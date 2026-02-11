@@ -16,7 +16,7 @@ export const threads = sqliteTable(
       .notNull()
       .references(() => projects.id),
     title: text("title"),
-    status: text("status").notNull().default("idle"),
+    status: text("status").notNull().default("created"),
     archivedAt: integer("archived_at"),
     createdAt: integer("created_at").notNull(),
     updatedAt: integer("updated_at").notNull(),

@@ -2,6 +2,8 @@ export type DomainErrorCode =
   | "invalid_request"
   | "thread_not_found"
   | "thread_archived"
+  | "thread_provisioning"
+  | "thread_provisioning_failed"
   | "project_not_found"
   | "inactive_session"
   | "no_active_turn"
@@ -50,6 +52,22 @@ export function threadNotFoundError(threadId: string): DomainError {
 
 export function threadArchivedError(threadId: string): DomainError {
   return new DomainError("thread_archived", `Thread ${threadId} is archived`);
+}
+
+export function threadProvisioningError(threadId: string): DomainError {
+  return new DomainError(
+    "thread_provisioning",
+    `Thread ${threadId} is still provisioning`,
+    { retryable: true },
+  );
+}
+
+export function threadProvisioningFailedError(threadId: string): DomainError {
+  return new DomainError(
+    "thread_provisioning_failed",
+    `Thread ${threadId} provisioning failed; reprovision started`,
+    { retryable: true },
+  );
 }
 
 export function projectNotFoundError(projectId: string): DomainError {

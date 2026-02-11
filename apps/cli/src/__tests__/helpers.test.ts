@@ -34,6 +34,18 @@ describe("formatUptime()", () => {
 });
 
 describe("statusIcon()", () => {
+  it("returns dotted circle for created", () => {
+    expect(statusIcon("created")).toBe("\u25CC");
+  });
+
+  it("returns half circle for provisioning", () => {
+    expect(statusIcon("provisioning")).toBe("\u25D1");
+  });
+
+  it("returns fisheye circle for provisioning_failed", () => {
+    expect(statusIcon("provisioning_failed")).toBe("\u25C9");
+  });
+
   it("returns empty circle for idle", () => {
     expect(statusIcon("idle")).toBe("\u25CB");
   });

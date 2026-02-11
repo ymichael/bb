@@ -300,6 +300,7 @@ function parseReasoningDeltaText(
 ): string | null {
   if (
     eventType !== "item/reasoning/summarytextdelta" &&
+    eventType !== "item/reasoning/textdelta" &&
     eventType !== "message/reasoning/delta"
   ) {
     return null;
@@ -332,6 +333,14 @@ function parseReasoningFinalText(
 function toToolStatus(value: unknown): UIToolCallMessage["status"] | undefined {
   if (typeof value !== "string") return undefined;
   const token = normalizeToken(value);
+  if (
+    token.includes("declin") ||
+    token.includes("cancel") ||
+    token.includes("abort") ||
+    token.includes("interrupt")
+  ) {
+    return "interrupted";
+  }
   if (token.includes("error") || token.includes("fail")) return "error";
   if (token.includes("complete") || token.includes("success") || token === "done") {
     return "completed";
@@ -425,6 +434,7 @@ function parseToolFromExecEvent(
   if (!callId) return null;
 
   const exitCode = getNumberField(msg, "exit_code");
+  const statusToken = toToolStatus(getStringField(msg, "status"));
   const command =
     extractParsedCommand(msg) ??
     extractShellCommand(msg?.command);
@@ -463,9 +473,10 @@ function parseToolFromExecEvent(
       getStringField(msg, "stdout"),
     exitCode,
     status:
-      exitCode !== undefined && exitCode !== 0
+      statusToken ??
+      (exitCode !== undefined && exitCode !== 0
         ? "error"
-        : "completed",
+        : "completed"),
   };
 }
 
@@ -520,9 +531,38 @@ function parseToolFromItemEvent(
 function toFileEditStatus(value: unknown): UIFileEditMessage["status"] | undefined {
   if (typeof value !== "string") return undefined;
   const token = normalizeToken(value);
+  if (
+    token.includes("declin") ||
+    token.includes("cancel") ||
+    token.includes("abort") ||
+    token.includes("interrupt")
+  ) {
+    return "interrupted";
+  }
   if (token.includes("error") || token.includes("fail")) return "error";
   if (token.includes("complete") || token.includes("success")) return "completed";
   if (token.includes("progress") || token.includes("pending")) return "pending";
+  return undefined;
+}
+
+function normalizeFileChangeKind(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const token = normalizeToken(value);
+  if (token.includes("add") || token.includes("create") || token.includes("new")) {
+    return "add";
+  }
+  if (token.includes("delete") || token.includes("remove")) {
+    return "delete";
+  }
+  if (
+    token.includes("update") ||
+    token.includes("edit") ||
+    token.includes("modify") ||
+    token.includes("rename") ||
+    token.includes("move")
+  ) {
+    return "update";
+  }
   return undefined;
 }
 
@@ -537,11 +577,20 @@ function parseFileChangesFromArray(changes: unknown): UIFileEditChange[] {
     if (!path) continue;
 
     const kindRecord = toRecord(change.kind);
+    const kind =
+      normalizeFileChangeKind(getStringField(kindRecord, "type")) ??
+      normalizeFileChangeKind(getStringField(change, "type"));
     parsed.push({
       path,
-      kind: getStringField(kindRecord, "type") ?? getStringField(change, "type"),
-      movePath: getStringField(kindRecord, "move_path") ?? null,
-      diff: getStringField(change, "diff") ?? getStringField(change, "unified_diff"),
+      kind,
+      movePath:
+        getStringField(kindRecord, "move_path") ??
+        getStringField(kindRecord, "movePath") ??
+        null,
+      diff:
+        getStringField(change, "diff") ??
+        getStringField(change, "unified_diff") ??
+        getStringField(change, "content"),
     });
   }
 
@@ -559,9 +608,14 @@ function parseFileChangesFromMap(changes: unknown): UIFileEditChange[] {
 
     parsed.push({
       path,
-      kind: getStringField(change, "type"),
-      movePath: getStringField(change, "move_path") ?? null,
-      diff: getStringField(change, "unified_diff"),
+      kind: normalizeFileChangeKind(getStringField(change, "type")),
+      movePath:
+        getStringField(change, "move_path") ??
+        getStringField(change, "movePath") ??
+        null,
+      diff:
+        getStringField(change, "unified_diff") ??
+        getStringField(change, "content"),
     });
   }
 
@@ -622,8 +676,10 @@ function parseFileEditFromPatchEvent(
   if (!callId) return null;
 
   const success = msg?.success;
-  const status: UIFileEditMessage["status"] =
-    eventType === "codex/event/patch_apply_end"
+  const statusToken = toFileEditStatus(getStringField(msg, "status"));
+  const status: UIFileEditMessage["status"] = statusToken
+    ? statusToken
+    : eventType === "codex/event/patch_apply_end"
       ? success === false
         ? "error"
         : "completed"
@@ -643,6 +699,105 @@ function parseOperationMessage(
   eventType: string,
   options?: { includeOptionalOperations?: boolean },
 ): UIOperationMessage | null {
+  if (eventType === "turn/plan/updated") {
+    const payload = toRecord(event.data);
+    const plan = Array.isArray(payload?.plan) ? payload.plan : [];
+    const explanation = getStringField(payload, "explanation");
+    const steps = plan
+      .map((entry) => {
+        const step = toRecord(entry);
+        if (!step) return null;
+        const status = getStringField(step, "status");
+        const text = getStringField(step, "step");
+        if (!text) return null;
+        return status ? `[${status}] ${text}` : text;
+      })
+      .filter((value): value is string => Boolean(value));
+
+    return {
+      kind: "operation",
+      id: messageId(event.threadId, "op", `plan:${event.seq}`),
+      threadId: event.threadId,
+      sourceSeqStart: event.seq,
+      sourceSeqEnd: event.seq,
+      createdAt: event.createdAt,
+      turnId: getTurnId(event.data),
+      opType: "plan-updated",
+      title: "Plan updated",
+      detail:
+        explanation ??
+        (steps.length > 0 ? steps.join(" • ") : undefined),
+    };
+  }
+
+  if (eventType === "item/mcptoolcall/progress") {
+    const payload = toRecord(event.data);
+    const detail =
+      getStringField(payload, "message") ??
+      extractText(payload?.detail);
+    return {
+      kind: "operation",
+      id: messageId(event.threadId, "op", `mcp-progress:${event.seq}`),
+      threadId: event.threadId,
+      sourceSeqStart: event.seq,
+      sourceSeqEnd: event.seq,
+      createdAt: event.createdAt,
+      turnId: getTurnId(event.data),
+      opType: "mcp-progress",
+      title: "MCP tool progress",
+      detail: detail || undefined,
+    };
+  }
+
+  if (
+    eventType === "deprecationnotice" ||
+    eventType === "codex/event/deprecation_notice"
+  ) {
+    const payload = toRecord(event.data);
+    const detail =
+      getStringField(payload, "summary") ??
+      getStringField(payload, "details") ??
+      extractText(payload);
+
+    return {
+      kind: "operation",
+      id: messageId(event.threadId, "op", `deprecation:${event.seq}`),
+      threadId: event.threadId,
+      sourceSeqStart: event.seq,
+      sourceSeqEnd: event.seq,
+      createdAt: event.createdAt,
+      turnId: getTurnId(event.data),
+      opType: "deprecation",
+      title: "Deprecation notice",
+      detail: detail || undefined,
+    };
+  }
+
+  if (
+    eventType === "configwarning" ||
+    eventType === "windows/worldwritablewarning" ||
+    eventType === "warning"
+  ) {
+    const payload = toRecord(event.data);
+    const detail =
+      getStringField(payload, "summary") ??
+      getStringField(payload, "details") ??
+      extractText(payload);
+
+    return {
+      kind: "operation",
+      id: messageId(event.threadId, "op", `warning:${event.seq}`),
+      threadId: event.threadId,
+      sourceSeqStart: event.seq,
+      sourceSeqEnd: event.seq,
+      createdAt: event.createdAt,
+      turnId: getTurnId(event.data),
+      opType: "warning",
+      title: "Configuration warning",
+      detail: detail || undefined,
+    };
+  }
+
   if (eventType.includes("compact")) {
     return {
       kind: "operation",

@@ -185,6 +185,12 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
 
 export function statusIcon(status: string): string {
   switch (status) {
+    case "created":
+      return "\u25CC"; // dotted circle
+    case "provisioning":
+      return "\u25D1"; // circle with left half black
+    case "provisioning_failed":
+      return "\u25C9"; // fisheye
     case "idle":
       return "\u25CB"; // empty circle
     case "active":

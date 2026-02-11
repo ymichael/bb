@@ -93,6 +93,21 @@ describe("ConversationEntry", () => {
     expect(html).not.toContain("Ran command");
   });
 
+  it("renders interrupted tool-call summary as 'Declined <command>'", () => {
+    const message: UIMessage = {
+      ...baseMessage(),
+      kind: "tool-call",
+      toolName: "exec_command",
+      callId: "call-2",
+      command: "rm -rf /tmp/nope",
+      status: "interrupted",
+      output: "",
+    };
+
+    const html = renderToStaticMarkup(<ConversationEntry message={message} />);
+    expect(html).toContain("Declined rm -rf /tmp/nope");
+  });
+
   it("renders file-edit summary as 'Edited <filename>'", () => {
     const message: UIMessage = {
       ...baseMessage(),
@@ -112,6 +127,68 @@ describe("ConversationEntry", () => {
     expect(html).toContain("Edited");
     expect(html).toContain("ConversationEntry.tsx");
     expect(html).not.toContain("Edited 1 file");
+  });
+
+  it("renders file-add summary as 'Created <filename>'", () => {
+    const message: UIMessage = {
+      ...baseMessage(),
+      kind: "file-edit",
+      callId: "edit-2",
+      status: "completed",
+      changes: [
+        {
+          path: "/repo/src/new-file.ts",
+          kind: "add",
+          diff: "@@ -0,0 +1 @@\n+export const created = true;",
+        },
+      ],
+    };
+
+    const html = renderToStaticMarkup(<ConversationEntry message={message} />);
+    expect(html).toContain("Created");
+    expect(html).toContain("new-file.ts");
+  });
+
+  it("renders file-delete summary as 'Deleted <filename>'", () => {
+    const message: UIMessage = {
+      ...baseMessage(),
+      kind: "file-edit",
+      callId: "edit-3",
+      status: "completed",
+      changes: [
+        {
+          path: "/repo/src/old-file.ts",
+          kind: "delete",
+          diff: "@@ -1 +0,0 @@\n-export const removed = true;",
+        },
+      ],
+    };
+
+    const html = renderToStaticMarkup(<ConversationEntry message={message} />);
+    expect(html).toContain("Deleted");
+    expect(html).toContain("old-file.ts");
+  });
+
+  it("renders rename details for moved files", () => {
+    const message: UIMessage = {
+      ...baseMessage(),
+      kind: "file-edit",
+      callId: "edit-4",
+      status: "completed",
+      changes: [
+        {
+          path: "/repo/src/old-name.ts",
+          kind: "update",
+          movePath: "/repo/src/new-name.ts",
+          diff: "",
+        },
+      ],
+    };
+
+    const html = renderToStaticMarkup(<ConversationEntry message={message} />);
+    expect(html).toContain("Renamed");
+    expect(html).toContain("old-name.ts");
+    expect(html).toContain("new-name.ts");
   });
 
   it("renders debug raw event rows when provided by projector", () => {

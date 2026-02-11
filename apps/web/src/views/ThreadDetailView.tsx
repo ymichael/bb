@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import { useThread, useThreadEvents, useTellThread, useStopThread } from "../hooks/useApi";
 import {
@@ -121,7 +121,12 @@ export function ThreadDetailView() {
 
   const { containerRef, handleScroll: baseHandleScroll } = useAutoScroll(
     threadDetailRows.length,
+    threadId,
   );
+
+  useEffect(() => {
+    setShowScrollToLatest(false);
+  }, [threadId]);
 
   const handleScroll = useCallback(() => {
     baseHandleScroll();
@@ -154,9 +159,18 @@ export function ThreadDetailView() {
     );
   }
 
-  const canSendFollowUp = true;
+  const isCreated = thread.status === "created";
+  const isProvisioning = thread.status === "provisioning";
+  const isProvisioningFailed = thread.status === "provisioning_failed";
+  const canSendFollowUp = !isCreated && !isProvisioning;
   const promptPlaceholder =
-    thread.status === "idle"
+    isCreated
+      ? "Thread is being created..."
+      : isProvisioning
+      ? "Thread is provisioning..."
+      : isProvisioningFailed
+      ? "Retry provisioning by sending a message"
+      : thread.status === "idle"
       ? "Ask for follow-up changes"
       : "Send a message to this thread...";
 
@@ -190,10 +204,10 @@ export function ThreadDetailView() {
             ) : (
               threadDetailRows.map((entry) =>
                 entry.kind === "tool-group" ? (
-                  <ToolGroupEntry key={entry.id} entry={entry} />
+                  <ToolGroupEntry key={`${threadId}:${entry.id}`} entry={entry} />
                 ) : (
                   <ConversationEntry
-                    key={entry.id}
+                    key={`${threadId}:${entry.id}`}
                     message={entry.message}
                   />
                 ),
@@ -207,6 +221,15 @@ export function ThreadDetailView() {
 
         <div className="shrink-0">
           <div className="chat-prompt-box mx-auto w-full max-w-[800px] bg-background px-4 pb-4">
+            {isCreated || isProvisioning || isProvisioningFailed ? (
+              <div className="pb-2 text-xs text-muted-foreground">
+                {isCreated
+                  ? "Created..."
+                  : isProvisioning
+                  ? "Provisioning..."
+                  : "Provisioning failed"}
+              </div>
+            ) : null}
             <div className="flex h-0 items-center justify-center">
               <button
                 onClick={scrollToLatest}

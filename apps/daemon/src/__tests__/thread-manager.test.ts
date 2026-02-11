@@ -276,7 +276,7 @@ describe("ThreadManager", () => {
       expect(manager.getActiveCount()).toBe(1);
     });
 
-    it("updates thread status to active and broadcasts", async () => {
+    it("updates thread status through provisioning and broadcasts", async () => {
       const project = { id: "proj-1", name: "Test", rootPath: "/test", createdAt: 1000, updatedAt: 1000 };
       (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(project);
 
@@ -287,8 +287,9 @@ describe("ThreadManager", () => {
       );
 
       await manager.spawn({ projectId: "proj-1" });
-
-      expect(threadRepo.update).toHaveBeenCalledWith("t-new", { status: "active" });
+      await vi.waitFor(() => {
+        expect(threadRepo.update).toHaveBeenCalledWith("t-new", { status: "provisioning" });
+      });
       expect(ws.broadcast).toHaveBeenCalledWith("thread", "t-new");
     });
 
@@ -338,8 +339,11 @@ describe("ThreadManager", () => {
         input: [{ type: "text", text: "Fix the login bug" }],
       });
 
+      await vi.waitFor(() => {
+        expect(fakeChild._stdinData.length).toBe(3);
+      });
+
       // Should have written initialize + thread/start + turn/start
-      expect(fakeChild._stdinData.length).toBe(3);
       const turnMsg = JSON.parse(fakeChild._stdinData[2].trim());
       expect(turnMsg.jsonrpc).toBe("2.0");
       expect(turnMsg.method).toBe("turn/start");
@@ -445,12 +449,14 @@ describe("ThreadManager", () => {
         projectId: "proj-1",
         input: [{ type: "text", text: "Fix flaky login redirect" }],
       });
+      await vi.waitFor(() => {
+        expect(providerTitleGenerator).toHaveBeenCalledTimes(1);
+      });
 
       expect(threadRepo.create).toHaveBeenCalledWith({
         projectId: "proj-1",
         title: "Fix flaky login redirect",
       });
-      expect(providerTitleGenerator).toHaveBeenCalledTimes(1);
     });
 
     it("keeps generated title when a later provider rename suggests the first message", async () => {
@@ -530,7 +536,9 @@ describe("ThreadManager", () => {
         ],
       });
 
-      expect(fakeChild._stdinData.length).toBe(3);
+      await vi.waitFor(() => {
+        expect(fakeChild._stdinData.length).toBe(3);
+      });
       const turnMsg = JSON.parse(fakeChild._stdinData[2].trim());
       expect(turnMsg.method).toBe("turn/start");
       expect(turnMsg.params.threadId).toBe(CODEX_THREAD_ID);
@@ -558,7 +566,9 @@ describe("ThreadManager", () => {
         reasoningLevel: "high",
       });
 
-      expect(fakeChild._stdinData.length).toBe(3);
+      await vi.waitFor(() => {
+        expect(fakeChild._stdinData.length).toBe(3);
+      });
 
       const startMsg = JSON.parse(fakeChild._stdinData[1].trim());
       expect(startMsg.params.model).toBe("gpt-5-codex");
@@ -599,7 +609,7 @@ describe("ThreadManager", () => {
       expect(spawnMock).not.toHaveBeenCalled();
     });
 
-    it("returns the thread record from DB after spawn", async () => {
+    it("returns the created thread record immediately after spawn", async () => {
       const project = { id: "proj-1", name: "Test", rootPath: "/test", createdAt: 1000, updatedAt: 1000 };
       (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(project);
 
@@ -611,11 +621,11 @@ describe("ThreadManager", () => {
 
       const result = await manager.spawn({ projectId: "proj-1" });
 
-      expect(result).toBe(updatedThread);
-      expect(result.status).toBe("active");
+      expect(result).toBe(createdThread);
+      expect(result.status).toBe("idle");
     });
 
-    it("marks thread idle and re-throws if spawn errors", async () => {
+    it("marks thread provisioning_failed if spawn setup errors", async () => {
       const project = { id: "proj-1", name: "Test", rootPath: "/test", createdAt: 1000, updatedAt: 1000 };
       (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(project);
 
@@ -627,15 +637,16 @@ describe("ThreadManager", () => {
         throw new Error("ENOENT: codex not found");
       });
 
-      await expect(
-        manager.spawn({ projectId: "proj-1" }),
-      ).rejects.toThrow("ENOENT: codex not found");
+      const result = await manager.spawn({ projectId: "proj-1" });
+      expect(result).toBe(createdThread);
+      await vi.waitFor(() => {
+        expect(threadRepo.update).toHaveBeenCalledWith("t-new", { status: "provisioning_failed" });
+      });
 
-      expect(threadRepo.update).toHaveBeenCalledWith("t-new", { status: "idle" });
       expect(ws.broadcast).toHaveBeenCalledWith("thread", "t-new");
     });
 
-    it("throws and marks thread idle when codex returns RPC error to thread/start", async () => {
+    it("marks thread provisioning_failed when codex returns RPC error to thread/start", async () => {
       const project = { id: "proj-1", name: "Test", rootPath: "/test", createdAt: 1000, updatedAt: 1000 };
       (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(project);
 
@@ -668,14 +679,13 @@ describe("ThreadManager", () => {
         },
       });
 
-      await expect(
-        manager.spawn({ projectId: "proj-1" }),
-      ).rejects.toThrow("RPC error");
-
-      expect(threadRepo.update).toHaveBeenCalledWith("t-err", { status: "idle" });
+      await manager.spawn({ projectId: "proj-1" });
+      await vi.waitFor(() => {
+        expect(threadRepo.update).toHaveBeenCalledWith("t-err", { status: "provisioning_failed" });
+      });
     });
 
-    it("throws and marks thread idle when thread/start times out", async () => {
+    it("marks thread provisioning_failed when thread/start times out", async () => {
       vi.useFakeTimers();
       try {
         const project = { id: "proj-1", name: "Test", rootPath: "/test", createdAt: 1000, updatedAt: 1000 };
@@ -688,18 +698,15 @@ describe("ThreadManager", () => {
         const silentChild = createFakeChildProcess({ autoRespond: false });
         (spawnMock as ReturnType<typeof vi.fn>).mockReturnValue(silentChild);
 
-        // Attach the catch handler before advancing timers to avoid unhandled rejection
-        const spawnPromise = manager
-          .spawn({ projectId: "proj-1" })
-          .catch((e: Error) => e);
+        await manager.spawn({ projectId: "proj-1" });
 
         // Advance past the 10s timeout
         await vi.advanceTimersByTimeAsync(10_001);
-
-        const err = await spawnPromise;
-        expect(err).toBeInstanceOf(Error);
-        expect((err as Error).message).toMatch("Timed out waiting for response");
-        expect(threadRepo.update).toHaveBeenCalledWith("t-timeout", { status: "idle" });
+        await vi.waitFor(() => {
+          expect(threadRepo.update).toHaveBeenCalledWith("t-timeout", {
+            status: "provisioning_failed",
+          });
+        });
       } finally {
         vi.useRealTimers();
       }
@@ -786,6 +793,9 @@ describe("ThreadManager", () => {
       );
 
       await manager.spawn({ projectId: "proj-1" });
+      await vi.waitFor(() => {
+        expect(threadRepo.update).toHaveBeenCalledWith("t-new", { status: "idle" });
+      });
       (ws.broadcast as ReturnType<typeof vi.fn>).mockClear();
 
       fakeChild._pushStdout(
@@ -1213,6 +1223,9 @@ describe("ThreadManager", () => {
         projectId: "proj-1",
         input: [{ type: "text", text: "First" }],
       });
+      await vi.waitFor(() => {
+        expect(child1._stdinData.length).toBeGreaterThanOrEqual(3);
+      });
 
       // initialize gets id=1, thread/start gets id=2, turn/start gets id=3
       const initMsg = JSON.parse(child1._stdinData[0].trim());
@@ -1230,6 +1243,9 @@ describe("ThreadManager", () => {
       (spawnMock as ReturnType<typeof vi.fn>).mockReturnValueOnce(child2);
 
       await manager.spawn({ projectId: "proj-1" });
+      await vi.waitFor(() => {
+        expect(child2._stdinData.length).toBeGreaterThanOrEqual(2);
+      });
 
       // initialize gets id=4, thread/start gets id=5
       const initMsg2 = JSON.parse(child2._stdinData[0].trim());

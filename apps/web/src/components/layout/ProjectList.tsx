@@ -7,6 +7,7 @@ import {
   FolderOpen,
   LoaderCircle,
   Plus,
+  SquarePen,
 } from "lucide-react"
 import { useArchiveThread, useProjects, useThreads } from "@/hooks/useApi"
 import { NavLink, useLocation } from "react-router-dom"
@@ -136,6 +137,7 @@ export function ProjectList({
                   >
                     <button
                       type="button"
+                      aria-expanded={!isProjectCollapsed}
                       aria-label={
                         isProjectCollapsed
                           ? `Expand ${project.name}`
@@ -144,40 +146,50 @@ export function ProjectList({
                       title={
                         isProjectCollapsed ? "Expand project threads" : "Collapse project threads"
                       }
-                      onClick={(event) => {
-                        event.preventDefault()
-                        event.stopPropagation()
-                        toggleProjectCollapsed(project.id)
-                      }}
-                      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-sidebar-foreground/70 outline-none ring-sidebar-ring transition-colors hover:text-sidebar-foreground focus-visible:ring-2"
+                      onClick={() => toggleProjectCollapsed(project.id)}
+                      className="flex min-w-0 flex-1 items-center"
                     >
-                      <span className="relative inline-flex size-4 items-center justify-center">
-                        <ChevronRight
-                          className={cn(
-                            "absolute size-4 opacity-0 transition-all duration-150 group-hover/project-row:opacity-100",
-                            !isProjectCollapsed && "rotate-90"
+                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-sidebar-foreground/70 outline-none ring-sidebar-ring transition-colors hover:text-sidebar-foreground focus-visible:ring-2">
+                        <span className="relative inline-flex size-4 items-center justify-center">
+                          <ChevronRight
+                            className={cn(
+                              "absolute size-4 opacity-0 transition-all duration-150 group-hover/project-row:opacity-100",
+                              !isProjectCollapsed && "rotate-90"
+                            )}
+                          />
+                          {isProjectCollapsed ? (
+                            <Folder className="absolute size-4 opacity-100 transition-opacity duration-150 group-hover/project-row:opacity-0" />
+                          ) : (
+                            <FolderOpen className="absolute size-4 opacity-100 transition-opacity duration-150 group-hover/project-row:opacity-0" />
                           )}
-                        />
-                        {isProjectCollapsed ? (
-                          <Folder className="absolute size-4 opacity-100 transition-opacity duration-150 group-hover/project-row:opacity-0" />
-                        ) : (
-                          <FolderOpen className="absolute size-4 opacity-100 transition-opacity duration-150 group-hover/project-row:opacity-0" />
-                        )}
+                        </span>
+                      </span>
+                      <span className="min-w-0 flex-1 truncate pr-2 text-left">
+                        {project.name}
                       </span>
                     </button>
                     <NavLink
                       to={`/projects/${project.id}`}
-                      onClick={onProjectSelect}
-                      className="min-w-0 flex-1 truncate pr-2"
+                      state={{ focusPrompt: true }}
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        onProjectSelect?.()
+                      }}
+                      title={`Open ${project.name}`}
+                      aria-label={`Open ${project.name}`}
+                      className="mr-1 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-sidebar-foreground/70 outline-none ring-sidebar-ring transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground focus-visible:ring-2"
                     >
-                      <span>{project.name}</span>
+                      <SquarePen className="size-4" />
                     </NavLink>
                   </div>
 
                   {!isProjectCollapsed && !threadsLoading && projectThreads.length > 0 ? (
                     <div className="space-y-1 group-data-[collapsible=icon]:hidden">
                       {projectThreads.map((thread) => {
-                        const isRunningThread = thread.status === "active"
+                        const isBusyThread =
+                          thread.status === "active" ||
+                          thread.status === "created" ||
+                          thread.status === "provisioning"
 
                         return (
                           <NavLink
@@ -194,7 +206,7 @@ export function ProjectList({
                             }
                           >
                             <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center text-sidebar-foreground/60">
-                              {isRunningThread ? (
+                              {isBusyThread ? (
                                 <LoaderCircle className="size-3.5 animate-spin" />
                               ) : null}
                             </span>

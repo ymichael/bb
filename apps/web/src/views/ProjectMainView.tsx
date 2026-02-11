@@ -4,7 +4,7 @@ import {
   useState,
 } from "react";
 import type { AvailableModel, ReasoningLevel } from "@beanbag/core";
-import { useParams } from "react-router-dom";
+import { useLocation, useParams } from "react-router-dom";
 import { PromptBox } from "@/components/promptbox/PromptBox";
 import { PromptOptionPicker } from "@/components/promptbox/PromptOptionPicker";
 import { useAvailableModels, useSpawnThread } from "@/hooks/useApi";
@@ -79,6 +79,7 @@ function formatModelLabel(value: string): string {
 
 export function ProjectMainView() {
   const { projectId } = useParams<{ projectId: string }>();
+  const location = useLocation();
   const spawnThread = useSpawnThread();
   const availableModelsQuery = useAvailableModels();
   const promptDraft = usePromptDraftStorage({ projectId, threadId: null });
@@ -173,6 +174,25 @@ export function ProjectMainView() {
     if (typeof window === "undefined") return;
     window.localStorage.setItem(REASONING_STORAGE_KEY, reasoningLevel);
   }, [reasoningLevel]);
+
+  const shouldFocusPrompt =
+    typeof location.state === "object" &&
+    location.state !== null &&
+    "focusPrompt" in location.state &&
+    location.state.focusPrompt === true;
+
+  useEffect(() => {
+    if (!shouldFocusPrompt) return;
+    const handle = window.requestAnimationFrame(() => {
+      const promptElement = document.getElementById("project-main-prompt");
+      if (!(promptElement instanceof HTMLTextAreaElement)) return;
+      promptElement.focus();
+      const caretIndex = promptElement.value.length;
+      promptElement.setSelectionRange(caretIndex, caretIndex);
+    });
+
+    return () => window.cancelAnimationFrame(handle);
+  }, [location.key, shouldFocusPrompt]);
 
   if (!projectId) {
     return (

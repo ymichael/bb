@@ -1,6 +1,6 @@
-import type { UIFileEditMessage, UIMessage, UIToolCallMessage } from "@beanbag/core";
+import type { UIMessage } from "@beanbag/core";
 
-type CollapsibleTurnMessage = UIToolCallMessage | UIFileEditMessage;
+type CollapsibleTurnMessage = UIMessage;
 
 export interface ThreadDetailMessageRow {
   kind: "message";
@@ -18,7 +18,7 @@ export interface ThreadDetailToolGroupRow {
 export type ThreadDetailRow = ThreadDetailMessageRow | ThreadDetailToolGroupRow;
 
 function isCollapsibleTurnMessage(message: UIMessage): message is CollapsibleTurnMessage {
-  return message.kind === "tool-call" || message.kind === "file-edit";
+  return message.kind !== "user";
 }
 
 export function buildThreadDetailRows(messages: UIMessage[]): ThreadDetailRow[] {

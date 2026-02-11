@@ -162,7 +162,7 @@ export class ThreadRepository {
       id: nanoid(),
       projectId: data.projectId,
       title: data.title ?? null,
-      status: "idle" as const,
+      status: "created" as const,
       archivedAt: null,
       createdAt: now,
       updatedAt: now,
@@ -231,10 +231,18 @@ export class ThreadRepository {
 
   private rowToThread(row: typeof threads.$inferSelect): Thread {
     const normalizedStatus = (() => {
-      if (row.status === "active" || row.status === "idle") return row.status;
+      if (
+        row.status === "created" ||
+        row.status === "provisioning" ||
+        row.status === "provisioning_failed" ||
+        row.status === "active" ||
+        row.status === "idle"
+      ) {
+        return row.status;
+      }
       // Backward compatibility for databases that still contain legacy statuses.
       if (row.status === "running") return "active";
-      return "idle";
+      return "created";
     })();
 
     return {

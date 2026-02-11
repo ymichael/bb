@@ -16,7 +16,7 @@ function baseMessage(
 }
 
 describe("buildThreadDetailRows", () => {
-  it("collapses tool calls and file edits before the last assistant message in a turn", () => {
+  it("collapses all non-user rows before the final assistant message", () => {
     const messages: UIMessage[] = [
       {
         ...baseMessage("user-1", 1),
@@ -71,12 +71,52 @@ describe("buildThreadDetailRows", () => {
     const group = rows.find((row) => row.kind === "tool-group");
     expect(group).toBeDefined();
     if (!group || group.kind !== "tool-group") return;
-    expect(group.messages.map((message) => message.id)).toEqual(["tool-1", "edit-1"]);
+    expect(group.messages.map((message) => message.id)).toEqual([
+      "tool-1",
+      "edit-1",
+    ]);
 
     const renderedMessageIds = rows
       .filter((row): row is Extract<(typeof rows)[number], { kind: "message" }> => row.kind === "message")
       .map((row) => row.message.id);
     expect(renderedMessageIds).toEqual(["user-1", "assistant-1", "tool-2"]);
+  });
+
+  it("keeps user and final assistant rows visible while collapsing earlier non-user rows", () => {
+    const messages: UIMessage[] = [
+      {
+        ...baseMessage("user-1", 1),
+        kind: "user",
+        turnId: "turn-1",
+        text: "do work",
+      },
+      {
+        ...baseMessage("op-1", 2),
+        kind: "operation",
+        turnId: "turn-1",
+        opType: "compaction",
+        title: "Context compacted",
+      },
+      {
+        ...baseMessage("assistant-1", 3),
+        kind: "assistant-text",
+        turnId: "turn-1",
+        text: "done",
+        status: "completed",
+      },
+    ];
+
+    const rows = buildThreadDetailRows(messages);
+    const renderedMessageIds = rows
+      .filter((row): row is Extract<(typeof rows)[number], { kind: "message" }> => row.kind === "message")
+      .map((row) => row.message.id);
+
+    expect(renderedMessageIds).toEqual(["user-1", "assistant-1"]);
+
+    const group = rows.find((row) => row.kind === "tool-group");
+    expect(group).toBeDefined();
+    if (!group || group.kind !== "tool-group") return;
+    expect(group.messages.map((message) => message.id)).toEqual(["op-1"]);
   });
 
   it("does not collapse rows when a turn has no assistant message", () => {

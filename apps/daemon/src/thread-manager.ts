@@ -33,6 +33,8 @@ import {
   providerRpcError,
   providerTimeoutError,
   providerUnavailableError,
+  threadProvisioningError,
+  threadProvisioningFailedError,
   threadArchivedError,
   threadNotFoundError,
   unsupportedOperationError,
@@ -51,6 +53,8 @@ export class ThreadManager {
   private lockedTitleThreadIds = new Set<string>();
   /** Ensure auto-title generation runs at most once per thread. */
   private autoTitleAttemptedThreadIds = new Set<string>();
+  /** Tracks in-flight provisioning operations by thread ID. */
+  private provisioningTasks = new Map<string, Promise<void>>();
   private rpcIdCounter = 0;
 
   constructor(
@@ -62,10 +66,33 @@ export class ThreadManager {
   ) {}
 
   /**
-   * One-time startup reconciliation for threads persisted as active.
-   * Verifies resumability against the provider app-server, then aligns DB status.
+   * One-time startup reconciliation for persisted thread statuses.
+   * - created: reprovision
+   * - provisioning: mark failed (interrupted by restart)
+   * - active: attempt resume, otherwise demote to idle
    */
   async reconcileActiveThreadsOnBoot(): Promise<void> {
+    const createdThreads = this.threadRepo.list({
+      status: "created",
+      includeArchived: true,
+    });
+    for (const thread of createdThreads) {
+      if (thread.archivedAt !== undefined) {
+        this._setThreadStatus(thread.id, "idle");
+        continue;
+      }
+      this._scheduleProvisioning(thread.id, { projectId: thread.projectId });
+    }
+
+    const provisioningThreads = this.threadRepo.list({
+      status: "provisioning",
+      includeArchived: true,
+    });
+    for (const thread of provisioningThreads) {
+      this._cleanupThreadRuntime(thread.id);
+      this._setThreadStatus(thread.id, "provisioning_failed");
+    }
+
     const activeThreads = this.threadRepo.list({
       status: "active",
       includeArchived: true,
@@ -106,22 +133,7 @@ export class ThreadManager {
           this.activeTurnIds.set(thread.id, activeTurnId);
         }
       } catch {
-        const child = this.processes.get(thread.id);
-        if (child) {
-          try {
-            child.kill("SIGTERM");
-          } catch {
-            // ignore shutdown errors
-          }
-        }
-        this.processes.delete(thread.id);
-        const runtime = this.runtimes.get(thread.id);
-        if (runtime) {
-          runtime.close();
-        }
-        this.runtimes.delete(thread.id);
-        this.providerThreadIds.delete(thread.id);
-        this.activeTurnIds.delete(thread.id);
+        this._cleanupThreadRuntime(thread.id);
         this.threadRepo.update(thread.id, { status: "idle" });
         this.ws.broadcast("thread", thread.id);
       }
@@ -134,7 +146,7 @@ export class ThreadManager {
    * and optionally sends an initial prompt.
    */
   async spawn(req: SpawnThreadRequest): Promise<Thread> {
-    // Validate the project exists to get rootPath
+    // Validate the project exists.
     const project = this.projectRepo.getById(req.projectId);
     if (!project) {
       throw projectNotFoundError(req.projectId);
@@ -154,54 +166,9 @@ export class ThreadManager {
       this.lockedTitleThreadIds.add(thread.id);
     }
 
-    try {
-      this._spawnProcess(thread.id, project.rootPath);
-
-      // Mark thread active once its worker process is spawned.
-      this.threadRepo.update(thread.id, { status: "active" });
-      this.ws.broadcast("thread", thread.id);
-
-      // Step 1: Initialize the provider session
-      this._sendInitialize(thread.id);
-
-      // Step 2: Send thread/start with correct params
-      const providerThreadId = await this._sendRequestAndAwaitThreadId(
-        thread.id,
-        this.provider.threadStartMethod,
-        this.provider.createThreadStartParams(req),
-      );
-      this.providerThreadIds.set(thread.id, providerThreadId);
-
-      // Step 3: If a prompt was provided, send turn/start with correct params
-      const initialInput = req.input ?? [];
-      this._maybeAutogenerateThreadTitle(
-        thread.id,
-        project.rootPath,
-        providerThreadId,
-        initialInput,
-      );
-
-      if (initialInput.length > 0) {
-        const turnMsg = {
-          jsonrpc: "2.0",
-          method: this.provider.turnStartMethod,
-          id: ++this.rpcIdCounter,
-          params: this.provider.createTurnStartParams(
-            providerThreadId,
-            initialInput,
-            req,
-          ),
-        };
-        this._sendToProcess(thread.id, turnMsg);
-      }
-
-      return this.threadRepo.getById(thread.id) ?? thread;
-    } catch (err) {
-      // If spawning fails, ensure thread returns to idle.
-      this.threadRepo.update(thread.id, { status: "idle" });
-      this.ws.broadcast("thread", thread.id);
-      throw err;
-    }
+    this.ws.broadcast("thread", thread.id);
+    this._scheduleProvisioning(thread.id, req, { rootPathHint: project.rootPath });
+    return thread;
   }
 
   /**
@@ -224,6 +191,24 @@ export class ThreadManager {
     if (thread.archivedAt !== undefined) {
       throw threadArchivedError(threadId);
     }
+    if (thread.status === "created" || thread.status === "provisioning") {
+      throw threadProvisioningError(threadId);
+    }
+    if (thread.status === "provisioning_failed") {
+      this._scheduleProvisioning(
+        threadId,
+        {
+          projectId: thread.projectId,
+          model: options?.model,
+          reasoningLevel: options?.reasoningLevel,
+        },
+        {
+          reason: "tell-after-provisioning-failure",
+        },
+      );
+      throw threadProvisioningFailedError(threadId);
+    }
+
     const providerThreadId = await this._ensureProviderSession(threadId, options);
     const tellMode = request.mode ?? "auto";
     const hasExecutionOverrides = Boolean(options?.model || options?.reasoningLevel);
@@ -456,6 +441,108 @@ export class ThreadManager {
     this.providerThreadIds.clear();
     this.activeTurnIds.clear();
     this.autoTitleAttemptedThreadIds.clear();
+    this.provisioningTasks.clear();
+  }
+
+  private _scheduleProvisioning(
+    threadId: string,
+    req: SpawnThreadRequest,
+    opts?: { rootPathHint?: string; reason?: string },
+  ): void {
+    if (this.provisioningTasks.has(threadId)) return;
+
+    const task = this._provisionThread(threadId, req, opts)
+      .catch((err) => {
+        this._cleanupThreadRuntime(threadId);
+        this._setThreadStatus(threadId, "provisioning_failed", true, {
+          force: true,
+        });
+        const message = err instanceof Error ? err.message : String(err);
+        const reason = opts?.reason ? ` (${opts.reason})` : "";
+        console.error(`[thread ${threadId}] provisioning failed${reason}: ${message}`);
+      })
+      .finally(() => {
+        this.provisioningTasks.delete(threadId);
+      });
+
+    this.provisioningTasks.set(threadId, task);
+  }
+
+  private async _provisionThread(
+    threadId: string,
+    req: SpawnThreadRequest,
+    opts?: { rootPathHint?: string },
+  ): Promise<void> {
+    const thread = this.threadRepo.getById(threadId);
+    if (thread?.archivedAt !== undefined) return;
+
+    const project = this.projectRepo.getById(req.projectId);
+    if (!project) {
+      throw projectNotFoundError(req.projectId);
+    }
+
+    // Ensure provisioning starts from a clean runtime state.
+    this._cleanupThreadRuntime(threadId);
+    this._setThreadStatus(threadId, "provisioning", true, {
+      force: true,
+    });
+
+    this._spawnProcess(threadId, opts?.rootPathHint ?? project.rootPath);
+    this._sendInitialize(threadId);
+
+    const providerThreadId = await this._sendRequestAndAwaitThreadId(
+      threadId,
+      this.provider.threadStartMethod,
+      this.provider.createThreadStartParams(req),
+    );
+    this.providerThreadIds.set(threadId, providerThreadId);
+
+    const initialInput = req.input ?? [];
+    this._maybeAutogenerateThreadTitle(
+      threadId,
+      project.rootPath,
+      providerThreadId,
+      initialInput,
+    );
+
+    if (initialInput.length > 0) {
+      this._setThreadStatus(threadId, "active");
+      const turnMsg = {
+        jsonrpc: "2.0",
+        method: this.provider.turnStartMethod,
+        id: ++this.rpcIdCounter,
+        params: this.provider.createTurnStartParams(
+          providerThreadId,
+          initialInput,
+          req,
+        ),
+      };
+      this._sendToProcess(threadId, turnMsg);
+      return;
+    }
+
+    this._setThreadStatus(threadId, "idle");
+  }
+
+  private _cleanupThreadRuntime(threadId: string): void {
+    const child = this.processes.get(threadId);
+    if (child) {
+      try {
+        child.kill("SIGTERM");
+      } catch {
+        // ignore shutdown errors
+      }
+    }
+    this.processes.delete(threadId);
+
+    const runtime = this.runtimes.get(threadId);
+    if (runtime) {
+      runtime.close();
+    }
+    this.runtimes.delete(threadId);
+
+    this.providerThreadIds.delete(threadId);
+    this.activeTurnIds.delete(threadId);
   }
 
   private _spawnProcess(threadId: string, cwd: string): void {
@@ -631,22 +718,7 @@ export class ThreadManager {
       this.providerThreadIds.set(threadId, resumedThreadId);
       return resumedThreadId;
     } catch (err) {
-      const child = this.processes.get(threadId);
-      if (child) {
-        try {
-          child.kill("SIGTERM");
-        } catch {
-          // Process may already be gone.
-        }
-      }
-      this.processes.delete(threadId);
-      const runtime = this.runtimes.get(threadId);
-      if (runtime) {
-        runtime.close();
-      }
-      this.runtimes.delete(threadId);
-      this.providerThreadIds.delete(threadId);
-      this.activeTurnIds.delete(threadId);
+      this._cleanupThreadRuntime(threadId);
       throw err;
     }
   }
@@ -711,9 +783,10 @@ export class ThreadManager {
     const thread = this.threadRepo.getById(threadId);
     if (!thread) return;
 
-    // A finished process always leaves the thread idle.
     if (thread.status === "active") {
-      this.threadRepo.update(threadId, { status: "idle" });
+      this._setThreadStatus(threadId, "idle", false);
+    } else if (thread.status === "created" || thread.status === "provisioning") {
+      this._setThreadStatus(threadId, "provisioning_failed", false);
     }
 
     this.ws.broadcast("thread", threadId);
@@ -850,16 +923,57 @@ export class ThreadManager {
     }
   }
 
+  private _canTransitionStatus(
+    currentStatus: Thread["status"],
+    nextStatus: Thread["status"],
+  ): boolean {
+    if (currentStatus === nextStatus) return true;
+
+    switch (currentStatus) {
+      case "created":
+        return (
+          nextStatus === "provisioning" ||
+          nextStatus === "provisioning_failed" ||
+          nextStatus === "idle"
+        );
+      case "provisioning":
+        return (
+          nextStatus === "active" ||
+          nextStatus === "idle" ||
+          nextStatus === "provisioning_failed"
+        );
+      case "provisioning_failed":
+        return nextStatus === "provisioning" || nextStatus === "idle";
+      case "idle":
+        return nextStatus === "active" || nextStatus === "provisioning";
+      case "active":
+        return nextStatus === "idle";
+      default:
+        return false;
+    }
+  }
+
   private _setThreadStatus(
     threadId: string,
     nextStatus: Thread["status"],
     shouldBroadcast = true,
+    opts?: { force?: boolean },
   ): void {
     const thread = this.threadRepo.getById(threadId);
-    if (!thread) return;
+    if (!thread) {
+      if (!opts?.force) return;
+      this.threadRepo.update(threadId, { status: nextStatus });
+      if (shouldBroadcast) {
+        this.ws.broadcast("thread", threadId);
+      }
+      return;
+    }
     if (thread.archivedAt !== undefined && nextStatus === "active") return;
 
     if (thread.status === nextStatus) return;
+    if (!opts?.force && !this._canTransitionStatus(thread.status, nextStatus)) {
+      return;
+    }
 
     this.threadRepo.update(threadId, { status: nextStatus });
     if (shouldBroadcast) {

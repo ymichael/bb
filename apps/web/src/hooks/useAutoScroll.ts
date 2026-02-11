@@ -2,7 +2,7 @@ import { useRef, useCallback, useEffect } from "react"
 
 const SCROLL_THRESHOLD = 40
 
-export function useAutoScroll(dep: unknown) {
+export function useAutoScroll(dep: unknown, resetDep?: unknown) {
   const containerRef = useRef<HTMLDivElement>(null)
   const stickRef = useRef(true)
 
@@ -18,6 +18,14 @@ export function useAutoScroll(dep: unknown) {
       containerRef.current.scrollTop = containerRef.current.scrollHeight
     }
   }, [dep])
+
+  useEffect(() => {
+    if (resetDep === undefined) return
+    stickRef.current = true
+    if (containerRef.current) {
+      containerRef.current.scrollTop = containerRef.current.scrollHeight
+    }
+  }, [resetDep])
 
   return { containerRef, handleScroll }
 }

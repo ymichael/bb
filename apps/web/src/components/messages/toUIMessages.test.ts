@@ -427,6 +427,213 @@ describe("toUIMessages replay coverage", () => {
     expect(fileEdit?.stdout).toContain("patched");
   });
 
+  it("maps declined command executions to interrupted status", () => {
+    const events: ThreadEvent[] = [
+      {
+        id: "evt-1",
+        threadId: "thread-1",
+        seq: 1,
+        type: "item/completed",
+        data: {
+          item: {
+            type: "commandExecution",
+            id: "call-declined-1",
+            status: "declined",
+            command: "/bin/zsh -lc 'rm -rf /tmp/nope'",
+          },
+          turnId: "turn-1",
+        },
+        createdAt: 1,
+      },
+    ];
+
+    const projected = toUIMessages(events, { threadStatus: "idle" });
+    const tool = projected.find(
+      (message): message is Extract<UIMessage, { kind: "tool-call" }> =>
+        message.kind === "tool-call",
+    );
+
+    expect(tool).toBeDefined();
+    expect(tool?.status).toBe("interrupted");
+  });
+
+  it("maps declined file changes to interrupted status", () => {
+    const events: ThreadEvent[] = [
+      {
+        id: "evt-1",
+        threadId: "thread-1",
+        seq: 1,
+        type: "item/completed",
+        data: {
+          item: {
+            type: "fileChange",
+            id: "file-declined-1",
+            status: "declined",
+            changes: [
+              {
+                path: "/repo/src/example.ts",
+                kind: { type: "update", move_path: null },
+                diff: "@@ -1 +1 @@",
+              },
+            ],
+          },
+          turnId: "turn-1",
+        },
+        createdAt: 1,
+      },
+    ];
+
+    const projected = toUIMessages(events, { threadStatus: "idle" });
+    const fileEdit = projected.find(
+      (message): message is Extract<UIMessage, { kind: "file-edit" }> =>
+        message.kind === "file-edit",
+    );
+
+    expect(fileEdit).toBeDefined();
+    expect(fileEdit?.status).toBe("interrupted");
+  });
+
+  it("preserves add/delete patch kinds from patch_apply events", () => {
+    const events: ThreadEvent[] = [
+      {
+        id: "evt-1",
+        threadId: "thread-1",
+        seq: 1,
+        type: "codex/event/patch_apply_end",
+        data: {
+          id: "1",
+          msg: {
+            call_id: "call-edit-2",
+            success: true,
+            changes: {
+              "/repo/src/new-file.ts": {
+                type: "add",
+                content: "export const created = true;\n",
+              },
+              "/repo/src/old-file.ts": {
+                type: "delete",
+                content: "export const removed = true;\n",
+              },
+            },
+          },
+        },
+        createdAt: 1,
+      },
+    ];
+
+    const projected = toUIMessages(events, { threadStatus: "idle" });
+    const fileEdit = projected.find(
+      (message): message is Extract<UIMessage, { kind: "file-edit" }> =>
+        message.kind === "file-edit",
+    );
+
+    expect(fileEdit).toBeDefined();
+    expect(fileEdit?.changes).toHaveLength(2);
+    expect(fileEdit?.changes.find((change) => change.path.endsWith("new-file.ts"))?.kind).toBe(
+      "add",
+    );
+    expect(fileEdit?.changes.find((change) => change.path.endsWith("old-file.ts"))?.kind).toBe(
+      "delete",
+    );
+  });
+
+  it("projects turn plan updates as operation rows", () => {
+    const events: ThreadEvent[] = [
+      {
+        id: "evt-1",
+        threadId: "thread-1",
+        seq: 1,
+        type: "turn/plan/updated",
+        data: {
+          threadId: "thread-1",
+          turnId: "turn-1",
+          explanation: "Plan is now clearer",
+          plan: [
+            { step: "Inspect project", status: "completed" },
+            { step: "Apply fix", status: "inProgress" },
+          ],
+        },
+        createdAt: 1,
+      },
+    ];
+
+    const projected = toUIMessages(events);
+    const op = projected.find(
+      (message): message is Extract<UIMessage, { kind: "operation" }> =>
+        message.kind === "operation",
+    );
+
+    expect(op).toBeDefined();
+    expect(op?.opType).toBe("plan-updated");
+    expect(op?.title).toBe("Plan updated");
+    expect(op?.detail).toContain("Plan is now clearer");
+  });
+
+  it("treats raw reasoning text deltas as reasoning stream updates", () => {
+    const events: ThreadEvent[] = [
+      {
+        id: "evt-1",
+        threadId: "thread-1",
+        seq: 1,
+        type: "item/reasoning/textDelta",
+        data: {
+          threadId: "thread-1",
+          turnId: "turn-1",
+          itemId: "reasoning-1",
+          delta: "raw-reasoning",
+          contentIndex: 0,
+        },
+        createdAt: 1,
+      },
+    ];
+
+    const projected = toUIMessages(events, { threadStatus: "active" });
+    const reasoning = projected.find(
+      (message): message is Extract<UIMessage, { kind: "assistant-reasoning" }> =>
+        message.kind === "assistant-reasoning",
+    );
+
+    expect(reasoning).toBeDefined();
+    expect(reasoning?.text).toContain("raw-reasoning");
+    expect(reasoning?.status).toBe("streaming");
+  });
+
+  it("projects deprecation and config warnings as operations", () => {
+    const events: ThreadEvent[] = [
+      {
+        id: "evt-1",
+        threadId: "thread-1",
+        seq: 1,
+        type: "deprecationNotice",
+        data: {
+          summary: "Legacy API will be removed",
+          details: "Use v2 APIs instead",
+        },
+        createdAt: 1,
+      },
+      {
+        id: "evt-2",
+        threadId: "thread-1",
+        seq: 2,
+        type: "configWarning",
+        data: {
+          summary: "Unknown config key",
+          details: "Remove 'legacyFlag'",
+        },
+        createdAt: 2,
+      },
+    ];
+
+    const projected = toUIMessages(events);
+    const ops = projected.filter(
+      (message): message is Extract<UIMessage, { kind: "operation" }> =>
+        message.kind === "operation",
+    );
+
+    expect(ops.some((message) => message.opType === "deprecation")).toBe(true);
+    expect(ops.some((message) => message.opType === "warning")).toBe(true);
+  });
+
   it("wraps unknown events in debug mode and drops them otherwise", () => {
     const events: ThreadEvent[] = [
       {

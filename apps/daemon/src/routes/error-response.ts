@@ -22,6 +22,8 @@ function statusFromCode(code: string): ApiErrorStatus {
     case "thread_archived":
     case "inactive_session":
     case "no_active_turn":
+    case "thread_provisioning":
+    case "thread_provisioning_failed":
       return 409;
     case "unsupported_operation":
       return 422;

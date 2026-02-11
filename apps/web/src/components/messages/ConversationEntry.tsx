@@ -75,6 +75,28 @@ function fileNameFromPath(path: string): string {
   return candidate && candidate.length > 0 ? candidate : path;
 }
 
+type FileChangeAction = "created" | "deleted" | "renamed" | "edited";
+
+function normalizeToken(value: string | undefined): string {
+  if (!value) return "";
+  return value.toLowerCase().replaceAll(/[^a-z0-9]/g, "");
+}
+
+function fileChangeAction(change: UIFileEditMessage["changes"][number]): FileChangeAction {
+  if (change.movePath) return "renamed";
+  const token = normalizeToken(change.kind);
+  if (token.includes("add") || token.includes("create")) return "created";
+  if (token.includes("delete") || token.includes("remove")) return "deleted";
+  return "edited";
+}
+
+function fileChangeActionLabel(action: FileChangeAction): string {
+  if (action === "created") return "Created";
+  if (action === "deleted") return "Deleted";
+  if (action === "renamed") return "Renamed";
+  return "Edited";
+}
+
 function diffStats(diff: string | undefined): { added: number; removed: number } {
   if (!diff) return { added: 0, removed: 0 };
 
@@ -396,7 +418,15 @@ function ReasoningRow({ message }: { message: UIAssistantReasoningMessage }) {
 function ToolCallRow({ message }: { message: UIToolCallMessage }) {
   const [isExpanded, setIsExpanded] = useState(false);
   const command = message.command ?? message.toolName;
-  const summaryText = isExpanded ? "Ran command" : `Ran ${command}`;
+  const actionLabel =
+    message.status === "error"
+      ? "Failed"
+      : message.status === "interrupted"
+        ? "Declined"
+        : message.status === "pending"
+          ? "Running"
+          : "Ran";
+  const summaryText = isExpanded ? `${actionLabel} command` : `${actionLabel} ${command}`;
   const headerToneClass = isExpanded
     ? HEADER_EXPANDED_TONE_CLASS
     : HEADER_COLLAPSED_TONE_CLASS;
@@ -428,13 +458,19 @@ function ToolCallRow({ message }: { message: UIToolCallMessage }) {
 
 function FileEditRow({ message }: { message: UIFileEditMessage }) {
   const [isExpanded, setIsExpanded] = useState(false);
-  const firstPath = message.changes[0]?.path;
+  const firstChange = message.changes[0];
+  const firstPath = firstChange?.path;
   const firstFileName = firstPath ? fileNameFromPath(firstPath) : "file";
+  const firstMoveFileName = firstChange?.movePath
+    ? fileNameFromPath(firstChange.movePath)
+    : undefined;
   const extraCount = Math.max(0, message.changes.length - 1);
   const collapsedFileLabel =
-    extraCount > 0
-      ? `${firstFileName} +${extraCount} more`
-      : firstFileName;
+    firstMoveFileName && extraCount === 0
+      ? `${firstFileName} → ${firstMoveFileName}`
+      : extraCount > 0
+        ? `${firstFileName} +${extraCount} more`
+        : firstFileName;
   const collapsedStats = useMemo(
     () =>
       message.changes.reduce(
@@ -449,12 +485,23 @@ function FileEditRow({ message }: { message: UIFileEditMessage }) {
       ),
     [message.changes],
   );
-  const title = isExpanded ? "Edited file" : `Edited ${collapsedFileLabel}`;
+  const actionLabel = useMemo(() => {
+    if (message.status === "error") return "Failed";
+    if (message.status === "interrupted") return "Declined";
+    if (message.status === "pending") return "Applying";
+    if (message.changes.length === 0) return "Edited";
+    const actions = message.changes.map((change) => fileChangeAction(change));
+    const first = actions[0];
+    const hasMixed = actions.some((action) => action !== first);
+    if (hasMixed || !first) return "Changed";
+    return fileChangeActionLabel(first);
+  }, [message.changes, message.status]);
+  const title = isExpanded ? `${actionLabel} file` : `${actionLabel} ${collapsedFileLabel}`;
   const collapsedSummaryContent = isExpanded ? (
     title
   ) : (
     <span className="inline-flex min-w-0 items-center gap-1.5">
-      <span className="shrink-0 text-muted-foreground/90">Edited</span>
+      <span className="shrink-0 text-muted-foreground/90">{actionLabel}</span>
       <span className="truncate font-semibold text-foreground/95">
         {collapsedFileLabel}
       </span>
@@ -478,19 +525,27 @@ function FileEditRow({ message }: { message: UIFileEditMessage }) {
         >
           <div className="font-mono text-[12px] text-foreground/90">
               {message.changes.map((change, index) => {
+                const action = fileChangeAction(change);
+                const actionChip = fileChangeActionLabel(action);
                 const stats = diffStats(change.diff);
                 const diffLines = parseUnifiedDiffLines(change.diff);
                 const fileName = fileNameFromPath(change.path);
+                const pathDetail = change.movePath
+                  ? `${change.path} → ${change.movePath}`
+                  : change.path;
                 const visibleDiffLines = diffLines.filter(
                   (line) => line.type !== "meta" && line.type !== "hunk",
                 );
                 return (
                   <div
-                    key={change.path}
+                    key={`${change.path}:${change.movePath ?? ""}:${index}`}
                     className={index === 0 ? "" : "mt-1.5"}
                   >
                     <div className="overflow-hidden rounded-lg border border-border/60 bg-background/70">
                       <div className="flex items-center gap-2 px-3 pb-0.5 pt-2">
+                        <Badge variant="outline" className="h-4 rounded px-1 text-[9px]">
+                          {actionChip}
+                        </Badge>
                         <span
                           className="min-w-0 flex-1 truncate font-mono text-[12px] text-foreground/90"
                           title={change.path}
@@ -503,7 +558,7 @@ function FileEditRow({ message }: { message: UIFileEditMessage }) {
                         </span>
                       </div>
                       <div className="break-all px-3 pb-1 pt-0.5 font-mono text-[10px] text-muted-foreground/75">
-                        {change.path}
+                        {pathDetail}
                       </div>
                       <div className="max-h-[240px] overflow-auto border-t border-border/60 pb-1">
                         <div className="min-w-fit">

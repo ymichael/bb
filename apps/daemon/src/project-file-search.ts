@@ -15,6 +15,11 @@ const IGNORED_DIRECTORIES = new Set([
   "build",
   "coverage",
 ]);
+const IGNORED_FILE_NAMES = new Set([
+  ".DS_Store",
+  "Thumbs.db",
+  "desktop.ini",
+]);
 
 interface CachedFileList {
   expiresAt: number;
@@ -30,6 +35,11 @@ function normalizeLimit(limit: number | undefined): number {
 
 function normalizePath(path: string): string {
   return path.split(sep).join("/");
+}
+
+function isIgnoredFilePath(path: string): boolean {
+  const fileName = path.split("/").at(-1) ?? path;
+  return IGNORED_FILE_NAMES.has(fileName);
 }
 
 function fuzzyMatch(text: string, query: string): boolean {
@@ -66,7 +76,7 @@ export function rankProjectFiles(
 
   const ranked = files
     .map((path) => ({ path, score: scoreFilePath(path, normalizedQuery) }))
-    .filter((entry) => entry.score > 0)
+    .filter((entry) => entry.score > 0 && !isIgnoredFilePath(entry.path))
     .sort((left, right) => {
       if (right.score !== left.score) {
         return right.score - left.score;
@@ -109,6 +119,7 @@ async function collectProjectFiles(rootPath: string): Promise<string[]> {
         continue;
       }
       if (!entry.isFile()) continue;
+      if (IGNORED_FILE_NAMES.has(entryName)) continue;
 
       const absolutePath = join(directory, entryName);
       const relativePath = relative(rootPath, absolutePath);

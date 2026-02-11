@@ -8,7 +8,12 @@ export interface Project {
 }
 
 // Thread
-export type ThreadStatus = "idle" | "active";
+export type ThreadStatus =
+  | "created"
+  | "provisioning"
+  | "provisioning_failed"
+  | "idle"
+  | "active";
 
 export interface Thread {
   id: string;

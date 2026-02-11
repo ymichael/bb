@@ -36,6 +36,13 @@
       "when": 1770883200000,
       "tag": "0004_events_lookup_fields",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1770903000000,
+      "tag": "0005_thread_statuses",
+      "breakpoints": true
     }
   ]
 }

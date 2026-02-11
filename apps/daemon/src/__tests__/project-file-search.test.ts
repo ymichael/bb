@@ -43,4 +43,19 @@ describe("project file search ranking", () => {
 
     expect(ranked).toHaveLength(2);
   });
+
+  it("filters OS metadata files from results", () => {
+    const ranked = rankProjectFiles(
+      [
+        "plans/.DS_Store",
+        "plans/orchestrator-task-model.md",
+      ],
+      "plans/",
+      5,
+    );
+
+    expect(ranked).toEqual([
+      { path: "plans/orchestrator-task-model.md" },
+    ]);
+  });
 });
