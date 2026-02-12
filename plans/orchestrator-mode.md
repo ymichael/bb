@@ -5,6 +5,20 @@ Build an optional **orchestrator mode** that plans and executes multi-step work 
 
 Task model is the foundation. Orchestrator mode adds automation, coordination, retries, and dependency-aware execution.
 
+## Relationship to prompt modes and Task Skills
+This should fit the same prompt-level mode model:
+
+- **Agent mode:** direct thread workflow.
+- **Task mode:** task-first workflow driven by a selected Task Skill.
+
+Orchestrator mode can be modeled as:
+- either a dedicated top-level mode, or
+- an advanced Task Skill selected inside Task mode.
+
+Product intent: keep this concept simple for users — “structured kickoff + coordinated execution.”
+
+> Planning note: this document is product-behavior first; implementation details can follow once interaction design is settled.
+
 ## Dependency on task model
 Orchestrator mode assumes:
 - tasks exist as first-class records
@@ -15,7 +29,7 @@ Orchestrator mode assumes:
 Without task model, orchestrator mode should not ship.
 
 ## MVP UX
-1. User starts an orchestrated run from a project.
+1. User enters Task mode and selects an orchestrator-style kickoff (mode or task skill).
 2. User provides objective.
 3. Orchestrator generates/updates a task plan.
 4. User approves plan.

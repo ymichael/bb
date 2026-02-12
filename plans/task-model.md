@@ -6,12 +6,23 @@ Introduce first-class **tasks** as an organizational layer above threads, while 
 A task is a container for work. Most tasks will have one thread. Some tasks may have multiple threads (research, planning, implementation, verification).
 Tasks can also be hierarchical (task -> subtask -> subtask).
 
+## Interaction model: Agent mode vs Task mode
+Mode is a product-level UX choice in the prompt composer (alongside model/reasoning):
+
+- **Agent mode (default):** prompt behaves exactly like today (prompt -> orphaned thread).
+- **Task mode:** prompt creates/updates a task and runs a task kickoff workflow.
+
+Task mode should feel like structured prompting, not a separate app.
+
+> Planning note: this document is product-shape first; implementation specifics are intentionally flexible at this stage.
+
 ## Product principles
 - Keep the default path lightweight: user prompt -> **orphaned thread** (no task required).
 - Preserve flexibility: threads can exist without a task (unassigned/orphaned) to reduce mental overhead.
 - Make structure visible: sidebar and task page provide bird’s-eye context for multi-thread work.
 - Make promotion easy: orphaned threads should be one-click “convert/move into task”.
 - Make both models explicit in one place: sidebar uses a **single interleaved list** of task rows and orphaned thread rows.
+- Make mode choice explicit: users can choose Agent mode or Task mode each time they prompt.
 
 ## What this unlocks
 - Better sidebar organization than flat thread lists.
@@ -24,6 +35,8 @@ Tasks can also be hierarchical (task -> subtask -> subtask).
 - Task entities in core/db/api/web/cli.
 - Optional `thread.taskId` relationship.
 - Task hierarchy (`parentTaskId`) for subtasks.
+- Prompt-level mode selector (`Agent` vs `Task`).
+- Task Skill concept for Task mode kickoff behavior.
 - Sidebar mixed row navigation (tasks + orphaned threads).
 - Task detail page with task metadata + thread list.
 - Dependency graph primitives (no autonomous scheduler yet).
@@ -119,11 +132,88 @@ Task rows should show:
 
 ## Prompt entry behavior
 When user starts work from project main prompt:
-- Create an **unassigned thread** (same mental model as today).
-- Navigate user directly to that thread.
-- Provide fast “Create task from this thread” action in thread UI.
+- In **Agent mode**:
+  - Create an **unassigned thread** (same mental model as today).
+  - Navigate user directly to that thread.
+  - Provide fast “Create task from this thread” action in thread UI.
 
-This keeps “one prompt to start work” behavior unchanged while still allowing users to add task structure when needed.
+- In **Task mode**:
+  - Create (or select) a task.
+  - Invoke a selected **Task Skill** to decide how kickoff happens.
+
+This keeps default behavior unchanged while allowing structured workflows when users opt in.
+
+## Task Skills (used by Task mode)
+Task mode should invoke a configurable kickoff recipe called a **Task Skill**.
+
+Example default Task Skill:
+1. Make a task.
+2. Flesh out plan in a planning thread.
+3. Run implementation in a new thread.
+4. Run review in a new thread.
+
+Task Skills are a product concept (not just implementation detail):
+- Users can pick a task skill when in Task mode.
+- Projects can have a default task skill.
+- Users can override defaults per prompt.
+
+## Task creation UX (how users make tasks)
+We should support three clear entry points so tasks feel additive, not disruptive:
+
+1. **Explicit create task**
+   - “New task” button in project header/sidebar.
+   - Opens lightweight create modal/sheet:
+     - Title (required)
+     - Description (optional)
+     - Priority / Status (optional defaults)
+     - “Create task” primary action
+     - “Create task + start thread” secondary action
+
+2. **Create from orphaned thread**
+   - On thread detail and thread row menu: “Create task from thread”.
+   - Flow:
+     - prefill task title from thread title
+     - assign current thread to new task
+     - optional open task page after create
+
+3. **Create subtask from task page**
+   - “Add subtask” button in task page subtask panel.
+   - Prefills `parentTaskId`.
+
+## Task page UX blueprint
+Task page should make it obvious: “this is where I manage work; threads are execution detail.”
+
+Suggested layout:
+- **Header**
+  - Task title + status badge
+  - Priority / assignee chips
+  - Primary CTA: “Start thread” (or “Open active thread”)
+  - Secondary actions: Edit, Add subtask, Add dependency
+- **Left column: task context**
+  - Description editor
+  - Dependencies (blocked by / blocking)
+  - Subtasks list (inline status + counts)
+- **Right column: execution**
+  - Threads in this task (status, updated time, model if useful)
+  - Quick actions per thread (open, archive, unassign)
+  - Optional small activity feed (“thread started”, “status changed”)
+
+Behavior expectations:
+- If task has no thread, show strong CTA: “Start first thread for this task”.
+- If task has one active thread, show “Open active thread”.
+- If multiple threads exist, keep task page as bird’s-eye default.
+
+## Migration UX for prompt-first users
+We should not force users to “learn tasks first.”
+
+Guidelines:
+- Default remains **Agent mode** (`prompt -> orphaned thread`).
+- **Task mode** is opt-in from the prompt controls.
+- Introduce tasks with gentle affordances:
+  - “Organize into task” chip/banner on orphaned thread pages.
+  - Sidebar row actions: “Move to task…”, “Create task from thread”.
+  - Empty state copy: “Tasks help group related threads.”
+- Let users adopt Task mode incrementally based on workflow complexity.
 
 ---
 
