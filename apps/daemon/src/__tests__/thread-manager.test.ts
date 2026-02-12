@@ -329,6 +329,7 @@ describe("ThreadManager", () => {
       expect(startMsg.jsonrpc).toBe("2.0");
       expect(startMsg.method).toBe("thread/start");
       expect(startMsg.params.approvalPolicy).toBe("never");
+      expect(startMsg.params.sandbox).toBe("danger-full-access");
       expect(startMsg.params.baseInstructions).toContain("coding agent");
       expect(startMsg.id).toBe(2);
     });
@@ -358,6 +359,8 @@ describe("ThreadManager", () => {
       expect(turnMsg.method).toBe("turn/start");
       expect(turnMsg.params.threadId).toBe(CODEX_THREAD_ID);
       expect(turnMsg.params.input).toEqual([{ type: "text", text: "Fix the login bug" }]);
+      expect(turnMsg.params.approvalPolicy).toBe("never");
+      expect(turnMsg.params.sandboxPolicy).toEqual({ type: "dangerFullAccess" });
       expect(turnMsg.id).toBe(3);
     });
 
@@ -556,6 +559,7 @@ describe("ThreadManager", () => {
         { type: "image", url: "https://example.com/diagram.png" },
         { type: "localImage", path: "/tmp/local-diagram.png" },
       ]);
+      expect(turnMsg.params.sandboxPolicy).toEqual({ type: "dangerFullAccess" });
     });
 
     it("includes model and reasoning config when input options are provided", async () => {
@@ -584,12 +588,14 @@ describe("ThreadManager", () => {
       expect(startMsg.params.config).toEqual({
         model_reasoning_effort: "high",
       });
+      expect(startMsg.params.sandbox).toBe("danger-full-access");
 
       const turnMsg = JSON.parse(fakeChild._stdinData[2].trim());
       expect(turnMsg.params.model).toBe("gpt-5-codex");
       expect(turnMsg.params.config).toEqual({
         model_reasoning_effort: "high",
       });
+      expect(turnMsg.params.sandboxPolicy).toEqual({ type: "dangerFullAccess" });
     });
 
     it("does NOT send turn/start when no input is provided", async () => {
@@ -1406,6 +1412,7 @@ describe("ThreadManager", () => {
       expect(msg.method).toBe("turn/start");
       expect(msg.params.threadId).toBe("codex-tid-123");
       expect(msg.params.input).toEqual([{ type: "text", text: "Do more work" }]);
+      expect(msg.params.sandboxPolicy).toEqual({ type: "dangerFullAccess" });
     });
 
     it("sends turn/steer JSON-RPC when mode=steer and an active turn exists", async () => {
@@ -1472,6 +1479,43 @@ describe("ThreadManager", () => {
       expect(fakeStdinData.length).toBe(1);
       const msg = JSON.parse(fakeStdinData[0].trim());
       expect(msg.method).toBe("turn/steer");
+    });
+
+    it("auto mode falls back to turn/start when sandbox override is provided", async () => {
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeThread(),
+      );
+
+      const fakeStdinData: string[] = [];
+      const fakeProcess = {
+        kill: vi.fn(),
+        stdin: new Writable({
+          write(chunk: Buffer, _enc: string, cb: () => void) {
+            fakeStdinData.push(chunk.toString());
+            cb();
+          },
+        }),
+        stdout: null,
+        stderr: null,
+      };
+      (manager as any).processes.set("thread-1", fakeProcess);
+      (manager as any).providerThreadIds.set("thread-1", "codex-tid-123");
+      (manager as any).activeTurnIds.set("thread-1", "turn-123");
+
+      await manager.tell(
+        "thread-1",
+        {
+          input: [{ type: "text", text: "Keep going" }],
+        },
+        {
+          sandboxMode: "read-only",
+        },
+      );
+
+      expect(fakeStdinData.length).toBe(1);
+      const msg = JSON.parse(fakeStdinData[0].trim());
+      expect(msg.method).toBe("turn/start");
+      expect(msg.params.sandboxPolicy).toEqual({ type: "readOnly" });
     });
 
     it("throws when mode=steer but no active turn exists", async () => {
@@ -1570,6 +1614,7 @@ describe("ThreadManager", () => {
         { type: "image", url: "https://example.com/mock.png" },
         { type: "localImage", path: "/tmp/mock.png" },
       ]);
+      expect(msg.params.sandboxPolicy).toEqual({ type: "dangerFullAccess" });
     });
 
     it("throws for empty tell payload object", async () => {
@@ -1715,6 +1760,7 @@ describe("ThreadManager", () => {
       expect(msg.params.config).toEqual({
         model_reasoning_effort: "medium",
       });
+      expect(msg.params.sandboxPolicy).toEqual({ type: "dangerFullAccess" });
     });
 
     it("sets fallback title from first tell input while async generation is pending", async () => {

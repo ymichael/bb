@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils"
 export interface PromptOption<T extends string> {
   value: T
   label: string
+  tone?: "default" | "warning"
 }
 
 interface PromptOptionPickerProps<T extends string> {
@@ -29,6 +30,7 @@ export function PromptOptionPicker<T extends string>({
   className,
 }: PromptOptionPickerProps<T>) {
   const selectedOption = options.find((option) => option.value === value)
+  const selectedIsWarning = selectedOption?.tone === "warning"
 
   return (
     <DropdownMenu>
@@ -41,11 +43,20 @@ export function PromptOptionPicker<T extends string>({
           title={label}
           className={cn(
             "h-8 w-fit max-w-full min-w-0 items-center gap-1 border-none bg-transparent px-1 text-xs text-muted-foreground/75 shadow-none hover:bg-transparent hover:text-foreground",
+            selectedIsWarning &&
+              "text-amber-600 hover:text-amber-700 dark:text-amber-400 dark:hover:text-amber-300",
             className
           )}
         >
           <span>{selectedOption?.label ?? value}</span>
-          <ChevronDown className="size-3.5 text-muted-foreground" />
+          <ChevronDown
+            className={cn(
+              "size-3.5",
+              selectedIsWarning
+                ? "text-amber-500/90 dark:text-amber-300"
+                : "text-muted-foreground"
+            )}
+          />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="min-w-44">
@@ -55,7 +66,15 @@ export function PromptOptionPicker<T extends string>({
             onSelect={() => onChange(option.value)}
             className="flex items-center justify-between gap-3"
           >
-            <span>{option.label}</span>
+            <span
+              className={cn(
+                "flex items-center gap-2",
+                option.tone === "warning" &&
+                  "text-amber-700 dark:text-amber-300"
+              )}
+            >
+              <span>{option.label}</span>
+            </span>
             <Check
               className={cn(
                 "size-4",

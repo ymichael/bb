@@ -36,6 +36,7 @@ export type {
   ModelReasoningEffort,
   AvailableModel,
   ReasoningLevel,
+  SandboxMode,
   TellThreadMode,
   SystemStatus,
   ProviderCapabilities,

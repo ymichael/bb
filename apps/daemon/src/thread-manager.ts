@@ -208,6 +208,7 @@ export class ThreadManager {
           projectId: thread.projectId,
           model: options?.model,
           reasoningLevel: options?.reasoningLevel,
+          sandboxMode: options?.sandboxMode,
         },
         {
           reason: "tell-after-provisioning-failure",
@@ -218,7 +219,9 @@ export class ThreadManager {
 
     const providerThreadId = await this._ensureProviderSession(threadId, options);
     const tellMode = request.mode ?? "auto";
-    const hasExecutionOverrides = Boolean(options?.model || options?.reasoningLevel);
+    const hasExecutionOverrides = Boolean(
+      options?.model || options?.reasoningLevel || options?.sandboxMode,
+    );
     const activeTurnId =
       this.activeTurnIds.get(threadId) ?? this._resolvePersistedActiveTurnId(threadId);
     if (activeTurnId) {

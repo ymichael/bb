@@ -108,4 +108,80 @@ describe("codex provider adapter", () => {
     await expect(adapter.listModels()).resolves.toEqual(models);
     expect(mockedListCodexModels).toHaveBeenCalledTimes(1);
   });
+
+  it("defaults to full-access sandbox for start, resume, and turns", () => {
+    const adapter = createCodexProviderAdapter();
+
+    expect(
+      adapter.createThreadStartParams({
+        projectId: "proj-1",
+      }),
+    ).toMatchObject({
+      approvalPolicy: "never",
+      sandbox: "danger-full-access",
+    });
+
+    expect(adapter.createThreadResumeParams("provider-thread-1")).toMatchObject({
+      threadId: "provider-thread-1",
+      approvalPolicy: "never",
+      sandbox: "danger-full-access",
+    });
+
+    expect(
+      adapter.createTurnStartParams("provider-thread-1", [
+        { type: "text", text: "Continue" },
+      ]),
+    ).toMatchObject({
+      threadId: "provider-thread-1",
+      approvalPolicy: "never",
+      sandboxPolicy: { type: "dangerFullAccess" },
+    });
+  });
+
+  it("maps sandbox mode overrides to Codex thread/turn params", () => {
+    const adapter = createCodexProviderAdapter();
+
+    expect(
+      adapter.createThreadStartParams({
+        projectId: "proj-1",
+        sandboxMode: "read-only",
+      }),
+    ).toMatchObject({
+      sandbox: "read-only",
+    });
+
+    expect(
+      adapter.createThreadResumeParams("provider-thread-1", {
+        sandboxMode: "workspace-write",
+      }),
+    ).toMatchObject({
+      sandbox: "workspace-write",
+    });
+
+    expect(
+      adapter.createTurnStartParams(
+        "provider-thread-1",
+        [{ type: "text", text: "Continue" }],
+        { sandboxMode: "read-only" },
+      ),
+    ).toMatchObject({
+      sandboxPolicy: { type: "readOnly" },
+    });
+
+    expect(
+      adapter.createTurnStartParams(
+        "provider-thread-1",
+        [{ type: "text", text: "Continue" }],
+        { sandboxMode: "workspace-write" },
+      ),
+    ).toMatchObject({
+      sandboxPolicy: {
+        type: "workspaceWrite",
+        writableRoots: [],
+        networkAccess: true,
+        excludeTmpdirEnvVar: false,
+        excludeSlashTmp: false,
+      },
+    });
+  });
 });

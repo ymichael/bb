@@ -1,4 +1,8 @@
 export type ReasoningLevel = "low" | "medium" | "high" | "xhigh";
+export type SandboxMode =
+  | "read-only"
+  | "workspace-write"
+  | "danger-full-access";
 
 export type PromptInput =
   | { type: "text"; text: string }
@@ -27,6 +31,7 @@ export interface SpawnThreadRequest {
   input?: PromptInput[];
   model?: string;
   reasoningLevel?: ReasoningLevel;
+  sandboxMode?: SandboxMode;
 }
 
 export type TellThreadMode = "auto" | "start" | "steer";
@@ -35,6 +40,7 @@ export interface TellThreadRequest {
   input: PromptInput[];
   model?: string;
   reasoningLevel?: ReasoningLevel;
+  sandboxMode?: SandboxMode;
   mode?: TellThreadMode;
 }
 

@@ -22,12 +22,18 @@ export const spawnThreadSchema = z.object({
   input: z.array(promptInputSchema).min(1).optional(),
   model: z.string().optional(),
   reasoningLevel: z.enum(["low", "medium", "high", "xhigh"]).optional(),
+  sandboxMode: z
+    .enum(["read-only", "workspace-write", "danger-full-access"])
+    .optional(),
 });
 
 export const tellThreadSchema = z.object({
   input: z.array(promptInputSchema).min(1),
   model: z.string().optional(),
   reasoningLevel: z.enum(["low", "medium", "high", "xhigh"]).optional(),
+  sandboxMode: z
+    .enum(["read-only", "workspace-write", "danger-full-access"])
+    .optional(),
   mode: z.enum(["auto", "start", "steer"]).optional(),
 });
 

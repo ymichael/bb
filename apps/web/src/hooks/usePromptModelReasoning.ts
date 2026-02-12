@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
-import type { AvailableModel, ReasoningLevel } from "@beanbag/core";
+import type { AvailableModel, ReasoningLevel, SandboxMode } from "@beanbag/core";
 import { useAvailableModels } from "./useApi";
 
 const MODEL_STORAGE_KEY = "beanbag.promptbox.model";
 const REASONING_STORAGE_KEY = "beanbag.promptbox.reasoning";
+const SANDBOX_STORAGE_KEY = "beanbag.promptbox.sandbox";
 
 const FALLBACK_REASONING_OPTIONS = [
   { value: "low", label: "Low" },
@@ -33,10 +34,20 @@ const REASONING_LABELS: Record<ReasoningLevel, string> = {
   high: "High",
   xhigh: "Extra High",
 };
+const SANDBOX_OPTIONS: PromptOption<SandboxMode>[] = [
+  { value: "read-only", label: "Read Only" },
+  { value: "workspace-write", label: "Workspace Write" },
+  {
+    value: "danger-full-access",
+    label: "Full Access",
+    tone: "warning",
+  },
+];
 
 interface PromptOption<T extends string> {
   value: T;
   label: string;
+  tone?: "default" | "warning";
 }
 
 function isReasoningLevel(value: unknown): value is ReasoningLevel {
@@ -45,6 +56,14 @@ function isReasoningLevel(value: unknown): value is ReasoningLevel {
     value === "medium" ||
     value === "high" ||
     value === "xhigh"
+  );
+}
+
+function isSandboxMode(value: unknown): value is SandboxMode {
+  return (
+    value === "read-only" ||
+    value === "workspace-write" ||
+    value === "danger-full-access"
   );
 }
 
@@ -57,6 +76,12 @@ function getStoredReasoningLevel(): ReasoningLevel {
   if (typeof window === "undefined") return "medium";
   const raw = window.localStorage.getItem(REASONING_STORAGE_KEY);
   return isReasoningLevel(raw) ? raw : "medium";
+}
+
+function getStoredSandboxMode(): SandboxMode {
+  if (typeof window === "undefined") return "danger-full-access";
+  const raw = window.localStorage.getItem(SANDBOX_STORAGE_KEY);
+  return isSandboxMode(raw) ? raw : "danger-full-access";
 }
 
 function formatModelLabel(value: string): string {
@@ -80,6 +105,9 @@ export function usePromptModelReasoning() {
   );
   const [reasoningLevel, setReasoningLevel] = useState<ReasoningLevel>(() =>
     getStoredReasoningLevel(),
+  );
+  const [sandboxMode, setSandboxMode] = useState<SandboxMode>(() =>
+    getStoredSandboxMode(),
   );
 
   const availableModels = useMemo(
@@ -167,13 +195,21 @@ export function usePromptModelReasoning() {
     window.localStorage.setItem(REASONING_STORAGE_KEY, reasoningLevel);
   }, [reasoningLevel]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(SANDBOX_STORAGE_KEY, sandboxMode);
+  }, [sandboxMode]);
+
   return {
     selectedModel,
     setSelectedModel,
     reasoningLevel,
     setReasoningLevel,
+    sandboxMode,
+    setSandboxMode,
     activeModel,
     modelOptions,
     reasoningOptions,
+    sandboxOptions: SANDBOX_OPTIONS,
   };
 }

@@ -1,5 +1,6 @@
 import type {
   PromptInput,
+  SandboxMode,
   SpawnThreadRequest,
   Thread,
   ThreadEvent,
@@ -14,6 +15,15 @@ import type {
 
 const DEFAULT_BASE_INSTRUCTIONS =
   "You are a coding agent working on a project thread. Follow the instructions carefully and write clean, working code.";
+const DEFAULT_APPROVAL_POLICY = "never";
+const DEFAULT_SANDBOX_MODE = "danger-full-access";
+const DEFAULT_WORKSPACE_WRITE_POLICY = {
+  type: "workspaceWrite",
+  writableRoots: [] as string[],
+  networkAccess: true,
+  excludeTmpdirEnvVar: false,
+  excludeSlashTmp: false,
+} as const;
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
@@ -51,6 +61,22 @@ function withExecutionOptions(
     };
   }
   return nextParams;
+}
+
+function resolveSandboxMode(sandboxMode?: SandboxMode): SandboxMode {
+  return sandboxMode ?? DEFAULT_SANDBOX_MODE;
+}
+
+function toTurnSandboxPolicy(sandboxMode?: SandboxMode): Record<string, unknown> {
+  switch (resolveSandboxMode(sandboxMode)) {
+    case "read-only":
+      return { type: "readOnly" };
+    case "workspace-write":
+      return { ...DEFAULT_WORKSPACE_WRITE_POLICY };
+    case "danger-full-access":
+    default:
+      return { type: "dangerFullAccess" };
+  }
 }
 
 function deriveThreadTitleFromInput(input?: PromptInput[]): string | undefined {
@@ -125,7 +151,8 @@ export function createCodexProviderAdapter(
     createThreadStartParams(req: SpawnThreadRequest): Record<string, unknown> {
       return withExecutionOptions(
         {
-          approvalPolicy: "never",
+          approvalPolicy: DEFAULT_APPROVAL_POLICY,
+          sandbox: resolveSandboxMode(req.sandboxMode),
           baseInstructions: DEFAULT_BASE_INSTRUCTIONS,
         },
         req,
@@ -135,7 +162,14 @@ export function createCodexProviderAdapter(
       providerThreadId: string,
       options?: ProviderExecutionOptions,
     ): Record<string, unknown> {
-      return withExecutionOptions({ threadId: providerThreadId }, options);
+      return withExecutionOptions(
+        {
+          threadId: providerThreadId,
+          approvalPolicy: DEFAULT_APPROVAL_POLICY,
+          sandbox: resolveSandboxMode(options?.sandboxMode),
+        },
+        options,
+      );
     },
     createTurnStartParams(
       providerThreadId: string,
@@ -146,6 +180,8 @@ export function createCodexProviderAdapter(
         {
           threadId: providerThreadId,
           input,
+          approvalPolicy: DEFAULT_APPROVAL_POLICY,
+          sandboxPolicy: toTurnSandboxPolicy(options?.sandboxMode),
         },
         options,
       );

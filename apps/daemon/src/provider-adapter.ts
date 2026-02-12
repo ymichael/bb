@@ -3,6 +3,7 @@ import type {
   ProviderCapabilities,
   PromptInput,
   ReasoningLevel,
+  SandboxMode,
   SpawnThreadRequest,
   Thread,
   ThreadEvent,
@@ -11,6 +12,7 @@ import type {
 export interface ProviderExecutionOptions {
   model?: string;
   reasoningLevel?: ReasoningLevel;
+  sandboxMode?: SandboxMode;
 }
 
 export interface ProviderTitleGeneratorArgs {

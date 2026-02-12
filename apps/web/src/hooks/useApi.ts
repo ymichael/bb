@@ -108,9 +108,10 @@ export function useTellThread() {
       input,
       model,
       reasoningLevel,
+      sandboxMode,
       mode,
     }: { id: string } & TellThreadRequest) =>
-      api.tellThread(id, { input, model, reasoningLevel, mode }),
+      api.tellThread(id, { input, model, reasoningLevel, sandboxMode, mode }),
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["thread", variables.id] });
       queryClient.invalidateQueries({ queryKey: ["threadEvents", variables.id] });

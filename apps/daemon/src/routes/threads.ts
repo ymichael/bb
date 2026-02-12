@@ -50,15 +50,15 @@ export function createThreadRoutes(threadManager: ThreadManager) {
       zValidator("json", tellThreadSchema),
       async (c) => {
         try {
-          const { input, model, reasoningLevel, mode } = c.req.valid("json");
+          const { input, model, reasoningLevel, sandboxMode, mode } = c.req.valid("json");
           const thread = threadManager.getById(c.req.param("id"));
           if (!thread) {
             return sendRouteError(c, threadNotFoundError(c.req.param("id")));
           }
           const tellRequest = mode ? { input, mode } : { input };
           const options =
-            model || reasoningLevel
-              ? { model, reasoningLevel }
+            model || reasoningLevel || sandboxMode
+              ? { model, reasoningLevel, sandboxMode }
               : undefined;
           if (options) {
             await threadManager.tell(c.req.param("id"), tellRequest, options);

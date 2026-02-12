@@ -115,6 +115,30 @@ describe("Thread routes", () => {
       });
     });
 
+    it("forwards sandbox mode when provided", async () => {
+      const thread = makeThread({ id: "new-thread" });
+      (threadManager.spawn as ReturnType<typeof vi.fn>).mockResolvedValue(
+        thread,
+      );
+
+      const res = await app.request("/threads", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          projectId: "proj-1",
+          input: [{ type: "text", text: "Do work" }],
+          sandboxMode: "read-only",
+        }),
+      });
+
+      expect(res.status).toBe(201);
+      expect(threadManager.spawn).toHaveBeenCalledWith({
+        projectId: "proj-1",
+        input: [{ type: "text", text: "Do work" }],
+        sandboxMode: "read-only",
+      });
+    });
+
     it("returns 400 for invalid body", async () => {
       const res = await app.request("/threads", {
         method: "POST",
@@ -273,6 +297,29 @@ describe("Thread routes", () => {
         "thread-1",
         { input: [{ type: "text", text: "Do more stuff" }] },
         { model: "gpt-5-codex", reasoningLevel: "high" },
+      );
+    });
+
+    it("forwards sandbox mode override when provided", async () => {
+      const thread = makeThread();
+      (threadManager.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        thread,
+      );
+
+      const res = await app.request("/threads/thread-1/tell", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          input: [{ type: "text", text: "Do more stuff" }],
+          sandboxMode: "workspace-write",
+        }),
+      });
+
+      expect(res.status).toBe(200);
+      expect(threadManager.tell).toHaveBeenCalledWith(
+        "thread-1",
+        { input: [{ type: "text", text: "Do more stuff" }] },
+        expect.objectContaining({ sandboxMode: "workspace-write" }),
       );
     });
 

@@ -140,9 +140,12 @@ export function ThreadDetailView() {
     setSelectedModel,
     reasoningLevel,
     setReasoningLevel,
+    sandboxMode,
+    setSandboxMode,
     activeModel,
     modelOptions,
     reasoningOptions,
+    sandboxOptions,
   } = usePromptModelReasoning();
 
   const uiMessages = useMemo(
@@ -244,6 +247,7 @@ export function ThreadDetailView() {
         input: [{ type: "text", text: trimmed }],
         model: activeModel?.model ?? selectedModel,
         reasoningLevel,
+        sandboxMode,
       },
       { onSuccess: () => promptDraft.clear() },
     );
@@ -350,6 +354,12 @@ export function ThreadDetailView() {
                     value={reasoningLevel}
                     options={reasoningOptions}
                     onChange={setReasoningLevel}
+                  />
+                  <PromptOptionPicker
+                    label="Sandbox"
+                    value={sandboxMode}
+                    options={sandboxOptions}
+                    onChange={setSandboxMode}
                   />
                 </>
               }
