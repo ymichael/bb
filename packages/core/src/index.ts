@@ -2,8 +2,23 @@ export type {
   Project,
   Thread,
   ThreadStatus,
+  ThreadEventType,
+  ThreadEventDataByType,
+  ThreadEventData,
+  ThreadEventDataForType,
+  ThreadEventOfType,
   ThreadEvent,
 } from "./types.js";
+
+export type {
+  ServerNotification,
+  EventMsg,
+  CodexServerNotificationMethod,
+  CodexServerNotificationForMethod,
+  CodexServerNotificationParamsByMethod,
+  CodexEventMessageType,
+  CodexEventMessageForType,
+} from "./generated/codex-app-server/index.js";
 
 export type {
   SubscribeMessage,

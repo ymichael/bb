@@ -220,7 +220,7 @@ export function ThreadDetailView() {
         </div>
 
         <div className="shrink-0">
-          <div className="chat-prompt-box mx-auto w-full max-w-[800px] bg-background px-4 pb-4">
+          <div className="chat-prompt-box mx-auto w-full max-w-[800px] bg-background px-4 pb-4 pt-2">
             {isCreated || isProvisioning || isProvisioningFailed ? (
               <div className="pb-2 text-xs text-muted-foreground">
                 {isCreated

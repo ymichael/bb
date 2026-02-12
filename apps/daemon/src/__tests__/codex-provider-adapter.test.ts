@@ -8,16 +8,21 @@ vi.mock("../codex-models.js", () => ({
 import { listCodexModels } from "../codex-models.js";
 import { createCodexProviderAdapter } from "../codex-provider-adapter.js";
 
-function makeEvent(overrides: Partial<ThreadEvent> = {}): ThreadEvent {
+type ThreadEventOverrides = Partial<Omit<ThreadEvent, "type" | "data">> & {
+  type?: string;
+  data?: unknown;
+};
+
+function makeEvent(overrides: ThreadEventOverrides = {}): ThreadEvent {
   return {
     id: "evt-1",
     threadId: "thread-1",
     seq: 1,
-    type: "turn/start",
+    type: "turn/started",
     data: {},
     createdAt: 1000,
     ...overrides,
-  };
+  } as ThreadEvent;
 }
 
 describe("codex provider adapter", () => {
@@ -27,295 +32,55 @@ describe("codex provider adapter", () => {
     vi.clearAllMocks();
   });
 
-  it("canonicalizes turn lifecycle events", () => {
+  it("normalizes event type tokens", () => {
     const adapter = createCodexProviderAdapter();
 
-    expect(
-      adapter.toCanonicalEvent(
-        makeEvent({
-          type: "turn/start",
-          data: {
-            turnId: "turn-1",
-            input: [{ type: "text", text: "Hello" }],
-          },
-        }),
-      ),
-    ).toEqual(
-      makeEvent({
-        type: "turn/started",
-        data: {
-          turnId: "turn-1",
-          input: [{ type: "text", text: "Hello" }],
-        },
-      }),
-    );
-
-    expect(
-      adapter.toCanonicalEvent(
-        makeEvent({
-          id: "evt-2",
-          seq: 2,
-          type: "turn/end",
-          data: { turnId: "turn-1" },
-        }),
-      ),
-    ).toEqual(
-      makeEvent({
-        id: "evt-2",
-        seq: 2,
-        type: "turn/completed",
-        data: { turnId: "turn-1" },
-      }),
+    expect(adapter.normalizeEventType("turn.started")).toBe("turn/started");
+    expect(adapter.normalizeEventType("THREAD/NAME/UPDATED")).toBe(
+      "thread/name/updated",
     );
   });
 
-  it("canonicalizes completed message events", () => {
+  it("derives status transitions from turn lifecycle events", () => {
     const adapter = createCodexProviderAdapter();
 
-    const userEvent = adapter.toCanonicalEvent(
-      makeEvent({
-        type: "item/completed",
-        data: {
-          turnId: "turn-1",
-          item: {
-            id: "u-1",
-            type: "userMessage",
-            content: [
-              { type: "inputText", text: "Can you fix this?" },
-              { type: "localImage", path: "/tmp/screenshot.png" },
-            ],
-          },
-        },
-      }),
-    );
-
-    expect(userEvent.type).toBe("message/user");
-    expect(userEvent.data).toEqual({
-      role: "user",
-      turnId: "turn-1",
-      itemId: "u-1",
-      text: "Can you fix this?",
-      attachments: {
-        webImages: 0,
-        localImages: 1,
-      },
-    });
-
-    const assistantEvent = adapter.toCanonicalEvent(
-      makeEvent({
-        id: "evt-2",
-        seq: 2,
-        type: "item/completed",
-        data: {
-          turnId: "turn-1",
-          item: {
-            id: "a-1",
-            type: "agentMessage",
-            text: "Implemented the fix.",
-          },
-        },
-      }),
-    );
-
-    expect(assistantEvent.type).toBe("message/assistant");
-    expect(assistantEvent.data).toEqual({
-      role: "assistant",
-      turnId: "turn-1",
-      itemId: "a-1",
-      text: "Implemented the fix.",
-    });
+    expect(adapter.statusForEvent("turn/start")).toBe("active");
+    expect(adapter.statusForEvent("turn/started")).toBe("active");
+    expect(adapter.statusForEvent("turn/end")).toBe("idle");
+    expect(adapter.statusForEvent("turn/completed")).toBe("idle");
+    expect(adapter.statusForEvent("thread/started")).toBeUndefined();
   });
 
-  it("canonicalizes delta, title, and unknown provider events", () => {
+  it("derives thread titles from thread events", () => {
     const adapter = createCodexProviderAdapter();
 
     expect(
-      adapter.toCanonicalEvent(
-        makeEvent({
-          type: "item/agentMessage/delta",
-          data: { turnId: "turn-1", itemId: "a-1", delta: "hello" },
-        }),
-      ),
-    ).toEqual(
-      makeEvent({
-        type: "message/assistant/delta",
-        data: {
-          role: "assistant",
-          turnId: "turn-1",
-          itemId: "a-1",
-          text: "hello",
-          delta: "hello",
+      adapter.titleFromEvent("thread/started", {
+        thread: {
+          preview: "   Hello     world   ",
         },
       }),
-    );
+    ).toBe("Hello world");
 
     expect(
-      adapter.toCanonicalEvent(
-        makeEvent({
-          id: "evt-2",
-          seq: 2,
-          type: "thread/name/updated",
-          data: { threadName: "  Better title  " },
-        }),
-      ),
-    ).toEqual(
-      makeEvent({
-        id: "evt-2",
-        seq: 2,
-        type: "thread/title/updated",
-        data: { title: "Better title" },
+      adapter.titleFromEvent("thread/name/updated", {
+        threadName: "  New title  ",
       }),
-    );
-
-    const providerEvent = adapter.toCanonicalEvent(
-      makeEvent({
-        id: "evt-3",
-        seq: 3,
-        type: "item/started",
-        data: { item: { id: "x" } },
-      }),
-    );
-    expect(providerEvent.type).toBe("provider/event");
-    expect(providerEvent.data).toEqual({
-      provider: "codex",
-      providerEventType: "item/started",
-      payload: { item: { id: "x" } },
-    });
+    ).toBe("New title");
   });
 
-  it("canonicalizes command execution events into tool call lifecycle events", () => {
-    const adapter = createCodexProviderAdapter();
-
-    expect(
-      adapter.toCanonicalEvent(
-        makeEvent({
-          type: "codex/event/exec_command_begin",
-          data: {
-            msg: {
-              type: "exec_command_begin",
-              call_id: "call-1",
-              command: ["bash", "-lc", "pwd"],
-            },
-            cwd: "/repo",
-          },
-        }),
-      ),
-    ).toEqual(
-      makeEvent({
-        type: "tool/call/started",
-        data: {
-          toolName: "exec_command",
-          callId: "call-1",
-          command: "bash -lc pwd",
-          cwd: "/repo",
-        },
-      }),
-    );
-
-    expect(
-      adapter.toCanonicalEvent(
-        makeEvent({
-          id: "evt-2",
-          seq: 2,
-          type: "item/started",
-          data: {
-            turnId: "turn-1",
-            item: {
-              type: "commandExecution",
-              id: "call-2",
-              command: "npm test",
-              cwd: "/repo",
-            },
-          },
-        }),
-      ),
-    ).toEqual(
-      makeEvent({
-        id: "evt-2",
-        seq: 2,
-        type: "tool/call/started",
-        data: {
-          toolName: "exec_command",
-          turnId: "turn-1",
-          callId: "call-2",
-          command: "npm test",
-          cwd: "/repo",
-        },
-      }),
-    );
-
-    expect(
-      adapter.toCanonicalEvent(
-        makeEvent({
-          id: "evt-3",
-          seq: 3,
-          type: "codex/event/exec_command_end",
-          data: {
-            msg: {
-              type: "exec_command_end",
-              call_id: "call-1",
-              exit_code: 0,
-              status: "completed",
-              stdout: "ok",
-            },
-          },
-        }),
-      ),
-    ).toEqual(
-      makeEvent({
-        id: "evt-3",
-        seq: 3,
-        type: "tool/call/completed",
-        data: {
-          toolName: "exec_command",
-          callId: "call-1",
-          status: "completed",
-          exitCode: 0,
-          output: "ok",
-        },
-      }),
-    );
-
-    expect(
-      adapter.toCanonicalEvent(
-        makeEvent({
-          id: "evt-4",
-          seq: 4,
-          type: "item/completed",
-          data: {
-            item: {
-              type: "commandExecution",
-              id: "call-2",
-              status: "completed",
-              exitCode: 0,
-              output: "ok",
-            },
-          },
-        }),
-      ),
-    ).toEqual(
-      makeEvent({
-        id: "evt-4",
-        seq: 4,
-        type: "tool/call/completed",
-        data: {
-          toolName: "exec_command",
-          callId: "call-2",
-          status: "completed",
-          exitCode: 0,
-          output: "ok",
-        },
-      }),
-    );
-  });
-
-  it("extracts output from canonical assistant events", () => {
+  it("extracts assistant output from raw item/completed events", () => {
     const adapter = createCodexProviderAdapter();
 
     const output = adapter.outputFromEvent(
       makeEvent({
-        type: "message/assistant",
-        data: { text: "Final answer" },
+        type: "item/completed",
+        data: {
+          item: {
+            type: "agentMessage",
+            text: "Final answer",
+          },
+        },
       }),
     );
 

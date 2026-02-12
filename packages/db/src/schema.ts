@@ -1,4 +1,5 @@
 import { sqliteTable, text, integer, index } from "drizzle-orm/sqlite-core";
+import type { ThreadEventType } from "@beanbag/core";
 
 export const projects = sqliteTable("projects", {
   id: text("id").primaryKey(),
@@ -34,7 +35,7 @@ export const events = sqliteTable(
       .notNull()
       .references(() => threads.id),
     seq: integer("seq").notNull(),
-    type: text("type").notNull(),
+    type: text("type").$type<ThreadEventType>().notNull(),
     normType: text("norm_type").notNull().default(""),
     turnId: text("turn_id"),
     providerThreadId: text("provider_thread_id"),

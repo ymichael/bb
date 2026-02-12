@@ -5,6 +5,8 @@ import type {
   Thread,
   ThreadStatus,
   ThreadEvent,
+  ThreadEventData,
+  ThreadEventType,
 } from "@beanbag/core";
 import type { DbConnection } from "./connection.js";
 import { projects, threads, events } from "./schema.js";
@@ -267,8 +269,8 @@ export class EventRepository {
   create(data: {
     threadId: string;
     seq: number;
-    type: string;
-    data: unknown;
+    type: ThreadEventType;
+    data: ThreadEventData;
   }): ThreadEvent {
     const now = Date.now();
     const lookupFields = deriveEventLookupFields(data.type, data.data);
@@ -291,7 +293,7 @@ export class EventRepository {
       threadId: row.threadId,
       seq: row.seq,
       type: row.type,
-      data: data.data,
+      data: JSON.parse(row.data),
       createdAt: row.createdAt,
     };
   }
@@ -309,14 +311,16 @@ export class EventRepository {
       .orderBy(events.seq)
       .all();
 
-    return rows.map((r) => ({
-      id: r.id,
-      threadId: r.threadId,
-      seq: r.seq,
-      type: r.type,
-      data: JSON.parse(r.data),
-      createdAt: r.createdAt,
-    }));
+    return rows.map((r) => {
+      return {
+        id: r.id,
+        threadId: r.threadId,
+        seq: r.seq,
+        type: r.type,
+        data: JSON.parse(r.data),
+        createdAt: r.createdAt,
+      };
+    });
   }
 
   getLatestSeq(threadId: string): number {

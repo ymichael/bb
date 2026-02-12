@@ -240,22 +240,12 @@ function printEvent(event: ThreadEvent): void {
   const time = new Date(event.createdAt).toLocaleTimeString();
   const data = typeof event.data === "string" ? event.data : JSON.stringify(event.data, null, 2);
 
-  switch (event.type) {
-    case "message":
-      console.log(`[${time}] ${data}`);
-      break;
-    case "tool_call":
-      console.log(`[${time}] [tool] ${data}`);
-      break;
-    case "tool_result":
-      console.log(`[${time}] [result] ${data}`);
-      break;
-    case "error":
-      console.log(`[${time}] [ERROR] ${data}`);
-      break;
-    default:
-      console.log(`[${time}] [${event.type}] ${data}`);
+  if (event.type === "error") {
+    console.log(`[${time}] [ERROR] ${data}`);
+    return;
   }
+
+  console.log(`[${time}] [${event.type}] ${data}`);
 }
 
 function sleep(ms: number): Promise<void> {

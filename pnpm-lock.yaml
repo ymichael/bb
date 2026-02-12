@@ -63,6 +63,9 @@ importers:
       hono:
         specifier: ^4.7.0
         version: 4.11.9
+      xstate:
+        specifier: ^5.20.2
+        version: 5.27.0
       zod:
         specifier: ^3.24.0
         version: 3.25.76
@@ -2788,6 +2791,9 @@ packages:
       utf-8-validate:
         optional: true
 
+  xstate@5.27.0:
+    resolution: {integrity: sha512-ILzEhrLTbTyh3kP19IgLBX/sOSfejnDXrxcftuXS9QaY6mc8QuHXcl3GqUIAaAXM/09/ozHFn0nGFlQj+r9tCg==}
+
   yallist@3.1.1:
     resolution: {integrity: sha512-a4UGQaWPH59mOXUYnAG2ewncQS4i4F43Tv3JoAM+s2VDAmS9NsK8GpDMLrCHPksFT7h3K6TOoUNn2pb7RoXx4g==}
 
@@ -5193,6 +5199,8 @@ snapshots:
   wrappy@1.0.2: {}
 
   ws@8.19.0: {}
+
+  xstate@5.27.0: {}
 
   yallist@3.1.1: {}
 

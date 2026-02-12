@@ -4,6 +4,8 @@ import type {
   SystemProviderInfo,
   Thread,
   ThreadEvent,
+  ThreadEventData,
+  ThreadEventType,
   PromptInput,
   SpawnThreadRequest,
   TellThreadRequest,
@@ -39,6 +41,7 @@ import {
   threadNotFoundError,
   unsupportedOperationError,
 } from "./domain-errors.js";
+import { canTransitionThreadStatus } from "./thread-status-machine.js";
 
 export type PromptExecutionOptions = ProviderExecutionOptions;
 
@@ -53,6 +56,10 @@ export class ThreadManager {
   private lockedTitleThreadIds = new Set<string>();
   /** Ensure auto-title generation runs at most once per thread. */
   private autoTitleAttemptedThreadIds = new Set<string>();
+  /** Emit at most one refresh-token warning per thread process lifecycle. */
+  private authRefreshWarningThreadIds = new Set<string>();
+  /** Suppresses multiline JSON auth error payloads already summarized above. */
+  private suppressedAuthStderrDepth = new Map<string, number>();
   /** Tracks in-flight provisioning operations by thread ID. */
   private provisioningTasks = new Map<string, Promise<void>>();
   private rpcIdCounter = 0;
@@ -312,6 +319,8 @@ export class ThreadManager {
     }
 
     this.activeTurnIds.delete(threadId);
+    this.authRefreshWarningThreadIds.delete(threadId);
+    this.suppressedAuthStderrDepth.delete(threadId);
     this.threadRepo.update(threadId, { status: "idle" });
     this.ws.broadcast("thread", threadId);
   }
@@ -343,6 +352,8 @@ export class ThreadManager {
 
     this.providerThreadIds.delete(threadId);
     this.activeTurnIds.delete(threadId);
+    this.authRefreshWarningThreadIds.delete(threadId);
+    this.suppressedAuthStderrDepth.delete(threadId);
     this.threadRepo.update(threadId, {
       status: "idle",
       archivedAt: thread.archivedAt ?? Date.now(),
@@ -441,6 +452,8 @@ export class ThreadManager {
     this.providerThreadIds.clear();
     this.activeTurnIds.clear();
     this.autoTitleAttemptedThreadIds.clear();
+    this.authRefreshWarningThreadIds.clear();
+    this.suppressedAuthStderrDepth.clear();
     this.provisioningTasks.clear();
   }
 
@@ -543,6 +556,8 @@ export class ThreadManager {
 
     this.providerThreadIds.delete(threadId);
     this.activeTurnIds.delete(threadId);
+    this.authRefreshWarningThreadIds.delete(threadId);
+    this.suppressedAuthStderrDepth.delete(threadId);
   }
 
   private _spawnProcess(threadId: string, cwd: string): void {
@@ -567,7 +582,7 @@ export class ThreadManager {
         );
       },
       onStderrLine: (line) => {
-        console.error(`[thread ${threadId}] stderr: ${line}`);
+        this._handleProviderStderrLine(threadId, line);
       },
     });
     this.runtimes.set(threadId, runtime);
@@ -728,13 +743,12 @@ export class ThreadManager {
     seqCounter: number,
     msg: { method: unknown; params: unknown },
   ): number {
-    if (msg.method === undefined || msg.method === null) {
+    if (typeof msg.method !== "string") {
       return seqCounter;
     }
 
-    const eventType =
-      typeof msg.method === "string" ? msg.method : String(msg.method);
-    const eventData = msg.params ?? {};
+    const eventType = msg.method as ThreadEventType;
+    const eventData = (msg.params ?? {}) as ThreadEventData;
 
     const nextSeq = seqCounter + 1;
     this.eventRepo.create({
@@ -744,18 +758,13 @@ export class ThreadManager {
       data: eventData,
     });
 
-    if (typeof msg.method === "string") {
-      this._syncTitleFromEvent(threadId, msg.method, eventData);
-      this._syncStatusFromEvent(threadId, msg.method);
-      this._syncActiveTurnFromEvent(threadId, msg.method, eventData);
+    this._syncTitleFromEvent(threadId, msg.method, eventData);
+    this._syncStatusFromEvent(threadId, msg.method);
+    this._syncActiveTurnFromEvent(threadId, msg.method, eventData);
 
-      if (this.provider.shouldBroadcastForEvent(msg.method)) {
-        this.ws.broadcast("thread", threadId);
-      }
-      return nextSeq;
+    if (this.provider.shouldBroadcastForEvent(msg.method)) {
+      this.ws.broadcast("thread", threadId);
     }
-
-    this.ws.broadcast("thread", threadId);
     return nextSeq;
   }
 
@@ -779,6 +788,8 @@ export class ThreadManager {
     }
     this.providerThreadIds.delete(threadId);
     this.activeTurnIds.delete(threadId);
+    this.authRefreshWarningThreadIds.delete(threadId);
+    this.suppressedAuthStderrDepth.delete(threadId);
 
     const thread = this.threadRepo.getById(threadId);
     if (!thread) return;
@@ -790,6 +801,62 @@ export class ThreadManager {
     }
 
     this.ws.broadcast("thread", threadId);
+  }
+
+  private _handleProviderStderrLine(threadId: string, line: string): void {
+    if (this._consumeSuppressedAuthStderrLine(threadId, line)) {
+      return;
+    }
+
+    const normalized = line.toLowerCase();
+    const isRefreshTokenConflict =
+      normalized.includes("refresh_token_reused") ||
+      normalized.includes("refresh token has already been used") ||
+      normalized.includes("your access token could not be refreshed");
+    const isRefreshTokenFailure = normalized.includes("failed to refresh token");
+
+    if (isRefreshTokenFailure || isRefreshTokenConflict) {
+      if (!this.authRefreshWarningThreadIds.has(threadId)) {
+        this.authRefreshWarningThreadIds.add(threadId);
+        console.warn(
+          `[thread ${threadId}] provider auth refresh conflict (refresh token reused). ` +
+            "Another Codex process likely refreshed credentials first. " +
+            "If requests start failing, re-authenticate with `codex login` and restart Beanbag daemon.",
+        );
+      }
+
+      if (isRefreshTokenFailure && line.includes("{")) {
+        const depth = this._braceDepthDelta(line);
+        if (depth > 0) {
+          this.suppressedAuthStderrDepth.set(threadId, depth);
+        }
+      }
+      return;
+    }
+
+    console.error(`[thread ${threadId}] stderr: ${line}`);
+  }
+
+  private _consumeSuppressedAuthStderrLine(threadId: string, line: string): boolean {
+    const currentDepth = this.suppressedAuthStderrDepth.get(threadId);
+    if (!currentDepth || currentDepth <= 0) return false;
+
+    const nextDepth = currentDepth + this._braceDepthDelta(line);
+    if (nextDepth > 0) {
+      this.suppressedAuthStderrDepth.set(threadId, nextDepth);
+    } else {
+      this.suppressedAuthStderrDepth.delete(threadId);
+    }
+    return true;
+  }
+
+  private _braceDepthDelta(line: string): number {
+    let delta = 0;
+    for (const ch of line) {
+      if (ch === "{") delta += 1;
+      else if (ch === "}") delta -= 1;
+    }
+    return delta;
   }
 
   /**
@@ -923,36 +990,6 @@ export class ThreadManager {
     }
   }
 
-  private _canTransitionStatus(
-    currentStatus: Thread["status"],
-    nextStatus: Thread["status"],
-  ): boolean {
-    if (currentStatus === nextStatus) return true;
-
-    switch (currentStatus) {
-      case "created":
-        return (
-          nextStatus === "provisioning" ||
-          nextStatus === "provisioning_failed" ||
-          nextStatus === "idle"
-        );
-      case "provisioning":
-        return (
-          nextStatus === "active" ||
-          nextStatus === "idle" ||
-          nextStatus === "provisioning_failed"
-        );
-      case "provisioning_failed":
-        return nextStatus === "provisioning" || nextStatus === "idle";
-      case "idle":
-        return nextStatus === "active" || nextStatus === "provisioning";
-      case "active":
-        return nextStatus === "idle";
-      default:
-        return false;
-    }
-  }
-
   private _setThreadStatus(
     threadId: string,
     nextStatus: Thread["status"],
@@ -971,7 +1008,7 @@ export class ThreadManager {
     if (thread.archivedAt !== undefined && nextStatus === "active") return;
 
     if (thread.status === nextStatus) return;
-    if (!opts?.force && !this._canTransitionStatus(thread.status, nextStatus)) {
+    if (!opts?.force && !canTransitionThreadStatus(thread.status, nextStatus)) {
       return;
     }
 
@@ -990,11 +1027,6 @@ export class ThreadManager {
     if (this.lockedTitleThreadIds.has(threadId)) return;
     if (this.autoTitleAttemptedThreadIds.has(threadId)) return;
     if (input.length === 0) return;
-    if (this._hasPriorUserMessage(threadId)) {
-      // Titles are generated only from the first user message in a thread.
-      this.autoTitleAttemptedThreadIds.add(threadId);
-      return;
-    }
 
     const fallbackTitle = this.provider.deriveThreadTitle(input);
     if (fallbackTitle) {
@@ -1013,18 +1045,6 @@ export class ThreadManager {
     if (!hasTextInput) return;
     if (!this.provider.generateThreadTitle) return;
     void this._runAutogeneratedThreadTitle(threadId, cwd, providerThreadId, input);
-  }
-
-  private _hasPriorUserMessage(threadId: string): boolean {
-    const events = this.eventRepo.listByThread(threadId) ?? [];
-    for (let i = events.length - 1; i >= 0; i--) {
-      const canonicalEvent = this.provider.toCanonicalEvent(events[i]);
-      const normalizedType = this.provider.normalizeEventType(canonicalEvent.type);
-      if (normalizedType === "message/user") {
-        return true;
-      }
-    }
-    return false;
   }
 
   private async _runAutogeneratedThreadTitle(

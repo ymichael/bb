@@ -17,7 +17,12 @@ function makeThread(overrides: Partial<Thread> = {}): Thread {
   };
 }
 
-function makeEvent(overrides: Partial<ThreadEvent> = {}): ThreadEvent {
+type ThreadEventOverrides = Partial<Omit<ThreadEvent, "type" | "data">> & {
+  type?: string;
+  data?: unknown;
+};
+
+function makeEvent(overrides: ThreadEventOverrides = {}): ThreadEvent {
   return {
     id: "evt-1",
     threadId: "thread-1",
@@ -26,7 +31,7 @@ function makeEvent(overrides: Partial<ThreadEvent> = {}): ThreadEvent {
     data: { content: "result" },
     createdAt: 1000,
     ...overrides,
-  };
+  } as ThreadEvent;
 }
 
 function mockThreadManager(): ThreadManager {

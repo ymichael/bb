@@ -87,24 +87,7 @@ function extractText(value: unknown): string {
 }
 
 function getEventType(event: ThreadEvent): string {
-  const normalizedType = normalizeEventType(event.type);
-  if (normalizedType !== "provider/event") return normalizedType;
-
-  const data = toRecord(event.data);
-  const providerEventType = getStringField(data, "providerEventType");
-  return providerEventType ? normalizeEventType(providerEventType) : normalizedType;
-}
-
-function getEventData(event: ThreadEvent): unknown {
-  const data = toRecord(event.data);
-  if (!data || !("providerEventType" in data)) return event.data;
-  return data.payload;
-}
-
-function getMsgRecord(data: unknown): Record<string, unknown> | null {
-  const params = toRecord(data);
-  if (!params) return null;
-  return toRecord(params.msg);
+  return normalizeEventType(event.type);
 }
 
 function getTurnId(data: unknown): string | undefined {
@@ -170,36 +153,6 @@ function messageId(threadId: string, kind: string, key: string): string {
   return `${threadId}:${kind}:${key}`;
 }
 
-function parseUserFromCodexEvent(
-  event: ThreadEvent,
-  eventType: string,
-): UIUserMessage | null {
-  if (eventType !== "codex/event/user_message") return null;
-
-  const payload = toRecord(event.data);
-  const msg = toRecord(payload?.msg);
-  const text = typeof msg?.message === "string" ? msg.message : "";
-  const images = Array.isArray(msg?.images) ? msg.images.length : 0;
-  const localImages = Array.isArray(msg?.local_images) ? msg.local_images.length : 0;
-  if (!text && images === 0 && localImages === 0) return null;
-
-  const turnId = getTurnId(event.data);
-  return {
-    kind: "user",
-    id: messageId(event.threadId, "user", `${turnId ?? event.seq}`),
-    threadId: event.threadId,
-    sourceSeqStart: event.seq,
-    sourceSeqEnd: event.seq,
-    createdAt: event.createdAt,
-    ...(turnId ? { turnId } : {}),
-    text,
-    attachments: {
-      webImages: images,
-      localImages,
-    },
-  };
-}
-
 function parseUserFromItemEvent(
   event: ThreadEvent,
   eventType: string,
@@ -263,10 +216,7 @@ function parseAssistantDeltaText(
   event: ThreadEvent,
   eventType: string,
 ): string | null {
-  if (
-    eventType !== "item/agentmessage/delta" &&
-    eventType !== "message/assistant/delta"
-  ) {
+  if (eventType !== "item/agentmessage/delta") {
     return null;
   }
 
@@ -285,12 +235,6 @@ function parseAssistantFinalText(
     return text.length > 0 ? text : null;
   }
 
-  if (eventType === "message/assistant") {
-    const params = toRecord(event.data);
-    const text = extractText(params?.text ?? params?.content);
-    return text.length > 0 ? text : null;
-  }
-
   return null;
 }
 
@@ -300,8 +244,7 @@ function parseReasoningDeltaText(
 ): string | null {
   if (
     eventType !== "item/reasoning/summarytextdelta" &&
-    eventType !== "item/reasoning/textdelta" &&
-    eventType !== "message/reasoning/delta"
+    eventType !== "item/reasoning/textdelta"
   ) {
     return null;
   }
@@ -318,12 +261,6 @@ function parseReasoningFinalText(
   if (eventType === "item/completed" && getItemTypeToken(event.data) === "reasoning") {
     const item = getItemRecord(event.data);
     const text = extractText(item?.summary ?? item?.summaryText ?? item?.text ?? item?.content);
-    return text.length > 0 ? text : null;
-  }
-
-  if (eventType === "message/reasoning") {
-    const params = toRecord(event.data);
-    const text = extractText(params?.text ?? params?.content);
     return text.length > 0 ? text : null;
   }
 
@@ -368,116 +305,9 @@ function extractShellCommand(value: unknown): string | undefined {
   return undefined;
 }
 
-function extractParsedCommand(data: Record<string, unknown> | null): string | undefined {
-  const parsed = data?.parsed_cmd;
-  if (!Array.isArray(parsed) || parsed.length === 0) return undefined;
-
-  const first = toRecord(parsed[0]);
-  return getStringField(first, "cmd") ?? getStringField(first, "command");
-}
-
 interface ToolPartial extends Partial<UIToolCallMessage> {
   callId: string;
   appendOutput?: boolean;
-}
-
-function parseToolFromCanonicalEvent(
-  event: ThreadEvent,
-  eventType: string,
-): ToolPartial | null {
-  if (eventType !== "tool/call/started" && eventType !== "tool/call/completed") {
-    return null;
-  }
-
-  const params = toRecord(event.data);
-  const callId =
-    getStringField(params, "callId") ??
-    getStringField(params, "call_id") ??
-    getStringField(params, "itemId");
-  if (!callId) return null;
-
-  const status =
-    (eventType === "tool/call/completed" ? "completed" : "pending") as UIToolCallMessage["status"];
-  const exitCode = getNumberField(params, "exitCode") ?? getNumberField(params, "exit_code");
-
-  return {
-    callId,
-    toolName: getStringField(params, "toolName") ?? "exec_command",
-    command: extractShellCommand(params?.command),
-    cwd: getStringField(params, "cwd"),
-    output:
-      getStringField(params, "output") ??
-      getStringField(params, "aggregatedOutput") ??
-      getStringField(params, "aggregated_output"),
-    exitCode,
-    status:
-      exitCode !== undefined && exitCode !== 0
-        ? "error"
-        : (toToolStatus(getStringField(params, "status")) ?? status),
-  };
-}
-
-function parseToolFromExecEvent(
-  event: ThreadEvent,
-  eventType: string,
-): ToolPartial | null {
-  if (
-    eventType !== "codex/event/exec_command_begin" &&
-    eventType !== "codex/event/exec_command_end" &&
-    eventType !== "codex/event/exec_command_output_delta"
-  ) {
-    return null;
-  }
-
-  const msg = getMsgRecord(event.data);
-  const callId = getStringField(msg, "call_id");
-  if (!callId) return null;
-
-  const exitCode = getNumberField(msg, "exit_code");
-  const statusToken = toToolStatus(getStringField(msg, "status"));
-  const command =
-    extractParsedCommand(msg) ??
-    extractShellCommand(msg?.command);
-
-  if (eventType === "codex/event/exec_command_output_delta") {
-    const delta = getStringField(msg, "delta") ?? "";
-    return {
-      callId,
-      toolName: "exec_command",
-      command,
-      cwd: getStringField(msg, "cwd"),
-      output: delta,
-      appendOutput: true,
-      status: "pending",
-    };
-  }
-
-  if (eventType === "codex/event/exec_command_begin") {
-    return {
-      callId,
-      toolName: "exec_command",
-      command,
-      cwd: getStringField(msg, "cwd"),
-      status: "pending",
-    };
-  }
-
-  return {
-    callId,
-    toolName: "exec_command",
-    command,
-    cwd: getStringField(msg, "cwd"),
-    output:
-      getStringField(msg, "aggregated_output") ??
-      getStringField(msg, "formatted_output") ??
-      getStringField(msg, "stdout"),
-    exitCode,
-    status:
-      statusToken ??
-      (exitCode !== undefined && exitCode !== 0
-        ? "error"
-        : "completed"),
-  };
 }
 
 function parseToolFromItemEvent(
@@ -597,31 +427,6 @@ function parseFileChangesFromArray(changes: unknown): UIFileEditChange[] {
   return parsed;
 }
 
-function parseFileChangesFromMap(changes: unknown): UIFileEditChange[] {
-  const record = toRecord(changes);
-  if (!record) return [];
-
-  const parsed: UIFileEditChange[] = [];
-  for (const [path, value] of Object.entries(record)) {
-    const change = toRecord(value);
-    if (!change) continue;
-
-    parsed.push({
-      path,
-      kind: normalizeFileChangeKind(getStringField(change, "type")),
-      movePath:
-        getStringField(change, "move_path") ??
-        getStringField(change, "movePath") ??
-        null,
-      diff:
-        getStringField(change, "unified_diff") ??
-        getStringField(change, "content"),
-    });
-  }
-
-  return parsed;
-}
-
 interface FileEditPartial extends Partial<UIFileEditMessage> {
   callId: string;
   appendStdout?: boolean;
@@ -656,41 +461,12 @@ function parseFileEditFromItemEvent(
   return {
     callId,
     changes: parseFileChangesFromArray(item?.changes),
+    stdout:
+      getStringField(item, "stdout") ??
+      getStringField(item, "aggregatedOutput") ??
+      getStringField(item, "aggregated_output"),
+    stderr: getStringField(item, "stderr"),
     status: toFileEditStatus(getStringField(item, "status")) ?? defaultStatus,
-  };
-}
-
-function parseFileEditFromPatchEvent(
-  event: ThreadEvent,
-  eventType: string,
-): FileEditPartial | null {
-  if (
-    eventType !== "codex/event/patch_apply_begin" &&
-    eventType !== "codex/event/patch_apply_end"
-  ) {
-    return null;
-  }
-
-  const msg = getMsgRecord(event.data);
-  const callId = getStringField(msg, "call_id");
-  if (!callId) return null;
-
-  const success = msg?.success;
-  const statusToken = toFileEditStatus(getStringField(msg, "status"));
-  const status: UIFileEditMessage["status"] = statusToken
-    ? statusToken
-    : eventType === "codex/event/patch_apply_end"
-      ? success === false
-        ? "error"
-        : "completed"
-      : "pending";
-
-  return {
-    callId,
-    changes: parseFileChangesFromMap(msg?.changes),
-    stdout: getStringField(msg, "stdout"),
-    stderr: getStringField(msg, "stderr"),
-    status,
   };
 }
 
@@ -749,10 +525,7 @@ function parseOperationMessage(
     };
   }
 
-  if (
-    eventType === "deprecationnotice" ||
-    eventType === "codex/event/deprecation_notice"
-  ) {
+  if (eventType === "deprecationnotice") {
     const payload = toRecord(event.data);
     const detail =
       getStringField(payload, "summary") ??
@@ -775,8 +548,7 @@ function parseOperationMessage(
 
   if (
     eventType === "configwarning" ||
-    eventType === "windows/worldwritablewarning" ||
-    eventType === "warning"
+    eventType === "windows/worldwritablewarning"
   ) {
     const payload = toRecord(event.data);
     const detail =
@@ -815,10 +587,9 @@ function parseOperationMessage(
 
   if (
     options?.includeOptionalOperations &&
-    (eventType === "turn/diff/updated" || eventType === "codex/event/turn_diff")
+    eventType === "turn/diff/updated"
   ) {
     const params = toRecord(event.data);
-    const msg = toRecord(params?.msg);
     return {
       kind: "operation",
       id: messageId(event.threadId, "op", `turn-diff:${event.seq}`),
@@ -829,7 +600,7 @@ function parseOperationMessage(
       turnId: getTurnId(event.data),
       opType: "turn-diff",
       title: "Turn diff updated",
-      detail: getStringField(params, "diff") ?? getStringField(msg, "unified_diff"),
+      detail: getStringField(params, "diff") ?? getStringField(params, "unifiedDiff"),
     };
   }
 
@@ -855,16 +626,10 @@ function parseErrorMessage(event: ThreadEvent, eventType: string): UIErrorMessag
 
 function isIgnoredNoiseType(eventType: string): boolean {
   const ignored = new Set([
-    "provider/event",
     "thread/started",
-    "thread/title/updated",
     "thread/name/updated",
-    "codex/event/thread_name_updated",
-    "codex/event/mcp_startup_complete",
-    "codex/event/token_count",
     "account/ratelimits/updated",
     "thread/tokenusage/updated",
-    "codex/event/agent_reasoning_section_break",
     "item/reasoning/summarypartadded",
   ]);
 
@@ -875,20 +640,8 @@ function isDuplicateEventType(eventType: string): boolean {
   const duplicates = new Set([
     "turn/started",
     "turn/completed",
-    "codex/event/task_started",
-    "codex/event/task_complete",
-    "codex/event/item_started",
-    "codex/event/item_completed",
-    "codex/event/agent_message_content_delta",
-    "codex/event/agent_message_delta",
-    "codex/event/agent_message",
-    "codex/event/reasoning_content_delta",
-    "codex/event/agent_reasoning_delta",
-    "codex/event/agent_reasoning",
-    "codex/event/exec_command_output_delta",
     "item/commandexecution/outputdelta",
     "item/filechange/outputdelta",
-    "codex/event/turn_diff",
     "turn/diff/updated",
   ]);
 
@@ -915,7 +668,7 @@ function appendDebugEvent(
     sourceSeqStart: event.seq,
     sourceSeqEnd: event.seq,
     createdAt: event.createdAt,
-    turnId: getTurnId(getEventData(event)),
+    turnId: getTurnId(event.data),
     rawType: eventType,
     rawEvent: event,
     reason,
@@ -1146,11 +899,7 @@ export function toUIMessages(
 
   for (const originalEvent of orderedEvents) {
     const eventType = getEventType(originalEvent);
-    const eventData = getEventData(originalEvent);
-    const event =
-      eventData === originalEvent.data
-        ? originalEvent
-        : { ...originalEvent, data: eventData };
+    const event = originalEvent;
 
     const eventTurnId = getTurnId(event.data);
 
@@ -1160,16 +909,6 @@ export function toUIMessages(
       if (!state.seenUserKeys.has(key)) {
         state.seenUserKeys.add(key);
         state.messages.push(userFromItem);
-      }
-      continue;
-    }
-
-    const userFromCodex = parseUserFromCodexEvent(event, eventType);
-    if (userFromCodex) {
-      const key = `${userFromCodex.turnId ?? userFromCodex.id}:${userFromCodex.text}`;
-      if (!state.seenUserKeys.has(key)) {
-        state.seenUserKeys.add(key);
-        state.messages.push(userFromCodex);
       }
       continue;
     }
@@ -1286,18 +1025,13 @@ export function toUIMessages(
       continue;
     }
 
-    const tool =
-      parseToolFromItemEvent(event, eventType) ??
-      parseToolFromExecEvent(event, eventType) ??
-      parseToolFromCanonicalEvent(event, eventType);
+    const tool = parseToolFromItemEvent(event, eventType);
     if (tool) {
       upsertTool(state, event, tool);
       continue;
     }
 
-    const fileEdit =
-      parseFileEditFromItemEvent(event, eventType) ??
-      parseFileEditFromPatchEvent(event, eventType);
+    const fileEdit = parseFileEditFromItemEvent(event, eventType);
     if (fileEdit) {
       upsertFileEdit(state, event, fileEdit);
       continue;

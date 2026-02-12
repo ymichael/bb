@@ -61,7 +61,6 @@ export interface ProviderAdapter {
   statusForEvent(method: string): Thread["status"] | undefined;
   titleFromEvent(method: string, data: unknown): string | undefined;
   outputFromEvent(event: ThreadEvent): string | undefined;
-  toCanonicalEvent(event: ThreadEvent): ThreadEvent;
   listModels(): Promise<AvailableModel[]>;
   deriveThreadTitle(input?: PromptInput[]): string | undefined;
   generateThreadTitle?(

@@ -195,20 +195,20 @@ describe("ConversationEntry", () => {
     const message: UIMessage = {
       ...baseMessage(),
       kind: "debug/raw-event",
-      rawType: "codex/event/new_thing",
+      rawType: "account/updated",
       rawEvent: {
         id: "evt-1",
         threadId: "thread-1",
         seq: 1,
-        type: "codex/event/new_thing",
-        data: { detail: "future event" },
+        type: "account/updated",
+        data: { authMode: null },
         createdAt: 1,
       },
       reason: "unhandled",
     };
 
     const html = renderToStaticMarkup(<ConversationEntry message={message} />);
-    expect(html).toContain("codex/event/new_thing");
+    expect(html).toContain("account/updated");
     expect(html).toContain("unhandled");
   });
 });

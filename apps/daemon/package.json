@@ -25,6 +25,7 @@
     "@hono/node-ws": "^1.1.0",
     "@hono/zod-validator": "^0.4.0",
     "hono": "^4.7.0",
+    "xstate": "^5.20.2",
     "zod": "^3.24.0"
   },
   "devDependencies": {

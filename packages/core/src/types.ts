@@ -1,3 +1,9 @@
+import type {
+  CodexServerNotificationMethod,
+  CodexServerNotificationParamsByMethod,
+} from "./generated/codex-app-server/index.js";
+import type { PromptInput } from "./api-types.js";
+
 // Project
 export interface Project {
   id: string;
@@ -25,12 +31,32 @@ export interface Thread {
   updatedAt: number;
 }
 
+export type ThreadEventType = CodexServerNotificationMethod;
+
+export interface TurnLifecycleEventData {
+  turnId?: string;
+  input?: PromptInput[];
+}
+
+export type ThreadEventDataByType = CodexServerNotificationParamsByMethod;
+
+export type ThreadEventData = ThreadEventDataByType[ThreadEventType];
+
+export type ThreadEventDataForType<TType extends ThreadEventType> =
+  ThreadEventDataByType[TType];
+
 // Event (streaming log from codex)
-export interface ThreadEvent {
+export interface ThreadEvent<
+  TType extends ThreadEventType = ThreadEventType,
+> {
   id: string;
   threadId: string;
   seq: number;
-  type: string;
-  data: unknown;
+  type: TType;
+  data: ThreadEventDataForType<TType>;
   createdAt: number;
 }
+
+export type ThreadEventOfType<TType extends ThreadEventType> = ThreadEvent<
+  TType
+>;

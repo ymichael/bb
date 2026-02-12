@@ -13,7 +13,9 @@
   "files": ["src"],
   "scripts": {
     "clean": "rm -f tsconfig.tsbuildinfo",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --config vitest.config.ts",
+    "gen:codex-event-types": "node ./scripts/generate-codex-event-types.mjs"
   },
   "dependencies": {
     "zod": "^3.24.0"

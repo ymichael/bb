@@ -32,6 +32,7 @@ const CODEX_THREAD_ID = "codex-thread-abc-123";
 function createFakeChildProcess(opts?: { autoRespond?: boolean }): ChildProcess & {
   _stdinData: string[];
   _pushStdout: (line: string) => void;
+  _pushStderr: (line: string) => void;
   _emitExit: (code: number | null, signal: string | null) => void;
 } {
   const autoRespond = opts?.autoRespond ?? true;
@@ -78,6 +79,9 @@ function createFakeChildProcess(opts?: { autoRespond?: boolean }): ChildProcess 
   child._pushStdout = (line: string) => {
     child.stdout.push(line + "\n");
   };
+  child._pushStderr = (line: string) => {
+    child.stderr.push(line + "\n");
+  };
   child._emitExit = (code: number | null, signal: string | null) => {
     child.exitCode = code;
     child.emit("exit", code, signal);
@@ -97,7 +101,12 @@ function makeThread(overrides: Partial<Thread> = {}): Thread {
   };
 }
 
-function makeEvent(overrides: Partial<ThreadEvent> = {}): ThreadEvent {
+type ThreadEventOverrides = Partial<Omit<ThreadEvent, "type" | "data">> & {
+  type?: string;
+  data?: unknown;
+};
+
+function makeEvent(overrides: ThreadEventOverrides = {}): ThreadEvent {
   return {
     id: "evt-1",
     threadId: "thread-1",
@@ -106,7 +115,7 @@ function makeEvent(overrides: Partial<ThreadEvent> = {}): ThreadEvent {
     data: {},
     createdAt: 1000,
     ...overrides,
-  };
+  } as ThreadEvent;
 }
 
 function createMocks() {
@@ -742,6 +751,77 @@ describe("ThreadManager", () => {
       );
 
       consoleSpy.mockRestore();
+    });
+
+    it("summarizes refresh-token reuse stderr as a single warning", async () => {
+      const project = { id: "proj-1", name: "Test", rootPath: "/test", createdAt: 1000, updatedAt: 1000 };
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(project);
+
+      const createdThread = makeThread({ id: "t-auth", status: "idle" });
+      (threadRepo.create as ReturnType<typeof vi.fn>).mockReturnValue(createdThread);
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeThread({ id: "t-auth", status: "active" }),
+      );
+
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+      await manager.spawn({ projectId: "proj-1" });
+
+      fakeChild._pushStderr(
+        "2026-02-12T04:44:47.619501Z ERROR codex_core::auth: Failed to refresh token: 401 Unauthorized: {",
+      );
+      fakeChild._pushStderr('  "error": {');
+      fakeChild._pushStderr(
+        '    "message": "Your refresh token has already been used to generate a new access token. Please try signing in again.",',
+      );
+      fakeChild._pushStderr('    "type": "invalid_request_error",');
+      fakeChild._pushStderr('    "code": "refresh_token_reused"');
+      fakeChild._pushStderr("  }");
+      fakeChild._pushStderr("}");
+      fakeChild._pushStderr(
+        "2026-02-12T04:44:47.619583Z ERROR codex_core::auth: Failed to refresh token: Your access token could not be refreshed because your refresh token was already used. Please log out and sign in again.",
+      );
+
+      await new Promise((r) => setTimeout(r, 50));
+
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining("provider auth refresh conflict"),
+      );
+      const sawRefreshTokenStderr = errorSpy.mock.calls.some((call) =>
+        call.some(
+          (arg) => typeof arg === "string" && arg.includes("refresh token"),
+        ),
+      );
+      expect(sawRefreshTokenStderr).toBe(false);
+
+      warnSpy.mockRestore();
+      errorSpy.mockRestore();
+    });
+
+    it("keeps logging unrelated stderr lines as errors", async () => {
+      const project = { id: "proj-1", name: "Test", rootPath: "/test", createdAt: 1000, updatedAt: 1000 };
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(project);
+
+      const createdThread = makeThread({ id: "t-stderr", status: "idle" });
+      (threadRepo.create as ReturnType<typeof vi.fn>).mockReturnValue(createdThread);
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeThread({ id: "t-stderr", status: "active" }),
+      );
+
+      const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+      await manager.spawn({ projectId: "proj-1" });
+
+      fakeChild._pushStderr("panic: synthetic stderr failure");
+      await new Promise((r) => setTimeout(r, 50));
+
+      expect(errorSpy).toHaveBeenCalledWith(
+        "[thread t-stderr] stderr: panic: synthetic stderr failure",
+      );
+
+      errorSpy.mockRestore();
     });
 
     it("streams stdout JSON-RPC notifications as events", async () => {
@@ -1696,7 +1776,7 @@ describe("ThreadManager", () => {
       expect(fakeStdinData.length).toBe(1);
     });
 
-    it("does not auto-generate a new title after the first user message exists", async () => {
+    it("auto-generates a title even when prior user-message history exists", async () => {
       const providerTitleGenerator = vi.fn().mockResolvedValue("Second title");
       const autogenManager = new ThreadManager(
         threadRepo as any,
@@ -1759,10 +1839,7 @@ describe("ThreadManager", () => {
         input: [{ type: "text", text: "Second prompt should not retitle" }],
       });
 
-      expect(providerTitleGenerator).not.toHaveBeenCalled();
-      expect(threadRepo.update).not.toHaveBeenCalledWith("thread-1", {
-        title: "Second prompt should not retitle",
-      });
+      expect(providerTitleGenerator).toHaveBeenCalledTimes(1);
       expect(fakeStdinData.length).toBe(1);
     });
   });
@@ -1844,8 +1921,8 @@ describe("ThreadManager", () => {
   describe("getEvents()", () => {
     it("returns raw persisted events", () => {
       const events = [
-        makeEvent({ seq: 1, type: "turn/start", data: { turnId: "turn-1" } }),
-        makeEvent({ seq: 2, id: "evt-2", type: "turn/end", data: { turnId: "turn-1" } }),
+        makeEvent({ seq: 1, type: "turn/started", data: { turnId: "turn-1" } }),
+        makeEvent({ seq: 2, id: "evt-2", type: "turn/completed", data: { turnId: "turn-1" } }),
       ];
       (eventRepo.listByThread as ReturnType<typeof vi.fn>).mockReturnValue(
         events,
@@ -1896,7 +1973,7 @@ describe("ThreadManager", () => {
   describe("getOutput()", () => {
     it("extracts text from last item/completed agentMessage event", () => {
       const events = [
-        makeEvent({ seq: 1, type: "turn/start", data: {} }),
+        makeEvent({ seq: 1, type: "turn/started", data: {} }),
         makeEvent({
           seq: 2,
           type: "item/completed",
@@ -1927,8 +2004,8 @@ describe("ThreadManager", () => {
 
     it("returns undefined if no item/completed events", () => {
       const events = [
-        makeEvent({ seq: 1, type: "turn/start", data: {} }),
-        makeEvent({ seq: 2, type: "turn/end", data: {} }),
+        makeEvent({ seq: 1, type: "turn/started", data: {} }),
+        makeEvent({ seq: 2, type: "turn/completed", data: {} }),
       ];
       (eventRepo.listByThread as ReturnType<typeof vi.fn>).mockReturnValue(
         events,
@@ -1980,7 +2057,7 @@ describe("ThreadManager", () => {
           type: "item/completed",
           data: { item: { type: "agentMessage", text: "First output" } },
         }),
-        makeEvent({ seq: 2, type: "turn/start", data: {} }),
+        makeEvent({ seq: 2, type: "turn/started", data: {} }),
         makeEvent({
           seq: 3,
           type: "item/completed",
