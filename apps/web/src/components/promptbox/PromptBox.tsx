@@ -123,8 +123,9 @@ export function PromptBox({
     syncMentionState(textareaRef.current)
   }, [syncMentionState, value])
 
-  const showStop = Boolean(isRunning && onStop)
-  const canSubmit = value.trim().length > 0 && !isSubmitting && !submitDisabled
+  const trimmedValue = value.trim()
+  const showStop = Boolean(isRunning && onStop && trimmedValue.length === 0)
+  const canSubmit = trimmedValue.length > 0 && !isSubmitting && !submitDisabled
   const hasMentionContext = activeMention !== null
   const showMentionMenu = hasMentionContext
   const activeMentionQuery = activeMention?.query.trim() ?? ""
@@ -185,10 +186,6 @@ export function PromptBox({
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    if (showStop && onStop) {
-      onStop()
-      return
-    }
     if (!canSubmit) return
     onSubmit()
   }
@@ -232,7 +229,7 @@ export function PromptBox({
 
     if (!isSubmitKey) return
     event.preventDefault()
-    if (showStop || !canSubmit) return
+    if (!canSubmit) return
     onSubmit()
   }
 
@@ -334,22 +331,33 @@ export function PromptBox({
           {footerStart}
         </div>
         <div className="flex shrink-0 flex-row items-center gap-1">
-          <Button
-            type="submit"
-            size="icon"
-            variant={showStop ? "secondary" : "default"}
-            title={showStop ? "Stop run" : submitTitle}
-            disabled={!showStop && !canSubmit}
-            className="size-auto h-8 px-2 transition-all"
-          >
-            {isSubmitting && !showStop ? (
-              <Loader2 className="size-4 animate-spin" />
-            ) : showStop ? (
+          {showStop ? (
+            <Button
+              type="button"
+              size="icon"
+              variant="secondary"
+              title="Stop run"
+              onClick={onStop}
+              className="size-auto h-8 px-2 transition-all"
+            >
               <Square className="size-3.5" fill="currentColor" strokeWidth={0} />
-            ) : (
-              <CornerDownLeft className="size-4" />
-            )}
-          </Button>
+            </Button>
+          ) : (
+            <Button
+              type="submit"
+              size="icon"
+              variant="default"
+              title={submitTitle}
+              disabled={!canSubmit}
+              className="size-auto h-8 px-2 transition-all"
+            >
+              {isSubmitting ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <CornerDownLeft className="size-4" />
+              )}
+            </Button>
+          )}
         </div>
       </div>
     </form>
