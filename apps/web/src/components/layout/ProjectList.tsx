@@ -9,6 +9,7 @@ import {
   Folder,
   FolderOpen,
   LoaderCircle,
+  MessageSquare,
   Plus,
   SquarePen,
 } from "lucide-react"
@@ -33,6 +34,10 @@ interface ProjectListProps {
 }
 
 const COLLAPSED_PROJECTS_STORAGE_KEY = "beanbag.sidebar.collapsedProjects"
+
+type ProjectItem =
+  | { kind: "thread"; thread: Thread; updatedAt: number }
+  | { kind: "task"; task: Task; updatedAt: number }
 
 export function ProjectList({
   onNewProject,
@@ -68,43 +73,43 @@ export function ProjectList({
     /^\/projects\/[^/]+\/tasks\/([^/]+)/
   )?.[1]
 
-  const threadsByProject = useMemo(() => {
-    const grouped = new Map<string, Thread[]>()
+  const itemsByProject = useMemo(() => {
+    const grouped = new Map<string, ProjectItem[]>()
 
-    for (const thread of threads ?? []) {
-      const existing = grouped.get(thread.projectId)
+    for (const projectThread of threads ?? []) {
+      const existing = grouped.get(projectThread.projectId)
+      const item: ProjectItem = {
+        kind: "thread",
+        thread: projectThread,
+        updatedAt: projectThread.updatedAt,
+      }
       if (existing) {
-        existing.push(thread)
+        existing.push(item)
       } else {
-        grouped.set(thread.projectId, [thread])
+        grouped.set(projectThread.projectId, [item])
       }
     }
 
-    for (const projectThreads of grouped.values()) {
-      projectThreads.sort((a, b) => b.updatedAt - a.updatedAt)
-    }
-
-    return grouped
-  }, [threads])
-
-  const tasksByProject = useMemo(() => {
-    const grouped = new Map<string, Task[]>()
-
-    for (const task of tasks ?? []) {
-      const existing = grouped.get(task.projectId)
+    for (const projectTask of tasks ?? []) {
+      const existing = grouped.get(projectTask.projectId)
+      const item: ProjectItem = {
+        kind: "task",
+        task: projectTask,
+        updatedAt: projectTask.updatedAt,
+      }
       if (existing) {
-        existing.push(task)
+        existing.push(item)
       } else {
-        grouped.set(task.projectId, [task])
+        grouped.set(projectTask.projectId, [item])
       }
     }
 
-    for (const projectTasks of grouped.values()) {
-      projectTasks.sort((a, b) => b.updatedAt - a.updatedAt)
+    for (const projectItems of grouped.values()) {
+      projectItems.sort((a, b) => b.updatedAt - a.updatedAt)
     }
 
     return grouped
-  }, [tasks])
+  }, [tasks, threads])
 
   useEffect(() => {
     if (typeof window === "undefined") return
@@ -145,8 +150,8 @@ export function ProjectList({
             </>
           ) : projects && projects.length > 0 ? (
             projects.map((project) => {
-              const projectThreads = threadsByProject.get(project.id) ?? []
-              const projectTasks = tasksByProject.get(project.id) ?? []
+              const projectItems = itemsByProject.get(project.id) ?? []
+              const isProjectItemsLoading = threadsLoading || tasksLoading
               const isProjectCollapsed = collapsedProjectIds.has(project.id)
               const isProjectActive =
                 selectedProjectId === project.id && !selectedThreadId && !selectedTaskId
@@ -210,25 +215,72 @@ export function ProjectList({
                     </NavLink>
                   </div>
 
-                  {!isProjectCollapsed && !threadsLoading && projectThreads.length > 0 ? (
+                  {!isProjectCollapsed && !isProjectItemsLoading && projectItems.length > 0 ? (
                     <div className="space-y-1 group-data-[collapsible=icon]:hidden">
-                      <p className="px-2 pt-1 text-[10px] uppercase tracking-[0.08em] text-sidebar-foreground/45">
-                        Threads
-                      </p>
-                      {projectThreads.map((thread) => {
-                        const isBusyThread =
-                          thread.status === "active" ||
-                          thread.status === "created" ||
-                          thread.status === "provisioning"
+                      {projectItems.map((item) => {
+                        if (item.kind === "thread") {
+                          const thread = item.thread
+                          const isBusyThread =
+                            thread.status === "active" ||
+                            thread.status === "created" ||
+                            thread.status === "provisioning"
 
+                          return (
+                            <NavLink
+                              key={thread.id}
+                              to={`/projects/${project.id}/threads/${thread.id}`}
+                              onClick={onProjectSelect}
+                              className={({ isActive }) =>
+                                cn(
+                                  "group/thread-row flex h-8 w-full items-center gap-2 rounded-md p-2 text-sm transition-colors",
+                                  isActive
+                                    ? "bg-sidebar-border/80 text-sidebar-foreground"
+                                    : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                                )
+                              }
+                            >
+                              <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center text-sidebar-foreground/60">
+                                {isBusyThread ? (
+                                  <LoaderCircle className="size-3.5 animate-spin" />
+                                ) : (
+                                  <MessageSquare className="size-3.5" />
+                                )}
+                              </span>
+                              <span className="min-w-0 flex-1 truncate">
+                                {thread.title ?? `Thread ${thread.id.slice(0, 8)}`}
+                              </span>
+                              <span className="relative shrink-0 text-xs text-sidebar-foreground/60">
+                                <span className="inline-block min-w-8 text-right transition-opacity group-hover/thread-row:opacity-0">
+                                  {formatRelativeTime(thread.updatedAt)}
+                                </span>
+                                <button
+                                  type="button"
+                                  title="Archive thread"
+                                  aria-label="Archive thread"
+                                  className="pointer-events-none absolute inset-0 flex items-center justify-end opacity-0 transition-opacity group-hover/thread-row:pointer-events-auto group-hover/thread-row:opacity-100"
+                                  onClick={(event) => {
+                                    event.preventDefault()
+                                    event.stopPropagation()
+                                    if (archiveThread.isPending) return
+                                    archiveThread.mutate(thread.id)
+                                  }}
+                                >
+                                  <Archive className="size-3.5" />
+                                </button>
+                              </span>
+                            </NavLink>
+                          )
+                        }
+
+                        const task = item.task
                         return (
                           <NavLink
-                            key={thread.id}
-                            to={`/projects/${project.id}/threads/${thread.id}`}
+                            key={task.id}
+                            to={`/projects/${project.id}/tasks/${task.id}`}
                             onClick={onProjectSelect}
                             className={({ isActive }) =>
                               cn(
-                                "group/thread-row flex h-8 w-full items-center gap-2 rounded-md p-2 text-sm transition-colors",
+                                "group/task-row flex h-8 w-full items-center gap-2 rounded-md p-2 text-sm transition-colors",
                                 isActive
                                   ? "bg-sidebar-border/80 text-sidebar-foreground"
                                   : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
@@ -236,68 +288,17 @@ export function ProjectList({
                             }
                           >
                             <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center text-sidebar-foreground/60">
-                              {isBusyThread ? (
-                                <LoaderCircle className="size-3.5 animate-spin" />
-                              ) : null}
+                              <TaskStatusIcon status={task.status} />
                             </span>
                             <span className="min-w-0 flex-1 truncate">
-                              {thread.title ?? `Thread ${thread.id.slice(0, 8)}`}
+                              {task.title}
                             </span>
-                            <span className="relative shrink-0 text-xs text-sidebar-foreground/60">
-                              <span className="inline-block min-w-8 text-right transition-opacity group-hover/thread-row:opacity-0">
-                                {formatRelativeTime(thread.updatedAt)}
-                              </span>
-                              <button
-                                type="button"
-                                title="Archive thread"
-                                aria-label="Archive thread"
-                                className="pointer-events-none absolute inset-0 flex items-center justify-end opacity-0 transition-opacity group-hover/thread-row:pointer-events-auto group-hover/thread-row:opacity-100"
-                                onClick={(event) => {
-                                  event.preventDefault()
-                                  event.stopPropagation()
-                                  if (archiveThread.isPending) return
-                                  archiveThread.mutate(thread.id)
-                                }}
-                              >
-                                <Archive className="size-3.5" />
-                              </button>
+                            <span className="shrink-0 text-xs text-sidebar-foreground/60">
+                              {formatRelativeTime(task.updatedAt)}
                             </span>
                           </NavLink>
                         )
                       })}
-                    </div>
-                  ) : null}
-
-                  {!isProjectCollapsed && !tasksLoading && projectTasks.length > 0 ? (
-                    <div className="space-y-1 group-data-[collapsible=icon]:hidden">
-                      <p className="px-2 pt-1 text-[10px] uppercase tracking-[0.08em] text-sidebar-foreground/45">
-                        Tasks
-                      </p>
-                      {projectTasks.map((task) => (
-                        <NavLink
-                          key={task.id}
-                          to={`/projects/${project.id}/tasks/${task.id}`}
-                          onClick={onProjectSelect}
-                          className={({ isActive }) =>
-                            cn(
-                              "group/task-row flex h-8 w-full items-center gap-2 rounded-md p-2 text-sm transition-colors",
-                              isActive
-                                ? "bg-sidebar-border/80 text-sidebar-foreground"
-                                : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-                            )
-                          }
-                        >
-                          <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center text-sidebar-foreground/60">
-                            <TaskStatusIcon status={task.status} />
-                          </span>
-                          <span className="min-w-0 flex-1 truncate">
-                            {task.title}
-                          </span>
-                          <span className="shrink-0 text-xs text-sidebar-foreground/60">
-                            {formatRelativeTime(task.updatedAt)}
-                          </span>
-                        </NavLink>
-                      ))}
                     </div>
                   ) : null}
                 </SidebarMenuItem>
