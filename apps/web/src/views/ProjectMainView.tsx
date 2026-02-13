@@ -132,7 +132,7 @@ export function ProjectMainView() {
     createTask.isPending || taskTitle.trim().length === 0;
 
   return (
-    <div className="mx-auto flex min-h-0 w-full max-w-[760px] flex-1 items-center">
+    <div className="mx-auto flex min-h-0 w-full max-w-[760px] flex-1 items-start pt-8 md:pt-10">
       <div className="w-full space-y-4">
         <div className="flex justify-center">
           <div className="inline-flex overflow-hidden rounded-lg border border-border/70 bg-muted/30">
