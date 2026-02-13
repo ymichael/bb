@@ -17,7 +17,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { AppSidebar } from "./AppSidebar"
-import { useProjects, useThread } from "@/hooks/useApi"
+import { useProjects, useTask, useThread } from "@/hooks/useApi"
 
 const SIDEBAR_WIDTH_KEY = "beanbag.sidebar.width"
 const SIDEBAR_MIN_WIDTH = 240
@@ -137,22 +137,33 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const projectThreadMatch = location.pathname.match(
     /^\/projects\/([^/]+)\/threads\/([^/]+)(?:\/|$)/
   )
+  const projectTaskMatch = location.pathname.match(
+    /^\/projects\/([^/]+)\/tasks\/([^/]+)(?:\/|$)/
+  )
   const threadMatch = projectThreadMatch
-  const isProjectMainView = Boolean(projectMatch && !threadMatch)
+  const taskMatch = projectTaskMatch
+  const isProjectMainView = Boolean(projectMatch && !threadMatch && !taskMatch)
   const threadId = projectThreadMatch?.[2] ?? ""
+  const taskId = projectTaskMatch?.[2] ?? ""
 
   const projectId = projectMatch?.[1]
   const projectName = projectId
     ? projects?.find((project) => project.id === projectId)?.name
     : undefined
   const { data: thread } = useThread(threadId)
+  const { data: task } = useTask(taskId)
 
   const meta = threadMatch
     ? {
         title: thread?.title ?? "Thread",
         subtitle: undefined,
       }
-      : projectMatch
+    : taskMatch
+      ? {
+          title: task?.title ?? "Task",
+          subtitle: task ? `Status: ${task.status.replace("_", " ")}` : undefined,
+        }
+    : projectMatch
         ? {
             title: projectName ?? projectMatch[1],
             subtitle: undefined,

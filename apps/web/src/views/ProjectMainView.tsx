@@ -1,21 +1,30 @@
 import { useEffect, useState } from "react";
-import { useLocation, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { PromptBox } from "@/components/promptbox/PromptBox";
 import { PromptOptionPicker } from "@/components/promptbox/PromptOptionPicker";
-import { ProjectTaskPanel } from "@/components/tasks/ProjectTaskPanel";
-import { useSpawnThread } from "@/hooks/useApi";
+import { TaskComposer } from "@/components/tasks/TaskComposer";
+import { useCreateTask, useSpawnThread } from "@/hooks/useApi";
 import { usePromptDraftStorage } from "@/hooks/usePromptDraftStorage";
 import { usePromptFileMentions } from "@/hooks/usePromptFileMentions";
 import { usePromptModelReasoning } from "@/hooks/usePromptModelReasoning";
+import { cn } from "@/lib/utils";
+
+type ComposerTab = "thread" | "tasks";
 
 export function ProjectMainView() {
   const { projectId } = useParams<{ projectId: string }>();
   const location = useLocation();
+  const navigate = useNavigate();
   const spawnThread = useSpawnThread();
+  const createTask = useCreateTask();
   const promptDraft = usePromptDraftStorage({ projectId, threadId: null });
   const fileMentions = usePromptFileMentions(projectId);
   const prompt = promptDraft.value;
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [threadErrorMessage, setThreadErrorMessage] = useState<string | null>(null);
+  const [taskErrorMessage, setTaskErrorMessage] = useState<string | null>(null);
+  const [taskTitle, setTaskTitle] = useState("");
+  const [taskDescription, setTaskDescription] = useState("");
+  const [activeTab, setActiveTab] = useState<ComposerTab>("thread");
   const {
     selectedModel,
     setSelectedModel,
@@ -34,9 +43,28 @@ export function ProjectMainView() {
     location.state !== null &&
     "focusPrompt" in location.state &&
     location.state.focusPrompt === true;
+  const shouldFocusTaskComposer =
+    typeof location.state === "object" &&
+    location.state !== null &&
+    "focusTaskComposer" in location.state &&
+    location.state.focusTaskComposer === true;
 
   useEffect(() => {
+    if (shouldFocusTaskComposer) {
+      setActiveTab("tasks");
+      const handle = window.requestAnimationFrame(() => {
+        const titleElement = document.getElementById("project-main-task-title");
+        if (!(titleElement instanceof HTMLInputElement)) return;
+        titleElement.focus();
+        const caretIndex = titleElement.value.length;
+        titleElement.setSelectionRange(caretIndex, caretIndex);
+      });
+
+      return () => window.cancelAnimationFrame(handle);
+    }
+
     if (!shouldFocusPrompt) return;
+    setActiveTab("thread");
     const handle = window.requestAnimationFrame(() => {
       const promptElement = document.getElementById("project-main-prompt");
       if (!(promptElement instanceof HTMLTextAreaElement)) return;
@@ -46,7 +74,7 @@ export function ProjectMainView() {
     });
 
     return () => window.cancelAnimationFrame(handle);
-  }, [location.key, shouldFocusPrompt]);
+  }, [location.key, shouldFocusPrompt, shouldFocusTaskComposer]);
 
   if (!projectId) {
     return (
@@ -60,7 +88,7 @@ export function ProjectMainView() {
     const trimmed = prompt.trim();
     if (!trimmed || spawnThread.isPending) return;
 
-    setErrorMessage(null);
+    setThreadErrorMessage(null);
     try {
       await spawnThread.mutateAsync({
         input: [{ type: "text", text: trimmed }],
@@ -71,58 +99,137 @@ export function ProjectMainView() {
       });
       promptDraft.clear();
     } catch (error) {
-      setErrorMessage(
+      setThreadErrorMessage(
         error instanceof Error ? error.message : "Unable to send prompt.",
       );
     }
   };
 
+  const submitTask = async () => {
+    if (!projectId) return;
+    const trimmedTitle = taskTitle.trim();
+    if (!trimmedTitle || createTask.isPending) return;
+
+    setTaskErrorMessage(null);
+    try {
+      const task = await createTask.mutateAsync({
+        projectId,
+        title: trimmedTitle,
+        description: taskDescription.trim() || undefined,
+      });
+      setTaskTitle("");
+      setTaskDescription("");
+      navigate(`/projects/${projectId}/tasks/${task.id}`);
+    } catch (error) {
+      setTaskErrorMessage(
+        error instanceof Error ? error.message : "Unable to create task.",
+      );
+    }
+  };
+
   const isSubmitDisabled = spawnThread.isPending || prompt.trim().length === 0;
+  const isTaskSubmitDisabled =
+    createTask.isPending || taskTitle.trim().length === 0;
 
   return (
-    <div className="mx-auto w-full max-w-[950px] space-y-6">
-      <PromptBox
-        id="project-main-prompt"
-        value={prompt}
-        onChange={(value) => {
-          promptDraft.setValue(value);
-          if (errorMessage) setErrorMessage(null);
-        }}
-        onSubmit={submitPrompt}
-        isSubmitting={spawnThread.isPending}
-        submitDisabled={isSubmitDisabled}
-        submitTitle={spawnThread.isPending ? "Submitting..." : "Submit (Enter)"}
-        mentionSuggestions={fileMentions.suggestions}
-        mentionLoading={fileMentions.isLoading}
-        mentionError={fileMentions.isError}
-        onMentionQueryChange={fileMentions.setQuery}
-        footerStart={
+    <div className="mx-auto flex min-h-0 w-full max-w-[760px] flex-1 items-center">
+      <div className="w-full space-y-4">
+        <div className="flex justify-center">
+          <div className="inline-flex rounded-lg border border-border/70 bg-muted/30 p-1">
+            <button
+              type="button"
+              onClick={() => setActiveTab("thread")}
+              className={cn(
+                "rounded-md px-3 py-1.5 text-sm transition-colors",
+                activeTab === "thread"
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              Thread
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab("tasks")}
+              className={cn(
+                "rounded-md px-3 py-1.5 text-sm transition-colors",
+                activeTab === "tasks"
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              Tasks
+            </button>
+          </div>
+        </div>
+
+        {activeTab === "thread" ? (
           <>
-            <PromptOptionPicker
-              label="Model"
-              value={activeModel?.model ?? selectedModel}
-              options={modelOptions}
-              onChange={setSelectedModel}
+            <PromptBox
+              id="project-main-prompt"
+              value={prompt}
+              onChange={(value) => {
+                promptDraft.setValue(value);
+                if (threadErrorMessage) setThreadErrorMessage(null);
+              }}
+              onSubmit={submitPrompt}
+              isSubmitting={spawnThread.isPending}
+              submitDisabled={isSubmitDisabled}
+              submitTitle={spawnThread.isPending ? "Submitting..." : "Submit (Enter)"}
+              mentionSuggestions={fileMentions.suggestions}
+              mentionLoading={fileMentions.isLoading}
+              mentionError={fileMentions.isError}
+              onMentionQueryChange={fileMentions.setQuery}
+              footerStart={
+                <>
+                  <PromptOptionPicker
+                    label="Model"
+                    value={activeModel?.model ?? selectedModel}
+                    options={modelOptions}
+                    onChange={setSelectedModel}
+                  />
+                  <PromptOptionPicker
+                    label="Reasoning"
+                    value={reasoningLevel}
+                    options={reasoningOptions}
+                    onChange={setReasoningLevel}
+                  />
+                  <PromptOptionPicker
+                    label="Sandbox"
+                    value={sandboxMode}
+                    options={sandboxOptions}
+                    onChange={setSandboxMode}
+                  />
+                </>
+              }
             />
-            <PromptOptionPicker
-              label="Reasoning"
-              value={reasoningLevel}
-              options={reasoningOptions}
-              onChange={setReasoningLevel}
-            />
-            <PromptOptionPicker
-              label="Sandbox"
-              value={sandboxMode}
-              options={sandboxOptions}
-              onChange={setSandboxMode}
-            />
+            {threadErrorMessage ? (
+              <p className="pt-1 text-sm text-destructive">{threadErrorMessage}</p>
+            ) : null}
           </>
-        }
-      />
-      {errorMessage ? (
-        <p className="pt-2 text-sm text-destructive">{errorMessage}</p>
-      ) : null}
-      <ProjectTaskPanel projectId={projectId} />
+        ) : (
+          <>
+            <TaskComposer
+              titleInputId="project-main-task-title"
+              title={taskTitle}
+              description={taskDescription}
+              onTitleChange={(value) => {
+                setTaskTitle(value);
+                if (taskErrorMessage) setTaskErrorMessage(null);
+              }}
+              onDescriptionChange={setTaskDescription}
+              onSubmit={submitTask}
+              isSubmitting={createTask.isPending}
+              submitDisabled={isTaskSubmitDisabled}
+              submitTitle={createTask.isPending ? "Creating..." : "Create task (Enter)"}
+              autoFocusTitle={shouldFocusTaskComposer}
+            />
+            {taskErrorMessage ? (
+              <p className="pt-1 text-sm text-destructive">{taskErrorMessage}</p>
+            ) : null}
+          </>
+        )}
+      </div>
     </div>
   );
 }

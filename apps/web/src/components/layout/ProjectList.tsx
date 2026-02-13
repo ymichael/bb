@@ -1,15 +1,18 @@
 import { useEffect, useMemo, useState } from "react"
-import type { Thread } from "@beanbag/core"
+import type { Task, Thread } from "@beanbag/core"
 import {
+  AlertTriangle,
   Archive,
+  CheckCircle2,
   ChevronRight,
+  Circle,
   Folder,
   FolderOpen,
   LoaderCircle,
   Plus,
   SquarePen,
 } from "lucide-react"
-import { useArchiveThread, useProjects, useThreads } from "@/hooks/useApi"
+import { useArchiveThread, useProjects, useTasks, useThreads } from "@/hooks/useApi"
 import { NavLink, useLocation } from "react-router-dom"
 import { cn } from "@/lib/utils"
 import {
@@ -39,6 +42,7 @@ export function ProjectList({
 }: ProjectListProps) {
   const { data: projects, isLoading: projectsLoading } = useProjects()
   const { data: threads, isLoading: threadsLoading } = useThreads()
+  const { data: tasks, isLoading: tasksLoading } = useTasks()
   const archiveThread = useArchiveThread()
   const location = useLocation()
   const [collapsedProjectIds, setCollapsedProjectIds] = useState<Set<string>>(
@@ -60,6 +64,9 @@ export function ProjectList({
   const selectedThreadId = location.pathname.match(
     /^\/projects\/[^/]+\/threads\/([^/]+)/
   )?.[1]
+  const selectedTaskId = location.pathname.match(
+    /^\/projects\/[^/]+\/tasks\/([^/]+)/
+  )?.[1]
 
   const threadsByProject = useMemo(() => {
     const grouped = new Map<string, Thread[]>()
@@ -79,6 +86,25 @@ export function ProjectList({
 
     return grouped
   }, [threads])
+
+  const tasksByProject = useMemo(() => {
+    const grouped = new Map<string, Task[]>()
+
+    for (const task of tasks ?? []) {
+      const existing = grouped.get(task.projectId)
+      if (existing) {
+        existing.push(task)
+      } else {
+        grouped.set(task.projectId, [task])
+      }
+    }
+
+    for (const projectTasks of grouped.values()) {
+      projectTasks.sort((a, b) => b.updatedAt - a.updatedAt)
+    }
+
+    return grouped
+  }, [tasks])
 
   useEffect(() => {
     if (typeof window === "undefined") return
@@ -120,9 +146,10 @@ export function ProjectList({
           ) : projects && projects.length > 0 ? (
             projects.map((project) => {
               const projectThreads = threadsByProject.get(project.id) ?? []
+              const projectTasks = tasksByProject.get(project.id) ?? []
               const isProjectCollapsed = collapsedProjectIds.has(project.id)
               const isProjectActive =
-                selectedProjectId === project.id && !selectedThreadId
+                selectedProjectId === project.id && !selectedThreadId && !selectedTaskId
 
               return (
                 <SidebarMenuItem key={project.id} className="space-y-1">
@@ -144,7 +171,7 @@ export function ProjectList({
                           : `Collapse ${project.name}`
                       }
                       title={
-                        isProjectCollapsed ? "Expand project threads" : "Collapse project threads"
+                        isProjectCollapsed ? "Expand project items" : "Collapse project items"
                       }
                       onClick={() => toggleProjectCollapsed(project.id)}
                       className="flex min-w-0 flex-1 items-center"
@@ -185,6 +212,9 @@ export function ProjectList({
 
                   {!isProjectCollapsed && !threadsLoading && projectThreads.length > 0 ? (
                     <div className="space-y-1 group-data-[collapsible=icon]:hidden">
+                      <p className="px-2 pt-1 text-[10px] uppercase tracking-[0.08em] text-sidebar-foreground/45">
+                        Threads
+                      </p>
                       {projectThreads.map((thread) => {
                         const isBusyThread =
                           thread.status === "active" ||
@@ -237,6 +267,39 @@ export function ProjectList({
                       })}
                     </div>
                   ) : null}
+
+                  {!isProjectCollapsed && !tasksLoading && projectTasks.length > 0 ? (
+                    <div className="space-y-1 group-data-[collapsible=icon]:hidden">
+                      <p className="px-2 pt-1 text-[10px] uppercase tracking-[0.08em] text-sidebar-foreground/45">
+                        Tasks
+                      </p>
+                      {projectTasks.map((task) => (
+                        <NavLink
+                          key={task.id}
+                          to={`/projects/${project.id}/tasks/${task.id}`}
+                          onClick={onProjectSelect}
+                          className={({ isActive }) =>
+                            cn(
+                              "group/task-row flex h-8 w-full items-center gap-2 rounded-md p-2 text-sm transition-colors",
+                              isActive
+                                ? "bg-sidebar-border/80 text-sidebar-foreground"
+                                : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                            )
+                          }
+                        >
+                          <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center text-sidebar-foreground/60">
+                            <TaskStatusIcon status={task.status} />
+                          </span>
+                          <span className="min-w-0 flex-1 truncate">
+                            {task.title}
+                          </span>
+                          <span className="shrink-0 text-xs text-sidebar-foreground/60">
+                            {formatRelativeTime(task.updatedAt)}
+                          </span>
+                        </NavLink>
+                      ))}
+                    </div>
+                  ) : null}
                 </SidebarMenuItem>
               )
             })
@@ -251,6 +314,20 @@ export function ProjectList({
       </SidebarGroupContent>
     </SidebarGroup>
   )
+}
+
+function TaskStatusIcon({ status }: { status: Task["status"] }) {
+  switch (status) {
+    case "in_progress":
+      return <LoaderCircle className="size-3.5 animate-spin" />
+    case "blocked":
+      return <AlertTriangle className="size-3.5 text-destructive" />
+    case "closed":
+      return <CheckCircle2 className="size-3.5" />
+    case "open":
+    default:
+      return <Circle className="size-3.5" />
+  }
 }
 
 function formatRelativeTime(timestamp: number): string {
