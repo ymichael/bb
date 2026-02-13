@@ -1,5 +1,11 @@
 export type {
   Project,
+  Task,
+  TaskStatus,
+  TaskCloseReason,
+  TaskDependencyType,
+  TaskDependency,
+  TaskEvent,
   Thread,
   ThreadStatus,
   ThreadEventType,
@@ -31,6 +37,10 @@ export type {
 export type {
   SpawnThreadRequest,
   TellThreadRequest,
+  CreateTaskRequest,
+  UpdateTaskRequest,
+  AssignTaskRequest,
+  CreateTaskDependencyRequest,
   CreateProjectRequest,
   PromptInput,
   ModelReasoningEffort,
@@ -47,8 +57,15 @@ export type {
 
 export {
   promptInputSchema,
+  taskStatusSchema,
+  taskCloseReasonSchema,
+  taskDependencyTypeSchema,
   spawnThreadSchema,
   tellThreadSchema,
+  createTaskSchema,
+  updateTaskSchema,
+  assignTaskSchema,
+  createTaskDependencySchema,
   createProjectSchema,
 } from "./schemas.js";
 

@@ -17,6 +17,43 @@ export interface Project {
   updatedAt: number;
 }
 
+// Task
+export type TaskStatus = "open" | "in_progress" | "blocked" | "closed";
+
+export type TaskCloseReason = "completed" | "failed" | "canceled";
+
+export type TaskDependencyType = "blocks" | "parent-child" | "related";
+
+export interface Task {
+  id: string;
+  projectId: string;
+  title: string;
+  description?: string;
+  status: TaskStatus;
+  closeReason?: TaskCloseReason;
+  assignee?: string;
+  closedAt?: number;
+  resultSummary?: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface TaskDependency {
+  taskId: string;
+  dependsOnTaskId: string;
+  type: TaskDependencyType;
+  createdAt: number;
+}
+
+export interface TaskEvent {
+  id: string;
+  taskId: string;
+  seq: number;
+  type: string;
+  data: Record<string, unknown>;
+  createdAt: number;
+}
+
 // Thread
 export type ThreadStatus =
   | "created"

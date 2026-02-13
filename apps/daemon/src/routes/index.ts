@@ -1,12 +1,14 @@
 import { Hono } from "hono";
-import type { ProjectRepository } from "@beanbag/db";
+import type { ProjectRepository, TaskRepository } from "@beanbag/db";
 import type { ThreadManager } from "../thread-manager.js";
 import { createProjectRoutes } from "./projects.js";
 import { createThreadRoutes } from "./threads.js";
 import { createSystemRoutes } from "./system.js";
+import { createTaskRoutes } from "./tasks.js";
 
 export interface ApiRouteDeps {
   projectRepo: ProjectRepository;
+  taskRepo: TaskRepository;
   threadManager: ThreadManager;
   startTime: number;
 }
@@ -14,6 +16,7 @@ export interface ApiRouteDeps {
 export function createApiRoutes(deps: ApiRouteDeps) {
   return new Hono()
     .route("/projects", createProjectRoutes(deps.projectRepo))
+    .route("/tasks", createTaskRoutes(deps.projectRepo, deps.taskRepo))
     .route("/threads", createThreadRoutes(deps.threadManager))
     .route("/system", createSystemRoutes(deps.threadManager, deps.startTime));
 }

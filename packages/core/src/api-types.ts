@@ -3,6 +3,9 @@ export type SandboxMode =
   | "read-only"
   | "workspace-write"
   | "danger-full-access";
+export type TaskStatus = "open" | "in_progress" | "blocked" | "closed";
+export type TaskCloseReason = "completed" | "failed" | "canceled";
+export type TaskDependencyType = "blocks" | "parent-child" | "related";
 
 export type PromptInput =
   | { type: "text"; text: string }
@@ -51,6 +54,32 @@ export interface ThreadExecutionOptions {
   approvalPolicy?: string;
   source?: "client/thread/start" | "client/turn/start";
   seq?: number;
+}
+
+// Task endpoints
+export interface CreateTaskRequest {
+  projectId: string;
+  title: string;
+  description?: string;
+  parentId?: string;
+}
+
+export interface UpdateTaskRequest {
+  title?: string;
+  description?: string;
+  status?: TaskStatus;
+  closeReason?: TaskCloseReason;
+  resultSummary?: string;
+  assignee?: string;
+}
+
+export interface AssignTaskRequest {
+  assignee: string;
+}
+
+export interface CreateTaskDependencyRequest {
+  dependsOnTaskId: string;
+  type: TaskDependencyType;
 }
 
 // Project endpoints

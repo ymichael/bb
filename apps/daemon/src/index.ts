@@ -8,6 +8,7 @@ import {
   ProjectRepository,
   ThreadRepository,
   EventRepository,
+  TaskRepository,
 } from "@beanbag/db";
 import { createServer } from "./server.js";
 
@@ -76,11 +77,13 @@ async function main(): Promise<void> {
   const projectRepo = new ProjectRepository(db);
   const threadRepo = new ThreadRepository(db);
   const eventRepo = new EventRepository(db);
+  const taskRepo = new TaskRepository(db);
 
   // Create server
   const { app, injectWebSocket, wsManager, threadManager } =
     createServer({
       projectRepo,
+      taskRepo,
       threadRepo,
       eventRepo,
     });

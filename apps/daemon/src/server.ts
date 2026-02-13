@@ -9,6 +9,7 @@ import type {
   ProjectRepository,
   ThreadRepository,
   EventRepository,
+  TaskRepository,
 } from "@beanbag/db";
 import { WSManager } from "./ws.js";
 import { ThreadManager } from "./thread-manager.js";
@@ -23,6 +24,7 @@ export interface ServerDeps {
   projectRepo: ProjectRepository;
   threadRepo: ThreadRepository;
   eventRepo: EventRepository;
+  taskRepo: TaskRepository;
 }
 
 export function createServer(deps: ServerDeps) {
@@ -62,6 +64,7 @@ export function createServer(deps: ServerDeps) {
   const startTime = Date.now();
   const apiRoutes = createApiRoutes({
     projectRepo: deps.projectRepo,
+    taskRepo: deps.taskRepo,
     threadManager,
     startTime,
   });

@@ -2,6 +2,7 @@
 
 import { Command } from "commander";
 import { registerDaemonCommands } from "./commands/daemon.js";
+import { registerTaskCommands } from "./commands/task.js";
 import { registerThreadCommands } from "./commands/thread.js";
 
 const DEFAULT_URL = "http://localhost:3333";
@@ -21,6 +22,7 @@ function getUrl(): string {
 
 // Register all command groups
 registerDaemonCommands(program, getUrl);
+registerTaskCommands(program, getUrl);
 registerThreadCommands(program, getUrl);
 
 program.parseAsync(process.argv).catch((err) => {
