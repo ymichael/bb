@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { findActiveFileMention, insertFileMention, type ActiveFileMention } from "./file-mention"
 
-const PROMPTBOX_MIN_HEIGHT = 58
+const PROMPTBOX_MIN_HEIGHT = 68
 const PROMPTBOX_MAX_HEIGHT = 158
 
 type SubmitMode = "enter" | "mod-enter"
