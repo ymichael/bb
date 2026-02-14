@@ -10,8 +10,12 @@
   },
   "main": "./src/index.ts",
   "types": "./src/index.ts",
-  "files": ["src", "drizzle"],
+  "files": [
+    "src",
+    "drizzle"
+  ],
   "scripts": {
+    "dev": "drizzle-kit studio",
     "clean": "rm -f tsconfig.tsbuildinfo",
     "typecheck": "tsc --noEmit",
     "db:generate": "drizzle-kit generate",
