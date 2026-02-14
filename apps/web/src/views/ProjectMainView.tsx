@@ -158,7 +158,7 @@ export function ProjectMainView() {
                   : "text-muted-foreground hover:text-foreground"
               )}
             >
-              Tasks
+              Task
             </button>
           </div>
         </div>
