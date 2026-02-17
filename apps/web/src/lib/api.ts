@@ -2,8 +2,12 @@ import type {
   Project,
   Task,
   TaskEvent,
+  AgentRole,
   CreateTaskRequest,
   UpdateTaskRequest,
+  AssignTaskRequest,
+  TaskChatRequest,
+  TaskChatResponse,
   Thread,
   ThreadEvent,
   CreateProjectRequest,
@@ -91,6 +95,17 @@ export async function updateTask(id: string, req: UpdateTaskRequest): Promise<Ta
   return request<Task>("PATCH", `/tasks/${id}`, req);
 }
 
+export async function assignTask(id: string, req: AssignTaskRequest): Promise<Task> {
+  return request<Task>("POST", `/tasks/${id}/assign`, req);
+}
+
+export async function chatTask(
+  id: string,
+  req: TaskChatRequest,
+): Promise<TaskChatResponse> {
+  return request<TaskChatResponse>("POST", `/tasks/${id}/chat`, req);
+}
+
 export async function getTaskEvents(
   id: string,
   afterSeq?: number,
@@ -99,6 +114,14 @@ export async function getTaskEvents(
   if (afterSeq !== undefined) params.set("afterSeq", String(afterSeq));
   const qs = params.toString();
   return request<TaskEvent[]>("GET", `/tasks/${id}/events${qs ? `?${qs}` : ""}`);
+}
+
+export async function archiveTask(id: string): Promise<void> {
+  return request<void>("POST", `/tasks/${id}/archive`);
+}
+
+export async function listRoles(): Promise<AgentRole[]> {
+  return request<AgentRole[]>("GET", "/roles");
 }
 
 // --- Threads ---

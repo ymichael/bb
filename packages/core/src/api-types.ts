@@ -62,6 +62,7 @@ export interface CreateTaskRequest {
   title: string;
   description?: string;
   parentId?: string;
+  assignee?: string;
 }
 
 export interface UpdateTaskRequest {
@@ -77,9 +78,26 @@ export interface AssignTaskRequest {
   assignee: string;
 }
 
+export interface TaskChatRequest {
+  input: PromptInput[];
+}
+
+export interface TaskChatResponse {
+  ok: boolean;
+  threadId: string;
+  createdThread: boolean;
+}
+
 export interface CreateTaskDependencyRequest {
   dependsOnTaskId: string;
   type: TaskDependencyType;
+}
+
+export interface AgentRole {
+  id: string;
+  name: string;
+  description: string;
+  instructions: string;
 }
 
 // Project endpoints

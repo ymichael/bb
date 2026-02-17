@@ -10,16 +10,20 @@ import {
   FolderOpen,
   LoaderCircle,
   MessageSquare,
-  Plus,
   SquarePen,
 } from "lucide-react"
-import { useArchiveThread, useProjects, useTasks, useThreads } from "@/hooks/useApi"
+import {
+  useArchiveTask,
+  useArchiveThread,
+  useProjects,
+  useTasks,
+  useThreads,
+} from "@/hooks/useApi"
 import { NavLink, useLocation } from "react-router-dom"
 import { cn } from "@/lib/utils"
 import {
   SidebarGroup,
   SidebarGroupLabel,
-  SidebarGroupAction,
   SidebarGroupContent,
   SidebarMenu,
   SidebarMenuItem,
@@ -49,6 +53,7 @@ export function ProjectList({
   const { data: threads, isLoading: threadsLoading } = useThreads()
   const { data: tasks, isLoading: tasksLoading } = useTasks()
   const archiveThread = useArchiveThread()
+  const archiveTask = useArchiveTask()
   const location = useLocation()
   const [collapsedProjectIds, setCollapsedProjectIds] = useState<Set<string>>(
     () => {
@@ -134,13 +139,6 @@ export function ProjectList({
   return (
     <SidebarGroup>
       <SidebarGroupLabel>Projects</SidebarGroupLabel>
-      <SidebarGroupAction
-        onClick={onNewProject}
-        title={isCreatingProject ? "Creating project..." : "New project"}
-        disabled={isCreatingProject}
-      >
-        <Plus />
-      </SidebarGroupAction>
       <SidebarGroupContent>
         <SidebarMenu>
           {projectsLoading ? (
@@ -196,7 +194,7 @@ export function ProjectList({
                           )}
                         </span>
                       </span>
-                      <span className="min-w-0 flex-1 truncate pr-2 text-left">
+                      <span className="min-w-0 flex-1 truncate text-left">
                         {project.name}
                       </span>
                     </button>
@@ -209,7 +207,7 @@ export function ProjectList({
                       }}
                       title={`Open ${project.name}`}
                       aria-label={`Open ${project.name}`}
-                      className="mr-1 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-sidebar-foreground/70 outline-none ring-sidebar-ring transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground focus-visible:ring-2"
+                      className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-sidebar-foreground/70 outline-none ring-sidebar-ring transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground focus-visible:ring-2"
                     >
                       <SquarePen className="size-4" />
                     </NavLink>
@@ -296,8 +294,24 @@ export function ProjectList({
                             <span className="min-w-0 flex-1 truncate">
                               {task.title}
                             </span>
-                            <span className="shrink-0 text-xs text-sidebar-foreground/60">
-                              {formatRelativeTime(task.updatedAt)}
+                            <span className="relative shrink-0 text-xs text-sidebar-foreground/60">
+                              <span className="inline-block min-w-8 text-right transition-opacity group-hover/task-row:opacity-0">
+                                {formatRelativeTime(task.updatedAt)}
+                              </span>
+                              <button
+                                type="button"
+                                title="Archive task"
+                                aria-label="Archive task"
+                                className="pointer-events-none absolute inset-0 flex items-center justify-end opacity-0 transition-opacity group-hover/task-row:pointer-events-auto group-hover/task-row:opacity-100"
+                                onClick={(event) => {
+                                  event.preventDefault()
+                                  event.stopPropagation()
+                                  if (archiveTask.isPending) return
+                                  archiveTask.mutate(task.id)
+                                }}
+                              >
+                                <Archive className="size-3.5" />
+                              </button>
                             </span>
                           </NavLink>
                         )
@@ -314,6 +328,17 @@ export function ProjectList({
               </div>
             </SidebarMenuItem>
           )}
+          <SidebarMenuItem>
+            <button
+              type="button"
+              onClick={onNewProject}
+              disabled={isCreatingProject}
+              title={isCreatingProject ? "Creating Project..." : "Add Project"}
+              className="flex h-8 w-full items-center justify-center rounded-md border border-sidebar-border/80 bg-sidebar-accent/10 px-2 text-xs font-medium text-sidebar-foreground/65 transition-colors hover:bg-sidebar-accent/50 hover:text-sidebar-foreground disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {isCreatingProject ? "Adding Project..." : "Add Project"}
+            </button>
+          </SidebarMenuItem>
         </SidebarMenu>
       </SidebarGroupContent>
     </SidebarGroup>

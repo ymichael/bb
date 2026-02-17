@@ -32,6 +32,7 @@ export interface Task {
   status: TaskStatus;
   closeReason?: TaskCloseReason;
   assignee?: string;
+  archivedAt?: number;
   closedAt?: number;
   resultSummary?: string;
   createdAt: number;

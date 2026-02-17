@@ -44,6 +44,7 @@ function mockTaskRepo(): TaskRepository {
     getReady: vi.fn(),
     update: vi.fn(),
     assign: vi.fn(),
+    archive: vi.fn(),
     addDependency: vi.fn(),
     removeDependency: vi.fn(),
     listDependencies: vi.fn(),
@@ -66,6 +67,7 @@ describe("Task routes", () => {
     const routes = createTaskRoutes(
       projectRepo as any,
       taskRepo as any,
+      undefined,
       wsManager as any,
     );
     app = new Hono().route("/tasks", routes);
@@ -169,6 +171,34 @@ describe("Task routes", () => {
       expect(await res.json()).toEqual({
         error: "Task already assigned to builder-2",
       });
+    });
+  });
+
+  describe("POST /tasks/:id/archive", () => {
+    it("archives a task", async () => {
+      (taskRepo.archive as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeTask({ archivedAt: 1234 }),
+      );
+
+      const res = await app.request("/tasks/task-1/archive", {
+        method: "POST",
+      });
+
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ ok: true });
+      expect(taskRepo.archive).toHaveBeenCalledWith("task-1");
+      expect(wsManager.broadcast).toHaveBeenCalledWith("task", "task-1");
+    });
+
+    it("returns 404 when task does not exist", async () => {
+      (taskRepo.archive as ReturnType<typeof vi.fn>).mockReturnValue(undefined);
+
+      const res = await app.request("/tasks/task-missing/archive", {
+        method: "POST",
+      });
+
+      expect(res.status).toBe(404);
+      expect(await res.json()).toEqual({ error: "Task not found" });
     });
   });
 

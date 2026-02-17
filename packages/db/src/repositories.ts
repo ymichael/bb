@@ -25,6 +25,8 @@ import {
   taskEvents,
 } from "./schema.js";
 
+const DEFAULT_TASK_ASSIGNEE = "agent/generic";
+
 function asRecord(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   return value as Record<string, unknown>;
@@ -496,6 +498,7 @@ export class TaskRepository {
     title: string;
     description?: string;
     parentId?: string;
+    assignee?: string;
   }): Task {
     const now = Date.now();
     const row = {
@@ -505,7 +508,8 @@ export class TaskRepository {
       description: data.description ?? null,
       status: "open",
       closeReason: null,
-      assignee: null,
+      assignee: data.assignee ?? DEFAULT_TASK_ASSIGNEE,
+      archivedAt: null,
       closedAt: null,
       resultSummary: null,
       createdAt: now,
@@ -517,6 +521,10 @@ export class TaskRepository {
       this.appendTaskEventTx(tx, row.id, "task.created", {
         projectId: row.projectId,
         title: row.title,
+        assignee: row.assignee,
+      });
+      this.appendTaskEventTx(tx, row.id, "task.assigned", {
+        assignee: row.assignee,
       });
 
       if (data.parentId) {
@@ -562,12 +570,16 @@ export class TaskRepository {
     projectId?: string;
     status?: TaskStatus;
     parentId?: string;
+    includeArchived?: boolean;
   }): Task[] {
     if (filters?.parentId) {
       const conditions = [
         eq(taskDependencies.dependsOnTaskId, filters.parentId),
         eq(taskDependencies.type, "parent-child"),
       ];
+      if (!filters.includeArchived) {
+        conditions.push(isNull(tasks.archivedAt));
+      }
       if (filters.projectId) {
         conditions.push(eq(tasks.projectId, filters.projectId));
       }
@@ -587,6 +599,9 @@ export class TaskRepository {
     }
 
     const conditions = [];
+    if (!filters?.includeArchived) {
+      conditions.push(isNull(tasks.archivedAt));
+    }
     if (filters?.projectId) {
       conditions.push(eq(tasks.projectId, filters.projectId));
     }
@@ -611,6 +626,7 @@ export class TaskRepository {
         and(
           eq(tasks.projectId, projectId),
           eq(tasks.status, "open"),
+          isNull(tasks.archivedAt),
           sql`(${tasks.assignee} IS NULL OR ${tasks.assignee} = '')`,
           sql`NOT EXISTS (
             SELECT 1
@@ -764,6 +780,42 @@ export class TaskRepository {
     });
   }
 
+  archive(id: string): Task | undefined {
+    return this.withTransaction((tx) => {
+      const existing = tx
+        .select()
+        .from(tasks)
+        .where(eq(tasks.id, id))
+        .get();
+      if (!existing) return undefined;
+
+      if (existing.archivedAt !== null) {
+        return this.rowToTask(existing);
+      }
+
+      const now = Date.now();
+      tx
+        .update(tasks)
+        .set({
+          archivedAt: now,
+          updatedAt: now,
+        })
+        .where(eq(tasks.id, id))
+        .run();
+      this.appendTaskEventTx(tx, id, "task.archived", {
+        archivedAt: now,
+      });
+
+      const updated = tx
+        .select()
+        .from(tasks)
+        .where(eq(tasks.id, id))
+        .get();
+      if (!updated) return undefined;
+      return this.rowToTask(updated);
+    });
+  }
+
   addDependency(data: {
     taskId: string;
     dependsOnTaskId: string;
@@ -884,6 +936,48 @@ export class TaskRepository {
     });
   }
 
+  appendEvent(
+    taskId: string,
+    type: string,
+    data: Record<string, unknown>,
+  ): TaskEvent | undefined {
+    return this.withTransaction((tx) => {
+      const task = tx
+        .select({ id: tasks.id })
+        .from(tasks)
+        .where(eq(tasks.id, taskId))
+        .get();
+      if (!task) return undefined;
+
+      const latest = tx
+        .select({ maxSeq: sql<number>`MAX(${taskEvents.seq})` })
+        .from(taskEvents)
+        .where(eq(taskEvents.taskId, taskId))
+        .get();
+
+      const now = Date.now();
+      const row = {
+        id: nanoid(),
+        taskId,
+        seq: (latest?.maxSeq ?? 0) + 1,
+        type,
+        data: JSON.stringify(data),
+        createdAt: now,
+      };
+      tx.insert(taskEvents).values(row).run();
+      tx.update(tasks).set({ updatedAt: now }).where(eq(tasks.id, taskId)).run();
+
+      return {
+        id: row.id,
+        taskId: row.taskId,
+        seq: row.seq,
+        type: row.type,
+        data: JSON.parse(row.data),
+        createdAt: row.createdAt,
+      };
+    });
+  }
+
   private withTransaction<T>(work: (tx: any) => T): T {
     return (this.db as any).transaction(work);
   }
@@ -958,6 +1052,7 @@ export class TaskRepository {
         ? { closeReason: normalizeTaskCloseReason(row.closeReason) }
         : {}),
       ...(row.assignee ? { assignee: row.assignee } : {}),
+      ...(row.archivedAt !== null ? { archivedAt: row.archivedAt } : {}),
       ...(row.closedAt !== null ? { closedAt: row.closedAt } : {}),
       ...(row.resultSummary ? { resultSummary: row.resultSummary } : {}),
       createdAt: row.createdAt,

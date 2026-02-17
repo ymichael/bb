@@ -41,7 +41,10 @@ export type {
   CreateTaskRequest,
   UpdateTaskRequest,
   AssignTaskRequest,
+  TaskChatRequest,
+  TaskChatResponse,
   CreateTaskDependencyRequest,
+  AgentRole,
   CreateProjectRequest,
   PromptInput,
   ModelReasoningEffort,
@@ -66,6 +69,7 @@ export {
   createTaskSchema,
   updateTaskSchema,
   assignTaskSchema,
+  taskChatSchema,
   createTaskDependencySchema,
   createProjectSchema,
 } from "./schemas.js";

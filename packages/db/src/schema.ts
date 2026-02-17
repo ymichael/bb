@@ -69,6 +69,7 @@ export const tasks = sqliteTable(
     status: text("status").notNull().default("open"),
     closeReason: text("close_reason"),
     assignee: text("assignee"),
+    archivedAt: integer("archived_at"),
     closedAt: integer("closed_at"),
     resultSummary: text("result_summary"),
     createdAt: integer("created_at").notNull(),

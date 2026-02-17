@@ -50,6 +50,13 @@
       "when": 1771021800000,
       "tag": "0006_task_model_phase1",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1771025400000,
+      "tag": "0007_tasks_archive",
+      "breakpoints": true
     }
   ]
 }

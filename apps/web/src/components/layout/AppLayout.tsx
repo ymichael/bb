@@ -1,4 +1,4 @@
-import type { ReactNode } from "react"
+import { Fragment, type ReactNode } from "react"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { useLocation } from "react-router-dom"
 import { ChevronRight, MoreHorizontal, PencilLine, X } from "lucide-react"
@@ -17,12 +17,20 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { AppSidebar } from "./AppSidebar"
-import { useProjects, useTask, useThread } from "@/hooks/useApi"
+import { useProjects, useRoles, useTask, useThread } from "@/hooks/useApi"
 
 const SIDEBAR_WIDTH_KEY = "beanbag.sidebar.width"
 const SIDEBAR_MIN_WIDTH = 240
 const SIDEBAR_MAX_WIDTH = 460
 const SIDEBAR_DEFAULT_WIDTH = 320
+
+function decodePathSegment(value: string): string {
+  try {
+    return decodeURIComponent(value)
+  } catch {
+    return value
+  }
+}
 
 function clampSidebarWidth(value: number) {
   return Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, value))
@@ -36,7 +44,7 @@ interface AppHeaderProps {
   isProjectMainView: boolean
   projectMatch: RegExpMatchArray | null
   projectName?: string
-  meta: { title: string; subtitle?: string }
+  meta: { title: string; subtitle?: string; breadcrumbs?: string[] }
 }
 
 function AppHeader({
@@ -53,8 +61,11 @@ function AppHeader({
     isSidebarCollapsed && isProjectMainView && projectMatch
       ? (projectName ?? projectMatch[1])
       : undefined
+  const headerBreadcrumbs = collapsedProjectLabel
+    ? ["Projects", collapsedProjectLabel]
+    : (showProjectNameInHeader ? meta.breadcrumbs : undefined)
   const headerTitle =
-    collapsedProjectLabel ? undefined : (showProjectNameInHeader ? meta.title : undefined)
+    headerBreadcrumbs ? undefined : (showProjectNameInHeader ? meta.title : undefined)
 
   return (
     <header
@@ -67,11 +78,27 @@ function AppHeader({
             <Separator orientation="vertical" className="mr-2 h-4" />
           ) : null}
           <div className="min-w-0 flex-1">
-            {collapsedProjectLabel ? (
+            {headerBreadcrumbs ? (
               <p className="flex min-w-0 items-center gap-1.5 text-sm font-semibold">
-                <span className="text-muted-foreground">Projects</span>
-                <ChevronRight className="size-3.5 shrink-0 text-muted-foreground/70" />
-                <span className="truncate">{collapsedProjectLabel}</span>
+                {headerBreadcrumbs.map((segment, index) => {
+                  const isLast = index === headerBreadcrumbs.length - 1
+                  return (
+                    <Fragment key={`${segment}-${index}`}>
+                      {index > 0 ? (
+                        <ChevronRight className="size-3.5 shrink-0 text-muted-foreground/70" />
+                      ) : null}
+                      <span
+                        className={
+                          isLast
+                            ? "min-w-0 truncate"
+                            : "shrink-0 text-muted-foreground"
+                        }
+                      >
+                        {segment}
+                      </span>
+                    </Fragment>
+                  )
+                })}
               </p>
             ) : null}
             {headerTitle ? (
@@ -140,16 +167,20 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const projectTaskMatch = location.pathname.match(
     /^\/projects\/([^/]+)\/tasks\/([^/]+)(?:\/|$)/
   )
+  const roleMatch = location.pathname.match(/^\/roles\/([^/]+)(?:\/|$)/)
   const threadMatch = projectThreadMatch
   const taskMatch = projectTaskMatch
   const isProjectMainView = Boolean(projectMatch && !threadMatch && !taskMatch)
   const threadId = projectThreadMatch?.[2] ?? ""
   const taskId = projectTaskMatch?.[2] ?? ""
+  const roleId = roleMatch?.[1] ? decodePathSegment(roleMatch[1]) : ""
 
   const projectId = projectMatch?.[1]
   const projectName = projectId
     ? projects?.find((project) => project.id === projectId)?.name
     : undefined
+  const { data: roles } = useRoles()
+  const role = roleId ? roles?.find((entry) => entry.id === roleId) : undefined
   const { data: thread } = useThread(threadId)
   const { data: task } = useTask(taskId)
 
@@ -161,6 +192,12 @@ export function AppLayout({ children }: { children: ReactNode }) {
     : taskMatch
       ? {
           title: task?.title ?? "Task",
+          subtitle: undefined,
+        }
+    : roleMatch
+      ? {
+          title: (role?.name ?? roleId) || "Role",
+          breadcrumbs: ["Roles", (role?.name ?? roleId) || "Role"],
           subtitle: undefined,
         }
     : projectMatch

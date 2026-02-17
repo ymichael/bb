@@ -24,6 +24,7 @@ export function ProjectMainView() {
   const [taskErrorMessage, setTaskErrorMessage] = useState<string | null>(null);
   const [taskTitle, setTaskTitle] = useState("");
   const [taskDescription, setTaskDescription] = useState("");
+  const [taskAssignee, setTaskAssignee] = useState("agent/generic");
   const [activeTab, setActiveTab] = useState<ComposerTab>("thread");
   const {
     selectedModel,
@@ -119,6 +120,7 @@ export function ProjectMainView() {
         projectId,
         title: trimmedTitle,
         description: taskDescription.trim() || undefined,
+        assignee: taskAssignee,
       });
       setTaskTitle("");
       setTaskDescription("");
@@ -233,6 +235,11 @@ export function ProjectMainView() {
                 if (taskErrorMessage) setTaskErrorMessage(null);
               }}
               onDescriptionChange={setTaskDescription}
+              assignee={taskAssignee}
+              onAssigneeChange={(nextAssignee) => {
+                setTaskAssignee(nextAssignee);
+                if (taskErrorMessage) setTaskErrorMessage(null);
+              }}
               onSubmit={submitTask}
               isSubmitting={createTask.isPending}
               submitDisabled={isTaskSubmitDisabled}

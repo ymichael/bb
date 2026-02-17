@@ -62,6 +62,7 @@ export const createTaskSchema = z.object({
   title: z.string().min(1),
   description: z.string().optional(),
   parentId: z.string().optional(),
+  assignee: z.string().min(1).optional(),
 });
 
 export const updateTaskSchema = z.object({
@@ -75,6 +76,10 @@ export const updateTaskSchema = z.object({
 
 export const assignTaskSchema = z.object({
   assignee: z.string().min(1),
+});
+
+export const taskChatSchema = z.object({
+  input: z.array(promptInputSchema).min(1),
 });
 
 export const createTaskDependencySchema = z.object({

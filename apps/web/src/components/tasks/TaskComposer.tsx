@@ -2,6 +2,7 @@ import { type FormEvent, type KeyboardEvent, useEffect, useMemo, useState } from
 import { CornerDownLeft, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
+import { TaskAssigneeSelector } from "./TaskAssigneeSelector"
 
 interface TaskComposerProps {
   titleInputId?: string
@@ -9,6 +10,8 @@ interface TaskComposerProps {
   description: string
   onTitleChange: (value: string) => void
   onDescriptionChange: (value: string) => void
+  assignee: string
+  onAssigneeChange: (value: string) => void
   onSubmit: () => void
   isSubmitting?: boolean
   submitDisabled?: boolean
@@ -42,6 +45,8 @@ export function TaskComposer({
   description,
   onTitleChange,
   onDescriptionChange,
+  assignee,
+  onAssigneeChange,
   onSubmit,
   isSubmitting = false,
   submitDisabled = false,
@@ -102,8 +107,14 @@ export function TaskComposer({
           maxHeight: `${TASK_COMPOSER_MAX_HEIGHT}px`,
         }}
       />
-      <div className="flex flex-row items-center gap-3 px-3.5 pt-1.5">
-        <div className="flex min-w-0 flex-1 flex-row items-center gap-1" />
+      <div className="flex flex-row items-center gap-3 px-4 pt-1.5">
+        <div className="flex min-w-0 flex-1 flex-row items-center gap-1">
+          <TaskAssigneeSelector
+            value={assignee}
+            onChange={onAssigneeChange}
+            className="h-auto px-0 text-xs text-muted-foreground/75 hover:text-foreground"
+          />
+        </div>
         <div className="flex shrink-0 flex-row items-center gap-1">
           <Button
             type="submit"

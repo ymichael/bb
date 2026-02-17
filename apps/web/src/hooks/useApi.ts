@@ -4,8 +4,10 @@ import type {
   Task,
   TaskEvent,
   TaskStatus,
+  AgentRole,
   CreateTaskRequest,
   UpdateTaskRequest,
+  TaskChatRequest,
   Thread,
   ThreadEvent,
   CreateProjectRequest,
@@ -66,6 +68,13 @@ export function useTaskEvents(id: string) {
   });
 }
 
+export function useRoles() {
+  return useQuery<AgentRole[]>({
+    queryKey: ["roles"],
+    queryFn: () => api.listRoles(),
+  });
+}
+
 export function useCreateTask() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -87,6 +96,58 @@ export function useUpdateTask() {
       queryClient.invalidateQueries({ queryKey: ["tasks"] });
       queryClient.setQueryData(["task", task.id], task);
       queryClient.invalidateQueries({ queryKey: ["taskEvents", task.id] });
+    },
+  });
+}
+
+export function useAssignTask() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, assignee }: { id: string; assignee: string }) =>
+      api.assignTask(id, { assignee }),
+    onSuccess: (task) => {
+      queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      queryClient.setQueryData(["task", task.id], task);
+      queryClient.invalidateQueries({ queryKey: ["taskEvents", task.id] });
+    },
+  });
+}
+
+export function useSetTaskAssignee() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, assignee }: { id: string; assignee: string }) =>
+      api.updateTask(id, { assignee }),
+    onSuccess: (task) => {
+      queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      queryClient.setQueryData(["task", task.id], task);
+      queryClient.invalidateQueries({ queryKey: ["taskEvents", task.id] });
+    },
+  });
+}
+
+export function useTaskChat() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, req }: { id: string; req: TaskChatRequest }) =>
+      api.chatTask(id, req),
+    onSuccess: (_result, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["task", variables.id] });
+      queryClient.invalidateQueries({ queryKey: ["taskEvents", variables.id] });
+      queryClient.invalidateQueries({ queryKey: ["threads"] });
+      queryClient.invalidateQueries({ queryKey: ["threadEvents"] });
+    },
+  });
+}
+
+export function useArchiveTask() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.archiveTask(id),
+    onSuccess: (_data, id) => {
+      queryClient.invalidateQueries({ queryKey: ["task", id] });
+      queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      queryClient.invalidateQueries({ queryKey: ["taskEvents", id] });
     },
   });
 }
