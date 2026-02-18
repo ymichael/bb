@@ -8,18 +8,41 @@ import {
   type TaskDependencyType,
 } from "@beanbag/core";
 import { createClient, unwrap } from "../client.js";
-import { requireProjectId } from "../context-env.js";
+import {
+  requireProjectId,
+  requireTaskId,
+  resolveTaskId,
+} from "../context-env.js";
+import { formatTaskDescription } from "../task-format.js";
 
-export function statusIcon(status: TaskStatus): string {
+type TaskStatusEventMode = "summary" | "raw";
+
+function parseRecentEventsCount(rawCount: string): number {
+  const parsed = Number.parseInt(rawCount, 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    throw new Error("Recent events count must be a positive integer.");
+  }
+  return parsed;
+}
+
+function parseTaskStatusEventMode(rawMode: string | undefined): TaskStatusEventMode {
+  const normalized = (rawMode ?? "summary").trim().toLowerCase();
+  if (normalized === "summary" || normalized === "raw") {
+    return normalized;
+  }
+  throw new Error(`Invalid event mode '${rawMode}'. Expected 'summary' or 'raw'.`);
+}
+
+export function statusText(status: TaskStatus): string {
   switch (status) {
     case "open":
-      return "\u25CB";
+      return "open";
     case "in_progress":
-      return "\u25D4";
+      return "in_progress";
     case "blocked":
-      return "\u25D1";
+      return "blocked";
     case "closed":
-      return "\u25CF";
+      return "closed";
     default:
       return assertNever(status);
   }
@@ -30,7 +53,8 @@ function printTask(task: Task): void {
   console.log(`  ID:          ${task.id}`);
   console.log(`  Project:     ${task.projectId}`);
   console.log(`  Title:       ${task.title}`);
-  console.log(`  Status:      ${statusIcon(task.status)} ${task.status}`);
+  console.log(`  Description: ${formatTaskDescription(task.description)}`);
+  console.log(`  Status:      ${statusText(task.status)}`);
   if (task.assignee) console.log(`  Assignee:    ${task.assignee}`);
   if (task.closeReason) console.log(`  CloseReason: ${task.closeReason}`);
   console.log(`  Created:     ${new Date(task.createdAt).toLocaleString()}`);
@@ -59,7 +83,7 @@ function printTaskTable(tasks: Task[]): void {
     const row = [
       task.id.padEnd(idWidth),
       task.projectId.padEnd(projectWidth),
-      `${statusIcon(task.status)} ${task.status}`.padEnd(statusWidth + 2),
+      statusText(task.status).padEnd(statusWidth),
       task.title.padEnd(titleWidth),
     ].join("  ");
     console.log(row);
@@ -70,11 +94,7 @@ function printTaskTable(tasks: Task[]): void {
 function printTaskEvent(event: TaskEvent): void {
   const time = new Date(event.createdAt).toLocaleTimeString();
   const data = JSON.stringify(event.data);
-  console.log(`[${time}] [${event.type}] ${data}`);
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+  console.log(`time=${time} type=${event.type} data=${data}`);
 }
 
 export function registerTaskCommands(program: Command, getUrl: () => string): void {
@@ -87,23 +107,37 @@ export function registerTaskCommands(program: Command, getUrl: () => string): vo
     .requiredOption("--title <title>", "Task title")
     .option("--description <description>", "Task description")
     .option("--parent <taskId>", "Parent task ID")
+    .option(
+      "--no-context-parent",
+      "Do not default parent to BB_TASK_ID when --parent is omitted",
+    )
     .action(
       async (opts: {
         project?: string;
         title: string;
         description?: string;
         parent?: string;
+        contextParent?: boolean;
       }) => {
         const client = createClient(getUrl());
         try {
+          if (opts.parent && opts.contextParent === false) {
+            throw new Error(
+              "Cannot combine --parent with --no-context-parent.",
+            );
+          }
+
           const projectId = requireProjectId(opts.project);
+          const parentId =
+            opts.parent ??
+            (opts.contextParent === false ? undefined : resolveTaskId());
           const created = await unwrap<Task>(
             client.api.v1.tasks.$post({
               json: {
                 projectId,
                 title: opts.title,
                 description: opts.description,
-                parentId: opts.parent,
+                parentId,
               },
             }),
           );
@@ -149,37 +183,56 @@ export function registerTaskCommands(program: Command, getUrl: () => string): vo
     );
 
   task
-    .command("ready")
-    .description("List assignable ready tasks")
-    .option("--project <id>", "Project ID (defaults to BB_PROJECT_ID)")
-    .action(async (opts: { project?: string }) => {
-      const client = createClient(getUrl());
-      try {
-        const projectId = requireProjectId(opts.project);
-        const tasks = await unwrap<Task[]>(
-          client.api.v1.tasks.ready.$get({
-            query: { projectId },
-          }),
-        );
-        if (tasks.length === 0) {
-          console.log("No ready tasks found");
-          return;
+    .command("status [id]")
+    .description("Show task status (defaults to BB_TASK_ID)")
+    .option("--recent-events <count>", "Include last N task events")
+    .option(
+      "--event-mode <mode>",
+      "summary|raw event formatting for --recent-events",
+      "summary",
+    )
+    .action(
+      async (
+        id: string | undefined,
+        opts: { recentEvents?: string; eventMode?: string },
+      ) => {
+        const client = createClient(getUrl());
+        try {
+          const taskId = requireTaskId(id);
+          const recentEvents =
+            opts.recentEvents === undefined
+              ? undefined
+              : parseRecentEventsCount(opts.recentEvents);
+          const eventMode = parseTaskStatusEventMode(opts.eventMode);
+          const task = await unwrap<Task>(
+            client.api.v1.tasks[":id"].$get({ param: { id: taskId } }),
+          );
+          const events =
+            recentEvents === undefined
+              ? []
+              : await unwrap<TaskEvent[]>(
+                  client.api.v1.tasks[":id"].events.$get({
+                    param: { id: taskId },
+                    query: {},
+                  }),
+                );
+          printTaskStatus(task, events, { recentEvents, eventMode });
+        } catch (err: unknown) {
+          console.error(`Error: ${(err as Error).message}`);
+          process.exit(1);
         }
-        printTaskTable(tasks);
-      } catch (err: unknown) {
-        console.error(`Error: ${(err as Error).message}`);
-        process.exit(1);
-      }
-    });
+      },
+    );
 
   task
-    .command("show <id>")
-    .description("Show task details")
-    .action(async (id: string) => {
+    .command("show [id]")
+    .description("Show task details (defaults to BB_TASK_ID)")
+    .action(async (id: string | undefined) => {
       const client = createClient(getUrl());
       try {
+        const taskId = requireTaskId(id);
         const task = await unwrap<Task>(
-          client.api.v1.tasks[":id"].$get({ param: { id } }),
+          client.api.v1.tasks[":id"].$get({ param: { id: taskId } }),
         );
         printTask(task);
       } catch (err: unknown) {
@@ -295,7 +348,9 @@ export function registerTaskCommands(program: Command, getUrl: () => string): vo
               json: { dependsOnTaskId, type: opts.type },
             }),
           );
-          console.log(`Dependency added: ${taskId} -(${opts.type})-> ${dependsOnTaskId}`);
+          console.log(
+            `Dependency added: task=${taskId} dependsOn=${dependsOnTaskId} type=${opts.type}`,
+          );
         } catch (err: unknown) {
           console.error(`Error: ${(err as Error).message}`);
           process.exit(1);
@@ -321,7 +376,9 @@ export function registerTaskCommands(program: Command, getUrl: () => string): vo
               query: { type: opts.type },
             }),
           );
-          console.log(`Dependency removed: ${taskId} -(${opts.type})-> ${dependsOnTaskId}`);
+          console.log(
+            `Dependency removed: task=${taskId} dependsOn=${dependsOnTaskId} type=${opts.type}`,
+          );
         } catch (err: unknown) {
           console.error(`Error: ${(err as Error).message}`);
           process.exit(1);
@@ -330,52 +387,60 @@ export function registerTaskCommands(program: Command, getUrl: () => string): vo
     );
 
   task
-    .command("events <id>")
-    .description("Show task event log")
-    .option("-f, --follow", "Follow new events")
-    .action(async (id: string, opts: { follow?: boolean }) => {
+    .command("events [id]")
+    .description("Show task event log (defaults to BB_TASK_ID)")
+    .action(async (id: string | undefined) => {
       const client = createClient(getUrl());
       try {
-        let lastSeq = -1;
+        const taskId = requireTaskId(id);
         const events = await unwrap<TaskEvent[]>(
           client.api.v1.tasks[":id"].events.$get({
-            param: { id },
+            param: { id: taskId },
             query: {},
           }),
         );
         for (const event of events) {
           printTaskEvent(event);
-          if (event.seq > lastSeq) lastSeq = event.seq;
-        }
-
-        if (!opts.follow) return;
-
-        console.log("--- following (Ctrl+C to stop) ---");
-        process.on("SIGINT", () => {
-          console.log("\n--- stopped following ---");
-          process.exit(0);
-        });
-
-        while (true) {
-          await sleep(500);
-          try {
-            const newEvents = await unwrap<TaskEvent[]>(
-              client.api.v1.tasks[":id"].events.$get({
-                param: { id },
-                query: { afterSeq: String(lastSeq) },
-              }),
-            );
-            for (const event of newEvents) {
-              printTaskEvent(event);
-              if (event.seq > lastSeq) lastSeq = event.seq;
-            }
-          } catch {
-            await sleep(1500);
-          }
         }
       } catch (err: unknown) {
         console.error(`Error: ${(err as Error).message}`);
         process.exit(1);
       }
     });
+}
+
+function printTaskStatus(
+  task: Task,
+  events: TaskEvent[],
+  opts?: { recentEvents?: number; eventMode: TaskStatusEventMode },
+): void {
+  console.log(`Task ${task.id}`);
+  console.log(
+    `Status ${statusText(task.status)}${task.assignee ? ` (assignee: ${task.assignee})` : ""}`,
+  );
+  console.log(`Project ${task.projectId}`);
+  console.log(`Description ${formatTaskDescription(task.description)}`);
+  console.log(`Updated ${new Date(task.updatedAt).toLocaleString()}`);
+
+  const recentEventCount = opts?.recentEvents;
+  if (recentEventCount === undefined) return;
+  const eventMode = opts?.eventMode ?? "summary";
+
+  const recentEvents = events.slice(-recentEventCount);
+
+  console.log("");
+  console.log("Recent events:");
+  if (recentEvents.length === 0) return;
+
+  if (eventMode === "raw") {
+    for (const event of recentEvents) {
+      printTaskEvent(event);
+    }
+    return;
+  }
+
+  for (const event of recentEvents) {
+    const at = new Date(event.createdAt).toLocaleTimeString();
+    console.log(`- ${at} ${event.type}`);
+  }
 }

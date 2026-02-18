@@ -79,7 +79,7 @@ export function ProjectList({
     const grouped = new Map<string, ProjectItem[]>()
 
     for (const projectThread of threads ?? []) {
-      if (isTaskPrimaryThread(projectThread)) continue
+      if (!isVisibleProjectThread(projectThread)) continue
       const existing = grouped.get(projectThread.projectId)
       const item: ProjectItem = {
         kind: "thread",
@@ -94,6 +94,7 @@ export function ProjectList({
     }
 
     for (const projectTask of tasks ?? []) {
+      if (!isUnarchivedTask(projectTask)) continue
       const existing = grouped.get(projectTask.projectId)
       const item: ProjectItem = {
         kind: "task",
@@ -219,7 +220,7 @@ export function ProjectList({
                     </button>
                     <NavLink
                       to={`/projects/${project.id}`}
-                      state={{ focusPrompt: true }}
+                      state={{ focusTaskComposer: true }}
                       onClick={(event) => {
                         event.stopPropagation()
                         onProjectSelect?.()
@@ -369,6 +370,18 @@ function isBusyThreadStatus(status: Thread["status"]): boolean {
   }
 }
 
-function isTaskPrimaryThread(thread: Thread): boolean {
-  return thread.taskRole === "primary" && Boolean(thread.taskId)
+function isVisibleProjectThread(thread: Thread): boolean {
+  return isUnarchivedThread(thread) && isOrphanedThread(thread)
+}
+
+function isUnarchivedThread(thread: Thread): boolean {
+  return thread.archivedAt === undefined
+}
+
+function isOrphanedThread(thread: Thread): boolean {
+  return thread.taskId === undefined && thread.parentThreadId === undefined
+}
+
+function isUnarchivedTask(task: Task): boolean {
+  return task.archivedAt === undefined
 }

@@ -13,6 +13,7 @@ export type {
   TaskEvent,
   Thread,
   ThreadStatus,
+  ThreadTurnInitiator,
   ThreadEventType,
   ThreadEventDataByType,
   ThreadEventData,

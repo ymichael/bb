@@ -41,7 +41,7 @@ pnpm dev
 
 # run CLI from source in dev
 pnpm bb:dev --help
-pnpm bb:dev daemon status
+pnpm bb:dev status
 ```
 
 Production (built `dist`):
@@ -52,14 +52,13 @@ pnpm build
 # run built daemon and built CLI
 pnpm daemon --help
 pnpm bb --help
-pnpm bb daemon start
 ```
 
 Notes:
 
 - `dist/` output is generated for `@beanbag/core`, `@beanbag/db`, `@beanbag/daemon`, and `@beanbag/cli`.
-- `bb daemon start` prefers `apps/daemon/dist/index.js` when available; if not built, it falls back to `apps/daemon/src/index.ts` via `tsx` for local development.
-- `pnpm dev` starts the daemon on `:3333`; stop any already-running background daemon first (`pnpm bb daemon stop`) to avoid `EADDRINUSE`.
+- `pnpm dev` starts the daemon on `:3333`.
+- CLI uses `BB_DAEMON_URL` when set, otherwise defaults to `http://localhost:3333`.
 
 ## Build, Typecheck, Test
 
@@ -108,11 +107,34 @@ Thread execution context is exposed to agent shells as:
 - `BB_PROJECT_ID`
 - `BB_TASK_ID` (task-linked threads)
 - `BB_THREAD_ID`
+- `BB_DAEMON_URL` (optional daemon endpoint override; default is `http://localhost:3333`)
 
 `bb` is also kept on `PATH` for agent shell commands.
 
 CLI commands that need project context accept `--project`, or fall back to
 `BB_PROJECT_ID` when the flag is omitted.
+
+Creation defaults:
+
+- `bb task create` defaults parent task to `BB_TASK_ID` (opt out with `--no-context-parent`).
+- `bb thread spawn` defaults task/parent-thread to `BB_TASK_ID`/`BB_THREAD_ID` (opt out with `--no-context-task` and `--no-context-parent-thread`).
+- `bb thread spawn --task-role ...` requires task context (`--task <id>` or `BB_TASK_ID`).
+
+Status output defaults:
+
+- `bb status` always prints `Project`, `Task`, and `Thread` ids.
+- When task context is available, `bb status` also prints `Task Title` and `Task Description`.
+- `bb task status` and `bb thread status` are concise by default (no recent-event block unless requested).
+
+Status event flags:
+
+- `bb task status --recent-events <n> [--event-mode summary|raw]`
+- `bb thread status --recent-events <n> [--event-mode summary|raw] [--include-low-signal]`
+
+Show command context fallback:
+
+- `bb task show [id]` defaults to `BB_TASK_ID` when `id` is omitted.
+- `bb thread show [id]` defaults to `BB_THREAD_ID` when `id` is omitted.
 
 ## Typed Codex Event Schema
 

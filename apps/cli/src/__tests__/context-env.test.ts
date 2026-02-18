@@ -1,12 +1,21 @@
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  DEFAULT_DAEMON_URL,
+  requireTaskId,
+  requireThreadId,
+  resolveDaemonUrl,
   requireProjectId,
   resolveProjectId,
   resolveTaskId,
   resolveThreadId,
 } from "../context-env.js";
 
-const CONTEXT_KEYS = ["BB_PROJECT_ID", "BB_TASK_ID", "BB_THREAD_ID"] as const;
+const CONTEXT_KEYS = [
+  "BB_PROJECT_ID",
+  "BB_TASK_ID",
+  "BB_THREAD_ID",
+  "BB_DAEMON_URL",
+] as const;
 
 afterEach(() => {
   for (const key of CONTEXT_KEYS) {
@@ -27,7 +36,16 @@ describe("context env resolution", () => {
 
   it("requires a project value from flag or BB_PROJECT_ID", () => {
     expect(() => requireProjectId(undefined)).toThrow(
-      "Missing project context. Pass --project <id> or set BB_PROJECT_ID.",
+      "Missing project context. Pass a project ID (for example --project <id>) or set BB_PROJECT_ID.",
+    );
+  });
+
+  it("requires task and thread values from explicit args or BB_* context", () => {
+    expect(() => requireTaskId(undefined)).toThrow(
+      "Missing task context. Pass <taskId> or set BB_TASK_ID.",
+    );
+    expect(() => requireThreadId(undefined)).toThrow(
+      "Missing thread context. Pass <threadId> or set BB_THREAD_ID.",
     );
   });
 
@@ -43,9 +61,16 @@ describe("context env resolution", () => {
     process.env.BB_PROJECT_ID = "   ";
     process.env.BB_TASK_ID = "";
     process.env.BB_THREAD_ID = " \t ";
+    process.env.BB_DAEMON_URL = " ";
 
     expect(resolveProjectId(undefined)).toBeUndefined();
     expect(resolveTaskId(undefined)).toBeUndefined();
     expect(resolveThreadId(undefined)).toBeUndefined();
+    expect(resolveDaemonUrl()).toBe(DEFAULT_DAEMON_URL);
+  });
+
+  it("uses BB_DAEMON_URL when set", () => {
+    process.env.BB_DAEMON_URL = "http://127.0.0.1:4444";
+    expect(resolveDaemonUrl()).toBe("http://127.0.0.1:4444");
   });
 });

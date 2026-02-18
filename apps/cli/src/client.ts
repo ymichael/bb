@@ -19,7 +19,7 @@ export async function unwrap<T>(
       (err as any).cause?.code === "ECONNREFUSED"
     ) {
       throw new Error(
-        "Cannot connect to daemon. Is it running? Try: bb daemon start",
+        "Cannot connect to Beanbag daemon. Ensure it is running and BB_DAEMON_URL is correct.",
       );
     }
     throw err;

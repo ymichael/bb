@@ -26,10 +26,6 @@ const listTasksQuerySchema = z.object({
   parentId: z.string().optional(),
 });
 
-const readyTasksQuerySchema = z.object({
-  projectId: z.string(),
-});
-
 const eventsQuerySchema = z.object({
   afterSeq: z.string().optional(),
 });
@@ -59,33 +55,15 @@ function toTaskChatMessage(input: PromptInput[]): string {
   return parts.join(" ").trim() || "(no text)";
 }
 
-function buildTaskRolePreamble(task: Task): string {
-  const role = getAgentRoleDefinition(task.assignee ?? "") ?? getDefaultAgentRole();
-  const description =
-    task.description && task.description.trim().length > 0
-      ? task.description.trim()
-      : "(none)";
+const TASK_ASSIGNMENT_SYSTEM_MESSAGE =
+  "[bb system] You have been assigned this task, please work on it as instructed";
 
-  return [
-    `You are now assigned to Beanbag task ${task.id}.`,
-    `Role: ${role.id} (${role.name})`,
-    "",
-    "Role instructions:",
-    role.instructions,
-    "",
-    "Task context:",
-    `- projectId: ${task.projectId}`,
-    `- taskId: ${task.id}`,
-    `- title: ${task.title}`,
-    `- status: ${task.status}`,
-    `- description: ${description}`,
-    "",
-    "Delegation:",
-    "- If you spawn helper threads, use `bb thread spawn --prompt \"...\"`.",
-    "- Task context is injected automatically so helper threads are linked back to this task activity.",
-    "",
-    "Collaborate directly in this thread with the user who owns the task.",
-  ].join("\n");
+function buildTaskAssignmentStartupInput(): PromptInput[] {
+  return [{ type: "text", text: TASK_ASSIGNMENT_SYSTEM_MESSAGE }];
+}
+
+function resolveAgentRoleForTask(task: Task) {
+  return getAgentRoleDefinition(task.assignee ?? "") ?? getDefaultAgentRole();
 }
 
 function buildPrimaryThreadTitle(task: Task): string {
@@ -130,19 +108,20 @@ export function createTaskRoutes(
       }
     }
 
-    const input: PromptInput[] = [
-      { type: "text", text: buildTaskRolePreamble(task) },
-      ...(opts?.initialInput ?? []),
-    ];
+    const input = opts?.initialInput ?? buildTaskAssignmentStartupInput();
+    const agentRole = resolveAgentRoleForTask(task);
     const thread = await threadManager.spawn({
       projectId: task.projectId,
       title: buildPrimaryThreadTitle(task),
-      input,
+      ...(input ? { input } : {}),
+      agentRoleId: agentRole.id,
+      developerInstructions: agentRole.instructions,
       taskId: task.id,
       taskRole: "primary",
     });
     taskRepo.appendEvent(task.id, "task.chat.thread_created", {
       threadId: thread.id,
+      taskRole: "primary",
     });
     return { threadId: thread.id, createdThread: true };
   };
@@ -181,19 +160,6 @@ export function createTaskRoutes(
       try {
         const filters = c.req.valid("query");
         const tasks = taskRepo.list(filters);
-        return c.json(tasks);
-      } catch (err) {
-        return c.json({ error: toErrorMessage(err) }, 500);
-      }
-    })
-    .get("/ready", zValidator("query", readyTasksQuerySchema), async (c) => {
-      try {
-        const { projectId } = c.req.valid("query");
-        const project = projectRepo.getById(projectId);
-        if (!project) {
-          return c.json({ error: "Project not found" }, 404);
-        }
-        const tasks = taskRepo.getReady(projectId);
         return c.json(tasks);
       } catch (err) {
         return c.json({ error: toErrorMessage(err) }, 500);
@@ -289,7 +255,9 @@ export function createTaskRoutes(
           initialInput: input,
         });
         if (!createdThread) {
-          await threadManager.tell(threadId, { input });
+          await threadManager.tell(threadId, { input }, undefined, {
+            initiator: "user",
+          });
         }
 
         taskRepo.appendEvent(task.id, "task.chat.message", {

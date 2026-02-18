@@ -12,7 +12,7 @@ export function DetailCard({
   className?: string;
 }) {
   return (
-    <dl className={cn("rounded-md border border-border/60 bg-background/40 px-2 py-1", className)}>
+    <dl className={cn("rounded-md border border-border/80 bg-background/40 px-2 py-1", className)}>
       {children}
     </dl>
   );
@@ -24,7 +24,7 @@ export function DetailRow({
   className,
   labelClassName,
   valueClassName,
-  align = "start",
+  align = "center",
 }: {
   label: ReactNode;
   children: ReactNode;

@@ -1,0 +1,96 @@
+import { useCallback, useEffect, useState, type RefObject } from "react";
+
+const SCROLL_THRESHOLD = 40;
+
+function shouldShowIndicator(el: HTMLDivElement): boolean {
+  const maxScrollOffset = el.scrollHeight - el.clientHeight;
+  if (maxScrollOffset <= SCROLL_THRESHOLD) {
+    return false;
+  }
+  const distanceFromBottom = maxScrollOffset - el.scrollTop;
+  return distanceFromBottom > SCROLL_THRESHOLD;
+}
+
+export function useScrollToBottomIndicator({
+  containerRef,
+  onBaseScroll,
+  resetDep,
+}: {
+  containerRef: RefObject<HTMLDivElement | null>;
+  onBaseScroll?: () => void;
+  resetDep?: unknown;
+}) {
+  const [showScrollToBottom, setShowScrollToBottom] = useState(false);
+
+  const syncVisibility = useCallback(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    setShowScrollToBottom(shouldShowIndicator(el));
+  }, [containerRef]);
+
+  useEffect(() => {
+    setShowScrollToBottom(false);
+  }, [resetDep]);
+
+  const handleScroll = useCallback(() => {
+    onBaseScroll?.();
+    syncVisibility();
+  }, [onBaseScroll, syncVisibility]);
+
+  const scrollToBottom = useCallback(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+    setShowScrollToBottom(false);
+  }, [containerRef]);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+
+    let frameId: number | null = null;
+    const scheduleSync = () => {
+      if (frameId !== null) return;
+      frameId = window.requestAnimationFrame(() => {
+        frameId = null;
+        syncVisibility();
+      });
+    };
+
+    const mutationObserver = new MutationObserver(() => {
+      scheduleSync();
+    });
+    mutationObserver.observe(el, {
+      subtree: true,
+      childList: true,
+      characterData: true,
+      attributes: true,
+    });
+
+    let resizeObserver: ResizeObserver | undefined;
+    if (typeof ResizeObserver !== "undefined") {
+      resizeObserver = new ResizeObserver(() => {
+        scheduleSync();
+      });
+      resizeObserver.observe(el);
+    }
+
+    window.addEventListener("resize", scheduleSync);
+    scheduleSync();
+
+    return () => {
+      mutationObserver.disconnect();
+      resizeObserver?.disconnect();
+      window.removeEventListener("resize", scheduleSync);
+      if (frameId !== null) {
+        window.cancelAnimationFrame(frameId);
+      }
+    };
+  }, [containerRef, syncVisibility]);
+
+  return {
+    showScrollToBottom,
+    handleScroll,
+    scrollToBottom,
+  };
+}

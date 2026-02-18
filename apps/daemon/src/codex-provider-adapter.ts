@@ -187,12 +187,16 @@ export function createCodexProviderAdapter(
       req: SpawnThreadRequest,
       context: ProviderThreadContext,
     ): Record<string, unknown> {
+      const baseInstructions =
+        req.developerInstructions !== undefined
+          ? req.developerInstructions
+          : DEFAULT_BASE_INSTRUCTIONS;
       return withExecutionOptions(
         withThreadEnvironmentPolicy(
           {
             approvalPolicy: DEFAULT_APPROVAL_POLICY,
             sandbox: resolveSandboxMode(req.sandboxMode),
-            baseInstructions: DEFAULT_BASE_INSTRUCTIONS,
+            baseInstructions,
           },
           context,
         ),

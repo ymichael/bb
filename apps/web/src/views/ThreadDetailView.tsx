@@ -1,11 +1,13 @@
-import { useCallback, useEffect, useMemo, useReducer, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useEffect, useMemo, useReducer } from "react";
+import { Link, useParams } from "react-router-dom";
 import {
   useThread,
+  useTask,
   useThreadEvents,
   useTellThread,
   useStopThread,
   useThreadDefaultExecutionOptions,
+  useRoles,
 } from "../hooks/useApi";
 import {
   ConversationEntry,
@@ -18,13 +20,14 @@ import { ConversationWorkingIndicator } from "@/components/messages/Conversation
 import { PromptBox } from "@/components/promptbox/PromptBox";
 import { PromptOptionPicker } from "@/components/promptbox/PromptOptionPicker";
 import { useAutoScroll } from "@/hooks/useAutoScroll";
+import { useScrollToBottomIndicator } from "@/hooks/useScrollToBottomIndicator";
 import { usePromptModelReasoning } from "@/hooks/usePromptModelReasoning";
-import { ArrowDown } from "lucide-react";
-import { cn } from "@/lib/utils";
 import { usePromptDraftStorage } from "@/hooks/usePromptDraftStorage";
 import { useDebugMode } from "@/hooks/useDebugMode";
 import { usePromptFileMentions } from "@/hooks/usePromptFileMentions";
 import { PageShell } from "@/components/layout/PageShell";
+import { DetailCard, DetailRow } from "@/components/shared/DetailCard";
+import { ScrollToBottomButton } from "@/components/shared/ScrollToBottomButton";
 import { toUIMessages } from "@beanbag/core";
 import {
   buildThreadDetailRows,
@@ -39,8 +42,6 @@ import {
   createLatestInitialExpandedState,
   reduceLatestInitialExpandedState,
 } from "@/lib/latestInitialExpanded";
-
-const SCROLL_THRESHOLD = 40;
 
 function useLatestInitialExpanded(initialExpanded: boolean): {
   isExpanded: boolean;
@@ -122,17 +123,22 @@ export function ThreadDetailView() {
     threadId: string;
   }>();
   const { data: thread, isLoading, error } = useThread(threadId ?? "");
+  const { data: task } = useTask(thread?.taskId ?? "");
+  const { data: parentThread } = useThread(thread?.parentThreadId ?? "");
   const { data: events } = useThreadEvents(threadId ?? "");
   const { data: defaultExecutionOptions } = useThreadDefaultExecutionOptions(
     threadId ?? "",
   );
+  const rolesQuery = useRoles();
+  const roleNameById = useMemo(() => {
+    return new Map((rolesQuery.data ?? []).map((role) => [role.id, role.name]));
+  }, [rolesQuery.data]);
   const { debugMode } = useDebugMode();
   const tellThread = useTellThread();
   const stopThread = useStopThread();
   const promptDraft = usePromptDraftStorage({ projectId, threadId });
   const fileMentions = usePromptFileMentions(projectId);
   const message = promptDraft.value;
-  const [showScrollToLatest, setShowScrollToLatest] = useState(false);
   const {
     selectedModel,
     setSelectedModel,
@@ -190,25 +196,12 @@ export function ThreadDetailView() {
     threadDetailRows,
     threadId,
   );
-
-  useEffect(() => {
-    setShowScrollToLatest(false);
-  }, [threadId]);
-
-  const handleScroll = useCallback(() => {
-    baseHandleScroll();
-    const el = containerRef.current;
-    if (!el) return;
-    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
-    setShowScrollToLatest(distanceFromBottom > SCROLL_THRESHOLD);
-  }, [baseHandleScroll, containerRef]);
-
-  const scrollToLatest = useCallback(() => {
-    const el = containerRef.current;
-    if (!el) return;
-    el.scrollTop = el.scrollHeight;
-    setShowScrollToLatest(false);
-  }, [containerRef]);
+  const { showScrollToBottom, handleScroll, scrollToBottom } =
+    useScrollToBottomIndicator({
+      containerRef,
+      onBaseScroll: baseHandleScroll,
+      resetDep: threadId,
+    });
 
   if (!projectId || !threadId) {
     return (
@@ -252,6 +245,19 @@ export function ThreadDetailView() {
       : thread.status === "idle"
       ? "Ask for follow-up changes"
       : "Send a message to this thread...";
+  const linkedTaskId = thread.taskId;
+  const linkedTaskDisplayName =
+    task?.title && task.title.trim().length > 0 ? task.title : linkedTaskId;
+  const parentThreadId = thread.parentThreadId;
+  const parentThreadDisplayName =
+    parentThread?.title && parentThread.title.trim().length > 0
+      ? parentThread.title
+      : parentThreadId;
+  const threadRoleId = thread.agentRoleId;
+  const threadRoleDisplayName = threadRoleId
+    ? (roleNameById.get(threadRoleId) ?? threadRoleId)
+    : null;
+  const showThreadMetadata = Boolean(linkedTaskId || parentThreadId || threadRoleId);
 
   const handleSend = () => {
     const trimmed = message.trim();
@@ -272,7 +278,7 @@ export function ThreadDetailView() {
     <PageShell
       scrollRef={containerRef}
       onScroll={handleScroll}
-      contentClassName="gap-1"
+      contentClassName="gap-1 pt-0"
       footerUsesPromptPadding
       footer={
         <>
@@ -285,21 +291,10 @@ export function ThreadDetailView() {
                 : "Provisioning failed"}
             </div>
           ) : null}
-          <div className="flex h-0 items-center justify-center">
-            <button
-              onClick={scrollToLatest}
-              className={cn(
-                "z-20 -mt-20 flex size-8 items-center justify-center rounded-full border border-foreground/20 bg-background/80 shadow-md backdrop-blur-md transition-all duration-200 hover:border-foreground/30 hover:bg-background/90",
-                showScrollToLatest
-                  ? "translate-y-0 opacity-100"
-                  : "pointer-events-none translate-y-2 opacity-0",
-              )}
-              aria-label="Scroll to latest event"
-              type="button"
-            >
-              <ArrowDown className="size-4" />
-            </button>
-          </div>
+          <ScrollToBottomButton
+            visible={showScrollToBottom}
+            onClick={scrollToBottom}
+          />
           <PromptBox
             value={message}
             onChange={promptDraft.setValue}
@@ -345,6 +340,50 @@ export function ThreadDetailView() {
         </>
       }
     >
+      {showThreadMetadata ? (
+        <section className="sticky top-0 z-10 shrink-0 bg-background pt-2">
+          <DetailCard>
+            {linkedTaskId ? (
+              <DetailRow
+                label="Task"
+                valueClassName="min-w-0 truncate"
+                align="center"
+              >
+                <Link
+                  to={`/projects/${projectId}/tasks/${linkedTaskId}`}
+                  className="underline underline-offset-2"
+                >
+                  {linkedTaskDisplayName}
+                </Link>
+              </DetailRow>
+            ) : null}
+            {parentThreadId ? (
+              <DetailRow
+                label="Parent thread"
+                valueClassName="min-w-0 truncate"
+                align="center"
+              >
+                <Link
+                  to={`/projects/${projectId}/threads/${parentThreadId}`}
+                  className="underline underline-offset-2"
+                >
+                  {parentThreadDisplayName}
+                </Link>
+              </DetailRow>
+            ) : null}
+            {threadRoleId && threadRoleDisplayName ? (
+              <DetailRow label="Role" valueClassName="min-w-0 truncate" align="center">
+                <Link
+                  to={`/roles/${encodeURIComponent(threadRoleId)}`}
+                  className="underline underline-offset-2"
+                >
+                  {threadRoleDisplayName}
+                </Link>
+              </DetailRow>
+            ) : null}
+          </DetailCard>
+        </section>
+      ) : null}
       {threadDetailRows.length === 0 ? (
         <div className="py-16 text-center text-sm text-muted-foreground">
           No events yet

@@ -75,7 +75,7 @@ export function ConversationMarkdown({ content, className }: ConversationMarkdow
             return (
               <a
                 href={href}
-                className="underline underline-offset-2 break-all hover:no-underline"
+                className="underline underline-offset-2 break-all"
                 target="_blank"
                 rel="noopener noreferrer"
                 {...props}

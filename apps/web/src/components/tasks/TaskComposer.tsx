@@ -1,8 +1,11 @@
-import { type FormEvent, type KeyboardEvent, useEffect, useMemo, useState } from "react"
+import { type FormEvent, type KeyboardEvent, useEffect, useMemo, useRef, useState } from "react"
 import { CornerDownLeft, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { useAutoGrow } from "@/hooks/useAutoGrow"
 import { cn } from "@/lib/utils"
 import { TaskAssigneeSelector } from "./TaskAssigneeSelector"
+
+type SubmitMode = "enter" | "mod-enter"
 
 interface TaskComposerProps {
   titleInputId?: string
@@ -16,6 +19,7 @@ interface TaskComposerProps {
   isSubmitting?: boolean
   submitDisabled?: boolean
   submitTitle?: string
+  submitMode?: SubmitMode
   autoFocusTitle?: boolean
   className?: string
 }
@@ -51,9 +55,15 @@ export function TaskComposer({
   isSubmitting = false,
   submitDisabled = false,
   submitTitle = "Create task (Enter)",
+  submitMode = "enter",
   autoFocusTitle = false,
   className,
 }: TaskComposerProps) {
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const resizeTextarea = useAutoGrow(textareaRef, {
+    minHeight: TASK_COMPOSER_MIN_HEIGHT,
+    maxHeight: TASK_COMPOSER_MAX_HEIGHT,
+  })
   const [body, setBody] = useState(() => composeTaskBody(title, description))
   const parsedBody = useMemo(() => parseTaskBody(body), [body])
   const canSubmit =
@@ -66,6 +76,10 @@ export function TaskComposer({
     setBody(composeTaskBody(title, description))
   }, [title, description, parsedBody.title, parsedBody.description])
 
+  useEffect(() => {
+    resizeTextarea()
+  }, [body, resizeTextarea])
+
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (!canSubmit) return
@@ -73,7 +87,13 @@ export function TaskComposer({
   }
 
   const handleComposerKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (event.key !== "Enter" || !(event.metaKey || event.ctrlKey)) return
+    const withModifier = event.metaKey || event.ctrlKey
+    const isSubmitKey =
+      submitMode === "mod-enter"
+        ? withModifier && event.key === "Enter"
+        : event.key === "Enter" && !event.shiftKey
+
+    if (!isSubmitKey) return
     event.preventDefault()
     if (!canSubmit) return
     onSubmit()
@@ -88,11 +108,13 @@ export function TaskComposer({
       )}
     >
       <textarea
+        ref={textareaRef}
         id={titleInputId}
         value={body}
         onChange={(event) => {
           const next = event.target.value
           setBody(next)
+          resizeTextarea(event.target)
           const parsed = parseTaskBody(next)
           onTitleChange(parsed.title)
           onDescriptionChange(parsed.description)

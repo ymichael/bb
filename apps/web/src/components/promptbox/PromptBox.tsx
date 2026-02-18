@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type FormEvent, type Keyboard
 import { CornerDownLeft, Loader2, Square } from "lucide-react"
 import type { ProjectFileSuggestion } from "@beanbag/core"
 import { Button } from "@/components/ui/button"
+import { useAutoGrow } from "@/hooks/useAutoGrow"
 import { cn } from "@/lib/utils"
 import { findActiveFileMention, insertFileMention, type ActiveFileMention } from "./file-mention"
 
@@ -58,24 +59,20 @@ export function PromptBox({
   onMentionQueryChange,
 }: PromptBoxProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const resizeTextarea = useAutoGrow(textareaRef, {
+    minHeight: PROMPTBOX_MIN_HEIGHT,
+    maxHeight: PROMPTBOX_MAX_HEIGHT,
+  })
   const mentionItemRefs = useRef<Array<HTMLButtonElement | null>>([])
   const mentionKeyRef = useRef("")
   const dismissedMentionRef = useRef<DismissedMentionRange | null>(null)
   const [activeMention, setActiveMention] = useState<ActiveFileMention | null>(null)
   const [selectedMentionIndex, setSelectedMentionIndex] = useState(0)
 
-  const resize = useCallback((textarea: HTMLTextAreaElement) => {
-    textarea.style.height = "auto"
-    textarea.style.height = `${Math.min(
-      Math.max(textarea.scrollHeight, PROMPTBOX_MIN_HEIGHT),
-      PROMPTBOX_MAX_HEIGHT
-    )}px`
-  }, [])
-
   useEffect(() => {
     if (!textareaRef.current) return
-    resize(textareaRef.current)
-  }, [resize, value])
+    resizeTextarea(textareaRef.current)
+  }, [resizeTextarea, value])
 
   const syncMentionState = useCallback((textarea: HTMLTextAreaElement) => {
     const caretPosition = textarea.selectionStart ?? textarea.value.length
@@ -180,9 +177,9 @@ export function PromptBox({
         replacement.caretPosition,
         replacement.caretPosition,
       )
-      resize(nextTextarea)
+      resizeTextarea(nextTextarea)
     })
-  }, [activeMention, onChange, onMentionQueryChange, resize, value])
+  }, [activeMention, onChange, onMentionQueryChange, resizeTextarea, value])
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -244,7 +241,7 @@ export function PromptBox({
         value={value}
         onChange={(event) => {
           onChange(event.target.value)
-          resize(event.target)
+          resizeTextarea(event.target)
           syncMentionState(event.target)
         }}
         onClick={(event) => {

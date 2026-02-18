@@ -61,7 +61,7 @@ describe("unwrap()", () => {
     (connError as any).cause = { code: "ECONNREFUSED" };
 
     await expect(unwrap(Promise.reject(connError))).rejects.toThrow(
-      "Cannot connect to daemon. Is it running? Try: bb daemon start",
+      "Cannot connect to Beanbag daemon. Ensure it is running and BB_DAEMON_URL is correct.",
     );
   });
 

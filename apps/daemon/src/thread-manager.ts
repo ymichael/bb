@@ -11,6 +11,7 @@ import { delimiter, join, resolve } from "node:path";
 import {
   assertNever,
   type AvailableModel,
+  type ThreadTurnInitiator,
   type ThreadExecutionOptions,
   type SystemProviderInfo,
   type Thread,
@@ -56,6 +57,10 @@ import {
 import { canTransitionThreadStatus } from "./thread-status-machine.js";
 
 export type PromptExecutionOptions = ProviderExecutionOptions;
+
+interface TellContext {
+  initiator: ThreadTurnInitiator;
+}
 
 function resolveBbBinDir(pathValue: string | undefined): string | undefined {
   if (!pathValue) return undefined;
@@ -256,6 +261,10 @@ export class ThreadManager {
   private provisioningTasks = new Map<string, Promise<void>>();
   /** Monotonic sequence counter per thread for persisted events (inbound + outbound). */
   private eventSeqCounters = new Map<string, number>();
+  /** Dedupes parent completion notifications when providers emit duplicate completion events. */
+  private lastNotifiedCompletionTurnIds = new Map<string, string>();
+  /** Fallback dedupe when provider omits turn IDs on completion events. */
+  private lastNotifiedCompletionSeqs = new Map<string, number>();
   private rpcIdCounter = 0;
   private threadShellPath: string | undefined;
 
@@ -373,6 +382,7 @@ export class ThreadManager {
       ...(threadTitle ? { title: threadTitle } : {}),
       ...(req.taskId ? { taskId: req.taskId } : {}),
       ...(req.taskRole ? { taskRole: req.taskRole } : {}),
+      ...(req.agentRoleId ? { agentRoleId: req.agentRoleId } : {}),
       ...(req.parentThreadId ? { parentThreadId: req.parentThreadId } : {}),
     });
     // Treat only truly custom titles as locked. If caller title matches our
@@ -393,6 +403,28 @@ export class ThreadManager {
     threadId: string,
     request: TellThreadRequest,
     options?: PromptExecutionOptions,
+    context?: { initiator?: ThreadTurnInitiator },
+  ): Promise<void> {
+    const initiator = context?.initiator ?? "agent";
+    await this._tell(threadId, request, options, { initiator });
+  }
+
+  /**
+   * Send an internal system-originated message to a thread.
+   */
+  async systemTell(
+    threadId: string,
+    request: TellThreadRequest,
+    options?: PromptExecutionOptions,
+  ): Promise<void> {
+    await this._tell(threadId, request, options, { initiator: "system" });
+  }
+
+  private async _tell(
+    threadId: string,
+    request: TellThreadRequest,
+    options: PromptExecutionOptions | undefined,
+    context: TellContext,
   ): Promise<void> {
     const input = request.input;
     if (input.length === 0) {
@@ -509,7 +541,10 @@ export class ThreadManager {
       threadId,
       "client/turn/start",
       turnStartMsg.params,
-      "tell",
+      {
+        source: "tell",
+        initiator: context.initiator,
+      },
     );
     this._sendToProcess(threadId, turnStartMsg);
   }
@@ -538,6 +573,8 @@ export class ThreadManager {
     this.activeTurnIds.delete(threadId);
     this.authRefreshWarningThreadIds.delete(threadId);
     this.suppressedAuthStderrDepth.delete(threadId);
+    this.lastNotifiedCompletionTurnIds.delete(threadId);
+    this.lastNotifiedCompletionSeqs.delete(threadId);
     this.threadRepo.update(threadId, { status: "idle" });
     this.ws.broadcast("thread", threadId);
   }
@@ -571,6 +608,8 @@ export class ThreadManager {
     this.activeTurnIds.delete(threadId);
     this.authRefreshWarningThreadIds.delete(threadId);
     this.suppressedAuthStderrDepth.delete(threadId);
+    this.lastNotifiedCompletionTurnIds.delete(threadId);
+    this.lastNotifiedCompletionSeqs.delete(threadId);
     this.threadRepo.update(threadId, {
       status: "idle",
       archivedAt: thread.archivedAt ?? Date.now(),
@@ -619,6 +658,7 @@ export class ThreadManager {
     projectId?: string;
     taskId?: string;
     taskRole?: "primary" | "worker";
+    agentRoleId?: string;
     parentThreadId?: string;
     includeArchived?: boolean;
   }): Thread[] {
@@ -685,6 +725,8 @@ export class ThreadManager {
     this.suppressedAuthStderrDepth.clear();
     this.provisioningTasks.clear();
     this.eventSeqCounters.clear();
+    this.lastNotifiedCompletionTurnIds.clear();
+    this.lastNotifiedCompletionSeqs.clear();
   }
 
   private _scheduleProvisioning(
@@ -745,7 +787,10 @@ export class ThreadManager {
       threadId,
       "client/thread/start",
       threadStartParams,
-      "spawn",
+      {
+        source: "spawn",
+        initiator: "agent",
+      },
     );
     const providerThreadId = await this._sendRequestAndAwaitThreadId(
       threadId,
@@ -773,7 +818,10 @@ export class ThreadManager {
         threadId,
         "client/turn/start",
         turnStartParams,
-        "spawn",
+        {
+          source: "spawn",
+          initiator: "agent",
+        },
       );
       const turnMsg = {
         jsonrpc: "2.0",
@@ -810,6 +858,8 @@ export class ThreadManager {
     this.authRefreshWarningThreadIds.delete(threadId);
     this.suppressedAuthStderrDepth.delete(threadId);
     this.eventSeqCounters.delete(threadId);
+    this.lastNotifiedCompletionTurnIds.delete(threadId);
+    this.lastNotifiedCompletionSeqs.delete(threadId);
   }
 
   private _spawnProcess(threadId: string, cwd: string): void {
@@ -1010,11 +1060,12 @@ export class ThreadManager {
     const eventType = toProviderEventType(msg.method);
     const eventData = toProviderEventData(msg.params);
 
-    this._appendEvent(threadId, eventType, eventData);
+    const persistedEvent = this._appendEvent(threadId, eventType, eventData);
 
     this._syncTitleFromEvent(threadId, msg.method, eventData);
     this._syncStatusFromEvent(threadId, msg.method);
     this._syncActiveTurnFromEvent(threadId, msg.method, eventData);
+    this._maybeNotifyParentOnChildTurnCompletion(threadId, persistedEvent);
 
     if (this.provider.shouldBroadcastForEvent(msg.method)) {
       this.ws.broadcast("thread", threadId);
@@ -1025,14 +1076,23 @@ export class ThreadManager {
     threadId: string,
     type: ThreadEventType,
     data: ThreadEventData,
-  ): void {
+  ): ThreadEvent {
     const seq = this._nextEventSeq(threadId);
-    this.eventRepo.create({
+    const created = this.eventRepo.create({
       threadId,
       seq,
       type,
       data,
     });
+    if (created) return created;
+    return {
+      id: "",
+      threadId,
+      seq,
+      type,
+      data: data as ThreadEvent["data"],
+      createdAt: Date.now(),
+    };
   }
 
   private _nextEventSeq(threadId: string): number {
@@ -1047,11 +1107,12 @@ export class ThreadManager {
     threadId: string,
     type: "client/thread/start" | "client/turn/start",
     params: Record<string, unknown>,
-    source: "spawn" | "tell",
+    meta: { source: "spawn" | "tell"; initiator: ThreadTurnInitiator },
   ): void {
     const eventData: ThreadEventData = {
       direction: "outbound",
-      source,
+      source: meta.source,
+      initiator: meta.initiator,
       request: {
         method: type === "client/thread/start" ? "thread/start" : "turn/start",
         params,
@@ -1060,6 +1121,52 @@ export class ThreadManager {
     };
 
     this._appendEvent(threadId, type, eventData);
+  }
+
+  private _maybeNotifyParentOnChildTurnCompletion(
+    childThreadId: string,
+    event: ThreadEvent,
+  ): void {
+    const normalizedType = this.provider.normalizeEventType(event.type);
+    if (normalizedType !== "turn/completed" && normalizedType !== "turn/end") {
+      return;
+    }
+
+    const childThread = this.threadRepo.getById(childThreadId);
+    if (!childThread) return;
+    if (childThread.archivedAt !== undefined) return;
+    const parentThreadId = childThread.parentThreadId;
+    if (!parentThreadId) return;
+    if (parentThreadId === childThreadId) return;
+
+    const parentThread = this.threadRepo.getById(parentThreadId);
+    if (!parentThread) return;
+    if (parentThread.archivedAt !== undefined) return;
+
+    const turnId = this._extractTurnIdFromEventData(event.data);
+    if (turnId) {
+      const lastTurnId = this.lastNotifiedCompletionTurnIds.get(childThreadId);
+      if (lastTurnId === turnId) return;
+      this.lastNotifiedCompletionTurnIds.set(childThreadId, turnId);
+    } else {
+      const lastSeq = this.lastNotifiedCompletionSeqs.get(childThreadId);
+      if (lastSeq === event.seq) return;
+      this.lastNotifiedCompletionSeqs.set(childThreadId, event.seq);
+    }
+
+    const notification = this._buildParentThreadCompletionNotification(childThread);
+    void this.systemTell(parentThreadId, {
+      input: [{ type: "text", text: notification }],
+    }).catch((err) => {
+      const message = err instanceof Error ? err.message : String(err);
+      console.warn(
+        `[thread ${childThreadId}] failed to notify parent thread ${parentThreadId}: ${message}`,
+      );
+    });
+  }
+
+  private _buildParentThreadCompletionNotification(childThread: Thread): string {
+    return `[bb system] Thread ${childThread.id} is done.`;
   }
 
   private _extractExecutionOptionsFromParams(
@@ -1114,6 +1221,8 @@ export class ThreadManager {
     this.authRefreshWarningThreadIds.delete(threadId);
     this.suppressedAuthStderrDepth.delete(threadId);
     this.eventSeqCounters.delete(threadId);
+    this.lastNotifiedCompletionTurnIds.delete(threadId);
+    this.lastNotifiedCompletionSeqs.delete(threadId);
 
     const thread = this.threadRepo.getById(threadId);
     if (!thread) return;

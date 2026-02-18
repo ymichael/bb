@@ -73,6 +73,35 @@ describe("repository strict normalization", () => {
     );
   });
 
+  it("persists and loads thread agent role metadata", () => {
+    const projectId = createProjectId();
+    const thread = threads.create({
+      projectId,
+      agentRoleId: "agent/generic",
+    });
+
+    expect(threads.getById(thread.id)).toMatchObject({
+      id: thread.id,
+      agentRoleId: "agent/generic",
+    });
+  });
+
+  it("filters thread listings by agent role id", () => {
+    const projectId = createProjectId();
+    const genericThread = threads.create({
+      projectId,
+      agentRoleId: "agent/generic",
+    });
+    threads.create({
+      projectId,
+      agentRoleId: "agent/other",
+    });
+
+    expect(threads.list({ projectId, agentRoleId: "agent/generic" })).toEqual([
+      expect.objectContaining({ id: genericThread.id, agentRoleId: "agent/generic" }),
+    ]);
+  });
+
   it("throws for invalid persisted task status values", () => {
     const projectId = createProjectId();
     const task = tasks.create({
@@ -84,6 +113,27 @@ describe("repository strict normalization", () => {
     expect(() => tasks.getById(task.id)).toThrow(
       "Invalid persisted task status: todo",
     );
+  });
+
+  it("includes description in task.created event payload when provided", () => {
+    const projectId = createProjectId();
+    const task = tasks.create({
+      projectId,
+      title: "Task",
+      description: "Implements feature flags",
+    });
+
+    const createdEvent = tasks
+      .listEvents(task.id)
+      .find((event) => event.type === "task.created");
+    expect(createdEvent).toMatchObject({
+      type: "task.created",
+      data: {
+        projectId,
+        title: "Task",
+        description: "Implements feature flags",
+      },
+    });
   });
 
   it("throws for invalid persisted task close reason values", () => {

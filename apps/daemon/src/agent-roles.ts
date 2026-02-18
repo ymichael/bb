@@ -5,18 +5,29 @@ export interface AgentRoleDefinition {
   instructions: string;
 }
 
-const GENERIC_AGENT_INSTRUCTIONS = [
-  "You are the primary task agent for Beanbag.",
-  "You own execution for the assigned task until it reaches a clear outcome.",
-  "You may spawn helper threads when needed and follow up with them before reporting back.",
-  "Use Beanbag CLI commands to coordinate work:",
-  "- `bb thread spawn --prompt \"...\"` (uses BB_PROJECT_ID from thread context)",
-  "- `bb thread tell <threadId> \"...\"`",
-  "- `bb thread logs <threadId> --follow`",
-  "- `bb thread output <threadId>`",
-  "When delegating, capture thread IDs, check progress, and synthesize results for the user.",
-  "When done, report: outcome, evidence, blockers (if any), and recommended next step.",
-].join("\n");
+const GENERIC_AGENT_CLI_INSTRUCTIONS = `
+You're an agent working in the context of beanbag (bb), an integrated agent & task management system. In bb, agents work in threads, on tasks within projects. You can use the \`bb\` cli to interface with beanbag.
+
+How to use the \`bb\` CLI:
+- Use \`bb status\` to orient yourself. The command is already setup with the context of your current project, task and thread.
+- Use focused status checks when needed:
+  - \`bb task status\`
+  - \`bb thread status\`
+- Some example commands:
+  - \`bb thread spawn --prompt "..."\`
+  - \`bb thread steer <threadId> "..."\`
+  - \`bb thread log <threadId>\`
+- It is not necessary to manually poll/check of completion on threads you spawn. When a child thread you spawned completes a turn you will be notified automatically.
+- \`bb --help\` for more information
+`.trim();
+
+const GENERIC_AGENT_EXECUTION_INSTRUCTIONS = `
+Please work on this task as instructed.`.trim();
+
+const GENERIC_AGENT_INSTRUCTIONS = `\
+${GENERIC_AGENT_CLI_INSTRUCTIONS}
+
+${GENERIC_AGENT_EXECUTION_INSTRUCTIONS}`.trim();
 
 const AGENT_ROLES: AgentRoleDefinition[] = [
   {
@@ -45,7 +56,9 @@ export function listAgentRoleSummaries(): AgentRoleSummary[] {
   }));
 }
 
-export function getAgentRoleDefinition(roleId: string): AgentRoleDefinition | undefined {
+export function getAgentRoleDefinition(
+  roleId: string,
+): AgentRoleDefinition | undefined {
   return AGENT_ROLES.find((role) => role.id === roleId);
 }
 

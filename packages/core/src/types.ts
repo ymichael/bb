@@ -52,6 +52,7 @@ export type TaskEventDataByType = {
   "task.created": {
     projectId: string;
     title: string;
+    description?: string;
     assignee?: string;
   };
   "task.updated.title": {
@@ -84,6 +85,7 @@ export type TaskEventDataByType = {
   };
   "task.chat.thread_created": {
     threadId: string;
+    taskRole?: TaskThreadRole;
   };
 };
 
@@ -122,6 +124,7 @@ export interface Thread {
   status: ThreadStatus;
   taskId?: string;
   taskRole?: TaskThreadRole;
+  agentRoleId?: string;
   parentThreadId?: string;
   archivedAt?: number;
   createdAt: number;
@@ -129,6 +132,8 @@ export interface Thread {
 }
 
 export type AppThreadEventType = "client/thread/start" | "client/turn/start";
+
+export type ThreadTurnInitiator = "user" | "agent" | "system";
 
 export interface ClientExecutionOptionsSnapshot {
   model?: string;
@@ -140,6 +145,7 @@ export interface ClientExecutionOptionsSnapshot {
 export interface ClientOutboundStartEventData {
   direction: "outbound";
   source: "spawn" | "tell";
+  initiator?: ThreadTurnInitiator;
   request: {
     method: "thread/start" | "turn/start";
     params: Record<string, unknown>;

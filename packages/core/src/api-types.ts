@@ -40,6 +40,9 @@ export interface SpawnThreadRequest {
   model?: string;
   reasoningLevel?: ReasoningLevel;
   sandboxMode?: SandboxMode;
+  roleId?: string;
+  agentRoleId?: string;
+  developerInstructions?: string;
   taskId?: string;
   parentThreadId?: string;
   taskRole?: TaskThreadRole;

@@ -359,6 +359,7 @@ export class ThreadRepository {
     title?: string;
     taskId?: string;
     taskRole?: TaskThreadRole;
+    agentRoleId?: string;
     parentThreadId?: string;
   }): Thread {
     const now = Date.now();
@@ -369,6 +370,7 @@ export class ThreadRepository {
       status: "created" as const,
       taskId: data.taskId ?? null,
       taskRole: data.taskRole ?? null,
+      agentRoleId: data.agentRoleId ?? null,
       parentThreadId: data.parentThreadId ?? null,
       archivedAt: null,
       createdAt: now,
@@ -393,6 +395,7 @@ export class ThreadRepository {
     status?: ThreadStatus;
     taskId?: string;
     taskRole?: TaskThreadRole;
+    agentRoleId?: string;
     parentThreadId?: string;
     includeArchived?: boolean;
   }): Thread[] {
@@ -411,6 +414,9 @@ export class ThreadRepository {
     }
     if (filters?.taskRole) {
       conditions.push(eq(threads.taskRole, filters.taskRole));
+    }
+    if (filters?.agentRoleId) {
+      conditions.push(eq(threads.agentRoleId, filters.agentRoleId));
     }
     if (filters?.parentThreadId) {
       conditions.push(eq(threads.parentThreadId, filters.parentThreadId));
@@ -456,6 +462,7 @@ export class ThreadRepository {
       status: normalizeThreadStatus(row.status),
       taskId: row.taskId ?? undefined,
       taskRole: normalizeTaskThreadRole(row.taskRole),
+      agentRoleId: row.agentRoleId ?? undefined,
       parentThreadId: row.parentThreadId ?? undefined,
       archivedAt: row.archivedAt ?? undefined,
       createdAt: row.createdAt,
@@ -647,6 +654,7 @@ export class TaskRepository {
       this.appendTaskEventTx(tx, row.id, "task.created", {
         projectId: row.projectId,
         title: row.title,
+        ...(row.description !== null ? { description: row.description } : {}),
         ...(row.assignee ? { assignee: row.assignee } : {}),
       });
       if (row.assignee) {
@@ -743,32 +751,6 @@ export class TaskRepository {
     }
 
     const rows = query.orderBy(desc(tasks.updatedAt)).all();
-    return rows.map((row) => this.rowToTask(row));
-  }
-
-  getReady(projectId: string): Task[] {
-    const rows = this.db
-      .select()
-      .from(tasks)
-      .where(
-        and(
-          eq(tasks.projectId, projectId),
-          eq(tasks.status, "open"),
-          isNull(tasks.archivedAt),
-          sql`(${tasks.assignee} IS NULL OR ${tasks.assignee} = '')`,
-          sql`NOT EXISTS (
-            SELECT 1
-            FROM task_dependencies td
-            JOIN tasks blocker ON blocker.id = td.depends_on_task_id
-            WHERE td.task_id = ${tasks.id}
-              AND td.type = 'blocks'
-              AND blocker.status IN ('open', 'in_progress', 'blocked')
-          )`,
-        ),
-      )
-      .orderBy(desc(tasks.updatedAt))
-      .all();
-
     return rows.map((row) => this.rowToTask(row));
   }
 

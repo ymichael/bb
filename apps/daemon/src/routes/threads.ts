@@ -6,12 +6,14 @@ import type { ThreadManager } from "../thread-manager.js";
 import type { TaskRepository } from "@beanbag/db";
 import type { WSManager } from "../ws.js";
 import { threadNotFoundError } from "../domain-errors.js";
+import { getAgentRoleDefinition } from "../agent-roles.js";
 import { sendRouteError } from "./error-response.js";
 
 const listThreadsQuerySchema = z.object({
   projectId: z.string().optional(),
   taskId: z.string().optional(),
   taskRole: z.enum(["primary", "worker"]).optional(),
+  agentRoleId: z.string().optional(),
   parentThreadId: z.string().optional(),
   includeArchived: z.enum(["true", "false"]).optional(),
 });
@@ -22,13 +24,17 @@ const eventsQuerySchema = z.object({
 
 export function createThreadRoutes(
   threadManager: ThreadManager,
-  taskRepo?: Pick<TaskRepository, "getById">,
+  taskRepo?: Pick<TaskRepository, "getById" | "appendEvent">,
   wsManager?: Pick<WSManager, "broadcast">,
 ) {
   return new Hono()
     .post("/", zValidator("json", spawnThreadSchema), async (c) => {
       try {
         const body = c.req.valid("json");
+        const role = body.roleId ? getAgentRoleDefinition(body.roleId) : undefined;
+        if (body.roleId && !role) {
+          return c.json({ error: `Unknown role id: ${body.roleId}` }, 400);
+        }
         if (taskRepo && body.taskId) {
           const task = taskRepo.getById(body.taskId);
           if (!task) {
@@ -42,8 +48,29 @@ export function createThreadRoutes(
           }
         }
 
-        const thread = await threadManager.spawn(body);
+        const thread = await threadManager.spawn({
+          projectId: body.projectId,
+          ...(body.title ? { title: body.title } : {}),
+          ...(body.input ? { input: body.input } : {}),
+          ...(body.model ? { model: body.model } : {}),
+          ...(body.reasoningLevel ? { reasoningLevel: body.reasoningLevel } : {}),
+          ...(body.sandboxMode ? { sandboxMode: body.sandboxMode } : {}),
+          ...(body.taskId ? { taskId: body.taskId } : {}),
+          ...(body.parentThreadId ? { parentThreadId: body.parentThreadId } : {}),
+          ...(body.taskRole ? { taskRole: body.taskRole } : {}),
+          ...(role
+            ? {
+                agentRoleId: role.id,
+                developerInstructions: role.instructions,
+              }
+            : {}),
+        });
         if (body.taskId) {
+          const createdTaskRole = thread.taskRole ?? body.taskRole;
+          taskRepo?.appendEvent(body.taskId, "task.chat.thread_created", {
+            threadId: thread.id,
+            ...(createdTaskRole ? { taskRole: createdTaskRole } : {}),
+          });
           wsManager?.broadcast("task", body.taskId);
         }
         return c.json(thread, 201);
@@ -64,6 +91,7 @@ export function createThreadRoutes(
           ...(filters.projectId ? { projectId: filters.projectId } : {}),
           ...(filters.taskId ? { taskId: filters.taskId } : {}),
           ...(filters.taskRole ? { taskRole: filters.taskRole } : {}),
+          ...(filters.agentRoleId ? { agentRoleId: filters.agentRoleId } : {}),
           ...(filters.parentThreadId
             ? { parentThreadId: filters.parentThreadId }
             : {}),

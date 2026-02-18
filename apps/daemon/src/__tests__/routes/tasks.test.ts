@@ -41,7 +41,6 @@ function mockTaskRepo(): TaskRepository {
     create: vi.fn(),
     getById: vi.fn(),
     list: vi.fn(),
-    getReady: vi.fn(),
     update: vi.fn(),
     assign: vi.fn(),
     archive: vi.fn(),
@@ -124,6 +123,57 @@ describe("Task routes", () => {
 
       expect(res.status).toBe(404);
       expect(await res.json()).toEqual({ error: "Project not found" });
+    });
+
+    it("creates assigned tasks with a standardized system kickoff input", async () => {
+      const threadManager = mockThreadManager();
+      const routes = createTaskRoutes(
+        projectRepo as any,
+        taskRepo as any,
+        threadManager as any,
+        wsManager as any,
+      );
+      const appWithThreadManager = new Hono().route("/tasks", routes);
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(makeProject());
+      (taskRepo.create as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeTask({ assignee: "agent/generic" }),
+      );
+      (threadManager.list as ReturnType<typeof vi.fn>).mockReturnValue([]);
+      (threadManager.spawn as ReturnType<typeof vi.fn>).mockResolvedValue({
+        id: "thread-1",
+      });
+
+      const res = await appWithThreadManager.request("/tasks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          projectId: "proj-1",
+          title: "Implement task API",
+          assignee: "agent/generic",
+        }),
+      });
+
+      expect(res.status).toBe(201);
+      expect(threadManager.spawn).toHaveBeenCalledWith({
+        projectId: "proj-1",
+        title: "Primary Thread for Task task-1",
+        input: [
+          {
+            type: "text",
+            text: "[bb system] You have been assigned this task, please work on it as instructed",
+          },
+        ],
+        agentRoleId: "agent/generic",
+        developerInstructions: expect.stringContaining(
+          "Please work on this task as instructed.",
+        ),
+        taskId: "task-1",
+        taskRole: "primary",
+      });
+      const spawnReq = (threadManager.spawn as ReturnType<typeof vi.fn>).mock.calls[0][0];
+      expect(spawnReq.developerInstructions).not.toContain(
+        "[bb system] You have been assigned this task, please work on it as instructed",
+      );
     });
   });
 
@@ -248,6 +298,11 @@ describe("Task routes", () => {
         expect.objectContaining({
           projectId: "proj-1",
           title: "Primary Thread for Task task-1",
+          input: [{ type: "text", text: "hello from task chat" }],
+          agentRoleId: "agent/generic",
+          developerInstructions: expect.stringContaining(
+            "Please work on this task as instructed.",
+          ),
           taskId: "task-1",
           taskRole: "primary",
         }),
@@ -255,7 +310,56 @@ describe("Task routes", () => {
       expect(taskRepo.appendEvent).toHaveBeenCalledWith(
         "task-1",
         "task.chat.thread_created",
-        { threadId: "thread-1" },
+        { threadId: "thread-1", taskRole: "primary" },
+      );
+    });
+
+    it("sends task chat input to an existing primary thread with user initiator metadata", async () => {
+      const threadManager = mockThreadManager();
+      const routes = createTaskRoutes(
+        projectRepo as any,
+        taskRepo as any,
+        threadManager as any,
+        wsManager as any,
+      );
+      const appWithThreadManager = new Hono().route("/tasks", routes);
+
+      (taskRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeTask({ assignee: "builder-1" }),
+      );
+      (threadManager.list as ReturnType<typeof vi.fn>).mockReturnValue([
+        {
+          id: "thread-existing",
+          projectId: "proj-1",
+          taskId: "task-1",
+          taskRole: "primary",
+          status: "idle",
+          createdAt: 1000,
+          updatedAt: 1000,
+          archivedAt: undefined,
+        },
+      ]);
+
+      const res = await appWithThreadManager.request("/tasks/task-1/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          input: [{ type: "text", text: "continue task work" }],
+        }),
+      });
+
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({
+        ok: true,
+        threadId: "thread-existing",
+        createdThread: false,
+      });
+      expect(threadManager.spawn).not.toHaveBeenCalled();
+      expect(threadManager.tell).toHaveBeenCalledWith(
+        "thread-existing",
+        { input: [{ type: "text", text: "continue task work" }] },
+        undefined,
+        { initiator: "user" },
       );
     });
   });

@@ -167,6 +167,48 @@ describe("Thread routes", () => {
       expect(body.error).toBe("Project not found");
     });
 
+    it("resolves role instructions when roleId is provided", async () => {
+      const thread = makeThread({ id: "role-thread" });
+      (threadManager.spawn as ReturnType<typeof vi.fn>).mockResolvedValue(thread);
+
+      const res = await app.request("/threads", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          projectId: "proj-1",
+          roleId: "agent/generic",
+        }),
+      });
+
+      expect(res.status).toBe(201);
+      expect(threadManager.spawn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          projectId: "proj-1",
+          agentRoleId: "agent/generic",
+          developerInstructions: expect.stringContaining(
+            "How to use the `bb` CLI:",
+          ),
+        }),
+      );
+    });
+
+    it("returns 400 for unknown roleId", async () => {
+      const res = await app.request("/threads", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          projectId: "proj-1",
+          roleId: "agent/missing",
+        }),
+      });
+
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual({
+        error: "Unknown role id: agent/missing",
+      });
+      expect(threadManager.spawn).not.toHaveBeenCalled();
+    });
+
     it("broadcasts task updates when spawning a task-linked thread", async () => {
       const thread = makeThread({ id: "worker-thread", projectId: "proj-1" });
       const task: Task = {
@@ -180,6 +222,7 @@ describe("Thread routes", () => {
       };
       const taskRepo = {
         getById: vi.fn().mockReturnValue(task),
+        appendEvent: vi.fn(),
       };
       const wsManager = {
         broadcast: vi.fn(),
@@ -210,12 +253,21 @@ describe("Thread routes", () => {
         parentThreadId: "primary-thread",
         taskRole: "worker",
       });
+      expect(taskRepo.appendEvent).toHaveBeenCalledWith(
+        "task-1",
+        "task.chat.thread_created",
+        {
+          threadId: "worker-thread",
+          taskRole: "worker",
+        },
+      );
       expect(wsManager.broadcast).toHaveBeenCalledWith("task", "task-1");
     });
 
     it("returns 404 for unknown task context", async () => {
       const taskRepo = {
         getById: vi.fn().mockReturnValue(undefined),
+        appendEvent: vi.fn(),
       };
       const localRoutes = createThreadRoutes(
         threadManager as any,
@@ -249,6 +301,7 @@ describe("Thread routes", () => {
             updatedAt: 1000,
           } satisfies Task,
         ),
+        appendEvent: vi.fn(),
       };
       const localRoutes = createThreadRoutes(
         threadManager as any,
@@ -301,7 +354,7 @@ describe("Thread routes", () => {
       (threadManager.list as ReturnType<typeof vi.fn>).mockReturnValue([]);
 
       const res = await app.request(
-        "/threads?projectId=proj-1&taskId=task-1&taskRole=primary&includeArchived=true",
+        "/threads?projectId=proj-1&taskId=task-1&taskRole=primary&agentRoleId=agent/generic&includeArchived=true",
       );
 
       expect(res.status).toBe(200);
@@ -309,6 +362,7 @@ describe("Thread routes", () => {
         projectId: "proj-1",
         taskId: "task-1",
         taskRole: "primary",
+        agentRoleId: "agent/generic",
         includeArchived: true,
       });
     });

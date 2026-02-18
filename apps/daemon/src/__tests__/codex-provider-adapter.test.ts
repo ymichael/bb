@@ -234,4 +234,24 @@ describe("codex provider adapter", () => {
       },
     });
   });
+
+  it("maps developerInstructions to baseInstructions for thread/start", () => {
+    const adapter = createCodexProviderAdapter();
+
+    const params = adapter.createThreadStartParams(
+      {
+        projectId: "proj-1",
+        developerInstructions: "[bb system] test developer instructions",
+      },
+      {
+        projectId: "proj-1",
+        threadId: "thread-1",
+      },
+    );
+
+    expect(params).toMatchObject({
+      baseInstructions: "[bb system] test developer instructions",
+    });
+    expect(params).not.toHaveProperty("developerInstructions");
+  });
 });

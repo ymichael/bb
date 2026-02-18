@@ -8,9 +8,20 @@ import { useCreateTask, useSpawnThread } from "@/hooks/useApi";
 import { usePromptDraftStorage } from "@/hooks/usePromptDraftStorage";
 import { usePromptFileMentions } from "@/hooks/usePromptFileMentions";
 import { usePromptModelReasoning } from "@/hooks/usePromptModelReasoning";
+import { useTaskDraftStorage } from "@/hooks/useTaskDraftStorage";
 import { cn } from "@/lib/utils";
 
 type ComposerTab = "thread" | "tasks";
+const DEFAULT_TASK_ASSIGNEE = "agent/generic";
+const TASK_ASSIGNEE_STORAGE_KEY = "beanbag.taskcomposer.assignee";
+
+function getStoredTaskAssignee(): string {
+  if (typeof window === "undefined") return DEFAULT_TASK_ASSIGNEE;
+  const storedAssignee = window.localStorage.getItem(TASK_ASSIGNEE_STORAGE_KEY);
+  return storedAssignee && storedAssignee.trim().length > 0
+    ? storedAssignee
+    : DEFAULT_TASK_ASSIGNEE;
+}
 
 export function ProjectMainView() {
   const { projectId } = useParams<{ projectId: string }>();
@@ -19,14 +30,15 @@ export function ProjectMainView() {
   const spawnThread = useSpawnThread();
   const createTask = useCreateTask();
   const promptDraft = usePromptDraftStorage({ projectId, threadId: null });
+  const taskDraft = useTaskDraftStorage({ projectId });
   const fileMentions = usePromptFileMentions(projectId);
   const prompt = promptDraft.value;
+  const taskTitle = taskDraft.title;
+  const taskDescription = taskDraft.description;
   const [threadErrorMessage, setThreadErrorMessage] = useState<string | null>(null);
   const [taskErrorMessage, setTaskErrorMessage] = useState<string | null>(null);
-  const [taskTitle, setTaskTitle] = useState("");
-  const [taskDescription, setTaskDescription] = useState("");
-  const [taskAssignee, setTaskAssignee] = useState("");
-  const [activeTab, setActiveTab] = useState<ComposerTab>("thread");
+  const [taskAssignee, setTaskAssignee] = useState(() => getStoredTaskAssignee());
+  const [activeTab, setActiveTab] = useState<ComposerTab>("tasks");
   const {
     selectedModel,
     setSelectedModel,
@@ -81,6 +93,16 @@ export function ProjectMainView() {
     return focusComposerById("project-main-prompt");
   }, [location.key, shouldFocusPrompt, shouldFocusTaskComposer, focusComposerById]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const nextAssignee = taskAssignee.trim();
+    if (nextAssignee.length === 0) {
+      window.localStorage.removeItem(TASK_ASSIGNEE_STORAGE_KEY);
+      return;
+    }
+    window.localStorage.setItem(TASK_ASSIGNEE_STORAGE_KEY, nextAssignee);
+  }, [taskAssignee]);
+
   if (!projectId) {
     return (
       <PageShell contentClassName="min-h-full items-center justify-center">
@@ -125,8 +147,7 @@ export function ProjectMainView() {
         description: taskDescription.trim() || undefined,
         assignee: taskAssignee.trim().length > 0 ? taskAssignee : undefined,
       });
-      setTaskTitle("");
-      setTaskDescription("");
+      taskDraft.clear();
       navigate(`/projects/${projectId}/tasks/${task.id}`);
     } catch (error) {
       setTaskErrorMessage(
@@ -146,27 +167,27 @@ export function ProjectMainView() {
           <div className="inline-flex overflow-hidden rounded-lg border border-border/70 bg-muted/30">
             <button
               type="button"
-              onClick={() => handleTabChange("thread")}
-              className={cn(
-                "rounded-l-md border-r border-border/60 px-3 py-1.5 text-sm transition-colors",
-                activeTab === "thread"
-                  ? "bg-background text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              Thread
-            </button>
-            <button
-              type="button"
               onClick={() => handleTabChange("tasks")}
               className={cn(
-                "rounded-r-md px-3 py-1.5 text-sm transition-colors",
+                "rounded-l-md border-r border-border/60 px-3 py-1.5 text-sm transition-colors",
                 activeTab === "tasks"
                   ? "bg-background text-foreground shadow-sm"
                   : "text-muted-foreground hover:text-foreground"
               )}
             >
               Task
+            </button>
+            <button
+              type="button"
+              onClick={() => handleTabChange("thread")}
+              className={cn(
+                "rounded-r-md px-3 py-1.5 text-sm transition-colors",
+                activeTab === "thread"
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              Thread
             </button>
           </div>
         </div>
@@ -234,10 +255,10 @@ export function ProjectMainView() {
               title={taskTitle}
               description={taskDescription}
               onTitleChange={(value) => {
-                setTaskTitle(value);
+                taskDraft.setTitle(value);
                 if (taskErrorMessage) setTaskErrorMessage(null);
               }}
-              onDescriptionChange={setTaskDescription}
+              onDescriptionChange={taskDraft.setDescription}
               assignee={taskAssignee}
               onAssigneeChange={(nextAssignee) => {
                 setTaskAssignee(nextAssignee);

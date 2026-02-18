@@ -295,6 +295,27 @@ describe("ThreadManager", () => {
       });
     });
 
+    it("persists agent role metadata on thread creation", async () => {
+      const project = { id: "proj-1", name: "Test", rootPath: "/test", createdAt: 1000, updatedAt: 1000 };
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(project);
+
+      const createdThread = makeThread({ id: "t-new", status: "idle" });
+      (threadRepo.create as ReturnType<typeof vi.fn>).mockReturnValue(createdThread);
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeThread({ id: "t-new", status: "active" }),
+      );
+
+      await manager.spawn({
+        projectId: "proj-1",
+        agentRoleId: "agent/generic",
+      });
+
+      expect(threadRepo.create).toHaveBeenCalledWith({
+        projectId: "proj-1",
+        agentRoleId: "agent/generic",
+      });
+    });
+
     it("prepends bb path to PATH and injects it into thread/start config", async () => {
       const tmpRoot = mkdtempSync(join(tmpdir(), "beanbag-thread-manager-"));
       const firstBin = join(tmpRoot, "first-bin");
@@ -499,6 +520,40 @@ describe("ThreadManager", () => {
       expect(turnMsg.params.approvalPolicy).toBe("never");
       expect(turnMsg.params.sandboxPolicy).toEqual({ type: "dangerFullAccess" });
       expect(turnMsg.id).toBe(3);
+    });
+
+    it("maps developerInstructions onto thread/start baseInstructions", async () => {
+      const project = { id: "proj-1", name: "Test", rootPath: "/test", createdAt: 1000, updatedAt: 1000 };
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(project);
+
+      const createdThread = makeThread({ id: "t-new", status: "idle" });
+      (threadRepo.create as ReturnType<typeof vi.fn>).mockReturnValue(createdThread);
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeThread({ id: "t-new", status: "active" }),
+      );
+
+      await manager.spawn({
+        projectId: "proj-1",
+        developerInstructions: "[bb system] test developer instructions",
+      });
+
+      const startMsg = JSON.parse(fakeChild._stdinData[1].trim());
+      expect(startMsg.params.baseInstructions).toBe(
+        "[bb system] test developer instructions",
+      );
+      expect(startMsg.params.developerInstructions).toBeUndefined();
+      expect(eventRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "client/thread/start",
+          data: expect.objectContaining({
+            request: expect.objectContaining({
+              params: expect.objectContaining({
+                baseInstructions: "[bb system] test developer instructions",
+              }),
+            }),
+          }),
+        }),
+      );
     });
 
     it("auto-generates and persists thread names when provider title generation is enabled", async () => {
@@ -1125,6 +1180,169 @@ describe("ThreadManager", () => {
       await new Promise((r) => setTimeout(r, 50));
 
       expect((manager as any).activeTurnIds.has("t-new")).toBe(false);
+    });
+
+    it("notifies parent thread when a child turn completes", async () => {
+      const project = { id: "proj-1", name: "Test", rootPath: "/test", createdAt: 1000, updatedAt: 1000 };
+      const childThread = makeThread({
+        id: "t-child",
+        status: "active",
+        parentThreadId: "parent-1",
+      });
+      const parentThread = makeThread({
+        id: "parent-1",
+        status: "idle",
+      });
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(project);
+      (threadRepo.create as ReturnType<typeof vi.fn>).mockReturnValue(childThread);
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockImplementation(
+        (id: string) => {
+          if (id === "t-child") return childThread;
+          if (id === "parent-1") return parentThread;
+          return undefined;
+        },
+      );
+
+      const parentStdinData: string[] = [];
+      const parentProcess = {
+        kill: vi.fn(),
+        stdin: new Writable({
+          write(chunk: Buffer, _enc: string, cb: () => void) {
+            parentStdinData.push(chunk.toString());
+            cb();
+          },
+        }),
+        stdout: null,
+        stderr: null,
+      };
+      (manager as any).processes.set("parent-1", parentProcess);
+      (manager as any).providerThreadIds.set("parent-1", "codex-parent-thread");
+
+      await manager.spawn({ projectId: "proj-1", parentThreadId: "parent-1" });
+
+      fakeChild._pushStdout(
+        JSON.stringify({
+          method: "turn/completed",
+          params: { turnId: "turn-child-1" },
+        }),
+      );
+      await new Promise((r) => setTimeout(r, 50));
+
+      expect(parentStdinData.length).toBe(1);
+      const notifyMsg = JSON.parse(parentStdinData[0].trim());
+      expect(notifyMsg.method).toBe("turn/start");
+      expect(notifyMsg.params.threadId).toBe("codex-parent-thread");
+      expect(notifyMsg.params.input).toEqual([
+        {
+          type: "text",
+          text: expect.stringContaining("[bb system] Thread"),
+        },
+      ]);
+      expect(notifyMsg.params.input[0].text).toContain("t-child");
+    });
+
+    it("dedupes parent notifications when duplicate completion events share the same turnId", async () => {
+      const project = { id: "proj-1", name: "Test", rootPath: "/test", createdAt: 1000, updatedAt: 1000 };
+      const childThread = makeThread({
+        id: "t-child",
+        status: "active",
+        parentThreadId: "parent-1",
+      });
+      const parentThread = makeThread({
+        id: "parent-1",
+        status: "idle",
+      });
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(project);
+      (threadRepo.create as ReturnType<typeof vi.fn>).mockReturnValue(childThread);
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockImplementation(
+        (id: string) => {
+          if (id === "t-child") return childThread;
+          if (id === "parent-1") return parentThread;
+          return undefined;
+        },
+      );
+
+      const parentStdinData: string[] = [];
+      const parentProcess = {
+        kill: vi.fn(),
+        stdin: new Writable({
+          write(chunk: Buffer, _enc: string, cb: () => void) {
+            parentStdinData.push(chunk.toString());
+            cb();
+          },
+        }),
+        stdout: null,
+        stderr: null,
+      };
+      (manager as any).processes.set("parent-1", parentProcess);
+      (manager as any).providerThreadIds.set("parent-1", "codex-parent-thread");
+
+      await manager.spawn({ projectId: "proj-1", parentThreadId: "parent-1" });
+
+      fakeChild._pushStdout(
+        JSON.stringify({
+          method: "turn/completed",
+          params: { turnId: "turn-child-1" },
+        }),
+      );
+      fakeChild._pushStdout(
+        JSON.stringify({
+          method: "turn/end",
+          params: { turnId: "turn-child-1" },
+        }),
+      );
+      await new Promise((r) => setTimeout(r, 50));
+
+      expect(parentStdinData.length).toBe(1);
+    });
+
+    it("does not notify parent thread for non-completion lifecycle events", async () => {
+      const project = { id: "proj-1", name: "Test", rootPath: "/test", createdAt: 1000, updatedAt: 1000 };
+      const childThread = makeThread({
+        id: "t-child",
+        status: "active",
+        parentThreadId: "parent-1",
+      });
+      const parentThread = makeThread({
+        id: "parent-1",
+        status: "idle",
+      });
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(project);
+      (threadRepo.create as ReturnType<typeof vi.fn>).mockReturnValue(childThread);
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockImplementation(
+        (id: string) => {
+          if (id === "t-child") return childThread;
+          if (id === "parent-1") return parentThread;
+          return undefined;
+        },
+      );
+
+      const parentStdinData: string[] = [];
+      const parentProcess = {
+        kill: vi.fn(),
+        stdin: new Writable({
+          write(chunk: Buffer, _enc: string, cb: () => void) {
+            parentStdinData.push(chunk.toString());
+            cb();
+          },
+        }),
+        stdout: null,
+        stderr: null,
+      };
+      (manager as any).processes.set("parent-1", parentProcess);
+      (manager as any).providerThreadIds.set("parent-1", "codex-parent-thread");
+
+      await manager.spawn({ projectId: "proj-1", parentThreadId: "parent-1" });
+
+      fakeChild._pushStdout(
+        JSON.stringify({
+          method: "turn/started",
+          params: { turnId: "turn-child-1" },
+        }),
+      );
+      await new Promise((r) => setTimeout(r, 50));
+
+      expect(parentStdinData.length).toBe(0);
     });
 
     it("sets title from thread/started preview when thread title is missing", async () => {
@@ -1914,6 +2132,87 @@ describe("ThreadManager", () => {
       expect(msg.params.sandboxPolicy).toEqual({ type: "dangerFullAccess" });
     });
 
+    it("persists outbound tell events with initiator=user metadata", async () => {
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeThread(),
+      );
+
+      const fakeStdinData: string[] = [];
+      const fakeProcess = {
+        kill: vi.fn(),
+        stdin: new Writable({
+          write(chunk: Buffer, _enc: string, cb: () => void) {
+            fakeStdinData.push(chunk.toString());
+            cb();
+          },
+        }),
+        stdout: null,
+        stderr: null,
+      };
+      (manager as any).processes.set("thread-1", fakeProcess);
+      (manager as any).providerThreadIds.set("thread-1", "codex-tid-123");
+      (eventRepo.create as ReturnType<typeof vi.fn>).mockClear();
+
+      await manager.tell(
+        "thread-1",
+        { input: [{ type: "text", text: "Continue" }] },
+        undefined,
+        { initiator: "user" },
+      );
+
+      expect(fakeStdinData.length).toBe(1);
+      expect(eventRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          threadId: "thread-1",
+          type: "client/turn/start",
+          data: expect.objectContaining({
+            direction: "outbound",
+            source: "tell",
+            initiator: "user",
+          }),
+        }),
+      );
+    });
+
+    it("persists outbound systemTell events with initiator=system metadata", async () => {
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeThread(),
+      );
+
+      const fakeStdinData: string[] = [];
+      const fakeProcess = {
+        kill: vi.fn(),
+        stdin: new Writable({
+          write(chunk: Buffer, _enc: string, cb: () => void) {
+            fakeStdinData.push(chunk.toString());
+            cb();
+          },
+        }),
+        stdout: null,
+        stderr: null,
+      };
+      (manager as any).processes.set("thread-1", fakeProcess);
+      (manager as any).providerThreadIds.set("thread-1", "codex-tid-123");
+      (eventRepo.create as ReturnType<typeof vi.fn>).mockClear();
+
+      await manager.systemTell("thread-1", {
+        input: [{ type: "text", text: "Internal notification" }],
+      });
+
+      expect(fakeStdinData.length).toBe(1);
+      expect(eventRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          threadId: "thread-1",
+          type: "client/turn/start",
+          data: expect.objectContaining({
+            direction: "outbound",
+            source: "tell",
+            initiator: "system",
+          }),
+        }),
+      );
+    });
+
     it("sets fallback title from first tell input while async generation is pending", async () => {
       const providerTitleGenerator = vi
         .fn()
@@ -2037,7 +2336,9 @@ describe("ThreadManager", () => {
       });
 
       expect(providerTitleGenerator).toHaveBeenCalledTimes(1);
-      expect(fakeStdinData.length).toBe(1);
+      expect(fakeStdinData.length).toBeGreaterThanOrEqual(1);
+      const firstMessage = JSON.parse(fakeStdinData[0].trim());
+      expect(firstMessage.method).toBe("turn/start");
     });
   });
 

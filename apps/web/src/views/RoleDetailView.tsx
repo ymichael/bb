@@ -75,6 +75,7 @@ export function RoleDetailView() {
           <DetailRow
             label="Instructions"
             valueClassName="min-w-0 break-words text-foreground/90"
+            align="start"
           >
             <ConversationMarkdown
               content={role.instructions}
