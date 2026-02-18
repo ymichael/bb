@@ -19,6 +19,13 @@ const DEFAULT_BASE_INSTRUCTIONS =
   "You are a coding agent working on a project thread. Follow the instructions carefully and write clean, working code.";
 const DEFAULT_APPROVAL_POLICY = "never";
 const DEFAULT_SANDBOX_MODE = "danger-full-access";
+// Suppress only known legacy duplicates that are mirrored by v2 item lifecycle
+// notifications. We intentionally do not blanket-drop codex/event/* because
+// some legacy events can still carry unique compatibility signals.
+const LEGACY_DUPLICATE_NOTIFICATION_METHODS = [
+  "codex/event/item_started",
+  "codex/event/item_completed",
+] as const;
 const DEFAULT_WORKSPACE_WRITE_POLICY = {
   type: "workspaceWrite",
   writableRoots: [] as string[],
@@ -178,6 +185,18 @@ export function createCodexProviderAdapter(
       version: "0.0.1",
     },
     initializeMethod: "initialize",
+    createInitializeParams(
+      clientInfo: { name: string; version: string },
+    ): Record<string, unknown> {
+      return {
+        clientInfo,
+        capabilities: {
+          // Codex app-server emits both legacy codex/event/* and v2 item/* lifecycle
+          // notifications; suppress duplicate legacy item lifecycle events at source.
+          optOutNotificationMethods: [...LEGACY_DUPLICATE_NOTIFICATION_METHODS],
+        },
+      };
+    },
     threadStartMethod: "thread/start",
     threadResumeMethod: "thread/resume",
     turnStartMethod: "turn/start",
@@ -273,6 +292,12 @@ export function createCodexProviderAdapter(
     },
     normalizeEventType(type: string): string {
       return normalizeProviderEventType(type);
+    },
+    shouldPersistEvent(method: string): boolean {
+      const normalized = normalizeProviderEventType(method);
+      return !LEGACY_DUPLICATE_NOTIFICATION_METHODS.includes(
+        normalized as (typeof LEGACY_DUPLICATE_NOTIFICATION_METHODS)[number],
+      );
     },
     shouldBroadcastForEvent(method: string): boolean {
       const normalized = normalizeProviderEventType(method);

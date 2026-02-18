@@ -39,6 +39,9 @@ export interface ProviderAdapter {
   processArgs: string[];
   clientInfo: { name: string; version: string };
   initializeMethod: string;
+  createInitializeParams?(
+    clientInfo: { name: string; version: string },
+  ): Record<string, unknown>;
   threadStartMethod: string;
   threadResumeMethod: string;
   turnStartMethod: string;
@@ -70,6 +73,7 @@ export interface ProviderAdapter {
   extractThreadIdFromResult(result: unknown): string | undefined;
   extractThreadIdFromEventData(data: unknown): string | undefined;
   normalizeEventType(type: string): string;
+  shouldPersistEvent?(method: string, data: unknown): boolean;
   shouldBroadcastForEvent(method: string): boolean;
   statusForEvent(method: string): Thread["status"] | undefined;
   titleFromEvent(method: string, data: unknown): string | undefined;

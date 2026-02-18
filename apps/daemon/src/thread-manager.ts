@@ -911,13 +911,17 @@ export class ThreadManager {
   }
 
   private _sendInitialize(threadId: string): void {
+    const defaultParams = {
+      clientInfo: this.provider.clientInfo,
+    };
+    const params =
+      this.provider.createInitializeParams?.(this.provider.clientInfo) ??
+      defaultParams;
     const initMsg = {
       jsonrpc: "2.0",
       method: this.provider.initializeMethod,
       id: ++this.rpcIdCounter,
-      params: {
-        clientInfo: this.provider.clientInfo,
-      },
+      params,
     };
     this._sendToProcess(threadId, initMsg);
   }
@@ -1054,6 +1058,10 @@ export class ThreadManager {
     msg: { method: unknown; params: unknown },
   ): void {
     if (typeof msg.method !== "string") {
+      return;
+    }
+
+    if (this.provider.shouldPersistEvent?.(msg.method, msg.params) === false) {
       return;
     }
 

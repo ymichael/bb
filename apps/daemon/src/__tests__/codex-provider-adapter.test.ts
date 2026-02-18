@@ -41,6 +41,36 @@ describe("codex provider adapter", () => {
     );
   });
 
+  it("opts out of duplicate legacy item lifecycle notifications", () => {
+    const adapter = createCodexProviderAdapter();
+    const params = adapter.createInitializeParams?.({
+      name: "beanbag",
+      version: "0.0.1",
+    });
+
+    expect(params).toMatchObject({
+      clientInfo: {
+        name: "beanbag",
+        version: "0.0.1",
+      },
+      capabilities: {
+        optOutNotificationMethods: expect.arrayContaining([
+          "codex/event/item_started",
+          "codex/event/item_completed",
+        ]),
+      },
+    });
+  });
+
+  it("suppresses duplicate legacy item lifecycle notifications at ingestion", () => {
+    const adapter = createCodexProviderAdapter();
+
+    expect(adapter.shouldPersistEvent?.("codex/event/item_started", {})).toBe(false);
+    expect(adapter.shouldPersistEvent?.("codex/event/item_completed", {})).toBe(false);
+    expect(adapter.shouldPersistEvent?.("item/started", {})).toBe(true);
+    expect(adapter.shouldPersistEvent?.("item/completed", {})).toBe(true);
+  });
+
   it("derives status transitions from turn lifecycle events", () => {
     const adapter = createCodexProviderAdapter();
 

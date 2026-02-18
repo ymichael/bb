@@ -478,6 +478,12 @@ describe("ThreadManager", () => {
       expect(initMsg.jsonrpc).toBe("2.0");
       expect(initMsg.method).toBe("initialize");
       expect(initMsg.params.clientInfo.name).toBe("beanbag");
+      expect(initMsg.params.capabilities?.optOutNotificationMethods).toEqual(
+        expect.arrayContaining([
+          "codex/event/item_started",
+          "codex/event/item_completed",
+        ]),
+      );
       expect(initMsg.id).toBe(1);
 
       // Second message: thread/start
@@ -1060,6 +1066,78 @@ describe("ThreadManager", () => {
         type: "item/completed",
         data: { content: "done" },
       });
+    });
+
+    it("suppresses duplicate legacy codex item lifecycle notifications", async () => {
+      const project = { id: "proj-1", name: "Test", rootPath: "/test", createdAt: 1000, updatedAt: 1000 };
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(project);
+
+      const createdThread = makeThread({ id: "t-new", status: "idle" });
+      (threadRepo.create as ReturnType<typeof vi.fn>).mockReturnValue(createdThread);
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeThread({ id: "t-new", status: "active" }),
+      );
+
+      await manager.spawn({ projectId: "proj-1" });
+      await vi.waitFor(() => {
+        expect(threadRepo.update).toHaveBeenCalledWith("t-new", { status: "idle" });
+      });
+      (ws.broadcast as ReturnType<typeof vi.fn>).mockClear();
+
+      fakeChild._pushStdout(
+        JSON.stringify({
+          method: "codex/event/item_completed",
+          params: {
+            id: "turn-1",
+            msg: {
+              type: "item_completed",
+              turn_id: "turn-1",
+              item: {
+                type: "AgentMessage",
+                id: "msg-1",
+                content: [{ type: "Text", text: "duplicate legacy item event" }],
+              },
+            },
+          },
+        }),
+      );
+      fakeChild._pushStdout(
+        JSON.stringify({
+          method: "item/completed",
+          params: {
+            turnId: "turn-1",
+            item: {
+              type: "agentMessage",
+              id: "msg-1",
+              text: "canonical item event",
+            },
+          },
+        }),
+      );
+
+      await new Promise((r) => setTimeout(r, 50));
+
+      expect(eventRepo.create).toHaveBeenCalledTimes(2);
+      expect(eventRepo.create).toHaveBeenNthCalledWith(2, {
+        threadId: "t-new",
+        seq: 2,
+        type: "item/completed",
+        data: {
+          turnId: "turn-1",
+          item: {
+            type: "agentMessage",
+            id: "msg-1",
+            text: "canonical item event",
+          },
+        },
+      });
+      expect(eventRepo.create).not.toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "codex/event/item_completed",
+        }),
+      );
+      expect(ws.broadcast).toHaveBeenCalledTimes(1);
+      expect(ws.broadcast).toHaveBeenCalledWith("thread", "t-new");
     });
 
     it("does not broadcast thread changes for high-frequency delta notifications", async () => {
