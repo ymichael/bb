@@ -35,6 +35,9 @@ export function createThreadRoutes(
         if (body.roleId && !role) {
           return c.json({ error: `Unknown role id: ${body.roleId}` }, 400);
         }
+        const resolvedAgentRoleId = role?.id ?? body.agentRoleId;
+        const resolvedDeveloperInstructions =
+          role?.instructions ?? body.developerInstructions;
         if (taskRepo && body.taskId) {
           const task = taskRepo.getById(body.taskId);
           if (!task) {
@@ -58,11 +61,9 @@ export function createThreadRoutes(
           ...(body.taskId ? { taskId: body.taskId } : {}),
           ...(body.parentThreadId ? { parentThreadId: body.parentThreadId } : {}),
           ...(body.taskRole ? { taskRole: body.taskRole } : {}),
-          ...(role
-            ? {
-                agentRoleId: role.id,
-                developerInstructions: role.instructions,
-              }
+          ...(resolvedAgentRoleId ? { agentRoleId: resolvedAgentRoleId } : {}),
+          ...(resolvedDeveloperInstructions !== undefined
+            ? { developerInstructions: resolvedDeveloperInstructions }
             : {}),
         });
         if (body.taskId) {

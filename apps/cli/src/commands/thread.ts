@@ -57,6 +57,22 @@ function parseThreadStatusEventMode(
 
 export function registerThreadCommands(program: Command, getUrl: () => string): void {
   const thread = program.command("thread").description("Manage threads");
+  const postThreadMessage = async (
+    threadId: string,
+    message: string,
+    mode?: "steer",
+  ): Promise<void> => {
+    const client = createClient(getUrl());
+    await unwrap<{ ok: boolean }>(
+      client.api.v1.threads[":id"].tell.$post({
+        param: { id: threadId },
+        json: {
+          input: [{ type: "text", text: message }],
+          ...(mode ? { mode } : {}),
+        },
+      }),
+    );
+  };
 
   thread
     .command("spawn")
@@ -244,17 +260,24 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
     });
 
   thread
+    .command("tell <id> <message>")
+    .description("Send a follow-up message to a thread")
+    .action(async (id: string, message: string) => {
+      try {
+        await postThreadMessage(id, message);
+        console.log(`Thread ${id} updated`);
+      } catch (err: unknown) {
+        console.error(`Error: ${(err as Error).message}`);
+        process.exit(1);
+      }
+    });
+
+  thread
     .command("steer <id> <message>")
     .description("Steer a thread with an additional message")
     .action(async (id: string, message: string) => {
-      const client = createClient(getUrl());
       try {
-        await unwrap<{ ok: boolean }>(
-          client.api.v1.threads[":id"].tell.$post({
-            param: { id },
-            json: { input: [{ type: "text", text: message }], mode: "steer" },
-          }),
-        );
+        await postThreadMessage(id, message, "steer");
         console.log(`Thread ${id} steered`);
       } catch (err: unknown) {
         console.error(`Error: ${(err as Error).message}`);

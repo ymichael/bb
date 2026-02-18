@@ -263,8 +263,10 @@ export class ThreadManager {
   private eventSeqCounters = new Map<string, number>();
   /** Dedupes parent completion notifications when providers emit duplicate completion events. */
   private lastNotifiedCompletionTurnIds = new Map<string, string>();
-  /** Fallback dedupe when provider omits turn IDs on completion events. */
-  private lastNotifiedCompletionSeqs = new Map<string, number>();
+  /** Lifecycle epoch counter, incremented on each turn/start or turn/started event. */
+  private turnLifecycleEpochs = new Map<string, number>();
+  /** Fallback dedupe keyed by turn lifecycle epoch when completion events omit turn IDs. */
+  private lastNotifiedCompletionEpochs = new Map<string, number>();
   private rpcIdCounter = 0;
   private threadShellPath: string | undefined;
 
@@ -574,7 +576,8 @@ export class ThreadManager {
     this.authRefreshWarningThreadIds.delete(threadId);
     this.suppressedAuthStderrDepth.delete(threadId);
     this.lastNotifiedCompletionTurnIds.delete(threadId);
-    this.lastNotifiedCompletionSeqs.delete(threadId);
+    this.turnLifecycleEpochs.delete(threadId);
+    this.lastNotifiedCompletionEpochs.delete(threadId);
     this.threadRepo.update(threadId, { status: "idle" });
     this.ws.broadcast("thread", threadId);
   }
@@ -609,7 +612,8 @@ export class ThreadManager {
     this.authRefreshWarningThreadIds.delete(threadId);
     this.suppressedAuthStderrDepth.delete(threadId);
     this.lastNotifiedCompletionTurnIds.delete(threadId);
-    this.lastNotifiedCompletionSeqs.delete(threadId);
+    this.turnLifecycleEpochs.delete(threadId);
+    this.lastNotifiedCompletionEpochs.delete(threadId);
     this.threadRepo.update(threadId, {
       status: "idle",
       archivedAt: thread.archivedAt ?? Date.now(),
@@ -726,7 +730,8 @@ export class ThreadManager {
     this.provisioningTasks.clear();
     this.eventSeqCounters.clear();
     this.lastNotifiedCompletionTurnIds.clear();
-    this.lastNotifiedCompletionSeqs.clear();
+    this.turnLifecycleEpochs.clear();
+    this.lastNotifiedCompletionEpochs.clear();
   }
 
   private _scheduleProvisioning(
@@ -859,7 +864,8 @@ export class ThreadManager {
     this.suppressedAuthStderrDepth.delete(threadId);
     this.eventSeqCounters.delete(threadId);
     this.lastNotifiedCompletionTurnIds.delete(threadId);
-    this.lastNotifiedCompletionSeqs.delete(threadId);
+    this.turnLifecycleEpochs.delete(threadId);
+    this.lastNotifiedCompletionEpochs.delete(threadId);
   }
 
   private _spawnProcess(threadId: string, cwd: string): void {
@@ -1150,6 +1156,7 @@ export class ThreadManager {
     const parentThread = this.threadRepo.getById(parentThreadId);
     if (!parentThread) return;
     if (parentThread.archivedAt !== undefined) return;
+    if (parentThread.projectId !== childThread.projectId) return;
 
     const turnId = this._extractTurnIdFromEventData(event.data);
     if (turnId) {
@@ -1157,9 +1164,10 @@ export class ThreadManager {
       if (lastTurnId === turnId) return;
       this.lastNotifiedCompletionTurnIds.set(childThreadId, turnId);
     } else {
-      const lastSeq = this.lastNotifiedCompletionSeqs.get(childThreadId);
-      if (lastSeq === event.seq) return;
-      this.lastNotifiedCompletionSeqs.set(childThreadId, event.seq);
+      const lifecycleEpoch = this.turnLifecycleEpochs.get(childThreadId) ?? 0;
+      const lastEpoch = this.lastNotifiedCompletionEpochs.get(childThreadId);
+      if (lastEpoch === lifecycleEpoch) return;
+      this.lastNotifiedCompletionEpochs.set(childThreadId, lifecycleEpoch);
     }
 
     const notification = this._buildParentThreadCompletionNotification(childThread);
@@ -1230,7 +1238,8 @@ export class ThreadManager {
     this.suppressedAuthStderrDepth.delete(threadId);
     this.eventSeqCounters.delete(threadId);
     this.lastNotifiedCompletionTurnIds.delete(threadId);
-    this.lastNotifiedCompletionSeqs.delete(threadId);
+    this.turnLifecycleEpochs.delete(threadId);
+    this.lastNotifiedCompletionEpochs.delete(threadId);
 
     const thread = this.threadRepo.getById(threadId);
     if (!thread) return;
@@ -1385,6 +1394,8 @@ export class ThreadManager {
   ): void {
     const state = toTurnLifecycleState(this.provider.normalizeEventType(method));
     if (state === "active") {
+      const nextEpoch = (this.turnLifecycleEpochs.get(threadId) ?? 0) + 1;
+      this.turnLifecycleEpochs.set(threadId, nextEpoch);
       const turnId = this._extractTurnIdFromEventData(data);
       if (turnId) this.activeTurnIds.set(threadId, turnId);
       return;

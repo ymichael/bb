@@ -1374,6 +1374,142 @@ describe("ThreadManager", () => {
       expect(parentStdinData.length).toBe(1);
     });
 
+    it("dedupes no-turn-id completion events within the same lifecycle epoch", async () => {
+      const project = {
+        id: "proj-1",
+        name: "Test",
+        rootPath: "/test",
+        createdAt: 1000,
+        updatedAt: 1000,
+      };
+      const childThread = makeThread({
+        id: "t-child",
+        status: "active",
+        parentThreadId: "parent-1",
+      });
+      const parentThread = makeThread({
+        id: "parent-1",
+        status: "idle",
+      });
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(project);
+      (threadRepo.create as ReturnType<typeof vi.fn>).mockReturnValue(childThread);
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockImplementation(
+        (id: string) => {
+          if (id === "t-child") return childThread;
+          if (id === "parent-1") return parentThread;
+          return undefined;
+        },
+      );
+
+      const parentStdinData: string[] = [];
+      const parentProcess = {
+        kill: vi.fn(),
+        stdin: new Writable({
+          write(chunk: Buffer, _enc: string, cb: () => void) {
+            parentStdinData.push(chunk.toString());
+            cb();
+          },
+        }),
+        stdout: null,
+        stderr: null,
+      };
+      (manager as any).processes.set("parent-1", parentProcess);
+      (manager as any).providerThreadIds.set("parent-1", "codex-parent-thread");
+
+      await manager.spawn({ projectId: "proj-1", parentThreadId: "parent-1" });
+
+      fakeChild._pushStdout(
+        JSON.stringify({
+          method: "turn/started",
+          params: {},
+        }),
+      );
+      fakeChild._pushStdout(
+        JSON.stringify({
+          method: "turn/completed",
+          params: {},
+        }),
+      );
+      fakeChild._pushStdout(
+        JSON.stringify({
+          method: "turn/end",
+          params: {},
+        }),
+      );
+      fakeChild._pushStdout(
+        JSON.stringify({
+          method: "turn/started",
+          params: {},
+        }),
+      );
+      fakeChild._pushStdout(
+        JSON.stringify({
+          method: "turn/completed",
+          params: {},
+        }),
+      );
+      await new Promise((r) => setTimeout(r, 50));
+
+      expect(parentStdinData.length).toBe(2);
+    });
+
+    it("does not notify parent thread when parent project differs from child project", async () => {
+      const project = {
+        id: "proj-1",
+        name: "Test",
+        rootPath: "/test",
+        createdAt: 1000,
+        updatedAt: 1000,
+      };
+      const childThread = makeThread({
+        id: "t-child",
+        status: "active",
+        projectId: "proj-1",
+        parentThreadId: "parent-1",
+      });
+      const parentThread = makeThread({
+        id: "parent-1",
+        status: "idle",
+        projectId: "proj-2",
+      });
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(project);
+      (threadRepo.create as ReturnType<typeof vi.fn>).mockReturnValue(childThread);
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockImplementation(
+        (id: string) => {
+          if (id === "t-child") return childThread;
+          if (id === "parent-1") return parentThread;
+          return undefined;
+        },
+      );
+
+      const parentStdinData: string[] = [];
+      const parentProcess = {
+        kill: vi.fn(),
+        stdin: new Writable({
+          write(chunk: Buffer, _enc: string, cb: () => void) {
+            parentStdinData.push(chunk.toString());
+            cb();
+          },
+        }),
+        stdout: null,
+        stderr: null,
+      };
+      (manager as any).processes.set("parent-1", parentProcess);
+      (manager as any).providerThreadIds.set("parent-1", "codex-parent-thread");
+
+      await manager.spawn({ projectId: "proj-1", parentThreadId: "parent-1" });
+
+      fakeChild._pushStdout(
+        JSON.stringify({
+          method: "turn/completed",
+          params: { turnId: "turn-child-1" },
+        }),
+      );
+      await new Promise((r) => setTimeout(r, 50));
+
+      expect(parentStdinData.length).toBe(0);
+    });
+
     it("does not notify parent thread for non-completion lifecycle events", async () => {
       const project = { id: "proj-1", name: "Test", rootPath: "/test", createdAt: 1000, updatedAt: 1000 };
       const childThread = makeThread({

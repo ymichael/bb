@@ -192,6 +192,30 @@ describe("Thread routes", () => {
       );
     });
 
+    it("forwards explicit role metadata when roleId is omitted", async () => {
+      const thread = makeThread({ id: "explicit-role-thread" });
+      (threadManager.spawn as ReturnType<typeof vi.fn>).mockResolvedValue(thread);
+
+      const res = await app.request("/threads", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          projectId: "proj-1",
+          agentRoleId: "agent/custom",
+          developerInstructions: "Use local tools first.",
+        }),
+      });
+
+      expect(res.status).toBe(201);
+      expect(threadManager.spawn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          projectId: "proj-1",
+          agentRoleId: "agent/custom",
+          developerInstructions: "Use local tools first.",
+        }),
+      );
+    });
+
     it("returns 400 for unknown roleId", async () => {
       const res = await app.request("/threads", {
         method: "POST",

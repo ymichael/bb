@@ -390,6 +390,63 @@ describe("CLI command output contracts", () => {
     expect(threadGet).toHaveBeenCalledWith({ param: { id: "thread-42" } });
   });
 
+  it("bb thread tell posts a normal follow-up message", async () => {
+    const tellPost = vi.fn(async () => ({ ok: true }));
+    createClientMock.mockReturnValue({
+      api: {
+        v1: {
+          threads: {
+            ":id": {
+              tell: {
+                $post: tellPost,
+              },
+            },
+          },
+        },
+      },
+    } as any);
+
+    await runCommand(["thread", "tell", "thread-1", "continue"], (program) =>
+      registerThreadCommands(program, () => "http://daemon"),
+    );
+
+    expect(tellPost).toHaveBeenCalledWith({
+      param: { id: "thread-1" },
+      json: {
+        input: [{ type: "text", text: "continue" }],
+      },
+    });
+  });
+
+  it("bb thread steer posts an explicit steer-mode message", async () => {
+    const tellPost = vi.fn(async () => ({ ok: true }));
+    createClientMock.mockReturnValue({
+      api: {
+        v1: {
+          threads: {
+            ":id": {
+              tell: {
+                $post: tellPost,
+              },
+            },
+          },
+        },
+      },
+    } as any);
+
+    await runCommand(["thread", "steer", "thread-1", "continue"], (program) =>
+      registerThreadCommands(program, () => "http://daemon"),
+    );
+
+    expect(tellPost).toHaveBeenCalledWith({
+      param: { id: "thread-1" },
+      json: {
+        input: [{ type: "text", text: "continue" }],
+        mode: "steer",
+      },
+    });
+  });
+
   it("bb thread spawn errors when --task-role is provided without task context", async () => {
     createClientMock.mockReturnValue({
       api: { v1: { threads: { $post: vi.fn() } } },
