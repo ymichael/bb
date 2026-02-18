@@ -5,9 +5,7 @@ export interface AgentRoleDefinition {
   instructions: string;
 }
 
-const GENERIC_AGENT_CLI_INSTRUCTIONS = `
-You're an agent working in the context of beanbag (bb), an integrated agent & task management system. In bb, agents work in threads, on tasks within projects. You can use the \`bb\` cli to interface with beanbag.
-
+const BB_CLI_INSTRUCTIONS = `\
 How to use the \`bb\` CLI:
 - Use \`bb status\` to orient yourself. The command is already setup with the context of your current project, task and thread.
 - Use focused status checks when needed:
@@ -17,17 +15,15 @@ How to use the \`bb\` CLI:
   - \`bb thread spawn --prompt "..."\`
   - \`bb thread steer <threadId> "..."\`
   - \`bb thread log <threadId>\`
-- It is not necessary to manually poll/check of completion on threads you spawn. When a child thread you spawned completes a turn you will be notified automatically.
+  - \`bb task create ...\`
+- It is not necessary to manually poll/check of completion on threads you spawn. When a child thread you spawned completes a turn, you will be notified automatically.
 - \`bb --help\` for more information
-`.trim();
-
-const GENERIC_AGENT_EXECUTION_INSTRUCTIONS = `
-Please work on this task as instructed.`.trim();
+`;
 
 const GENERIC_AGENT_INSTRUCTIONS = `\
-${GENERIC_AGENT_CLI_INSTRUCTIONS}
+You're an agent working in the context of beanbag (bb), an integrated agent & task management system. In bb, agents work in threads, on tasks within projects. You can use the \`bb\` cli to interface with beanbag. Please work on this task as instructed.
 
-${GENERIC_AGENT_EXECUTION_INSTRUCTIONS}`.trim();
+${BB_CLI_INSTRUCTIONS}`.trim();
 
 const AGENT_ROLES: AgentRoleDefinition[] = [
   {
