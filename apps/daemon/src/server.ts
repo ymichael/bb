@@ -88,7 +88,7 @@ export function createServer(deps: ServerDeps) {
   const appWithRoutes = app.route("/api/v1", apiRoutes);
 
   // Static file serving for the web UI
-  const webDistPath = resolve(__dirname, "../../web/dist");
+  const webDistPath = resolve(__dirname, "../../app/dist");
   if (existsSync(webDistPath)) {
     app.use(
       "/*",
@@ -106,7 +106,7 @@ export function createServer(deps: ServerDeps) {
     app.get("/*", (c) => {
       return c.json({
         message:
-          "Beanbag daemon is running. Web UI not built yet — run `pnpm build` in apps/web.",
+          "Beanbag daemon is running. Web UI not built yet — run `pnpm build` in apps/app.",
       });
     });
   }

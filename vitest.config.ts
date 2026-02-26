@@ -5,8 +5,8 @@ export default defineConfig({
     projects: [
       "apps/daemon",
       "apps/cli",
-      "apps/web",
-      "packages/core",
+      "apps/app",
+      "packages/agent-core",
       "packages/agent-server",
     ],
   },

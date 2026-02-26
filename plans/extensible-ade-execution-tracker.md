@@ -65,11 +65,11 @@
 
 ## Phase 5: Folder Rename + Daemon/Agent-Server Split
 
-- `[ ]` Move `packages/core` to `packages/agent-core`
-- `[ ]` Move `apps/web` to `apps/app`
-- `[ ]` Create `packages/agent-server` runtime bridge package from current mixed daemon code
-- `[ ]` Keep/reshape `apps/daemon` as `@beanbag/daemon` host app
-- `[ ]` Update workspace paths (`pnpm-workspace.yaml`, `turbo`, Vitest, scripts, tsconfig refs)
+- `[x]` Move `packages/core` to `packages/agent-core`
+- `[x]` Move `apps/web` to `apps/app`
+- `[x]` Create `packages/agent-server` runtime bridge package from current mixed daemon code
+- `[x]` Keep/reshape `apps/daemon` as `@beanbag/daemon` host app
+- `[x]` Update workspace paths (`pnpm-workspace.yaml`, `turbo`, Vitest, scripts, tsconfig refs)
 - `[ ]` Update docs and references to new folder paths
 - `[ ]` Publish contract catalog for package boundaries, API schemas, and DB shapes
 - `[ ]` Document all supported `events.type` values and event payload typing strategy

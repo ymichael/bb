@@ -18,82 +18,11 @@ importers:
         specifier: ^4.0.18
         version: 4.0.18(@types/node@22.19.10)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.21.0)
 
-  apps/cli:
+  apps/app:
     dependencies:
       '@beanbag/agent-core':
         specifier: workspace:*
-        version: link:../../packages/core
-      '@beanbag/daemon':
-        specifier: workspace:*
-        version: link:../daemon
-      commander:
-        specifier: ^13.0.0
-        version: 13.1.0
-      hono:
-        specifier: ^4.7.0
-        version: 4.11.9
-    devDependencies:
-      '@beanbag/tsconfig':
-        specifier: workspace:*
-        version: link:../../packages/tsconfig
-      '@types/node':
-        specifier: ^22.0.0
-        version: 22.19.10
-      typescript:
-        specifier: ^5.7.0
-        version: 5.9.3
-
-  apps/daemon:
-    dependencies:
-      '@beanbag/agent-core':
-        specifier: workspace:*
-        version: link:../../packages/core
-      '@beanbag/agent-server':
-        specifier: workspace:*
-        version: link:../../packages/agent-server
-      '@beanbag/db':
-        specifier: workspace:*
-        version: link:../../packages/db
-      '@hono/node-server':
-        specifier: ^1.13.0
-        version: 1.19.9(hono@4.11.9)
-      '@hono/node-ws':
-        specifier: ^1.1.0
-        version: 1.3.0(@hono/node-server@1.19.9(hono@4.11.9))(hono@4.11.9)
-      '@hono/zod-validator':
-        specifier: ^0.4.0
-        version: 0.4.3(hono@4.11.9)(zod@3.25.76)
-      hono:
-        specifier: ^4.7.0
-        version: 4.11.9
-      xstate:
-        specifier: ^5.20.2
-        version: 5.27.0
-      zod:
-        specifier: ^3.24.0
-        version: 3.25.76
-    devDependencies:
-      '@beanbag/tsconfig':
-        specifier: workspace:*
-        version: link:../../packages/tsconfig
-      '@types/node':
-        specifier: ^22.0.0
-        version: 22.19.10
-      '@types/ws':
-        specifier: ^8.5.0
-        version: 8.18.1
-      tsx:
-        specifier: ^4.19.0
-        version: 4.21.0
-      typescript:
-        specifier: ^5.7.0
-        version: 5.9.3
-
-  apps/web:
-    dependencies:
-      '@beanbag/agent-core':
-        specifier: workspace:*
-        version: link:../../packages/core
+        version: link:../../packages/agent-core
       '@beanbag/ui-core':
         specifier: workspace:*
         version: link:../../packages/ui-core
@@ -177,11 +106,95 @@ importers:
         specifier: ^7.3.1
         version: 7.3.1(@types/node@22.19.10)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.21.0)
 
+  apps/cli:
+    dependencies:
+      '@beanbag/agent-core':
+        specifier: workspace:*
+        version: link:../../packages/agent-core
+      '@beanbag/daemon':
+        specifier: workspace:*
+        version: link:../daemon
+      commander:
+        specifier: ^13.0.0
+        version: 13.1.0
+      hono:
+        specifier: ^4.7.0
+        version: 4.11.9
+    devDependencies:
+      '@beanbag/tsconfig':
+        specifier: workspace:*
+        version: link:../../packages/tsconfig
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.19.10
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
+
+  apps/daemon:
+    dependencies:
+      '@beanbag/agent-core':
+        specifier: workspace:*
+        version: link:../../packages/agent-core
+      '@beanbag/agent-server':
+        specifier: workspace:*
+        version: link:../../packages/agent-server
+      '@beanbag/db':
+        specifier: workspace:*
+        version: link:../../packages/db
+      '@hono/node-server':
+        specifier: ^1.13.0
+        version: 1.19.9(hono@4.11.9)
+      '@hono/node-ws':
+        specifier: ^1.1.0
+        version: 1.3.0(@hono/node-server@1.19.9(hono@4.11.9))(hono@4.11.9)
+      '@hono/zod-validator':
+        specifier: ^0.4.0
+        version: 0.4.3(hono@4.11.9)(zod@3.25.76)
+      hono:
+        specifier: ^4.7.0
+        version: 4.11.9
+      xstate:
+        specifier: ^5.20.2
+        version: 5.27.0
+      zod:
+        specifier: ^3.24.0
+        version: 3.25.76
+    devDependencies:
+      '@beanbag/tsconfig':
+        specifier: workspace:*
+        version: link:../../packages/tsconfig
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.19.10
+      '@types/ws':
+        specifier: ^8.5.0
+        version: 8.18.1
+      tsx:
+        specifier: ^4.19.0
+        version: 4.21.0
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
+
+  packages/agent-core:
+    dependencies:
+      zod:
+        specifier: ^3.24.0
+        version: 3.25.76
+    devDependencies:
+      '@beanbag/tsconfig':
+        specifier: workspace:*
+        version: link:../tsconfig
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
+
   packages/agent-server:
     dependencies:
       '@beanbag/agent-core':
         specifier: workspace:*
-        version: link:../core
+        version: link:../agent-core
     devDependencies:
       '@beanbag/tsconfig':
         specifier: workspace:*
@@ -196,24 +209,11 @@ importers:
         specifier: ^4.0.0
         version: 4.0.18(@types/node@22.19.10)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.21.0)
 
-  packages/core:
-    dependencies:
-      zod:
-        specifier: ^3.24.0
-        version: 3.25.76
-    devDependencies:
-      '@beanbag/tsconfig':
-        specifier: workspace:*
-        version: link:../tsconfig
-      typescript:
-        specifier: ^5.7.0
-        version: 5.9.3
-
   packages/db:
     dependencies:
       '@beanbag/agent-core':
         specifier: workspace:*
-        version: link:../core
+        version: link:../agent-core
       better-sqlite3:
         specifier: ^11.7.0
         version: 11.10.0

@@ -30,7 +30,7 @@ Endpoints:
 - API base: `http://localhost:3333/api/v1`
 - WebSocket: `ws://localhost:3333/ws`
 
-`apps/web` dev server proxies `/api` and `/ws` to daemon `:3333`.
+`apps/app` dev server proxies `/api` and `/ws` to daemon `:3333`.
 
 ## CLI and Daemon Run Modes
 
@@ -140,11 +140,11 @@ Provider and environment selection:
 
 ## Typed Codex Event Schema
 
-`packages/core` derives thread event types from generated Codex app-server
+`packages/agent-core` derives thread event types from generated Codex app-server
 TypeScript schemas in:
 
-- `packages/core/src/generated/codex-app-server/schema/`
-- `packages/core/src/generated/codex-app-server/index.ts`
+- `packages/agent-core/src/generated/codex-app-server/schema/`
+- `packages/agent-core/src/generated/codex-app-server/index.ts`
 
 Regenerate:
 
