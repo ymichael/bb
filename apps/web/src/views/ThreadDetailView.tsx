@@ -3,8 +3,6 @@ import { Link, useParams } from "react-router-dom";
 import {
   useThread,
   useThreadEvents,
-  useSystemEnvironment,
-  useSystemProvider,
   useTellThread,
   useStopThread,
   useThreadDefaultExecutionOptions,
@@ -12,7 +10,6 @@ import {
 import {
   ConversationEntry,
 } from "@/components/messages/ConversationEntry";
-import { ConversationMarkdown } from "@/components/messages/ConversationMarkdown";
 import {
   CollapsibleHeader,
   getCollapsibleHeaderToneClass,
@@ -30,12 +27,9 @@ import { PageShell } from "@/components/layout/PageShell";
 import { DetailCard, DetailRow } from "@/components/shared/DetailCard";
 import { ScrollToBottomButton } from "@/components/shared/ScrollToBottomButton";
 import {
-  ContextPanel,
-  ContextPanelCard,
   ConversationEmptyState,
   ConversationTimeline,
   PromptComposerShell,
-  ThreePaneLayout,
 } from "@beanbag/ui-core";
 import { toUIMessages } from "@beanbag/agent-core";
 import {
@@ -137,8 +131,6 @@ export function ThreadDetailView() {
   const { data: defaultExecutionOptions } = useThreadDefaultExecutionOptions(
     threadId ?? "",
   );
-  const providerInfoQuery = useSystemProvider();
-  const environmentInfoQuery = useSystemEnvironment();
   const { debugMode } = useDebugMode();
   const tellThread = useTellThread();
   const stopThread = useStopThread();
@@ -267,30 +259,6 @@ export function ThreadDetailView() {
       : isProvisioningFailed
       ? "Provisioning failed"
       : undefined;
-  const runtimeProviderName = providerInfoQuery.data?.displayName ?? "Unknown provider";
-  const runtimeEnvironmentName =
-    environmentInfoQuery.data?.displayName ?? "Unknown environment";
-  const toolGroupCount = threadDetailRows.filter(
-    (entry) => entry.kind === "tool-group",
-  ).length;
-  const fileEditMessages = visibleMessages.filter(
-    (entry) => entry.kind === "file-edit",
-  );
-  const changedFileCount = new Set(
-    fileEditMessages.flatMap((message) =>
-      message.changes.map((change) => change.path),
-    ),
-  ).size;
-  const changedHunkCount = fileEditMessages.reduce(
-    (total, message) => total + message.changes.length,
-    0,
-  );
-  const latestAssistantTextMessage = [...visibleMessages]
-    .reverse()
-    .find(
-      (entry): entry is Extract<typeof entry, { kind: "assistant-text" }> =>
-        entry.kind === "assistant-text",
-    );
 
   const handleSend = () => {
     const trimmed = message.trim();
@@ -359,115 +327,68 @@ export function ThreadDetailView() {
     </>
   );
 
-  const contextPanel = (
-    <ContextPanel>
-      <ContextPanelCard title="Runtime">
-        <div className="flex items-center justify-between gap-2 text-xs">
-          <span className="text-muted-foreground">Provider</span>
-          <span className="truncate">{runtimeProviderName}</span>
-        </div>
-        <div className="flex items-center justify-between gap-2 text-xs">
-          <span className="text-muted-foreground">Environment</span>
-          <span className="truncate">{runtimeEnvironmentName}</span>
-        </div>
-      </ContextPanelCard>
-      <ContextPanelCard title="Artifacts">
-        <div className="flex items-center justify-between gap-2 text-xs">
-          <span className="text-muted-foreground">Tool Groups</span>
-          <span>{toolGroupCount}</span>
-        </div>
-        <div className="flex items-center justify-between gap-2 text-xs">
-          <span className="text-muted-foreground">Changed Files</span>
-          <span>{changedFileCount}</span>
-        </div>
-        <div className="flex items-center justify-between gap-2 text-xs">
-          <span className="text-muted-foreground">Diff Hunks</span>
-          <span>{changedHunkCount}</span>
-        </div>
-      </ContextPanelCard>
-      <ContextPanelCard title="Markdown Preview">
-        {latestAssistantTextMessage ? (
-          <div className="max-h-80 overflow-y-auto rounded border border-border/60 bg-background/60 px-2 py-1.5 text-xs">
-            <ConversationMarkdown content={latestAssistantTextMessage.text} />
-          </div>
-        ) : (
-          <p className="text-xs text-muted-foreground">No assistant markdown yet.</p>
-        )}
-      </ContextPanelCard>
-    </ContextPanel>
-  );
-
   return (
     <PageShell
       scrollRef={containerRef}
       onScroll={handleScroll}
-      maxWidthClassName="max-w-[1160px]"
       contentClassName="gap-2 pt-0"
       footerUsesPromptPadding
       footer={
-        <div className="grid min-w-0 grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(280px,340px)]">
-          <div className="min-w-0 w-full max-w-[800px]">
-            <PromptComposerShell statusLabel={provisioningStatusLabel}>
-              <ScrollToBottomButton
-                visible={showScrollToBottom}
-                onClick={scrollToBottom}
-              />
-              <PromptBox
-                value={message}
-                onChange={promptDraft.setValue}
-                onSubmit={handleSend}
-                onStop={
-                  thread.status === "active"
-                    ? () => stopThread.mutate(thread.id)
-                    : undefined
-                }
-                isSubmitting={tellThread.isPending}
-                submitDisabled={!canSendFollowUp}
-                isRunning={thread.status === "active"}
-                placeholder={promptPlaceholder}
-                submitMode="enter"
-                autoFocus
-                mentionSuggestions={fileMentions.suggestions}
-                mentionLoading={fileMentions.isLoading}
-                mentionError={fileMentions.isError}
-                onMentionQueryChange={fileMentions.setQuery}
-                footerStart={
-                  <>
-                    {supportsModelList ? (
-                      <PromptOptionPicker
-                        label="Model"
-                        value={activeModel?.model ?? selectedModel}
-                        options={modelOptions}
-                        onChange={setSelectedModel}
-                      />
-                    ) : null}
-                    {supportsReasoningLevels ? (
-                      <PromptOptionPicker
-                        label="Reasoning"
-                        value={reasoningLevel}
-                        options={reasoningOptions}
-                        onChange={setReasoningLevel}
-                      />
-                    ) : null}
-                    <PromptOptionPicker
-                      label="Sandbox"
-                      value={sandboxMode}
-                      options={sandboxOptions}
-                      onChange={setSandboxMode}
-                    />
-                  </>
-                }
-              />
-            </PromptComposerShell>
-          </div>
-        </div>
+        <PromptComposerShell statusLabel={provisioningStatusLabel}>
+          <ScrollToBottomButton
+            visible={showScrollToBottom}
+            onClick={scrollToBottom}
+          />
+          <PromptBox
+            value={message}
+            onChange={promptDraft.setValue}
+            onSubmit={handleSend}
+            onStop={
+              thread.status === "active"
+                ? () => stopThread.mutate(thread.id)
+                : undefined
+            }
+            isSubmitting={tellThread.isPending}
+            submitDisabled={!canSendFollowUp}
+            isRunning={thread.status === "active"}
+            placeholder={promptPlaceholder}
+            submitMode="enter"
+            autoFocus
+            mentionSuggestions={fileMentions.suggestions}
+            mentionLoading={fileMentions.isLoading}
+            mentionError={fileMentions.isError}
+            onMentionQueryChange={fileMentions.setQuery}
+            footerStart={
+              <>
+                {supportsModelList ? (
+                  <PromptOptionPicker
+                    label="Model"
+                    value={activeModel?.model ?? selectedModel}
+                    options={modelOptions}
+                    onChange={setSelectedModel}
+                  />
+                ) : null}
+                {supportsReasoningLevels ? (
+                  <PromptOptionPicker
+                    label="Reasoning"
+                    value={reasoningLevel}
+                    options={reasoningOptions}
+                    onChange={setReasoningLevel}
+                  />
+                ) : null}
+                <PromptOptionPicker
+                  label="Sandbox"
+                  value={sandboxMode}
+                  options={sandboxOptions}
+                  onChange={setSandboxMode}
+                />
+              </>
+            }
+          />
+        </PromptComposerShell>
       }
     >
-      <ThreePaneLayout
-        main={conversationMain}
-        right={contextPanel}
-        mainClassName="w-full max-w-[800px]"
-      />
+      {conversationMain}
     </PageShell>
   );
 }
