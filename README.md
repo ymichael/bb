@@ -57,7 +57,7 @@ pnpm bb --help
 
 Notes:
 
-- `dist/` output is generated for `@beanbag/agent-core`, `@beanbag/ui-core`, `@beanbag/db`, `@beanbag/agent-server`, and `@beanbag/cli`.
+- `dist/` output is generated for `@beanbag/agent-core`, `@beanbag/agent-server`, `@beanbag/ui-core`, `@beanbag/db`, `@beanbag/daemon`, and `@beanbag/cli`.
 - `pnpm dev` starts the daemon on `:3333`.
 - CLI uses `BB_DAEMON_URL` when set, otherwise defaults to `http://localhost:3333`.
 

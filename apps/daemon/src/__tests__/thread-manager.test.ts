@@ -20,8 +20,8 @@ import type {
   EventRepository,
   ProjectRepository,
 } from "@beanbag/db";
+import { createCodexProviderAdapter } from "@beanbag/agent-server";
 import { ThreadManager } from "../thread-manager.js";
-import { createCodexProviderAdapter } from "../codex-provider-adapter.js";
 import { WSManager } from "../ws.js";
 
 // Mock child_process.spawn

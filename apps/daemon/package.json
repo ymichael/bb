@@ -1,5 +1,5 @@
 {
-  "name": "@beanbag/agent-server",
+  "name": "@beanbag/daemon",
   "version": "0.0.1",
   "type": "module",
   "exports": {
@@ -22,6 +22,7 @@
   },
   "dependencies": {
     "@beanbag/agent-core": "workspace:*",
+    "@beanbag/agent-server": "workspace:*",
     "@beanbag/db": "workspace:*",
     "@hono/node-server": "^1.13.0",
     "@hono/node-ws": "^1.1.0",

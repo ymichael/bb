@@ -36,15 +36,15 @@ import type {
   EventRepository,
   ProjectRepository,
 } from "@beanbag/db";
-import { WSManager } from "./ws.js";
-import { createCodexProviderAdapter } from "./codex-provider-adapter.js";
-import { createLocalEnvironmentAdapter } from "./environment-adapter.js";
 import {
+  createCodexProviderAdapter,
+  createLocalEnvironmentAdapter,
   ProviderRuntime,
   ProviderRuntimeRpcError,
   ProviderRuntimeTimeoutError,
   ProviderRuntimeUnavailableError,
-} from "./provider-runtime.js";
+} from "@beanbag/agent-server";
+import { WSManager } from "./ws.js";
 import {
   isDomainError,
   inactiveSessionError,

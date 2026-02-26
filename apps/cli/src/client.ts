@@ -1,5 +1,5 @@
 import { hc } from "hono/client";
-import type { AppType } from "@beanbag/agent-server/app-type";
+import type { AppType } from "@beanbag/daemon/app-type";
 
 export function createClient(baseUrl: string) {
   return hc<AppType>(baseUrl);

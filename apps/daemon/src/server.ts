@@ -10,18 +10,16 @@ import type {
   ThreadRepository,
   EventRepository,
 } from "@beanbag/db";
-import { WSManager } from "./ws.js";
-import { ThreadManager } from "./thread-manager.js";
-import { generateCodexThreadTitle } from "./codex-title-generator.js";
-import { createApiRoutes } from "./routes/index.js";
 import {
   createEnvironmentAdapter,
-  listAvailableEnvironmentInfos,
-} from "./environment-registry.js";
-import {
   createProviderAdapter,
+  generateCodexThreadTitle,
+  listAvailableEnvironmentInfos,
   listAvailableProviderInfos,
-} from "./provider-registry.js";
+} from "@beanbag/agent-server";
+import { WSManager } from "./ws.js";
+import { ThreadManager } from "./thread-manager.js";
+import { createApiRoutes } from "./routes/index.js";
 import { InMemorySchedulerService } from "./scheduler-service.js";
 
 const __filename = fileURLToPath(import.meta.url);
