@@ -87,7 +87,9 @@ function normalizeTranscript(rawText: string): string {
   return rawText.replace(/\s+/g, " ").trim();
 }
 
-export function useVoiceInput(options: {
+export function useVoiceInput({
+  onTranscript,
+}: {
   onTranscript: (transcript: string) => void;
 }) {
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
@@ -133,7 +135,7 @@ export function useVoiceInput(options: {
       if (finalParts.length === 0) return;
 
       setState("transcribing");
-      options.onTranscript(finalParts.join(" "));
+      onTranscript(finalParts.join(" "));
       setState("listening");
     };
     recognition.onend = () => {
@@ -160,7 +162,7 @@ export function useVoiceInput(options: {
         // noop
       }
     };
-  }, [options.onTranscript]);
+  }, [onTranscript]);
 
   const start = useCallback(() => {
     const recognition = recognitionRef.current;

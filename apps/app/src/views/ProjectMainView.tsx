@@ -60,6 +60,24 @@ export function ProjectMainView() {
     return () => window.cancelAnimationFrame(handle);
   }, [location.key, shouldFocusPrompt]);
 
+  const handleAttachFiles = useCallback(async (files: File[]) => {
+    if (!projectId || files.length === 0) return;
+
+    setAttachmentError(null);
+    for (const file of files) {
+      try {
+        const uploaded = await uploadPromptAttachment.mutateAsync({
+          projectId,
+          file,
+        });
+        promptDraft.addAttachment(uploaded);
+      } catch (err) {
+        setAttachmentError(err instanceof Error ? err.message : "Attachment upload failed");
+        break;
+      }
+    }
+  }, [projectId, promptDraft, uploadPromptAttachment]);
+
   if (!projectId) {
     return (
       <PageShell contentClassName="min-h-full items-center justify-center">
@@ -89,74 +107,60 @@ export function ProjectMainView() {
     }
   };
 
-  const handleAttachFiles = useCallback(async (files: File[]) => {
-    if (!projectId || files.length === 0) return;
-
-    setAttachmentError(null);
-    for (const file of files) {
-      try {
-        const uploaded = await uploadPromptAttachment.mutateAsync({
-          projectId,
-          file,
-        });
-        promptDraft.addAttachment(uploaded);
-      } catch (err) {
-        setAttachmentError(err instanceof Error ? err.message : "Attachment upload failed");
-        break;
-      }
-    }
-  }, [projectId, promptDraft, uploadPromptAttachment]);
-
   const isSubmitDisabled = spawnThread.isPending || promptInput.length === 0;
 
   return (
     <PageShell contentClassName="pt-8 md:pt-10">
-      <PromptBox
-        id="project-main-prompt"
-        value={prompt}
-        onChange={promptDraft.setText}
-        onSubmit={submitPrompt}
-        isSubmitting={spawnThread.isPending}
-        submitDisabled={isSubmitDisabled}
-        submitTitle={spawnThread.isPending ? "Submitting..." : "Submit (Enter)"}
-        mentionSuggestions={fileMentions.suggestions}
-        mentionLoading={fileMentions.isLoading}
-        mentionError={fileMentions.isError}
-        onMentionQueryChange={fileMentions.setQuery}
-        attachments={promptDraft.attachments}
-        onAttachFiles={handleAttachFiles}
-        onRemoveAttachment={promptDraft.removeAttachment}
-        isAttaching={uploadPromptAttachment.isPending}
-        attachmentError={attachmentError}
-        footerStart={
-          <>
-            <PromptOptionPicker
-              label="Model"
-              value={activeModel?.model ?? selectedModel}
-              options={modelOptions}
-              onChange={setSelectedModel}
-            />
-            <PromptOptionPicker
-              label="Reasoning"
-              value={reasoningLevel}
-              options={reasoningOptions}
-              onChange={setReasoningLevel}
-            />
-            <PromptOptionPicker
-              label="Sandbox"
-              value={sandboxMode}
-              options={sandboxOptions}
-              onChange={setSandboxMode}
-            />
-            <PromptOptionPicker
-              label="Environment"
-              value={environmentId}
-              options={environmentOptions}
-              onChange={setEnvironmentId}
-            />
-          </>
-        }
-      />
+      <div className="space-y-1">
+        <PromptBox
+          id="project-main-prompt"
+          value={prompt}
+          onChange={promptDraft.setText}
+          onSubmit={submitPrompt}
+          isSubmitting={spawnThread.isPending}
+          submitDisabled={isSubmitDisabled}
+          submitTitle={spawnThread.isPending ? "Submitting..." : "Submit (Enter)"}
+          mentionSuggestions={fileMentions.suggestions}
+          mentionLoading={fileMentions.isLoading}
+          mentionError={fileMentions.isError}
+          onMentionQueryChange={fileMentions.setQuery}
+          attachments={promptDraft.attachments}
+          onAttachFiles={handleAttachFiles}
+          onRemoveAttachment={promptDraft.removeAttachment}
+          isAttaching={uploadPromptAttachment.isPending}
+          attachmentError={attachmentError}
+          footerStart={
+            <>
+              <PromptOptionPicker
+                label="Model"
+                value={activeModel?.model ?? selectedModel}
+                options={modelOptions}
+                onChange={setSelectedModel}
+              />
+              <PromptOptionPicker
+                label="Reasoning"
+                value={reasoningLevel}
+                options={reasoningOptions}
+                onChange={setReasoningLevel}
+              />
+              <PromptOptionPicker
+                label="Sandbox"
+                value={sandboxMode}
+                options={sandboxOptions}
+                onChange={setSandboxMode}
+              />
+            </>
+          }
+        />
+        <div className="flex items-center px-3.5">
+          <PromptOptionPicker
+            label="Environment"
+            value={environmentId}
+            options={environmentOptions}
+            onChange={setEnvironmentId}
+          />
+        </div>
+      </div>
     </PageShell>
   );
 }

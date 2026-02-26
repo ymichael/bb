@@ -13,6 +13,7 @@
     "clean": {
       "cache": false
     },
+    "lint": {},
     "typecheck": {
       "dependsOn": ["^build"]
     },

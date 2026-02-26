@@ -6,6 +6,7 @@
     "dev": "turbo run dev --ui tui",
     "build": "turbo run build",
     "clean": "turbo run clean",
+    "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
     "test": "vitest run",
     "test:e2e": "pnpm --filter @beanbag/daemon test:e2e",

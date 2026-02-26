@@ -216,6 +216,24 @@ export function ThreadDetailView() {
       resetDep: threadId,
     });
 
+  const handleAttachFiles = useCallback(async (files: File[]) => {
+    if (!projectId || files.length === 0) return;
+
+    setAttachmentError(null);
+    for (const file of files) {
+      try {
+        const uploaded = await uploadPromptAttachment.mutateAsync({
+          projectId,
+          file,
+        });
+        promptDraft.addAttachment(uploaded);
+      } catch (err) {
+        setAttachmentError(err instanceof Error ? err.message : "Attachment upload failed");
+        break;
+      }
+    }
+  }, [projectId, promptDraft, uploadPromptAttachment]);
+
   if (!projectId || !threadId) {
     return (
       <PageShell contentClassName="min-h-full items-center justify-center">
@@ -289,24 +307,6 @@ export function ThreadDetailView() {
       },
     );
   };
-
-  const handleAttachFiles = useCallback(async (files: File[]) => {
-    if (!projectId || files.length === 0) return;
-
-    setAttachmentError(null);
-    for (const file of files) {
-      try {
-        const uploaded = await uploadPromptAttachment.mutateAsync({
-          projectId,
-          file,
-        });
-        promptDraft.addAttachment(uploaded);
-      } catch (err) {
-        setAttachmentError(err instanceof Error ? err.message : "Attachment upload failed");
-        break;
-      }
-    }
-  }, [projectId, promptDraft, uploadPromptAttachment]);
 
   const conversationMain = (
     <>
