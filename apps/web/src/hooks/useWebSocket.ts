@@ -12,12 +12,9 @@ export function useWebSocket(): void {
 
   useEffect(() => {
     const changedThreadIds = new Set<string>();
-    const changedTaskIds = new Set<string>();
     let shouldInvalidateThreads = false;
-    let shouldInvalidateTasks = false;
     let shouldInvalidateStatus = false;
     let shouldInvalidateAllThreadEvents = false;
-    let shouldInvalidateAllTaskEvents = false;
     let debounceTimer: ReturnType<typeof setTimeout> | null = null;
     let maxWaitTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -92,33 +89,10 @@ export function useWebSocket(): void {
         queryClient.invalidateQueries({ queryKey: ["status"] });
       }
 
-      if (shouldInvalidateTasks) {
-        queryClient.invalidateQueries({ queryKey: ["tasks"] });
-      }
-
-      if (shouldInvalidateTasks && changedTaskIds.size === 0) {
-        queryClient.invalidateQueries({ queryKey: ["task"] });
-      }
-
-      for (const taskId of changedTaskIds) {
-        queryClient.invalidateQueries({ queryKey: ["task", taskId] });
-      }
-
-      if (shouldInvalidateAllTaskEvents) {
-        queryClient.invalidateQueries({ queryKey: ["taskEvents"] });
-      } else {
-        for (const taskId of changedTaskIds) {
-          queryClient.invalidateQueries({ queryKey: ["taskEvents", taskId] });
-        }
-      }
-
       changedThreadIds.clear();
-      changedTaskIds.clear();
       shouldInvalidateThreads = false;
-      shouldInvalidateTasks = false;
       shouldInvalidateStatus = false;
       shouldInvalidateAllThreadEvents = false;
-      shouldInvalidateAllTaskEvents = false;
     };
 
     const scheduleInvalidations = () => {
@@ -135,9 +109,8 @@ export function useWebSocket(): void {
     // Connect to WebSocket
     wsManager.connect();
 
-    // Subscribe to all entity types
+    // Subscribe to thread changes.
     wsManager.subscribe("thread");
-    wsManager.subscribe("task");
 
     // Invalidate React Query caches on changes
     const unsubscribe = wsManager.onChanged((entity, id) => {
@@ -151,15 +124,6 @@ export function useWebSocket(): void {
           }
           // Also invalidate system status since thread counts may change
           shouldInvalidateStatus = true;
-          scheduleInvalidations();
-          break;
-        case "task":
-          shouldInvalidateTasks = true;
-          if (id) {
-            changedTaskIds.add(id);
-          } else {
-            shouldInvalidateAllTaskEvents = true;
-          }
           scheduleInvalidations();
           break;
         default:
@@ -176,7 +140,6 @@ export function useWebSocket(): void {
       }
       unsubscribe();
       wsManager.unsubscribe("thread");
-      wsManager.unsubscribe("task");
       wsManager.disconnect();
     };
   }, [queryClient]);

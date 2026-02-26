@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
-import { assertNever, type Task, type Thread } from "@beanbag/core"
+import { assertNever, type Thread } from "@beanbag/core"
 import {
   Archive,
   ChevronRight,
@@ -9,10 +9,8 @@ import {
   SquarePen,
 } from "lucide-react"
 import {
-  useArchiveTask,
   useArchiveThread,
   useProjects,
-  useTasks,
   useThreads,
 } from "@/hooks/useApi"
 import { NavLink, useLocation } from "react-router-dom"
@@ -36,10 +34,6 @@ interface ProjectListProps {
 
 const COLLAPSED_PROJECTS_STORAGE_KEY = "beanbag.sidebar.collapsedProjects"
 
-type ProjectItem =
-  | { kind: "thread"; thread: Thread; updatedAt: number }
-  | { kind: "task"; task: Task; updatedAt: number }
-
 export function ProjectList({
   onNewProject,
   onProjectSelect,
@@ -48,9 +42,7 @@ export function ProjectList({
 }: ProjectListProps) {
   const { data: projects, isLoading: projectsLoading } = useProjects()
   const { data: threads, isLoading: threadsLoading } = useThreads()
-  const { data: tasks, isLoading: tasksLoading } = useTasks()
   const archiveThread = useArchiveThread()
-  const archiveTask = useArchiveTask()
   const location = useLocation()
   const [collapsedProjectIds, setCollapsedProjectIds] = useState<Set<string>>(
     () => {
@@ -71,69 +63,25 @@ export function ProjectList({
   const selectedThreadId = location.pathname.match(
     /^\/projects\/[^/]+\/threads\/([^/]+)/
   )?.[1]
-  const selectedTaskId = location.pathname.match(
-    /^\/projects\/[^/]+\/tasks\/([^/]+)/
-  )?.[1]
 
-  const itemsByProject = useMemo(() => {
-    const grouped = new Map<string, ProjectItem[]>()
+  const threadsByProject = useMemo(() => {
+    const grouped = new Map<string, Thread[]>()
 
-    for (const projectThread of threads ?? []) {
-      if (!isVisibleProjectThread(projectThread)) continue
-      const existing = grouped.get(projectThread.projectId)
-      const item: ProjectItem = {
-        kind: "thread",
-        thread: projectThread,
-        updatedAt: projectThread.updatedAt,
-      }
+    for (const thread of threads ?? []) {
+      if (!isVisibleProjectThread(thread)) continue
+      const existing = grouped.get(thread.projectId)
       if (existing) {
-        existing.push(item)
+        existing.push(thread)
       } else {
-        grouped.set(projectThread.projectId, [item])
+        grouped.set(thread.projectId, [thread])
       }
     }
 
-    for (const projectTask of tasks ?? []) {
-      if (!isUnarchivedTask(projectTask)) continue
-      const existing = grouped.get(projectTask.projectId)
-      const item: ProjectItem = {
-        kind: "task",
-        task: projectTask,
-        updatedAt: projectTask.updatedAt,
-      }
-      if (existing) {
-        existing.push(item)
-      } else {
-        grouped.set(projectTask.projectId, [item])
-      }
-    }
-
-    for (const projectItems of grouped.values()) {
-      projectItems.sort((a, b) => b.updatedAt - a.updatedAt)
+    for (const projectThreads of grouped.values()) {
+      projectThreads.sort((a, b) => b.updatedAt - a.updatedAt)
     }
 
     return grouped
-  }, [tasks, threads])
-
-  const activePrimaryThreadTaskIds = useMemo(() => {
-    const latestPrimaryThreadsByTaskId = new Map<string, Thread>()
-
-    for (const thread of threads ?? []) {
-      if (!thread.taskId || thread.taskRole !== "primary") continue
-      const existing = latestPrimaryThreadsByTaskId.get(thread.taskId)
-      if (!existing || thread.createdAt > existing.createdAt) {
-        latestPrimaryThreadsByTaskId.set(thread.taskId, thread)
-      }
-    }
-
-    const taskIds = new Set<string>()
-    for (const [taskId, thread] of latestPrimaryThreadsByTaskId.entries()) {
-      if (thread.status === "active" && isBusyThreadStatus(thread.status)) {
-        taskIds.add(taskId)
-      }
-    }
-
-    return taskIds
   }, [threads])
 
   useEffect(() => {
@@ -168,11 +116,10 @@ export function ProjectList({
             </>
           ) : projects && projects.length > 0 ? (
             projects.map((project) => {
-              const projectItems = itemsByProject.get(project.id) ?? []
-              const isProjectItemsLoading = threadsLoading || tasksLoading
+              const projectThreads = threadsByProject.get(project.id) ?? []
               const isProjectCollapsed = collapsedProjectIds.has(project.id)
               const isProjectActive =
-                selectedProjectId === project.id && !selectedThreadId && !selectedTaskId
+                selectedProjectId === project.id && !selectedThreadId
 
               return (
                 <SidebarMenuItem key={project.id} className="space-y-1">
@@ -194,7 +141,7 @@ export function ProjectList({
                           : `Collapse ${project.name}`
                       }
                       title={
-                        isProjectCollapsed ? "Expand project items" : "Collapse project items"
+                        isProjectCollapsed ? "Expand project threads" : "Collapse project threads"
                       }
                       onClick={() => toggleProjectCollapsed(project.id)}
                       className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-sidebar-foreground/70 outline-none ring-sidebar-ring transition-colors hover:text-sidebar-foreground focus-visible:ring-2"
@@ -222,7 +169,7 @@ export function ProjectList({
                     </NavLink>
                     <NavLink
                       to={`/projects/${project.id}`}
-                      state={{ focusTaskComposer: true }}
+                      state={{ focusPrompt: true }}
                       onClick={(event) => {
                         event.stopPropagation()
                         onProjectSelect?.()
@@ -235,11 +182,14 @@ export function ProjectList({
                     </NavLink>
                   </div>
 
-                  {!isProjectCollapsed && !isProjectItemsLoading && projectItems.length > 0 ? (
-                    <div className="space-y-1 group-data-[collapsible=icon]:hidden">
-                      {projectItems.map((item) => {
-                        if (item.kind === "thread") {
-                          const thread = item.thread
+                  {!isProjectCollapsed ? (
+                    threadsLoading ? (
+                      <div className="group-data-[collapsible=icon]:hidden">
+                        <SidebarMenuSkeleton />
+                      </div>
+                    ) : projectThreads.length > 0 ? (
+                      <div className="space-y-1 group-data-[collapsible=icon]:hidden">
+                        {projectThreads.map((thread) => {
                           const isBusyThread = isBusyThreadStatus(thread.status)
 
                           return (
@@ -283,53 +233,9 @@ export function ProjectList({
                               </span>
                             </NavLink>
                           )
-                        }
-
-                        const task = item.task
-                        const showTaskLoader = activePrimaryThreadTaskIds.has(task.id)
-                        return (
-                          <NavLink
-                            key={task.id}
-                            to={`/projects/${project.id}/tasks/${task.id}`}
-                            onClick={onProjectSelect}
-                            className={({ isActive }) =>
-                              cn(
-                                "group/task-row flex h-8 w-full items-center gap-2 rounded-md p-2 text-sm transition-colors",
-                                isActive
-                                  ? "bg-sidebar-border/80 text-sidebar-foreground"
-                                  : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-                              )
-                            }
-                          >
-                            <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center text-sidebar-foreground/60">
-                              {showTaskLoader ? <LoaderCircle className="size-3.5 animate-spin" /> : null}
-                            </span>
-                            <span className="min-w-0 flex-1 truncate">
-                              {task.title}
-                            </span>
-                            <span className="relative shrink-0 text-xs text-sidebar-foreground/60">
-                              <span className="inline-block min-w-8 text-right transition-opacity group-hover/task-row:opacity-0">
-                                {formatRelativeTime(task.updatedAt)}
-                              </span>
-                              <button
-                                type="button"
-                                title="Archive task"
-                                aria-label="Archive task"
-                                className="pointer-events-none absolute inset-0 flex items-center justify-end opacity-0 transition-opacity group-hover/task-row:pointer-events-auto group-hover/task-row:opacity-100"
-                                onClick={(event) => {
-                                  event.preventDefault()
-                                  event.stopPropagation()
-                                  if (archiveTask.isPending) return
-                                  archiveTask.mutate(task.id)
-                                }}
-                              >
-                                <Archive className="size-3.5" />
-                              </button>
-                            </span>
-                          </NavLink>
-                        )
-                      })}
-                    </div>
+                        })}
+                      </div>
+                    ) : null
                   ) : null}
                 </SidebarMenuItem>
               )
@@ -373,17 +279,5 @@ function isBusyThreadStatus(status: Thread["status"]): boolean {
 }
 
 function isVisibleProjectThread(thread: Thread): boolean {
-  return isUnarchivedThread(thread) && isOrphanedThread(thread)
-}
-
-function isUnarchivedThread(thread: Thread): boolean {
-  return thread.archivedAt === undefined
-}
-
-function isOrphanedThread(thread: Thread): boolean {
-  return thread.taskId === undefined && thread.parentThreadId === undefined
-}
-
-function isUnarchivedTask(task: Task): boolean {
-  return task.archivedAt === undefined
+  return thread.archivedAt === undefined && thread.parentThreadId === undefined
 }

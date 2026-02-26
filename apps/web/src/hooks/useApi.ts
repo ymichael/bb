@@ -6,13 +6,7 @@ import {
 } from "@tanstack/react-query";
 import type {
   Project,
-  Task,
-  TaskEvent,
-  TaskStatus,
   AgentRole,
-  CreateTaskRequest,
-  UpdateTaskRequest,
-  TaskChatRequest,
   Thread,
   ThreadEvent,
   CreateProjectRequest,
@@ -22,7 +16,6 @@ import type {
   AvailableModel,
   ProjectFileSuggestion,
   ThreadExecutionOptions,
-  TaskThreadRole,
 } from "@beanbag/core";
 import * as api from "../lib/api";
 
@@ -45,116 +38,10 @@ export function useCreateProject() {
   });
 }
 
-// --- Tasks ---
-
-export function useTasks(filters?: {
-  projectId?: string;
-  status?: TaskStatus;
-  parentId?: string;
-}) {
-  return useQuery<Task[]>({
-    queryKey: ["tasks", filters],
-    queryFn: () => api.listTasks(filters),
-  });
-}
-
-export function useTask(id: string) {
-  return useQuery<Task>({
-    queryKey: ["task", id],
-    queryFn: () => api.getTask(id),
-    enabled: !!id,
-  });
-}
-
-export function useTaskEvents(id: string) {
-  return useQuery<TaskEvent[]>({
-    queryKey: ["taskEvents", id],
-    queryFn: () => api.getTaskEvents(id),
-    enabled: !!id,
-  });
-}
-
 export function useRoles() {
   return useQuery<AgentRole[]>({
     queryKey: ["roles"],
     queryFn: () => api.listRoles(),
-  });
-}
-
-export function useCreateTask() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (req: CreateTaskRequest) => api.createTask(req),
-    onSuccess: (task) => {
-      queryClient.invalidateQueries({ queryKey: ["tasks"] });
-      queryClient.setQueryData(["task", task.id], task);
-      queryClient.invalidateQueries({ queryKey: ["taskEvents", task.id] });
-    },
-  });
-}
-
-export function useUpdateTask() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: ({ id, req }: { id: string; req: UpdateTaskRequest }) =>
-      api.updateTask(id, req),
-    onSuccess: (task) => {
-      queryClient.invalidateQueries({ queryKey: ["tasks"] });
-      queryClient.setQueryData(["task", task.id], task);
-      queryClient.invalidateQueries({ queryKey: ["taskEvents", task.id] });
-    },
-  });
-}
-
-export function useAssignTask() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: ({ id, assignee }: { id: string; assignee: string }) =>
-      api.assignTask(id, { assignee }),
-    onSuccess: (task) => {
-      queryClient.invalidateQueries({ queryKey: ["tasks"] });
-      queryClient.setQueryData(["task", task.id], task);
-      queryClient.invalidateQueries({ queryKey: ["taskEvents", task.id] });
-    },
-  });
-}
-
-export function useSetTaskAssignee() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: ({ id, assignee }: { id: string; assignee: string }) =>
-      api.updateTask(id, { assignee }),
-    onSuccess: (task) => {
-      queryClient.invalidateQueries({ queryKey: ["tasks"] });
-      queryClient.setQueryData(["task", task.id], task);
-      queryClient.invalidateQueries({ queryKey: ["taskEvents", task.id] });
-    },
-  });
-}
-
-export function useTaskChat() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: ({ id, req }: { id: string; req: TaskChatRequest }) =>
-      api.chatTask(id, req),
-    onSuccess: (_result, variables) => {
-      queryClient.invalidateQueries({ queryKey: ["task", variables.id] });
-      queryClient.invalidateQueries({ queryKey: ["taskEvents", variables.id] });
-      queryClient.invalidateQueries({ queryKey: ["threads"] });
-      queryClient.invalidateQueries({ queryKey: ["threadEvents"] });
-    },
-  });
-}
-
-export function useArchiveTask() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (id: string) => api.archiveTask(id),
-    onSuccess: (_data, id) => {
-      queryClient.invalidateQueries({ queryKey: ["task", id] });
-      queryClient.invalidateQueries({ queryKey: ["tasks"] });
-      queryClient.invalidateQueries({ queryKey: ["taskEvents", id] });
-    },
   });
 }
 
@@ -178,8 +65,6 @@ export function useProjectFileSuggestions(
 
 export function useThreads(filters?: {
   projectId?: string;
-  taskId?: string;
-  taskRole?: TaskThreadRole;
   parentThreadId?: string;
   includeArchived?: boolean;
 }, options?: { enabled?: boolean }) {

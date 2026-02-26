@@ -2,7 +2,6 @@ import { useEffect, useMemo, useReducer } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
   useThread,
-  useTask,
   useThreadEvents,
   useTellThread,
   useStopThread,
@@ -123,7 +122,6 @@ export function ThreadDetailView() {
     threadId: string;
   }>();
   const { data: thread, isLoading, error } = useThread(threadId ?? "");
-  const { data: task } = useTask(thread?.taskId ?? "");
   const { data: parentThread } = useThread(thread?.parentThreadId ?? "");
   const { data: events } = useThreadEvents(threadId ?? "");
   const { data: defaultExecutionOptions } = useThreadDefaultExecutionOptions(
@@ -245,9 +243,6 @@ export function ThreadDetailView() {
       : thread.status === "idle"
       ? "Ask for follow-up changes"
       : "Send a message to this thread...";
-  const linkedTaskId = thread.taskId;
-  const linkedTaskDisplayName =
-    task?.title && task.title.trim().length > 0 ? task.title : linkedTaskId;
   const parentThreadId = thread.parentThreadId;
   const parentThreadDisplayName =
     parentThread?.title && parentThread.title.trim().length > 0
@@ -257,7 +252,7 @@ export function ThreadDetailView() {
   const threadRoleDisplayName = threadRoleId
     ? (roleNameById.get(threadRoleId) ?? threadRoleId)
     : null;
-  const showThreadMetadata = Boolean(linkedTaskId || parentThreadId || threadRoleId);
+  const showThreadMetadata = Boolean(parentThreadId || threadRoleId);
 
   const handleSend = () => {
     const trimmed = message.trim();
@@ -343,20 +338,6 @@ export function ThreadDetailView() {
       {showThreadMetadata ? (
         <section className="sticky top-0 z-10 shrink-0 bg-background pt-2">
           <DetailCard>
-            {linkedTaskId ? (
-              <DetailRow
-                label="Task"
-                valueClassName="min-w-0 truncate"
-                align="center"
-              >
-                <Link
-                  to={`/projects/${projectId}/tasks/${linkedTaskId}`}
-                  className="underline underline-offset-2"
-                >
-                  {linkedTaskDisplayName}
-                </Link>
-              </DetailRow>
-            ) : null}
             {parentThreadId ? (
               <DetailRow
                 label="Parent thread"

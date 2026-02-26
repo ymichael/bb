@@ -1,13 +1,6 @@
 import type {
   Project,
-  Task,
-  TaskEvent,
   AgentRole,
-  CreateTaskRequest,
-  UpdateTaskRequest,
-  AssignTaskRequest,
-  TaskChatRequest,
-  TaskChatResponse,
   Thread,
   ThreadEvent,
   CreateProjectRequest,
@@ -18,7 +11,6 @@ import type {
   AvailableModel,
   ProjectFileSuggestion,
   ThreadExecutionOptions,
-  TaskThreadRole,
 } from "@beanbag/core";
 
 const BASE = "/api/v1";
@@ -69,58 +61,6 @@ export async function pickProjectFolder(): Promise<{ path: string | null }> {
   return request<{ path: string | null }>("POST", "/system/pick-folder");
 }
 
-// --- Tasks ---
-
-export async function createTask(req: CreateTaskRequest): Promise<Task> {
-  return request<Task>("POST", "/tasks", req);
-}
-
-export async function listTasks(filters?: {
-  projectId?: string;
-  status?: Task["status"];
-  parentId?: string;
-}): Promise<Task[]> {
-  const params = new URLSearchParams();
-  if (filters?.projectId) params.set("projectId", filters.projectId);
-  if (filters?.status) params.set("status", filters.status);
-  if (filters?.parentId) params.set("parentId", filters.parentId);
-  const qs = params.toString();
-  return request<Task[]>("GET", `/tasks${qs ? `?${qs}` : ""}`);
-}
-
-export async function getTask(id: string): Promise<Task> {
-  return request<Task>("GET", `/tasks/${id}`);
-}
-
-export async function updateTask(id: string, req: UpdateTaskRequest): Promise<Task> {
-  return request<Task>("PATCH", `/tasks/${id}`, req);
-}
-
-export async function assignTask(id: string, req: AssignTaskRequest): Promise<Task> {
-  return request<Task>("POST", `/tasks/${id}/assign`, req);
-}
-
-export async function chatTask(
-  id: string,
-  req: TaskChatRequest,
-): Promise<TaskChatResponse> {
-  return request<TaskChatResponse>("POST", `/tasks/${id}/chat`, req);
-}
-
-export async function getTaskEvents(
-  id: string,
-  afterSeq?: number,
-): Promise<TaskEvent[]> {
-  const params = new URLSearchParams();
-  if (afterSeq !== undefined) params.set("afterSeq", String(afterSeq));
-  const qs = params.toString();
-  return request<TaskEvent[]>("GET", `/tasks/${id}/events${qs ? `?${qs}` : ""}`);
-}
-
-export async function archiveTask(id: string): Promise<void> {
-  return request<void>("POST", `/tasks/${id}/archive`);
-}
-
 export async function listRoles(): Promise<AgentRole[]> {
   return request<AgentRole[]>("GET", "/roles");
 }
@@ -133,15 +73,11 @@ export async function spawnThread(req: SpawnThreadRequest): Promise<Thread> {
 
 export async function listThreads(filters?: {
   projectId?: string;
-  taskId?: string;
-  taskRole?: TaskThreadRole;
   parentThreadId?: string;
   includeArchived?: boolean;
 }): Promise<Thread[]> {
   const params = new URLSearchParams();
   if (filters?.projectId) params.set("projectId", filters.projectId);
-  if (filters?.taskId) params.set("taskId", filters.taskId);
-  if (filters?.taskRole) params.set("taskRole", filters.taskRole);
   if (filters?.parentThreadId) {
     params.set("parentThreadId", filters.parentThreadId);
   }
