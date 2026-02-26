@@ -7,7 +7,6 @@ export {
   ProjectRepository,
   ThreadRepository,
   EventRepository,
-  TaskRepository,
 } from "./repositories.js";
 
 export { migrate } from "./migrate.js";

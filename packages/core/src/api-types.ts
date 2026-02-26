@@ -2,19 +2,11 @@ import type {
   PromptInput,
   ReasoningLevel,
   SandboxMode,
-  TaskCloseReason,
-  TaskDependencyType,
-  TaskStatus,
-  TaskThreadRole,
 } from "./shared-types.js";
 export type {
   PromptInput,
   ReasoningLevel,
   SandboxMode,
-  TaskCloseReason,
-  TaskDependencyType,
-  TaskStatus,
-  TaskThreadRole,
 } from "./shared-types.js";
 
 export interface ModelReasoningEffort {
@@ -43,9 +35,7 @@ export interface SpawnThreadRequest {
   roleId?: string;
   agentRoleId?: string;
   developerInstructions?: string;
-  taskId?: string;
   parentThreadId?: string;
-  taskRole?: TaskThreadRole;
 }
 
 export type TellThreadMode = "auto" | "start" | "steer";
@@ -65,42 +55,6 @@ export interface ThreadExecutionOptions {
   approvalPolicy?: string;
   source?: "client/thread/start" | "client/turn/start";
   seq?: number;
-}
-
-// Task endpoints
-export interface CreateTaskRequest {
-  projectId: string;
-  title: string;
-  description?: string;
-  parentId?: string;
-  assignee?: string;
-}
-
-export interface UpdateTaskRequest {
-  title?: string;
-  description?: string;
-  status?: TaskStatus;
-  closeReason?: TaskCloseReason;
-  assignee?: string;
-}
-
-export interface AssignTaskRequest {
-  assignee: string;
-}
-
-export interface TaskChatRequest {
-  input: PromptInput[];
-}
-
-export interface TaskChatResponse {
-  ok: boolean;
-  threadId: string;
-  createdThread: boolean;
-}
-
-export interface CreateTaskDependencyRequest {
-  dependsOnTaskId: string;
-  type: TaskDependencyType;
 }
 
 export interface AgentRole {

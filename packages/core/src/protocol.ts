@@ -1,4 +1,4 @@
-export type RealtimeEntity = "thread" | "task";
+export type RealtimeEntity = "thread";
 
 // Client -> Server
 export interface SubscribeMessage {

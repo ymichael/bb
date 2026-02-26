@@ -71,6 +71,13 @@
       "when": 1771459200000,
       "tag": "0009_thread_agent_role_metadata",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1771603200000,
+      "tag": "0010_remove_task_model",
+      "breakpoints": true
     }
   ]
 }
