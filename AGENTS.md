@@ -16,3 +16,9 @@
 - Centralize repeated formatting behavior (for example relative time) in shared web utilities.
 - Avoid arbitrary `text-[Npx]` classes; prefer sanctioned typography tokens/utilities.
 - Keep theme typography tokens consistent across light/dark modes unless an intentional divergence is documented.
+
+## Debugging Data Flows
+
+- When investigating entity/state issues from a route like `http://localhost:5173/projects/<projectId>/threads/<threadId>`, prefer inspecting data through the daemon HTTP API or CLI first.
+- For data-only debugging, prefer daemon API/CLI over `curl` + browser workflows; it is faster to inspect entities directly without frontend/UI noise.
+- Use direct SQLite queries as an alternative fast path, especially when you need to validate persisted state or compare raw stored values against daemon/API responses.
