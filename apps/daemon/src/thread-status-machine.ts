@@ -1,4 +1,4 @@
-import type { ThreadStatus } from "@beanbag/core";
+import type { ThreadStatus } from "@beanbag/agent-core";
 import { createMachine, initialTransition, transition } from "xstate";
 
 type ThreadStatusTransitionEvent = {

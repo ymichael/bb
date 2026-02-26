@@ -170,17 +170,17 @@ interface CliLaunchTarget {
 }
 
 function resolveCliLaunchTarget(): CliLaunchTarget {
-  if (existsSync(CLI_DIST_PATH)) {
-    return {
-      command: process.execPath,
-      args: [CLI_DIST_PATH],
-    };
-  }
-
   if (existsSync(TSX_CLI_PATH) && existsSync(CLI_SOURCE_PATH)) {
     return {
       command: process.execPath,
       args: [TSX_CLI_PATH, CLI_SOURCE_PATH],
+    };
+  }
+
+  if (existsSync(CLI_DIST_PATH)) {
+    return {
+      command: process.execPath,
+      args: [CLI_DIST_PATH],
     };
   }
 

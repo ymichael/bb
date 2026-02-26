@@ -1,5 +1,5 @@
 {
-  "name": "@beanbag/core",
+  "name": "@beanbag/agent-core",
   "version": "0.0.1",
   "type": "module",
   "exports": {

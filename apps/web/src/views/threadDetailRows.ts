@@ -1,4 +1,4 @@
-import type { UIMessage } from "@beanbag/core";
+import type { UIMessage } from "@beanbag/agent-core";
 
 type CollapsibleTurnMessage = UIMessage;
 

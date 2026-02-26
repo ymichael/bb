@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { Hono } from "hono";
-import type { AvailableModel, SystemProviderInfo, Thread } from "@beanbag/core";
+import type { AvailableModel, SystemProviderInfo, Thread } from "@beanbag/agent-core";
 import { createSystemRoutes } from "../../routes/system.js";
 import type { ThreadManager } from "../../thread-manager.js";
 

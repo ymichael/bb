@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import type { Project, Thread, ThreadEvent } from "@beanbag/core";
+import type { Project, Thread, ThreadEvent } from "@beanbag/agent-core";
 import {
   runCliCommand,
   startDaemonE2eHarness,

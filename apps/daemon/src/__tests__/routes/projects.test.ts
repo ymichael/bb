@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { Hono } from "hono";
-import type { Project, ProjectFileSuggestion } from "@beanbag/core";
+import type { Project, ProjectFileSuggestion } from "@beanbag/agent-core";
 import { createProjectRoutes } from "../../routes/projects.js";
 import type { ProjectRepository } from "@beanbag/db";
 

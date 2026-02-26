@@ -1,76 +1,77 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   DEFAULT_DAEMON_URL,
-  requireTaskId,
-  requireThreadId,
-  resolveDaemonUrl,
   requireProjectId,
+  requireThreadId,
+  resolveContextSnapshot,
+  resolveDaemonUrl,
   resolveProjectId,
-  resolveTaskId,
   resolveThreadId,
 } from "../context-env.js";
 
-const CONTEXT_KEYS = [
-  "BB_PROJECT_ID",
-  "BB_TASK_ID",
-  "BB_THREAD_ID",
-  "BB_DAEMON_URL",
-] as const;
+const ENV_KEYS = ["BB_PROJECT_ID", "BB_THREAD_ID", "BB_DAEMON_URL"] as const;
 
-afterEach(() => {
-  for (const key of CONTEXT_KEYS) {
-    delete process.env[key];
-  }
-});
+describe("context-env", () => {
+  const originalEnv: Partial<Record<(typeof ENV_KEYS)[number], string | undefined>> = {};
 
-describe("context env resolution", () => {
-  it("prefers explicit project flag over env", () => {
-    process.env.BB_PROJECT_ID = "proj-env";
-    expect(resolveProjectId("proj-flag")).toBe("proj-flag");
+  beforeEach(() => {
+    for (const key of ENV_KEYS) {
+      originalEnv[key] = process.env[key];
+      delete process.env[key];
+    }
   });
 
-  it("uses BB_PROJECT_ID when project flag is missing", () => {
-    process.env.BB_PROJECT_ID = "proj-env";
-    expect(resolveProjectId(undefined)).toBe("proj-env");
+  afterEach(() => {
+    for (const key of ENV_KEYS) {
+      if (originalEnv[key] === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = originalEnv[key];
+      }
+    }
   });
 
-  it("requires a project value from flag or BB_PROJECT_ID", () => {
+  it("resolves daemon url from env with fallback", () => {
+    expect(resolveDaemonUrl()).toBe(DEFAULT_DAEMON_URL);
+    process.env.BB_DAEMON_URL = "http://127.0.0.1:5555";
+    expect(resolveDaemonUrl()).toBe("http://127.0.0.1:5555");
+  });
+
+  it("requires project and thread context when missing", () => {
     expect(() => requireProjectId(undefined)).toThrow(
       "Missing project context. Pass a project ID (for example --project <id>) or set BB_PROJECT_ID.",
-    );
-  });
-
-  it("requires task and thread values from explicit args or BB_* context", () => {
-    expect(() => requireTaskId(undefined)).toThrow(
-      "Missing task context. Pass <taskId> or set BB_TASK_ID.",
     );
     expect(() => requireThreadId(undefined)).toThrow(
       "Missing thread context. Pass <threadId> or set BB_THREAD_ID.",
     );
   });
 
-  it("reads BB_TASK_ID and BB_THREAD_ID defaults", () => {
-    process.env.BB_TASK_ID = "task-env";
+  it("reads BB_PROJECT_ID and BB_THREAD_ID defaults", () => {
+    process.env.BB_PROJECT_ID = "proj-env";
     process.env.BB_THREAD_ID = "thread-env";
 
-    expect(resolveTaskId(undefined)).toBe("task-env");
+    expect(resolveProjectId(undefined)).toBe("proj-env");
     expect(resolveThreadId(undefined)).toBe("thread-env");
   });
 
-  it("treats blank values as unset", () => {
-    process.env.BB_PROJECT_ID = "   ";
-    process.env.BB_TASK_ID = "";
-    process.env.BB_THREAD_ID = " \t ";
-    process.env.BB_DAEMON_URL = " ";
+  it("normalizes empty values as undefined", () => {
+    process.env.BB_PROJECT_ID = "";
+    process.env.BB_THREAD_ID = "   ";
 
     expect(resolveProjectId(undefined)).toBeUndefined();
-    expect(resolveTaskId(undefined)).toBeUndefined();
     expect(resolveThreadId(undefined)).toBeUndefined();
-    expect(resolveDaemonUrl()).toBe(DEFAULT_DAEMON_URL);
   });
 
-  it("uses BB_DAEMON_URL when set", () => {
-    process.env.BB_DAEMON_URL = "http://127.0.0.1:4444";
-    expect(resolveDaemonUrl()).toBe("http://127.0.0.1:4444");
+  it("captures a consistent context snapshot", () => {
+    process.env.BB_PROJECT_ID = "proj-1";
+    process.env.BB_THREAD_ID = "thread-1";
+    process.env.BB_DAEMON_URL = "http://localhost:4444";
+
+    expect(resolveContextSnapshot()).toEqual({
+      projectId: "proj-1",
+      threadId: "thread-1",
+      daemonUrl: "http://localhost:4444",
+      daemonUrlFromEnv: "http://localhost:4444",
+    });
   });
 });

@@ -4,7 +4,7 @@ import {
   type Thread,
   type ThreadEvent,
   type ThreadStatus,
-} from "@beanbag/core";
+} from "@beanbag/agent-core";
 import { createClient, unwrap } from "../client.js";
 import {
   requireProjectId,

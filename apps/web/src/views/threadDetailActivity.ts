@@ -1,4 +1,4 @@
-import type { UIMessage } from "@beanbag/core";
+import type { UIMessage } from "@beanbag/agent-core";
 import type { ThreadDetailRow } from "./threadDetailRows";
 
 export function isActivityMessage(message: UIMessage): boolean {

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from "react"
 import { CornerDownLeft, Loader2, Square } from "lucide-react"
-import type { ProjectFileSuggestion } from "@beanbag/core"
+import type { ProjectFileSuggestion } from "@beanbag/agent-core"
 import { Button } from "@/components/ui/button"
 import { useAutoGrow } from "@/hooks/useAutoGrow"
 import { cn } from "@/lib/utils"

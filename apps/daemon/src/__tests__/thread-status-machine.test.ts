@@ -1,4 +1,4 @@
-import type { ThreadStatus } from "@beanbag/core";
+import type { ThreadStatus } from "@beanbag/agent-core";
 import { describe, expect, it } from "vitest";
 import { canTransitionThreadStatus } from "../thread-status-machine.js";
 

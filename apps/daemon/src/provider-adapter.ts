@@ -7,7 +7,7 @@ import type {
   SpawnThreadRequest,
   Thread,
   ThreadEvent,
-} from "@beanbag/core";
+} from "@beanbag/agent-core";
 
 export interface ProviderExecutionOptions {
   model?: string;

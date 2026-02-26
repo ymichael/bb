@@ -8,7 +8,7 @@ import type {
   ThreadEventData,
   ThreadEventType,
   ThreadExecutionOptions,
-} from "@beanbag/core";
+} from "@beanbag/agent-core";
 import type { DbConnection } from "./connection.js";
 import {
   projects,

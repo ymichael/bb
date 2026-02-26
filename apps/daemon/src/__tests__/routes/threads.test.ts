@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { Hono } from "hono";
-import type { Task, Thread, ThreadEvent } from "@beanbag/core";
+import type { Thread, ThreadEvent } from "@beanbag/agent-core";
 import { createThreadRoutes } from "../../routes/threads.js";
 import type { ThreadManager } from "../../thread-manager.js";
 import { inactiveSessionError, threadArchivedError } from "../../domain-errors.js";
@@ -233,118 +233,6 @@ describe("Thread routes", () => {
       expect(threadManager.spawn).not.toHaveBeenCalled();
     });
 
-    it("broadcasts task updates when spawning a task-linked thread", async () => {
-      const thread = makeThread({ id: "worker-thread", projectId: "proj-1" });
-      const task: Task = {
-        id: "task-1",
-        projectId: "proj-1",
-        title: "Task One",
-        status: "in_progress",
-        assignee: "agent/generic",
-        createdAt: 1000,
-        updatedAt: 1000,
-      };
-      const taskRepo = {
-        getById: vi.fn().mockReturnValue(task),
-        appendEvent: vi.fn(),
-      };
-      const wsManager = {
-        broadcast: vi.fn(),
-      };
-      const localRoutes = createThreadRoutes(
-        threadManager as any,
-        taskRepo as any,
-        wsManager as any,
-      );
-      const localApp = new Hono().route("/threads", localRoutes);
-      (threadManager.spawn as ReturnType<typeof vi.fn>).mockResolvedValue(thread);
-
-      const res = await localApp.request("/threads", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          projectId: "proj-1",
-          taskId: "task-1",
-          parentThreadId: "primary-thread",
-          taskRole: "worker",
-        }),
-      });
-
-      expect(res.status).toBe(201);
-      expect(threadManager.spawn).toHaveBeenCalledWith({
-        projectId: "proj-1",
-        taskId: "task-1",
-        parentThreadId: "primary-thread",
-        taskRole: "worker",
-      });
-      expect(taskRepo.appendEvent).toHaveBeenCalledWith(
-        "task-1",
-        "task.chat.thread_created",
-        {
-          threadId: "worker-thread",
-          taskRole: "worker",
-        },
-      );
-      expect(wsManager.broadcast).toHaveBeenCalledWith("task", "task-1");
-    });
-
-    it("returns 404 for unknown task context", async () => {
-      const taskRepo = {
-        getById: vi.fn().mockReturnValue(undefined),
-        appendEvent: vi.fn(),
-      };
-      const localRoutes = createThreadRoutes(
-        threadManager as any,
-        taskRepo as any,
-      );
-      const localApp = new Hono().route("/threads", localRoutes);
-
-      const res = await localApp.request("/threads", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          projectId: "proj-1",
-          taskId: "task-missing",
-        }),
-      });
-
-      expect(res.status).toBe(404);
-      expect(threadManager.spawn).not.toHaveBeenCalled();
-    });
-
-    it("returns 400 when task project does not match thread project", async () => {
-      const taskRepo = {
-        getById: vi.fn().mockReturnValue(
-          {
-            id: "task-1",
-            projectId: "proj-other",
-            title: "Task One",
-            status: "in_progress",
-            assignee: "agent/generic",
-            createdAt: 1000,
-            updatedAt: 1000,
-          } satisfies Task,
-        ),
-        appendEvent: vi.fn(),
-      };
-      const localRoutes = createThreadRoutes(
-        threadManager as any,
-        taskRepo as any,
-      );
-      const localApp = new Hono().route("/threads", localRoutes);
-
-      const res = await localApp.request("/threads", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          projectId: "proj-1",
-          taskId: "task-1",
-        }),
-      });
-
-      expect(res.status).toBe(400);
-      expect(threadManager.spawn).not.toHaveBeenCalled();
-    });
   });
 
   describe("GET /threads", () => {
@@ -374,22 +262,6 @@ describe("Thread routes", () => {
       });
     });
 
-    it("forwards task linkage filters when provided", async () => {
-      (threadManager.list as ReturnType<typeof vi.fn>).mockReturnValue([]);
-
-      const res = await app.request(
-        "/threads?projectId=proj-1&taskId=task-1&taskRole=primary&agentRoleId=agent/generic&includeArchived=true",
-      );
-
-      expect(res.status).toBe(200);
-      expect(threadManager.list).toHaveBeenCalledWith({
-        projectId: "proj-1",
-        taskId: "task-1",
-        taskRole: "primary",
-        agentRoleId: "agent/generic",
-        includeArchived: true,
-      });
-    });
   });
 
   describe("GET /threads/:id", () => {

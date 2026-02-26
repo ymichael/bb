@@ -2,7 +2,7 @@ import type {
   ClientMessage,
   RealtimeEntity,
   ServerMessage,
-} from "@beanbag/core";
+} from "@beanbag/agent-core";
 
 export type ChangeCallback = (entity: RealtimeEntity, id?: string) => void;
 

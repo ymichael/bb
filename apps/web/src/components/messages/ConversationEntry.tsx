@@ -12,7 +12,7 @@ import type {
   UIAssistantReasoningMessage,
   UIAssistantTextMessage,
   UIWebSearchMessage,
-} from "@beanbag/core";
+} from "@beanbag/agent-core";
 import { ChevronDown, ChevronRight, CircleX } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import {

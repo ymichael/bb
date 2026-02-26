@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { AvailableModel, ThreadEvent } from "@beanbag/core";
+import type { AvailableModel, ThreadEvent } from "@beanbag/agent-core";
 
 vi.mock("../codex-models.js", () => ({
   listCodexModels: vi.fn(),
@@ -185,7 +185,6 @@ describe("codex provider adapter", () => {
     const context = {
       projectId: "proj-1",
       threadId: "thread-1",
-      taskId: "task-1",
       path: "/bb/bin:/usr/bin",
     };
 
@@ -199,7 +198,6 @@ describe("codex provider adapter", () => {
       config: {
         "shell_environment_policy.set.BB_PROJECT_ID": "proj-1",
         "shell_environment_policy.set.BB_THREAD_ID": "thread-1",
-        "shell_environment_policy.set.BB_TASK_ID": "task-1",
         "shell_environment_policy.set.PATH": "/bb/bin:/usr/bin",
       },
     });

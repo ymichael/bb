@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
-import { createProjectSchema, type ProjectFileSuggestion } from "@beanbag/core";
+import { createProjectSchema, type ProjectFileSuggestion } from "@beanbag/agent-core";
 import { z } from "zod";
 import type { ProjectRepository } from "@beanbag/db";
 import { searchProjectFiles } from "../project-file-search.js";

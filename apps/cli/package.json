@@ -14,8 +14,8 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@beanbag/core": "workspace:*",
-    "@beanbag/daemon": "workspace:*",
+    "@beanbag/agent-core": "workspace:*",
+    "@beanbag/agent-server": "workspace:*",
     "commander": "^13.0.0",
     "hono": "^4.7.0"
   },

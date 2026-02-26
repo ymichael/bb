@@ -14,7 +14,7 @@ import {
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import type { ChildProcess } from "node:child_process";
-import type { Thread, ThreadEvent } from "@beanbag/core";
+import type { Thread, ThreadEvent } from "@beanbag/agent-core";
 import type {
   ThreadRepository,
   EventRepository,

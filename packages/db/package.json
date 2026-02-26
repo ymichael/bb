@@ -25,7 +25,7 @@
     "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
-    "@beanbag/core": "workspace:*",
+    "@beanbag/agent-core": "workspace:*",
     "better-sqlite3": "^11.7.0",
     "drizzle-orm": "^0.38.0",
     "nanoid": "^5.0.9"

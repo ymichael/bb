@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import type { AvailableModel, ReasoningLevel, SandboxMode } from "@beanbag/core";
+import type { AvailableModel, ReasoningLevel, SandboxMode } from "@beanbag/agent-core";
 import { useAvailableModels } from "./useApi";
 
 const MODEL_STORAGE_KEY = "beanbag.promptbox.model";

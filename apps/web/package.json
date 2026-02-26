@@ -1,5 +1,5 @@
 {
-  "name": "@beanbag/web",
+  "name": "@beanbag/app",
   "version": "0.0.1",
   "type": "module",
   "private": true,
@@ -12,7 +12,7 @@
     "test": "vitest run --config vitest.config.ts"
   },
   "dependencies": {
-    "@beanbag/core": "workspace:*",
+    "@beanbag/agent-core": "workspace:*",
     "@radix-ui/react-avatar": "^1.1.11",
     "@radix-ui/react-collapsible": "^1.1.12",
     "@radix-ui/react-dialog": "^1.1.15",

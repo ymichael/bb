@@ -3,7 +3,7 @@ import type {
   AvailableModel,
   SystemProviderInfo,
   SystemStatus,
-} from "@beanbag/core";
+} from "@beanbag/agent-core";
 import type { ThreadManager } from "../thread-manager.js";
 import { pickFolderPath } from "../folder-picker.js";
 import { sendRouteError } from "./error-response.js";

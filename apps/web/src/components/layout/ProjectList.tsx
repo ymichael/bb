@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
-import { assertNever, type Thread } from "@beanbag/core"
+import { assertNever, type Thread } from "@beanbag/agent-core"
 import {
   Archive,
   ChevronRight,

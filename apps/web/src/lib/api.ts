@@ -11,7 +11,7 @@ import type {
   AvailableModel,
   ProjectFileSuggestion,
   ThreadExecutionOptions,
-} from "@beanbag/core";
+} from "@beanbag/agent-core";
 
 const BASE = "/api/v1";
 

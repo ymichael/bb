@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
-import { spawnThreadSchema, tellThreadSchema } from "@beanbag/core";
+import { spawnThreadSchema, tellThreadSchema } from "@beanbag/agent-core";
 import { z } from "zod";
 import type { ThreadManager } from "../thread-manager.js";
 import { threadNotFoundError } from "../domain-errors.js";

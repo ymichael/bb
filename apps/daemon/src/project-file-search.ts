@@ -1,6 +1,6 @@
 import { readdir } from "node:fs/promises";
 import { join, relative, sep } from "node:path";
-import type { ProjectFileSuggestion } from "@beanbag/core";
+import type { ProjectFileSuggestion } from "@beanbag/agent-core";
 
 const DEFAULT_RESULT_LIMIT = 8;
 const MAX_RESULT_LIMIT = 25;

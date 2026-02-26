@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { createInterface } from "node:readline";
-import type { PromptInput } from "@beanbag/core";
+import type { PromptInput } from "@beanbag/agent-core";
 import type { ProviderTitleGeneratorArgs } from "./provider-adapter.js";
 
 const DEFAULT_TIMEOUT_MS = 60_000;

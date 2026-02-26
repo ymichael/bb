@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
-import type { UIMessage } from "@beanbag/core";
+import type { UIMessage } from "@beanbag/agent-core";
 import { ConversationEntry } from "./ConversationEntry";
 
 function baseMessage(): Pick<

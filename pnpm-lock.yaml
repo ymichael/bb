@@ -20,10 +20,10 @@ importers:
 
   apps/cli:
     dependencies:
-      '@beanbag/core':
+      '@beanbag/agent-core':
         specifier: workspace:*
         version: link:../../packages/core
-      '@beanbag/daemon':
+      '@beanbag/agent-server':
         specifier: workspace:*
         version: link:../daemon
       commander:
@@ -45,7 +45,7 @@ importers:
 
   apps/daemon:
     dependencies:
-      '@beanbag/core':
+      '@beanbag/agent-core':
         specifier: workspace:*
         version: link:../../packages/core
       '@beanbag/db':
@@ -88,7 +88,7 @@ importers:
 
   apps/web:
     dependencies:
-      '@beanbag/core':
+      '@beanbag/agent-core':
         specifier: workspace:*
         version: link:../../packages/core
       '@radix-ui/react-avatar':
@@ -186,7 +186,7 @@ importers:
 
   packages/db:
     dependencies:
-      '@beanbag/core':
+      '@beanbag/agent-core':
         specifier: workspace:*
         version: link:../core
       better-sqlite3:

@@ -21,7 +21,7 @@ import {
   type PromptInput,
   type SpawnThreadRequest,
   type TellThreadRequest,
-} from "@beanbag/core";
+} from "@beanbag/agent-core";
 import type {
   ThreadRepository,
   EventRepository,

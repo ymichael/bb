@@ -27,7 +27,7 @@ import { usePromptFileMentions } from "@/hooks/usePromptFileMentions";
 import { PageShell } from "@/components/layout/PageShell";
 import { DetailCard, DetailRow } from "@/components/shared/DetailCard";
 import { ScrollToBottomButton } from "@/components/shared/ScrollToBottomButton";
-import { toUIMessages } from "@beanbag/core";
+import { toUIMessages } from "@beanbag/agent-core";
 import {
   buildThreadDetailRows,
   type ThreadDetailToolGroupRow,

@@ -4,8 +4,8 @@ import type {
   SpawnThreadRequest,
   Thread,
   ThreadEvent,
-} from "@beanbag/core";
-import { assertNever } from "@beanbag/core";
+} from "@beanbag/agent-core";
+import { assertNever } from "@beanbag/agent-core";
 import { listCodexModels } from "./codex-models.js";
 import type {
   ProviderAdapter,

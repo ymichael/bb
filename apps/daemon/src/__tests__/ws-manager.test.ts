@@ -68,21 +68,6 @@ describe("WSManager", () => {
       expect(socket.send).not.toHaveBeenCalled();
     });
 
-    it("supports task entity subscriptions", () => {
-      const socket = createMockSocket();
-      wsManager.handleConnection(socket);
-
-      socket._emit(
-        "message",
-        Buffer.from(JSON.stringify({ type: "subscribe", entity: "task", id: "task-1" })),
-      );
-
-      wsManager.broadcast("task", "task-1");
-      expect(socket.send).toHaveBeenCalledWith(
-        JSON.stringify({ type: "changed", entity: "task", id: "task-1" }),
-      );
-    });
-
     it("processes unsubscribe messages", () => {
       const socket = createMockSocket();
       wsManager.handleConnection(socket);

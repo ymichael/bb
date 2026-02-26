@@ -1,5 +1,5 @@
 import type { WebSocket } from "ws";
-import type { ClientMessage, RealtimeEntity, ServerMessage } from "@beanbag/core";
+import type { ClientMessage, RealtimeEntity, ServerMessage } from "@beanbag/agent-core";
 
 function subscriptionKey(entity: RealtimeEntity, id?: string): string {
   return id ? `${entity}:${id}` : entity;

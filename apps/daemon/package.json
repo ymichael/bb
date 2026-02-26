@@ -1,5 +1,5 @@
 {
-  "name": "@beanbag/daemon",
+  "name": "@beanbag/agent-server",
   "version": "0.0.1",
   "type": "module",
   "exports": {
@@ -21,7 +21,7 @@
     "test:e2e": "vitest run --dir src/__tests__/e2e"
   },
   "dependencies": {
-    "@beanbag/core": "workspace:*",
+    "@beanbag/agent-core": "workspace:*",
     "@beanbag/db": "workspace:*",
     "@hono/node-server": "^1.13.0",
     "@hono/node-ws": "^1.1.0",

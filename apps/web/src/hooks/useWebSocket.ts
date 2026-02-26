@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { assertNever, type ThreadEvent } from "@beanbag/core";
+import { assertNever, type ThreadEvent } from "@beanbag/agent-core";
 import { wsManager } from "../lib/ws";
 import { getThreadEvents } from "../lib/api";
 

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { ProjectFileSuggestion } from "@beanbag/core";
+import type { ProjectFileSuggestion } from "@beanbag/agent-core";
 import { useProjectFileSuggestions } from "./useApi";
 
 const FILE_MENTION_DEBOUNCE_MS = 120;
