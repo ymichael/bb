@@ -401,7 +401,7 @@ export function ThreadDetailView() {
     <PageShell
       scrollRef={containerRef}
       onScroll={handleScroll}
-      maxWidthClassName="max-w-[1400px]"
+      maxWidthClassName="max-w-[1160px]"
       contentClassName="gap-2 pt-0"
       footerUsesPromptPadding
       footer={
