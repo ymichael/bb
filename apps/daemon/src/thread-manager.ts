@@ -10,6 +10,13 @@ import { tmpdir } from "node:os";
 import { delimiter, join, resolve } from "node:path";
 import {
   assertNever,
+  createProviderEventEnvelope,
+  extractProviderThreadIdFromPersistedEventData,
+  extractTurnIdFromPersistedEventData,
+  getStringField,
+  resolveProviderEventMethod,
+  toRecord,
+  unwrapProviderEventPayload,
   type AvailableModel,
   type EnvironmentAdapter,
   type EnvironmentSession,
@@ -168,27 +175,9 @@ function resolveThreadShellPath(pathValue: string | undefined): string | undefin
   return prependPathEntry(pathValue, shimBinDir);
 }
 
-function asRecord(value: unknown): Record<string, unknown> | null {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-  return value as Record<string, unknown>;
-}
-
-function getStringField(
-  record: Record<string, unknown> | null,
-  key: string,
-): string | undefined {
-  const value = record?.[key];
-  return typeof value === "string" && value.length > 0 ? value : undefined;
-}
-
 function toProviderEventType(method: string): ThreadEventType {
   // Open provider/runtime set: upstream providers can add event methods.
   return method as ThreadEventType;
-}
-
-function toProviderEventData(params: unknown): ThreadEventData {
-  // Open provider/runtime set: preserve payload shape as delivered by provider.
-  return (params ?? {}) as ThreadEventData;
 }
 
 function toReasoningLevel(
@@ -666,7 +655,11 @@ export class ThreadManager implements ThreadOrchestrator {
     const allEvents = this.eventRepo.listByThread(threadId);
     // Walk backwards to find the last output event.
     for (let i = allEvents.length - 1; i >= 0; i--) {
-      const output = this.provider.outputFromEvent(allEvents[i]);
+      const hydratedEvent: ThreadEvent = {
+        ...allEvents[i],
+        data: unwrapProviderEventPayload(allEvents[i].data) as ThreadEvent["data"],
+      };
+      const output = this.provider.outputFromEvent(hydratedEvent);
       if (output !== undefined) return output;
     }
     return undefined;
@@ -1051,8 +1044,13 @@ export class ThreadManager implements ThreadOrchestrator {
     const events = this.eventRepo.listByThread(threadId) ?? [];
     for (let i = events.length - 1; i >= 0; i--) {
       const event = events[i];
-      const providerThreadId = this.provider.extractThreadIdFromEventData(
+      const normalizedProviderThreadId = extractProviderThreadIdFromPersistedEventData(
         event.data,
+      );
+      if (normalizedProviderThreadId) return normalizedProviderThreadId;
+
+      const providerThreadId = this.provider.extractThreadIdFromEventData(
+        unwrapProviderEventPayload(event.data),
       );
       if (providerThreadId) return providerThreadId;
     }
@@ -1075,7 +1073,8 @@ export class ThreadManager implements ThreadOrchestrator {
     const events = this.eventRepo.listByThread(threadId) ?? [];
     for (let i = events.length - 1; i >= 0; i--) {
       const event = events[i];
-      const normalizedType = this.provider.normalizeEventType(event.type);
+      const method = resolveProviderEventMethod(event.type, event.data);
+      const normalizedType = this.provider.normalizeEventType(method);
       const state = toTurnLifecycleState(normalizedType);
       if (state === "idle") return undefined;
       if (state === "active") {
@@ -1086,14 +1085,7 @@ export class ThreadManager implements ThreadOrchestrator {
   }
 
   private _extractTurnIdFromEventData(data: unknown): string | undefined {
-    const payload = asRecord(data);
-    if (!payload) return undefined;
-
-    const directTurnId =
-      getStringField(payload, "turnId") ?? getStringField(payload, "turn_id");
-    if (directTurnId) return directTurnId;
-
-    return getStringField(asRecord(payload.turn), "id");
+    return extractTurnIdFromPersistedEventData(data);
   }
 
   private async _ensureProviderSession(
@@ -1235,13 +1227,18 @@ export class ThreadManager implements ThreadOrchestrator {
     }
 
     const eventType = toProviderEventType(msg.method);
-    const eventData = toProviderEventData(msg.params);
+    const providerPayload = msg.params ?? {};
+    const eventData: ThreadEventData = createProviderEventEnvelope({
+      providerId: this.provider.id,
+      method: msg.method,
+      payload: providerPayload,
+    });
 
     const persistedEvent = this._appendEvent(threadId, eventType, eventData);
 
-    this._syncTitleFromEvent(threadId, msg.method, eventData);
+    this._syncTitleFromEvent(threadId, msg.method, providerPayload);
     this._syncStatusFromEvent(threadId, msg.method);
-    this._syncActiveTurnFromEvent(threadId, msg.method, eventData);
+    this._syncActiveTurnFromEvent(threadId, msg.method, providerPayload);
     this._maybeNotifyParentOnChildTurnCompletion(threadId, persistedEvent);
 
     if (this.provider.shouldBroadcastForEvent(msg.method)) {
@@ -1306,7 +1303,8 @@ export class ThreadManager implements ThreadOrchestrator {
     childThreadId: string,
     event: ThreadEvent,
   ): void {
-    const normalizedType = this.provider.normalizeEventType(event.type);
+    const eventMethod = resolveProviderEventMethod(event.type, event.data);
+    const normalizedType = this.provider.normalizeEventType(eventMethod);
     if (normalizedType !== "turn/completed" && normalizedType !== "turn/end") {
       return;
     }
@@ -1356,7 +1354,7 @@ export class ThreadManager implements ThreadOrchestrator {
   ): ThreadExecutionOptions {
     const model = getStringField(params, "model");
     const approvalPolicy = getStringField(params, "approvalPolicy");
-    const config = asRecord(params.config);
+    const config = toRecord(params.config);
     const reasoningLevel = toReasoningLevel(config?.model_reasoning_effort);
 
     let sandboxMode: ThreadExecutionOptions["sandboxMode"] | undefined;
@@ -1365,7 +1363,7 @@ export class ThreadManager implements ThreadOrchestrator {
         sandboxMode = toSandboxMode(params.sandbox);
         break;
       case "client/turn/start":
-        sandboxMode = toSandboxModeFromPolicy(asRecord(params.sandboxPolicy));
+        sandboxMode = toSandboxModeFromPolicy(toRecord(params.sandboxPolicy));
         break;
       default:
         return assertNever(type);
@@ -1741,7 +1739,8 @@ export class ThreadManager implements ThreadOrchestrator {
 
     const events = this.eventRepo.listByThread(threadId) ?? [];
     for (let i = events.length - 1; i >= 0; i -= 1) {
-      const normalizedType = this.provider.normalizeEventType(events[i].type);
+      const method = resolveProviderEventMethod(events[i].type, events[i].data);
+      const normalizedType = this.provider.normalizeEventType(method);
       const state = toTurnLifecycleState(normalizedType);
       if (state) return state;
     }

@@ -8,6 +8,14 @@ import type {
   ThreadEventData,
   ThreadEventType,
   ThreadExecutionOptions,
+  PersistedThreadEventData,
+} from "@beanbag/agent-core";
+import {
+  extractProviderThreadIdFromPersistedEventData,
+  extractTurnIdFromPersistedEventData,
+  getStringField,
+  normalizeThreadEventType,
+  toRecord,
 } from "@beanbag/agent-core";
 import type { DbConnection } from "./connection.js";
 import {
@@ -16,85 +24,6 @@ import {
   events,
 } from "./schema.js";
 
-function asRecord(value: unknown): Record<string, unknown> | null {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-  return value as Record<string, unknown>;
-}
-
-function getStringField(
-  record: Record<string, unknown> | null,
-  key: string,
-): string | undefined {
-  const value = record?.[key];
-  return typeof value === "string" && value.length > 0 ? value : undefined;
-}
-
-function normalizeEventType(type: string): string {
-  return type.toLowerCase().replaceAll(".", "/");
-}
-
-function extractTurnIdFromEventData(data: unknown): string | undefined {
-  const root = asRecord(data);
-  if (!root) return undefined;
-
-  const direct =
-    getStringField(root, "turnId") ??
-    getStringField(root, "turn_id");
-  if (direct) return direct;
-
-  const turn = asRecord(root.turn);
-  const turnId = getStringField(turn, "id");
-  if (turnId) return turnId;
-
-  const msg = asRecord(root.msg);
-  const msgTurnId =
-    getStringField(msg, "turn_id") ??
-    getStringField(msg, "turnId");
-  if (msgTurnId) return msgTurnId;
-
-  const payload = asRecord(root.payload);
-  if (!payload) return undefined;
-
-  return (
-    getStringField(payload, "turnId") ??
-    getStringField(payload, "turn_id") ??
-    getStringField(asRecord(payload.turn), "id") ??
-    getStringField(asRecord(payload.msg), "turn_id") ??
-    getStringField(asRecord(payload.msg), "turnId")
-  );
-}
-
-function extractProviderThreadIdFromEventData(data: unknown): string | undefined {
-  const root = asRecord(data);
-  if (!root) return undefined;
-
-  const candidates = [
-    root,
-    asRecord(root.msg),
-    asRecord(root.thread),
-    asRecord(root.payload),
-    asRecord(asRecord(root.payload)?.msg),
-    asRecord(asRecord(root.payload)?.thread),
-  ];
-
-  for (const candidate of candidates) {
-    if (!candidate) continue;
-
-    const threadId =
-      getStringField(candidate, "threadId") ??
-      getStringField(candidate, "thread_id") ??
-      getStringField(candidate, "conversationId") ??
-      getStringField(candidate, "conversation_id");
-    if (threadId) return threadId;
-
-    const thread = asRecord(candidate.thread);
-    const nestedThreadId = getStringField(thread, "id");
-    if (nestedThreadId) return nestedThreadId;
-  }
-
-  return undefined;
-}
-
 function deriveEventLookupFields(type: string, data: unknown): {
   normType: string;
   turnId?: string;
@@ -102,9 +31,9 @@ function deriveEventLookupFields(type: string, data: unknown): {
   isTurnLifecycle: boolean;
   isThreadIdentity: boolean;
 } {
-  const normType = normalizeEventType(type);
-  const turnId = extractTurnIdFromEventData(data);
-  const providerThreadId = extractProviderThreadIdFromEventData(data);
+  const normType = normalizeThreadEventType(type);
+  const turnId = extractTurnIdFromPersistedEventData(data);
+  const providerThreadId = extractProviderThreadIdFromPersistedEventData(data);
   const isTurnLifecycle =
     normType === "turn/start" ||
     normType === "turn/started" ||
@@ -121,10 +50,10 @@ function deriveEventLookupFields(type: string, data: unknown): {
 }
 
 function parseThreadExecutionOptions(
-  data: unknown,
+  data: PersistedThreadEventData,
 ): ThreadExecutionOptions | undefined {
-  const root = asRecord(data);
-  const execution = asRecord(root?.execution);
+  const root = toRecord(data);
+  const execution = toRecord(root?.execution);
   if (!execution) return undefined;
 
   const model = getStringField(execution, "model");

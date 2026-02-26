@@ -7,6 +7,10 @@ export type {
   ThreadEventDataByType,
   ThreadEventData,
   ThreadEventDataForType,
+  PersistedThreadEventDataForType,
+  PersistedThreadEventData,
+  ProviderEventEnvelopeMetadata,
+  ProviderEventEnvelope,
   ThreadEventOfType,
   ThreadEvent,
 } from "./types.js";
@@ -96,3 +100,14 @@ export type {
 
 export { toUIMessages } from "./to-ui-messages.js";
 export { assertNever } from "./assert-never.js";
+export { toRecord, getStringField } from "./unknown-helpers.js";
+export {
+  createProviderEventEnvelope,
+  decodeProviderEventEnvelope,
+  isProviderEventEnvelope,
+  unwrapProviderEventPayload,
+  resolveProviderEventMethod,
+  normalizeThreadEventType,
+  extractTurnIdFromPersistedEventData,
+  extractProviderThreadIdFromPersistedEventData,
+} from "./thread-event-normalization.js";

@@ -1,5 +1,10 @@
 import type { ThreadEvent } from "./types.js";
 import { assertNever } from "./assert-never.js";
+import {
+  normalizeThreadEventType,
+  resolveProviderEventMethod,
+  unwrapProviderEventPayload,
+} from "./thread-event-normalization.js";
 import type {
   ToUIMessagesOptions,
   UIAssistantReasoningMessage,
@@ -23,12 +28,16 @@ function toRecord(value: unknown): Record<string, unknown> | null {
   return value as Record<string, unknown>;
 }
 
-function normalizeEventType(type: string): string {
-  return type.toLowerCase().replaceAll(".", "/");
+function toEventData(value: unknown): unknown {
+  return unwrapProviderEventPayload(value);
+}
+
+function toEventRecord(value: unknown): Record<string, unknown> | null {
+  return toRecord(toEventData(value));
 }
 
 function getEventTypeCandidates(eventType: string): Set<string> {
-  const normalized = normalizeEventType(eventType);
+  const normalized = normalizeThreadEventType(eventType);
   const candidates = new Set<string>([normalized]);
 
   if (normalized.startsWith("codex/event/")) {
@@ -46,7 +55,7 @@ function getEventTypeCandidates(eventType: string): Set<string> {
 
 function eventTypeMatches(eventType: string, expected: string): boolean {
   const candidates = getEventTypeCandidates(eventType);
-  const normalizedExpected = normalizeEventType(expected);
+  const normalizedExpected = normalizeThreadEventType(expected);
   return (
     candidates.has(normalizedExpected) ||
     candidates.has(normalizedExpected.replaceAll("_", "/")) ||
@@ -155,11 +164,12 @@ function extractText(value: unknown): string {
 }
 
 function getEventType(event: ThreadEvent): string {
-  return normalizeEventType(event.type);
+  const providerMethod = resolveProviderEventMethod(event.type, event.data);
+  return normalizeThreadEventType(providerMethod);
 }
 
 function getTurnId(data: unknown): string | undefined {
-  const params = toRecord(data);
+  const params = toEventRecord(data);
   if (!params) return undefined;
 
   if (typeof params.turnId === "string" && params.turnId.length > 0) {
@@ -187,7 +197,7 @@ function getTurnId(data: unknown): string | undefined {
 }
 
 function getItemRecord(data: unknown): Record<string, unknown> | null {
-  const params = toRecord(data);
+  const params = toEventRecord(data);
   if (!params) return null;
 
   const directItem = toRecord(params.item);
@@ -209,7 +219,7 @@ function getItemId(data: unknown): string | undefined {
   const itemId = getStringField(item, "id");
   if (itemId) return itemId;
 
-  const params = toRecord(data);
+  const params = toEventRecord(data);
   const paramsItemId = getStringField(params, "itemId");
   if (paramsItemId) return paramsItemId;
 
@@ -221,7 +231,7 @@ function getItemId(data: unknown): string | undefined {
 }
 
 function getEventPayloadRecord(data: unknown): Record<string, unknown> | null {
-  const params = toRecord(data);
+  const params = toEventRecord(data);
   if (!params) return null;
   const msg = toRecord(params.msg);
   return msg ?? params;
@@ -370,7 +380,7 @@ function parseUserFromClientThreadStart(
     return null;
   }
 
-  const payload = toRecord(event.data);
+  const payload = toEventRecord(event.data);
   const parsedInput = parsePromptInput(payload?.input);
   if (!parsedInput) return null;
   const hasMatchingUserItem = userItemSignatures.has(userMessageSignature(parsedInput));
@@ -401,7 +411,7 @@ function parseAssistantDeltaText(
     return null;
   }
 
-  const params = toRecord(event.data);
+  const params = toEventRecord(event.data);
   const text = extractText(params?.delta ?? params?.text ?? params?.content);
   return text.length > 0 ? text : null;
 }
@@ -433,7 +443,7 @@ function parseReasoningDeltaText(
     return null;
   }
 
-  const params = toRecord(event.data);
+  const params = toEventRecord(event.data);
   const text = extractText(params?.delta ?? params?.text ?? params?.content);
   return text.length > 0 ? text : null;
 }
@@ -888,7 +898,7 @@ function parseOperationMessage(
   options?: { includeOptionalOperations?: boolean },
 ): UIOperationMessage | null {
   if (eventTypeMatches(eventType, "turn/plan/updated")) {
-    const payload = toRecord(event.data);
+    const payload = toEventRecord(event.data);
     const plan = Array.isArray(payload?.plan) ? payload.plan : [];
     const explanation = getStringField(payload, "explanation");
     const steps = plan
@@ -919,7 +929,7 @@ function parseOperationMessage(
   }
 
   if (eventTypeMatches(eventType, "item/mcptoolcall/progress")) {
-    const payload = toRecord(event.data);
+    const payload = toEventRecord(event.data);
     const detail =
       getStringField(payload, "message") ??
       extractText(payload?.detail);
@@ -938,7 +948,7 @@ function parseOperationMessage(
   }
 
   if (eventTypeMatchesAny(eventType, ["deprecationnotice", "deprecation_notice"])) {
-    const payload = toRecord(event.data);
+    const payload = toEventRecord(event.data);
     const detail =
       getStringField(payload, "summary") ??
       getStringField(payload, "details") ??
@@ -965,7 +975,7 @@ function parseOperationMessage(
       "windows_worldwritable_warning",
     ])
   ) {
-    const payload = toRecord(event.data);
+    const payload = toEventRecord(event.data);
     const detail =
       getStringField(payload, "summary") ??
       getStringField(payload, "details") ??
@@ -1004,7 +1014,7 @@ function parseOperationMessage(
     options?.includeOptionalOperations &&
     eventTypeMatches(eventType, "turn/diff/updated")
   ) {
-    const params = toRecord(event.data);
+    const params = toEventRecord(event.data);
     return {
       kind: "operation",
       id: messageId(event.threadId, "op", `turn-diff:${event.seq}`),
@@ -1025,7 +1035,7 @@ function parseOperationMessage(
 function parseErrorMessage(event: ThreadEvent, eventType: string): UIErrorMessage | null {
   if (!eventType.includes("error")) return null;
 
-  const payload = toRecord(event.data);
+  const payload = toEventRecord(event.data);
   const error = toRecord(payload?.error);
   const message =
     getStringField(payload, "message") ??

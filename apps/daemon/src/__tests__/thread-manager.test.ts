@@ -1060,13 +1060,25 @@ describe("ThreadManager", () => {
         threadId: "t-new",
         seq: 2,
         type: "item/started",
-        data: { itemId: "i1" },
+        data: expect.objectContaining({
+          __bb_provider_event: expect.objectContaining({
+            providerId: "codex",
+            method: "item/started",
+          }),
+          payload: { itemId: "i1" },
+        }),
       });
       expect(eventRepo.create).toHaveBeenNthCalledWith(3, {
         threadId: "t-new",
         seq: 3,
         type: "item/completed",
-        data: { content: "done" },
+        data: expect.objectContaining({
+          __bb_provider_event: expect.objectContaining({
+            providerId: "codex",
+            method: "item/completed",
+          }),
+          payload: { content: "done" },
+        }),
       });
     });
 
@@ -1124,14 +1136,20 @@ describe("ThreadManager", () => {
         threadId: "t-new",
         seq: 2,
         type: "item/completed",
-        data: {
-          turnId: "turn-1",
-          item: {
-            type: "agentMessage",
-            id: "msg-1",
-            text: "canonical item event",
+        data: expect.objectContaining({
+          __bb_provider_event: expect.objectContaining({
+            providerId: "codex",
+            method: "item/completed",
+          }),
+          payload: {
+            turnId: "turn-1",
+            item: {
+              type: "agentMessage",
+              id: "msg-1",
+              text: "canonical item event",
+            },
           },
-        },
+        }),
       });
       expect(eventRepo.create).not.toHaveBeenCalledWith(
         expect.objectContaining({
@@ -1168,7 +1186,13 @@ describe("ThreadManager", () => {
         threadId: "t-new",
         seq: 2,
         type: "item/agentMessage/delta",
-        data: { delta: "hel" },
+        data: expect.objectContaining({
+          __bb_provider_event: expect.objectContaining({
+            providerId: "codex",
+            method: "item/agentMessage/delta",
+          }),
+          payload: { delta: "hel" },
+        }),
       });
       expect(ws.broadcast).not.toHaveBeenCalled();
     });
@@ -1827,7 +1851,13 @@ describe("ThreadManager", () => {
         threadId: "t-new",
         seq: 2,
         type: "turn/end",
-        data: {},
+        data: expect.objectContaining({
+          __bb_provider_event: expect.objectContaining({
+            providerId: "codex",
+            method: "turn/end",
+          }),
+          payload: {},
+        }),
       });
     });
 

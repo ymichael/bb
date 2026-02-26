@@ -7,7 +7,7 @@ import type {
   Thread,
   ThreadEvent,
 } from "@beanbag/agent-core";
-import { assertNever } from "@beanbag/agent-core";
+import { assertNever, unwrapProviderEventPayload } from "@beanbag/agent-core";
 import { listCodexModels } from "./codex-models.js";
 import type {
   ProviderAdapter,
@@ -152,7 +152,7 @@ function outputFromEvent(event: ThreadEvent): string | undefined {
   const normalizedType = normalizeProviderEventType(event.type);
   if (normalizedType !== "item/completed") return undefined;
 
-  const payload = asRecord(event.data);
+  const payload = asRecord(unwrapProviderEventPayload(event.data));
   const item = asRecord(payload?.item);
   if (!item) return undefined;
   if (item.type !== "agentMessage") return undefined;

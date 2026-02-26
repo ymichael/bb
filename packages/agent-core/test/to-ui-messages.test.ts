@@ -31,6 +31,44 @@ function assertMonotonicSourceSeq(messages: UIMessage[]): void {
 }
 
 describe("toUIMessages replay coverage", () => {
+  it("projects provider-envelope payloads with the same output as raw events", () => {
+    const events: ThreadEvent[] = [
+      {
+        id: "evt-1",
+        threadId: "thread-1",
+        seq: 1,
+        type: "item/completed",
+        data: {
+          __bb_provider_event: {
+            schema: "beanbag/provider-event-envelope",
+            version: 1,
+            providerId: "codex",
+            method: "item/completed",
+            observedAt: 1,
+          },
+          payload: {
+            threadId: "thread-1",
+            turnId: "turn-1",
+            item: {
+              type: "agentMessage",
+              id: "assistant-1",
+              text: "Envelope output",
+            },
+          },
+        },
+        createdAt: 1,
+      },
+    ];
+
+    const projected = toUIMessages(events, { threadStatus: "idle" });
+    expect(projected).toHaveLength(1);
+    expect(projected[0]?.kind).toBe("assistant-text");
+    if (projected[0]?.kind === "assistant-text") {
+      expect(projected[0].text).toBe("Envelope output");
+      expect(projected[0].turnId).toBe("turn-1");
+    }
+  });
+
   it("projects the direct raw-events fixture with stable, deduplicated output", () => {
     const events = loadFixture("thread-JQh4-pAyGlgHLACZ8AXY2-events.json");
     expect(events.length).toBeGreaterThan(500);

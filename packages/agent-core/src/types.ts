@@ -42,6 +42,23 @@ export type AppThreadEventType =
   | "client/turn/start"
   | "system/error";
 
+export const PROVIDER_EVENT_ENVELOPE_SCHEMA =
+  "beanbag/provider-event-envelope" as const;
+export const PROVIDER_EVENT_ENVELOPE_VERSION = 1 as const;
+
+export interface ProviderEventEnvelopeMetadata {
+  schema: typeof PROVIDER_EVENT_ENVELOPE_SCHEMA;
+  version: typeof PROVIDER_EVENT_ENVELOPE_VERSION;
+  providerId: string;
+  method: string;
+  observedAt: number;
+}
+
+export interface ProviderEventEnvelope<TPayload = unknown> {
+  __bb_provider_event: ProviderEventEnvelopeMetadata;
+  payload: TPayload;
+}
+
 export type ThreadTurnInitiator = "user" | "agent" | "system";
 
 export interface ClientExecutionOptionsSnapshot {
@@ -82,10 +99,19 @@ export type ThreadEventDataByType = CodexServerNotificationParamsByMethod & {
   "system/error": SystemErrorEventData;
 };
 
-export type ThreadEventData = ThreadEventDataByType[ThreadEventType];
+export type ThreadEventData =
+  | ThreadEventDataByType[ThreadEventType]
+  | ProviderEventEnvelope;
 
 export type ThreadEventDataForType<TType extends ThreadEventType> =
   ThreadEventDataByType[TType];
+
+export type PersistedThreadEventDataForType<TType extends ThreadEventType> =
+  TType extends AppThreadEventType
+    ? ThreadEventDataForType<TType>
+    : ThreadEventDataForType<TType> | ProviderEventEnvelope;
+
+export type PersistedThreadEventData = PersistedThreadEventDataForType<ThreadEventType>;
 
 // Event (streaming log from codex)
 export interface ThreadEvent<
@@ -95,7 +121,7 @@ export interface ThreadEvent<
   threadId: string;
   seq: number;
   type: TType;
-  data: ThreadEventDataForType<TType>;
+  data: PersistedThreadEventDataForType<TType>;
   createdAt: number;
 }
 
