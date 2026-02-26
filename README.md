@@ -136,6 +136,7 @@ Provider and environment selection:
 
 - `BEANBAG_PROVIDER` selects the active provider adapter (`codex`, `pi-mono`, `claude-code`).
 - `BEANBAG_ENVIRONMENT` selects the execution environment adapter (`local`, `worktree`).
+- `BEANBAG_PI_PROVIDER_COMMAND` overrides the Pi executable used by the `pi-mono` adapter bridge (default: `pi`).
 - `GET /api/v1/system/providers` and `GET /api/v1/system/environments` expose adapter catalogs.
 
 ## Typed Codex Event Schema
