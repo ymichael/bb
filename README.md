@@ -1,7 +1,7 @@
 # Beanbag
 
 Beanbag is a local-first coding-agent workspace. A local daemon runs
-`codex app-server`, persists threads/events in SQLite, and serves both a web UI
+provider adapters, persists threads/events in SQLite, and serves both a web UI
 and a CLI.
 
 ## Monorepo Layout
@@ -12,7 +12,8 @@ apps/
   web/      React + Vite frontend
   cli/      bb CLI for daemon/thread operations
 packages/
-  core/     Shared types/schemas + event -> UI message projection
+  core/     Shared contracts/types/schemas + event -> UI message projection
+  ui-core/  Reusable ADE UI primitives (layout, timeline, prompt shell, panels)
   db/       Drizzle schema, migrations, repositories (SQLite)
 ```
 
@@ -56,7 +57,7 @@ pnpm bb --help
 
 Notes:
 
-- `dist/` output is generated for `@beanbag/agent-core`, `@beanbag/db`, `@beanbag/agent-server`, and `@beanbag/cli`.
+- `dist/` output is generated for `@beanbag/agent-core`, `@beanbag/ui-core`, `@beanbag/db`, `@beanbag/agent-server`, and `@beanbag/cli`.
 - `pnpm dev` starts the daemon on `:3333`.
 - CLI uses `BB_DAEMON_URL` when set, otherwise defaults to `http://localhost:3333`.
 
@@ -93,7 +94,7 @@ Persisted status model:
 `created -> provisioning -> idle|active|provisioning_failed`
 
 Transition rules are centralized in
-`apps/agent-server/src/thread-status-machine.ts` (XState-based).
+`apps/daemon/src/thread-status-machine.ts`.
 
 - `spawn`: creates a DB thread, then provisions async.
 - `tell`: sends `turn/start` or `turn/steer` (`mode=auto|start|steer`).
@@ -105,8 +106,8 @@ Transition rules are centralized in
 Thread execution context is exposed to agent shells as:
 
 - `BB_PROJECT_ID`
-- `BB_TASK_ID` (task-linked threads)
 - `BB_THREAD_ID`
+- `BB_ENVIRONMENT_ID`
 - `BB_DAEMON_URL` (optional daemon endpoint override; default is `http://localhost:3333`)
 
 `bb` is also kept on `PATH` for agent shell commands.
@@ -116,33 +117,35 @@ CLI commands that need project context accept `--project`, or fall back to
 
 Creation defaults:
 
-- `bb task create` defaults parent task to `BB_TASK_ID` (opt out with `--no-context-parent`).
-- `bb thread spawn` defaults task/parent-thread to `BB_TASK_ID`/`BB_THREAD_ID` (opt out with `--no-context-task` and `--no-context-parent-thread`).
-- `bb thread spawn --task-role ...` requires task context (`--task <id>` or `BB_TASK_ID`).
+- `bb thread spawn` defaults parent-thread context to `BB_THREAD_ID` (opt out with `--no-context-parent-thread`).
+- `bb thread spawn --role ...` attaches a predefined agent role to the thread.
 
 Status output defaults:
 
-- `bb status` always prints `Project`, `Task`, and `Thread` ids.
-- When task context is available, `bb status` also prints `Task Title` and `Task Description`.
-- `bb task status` and `bb thread status` are concise by default (no recent-event block unless requested).
+- `bb status` prints `Project` and `Thread` ids from the current context.
+- `bb thread status` is concise by default (no recent-event block unless requested).
 
 Status event flags:
 
-- `bb task status --recent-events <n> [--event-mode summary|raw]`
 - `bb thread status --recent-events <n> [--event-mode summary|raw] [--include-low-signal]`
 
 Show command context fallback:
 
-- `bb task show [id]` defaults to `BB_TASK_ID` when `id` is omitted.
 - `bb thread show [id]` defaults to `BB_THREAD_ID` when `id` is omitted.
+
+Provider and environment selection:
+
+- `BEANBAG_PROVIDER` selects the active provider adapter (`codex`, `pi-mono`, `claude-code`).
+- `BEANBAG_ENVIRONMENT` selects the execution environment adapter (`local`, `worktree`).
+- `GET /api/v1/system/providers` and `GET /api/v1/system/environments` expose adapter catalogs.
 
 ## Typed Codex Event Schema
 
-`packages/agent-core` derives thread event types from generated Codex app-server
+`packages/core` derives thread event types from generated Codex app-server
 TypeScript schemas in:
 
-- `packages/agent-core/src/generated/codex-app-server/schema/`
-- `packages/agent-core/src/generated/codex-app-server/index.ts`
+- `packages/core/src/generated/codex-app-server/schema/`
+- `packages/core/src/generated/codex-app-server/index.ts`
 
 Regenerate:
 

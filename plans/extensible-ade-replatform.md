@@ -138,6 +138,13 @@ Composable rendering and layout seams.
 - `pnpm typecheck` and `pnpm test` pass.
 - Main app supports projects + threads only.
 
+### Completion Snapshot
+
+- Completed in commits:
+  - `b169279`, `cc23e63`, `98052fd`, `33f4fbf`
+- Task model removed from core/db/daemon/cli/web.
+- Thread-first flows validated with green typecheck + tests.
+
 ## Phase 2: Boundary Extraction (no extension runtime)
 
 ### Goals
@@ -157,6 +164,13 @@ Composable rendering and layout seams.
 - All runtime paths flow through explicit adapter interfaces.
 - New providers/environments can be added without cross-cutting edits.
 
+### Completion Snapshot
+
+- Completed in commit:
+  - `07bbe84`
+- Added explicit runtime contracts in `@beanbag/agent-core`.
+- Daemon now composes provider, environment, and scheduler boundaries through registries and interface contracts.
+
 ## Phase 3: UI Core Hardening
 
 ### Goals
@@ -175,6 +189,13 @@ Composable rendering and layout seams.
 - `@beanbag/app` composes UI mostly via `@beanbag/ui-core` primitives.
 - Replacing a panel/renderer is a local composition change.
 
+### Completion Snapshot
+
+- Completed in commit:
+  - `50d6ef1`
+- Introduced `@beanbag/ui-core` with three-pane layout, conversation timeline, prompt composer shell, and context panel primitives.
+- Thread detail view now uses `ui-core` primitives with right-panel runtime/artifact/diff/markdown surfaces.
+
 ## Phase 4: Multi-Provider + Multi-Environment First-Party Adapters
 
 ### Goals
@@ -190,6 +211,14 @@ Composable rendering and layout seams.
 ### Acceptance Criteria
 
 - Runtime can run with different provider/environment combinations with no core refactor.
+
+### Completion Snapshot
+
+- Completed in commit:
+  - `07bbe84`
+- Provider adapters: `codex`, `pi-mono`, `claude-code`.
+- Environment adapters: `local`, `worktree`.
+- Capability-aware fallback added in server model listing and app prompt options.
 
 ## Phase 5: Scheduler/Automations
 
