@@ -172,6 +172,7 @@ function diffStats(
 
 const DIFF_VIEW_OPTIONS = {
   overflow: "scroll",
+  diffStyle: "unified",
   themeType: "system",
   disableFileHeader: true,
 } as const;
