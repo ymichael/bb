@@ -860,8 +860,9 @@ function OperationRow({
   message: UIOperationMessage;
   initialExpanded?: boolean;
 }) {
+  const { isExpanded, onToggle } = useLatestInitialExpanded(initialExpanded);
+
   if (message.opType === "provisioning") {
-    const { isExpanded, onToggle } = useLatestInitialExpanded(initialExpanded);
     const detailLines = (message.detail ?? "")
       .split("\n")
       .map((line) => line.trim())

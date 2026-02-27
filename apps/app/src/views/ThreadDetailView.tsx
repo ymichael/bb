@@ -319,6 +319,7 @@ export function ThreadDetailView() {
 
   const handleSend = () => {
     if (promptInput.length === 0) return;
+    scrollToBottom();
     tellThread.mutate(
       {
         id: thread.id,
