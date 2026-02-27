@@ -10,6 +10,7 @@ import {
   useTellThread,
   useCommitThread,
   useStopThread,
+  useMarkThreadRead,
   useThreadDefaultExecutionOptions,
   useUploadPromptAttachment,
 } from "../hooks/useApi";
@@ -176,6 +177,7 @@ export function ThreadDetailView() {
   const tellThread = useTellThread();
   const commitThread = useCommitThread();
   const stopThread = useStopThread();
+  const markThreadRead = useMarkThreadRead();
   const uploadPromptAttachment = useUploadPromptAttachment();
   const promptDraft = usePromptDraftStorage({ projectId, threadId });
   const fileMentions = usePromptFileMentions(projectId);
@@ -185,6 +187,7 @@ export function ThreadDetailView() {
     Record<string, UIMessage[]>
   >({});
   const [isChangeListExpanded, setIsChangeListExpanded] = useState(false);
+  const markedReadKeysRef = useRef<Set<string>>(new Set());
   const message = promptDraft.text;
   const promptInput = useMemo(
     () =>
@@ -260,6 +263,21 @@ export function ThreadDetailView() {
     setLoadingToolGroupIds(new Set());
     setToolGroupMessagesById({});
   }, [threadId]);
+
+  useEffect(() => {
+    if (!thread) return;
+    if ((thread.lastReadAt ?? 0) >= thread.updatedAt) return;
+
+    const marker = `${thread.id}:${thread.updatedAt}`;
+    if (markedReadKeysRef.current.has(marker)) return;
+
+    markedReadKeysRef.current.add(marker);
+    markThreadRead.mutate(thread.id, {
+      onError: () => {
+        markedReadKeysRef.current.delete(marker);
+      },
+    });
+  }, [markThreadRead, thread]);
 
   const handleLoadToolGroupMessages = useCallback(
     (entry: ThreadDetailToolGroupRow) => {

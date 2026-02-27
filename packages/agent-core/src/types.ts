@@ -38,6 +38,7 @@ export interface Thread {
   environmentId?: string;
   parentThreadId?: string;
   archivedAt?: number;
+  lastReadAt?: number;
   createdAt: number;
   updatedAt: number;
 }

@@ -106,6 +106,13 @@
       "when": 1772204400000,
       "tag": "0014_thread_agent_diff_stats",
       "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "6",
+      "when": 1772215200000,
+      "tag": "0015_thread_read_state",
+      "breakpoints": true
     }
   ]
 }

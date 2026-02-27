@@ -140,6 +140,7 @@ export interface ThreadOrchestrator {
   ): Promise<void>;
   stop(threadId: string): void;
   archive(threadId: string): void;
+  markRead(threadId: string): Thread;
   commitThread(
     threadId: string,
     request?: CommitThreadRequest,

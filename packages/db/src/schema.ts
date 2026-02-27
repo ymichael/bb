@@ -32,6 +32,7 @@ export const threads = sqliteTable(
     agentDiffCapturedAt: integer("agent_diff_captured_at"),
     parentThreadId: text("parent_thread_id"),
     archivedAt: integer("archived_at"),
+    lastReadAt: integer("last_read_at").notNull().default(0),
     createdAt: integer("created_at").notNull(),
     updatedAt: integer("updated_at").notNull(),
   },

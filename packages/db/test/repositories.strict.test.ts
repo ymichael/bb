@@ -93,4 +93,29 @@ describe("repository strict normalization", () => {
       expect.objectContaining({ id: childThread.id, parentThreadId: "parent-1" }),
     ]);
   });
+
+  it("creates thread records with lastReadAt initialized", () => {
+    const projectId = createProjectId();
+    const thread = threads.create({ projectId });
+
+    expect(thread.lastReadAt).toBeTypeOf("number");
+    expect(thread.lastReadAt).toBeGreaterThan(0);
+  });
+
+  it("marks a thread as read without changing updatedAt", () => {
+    const projectId = createProjectId();
+    const thread = threads.create({ projectId });
+
+    sqlite.exec(
+      `UPDATE threads SET updated_at=${thread.updatedAt + 5000}, last_read_at=${thread.lastReadAt ?? 0} WHERE id='${thread.id}'`,
+    );
+
+    const before = threads.getById(thread.id);
+    expect(before).toBeDefined();
+
+    const marked = threads.markRead(thread.id, before!.updatedAt);
+    expect(marked).toBeDefined();
+    expect(marked!.lastReadAt).toBe(before!.updatedAt);
+    expect(marked!.updatedAt).toBe(before!.updatedAt);
+  });
 });

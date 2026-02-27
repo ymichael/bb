@@ -40,6 +40,7 @@ function mockThreadManager(): ThreadManager {
     tell: vi.fn(),
     stop: vi.fn(),
     archive: vi.fn(),
+    markRead: vi.fn(),
     mergeThread: vi.fn(),
     getById: vi.fn(),
     getWorkStatus: vi.fn(),
@@ -669,6 +670,41 @@ describe("Thread routes", () => {
 
       expect(res.status).toBe(404);
       expect(threadManager.archive).not.toHaveBeenCalled();
+    });
+  });
+
+
+  describe("POST /threads/:id/read", () => {
+    it("marks a thread as read", async () => {
+      const thread = makeThread({ lastReadAt: 1000, updatedAt: 2000 });
+      const updatedThread = makeThread({ lastReadAt: 2000, updatedAt: 2000 });
+      (threadManager.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        thread,
+      );
+      (threadManager.markRead as ReturnType<typeof vi.fn>).mockReturnValue(
+        updatedThread,
+      );
+
+      const res = await app.request("/threads/thread-1/read", {
+        method: "POST",
+      });
+
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual(updatedThread);
+      expect(threadManager.markRead).toHaveBeenCalledWith("thread-1");
+    });
+
+    it("returns 404 when thread not found", async () => {
+      (threadManager.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        undefined,
+      );
+
+      const res = await app.request("/threads/nonexistent/read", {
+        method: "POST",
+      });
+
+      expect(res.status).toBe(404);
+      expect(threadManager.markRead).not.toHaveBeenCalled();
     });
   });
 

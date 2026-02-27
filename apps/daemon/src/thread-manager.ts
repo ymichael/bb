@@ -92,6 +92,26 @@ interface ActiveEnvironmentRuntime {
   session: EnvironmentSession;
 }
 
+interface ThreadTimelineCacheEntry {
+  latestSeq: number;
+  threadStatus: Thread["status"] | undefined;
+  byRequestKey: Map<string, ThreadTimelineResponse>;
+}
+
+// Open provider/runtime event type set: unknown values are intentionally not filtered.
+const TIMELINE_NOISE_EVENT_TYPES: readonly string[] = [
+  "thread/started",
+  "thread/name/updated",
+  "account/rateLimits/updated",
+  "thread/tokenUsage/updated",
+  "item/reasoning/summaryPartAdded",
+  "codex/event/agent_message_delta",
+  "codex/event/agent_message_content_delta",
+  "codex/event/agent_reasoning_delta",
+  "codex/event/reasoning_content_delta",
+  "codex/event/exec_command_output_delta",
+];
+
 function resolveBbBinDir(pathValue: string | undefined): string | undefined {
   if (!pathValue) return undefined;
   for (const pathEntry of pathValue.split(delimiter)) {
@@ -280,6 +300,8 @@ export class ThreadManager implements ThreadOrchestrator {
   private turnLifecycleEpochs = new Map<string, number>();
   /** Fallback dedupe keyed by turn lifecycle epoch when completion events omit turn IDs. */
   private lastNotifiedCompletionEpochs = new Map<string, number>();
+  /** Memoized timeline projection per thread until event sequence or thread status changes. */
+  private timelineByThread = new Map<string, ThreadTimelineCacheEntry>();
   private rpcIdCounter = 0;
   private threadShellPath: string | undefined;
   private providerCatalog: SystemProviderInfo[];
@@ -684,6 +706,25 @@ export class ThreadManager implements ThreadOrchestrator {
     this.ws.broadcast("thread", threadId);
   }
 
+
+  markRead(threadId: string): Thread {
+    const thread = this.threadRepo.getById(threadId);
+    if (!thread) {
+      throw threadNotFoundError(threadId);
+    }
+
+    const updated = this.threadRepo.markRead(threadId, thread.updatedAt);
+    if (!updated) {
+      throw threadNotFoundError(threadId);
+    }
+
+    if ((thread.lastReadAt ?? 0) !== updated.lastReadAt) {
+      this.ws.broadcast("thread", threadId);
+    }
+
+    return updated;
+  }
+
   /**
    * Get events for a thread, optionally after a given sequence number.
    */
@@ -697,7 +738,26 @@ export class ThreadManager implements ThreadOrchestrator {
     includeToolGroupMessages: boolean = false,
   ): ThreadTimelineResponse {
     const thread = this.threadRepo.getById(threadId);
-    const events = this.eventRepo.listByThread(threadId, undefined, limit);
+    const latestSeq = this.eventRepo.getLatestSeq(threadId);
+    const requestKey = `${limit ?? "all"}:${includeToolGroupMessages ? "with-tool-messages" : "summary-only"}`;
+    const existingCache = this.timelineByThread.get(threadId);
+    if (
+      existingCache &&
+      existingCache.latestSeq === latestSeq &&
+      existingCache.threadStatus === thread?.status
+    ) {
+      const cached = existingCache.byRequestKey.get(requestKey);
+      if (cached) {
+        return cached;
+      }
+    }
+
+    const events = this.eventRepo.listByThread(
+      threadId,
+      undefined,
+      limit,
+      TIMELINE_NOISE_EVENT_TYPES,
+    );
     const uiMessages = toUIMessages(events, {
       includeDebugRawEvents: false,
       includeOptionalOperations: false,
@@ -709,7 +769,23 @@ export class ThreadManager implements ThreadOrchestrator {
     const rows = buildThreadDetailRows(visibleMessages, {
       includeToolGroupMessages,
     });
-    return { rows };
+    const timeline = { rows };
+
+    if (
+      !existingCache ||
+      existingCache.latestSeq !== latestSeq ||
+      existingCache.threadStatus !== thread?.status
+    ) {
+      this.timelineByThread.set(threadId, {
+        latestSeq,
+        threadStatus: thread?.status,
+        byRequestKey: new Map([[requestKey, timeline]]),
+      });
+    } else {
+      existingCache.byRequestKey.set(requestKey, timeline);
+    }
+
+    return timeline;
   }
 
   getToolGroupMessages(
@@ -1596,6 +1672,7 @@ export class ThreadManager implements ThreadOrchestrator {
       type,
       data,
     });
+    this.timelineByThread.delete(threadId);
     if (created) return created;
     return {
       id: "",

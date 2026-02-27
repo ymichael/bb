@@ -313,6 +313,17 @@ export function useArchiveThread() {
   });
 }
 
+export function useMarkThreadRead() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.markThreadRead(id),
+    onSuccess: (thread) => {
+      queryClient.setQueryData<Thread>(["thread", thread.id], thread);
+      queryClient.invalidateQueries({ queryKey: ["threads"] });
+    },
+  });
+}
+
 export function useCommitThread() {
   const queryClient = useQueryClient();
   return useMutation({

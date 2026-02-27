@@ -137,6 +137,7 @@ function createMocks() {
     getById: vi.fn(),
     list: vi.fn(),
     update: vi.fn(),
+    markRead: vi.fn(),
     delete: vi.fn(),
   } as unknown as ThreadRepository;
 
@@ -191,6 +192,7 @@ describe("ThreadManager", () => {
         getById: vi.fn(),
         list: vi.fn(),
         update: vi.fn(),
+        markRead: vi.fn(),
         delete: vi.fn(),
       } as unknown as ThreadRepository;
 

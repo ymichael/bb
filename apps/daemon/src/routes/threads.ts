@@ -245,6 +245,18 @@ export function createThreadRoutes(
         return sendRouteError(c, err);
       }
     })
+    .post("/:id/read", async (c) => {
+      try {
+        const thread = threadManager.getById(c.req.param("id"));
+        if (!thread) {
+          return sendRouteError(c, threadNotFoundError(c.req.param("id")));
+        }
+        const updated = threadManager.markRead(c.req.param("id"));
+        return c.json(updated);
+      } catch (err) {
+        return sendRouteError(c, err);
+      }
+    })
     .get("/:id/work-status", async (c) => {
       try {
         const thread = threadManager.getById(c.req.param("id"));

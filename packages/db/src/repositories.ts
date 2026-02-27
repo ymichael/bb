@@ -1,4 +1,4 @@
-import { eq, and, sql, gt, isNull, desc, inArray } from "drizzle-orm";
+import { eq, and, sql, gt, isNull, desc, inArray, notInArray } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import type {
   Project,
@@ -239,6 +239,7 @@ export class ThreadRepository {
       agentDiffCapturedAt: null,
       parentThreadId: data.parentThreadId ?? null,
       archivedAt: null,
+      lastReadAt: now,
       createdAt: now,
       updatedAt: now,
     };
@@ -292,6 +293,7 @@ export class ThreadRepository {
       environmentId?: string | null;
       agentDiffStats?: ThreadAgentDiffStats | null;
       archivedAt?: number | null;
+      lastReadAt?: number;
     },
     opts?: {
       touchUpdatedAt?: boolean;
@@ -319,6 +321,7 @@ export class ThreadRepository {
       updates.agentDiffCapturedAt = data.agentDiffStats?.capturedAt ?? null;
     }
     if (data.archivedAt !== undefined) updates.archivedAt = data.archivedAt;
+    if (data.lastReadAt !== undefined) updates.lastReadAt = data.lastReadAt;
 
     this.db.update(threads).set(updates).where(eq(threads.id, id)).run();
     return this.getById(id);
@@ -326,6 +329,31 @@ export class ThreadRepository {
 
   delete(id: string): void {
     this.db.delete(threads).where(eq(threads.id, id)).run();
+  }
+
+  markRead(id: string, readAt: number): Thread | undefined {
+    if (!Number.isFinite(readAt) || readAt <= 0) {
+      throw new Error(`Invalid thread read timestamp: ${readAt}`);
+    }
+
+    const existing = this.db
+      .select()
+      .from(threads)
+      .where(eq(threads.id, id))
+      .get();
+    if (!existing) return undefined;
+
+    const nextReadAt = Math.max(existing.lastReadAt, Math.floor(readAt));
+    if (nextReadAt <= existing.lastReadAt) {
+      return this.rowToThread(existing);
+    }
+
+    this.db
+      .update(threads)
+      .set({ lastReadAt: nextReadAt })
+      .where(eq(threads.id, id))
+      .run();
+    return this.getById(id);
   }
 
   private rowToThread(row: typeof threads.$inferSelect): Thread {
@@ -353,6 +381,7 @@ export class ThreadRepository {
       agentDiffStats,
       parentThreadId: row.parentThreadId ?? undefined,
       archivedAt: row.archivedAt ?? undefined,
+      lastReadAt: row.lastReadAt,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
     };
@@ -398,10 +427,18 @@ export class EventRepository {
     };
   }
 
-  listByThread(threadId: string, afterSeq?: number, limit?: number): ThreadEvent[] {
+  listByThread(
+    threadId: string,
+    afterSeq?: number,
+    limit?: number,
+    excludedTypes?: readonly string[],
+  ): ThreadEvent[] {
     const conditions = [eq(events.threadId, threadId)];
     if (afterSeq !== undefined) {
       conditions.push(gt(events.seq, afterSeq));
+    }
+    if (excludedTypes && excludedTypes.length > 0) {
+      conditions.push(notInArray(events.type, [...excludedTypes] as ThreadEventType[]));
     }
 
     let rows: Array<typeof events.$inferSelect>;
