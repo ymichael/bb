@@ -1,4 +1,9 @@
+import { spawn } from "node:child_process";
+import { existsSync } from "node:fs";
+import { isAbsolute } from "node:path";
 import { Hono } from "hono";
+import { zValidator } from "@hono/zod-validator";
+import { z } from "zod";
 import type {
   AvailableModel,
   SystemEnvironmentInfo,
@@ -7,6 +12,7 @@ import type {
   ThreadOrchestrator,
 } from "@beanbag/agent-core";
 import { pickFolderPath } from "../folder-picker.js";
+import { invalidRequestError } from "../domain-errors.js";
 import { sendRouteError } from "./error-response.js";
 import {
   type TranscribeVoiceInputArgs,
@@ -23,6 +29,32 @@ type EnvironmentCatalogFn = () => SystemEnvironmentInfo[];
 type TranscribeVoiceFn = (
   args: TranscribeVoiceInputArgs,
 ) => Promise<TranscribeVoiceInputResult>;
+
+const openPathSchema = z.object({
+  path: z.string().min(1),
+});
+
+function openPathInEditor(path: string): void {
+  const platform = process.platform;
+  const command =
+    platform === "darwin"
+      ? "open"
+      : platform === "win32"
+        ? "cmd"
+        : "xdg-open";
+  const args =
+    platform === "darwin"
+      ? [path]
+      : platform === "win32"
+        ? ["/c", "start", "", path]
+        : [path];
+
+  const child = spawn(command, args, {
+    detached: true,
+    stdio: "ignore",
+  });
+  child.unref();
+}
 
 export function createSystemRoutes(
   threadManager: ThreadOrchestrator,
@@ -56,6 +88,22 @@ export function createSystemRoutes(
       try {
         const path = await pickFolder();
         return c.json({ path });
+      } catch (err) {
+        return sendRouteError(c, err);
+      }
+    })
+    .post("/open-path", zValidator("json", openPathSchema), async (c) => {
+      try {
+        const body = c.req.valid("json");
+        const targetPath = body.path.trim();
+        if (!isAbsolute(targetPath)) {
+          throw invalidRequestError("Path must be absolute");
+        }
+        if (!existsSync(targetPath)) {
+          throw invalidRequestError("Path does not exist");
+        }
+        openPathInEditor(targetPath);
+        return c.json({ ok: true });
       } catch (err) {
         return sendRouteError(c, err);
       }

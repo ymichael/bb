@@ -345,6 +345,46 @@ describe("ConversationEntry", () => {
     expect(html).toContain("old-file.ts");
   });
 
+  it("counts created-file stats from plain content diffs", () => {
+    const message: UIMessage = {
+      ...baseMessage(),
+      kind: "file-edit",
+      callId: "edit-plain-add",
+      status: "completed",
+      changes: [
+        {
+          path: "/repo/src/new-file.ts",
+          kind: "add",
+          diff: "line one\nline two\n",
+        },
+      ],
+    };
+
+    const html = renderToStaticMarkup(<ConversationEntry message={message} />);
+    expect(html).toContain("+2");
+    expect(html).toContain("-0");
+  });
+
+  it("counts deleted-file stats from plain content diffs", () => {
+    const message: UIMessage = {
+      ...baseMessage(),
+      kind: "file-edit",
+      callId: "edit-plain-del",
+      status: "completed",
+      changes: [
+        {
+          path: "/repo/src/old-file.ts",
+          kind: "delete",
+          diff: "removed one\nremoved two\nremoved three\n",
+        },
+      ],
+    };
+
+    const html = renderToStaticMarkup(<ConversationEntry message={message} />);
+    expect(html).toContain("+0");
+    expect(html).toContain("-3");
+  });
+
   it("renders rename details for moved files", () => {
     const message: UIMessage = {
       ...baseMessage(),

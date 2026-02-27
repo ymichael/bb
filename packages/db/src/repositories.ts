@@ -3,6 +3,8 @@ import { nanoid } from "nanoid";
 import type {
   Project,
   Thread,
+  ThreadAgentDiffStats,
+  ThreadAgentDiffSource,
   ThreadStatus,
   ThreadEvent,
   ThreadEventData,
@@ -133,6 +135,16 @@ function toThreadExecutionSource(
   throw new Error(`Invalid persisted thread execution source: ${value}`);
 }
 
+function toThreadAgentDiffSource(
+  value: string | undefined,
+): ThreadAgentDiffSource | undefined {
+  if (value === undefined) return undefined;
+  if (value === "worktree_snapshot" || value === "local_tally") {
+    return value;
+  }
+  throw new Error(`Invalid persisted thread agent diff source: ${value}`);
+}
+
 // ---------------------------------------------------------------------------
 // ProjectRepository
 // ---------------------------------------------------------------------------
@@ -140,33 +152,45 @@ function toThreadExecutionSource(
 export class ProjectRepository {
   constructor(private db: DbConnection) {}
 
-  create(data: { name: string; rootPath: string }): Project {
+  private rowToProject(row: typeof projects.$inferSelect): Project {
+    return {
+      id: row.id,
+      name: row.name,
+      rootPath: row.rootPath,
+      workflowInstructions: row.workflowInstructions ?? undefined,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
+    };
+  }
+
+  create(data: { name: string; rootPath: string; workflowInstructions?: string }): Project {
     const now = Date.now();
     const row = {
       id: nanoid(),
       name: data.name,
       rootPath: data.rootPath,
+      workflowInstructions: data.workflowInstructions ?? null,
       createdAt: now,
       updatedAt: now,
     };
     this.db.insert(projects).values(row).run();
-    return row;
+    return this.rowToProject(row);
   }
 
   getById(id: string): Project | undefined {
     const row = this.db.select().from(projects).where(eq(projects.id, id)).get();
     if (!row) return undefined;
-    return row as Project;
+    return this.rowToProject(row);
   }
 
   list(): Project[] {
     const rows = this.db.select().from(projects).all();
-    return rows as Project[];
+    return rows.map((row) => this.rowToProject(row));
   }
 
   update(
     id: string,
-    data: { name?: string; rootPath?: string },
+    data: { name?: string; rootPath?: string; workflowInstructions?: string },
   ): Project | undefined {
     const existing = this.db.select().from(projects).where(eq(projects.id, id)).get();
     if (!existing) return undefined;
@@ -174,10 +198,13 @@ export class ProjectRepository {
     const updates: Record<string, unknown> = { updatedAt: Date.now() };
     if (data.name !== undefined) updates.name = data.name;
     if (data.rootPath !== undefined) updates.rootPath = data.rootPath;
+    if (data.workflowInstructions !== undefined) {
+      updates.workflowInstructions = data.workflowInstructions;
+    }
 
     this.db.update(projects).set(updates).where(eq(projects.id, id)).run();
     const updated = this.db.select().from(projects).where(eq(projects.id, id)).get();
-    return updated ? (updated as Project) : undefined;
+    return updated ? this.rowToProject(updated) : undefined;
   }
 
   delete(id: string): void {
@@ -205,6 +232,11 @@ export class ThreadRepository {
       title: data.title ?? null,
       status: "created" as const,
       environmentId: data.environmentId ?? null,
+      agentDiffSource: null,
+      agentChangedFiles: null,
+      agentInsertions: null,
+      agentDeletions: null,
+      agentDiffCapturedAt: null,
       parentThreadId: data.parentThreadId ?? null,
       archivedAt: null,
       createdAt: now,
@@ -258,8 +290,12 @@ export class ThreadRepository {
       status?: ThreadStatus;
       title?: string;
       environmentId?: string | null;
+      agentDiffStats?: ThreadAgentDiffStats | null;
       archivedAt?: number | null;
-    }
+    },
+    opts?: {
+      touchUpdatedAt?: boolean;
+    },
   ): Thread | undefined {
     const existing = this.db
       .select()
@@ -268,10 +304,20 @@ export class ThreadRepository {
       .get();
     if (!existing) return undefined;
 
-    const updates: Record<string, unknown> = { updatedAt: Date.now() };
+    const updates: Record<string, unknown> = {};
+    if (opts?.touchUpdatedAt !== false) {
+      updates.updatedAt = Date.now();
+    }
     if (data.status !== undefined) updates.status = data.status;
     if (data.title !== undefined) updates.title = data.title;
     if (data.environmentId !== undefined) updates.environmentId = data.environmentId;
+    if (data.agentDiffStats !== undefined) {
+      updates.agentDiffSource = data.agentDiffStats?.source ?? null;
+      updates.agentChangedFiles = data.agentDiffStats?.changedFiles ?? null;
+      updates.agentInsertions = data.agentDiffStats?.insertions ?? null;
+      updates.agentDeletions = data.agentDiffStats?.deletions ?? null;
+      updates.agentDiffCapturedAt = data.agentDiffStats?.capturedAt ?? null;
+    }
     if (data.archivedAt !== undefined) updates.archivedAt = data.archivedAt;
 
     this.db.update(threads).set(updates).where(eq(threads.id, id)).run();
@@ -283,12 +329,28 @@ export class ThreadRepository {
   }
 
   private rowToThread(row: typeof threads.$inferSelect): Thread {
+    const agentDiffSource = toThreadAgentDiffSource(row.agentDiffSource ?? undefined);
+    const agentDiffStats =
+      agentDiffSource !== undefined &&
+      row.agentChangedFiles !== null &&
+      row.agentInsertions !== null &&
+      row.agentDeletions !== null &&
+      row.agentDiffCapturedAt !== null
+        ? {
+            source: agentDiffSource,
+            changedFiles: row.agentChangedFiles,
+            insertions: row.agentInsertions,
+            deletions: row.agentDeletions,
+            capturedAt: row.agentDiffCapturedAt,
+          }
+        : undefined;
     return {
       id: row.id,
       projectId: row.projectId,
       title: row.title ?? undefined,
       status: normalizeThreadStatus(row.status),
       environmentId: row.environmentId ?? undefined,
+      agentDiffStats,
       parentThreadId: row.parentThreadId ?? undefined,
       archivedAt: row.archivedAt ?? undefined,
       createdAt: row.createdAt,
@@ -336,18 +398,33 @@ export class EventRepository {
     };
   }
 
-  listByThread(threadId: string, afterSeq?: number): ThreadEvent[] {
+  listByThread(threadId: string, afterSeq?: number, limit?: number): ThreadEvent[] {
     const conditions = [eq(events.threadId, threadId)];
     if (afterSeq !== undefined) {
       conditions.push(gt(events.seq, afterSeq));
     }
 
-    const rows = this.db
-      .select()
-      .from(events)
-      .where(and(...conditions))
-      .orderBy(events.seq)
-      .all();
+    let rows: Array<typeof events.$inferSelect>;
+    if (limit !== undefined && afterSeq === undefined) {
+      rows = this.db
+        .select()
+        .from(events)
+        .where(and(...conditions))
+        .orderBy(desc(events.seq))
+        .limit(limit)
+        .all()
+        .reverse();
+    } else {
+      let query = this.db
+        .select()
+        .from(events)
+        .where(and(...conditions))
+        .orderBy(events.seq);
+      if (limit !== undefined) {
+        query = query.limit(limit) as typeof query;
+      }
+      rows = query.all();
+    }
 
     return rows.map((r) => {
       return {
@@ -359,6 +436,25 @@ export class EventRepository {
         createdAt: r.createdAt,
       };
     });
+  }
+
+  getLatestByType(threadId: string, type: ThreadEventType): ThreadEvent | undefined {
+    const row = this.db
+      .select()
+      .from(events)
+      .where(and(eq(events.threadId, threadId), eq(events.type, type)))
+      .orderBy(desc(events.seq))
+      .limit(1)
+      .get();
+    if (!row) return undefined;
+    return {
+      id: row.id,
+      threadId: row.threadId,
+      seq: row.seq,
+      type: row.type,
+      data: JSON.parse(row.data),
+      createdAt: row.createdAt,
+    };
   }
 
   deleteByThreadId(threadId: string): void {

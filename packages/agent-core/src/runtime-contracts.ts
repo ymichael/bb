@@ -1,16 +1,23 @@
 import type {
   AvailableModel,
+  CommitThreadRequest,
+  CommitThreadResponse,
+  MergeThreadResponse,
   ProviderCapabilities,
   SpawnThreadRequest,
   SystemEnvironmentInfo,
   SystemProviderInfo,
   TellThreadRequest,
   ThreadExecutionOptions,
+  ThreadTimelineResponse,
+  ThreadToolGroupMessagesRequest,
+  ThreadToolGroupMessagesResponse,
 } from "./api-types.js";
 import type { PromptInput, ReasoningLevel, SandboxMode } from "./shared-types.js";
 import type {
   Thread,
   ThreadEvent,
+  ThreadWorkStatus,
   ThreadTurnInitiator,
 } from "./types.js";
 
@@ -115,6 +122,7 @@ export interface ThreadListFilters {
   projectId?: string;
   parentThreadId?: string;
   includeArchived?: boolean;
+  includeWorkStatus?: boolean;
 }
 
 export interface ThreadOrchestrator {
@@ -132,8 +140,23 @@ export interface ThreadOrchestrator {
   ): Promise<void>;
   stop(threadId: string): void;
   archive(threadId: string): void;
+  commitThread(
+    threadId: string,
+    request?: CommitThreadRequest,
+  ): CommitThreadResponse;
+  mergeThread(threadId: string): MergeThreadResponse;
   getById(threadId: string): Thread | undefined;
-  getEvents(threadId: string, afterSeq?: number): ThreadEvent[];
+  getWorkStatus(threadId: string): ThreadWorkStatus | undefined;
+  getEvents(threadId: string, afterSeq?: number, limit?: number): ThreadEvent[];
+  getTimeline(
+    threadId: string,
+    limit?: number,
+    includeToolGroupMessages?: boolean,
+  ): ThreadTimelineResponse;
+  getToolGroupMessages(
+    threadId: string,
+    request: ThreadToolGroupMessagesRequest,
+  ): ThreadToolGroupMessagesResponse;
   getOutput(threadId: string): string | undefined;
   getDefaultExecutionOptions(
     threadId: string,

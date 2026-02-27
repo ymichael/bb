@@ -866,6 +866,35 @@ describe("toUIMessages replay coverage", () => {
     expect(ops.some((message) => message.opType === "warning")).toBe(true);
   });
 
+  it("projects system thread title updates as operations", () => {
+    const events: ThreadEvent[] = [
+      {
+        id: "evt-1",
+        threadId: "thread-1",
+        seq: 1,
+        type: "system/thread-title/updated",
+        data: {
+          title: "Fix collapsed groups",
+          previousTitle: "Investigate slowness",
+          source: "provider",
+          providerMethod: "thread/name/updated",
+        },
+        createdAt: 1,
+      },
+    ];
+
+    const projected = toUIMessages(events);
+    const op = projected.find(
+      (message): message is Extract<UIMessage, { kind: "operation" }> =>
+        message.kind === "operation",
+    );
+
+    expect(op).toBeDefined();
+    expect(op?.opType).toBe("thread-title-updated");
+    expect(op?.title).toBe("Title updated");
+    expect(op?.detail).toBe("Investigate slowness → Fix collapsed groups");
+  });
+
   it("wraps unknown events in debug mode and drops them otherwise", () => {
     const events: ThreadEvent[] = [
       {
@@ -1218,6 +1247,41 @@ describe("toUIMessages replay coverage", () => {
         (message) =>
           message.kind === "user" &&
           message.text.includes("Recover from provisioning failure"),
+      ),
+    ).toBe(true);
+  });
+
+  it("renders follow-up client turn input while active when no user item events exist yet", () => {
+    const events: ThreadEvent[] = [
+      {
+        id: "evt-1",
+        threadId: "thread-1",
+        seq: 1,
+        type: "client/turn/start",
+        data: {
+          direction: "outbound",
+          source: "tell",
+          initiator: "agent",
+          input: [{ type: "text", text: "Follow up fix for lag" }],
+          request: {
+            method: "turn/start",
+            params: {},
+          },
+          execution: {},
+        },
+        createdAt: 1,
+      },
+    ];
+
+    const projected = toUIMessages(events, {
+      threadStatus: "active",
+    });
+
+    expect(
+      projected.some(
+        (message) =>
+          message.kind === "user" &&
+          message.text.includes("Follow up fix for lag"),
       ),
     ).toBe(true);
   });

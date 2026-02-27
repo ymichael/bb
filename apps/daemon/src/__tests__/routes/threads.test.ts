@@ -40,9 +40,13 @@ function mockThreadManager(): ThreadManager {
     tell: vi.fn(),
     stop: vi.fn(),
     archive: vi.fn(),
+    mergeThread: vi.fn(),
     getById: vi.fn(),
+    getWorkStatus: vi.fn(),
     getDefaultExecutionOptions: vi.fn(),
     list: vi.fn(),
+    getTimeline: vi.fn(),
+    getToolGroupMessages: vi.fn(),
     getEvents: vi.fn(),
     getOutput: vi.fn(),
     isActive: vi.fn(),
@@ -647,6 +651,7 @@ describe("Thread routes", () => {
       expect(threadManager.getEvents).toHaveBeenCalledWith(
         "thread-1",
         undefined,
+        undefined,
       );
     });
 
@@ -662,7 +667,11 @@ describe("Thread routes", () => {
       const res = await app.request("/threads/thread-1/events?afterSeq=5");
 
       expect(res.status).toBe(200);
-      expect(threadManager.getEvents).toHaveBeenCalledWith("thread-1", 5);
+      expect(threadManager.getEvents).toHaveBeenCalledWith(
+        "thread-1",
+        5,
+        undefined,
+      );
     });
 
     it("returns 404 when thread not found", async () => {
@@ -674,6 +683,46 @@ describe("Thread routes", () => {
 
       expect(res.status).toBe(404);
       expect(threadManager.getEvents).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("GET /threads/:id/timeline", () => {
+    it("returns projected timeline rows", async () => {
+      const thread = makeThread();
+      (threadManager.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
+      (threadManager.getTimeline as ReturnType<typeof vi.fn>).mockReturnValue({
+        rows: [],
+      });
+
+      const res = await app.request("/threads/thread-1/timeline?limit=120");
+
+      expect(res.status).toBe(200);
+      expect(threadManager.getTimeline).toHaveBeenCalledWith(
+        "thread-1",
+        120,
+        false,
+      );
+    });
+  });
+
+  describe("GET /threads/:id/tool-group-messages", () => {
+    it("returns deferred tool-group messages", async () => {
+      const thread = makeThread();
+      (threadManager.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
+      (threadManager.getToolGroupMessages as ReturnType<typeof vi.fn>).mockReturnValue({
+        messages: [],
+      });
+
+      const res = await app.request(
+        "/threads/thread-1/tool-group-messages?turnId=turn-1&sourceSeqStart=3&sourceSeqEnd=8",
+      );
+
+      expect(res.status).toBe(200);
+      expect(threadManager.getToolGroupMessages).toHaveBeenCalledWith("thread-1", {
+        turnId: "turn-1",
+        sourceSeqStart: 3,
+        sourceSeqEnd: 8,
+      });
     });
   });
 

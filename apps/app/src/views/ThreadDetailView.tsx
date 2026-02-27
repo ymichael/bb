@@ -1,9 +1,14 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
+import { ChevronDown } from "lucide-react";
 import {
   useThread,
+  useThreadWorkStatus,
   useThreadEvents,
+  useThreadTimeline,
+  useThreadToolGroupMessages,
   useTellThread,
+  useCommitThread,
   useStopThread,
   useThreadDefaultExecutionOptions,
   useUploadPromptAttachment,
@@ -32,7 +37,7 @@ import {
   ConversationTimeline,
   PromptComposerShell,
 } from "@beanbag/ui-core";
-import { toUIMessages } from "@beanbag/agent-core";
+import { toUIMessages, type UIMessage } from "@beanbag/agent-core";
 import {
   buildThreadDetailRows,
   type ThreadDetailToolGroupRow,
@@ -47,6 +52,12 @@ import {
   reduceLatestInitialExpandedState,
 } from "@/lib/latestInitialExpanded";
 import { promptDraftToInput } from "@/lib/prompt-draft";
+import { openPathInEditor } from "@/lib/api";
+import { StatusPillCommitPopover } from "@/components/shared/StatusPillCommitPopover";
+import {
+  threadWorkStatusLabel,
+  threadWorkStatusVariant,
+} from "@/lib/thread-work-status";
 
 function useLatestInitialExpanded(initialExpanded: boolean): {
   isExpanded: boolean;
@@ -71,19 +82,31 @@ function useLatestInitialExpanded(initialExpanded: boolean): {
 
 function ToolGroupEntry({
   entry,
+  messages,
+  isLoadingMessages,
+  onLoadMessages,
   isLatestActivity,
 }: {
   entry: ThreadDetailToolGroupRow;
+  messages: ThreadDetailToolGroupRow["messages"];
+  isLoadingMessages: boolean;
+  onLoadMessages: () => void;
   isLatestActivity: boolean;
 }) {
   const { isExpanded, onToggle } = useLatestInitialExpanded(isLatestActivity);
   const latestActivityMessageId = useMemo(
-    () => findLatestActivityMessageId(entry.messages),
-    [entry.messages],
+    () => findLatestActivityMessageId(messages),
+    [messages],
   );
   const count = entry.summaryCount;
   const summaryContent = `${count} tools and changes`;
   const headerToneClass = getCollapsibleHeaderToneClass(isExpanded);
+  const handleToggle = () => {
+    if (!isExpanded) {
+      onLoadMessages();
+    }
+    onToggle();
+  };
 
   return (
     <div className="group w-full" style={{ overflowAnchor: "none" }}>
@@ -92,7 +115,7 @@ function ToolGroupEntry({
           <div className="px-2 py-1">
             <CollapsibleHeader
               isExpanded={isExpanded}
-              onToggle={onToggle}
+              onToggle={handleToggle}
               toneClassName={headerToneClass}
               summaryContent={summaryContent}
             />
@@ -100,7 +123,12 @@ function ToolGroupEntry({
           {isExpanded ? (
             <div className="px-2 pb-1">
               <div className="overflow-hidden rounded-md border border-border/60 bg-background/40">
-                {entry.messages.map((message) => {
+                {isLoadingMessages ? (
+                  <div className="px-3 py-2 text-xs text-muted-foreground">
+                    Loading details...
+                  </div>
+                ) : null}
+                {messages.map((message) => {
                   const isLatestMessage =
                     isLatestActivity &&
                     message.id === latestActivityMessageId;
@@ -128,18 +156,34 @@ export function ThreadDetailView() {
     threadId: string;
   }>();
   const { data: thread, isLoading, error } = useThread(threadId ?? "");
+  const { data: threadWorkStatus } = useThreadWorkStatus(threadId ?? "");
   const { data: parentThread } = useThread(thread?.parentThreadId ?? "");
-  const { data: events } = useThreadEvents(threadId ?? "");
+  const { debugMode } = useDebugMode();
+  const { data: events, isLoading: eventsLoading } = useThreadEvents(threadId ?? "", {
+    enabled: Boolean(threadId) && debugMode,
+  });
+  const { data: timeline, isLoading: timelineLoading } = useThreadTimeline(
+    threadId ?? "",
+    {
+      enabled: Boolean(threadId) && !debugMode,
+    },
+  );
+  const threadToolGroupMessages = useThreadToolGroupMessages();
   const { data: defaultExecutionOptions } = useThreadDefaultExecutionOptions(
     threadId ?? "",
   );
-  const { debugMode } = useDebugMode();
   const tellThread = useTellThread();
+  const commitThread = useCommitThread();
   const stopThread = useStopThread();
   const uploadPromptAttachment = useUploadPromptAttachment();
   const promptDraft = usePromptDraftStorage({ projectId, threadId });
   const fileMentions = usePromptFileMentions(projectId);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
+  const [loadingToolGroupIds, setLoadingToolGroupIds] = useState<Set<string>>(new Set());
+  const [toolGroupMessagesById, setToolGroupMessagesById] = useState<
+    Record<string, UIMessage[]>
+  >({});
+  const [isChangeListExpanded, setIsChangeListExpanded] = useState(false);
   const message = promptDraft.text;
   const promptInput = useMemo(
     () =>
@@ -181,13 +225,18 @@ export function ThreadDetailView() {
   );
 
   const visibleMessages = useMemo(
-    () => uiMessages.filter((entry) => entry.kind !== "assistant-reasoning"),
-    [uiMessages],
+    () =>
+      debugMode
+        ? uiMessages.filter((entry) => entry.kind !== "assistant-reasoning")
+        : [],
+    [debugMode, uiMessages],
   );
-  const threadDetailRows = useMemo(
-    () => buildThreadDetailRows(visibleMessages),
-    [visibleMessages],
-  );
+  const threadDetailRows = useMemo(() => {
+    if (debugMode) {
+      return buildThreadDetailRows(visibleMessages);
+    }
+    return timeline?.rows ?? [];
+  }, [debugMode, timeline?.rows, visibleMessages]);
   const latestActivityRowId = useMemo(
     () => findLatestActivityRowId(threadDetailRows),
     [threadDetailRows],
@@ -203,6 +252,47 @@ export function ThreadDetailView() {
         (entry) => entry.kind === "assistant-reasoning" && entry.status === "streaming",
       ),
     [uiMessages],
+  );
+  const isTimelineLoading = debugMode ? eventsLoading : timelineLoading;
+
+  useEffect(() => {
+    setLoadingToolGroupIds(new Set());
+    setToolGroupMessagesById({});
+  }, [threadId]);
+
+  const handleLoadToolGroupMessages = useCallback(
+    (entry: ThreadDetailToolGroupRow) => {
+      if (!threadId) return;
+      if (entry.messages.length > 0 || toolGroupMessagesById[entry.id]) return;
+      if (loadingToolGroupIds.has(entry.id)) return;
+      setLoadingToolGroupIds((prev) => new Set(prev).add(entry.id));
+      void threadToolGroupMessages
+        .mutateAsync({
+          id: threadId,
+          turnId: entry.turnId,
+          sourceSeqStart: entry.sourceSeqStart,
+          sourceSeqEnd: entry.sourceSeqEnd,
+        })
+        .then((response) => {
+          setToolGroupMessagesById((prev) => ({
+            ...prev,
+            [entry.id]: response.messages,
+          }));
+        })
+        .finally(() => {
+          setLoadingToolGroupIds((prev) => {
+            const next = new Set(prev);
+            next.delete(entry.id);
+            return next;
+          });
+        });
+    },
+    [
+      loadingToolGroupIds,
+      threadId,
+      threadToolGroupMessages,
+      toolGroupMessagesById,
+    ],
   );
 
   const { containerRef, handleScroll: baseHandleScroll } = useAutoScroll(
@@ -309,7 +399,11 @@ export function ThreadDetailView() {
     parentThread?.title && parentThread.title.trim().length > 0
       ? parentThread.title
       : parentThreadId;
-  const showThreadMetadata = Boolean(parentThreadId || thread.environmentId);
+  const showThreadMetadata = Boolean(
+    parentThreadId ||
+      thread.environmentId ||
+      threadWorkStatus,
+  );
   const provisioningStatusLabel =
     isCreated
       ? "Created..."
@@ -365,11 +459,57 @@ export function ThreadDetailView() {
                 <span>{thread.environmentId}</span>
               </DetailRow>
             ) : null}
+            {threadWorkStatus ? (
+              <DetailRow
+                label="Workspace status"
+                valueClassName="min-w-0"
+                align="center"
+              >
+                <StatusPillCommitPopover
+                  status={threadWorkStatus}
+                  label={threadWorkStatusLabel(threadWorkStatus)}
+                  variant={threadWorkStatusVariant(threadWorkStatus)}
+                  canCommit={threadWorkStatus.hasUncommittedChanges}
+                  isCommitting={commitThread.isPending}
+                  onCommit={async ({ includeUnstaged, message }) => {
+                    if (!threadId) return;
+                    await commitThread.mutateAsync({
+                      id: threadId,
+                      includeUnstaged,
+                      ...(message ? { message } : {}),
+                    });
+                  }}
+                />
+              </DetailRow>
+            ) : null}
+            {thread.environmentId === "worktree" && threadWorkStatus?.workspaceRoot ? (
+              <DetailRow
+                label="Worktree"
+                valueClassName="min-w-0"
+                align="center"
+              >
+                <button
+                  type="button"
+                  className="w-full truncate text-left text-xs underline underline-offset-2"
+                  title={threadWorkStatus.workspaceRoot}
+                  onClick={() => {
+                    void openPathInEditor(threadWorkStatus.workspaceRoot!);
+                  }}
+                >
+                  {threadWorkStatus.workspaceRoot}
+                  {threadWorkStatus.currentBranch
+                    ? ` (${threadWorkStatus.currentBranch})`
+                    : ""}
+                </button>
+              </DetailRow>
+            ) : null}
           </DetailCard>
         </section>
       ) : null}
       <ConversationTimeline>
-        {threadDetailRows.length === 0 ? (
+        {isTimelineLoading && threadDetailRows.length === 0 ? (
+          <ConversationEmptyState message="Loading events..." />
+        ) : threadDetailRows.length === 0 ? (
           <ConversationEmptyState message="No events yet" />
         ) : (
           threadDetailRows.map((entry) => {
@@ -379,6 +519,9 @@ export function ThreadDetailView() {
               <ToolGroupEntry
                 key={`${threadId}:${entry.id}`}
                 entry={entry}
+                messages={toolGroupMessagesById[entry.id] ?? entry.messages}
+                isLoadingMessages={loadingToolGroupIds.has(entry.id)}
+                onLoadMessages={() => handleLoadToolGroupMessages(entry)}
                 isLatestActivity={isLatestActivity}
               />
             ) : (
@@ -411,6 +554,44 @@ export function ThreadDetailView() {
               visible={showScrollToBottom}
               onClick={scrollToBottom}
             />
+            {threadWorkStatus && threadWorkStatus.changedFiles > 0 ? (
+              <div className="mb-2 rounded-md border border-border/60 bg-muted/40 px-3 py-1.5 text-xs text-muted-foreground">
+                <div className="flex items-center justify-between gap-3">
+                  <button
+                    type="button"
+                    className="flex min-w-0 items-center justify-between gap-2 truncate text-left"
+                    onClick={() => setIsChangeListExpanded((prev) => !prev)}
+                  >
+                    <span className="truncate">
+                      {threadWorkStatus.changedFiles} files changed +{threadWorkStatus.insertions} -{threadWorkStatus.deletions}
+                    </span>
+                    <ChevronDown
+                      className={`size-3.5 shrink-0 transition-transform duration-200 ${
+                        isChangeListExpanded ? "rotate-180" : ""
+                      }`}
+                    />
+                  </button>
+                </div>
+                <div
+                  className={`overflow-hidden transition-all duration-200 ${
+                    isChangeListExpanded ? "mt-2 max-h-40 border-t border-border/50 pt-1 opacity-100" : "max-h-0 opacity-0"
+                  }`}
+                >
+                  {threadWorkStatus.files && threadWorkStatus.files.length > 0 ? (
+                    <ul className="max-h-32 space-y-0.5 overflow-auto">
+                      {threadWorkStatus.files.map((file) => (
+                        <li key={`${file.status}:${file.path}`} className="flex items-center gap-2">
+                          <span className="w-8 shrink-0 text-[10px] uppercase text-muted-foreground/80">
+                            {file.status}
+                          </span>
+                          <span className="truncate">{file.path}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
             <PromptBox
               value={message}
               onChange={promptDraft.setText}

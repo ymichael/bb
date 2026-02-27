@@ -388,6 +388,20 @@ export function ProjectList({
                                     event.preventDefault()
                                     event.stopPropagation()
                                     if (archiveThread.isPending) return
+                                    const workStatus = thread.workStatus
+                                    if (
+                                      workStatus &&
+                                      (
+                                        workStatus.state === "dirty_uncommitted" ||
+                                        workStatus.state === "committed_unmerged" ||
+                                        workStatus.state === "dirty_and_committed_unmerged"
+                                      )
+                                    ) {
+                                      const shouldArchive = window.confirm(
+                                        "This thread has uncommitted or unmerged work. Archive anyway?"
+                                      )
+                                      if (!shouldArchive) return
+                                    }
                                     archiveThread.mutate(thread.id)
                                   }}
                                 >

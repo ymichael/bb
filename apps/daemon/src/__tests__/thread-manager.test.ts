@@ -231,9 +231,15 @@ describe("ThreadManager", () => {
 
       await bootManager.reconcileActiveThreadsOnBoot();
 
-      expect(bootThreadRepo.update).toHaveBeenCalledWith("boot-active", {
-        status: "idle",
-      });
+      expect(bootThreadRepo.update).toHaveBeenCalledWith(
+        "boot-active",
+        {
+          status: "idle",
+        },
+        {
+          touchUpdatedAt: false,
+        },
+      );
       expect(bootWs.broadcast).toHaveBeenCalledWith("thread", "boot-active");
     });
   });
@@ -1708,6 +1714,17 @@ describe("ThreadManager", () => {
       expect(threadRepo.update).toHaveBeenCalledWith("t-new", {
         title: "Server-assigned title",
       });
+      expect(eventRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          threadId: "t-new",
+          type: "system/thread-title/updated",
+          data: expect.objectContaining({
+            title: "Server-assigned title",
+            source: "provider",
+            providerMethod: "thread/name/updated",
+          }),
+        }),
+      );
     });
 
     it("does not overwrite explicit spawn title from thread/name/updated", async () => {
@@ -1757,7 +1774,7 @@ describe("ThreadManager", () => {
       });
     });
 
-    it("allows server rename when spawn title matches derived prompt title", async () => {
+    it("does not rename when thread already has a title, even if spawn title matches derived input", async () => {
       const project = { id: "proj-1", name: "Test", rootPath: "/test", createdAt: 1000, updatedAt: 1000 };
       (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(project);
 
@@ -1800,9 +1817,60 @@ describe("ThreadManager", () => {
 
       await new Promise((r) => setTimeout(r, 50));
 
-      expect(threadRepo.update).toHaveBeenCalledWith("t-new", {
+      expect(threadRepo.update).not.toHaveBeenCalledWith("t-new", {
         title: "Server refined title",
       });
+      expect(persistedThread.title).toBe("Fix flaky login redirect");
+    });
+
+    it("only applies provider thread/name/updated once", async () => {
+      const project = { id: "proj-1", name: "Test", rootPath: "/test", createdAt: 1000, updatedAt: 1000 };
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(project);
+
+      const createdThread = makeThread({ id: "t-new", status: "idle" });
+      const persistedThread = makeThread({ id: "t-new", status: "active" });
+      (threadRepo.create as ReturnType<typeof vi.fn>).mockReturnValue(createdThread);
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockImplementation(() => persistedThread);
+      (threadRepo.update as ReturnType<typeof vi.fn>).mockImplementation(
+        (_threadId: string, updates: { status?: Thread["status"]; title?: string }) => {
+          if (updates.status !== undefined) persistedThread.status = updates.status;
+          if (updates.title !== undefined) persistedThread.title = updates.title;
+          return persistedThread;
+        },
+      );
+
+      await manager.spawn({ projectId: "proj-1" });
+      (threadRepo.update as ReturnType<typeof vi.fn>).mockClear();
+
+      fakeChild._pushStdout(
+        JSON.stringify({
+          method: "thread/name/updated",
+          params: {
+            threadId: CODEX_THREAD_ID,
+            threadName: "First server title",
+          },
+        }),
+      );
+      await new Promise((r) => setTimeout(r, 20));
+
+      fakeChild._pushStdout(
+        JSON.stringify({
+          method: "thread/name/updated",
+          params: {
+            threadId: CODEX_THREAD_ID,
+            threadName: "Second server title",
+          },
+        }),
+      );
+      await new Promise((r) => setTimeout(r, 20));
+
+      expect(threadRepo.update).toHaveBeenCalledWith("t-new", {
+        title: "First server title",
+      });
+      expect(threadRepo.update).not.toHaveBeenCalledWith("t-new", {
+        title: "Second server title",
+      });
+      expect(persistedThread.title).toBe("First server title");
     });
 
     it("ignores blank lines on stdout", async () => {
@@ -2818,7 +2886,11 @@ describe("ThreadManager", () => {
       const result = manager.getEvents("thread-1", 0);
 
       expect(result).toEqual(events);
-      expect(eventRepo.listByThread).toHaveBeenCalledWith("thread-1", 0);
+      expect(eventRepo.listByThread).toHaveBeenCalledWith(
+        "thread-1",
+        0,
+        undefined,
+      );
     });
 
     it("passes undefined afterSeq when not provided", () => {
@@ -2828,6 +2900,7 @@ describe("ThreadManager", () => {
 
       expect(eventRepo.listByThread).toHaveBeenCalledWith(
         "thread-1",
+        undefined,
         undefined,
       );
     });

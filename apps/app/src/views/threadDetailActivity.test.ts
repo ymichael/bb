@@ -28,6 +28,8 @@ describe("threadDetailActivity", () => {
         id: "group-1",
         turnId: "turn-1",
         summaryCount: 2,
+        sourceSeqStart: 1,
+        sourceSeqEnd: 1,
         messages: [],
       },
       {
@@ -66,6 +68,8 @@ describe("threadDetailActivity", () => {
         id: "group-1",
         turnId: "turn-1",
         summaryCount: 1,
+        sourceSeqStart: 2,
+        sourceSeqEnd: 2,
         messages: [],
       },
     ];

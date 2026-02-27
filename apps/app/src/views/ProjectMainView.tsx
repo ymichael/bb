@@ -4,7 +4,15 @@ import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { PromptBox } from "@/components/promptbox/PromptBox";
 import { PromptOptionPicker } from "@/components/promptbox/PromptOptionPicker";
 import { PageShell } from "@/components/layout/PageShell";
-import { useProjects, useSpawnThread, useUploadPromptAttachment } from "@/hooks/useApi";
+import { StatusPill, type StatusPillVariant } from "@/components/shared/StatusPill";
+import { StatusPillCommitPopover } from "@/components/shared/StatusPillCommitPopover";
+import {
+  useCommitProjectWorkspace,
+  useProjectWorkspaceStatus,
+  useProjects,
+  useSpawnThread,
+  useUploadPromptAttachment,
+} from "@/hooks/useApi";
 import { usePromptDraftStorage } from "@/hooks/usePromptDraftStorage";
 import { usePromptFileMentions } from "@/hooks/usePromptFileMentions";
 import { usePromptModelReasoning } from "@/hooks/usePromptModelReasoning";
@@ -15,7 +23,9 @@ export function ProjectMainView() {
   const location = useLocation();
   const navigate = useNavigate();
   const { data: projects } = useProjects();
+  const { data: workspaceStatus, isLoading: threadsLoading } = useProjectWorkspaceStatus(projectId);
   const spawnThread = useSpawnThread();
+  const commitProjectWorkspace = useCommitProjectWorkspace();
   const uploadPromptAttachment = useUploadPromptAttachment();
   const promptDraft = usePromptDraftStorage({ projectId, threadId: null });
   const fileMentions = usePromptFileMentions(projectId);
@@ -72,6 +82,36 @@ export function ProjectMainView() {
 
     return knownOptions;
   }, [projectId, projects]);
+  const projectWorkspaceStatus = useMemo<{
+    label: string;
+    variant: StatusPillVariant;
+    actionable: boolean;
+  }>(() => {
+    if (workspaceStatus?.hasUncommittedChanges) {
+      const insertions = workspaceStatus.workspaceInsertions;
+      const deletions = workspaceStatus.workspaceDeletions;
+      return {
+        label: `Dirty +${insertions} -${deletions}`,
+        variant: "secondary",
+        actionable: true,
+      };
+    }
+
+    if (workspaceStatus?.hasCommittedUnmergedChanges) {
+      const branch = workspaceStatus.currentBranch;
+      return {
+        label: branch ? `Ahead (${branch})` : "Ahead",
+        variant: "default",
+        actionable: false,
+      };
+    }
+
+    return {
+      label: "Clean",
+      variant: "outline",
+      actionable: false,
+    };
+  }, [workspaceStatus]);
   const handleProjectChange = useCallback((nextProjectId: string) => {
     if (nextProjectId === projectId) return;
     navigate(`/projects/${nextProjectId}`);
@@ -149,13 +189,32 @@ export function ProjectMainView() {
       <div className="space-y-1">
         <div className="flex items-center px-3.5">
           {projectId ? (
-            <PromptOptionPicker
-              label="Project"
-              value={projectId}
-              options={projectOptions}
-              onChange={handleProjectChange}
-              className="h-8 px-0 text-sm text-foreground/90 hover:text-foreground"
-            />
+            <div className="flex items-center gap-3">
+              <PromptOptionPicker
+                label="Project"
+                value={projectId}
+                options={projectOptions}
+                onChange={handleProjectChange}
+                className="h-8 px-0 text-sm text-foreground/90 hover:text-foreground"
+              />
+              {!threadsLoading ? (
+                <StatusPillCommitPopover
+                  status={workspaceStatus}
+                  label={projectWorkspaceStatus.label}
+                  variant={projectWorkspaceStatus.variant}
+                  canCommit={Boolean(workspaceStatus?.hasUncommittedChanges)}
+                  isCommitting={commitProjectWorkspace.isPending}
+                  onCommit={async ({ includeUnstaged, message }) => {
+                    if (!projectId) return;
+                    await commitProjectWorkspace.mutateAsync({
+                      projectId,
+                      includeUnstaged,
+                      ...(message ? { message } : {}),
+                    });
+                  }}
+                />
+              ) : null}
+            </div>
           ) : null}
         </div>
         <PromptBox

@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import { AppLayout } from "./components/layout/AppLayout";
 import { MainView } from "./views/MainView";
 import { ProjectMainView } from "./views/ProjectMainView";
+import { ProjectSettingsView } from "./views/ProjectSettingsView";
 import { ThreadDetailView } from "./views/ThreadDetailView";
 import { useWebSocket } from "./hooks/useWebSocket";
 
@@ -14,6 +15,7 @@ export function App() {
       <Routes>
         <Route path="/" element={<MainView />} />
         <Route path="/projects/:projectId" element={<ProjectMainView />} />
+        <Route path="/projects/:projectId/settings" element={<ProjectSettingsView />} />
         <Route
           path="/projects/:projectId/threads/:threadId"
           element={<ThreadDetailView />}

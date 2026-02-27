@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import {
+  commitThreadSchema,
   spawnThreadSchema,
   tellThreadSchema,
   type PromptInput,
@@ -15,10 +16,48 @@ const listThreadsQuerySchema = z.object({
   projectId: z.string().optional(),
   parentThreadId: z.string().optional(),
   includeArchived: z.enum(["true", "false"]).optional(),
+  includeWorkStatus: z.enum(["true", "false"]).optional(),
 });
 
 const eventsQuerySchema = z.object({
   afterSeq: z.string().optional(),
+  limit: z
+    .string()
+    .optional()
+    .transform((value) => {
+      if (!value) return undefined;
+      const parsed = Number.parseInt(value, 10);
+      if (!Number.isFinite(parsed) || parsed <= 0) return undefined;
+      return parsed;
+    }),
+});
+
+const timelineQuerySchema = z.object({
+  limit: z
+    .string()
+    .optional()
+    .transform((value) => {
+      if (!value) return undefined;
+      const parsed = Number.parseInt(value, 10);
+      if (!Number.isFinite(parsed) || parsed <= 0) return undefined;
+      return parsed;
+    }),
+  includeToolGroupMessages: z
+    .enum(["true", "false"])
+    .optional()
+    .transform((value) => value === "true"),
+});
+
+const toolGroupMessagesQuerySchema = z.object({
+  turnId: z.string().min(1),
+  sourceSeqStart: z
+    .string()
+    .transform((value) => Number.parseInt(value, 10))
+    .pipe(z.number().int().positive()),
+  sourceSeqEnd: z
+    .string()
+    .transform((value) => Number.parseInt(value, 10))
+    .pipe(z.number().int().positive()),
 });
 
 const MAX_PROMPT_ATTACHMENT_INPUTS = 12;
@@ -83,12 +122,19 @@ export function createThreadRoutes(
             : filters.includeArchived === "false"
               ? false
               : undefined;
+        const includeWorkStatus =
+          filters.includeWorkStatus === "true"
+            ? true
+            : filters.includeWorkStatus === "false"
+              ? false
+              : undefined;
         const threads = threadManager.list({
           ...(filters.projectId ? { projectId: filters.projectId } : {}),
           ...(filters.parentThreadId
             ? { parentThreadId: filters.parentThreadId }
             : {}),
           ...(includeArchived !== undefined ? { includeArchived } : {}),
+          ...(includeWorkStatus !== undefined ? { includeWorkStatus } : {}),
         });
         return c.json(threads);
       } catch (err) {
@@ -171,6 +217,91 @@ export function createThreadRoutes(
         return sendRouteError(c, err);
       }
     })
+    .get("/:id/work-status", async (c) => {
+      try {
+        const thread = threadManager.getById(c.req.param("id"));
+        if (!thread) {
+          return sendRouteError(c, threadNotFoundError(c.req.param("id")));
+        }
+        return c.json(threadManager.getWorkStatus(c.req.param("id")) ?? null);
+      } catch (err) {
+        return sendRouteError(c, err);
+      }
+    })
+    .get(
+      "/:id/timeline",
+      zValidator("query", timelineQuerySchema),
+      async (c) => {
+        try {
+          const thread = threadManager.getById(c.req.param("id"));
+          if (!thread) {
+            return sendRouteError(c, threadNotFoundError(c.req.param("id")));
+          }
+          const { limit, includeToolGroupMessages } = c.req.valid("query");
+          const timeline = threadManager.getTimeline(
+            c.req.param("id"),
+            limit,
+            includeToolGroupMessages,
+          );
+          return c.json(timeline);
+        } catch (err) {
+          return sendRouteError(c, err);
+        }
+      },
+    )
+    .get(
+      "/:id/tool-group-messages",
+      zValidator("query", toolGroupMessagesQuerySchema),
+      async (c) => {
+        try {
+          const thread = threadManager.getById(c.req.param("id"));
+          if (!thread) {
+            return sendRouteError(c, threadNotFoundError(c.req.param("id")));
+          }
+          const { turnId, sourceSeqStart, sourceSeqEnd } = c.req.valid("query");
+          const messages = threadManager.getToolGroupMessages(
+            c.req.param("id"),
+            {
+              turnId,
+              sourceSeqStart,
+              sourceSeqEnd,
+            },
+          );
+          return c.json(messages);
+        } catch (err) {
+          return sendRouteError(c, err);
+        }
+      },
+    )
+    .post(
+      "/:id/commit",
+      zValidator("json", commitThreadSchema.optional()),
+      async (c) => {
+        try {
+          const thread = threadManager.getById(c.req.param("id"));
+          if (!thread) {
+            return sendRouteError(c, threadNotFoundError(c.req.param("id")));
+          }
+          const body = c.req.valid("json");
+          const result = threadManager.commitThread(c.req.param("id"), body ?? undefined);
+          return c.json(result);
+        } catch (err) {
+          return sendRouteError(c, err);
+        }
+      },
+    )
+    .post("/:id/merge", async (c) => {
+      try {
+        const thread = threadManager.getById(c.req.param("id"));
+        if (!thread) {
+          return sendRouteError(c, threadNotFoundError(c.req.param("id")));
+        }
+        const result = threadManager.mergeThread(c.req.param("id"));
+        return c.json(result);
+      } catch (err) {
+        return sendRouteError(c, err);
+      }
+    })
     .get(
       "/:id/events",
       zValidator("query", eventsQuerySchema),
@@ -181,12 +312,13 @@ export function createThreadRoutes(
             return sendRouteError(c, threadNotFoundError(c.req.param("id")));
           }
 
-          const { afterSeq } = c.req.valid("query");
+          const { afterSeq, limit } = c.req.valid("query");
           const afterSeqNum = afterSeq ? parseInt(afterSeq, 10) : undefined;
 
           const events = threadManager.getEvents(
             c.req.param("id"),
             afterSeqNum,
+            limit,
           );
           return c.json(events);
         } catch (err) {

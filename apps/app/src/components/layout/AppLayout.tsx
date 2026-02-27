@@ -1,7 +1,7 @@
 import { Fragment, type ReactNode } from "react"
 import { useCallback, useEffect, useRef, useState } from "react"
-import { useLocation } from "react-router-dom"
-import { ChevronRight, MoreHorizontal, PencilLine, X } from "lucide-react"
+import { Link, useLocation } from "react-router-dom"
+import { ChevronRight, MoreHorizontal, PencilLine, Settings, X } from "lucide-react"
 import {
   SidebarProvider,
   SidebarInset,
@@ -101,6 +101,16 @@ function AppHeader({
             ) : null}
           </div>
         </div>
+        {isProjectMainView && projectMatch ? (
+          <Link
+            to={`/projects/${projectMatch[1]}/settings`}
+            className="mr-2 inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+            aria-label="Project settings"
+            title="Project settings"
+          >
+            <Settings className="size-4" />
+          </Link>
+        ) : null}
         {showProjectMenuButton ? (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -156,8 +166,9 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const projectThreadMatch = location.pathname.match(
     /^\/projects\/([^/]+)\/threads\/([^/]+)(?:\/|$)/
   )
+  const projectSettingsMatch = location.pathname.match(/^\/projects\/([^/]+)\/settings(?:\/|$)/)
   const threadMatch = projectThreadMatch
-  const isProjectMainView = Boolean(projectMatch && !threadMatch)
+  const isProjectMainView = Boolean(projectMatch && !threadMatch && !projectSettingsMatch)
   const threadId = projectThreadMatch?.[2] ?? ""
 
   const projectId = projectMatch?.[1]
@@ -171,6 +182,11 @@ export function AppLayout({ children }: { children: ReactNode }) {
         title: thread?.title ?? "Thread",
         subtitle: undefined,
       }
+    : projectSettingsMatch
+        ? {
+            title: `${projectName ?? projectSettingsMatch[1]} settings`,
+            subtitle: undefined,
+          }
     : projectMatch
         ? {
             title: projectName ?? projectMatch[1],

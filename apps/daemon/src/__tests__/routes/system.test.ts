@@ -51,6 +51,7 @@ function mockThreadManager(): ThreadOrchestrator {
 
   return {
     list: vi.fn(),
+    getWorkStatus: vi.fn(),
     getRunningCount: vi.fn(),
     listModels: vi.fn(),
     getProviderInfo: vi.fn(),

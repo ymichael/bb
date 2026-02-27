@@ -389,13 +389,18 @@ function parseUserFromItemEvent(
   };
 }
 
-function parseUserFromClientThreadStart(
+function parseUserFromClientStart(
   event: ThreadEvent,
   eventType: string,
   options?: ToUIMessagesOptions,
   userItemSignatures: ReadonlySet<string> = new Set<string>(),
 ): UIUserMessage | null {
-  if (!eventTypeMatches(eventType, "client/thread/start")) {
+  if (
+    !eventTypeMatchesAny(eventType, [
+      "client/thread/start",
+      "client/turn/start",
+    ])
+  ) {
     return null;
   }
 
@@ -1033,6 +1038,27 @@ function parseOperationMessage(
       detail: environmentDisplayName
         ? `Environment: ${environmentDisplayName}`
         : undefined,
+    };
+  }
+
+  if (eventTypeMatches(eventType, "system/thread-title/updated")) {
+    const payload = toEventRecord(event.data);
+    const title = getStringField(payload, "title");
+    if (!title) return null;
+    const previousTitle = getStringField(payload, "previousTitle");
+    return {
+      kind: "operation",
+      id: messageId(event.threadId, "op", `thread-title-updated:${event.seq}`),
+      threadId: event.threadId,
+      sourceSeqStart: event.seq,
+      sourceSeqEnd: event.seq,
+      createdAt: event.createdAt,
+      turnId: getTurnId(event.data),
+      opType: "thread-title-updated",
+      title: "Title updated",
+      detail: previousTitle
+        ? `${previousTitle} → ${title}`
+        : title,
     };
   }
 
@@ -1886,7 +1912,7 @@ export function toUIMessages(
 
     const eventTurnId = getTurnId(event.data);
 
-    const userFromClientThreadStart = parseUserFromClientThreadStart(
+    const userFromClientThreadStart = parseUserFromClientStart(
       event,
       eventType,
       options,

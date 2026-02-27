@@ -13,6 +13,7 @@ export interface Project {
   id: string;
   name: string;
   rootPath: string;
+  workflowInstructions?: string;
   rootPathExists?: boolean;
   createdAt: number;
   updatedAt: number;
@@ -31,6 +32,9 @@ export interface Thread {
   projectId: string;
   title?: string;
   status: ThreadStatus;
+  workStatus?: ThreadWorkStatus;
+  provisioningState?: ThreadProvisioningState;
+  agentDiffStats?: ThreadAgentDiffStats;
   environmentId?: string;
   parentThreadId?: string;
   archivedAt?: number;
@@ -38,10 +42,60 @@ export interface Thread {
   updatedAt: number;
 }
 
+export type ThreadAgentDiffSource = "worktree_snapshot" | "local_tally";
+
+export interface ThreadAgentDiffStats {
+  source: ThreadAgentDiffSource;
+  changedFiles: number;
+  insertions: number;
+  deletions: number;
+  capturedAt: number;
+}
+
+export type ThreadWorkState =
+  | "clean"
+  | "dirty_uncommitted"
+  | "committed_unmerged"
+  | "dirty_and_committed_unmerged";
+
+export interface ThreadWorkStatus {
+  state: ThreadWorkState;
+  changedFiles: number;
+  insertions: number;
+  deletions: number;
+  workspaceChangedFiles: number;
+  workspaceInsertions: number;
+  workspaceDeletions: number;
+  hasUncommittedChanges: boolean;
+  hasCommittedUnmergedChanges: boolean;
+  aheadCount: number;
+  behindCount: number;
+  currentBranch?: string;
+  defaultBranch?: string;
+  workspaceRoot?: string;
+  baseRef?: string;
+  files?: ThreadWorkFileChange[];
+}
+
+export interface ThreadWorkFileChange {
+  path: string;
+  status: string;
+}
+
+export type ThreadProvisioningReadiness = "ready" | "degraded" | "failed";
+
+export interface ThreadProvisioningState {
+  readiness: ThreadProvisioningReadiness;
+  message?: string;
+  mode?: string;
+  fallbackReason?: string;
+}
+
 export type AppThreadEventType =
   | "client/thread/start"
   | "client/turn/start"
   | "system/error"
+  | "system/thread-title/updated"
   | "system/provisioning/started"
   | "system/provisioning/fallback"
   | "system/provisioning/completed"
@@ -91,6 +145,13 @@ export interface SystemErrorEventData {
   detail?: string;
 }
 
+export interface SystemThreadTitleUpdatedEventData {
+  title: string;
+  previousTitle?: string;
+  source: "provider";
+  providerMethod?: string;
+}
+
 export interface SystemProvisioningStartedEventData {
   environmentId: string;
   environmentDisplayName?: string;
@@ -127,6 +188,7 @@ export type ThreadEventDataByType = CodexServerNotificationParamsByMethod & {
   "client/thread/start": ClientOutboundStartEventData;
   "client/turn/start": ClientOutboundStartEventData;
   "system/error": SystemErrorEventData;
+  "system/thread-title/updated": SystemThreadTitleUpdatedEventData;
   "system/provisioning/started": SystemProvisioningStartedEventData;
   "system/provisioning/fallback": SystemProvisioningFallbackEventData;
   "system/provisioning/completed": SystemProvisioningCompletedEventData;

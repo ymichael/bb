@@ -3,6 +3,9 @@ import type {
   ReasoningLevel,
   SandboxMode,
 } from "./shared-types.js";
+import type { ThreadDetailRow } from "./thread-detail-rows.js";
+import type { UIMessage } from "./ui-message.js";
+import type { ThreadWorkStatus } from "./types.js";
 export type {
   PromptInput,
   ReasoningLevel,
@@ -56,6 +59,20 @@ export interface ThreadExecutionOptions {
   seq?: number;
 }
 
+export interface ThreadToolGroupMessagesRequest {
+  turnId: string;
+  sourceSeqStart: number;
+  sourceSeqEnd: number;
+}
+
+export interface ThreadToolGroupMessagesResponse {
+  messages: UIMessage[];
+}
+
+export interface ThreadTimelineResponse {
+  rows: ThreadDetailRow[];
+}
+
 // Project endpoints
 export interface CreateProjectRequest {
   name: string;
@@ -65,6 +82,35 @@ export interface CreateProjectRequest {
 export interface UpdateProjectRequest {
   name?: string;
   rootPath?: string;
+  workflowInstructions?: string;
+}
+
+export interface CommitThreadRequest {
+  message?: string;
+  includeUnstaged?: boolean;
+}
+
+export interface CommitThreadResponse {
+  ok: true;
+  commitCreated: boolean;
+  message: string;
+  workStatus: ThreadWorkStatus;
+  commitSha?: string;
+}
+
+export interface MergeThreadResponse {
+  ok: true;
+  merged: boolean;
+  message: string;
+  workStatus: ThreadWorkStatus;
+}
+
+export interface CommitProjectResponse {
+  ok: true;
+  commitCreated: boolean;
+  message: string;
+  workStatus: ThreadWorkStatus;
+  commitSha?: string;
 }
 
 export interface ProjectFileSuggestion {

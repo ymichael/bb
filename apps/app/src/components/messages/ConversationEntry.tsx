@@ -113,20 +113,53 @@ function fileChangeActionLabel(action: FileChangeAction): string {
   return "Edited";
 }
 
-function diffStats(diff: string | undefined): { added: number; removed: number } {
+function diffStats(
+  change: UIFileEditMessage["changes"][number],
+): { added: number; removed: number } {
+  const diff = change.diff;
   if (!diff) return { added: 0, removed: 0 };
 
   let added = 0;
   let removed = 0;
+  let sawUnifiedDiffLine = false;
   for (const line of diff.split("\n")) {
     if (line.startsWith("+++ ") || line.startsWith("--- ")) continue;
     if (line.startsWith("+")) {
+      sawUnifiedDiffLine = true;
       added += 1;
       continue;
     }
     if (line.startsWith("-")) {
+      sawUnifiedDiffLine = true;
       removed += 1;
     }
+  }
+
+  if (sawUnifiedDiffLine) {
+    return { added, removed };
+  }
+
+  const action = fileChangeAction(change);
+  if (action === "created" || action === "deleted") {
+    const plainContentLines = diff
+      .split("\n")
+      .map((line) => line.trimEnd())
+      .filter((line) => line.trim().length > 0)
+      .filter((line) => {
+        return !(
+          line.startsWith("diff --git") ||
+          line.startsWith("index ") ||
+          line.startsWith("new file mode ") ||
+          line.startsWith("deleted file mode ") ||
+          line.startsWith("similarity index ") ||
+          line.startsWith("rename from ") ||
+          line.startsWith("rename to ")
+        );
+      }).length;
+    if (action === "created") {
+      return { added: plainContentLines, removed: 0 };
+    }
+    return { added: 0, removed: plainContentLines };
   }
 
   return { added, removed };
@@ -738,7 +771,7 @@ function FileEditRow({
     () =>
       message.changes.reduce(
         (totals, change) => {
-          const stats = diffStats(change.diff);
+          const stats = diffStats(change);
           return {
             added: totals.added + stats.added,
             removed: totals.removed + stats.removed,
@@ -796,7 +829,7 @@ function FileEditRow({
               {message.changes.map((change, index) => {
                 const action = fileChangeAction(change);
                 const actionChip = fileChangeActionLabel(action);
-                const stats = diffStats(change.diff);
+                const stats = diffStats(change);
                 const diffLines = parseUnifiedDiffLines(change.diff);
                 const fileName = fileNameFromPath(change.path);
                 const pathDetail = change.movePath

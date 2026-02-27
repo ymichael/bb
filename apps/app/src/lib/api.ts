@@ -12,7 +12,14 @@ import type {
   AvailableModel,
   ProjectFileSuggestion,
   ThreadExecutionOptions,
+  ThreadWorkStatus,
   UploadedPromptAttachment,
+  CommitThreadRequest,
+  CommitThreadResponse,
+  MergeThreadResponse,
+  CommitProjectResponse,
+  ThreadTimelineResponse,
+  ThreadToolGroupMessagesResponse,
 } from "@beanbag/agent-core";
 
 const BASE = "/api/v1";
@@ -217,6 +224,17 @@ export async function uploadPromptAttachment(
   );
 }
 
+export async function getProjectWorkspaceStatus(projectId: string): Promise<ThreadWorkStatus> {
+  return request<ThreadWorkStatus>("GET", `/projects/${projectId}/workspace-status`);
+}
+
+export async function commitProjectWorkspace(
+  projectId: string,
+  req?: CommitThreadRequest,
+): Promise<CommitProjectResponse> {
+  return request<CommitProjectResponse>("POST", `/projects/${projectId}/commit`, req ?? {});
+}
+
 export async function transcribeVoiceInput(
   file: File,
   prompt?: string,
@@ -238,6 +256,10 @@ export async function pickProjectFolder(): Promise<{ path: string | null }> {
   return request<{ path: string | null }>("POST", "/system/pick-folder");
 }
 
+export async function openPathInEditor(path: string): Promise<void> {
+  return request<void>("POST", "/system/open-path", { path });
+}
+
 // --- Threads ---
 
 export async function spawnThread(req: SpawnThreadRequest): Promise<Thread> {
@@ -248,6 +270,7 @@ export async function listThreads(filters?: {
   projectId?: string;
   parentThreadId?: string;
   includeArchived?: boolean;
+  includeWorkStatus?: boolean;
 }): Promise<Thread[]> {
   const params = new URLSearchParams();
   if (filters?.projectId) params.set("projectId", filters.projectId);
@@ -256,6 +279,9 @@ export async function listThreads(filters?: {
   }
   if (filters?.includeArchived !== undefined) {
     params.set("includeArchived", String(filters.includeArchived));
+  }
+  if (filters?.includeWorkStatus !== undefined) {
+    params.set("includeWorkStatus", String(filters.includeWorkStatus));
   }
   const qs = params.toString();
   return request<Thread[]>("GET", `/threads${qs ? `?${qs}` : ""}`);
@@ -286,14 +312,64 @@ export async function archiveThread(id: string): Promise<void> {
   return request<void>("POST", `/threads/${id}/archive`);
 }
 
+export async function getThreadWorkStatus(
+  id: string,
+): Promise<ThreadWorkStatus | null> {
+  return request<ThreadWorkStatus | null>("GET", `/threads/${id}/work-status`);
+}
+
+export async function commitThread(
+  id: string,
+  req?: CommitThreadRequest,
+): Promise<CommitThreadResponse> {
+  return request<CommitThreadResponse>("POST", `/threads/${id}/commit`, req ?? {});
+}
+
+export async function mergeThread(id: string): Promise<MergeThreadResponse> {
+  return request<MergeThreadResponse>("POST", `/threads/${id}/merge`);
+}
+
 export async function getThreadEvents(
   id: string,
-  afterSeq?: number
+  afterSeq?: number,
+  limit?: number,
 ): Promise<ThreadEvent[]> {
   const params = new URLSearchParams();
   if (afterSeq !== undefined) params.set("afterSeq", String(afterSeq));
+  if (limit !== undefined) params.set("limit", String(limit));
   const qs = params.toString();
   return request<ThreadEvent[]>("GET", `/threads/${id}/events${qs ? `?${qs}` : ""}`);
+}
+
+export async function getThreadTimeline(
+  id: string,
+  limit?: number,
+  includeToolGroupMessages: boolean = false,
+): Promise<ThreadTimelineResponse> {
+  const params = new URLSearchParams();
+  if (limit !== undefined) params.set("limit", String(limit));
+  if (includeToolGroupMessages) params.set("includeToolGroupMessages", "true");
+  const qs = params.toString();
+  return request<ThreadTimelineResponse>(
+    "GET",
+    `/threads/${id}/timeline${qs ? `?${qs}` : ""}`,
+  );
+}
+
+export async function getThreadToolGroupMessages(
+  id: string,
+  turnId: string,
+  sourceSeqStart: number,
+  sourceSeqEnd: number,
+): Promise<ThreadToolGroupMessagesResponse> {
+  const params = new URLSearchParams();
+  params.set("turnId", turnId);
+  params.set("sourceSeqStart", String(sourceSeqStart));
+  params.set("sourceSeqEnd", String(sourceSeqEnd));
+  return request<ThreadToolGroupMessagesResponse>(
+    "GET",
+    `/threads/${id}/tool-group-messages?${params.toString()}`,
+  );
 }
 
 export async function getThreadOutput(id: string): Promise<{ output: string }> {

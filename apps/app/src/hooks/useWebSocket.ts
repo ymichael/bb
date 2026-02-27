@@ -77,6 +77,8 @@ export function useWebSocket(): void {
       const changedIds = Array.from(changedThreadIds);
       for (const id of changedIds) {
         queryClient.invalidateQueries({ queryKey: ["thread", id] });
+        queryClient.invalidateQueries({ queryKey: ["threadWorkStatus", id] });
+        queryClient.invalidateQueries({ queryKey: ["threadTimeline", id] });
       }
 
       if (shouldInvalidateAllThreadEvents) {

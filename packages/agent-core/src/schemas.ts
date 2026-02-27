@@ -57,8 +57,17 @@ export const updateProjectSchema = z
   .object({
     name: z.string().optional(),
     rootPath: z.string().optional(),
+    workflowInstructions: z.string().optional(),
   })
   .refine(
-    (value) => value.name !== undefined || value.rootPath !== undefined,
+    (value) =>
+      value.name !== undefined ||
+      value.rootPath !== undefined ||
+      value.workflowInstructions !== undefined,
     "At least one field must be provided",
   );
+
+export const commitThreadSchema = z.object({
+  message: z.string().min(1).optional(),
+  includeUnstaged: z.boolean().optional(),
+});

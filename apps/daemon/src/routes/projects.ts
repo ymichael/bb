@@ -3,6 +3,7 @@ import { basename, extname, resolve, sep } from "node:path";
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import {
+  commitThreadSchema,
   createProjectSchema,
   updateProjectSchema,
   type Project,
@@ -13,6 +14,7 @@ import { z } from "zod";
 import type { EventRepository, ProjectRepository, ThreadRepository } from "@beanbag/db";
 import { searchProjectFiles } from "../project-file-search.js";
 import { invalidRequestError } from "../domain-errors.js";
+import { ThreadGitStatusService } from "../thread-git-status.js";
 
 const projectFileQuerySchema = z.object({
   query: z.string().default(""),
@@ -134,6 +136,7 @@ export function createProjectRoutes(
     eventRepo?: EventRepository;
   },
 ) {
+  const gitStatusService = new ThreadGitStatusService();
   return new Hono()
     .post("/", zValidator("json", createProjectSchema), async (c) => {
       try {
@@ -148,8 +151,12 @@ export function createProjectRoutes(
     .patch("/:id", zValidator("json", updateProjectSchema), async (c) => {
       try {
         const projectId = c.req.param("id");
-        const { name, rootPath } = c.req.valid("json");
-        const updated = projectRepo.update(projectId, { name, rootPath });
+        const { name, rootPath, workflowInstructions } = c.req.valid("json");
+        const updated = projectRepo.update(projectId, {
+          name,
+          rootPath,
+          workflowInstructions,
+        });
         if (!updated) {
           return c.json({ error: "Project not found" }, 404);
         }
@@ -207,6 +214,45 @@ export function createProjectRoutes(
         }
         const files = await findProjectFiles(project.rootPath, query, limit);
         return c.json(files);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Unknown error";
+        return c.json({ error: message }, 500);
+      }
+    })
+    .get("/:id/workspace-status", async (c) => {
+      try {
+        const project = projectRepo.getById(c.req.param("id"));
+        if (!project) {
+          return c.json({ error: "Project not found" }, 404);
+        }
+        const defaultBranch = gitStatusService.detectDefaultBranch(project.rootPath);
+        const status = gitStatusService.getStatus({
+          workspaceRoot: project.rootPath,
+          projectRoot: project.rootPath,
+          defaultBranch,
+        });
+        return c.json(status);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Unknown error";
+        return c.json({ error: message }, 500);
+      }
+    })
+    .post("/:id/commit", zValidator("json", commitThreadSchema.optional()), async (c) => {
+      try {
+        const project = projectRepo.getById(c.req.param("id"));
+        if (!project) {
+          return c.json({ error: "Project not found" }, 404);
+        }
+        const body = c.req.valid("json");
+        const defaultBranch = gitStatusService.detectDefaultBranch(project.rootPath);
+        const result = gitStatusService.commit({
+          workspaceRoot: project.rootPath,
+          projectRoot: project.rootPath,
+          defaultBranch,
+          message: body?.message,
+          includeUnstaged: body?.includeUnstaged,
+        });
+        return c.json(result);
       } catch (err) {
         const message = err instanceof Error ? err.message : "Unknown error";
         return c.json({ error: message }, 500);

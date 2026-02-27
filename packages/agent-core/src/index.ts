@@ -2,6 +2,12 @@ export type {
   Project,
   Thread,
   ThreadStatus,
+  ThreadWorkState,
+  ThreadWorkStatus,
+  ThreadProvisioningReadiness,
+  ThreadProvisioningState,
+  ThreadAgentDiffSource,
+  ThreadAgentDiffStats,
   ThreadTurnInitiator,
   ThreadEventType,
   ThreadEventDataByType,
@@ -39,6 +45,10 @@ export type {
   TellThreadRequest,
   CreateProjectRequest,
   UpdateProjectRequest,
+  CommitThreadRequest,
+  CommitThreadResponse,
+  MergeThreadResponse,
+  CommitProjectResponse,
   PromptInput,
   ModelReasoningEffort,
   AvailableModel,
@@ -53,6 +63,9 @@ export type {
   SystemEnvironmentInfo,
   ProjectFileSuggestion,
   UploadedPromptAttachment,
+  ThreadToolGroupMessagesRequest,
+  ThreadToolGroupMessagesResponse,
+  ThreadTimelineResponse,
 } from "./api-types.js";
 
 export {
@@ -61,6 +74,7 @@ export {
   tellThreadSchema,
   createProjectSchema,
   updateProjectSchema,
+  commitThreadSchema,
 } from "./schemas.js";
 
 export type {
@@ -84,6 +98,13 @@ export type {
 } from "./ui-message.js";
 
 export type {
+  ThreadDetailMessageRow,
+  ThreadDetailToolGroupRow,
+  ThreadDetailRow,
+  BuildThreadDetailRowsOptions,
+} from "./thread-detail-rows.js";
+
+export type {
   ProviderExecutionOptions,
   ProviderThreadContext,
   ProviderTitleGeneratorArgs,
@@ -100,6 +121,7 @@ export type {
 } from "./runtime-contracts.js";
 
 export { toUIMessages } from "./to-ui-messages.js";
+export { buildThreadDetailRows } from "./thread-detail-rows.js";
 export { assertNever } from "./assert-never.js";
 export { toRecord, getStringField } from "./unknown-helpers.js";
 export {

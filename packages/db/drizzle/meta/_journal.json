@@ -92,6 +92,20 @@
       "when": 1772114400000,
       "tag": "0012_thread_environment_ownership",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "6",
+      "when": 1772200800000,
+      "tag": "0013_project_workflow_instructions",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "6",
+      "when": 1772204400000,
+      "tag": "0014_thread_agent_diff_stats",
+      "breakpoints": true
     }
   ]
 }
