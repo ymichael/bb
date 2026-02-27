@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import type { CommitThreadResponse, ThreadWorkStatus } from "@beanbag/agent-core";
 
 type CacheEntry = {
@@ -146,6 +146,33 @@ function emptyStatus(workspaceRoot: string): ThreadWorkStatus {
   };
 }
 
+function toReadableAutoCommitMessage(workspaceRoot: string): string {
+  const stagedFiles = runGit(workspaceRoot, ["diff", "--cached", "--name-only"]);
+  const files = stagedFiles.ok
+    ? stagedFiles.stdout
+        .split("\n")
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0)
+    : [];
+
+  const stagedStat = parseShortstat(
+    runGit(workspaceRoot, ["diff", "--cached", "--shortstat"]).stdout,
+  );
+
+  let summary = "chore: update files";
+  if (files.length === 1) {
+    summary = `chore: update ${basename(files[0] ?? "file")}`;
+  } else if (files.length > 1) {
+    summary = `chore: update ${files.length} files`;
+  }
+
+  const statParts: string[] = [];
+  if (stagedStat.insertions > 0) statParts.push(`+${stagedStat.insertions}`);
+  if (stagedStat.deletions > 0) statParts.push(`-${stagedStat.deletions}`);
+
+  return statParts.length > 0 ? `${summary} (${statParts.join(" ")})` : summary;
+}
+
 export class ThreadGitStatusService {
   private cache = new Map<string, CacheEntry>();
   private defaultBranchCache = new Map<string, string | undefined>();
@@ -282,7 +309,7 @@ export class ThreadGitStatusService {
       };
     }
 
-    const commitMessage = args.message?.trim() || `beanbag: thread auto-commit ${new Date().toISOString()}`;
+    const commitMessage = args.message?.trim() || toReadableAutoCommitMessage(args.workspaceRoot);
     const commitResult = runGit(args.workspaceRoot, ["commit", "-m", commitMessage]);
     if (!commitResult.ok) {
       throw new Error(commitResult.stderr || "Commit failed");

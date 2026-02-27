@@ -1,4 +1,5 @@
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { basename, extname, resolve, sep } from "node:path";
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
@@ -35,12 +36,11 @@ type SearchProjectFilesFn = (
 ) => Promise<ProjectFileSuggestion[]>;
 
 type StorePromptAttachmentFn = (args: {
-  projectRootPath: string;
+  projectId: string;
   file: File;
 }) => Promise<UploadedPromptAttachment>;
 
-const ATTACHMENTS_ROOT_SEGMENT = ".beanbag";
-const ATTACHMENTS_DIRECTORY_SEGMENT = "attachments";
+const ATTACHMENTS_ROOT_PATH = resolve(homedir(), ".beanbag", "attachments");
 const MAX_PROMPT_ATTACHMENT_BYTES = 25 * 1024 * 1024;
 const MAX_PROMPT_IMAGE_ATTACHMENT_BYTES = 10 * 1024 * 1024;
 const IMAGE_EXTENSION_PATTERN = /\.(png|jpe?g|webp|gif|bmp|svg)$/i;
@@ -53,20 +53,24 @@ function sanitizeFileName(rawName: string): string {
   return cleaned.slice(0, 120);
 }
 
+function sanitizePathSegment(rawValue: string): string {
+  const trimmed = rawValue.trim();
+  if (trimmed.length === 0) return "unknown";
+  const cleaned = trimmed.replaceAll(/[^a-zA-Z0-9._-]/g, "_");
+  if (cleaned.length === 0) return "unknown";
+  return cleaned.slice(0, 120);
+}
+
 function isImageAttachment(fileName: string, mimeType: string | undefined): boolean {
   if (mimeType?.toLowerCase().startsWith("image/")) return true;
   return IMAGE_EXTENSION_PATTERN.test(fileName);
 }
 
 function resolvePromptAttachmentPath(
-  projectRootPath: string,
+  projectId: string,
   fileName: string,
 ): string {
-  const attachmentsDir = resolve(
-    projectRootPath,
-    ATTACHMENTS_ROOT_SEGMENT,
-    ATTACHMENTS_DIRECTORY_SEGMENT,
-  );
+  const attachmentsDir = resolve(ATTACHMENTS_ROOT_PATH, sanitizePathSegment(projectId));
   mkdirSync(attachmentsDir, { recursive: true });
 
   const extension = extname(fileName);
@@ -84,7 +88,7 @@ function resolvePromptAttachmentPath(
 }
 
 async function storePromptAttachment(args: {
-  projectRootPath: string;
+  projectId: string;
   file: File;
 }): Promise<UploadedPromptAttachment> {
   const safeName = sanitizeFileName(args.file.name);
@@ -107,7 +111,7 @@ async function storePromptAttachment(args: {
     );
   }
 
-  const destinationPath = resolvePromptAttachmentPath(args.projectRootPath, safeName);
+  const destinationPath = resolvePromptAttachmentPath(args.projectId, safeName);
   const bytes = Buffer.from(await args.file.arrayBuffer());
   writeFileSync(destinationPath, bytes);
 
@@ -272,7 +276,7 @@ export function createProjectRoutes(
         }
 
         const uploaded = await savePromptAttachment({
-          projectRootPath: project.rootPath,
+          projectId: project.id,
           file,
         });
         return c.json(uploaded, 201);

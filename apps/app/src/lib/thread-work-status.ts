@@ -5,7 +5,7 @@ export function threadWorkStatusLabel(status: ThreadWorkStatus | undefined): str
   if (!status) return "Unknown";
 
   if (status.hasUncommittedChanges) {
-    return `Dirty +${status.insertions} -${status.deletions}`;
+    return `Dirty +${status.workspaceInsertions} -${status.workspaceDeletions}`;
   }
   if (status.hasCommittedUnmergedChanges) {
     return status.currentBranch

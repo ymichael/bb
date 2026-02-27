@@ -49,7 +49,7 @@ describe("Project routes", () => {
     limit?: number,
   ) => Promise<ProjectFileSuggestion[]>;
   type StorePromptAttachmentFn = (args: {
-    projectRootPath: string;
+    projectId: string;
     file: File;
   }) => Promise<UploadedPromptAttachment>;
 
@@ -67,7 +67,7 @@ describe("Project routes", () => {
     findProjectFiles = vi.fn<SearchProjectFilesFn>().mockResolvedValue([]);
     savePromptAttachment = vi.fn<StorePromptAttachmentFn>().mockResolvedValue({
       type: "localImage",
-      path: "/repo/root/.beanbag/attachments/image.png",
+      path: "/Users/test/.beanbag/attachments/proj-2/image.png",
       name: "image.png",
       mimeType: "image/png",
       sizeBytes: 12,
@@ -353,13 +353,13 @@ describe("Project routes", () => {
       expect(res.status).toBe(201);
       expect(await res.json()).toEqual({
         type: "localImage",
-        path: "/repo/root/.beanbag/attachments/image.png",
+        path: "/Users/test/.beanbag/attachments/proj-2/image.png",
         name: "image.png",
         mimeType: "image/png",
         sizeBytes: 12,
       });
       expect(savePromptAttachment).toHaveBeenCalledWith({
-        projectRootPath: "/repo/root",
+        projectId: "proj-2",
         file: expect.any(File),
       });
     });

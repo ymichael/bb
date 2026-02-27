@@ -16,7 +16,7 @@ export function StatusPill({
   return (
     <Badge
       variant={variant}
-      className={cn("rounded-sm px-1.5 py-0 ui-text-xs", className)}
+      className={cn("rounded-sm px-1.5 py-0 ui-text-xs leading-none", className)}
     >
       {children}
     </Badge>

@@ -554,7 +554,7 @@ export function ThreadDetailView() {
               visible={showScrollToBottom}
               onClick={scrollToBottom}
             />
-            {threadWorkStatus && threadWorkStatus.changedFiles > 0 ? (
+            {threadWorkStatus && threadWorkStatus.workspaceChangedFiles > 0 ? (
               <div className="mb-2 rounded-md border border-border/60 bg-muted/40 px-3 py-1.5 text-xs text-muted-foreground">
                 <div className="flex items-center justify-between gap-3">
                   <button
@@ -563,7 +563,7 @@ export function ThreadDetailView() {
                     onClick={() => setIsChangeListExpanded((prev) => !prev)}
                   >
                     <span className="truncate">
-                      {threadWorkStatus.changedFiles} files changed +{threadWorkStatus.insertions} -{threadWorkStatus.deletions}
+                      {threadWorkStatus.workspaceChangedFiles} files changed +{threadWorkStatus.workspaceInsertions} -{threadWorkStatus.workspaceDeletions}
                     </span>
                     <ChevronDown
                       className={`size-3.5 shrink-0 transition-transform duration-200 ${
