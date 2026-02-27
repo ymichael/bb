@@ -163,6 +163,7 @@ export function ProjectMainView() {
           value={prompt}
           onChange={promptDraft.setText}
           onSubmit={submitPrompt}
+          zenModeLayout="project-main"
           isSubmitting={spawnThread.isPending}
           submitDisabled={isSubmitDisabled}
           submitTitle={spawnThread.isPending ? "Submitting..." : "Submit (Enter)"}

@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useRef, useState, type ChangeEvent, type FormEvent, type KeyboardEvent, type ReactNode } from "react"
-import { AudioLines, CornerDownLeft, Loader2, Mic, Paperclip, Square, X } from "lucide-react"
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ChangeEvent, type FormEvent, type KeyboardEvent, type ReactNode } from "react"
+import { ArrowUp, AudioLines, CornerDownLeft, Loader2, Maximize2, Mic, Minimize2, Paperclip, Square, X } from "lucide-react"
 import type { ProjectFileSuggestion } from "@beanbag/agent-core"
 import { Button } from "@/components/ui/button"
 import { useAutoGrow } from "@/hooks/useAutoGrow"
@@ -11,8 +11,15 @@ import { findActiveFileMention, insertFileMention, type ActiveFileMention } from
 
 const PROMPTBOX_MIN_HEIGHT = 68
 const PROMPTBOX_MAX_HEIGHT = 158
+const ZEN_MODE_STORAGE_KEY = "bb.promptbox.zen-mode"
 
 type SubmitMode = "enter" | "mod-enter"
+type ZenModeLayout = "thread" | "project-main"
+
+const ZEN_MODE_HEIGHT_CLASS: Record<ZenModeLayout, string> = {
+  thread: "h-[50dvh]",
+  "project-main": "h-[70dvh]",
+}
 
 interface PromptBoxProps {
   id?: string
@@ -38,6 +45,7 @@ interface PromptBoxProps {
   attachmentError?: string | null
   onAttachFiles?: (files: File[]) => void | Promise<void>
   onRemoveAttachment?: (path: string) => void
+  zenModeLayout?: ZenModeLayout
 }
 
 interface DismissedMentionRange {
@@ -98,7 +106,11 @@ export function PromptBox({
   attachmentError = null,
   onAttachFiles,
   onRemoveAttachment,
+  zenModeLayout = "thread",
 }: PromptBoxProps) {
+  const [isZenMode, setIsZenMode] = useState(false)
+  const formRef = useRef<HTMLFormElement>(null)
+  const heightAnimationFromRef = useRef<number | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const attachmentInputRef = useRef<HTMLInputElement>(null)
   const valueRef = useRef(value)
@@ -114,12 +126,62 @@ export function PromptBox({
 
   useEffect(() => {
     if (!textareaRef.current) return
+    if (isZenMode) {
+      textareaRef.current.style.height = "100%"
+      return
+    }
     resizeTextarea(textareaRef.current)
-  }, [resizeTextarea, value])
+  }, [isZenMode, resizeTextarea, value])
 
   useEffect(() => {
     valueRef.current = value
   }, [value])
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    const storedValue = window.localStorage.getItem(ZEN_MODE_STORAGE_KEY)
+    if (storedValue === "true") {
+      setIsZenMode(true)
+    }
+  }, [])
+
+  useLayoutEffect(() => {
+    const fromHeight = heightAnimationFromRef.current
+    const formElement = formRef.current
+    if (fromHeight === null || !formElement) return
+    heightAnimationFromRef.current = null
+
+    const previousTransition = formElement.style.transition
+    const previousWillChange = formElement.style.willChange
+
+    formElement.style.transition = "none"
+    formElement.style.height = ""
+    const toHeight = formElement.getBoundingClientRect().height
+    formElement.style.height = `${fromHeight}px`
+    formElement.getBoundingClientRect()
+    formElement.style.willChange = "height"
+    formElement.style.transition = "height 240ms cubic-bezier(0.22, 1, 0.36, 1)"
+    formElement.style.height = `${toHeight}px`
+
+    let isCleanedUp = false
+    const cleanup = () => {
+      if (isCleanedUp) return
+      isCleanedUp = true
+      formElement.style.transition = previousTransition
+      formElement.style.willChange = previousWillChange
+      formElement.style.height = ""
+      formElement.removeEventListener("transitionend", handleTransitionEnd)
+      window.clearTimeout(fallbackTimeout)
+    }
+    const handleTransitionEnd = (event: TransitionEvent) => {
+      if (event.propertyName !== "height") return
+      cleanup()
+    }
+    const fallbackTimeout = window.setTimeout(cleanup, 320)
+    formElement.addEventListener("transitionend", handleTransitionEnd)
+
+    return cleanup
+  }, [isZenMode, zenModeLayout])
 
   const syncMentionState = useCallback((textarea: HTMLTextAreaElement) => {
     const caretPosition = textarea.selectionStart ?? textarea.value.length
@@ -224,9 +286,13 @@ export function PromptBox({
         replacement.caretPosition,
         replacement.caretPosition,
       )
-      resizeTextarea(nextTextarea)
+      if (isZenMode) {
+        nextTextarea.style.height = "100%"
+      } else {
+        resizeTextarea(nextTextarea)
+      }
     })
-  }, [activeMention, onChange, onMentionQueryChange, resizeTextarea, value])
+  }, [activeMention, isZenMode, onChange, onMentionQueryChange, resizeTextarea, value])
 
   const insertVoiceTranscript = useCallback((transcript: string) => {
     const normalizedTranscript = transcript.replace(/\s+/g, " ").trim()
@@ -260,10 +326,14 @@ export function PromptBox({
       if (!nextTextarea) return
       nextTextarea.focus()
       nextTextarea.setSelectionRange(nextCursor, nextCursor)
-      resizeTextarea(nextTextarea)
+      if (isZenMode) {
+        nextTextarea.style.height = "100%"
+      } else {
+        resizeTextarea(nextTextarea)
+      }
       syncMentionState(nextTextarea)
     })
-  }, [onChange, resizeTextarea, syncMentionState])
+  }, [isZenMode, onChange, resizeTextarea, syncMentionState])
 
   const getVoicePromptContext = useCallback(() => {
     const currentValue = valueRef.current
@@ -307,6 +377,8 @@ export function PromptBox({
   const showStop = Boolean(isRunning && onStop && !hasSubmittableInput && !isVoiceBusy)
   const canSubmit = hasSubmittableInput && !isSubmitting && !submitDisabled && !isVoiceBusy
   const canStartVoiceInput = voiceInput.isSupported && !isSubmitting
+  const effectiveSubmitMode: SubmitMode = submitMode
+  const effectiveSubmitTitle = submitTitle
 
   const emitAttachmentFiles = useCallback((files: File[]) => {
     if (!onAttachFiles || files.length === 0) return
@@ -317,6 +389,35 @@ export function PromptBox({
     if (!canSubmit) return
     onSubmit()
   }, [canSubmit, onSubmit])
+
+  const toggleZenMode = useCallback(() => {
+    const textarea = textareaRef.current
+    const formElement = formRef.current
+    const selectionStart = textarea?.selectionStart ?? null
+    const selectionEnd = textarea?.selectionEnd ?? null
+    const scrollTop = textarea?.scrollTop ?? null
+    heightAnimationFromRef.current = formElement?.getBoundingClientRect().height ?? null
+
+    setIsZenMode((previous) => {
+      const next = !previous
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem(ZEN_MODE_STORAGE_KEY, String(next))
+      }
+      return next
+    })
+
+    requestAnimationFrame(() => {
+      const nextTextarea = textareaRef.current
+      if (!nextTextarea) return
+      nextTextarea.focus()
+      if (selectionStart !== null && selectionEnd !== null) {
+        nextTextarea.setSelectionRange(selectionStart, selectionEnd)
+      }
+      if (scrollTop !== null) {
+        nextTextarea.scrollTop = scrollTop
+      }
+    })
+  }, [])
 
   const handleAttachmentInputChange = useCallback(
     (event: ChangeEvent<HTMLInputElement>) => {
@@ -365,8 +466,9 @@ export function PromptBox({
     }
 
     const withModifier = event.metaKey || event.ctrlKey
+    if (isZenMode) return
     const isSubmitKey =
-      submitMode === "mod-enter"
+      effectiveSubmitMode === "mod-enter"
         ? withModifier && event.key === "Enter"
         : event.key === "Enter" && !event.shiftKey
 
@@ -377,6 +479,7 @@ export function PromptBox({
 
   return (
     <form
+      ref={formRef}
       onSubmit={handleSubmit}
       onDragOver={(event) => {
         if (!onAttachFiles) return
@@ -388,8 +491,23 @@ export function PromptBox({
         if (!event.dataTransfer?.files || event.dataTransfer.files.length === 0) return
         emitAttachmentFiles(Array.from(event.dataTransfer.files))
       }}
-      className={cn("relative w-full rounded-lg border border-input bg-background pb-2", className)}
+      className={cn("relative w-full rounded-lg border border-input bg-background pb-2", isZenMode && "flex flex-col pb-3", isZenMode && ZEN_MODE_HEIGHT_CLASS[zenModeLayout], className)}
     >
+      <Button
+        type="button"
+        size="icon"
+        variant="ghost"
+        onMouseDown={(event) => {
+          event.preventDefault()
+        }}
+        onClick={toggleZenMode}
+        title={isZenMode ? "Exit zen mode" : "Enter zen mode"}
+        aria-label={isZenMode ? "Exit zen mode" : "Enter zen mode"}
+        aria-pressed={isZenMode}
+        className="absolute right-2 top-2 z-20 size-auto h-6 px-1.5 text-muted-foreground/40 hover:text-muted-foreground"
+      >
+        {isZenMode ? <Minimize2 className="size-3" /> : <Maximize2 className="size-3" />}
+      </Button>
       <input
         ref={attachmentInputRef}
         type="file"
@@ -403,7 +521,11 @@ export function PromptBox({
         value={value}
         onChange={(event) => {
           onChange(event.target.value)
-          resizeTextarea(event.target)
+          if (isZenMode) {
+            event.target.style.height = "100%"
+          } else {
+            resizeTextarea(event.target)
+          }
           syncMentionState(event.target)
         }}
         onClick={(event) => {
@@ -439,10 +561,14 @@ export function PromptBox({
         placeholder={placeholder}
         rows={1}
         autoFocus={autoFocus}
-        className="w-full resize-none overflow-y-auto bg-transparent px-4 pt-3 text-sm leading-relaxed outline-none placeholder:text-muted-foreground/60"
+        className={cn(
+          "w-full resize-none overflow-y-auto bg-transparent px-4 pb-1 pr-14 pt-3 text-sm leading-relaxed outline-none placeholder:text-muted-foreground/60",
+          isZenMode && "min-h-0 flex-1 px-6 pb-3 pt-8"
+        )}
         style={{
-          minHeight: `${PROMPTBOX_MIN_HEIGHT}px`,
-          maxHeight: `${PROMPTBOX_MAX_HEIGHT}px`,
+          minHeight: isZenMode ? "0px" : `${PROMPTBOX_MIN_HEIGHT}px`,
+          height: isZenMode ? "100%" : undefined,
+          maxHeight: isZenMode ? "none" : `${PROMPTBOX_MAX_HEIGHT}px`,
         }}
       />
 
@@ -634,14 +760,14 @@ export function PromptBox({
               type="submit"
               size="sm"
               variant="default"
-              title={submitTitle}
+              title={effectiveSubmitTitle}
               disabled={!canSubmit}
               className="h-8 px-2 transition-all"
             >
               {isSubmitting ? (
                 <Loader2 className="size-4 animate-spin" />
               ) : (
-                <CornerDownLeft className="size-4" />
+                isZenMode ? <ArrowUp className="size-4" /> : <CornerDownLeft className="size-4" />
               )}
             </Button>
           )}

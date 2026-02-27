@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useReducer, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
   useThread,
@@ -209,12 +209,40 @@ export function ThreadDetailView() {
     threadDetailRows,
     threadId,
   );
+  const promptComposerRef = useRef<HTMLDivElement>(null);
+  const promptComposerHeightRef = useRef<number | null>(null);
   const { showScrollToBottom, handleScroll, scrollToBottom } =
     useScrollToBottomIndicator({
       containerRef,
       onBaseScroll: baseHandleScroll,
       resetDep: threadId,
     });
+
+  useLayoutEffect(() => {
+    const scrollContainer = containerRef.current;
+    const promptComposer = promptComposerRef.current;
+    if (!scrollContainer || !promptComposer || typeof ResizeObserver === "undefined") {
+      return;
+    }
+
+    promptComposerHeightRef.current = promptComposer.getBoundingClientRect().height;
+    const observer = new ResizeObserver((entries) => {
+      const nextHeight =
+        entries[0]?.contentRect.height ?? promptComposer.getBoundingClientRect().height;
+      const previousHeight = promptComposerHeightRef.current;
+      promptComposerHeightRef.current = nextHeight;
+      if (previousHeight === null) return;
+      const heightDelta = nextHeight - previousHeight;
+      if (Math.abs(heightDelta) < 0.5) return;
+      scrollContainer.scrollTop += heightDelta;
+    });
+
+    observer.observe(promptComposer);
+    return () => {
+      observer.disconnect();
+      promptComposerHeightRef.current = null;
+    };
+  }, [containerRef, threadId]);
 
   const handleAttachFiles = useCallback(async (files: File[]) => {
     if (!projectId || files.length === 0) return;
@@ -376,63 +404,66 @@ export function ThreadDetailView() {
       contentClassName="gap-2 pt-0"
       footerUsesPromptPadding
       footer={
-        <PromptComposerShell statusLabel={provisioningStatusLabel}>
-          <ScrollToBottomButton
-            visible={showScrollToBottom}
-            onClick={scrollToBottom}
-          />
-          <PromptBox
-            value={message}
-            onChange={promptDraft.setText}
-            onSubmit={handleSend}
-            onStop={
-              thread.status === "active"
-                ? () => stopThread.mutate(thread.id)
-                : undefined
-            }
-            isSubmitting={tellThread.isPending}
-            submitDisabled={!canSendFollowUp}
-            isRunning={thread.status === "active"}
-            placeholder={promptPlaceholder}
-            submitMode="enter"
-            autoFocus
-            mentionSuggestions={fileMentions.suggestions}
-            mentionLoading={fileMentions.isLoading}
-            mentionError={fileMentions.isError}
-            onMentionQueryChange={fileMentions.setQuery}
-            attachments={promptDraft.attachments}
-            onAttachFiles={handleAttachFiles}
-            onRemoveAttachment={promptDraft.removeAttachment}
-            isAttaching={uploadPromptAttachment.isPending}
-            attachmentError={attachmentError}
-            footerStart={
-              <>
-                {supportsModelList ? (
+        <div ref={promptComposerRef}>
+          <PromptComposerShell statusLabel={provisioningStatusLabel}>
+            <ScrollToBottomButton
+              visible={showScrollToBottom}
+              onClick={scrollToBottom}
+            />
+            <PromptBox
+              value={message}
+              onChange={promptDraft.setText}
+              onSubmit={handleSend}
+              zenModeLayout="thread"
+              onStop={
+                thread.status === "active"
+                  ? () => stopThread.mutate(thread.id)
+                  : undefined
+              }
+              isSubmitting={tellThread.isPending}
+              submitDisabled={!canSendFollowUp}
+              isRunning={thread.status === "active"}
+              placeholder={promptPlaceholder}
+              submitMode="enter"
+              autoFocus
+              mentionSuggestions={fileMentions.suggestions}
+              mentionLoading={fileMentions.isLoading}
+              mentionError={fileMentions.isError}
+              onMentionQueryChange={fileMentions.setQuery}
+              attachments={promptDraft.attachments}
+              onAttachFiles={handleAttachFiles}
+              onRemoveAttachment={promptDraft.removeAttachment}
+              isAttaching={uploadPromptAttachment.isPending}
+              attachmentError={attachmentError}
+              footerStart={
+                <>
+                  {supportsModelList ? (
+                    <PromptOptionPicker
+                      label="Model"
+                      value={activeModel?.model ?? selectedModel}
+                      options={modelOptions}
+                      onChange={setSelectedModel}
+                    />
+                  ) : null}
+                  {supportsReasoningLevels ? (
+                    <PromptOptionPicker
+                      label="Reasoning"
+                      value={reasoningLevel}
+                      options={reasoningOptions}
+                      onChange={setReasoningLevel}
+                    />
+                  ) : null}
                   <PromptOptionPicker
-                    label="Model"
-                    value={activeModel?.model ?? selectedModel}
-                    options={modelOptions}
-                    onChange={setSelectedModel}
+                    label="Sandbox"
+                    value={sandboxMode}
+                    options={sandboxOptions}
+                    onChange={setSandboxMode}
                   />
-                ) : null}
-                {supportsReasoningLevels ? (
-                  <PromptOptionPicker
-                    label="Reasoning"
-                    value={reasoningLevel}
-                    options={reasoningOptions}
-                    onChange={setReasoningLevel}
-                  />
-                ) : null}
-                <PromptOptionPicker
-                  label="Sandbox"
-                  value={sandboxMode}
-                  options={sandboxOptions}
-                  onChange={setSandboxMode}
-                />
-              </>
-            }
-          />
-        </PromptComposerShell>
+                </>
+              }
+            />
+          </PromptComposerShell>
+        </div>
       }
     >
       {conversationMain}
