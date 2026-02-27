@@ -4,7 +4,6 @@ import { ChevronDown } from "lucide-react";
 import {
   useThread,
   useThreadWorkStatus,
-  useThreadEvents,
   useThreadTimeline,
   useThreadToolGroupMessages,
   useTellThread,
@@ -29,7 +28,6 @@ import { useAutoScroll } from "@/hooks/useAutoScroll";
 import { useScrollToBottomIndicator } from "@/hooks/useScrollToBottomIndicator";
 import { usePromptModelReasoning } from "@/hooks/usePromptModelReasoning";
 import { usePromptDraftStorage } from "@/hooks/usePromptDraftStorage";
-import { useDebugMode } from "@/hooks/useDebugMode";
 import { usePromptFileMentions } from "@/hooks/usePromptFileMentions";
 import { PageShell } from "@/components/layout/PageShell";
 import { DetailCard, DetailRow } from "@/components/shared/DetailCard";
@@ -39,11 +37,8 @@ import {
   ConversationTimeline,
   PromptComposerShell,
 } from "@beanbag/ui-core";
-import { toUIMessages, type UIMessage } from "@beanbag/agent-core";
-import {
-  buildThreadDetailRows,
-  type ThreadDetailToolGroupRow,
-} from "./threadDetailRows";
+import { type UIMessage } from "@beanbag/agent-core";
+import { type ThreadDetailToolGroupRow } from "./threadDetailRows";
 import {
   findLatestActivityMessageId,
   findLatestActivityRowId,
@@ -165,15 +160,8 @@ export function ThreadDetailView() {
   const { data: thread, isLoading, error } = useThread(threadId ?? "");
   const { data: threadWorkStatus } = useThreadWorkStatus(threadId ?? "");
   const { data: parentThread } = useThread(thread?.parentThreadId ?? "");
-  const { debugMode } = useDebugMode();
-  const { data: events, isLoading: eventsLoading } = useThreadEvents(threadId ?? "", {
-    enabled: Boolean(threadId) && debugMode,
-  });
   const { data: timeline, isLoading: timelineLoading } = useThreadTimeline(
     threadId ?? "",
-    {
-      enabled: Boolean(threadId) && !debugMode,
-    },
   );
   const threadToolGroupMessages = useThreadToolGroupMessages();
   const { data: defaultExecutionOptions } = useThreadDefaultExecutionOptions(
@@ -224,29 +212,7 @@ export function ThreadDetailView() {
     initialEnvironmentId: thread?.environmentId,
   });
 
-  const uiMessages = useMemo(
-    () =>
-      toUIMessages(events, {
-        includeDebugRawEvents: debugMode,
-        includeOptionalOperations: false,
-        threadStatus: thread?.status,
-      }),
-    [debugMode, events, thread?.status],
-  );
-
-  const visibleMessages = useMemo(
-    () =>
-      debugMode
-        ? uiMessages.filter((entry) => entry.kind !== "assistant-reasoning")
-        : [],
-    [debugMode, uiMessages],
-  );
-  const threadDetailRows = useMemo(() => {
-    if (debugMode) {
-      return buildThreadDetailRows(visibleMessages);
-    }
-    return timeline?.rows ?? [];
-  }, [debugMode, timeline?.rows, visibleMessages]);
+  const threadDetailRows = useMemo(() => timeline?.rows ?? [], [timeline?.rows]);
   const latestActivityRowId = useMemo(
     () => findLatestActivityRowId(threadDetailRows),
     [threadDetailRows],
@@ -256,14 +222,8 @@ export function ThreadDetailView() {
     [latestActivityRowId, threadDetailRows],
   );
 
-  const isReasoningBlockActive = useMemo(
-    () =>
-      uiMessages.some(
-        (entry) => entry.kind === "assistant-reasoning" && entry.status === "streaming",
-      ),
-    [uiMessages],
-  );
-  const isTimelineLoading = debugMode ? eventsLoading : timelineLoading;
+  const isReasoningBlockActive = false;
+  const isTimelineLoading = timelineLoading;
 
   useEffect(() => {
     setLoadingToolGroupIds(new Set());

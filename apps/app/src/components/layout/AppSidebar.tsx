@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react"
 import { cn } from "@/lib/utils"
 import { useLocation } from "react-router-dom"
-import { Bug, BugOff, Moon, Sun } from "lucide-react"
+import { Moon, Sun } from "lucide-react"
 import {
   Sidebar,
   SidebarContent,
@@ -13,7 +13,6 @@ import {
 } from "@/components/ui/sidebar"
 import { ProjectList } from "./ProjectList"
 import { useQuickCreateProject } from "@/hooks/useQuickCreateProject"
-import { useDebugMode } from "@/hooks/useDebugMode"
 
 const THEME_STORAGE_KEY = "beanbag.theme"
 
@@ -28,7 +27,6 @@ export function AppSidebar({ onResizeMouseDown, isResizing }: AppSidebarProps) {
   const location = useLocation()
   const { isMobile, setOpenMobile } = useSidebar()
   const { createFromPicker, isCreating } = useQuickCreateProject()
-  const { debugMode, toggleDebugMode } = useDebugMode()
   const [theme, setTheme] = useState<Theme>(() => {
     if (typeof window === "undefined") return "light"
     const storedTheme = window.localStorage.getItem(THEME_STORAGE_KEY)
@@ -77,16 +75,6 @@ export function AppSidebar({ onResizeMouseDown, isResizing }: AppSidebarProps) {
                 aria-label={isDarkTheme ? "Switch to light mode" : "Switch to dark mode"}
               >
                 {isDarkTheme ? <Sun /> : <Moon />}
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-            <SidebarMenuItem>
-              <SidebarMenuButton
-                onClick={toggleDebugMode}
-                className="w-8 justify-center p-0"
-                tooltip={debugMode ? "Disable debug mode" : "Enable debug mode"}
-                aria-label={debugMode ? "Disable debug mode" : "Enable debug mode"}
-              >
-                {debugMode ? <BugOff /> : <Bug />}
               </SidebarMenuButton>
             </SidebarMenuItem>
           </SidebarMenu>

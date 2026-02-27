@@ -2,12 +2,10 @@ import {
   useQuery,
   useMutation,
   useQueryClient,
-  useQueries,
 } from "@tanstack/react-query";
 import type {
   Project,
   Thread,
-  ThreadEvent,
   CreateProjectRequest,
   UpdateProjectRequest,
   SpawnThreadRequest,
@@ -148,29 +146,6 @@ export function useThread(id: string) {
       }
       return undefined;
     },
-  });
-}
-
-export function useThreadEvents(
-  id: string,
-  options?: { enabled?: boolean; limit?: number },
-) {
-  return useQuery<ThreadEvent[]>({
-    queryKey: ["threadEvents", id, options?.limit ?? null],
-    queryFn: () => api.getThreadEvents(id, undefined, options?.limit),
-    enabled: (options?.enabled ?? true) && !!id,
-  });
-}
-
-export function useThreadEventsBatch(threadIds: string[]) {
-  const INITIAL_THREAD_EVENTS_LIMIT = 100;
-  const uniqueThreadIds = Array.from(new Set(threadIds.filter(Boolean)));
-  return useQueries({
-    queries: uniqueThreadIds.map((threadId) => ({
-      queryKey: ["threadEvents", threadId],
-      queryFn: () => api.getThreadEvents(threadId, undefined, INITIAL_THREAD_EVENTS_LIMIT),
-      enabled: threadId.length > 0,
-    })),
   });
 }
 
