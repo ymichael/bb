@@ -1,4 +1,4 @@
-import { Archive, Circle, MoreHorizontal, PencilLine, RotateCcw } from "lucide-react"
+import { MoreHorizontal } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -6,34 +6,42 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Button } from "@/components/ui/button"
+import { cn } from "@/lib/utils"
 
 interface ThreadActionsMenuProps {
-  onMarkUnread: () => void
+  onToggleRead: () => void
   onRename: () => void
   onToggleArchive: () => void
+  isRead: boolean
   isArchived: boolean
+  onOpenChange?: (open: boolean) => void
   disabled?: boolean
   triggerClassName?: string
   align?: "start" | "center" | "end"
 }
 
 export function ThreadActionsMenu({
-  onMarkUnread,
+  onToggleRead,
   onRename,
   onToggleArchive,
+  isRead,
   isArchived,
+  onOpenChange,
   disabled = false,
   triggerClassName,
   align = "end",
 }: ThreadActionsMenuProps) {
   return (
-    <DropdownMenu>
+    <DropdownMenu onOpenChange={onOpenChange}>
       <DropdownMenuTrigger asChild>
         <Button
           type="button"
           variant="ghost"
           size="icon"
-          className={triggerClassName}
+          className={cn(
+            "data-[state=open]:bg-accent data-[state=open]:text-foreground",
+            triggerClassName
+          )}
           aria-label="Thread actions"
           title="Thread actions"
           disabled={disabled}
@@ -50,11 +58,10 @@ export function ThreadActionsMenu({
           disabled={disabled}
           onSelect={(event) => {
             event.preventDefault()
-            onMarkUnread()
+            onToggleRead()
           }}
         >
-          <Circle className="size-4" />
-          Mark as unread
+          {isRead ? "Mark as unread" : "Mark as read"}
         </DropdownMenuItem>
         <DropdownMenuItem
           disabled={disabled}
@@ -63,7 +70,6 @@ export function ThreadActionsMenu({
             onRename()
           }}
         >
-          <PencilLine className="size-4" />
           Rename thread
         </DropdownMenuItem>
         <DropdownMenuItem
@@ -73,7 +79,6 @@ export function ThreadActionsMenu({
             onToggleArchive()
           }}
         >
-          {isArchived ? <RotateCcw className="size-4" /> : <Archive className="size-4" />}
           {isArchived ? "Unarchive" : "Archive"}
         </DropdownMenuItem>
       </DropdownMenuContent>

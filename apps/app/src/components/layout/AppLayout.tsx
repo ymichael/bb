@@ -26,6 +26,7 @@ import {
 import { AppSidebar } from "./AppSidebar"
 import {
   useArchiveThread,
+  useMarkThreadRead,
   useMarkThreadUnread,
   useProjects,
   useThread,
@@ -54,7 +55,7 @@ interface AppHeaderProps {
   projectMatch: RegExpMatchArray | null
   projectName?: string
   meta: { title: string; subtitle?: string; breadcrumbs?: string[] }
-  titleStartSlot?: ReactNode
+  titleEndSlot?: ReactNode
 }
 
 function AppHeader({
@@ -62,7 +63,7 @@ function AppHeader({
   projectMatch,
   projectName,
   meta,
-  titleStartSlot,
+  titleEndSlot,
 }: AppHeaderProps) {
   const { isMobile, open, openMobile } = useSidebar()
   const isSidebarCollapsed = isMobile ? !openMobile : !open
@@ -85,7 +86,6 @@ function AppHeader({
       <div className="flex h-full items-center">
         <SidebarTrigger className="h-5 w-5 shrink-0 rounded-md p-0" />
         <div className="ml-3 flex min-w-0 flex-1 items-center gap-2">
-          {titleStartSlot ? titleStartSlot : null}
           {headerTitle || meta.subtitle ? (
             <Separator orientation="vertical" className="mr-2 h-4" />
           ) : null}
@@ -121,6 +121,7 @@ function AppHeader({
             ) : null}
           </div>
         </div>
+        {titleEndSlot ? <div className="mr-2">{titleEndSlot}</div> : null}
         {isProjectMainView && projectMatch ? (
           <div className="mr-2 flex items-center gap-1">
             <Link
@@ -179,6 +180,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const { data: projects, isLoading: projectsLoading } = useProjects()
   const archiveThread = useArchiveThread()
   const unarchiveThread = useUnarchiveThread()
+  const markThreadRead = useMarkThreadRead()
   const markThreadUnread = useMarkThreadUnread()
   const updateThread = useUpdateThread()
   const threadWorkStatusLookup = useThreadWorkStatusLookup()
@@ -281,15 +283,21 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const threadTitleActions = threadMatch && thread ? (
     <ThreadActionsMenu
       triggerClassName="h-7 w-7 text-muted-foreground"
-      align="start"
       disabled={
         archiveThread.isPending ||
         unarchiveThread.isPending ||
+        markThreadRead.isPending ||
         markThreadUnread.isPending ||
         updateThread.isPending
       }
-      onMarkUnread={() => {
-        markThreadUnread.mutate(thread.id)
+      align="end"
+      isRead={(thread.lastReadAt ?? 0) >= thread.updatedAt}
+      onToggleRead={() => {
+        if ((thread.lastReadAt ?? 0) >= thread.updatedAt) {
+          markThreadUnread.mutate(thread.id)
+          return
+        }
+        markThreadRead.mutate(thread.id)
       }}
       onRename={renameThread}
       onToggleArchive={() => {
@@ -417,7 +425,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
               projectMatch={projectMatch}
               projectName={projectLabel}
               meta={meta}
-              titleStartSlot={threadTitleActions}
+              titleEndSlot={threadTitleActions}
             />
           ) : null}
           <main className="flex min-h-0 flex-1 flex-col p-4 md:p-5">

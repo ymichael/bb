@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { assertNever, type Thread } from "@beanbag/agent-core"
 import {
+  Archive,
   AlertTriangle,
   ChevronRight,
   Folder,
@@ -16,6 +17,7 @@ import {
 import {
   useArchiveThread,
   useDeleteProject,
+  useMarkThreadRead,
   useMarkThreadUnread,
   useProjects,
   useThreadWorkStatusLookup,
@@ -26,7 +28,6 @@ import {
 } from "@/hooks/useApi"
 import { NavLink, useLocation, useNavigate } from "react-router-dom"
 import { cn } from "@/lib/utils"
-import { formatRelativeTime } from "@/lib/formatting"
 import {
   deriveProjectNameFromPath,
   requestProjectRootPath,
@@ -75,6 +76,7 @@ export function ProjectList({
   const { data: threads, isLoading: threadsLoading } = useThreads()
   const archiveThread = useArchiveThread()
   const threadWorkStatusLookup = useThreadWorkStatusLookup()
+  const markThreadRead = useMarkThreadRead()
   const markThreadUnread = useMarkThreadUnread()
   const updateThread = useUpdateThread()
   const unarchiveThread = useUnarchiveThread()
@@ -98,6 +100,7 @@ export function ProjectList({
     }
   )
   const [archiveConfirmationThread, setArchiveConfirmationThread] = useState<Thread | null>(null)
+  const [openThreadActionsThreadId, setOpenThreadActionsThreadId] = useState<string | null>(null)
 
   const selectedThreadId = location.pathname.match(
     /^\/projects\/[^/]+\/threads\/([^/]+)/
@@ -409,6 +412,7 @@ export function ProjectList({
                         {projectThreads.map((thread) => {
                           const isBusyThread = isBusyThreadStatus(thread.status)
                           const showUnreadBadge = isCompletedUnreadThread(thread)
+                          const isThreadActionsOpen = openThreadActionsThreadId === thread.id
 
                           return (
                             <NavLink
@@ -417,7 +421,7 @@ export function ProjectList({
                               onClick={onProjectSelect}
                               className={({ isActive }) =>
                                 cn(
-                                  "group/thread-row flex h-8 w-full items-center gap-2 rounded-md p-2 text-sm transition-colors",
+                                  "group/thread-row flex h-8 w-full items-center gap-2 rounded-md pl-2 pr-0 text-sm transition-colors",
                                   isActive
                                     ? "bg-sidebar-border/80 text-sidebar-foreground"
                                     : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
@@ -438,34 +442,69 @@ export function ProjectList({
                               <span className="min-w-0 flex-1 truncate">
                                 {thread.title ?? `Thread ${thread.id.slice(0, 8)}`}
                               </span>
-                              <span className="relative shrink-0 text-xs text-sidebar-foreground/60 tabular-nums">
-                                <span className="inline-grid grid-cols-[0.75rem_auto] items-center justify-items-end gap-0.5 transition-opacity group-hover/thread-row:opacity-0">
-                                  <span
-                                    className={cn(
-                                      "inline-flex h-3 w-3 items-center justify-center",
-                                      thread.environmentId === "worktree" ? undefined : "invisible"
-                                    )}
-                                  >
-                                    <FolderGit2
-                                      className="size-3 text-sidebar-foreground/70"
-                                      aria-label="Worktree thread"
-                                    />
-                                  </span>
-                                  <span className="min-w-8 text-right">
-                                    {formatRelativeTime(thread.updatedAt)}
-                                  </span>
+                              <span className="relative h-7 w-14 shrink-0">
+                                <span
+                                  className={cn(
+                                    "absolute inset-0 flex items-center justify-end transition-opacity",
+                                    isThreadActionsOpen ? "opacity-0" : "group-hover/thread-row:opacity-0"
+                                  )}
+                                >
+                                  {thread.environmentId === "worktree" ? (
+                                    <span className="inline-flex h-7 w-7 items-center justify-center">
+                                      <FolderGit2
+                                        className="size-4 text-sidebar-foreground/70"
+                                        aria-label="Worktree thread"
+                                      />
+                                    </span>
+                                  ) : null}
                                 </span>
-                                <div className="pointer-events-none absolute inset-0 flex items-center justify-end opacity-0 transition-opacity group-hover/thread-row:pointer-events-auto group-hover/thread-row:opacity-100">
-                                  <ThreadActionsMenu
-                                    triggerClassName="h-6 w-6 text-sidebar-foreground/75 hover:bg-sidebar-accent hover:text-sidebar-foreground"
+                                <div
+                                  className={cn(
+                                    "absolute inset-0 flex items-center justify-end transition-opacity",
+                                    isThreadActionsOpen
+                                      ? "pointer-events-auto opacity-100"
+                                      : "pointer-events-none opacity-0 group-hover/thread-row:pointer-events-auto group-hover/thread-row:opacity-100"
+                                  )}
+                                >
+                                  <button
+                                    type="button"
+                                    className="inline-flex h-7 w-7 items-center justify-center rounded-md text-sidebar-foreground/70 outline-none ring-sidebar-ring transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-50"
+                                    title="Archive thread"
+                                    aria-label="Archive thread"
                                     disabled={
                                       archiveThread.isPending ||
                                       unarchiveThread.isPending ||
                                       updateThread.isPending ||
+                                      markThreadRead.isPending ||
                                       markThreadUnread.isPending
                                     }
-                                    onMarkUnread={() => {
-                                      markThreadUnread.mutate(thread.id)
+                                    onClick={(event) => {
+                                      event.preventDefault()
+                                      event.stopPropagation()
+                                      void requestArchiveThread(thread)
+                                    }}
+                                  >
+                                    <Archive className="size-4" />
+                                  </button>
+                                  <ThreadActionsMenu
+                                    triggerClassName="h-7 w-7 text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground"
+                                    onOpenChange={(open) => {
+                                      setOpenThreadActionsThreadId(open ? thread.id : null)
+                                    }}
+                                    disabled={
+                                      archiveThread.isPending ||
+                                      unarchiveThread.isPending ||
+                                      updateThread.isPending ||
+                                      markThreadRead.isPending ||
+                                      markThreadUnread.isPending
+                                    }
+                                    isRead={(thread.lastReadAt ?? 0) >= thread.updatedAt}
+                                    onToggleRead={() => {
+                                      if ((thread.lastReadAt ?? 0) >= thread.updatedAt) {
+                                        markThreadUnread.mutate(thread.id)
+                                        return
+                                      }
+                                      markThreadRead.mutate(thread.id)
                                     }}
                                     onRename={() => {
                                       renameThread(thread)
