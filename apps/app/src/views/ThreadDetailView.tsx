@@ -661,6 +661,7 @@ export function ThreadDetailView() {
               mentionError={fileMentions.isError}
               onMentionQueryChange={fileMentions.setQuery}
               attachments={promptDraft.attachments}
+              attachmentProjectId={projectId}
               onAttachFiles={handleAttachFiles}
               onRemoveAttachment={promptDraft.removeAttachment}
               isAttaching={uploadPromptAttachment.isPending}

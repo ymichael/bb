@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ChangeEvent, type FormEvent, type KeyboardEvent, type ReactNode } from "react"
-import { ArrowUp, AudioLines, CornerDownLeft, Loader2, Maximize2, Mic, Minimize2, Paperclip, Square, X } from "lucide-react"
+import { ArrowUp, AudioLines, ChevronLeft, ChevronRight, CornerDownLeft, Loader2, Maximize2, Mic, Minimize2, Paperclip, Square, X } from "lucide-react"
 import type { ProjectFileSuggestion } from "@beanbag/agent-core"
 import { Button } from "@/components/ui/button"
+import { Dialog, DialogClose, DialogContent, DialogTitle } from "@/components/ui/dialog"
 import { useAutoGrow } from "@/hooks/useAutoGrow"
 import { useVoiceInput } from "@/hooks/useVoiceInput"
 import { transcribeVoiceInput } from "@/lib/api"
 import type { PromptDraftAttachment } from "@/lib/prompt-draft"
+import { toUserAttachmentImageSrc } from "@/lib/user-attachment-images"
 import { cn } from "@/lib/utils"
 import { findActiveFileMention, insertFileMention, type ActiveFileMention } from "./file-mention"
 
@@ -50,6 +52,7 @@ interface PromptBoxProps {
   onAttachFiles?: (files: File[]) => void | Promise<void>
   onRemoveAttachment?: (path: string) => void
   zenModeLayout?: ZenModeLayout
+  attachmentProjectId?: string
 }
 
 interface DismissedMentionRange {
@@ -111,6 +114,7 @@ export function PromptBox({
   onAttachFiles,
   onRemoveAttachment,
   zenModeLayout = "thread",
+  attachmentProjectId,
 }: PromptBoxProps) {
   const [isZenMode, setIsZenMode] = useState(false)
   const formRef = useRef<HTMLFormElement>(null)
@@ -127,6 +131,7 @@ export function PromptBox({
   const dismissedMentionRef = useRef<DismissedMentionRange | null>(null)
   const [activeMention, setActiveMention] = useState<ActiveFileMention | null>(null)
   const [selectedMentionIndex, setSelectedMentionIndex] = useState(0)
+  const [expandedImageIndex, setExpandedImageIndex] = useState<number | null>(null)
 
   useEffect(() => {
     if (!textareaRef.current) return
@@ -238,6 +243,14 @@ export function PromptBox({
 
   const trimmedValue = value.trim()
   const hasAttachments = attachments.length > 0
+  const imageAttachments = attachments.filter((attachment) =>
+    attachment.type === "localImage" || attachment.mimeType?.toLowerCase().startsWith("image/")
+  )
+  const hasMultipleAttachmentImages = imageAttachments.length > 1
+  const currentAttachmentImageSrc =
+    expandedImageIndex !== null && imageAttachments[expandedImageIndex]
+      ? toUserAttachmentImageSrc(imageAttachments[expandedImageIndex].path, attachmentProjectId)
+      : null
   const hasSubmittableInput = trimmedValue.length > 0 || hasAttachments
   const hasMentionContext = activeMention !== null
   const showMentionMenu = hasMentionContext
@@ -257,6 +270,13 @@ export function PromptBox({
   useEffect(() => {
     mentionItemRefs.current = mentionItemRefs.current.slice(0, mentionSuggestions.length)
   }, [mentionSuggestions.length])
+
+  useEffect(() => {
+    if (expandedImageIndex === null) return
+    if (expandedImageIndex >= imageAttachments.length) {
+      setExpandedImageIndex(null)
+    }
+  }, [expandedImageIndex, imageAttachments.length])
 
   useEffect(() => {
     if (!showMentionMenu || mentionSuggestions.length === 0) return
@@ -634,7 +654,29 @@ export function PromptBox({
       ) : null}
 
       {attachments.length > 0 ? (
-        <div className="mx-3 mb-1 mt-1 flex flex-wrap gap-1.5">
+        <div className="mx-3 mb-1 mt-1">
+          {imageAttachments.length > 0 ? (
+            <div className="mb-1.5 flex flex-wrap gap-2">
+              {imageAttachments.map((attachment, index) => (
+                <button
+                  key={`${attachment.path}-${index}`}
+                  type="button"
+                  className="cursor-zoom-in overflow-hidden rounded-md border border-border/70 bg-muted/20"
+                  onClick={() => setExpandedImageIndex(index)}
+                  title={attachment.name}
+                >
+                  <img
+                    src={toUserAttachmentImageSrc(attachment.path, attachmentProjectId)}
+                    alt={attachment.name}
+                    className="h-16 w-24 object-cover"
+                    loading="lazy"
+                  />
+                </button>
+              ))}
+            </div>
+          ) : null}
+
+          <div className="flex flex-wrap gap-1.5">
           {attachments.map((attachment) => (
             <span
               key={attachment.path}
@@ -653,7 +695,65 @@ export function PromptBox({
               ) : null}
             </span>
           ))}
+          </div>
         </div>
+      ) : null}
+
+      {currentAttachmentImageSrc ? (
+        <Dialog open={true} onOpenChange={(open) => !open && setExpandedImageIndex(null)}>
+          <DialogContent className="max-w-[90vw] border-none bg-transparent p-0 shadow-none [&>button]:hidden">
+            <DialogTitle className="sr-only">Attached image preview</DialogTitle>
+            <img
+              src={currentAttachmentImageSrc}
+              alt="Attached image"
+              className="max-h-[82vh] max-w-[90vw] rounded bg-background/95 object-contain"
+            />
+
+            {hasMultipleAttachmentImages ? (
+              <>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="absolute left-2 top-1/2 size-9 -translate-y-1/2 rounded-full bg-black/45 text-white hover:bg-black/60 hover:text-white"
+                  onClick={() => {
+                    setExpandedImageIndex((index) => {
+                      if (index === null) return index
+                      return index === 0 ? imageAttachments.length - 1 : index - 1
+                    })
+                  }}
+                >
+                  <ChevronLeft className="size-5" />
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="absolute right-2 top-1/2 size-9 -translate-y-1/2 rounded-full bg-black/45 text-white hover:bg-black/60 hover:text-white"
+                  onClick={() => {
+                    setExpandedImageIndex((index) => {
+                      if (index === null) return index
+                      return index === imageAttachments.length - 1 ? 0 : index + 1
+                    })
+                  }}
+                >
+                  <ChevronRight className="size-5" />
+                </Button>
+              </>
+            ) : null}
+
+            <DialogClose asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="absolute right-2 top-2 size-9 rounded-full bg-black/45 text-white hover:bg-black/60 hover:text-white"
+              >
+                <X className="size-5" />
+              </Button>
+            </DialogClose>
+          </DialogContent>
+        </Dialog>
       ) : null}
 
       {attachmentError ? (
