@@ -1189,6 +1189,11 @@ function parseOperationMessage(
 
   if (eventTypeMatches(eventType, "system/thread-title/updated")) {
     const payload = toEventRecord(event.data);
+    // Avoid duplicate rows when the underlying provider thread/name/updated
+    // event is also present in the timeline.
+    if (eventTypeMatches(getStringField(payload, "providerMethod") ?? "", "thread/name/updated")) {
+      return null;
+    }
     const title = getStringField(payload, "title");
     if (!title) return null;
     const previousTitle = getStringField(payload, "previousTitle");
@@ -1205,6 +1210,28 @@ function parseOperationMessage(
       detail: previousTitle
         ? `${previousTitle} → ${title}`
         : title,
+    };
+  }
+
+  if (eventTypeMatches(eventType, "thread/name/updated")) {
+    const payload = toEventRecord(event.data);
+    const title = getFirstStringField(payload, ["threadName", "thread_name"]);
+    if (!title) return null;
+    const previousTitle = getFirstStringField(payload, [
+      "previousThreadName",
+      "previous_thread_name",
+    ]);
+    return {
+      kind: "operation",
+      id: messageId(event.threadId, "op", `thread-title-updated:${event.seq}`),
+      threadId: event.threadId,
+      sourceSeqStart: event.seq,
+      sourceSeqEnd: event.seq,
+      createdAt: event.createdAt,
+      turnId: getTurnId(event.data),
+      opType: "thread-title-updated",
+      title: "Title updated",
+      detail: previousTitle ? `${previousTitle} → ${title}` : title,
     };
   }
 
@@ -1400,7 +1427,6 @@ function parseErrorMessage(event: ThreadEvent, eventType: string): UIErrorMessag
 function isIgnoredNoiseType(eventType: string): boolean {
   const ignored = [
     "thread/started",
-    "thread/name/updated",
     "account/ratelimits/updated",
     "thread/tokenusage/updated",
     "item/reasoning/summarypartadded",

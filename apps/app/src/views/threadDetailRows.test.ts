@@ -369,4 +369,71 @@ describe("buildThreadDetailRows", () => {
     expect(rows[0].message.detail).toContain("Environment: Local Workspace");
     expect(rows[0].message.detail).toContain("local • /Users/michael/Projects/bb");
   });
+
+  it("keeps compaction and thread title updates visible outside tool groups", () => {
+    const messages: UIMessage[] = [
+      {
+        ...baseMessage("user-1", 1),
+        kind: "user",
+        turnId: "turn-1",
+        text: "continue",
+      },
+      {
+        ...baseMessage("exploring-1", 2),
+        kind: "tool-exploring",
+        turnId: "turn-1",
+        status: "completed",
+        calls: [
+          {
+            callId: "call-1",
+            command: "rg compact",
+            parsedCmd: [],
+            status: "completed",
+          },
+        ],
+      },
+      {
+        ...baseMessage("compact-1", 3),
+        kind: "operation",
+        turnId: "turn-1",
+        opType: "compaction",
+        title: "Context compacted",
+        detail: "Compacted",
+      },
+      {
+        ...baseMessage("rename-1", 4),
+        kind: "operation",
+        turnId: "turn-1",
+        opType: "thread-title-updated",
+        title: "Title updated",
+        detail: "Old → New",
+      },
+      {
+        ...baseMessage("assistant-1", 5),
+        kind: "assistant-text",
+        turnId: "turn-1",
+        text: "done",
+        status: "completed",
+      },
+    ];
+
+    const rows = buildThreadDetailRows(messages);
+    expect(rows.map((row) => row.kind)).toEqual([
+      "message",
+      "tool-group",
+      "message",
+      "message",
+      "message",
+    ]);
+
+    const renderedMessageIds = rows
+      .filter((row): row is Extract<(typeof rows)[number], { kind: "message" }> => row.kind === "message")
+      .map((row) => row.message.id);
+    expect(renderedMessageIds).toEqual([
+      "user-1",
+      "compact-1",
+      "rename-1",
+      "assistant-1",
+    ]);
+  });
 });

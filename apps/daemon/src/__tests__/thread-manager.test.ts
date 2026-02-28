@@ -3619,4 +3619,69 @@ describe("ThreadManager", () => {
       expect(manager.isActive("thread-1")).toBe(false);
     });
   });
+
+  describe("getTimeline()", () => {
+    it("includes provider thread/name/updated rows in the projected timeline", () => {
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeThread({ status: "idle" }),
+      );
+      (eventRepo.getLatestSeq as ReturnType<typeof vi.fn>).mockReturnValue(1);
+      (eventRepo.listByThread as ReturnType<typeof vi.fn>).mockReturnValue([
+        makeEvent({
+          seq: 1,
+          type: "thread/name/updated",
+          data: {
+            threadId: "provider-thread-1",
+            threadName: "Renamed by agent",
+          },
+        }),
+      ]);
+
+      const timeline = manager.getTimeline("thread-1");
+      const rows = timeline.rows.filter(
+        (row): row is Extract<(typeof timeline.rows)[number], { kind: "message" }> =>
+          row.kind === "message",
+      );
+
+      expect(rows).toHaveLength(1);
+      expect(rows[0]?.message.kind).toBe("operation");
+      if (rows[0]?.message.kind !== "operation") return;
+      expect(rows[0].message.opType).toBe("thread-title-updated");
+      expect(rows[0].message.detail).toBe("Renamed by agent");
+
+      const ignoredTypes = (eventRepo.listByThread as ReturnType<typeof vi.fn>).mock
+        .calls[0]?.[3] as readonly string[] | undefined;
+      expect(ignoredTypes).toBeDefined();
+      expect(ignoredTypes).not.toContain("thread/name/updated");
+    });
+
+    it("includes compaction rows in the projected timeline", () => {
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeThread({ status: "idle" }),
+      );
+      (eventRepo.getLatestSeq as ReturnType<typeof vi.fn>).mockReturnValue(1);
+      (eventRepo.listByThread as ReturnType<typeof vi.fn>).mockReturnValue([
+        makeEvent({
+          seq: 1,
+          type: "thread/compacted",
+          data: {
+            threadId: "provider-thread-1",
+            turnId: "turn-1",
+          },
+        }),
+      ]);
+
+      const timeline = manager.getTimeline("thread-1");
+      const rows = timeline.rows.filter(
+        (row): row is Extract<(typeof timeline.rows)[number], { kind: "message" }> =>
+          row.kind === "message",
+      );
+
+      expect(rows).toHaveLength(1);
+      expect(rows[0]?.message.kind).toBe("operation");
+      if (rows[0]?.message.kind !== "operation") return;
+      expect(rows[0].message.opType).toBe("compaction");
+      expect(rows[0].message.title).toBe("Context compacted");
+    });
+  });
 });

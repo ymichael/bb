@@ -25,6 +25,12 @@ export interface BuildThreadDetailRowsOptions {
 }
 
 function isCollapsibleTurnMessage(message: UIMessage): message is CollapsibleTurnMessage {
+  if (
+    message.kind === "operation" &&
+    (message.opType === "compaction" || message.opType === "thread-title-updated")
+  ) {
+    return false;
+  }
   return message.kind !== "user";
 }
 

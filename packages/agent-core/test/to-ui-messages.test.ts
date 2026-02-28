@@ -953,7 +953,7 @@ describe("toUIMessages replay coverage", () => {
           title: "Fix collapsed groups",
           previousTitle: "Investigate slowness",
           source: "provider",
-          providerMethod: "thread/name/updated",
+          providerMethod: "thread/started",
         },
         createdAt: 1,
       },
@@ -969,6 +969,98 @@ describe("toUIMessages replay coverage", () => {
     expect(op?.opType).toBe("thread-title-updated");
     expect(op?.title).toBe("Title updated");
     expect(op?.detail).toBe("Investigate slowness → Fix collapsed groups");
+  });
+
+  it("projects provider thread name updates as operations", () => {
+    const events: ThreadEvent[] = [
+      {
+        id: "evt-1",
+        threadId: "thread-1",
+        seq: 1,
+        type: "thread/name/updated",
+        data: {
+          threadId: "thread-1",
+          threadName: "Compaction summary title",
+        },
+        createdAt: 1,
+      },
+    ];
+
+    const projected = toUIMessages(events);
+    const op = projected.find(
+      (message): message is Extract<UIMessage, { kind: "operation" }> =>
+        message.kind === "operation",
+    );
+
+    expect(op).toBeDefined();
+    expect(op?.opType).toBe("thread-title-updated");
+    expect(op?.title).toBe("Title updated");
+    expect(op?.detail).toBe("Compaction summary title");
+  });
+
+  it("deduplicates provider + system title update pairs", () => {
+    const events: ThreadEvent[] = [
+      {
+        id: "evt-1",
+        threadId: "thread-1",
+        seq: 1,
+        type: "thread/name/updated",
+        data: {
+          threadId: "thread-1",
+          threadName: "Server-assigned title",
+        },
+        createdAt: 1,
+      },
+      {
+        id: "evt-2",
+        threadId: "thread-1",
+        seq: 2,
+        type: "system/thread-title/updated",
+        data: {
+          title: "Server-assigned title",
+          previousTitle: "Old title",
+          source: "provider",
+          providerMethod: "thread/name/updated",
+        },
+        createdAt: 2,
+      },
+    ];
+
+    const projected = toUIMessages(events);
+    const ops = projected.filter(
+      (message): message is Extract<UIMessage, { kind: "operation" }> =>
+        message.kind === "operation",
+    );
+
+    expect(ops).toHaveLength(1);
+    expect(ops[0]?.opType).toBe("thread-title-updated");
+    expect(ops[0]?.detail).toBe("Server-assigned title");
+  });
+
+  it("projects compaction events as operations", () => {
+    const events: ThreadEvent[] = [
+      {
+        id: "evt-1",
+        threadId: "thread-1",
+        seq: 1,
+        type: "thread/compacted",
+        data: {
+          threadId: "thread-1",
+          turnId: "turn-1",
+        },
+        createdAt: 1,
+      },
+    ];
+
+    const projected = toUIMessages(events);
+    const op = projected.find(
+      (message): message is Extract<UIMessage, { kind: "operation" }> =>
+        message.kind === "operation",
+    );
+
+    expect(op).toBeDefined();
+    expect(op?.opType).toBe("compaction");
+    expect(op?.title).toBe("Context compacted");
   });
 
   it("wraps unknown events in debug mode and drops them otherwise", () => {

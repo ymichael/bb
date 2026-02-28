@@ -55,6 +55,10 @@ function toThreadChangeFlags(changes: readonly ThreadChangeKind[]): ThreadChange
         flags.workStatusChanged = true;
         break;
       case "events-appended":
+        // Provider events (for example compaction) can update thread metadata
+        // without emitting a dedicated thread change kind. Keep thread detail
+        // metadata fresh when new events arrive.
+        flags.threadChanged = true;
         flags.eventsAppended = true;
         flags.timelineChanged = true;
         break;

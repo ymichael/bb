@@ -104,7 +104,6 @@ interface ThreadTimelineCacheEntry {
 // Open provider/runtime event type set: unknown values are intentionally not filtered.
 const TIMELINE_NOISE_EVENT_TYPES: readonly string[] = [
   "thread/started",
-  "thread/name/updated",
   "account/rateLimits/updated",
   "thread/tokenUsage/updated",
   "item/reasoning/summaryPartAdded",
