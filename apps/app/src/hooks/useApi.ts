@@ -344,6 +344,60 @@ export function useArchiveThread() {
   });
 }
 
+export function useUnarchiveThread() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (args: { id: string }) => api.unarchiveThread(args.id),
+    onMutate: async (args) => {
+      await queryClient.cancelQueries({ queryKey: ["thread", args.id] });
+      await queryClient.cancelQueries({ queryKey: ["threads"] });
+
+      const previousThread = queryClient.getQueryData<Thread>(["thread", args.id]);
+      const previousThreadLists = queryClient.getQueriesData<Thread[]>({
+        queryKey: ["threads"],
+      });
+
+      queryClient.setQueryData<Thread>(["thread", args.id], (thread) => {
+        if (!thread) return thread;
+        return {
+          ...thread,
+          archivedAt: undefined,
+        };
+      });
+
+      for (const [queryKey, list] of previousThreadLists) {
+        if (!list) continue;
+        queryClient.setQueryData<Thread[]>(
+          queryKey,
+          list.map((thread) =>
+            thread.id === args.id
+              ? {
+                  ...thread,
+                  archivedAt: undefined,
+                }
+              : thread,
+          ),
+        );
+      }
+
+      return { previousThread, previousThreadLists };
+    },
+    onError: (_error, args, context) => {
+      if (!context) return;
+
+      queryClient.setQueryData(["thread", args.id], context.previousThread);
+      for (const [queryKey, data] of context.previousThreadLists) {
+        queryClient.setQueryData(queryKey, data);
+      }
+    },
+    onSettled: (_data, _error, args) => {
+      queryClient.invalidateQueries({ queryKey: ["thread", args.id] });
+      queryClient.invalidateQueries({ queryKey: ["threads"] });
+      queryClient.invalidateQueries({ queryKey: ["status"] });
+    },
+  });
+}
+
 export function useMarkThreadRead() {
   const queryClient = useQueryClient();
   return useMutation({

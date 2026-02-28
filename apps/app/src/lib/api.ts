@@ -332,6 +332,10 @@ export async function archiveThread(
   });
 }
 
+export async function unarchiveThread(id: string): Promise<void> {
+  return request<void>("POST", `/threads/${id}/unarchive`);
+}
+
 export async function markThreadRead(id: string): Promise<Thread> {
   return request<Thread>("POST", `/threads/${id}/read`);
 }

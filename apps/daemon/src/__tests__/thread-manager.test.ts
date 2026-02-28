@@ -2929,6 +2929,34 @@ describe("ThreadManager", () => {
     });
   });
 
+  describe("unarchive()", () => {
+    it("clears archived timestamp and broadcasts", () => {
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeThread({ id: "thread-1", status: "idle", archivedAt: 1234 }),
+      );
+
+      manager.unarchive("thread-1");
+
+      expect(threadRepo.update).toHaveBeenCalledWith("thread-1", {
+        archivedAt: null,
+      });
+      expect(ws.broadcast).toHaveBeenCalledWith("thread", "thread-1", [
+        "archived-changed",
+      ]);
+    });
+
+    it("does nothing when thread is not archived", () => {
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeThread({ id: "thread-1", status: "idle", archivedAt: undefined }),
+      );
+
+      manager.unarchive("thread-1");
+
+      expect(threadRepo.update).not.toHaveBeenCalled();
+      expect(ws.broadcast).not.toHaveBeenCalled();
+    });
+  });
+
   describe("tell() archived threads", () => {
     it("rejects tells for archived threads", async () => {
       (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(

@@ -11,6 +11,7 @@ import {
   useSquashMergeThread,
   useStopThread,
   useMarkThreadRead,
+  useUnarchiveThread,
   useThreadDefaultExecutionOptions,
   useUploadPromptAttachment,
 } from "../hooks/useApi";
@@ -53,6 +54,7 @@ import { openPathInEditor } from "@/lib/api";
 import { getPathCommandForTarget } from "@/lib/open-path-preferences";
 import { StatusPillCommitPopover } from "@/components/shared/StatusPillCommitPopover";
 import { WorkspaceChangesList } from "@/components/shared/WorkspaceChangesList";
+import { ArchiveTimestampAction } from "@/components/shared/ArchiveTimestampAction";
 import {
   threadWorkStatusLabel,
   threadWorkStatusVariant,
@@ -171,6 +173,7 @@ export function ThreadDetailView() {
   const commitThread = useCommitThread();
   const squashMergeThread = useSquashMergeThread();
   const stopThread = useStopThread();
+  const unarchiveThread = useUnarchiveThread();
   const markThreadRead = useMarkThreadRead();
   const uploadPromptAttachment = useUploadPromptAttachment();
   const promptDraft = usePromptDraftStorage({ projectId, threadId });
@@ -384,11 +387,14 @@ export function ThreadDetailView() {
     parentThread?.title && parentThread.title.trim().length > 0
       ? parentThread.title
       : parentThreadId;
+  const showWorkspaceStatus =
+    Boolean(threadWorkStatus) &&
+    !(thread.archivedAt !== undefined && thread.environmentId === "local");
   const showThreadMetadata = Boolean(
     parentThreadId ||
       thread.archivedAt !== undefined ||
       thread.environmentId ||
-      threadWorkStatus,
+      showWorkspaceStatus,
   );
   const provisioningStatusLabel =
     isCreated
@@ -445,16 +451,7 @@ export function ThreadDetailView() {
                 <span>{thread.environmentId}</span>
               </DetailRow>
             ) : null}
-            {thread.archivedAt !== undefined ? (
-              <DetailRow
-                label="Archived"
-                valueClassName="min-w-0 truncate"
-                align="center"
-              >
-                <span>true</span>
-              </DetailRow>
-            ) : null}
-            {threadWorkStatus ? (
+            {showWorkspaceStatus && threadWorkStatus ? (
               <DetailRow
                 label="Workspace status"
                 valueClassName="min-w-0"
@@ -535,6 +532,24 @@ export function ThreadDetailView() {
                     ? ` (${threadWorkStatus.currentBranch})`
                     : ""}
                 </button>
+              </DetailRow>
+            ) : null}
+            {thread.archivedAt !== undefined ? (
+              <DetailRow
+                label="Archived"
+                valueClassName="min-w-0 truncate"
+                align="center"
+                className="group"
+              >
+                <ArchiveTimestampAction
+                  isPending={
+                    unarchiveThread.isPending &&
+                    unarchiveThread.variables?.id === thread.id
+                  }
+                  onUnarchive={() => {
+                    unarchiveThread.mutate({ id: thread.id });
+                  }}
+                />
               </DetailRow>
             ) : null}
           </DetailCard>

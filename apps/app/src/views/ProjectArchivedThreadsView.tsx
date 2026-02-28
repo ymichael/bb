@@ -1,7 +1,7 @@
 import { Link, useParams } from "react-router-dom";
 import { PageShell } from "@/components/layout/PageShell";
-import { useThreads } from "@/hooks/useApi";
-import { formatRelativeTime } from "@/lib/formatting";
+import { ArchiveTimestampAction } from "@/components/shared/ArchiveTimestampAction";
+import { useThreads, useUnarchiveThread } from "@/hooks/useApi";
 
 export function ProjectArchivedThreadsView() {
   const { projectId } = useParams<{ projectId: string }>();
@@ -12,6 +12,7 @@ export function ProjectArchivedThreadsView() {
     },
     { enabled: Boolean(projectId) },
   );
+  const unarchiveThread = useUnarchiveThread();
 
   if (!projectId) {
     return (
@@ -38,18 +39,26 @@ export function ProjectArchivedThreadsView() {
         ) : (
           <div className="space-y-1">
             {archivedThreads.map((thread) => (
-              <Link
+              <div
                 key={thread.id}
-                to={`/projects/${projectId}/threads/${thread.id}`}
-                className="flex h-9 items-center gap-3 rounded-md px-3 text-sm transition-colors hover:bg-accent"
+                className="group flex h-9 items-center gap-3 rounded-md px-3 text-sm transition-colors hover:bg-accent"
               >
-                <span className="min-w-0 flex-1 truncate">
+                <Link
+                  to={`/projects/${projectId}/threads/${thread.id}`}
+                  className="min-w-0 flex-1 truncate"
+                >
                   {thread.title ?? `Thread ${thread.id.slice(0, 8)}`}
-                </span>
-                <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
-                  {formatRelativeTime(thread.archivedAt ?? thread.updatedAt)}
-                </span>
-              </Link>
+                </Link>
+                <ArchiveTimestampAction
+                  isPending={
+                    unarchiveThread.isPending &&
+                    unarchiveThread.variables?.id === thread.id
+                  }
+                  onUnarchive={() => {
+                    unarchiveThread.mutate({ id: thread.id });
+                  }}
+                />
+              </div>
             ))}
           </div>
         )}

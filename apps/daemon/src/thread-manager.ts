@@ -717,6 +717,15 @@ export class ThreadManager implements ThreadOrchestrator {
     ]);
   }
 
+  unarchive(threadId: string): void {
+    const thread = this.threadRepo.getById(threadId);
+    if (!thread || thread.archivedAt === undefined) return;
+    this.threadRepo.update(threadId, {
+      archivedAt: null,
+    });
+    this._broadcastThreadChanged(threadId, ["archived-changed"]);
+  }
+
 
   markRead(threadId: string): Thread {
     const thread = this.threadRepo.getById(threadId);

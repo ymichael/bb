@@ -40,6 +40,7 @@ function mockThreadManager(): ThreadManager {
     tell: vi.fn(),
     stop: vi.fn(),
     archive: vi.fn(),
+    unarchive: vi.fn(),
     markRead: vi.fn(),
     mergeThread: vi.fn(),
     getById: vi.fn(),
@@ -670,6 +671,36 @@ describe("Thread routes", () => {
 
       expect(res.status).toBe(404);
       expect(threadManager.archive).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("POST /threads/:id/unarchive", () => {
+    it("unarchives a thread", async () => {
+      const thread = makeThread({ archivedAt: 1234 });
+      (threadManager.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        thread,
+      );
+
+      const res = await app.request("/threads/thread-1/unarchive", {
+        method: "POST",
+      });
+
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ ok: true });
+      expect(threadManager.unarchive).toHaveBeenCalledWith("thread-1");
+    });
+
+    it("returns 404 when thread not found", async () => {
+      (threadManager.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        undefined,
+      );
+
+      const res = await app.request("/threads/nonexistent/unarchive", {
+        method: "POST",
+      });
+
+      expect(res.status).toBe(404);
+      expect(threadManager.unarchive).not.toHaveBeenCalled();
     });
   });
 
