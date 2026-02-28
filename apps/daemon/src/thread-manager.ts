@@ -969,7 +969,12 @@ export class ThreadManager implements ThreadOrchestrator {
     let message = request?.message?.trim();
     if (!message && this.provider.generateCommitMessage) {
       try {
-        message = (await this.provider.generateCommitMessage({ cwd: workspaceRoot }))?.trim();
+        message = (
+          await this.provider.generateCommitMessage({
+            cwd: workspaceRoot,
+            includeUnstaged: request?.includeUnstaged,
+          })
+        )?.trim();
       } catch (err) {
         const detail = err instanceof Error ? err.message : String(err);
         console.warn(

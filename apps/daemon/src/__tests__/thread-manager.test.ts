@@ -3291,6 +3291,51 @@ describe("ThreadManager", () => {
   });
 
   describe("worktree operation broadcasts", () => {
+    it("passes includeUnstaged to provider commit-message generation", async () => {
+      const providerCommitMessageGenerator = vi.fn().mockResolvedValue("feat: generated message");
+      const autogenManager = new ThreadManager(
+        threadRepo as any,
+        eventRepo as any,
+        projectRepo as any,
+        ws as any,
+        createCodexProviderAdapter({ commitMessageGenerator: providerCommitMessageGenerator }),
+      );
+      const thread = makeThread({
+        id: "thread-1",
+        status: "idle",
+        environmentId: "worktree",
+      });
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue({
+        id: "proj-1",
+        name: "Test",
+        rootPath: "/tmp/proj-1",
+        createdAt: 1000,
+        updatedAt: 1000,
+      });
+      (eventRepo.getLatestSeq as ReturnType<typeof vi.fn>).mockReturnValue(0);
+      (eventRepo.create as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeEvent({ seq: 1, type: "system/worktree/commit" }),
+      );
+
+      (autogenManager as any).gitStatusService = {
+        detectDefaultBranch: vi.fn().mockReturnValue("main"),
+        commit: vi.fn().mockReturnValue({
+          ok: true,
+          commitCreated: true,
+          message: "Committed",
+          commitSha: "abc123",
+        }),
+      };
+
+      await autogenManager.commitThread("thread-1", { includeUnstaged: false });
+
+      expect(providerCommitMessageGenerator).toHaveBeenCalledWith({
+        cwd: "/tmp/proj-1",
+        includeUnstaged: false,
+      });
+    });
+
     it("broadcasts events-appended after commitThread appends a system event", async () => {
       const thread = makeThread({
         id: "thread-1",

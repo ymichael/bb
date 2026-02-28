@@ -1,4 +1,7 @@
 import { spawn, spawnSync } from "node:child_process";
+import { copyFileSync, existsSync, mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { isAbsolute, join, resolve } from "node:path";
 import { createInterface } from "node:readline";
 import type { ProviderCommitMessageGeneratorArgs } from "./provider-adapter.js";
 
@@ -12,11 +15,16 @@ function asRecord(value: unknown): Record<string, unknown> | null {
   return value as Record<string, unknown>;
 }
 
-function runGit(cwd: string, args: string[]): string {
+function runGit(
+  cwd: string,
+  args: string[],
+  envOverrides?: Record<string, string>,
+): string {
   const result = spawnSync("git", args, {
     cwd,
     encoding: "utf-8",
     stdio: "pipe",
+    ...(envOverrides ? { env: { ...process.env, ...envOverrides } } : {}),
   });
   if (result.status !== 0) return "";
   return result.stdout?.trim() ?? "";
@@ -52,24 +60,64 @@ function buildPrompt(args: {
   shortstat: string;
   files: string;
   patch: string;
+  diffDescription: string;
 }): string {
   return [
-    "Write a concise git commit message for the staged changes.",
+    `Write a concise git commit message for ${args.diffDescription}.`,
     "Rules:",
     "- Return ONLY JSON: {\"message\":\"...\"}",
     "- Use conventional commit style (feat|fix|refactor|test|docs|chore|perf|build|ci|style).",
     "- Use imperative mood, max 72 characters.",
     "- Single line only, no body.",
     "",
-    "Staged shortstat:",
+    "Shortstat:",
     args.shortstat || "(none)",
     "",
-    "Staged files (name-status):",
+    "Files (name-status):",
     args.files || "(none)",
     "",
-    "Staged patch excerpt:",
+    "Patch excerpt:",
     args.patch || "(none)",
   ].join("\n");
+}
+
+interface CommitDiffSnapshot {
+  shortstat: string;
+  files: string;
+  patch: string;
+}
+
+function readStagedSnapshot(
+  cwd: string,
+  envOverrides?: Record<string, string>,
+): CommitDiffSnapshot {
+  return {
+    files: runGit(cwd, ["diff", "--cached", "--name-status"], envOverrides),
+    shortstat: runGit(cwd, ["diff", "--cached", "--shortstat"], envOverrides),
+    patch: runGit(cwd, ["diff", "--cached", "--unified=0", "--no-color"], envOverrides),
+  };
+}
+
+function withSyntheticIndexSnapshot(cwd: string): CommitDiffSnapshot | undefined {
+  const gitIndexPathRaw = runGit(cwd, ["rev-parse", "--git-path", "index"]);
+  if (!gitIndexPathRaw) return undefined;
+
+  const gitIndexPath = isAbsolute(gitIndexPathRaw)
+    ? gitIndexPathRaw
+    : resolve(cwd, gitIndexPathRaw);
+  const tempDir = mkdtempSync(join(tmpdir(), "beanbag-commit-msg-"));
+  const tempIndexPath = join(tempDir, "index");
+
+  try {
+    if (existsSync(gitIndexPath)) {
+      copyFileSync(gitIndexPath, tempIndexPath);
+    }
+    const envOverrides = { GIT_INDEX_FILE: tempIndexPath };
+    runGit(cwd, ["add", "-A"], envOverrides);
+    return readStagedSnapshot(cwd, envOverrides);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
 }
 
 function extractJsonValue(raw: string): Record<string, unknown> | null {
@@ -97,12 +145,23 @@ export async function generateCodexCommitMessage(
   args: ProviderCommitMessageGeneratorArgs,
   timeoutMs: number = DEFAULT_TIMEOUT_MS,
 ): Promise<string | undefined> {
-  const files = runGit(args.cwd, ["diff", "--cached", "--name-status"]);
+  const includeUnstaged = args.includeUnstaged !== false;
+  const snapshot = includeUnstaged
+    ? withSyntheticIndexSnapshot(args.cwd) ?? readStagedSnapshot(args.cwd)
+    : readStagedSnapshot(args.cwd);
+  const files = snapshot.files;
   if (!files) return undefined;
-  const shortstat = runGit(args.cwd, ["diff", "--cached", "--shortstat"]);
-  const patchRaw = runGit(args.cwd, ["diff", "--cached", "--unified=0", "--no-color"]);
+  const shortstat = snapshot.shortstat;
+  const patchRaw = snapshot.patch;
   const patch = patchRaw.length <= MAX_PATCH_CHARS ? patchRaw : patchRaw.slice(0, MAX_PATCH_CHARS);
-  const prompt = buildPrompt({ shortstat, files, patch });
+  const prompt = buildPrompt({
+    shortstat,
+    files,
+    patch,
+    diffDescription: includeUnstaged
+      ? "the currently staged + unstaged changes that will be committed"
+      : "the currently staged changes",
+  });
 
   const child = spawn("codex", ["app-server"], {
     stdio: ["pipe", "pipe", "pipe"],

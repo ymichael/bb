@@ -48,6 +48,7 @@ export type ProviderTitleGenerator = (
 
 export interface ProviderCommitMessageGeneratorArgs {
   cwd: string;
+  includeUnstaged?: boolean;
 }
 
 export type ProviderCommitMessageGenerator = (
