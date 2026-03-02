@@ -17,6 +17,7 @@ import { usePromptDraftStorage } from "@/hooks/usePromptDraftStorage";
 import { usePromptFileMentions } from "@/hooks/usePromptFileMentions";
 import { usePromptModelReasoning } from "@/hooks/usePromptModelReasoning";
 import { promptDraftToInput } from "@/lib/prompt-draft";
+import { formatDirtyWorkspaceLabel } from "@/lib/workspace-change-summary";
 
 export function ProjectMainView() {
   const { projectId } = useParams<{ projectId: string }>();
@@ -91,10 +92,8 @@ export function ProjectMainView() {
     actionable: boolean;
   }>(() => {
     if (workspaceStatus?.hasUncommittedChanges) {
-      const insertions = workspaceStatus.workspaceInsertions;
-      const deletions = workspaceStatus.workspaceDeletions;
       return {
-        label: `Dirty +${insertions} -${deletions}`,
+        label: formatDirtyWorkspaceLabel(workspaceStatus),
         variant: "secondary",
         actionable: true,
       };

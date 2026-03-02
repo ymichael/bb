@@ -61,4 +61,37 @@ describe("PromptBox", () => {
     )
     expect(html).toContain('alt="example.png"')
   })
+
+  it("renders image remove controls on the preview instead of a pill", () => {
+    const html = renderToStaticMarkup(
+      <PromptBox
+        value=""
+        onChange={vi.fn()}
+        onSubmit={vi.fn()}
+        onRemoveAttachment={vi.fn()}
+        attachments={[
+          {
+            type: "localImage",
+            path: "/Users/me/.beanbag/attachments/proj-1/example.png",
+            name: "example.png",
+            mimeType: "image/png",
+            sizeBytes: 1024,
+          },
+          {
+            type: "localFile",
+            path: "/Users/me/.beanbag/attachments/proj-1/notes.md",
+            name: "notes.md",
+            mimeType: "text/markdown",
+            sizeBytes: 1024,
+          },
+        ]}
+        attachmentProjectId="proj-1"
+      />
+    )
+
+    expect(html).toContain('title="Remove example.png"')
+    expect(html).toContain("absolute right-1 top-1 z-10")
+    expect(html).not.toContain(">example.png</span>")
+    expect(html).toContain(">notes.md</span>")
+  })
 })

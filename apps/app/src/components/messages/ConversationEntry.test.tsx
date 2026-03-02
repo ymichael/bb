@@ -167,6 +167,7 @@ describe("ConversationEntry", () => {
     );
     expect(html).toContain("Running command");
     expect(html).not.toContain("Ran command");
+    expect(html).toContain("animate-shine");
     expect(html).toContain("max-h-[320px]");
     expect(html).toContain("max-h-[220px] overflow-auto");
   });
@@ -341,6 +342,7 @@ describe("ConversationEntry", () => {
     );
     expect(html).toContain("Exploring 1 file...");
     expect(html).not.toContain(">Explored<");
+    expect(html).toContain("animate-shine");
   });
 
   it("renders file-edit summary as 'Edited <filename>'", () => {

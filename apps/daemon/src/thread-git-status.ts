@@ -20,8 +20,8 @@ function runGit(cwd: string, args: string[]): { ok: boolean; stdout: string; std
   });
   return {
     ok: result.status === 0,
-    stdout: result.stdout?.trim() ?? "",
-    stderr: result.stderr?.trim() ?? "",
+    stdout: result.stdout?.trimEnd() ?? "",
+    stderr: result.stderr?.trimEnd() ?? "",
     code: result.status,
   };
 }
@@ -94,7 +94,22 @@ function countUnmergedAheadCommits(
 
 function parsePorcelainLine(line: string): { status: string; path: string } | undefined {
   if (line.length < 3) return undefined;
-  const status = line.slice(0, 2).trim() || "??";
+  const rawStatus = line.slice(0, 2);
+  const indexStatus = rawStatus[0] ?? " ";
+  const worktreeStatus = rawStatus[1] ?? " ";
+  const status = (() => {
+    if (indexStatus === "?" && worktreeStatus === "?") {
+      return "A?";
+    }
+    if (indexStatus === " " && worktreeStatus !== " ") {
+      return `${worktreeStatus}?`;
+    }
+    if (indexStatus !== " " && worktreeStatus === " ") {
+      return indexStatus;
+    }
+    // Git porcelain status codes are open_external; preserve unknown combinations intentionally.
+    return `${indexStatus}${worktreeStatus}`;
+  })();
   const rawPath = line.slice(2).trimStart();
   if (rawPath.length === 0) return undefined;
   const path = rawPath.includes(" -> ")

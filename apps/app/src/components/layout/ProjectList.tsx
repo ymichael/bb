@@ -120,14 +120,7 @@ export function ProjectList({
     }
 
     for (const projectThreads of grouped.values()) {
-      projectThreads.sort((a, b) => {
-        const aIsBusy = isBusyThreadStatus(a.status)
-        const bIsBusy = isBusyThreadStatus(b.status)
-        if (aIsBusy && bIsBusy) {
-          return b.createdAt - a.createdAt
-        }
-        return b.updatedAt - a.updatedAt
-      })
+      projectThreads.sort((a, b) => b.createdAt - a.createdAt)
     }
 
     return grouped

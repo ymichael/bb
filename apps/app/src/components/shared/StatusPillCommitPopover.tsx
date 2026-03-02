@@ -7,6 +7,10 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  formatWorkspaceChangedFilesLabel,
+  hasWorkspaceLineChanges,
+} from "@/lib/workspace-change-summary";
 import { DetailCard, DetailRow } from "./DetailCard";
 import { StatusPill, type StatusPillVariant } from "./StatusPill";
 import { WorkspaceChangesList } from "./WorkspaceChangesList";
@@ -53,6 +57,7 @@ export function StatusPillCommitPopover({
     (status?.workspaceChangedFiles ?? 0) > 0 ||
     (status?.workspaceInsertions ?? 0) > 0 ||
     (status?.workspaceDeletions ?? 0) > 0;
+  const hasWorkspaceLineDelta = status ? hasWorkspaceLineChanges(status) : false;
   const canShowChangedFiles = Boolean(
     status &&
       (
@@ -130,13 +135,20 @@ export function StatusPillCommitPopover({
               {(!isUpToDate || hasWorkspaceDelta) ? (
                 <DetailRow label="Changes">
                   <span className="font-medium">
-                    <span className="text-foreground">{status?.workspaceChangedFiles ?? 0} files, </span>
-                    <span className="text-emerald-600 dark:text-emerald-400">
-                      +{status?.workspaceInsertions ?? 0}
-                    </span>{" "}
-                    <span className="text-rose-600 dark:text-rose-400">
-                      -{status?.workspaceDeletions ?? 0}
+                    <span className="text-foreground">
+                      {formatWorkspaceChangedFilesLabel(status?.workspaceChangedFiles ?? 0)}
                     </span>
+                    {hasWorkspaceLineDelta ? (
+                      <>
+                        <span className="text-foreground">, </span>
+                        <span className="text-emerald-600 dark:text-emerald-400">
+                          +{status?.workspaceInsertions ?? 0}
+                        </span>{" "}
+                        <span className="text-rose-600 dark:text-rose-400">
+                          -{status?.workspaceDeletions ?? 0}
+                        </span>
+                      </>
+                    ) : null}
                   </span>
                 </DetailRow>
               ) : null}

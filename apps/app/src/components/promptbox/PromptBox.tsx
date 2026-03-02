@@ -89,6 +89,13 @@ function summarizeVoiceErrorMessage(input: string): string {
   return normalized || "Voice input failed."
 }
 
+function isImageAttachment(attachment: PromptDraftAttachment): boolean {
+  return (
+    attachment.type === "localImage" ||
+    attachment.mimeType?.toLowerCase().startsWith("image/") === true
+  )
+}
+
 export function PromptBox({
   id,
   value,
@@ -243,9 +250,8 @@ export function PromptBox({
 
   const trimmedValue = value.trim()
   const hasAttachments = attachments.length > 0
-  const imageAttachments = attachments.filter((attachment) =>
-    attachment.type === "localImage" || attachment.mimeType?.toLowerCase().startsWith("image/")
-  )
+  const imageAttachments = attachments.filter(isImageAttachment)
+  const nonImageAttachments = attachments.filter((attachment) => !isImageAttachment(attachment))
   const hasMultipleAttachmentImages = imageAttachments.length > 1
   const currentAttachmentImageSrc =
     expandedImageIndex !== null && imageAttachments[expandedImageIndex]
@@ -658,44 +664,58 @@ export function PromptBox({
           {imageAttachments.length > 0 ? (
             <div className="mb-1.5 flex flex-wrap gap-2">
               {imageAttachments.map((attachment, index) => (
-                <button
-                  key={`${attachment.path}-${index}`}
-                  type="button"
-                  className="cursor-zoom-in overflow-hidden rounded-md border border-border/70 bg-muted/20"
-                  onClick={() => setExpandedImageIndex(index)}
-                  title={attachment.name}
-                >
-                  <img
-                    src={toUserAttachmentImageSrc(attachment.path, attachmentProjectId)}
-                    alt={attachment.name}
-                    className="h-16 w-24 object-cover"
-                    loading="lazy"
-                  />
-                </button>
+                <div key={`${attachment.path}-${index}`} className="relative">
+                  <button
+                    type="button"
+                    className="cursor-zoom-in overflow-hidden rounded-md border border-border/70 bg-muted/20"
+                    onClick={() => setExpandedImageIndex(index)}
+                    title={attachment.name}
+                  >
+                    <img
+                      src={toUserAttachmentImageSrc(attachment.path, attachmentProjectId)}
+                      alt={attachment.name}
+                      className="h-16 w-24 object-cover"
+                      loading="lazy"
+                    />
+                  </button>
+                  {onRemoveAttachment ? (
+                    <button
+                      type="button"
+                      onClick={() => onRemoveAttachment(attachment.path)}
+                      className="absolute right-1 top-1 z-10 rounded-full bg-black/55 p-0.5 text-white transition-colors hover:bg-black/70"
+                      title={`Remove ${attachment.name}`}
+                      aria-label={`Remove ${attachment.name}`}
+                    >
+                      <X className="size-3" />
+                    </button>
+                  ) : null}
+                </div>
               ))}
             </div>
           ) : null}
 
-          <div className="flex flex-wrap gap-1.5">
-          {attachments.map((attachment) => (
-            <span
-              key={attachment.path}
-              className="inline-flex max-w-full items-center gap-1 rounded-full border border-border/70 bg-muted/40 px-2 py-0.5 text-xs text-muted-foreground"
-            >
-              <span className="truncate">{attachment.name}</span>
-              {onRemoveAttachment ? (
-                <button
-                  type="button"
-                  onClick={() => onRemoveAttachment(attachment.path)}
-                  className="rounded p-0.5 hover:bg-background/70"
-                  title={`Remove ${attachment.name}`}
+          {nonImageAttachments.length > 0 ? (
+            <div className="flex flex-wrap gap-1.5">
+              {nonImageAttachments.map((attachment) => (
+                <span
+                  key={attachment.path}
+                  className="inline-flex max-w-full items-center gap-1 rounded-full border border-border/70 bg-muted/40 px-2 py-0.5 text-xs text-muted-foreground"
                 >
-                  <X className="size-3" />
-                </button>
-              ) : null}
-            </span>
-          ))}
-          </div>
+                  <span className="truncate">{attachment.name}</span>
+                  {onRemoveAttachment ? (
+                    <button
+                      type="button"
+                      onClick={() => onRemoveAttachment(attachment.path)}
+                      className="rounded p-0.5 hover:bg-background/70"
+                      title={`Remove ${attachment.name}`}
+                    >
+                      <X className="size-3" />
+                    </button>
+                  ) : null}
+                </span>
+              ))}
+            </div>
+          ) : null}
         </div>
       ) : null}
 

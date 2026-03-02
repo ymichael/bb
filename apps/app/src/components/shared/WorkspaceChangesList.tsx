@@ -2,6 +2,7 @@ import type { ThreadWorkStatus } from "@beanbag/agent-core";
 import { openPathInEditor } from "@/lib/api";
 import { getPathCommandForTarget } from "@/lib/open-path-preferences";
 import { cn } from "@/lib/utils";
+import { formatWorkspaceFileStatus } from "@/lib/workspace-change-summary";
 
 export function WorkspaceChangesList({
   files,
@@ -25,7 +26,7 @@ export function WorkspaceChangesList({
       {files.map((file) => (
         <li key={`${file.status}:${file.path}`} className="flex items-center gap-2">
           <span className="w-8 shrink-0 text-xs uppercase text-muted-foreground/80">
-            {file.status}
+            {formatWorkspaceFileStatus(file.status)}
           </span>
           {workspaceRoot ? (
             <button

@@ -62,6 +62,7 @@ import {
   threadWorkStatusLabel,
   threadWorkStatusVariant,
 } from "@/lib/thread-work-status";
+import { formatWorkspaceChangeSummary } from "@/lib/workspace-change-summary";
 
 function useLatestInitialExpanded(initialExpanded: boolean): {
   isExpanded: boolean;
@@ -624,7 +625,7 @@ export function ThreadDetailView() {
                     onClick={() => setIsChangeListExpanded((prev) => !prev)}
                   >
                     <span className="truncate">
-                      {threadWorkStatus.workspaceChangedFiles} files, +{threadWorkStatus.workspaceInsertions} -{threadWorkStatus.workspaceDeletions}
+                      {formatWorkspaceChangeSummary(threadWorkStatus)}
                     </span>
                     <ChevronDown
                       className={`size-3.5 shrink-0 transition-transform duration-200 ${

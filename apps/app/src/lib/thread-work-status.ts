@@ -1,5 +1,6 @@
 import { assertNever, type ThreadWorkStatus } from "@beanbag/agent-core";
 import type { StatusPillVariant } from "@/components/shared/StatusPill";
+import { formatDirtyWorkspaceLabel } from "@/lib/workspace-change-summary";
 
 export function threadWorkStatusLabel(
   status: ThreadWorkStatus | undefined,
@@ -14,7 +15,7 @@ export function threadWorkStatusLabel(
       return "Deleted";
     case "dirty_uncommitted":
     case "dirty_and_committed_unmerged":
-      return `Dirty +${status.workspaceInsertions} -${status.workspaceDeletions}`;
+      return formatDirtyWorkspaceLabel(status);
     case "committed_unmerged":
       return status.currentBranch
         ? `Ahead (${status.currentBranch})`
