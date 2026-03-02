@@ -84,6 +84,7 @@ import {
 } from "@/lib/thread-work-status";
 import { formatWorkspaceChangeSummary } from "@/lib/workspace-change-summary";
 
+const SCROLL_THRESHOLD = 40;
 const QUEUED_FOLLOW_UP_PREVIEW_MAX_CHARS = 220;
 
 function getFileNameFromPath(path: string): string {
@@ -642,6 +643,12 @@ export function ThreadDetailView() {
       if (previousHeight === null) return;
       const heightDelta = nextHeight - previousHeight;
       if (Math.abs(heightDelta) < 0.5) return;
+      const maxScrollOffset = scrollContainer.scrollHeight - scrollContainer.clientHeight;
+      const distanceFromBottom = maxScrollOffset - scrollContainer.scrollTop;
+      if (distanceFromBottom <= SCROLL_THRESHOLD) {
+        scrollContainer.scrollTop = scrollContainer.scrollHeight;
+        return;
+      }
       scrollContainer.scrollTop += heightDelta;
     });
 

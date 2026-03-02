@@ -6,6 +6,12 @@ export function useAutoScroll(dep: unknown, resetDep?: unknown) {
   const containerRef = useRef<HTMLDivElement>(null)
   const stickRef = useRef(true)
 
+  const scrollToBottomIfSticking = useCallback(() => {
+    const el = containerRef.current
+    if (!el || !stickRef.current) return
+    el.scrollTop = el.scrollHeight
+  }, [])
+
   const handleScroll = useCallback(() => {
     const el = containerRef.current
     if (!el) return
@@ -14,10 +20,53 @@ export function useAutoScroll(dep: unknown, resetDep?: unknown) {
   }, [])
 
   useEffect(() => {
-    if (stickRef.current && containerRef.current) {
-      containerRef.current.scrollTop = containerRef.current.scrollHeight
+    scrollToBottomIfSticking()
+  }, [dep, scrollToBottomIfSticking])
+
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el || typeof window === "undefined") return
+
+    let frameId: number | null = null
+    const schedule = () => {
+      if (frameId !== null) return
+      frameId = window.requestAnimationFrame(() => {
+        frameId = null
+        scrollToBottomIfSticking()
+      })
     }
-  }, [dep])
+
+    let mutationObserver: MutationObserver | undefined
+    if (typeof MutationObserver !== "undefined") {
+      mutationObserver = new MutationObserver(() => {
+        schedule()
+      })
+      mutationObserver.observe(el, {
+        subtree: true,
+        childList: true,
+        characterData: true,
+      })
+    }
+
+    let resizeObserver: ResizeObserver | undefined
+    if (typeof ResizeObserver !== "undefined") {
+      resizeObserver = new ResizeObserver(() => {
+        schedule()
+      })
+      resizeObserver.observe(el)
+    }
+
+    window.addEventListener("resize", schedule)
+
+    return () => {
+      mutationObserver?.disconnect()
+      resizeObserver?.disconnect()
+      window.removeEventListener("resize", schedule)
+      if (frameId !== null) {
+        window.cancelAnimationFrame(frameId)
+      }
+    }
+  }, [scrollToBottomIfSticking])
 
   useEffect(() => {
     if (resetDep === undefined) return
