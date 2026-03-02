@@ -373,18 +373,6 @@ export function createThreadRoutes(
         }
       },
     )
-    .post("/:id/merge", async (c) => {
-      try {
-        const thread = threadManager.getById(c.req.param("id"));
-        if (!thread) {
-          return sendRouteError(c, threadNotFoundError(c.req.param("id")));
-        }
-        const result = threadManager.mergeThread(c.req.param("id"));
-        return c.json(result);
-      } catch (err) {
-        return sendRouteError(c, err);
-      }
-    })
     .post(
       "/:id/squash-merge",
       zValidator("json", squashMergeThreadSchema.optional()),

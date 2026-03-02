@@ -17,7 +17,6 @@ import type {
   UploadedPromptAttachment,
   CommitThreadRequest,
   CommitThreadResponse,
-  MergeThreadResponse,
   SquashMergeThreadRequest,
   SquashMergeThreadResponse,
   CommitProjectResponse,
@@ -363,10 +362,6 @@ export async function commitThread(
   req?: CommitThreadRequest,
 ): Promise<CommitThreadResponse> {
   return request<CommitThreadResponse>("POST", `/threads/${id}/commit`, req ?? {});
-}
-
-export async function mergeThread(id: string): Promise<MergeThreadResponse> {
-  return request<MergeThreadResponse>("POST", `/threads/${id}/merge`);
 }
 
 export async function squashMergeThread(

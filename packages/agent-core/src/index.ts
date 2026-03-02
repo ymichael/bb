@@ -51,7 +51,6 @@ export type {
   UpdateProjectRequest,
   CommitThreadRequest,
   CommitThreadResponse,
-  MergeThreadResponse,
   SquashMergeThreadRequest,
   SquashMergeThreadResponse,
   CommitProjectResponse,

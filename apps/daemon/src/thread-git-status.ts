@@ -364,60 +364,6 @@ export class ThreadGitStatusService {
     };
   }
 
-  mergeWorktreeIntoDefaultBranch(args: {
-    workspaceRoot: string;
-    projectRoot: string;
-    defaultBranch?: string;
-  }): { merged: boolean; message: string } {
-    const defaultBranch = args.defaultBranch ?? this.detectDefaultBranch(args.projectRoot);
-    if (!defaultBranch) {
-      throw new Error("Could not determine default branch");
-    }
-
-    const workspaceStatus = this.getStatus({
-      workspaceRoot: args.workspaceRoot,
-      projectRoot: args.projectRoot,
-      defaultBranch,
-    });
-    if (workspaceStatus.hasUncommittedChanges) {
-      throw new Error("Workspace has uncommitted changes; commit first");
-    }
-    if (workspaceStatus.aheadCount <= 0) {
-      return { merged: false, message: "No commits to merge" };
-    }
-
-    if (hasLocalWorkingChanges(args.projectRoot)) {
-      throw new Error(
-        "Project root has local changes that could be lost; commit or stash them before merge",
-      );
-    }
-
-    const currentProjectBranch = runGit(args.projectRoot, ["symbolic-ref", "--short", "HEAD"]);
-    const workspaceHead = runGit(args.workspaceRoot, ["rev-parse", "HEAD"]);
-    if (!workspaceHead.ok || !workspaceHead.stdout) {
-      throw new Error("Failed to resolve worktree HEAD");
-    }
-
-    const checkoutDefault = runGit(args.projectRoot, ["checkout", defaultBranch]);
-    if (!checkoutDefault.ok) {
-      throw new Error(checkoutDefault.stderr || `Failed to checkout ${defaultBranch}`);
-    }
-
-    const mergeResult = runGit(args.projectRoot, ["merge", "--ff-only", workspaceHead.stdout]);
-    const restoreBranch = currentProjectBranch.ok && currentProjectBranch.stdout
-      ? runGit(args.projectRoot, ["checkout", currentProjectBranch.stdout])
-      : { ok: true };
-
-    if (!restoreBranch.ok) {
-      throw new Error("Merged but failed to restore original branch");
-    }
-    if (!mergeResult.ok) {
-      throw new Error(mergeResult.stderr || "Merge failed");
-    }
-
-    return { merged: true, message: `Merged into ${defaultBranch}` };
-  }
-
   squashMergeWorktreeIntoDefaultBranch(args: {
     workspaceRoot: string;
     projectRoot: string;

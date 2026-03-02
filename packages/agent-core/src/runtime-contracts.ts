@@ -2,7 +2,6 @@ import type {
   AvailableModel,
   CommitThreadRequest,
   CommitThreadResponse,
-  MergeThreadResponse,
   SquashMergeThreadRequest,
   SquashMergeThreadResponse,
   ProviderCapabilities,
@@ -162,7 +161,6 @@ export interface ThreadOrchestrator {
     threadId: string,
     request?: CommitThreadRequest,
   ): Promise<CommitThreadResponse>;
-  mergeThread(threadId: string): MergeThreadResponse;
   squashMergeThread(
     threadId: string,
     request?: SquashMergeThreadRequest,

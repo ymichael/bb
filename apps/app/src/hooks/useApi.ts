@@ -21,7 +21,6 @@ import type {
   UploadedPromptAttachment,
   CommitThreadResponse,
   CommitThreadRequest,
-  MergeThreadResponse,
   SquashMergeThreadRequest,
   SquashMergeThreadResponse,
   CommitProjectResponse,
@@ -464,20 +463,6 @@ export function useCommitThread() {
           req.autoArchiveThreadOnCommit ??
           getAutoArchivePreferences().autoArchiveThreadOnCommit,
       }),
-    onSuccess: (_data, variables) => {
-      queryClient.invalidateQueries({ queryKey: ["thread", variables.id] });
-      queryClient.invalidateQueries({ queryKey: ["threadWorkStatus", variables.id] });
-      queryClient.invalidateQueries({ queryKey: ["threads"] });
-      queryClient.invalidateQueries({ queryKey: ["status"] });
-    },
-  });
-}
-
-export function useMergeThread() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: ({ id }: { id: string }): Promise<MergeThreadResponse> =>
-      api.mergeThread(id),
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["thread", variables.id] });
       queryClient.invalidateQueries({ queryKey: ["threadWorkStatus", variables.id] });

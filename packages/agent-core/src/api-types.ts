@@ -103,13 +103,6 @@ export interface CommitThreadResponse {
   commitSha?: string;
 }
 
-export interface MergeThreadResponse {
-  ok: true;
-  merged: boolean;
-  message: string;
-  workStatus: ThreadWorkStatus;
-}
-
 export interface SquashMergeThreadRequest {
   commitIfNeeded?: boolean;
   includeUnstaged?: boolean;

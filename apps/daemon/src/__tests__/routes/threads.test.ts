@@ -42,7 +42,6 @@ function mockThreadManager(): ThreadManager {
     archive: vi.fn(),
     unarchive: vi.fn(),
     markRead: vi.fn(),
-    mergeThread: vi.fn(),
     getById: vi.fn(),
     getWorkStatus: vi.fn(),
     getDefaultExecutionOptions: vi.fn(),

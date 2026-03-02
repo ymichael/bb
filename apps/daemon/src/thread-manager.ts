@@ -42,7 +42,6 @@ import {
   type ThreadProvisioningState,
   type CommitThreadRequest,
   type CommitThreadResponse,
-  type MergeThreadResponse,
   type SquashMergeThreadRequest,
   type SquashMergeThreadResponse,
   type ThreadTimelineResponse,
@@ -1010,43 +1009,6 @@ export class ThreadManager implements ThreadOrchestrator {
       this.archive(thread.id);
     }
     return result;
-  }
-
-  mergeThread(threadId: string): MergeThreadResponse {
-    const thread = this.threadRepo.getById(threadId);
-    if (!thread) {
-      throw threadNotFoundError(threadId);
-    }
-    if (thread.archivedAt !== undefined) {
-      throw threadArchivedError(threadId);
-    }
-    if (thread.environmentId !== "worktree") {
-      throw invalidRequestError("Merge is only available for worktree threads");
-    }
-    const project = this.projectRepo.getById(thread.projectId);
-    if (!project) {
-      throw projectNotFoundError(thread.projectId);
-    }
-    const workspaceRoot = this._resolveThreadWorkspaceRoot(thread, project.rootPath);
-    const defaultBranch = this.gitStatusService.detectDefaultBranch(project.rootPath);
-    const mergeResult = this.gitStatusService.mergeWorktreeIntoDefaultBranch({
-      workspaceRoot,
-      projectRoot: project.rootPath,
-      defaultBranch,
-    });
-    this.gitStatusService.invalidate(workspaceRoot);
-    const workStatus = this.gitStatusService.getStatus({
-      workspaceRoot,
-      projectRoot: project.rootPath,
-      defaultBranch,
-    });
-    this._broadcastThreadChanged(thread.id, ["work-status-changed"]);
-    return {
-      ok: true,
-      merged: mergeResult.merged,
-      message: mergeResult.message,
-      workStatus,
-    };
   }
 
   async squashMergeThread(
