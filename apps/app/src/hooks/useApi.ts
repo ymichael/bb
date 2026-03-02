@@ -12,6 +12,9 @@ import type {
   SpawnThreadRequest,
   TellThreadRequest,
   SystemStatus,
+  SystemRestartPolicy,
+  SystemShutdownAcceptedResponse,
+  SystemShutdownRequest,
   SystemEnvironmentInfo,
   SystemProviderInfo,
   AvailableModel,
@@ -220,6 +223,14 @@ export function useSystemStatus() {
   return useQuery<SystemStatus>({
     queryKey: ["status"],
     queryFn: () => api.getSystemStatus(),
+  });
+}
+
+export function useSystemRestartPolicy() {
+  return useQuery<SystemRestartPolicy>({
+    queryKey: ["systemRestartPolicy"],
+    queryFn: () => api.getSystemRestartPolicy(),
+    staleTime: 60_000,
   });
 }
 
@@ -510,6 +521,17 @@ export function useCommitProjectWorkspace() {
       queryClient.invalidateQueries({ queryKey: ["projectWorkspaceStatus", variables.projectId] });
       queryClient.invalidateQueries({ queryKey: ["threads"] });
       queryClient.invalidateQueries({ queryKey: ["thread"] });
+      queryClient.invalidateQueries({ queryKey: ["status"] });
+    },
+  });
+}
+
+export function useShutdownDaemon() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (req?: SystemShutdownRequest): Promise<SystemShutdownAcceptedResponse> =>
+      api.shutdownDaemon(req),
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["status"] });
     },
   });

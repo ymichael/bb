@@ -5,7 +5,7 @@ import type {
 } from "./shared-types.js";
 import type { ThreadDetailRow } from "./thread-detail-rows.js";
 import type { UIMessage } from "./ui-message.js";
-import type { ThreadWorkStatus } from "./types.js";
+import type { ThreadStatus, ThreadWorkStatus } from "./types.js";
 export type {
   PromptInput,
   ReasoningLevel,
@@ -161,6 +161,39 @@ export interface SystemStatus {
   runningThreads: number;
   totalThreads: number;
   uptime: number;
+}
+
+export type SystemRestartAction =
+  | "reprovision"
+  | "mark-provisioning-failed"
+  | "attempt-resume-or-idle"
+  | "noop";
+
+export interface SystemRestartPolicy {
+  restartPolicyByStatus: Record<ThreadStatus, SystemRestartAction>;
+  shutdownBlockingStatuses: ThreadStatus[];
+}
+
+export interface SystemShutdownRequest {
+  force?: boolean;
+}
+
+export interface SystemShutdownAcceptedResponse {
+  ok: true;
+  forced: boolean;
+  blockingThreadsCount: number;
+}
+
+export interface SystemShutdownBlockingThread {
+  id: string;
+  projectId: string;
+  status: ThreadStatus;
+}
+
+export interface SystemShutdownBlockedResponse {
+  code: "shutdown_blocked";
+  message: string;
+  blockingThreads: SystemShutdownBlockingThread[];
 }
 
 export interface ProviderCapabilities {

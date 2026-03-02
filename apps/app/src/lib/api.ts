@@ -1,6 +1,7 @@
 import type {
   Project,
   Thread,
+  ThreadStatus,
   ThreadEvent,
   CreateProjectRequest,
   UpdateProjectRequest,
@@ -23,11 +24,23 @@ import type {
   ThreadTimelineResponse,
   ThreadToolGroupMessagesResponse,
   OpenPathTarget,
+  SystemRestartPolicy,
+  SystemShutdownAcceptedResponse,
+  SystemShutdownBlockedResponse,
+  SystemShutdownBlockingThread,
+  SystemShutdownRequest,
 } from "@beanbag/agent-core";
 
 const BASE = "/api/v1";
 const MAX_ERROR_MESSAGE_LENGTH = 180;
 const HTML_DOCUMENT_PATTERN = /<!doctype html|<html[\s>]/i;
+const THREAD_STATUSES: readonly ThreadStatus[] = [
+  "created",
+  "provisioning",
+  "provisioning_failed",
+  "idle",
+  "active",
+];
 
 const ERROR_KEYS = ["message", "error", "detail"] as const;
 
@@ -43,6 +56,70 @@ function truncateErrorText(raw: string): string {
   return raw.length > MAX_ERROR_MESSAGE_LENGTH
     ? `${raw.slice(0, MAX_ERROR_MESSAGE_LENGTH - 1)}...`
     : raw;
+}
+
+function isThreadStatus(value: unknown): value is ThreadStatus {
+  return typeof value === "string" && THREAD_STATUSES.includes(value as ThreadStatus);
+}
+
+function parseShutdownBlockingThread(
+  value: unknown,
+): SystemShutdownBlockingThread | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+  const { id, projectId, status } = value;
+  if (
+    typeof id !== "string" ||
+    typeof projectId !== "string" ||
+    !isThreadStatus(status)
+  ) {
+    return null;
+  }
+  return {
+    id,
+    projectId,
+    status,
+  };
+}
+
+function parseShutdownBlockedResponse(
+  value: unknown,
+): SystemShutdownBlockedResponse | null {
+  if (!isRecord(value) || value.code !== "shutdown_blocked") {
+    return null;
+  }
+  const message =
+    typeof value.message === "string" && value.message.trim().length > 0
+      ? value.message
+      : "Daemon shutdown blocked by active thread work";
+  const blockingThreadsRaw = Array.isArray(value.blockingThreads)
+    ? value.blockingThreads
+    : [];
+  const blockingThreads = blockingThreadsRaw
+    .map((entry) => parseShutdownBlockingThread(entry))
+    .filter((entry): entry is SystemShutdownBlockingThread => entry !== null);
+
+  return {
+    code: "shutdown_blocked",
+    message,
+    blockingThreads,
+  };
+}
+
+export class SystemShutdownBlockedError extends Error {
+  code: "shutdown_blocked";
+  blockingThreads: SystemShutdownBlockingThread[];
+
+  constructor(
+    message: string,
+    blockingThreads: SystemShutdownBlockingThread[],
+  ) {
+    super(message);
+    this.name = "SystemShutdownBlockedError";
+    this.code = "shutdown_blocked";
+    this.blockingThreads = blockingThreads;
+  }
 }
 
 function extractErrorMessage(value: unknown): string | null {
@@ -442,4 +519,60 @@ export async function getSystemEnvironment(): Promise<SystemEnvironmentInfo> {
 
 export async function listSystemEnvironments(): Promise<SystemEnvironmentInfo[]> {
   return request<SystemEnvironmentInfo[]>("GET", "/system/environments");
+}
+
+export async function getSystemRestartPolicy(): Promise<SystemRestartPolicy> {
+  return request<SystemRestartPolicy>("GET", "/system/restart-policy");
+}
+
+export async function shutdownDaemon(
+  req: SystemShutdownRequest = {},
+): Promise<SystemShutdownAcceptedResponse> {
+  const res = await fetch(`${BASE}/system/shutdown`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(req),
+  });
+
+  if (res.status === 409) {
+    const rawBody = await res.text().catch(() => "");
+    const normalized = normalizeErrorText(rawBody);
+    if (normalized.length > 0) {
+      try {
+        const parsed = JSON.parse(normalized) as unknown;
+        const blocked = parseShutdownBlockedResponse(parsed);
+        if (blocked) {
+          throw new SystemShutdownBlockedError(
+            blocked.message,
+            blocked.blockingThreads,
+          );
+        }
+      } catch (err) {
+        if (err instanceof SystemShutdownBlockedError) {
+          throw err;
+        }
+      }
+    }
+    const message = deriveHttpErrorMessage(
+      res.status,
+      res.statusText,
+      rawBody,
+      res.headers.get("content-type"),
+    );
+    throw new Error(`HTTP ${res.status}: ${message}`);
+  }
+
+  if (!res.ok) {
+    await throwHttpError(res);
+  }
+
+  const text = await res.text();
+  if (!text) {
+    return {
+      ok: true,
+      forced: Boolean(req.force),
+      blockingThreadsCount: 0,
+    };
+  }
+  return JSON.parse(text) as SystemShutdownAcceptedResponse;
 }
