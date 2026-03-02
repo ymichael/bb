@@ -2,6 +2,7 @@ import { Link, useParams } from "react-router-dom";
 import { PageShell } from "@/components/layout/PageShell";
 import { ArchiveTimestampAction } from "@/components/shared/ArchiveTimestampAction";
 import { useThreads, useUnarchiveThread } from "@/hooks/useApi";
+import { getThreadDisplayTitle } from "@/lib/thread-title";
 
 export function ProjectArchivedThreadsView() {
   const { projectId } = useParams<{ projectId: string }>();
@@ -47,7 +48,7 @@ export function ProjectArchivedThreadsView() {
                   to={`/projects/${projectId}/threads/${thread.id}`}
                   className="min-w-0 flex-1 truncate"
                 >
-                  {thread.title ?? `Thread ${thread.id.slice(0, 8)}`}
+                  {getThreadDisplayTitle(thread)}
                 </Link>
                 <ArchiveTimestampAction
                   isPending={

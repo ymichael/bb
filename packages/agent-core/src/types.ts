@@ -40,6 +40,7 @@ export interface Thread {
   id: string;
   projectId: string;
   title?: string;
+  titleFallback?: string;
   status: ThreadStatus;
   workStatus?: ThreadWorkStatus;
   primaryCheckout?: ThreadPrimaryCheckoutState;

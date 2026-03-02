@@ -850,7 +850,23 @@ describe("ThreadManager", () => {
       });
     });
 
-    it("does not call provider title generation hooks during spawn", async () => {
+    it("returns prompt-derived title fallback when spawned without an explicit title", async () => {
+      const project = { id: "proj-1", name: "Test", rootPath: "/test", createdAt: 1000, updatedAt: 1000 };
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(project);
+
+      const createdThread = makeThread({ id: "t-new", status: "idle" });
+      (threadRepo.create as ReturnType<typeof vi.fn>).mockReturnValue(createdThread);
+
+      const result = await manager.spawn({
+        projectId: "proj-1",
+        input: [{ type: "text", text: "Fix flaky login redirect" }],
+      });
+
+      expect(result.title).toBeUndefined();
+      expect(result.titleFallback).toBe("Fix flaky login redirect");
+    });
+
+    it("auto-generates and persists thread names when provider title generation is enabled", async () => {
       const providerTitleGenerator = vi
         .fn()
         .mockResolvedValue("Generated Login Fix Title");
@@ -866,9 +882,23 @@ describe("ThreadManager", () => {
       (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(project);
 
       const createdThread = makeThread({ id: "t-new", status: "idle" });
+      let persistedThread = makeThread({
+        id: "t-new",
+        status: "active",
+      });
       (threadRepo.create as ReturnType<typeof vi.fn>).mockReturnValue(createdThread);
-      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
-        makeThread({ id: "t-new", status: "active" }),
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockImplementation(
+        () => persistedThread,
+      );
+      (threadRepo.update as ReturnType<typeof vi.fn>).mockImplementation(
+        (_threadId: string, updates: { status?: Thread["status"]; title?: string }) => {
+          persistedThread = {
+            ...persistedThread,
+            ...(updates.status !== undefined ? { status: updates.status } : {}),
+            ...(updates.title !== undefined ? { title: updates.title } : {}),
+          };
+          return persistedThread;
+        },
       );
 
       await titleManager.spawn({
@@ -876,7 +906,23 @@ describe("ThreadManager", () => {
         input: [{ type: "text", text: "Fix the login bug" }],
       });
 
-      expect(providerTitleGenerator).not.toHaveBeenCalled();
+      await vi.waitFor(() => {
+        expect(providerTitleGenerator).toHaveBeenCalledTimes(1);
+      });
+      expect(providerTitleGenerator).toHaveBeenCalledWith({
+        input: [{ type: "text", text: "Fix the login bug" }],
+        cwd: "/test",
+      });
+
+      const renameMsgRaw = fakeChild._stdinData
+        .map((entry) => JSON.parse(entry.trim()))
+        .find((entry) => entry.method === "thread/name/set");
+      expect(renameMsgRaw).toBeDefined();
+      expect(renameMsgRaw.params).toEqual({
+        threadId: CODEX_THREAD_ID,
+        name: "Generated Login Fix Title",
+      });
+      expect(persistedThread.title).toBe("Generated Login Fix Title");
     });
 
     it("sends explicit spawn titles to provider after thread startup", async () => {
@@ -2031,7 +2077,7 @@ describe("ThreadManager", () => {
       expect(persistedThread.title).toBe("Fix flaky login redirect");
     });
 
-    it("applies provider thread/name/updated updates until a manual lock exists", async () => {
+    it("only applies provider thread/name/updated once when a title is missing", async () => {
       const project = { id: "proj-1", name: "Test", rootPath: "/test", createdAt: 1000, updatedAt: 1000 };
       (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(project);
 
@@ -2075,10 +2121,10 @@ describe("ThreadManager", () => {
       expect(threadRepo.update).toHaveBeenCalledWith("t-new", {
         title: "First server title",
       });
-      expect(threadRepo.update).toHaveBeenCalledWith("t-new", {
+      expect(threadRepo.update).not.toHaveBeenCalledWith("t-new", {
         title: "Second server title",
       });
-      expect(persistedThread.title).toBe("Second server title");
+      expect(persistedThread.title).toBe("First server title");
     });
 
     it("ignores blank lines on stdout", async () => {
@@ -3178,6 +3224,27 @@ describe("ThreadManager", () => {
       expect(manager.getById("nonexistent")).toBeUndefined();
     });
 
+    it("includes prompt-derived title fallback when persisted title is missing", () => {
+      const untitledThread = makeThread({ status: "idle", title: undefined });
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(untitledThread);
+      (eventRepo.getLatestByType as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeEvent({
+          type: "client/thread/start",
+          data: {
+            input: [{ type: "text", text: "Investigate flaky test reruns" }],
+          },
+        }),
+      );
+
+      const result = manager.getById("thread-1");
+      const resultSecondRead = manager.getById("thread-1");
+
+      expect(result?.title).toBeUndefined();
+      expect(result?.titleFallback).toBe("Investigate flaky test reruns");
+      expect(resultSecondRead?.titleFallback).toBe("Investigate flaky test reruns");
+      expect(eventRepo.getLatestByType).toHaveBeenCalledTimes(1);
+    });
+
     it("returns persisted active status even when lifecycle events suggest completion", () => {
       const runningThread = makeThread({ status: "active" });
       (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(runningThread);
@@ -3234,6 +3301,30 @@ describe("ThreadManager", () => {
       expect(result).toStrictEqual(threads);
       expect(threadRepo.list).toHaveBeenCalledWith(filters);
       expect(ws.broadcast).not.toHaveBeenCalled();
+    });
+
+    it("includes prompt-derived title fallback for untitled threads", () => {
+      const threads = [makeThread({ id: "thread-1", status: "idle", title: undefined })];
+      (threadRepo.list as ReturnType<typeof vi.fn>).mockReturnValue(threads);
+      (eventRepo.getLatestByType as ReturnType<typeof vi.fn>).mockImplementation(
+        (_threadId: string, type: string) =>
+          type === "client/thread/start"
+            ? makeEvent({
+                type: "client/thread/start",
+                data: {
+                  input: [{ type: "text", text: "Stabilize flaky auth redirect tests" }],
+                },
+              })
+            : undefined,
+      );
+
+      const result = manager.list();
+      const secondResult = manager.list();
+
+      expect(result[0]?.title).toBeUndefined();
+      expect(result[0]?.titleFallback).toBe("Stabilize flaky auth redirect tests");
+      expect(secondResult[0]?.titleFallback).toBe("Stabilize flaky auth redirect tests");
+      expect(eventRepo.getLatestByType).toHaveBeenCalledTimes(1);
     });
 
     it("returns persisted active list status even when lifecycle events suggest completion", () => {

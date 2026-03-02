@@ -308,6 +308,20 @@ function toTurnLifecycleState(
   return undefined;
 }
 
+function extractFirstPromptText(input: unknown): string | undefined {
+  if (!Array.isArray(input)) return undefined;
+  for (const chunk of input) {
+    const promptChunk = toRecord(chunk);
+    if (!promptChunk) continue;
+    if (getStringField(promptChunk, "type") !== "text") continue;
+    const text = getStringField(promptChunk, "text");
+    if (!text) continue;
+    const trimmed = text.trim();
+    if (trimmed.length > 0) return trimmed;
+  }
+  return undefined;
+}
+
 function normalizeQueuedReasoningLevel(
   value: ReasoningLevel | undefined,
 ): ReasoningLevel {
@@ -330,6 +344,8 @@ export class ThreadManager implements ThreadOrchestrator {
   private activeTurnIds = new Map<string, string>();
   /** Threads explicitly titled by the caller should not be overwritten by event heuristics. */
   private lockedTitleThreadIds = new Set<string>();
+  /** Ensure automatic title generation is attempted at most once per thread. */
+  private autoTitleAttemptedThreadIds = new Set<string>();
   /** Emit at most one refresh-token warning per thread process lifecycle. */
   private authRefreshWarningThreadIds = new Set<string>();
   /** Suppresses multiline JSON auth error payloads already summarized above. */
@@ -346,6 +362,8 @@ export class ThreadManager implements ThreadOrchestrator {
   private lastNotifiedCompletionEpochs = new Map<string, number>();
   /** Memoized timeline projection per thread until event sequence or thread status changes. */
   private timelineByThread = new Map<string, ThreadTimelineCacheEntry>();
+  /** Cached prompt-derived fallback titles for untitled threads. */
+  private titleFallbackByThreadId = new Map<string, string | null>();
   /** Per-project in-memory primary-checkout promotion status. */
   private primaryPromotionByProjectId = new Map<string, PrimaryPromotionState>();
   /** Prevents concurrent queued follow-up dispatch loops per thread. */
@@ -597,7 +615,16 @@ export class ThreadManager implements ThreadOrchestrator {
       { ...req, environmentId },
       { rootPathHint: project.rootPath },
     );
-    return thread;
+    const hydratedThread = this._withPrimaryCheckoutState(thread);
+    const promptTitleFallback = this._derivePromptFallbackTitle(req.input);
+    if (!promptTitleFallback || hydratedThread.title) {
+      return hydratedThread;
+    }
+    this.titleFallbackByThreadId.set(thread.id, promptTitleFallback);
+    return {
+      ...hydratedThread,
+      titleFallback: promptTitleFallback,
+    };
   }
 
   /**
@@ -774,6 +801,16 @@ export class ThreadManager implements ThreadOrchestrator {
       this.activeTurnIds.get(threadId) ?? this._resolvePersistedActiveTurnId(threadId);
     if (activeTurnId) {
       this.activeTurnIds.set(threadId, activeTurnId);
+    }
+
+    const project = this.projectRepo.getById(thread.projectId);
+    if (project) {
+      this._maybeAutogenerateThreadTitle(
+        threadId,
+        project.rootPath,
+        providerThreadId,
+        requestedInput,
+      );
     }
 
     this._setThreadStatus(threadId, "active");
@@ -1007,6 +1044,7 @@ export class ThreadManager implements ThreadOrchestrator {
     const nextTitle = this._normalizeThreadTitle(request.title);
     if (nextTitle && nextTitle !== thread.title) {
       this.threadRepo.update(threadId, { title: nextTitle });
+      this.titleFallbackByThreadId.delete(threadId);
       this.lockedTitleThreadIds.add(threadId);
       const providerThreadId = this.providerThreadIds.get(threadId);
       if (providerThreadId) {
@@ -1699,6 +1737,8 @@ export class ThreadManager implements ThreadOrchestrator {
     this.environmentRuntimes.clear();
     this.providerThreadIds.clear();
     this.activeTurnIds.clear();
+    this.autoTitleAttemptedThreadIds.clear();
+    this.titleFallbackByThreadId.clear();
     this.authRefreshWarningThreadIds.clear();
     this.suppressedAuthStderrDepth.clear();
     this.provisioningTasks.clear();
@@ -1854,6 +1894,13 @@ export class ThreadManager implements ThreadOrchestrator {
         hydratedThreadAfterStart.title,
       );
     }
+
+    this._maybeAutogenerateThreadTitle(
+      threadId,
+      project.rootPath,
+      providerThreadId,
+      requestedInput,
+    );
 
     if (requestedInput.length > 0) {
       this._setThreadStatus(threadId, "active");
@@ -2466,16 +2513,49 @@ export class ThreadManager implements ThreadOrchestrator {
   private _withPrimaryCheckoutState(thread: Thread): Thread {
     const activePromotion = this.primaryPromotionByProjectId.get(thread.projectId);
     const isActivePrimary = activePromotion?.threadId === thread.id;
-    if (!isActivePrimary) {
-      return thread;
-    }
+    const withPrimaryCheckout = !isActivePrimary
+      ? thread
+      : {
+          ...thread,
+          primaryCheckout: {
+            isActive: true,
+            ...(activePromotion ? { promotedAt: activePromotion.promotedAt } : {}),
+          },
+        };
+    return this._withThreadTitleFallback(withPrimaryCheckout);
+  }
+
+  private _withThreadTitleFallback(thread: Thread): Thread {
+    if (thread.title) return thread;
+    const titleFallback = this._getThreadTitleFallback(thread.id);
+    if (!titleFallback) return thread;
     return {
       ...thread,
-      primaryCheckout: {
-        isActive: true,
-        ...(activePromotion ? { promotedAt: activePromotion.promotedAt } : {}),
-      },
+      titleFallback,
     };
+  }
+
+  private _getThreadTitleFallback(threadId: string): string | undefined {
+    if (this.titleFallbackByThreadId.has(threadId)) {
+      const cached = this.titleFallbackByThreadId.get(threadId);
+      return cached ?? undefined;
+    }
+    const fallback = this._readThreadTitleFallback(threadId);
+    this.titleFallbackByThreadId.set(threadId, fallback ?? null);
+    return fallback;
+  }
+
+  private _readThreadTitleFallback(threadId: string): string | undefined {
+    const startEvent = this.eventRepo.getLatestByType(threadId, "client/thread/start");
+    if (!startEvent) return undefined;
+    const startData = toRecord(startEvent.data);
+    return this._derivePromptFallbackTitle(startData?.input);
+  }
+
+  private _derivePromptFallbackTitle(input: unknown): string | undefined {
+    const firstPromptText = extractFirstPromptText(input);
+    if (!firstPromptText) return undefined;
+    return this._normalizeThreadTitle(firstPromptText);
   }
 
   private _resolveThreadWorkspaceRoot(thread: Thread, projectRoot: string): string {
@@ -2599,6 +2679,13 @@ export class ThreadManager implements ThreadOrchestrator {
     input: PromptInput[] | undefined,
     meta: { source: "spawn" | "tell"; initiator: ThreadTurnInitiator },
   ): void {
+    if (type === "client/thread/start" && !this.titleFallbackByThreadId.has(threadId)) {
+      const fallback = this._derivePromptFallbackTitle(input);
+      if (fallback) {
+        this.titleFallbackByThreadId.set(threadId, fallback);
+      }
+    }
+
     const eventData: ThreadEventData = {
       direction: "outbound",
       source: meta.source,
@@ -2896,9 +2983,8 @@ export class ThreadManager implements ThreadOrchestrator {
     if (!title) return false;
     const thread = this.threadRepo.getById(threadId);
     const changed = this._setThreadTitle(threadId, title, {
-      // Manual user titles are locked in-memory; provider-driven updates remain authoritative
-      // unless a manual override is present.
-      onlyIfMissing: false,
+      // Provider title suggestions should only apply when no title has been set yet.
+      onlyIfMissing: true,
       shouldBroadcast: false,
     });
     if (!changed) return false;
@@ -2931,6 +3017,7 @@ export class ThreadManager implements ThreadOrchestrator {
     if (thread.title === title) return false;
 
     this.threadRepo.update(threadId, { title });
+    this.titleFallbackByThreadId.delete(threadId);
     if (opts?.shouldBroadcast !== false) {
       this._broadcastThreadChanged(threadId, ["title-changed"]);
     }
@@ -2994,6 +3081,76 @@ export class ThreadManager implements ThreadOrchestrator {
     const uniqueChanges = Array.from(new Set(changes));
     if (uniqueChanges.length === 0) return;
     this.ws.broadcast("thread", threadId, uniqueChanges);
+  }
+
+  private _maybeAutogenerateThreadTitle(
+    threadId: string,
+    cwd: string,
+    providerThreadId: string,
+    input: PromptInput[],
+  ): void {
+    if (this.lockedTitleThreadIds.has(threadId)) return;
+    if (this.autoTitleAttemptedThreadIds.has(threadId)) return;
+    if (input.length === 0) return;
+
+    const thread = this.threadRepo.getById(threadId);
+    if (thread?.title) return;
+
+    // Title generation is a one-time attempt bound to the first input for the thread.
+    this.autoTitleAttemptedThreadIds.add(threadId);
+
+    const hasTextInput = input.some(
+      (chunk) => chunk.type === "text" && chunk.text.trim().length > 0,
+    );
+    if (!hasTextInput) return;
+    if (!this.provider.generateThreadTitle) return;
+
+    void this._runAutogeneratedThreadTitle(threadId, cwd, providerThreadId, input);
+  }
+
+  private async _runAutogeneratedThreadTitle(
+    threadId: string,
+    cwd: string,
+    providerThreadId: string,
+    input: PromptInput[],
+  ): Promise<void> {
+    try {
+      if (!this.provider.generateThreadTitle) return;
+      const generatedTitle = await this.provider.generateThreadTitle({
+        input,
+        cwd,
+      });
+      if (!generatedTitle) return;
+
+      const threadBeforeUpdate = this.threadRepo.getById(threadId);
+      if (!threadBeforeUpdate) return;
+
+      const fallbackTitle =
+        this.provider.deriveThreadTitle(input) ?? this._derivePromptFallbackTitle(input);
+      if (
+        threadBeforeUpdate.title &&
+        (
+          !fallbackTitle ||
+          threadBeforeUpdate.title !== fallbackTitle
+        )
+      ) {
+        return;
+      }
+
+      const changed = this._setThreadTitle(threadId, generatedTitle, {
+        onlyIfMissing: false,
+      });
+      if (!changed) return;
+
+      this.lockedTitleThreadIds.add(threadId);
+      this._sendThreadNameSet(threadId, providerThreadId, generatedTitle);
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Unknown title generation error";
+      console.error(
+        `[thread ${threadId}] Failed to auto-generate title (${this.provider.displayName}): ${message}`,
+      );
+    }
   }
 
   private _sendThreadNameSet(

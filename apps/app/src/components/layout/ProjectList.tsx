@@ -28,6 +28,7 @@ import {
 } from "@/hooks/useApi"
 import { NavLink, useLocation, useNavigate } from "react-router-dom"
 import { cn } from "@/lib/utils"
+import { getThreadDisplayTitle } from "@/lib/thread-title"
 import {
   deriveProjectNameFromPath,
   requestProjectRootPath,
@@ -230,7 +231,7 @@ export function ProjectList({
   const renameThread = (thread: Thread) => {
     if (updateThread.isPending) return
 
-    const currentTitle = thread.title ?? `Thread ${thread.id.slice(0, 8)}`
+    const currentTitle = getThreadDisplayTitle(thread)
     const typedName = window.prompt("Enter a new thread name:", currentTitle)
     if (typedName == null) return
 
@@ -440,7 +441,7 @@ export function ProjectList({
                                 ) : null}
                               </span>
                               <span className="min-w-0 flex-1 truncate">
-                                {thread.title ?? `Thread ${thread.id.slice(0, 8)}`}
+                                {getThreadDisplayTitle(thread)}
                               </span>
                               <span className="relative h-7 w-14 shrink-0">
                                 <span

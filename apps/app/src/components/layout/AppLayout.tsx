@@ -35,6 +35,7 @@ import {
   useUpdateThread,
 } from "@/hooks/useApi"
 import { ThreadActionsMenu } from "@/components/thread/ThreadActionsMenu"
+import { getThreadDisplayTitle } from "@/lib/thread-title"
 
 const SIDEBAR_WIDTH_KEY = "beanbag.sidebar.width"
 const SIDEBAR_MIN_WIDTH = 240
@@ -223,7 +224,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
 
   const renameThread = useCallback(() => {
     if (!thread || updateThread.isPending) return
-    const currentTitle = thread.title ?? `Thread ${thread.id.slice(0, 8)}`
+    const currentTitle = getThreadDisplayTitle(thread)
     const typedName = window.prompt("Enter a new thread name:", currentTitle)
     if (typedName == null) return
 
@@ -309,27 +310,27 @@ export function AppLayout({ children }: { children: ReactNode }) {
 
   const meta = threadMatch
     ? {
-        title: thread?.title ?? "Thread",
+        title: thread ? getThreadDisplayTitle(thread) : "Thread",
         subtitle: undefined,
       }
     : projectSettingsMatch
-        ? {
-            title: "",
-            subtitle: undefined,
-            breadcrumbs: ["Projects", projectLabel ?? projectSettingsMatch[1], "Settings"],
-          }
+      ? {
+          title: "",
+          subtitle: undefined,
+          breadcrumbs: ["Projects", projectLabel ?? projectSettingsMatch[1], "Settings"],
+        }
     : projectArchivedMatch
-        ? {
-            title: "",
-            subtitle: undefined,
-            breadcrumbs: ["Projects", projectLabel ?? projectArchivedMatch[1], "Archived"],
-          }
+      ? {
+          title: "",
+          subtitle: undefined,
+          breadcrumbs: ["Projects", projectLabel ?? projectArchivedMatch[1], "Archived"],
+        }
     : projectMatch
-        ? {
-            title: projectLabel ?? projectMatch[1],
-            subtitle: undefined,
-          }
-        : (routeTitles[location.pathname] ?? { title: "" })
+      ? {
+          title: projectLabel ?? projectMatch[1],
+          subtitle: undefined,
+        }
+      : (routeTitles[location.pathname] ?? { title: "" })
 
   const handleResizeMouseDown = useCallback(
     (event: React.MouseEvent<HTMLDivElement>) => {
