@@ -29,6 +29,8 @@ import type {
   SquashMergeThreadRequest,
   SquashMergeThreadResponse,
   CommitProjectResponse,
+  PromoteThreadResponse,
+  DemotePrimaryResponse,
   ThreadTimelineResponse,
   ThreadToolGroupMessagesResponse,
 } from "@beanbag/agent-core";
@@ -481,6 +483,36 @@ export function useCommitThread() {
       queryClient.invalidateQueries({ queryKey: ["thread", variables.id] });
       queryClient.invalidateQueries({ queryKey: ["threadWorkStatus", variables.id] });
       queryClient.invalidateQueries({ queryKey: ["threads"] });
+      queryClient.invalidateQueries({ queryKey: ["status"] });
+    },
+  });
+}
+
+export function usePromoteThread() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id }: { id: string }): Promise<PromoteThreadResponse> =>
+      api.promoteThread(id),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["thread", variables.id] });
+      queryClient.invalidateQueries({ queryKey: ["threads"] });
+      queryClient.invalidateQueries({ queryKey: ["threadTimeline", variables.id] });
+      queryClient.invalidateQueries({ queryKey: ["threadEvents", variables.id] });
+      queryClient.invalidateQueries({ queryKey: ["status"] });
+    },
+  });
+}
+
+export function useDemotePrimaryCheckout() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id }: { id: string }): Promise<DemotePrimaryResponse> =>
+      api.demotePrimaryCheckout(id),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["thread", variables.id] });
+      queryClient.invalidateQueries({ queryKey: ["threads"] });
+      queryClient.invalidateQueries({ queryKey: ["threadTimeline", variables.id] });
+      queryClient.invalidateQueries({ queryKey: ["threadEvents", variables.id] });
       queryClient.invalidateQueries({ queryKey: ["status"] });
     },
   });

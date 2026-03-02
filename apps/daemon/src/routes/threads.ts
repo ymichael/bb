@@ -318,6 +318,17 @@ export function createThreadRoutes(
         return sendRouteError(c, err);
       }
     })
+    .get("/:id/primary-status", async (c) => {
+      try {
+        const thread = threadManager.getById(c.req.param("id"));
+        if (!thread) {
+          return sendRouteError(c, threadNotFoundError(c.req.param("id")));
+        }
+        return c.json(threadManager.getPrimaryCheckoutStatus(thread.projectId));
+      } catch (err) {
+        return sendRouteError(c, err);
+      }
+    })
     .get(
       "/:id/timeline",
       zValidator("query", timelineQuerySchema),
@@ -358,6 +369,36 @@ export function createThreadRoutes(
             },
           );
           return c.json(messages);
+        } catch (err) {
+          return sendRouteError(c, err);
+        }
+      },
+    )
+    .post(
+      "/:id/promote",
+      async (c) => {
+        try {
+          const thread = threadManager.getById(c.req.param("id"));
+          if (!thread) {
+            return sendRouteError(c, threadNotFoundError(c.req.param("id")));
+          }
+          const result = await threadManager.promoteThread(c.req.param("id"));
+          return c.json(result);
+        } catch (err) {
+          return sendRouteError(c, err);
+        }
+      },
+    )
+    .post(
+      "/:id/demote-primary",
+      async (c) => {
+        try {
+          const thread = threadManager.getById(c.req.param("id"));
+          if (!thread) {
+            return sendRouteError(c, threadNotFoundError(c.req.param("id")));
+          }
+          const result = await threadManager.demotePrimaryCheckout(c.req.param("id"));
+          return c.json(result);
         } catch (err) {
           return sendRouteError(c, err);
         }

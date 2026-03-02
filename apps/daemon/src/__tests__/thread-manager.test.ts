@@ -24,10 +24,14 @@ import { createCodexProviderAdapter } from "@beanbag/agent-server";
 import { ThreadManager } from "../thread-manager.js";
 import { WSManager } from "../ws.js";
 
-// Mock child_process.spawn
-vi.mock("node:child_process", () => ({
-  spawn: vi.fn(),
-}));
+// Mock child_process.spawn while preserving other exports.
+vi.mock("node:child_process", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:child_process")>();
+  return {
+    ...actual,
+    spawn: vi.fn(),
+  };
+});
 
 import { spawn as spawnMock } from "node:child_process";
 
@@ -489,7 +493,9 @@ describe("ThreadManager", () => {
         expect(() => accessSync(shimPath, constants.X_OK)).not.toThrow();
 
         const shimScript = readFileSync(shimPath, "utf-8");
-        expect(shimScript).toContain(`"${process.execPath}"`);
+        const hasNodeRunner = shimScript.includes(`"${process.execPath}"`);
+        const hasTsxRunner = shimScript.includes("/tsx\"");
+        expect(hasNodeRunner || hasTsxRunner).toBe(true);
         expect(shimScript).toContain('"$@"');
 
         const startMsg = JSON.parse(fakeChild._stdinData[1].trim());
@@ -636,6 +642,188 @@ describe("ThreadManager", () => {
                 baseInstructions: "[bb system] test developer instructions",
               }),
             }),
+          }),
+        }),
+      );
+    });
+
+    it("lets environment adapters customize developer instructions", async () => {
+      const customizeDeveloperInstructions = vi.fn(
+        (currentInstructions: string | undefined) =>
+          [currentInstructions, "[bb worktree] commit work often"]
+            .filter((value): value is string => Boolean(value))
+            .join("\n\n"),
+      );
+      const customEnvironmentAdapter = {
+        info: {
+          id: "worktree",
+          displayName: "Git Worktree Workspace",
+          description: "",
+          capabilities: {
+            isolatedFilesystem: true,
+            ephemeralWorkspace: true,
+            supportsCleanup: true,
+          },
+        },
+        prepare: vi.fn(() => ({
+          cwd: "/tmp/thread-worktree",
+          env: {
+            BB_WORKSPACE_ROOT: "/tmp/thread-worktree",
+            BB_WORKSPACE_MODE: "worktree",
+          },
+          metadata: {
+            mode: "worktree",
+            workspaceRoot: "/tmp/thread-worktree",
+          },
+        })),
+        customizeDeveloperInstructions,
+      };
+      const managerWithCustomEnvironment = new ThreadManager(
+        threadRepo as any,
+        eventRepo as any,
+        projectRepo as any,
+        ws as any,
+        createCodexProviderAdapter(),
+        process.env,
+        customEnvironmentAdapter as any,
+      );
+
+      const project = {
+        id: "proj-1",
+        name: "Test",
+        rootPath: "/test",
+        createdAt: 1000,
+        updatedAt: 1000,
+        workflowInstructions: "[project workflow] keep CI green",
+      };
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(project);
+
+      const createdThread = makeThread({
+        id: "t-new",
+        status: "idle",
+        environmentId: "worktree",
+      });
+      (threadRepo.create as ReturnType<typeof vi.fn>).mockReturnValue(createdThread);
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeThread({ id: "t-new", status: "active", environmentId: "worktree" }),
+      );
+
+      await managerWithCustomEnvironment.spawn({
+        projectId: "proj-1",
+        environmentId: "worktree",
+        developerInstructions: "[request instructions] add tests",
+      });
+
+      const startMsg = JSON.parse(fakeChild._stdinData[1].trim());
+      expect(startMsg.params.baseInstructions).toBe(
+        [
+          "[project workflow] keep CI green",
+          "[request instructions] add tests",
+          "[bb worktree] commit work often",
+        ].join("\n\n"),
+      );
+      expect(customizeDeveloperInstructions).toHaveBeenCalledWith(
+        [
+          "[project workflow] keep CI green",
+          "[request instructions] add tests",
+        ].join("\n\n"),
+        expect.objectContaining({
+          projectId: "proj-1",
+          threadId: "t-new",
+          requestedEnvironmentId: "worktree",
+          effectiveEnvironmentId: "worktree",
+          mode: "worktree",
+          workspaceRootPath: "/tmp/thread-worktree",
+        }),
+      );
+    });
+
+    it("records environment provisioning events emitted by the adapter", async () => {
+      const customEnvironmentAdapter = {
+        info: {
+          id: "worktree",
+          displayName: "Git Worktree Workspace",
+          description: "",
+          capabilities: {
+            isolatedFilesystem: true,
+            ephemeralWorkspace: true,
+            supportsCleanup: true,
+          },
+        },
+        prepare: vi.fn((context: { onProvisioningEvent?: (event: unknown) => void }) => {
+          context.onProvisioningEvent?.({
+            type: "env-setup",
+            status: "started",
+            scriptPath: ".bb-env-setup.ts",
+            timeoutMs: 600000,
+          });
+          context.onProvisioningEvent?.({
+            type: "env-setup",
+            status: "completed",
+            scriptPath: ".bb-env-setup.ts",
+            timeoutMs: 600000,
+            durationMs: 42,
+          });
+          return {
+            cwd: "/tmp/thread-worktree",
+            env: {
+              BB_WORKSPACE_ROOT: "/tmp/thread-worktree",
+              BB_WORKSPACE_MODE: "worktree",
+            },
+            metadata: {
+              mode: "worktree",
+              workspaceRoot: "/tmp/thread-worktree",
+            },
+          };
+        }),
+      };
+      const managerWithCustomEnvironment = new ThreadManager(
+        threadRepo as any,
+        eventRepo as any,
+        projectRepo as any,
+        ws as any,
+        createCodexProviderAdapter(),
+        process.env,
+        customEnvironmentAdapter as any,
+      );
+
+      const project = { id: "proj-1", name: "Test", rootPath: "/test", createdAt: 1000, updatedAt: 1000 };
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(project);
+
+      const createdThread = makeThread({
+        id: "t-new",
+        status: "idle",
+        environmentId: "worktree",
+      });
+      (threadRepo.create as ReturnType<typeof vi.fn>).mockReturnValue(createdThread);
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeThread({ id: "t-new", status: "active", environmentId: "worktree" }),
+      );
+
+      await managerWithCustomEnvironment.spawn({
+        projectId: "proj-1",
+        environmentId: "worktree",
+      });
+
+      expect(eventRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          threadId: "t-new",
+          type: "system/provisioning/env_setup",
+          data: expect.objectContaining({
+            status: "started",
+            scriptPath: ".bb-env-setup.ts",
+            timeoutMs: 600000,
+          }),
+        }),
+      );
+      expect(eventRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          threadId: "t-new",
+          type: "system/provisioning/env_setup",
+          data: expect.objectContaining({
+            status: "completed",
+            scriptPath: ".bb-env-setup.ts",
+            durationMs: 42,
           }),
         }),
       );

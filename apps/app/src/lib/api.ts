@@ -20,6 +20,9 @@ import type {
   CommitThreadResponse,
   SquashMergeThreadRequest,
   SquashMergeThreadResponse,
+  PromoteThreadResponse,
+  DemotePrimaryResponse,
+  PrimaryCheckoutStatus,
   CommitProjectResponse,
   ThreadTimelineResponse,
   ThreadToolGroupMessagesResponse,
@@ -445,11 +448,27 @@ export async function getThreadWorkStatus(
   );
 }
 
+export async function getThreadPrimaryStatus(
+  id: string,
+): Promise<PrimaryCheckoutStatus> {
+  return request<PrimaryCheckoutStatus>("GET", `/threads/${id}/primary-status`);
+}
+
 export async function commitThread(
   id: string,
   req?: CommitThreadRequest,
 ): Promise<CommitThreadResponse> {
   return request<CommitThreadResponse>("POST", `/threads/${id}/commit`, req ?? {});
+}
+
+export async function promoteThread(id: string): Promise<PromoteThreadResponse> {
+  return request<PromoteThreadResponse>("POST", `/threads/${id}/promote`);
+}
+
+export async function demotePrimaryCheckout(
+  id: string,
+): Promise<DemotePrimaryResponse> {
+  return request<DemotePrimaryResponse>("POST", `/threads/${id}/demote-primary`);
 }
 
 export async function squashMergeThread(

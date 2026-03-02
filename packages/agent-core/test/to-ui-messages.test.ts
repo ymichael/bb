@@ -1063,6 +1063,49 @@ describe("toUIMessages replay coverage", () => {
     expect(op?.title).toBe("Context compacted");
   });
 
+  it("projects provisioning env setup events as operations", () => {
+    const events: ThreadEvent[] = [
+      {
+        id: "evt-1",
+        threadId: "thread-1",
+        seq: 1,
+        type: "system/provisioning/env_setup",
+        data: {
+          status: "started",
+          scriptPath: ".bb-env-setup.ts",
+          timeoutMs: 600000,
+        },
+        createdAt: 1,
+      },
+      {
+        id: "evt-2",
+        threadId: "thread-1",
+        seq: 2,
+        type: "system/provisioning/env_setup",
+        data: {
+          status: "completed",
+          scriptPath: ".bb-env-setup.ts",
+          durationMs: 125,
+        },
+        createdAt: 2,
+      },
+    ];
+
+    const projected = toUIMessages(events);
+    const ops = projected.filter(
+      (message): message is Extract<UIMessage, { kind: "operation" }> =>
+        message.kind === "operation",
+    );
+
+    expect(ops).toHaveLength(2);
+    expect(ops[0]?.opType).toBe("provisioning-env-setup");
+    expect(ops[0]?.title).toBe("Environment setup started");
+    expect(ops[0]?.detail).toContain(".bb-env-setup.ts");
+    expect(ops[1]?.opType).toBe("provisioning-env-setup");
+    expect(ops[1]?.title).toBe("Environment setup completed");
+    expect(ops[1]?.detail).toContain("Duration 125ms");
+  });
+
   it("wraps unknown events in debug mode and drops them otherwise", () => {
     const events: ThreadEvent[] = [
       {

@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -283,5 +283,40 @@ describe("ThreadGitStatusService", () => {
     });
 
     expect(status.files?.some((entry) => entry.path === "README.md" && entry.status === "M?")).toBe(true);
+  });
+
+  it("promotes dirty worktree changes (tracked + untracked) into primary checkout", () => {
+    const repoRoot = makeTempDir();
+    const threadRoot = join(makeTempDir(), "thread-worktree");
+    git(repoRoot, "init");
+    git(repoRoot, "config", "user.name", "Beanbag Test");
+    git(repoRoot, "config", "user.email", "beanbag-test@example.com");
+    git(repoRoot, "checkout", "-b", "main");
+
+    writeFileSync(join(repoRoot, "README.md"), "initial\n", "utf8");
+    git(repoRoot, "add", "README.md");
+    git(repoRoot, "commit", "-m", "initial");
+
+    git(repoRoot, "worktree", "add", "-b", "thread", threadRoot, "main");
+    writeFileSync(join(threadRoot, "README.md"), "initial\nthread edit\n", "utf8");
+    mkdirSync(join(threadRoot, "notes"), { recursive: true });
+    writeFileSync(join(threadRoot, "notes", "todo.md"), "note\n", "utf8");
+
+    const service = new ThreadGitStatusService();
+    const result = service.promoteWorktreeIntoPrimary({
+      workspaceRoot: threadRoot,
+      projectRoot: repoRoot,
+    });
+
+    expect(result.promotedCheckout.branch).toBe("thread");
+    expect(git(repoRoot, "status", "--porcelain")).toContain("README.md");
+    expect(existsSync(join(repoRoot, "notes", "todo.md"))).toBe(true);
+    expect(git(repoRoot, "rev-parse", "--abbrev-ref", "HEAD")).toBe("thread");
+
+    service.discardLocalChanges(repoRoot);
+    service.checkoutSnapshot(repoRoot, result.previousCheckout);
+
+    expect(git(repoRoot, "rev-parse", "--abbrev-ref", "HEAD")).toBe("main");
+    expect(git(repoRoot, "status", "--porcelain")).toBe("");
   });
 });

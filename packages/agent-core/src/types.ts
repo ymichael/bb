@@ -33,6 +33,7 @@ export interface Thread {
   title?: string;
   status: ThreadStatus;
   workStatus?: ThreadWorkStatus;
+  primaryCheckout?: ThreadPrimaryCheckoutState;
   provisioningState?: ThreadProvisioningState;
   agentDiffStats?: ThreadAgentDiffStats;
   environmentId?: string;
@@ -86,6 +87,11 @@ export interface ThreadWorkFileChange {
   status: string;
 }
 
+export interface ThreadPrimaryCheckoutState {
+  isActive: boolean;
+  promotedAt?: number;
+}
+
 export type ThreadProvisioningReadiness = "ready" | "degraded" | "failed";
 
 export interface ThreadProvisioningState {
@@ -100,9 +106,11 @@ export type AppThreadEventType =
   | "client/turn/start"
   | "system/error"
   | "system/thread-title/updated"
+  | "system/primary_checkout/updated"
   | "system/worktree/commit"
   | "system/worktree/squash_merge"
   | "system/provisioning/started"
+  | "system/provisioning/env_setup"
   | "system/provisioning/fallback"
   | "system/provisioning/completed"
   | "system/provisioning/cleanup_failed";
@@ -158,9 +166,27 @@ export interface SystemThreadTitleUpdatedEventData {
   providerMethod?: string;
 }
 
+export interface SystemPrimaryCheckoutUpdatedEventData {
+  action: "promote" | "demote";
+  status: "started" | "completed" | "failed" | "noop";
+  message: string;
+  projectId: string;
+  activeThreadId?: string;
+  branch?: string;
+}
+
 export interface SystemProvisioningStartedEventData {
   environmentId: string;
   environmentDisplayName?: string;
+}
+
+export interface SystemProvisioningEnvSetupEventData {
+  status: "started" | "completed" | "failed";
+  scriptPath: string;
+  workspaceRoot?: string;
+  timeoutMs?: number;
+  durationMs?: number;
+  detail?: string;
 }
 
 export interface SystemProvisioningFallbackEventData {
@@ -210,9 +236,11 @@ export type ThreadEventDataByType = CodexServerNotificationParamsByMethod & {
   "client/turn/start": ClientOutboundStartEventData;
   "system/error": SystemErrorEventData;
   "system/thread-title/updated": SystemThreadTitleUpdatedEventData;
+  "system/primary_checkout/updated": SystemPrimaryCheckoutUpdatedEventData;
   "system/worktree/commit": SystemWorktreeCommitEventData;
   "system/worktree/squash_merge": SystemWorktreeSquashMergeEventData;
   "system/provisioning/started": SystemProvisioningStartedEventData;
+  "system/provisioning/env_setup": SystemProvisioningEnvSetupEventData;
   "system/provisioning/fallback": SystemProvisioningFallbackEventData;
   "system/provisioning/completed": SystemProvisioningCompletedEventData;
   "system/provisioning/cleanup_failed": SystemProvisioningCleanupFailedEventData;

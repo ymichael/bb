@@ -1187,6 +1187,47 @@ function parseOperationMessage(
     };
   }
 
+  if (eventTypeMatches(eventType, "system/provisioning/env_setup")) {
+    const payload = toEventRecord(event.data);
+    const status = getStringField(payload, "status");
+    const title = (() => {
+      switch (status) {
+        case "started":
+          return "Environment setup started";
+        case "completed":
+          return "Environment setup completed";
+        case "failed":
+          return "Environment setup failed";
+        default:
+          // Persisted payloads are open_external at read-time; tolerate unknown statuses.
+          return "Environment setup update";
+      }
+    })();
+
+    const timeoutMs = getNumberField(payload, "timeoutMs");
+    const durationMs = getNumberField(payload, "durationMs");
+    const detailParts = [
+      getStringField(payload, "scriptPath"),
+      getStringField(payload, "workspaceRoot"),
+      timeoutMs !== undefined ? `Timeout ${Math.round(timeoutMs / 1000)}s` : undefined,
+      durationMs !== undefined ? `Duration ${durationMs}ms` : undefined,
+      getStringField(payload, "detail"),
+    ].filter((value): value is string => Boolean(value));
+
+    return {
+      kind: "operation",
+      id: messageId(event.threadId, "op", `provisioning-env-setup:${event.seq}`),
+      threadId: event.threadId,
+      sourceSeqStart: event.seq,
+      sourceSeqEnd: event.seq,
+      createdAt: event.createdAt,
+      turnId: getTurnId(event.data),
+      opType: "provisioning-env-setup",
+      title,
+      detail: detailParts.length > 0 ? detailParts.join(" • ") : undefined,
+    };
+  }
+
   if (eventTypeMatches(eventType, "system/thread-title/updated")) {
     const payload = toEventRecord(event.data);
     // Avoid duplicate rows when the underlying provider thread/name/updated
@@ -1232,6 +1273,65 @@ function parseOperationMessage(
       opType: "thread-title-updated",
       title: "Title updated",
       detail: previousTitle ? `${previousTitle} → ${title}` : title,
+    };
+  }
+
+  if (eventTypeMatches(eventType, "system/primary_checkout/updated")) {
+    const payload = toEventRecord(event.data);
+    const action = getStringField(payload, "action");
+    const status = getStringField(payload, "status");
+    const message = getStringField(payload, "message");
+    const branch = getStringField(payload, "branch");
+    const detailParts = [
+      message,
+      branch ? `Branch: ${branch}` : undefined,
+    ].filter((value): value is string => Boolean(value));
+    const title = (() => {
+      if (action === "promote") {
+        switch (status) {
+          case "started":
+            return "Promoting primary checkout";
+          case "completed":
+            return "Promoted to primary checkout";
+          case "failed":
+            return "Primary checkout promotion failed";
+          case "noop":
+            return "Primary checkout already promoted";
+          default:
+            // Historical/unknown persisted statuses are open_external; keep a generic fallback.
+            return "Primary checkout promotion update";
+        }
+      }
+      if (action === "demote") {
+        switch (status) {
+          case "started":
+            return "Demoting primary checkout";
+          case "completed":
+            return "Demoted from primary checkout";
+          case "failed":
+            return "Primary checkout demotion failed";
+          case "noop":
+            return "Primary checkout already demoted";
+          default:
+            // Historical/unknown persisted statuses are open_external; keep a generic fallback.
+            return "Primary checkout demotion update";
+        }
+      }
+      // Persisted event payloads are open_external at read-time; tolerate unknown action values.
+      return "Primary checkout update";
+    })();
+
+    return {
+      kind: "operation",
+      id: messageId(event.threadId, "op", `primary-checkout-updated:${event.seq}`),
+      threadId: event.threadId,
+      sourceSeqStart: event.seq,
+      sourceSeqEnd: event.seq,
+      createdAt: event.createdAt,
+      turnId: getTurnId(event.data),
+      opType: "primary-checkout",
+      title,
+      detail: detailParts.length > 0 ? detailParts.join(" • ") : undefined,
     };
   }
 

@@ -11,6 +11,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type {
   EnvironmentPrepareContext,
+  EnvironmentProvisioningEvent,
   EnvironmentSession,
 } from "@beanbag/agent-core";
 import {
@@ -37,12 +38,16 @@ function createPrepareContext(args: {
   projectId: string;
   threadId: string;
   projectRootPath: string;
+  onProvisioningEvent?: (event: EnvironmentProvisioningEvent) => void;
 }): EnvironmentPrepareContext {
   return {
     projectId: args.projectId,
     threadId: args.threadId,
     projectRootPath: args.projectRootPath,
     runtimeEnv: process.env,
+    ...(args.onProvisioningEvent
+      ? { onProvisioningEvent: args.onProvisioningEvent }
+      : {}),
   };
 }
 
@@ -197,5 +202,99 @@ describe("environment adapter contract", () => {
     });
     expect(session.env?.BB_WORKSPACE_MODE).toBe("local-fallback");
     expect(session.metadata?.fallbackReason).toBe("worktree-add-failed");
+  });
+
+  it("runs optional .bb-env-setup.ts and emits provisioning events", () => {
+    const projectRoot = makeTempDir("bb-env-contract-env-setup-");
+    initGitRepo(projectRoot);
+
+    writeFileSync(
+      join(projectRoot, ".bb-env-setup.ts"),
+      [
+        'import { appendFileSync } from "node:fs";',
+        'import { join } from "node:path";',
+        'appendFileSync(join(process.cwd(), "env-setup.log"), `${process.env.BB_THREAD_ID}|${process.env.BB_WORKSPACE_MODE}\\n`, "utf-8");',
+      ].join("\n"),
+      "utf-8",
+    );
+    git(projectRoot, "add", ".bb-env-setup.ts");
+    git(projectRoot, "commit", "-m", "add env setup hook");
+
+    const events: EnvironmentProvisioningEvent[] = [];
+    const adapter = createWorktreeEnvironmentAdapter({
+      worktreeRootName: ".beanbag-test-worktrees",
+    });
+    const session = adapter.prepare(
+      createPrepareContext({
+        projectId: "proj-env-setup",
+        threadId: "thread-env-setup",
+        projectRootPath: projectRoot,
+        onProvisioningEvent: (event) => {
+          events.push(event);
+        },
+      }),
+    );
+
+    expect(readFileSync(join(session.cwd, "env-setup.log"), "utf-8")).toContain(
+      "thread-env-setup|worktree",
+    );
+    expect(events[0]).toEqual(
+      expect.objectContaining({
+        type: "env-setup",
+        status: "started",
+        scriptPath: ".bb-env-setup.ts",
+      }),
+    );
+    expect(events[1]).toEqual(
+      expect.objectContaining({
+        type: "env-setup",
+        status: "completed",
+        scriptPath: ".bb-env-setup.ts",
+      }),
+    );
+    session.cleanup?.();
+  });
+
+  it("surfaces .bb-env-setup.ts failures and emits a failed event", () => {
+    const projectRoot = makeTempDir("bb-env-contract-env-setup-failed-");
+    initGitRepo(projectRoot);
+
+    writeFileSync(
+      join(projectRoot, ".bb-env-setup.ts"),
+      'throw new Error("setup failed for test");\n',
+      "utf-8",
+    );
+    git(projectRoot, "add", ".bb-env-setup.ts");
+    git(projectRoot, "commit", "-m", "add failing env setup hook");
+
+    const events: EnvironmentProvisioningEvent[] = [];
+    const adapter = createWorktreeEnvironmentAdapter({
+      worktreeRootName: ".beanbag-test-worktrees",
+    });
+    expect(() =>
+      adapter.prepare(
+        createPrepareContext({
+          projectId: "proj-env-setup-failed",
+          threadId: "thread-env-setup-failed",
+          projectRootPath: projectRoot,
+          onProvisioningEvent: (event) => {
+            events.push(event);
+          },
+        }),
+      )).toThrow(".bb-env-setup.ts failed");
+    expect(events[0]).toEqual(
+      expect.objectContaining({
+        type: "env-setup",
+        status: "started",
+        scriptPath: ".bb-env-setup.ts",
+      }),
+    );
+    expect(events[1]).toEqual(
+      expect.objectContaining({
+        type: "env-setup",
+        status: "failed",
+        scriptPath: ".bb-env-setup.ts",
+      }),
+    );
   });
 });

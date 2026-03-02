@@ -450,11 +450,18 @@ export function ProjectList({
                                   )}
                                 >
                                   {thread.environmentId === "worktree" ? (
-                                    <span className="inline-flex h-7 w-7 items-center justify-center">
+                                    <span className="relative inline-flex h-7 w-7 items-center justify-center">
                                       <FolderGit2
                                         className="size-4 text-sidebar-foreground/70"
                                         aria-label="Worktree thread"
                                       />
+                                      {thread.primaryCheckout?.isActive ? (
+                                        <span
+                                          className="absolute -right-0.5 -top-0.5 inline-flex h-2.5 w-2.5 rounded-full border border-sidebar-background bg-emerald-500"
+                                          aria-label="Primary checkout active"
+                                          title="Active in primary checkout"
+                                        />
+                                      ) : null}
                                     </span>
                                   ) : null}
                                 </span>

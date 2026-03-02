@@ -41,9 +41,12 @@ function mockThreadManager(): ThreadManager {
     stop: vi.fn(),
     archive: vi.fn(),
     unarchive: vi.fn(),
+    promoteThread: vi.fn(),
+    demotePrimaryCheckout: vi.fn(),
     markRead: vi.fn(),
     getById: vi.fn(),
     getWorkStatus: vi.fn(),
+    getPrimaryCheckoutStatus: vi.fn(),
     getDefaultExecutionOptions: vi.fn(),
     list: vi.fn(),
     getTimeline: vi.fn(),
@@ -599,6 +602,59 @@ describe("Thread routes", () => {
     });
   });
 
+  describe("POST /threads/:id/promote", () => {
+    it("promotes a thread into primary checkout", async () => {
+      const thread = makeThread({ environmentId: "worktree" });
+      (threadManager.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
+      (threadManager.promoteThread as ReturnType<typeof vi.fn>).mockResolvedValue({
+        ok: true,
+        promoted: true,
+        message: "Primary checkout promoted",
+        primaryStatus: {
+          projectId: thread.projectId,
+          activeThreadId: thread.id,
+        },
+      });
+
+      const res = await app.request("/threads/thread-1/promote", {
+        method: "POST",
+      });
+
+      expect(res.status).toBe(200);
+      expect(threadManager.promoteThread).toHaveBeenCalledWith("thread-1");
+      expect(await res.json()).toMatchObject({
+        ok: true,
+        promoted: true,
+      });
+    });
+  });
+
+  describe("POST /threads/:id/demote-primary", () => {
+    it("demotes an active primary checkout thread", async () => {
+      const thread = makeThread({ environmentId: "worktree" });
+      (threadManager.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
+      (threadManager.demotePrimaryCheckout as ReturnType<typeof vi.fn>).mockResolvedValue({
+        ok: true,
+        demoted: true,
+        message: "Primary checkout demoted",
+        primaryStatus: {
+          projectId: thread.projectId,
+        },
+      });
+
+      const res = await app.request("/threads/thread-1/demote-primary", {
+        method: "POST",
+      });
+
+      expect(res.status).toBe(200);
+      expect(threadManager.demotePrimaryCheckout).toHaveBeenCalledWith("thread-1");
+      expect(await res.json()).toMatchObject({
+        ok: true,
+        demoted: true,
+      });
+    });
+  });
+
   describe("POST /threads/:id/archive", () => {
     it("archives a thread", async () => {
       const thread = makeThread();
@@ -735,6 +791,26 @@ describe("Thread routes", () => {
 
       expect(res.status).toBe(404);
       expect(threadManager.markRead).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("GET /threads/:id/primary-status", () => {
+    it("returns primary checkout status for the thread project", async () => {
+      const thread = makeThread({ projectId: "proj-1" });
+      (threadManager.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
+      (threadManager.getPrimaryCheckoutStatus as ReturnType<typeof vi.fn>).mockReturnValue({
+        projectId: "proj-1",
+        activeThreadId: "thread-1",
+      });
+
+      const res = await app.request("/threads/thread-1/primary-status");
+
+      expect(res.status).toBe(200);
+      expect(threadManager.getPrimaryCheckoutStatus).toHaveBeenCalledWith("proj-1");
+      expect(await res.json()).toEqual({
+        projectId: "proj-1",
+        activeThreadId: "thread-1",
+      });
     });
   });
 

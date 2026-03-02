@@ -2,6 +2,9 @@ import type {
   AvailableModel,
   CommitThreadRequest,
   CommitThreadResponse,
+  DemotePrimaryResponse,
+  PrimaryCheckoutStatus,
+  PromoteThreadResponse,
   SquashMergeThreadRequest,
   SquashMergeThreadResponse,
   ProviderCapabilities,
@@ -117,6 +120,18 @@ export interface EnvironmentPrepareContext {
   threadId: string;
   projectRootPath: string;
   runtimeEnv: Record<string, string | undefined>;
+  onProvisioningEvent?: (event: EnvironmentProvisioningEvent) => void;
+}
+
+export interface EnvironmentInstructionsContext {
+  projectId: string;
+  threadId: string;
+  projectRootPath: string;
+  workspaceRootPath: string;
+  requestedEnvironmentId: string;
+  effectiveEnvironmentId: string;
+  mode?: string;
+  fallbackReason?: string;
 }
 
 export interface EnvironmentSession {
@@ -126,9 +141,24 @@ export interface EnvironmentSession {
   cleanup?: () => Promise<void> | void;
 }
 
+export type EnvironmentProvisioningEvent =
+  | {
+      type: "env-setup";
+      status: "started" | "completed" | "failed";
+      scriptPath: string;
+      workspaceRoot?: string;
+      timeoutMs?: number;
+      durationMs?: number;
+      detail?: string;
+    };
+
 export interface EnvironmentAdapter {
   info: SystemEnvironmentInfo;
   prepare(context: EnvironmentPrepareContext): EnvironmentSession;
+  customizeDeveloperInstructions?(
+    currentInstructions: string | undefined,
+    context: EnvironmentInstructionsContext,
+  ): string | undefined;
 }
 
 export interface ThreadListFilters {
@@ -161,6 +191,9 @@ export interface ThreadOrchestrator {
     threadId: string,
     request?: CommitThreadRequest,
   ): Promise<CommitThreadResponse>;
+  promoteThread(threadId: string): Promise<PromoteThreadResponse>;
+  demotePrimaryCheckout(threadId: string): Promise<DemotePrimaryResponse>;
+  getPrimaryCheckoutStatus(projectId: string): PrimaryCheckoutStatus;
   squashMergeThread(
     threadId: string,
     request?: SquashMergeThreadRequest,

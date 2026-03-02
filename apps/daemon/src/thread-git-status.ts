@@ -1,7 +1,17 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, rmSync, statSync } from "node:fs";
+import {
+  copyFileSync,
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  mkdtempSync,
+  readlinkSync,
+  rmSync,
+  statSync,
+  symlinkSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import type { CommitThreadResponse, ThreadWorkStatus } from "@beanbag/agent-core";
 
 type CacheEntry = {
@@ -14,6 +24,17 @@ type CacheEntry = {
 
 const CACHE_TTL_MS = 1_500;
 
+export interface GitCheckoutSnapshot {
+  branch?: string;
+  head: string;
+  detached: boolean;
+}
+
+export interface PromoteWorktreeResult {
+  previousCheckout: GitCheckoutSnapshot;
+  promotedCheckout: GitCheckoutSnapshot;
+}
+
 function runGit(cwd: string, args: string[]): { ok: boolean; stdout: string; stderr: string; code: number | null } {
   const result = spawnSync("git", args, {
     cwd,
@@ -23,6 +44,20 @@ function runGit(cwd: string, args: string[]): { ok: boolean; stdout: string; std
   return {
     ok: result.status === 0,
     stdout: result.stdout?.trimEnd() ?? "",
+    stderr: result.stderr?.trimEnd() ?? "",
+    code: result.status,
+  };
+}
+
+function runGitRaw(cwd: string, args: string[]): { ok: boolean; stdout: string; stderr: string; code: number | null } {
+  const result = spawnSync("git", args, {
+    cwd,
+    encoding: "utf-8",
+    stdio: "pipe",
+  });
+  return {
+    ok: result.status === 0,
+    stdout: result.stdout ?? "",
     stderr: result.stderr?.trimEnd() ?? "",
     code: result.status,
   };
@@ -252,6 +287,110 @@ function hasLocalWorkingChanges(repoRoot: string): boolean {
   return status.stdout.trim().length > 0;
 }
 
+function hasLocalBranch(repoRoot: string, branch: string): boolean {
+  return runGit(
+    repoRoot,
+    ["show-ref", "--verify", "--quiet", `refs/heads/${branch}`],
+  ).ok;
+}
+
+function resolveCheckoutSnapshot(repoRoot: string): GitCheckoutSnapshot {
+  const headResult = runGit(repoRoot, ["rev-parse", "HEAD"]);
+  if (!headResult.ok || !headResult.stdout) {
+    throw new Error("Failed to resolve HEAD");
+  }
+
+  const branchResult = runGit(repoRoot, ["symbolic-ref", "--quiet", "--short", "HEAD"]);
+  if (branchResult.ok && branchResult.stdout) {
+    return {
+      branch: branchResult.stdout,
+      head: headResult.stdout,
+      detached: false,
+    };
+  }
+
+  return {
+    head: headResult.stdout,
+    detached: true,
+  };
+}
+
+function checkoutSnapshot(repoRoot: string, snapshot: GitCheckoutSnapshot): void {
+  const branch = snapshot.branch?.trim();
+  if (branch && hasLocalBranch(repoRoot, branch)) {
+    const branchCheckout = runGit(
+      repoRoot,
+      ["checkout", "--ignore-other-worktrees", branch],
+    );
+    if (branchCheckout.ok) return;
+  }
+
+  const detachedCheckout = runGit(repoRoot, ["checkout", "--detach", snapshot.head]);
+  if (!detachedCheckout.ok) {
+    throw new Error(detachedCheckout.stderr || "Failed to checkout detached HEAD");
+  }
+}
+
+function parseNulSeparatedList(value: string): string[] {
+  return value
+    .split("\u0000")
+    .filter((entry) => entry.length > 0);
+}
+
+function copyFileSystemEntry(sourcePath: string, targetPath: string): void {
+  const stat = lstatSync(sourcePath);
+  if (stat.isDirectory()) {
+    mkdirSync(targetPath, { recursive: true });
+    return;
+  }
+  if (stat.isSymbolicLink()) {
+    rmSync(targetPath, { recursive: true, force: true });
+    mkdirSync(dirname(targetPath), { recursive: true });
+    const linkTarget = readlinkSync(sourcePath);
+    symlinkSync(linkTarget, targetPath);
+    return;
+  }
+
+  mkdirSync(dirname(targetPath), { recursive: true });
+  if (existsSync(targetPath) && lstatSync(targetPath).isDirectory()) {
+    rmSync(targetPath, { recursive: true, force: true });
+  }
+  copyFileSync(sourcePath, targetPath);
+}
+
+function applyBinaryDiffPatch(projectRoot: string, patch: string): void {
+  if (patch.trim().length === 0) return;
+  const applyResult = spawnSync(
+    "git",
+    ["apply", "--allow-empty", "--whitespace=nowarn", "-"],
+    {
+      cwd: projectRoot,
+      encoding: "utf-8",
+      stdio: "pipe",
+      input: patch,
+    },
+  );
+  if (applyResult.status !== 0) {
+    const stderr = applyResult.stderr?.trim();
+    throw new Error(stderr || "Failed to apply worktree patch to primary checkout");
+  }
+}
+
+function syncUntrackedFilesFromWorkspace(workspaceRoot: string, projectRoot: string): void {
+  const untracked = runGit(
+    workspaceRoot,
+    ["ls-files", "--others", "--exclude-standard", "-z"],
+  );
+  if (!untracked.ok || !untracked.stdout) return;
+
+  for (const relativePath of parseNulSeparatedList(untracked.stdout)) {
+    const sourcePath = join(workspaceRoot, relativePath);
+    if (!existsSync(sourcePath)) continue;
+    const targetPath = join(projectRoot, relativePath);
+    copyFileSystemEntry(sourcePath, targetPath);
+  }
+}
+
 function emptyStatus(workspaceRoot: string): ThreadWorkStatus {
   return {
     state: "clean",
@@ -292,6 +431,85 @@ export class ThreadGitStatusService {
     const branch = resolveDefaultBranch(projectRoot);
     this.defaultBranchCache.set(projectRoot, branch);
     return branch;
+  }
+
+  isCleanWorkspace(repoRoot: string): boolean {
+    return !hasLocalWorkingChanges(repoRoot);
+  }
+
+  resolveCheckoutSnapshot(repoRoot: string): GitCheckoutSnapshot {
+    return resolveCheckoutSnapshot(repoRoot);
+  }
+
+  checkoutSnapshot(repoRoot: string, snapshot: GitCheckoutSnapshot): void {
+    checkoutSnapshot(repoRoot, snapshot);
+  }
+
+  resolveDefaultBranchCheckout(projectRoot: string): GitCheckoutSnapshot | undefined {
+    const defaultBranch = this.detectDefaultBranch(projectRoot);
+    if (!defaultBranch) return undefined;
+    if (!hasLocalBranch(projectRoot, defaultBranch)) return undefined;
+    const headResult = runGit(projectRoot, ["rev-parse", defaultBranch]);
+    if (!headResult.ok || !headResult.stdout) return undefined;
+    return {
+      branch: defaultBranch,
+      head: headResult.stdout,
+      detached: false,
+    };
+  }
+
+  discardLocalChanges(repoRoot: string): void {
+    const reset = runGit(repoRoot, ["reset", "--hard"]);
+    if (!reset.ok) {
+      throw new Error(reset.stderr || "Failed to reset primary checkout");
+    }
+    const clean = runGit(repoRoot, ["clean", "-fd"]);
+    if (!clean.ok) {
+      throw new Error(clean.stderr || "Failed to clean primary checkout");
+    }
+  }
+
+  promoteWorktreeIntoPrimary(args: {
+    workspaceRoot: string;
+    projectRoot: string;
+  }): PromoteWorktreeResult {
+    if (!this.isCleanWorkspace(args.projectRoot)) {
+      throw new Error(
+        "Primary checkout has local changes. Commit, stash, or discard changes before promoting a thread.",
+      );
+    }
+
+    const previousCheckout = this.resolveCheckoutSnapshot(args.projectRoot);
+    const promotedCheckout = this.resolveCheckoutSnapshot(args.workspaceRoot);
+
+    try {
+      checkoutSnapshot(args.projectRoot, promotedCheckout);
+
+      const patchResult = runGitRaw(args.workspaceRoot, ["diff", "--binary", "HEAD"]);
+      if (!patchResult.ok) {
+        throw new Error(patchResult.stderr || "Failed to generate worktree patch");
+      }
+      applyBinaryDiffPatch(args.projectRoot, patchResult.stdout);
+      syncUntrackedFilesFromWorkspace(args.workspaceRoot, args.projectRoot);
+
+      this.invalidate(args.workspaceRoot);
+      return {
+        previousCheckout,
+        promotedCheckout,
+      };
+    } catch (err) {
+      try {
+        checkoutSnapshot(args.projectRoot, previousCheckout);
+      } catch (restoreErr) {
+        const restoreMessage = restoreErr instanceof Error
+          ? restoreErr.message
+          : String(restoreErr);
+        throw new Error(
+          `${err instanceof Error ? err.message : String(err)} (failed to restore primary checkout: ${restoreMessage})`,
+        );
+      }
+      throw err;
+    }
   }
 
   getStatus(args: {

@@ -121,6 +121,26 @@ export interface SquashMergeThreadResponse {
   conflictFiles?: string[];
 }
 
+export interface PrimaryCheckoutStatus {
+  projectId: string;
+  activeThreadId?: string;
+  promotedAt?: number;
+}
+
+export interface PromoteThreadResponse {
+  ok: true;
+  promoted: boolean;
+  message: string;
+  primaryStatus: PrimaryCheckoutStatus;
+}
+
+export interface DemotePrimaryResponse {
+  ok: true;
+  demoted: boolean;
+  message: string;
+  primaryStatus: PrimaryCheckoutStatus;
+}
+
 export interface CommitProjectResponse {
   ok: true;
   commitCreated: boolean;

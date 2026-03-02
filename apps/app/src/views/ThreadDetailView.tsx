@@ -9,6 +9,8 @@ import {
   useThreadToolGroupMessages,
   useTellThread,
   useCommitThread,
+  usePromoteThread,
+  useDemotePrimaryCheckout,
   useSquashMergeThread,
   useStopThread,
   useMarkThreadRead,
@@ -184,6 +186,8 @@ export function ThreadDetailView() {
   );
   const tellThread = useTellThread();
   const commitThread = useCommitThread();
+  const promoteThread = usePromoteThread();
+  const demotePrimaryCheckout = useDemotePrimaryCheckout();
   const squashMergeThread = useSquashMergeThread();
   const stopThread = useStopThread();
   const unarchiveThread = useUnarchiveThread();
@@ -409,6 +413,7 @@ export function ThreadDetailView() {
   const isCreated = thread.status === "created";
   const isProvisioning = thread.status === "provisioning";
   const isProvisioningFailed = thread.status === "provisioning_failed";
+  const isFollowUpSubmitting = tellThread.isPending || demotePrimaryCheckout.isPending;
   const canSendFollowUp = !isCreated && !isProvisioning;
   const promptPlaceholder =
     isCreated
@@ -425,6 +430,7 @@ export function ThreadDetailView() {
     parentThread?.title && parentThread.title.trim().length > 0
       ? parentThread.title
       : parentThreadId;
+  const isPrimaryCheckoutActive = thread.primaryCheckout?.isActive === true;
   const showWorkspaceStatus =
     Boolean(threadWorkStatus) &&
     !(thread.archivedAt !== undefined && thread.environmentId === "local");
@@ -432,6 +438,7 @@ export function ThreadDetailView() {
     parentThreadId ||
       thread.archivedAt !== undefined ||
       thread.environmentId ||
+      isPrimaryCheckoutActive ||
       showWorkspaceStatus,
   );
   const provisioningStatusLabel =
@@ -441,8 +448,20 @@ export function ThreadDetailView() {
       ? "Provisioning..."
       : undefined;
 
-  const handleSend = () => {
+  const handleSend = async () => {
     if (promptInput.length === 0) return;
+    if (isPrimaryCheckoutActive) {
+      try {
+        await demotePrimaryCheckout.mutateAsync({ id: thread.id });
+      } catch (err) {
+        window.alert(
+          err instanceof Error
+            ? err.message
+            : "Failed to demote primary checkout before follow-up",
+        );
+        return;
+      }
+    }
     scrollToBottom();
     tellThread.mutate(
       {
@@ -487,6 +506,42 @@ export function ThreadDetailView() {
                 align="center"
               >
                 <span>{thread.environmentId}</span>
+              </DetailRow>
+            ) : null}
+            {thread.environmentId === "worktree" ? (
+              <DetailRow
+                label="Primary checkout"
+                valueClassName="min-w-0"
+                align="center"
+              >
+                <div className="flex w-full items-center justify-between gap-3">
+                  <span className="truncate text-xs text-muted-foreground">
+                    {isPrimaryCheckoutActive ? "Active" : "Not active"}
+                  </span>
+                  <button
+                    type="button"
+                    className="inline-flex shrink-0 items-center rounded-md border border-border/70 px-2 py-1 text-xs font-medium text-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+                    disabled={
+                      thread.archivedAt !== undefined ||
+                      promoteThread.isPending ||
+                      demotePrimaryCheckout.isPending
+                    }
+                    onClick={() => {
+                      const action = isPrimaryCheckoutActive
+                        ? demotePrimaryCheckout.mutateAsync({ id: thread.id })
+                        : promoteThread.mutateAsync({ id: thread.id });
+                      void action.catch((err) => {
+                        window.alert(
+                          err instanceof Error
+                            ? err.message
+                            : "Failed to update primary checkout state",
+                        );
+                      });
+                    }}
+                  >
+                    {isPrimaryCheckoutActive ? "Demote" : "Promote"}
+                  </button>
+                </div>
               </DetailRow>
             ) : null}
             {showWorkspaceStatus && threadWorkStatus ? (
@@ -707,8 +762,8 @@ export function ThreadDetailView() {
                   ? () => stopThread.mutate(thread.id)
                   : undefined
               }
-              isSubmitting={tellThread.isPending}
-              submitDisabled={!canSendFollowUp}
+              isSubmitting={isFollowUpSubmitting}
+              submitDisabled={!canSendFollowUp || isFollowUpSubmitting}
               isRunning={thread.status === "active"}
               placeholder={promptPlaceholder}
               submitMode="enter"

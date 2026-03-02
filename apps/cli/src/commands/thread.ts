@@ -269,6 +269,91 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
     });
 
   thread
+    .command("promote <id>")
+    .description("Promote a worktree thread into the primary checkout")
+    .action(async (id: string) => {
+      const client = createClient(getUrl());
+      try {
+        const result = await unwrap<{ ok: true; promoted: boolean; message: string }>(
+          client.api.v1.threads[":id"].promote.$post({
+            param: { id },
+          }),
+        );
+        console.log(result.message);
+      } catch (err: unknown) {
+        console.error(`Error: ${(err as Error).message}`);
+        process.exit(1);
+      }
+    });
+
+  thread
+    .command("demote [id]")
+    .description("Demote the currently promoted thread from the primary checkout")
+    .option("--project <id>", "Project ID (defaults to BB_PROJECT_ID when id is omitted)")
+    .action(async (id: string | undefined, opts: { project?: string }) => {
+      const client = createClient(getUrl());
+      try {
+        const threadId = (() => {
+          if (id) return id;
+          const fallbackFromContext = resolveThreadId();
+          if (fallbackFromContext) return fallbackFromContext;
+          const projectId = requireProjectId(opts.project);
+          return unwrap<Thread[]>(
+            client.api.v1.threads.$get({
+              query: { projectId },
+            }),
+          ).then((threads) => {
+            const active = threads.find((thread) => thread.primaryCheckout?.isActive);
+            if (!active) {
+              throw new Error("Primary checkout is already demoted.");
+            }
+            return active.id;
+          });
+        })();
+        const resolvedThreadId = typeof threadId === "string"
+          ? threadId
+          : await threadId;
+        const result = await unwrap<{ ok: true; demoted: boolean; message: string }>(
+          client.api.v1.threads[":id"]["demote-primary"].$post({
+            param: { id: resolvedThreadId },
+          }),
+        );
+        console.log(result.message);
+      } catch (err: unknown) {
+        console.error(`Error: ${(err as Error).message}`);
+        process.exit(1);
+      }
+    });
+
+  thread
+    .command("promote-status")
+    .description("Show which thread is active in the primary checkout")
+    .option("--project <id>", "Project ID (defaults to BB_PROJECT_ID)")
+    .action(async (opts: { project?: string }) => {
+      const client = createClient(getUrl());
+      try {
+        const projectId = requireProjectId(opts.project);
+        const threads = await unwrap<Thread[]>(
+          client.api.v1.threads.$get({
+            query: { projectId },
+          }),
+        );
+        const active = threads.find((thread) => thread.primaryCheckout?.isActive);
+        if (!active) {
+          console.log("Primary checkout: demoted");
+          return;
+        }
+        console.log(`Primary checkout: ${active.id}`);
+        if (active.title) {
+          console.log(`Title: ${active.title}`);
+        }
+      } catch (err: unknown) {
+        console.error(`Error: ${(err as Error).message}`);
+        process.exit(1);
+      }
+    });
+
+  thread
     .command("log [id]")
     .description("Show thread event log (defaults to BB_THREAD_ID)")
     .action(async (id: string | undefined) => {
