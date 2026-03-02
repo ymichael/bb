@@ -281,11 +281,11 @@ function QueuedFollowUpList({
                     type="button"
                     size="sm"
                     variant="link"
-                    className="h-auto px-0 text-xs text-muted-foreground"
+                    className="h-auto px-0 text-xs text-muted-foreground underline"
                     disabled={sendDisabled || isProcessing}
                     onClick={() => onSendImmediately(queuedMessage.id)}
                   >
-                    {isProcessing ? "Sending..." : "Steer"}
+                    {isProcessing ? "Sending..." : "Send now"}
                   </Button>
                   <Button
                     type="button"
