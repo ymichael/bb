@@ -83,6 +83,9 @@ function relaunchCurrentProcess(): boolean {
   }
 }
 
+const SUPERVISED_RESTART_ENV = "BEANBAG_SUPERVISED_RESTART";
+const SUPERVISED_RESTART_EXIT_CODE = 75;
+
 // ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
@@ -135,6 +138,10 @@ async function main(): Promise<void> {
     await closeHttpServer(httpServer);
 
     if (restartRequested) {
+      if (process.env[SUPERVISED_RESTART_ENV] === "1") {
+        console.log("Shutdown complete. Restart requested (supervised).");
+        process.exit(SUPERVISED_RESTART_EXIT_CODE);
+      }
       const relaunched = relaunchCurrentProcess();
       if (!relaunched) {
         console.error("Failed to relaunch daemon process.");
