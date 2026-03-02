@@ -8,11 +8,13 @@ import type {
   AvailableModel,
   OpenPathEditor,
   OpenPathRequest,
+  Thread,
   SystemEnvironmentInfo,
   SystemProviderInfo,
   SystemStatus,
   ThreadOrchestrator,
 } from "@beanbag/agent-core";
+import { assertNever } from "@beanbag/agent-core";
 import { pickFolderPath } from "../folder-picker.js";
 import { invalidRequestError } from "../domain-errors.js";
 import { sendRouteError } from "./error-response.js";
@@ -32,6 +34,19 @@ type TranscribeVoiceFn = (
   args: TranscribeVoiceInputArgs,
 ) => Promise<TranscribeVoiceInputResult>;
 type OpenPathFn = (args: OpenPathRequest) => void;
+type RequestShutdownFn = (reason: string) => void;
+
+export interface CreateSystemRoutesOptions {
+  pickFolder?: PickFolderFn;
+  listModels?: ListModelsFn;
+  getProviderInfo?: ProviderInfoFn;
+  listProviders?: ProviderCatalogFn;
+  getEnvironmentInfo?: EnvironmentInfoFn;
+  listEnvironments?: EnvironmentCatalogFn;
+  transcribeVoice?: TranscribeVoiceFn;
+  openPath?: OpenPathFn;
+  requestShutdown?: RequestShutdownFn;
+}
 
 const openPathSchema = z.object({
   path: z.string().min(1),
@@ -39,6 +54,32 @@ const openPathSchema = z.object({
   editor: z.enum(["system_default", "vscode", "cursor", "zed", "windsurf"]).optional(),
   command: z.string().min(1).optional(),
 });
+
+const shutdownRequestSchema = z.object({
+  force: z.boolean().optional(),
+});
+
+const RESTART_POLICY_BY_STATUS: Record<Thread["status"], string> = {
+  created: "reprovision",
+  provisioning: "mark-provisioning-failed",
+  active: "attempt-resume-or-idle",
+  idle: "noop",
+  provisioning_failed: "noop",
+};
+
+function isShutdownBlockingStatus(status: Thread["status"]): boolean {
+  switch (status) {
+    case "created":
+    case "provisioning":
+    case "active":
+      return true;
+    case "idle":
+    case "provisioning_failed":
+      return false;
+    default:
+      return assertNever(status);
+  }
+}
 
 function toEditorCommand(editor: OpenPathEditor): string | null {
   switch (editor) {
@@ -116,15 +157,18 @@ function openPathInEditor(request: OpenPathRequest): void {
 export function createSystemRoutes(
   threadManager: ThreadOrchestrator,
   startTime: number,
-  pickFolder: PickFolderFn = pickFolderPath,
-  listModels: ListModelsFn = () => threadManager.listModels(),
-  getProviderInfo: ProviderInfoFn = () => threadManager.getProviderInfo(),
-  listProviders: ProviderCatalogFn = () => threadManager.listProviders(),
-  getEnvironmentInfo: EnvironmentInfoFn = () => threadManager.getEnvironmentInfo(),
-  listEnvironments: EnvironmentCatalogFn = () => threadManager.listEnvironments(),
-  transcribeVoice: TranscribeVoiceFn = transcribeVoiceInput,
-  openPath: OpenPathFn = openPathInEditor,
+  opts: CreateSystemRoutesOptions = {},
 ) {
+  const pickFolder = opts.pickFolder ?? pickFolderPath;
+  const listModels = opts.listModels ?? (() => threadManager.listModels());
+  const getProviderInfo = opts.getProviderInfo ?? (() => threadManager.getProviderInfo());
+  const listProviders = opts.listProviders ?? (() => threadManager.listProviders());
+  const getEnvironmentInfo = opts.getEnvironmentInfo ?? (() => threadManager.getEnvironmentInfo());
+  const listEnvironments = opts.listEnvironments ?? (() => threadManager.listEnvironments());
+  const transcribeVoice = opts.transcribeVoice ?? transcribeVoiceInput;
+  const openPath = opts.openPath ?? openPathInEditor;
+  const requestShutdown = opts.requestShutdown ?? (() => {});
+
   return new Hono()
     .get("/status", async (c) => {
       try {
@@ -218,6 +262,49 @@ export function createSystemRoutes(
     .get("/environments", async (c) => {
       try {
         return c.json(listEnvironments());
+      } catch (err) {
+        return sendRouteError(c, err);
+      }
+    })
+    .get("/restart-policy", async (c) => {
+      return c.json({
+        restartPolicyByStatus: RESTART_POLICY_BY_STATUS,
+        shutdownBlockingStatuses: ["created", "provisioning", "active"] as const,
+      });
+    })
+    .post("/shutdown", async (c) => {
+      try {
+        const bodyRaw = await c.req.json<unknown>().catch(() => ({}));
+        const parsed = shutdownRequestSchema.safeParse(bodyRaw);
+        if (!parsed.success) {
+          throw invalidRequestError("Invalid shutdown request body");
+        }
+        const force = parsed.data.force === true;
+        const blockingThreads = threadManager
+          .list({ includeArchived: false })
+          .filter((thread) => isShutdownBlockingStatus(thread.status))
+          .map((thread) => ({
+            id: thread.id,
+            status: thread.status,
+            projectId: thread.projectId,
+          }));
+        if (!force && blockingThreads.length > 0) {
+          return c.json({
+            code: "shutdown_blocked",
+            message: "Daemon shutdown blocked by active thread work",
+            blockingThreads,
+          }, 409);
+        }
+
+        setTimeout(() => {
+          requestShutdown("system/shutdown");
+        }, 0);
+
+        return c.json({
+          ok: true,
+          forced: force,
+          blockingThreadsCount: blockingThreads.length,
+        });
       } catch (err) {
         return sendRouteError(c, err);
       }

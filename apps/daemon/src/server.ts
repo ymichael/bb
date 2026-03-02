@@ -30,6 +30,7 @@ export interface ServerDeps {
   projectRepo: ProjectRepository;
   threadRepo: ThreadRepository;
   eventRepo: EventRepository;
+  requestShutdown?: (reason: string) => void;
 }
 
 export function createServer(deps: ServerDeps) {
@@ -92,6 +93,7 @@ export function createServer(deps: ServerDeps) {
     wsManager,
     startTime,
     projectCommitMessageGenerator,
+    requestShutdown: deps.requestShutdown,
   });
 
   const appWithRoutes = app.route("/api/v1", apiRoutes);

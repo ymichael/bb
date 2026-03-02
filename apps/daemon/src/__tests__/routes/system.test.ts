@@ -83,18 +83,13 @@ describe("System routes", () => {
     getProviderInfo = vi.fn();
     transcribeVoice = vi.fn().mockResolvedValue({ text: "transcribed prompt" });
     openPath = vi.fn();
-    const routes = createSystemRoutes(
-      threadManager as any,
-      startTime,
+    const routes = createSystemRoutes(threadManager as any, startTime, {
       pickFolder,
       listModels,
       getProviderInfo,
-      undefined,
-      undefined,
-      undefined,
       transcribeVoice,
       openPath,
-    );
+    });
     app = new Hono().route("/system", routes);
   });
 
@@ -314,7 +309,9 @@ describe("System routes", () => {
     it("uses thread manager provider listing by default", async () => {
       const defaultApp = new Hono().route(
         "/system",
-        createSystemRoutes(threadManager as any, startTime, pickFolder),
+        createSystemRoutes(threadManager as any, startTime, {
+          pickFolder,
+        }),
       );
       const models = [makeModel({ id: "provider-model-1", model: "provider-model-1" })];
       (
@@ -354,7 +351,10 @@ describe("System routes", () => {
     it("uses thread manager provider info by default", async () => {
       const defaultApp = new Hono().route(
         "/system",
-        createSystemRoutes(threadManager as any, startTime, pickFolder, listModels),
+        createSystemRoutes(threadManager as any, startTime, {
+          pickFolder,
+          listModels,
+        }),
       );
       const providerInfo: SystemProviderInfo = {
         id: "codex",
@@ -459,6 +459,116 @@ describe("System routes", () => {
       expect(await allRes.json()).toEqual(environments);
       expect(threadManager.getEnvironmentInfo).toHaveBeenCalledTimes(1);
       expect(threadManager.listEnvironments).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe("GET /system/restart-policy", () => {
+    it("returns explicit restart semantics by thread status", async () => {
+      const res = await app.request("/system/restart-policy");
+
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({
+        restartPolicyByStatus: {
+          created: "reprovision",
+          provisioning: "mark-provisioning-failed",
+          active: "attempt-resume-or-idle",
+          idle: "noop",
+          provisioning_failed: "noop",
+        },
+        shutdownBlockingStatuses: ["created", "provisioning", "active"],
+      });
+    });
+  });
+
+  describe("POST /system/shutdown", () => {
+    it("returns 409 when blocking thread work exists and force is not set", async () => {
+      const requestShutdown = vi.fn();
+      const shutdownApp = new Hono().route(
+        "/system",
+        createSystemRoutes(threadManager as any, startTime, {
+          requestShutdown,
+        }),
+      );
+      (threadManager.list as ReturnType<typeof vi.fn>).mockReturnValue([
+        makeThread({ id: "t-active", status: "active" }),
+        makeThread({ id: "t-idle", status: "idle" }),
+      ]);
+
+      const res = await shutdownApp.request("/system/shutdown", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+
+      expect(res.status).toBe(409);
+      expect(await res.json()).toEqual({
+        code: "shutdown_blocked",
+        message: "Daemon shutdown blocked by active thread work",
+        blockingThreads: [
+          {
+            id: "t-active",
+            status: "active",
+            projectId: "proj-1",
+          },
+        ],
+      });
+      expect(requestShutdown).not.toHaveBeenCalled();
+    });
+
+    it("schedules shutdown callback when no blocking work exists", async () => {
+      const requestShutdown = vi.fn();
+      const shutdownApp = new Hono().route(
+        "/system",
+        createSystemRoutes(threadManager as any, startTime, {
+          requestShutdown,
+        }),
+      );
+      (threadManager.list as ReturnType<typeof vi.fn>).mockReturnValue([
+        makeThread({ id: "t-idle", status: "idle" }),
+      ]);
+
+      const res = await shutdownApp.request("/system/shutdown", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({
+        ok: true,
+        forced: false,
+        blockingThreadsCount: 0,
+      });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(requestShutdown).toHaveBeenCalledWith("system/shutdown");
+    });
+
+    it("allows forced shutdown even when active work exists", async () => {
+      const requestShutdown = vi.fn();
+      const shutdownApp = new Hono().route(
+        "/system",
+        createSystemRoutes(threadManager as any, startTime, {
+          requestShutdown,
+        }),
+      );
+      (threadManager.list as ReturnType<typeof vi.fn>).mockReturnValue([
+        makeThread({ id: "t-active", status: "active" }),
+      ]);
+
+      const res = await shutdownApp.request("/system/shutdown", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ force: true }),
+      });
+
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({
+        ok: true,
+        forced: true,
+        blockingThreadsCount: 1,
+      });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(requestShutdown).toHaveBeenCalledWith("system/shutdown");
     });
   });
 });

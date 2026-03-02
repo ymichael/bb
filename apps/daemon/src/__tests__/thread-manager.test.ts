@@ -187,12 +187,24 @@ describe("ThreadManager", () => {
   });
 
   describe("boot status healing", () => {
-    it("resets persisted active threads to idle when they cannot be resumed", async () => {
+    function createBootManager(initialThreads: Thread[]) {
+      const threadState = new Map(
+        initialThreads.map((thread) => [thread.id, { ...thread }]),
+      );
       const bootThreadRepo = {
         create: vi.fn(),
-        getById: vi.fn(),
-        list: vi.fn(),
-        update: vi.fn(),
+        getById: vi.fn((threadId: string) => threadState.get(threadId)),
+        list: vi.fn(() => Array.from(threadState.values())),
+        update: vi.fn((threadId: string, updates: Partial<Thread>) => {
+          const existing = threadState.get(threadId);
+          if (!existing) return undefined;
+          const next = {
+            ...existing,
+            ...updates,
+          } as Thread;
+          threadState.set(threadId, next);
+          return next;
+        }),
         markRead: vi.fn(),
         delete: vi.fn(),
       } as unknown as ThreadRepository;
@@ -216,21 +228,31 @@ describe("ThreadManager", () => {
         close: vi.fn(),
       } as unknown as WSManager;
 
-      (bootThreadRepo.list as ReturnType<typeof vi.fn>).mockImplementation(
-        (filters?: { status?: Thread["status"] }) => {
-          if (filters?.status === "active") {
-            return [makeThread({ id: "boot-active", status: "active" })];
-          }
-          return [];
-        },
-      );
-
       const bootManager = new ThreadManager(
         bootThreadRepo as any,
         bootEventRepo as any,
         bootProjectRepo as any,
         bootWs as any,
       );
+
+      return {
+        bootManager,
+        bootThreadRepo,
+        bootEventRepo,
+        bootProjectRepo,
+        bootWs,
+        threadState,
+      };
+    }
+
+    it("resets persisted active threads to idle when they cannot be resumed", async () => {
+      const {
+        bootManager,
+        bootThreadRepo,
+        bootWs,
+      } = createBootManager([
+        makeThread({ id: "boot-active", status: "active" }),
+      ]);
 
       await bootManager.reconcileActiveThreadsOnBoot();
 
@@ -247,6 +269,68 @@ describe("ThreadManager", () => {
         "status-changed",
         "work-status-changed",
       ]);
+    });
+
+    it("applies the restart policy matrix across persisted thread statuses", async () => {
+      const {
+        bootManager,
+        bootThreadRepo,
+      } = createBootManager([
+        makeThread({ id: "boot-created", status: "created" }),
+        makeThread({ id: "boot-provisioning", status: "provisioning" }),
+        makeThread({ id: "boot-active", status: "active" }),
+        makeThread({ id: "boot-idle", status: "idle" }),
+        makeThread({ id: "boot-provisioning-failed", status: "provisioning_failed" }),
+        makeThread({
+          id: "boot-archived-active",
+          status: "active",
+          archivedAt: 123,
+        }),
+        makeThread({
+          id: "boot-archived-idle",
+          status: "idle",
+          archivedAt: 123,
+        }),
+      ]);
+
+      const scheduleProvisioningSpy = vi
+        .spyOn(bootManager as any, "_scheduleProvisioning")
+        .mockImplementation(() => {});
+      const cleanupRuntimeSpy = vi
+        .spyOn(bootManager as any, "_cleanupThreadRuntime")
+        .mockImplementation(() => {});
+
+      await bootManager.reconcileActiveThreadsOnBoot();
+
+      expect(scheduleProvisioningSpy).toHaveBeenCalledWith(
+        "boot-created",
+        {
+          projectId: "proj-1",
+          environmentId: undefined,
+        },
+      );
+      expect(cleanupRuntimeSpy).toHaveBeenCalledWith("boot-provisioning");
+      expect(bootThreadRepo.update).toHaveBeenCalledWith(
+        "boot-provisioning",
+        { status: "provisioning_failed" },
+        { touchUpdatedAt: false },
+      );
+      expect(bootThreadRepo.update).toHaveBeenCalledWith(
+        "boot-active",
+        { status: "idle" },
+        { touchUpdatedAt: false },
+      );
+      expect(bootThreadRepo.update).toHaveBeenCalledWith(
+        "boot-archived-active",
+        { status: "idle" },
+        { touchUpdatedAt: false },
+      );
+
+      const updatedIds = (bootThreadRepo.update as ReturnType<typeof vi.fn>).mock.calls
+        .map((call) => call[0] as string);
+      expect(updatedIds).not.toContain("boot-idle");
+      expect(updatedIds).not.toContain("boot-provisioning-failed");
+      expect(updatedIds).not.toContain("boot-archived-idle");
     });
   });
 

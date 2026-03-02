@@ -100,6 +100,13 @@ interface ThreadTimelineCacheEntry {
   byRequestKey: Map<string, ThreadTimelineResponse>;
 }
 
+type BootReconcileAction =
+  | { kind: "schedule-provisioning" }
+  | { kind: "mark-provisioning-failed" }
+  | { kind: "attempt-resume" }
+  | { kind: "set-idle" }
+  | { kind: "noop" };
+
 // Open provider/runtime event type set: unknown values are intentionally not filtered.
 const TIMELINE_NOISE_EVENT_TYPES: readonly string[] = [
   "thread/started",
@@ -355,90 +362,107 @@ export class ThreadManager implements ThreadOrchestrator {
 
   /**
    * One-time startup reconciliation for persisted thread statuses.
-   * - created: reprovision
-   * - provisioning: mark failed (interrupted by restart)
-   * - active: attempt resume, otherwise demote to idle
+   * Restart policy matrix:
+   * - created: schedule provisioning (unless archived -> idle)
+   * - provisioning: mark provisioning_failed (unless archived -> idle)
+   * - active: attempt resume, otherwise idle (archived -> idle)
+   * - idle: no-op
+   * - provisioning_failed: no-op
    */
   async reconcileActiveThreadsOnBoot(): Promise<void> {
-    const createdThreads = this.threadRepo.list({
-      status: "created",
+    const allThreads = this.threadRepo.list({
       includeArchived: true,
     });
-    for (const thread of createdThreads) {
-      if (thread.archivedAt !== undefined) {
-        this._setThreadStatus(thread.id, "idle", true, { touchUpdatedAt: false });
-        continue;
+    if (!Array.isArray(allThreads) || allThreads.length === 0) return;
+
+    for (const thread of allThreads) {
+      const action = this._resolveBootReconcileAction(thread);
+      switch (action.kind) {
+        case "schedule-provisioning":
+          this._scheduleProvisioning(thread.id, {
+            projectId: thread.projectId,
+            environmentId: thread.environmentId,
+          });
+          break;
+        case "mark-provisioning-failed":
+          this._cleanupThreadRuntime(thread.id);
+          this._setThreadStatus(thread.id, "provisioning_failed", true, {
+            touchUpdatedAt: false,
+          });
+          break;
+        case "attempt-resume":
+          await this._attemptResumeThreadOnBoot(thread);
+          break;
+        case "set-idle":
+          this._setThreadStatus(thread.id, "idle", true, {
+            touchUpdatedAt: false,
+          });
+          break;
+        case "noop":
+          break;
+        default:
+          assertNever(action);
       }
-      this._scheduleProvisioning(thread.id, {
-        projectId: thread.projectId,
-        environmentId: thread.environmentId,
-      });
+    }
+  }
+
+  private _resolveBootReconcileAction(thread: Thread): BootReconcileAction {
+    if (thread.archivedAt !== undefined) {
+      return thread.status === "idle" ? { kind: "noop" } : { kind: "set-idle" };
     }
 
-    const provisioningThreads = this.threadRepo.list({
-      status: "provisioning",
-      includeArchived: true,
-    });
-    for (const thread of provisioningThreads) {
+    switch (thread.status) {
+      case "created":
+        return { kind: "schedule-provisioning" };
+      case "provisioning":
+        return { kind: "mark-provisioning-failed" };
+      case "active":
+        return { kind: "attempt-resume" };
+      case "idle":
+      case "provisioning_failed":
+        return { kind: "noop" };
+      default:
+        return assertNever(thread.status);
+    }
+  }
+
+  private async _attemptResumeThreadOnBoot(thread: Thread): Promise<void> {
+    const project = this.projectRepo.getById(thread.projectId);
+    const providerThreadId = this._resolvePersistedProviderThreadId(thread.id);
+    const latestLifecycle = this._latestTurnLifecycleStatus(thread.id);
+    const shouldRemainActive = latestLifecycle === "active";
+
+    if (!project || !providerThreadId || !shouldRemainActive) {
+      this._setThreadStatus(thread.id, "idle", true, { touchUpdatedAt: false });
+      return;
+    }
+
+    try {
+      const environmentAdapter = this._resolveThreadEnvironmentAdapter({
+        thread,
+      });
+      this._spawnProcess(thread.id, project.rootPath, environmentAdapter);
+      this._sendInitialize(thread.id);
+      const resumedThreadId = await this._sendRequestAndAwaitThreadId(
+        thread.id,
+        this.provider.threadResumeMethod,
+        this.provider.createThreadResumeParams(
+          providerThreadId,
+          this._buildProviderThreadContext({
+            threadId: thread.id,
+            projectId: thread.projectId,
+          }),
+        ),
+      );
+      this.providerThreadIds.set(thread.id, resumedThreadId);
+
+      const activeTurnId = this._resolvePersistedActiveTurnId(thread.id);
+      if (activeTurnId) {
+        this.activeTurnIds.set(thread.id, activeTurnId);
+      }
+    } catch {
       this._cleanupThreadRuntime(thread.id);
-      this._setThreadStatus(thread.id, "provisioning_failed", true, {
-        touchUpdatedAt: false,
-      });
-    }
-
-    const activeThreads = this.threadRepo.list({
-      status: "active",
-      includeArchived: true,
-    });
-    if (!Array.isArray(activeThreads) || activeThreads.length === 0) return;
-
-    for (const thread of activeThreads) {
-      // Archived threads are never considered running.
-      if (thread.archivedAt !== undefined) {
-        this.threadRepo.update(thread.id, { status: "idle" }, { touchUpdatedAt: false });
-        this._broadcastThreadChanged(thread.id, THREAD_STATUS_CHANGE_KINDS);
-        continue;
-      }
-
-      const project = this.projectRepo.getById(thread.projectId);
-      const providerThreadId = this._resolvePersistedProviderThreadId(thread.id);
-      const latestLifecycle = this._latestTurnLifecycleStatus(thread.id);
-      const shouldRemainActive = latestLifecycle === "active";
-
-      if (!project || !providerThreadId || !shouldRemainActive) {
-        this.threadRepo.update(thread.id, { status: "idle" }, { touchUpdatedAt: false });
-        this._broadcastThreadChanged(thread.id, THREAD_STATUS_CHANGE_KINDS);
-        continue;
-      }
-
-      try {
-        const environmentAdapter = this._resolveThreadEnvironmentAdapter({
-          thread,
-        });
-        this._spawnProcess(thread.id, project.rootPath, environmentAdapter);
-        this._sendInitialize(thread.id);
-        const resumedThreadId = await this._sendRequestAndAwaitThreadId(
-          thread.id,
-          this.provider.threadResumeMethod,
-          this.provider.createThreadResumeParams(
-            providerThreadId,
-            this._buildProviderThreadContext({
-              threadId: thread.id,
-              projectId: thread.projectId,
-            }),
-          ),
-        );
-        this.providerThreadIds.set(thread.id, resumedThreadId);
-
-        const activeTurnId = this._resolvePersistedActiveTurnId(thread.id);
-        if (activeTurnId) {
-          this.activeTurnIds.set(thread.id, activeTurnId);
-        }
-      } catch {
-        this._cleanupThreadRuntime(thread.id);
-        this.threadRepo.update(thread.id, { status: "idle" }, { touchUpdatedAt: false });
-        this._broadcastThreadChanged(thread.id, THREAD_STATUS_CHANGE_KINDS);
-      }
+      this._setThreadStatus(thread.id, "idle", true, { touchUpdatedAt: false });
     }
   }
 

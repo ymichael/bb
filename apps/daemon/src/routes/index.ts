@@ -18,6 +18,7 @@ export interface ApiRouteDeps {
   wsManager: WSManager;
   startTime: number;
   projectCommitMessageGenerator?: ProviderCommitMessageGenerator;
+  requestShutdown?: (reason: string) => void;
 }
 
 export function createApiRoutes(deps: ApiRouteDeps) {
@@ -31,5 +32,10 @@ export function createApiRoutes(deps: ApiRouteDeps) {
       }),
     )
     .route("/threads", createThreadRoutes(deps.threadManager))
-    .route("/system", createSystemRoutes(deps.threadManager, deps.startTime));
+    .route(
+      "/system",
+      createSystemRoutes(deps.threadManager, deps.startTime, {
+        requestShutdown: deps.requestShutdown,
+      }),
+    );
 }

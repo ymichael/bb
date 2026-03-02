@@ -12,6 +12,7 @@ vi.mock("../client.js", () => {
 });
 
 import { createClient, unwrap } from "../client.js";
+import { registerDaemonCommands } from "../commands/daemon.js";
 import { registerStatusCommand } from "../commands/status.js";
 import { registerThreadCommands } from "../commands/thread.js";
 
@@ -131,5 +132,84 @@ describe("CLI command output contracts", () => {
         parentThreadId: "thread-parent",
       },
     });
+  });
+
+  it("bb daemon restart requests daemon shutdown", async () => {
+    const shutdownPost = vi.fn(async () =>
+      new Response(
+        JSON.stringify({
+          ok: true,
+          forced: false,
+          blockingThreadsCount: 0,
+        }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      ));
+    createClientMock.mockReturnValue({
+      api: {
+        v1: {
+          system: {
+            shutdown: {
+              $post: shutdownPost,
+            },
+          },
+        },
+      },
+    } as any);
+    unwrapMock.mockImplementation(async (responsePromise: Promise<unknown>) => {
+      const response = await responsePromise as Response;
+      return response.json();
+    });
+
+    await runCommand(["daemon", "restart"], (program) =>
+      registerDaemonCommands(program, () => "http://daemon"),
+    );
+
+    expect(shutdownPost).toHaveBeenCalledWith({
+      json: {},
+    });
+    const lines = collectLogLines(vi.mocked(console.log));
+    expect(lines).toContain("Daemon shutdown requested.");
+  });
+
+  it("bb daemon restart exits when shutdown is blocked by active work", async () => {
+    const shutdownPost = vi.fn(async () =>
+      new Response(
+        JSON.stringify({
+          code: "shutdown_blocked",
+          message: "Daemon shutdown blocked by active thread work",
+          blockingThreads: [
+            { id: "thread-1", status: "active", projectId: "proj-1" },
+          ],
+        }),
+        {
+          status: 409,
+          headers: { "Content-Type": "application/json" },
+        },
+      ));
+    createClientMock.mockReturnValue({
+      api: {
+        v1: {
+          system: {
+            shutdown: {
+              $post: shutdownPost,
+            },
+          },
+        },
+      },
+    } as any);
+
+    await expect(
+      runCommand(["daemon", "restart"], (program) =>
+        registerDaemonCommands(program, () => "http://daemon"),
+      ),
+    ).rejects.toThrow("process.exit:1");
+
+    const errorLines = collectLogLines(vi.mocked(console.error));
+    expect(errorLines).toContain("Daemon shutdown blocked by active thread work");
+    expect(errorLines).toContain("Blocking threads:");
+    expect(errorLines).toContain("- thread-1 (active, project proj-1)");
   });
 });

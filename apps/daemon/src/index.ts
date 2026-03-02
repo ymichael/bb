@@ -77,33 +77,21 @@ async function main(): Promise<void> {
   const threadRepo = new ThreadRepository(db);
   const eventRepo = new EventRepository(db);
 
-  // Create server
-  const { app, injectWebSocket, wsManager, threadManager } =
-    createServer({
-      projectRepo,
-      threadRepo,
-      eventRepo,
-    });
-
-  console.log("Reconciling active threads with provider...");
-  await threadManager.reconcileActiveThreadsOnBoot();
-  console.log("Startup reconciliation complete.");
-
-  // Graceful shutdown handler
-  let httpServer: ReturnType<typeof serve>;
+  let httpServer: ReturnType<typeof serve> | undefined;
+  let shutdownStarted = false;
+  let threadManagerRef: ReturnType<typeof createServer>["threadManager"] | undefined;
+  let wsManagerRef: ReturnType<typeof createServer>["wsManager"] | undefined;
 
   const shutdown = async (signal: string): Promise<void> => {
+    if (shutdownStarted) return;
+    shutdownStarted = true;
     console.log(`\nReceived ${signal}. Shutting down gracefully...`);
 
-    // Stop all active thread processes
-    threadManager.stopAll();
+    threadManagerRef?.stopAll();
+    wsManagerRef?.close();
 
-    // Close WebSocket connections
-    wsManager.close();
-
-    // Close HTTP server
     try {
-      httpServer.close();
+      httpServer?.close();
     } catch {
       // Ignore close errors
     }
@@ -111,6 +99,23 @@ async function main(): Promise<void> {
     console.log("Shutdown complete.");
     process.exit(0);
   };
+
+  // Create server
+  const { app, injectWebSocket, wsManager, threadManager } =
+    createServer({
+      projectRepo,
+      threadRepo,
+      eventRepo,
+      requestShutdown: (reason) => {
+        void shutdown(reason);
+      },
+    });
+  threadManagerRef = threadManager;
+  wsManagerRef = wsManager;
+
+  console.log("Reconciling active threads with provider...");
+  await threadManager.reconcileActiveThreadsOnBoot();
+  console.log("Startup reconciliation complete.");
 
   process.on("SIGINT", () => shutdown("SIGINT"));
   process.on("SIGTERM", () => shutdown("SIGTERM"));

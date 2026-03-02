@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { Command } from "commander";
+import { registerDaemonCommands } from "./commands/daemon.js";
 import { registerProjectCommands } from "./commands/project.js";
 import { registerStatusCommand } from "./commands/status.js";
 import { registerThreadCommands } from "./commands/thread.js";
@@ -45,6 +46,7 @@ function getUrl(): string {
 registerStatusCommand(program, getUrl);
 registerProjectCommands(program, getUrl);
 registerThreadCommands(program, getUrl);
+registerDaemonCommands(program, getUrl);
 
 program.parseAsync(process.argv).catch((err) => {
   console.error(err.message);
