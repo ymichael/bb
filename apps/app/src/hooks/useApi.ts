@@ -13,6 +13,8 @@ import type {
   TellThreadRequest,
   SystemStatus,
   SystemRestartPolicy,
+  SystemRestartAcceptedResponse,
+  SystemRestartRequest,
   SystemShutdownAcceptedResponse,
   SystemShutdownRequest,
   SystemEnvironmentInfo,
@@ -533,6 +535,18 @@ export function useShutdownDaemon() {
       api.shutdownDaemon(req),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["status"] });
+    },
+  });
+}
+
+export function useRestartDaemon() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (req?: SystemRestartRequest): Promise<SystemRestartAcceptedResponse> =>
+      api.restartDaemon(req),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["status"] });
+      queryClient.invalidateQueries({ queryKey: ["systemRestartPolicy"] });
     },
   });
 }

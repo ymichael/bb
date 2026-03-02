@@ -596,4 +596,98 @@ describe("System routes", () => {
       expect(requestShutdown).toHaveBeenCalledWith("system/shutdown");
     });
   });
+
+  describe("POST /system/restart", () => {
+    it("returns 409 when blocking thread work exists and force is not set", async () => {
+      const requestRestart = vi.fn();
+      const restartApp = new Hono().route(
+        "/system",
+        createSystemRoutes(threadManager as any, startTime, {
+          requestRestart,
+        }),
+      );
+      (threadManager.list as ReturnType<typeof vi.fn>).mockReturnValue([
+        makeThread({ id: "t-active", status: "active" }),
+        makeThread({ id: "t-idle", status: "idle" }),
+      ]);
+
+      const res = await restartApp.request("/system/restart", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+
+      expect(res.status).toBe(409);
+      expect(await res.json()).toEqual({
+        code: "shutdown_blocked",
+        message: "Daemon shutdown blocked by active thread work",
+        blockingThreads: [
+          {
+            id: "t-active",
+            status: "active",
+            projectId: "proj-1",
+          },
+        ],
+      });
+      expect(requestRestart).not.toHaveBeenCalled();
+    });
+
+    it("schedules restart callback when no blocking work exists", async () => {
+      const requestRestart = vi.fn();
+      const restartApp = new Hono().route(
+        "/system",
+        createSystemRoutes(threadManager as any, startTime, {
+          requestRestart,
+        }),
+      );
+      (threadManager.list as ReturnType<typeof vi.fn>).mockReturnValue([
+        makeThread({ id: "t-idle", status: "idle" }),
+      ]);
+
+      const res = await restartApp.request("/system/restart", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({
+        ok: true,
+        forced: false,
+        blockingThreadsCount: 0,
+        restarting: true,
+      });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(requestRestart).toHaveBeenCalledWith("system/restart");
+    });
+
+    it("allows forced restart even when active work exists", async () => {
+      const requestRestart = vi.fn();
+      const restartApp = new Hono().route(
+        "/system",
+        createSystemRoutes(threadManager as any, startTime, {
+          requestRestart,
+        }),
+      );
+      (threadManager.list as ReturnType<typeof vi.fn>).mockReturnValue([
+        makeThread({ id: "t-active", status: "active" }),
+      ]);
+
+      const res = await restartApp.request("/system/restart", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ force: true }),
+      });
+
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({
+        ok: true,
+        forced: true,
+        blockingThreadsCount: 1,
+        restarting: true,
+      });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(requestRestart).toHaveBeenCalledWith("system/restart");
+    });
+  });
 });

@@ -25,6 +25,8 @@ import type {
   ThreadToolGroupMessagesResponse,
   OpenPathTarget,
   SystemRestartPolicy,
+  SystemRestartAcceptedResponse,
+  SystemRestartRequest,
   SystemShutdownAcceptedResponse,
   SystemShutdownBlockedResponse,
   SystemShutdownBlockingThread,
@@ -575,4 +577,57 @@ export async function shutdownDaemon(
     };
   }
   return JSON.parse(text) as SystemShutdownAcceptedResponse;
+}
+
+export async function restartDaemon(
+  req: SystemRestartRequest = {},
+): Promise<SystemRestartAcceptedResponse> {
+  const res = await fetch(`${BASE}/system/restart`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(req),
+  });
+
+  if (res.status === 409) {
+    const rawBody = await res.text().catch(() => "");
+    const normalized = normalizeErrorText(rawBody);
+    if (normalized.length > 0) {
+      try {
+        const parsed = JSON.parse(normalized) as unknown;
+        const blocked = parseShutdownBlockedResponse(parsed);
+        if (blocked) {
+          throw new SystemShutdownBlockedError(
+            blocked.message,
+            blocked.blockingThreads,
+          );
+        }
+      } catch (err) {
+        if (err instanceof SystemShutdownBlockedError) {
+          throw err;
+        }
+      }
+    }
+    const message = deriveHttpErrorMessage(
+      res.status,
+      res.statusText,
+      rawBody,
+      res.headers.get("content-type"),
+    );
+    throw new Error(`HTTP ${res.status}: ${message}`);
+  }
+
+  if (!res.ok) {
+    await throwHttpError(res);
+  }
+
+  const text = await res.text();
+  if (!text) {
+    return {
+      ok: true,
+      forced: Boolean(req.force),
+      blockingThreadsCount: 0,
+      restarting: true,
+    };
+  }
+  return JSON.parse(text) as SystemRestartAcceptedResponse;
 }

@@ -179,10 +179,18 @@ export interface SystemShutdownRequest {
   force?: boolean;
 }
 
+export interface SystemRestartRequest {
+  force?: boolean;
+}
+
 export interface SystemShutdownAcceptedResponse {
   ok: true;
   forced: boolean;
   blockingThreadsCount: number;
+}
+
+export interface SystemRestartAcceptedResponse extends SystemShutdownAcceptedResponse {
+  restarting: true;
 }
 
 export interface SystemShutdownBlockingThread {

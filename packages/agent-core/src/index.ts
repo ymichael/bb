@@ -64,6 +64,8 @@ export type {
   SystemStatus,
   SystemRestartAction,
   SystemRestartPolicy,
+  SystemRestartRequest,
+  SystemRestartAcceptedResponse,
   SystemShutdownRequest,
   SystemShutdownAcceptedResponse,
   SystemShutdownBlockingThread,

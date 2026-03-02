@@ -15,7 +15,7 @@ import {
 import { ProjectList } from "./ProjectList"
 import { useQuickCreateProject } from "@/hooks/useQuickCreateProject"
 import {
-  useShutdownDaemon,
+  useRestartDaemon,
   useSystemRestartPolicy,
   useThreads,
 } from "@/hooks/useApi"
@@ -38,7 +38,7 @@ export function AppSidebar({ onResizeMouseDown, isResizing }: AppSidebarProps) {
   const { createFromPicker, isCreating } = useQuickCreateProject()
   const { data: threads } = useThreads()
   const { data: restartPolicy } = useSystemRestartPolicy()
-  const shutdownDaemon = useShutdownDaemon()
+  const restartDaemon = useRestartDaemon()
   const theme = usePreferredTheme()
 
   const closeOnMobile = () => {
@@ -58,10 +58,10 @@ export function AppSidebar({ onResizeMouseDown, isResizing }: AppSidebarProps) {
     threads?.filter((thread) => shutdownBlockingStatuses.includes(thread.status)).length ??
     0
   const cannotRestart = blockingThreadCount > 0
-  const isRestartDisabled = cannotRestart || shutdownDaemon.isPending
+  const isRestartDisabled = cannotRestart || restartDaemon.isPending
   const shouldRestart = restartPolicy?.shouldRestart === true
 
-  const restartTooltip = shutdownDaemon.isPending
+  const restartTooltip = restartDaemon.isPending
     ? "Requesting daemon restart…"
     : cannotRestart
       ? `Cannot restart while ${blockingThreadCount} thread${blockingThreadCount === 1 ? "" : "s"} ${blockingThreadCount === 1 ? "is" : "are"} active`
@@ -71,7 +71,7 @@ export function AppSidebar({ onResizeMouseDown, isResizing }: AppSidebarProps) {
 
   const requestRestart = () => {
     if (isRestartDisabled) return
-    shutdownDaemon.mutate({}, {
+    restartDaemon.mutate({}, {
       onSuccess: () => {
         toast.success("Daemon restart requested")
       },
@@ -118,7 +118,7 @@ export function AppSidebar({ onResizeMouseDown, isResizing }: AppSidebarProps) {
                 tooltip={restartTooltip}
                 aria-label={restartTooltip}
               >
-                <RotateCcw className={cn(shutdownDaemon.isPending && "animate-spin")} />
+                <RotateCcw className={cn(restartDaemon.isPending && "animate-spin")} />
               </SidebarMenuButton>
               {shouldRestart ? (
                 <span

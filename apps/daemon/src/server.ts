@@ -31,6 +31,7 @@ export interface ServerDeps {
   threadRepo: ThreadRepository;
   eventRepo: EventRepository;
   requestShutdown?: (reason: string) => void;
+  requestRestart?: (reason: string) => void;
 }
 
 export function createServer(deps: ServerDeps) {
@@ -91,6 +92,7 @@ export function createServer(deps: ServerDeps) {
     startTime,
     projectCommitMessageGenerator,
     requestShutdown: deps.requestShutdown,
+    requestRestart: deps.requestRestart,
     shouldRestart,
   });
 

@@ -1,3 +1,4 @@
+import { spawn } from "node:child_process";
 import { mkdirSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { homedir } from "node:os";
@@ -49,6 +50,38 @@ Options:
   return { port, dbPath };
 }
 
+function closeHttpServer(server: ReturnType<typeof serve> | undefined): Promise<void> {
+  if (!server) return Promise.resolve();
+  return new Promise((resolveClose) => {
+    try {
+      server.close(() => {
+        resolveClose();
+      });
+    } catch {
+      resolveClose();
+    }
+  });
+}
+
+function relaunchCurrentProcess(): boolean {
+  const argv = process.argv.slice(1);
+  if (argv.length === 0) {
+    return false;
+  }
+
+  try {
+    const child = spawn(process.execPath, argv, {
+      detached: true,
+      stdio: "ignore",
+      env: process.env,
+    });
+    child.unref();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
@@ -79,24 +112,39 @@ async function main(): Promise<void> {
 
   let httpServer: ReturnType<typeof serve> | undefined;
   let shutdownStarted = false;
+  let restartRequested = false;
   let threadManagerRef: ReturnType<typeof createServer>["threadManager"] | undefined;
   let wsManagerRef: ReturnType<typeof createServer>["wsManager"] | undefined;
 
-  const shutdown = async (signal: string): Promise<void> => {
+  const shutdown = async (
+    signal: string,
+    opts?: { restart?: boolean },
+  ): Promise<void> => {
+    if (opts?.restart) {
+      restartRequested = true;
+    }
     if (shutdownStarted) return;
     shutdownStarted = true;
-    console.log(`\nReceived ${signal}. Shutting down gracefully...`);
+    console.log(
+      `\nReceived ${signal}. ${restartRequested ? "Restarting" : "Shutting down"} gracefully...`,
+    );
 
     threadManagerRef?.stopAll();
     wsManagerRef?.close();
+    await closeHttpServer(httpServer);
 
-    try {
-      httpServer?.close();
-    } catch {
-      // Ignore close errors
+    if (restartRequested) {
+      const relaunched = relaunchCurrentProcess();
+      if (!relaunched) {
+        console.error("Failed to relaunch daemon process.");
+      }
     }
 
-    console.log("Shutdown complete.");
+    console.log(
+      restartRequested
+        ? "Shutdown complete. Relaunch requested."
+        : "Shutdown complete.",
+    );
     process.exit(0);
   };
 
@@ -108,6 +156,9 @@ async function main(): Promise<void> {
       eventRepo,
       requestShutdown: (reason) => {
         void shutdown(reason);
+      },
+      requestRestart: (reason) => {
+        void shutdown(reason, { restart: true });
       },
     });
   threadManagerRef = threadManager;

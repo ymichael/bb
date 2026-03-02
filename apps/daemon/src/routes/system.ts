@@ -35,6 +35,7 @@ type TranscribeVoiceFn = (
 ) => Promise<TranscribeVoiceInputResult>;
 type OpenPathFn = (args: OpenPathRequest) => void;
 type RequestShutdownFn = (reason: string) => void;
+type RequestRestartFn = (reason: string) => void;
 type ShouldRestartFn = () => boolean;
 
 export interface CreateSystemRoutesOptions {
@@ -47,6 +48,7 @@ export interface CreateSystemRoutesOptions {
   transcribeVoice?: TranscribeVoiceFn;
   openPath?: OpenPathFn;
   requestShutdown?: RequestShutdownFn;
+  requestRestart?: RequestRestartFn;
   shouldRestart?: ShouldRestartFn;
 }
 
@@ -81,6 +83,21 @@ function isShutdownBlockingStatus(status: Thread["status"]): boolean {
     default:
       return assertNever(status);
   }
+}
+
+function collectBlockingThreads(threadManager: ThreadOrchestrator): Array<{
+  id: string;
+  status: Thread["status"];
+  projectId: string;
+}> {
+  return threadManager
+    .list({ includeArchived: false })
+    .filter((thread) => isShutdownBlockingStatus(thread.status))
+    .map((thread) => ({
+      id: thread.id,
+      status: thread.status,
+      projectId: thread.projectId,
+    }));
 }
 
 function toEditorCommand(editor: OpenPathEditor): string | null {
@@ -170,6 +187,7 @@ export function createSystemRoutes(
   const transcribeVoice = opts.transcribeVoice ?? transcribeVoiceInput;
   const openPath = opts.openPath ?? openPathInEditor;
   const requestShutdown = opts.requestShutdown ?? (() => {});
+  const requestRestart = opts.requestRestart ?? (() => {});
   const shouldRestart = opts.shouldRestart ?? (() => false);
 
   return new Hono()
@@ -284,14 +302,7 @@ export function createSystemRoutes(
           throw invalidRequestError("Invalid shutdown request body");
         }
         const force = parsed.data.force === true;
-        const blockingThreads = threadManager
-          .list({ includeArchived: false })
-          .filter((thread) => isShutdownBlockingStatus(thread.status))
-          .map((thread) => ({
-            id: thread.id,
-            status: thread.status,
-            projectId: thread.projectId,
-          }));
+        const blockingThreads = collectBlockingThreads(threadManager);
         if (!force && blockingThreads.length > 0) {
           return c.json({
             code: "shutdown_blocked",
@@ -308,6 +319,37 @@ export function createSystemRoutes(
           ok: true,
           forced: force,
           blockingThreadsCount: blockingThreads.length,
+        });
+      } catch (err) {
+        return sendRouteError(c, err);
+      }
+    })
+    .post("/restart", async (c) => {
+      try {
+        const bodyRaw = await c.req.json<unknown>().catch(() => ({}));
+        const parsed = shutdownRequestSchema.safeParse(bodyRaw);
+        if (!parsed.success) {
+          throw invalidRequestError("Invalid restart request body");
+        }
+        const force = parsed.data.force === true;
+        const blockingThreads = collectBlockingThreads(threadManager);
+        if (!force && blockingThreads.length > 0) {
+          return c.json({
+            code: "shutdown_blocked",
+            message: "Daemon shutdown blocked by active thread work",
+            blockingThreads,
+          }, 409);
+        }
+
+        setTimeout(() => {
+          requestRestart("system/restart");
+        }, 0);
+
+        return c.json({
+          ok: true,
+          forced: force,
+          blockingThreadsCount: blockingThreads.length,
+          restarting: true as const,
         });
       } catch (err) {
         return sendRouteError(c, err);
