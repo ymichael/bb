@@ -85,6 +85,7 @@ import {
 import { formatWorkspaceChangeSummary } from "@/lib/workspace-change-summary";
 
 const QUEUED_FOLLOW_UP_PREVIEW_MAX_CHARS = 220;
+
 function getFileNameFromPath(path: string): string {
   const trimmedPath = path.trim();
   if (trimmedPath.length === 0) return "Attachment";
@@ -214,7 +215,6 @@ function extractThreadQueuedMessages(thread: unknown): ThreadQueuedMessage[] {
 
 function QueuedFollowUpList({
   queuedMessages,
-  isThreadActive,
   sendDisabled,
   actionDisabled,
   processingMessageId,
@@ -223,7 +223,6 @@ function QueuedFollowUpList({
   onDelete,
 }: {
   queuedMessages: readonly ThreadQueuedMessage[];
-  isThreadActive: boolean;
   sendDisabled: boolean;
   actionDisabled: boolean;
   processingMessageId: string | null;
@@ -236,60 +235,68 @@ function QueuedFollowUpList({
   return (
     <section
       aria-label="Queued follow-up messages"
-      className="mb-2 overflow-hidden rounded-xl border border-border/70 bg-background/60 shadow-sm"
+      className="mb-2 overflow-hidden rounded-md border border-border/60 bg-muted/25"
     >
-      <div className="border-b border-border/60 px-3 py-1.5">
+      <div className="flex items-center justify-between px-2.5 pb-1 pt-2.5">
         <p className="text-xs text-muted-foreground">Queued ({queuedMessages.length})</p>
       </div>
       <ul>
         {queuedMessages.map((queuedMessage, index) => {
+          const preview = formatQueuedFollowUpPreview(queuedMessage.input);
           const attachmentCount = countQueuedMessageAttachments(queuedMessage.input);
           const isProcessing = processingMessageId === queuedMessage.id;
           return (
             <li
               key={queuedMessage.id}
-              className={`px-2.5 py-2 ${index < queuedMessages.length - 1 ? "border-b border-border/60" : ""}`}
+              className="px-2.5 py-0.5"
             >
-              <div className="flex items-start gap-2">
-                <div className="mt-0.5 rounded-md border border-border/60 bg-muted/35 p-1 text-muted-foreground">
+              <div className="flex items-center gap-1.5">
+                <div className="p-0.5 text-muted-foreground">
                   <CornerDownRight className="size-3.5" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="max-h-10 overflow-hidden whitespace-pre-wrap break-words text-sm leading-5 text-foreground">
-                    {formatQueuedFollowUpPreview(queuedMessage.input)}
-                  </p>
-                  <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
-                    <span>#{index + 1} in queue</span>
+                  <div className="flex min-w-0 items-center gap-1 text-xs leading-4">
+                    <p className="min-w-0 truncate text-foreground" title={preview}>
+                      {preview}
+                    </p>
                     {attachmentCount > 0 ? (
-                      <span>
-                        {attachmentCount === 1 ? "1 attachment" : `${attachmentCount} attachments`}
-                      </span>
+                      <>
+                        <span className="shrink-0 text-muted-foreground">·</span>
+                        <span className="shrink-0 text-muted-foreground">
+                          {attachmentCount === 1 ? "1 attachment" : `${attachmentCount} attachments`}
+                        </span>
+                      </>
                     ) : null}
-                    {isProcessing ? <span>Sending...</span> : null}
+                    {isProcessing ? (
+                      <>
+                        <span className="shrink-0 text-muted-foreground">·</span>
+                        <span className="shrink-0 text-muted-foreground">Sending...</span>
+                      </>
+                    ) : null}
                   </div>
                 </div>
                 <div className="ml-1 flex shrink-0 items-center gap-1">
                   <Button
                     type="button"
                     size="sm"
-                    variant="secondary"
-                    className="h-8 rounded-full px-3 text-xs"
+                    variant="link"
+                    className="h-auto px-0 text-xs text-muted-foreground"
                     disabled={sendDisabled || isProcessing}
                     onClick={() => onSendImmediately(queuedMessage.id)}
                   >
-                    {isProcessing ? "Sending..." : isThreadActive ? "Steer" : "Send"}
+                    {isProcessing ? "Sending..." : "Steer"}
                   </Button>
                   <Button
                     type="button"
                     size="icon"
                     variant="ghost"
-                    className="size-8 text-muted-foreground hover:text-destructive"
+                    className="size-7 text-muted-foreground hover:text-destructive"
                     disabled={actionDisabled || isProcessing}
                     onClick={() => onDelete(queuedMessage.id)}
                     aria-label={`Delete queued message ${index + 1}`}
                     title="Delete queued message"
                   >
-                    <Trash2 className="size-4" />
+                    <Trash2 className="size-3.5" />
                   </Button>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
@@ -297,12 +304,12 @@ function QueuedFollowUpList({
                         type="button"
                         size="icon"
                         variant="ghost"
-                        className="size-8 text-muted-foreground"
+                        className="size-7 text-muted-foreground data-[state=open]:bg-accent"
                         disabled={actionDisabled || isProcessing}
                         aria-label={`More queued message actions for message ${index + 1}`}
                         title="More actions"
                       >
-                        <MoreHorizontal className="size-4" />
+                        <MoreHorizontal className="size-3.5" />
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" className="w-40">
@@ -1159,7 +1166,6 @@ export function ThreadDetailView() {
             ) : null}
             <QueuedFollowUpList
               queuedMessages={queuedMessages}
-              isThreadActive={thread.status === "active"}
               sendDisabled={!canSendFollowUp || isFollowUpSubmitting || isQueueMutationPending}
               actionDisabled={isFollowUpSubmitting || isQueueMutationPending}
               processingMessageId={processingQueuedMessageId}
