@@ -14,7 +14,6 @@ import {
   createEnvironmentAdapter,
   createProviderAdapter,
   generateCodexCommitMessage,
-  generateCodexThreadTitle,
   listAvailableEnvironmentInfos,
   listAvailableProviderInfos,
 } from "@beanbag/agent-server";
@@ -45,14 +44,10 @@ export function createServer(deps: ServerDeps) {
   // Create managers
   const wsManager = new WSManager();
   const provider = createProviderAdapter({
-    codexTitleGenerator: async ({ input, cwd }) =>
-      generateCodexThreadTitle({ input, cwd }),
     codexCommitMessageGenerator: async ({ cwd, includeUnstaged }) =>
       generateCodexCommitMessage({ cwd, includeUnstaged }),
   });
   const providerCatalog = listAvailableProviderInfos({
-    codexTitleGenerator: async ({ input, cwd }) =>
-      generateCodexThreadTitle({ input, cwd }),
     codexCommitMessageGenerator: async ({ cwd, includeUnstaged }) =>
       generateCodexCommitMessage({ cwd, includeUnstaged }),
   });

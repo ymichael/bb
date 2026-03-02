@@ -303,8 +303,6 @@ export class ThreadManager implements ThreadOrchestrator {
   private activeTurnIds = new Map<string, string>();
   /** Threads explicitly titled by the caller should not be overwritten by event heuristics. */
   private lockedTitleThreadIds = new Set<string>();
-  /** Ensure auto-title generation runs at most once per thread. */
-  private autoTitleAttemptedThreadIds = new Set<string>();
   /** Emit at most one refresh-token warning per thread process lifecycle. */
   private authRefreshWarningThreadIds = new Set<string>();
   /** Suppresses multiline JSON auth error payloads already summarized above. */
@@ -480,18 +478,14 @@ export class ThreadManager implements ThreadOrchestrator {
 
     // Create thread record in DB
     const explicitTitle = this._normalizeThreadTitle(req.title);
-    const derivedTitle = this.provider.deriveThreadTitle(req.input);
-    const threadTitle = explicitTitle ?? derivedTitle;
     const environmentId = this._resolveRequestedEnvironmentId(req.environmentId);
     const thread = this.threadRepo.create({
       projectId: req.projectId,
-      ...(threadTitle ? { title: threadTitle } : {}),
+      ...(explicitTitle ? { title: explicitTitle } : {}),
       environmentId,
       ...(req.parentThreadId ? { parentThreadId: req.parentThreadId } : {}),
     });
-    // Treat only truly custom titles as locked. If caller title matches our
-    // normal first-message derivation, keep it mutable so server events can refine it.
-    if (explicitTitle && explicitTitle !== derivedTitle) {
+    if (explicitTitle) {
       this.lockedTitleThreadIds.add(thread.id);
     }
 
@@ -577,25 +571,6 @@ export class ThreadManager implements ThreadOrchestrator {
       this.activeTurnIds.get(threadId) ?? this._resolvePersistedActiveTurnId(threadId);
     if (activeTurnId) {
       this.activeTurnIds.set(threadId, activeTurnId);
-    }
-
-    if (!this.provider.generateThreadTitle) {
-      const suggestedTitle = this.provider.deriveThreadTitle(requestedInput);
-      if (suggestedTitle) {
-        this._setThreadTitle(threadId, suggestedTitle, {
-          onlyIfMissing: true,
-        });
-      }
-    }
-
-    const project = this.projectRepo.getById(thread.projectId);
-    if (project) {
-      this._maybeAutogenerateThreadTitle(
-        threadId,
-        project.rootPath,
-        providerThreadId,
-        requestedInput,
-      );
     }
 
     this._setThreadStatus(threadId, "active");
@@ -1197,7 +1172,6 @@ export class ThreadManager implements ThreadOrchestrator {
     this.environmentRuntimes.clear();
     this.providerThreadIds.clear();
     this.activeTurnIds.clear();
-    this.autoTitleAttemptedThreadIds.clear();
     this.authRefreshWarningThreadIds.clear();
     this.suppressedAuthStderrDepth.clear();
     this.provisioningTasks.clear();
@@ -1331,13 +1305,17 @@ export class ThreadManager implements ThreadOrchestrator {
       threadStartParams,
     );
     this.providerThreadIds.set(threadId, providerThreadId);
-
-    this._maybeAutogenerateThreadTitle(
-      threadId,
-      project.rootPath,
-      providerThreadId,
-      requestedInput,
-    );
+    const hydratedThreadAfterStart = this.threadRepo.getById(threadId);
+    if (
+      hydratedThreadAfterStart?.title &&
+      this.lockedTitleThreadIds.has(threadId)
+    ) {
+      this._sendThreadNameSet(
+        threadId,
+        providerThreadId,
+        hydratedThreadAfterStart.title,
+      );
+    }
 
     if (requestedInput.length > 0) {
       this._setThreadStatus(threadId, "active");
@@ -2339,9 +2317,9 @@ export class ThreadManager implements ThreadOrchestrator {
     if (!title) return false;
     const thread = this.threadRepo.getById(threadId);
     const changed = this._setThreadTitle(threadId, title, {
-      // Thread titles are auto-assigned only once; subsequent provider
-      // rename suggestions are intentionally ignored.
-      onlyIfMissing: true,
+      // Manual user titles are locked in-memory; provider-driven updates remain authoritative
+      // unless a manual override is present.
+      onlyIfMissing: false,
       shouldBroadcast: false,
     });
     if (!changed) return false;
@@ -2431,66 +2409,6 @@ export class ThreadManager implements ThreadOrchestrator {
     const uniqueChanges = Array.from(new Set(changes));
     if (uniqueChanges.length === 0) return;
     this.ws.broadcast("thread", threadId, uniqueChanges);
-  }
-
-  private _maybeAutogenerateThreadTitle(
-    threadId: string,
-    cwd: string,
-    providerThreadId: string,
-    input: PromptInput[],
-  ): void {
-    if (this.lockedTitleThreadIds.has(threadId)) return;
-    if (this.autoTitleAttemptedThreadIds.has(threadId)) return;
-    if (input.length === 0) return;
-
-    const fallbackTitle = this.provider.deriveThreadTitle(input);
-    if (fallbackTitle) {
-      this._setThreadTitle(threadId, fallbackTitle, {
-        onlyIfMissing: true,
-      });
-    }
-
-    // Title generation is a one-time attempt bound to the first user message,
-    // even if that message has no text or generation later fails.
-    this.autoTitleAttemptedThreadIds.add(threadId);
-
-    const hasTextInput = input.some(
-      (chunk) => chunk.type === "text" && chunk.text.trim().length > 0,
-    );
-    if (!hasTextInput) return;
-    if (!this.provider.generateThreadTitle) return;
-    void this._runAutogeneratedThreadTitle(threadId, cwd, providerThreadId, input);
-  }
-
-  private async _runAutogeneratedThreadTitle(
-    threadId: string,
-    cwd: string,
-    providerThreadId: string,
-    input: PromptInput[],
-  ): Promise<void> {
-    try {
-      if (!this.provider.generateThreadTitle) return;
-      const generatedTitle = await this.provider.generateThreadTitle({
-        input,
-        cwd,
-      });
-
-      if (!generatedTitle) return;
-
-      this._setThreadTitle(threadId, generatedTitle, {
-        onlyIfMissing: false,
-      });
-      // Preserve generated titles against provider-side default renames
-      // (for example, first-message fallback names emitted later).
-      this.lockedTitleThreadIds.add(threadId);
-      this._sendThreadNameSet(threadId, providerThreadId, generatedTitle);
-    } catch (err) {
-      const message =
-        err instanceof Error ? err.message : "Unknown title generation error";
-      console.error(
-        `[thread ${threadId}] Failed to auto-generate title (${this.provider.displayName}): ${message}`,
-      );
-    }
   }
 
   private _sendThreadNameSet(
