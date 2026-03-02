@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { assertNever, type ThreadWorkStatus } from "@beanbag/agent-core";
+import { PromptOptionPicker } from "@/components/promptbox/PromptOptionPicker";
 import { Button } from "@/components/ui/button";
 import {
   Popover,
@@ -76,6 +77,13 @@ export function StatusPillCommitPopover({
     status?.mergeBaseBranch ??
     mergeBaseCandidates[0] ??
     status?.defaultBranch;
+  const mergeBaseBranchOptionItems = mergeBaseCandidates.map((candidate) => ({
+    value: candidate,
+    label: candidate,
+  }));
+  const mergeBaseBranchPickerValue =
+    selectedMergeBaseBranch ??
+    mergeBaseCandidates[0];
   const canSelectMergeBaseBranch =
     canShowMergeBaseDetails &&
     Boolean(onMergeBaseBranchChange) &&
@@ -157,18 +165,15 @@ export function StatusPillCommitPopover({
               {canShowMergeBaseDetails && (canSelectMergeBaseBranch || Boolean(selectedMergeBaseBranch)) ? (
                 <DetailRow label="Merge base">
                   {canSelectMergeBaseBranch ? (
-                    <select
-                      aria-label="Merge base branch"
-                      className="h-7 min-w-0 max-w-[220px] rounded-md border border-input bg-background px-2 text-xs"
-                      value={selectedMergeBaseBranch ?? ""}
-                      onChange={(event) => onMergeBaseBranchChange?.(event.target.value)}
-                    >
-                      {mergeBaseCandidates.map((candidate) => (
-                        <option key={candidate} value={candidate}>
-                          {candidate}
-                        </option>
-                      ))}
-                    </select>
+                    mergeBaseBranchPickerValue ? (
+                      <PromptOptionPicker
+                        label="Merge base branch"
+                        value={mergeBaseBranchPickerValue}
+                        options={mergeBaseBranchOptionItems}
+                        onChange={(branch) => onMergeBaseBranchChange?.(branch)}
+                        className="h-7 max-w-[220px] px-0 text-xs text-foreground hover:text-foreground [&_svg]:!text-foreground"
+                      />
+                    ) : null
                   ) : (
                     <span className="truncate font-medium">
                       {selectedMergeBaseBranch ?? "unknown"}

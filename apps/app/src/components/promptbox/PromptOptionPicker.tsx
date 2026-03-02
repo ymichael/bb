@@ -34,6 +34,7 @@ export function PromptOptionPicker<T extends string>({
   const selectedOption = options.find((option) => option.value === value)
   const selectedIsWarning = selectedOption?.tone === "warning"
   const SelectedIcon = selectedOption?.icon
+  const selectedLabel = selectedOption?.label ?? value
 
   return (
     <DropdownMenu>
@@ -43,7 +44,7 @@ export function PromptOptionPicker<T extends string>({
           variant="ghost"
           size="sm"
           aria-label={label}
-          title={label}
+          title={`${label}: ${selectedLabel}`}
           className={cn(
             "h-8 w-fit max-w-full min-w-0 items-center gap-1 border-none bg-transparent px-1 text-xs leading-none text-muted-foreground/75 shadow-none hover:bg-transparent hover:text-foreground",
             selectedIsWarning &&
@@ -51,9 +52,9 @@ export function PromptOptionPicker<T extends string>({
             className
           )}
         >
-          <span className="flex items-center gap-1.5">
+          <span className="flex min-w-0 items-center gap-1.5">
             {SelectedIcon ? <SelectedIcon className="size-3.5 shrink-0" /> : null}
-            <span>{selectedOption?.label ?? value}</span>
+            <span className="truncate">{selectedLabel}</span>
           </span>
           <ChevronDown
             className={cn(
@@ -65,7 +66,7 @@ export function PromptOptionPicker<T extends string>({
           />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="min-w-44">
+      <DropdownMenuContent align="start" className="min-w-44 max-w-80">
         {options.map((option) => {
           const OptionIcon = option.icon
           return (
@@ -76,13 +77,15 @@ export function PromptOptionPicker<T extends string>({
             >
               <span
                 className={cn(
-                  "flex items-center gap-2",
+                  "flex min-w-0 items-center gap-2",
                   option.tone === "warning" &&
                     "text-amber-700 dark:text-amber-300"
                 )}
               >
                 {OptionIcon ? <OptionIcon className="size-4 shrink-0" /> : null}
-                <span>{option.label}</span>
+                <span className="truncate" title={option.label}>
+                  {option.label}
+                </span>
               </span>
               <Check
                 className={cn(
