@@ -476,6 +476,31 @@ describe("System routes", () => {
           provisioning_failed: "noop",
         },
         shutdownBlockingStatuses: ["created", "provisioning", "active"],
+        shouldRestart: false,
+      });
+    });
+
+    it("surfaces restart recommendation when provided", async () => {
+      const restartAwareApp = new Hono().route(
+        "/system",
+        createSystemRoutes(threadManager as any, startTime, {
+          shouldRestart: () => true,
+        }),
+      );
+
+      const res = await restartAwareApp.request("/system/restart-policy");
+
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({
+        restartPolicyByStatus: {
+          created: "reprovision",
+          provisioning: "mark-provisioning-failed",
+          active: "attempt-resume-or-idle",
+          idle: "noop",
+          provisioning_failed: "noop",
+        },
+        shutdownBlockingStatuses: ["created", "provisioning", "active"],
+        shouldRestart: true,
       });
     });
   });

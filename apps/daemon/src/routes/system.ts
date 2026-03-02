@@ -35,6 +35,7 @@ type TranscribeVoiceFn = (
 ) => Promise<TranscribeVoiceInputResult>;
 type OpenPathFn = (args: OpenPathRequest) => void;
 type RequestShutdownFn = (reason: string) => void;
+type ShouldRestartFn = () => boolean;
 
 export interface CreateSystemRoutesOptions {
   pickFolder?: PickFolderFn;
@@ -46,6 +47,7 @@ export interface CreateSystemRoutesOptions {
   transcribeVoice?: TranscribeVoiceFn;
   openPath?: OpenPathFn;
   requestShutdown?: RequestShutdownFn;
+  shouldRestart?: ShouldRestartFn;
 }
 
 const openPathSchema = z.object({
@@ -168,6 +170,7 @@ export function createSystemRoutes(
   const transcribeVoice = opts.transcribeVoice ?? transcribeVoiceInput;
   const openPath = opts.openPath ?? openPathInEditor;
   const requestShutdown = opts.requestShutdown ?? (() => {});
+  const shouldRestart = opts.shouldRestart ?? (() => false);
 
   return new Hono()
     .get("/status", async (c) => {
@@ -270,6 +273,7 @@ export function createSystemRoutes(
       return c.json({
         restartPolicyByStatus: RESTART_POLICY_BY_STATUS,
         shutdownBlockingStatuses: ["created", "provisioning", "active"] as const,
+        shouldRestart: shouldRestart(),
       });
     })
     .post("/shutdown", async (c) => {

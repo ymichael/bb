@@ -172,6 +172,7 @@ export type SystemRestartAction =
 export interface SystemRestartPolicy {
   restartPolicyByStatus: Record<ThreadStatus, SystemRestartAction>;
   shutdownBlockingStatuses: ThreadStatus[];
+  shouldRestart: boolean;
 }
 
 export interface SystemShutdownRequest {

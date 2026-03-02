@@ -19,7 +19,6 @@ import {
   useSystemRestartPolicy,
   useThreads,
 } from "@/hooks/useApi"
-import { useDaemonConnectionState } from "@/hooks/useDaemonConnectionState"
 import { setPreferredTheme, usePreferredTheme } from "@/hooks/useTheme"
 
 interface AppSidebarProps {
@@ -40,7 +39,6 @@ export function AppSidebar({ onResizeMouseDown, isResizing }: AppSidebarProps) {
   const { data: threads } = useThreads()
   const { data: restartPolicy } = useSystemRestartPolicy()
   const shutdownDaemon = useShutdownDaemon()
-  const daemonConnectionState = useDaemonConnectionState()
   const theme = usePreferredTheme()
 
   const closeOnMobile = () => {
@@ -61,14 +59,14 @@ export function AppSidebar({ onResizeMouseDown, isResizing }: AppSidebarProps) {
     0
   const cannotRestart = blockingThreadCount > 0
   const isRestartDisabled = cannotRestart || shutdownDaemon.isPending
-  const shouldRestart = daemonConnectionState === "disconnected"
+  const shouldRestart = restartPolicy?.shouldRestart === true
 
   const restartTooltip = shutdownDaemon.isPending
     ? "Requesting daemon restart…"
     : cannotRestart
       ? `Cannot restart while ${blockingThreadCount} thread${blockingThreadCount === 1 ? "" : "s"} ${blockingThreadCount === 1 ? "is" : "are"} active`
       : shouldRestart
-        ? "Daemon disconnected. Restart recommended"
+        ? "Daemon code changed. Restart recommended"
         : "Restart daemon"
 
   const requestRestart = () => {

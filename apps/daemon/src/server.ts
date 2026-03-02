@@ -21,6 +21,7 @@ import { WSManager } from "./ws.js";
 import { ThreadManager } from "./thread-manager.js";
 import { createApiRoutes } from "./routes/index.js";
 import { InMemorySchedulerService } from "./scheduler-service.js";
+import { createRestartRecommendationEvaluator } from "./restart-recommendation.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -80,6 +81,7 @@ export function createServer(deps: ServerDeps) {
 
   // API routes
   const startTime = Date.now();
+  const shouldRestart = createRestartRecommendationEvaluator(startTime);
   const apiRoutes = createApiRoutes({
     projectRepo: deps.projectRepo,
     threadRepo: deps.threadRepo,
@@ -89,6 +91,7 @@ export function createServer(deps: ServerDeps) {
     startTime,
     projectCommitMessageGenerator,
     requestShutdown: deps.requestShutdown,
+    shouldRestart,
   });
 
   const appWithRoutes = app.route("/api/v1", apiRoutes);

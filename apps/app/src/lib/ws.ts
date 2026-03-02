@@ -6,26 +6,16 @@ import type {
 } from "@beanbag/agent-core";
 
 export type ChangeCallback = (message: ChangedMessage) => void;
-export type WebSocketConnectionState =
-  | "idle"
-  | "connecting"
-  | "connected"
-  | "disconnected";
-export type ConnectionStateCallback = (
-  state: WebSocketConnectionState,
-) => void;
 
 class WebSocketManager {
   private socket: WebSocket | null = null;
   private subscriptions = new Set<string>();
   private callbacks = new Set<ChangeCallback>();
-  private connectionCallbacks = new Set<ConnectionStateCallback>();
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-  private connectionState: WebSocketConnectionState = "idle";
+  private connected = false;
 
   connect(): void {
     if (this.socket) return;
-    this.setConnectionState("connecting");
 
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     const url = `${protocol}//${window.location.host}/ws`;
@@ -33,13 +23,12 @@ class WebSocketManager {
     try {
       this.socket = new WebSocket(url);
     } catch {
-      this.setConnectionState("disconnected");
       this.scheduleReconnect();
       return;
     }
 
     this.socket.onopen = () => {
-      this.setConnectionState("connected");
+      this.connected = true;
       // Re-subscribe to all active subscriptions
       for (const key of this.subscriptions) {
         const parsed = parseSubKey(key);
@@ -62,8 +51,8 @@ class WebSocketManager {
     };
 
     this.socket.onclose = () => {
+      this.connected = false;
       this.socket = null;
-      this.setConnectionState("disconnected");
       this.scheduleReconnect();
     };
 
@@ -78,21 +67,16 @@ class WebSocketManager {
       this.reconnectTimer = null;
     }
     if (this.socket) {
-      const socket = this.socket;
+      this.socket.close();
       this.socket = null;
-      socket.onopen = null;
-      socket.onmessage = null;
-      socket.onerror = null;
-      socket.onclose = null;
-      socket.close();
     }
-    this.setConnectionState("idle");
+    this.connected = false;
   }
 
   subscribe(entity: RealtimeEntity, id?: string): void {
     const key = subKey(entity, id);
     this.subscriptions.add(key);
-    if (this.connectionState === "connected") {
+    if (this.connected) {
       this.sendMessage({ type: "subscribe", entity, id });
     }
   }
@@ -100,7 +84,7 @@ class WebSocketManager {
   unsubscribe(entity: RealtimeEntity, id?: string): void {
     const key = subKey(entity, id);
     this.subscriptions.delete(key);
-    if (this.connectionState === "connected") {
+    if (this.connected) {
       this.sendMessage({ type: "unsubscribe", entity, id });
     }
   }
@@ -112,29 +96,9 @@ class WebSocketManager {
     };
   }
 
-  getConnectionState(): WebSocketConnectionState {
-    return this.connectionState;
-  }
-
-  onConnectionStateChange(callback: ConnectionStateCallback): () => void {
-    this.connectionCallbacks.add(callback);
-    callback(this.connectionState);
-    return () => {
-      this.connectionCallbacks.delete(callback);
-    };
-  }
-
   private sendMessage(msg: ClientMessage): void {
     if (this.socket && this.socket.readyState === WebSocket.OPEN) {
       this.socket.send(JSON.stringify(msg));
-    }
-  }
-
-  private setConnectionState(nextState: WebSocketConnectionState): void {
-    if (this.connectionState === nextState) return;
-    this.connectionState = nextState;
-    for (const callback of this.connectionCallbacks) {
-      callback(nextState);
     }
   }
 

@@ -19,6 +19,7 @@ export interface ApiRouteDeps {
   startTime: number;
   projectCommitMessageGenerator?: ProviderCommitMessageGenerator;
   requestShutdown?: (reason: string) => void;
+  shouldRestart?: () => boolean;
 }
 
 export function createApiRoutes(deps: ApiRouteDeps) {
@@ -36,6 +37,7 @@ export function createApiRoutes(deps: ApiRouteDeps) {
       "/system",
       createSystemRoutes(deps.threadManager, deps.startTime, {
         requestShutdown: deps.requestShutdown,
+        shouldRestart: deps.shouldRestart,
       }),
     );
 }
