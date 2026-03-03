@@ -157,6 +157,16 @@ const THREAD_STATUS_CHANGE_KINDS: readonly ThreadChangeKind[] = [
 const PRIMARY_CHECKOUT_VALIDATION_TTL_MS = 2_000;
 const IDLE_NOISE_EVENT_KEEP_RECENT = 300;
 const ARCHIVED_NOISE_EVENT_KEEP_RECENT = 120;
+const ACTIVE_NOISE_EVENT_KEEP_RECENT = 1_000;
+const ACTIVE_NOISE_PRUNE_MIN_SEQ_DELTA = 250;
+const ACTIVE_NOISE_PRUNE_MIN_INTERVAL_MS = 30_000;
+const PRUNABLE_NOISE_EVENT_TYPES: readonly string[] = [
+  "account/ratelimits/updated",
+  "thread/tokenusage/updated",
+  "item/reasoning/summarypartadded",
+  "turn/diff/updated",
+  "codex/event/token_count",
+];
 
 function checkoutSnapshotsMatch(
   left: GitCheckoutSnapshot,
@@ -421,6 +431,10 @@ export class ThreadManager implements ThreadOrchestrator {
   private turnLifecycleEpochs = new Map<string, number>();
   /** Fallback dedupe keyed by turn lifecycle epoch when completion events omit turn IDs. */
   private lastNotifiedCompletionEpochs = new Map<string, number>();
+  /** Last event sequence where historical noise pruning ran for an active thread. */
+  private lastNoisePruneSeqByThread = new Map<string, number>();
+  /** Last wall-clock timestamp where historical noise pruning ran for an active thread. */
+  private lastNoisePruneAtByThread = new Map<string, number>();
   /** Memoized timeline projection per thread until event sequence or thread status changes. */
   private timelineByThread = new Map<string, ThreadTimelineCacheEntry>();
   /** Cached prompt-derived fallback titles for untitled threads. */
@@ -1148,6 +1162,8 @@ export class ThreadManager implements ThreadOrchestrator {
     this.lastNotifiedCompletionTurnIds.delete(threadId);
     this.turnLifecycleEpochs.delete(threadId);
     this.lastNotifiedCompletionEpochs.delete(threadId);
+    this.lastNoisePruneSeqByThread.delete(threadId);
+    this.lastNoisePruneAtByThread.delete(threadId);
     this._cleanupEnvironmentSession(threadId);
     this.threadRepo.update(threadId, { status: "idle" });
     this._pruneHistoricalNoiseEvents(threadId, IDLE_NOISE_EVENT_KEEP_RECENT);
@@ -1188,6 +1204,8 @@ export class ThreadManager implements ThreadOrchestrator {
     this.lastNotifiedCompletionTurnIds.delete(threadId);
     this.turnLifecycleEpochs.delete(threadId);
     this.lastNotifiedCompletionEpochs.delete(threadId);
+    this.lastNoisePruneSeqByThread.delete(threadId);
+    this.lastNoisePruneAtByThread.delete(threadId);
     const activePromotion = this.primaryPromotionByProjectId.get(thread.projectId);
     if (activePromotion?.threadId === threadId) {
       this._clearPrimaryPromotionState(thread.projectId);
@@ -2409,6 +2427,8 @@ export class ThreadManager implements ThreadOrchestrator {
     this.lastNotifiedCompletionTurnIds.delete(threadId);
     this.turnLifecycleEpochs.delete(threadId);
     this.lastNotifiedCompletionEpochs.delete(threadId);
+    this.lastNoisePruneSeqByThread.delete(threadId);
+    this.lastNoisePruneAtByThread.delete(threadId);
     this._cleanupEnvironmentSession(threadId);
   }
 
@@ -2853,6 +2873,7 @@ export class ThreadManager implements ThreadOrchestrator {
     }
 
     const eventType = toProviderEventType(msg.method);
+    const normalizedType = this.provider.normalizeEventType(msg.method);
     const providerPayload = msg.params ?? {};
     const eventData: ThreadEventData = createProviderEventEnvelope({
       providerId: this.provider.id,
@@ -2869,6 +2890,11 @@ export class ThreadManager implements ThreadOrchestrator {
     const persistedEvent = this._appendEvent(threadId, eventType, eventData, {
       broadcastChanges: false,
     });
+    this._maybePruneActiveThreadNoise(
+      threadId,
+      normalizedType,
+      persistedEvent.seq,
+    );
 
     const titleChanged = this._syncTitleFromEvent(threadId, msg.method, providerPayload);
     if (shouldBroadcast && titleChanged) {
@@ -3600,6 +3626,43 @@ export class ThreadManager implements ThreadOrchestrator {
       this._broadcastThreadChanged(threadId, ["title-changed"]);
     }
     return true;
+  }
+
+  private _isPrunableNoiseEventType(normalizedType: string): boolean {
+    if (normalizedType.includes("delta")) {
+      return true;
+    }
+    return PRUNABLE_NOISE_EVENT_TYPES.includes(normalizedType);
+  }
+
+  private _maybePruneActiveThreadNoise(
+    threadId: string,
+    normalizedType: string,
+    seq: number,
+  ): void {
+    if (!this._isPrunableNoiseEventType(normalizedType)) {
+      return;
+    }
+
+    const thread = this.threadRepo.getById(threadId);
+    if (!thread || thread.status !== "active" || thread.archivedAt !== undefined) {
+      return;
+    }
+
+    const lastSeq = this.lastNoisePruneSeqByThread.get(threadId) ?? 0;
+    if (seq - lastSeq < ACTIVE_NOISE_PRUNE_MIN_SEQ_DELTA) {
+      return;
+    }
+
+    const now = Date.now();
+    const lastAt = this.lastNoisePruneAtByThread.get(threadId) ?? 0;
+    if (now - lastAt < ACTIVE_NOISE_PRUNE_MIN_INTERVAL_MS) {
+      return;
+    }
+
+    this.lastNoisePruneSeqByThread.set(threadId, seq);
+    this.lastNoisePruneAtByThread.set(threadId, now);
+    this._pruneHistoricalNoiseEvents(threadId, ACTIVE_NOISE_EVENT_KEEP_RECENT);
   }
 
   private _pruneHistoricalNoiseEvents(

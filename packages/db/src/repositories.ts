@@ -74,6 +74,7 @@ const PRUNABLE_NOISE_EVENT_NORM_TYPES: readonly string[] = [
   "thread/tokenusage/updated",
   "item/reasoning/summarypartadded",
   "turn/diff/updated",
+  "codex/event/token_count",
 ];
 
 const STORAGE_RECLAIM_MIN_INTERVAL_MS = 60_000;
