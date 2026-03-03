@@ -336,12 +336,12 @@ export function createWorktreeEnvironmentAdapter(
                 env: toChildEnv(context.runtimeEnv),
                 stdio: "pipe",
               },
-            );
+        );
         if (addResult.status !== 0) {
           return localFallbackSession(context, "worktree-add-failed");
         }
+        runOptionalEnvSetupHook(context, workspaceRoot);
       }
-      runOptionalEnvSetupHook(context, workspaceRoot);
 
       return {
         cwd: workspaceRoot,

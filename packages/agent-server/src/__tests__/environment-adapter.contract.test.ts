@@ -204,7 +204,7 @@ describe("environment adapter contract", () => {
     expect(session.metadata?.fallbackReason).toBe("worktree-add-failed");
   });
 
-  it("runs optional .bb-env-setup.sh and emits provisioning events", () => {
+  it("runs optional .bb-env-setup.sh only when provisioning a new workspace", () => {
     const projectRoot = makeTempDir("bb-env-contract-env-setup-");
     initGitRepo(projectRoot);
 
@@ -219,7 +219,7 @@ describe("environment adapter contract", () => {
     git(projectRoot, "add", ".bb-env-setup.sh");
     git(projectRoot, "commit", "-m", "add env setup hook");
 
-    const events: EnvironmentProvisioningEvent[] = [];
+    const firstRunEvents: EnvironmentProvisioningEvent[] = [];
     const adapter = createWorktreeEnvironmentAdapter({
       worktreeRootName: ".beanbag-test-worktrees",
     });
@@ -229,28 +229,52 @@ describe("environment adapter contract", () => {
         threadId: "thread-env-setup",
         projectRootPath: projectRoot,
         onProvisioningEvent: (event) => {
-          events.push(event);
+          firstRunEvents.push(event);
         },
       }),
     );
 
-    expect(readFileSync(join(session.cwd, "env-setup.log"), "utf-8")).toContain(
+    const firstRunLogLines = readFileSync(join(session.cwd, "env-setup.log"), "utf-8")
+      .split(/\r?\n/)
+      .filter((line) => line.length > 0);
+    expect(firstRunLogLines).toEqual([
       "thread-env-setup|worktree",
-    );
-    expect(events[0]).toEqual(
+    ]);
+    expect(firstRunEvents[0]).toEqual(
       expect.objectContaining({
         type: "env-setup",
         status: "started",
         scriptPath: ".bb-env-setup.sh",
       }),
     );
-    expect(events[1]).toEqual(
+    expect(firstRunEvents[1]).toEqual(
       expect.objectContaining({
         type: "env-setup",
         status: "completed",
         scriptPath: ".bb-env-setup.sh",
       }),
     );
+
+    const secondRunEvents: EnvironmentProvisioningEvent[] = [];
+    const secondSession = adapter.prepare(
+      createPrepareContext({
+        projectId: "proj-env-setup",
+        threadId: "thread-env-setup",
+        projectRootPath: projectRoot,
+        onProvisioningEvent: (event) => {
+          secondRunEvents.push(event);
+        },
+      }),
+    );
+
+    const secondRunLogLines = readFileSync(join(secondSession.cwd, "env-setup.log"), "utf-8")
+      .split(/\r?\n/)
+      .filter((line) => line.length > 0);
+    expect(secondRunLogLines).toEqual([
+      "thread-env-setup|worktree",
+    ]);
+    expect(secondRunEvents).toHaveLength(0);
+
     session.cleanup?.();
   });
 
