@@ -946,6 +946,7 @@ interface ProvisioningSetupAttempt {
 
 interface ParsedProvisioningDetails {
   environment?: string;
+  workspaceRoot?: string;
   setupAttempt?: ProvisioningSetupAttempt;
   additionalLines: string[];
 }
@@ -1028,6 +1029,49 @@ function parseProvisioningSetupLine(line: string): ProvisioningSetupAttempt | nu
   };
 }
 
+function isLikelyProvisioningEnvironmentToken(value: string): boolean {
+  const normalized = value.trim().toLowerCase();
+  return normalized === "worktree" || normalized === "local" || normalized.includes("workspace");
+}
+
+function parseProvisioningSummaryLine(
+  line: string,
+): { environment?: string; workspaceRoot?: string; remainingLine?: string } | null {
+  const parts = line
+    .split("•")
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0);
+  if (parts.length === 0) {
+    return null;
+  }
+
+  let environment: string | undefined;
+  let workspaceRoot: string | undefined;
+  const remainingParts: string[] = [];
+
+  for (const [index, part] of parts.entries()) {
+    if (!workspaceRoot && isWorkspaceRootToken(part)) {
+      workspaceRoot = part;
+      continue;
+    }
+    if (!environment && index === 0 && isLikelyProvisioningEnvironmentToken(part)) {
+      environment = part;
+      continue;
+    }
+    remainingParts.push(part);
+  }
+
+  if (!environment && !workspaceRoot) {
+    return null;
+  }
+
+  return {
+    environment,
+    workspaceRoot,
+    remainingLine: remainingParts.length > 0 ? remainingParts.join(" • ") : undefined,
+  };
+}
+
 function pickBestProvisioningSetupAttempt(
   attempts: ProvisioningSetupAttempt[],
 ): ProvisioningSetupAttempt | undefined {
@@ -1046,6 +1090,7 @@ function parseProvisioningDetails(detail: string | undefined): ParsedProvisionin
   if (lines.length === 0) return null;
 
   let environment: string | undefined;
+  let workspaceRoot: string | undefined;
   const attempts: ProvisioningSetupAttempt[] = [];
   let currentAttempt: ProvisioningSetupAttempt | undefined;
   const additionalLines: string[] = [];
@@ -1064,6 +1109,22 @@ function parseProvisioningDetails(detail: string | undefined): ParsedProvisionin
       attempts.push(parsedAttempt);
       currentAttempt = parsedAttempt;
       continue;
+    }
+
+    if (!currentAttempt) {
+      const parsedSummary = parseProvisioningSummaryLine(line);
+      if (parsedSummary) {
+        if (!environment && parsedSummary.environment) {
+          environment = parsedSummary.environment;
+        }
+        if (!workspaceRoot && parsedSummary.workspaceRoot) {
+          workspaceRoot = parsedSummary.workspaceRoot;
+        }
+        if (parsedSummary.remainingLine) {
+          additionalLines.push(parsedSummary.remainingLine);
+        }
+        continue;
+      }
     }
 
     if (currentAttempt) {
@@ -1085,6 +1146,7 @@ function parseProvisioningDetails(detail: string | undefined): ParsedProvisionin
 
   return {
     environment,
+    workspaceRoot,
     setupAttempt,
     additionalLines,
   };
@@ -1131,13 +1193,11 @@ function formatDurationLabel(durationMs: number): string {
 
 function getProvisioningSetupStatus(
   setupAttempt: ProvisioningSetupAttempt | undefined,
-  isCompleted: boolean,
+  isProvisioningCompleted: boolean,
 ): "Failed" | "Completed" | "Running" | undefined {
-  if (!setupAttempt) {
-    return isCompleted ? "Completed" : undefined;
-  }
+  if (!setupAttempt) return undefined;
   if (setupAttempt.outputLines.length > 0) return "Failed";
-  if (setupAttempt.durationMs !== undefined || isCompleted) return "Completed";
+  if (setupAttempt.durationMs !== undefined || isProvisioningCompleted) return "Completed";
   return "Running";
 }
 
@@ -1215,6 +1275,7 @@ function OperationRow({
     const additionalDetailsText = parsedDetails?.additionalLines.join("\n").trim();
     const setupScriptPath = resolveProvisioningSetupScriptPath(setupAttempt);
     const setupScriptLabel = setupScriptPath ?? setupAttempt?.scriptPath;
+    const workspacePath = setupAttempt?.workspaceRoot ?? parsedDetails?.workspaceRoot;
     const setupTimeLabel = setupAttempt
       ? setupAttempt.durationMs !== undefined
         ? `${formatDurationLabel(setupAttempt.durationMs)}${
@@ -1307,14 +1368,14 @@ function OperationRow({
                     <span className="font-mono ui-text-sm text-foreground/85">{setupTimeLabel}</span>
                   </DetailRow>
                 ) : null}
-                {setupAttempt?.workspaceRoot ? (
+                {workspacePath ? (
                   <DetailRow label="Workspace">
                     <OpenPathButton
-                      path={setupAttempt.workspaceRoot}
+                      path={workspacePath}
                       target="directory"
-                      title={setupAttempt.workspaceRoot}
+                      title={workspacePath}
                     >
-                      {setupAttempt.workspaceRoot}
+                      {workspacePath}
                     </OpenPathButton>
                   </DetailRow>
                 ) : null}
@@ -1326,7 +1387,7 @@ function OperationRow({
                   </DetailRow>
                 ) : null}
                 {additionalDetailsText ? (
-                  <DetailRow label="Details" align="start">
+                  <DetailRow label="Additional details" align="start">
                     <pre className="max-h-[220px] overflow-auto whitespace-pre-wrap break-words rounded-md border border-border/70 bg-background/70 px-2 py-1.5 font-mono ui-text-xs leading-tight text-muted-foreground">
                       {additionalDetailsText}
                     </pre>

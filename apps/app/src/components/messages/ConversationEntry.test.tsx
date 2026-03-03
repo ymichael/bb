@@ -564,6 +564,43 @@ describe("ConversationEntry", () => {
     expect(html).toContain("lucide-chevron-right");
   });
 
+  it("renders workspace from provisioning-completed details without setup status", () => {
+    const message: UIMessage = {
+      ...baseMessage(),
+      kind: "operation",
+      opType: "provisioning",
+      title: "Provisioned Git Worktree Workspace",
+      detail: "Environment: Git Worktree Workspace\nworktree • /tmp/worktree",
+    };
+
+    const html = renderToStaticMarkup(<ConversationEntry message={message} initialExpanded />);
+    expect(html).toContain("Environment");
+    expect(html).toContain(">worktree<");
+    expect(html).toContain("Workspace");
+    expect(html).toContain("/tmp/worktree");
+    expect(html).not.toContain("Setup status");
+    expect(html).not.toContain("Additional details");
+  });
+
+  it("shows only unstructured provisioning fields under additional details", () => {
+    const message: UIMessage = {
+      ...baseMessage(),
+      kind: "operation",
+      opType: "provisioning",
+      title: "Provisioned Git Worktree Workspace",
+      detail:
+        "Environment: Git Worktree Workspace\n" +
+        "worktree • /tmp/worktree • fallback because worktree bootstrap was unavailable",
+    };
+
+    const html = renderToStaticMarkup(<ConversationEntry message={message} initialExpanded />);
+    expect(html).toContain("Workspace");
+    expect(html).toContain("/tmp/worktree");
+    expect(html).toContain("Additional details");
+    expect(html).toContain("fallback because worktree bootstrap was unavailable");
+    expect(html).not.toContain("worktree • /tmp/worktree •");
+  });
+
   it("renders provisioning metadata and setup output in a structured layout", () => {
     const message: UIMessage = {
       ...baseMessage(),
