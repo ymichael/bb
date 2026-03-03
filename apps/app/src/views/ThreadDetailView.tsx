@@ -757,6 +757,8 @@ export function ThreadDetailView() {
     : promoteThread.isPending
     ? "Promoting..."
     : "Promote";
+  const isArchivedWorktreeThread =
+    thread.environmentId === "worktree" && thread.archivedAt !== undefined;
   const showWorkspaceStatus =
     Boolean(threadWorkStatus) &&
     !(thread.archivedAt !== undefined && thread.environmentId === "local");
@@ -909,7 +911,7 @@ export function ThreadDetailView() {
                 <span>{thread.environmentId}</span>
               </DetailRow>
             ) : null}
-            {thread.environmentId === "worktree" ? (
+            {thread.environmentId === "worktree" && !isArchivedWorktreeThread ? (
               <DetailRow
                 label="Primary checkout"
                 valueClassName="min-w-0"
@@ -1029,7 +1031,9 @@ export function ThreadDetailView() {
                 />
               </DetailRow>
             ) : null}
-            {thread.environmentId === "worktree" && threadWorkStatus?.workspaceRoot ? (
+            {thread.environmentId === "worktree" &&
+            !isArchivedWorktreeThread &&
+            threadWorkStatus?.workspaceRoot ? (
               <DetailRow
                 label="Worktree"
                 valueClassName="min-w-0"
