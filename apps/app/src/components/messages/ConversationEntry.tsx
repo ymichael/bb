@@ -1439,6 +1439,74 @@ function OperationRow({
     );
   }
 
+  if (message.opType === "thread-operation-intent") {
+    const detailText = message.detail?.trim();
+    if (!detailText) {
+      return (
+        <div className="group w-full" style={{ overflowAnchor: "none" }}>
+          <div className="mr-auto w-full rounded-md px-2 py-1 text-sm text-muted-foreground">
+            <div className={`py-0.5 ${COLLAPSIBLE_HEADER_STATIC_TONE_CLASS}`}>
+              {message.title}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    const promptLabel = "Prompt:\n";
+    const promptStart = detailText.indexOf(promptLabel);
+    if (promptStart === -1) {
+      return (
+        <div className="group w-full" style={{ overflowAnchor: "none" }}>
+          <div className="mr-auto w-full">
+            <div className="rounded-md px-2 py-1 text-sm text-muted-foreground">
+              <span className="font-medium text-foreground/80">{message.title}</span>
+              <span className="ml-2 text-muted-foreground/80">{detailText}</span>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    const operationDetailText = detailText.slice(0, promptStart).trim();
+    const promptText = detailText.slice(promptStart + promptLabel.length).trim();
+
+    if (!promptText) {
+      return (
+        <div className="group w-full" style={{ overflowAnchor: "none" }}>
+          <div className="mr-auto w-full">
+            <div className="rounded-md px-2 py-1 text-sm text-muted-foreground">
+              <span className="font-medium text-foreground/80">{message.title}</span>
+              {operationDetailText ? (
+                <span className="ml-2 text-muted-foreground/80">{operationDetailText}</span>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="group w-full" style={{ overflowAnchor: "none" }}>
+        <div className="mr-auto w-full">
+          <ExpandableEntryContainer
+            isExpanded={isExpanded}
+            summaryContent={message.title}
+            summaryContentClassName="min-w-0"
+            headerToneClass={headerToneClass}
+            onToggle={onToggle}
+          >
+            <pre
+              className="mt-0.5 max-h-[220px] overflow-auto whitespace-pre-wrap break-words rounded-md border border-border/70 bg-background/70 px-2 py-1.5 font-mono ui-text-xs leading-tight text-muted-foreground"
+            >
+              {promptText}
+            </pre>
+          </ExpandableEntryContainer>
+        </div>
+      </div>
+    );
+  }
+
   if (message.opType === "worktree-commit") {
     const detailLines = (message.detail ?? "")
       .split("•")

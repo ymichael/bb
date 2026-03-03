@@ -760,6 +760,31 @@ describe("ConversationEntry", () => {
     expect(html).not.toContain("lucide-chevron-right");
   });
 
+  it("renders merged thread-operation intents as expandable rows with prompt details", () => {
+    const promptText =
+      "Please squash-merge the changes in this thread workspace.\n" +
+      "Please use the default merge-base branch reported by git.";
+    const message: UIMessage = {
+      ...baseMessage(),
+      kind: "operation",
+      opType: "thread-operation-intent",
+      title: "Squash merge dispatched",
+      detail: `Squash-merge operation dispatched to the agent\n\nPrompt:\n${promptText}`,
+    };
+
+    const collapsedHtml = renderToStaticMarkup(<ConversationEntry message={message} />);
+    expect(collapsedHtml).toContain("Squash merge dispatched");
+    expect(collapsedHtml).toContain("lucide-chevron-right");
+    expect(collapsedHtml).not.toContain(promptText);
+
+    const expandedHtml = renderToStaticMarkup(
+      <ConversationEntry message={message} initialExpanded />,
+    );
+    expect(expandedHtml).toContain(promptText);
+    expect(expandedHtml).not.toContain(">Prompt<");
+    expect(expandedHtml).not.toContain("Squash-merge operation dispatched to the agent");
+  });
+
   it("renders plan-updated operations as expandable rows", () => {
     const message: UIMessage = {
       ...baseMessage(),

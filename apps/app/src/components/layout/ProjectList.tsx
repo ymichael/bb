@@ -425,35 +425,38 @@ export function ProjectList({
                           const isBusyThread = isBusyThreadStatus(thread.status)
                           const showUnreadBadge = isCompletedUnreadThread(thread)
                           const isThreadActionsOpen = openThreadActionsThreadId === thread.id
+                          const isThreadActive = selectedThreadId === thread.id
 
                           return (
-                            <NavLink
+                            <div
                               key={thread.id}
-                              to={`/projects/${project.id}/threads/${thread.id}`}
-                              onClick={onProjectSelect}
-                              className={({ isActive }) =>
-                                cn(
-                                  "group/thread-row flex h-8 w-full items-center gap-2 rounded-md pl-2 pr-0 text-sm transition-colors",
-                                  isActive
-                                    ? "bg-sidebar-border/80 text-sidebar-foreground"
-                                    : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-                                )
-                              }
+                              className={cn(
+                                "group/thread-row flex h-8 w-full items-center gap-2 rounded-md pl-2 pr-0 text-sm transition-colors",
+                                isThreadActive
+                                  ? "bg-sidebar-border/80 text-sidebar-foreground"
+                                  : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                              )}
                             >
-                              <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center text-sidebar-foreground/60">
-                                {isBusyThread ? (
-                                  <LoaderCircle className="size-3.5 animate-spin" />
-                                ) : showUnreadBadge ? (
-                                  <span
-                                    className="size-1.5 rounded-full bg-primary"
-                                    aria-label="Unread completed thread"
-                                    title="Unread completion"
-                                  />
-                                ) : null}
-                              </span>
-                              <span className="min-w-0 flex-1 truncate">
-                                {getThreadDisplayTitle(thread)}
-                              </span>
+                              <NavLink
+                                to={`/projects/${project.id}/threads/${thread.id}`}
+                                onClick={onProjectSelect}
+                                className="flex min-w-0 flex-1 items-center gap-2"
+                              >
+                                <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center text-sidebar-foreground/60">
+                                  {isBusyThread ? (
+                                    <LoaderCircle className="size-3.5 animate-spin" />
+                                  ) : showUnreadBadge ? (
+                                    <span
+                                      className="size-1.5 rounded-full bg-primary"
+                                      aria-label="Unread completed thread"
+                                      title="Unread completion"
+                                    />
+                                  ) : null}
+                                </span>
+                                <span className="min-w-0 flex-1 truncate">
+                                  {getThreadDisplayTitle(thread)}
+                                </span>
+                              </NavLink>
                               <span className="flex h-7 shrink-0 items-center justify-end gap-1 pl-1">
                                 {thread.primaryCheckout?.isActive ? (
                                   <StatusPill
@@ -484,43 +487,43 @@ export function ProjectList({
                                         ? "pointer-events-auto opacity-100"
                                         : "pointer-events-none opacity-0 group-hover/thread-row:pointer-events-auto group-hover/thread-row:opacity-100"
                                     )}
-                                >
-                                  <ThreadActionsMenu
-                                    triggerClassName="h-7 w-7 text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground"
-                                    onOpenChange={(open) => {
-                                      setOpenThreadActionsThreadId(open ? thread.id : null)
-                                    }}
-                                    disabled={
-                                      archiveThread.isPending ||
-                                      unarchiveThread.isPending ||
-                                      updateThread.isPending ||
-                                      markThreadRead.isPending ||
-                                      markThreadUnread.isPending
-                                    }
-                                    isRead={(thread.lastReadAt ?? 0) >= thread.updatedAt}
-                                    onToggleRead={() => {
-                                      if ((thread.lastReadAt ?? 0) >= thread.updatedAt) {
-                                        markThreadUnread.mutate(thread.id)
-                                        return
+                                  >
+                                    <ThreadActionsMenu
+                                      triggerClassName="h-7 w-7 text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground"
+                                      onOpenChange={(open) => {
+                                        setOpenThreadActionsThreadId(open ? thread.id : null)
+                                      }}
+                                      disabled={
+                                        archiveThread.isPending ||
+                                        unarchiveThread.isPending ||
+                                        updateThread.isPending ||
+                                        markThreadRead.isPending ||
+                                        markThreadUnread.isPending
                                       }
-                                      markThreadRead.mutate(thread.id)
-                                    }}
-                                    onRename={() => {
-                                      requestRenameThread(thread)
-                                    }}
-                                    onToggleArchive={() => {
-                                      if (thread.archivedAt !== undefined) {
-                                        unarchiveThread.mutate({ id: thread.id })
-                                        return
-                                      }
-                                      void requestArchiveThread(thread)
-                                    }}
-                                    isArchived={thread.archivedAt !== undefined}
-                                  />
+                                      isRead={(thread.lastReadAt ?? 0) >= thread.updatedAt}
+                                      onToggleRead={() => {
+                                        if ((thread.lastReadAt ?? 0) >= thread.updatedAt) {
+                                          markThreadUnread.mutate(thread.id)
+                                          return
+                                        }
+                                        markThreadRead.mutate(thread.id)
+                                      }}
+                                      onRename={() => {
+                                        requestRenameThread(thread)
+                                      }}
+                                      onToggleArchive={() => {
+                                        if (thread.archivedAt !== undefined) {
+                                          unarchiveThread.mutate({ id: thread.id })
+                                          return
+                                        }
+                                        void requestArchiveThread(thread)
+                                      }}
+                                      isArchived={thread.archivedAt !== undefined}
+                                    />
                                   </div>
                                 </span>
                               </span>
-                            </NavLink>
+                            </div>
                           )
                         })}
                       </div>

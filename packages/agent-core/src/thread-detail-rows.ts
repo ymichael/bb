@@ -272,6 +272,148 @@ function mergePrimaryCheckoutOperations(messages: UIMessage[]): UIMessage[] {
   return merged;
 }
 
+type ThreadOperationIntentAction = "commit" | "squash_merge" | "unknown";
+type ThreadOperationIntentPhase =
+  | "requested"
+  | "dispatched"
+  | "queued"
+  | "failed"
+  | "update";
+
+function isThreadOperationIntent(
+  message: UIMessage,
+): message is Extract<UIMessage, { kind: "operation" }> {
+  return message.kind === "operation" && message.opType === "thread-operation-intent";
+}
+
+function classifyThreadOperationIntent(message: Extract<UIMessage, { kind: "operation" }>): {
+  action: ThreadOperationIntentAction;
+  phase: ThreadOperationIntentPhase;
+} {
+  switch (message.title) {
+    case "Commit requested":
+      return { action: "commit", phase: "requested" };
+    case "Commit dispatched":
+      return { action: "commit", phase: "dispatched" };
+    case "Commit queued":
+      return { action: "commit", phase: "queued" };
+    case "Commit request failed":
+      return { action: "commit", phase: "failed" };
+    case "Commit operation update":
+      return { action: "commit", phase: "update" };
+    case "Squash merge requested":
+      return { action: "squash_merge", phase: "requested" };
+    case "Squash merge dispatched":
+      return { action: "squash_merge", phase: "dispatched" };
+    case "Squash merge queued":
+      return { action: "squash_merge", phase: "queued" };
+    case "Squash merge request failed":
+      return { action: "squash_merge", phase: "failed" };
+    case "Squash merge operation update":
+      return { action: "squash_merge", phase: "update" };
+    case "Thread operation update":
+      return { action: "unknown", phase: "update" };
+    default: {
+      const normalizedTitle = message.title.toLowerCase();
+      // Operation titles are persisted/read-time open_external; unknown values are intentionally tolerated.
+      if (normalizedTitle.includes("squash")) {
+        return { action: "squash_merge", phase: "update" };
+      }
+      if (normalizedTitle.includes("commit")) {
+        return { action: "commit", phase: "update" };
+      }
+      return { action: "unknown", phase: "update" };
+    }
+  }
+}
+
+function mergeThreadOperationIntentMessages(messages: UIMessage[]): UIMessage[] {
+  const merged: UIMessage[] = [];
+
+  for (let index = 0; index < messages.length; index += 1) {
+    const requested = messages[index];
+    if (!requested || !isThreadOperationIntent(requested)) {
+      if (requested) {
+        merged.push(requested);
+      }
+      continue;
+    }
+
+    const requestedClass = classifyThreadOperationIntent(requested);
+    if (
+      requestedClass.action !== "squash_merge" ||
+      requestedClass.phase !== "requested"
+    ) {
+      merged.push(requested);
+      continue;
+    }
+
+    let cursor = index + 1;
+    let promptMessage: Extract<UIMessage, { kind: "user" }> | null = null;
+    const promptCandidate = messages[cursor];
+    if (promptCandidate?.kind === "user") {
+      promptMessage = promptCandidate;
+      cursor += 1;
+    }
+
+    const dispatchedCandidate = messages[cursor];
+    if (!dispatchedCandidate || !isThreadOperationIntent(dispatchedCandidate)) {
+      merged.push(requested);
+      continue;
+    }
+
+    const dispatchedClass = classifyThreadOperationIntent(dispatchedCandidate);
+    if (
+      dispatchedClass.action !== "squash_merge" ||
+      (
+        dispatchedClass.phase !== "dispatched" &&
+        dispatchedClass.phase !== "queued"
+      )
+    ) {
+      merged.push(requested);
+      continue;
+    }
+
+    const detailSections: string[] = [];
+    const requestedDetail = requested.detail?.trim();
+    const dispatchedDetail = dispatchedCandidate.detail?.trim();
+    if (dispatchedDetail) {
+      detailSections.push(dispatchedDetail);
+    } else if (requestedDetail) {
+      detailSections.push(requestedDetail);
+    }
+
+    const promptText = promptMessage?.text.trim();
+    if (promptText) {
+      detailSections.push(`Prompt:\n${promptText}`);
+    }
+
+    const sequence = promptMessage
+      ? [requested, promptMessage, dispatchedCandidate]
+      : [requested, dispatchedCandidate];
+
+    merged.push({
+      kind: "operation",
+      id: `${requested.id}:thread-operation-intent:${dispatchedCandidate.id}`,
+      threadId: requested.threadId,
+      sourceSeqStart: Math.min(...sequence.map((message) => message.sourceSeqStart)),
+      sourceSeqEnd: Math.max(...sequence.map((message) => message.sourceSeqEnd)),
+      createdAt: Math.max(...sequence.map((message) => message.createdAt)),
+      turnId:
+        dispatchedCandidate.turnId ??
+        promptMessage?.turnId ??
+        requested.turnId,
+      opType: "thread-operation-intent",
+      title: dispatchedCandidate.title,
+      detail: detailSections.length > 0 ? detailSections.join("\n\n") : undefined,
+    });
+
+    index = cursor;
+  }
+
+  return merged;
+}
+
 function mergeFileEditStatus(
   left: Extract<UIMessage, { kind: "file-edit" }>["status"],
   right: Extract<UIMessage, { kind: "file-edit" }>["status"],
@@ -423,7 +565,10 @@ export function buildThreadDetailRows(
   const includeToolGroupMessages = options?.includeToolGroupMessages ?? true;
   const provisioningMergedMessages = mergeProvisioningOperations(messages);
   const primaryCheckoutMergedMessages = mergePrimaryCheckoutOperations(provisioningMergedMessages);
-  const mergedMessages = mergeConsecutiveToolActivityMessages(primaryCheckoutMergedMessages);
+  const threadOperationMergedMessages = mergeThreadOperationIntentMessages(
+    primaryCheckoutMergedMessages,
+  );
+  const mergedMessages = mergeConsecutiveToolActivityMessages(threadOperationMergedMessages);
   const lastAssistantIndexByTurn = new Map<string, number>();
 
   for (const [index, message] of mergedMessages.entries()) {

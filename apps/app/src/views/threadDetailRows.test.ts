@@ -500,6 +500,45 @@ describe("buildThreadDetailRows", () => {
     expect(rows[0].message.detail).toContain("local • /Users/michael/Projects/bb");
   });
 
+  it("merges squash operation intent request/prompt/dispatch into one row", () => {
+    const promptText =
+      "Please squash-merge the changes in this thread workspace.\n" +
+      "Please use the default merge-base branch reported by git.";
+    const messages: UIMessage[] = [
+      {
+        ...baseMessage("squash-requested-1", 1),
+        kind: "operation",
+        opType: "thread-operation-intent",
+        title: "Squash merge requested",
+        detail: "Squash-merge operation requested",
+      },
+      {
+        ...baseMessage("squash-prompt-1", 2),
+        kind: "user",
+        text: promptText,
+      },
+      {
+        ...baseMessage("squash-dispatched-1", 3),
+        kind: "operation",
+        opType: "thread-operation-intent",
+        title: "Squash merge dispatched",
+        detail: "Squash-merge operation dispatched to the agent",
+      },
+    ];
+
+    const rows = buildThreadDetailRows(messages);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.kind).toBe("message");
+    if (rows[0]?.kind !== "message") return;
+    expect(rows[0].message.kind).toBe("operation");
+    if (rows[0].message.kind !== "operation") return;
+    expect(rows[0].message.opType).toBe("thread-operation-intent");
+    expect(rows[0].message.title).toBe("Squash merge dispatched");
+    expect(rows[0].message.detail).toContain("Squash-merge operation dispatched to the agent");
+    expect(rows[0].message.detail).toContain("Prompt:");
+    expect(rows[0].message.detail).toContain(promptText);
+  });
+
   it("keeps compaction and thread title updates visible outside tool groups", () => {
     const messages: UIMessage[] = [
       {
