@@ -4,16 +4,13 @@ import {
   existsSync,
   lstatSync,
   mkdirSync,
-  mkdtempSync,
   readlinkSync,
   rmSync,
   statSync,
   symlinkSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import type {
-  CommitThreadResponse,
   ThreadGitDiffCommitSummary,
   ThreadWorkStatus,
 } from "@beanbag/agent-core";
@@ -1380,181 +1377,5 @@ export class ThreadGitStatusService {
       throw new Error(showResult.stderr || "Failed to compute commit diff");
     }
     return trimDiffForResponse(showResult.stdout);
-  }
-
-  commit(args: {
-    workspaceRoot: string;
-    projectRoot: string;
-    defaultBranch?: string;
-    message?: string;
-    includeUnstaged?: boolean;
-  }): CommitThreadResponse {
-    const before = this.getStatus(args);
-    if (!before.hasUncommittedChanges) {
-      return {
-        ok: true,
-        commitCreated: false,
-        message: "Working directory is clean",
-        workStatus: before,
-      };
-    }
-
-    const includeUnstaged = args.includeUnstaged ?? true;
-    if (includeUnstaged) {
-      const addResult = runGit(args.workspaceRoot, ["add", "-A"]);
-      if (!addResult.ok) {
-        throw new Error(addResult.stderr || "Failed to stage changes");
-      }
-    }
-
-    const hasStagedChanges = runGit(args.workspaceRoot, ["diff", "--cached", "--quiet"]);
-    if (hasStagedChanges.ok) {
-      const after = this.getStatus(args);
-      return {
-        ok: true,
-        commitCreated: false,
-        message: "No staged changes to commit",
-        workStatus: after,
-      };
-    }
-
-    const commitMessage = args.message?.trim();
-    if (!commitMessage) {
-      throw new Error("Commit message is required");
-    }
-    const commitResult = runGit(args.workspaceRoot, ["commit", "-m", commitMessage]);
-    if (!commitResult.ok) {
-      throw new Error(commitResult.stderr || "Commit failed");
-    }
-
-    this.invalidate(args.workspaceRoot);
-    const after = this.getStatus(args);
-    const shaResult = runGit(args.workspaceRoot, ["rev-parse", "HEAD"]);
-
-    return {
-      ok: true,
-      commitCreated: true,
-      message: "Committed changes",
-      workStatus: after,
-      ...(shaResult.ok && shaResult.stdout ? { commitSha: shaResult.stdout } : {}),
-    };
-  }
-
-  squashMergeWorktreeIntoDefaultBranch(args: {
-    workspaceRoot: string;
-    projectRoot: string;
-    defaultBranch?: string;
-    message?: string;
-  }): { merged: boolean; message: string; conflictFiles?: string[] } {
-    const mergeBaseBranch = args.defaultBranch ?? this.detectDefaultBranch(args.projectRoot);
-    if (!mergeBaseBranch) {
-      throw new Error("Could not determine merge base branch");
-    }
-
-    const workspaceStatus = this.getStatus({
-      workspaceRoot: args.workspaceRoot,
-      projectRoot: args.projectRoot,
-      defaultBranch: mergeBaseBranch,
-      mergeBaseBranch,
-    });
-    if (workspaceStatus.hasUncommittedChanges) {
-      throw new Error("Workspace has uncommitted changes; commit first");
-    }
-    if (workspaceStatus.aheadCount <= 0) {
-      return { merged: false, message: "No commits to merge" };
-    }
-
-    if (hasLocalWorkingChanges(args.projectRoot)) {
-      throw new Error(
-        "Project root has local changes that could be lost; commit or stash them before squash merge",
-      );
-    }
-
-    const workspaceHead = runGit(args.workspaceRoot, ["rev-parse", "HEAD"]);
-    if (!workspaceHead.ok || !workspaceHead.stdout) {
-      throw new Error("Failed to resolve worktree HEAD");
-    }
-
-    const currentProjectBranch = runGit(args.projectRoot, ["symbolic-ref", "--short", "HEAD"]);
-    const defaultHead = runGit(args.projectRoot, ["rev-parse", mergeBaseBranch]);
-    if (!defaultHead.ok || !defaultHead.stdout) {
-      throw new Error(`Failed to resolve ${mergeBaseBranch}`);
-    }
-
-    const tempRoot = mkdtempSync(join(tmpdir(), "beanbag-squash-merge-"));
-    const tempWorkspaceRoot = resolve(tempRoot, "integration");
-    try {
-      const addWorktree = runGit(args.projectRoot, [
-        "worktree",
-        "add",
-        "--detach",
-        tempWorkspaceRoot,
-        defaultHead.stdout,
-      ]);
-      if (!addWorktree.ok) {
-        throw new Error(addWorktree.stderr || "Failed to prepare integration worktree");
-      }
-
-      const squashResult = runGit(tempWorkspaceRoot, ["merge", "--squash", workspaceHead.stdout]);
-      if (!squashResult.ok) {
-        const conflictFiles = runGit(tempWorkspaceRoot, ["diff", "--name-only", "--diff-filter=U"]);
-        runGit(tempWorkspaceRoot, ["reset", "--hard"]);
-        return {
-          merged: false,
-          message:
-            `Squash merge has conflicts against ${mergeBaseBranch}. Ask the thread agent to rebase/merge ${mergeBaseBranch} into its worktree, resolve conflicts, and retry.`,
-          ...(conflictFiles.ok && conflictFiles.stdout
-            ? {
-                conflictFiles: conflictFiles.stdout
-                  .split("\n")
-                  .map((line) => line.trim())
-                  .filter((line) => line.length > 0),
-              }
-            : {}),
-        };
-      }
-
-      const hasSquashedChanges = runGit(tempWorkspaceRoot, ["diff", "--cached", "--quiet"]);
-      if (hasSquashedChanges.ok) {
-        return { merged: false, message: "No changes to merge after squash" };
-      }
-
-      const message = args.message?.trim() || `chore: squash merge from ${workspaceStatus.currentBranch ?? "worktree"}`;
-      const commitResult = runGit(tempWorkspaceRoot, ["commit", "-m", message]);
-      if (!commitResult.ok) {
-        throw new Error(commitResult.stderr || "Failed to commit squashed merge");
-      }
-
-      const mergedHead = runGit(tempWorkspaceRoot, ["rev-parse", "HEAD"]);
-      if (!mergedHead.ok || !mergedHead.stdout) {
-        throw new Error("Failed to resolve squashed merge commit");
-      }
-
-      const updateRef = runGit(args.projectRoot, [
-        "update-ref",
-        `refs/heads/${mergeBaseBranch}`,
-        mergedHead.stdout,
-        defaultHead.stdout,
-      ]);
-      if (!updateRef.ok) {
-        throw new Error(
-          updateRef.stderr || `${mergeBaseBranch} moved during squash merge; please retry`,
-        );
-      }
-
-      if (currentProjectBranch.ok && currentProjectBranch.stdout === mergeBaseBranch) {
-        const resetResult = runGit(args.projectRoot, ["reset", "--hard", mergedHead.stdout]);
-        if (!resetResult.ok) {
-          throw new Error(
-            resetResult.stderr || `Squash merged into ${mergeBaseBranch}, but failed to refresh checkout`,
-          );
-        }
-      }
-
-      return { merged: true, message: `Squash-merged into ${mergeBaseBranch}` };
-    } finally {
-      runGit(args.projectRoot, ["worktree", "remove", "--force", tempWorkspaceRoot]);
-      rmSync(tempRoot, { recursive: true, force: true });
-    }
   }
 }

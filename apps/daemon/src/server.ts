@@ -61,7 +61,6 @@ export function createServer(deps: ServerDeps) {
   const environmentAdapter = createEnvironmentAdapter();
   const environmentCatalog = listAvailableEnvironmentInfos();
   const scheduler = new InMemorySchedulerService();
-  const projectCommitMessageGenerator = provider.generateCommitMessage;
   const threadManager = new ThreadManager(
     deps.threadRepo,
     deps.eventRepo,
@@ -95,7 +94,6 @@ export function createServer(deps: ServerDeps) {
     threadManager,
     wsManager,
     startTime,
-    projectCommitMessageGenerator,
     requestShutdown: deps.requestShutdown,
     requestRestart: deps.requestRestart,
     shouldRestart,

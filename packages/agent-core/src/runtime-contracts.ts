@@ -1,15 +1,11 @@
 import type {
   AvailableModel,
-  CommitThreadRequest,
-  CommitThreadResponse,
   DemotePrimaryResponse,
   EnqueueThreadMessageRequest,
   PrimaryCheckoutStatus,
   PromoteThreadResponse,
   SendQueuedThreadMessageRequest,
   SendQueuedThreadMessageResponse,
-  SquashMergeThreadRequest,
-  SquashMergeThreadResponse,
   ThreadOperationRequest,
   ThreadOperationResponse,
   ProviderCapabilities,
@@ -211,17 +207,9 @@ export interface ThreadOrchestrator {
     threadId: string,
     request: ThreadOperationRequest,
   ): Promise<ThreadOperationResponse>;
-  commitThread(
-    threadId: string,
-    request?: CommitThreadRequest,
-  ): Promise<CommitThreadResponse>;
   promoteThread(threadId: string): Promise<PromoteThreadResponse>;
   demotePrimaryCheckout(threadId: string): Promise<DemotePrimaryResponse>;
   getPrimaryCheckoutStatus(projectId: string): PrimaryCheckoutStatus;
-  squashMergeThread(
-    threadId: string,
-    request?: SquashMergeThreadRequest,
-  ): Promise<SquashMergeThreadResponse>;
   getById(threadId: string): Thread | undefined;
   getWorkStatus(threadId: string, mergeBaseBranch?: string): ThreadWorkStatus | undefined;
   getEvents(threadId: string, afterSeq?: number, limit?: number): ThreadEvent[];

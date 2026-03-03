@@ -47,10 +47,6 @@ import {
   type SpawnThreadRequest,
   type TellThreadRequest,
   type ThreadProvisioningState,
-  type CommitThreadRequest,
-  type CommitThreadResponse,
-  type SquashMergeThreadRequest,
-  type SquashMergeThreadResponse,
   type PromoteThreadResponse,
   type DemotePrimaryResponse,
   type EnqueueThreadMessageRequest,
@@ -320,12 +316,6 @@ function resolveThreadShellPath(pathValue: string | undefined): string | undefin
   if (!shimBinDir) return pathValue;
 
   return prependPathEntry(pathValue, shimBinDir);
-}
-
-function isAutoArchiveThreadOnCommitEnabled(args: {
-  autoArchiveThreadOnCommit?: boolean;
-}): boolean {
-  return args.autoArchiveThreadOnCommit !== false;
 }
 
 function toProviderEventType(method: string): ThreadEventType {
@@ -1686,76 +1676,6 @@ export class ThreadManager implements ThreadOrchestrator {
     }
   }
 
-  async commitThread(
-    threadId: string,
-    request?: CommitThreadRequest,
-  ): Promise<CommitThreadResponse> {
-    const thread = this.threadRepo.getById(threadId);
-    if (!thread) {
-      throw threadNotFoundError(threadId);
-    }
-    if (thread.archivedAt !== undefined) {
-      throw threadArchivedError(threadId);
-    }
-    const project = this.projectRepo.getById(thread.projectId);
-    if (!project) {
-      throw projectNotFoundError(thread.projectId);
-    }
-    const workspaceRoot = this._resolveThreadWorkspaceRoot(thread, project.rootPath);
-    if (!workspaceRoot) {
-      throw invalidRequestError(
-        thread.environmentId === "worktree"
-          ? "Thread worktree is unavailable; reprovision the thread first"
-          : "Thread workspace is unavailable",
-      );
-    }
-    const defaultBranch = this.gitStatusService.detectDefaultBranch(project.rootPath);
-    let message = request?.message?.trim();
-    if (!message) {
-      if (!this.provider.generateCommitMessage) {
-        throw new Error("Commit message generation is unavailable");
-      }
-      const generated = await this.provider.generateCommitMessage({
-        cwd: workspaceRoot,
-        includeUnstaged: request?.includeUnstaged,
-      });
-      message = generated?.trim();
-      if (!message) {
-        throw new Error(
-          `Failed to auto-generate commit message (${this.provider.displayName})`,
-        );
-      }
-    }
-    const result = this.gitStatusService.commit({
-      workspaceRoot,
-      projectRoot: project.rootPath,
-      defaultBranch,
-      ...(message ? { message } : {}),
-      includeUnstaged: request?.includeUnstaged,
-    });
-    this._appendEvent(
-      thread.id,
-      "system/worktree/commit",
-      {
-        status: result.commitCreated ? "committed" : "noop",
-        message: result.message,
-        ...(result.commitSha ? { commitSha: result.commitSha } : {}),
-        ...(request?.includeUnstaged !== undefined
-          ? { includeUnstaged: request.includeUnstaged }
-          : {}),
-      },
-      { broadcastChanges: ["events-appended", "work-status-changed"] },
-    );
-    if (
-      result.commitCreated &&
-      thread.environmentId === "local" &&
-      isAutoArchiveThreadOnCommitEnabled(request ?? {})
-    ) {
-      this.archive(thread.id);
-    }
-    return result;
-  }
-
   async promoteThread(threadId: string): Promise<PromoteThreadResponse> {
     const thread = this.threadRepo.getById(threadId);
     if (!thread) {
@@ -2011,93 +1931,6 @@ export class ThreadManager implements ThreadOrchestrator {
         throw invalidRequestError(message);
       }
     });
-  }
-
-  async squashMergeThread(
-    threadId: string,
-    request?: SquashMergeThreadRequest,
-  ): Promise<SquashMergeThreadResponse> {
-    const thread = this.threadRepo.getById(threadId);
-    if (!thread) {
-      throw threadNotFoundError(threadId);
-    }
-    if (thread.archivedAt !== undefined) {
-      throw threadArchivedError(threadId);
-    }
-    if (thread.environmentId !== "worktree") {
-      throw invalidRequestError("Squash merge is only available for worktree threads");
-    }
-    const project = this.projectRepo.getById(thread.projectId);
-    if (!project) {
-      throw projectNotFoundError(thread.projectId);
-    }
-
-    let committed = false;
-    const workspaceRoot = this._resolveThreadWorkspaceRoot(thread, project.rootPath);
-    if (!workspaceRoot) {
-      throw invalidRequestError("Thread worktree is unavailable; reprovision the thread first");
-    }
-    const defaultBranch = this.gitStatusService.detectDefaultBranch(project.rootPath);
-    const requestedMergeBaseBranch = request?.mergeBaseBranch?.trim() || undefined;
-    const before = this.gitStatusService.getStatus({
-      workspaceRoot,
-      projectRoot: project.rootPath,
-      defaultBranch,
-      mergeBaseBranch: requestedMergeBaseBranch,
-    });
-    const mergeBaseBranch = before.mergeBaseBranch ?? defaultBranch;
-    const commitIfNeeded = request?.commitIfNeeded === true;
-    if (before.hasUncommittedChanges) {
-      if (!commitIfNeeded) {
-        throw invalidRequestError("Workspace has uncommitted changes; commit first");
-      }
-      const commitResult = await this.commitThread(threadId, {
-        includeUnstaged: request?.includeUnstaged,
-        message: request?.commitMessage,
-      });
-      committed = commitResult.commitCreated;
-    }
-
-    const mergeResult = this.gitStatusService.squashMergeWorktreeIntoDefaultBranch({
-      workspaceRoot,
-      projectRoot: project.rootPath,
-      defaultBranch: mergeBaseBranch,
-      message: request?.squashMessage,
-    });
-    this.gitStatusService.invalidate(workspaceRoot);
-    const workStatus = this.gitStatusService.getStatus({
-      workspaceRoot,
-      projectRoot: project.rootPath,
-      defaultBranch,
-      mergeBaseBranch,
-    });
-    this._appendEvent(
-      thread.id,
-      "system/worktree/squash_merge",
-      {
-        status: mergeResult.merged
-          ? "merged"
-          : mergeResult.conflictFiles && mergeResult.conflictFiles.length > 0
-            ? "conflict"
-            : "noop",
-        message: mergeResult.message,
-        committed,
-        ...(mergeBaseBranch ? { mergeBaseBranch } : {}),
-        ...(mergeResult.conflictFiles ? { conflictFiles: mergeResult.conflictFiles } : {}),
-      },
-      { broadcastChanges: ["events-appended", "work-status-changed"] },
-    );
-    if (mergeResult.merged && isAutoArchiveThreadOnCommitEnabled(request ?? {})) {
-      this.archive(thread.id);
-    }
-    return {
-      ok: true,
-      merged: mergeResult.merged,
-      committed,
-      message: mergeResult.message,
-      ...(mergeResult.conflictFiles ? { conflictFiles: mergeResult.conflictFiles } : {}),
-      workStatus,
-    };
   }
 
   /**

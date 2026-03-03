@@ -59,14 +59,9 @@ export type {
   SquashMergeOperationOptions,
   ThreadOperationRequest,
   ThreadOperationResponse,
-  CommitThreadRequest,
-  CommitThreadResponse,
-  SquashMergeThreadRequest,
-  SquashMergeThreadResponse,
   PrimaryCheckoutStatus,
   PromoteThreadResponse,
   DemotePrimaryResponse,
-  CommitProjectResponse,
   PromptInput,
   ModelReasoningEffort,
   AvailableModel,
@@ -110,8 +105,6 @@ export {
   updateThreadSchema,
   createProjectSchema,
   updateProjectSchema,
-  commitThreadSchema,
-  squashMergeThreadSchema,
   threadOperationSchema,
 } from "./schemas.js";
 

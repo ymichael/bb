@@ -1,10 +1,8 @@
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import {
-  commitThreadSchema,
   enqueueThreadMessageSchema,
   sendQueuedThreadMessageSchema,
-  squashMergeThreadSchema,
   spawnThreadSchema,
   threadOperationSchema,
   tellThreadSchema,
@@ -81,15 +79,6 @@ const archiveThreadBodySchema = z.object({
 });
 
 const MAX_PROMPT_ATTACHMENT_INPUTS = 12;
-const DEPRECATION_SUNSET_DATE = "Tue, 30 Jun 2026 00:00:00 GMT";
-
-function setDeprecatedEndpointHeaders(c: {
-  header: (name: string, value: string) => void;
-}, successorPath: string): void {
-  c.header("Deprecation", "true");
-  c.header("Sunset", DEPRECATION_SUNSET_DATE);
-  c.header("Link", `<${successorPath}>; rel=\"successor-version\"`);
-}
 
 function validatePromptInputAttachments(input: PromptInput[]): void {
   let attachmentCount = 0;
@@ -562,84 +551,6 @@ export function createThreadRoutes(
           const body = c.req.valid("json");
           const result = await threadManager.requestThreadOperation(c.req.param("id"), body);
           return c.json(result, 202);
-        } catch (err) {
-          return sendRouteError(c, err);
-        }
-      },
-    )
-    .post(
-      "/:id/commit",
-      zValidator("json", commitThreadSchema.optional()),
-      async (c) => {
-        try {
-          const threadId = c.req.param("id");
-          setDeprecatedEndpointHeaders(c, `/api/v1/threads/${threadId}/operations`);
-          const thread = threadManager.getById(threadId);
-          if (!thread) {
-            return sendRouteError(c, threadNotFoundError(threadId));
-          }
-          const body = c.req.valid("json");
-          const operationResult = await threadManager.requestThreadOperation(threadId, {
-            operation: "commit",
-            options: {
-              includeUnstaged: body?.includeUnstaged,
-              message: body?.message,
-            },
-          });
-          const workStatus = threadManager.getWorkStatus(threadId);
-          if (!workStatus) {
-            throw invalidRequestError("Thread work status is unavailable");
-          }
-          return c.json({
-            ok: true,
-            commitCreated: false,
-            message: operationResult.message,
-            workStatus,
-            queued: operationResult.queued,
-            operationStatus: operationResult.status,
-            demotedPrimaryCheckout: operationResult.demotedPrimaryCheckout,
-          });
-        } catch (err) {
-          return sendRouteError(c, err);
-        }
-      },
-    )
-    .post(
-      "/:id/squash-merge",
-      zValidator("json", squashMergeThreadSchema.optional()),
-      async (c) => {
-        try {
-          const threadId = c.req.param("id");
-          setDeprecatedEndpointHeaders(c, `/api/v1/threads/${threadId}/operations`);
-          const thread = threadManager.getById(threadId);
-          if (!thread) {
-            return sendRouteError(c, threadNotFoundError(threadId));
-          }
-          const body = c.req.valid("json");
-          const operationResult = await threadManager.requestThreadOperation(threadId, {
-            operation: "squash_merge",
-            options: {
-              commitIfNeeded: body?.commitIfNeeded,
-              includeUnstaged: body?.includeUnstaged,
-              commitMessage: body?.commitMessage,
-              squashMessage: body?.squashMessage,
-              mergeBaseBranch: body?.mergeBaseBranch,
-            },
-          });
-          const workStatus = threadManager.getWorkStatus(threadId);
-          if (!workStatus) {
-            throw invalidRequestError("Thread work status is unavailable");
-          }
-          return c.json({
-            ok: true,
-            merged: false,
-            committed: false,
-            message: operationResult.message,
-            workStatus,
-            queued: operationResult.queued,
-            operationStatus: operationResult.status,
-            demotedPrimaryCheckout: operationResult.demotedPrimaryCheckout,
-          });
         } catch (err) {
           return sendRouteError(c, err);
         }

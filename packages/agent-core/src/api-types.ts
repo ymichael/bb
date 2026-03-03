@@ -170,38 +170,6 @@ export interface ThreadOperationResponse {
   demotedPrimaryCheckout: boolean;
 }
 
-export interface CommitThreadRequest {
-  message?: string;
-  includeUnstaged?: boolean;
-  autoArchiveThreadOnCommit?: boolean;
-}
-
-export interface CommitThreadResponse {
-  ok: true;
-  commitCreated: boolean;
-  message: string;
-  workStatus: ThreadWorkStatus;
-  commitSha?: string;
-}
-
-export interface SquashMergeThreadRequest {
-  commitIfNeeded?: boolean;
-  includeUnstaged?: boolean;
-  commitMessage?: string;
-  squashMessage?: string;
-  mergeBaseBranch?: string;
-  autoArchiveThreadOnCommit?: boolean;
-}
-
-export interface SquashMergeThreadResponse {
-  ok: true;
-  merged: boolean;
-  committed: boolean;
-  message: string;
-  workStatus: ThreadWorkStatus;
-  conflictFiles?: string[];
-}
-
 export interface PrimaryCheckoutStatus {
   projectId: string;
   activeThreadId?: string;
@@ -220,14 +188,6 @@ export interface DemotePrimaryResponse {
   demoted: boolean;
   message: string;
   primaryStatus: PrimaryCheckoutStatus;
-}
-
-export interface CommitProjectResponse {
-  ok: true;
-  commitCreated: boolean;
-  message: string;
-  workStatus: ThreadWorkStatus;
-  commitSha?: string;
 }
 
 export interface ProjectFileSuggestion {

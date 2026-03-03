@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import type { ProviderCommitMessageGenerator, ThreadOrchestrator } from "@beanbag/agent-core";
+import type { ThreadOrchestrator } from "@beanbag/agent-core";
 import type {
   EventRepository,
   ProjectRepository,
@@ -17,7 +17,6 @@ export interface ApiRouteDeps {
   threadManager: ThreadOrchestrator;
   wsManager: WSManager;
   startTime: number;
-  projectCommitMessageGenerator?: ProviderCommitMessageGenerator;
   requestShutdown?: (reason: string) => void;
   requestRestart?: (reason: string) => void;
   shouldRestart?: () => boolean;
@@ -30,7 +29,6 @@ export function createApiRoutes(deps: ApiRouteDeps) {
       createProjectRoutes(deps.projectRepo, undefined, undefined, {
         threadRepo: deps.threadRepo,
         eventRepo: deps.eventRepo,
-        commitMessageGenerator: deps.projectCommitMessageGenerator,
       }),
     )
     .route("/threads", createThreadRoutes(deps.threadManager))

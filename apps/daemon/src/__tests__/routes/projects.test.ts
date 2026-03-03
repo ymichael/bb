@@ -1,8 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { homedir, tmpdir } from "node:os";
-import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { homedir } from "node:os";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { Hono } from "hono";
 import type {
   Project,
@@ -44,10 +43,6 @@ function mockEventRepo(): EventRepository {
   return {
     deleteByThreadId: vi.fn(),
   } as unknown as EventRepository;
-}
-
-function git(cwd: string, ...args: string[]): string {
-  return execFileSync("git", args, { cwd, encoding: "utf8" }).trim();
 }
 
 describe("Project routes", () => {
@@ -342,102 +337,6 @@ describe("Project routes", () => {
       expect(res.status).toBe(500);
       const body = await res.json();
       expect(body.error).toBe("Search failed");
-    });
-  });
-
-  describe("POST /projects/:id/commit", () => {
-    it("forwards includeUnstaged to commit-message generation", async () => {
-      const repoRoot = mkdtempSync(join(tmpdir(), "bb-project-commit-test-"));
-      try {
-        git(repoRoot, "init");
-        git(repoRoot, "config", "user.name", "Beanbag Test");
-        git(repoRoot, "config", "user.email", "beanbag-test@example.com");
-        git(repoRoot, "checkout", "-b", "main");
-
-        writeFileSync(resolve(repoRoot, "README.md"), "initial\n", "utf8");
-        git(repoRoot, "add", "README.md");
-        git(repoRoot, "commit", "-m", "initial");
-
-        writeFileSync(resolve(repoRoot, "README.md"), "initial\nupdated\n", "utf8");
-        git(repoRoot, "add", "README.md");
-
-        (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
-          makeProject({ id: "proj-1", rootPath: repoRoot }),
-        );
-
-        const commitMessageGenerator = vi
-          .fn()
-          .mockResolvedValue("fix: forward includeUnstaged to commit generator");
-        const commitRoutes = createProjectRoutes(
-          projectRepo as any,
-          findProjectFiles as SearchProjectFilesFn,
-          savePromptAttachment as StorePromptAttachmentFn,
-          {
-            threadRepo: threadRepo as any,
-            eventRepo: eventRepo as any,
-            commitMessageGenerator,
-          },
-        );
-        const commitApp = new Hono().route("/projects", commitRoutes);
-
-        const res = await commitApp.request("/projects/proj-1/commit", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ includeUnstaged: false }),
-        });
-
-        expect(res.status).toBe(200);
-        expect(res.headers.get("deprecation")).toBe("true");
-        expect(commitMessageGenerator).toHaveBeenCalledWith({
-          cwd: repoRoot,
-          includeUnstaged: false,
-        });
-      } finally {
-        rmSync(repoRoot, { recursive: true, force: true });
-      }
-    });
-
-    it("returns 500 when commit message generation fails", async () => {
-      const repoRoot = mkdtempSync(join(tmpdir(), "bb-project-commit-test-"));
-      try {
-        git(repoRoot, "init");
-        git(repoRoot, "config", "user.name", "Beanbag Test");
-        git(repoRoot, "config", "user.email", "beanbag-test@example.com");
-        git(repoRoot, "checkout", "-b", "main");
-
-        writeFileSync(resolve(repoRoot, "README.md"), "initial\n", "utf8");
-        git(repoRoot, "add", "README.md");
-        git(repoRoot, "commit", "-m", "initial");
-        writeFileSync(resolve(repoRoot, "README.md"), "initial\nupdated\n", "utf8");
-
-        (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
-          makeProject({ id: "proj-1", rootPath: repoRoot }),
-        );
-
-        const commitRoutes = createProjectRoutes(
-          projectRepo as any,
-          findProjectFiles as SearchProjectFilesFn,
-          savePromptAttachment as StorePromptAttachmentFn,
-          {
-            threadRepo: threadRepo as any,
-            eventRepo: eventRepo as any,
-            commitMessageGenerator: vi.fn().mockResolvedValue(undefined),
-          },
-        );
-        const commitApp = new Hono().route("/projects", commitRoutes);
-
-        const res = await commitApp.request("/projects/proj-1/commit", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ includeUnstaged: true }),
-        });
-
-        expect(res.status).toBe(500);
-        expect(res.headers.get("deprecation")).toBe("true");
-        expect(await res.json()).toEqual({ error: "Failed to auto-generate commit message" });
-      } finally {
-        rmSync(repoRoot, { recursive: true, force: true });
-      }
     });
   });
 

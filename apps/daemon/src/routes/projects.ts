@@ -4,10 +4,8 @@ import { basename, extname, resolve, sep } from "node:path";
 import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import {
-  commitThreadSchema,
   createProjectSchema,
   updateProjectSchema,
-  type ProviderCommitMessageGenerator,
   type Project,
   type ProjectFileSuggestion,
   type UploadedPromptAttachment,
@@ -49,15 +47,6 @@ const ATTACHMENTS_ROOT_PATH = resolve(homedir(), ".beanbag", "attachments");
 const MAX_PROMPT_ATTACHMENT_BYTES = 25 * 1024 * 1024;
 const MAX_PROMPT_IMAGE_ATTACHMENT_BYTES = 10 * 1024 * 1024;
 const IMAGE_EXTENSION_PATTERN = /\.(png|jpe?g|webp|gif|bmp|svg)$/i;
-const DEPRECATION_SUNSET_DATE = "Tue, 30 Jun 2026 00:00:00 GMT";
-
-function setDeprecatedEndpointHeaders(c: {
-  header: (name: string, value: string) => void;
-}, successorPath: string): void {
-  c.header("Deprecation", "true");
-  c.header("Sunset", DEPRECATION_SUNSET_DATE);
-  c.header("Link", `<${successorPath}>; rel=\"successor-version\"`);
-}
 
 function sanitizeFileName(rawName: string): string {
   const base = basename(rawName).trim();
@@ -176,7 +165,6 @@ export function createProjectRoutes(
   deps?: {
     threadRepo?: ThreadRepository;
     eventRepo?: EventRepository;
-    commitMessageGenerator?: ProviderCommitMessageGenerator;
   },
 ) {
   const gitStatusService = new ThreadGitStatusService();
@@ -275,43 +263,6 @@ export function createProjectRoutes(
           defaultBranch,
         });
         return c.json(status);
-      } catch (err) {
-        const message = err instanceof Error ? err.message : "Unknown error";
-        return c.json({ error: message }, 500);
-      }
-    })
-    .post("/:id/commit", zValidator("json", commitThreadSchema.optional()), async (c) => {
-      try {
-        const projectId = c.req.param("id");
-        setDeprecatedEndpointHeaders(c, "/api/v1/threads");
-        const project = projectRepo.getById(c.req.param("id"));
-        if (!project) {
-          return c.json({ error: "Project not found" }, 404);
-        }
-        const body = c.req.valid("json");
-        let message = body?.message;
-        if (!message) {
-          if (!deps?.commitMessageGenerator) {
-            throw new Error("Commit message generation is unavailable");
-          }
-          const generated = await deps.commitMessageGenerator({
-            cwd: project.rootPath,
-            includeUnstaged: body?.includeUnstaged,
-          });
-          message = generated?.trim();
-          if (!message) {
-            throw new Error("Failed to auto-generate commit message");
-          }
-        }
-        const defaultBranch = gitStatusService.detectDefaultBranch(project.rootPath);
-        const result = gitStatusService.commit({
-          workspaceRoot: project.rootPath,
-          projectRoot: project.rootPath,
-          defaultBranch,
-          ...(message ? { message } : {}),
-          includeUnstaged: body?.includeUnstaged,
-        });
-        return c.json(result);
       } catch (err) {
         const message = err instanceof Error ? err.message : "Unknown error";
         return c.json({ error: message }, 500);

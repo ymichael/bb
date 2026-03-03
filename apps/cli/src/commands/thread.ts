@@ -69,16 +69,6 @@ function printThreadOperationResult(result: ThreadOperationResponse): void {
 
 export function registerThreadCommands(program: Command, getUrl: () => string): void {
   const thread = program.command("thread").description("Manage threads");
-  thread.addHelpText(
-    "after",
-    [
-      "",
-      "Migration note:",
-      "  Legacy direct git routes (/threads/:id/commit and /threads/:id/squash-merge)",
-      "  are deprecated. Use `thread commit` and `thread squash-merge`.",
-      "",
-    ].join("\n"),
-  );
   const postThreadMessage = async (
     threadId: string,
     message: string,
