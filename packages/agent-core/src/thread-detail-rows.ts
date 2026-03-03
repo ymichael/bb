@@ -134,6 +134,137 @@ function mergeProvisioningOperations(messages: UIMessage[]): UIMessage[] {
   return merged;
 }
 
+type PrimaryCheckoutAction = "promote" | "demote" | "unknown";
+type PrimaryCheckoutPhase = "started" | "completed" | "failed" | "noop" | "update";
+
+function isPrimaryCheckoutOperation(
+  message: UIMessage,
+): message is Extract<UIMessage, { kind: "operation" }> {
+  return message.kind === "operation" && message.opType === "primary-checkout";
+}
+
+function classifyPrimaryCheckoutOperation(message: Extract<UIMessage, { kind: "operation" }>): {
+  action: PrimaryCheckoutAction;
+  phase: PrimaryCheckoutPhase;
+} {
+  switch (message.title) {
+    case "Promoting primary checkout":
+      return { action: "promote", phase: "started" };
+    case "Promoted to primary checkout":
+      return { action: "promote", phase: "completed" };
+    case "Primary checkout promotion failed":
+      return { action: "promote", phase: "failed" };
+    case "Primary checkout already promoted":
+      return { action: "promote", phase: "noop" };
+    case "Demoting primary checkout":
+      return { action: "demote", phase: "started" };
+    case "Demoted from primary checkout":
+      return { action: "demote", phase: "completed" };
+    case "Primary checkout demotion failed":
+      return { action: "demote", phase: "failed" };
+    case "Primary checkout already demoted":
+      return { action: "demote", phase: "noop" };
+    default: {
+      const normalizedTitle = message.title.toLowerCase();
+      // Operation titles are persisted/read-time open_external; unknown values are intentionally tolerated.
+      if (normalizedTitle.includes("promot")) {
+        return { action: "promote", phase: "update" };
+      }
+      if (normalizedTitle.includes("demot")) {
+        return { action: "demote", phase: "update" };
+      }
+      return { action: "unknown", phase: "update" };
+    }
+  }
+}
+
+function mergePrimaryCheckoutOperations(messages: UIMessage[]): UIMessage[] {
+  const merged: UIMessage[] = [];
+  let active: Array<Extract<UIMessage, { kind: "operation" }>> = [];
+  let activeAction: Exclude<PrimaryCheckoutAction, "unknown"> | null = null;
+
+  const flush = () => {
+    if (active.length === 0) return;
+    if (active.length === 1) {
+      merged.push(active[0]);
+      active = [];
+      activeAction = null;
+      return;
+    }
+
+    const first = active[0];
+    const last = active[active.length - 1];
+    if (!first || !last) {
+      active = [];
+      activeAction = null;
+      return;
+    }
+
+    const details = active
+      .map((message) => message.detail?.trim())
+      .filter((value): value is string => Boolean(value));
+    const uniqueDetailLines = [...new Set(details)];
+
+    merged.push({
+      kind: "operation",
+      id: `${first.id}:primary-checkout:${last.id}`,
+      threadId: first.threadId,
+      sourceSeqStart: Math.min(...active.map((message) => message.sourceSeqStart)),
+      sourceSeqEnd: Math.max(...active.map((message) => message.sourceSeqEnd)),
+      createdAt: Math.max(...active.map((message) => message.createdAt)),
+      turnId: first.turnId ?? last.turnId,
+      opType: "primary-checkout",
+      title: last.title,
+      detail: uniqueDetailLines.length > 0 ? uniqueDetailLines.join("\n") : undefined,
+    });
+
+    active = [];
+    activeAction = null;
+  };
+
+  for (const message of messages) {
+    if (!isPrimaryCheckoutOperation(message)) {
+      flush();
+      merged.push(message);
+      continue;
+    }
+
+    const classified = classifyPrimaryCheckoutOperation(message);
+    if (classified.action === "unknown") {
+      flush();
+      merged.push(message);
+      continue;
+    }
+
+    if (active.length === 0) {
+      active = [message];
+      activeAction = classified.action;
+      if (classified.phase !== "started") {
+        flush();
+      }
+      continue;
+    }
+
+    if (activeAction !== classified.action || classified.phase === "started") {
+      flush();
+      active = [message];
+      activeAction = classified.action;
+      if (classified.phase !== "started") {
+        flush();
+      }
+      continue;
+    }
+
+    active.push(message);
+    if (classified.phase !== "started") {
+      flush();
+    }
+  }
+
+  flush();
+  return merged;
+}
+
 function mergeToolExploringMessages(
   messages: CollapsibleTurnMessage[],
 ): CollapsibleTurnMessage[] {
@@ -211,7 +342,8 @@ export function buildThreadDetailRows(
 ): ThreadDetailRow[] {
   const includeToolGroupMessages = options?.includeToolGroupMessages ?? true;
   const provisioningMergedMessages = mergeProvisioningOperations(messages);
-  const mergedMessages = mergeToolExploringMessages(provisioningMergedMessages);
+  const primaryCheckoutMergedMessages = mergePrimaryCheckoutOperations(provisioningMergedMessages);
+  const mergedMessages = mergeToolExploringMessages(primaryCheckoutMergedMessages);
   const lastAssistantIndexByTurn = new Map<string, number>();
 
   for (const [index, message] of mergedMessages.entries()) {

@@ -17,9 +17,7 @@ export function threadWorkStatusLabel(
     case "dirty_and_committed_unmerged":
       return formatDirtyWorkspaceLabel(status);
     case "committed_unmerged":
-      return status.currentBranch
-        ? `Ahead (${status.currentBranch})`
-        : "Ahead";
+      return "Ahead";
     default:
       return assertNever(status.state);
   }
@@ -36,9 +34,9 @@ export function threadWorkStatusVariant(status: ThreadWorkStatus | undefined): S
     case "dirty_uncommitted":
       return "secondary";
     case "committed_unmerged":
-      return "default";
+      return "outline";
     case "dirty_and_committed_unmerged":
-      return "destructive";
+      return "secondary";
     default:
       return assertNever(status.state);
   }

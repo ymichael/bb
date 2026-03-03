@@ -5,13 +5,20 @@ import { StatusPill, type StatusPillVariant } from "./StatusPill";
 type Status = ThreadStatus;
 
 const variantMap: Record<Status, StatusPillVariant> = {
-  created: "secondary",
-  provisioning: "secondary",
+  created: "outline",
+  provisioning: "outline",
   provisioning_failed: "destructive",
-  active: "default",
+  active: "outline",
   idle: "outline",
 };
 
 export function StatusBadge({ status }: { status: Status }) {
-  return <StatusPill variant={variantMap[status]}>{formatSnakeCaseLabel(status)}</StatusPill>;
+  return (
+    <StatusPill
+      variant={variantMap[status]}
+      className={status === "active" ? "border-transparent bg-foreground text-background" : undefined}
+    >
+      {formatSnakeCaseLabel(status)}
+    </StatusPill>
+  );
 }

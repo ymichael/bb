@@ -103,7 +103,7 @@ export function ProjectMainView() {
       const branch = workspaceStatus.currentBranch;
       return {
         label: branch ? `Ahead (${branch})` : "Ahead",
-        variant: "default",
+        variant: "outline",
         actionable: false,
       };
     }

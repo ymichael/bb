@@ -458,7 +458,7 @@ export function ProjectList({
                                       />
                                       {thread.primaryCheckout?.isActive ? (
                                         <span
-                                          className="absolute -right-0.5 -top-0.5 inline-flex h-2.5 w-2.5 rounded-full border border-sidebar-background bg-emerald-500"
+                                          className="absolute -right-0.5 -top-0.5 inline-flex h-2.5 w-2.5 rounded-full border border-sidebar-background bg-foreground"
                                           aria-label="Primary checkout active"
                                           title="Active in primary checkout"
                                         />

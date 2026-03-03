@@ -74,6 +74,7 @@ import {
 import { openPathInEditor } from "@/lib/api";
 import { getPathCommandForTarget } from "@/lib/open-path-preferences";
 import { StatusPillCommitPopover } from "@/components/shared/StatusPillCommitPopover";
+import { StatusPill, type StatusPillVariant } from "@/components/shared/StatusPill";
 import { WorkspaceChangesList } from "@/components/shared/WorkspaceChangesList";
 import { ArchiveTimestampAction } from "@/components/shared/ArchiveTimestampAction";
 import { ThreadContextWindowIndicator } from "@/components/thread/ThreadContextWindowIndicator";
@@ -775,6 +776,11 @@ export function ThreadDetailView() {
       ? parentThread.title
       : parentThreadId;
   const isPrimaryCheckoutActive = thread.primaryCheckout?.isActive === true;
+  const primaryCheckoutStatusLabel = isPrimaryCheckoutActive ? "Active" : "Not active";
+  const primaryCheckoutStatusVariant: StatusPillVariant = "outline";
+  const primaryCheckoutStatusPillClassName = isPrimaryCheckoutActive
+    ? "border-transparent bg-foreground text-background"
+    : undefined;
   const showWorkspaceStatus =
     Boolean(threadWorkStatus) &&
     !(thread.archivedAt !== undefined && thread.environmentId === "local");
@@ -933,10 +939,13 @@ export function ThreadDetailView() {
                 valueClassName="min-w-0"
                 align="center"
               >
-                <div className="flex w-full items-center justify-between gap-3">
-                  <span className="truncate text-xs text-muted-foreground">
-                    {isPrimaryCheckoutActive ? "Active" : "Not active"}
-                  </span>
+                <div className="flex min-w-0 items-center gap-2">
+                  <StatusPill
+                    variant={primaryCheckoutStatusVariant}
+                    className={primaryCheckoutStatusPillClassName}
+                  >
+                    {primaryCheckoutStatusLabel}
+                  </StatusPill>
                   <button
                     type="button"
                     className="inline-flex shrink-0 items-center rounded-md border border-border/70 px-2 py-1 text-xs font-medium text-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
