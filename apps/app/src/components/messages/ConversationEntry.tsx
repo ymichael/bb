@@ -1128,6 +1128,20 @@ function parseProvisioningDetails(detail: string | undefined): ParsedProvisionin
     }
 
     if (currentAttempt) {
+      const parsedSummary = parseProvisioningSummaryLine(line);
+      if (parsedSummary) {
+        if (!environment && parsedSummary.environment) {
+          environment = parsedSummary.environment;
+        }
+        if (!workspaceRoot && parsedSummary.workspaceRoot) {
+          workspaceRoot = parsedSummary.workspaceRoot;
+        }
+        if (parsedSummary.remainingLine) {
+          additionalLines.push(parsedSummary.remainingLine);
+        }
+        continue;
+      }
+
       if (line.includes("•") && !line.includes(".bb-env-setup")) {
         additionalLines.push(line);
         continue;

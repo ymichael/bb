@@ -601,6 +601,29 @@ describe("ConversationEntry", () => {
     expect(html).not.toContain("worktree • /tmp/worktree •");
   });
 
+  it("does not show additional details when post-setup summary repeats environment and workspace", () => {
+    const message: UIMessage = {
+      ...baseMessage(),
+      kind: "operation",
+      opType: "provisioning",
+      title: "Provisioned Git Worktree Workspace",
+      detail:
+        "Environment: Git Worktree Workspace\n" +
+        ".bb-env-setup.sh • /tmp/worktree • Duration 10200ms\n" +
+        "worktree • /tmp/worktree",
+    };
+
+    const html = renderToStaticMarkup(<ConversationEntry message={message} initialExpanded />);
+    expect(html).toContain("Workspace");
+    expect(html).toContain("/tmp/worktree");
+    expect(html).toContain("Setup status");
+    expect(html).toContain("Completed");
+    expect(html).toContain("Setup time");
+    expect(html).toContain("10.2s");
+    expect(html).not.toContain("Additional details");
+    expect(html).not.toContain("worktree • /tmp/worktree");
+  });
+
   it("renders provisioning metadata and setup output in a structured layout", () => {
     const message: UIMessage = {
       ...baseMessage(),
