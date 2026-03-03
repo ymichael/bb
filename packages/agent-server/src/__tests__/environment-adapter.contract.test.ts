@@ -296,4 +296,50 @@ describe("environment adapter contract", () => {
       }),
     );
   });
+
+  it("keeps full .bb-env-setup.sh failure detail for UI scrolling", () => {
+    const projectRoot = makeTempDir("bb-env-contract-env-setup-full-detail-");
+    initGitRepo(projectRoot);
+
+    const longDetail = `setup-${"x".repeat(1200)}-detail`;
+    writeFileSync(
+      join(projectRoot, ".bb-env-setup.sh"),
+      [
+        "#!/usr/bin/env sh",
+        `printf "%s\\n" "${longDetail}" >&2`,
+        "exit 1",
+      ].join("\n"),
+      "utf-8",
+    );
+    git(projectRoot, "add", ".bb-env-setup.sh");
+    git(projectRoot, "commit", "-m", "add long failing env setup hook");
+
+    const events: EnvironmentProvisioningEvent[] = [];
+    const adapter = createWorktreeEnvironmentAdapter({
+      worktreeRootName: ".beanbag-test-worktrees",
+    });
+    expect(() =>
+      adapter.prepare(
+        createPrepareContext({
+          projectId: "proj-env-setup-full-detail",
+          threadId: "thread-env-setup-full-detail",
+          projectRootPath: projectRoot,
+          onProvisioningEvent: (event) => {
+            events.push(event);
+          },
+        }),
+      )).toThrow(`.bb-env-setup.sh failed: ${longDetail}`);
+
+    const failedEvent = events[1];
+    expect(failedEvent).toEqual(
+      expect.objectContaining({
+        type: "env-setup",
+        status: "failed",
+        scriptPath: ".bb-env-setup.sh",
+      }),
+    );
+    expect(failedEvent?.detail).toBe(longDetail);
+    expect(failedEvent?.detail?.length ?? 0).toBeGreaterThan(400);
+    expect(failedEvent?.detail?.endsWith("…")).toBe(false);
+  });
 });

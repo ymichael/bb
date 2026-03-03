@@ -468,7 +468,7 @@ describe("ConversationEntry", () => {
     expect(html).toContain("new-name.ts");
   });
 
-  it("renders collapsed error rows with concise encountered summary", () => {
+  it("renders collapsed error rows with normalized provisioning title", () => {
     const message: UIMessage = {
       ...baseMessage(),
       kind: "error",
@@ -479,8 +479,59 @@ describe("ConversationEntry", () => {
 
     const html = renderToStaticMarkup(<ConversationEntry message={message} />);
     expect(html).toContain("Error:");
-    expect(html).toContain("Thread provisioning failed for project proj-1");
+    expect(html).toContain("Thread provisioning failed");
+    expect(html).not.toContain("for project proj-1");
     expect(html).not.toContain("Provider RPC error for request 2: Invalid params");
+  });
+
+  it("renders multiline provisioning errors in a preformatted block", () => {
+    const message: UIMessage = {
+      ...baseMessage(),
+      kind: "error",
+      rawType: "system/error",
+      message:
+        "Thread provisioning failed for project proj-1 - line one\\nline two\\nline three",
+    };
+
+    const html = renderToStaticMarkup(<ConversationEntry message={message} initialExpanded />);
+    expect(html).toContain("Thread provisioning failed");
+    expect(html).not.toContain("for project proj-1");
+    expect(html).toContain("<pre");
+    expect(html).toContain("line one");
+    expect(html).toContain("line two");
+    expect(html).toContain("line three");
+  });
+
+  it("splits provisioning error bullet details onto separate lines", () => {
+    const message: UIMessage = {
+      ...baseMessage(),
+      kind: "error",
+      rawType: "system/error",
+      message:
+        "Thread provisioning failed for project proj-1 - " +
+        ".bb-env-setup.sh failed: • turbo 2.8.3\\n@beanbag/daemon:build: ERROR",
+    };
+
+    const html = renderToStaticMarkup(<ConversationEntry message={message} initialExpanded />);
+    expect(html).toContain("<pre");
+    expect(html).toContain(".bb-env-setup.sh failed:\n• turbo 2.8.3");
+    expect(html).toContain("@beanbag/daemon:build: ERROR");
+  });
+
+  it("splits provisioning error bullet details with literal newlines from events", () => {
+    const message: UIMessage = {
+      ...baseMessage(),
+      kind: "error",
+      rawType: "system/error",
+      message:
+        "Thread provisioning failed for project proj-1 - " +
+        ".bb-env-setup.sh failed: • turbo 2.8.3\n@beanbag/daemon:build: ERROR",
+    };
+
+    const html = renderToStaticMarkup(<ConversationEntry message={message} initialExpanded />);
+    expect(html).toContain("<pre");
+    expect(html).toContain(".bb-env-setup.sh failed:\n• turbo 2.8.3");
+    expect(html).toContain("@beanbag/daemon:build: ERROR");
   });
 
   it("renders non-expandable error rows when no details are available", () => {
@@ -511,6 +562,33 @@ describe("ConversationEntry", () => {
     expect(html).toContain("Provisioned");
     expect(html).toContain("Local Workspace");
     expect(html).toContain("lucide-chevron-right");
+  });
+
+  it("renders provisioning metadata and setup output in a structured layout", () => {
+    const message: UIMessage = {
+      ...baseMessage(),
+      kind: "operation",
+      opType: "provisioning",
+      title: "Provisioning Git Worktree Workspace...",
+      detail:
+        "Environment: Git Worktree Workspace\n" +
+        ".bb-env-setup.sh • /tmp/worktree • Timeout 600s\n" +
+        ".bb-env-setup.sh • /tmp/worktree • Timeout 600s • Duration 5988ms • turbo 2.8.3\n" +
+        "@beanbag/daemon:build: ERROR: command failed",
+    };
+
+    const html = renderToStaticMarkup(<ConversationEntry message={message} initialExpanded />);
+    expect(html).toContain("Environment");
+    expect(html).toContain("Git Worktree Workspace");
+    expect(html).toContain("Setup script");
+    expect(html).toContain(".bb-env-setup.sh");
+    expect(html).toContain("Setup status");
+    expect(html).toContain("Failed");
+    expect(html).toContain("Setup time");
+    expect(html).toContain("5988ms");
+    expect(html).toContain("Output");
+    expect(html).toContain("@beanbag/daemon:build: ERROR: command failed");
+    expect(html).not.toContain(".bb-env-setup.sh • /tmp/worktree • Timeout 600s");
   });
 
   it("renders completed primary-checkout operation titles with a subtler tone", () => {

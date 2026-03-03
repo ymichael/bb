@@ -28,6 +28,7 @@ import { ChevronDown, ChevronLeft, ChevronRight, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogClose, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { DetailCard, DetailRow } from "@/components/shared/DetailCard";
 import {
   createLatestInitialExpandedState,
   reduceLatestInitialExpandedState,
@@ -932,6 +933,183 @@ function FileEditRow({
   );
 }
 
+interface ProvisioningSetupAttempt {
+  scriptPath?: string;
+  workspaceRoot?: string;
+  timeout?: string;
+  durationMs?: number;
+  outputLines: string[];
+}
+
+interface ParsedProvisioningDetails {
+  environment?: string;
+  setupAttempt?: ProvisioningSetupAttempt;
+  additionalLines: string[];
+}
+
+function splitNonEmptyLines(value: string | undefined): string[] {
+  if (!value) return [];
+  return value
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+}
+
+function parseProvisioningDurationMs(part: string): number | undefined {
+  const match = part.match(/^Duration\s+(\d+)ms$/i);
+  if (!match?.[1]) return undefined;
+  const durationMs = Number.parseInt(match[1], 10);
+  return Number.isNaN(durationMs) ? undefined : durationMs;
+}
+
+function parseProvisioningTimeout(part: string): string | undefined {
+  const match = part.match(/^Timeout\s+(.+)$/i);
+  return match?.[1]?.trim() || undefined;
+}
+
+function isWorkspaceRootToken(part: string): boolean {
+  return part.startsWith("/") || part.startsWith("~/") || /^[A-Za-z]:[\\/]/.test(part);
+}
+
+function parseProvisioningSetupLine(line: string): ProvisioningSetupAttempt | null {
+  const parts = line
+    .split("•")
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0);
+  if (parts.length === 0 || !parts.some((part) => part.includes(".bb-env-setup"))) {
+    return null;
+  }
+
+  let scriptPath: string | undefined;
+  let workspaceRoot: string | undefined;
+  let timeout: string | undefined;
+  let durationMs: number | undefined;
+  const outputLines: string[] = [];
+
+  for (const part of parts) {
+    if (!scriptPath && part.includes(".bb-env-setup")) {
+      scriptPath = part;
+      continue;
+    }
+
+    if (!workspaceRoot && isWorkspaceRootToken(part)) {
+      workspaceRoot = part;
+      continue;
+    }
+
+    if (!timeout) {
+      const parsedTimeout = parseProvisioningTimeout(part);
+      if (parsedTimeout) {
+        timeout = parsedTimeout;
+        continue;
+      }
+    }
+
+    if (durationMs === undefined) {
+      const parsedDurationMs = parseProvisioningDurationMs(part);
+      if (parsedDurationMs !== undefined) {
+        durationMs = parsedDurationMs;
+        continue;
+      }
+    }
+
+    outputLines.push(part);
+  }
+
+  return {
+    scriptPath,
+    workspaceRoot,
+    timeout,
+    durationMs,
+    outputLines,
+  };
+}
+
+function pickBestProvisioningSetupAttempt(
+  attempts: ProvisioningSetupAttempt[],
+): ProvisioningSetupAttempt | undefined {
+  for (let index = attempts.length - 1; index >= 0; index -= 1) {
+    const attempt = attempts[index];
+    if (!attempt) continue;
+    if (attempt.durationMs !== undefined || attempt.outputLines.length > 0) {
+      return attempt;
+    }
+  }
+  return attempts.length > 0 ? attempts[attempts.length - 1] : undefined;
+}
+
+function parseProvisioningDetails(detail: string | undefined): ParsedProvisioningDetails | null {
+  const lines = splitNonEmptyLines(detail);
+  if (lines.length === 0) return null;
+
+  let environment: string | undefined;
+  const attempts: ProvisioningSetupAttempt[] = [];
+  let currentAttempt: ProvisioningSetupAttempt | undefined;
+  const additionalLines: string[] = [];
+
+  for (const line of lines) {
+    if (line.startsWith("Environment:")) {
+      const nextEnvironment = line.slice("Environment:".length).trim();
+      if (nextEnvironment.length > 0) {
+        environment = nextEnvironment;
+      }
+      continue;
+    }
+
+    const parsedAttempt = parseProvisioningSetupLine(line);
+    if (parsedAttempt) {
+      attempts.push(parsedAttempt);
+      currentAttempt = parsedAttempt;
+      continue;
+    }
+
+    if (currentAttempt) {
+      if (line.includes("•") && !line.includes(".bb-env-setup")) {
+        additionalLines.push(line);
+        continue;
+      }
+      currentAttempt.outputLines.push(line);
+      continue;
+    }
+
+    additionalLines.push(line);
+  }
+
+  const setupAttempt = pickBestProvisioningSetupAttempt(attempts);
+  if (!environment && !setupAttempt && additionalLines.length === 0) {
+    return null;
+  }
+
+  return {
+    environment,
+    setupAttempt,
+    additionalLines,
+  };
+}
+
+function formatDurationLabel(durationMs: number): string {
+  if (durationMs < 1_000) return `${durationMs}ms`;
+  const seconds = durationMs / 1_000;
+  if (seconds < 60) {
+    return `${seconds.toFixed(seconds < 10 ? 2 : 1)}s`;
+  }
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = Math.round(seconds % 60);
+  return `${minutes}m ${remainingSeconds}s`;
+}
+
+function getProvisioningSetupStatus(
+  setupAttempt: ProvisioningSetupAttempt | undefined,
+  isCompleted: boolean,
+): "Failed" | "Completed" | "Running" | undefined {
+  if (!setupAttempt) {
+    return isCompleted ? "Completed" : undefined;
+  }
+  if (setupAttempt.outputLines.length > 0) return "Failed";
+  if (setupAttempt.durationMs !== undefined || isCompleted) return "Completed";
+  return "Running";
+}
+
 function OperationRow({
   message,
   initialExpanded = false,
@@ -988,11 +1166,10 @@ function OperationRow({
   }
 
   if (message.opType === "provisioning") {
-    const detailLines = (message.detail ?? "")
-      .split("\n")
-      .map((line) => line.trim())
-      .filter((line) => line.length > 0);
-    const hasDetails = detailLines.length > 0;
+    const parsedDetails = parseProvisioningDetails(message.detail);
+    const fallbackDetailLines = splitNonEmptyLines(message.detail);
+    const hasParsedDetails = Boolean(parsedDetails);
+    const hasDetails = hasParsedDetails || fallbackDetailLines.length > 0;
     const isCompleted = message.title.startsWith("Provisioned ");
     const environmentLabel = isCompleted
       ? message.title.slice("Provisioned ".length).trim()
@@ -1000,6 +1177,26 @@ function OperationRow({
         ? message.title.slice("Provisioning ".length).replace(/\.\.\.$/, "").trim()
         : "";
     const actionLabel = isCompleted ? "Provisioned" : "Provisioning";
+    const setupAttempt = parsedDetails?.setupAttempt;
+    const setupStatus = getProvisioningSetupStatus(setupAttempt, isCompleted);
+    const outputText = setupAttempt?.outputLines.join("\n").trim();
+    const additionalDetailsText = parsedDetails?.additionalLines.join("\n").trim();
+    const setupTimeLabel = setupAttempt
+      ? setupAttempt.durationMs !== undefined
+        ? `${formatDurationLabel(setupAttempt.durationMs)} (${setupAttempt.durationMs}ms)${
+          setupAttempt.timeout ? ` / timeout ${setupAttempt.timeout}` : ""
+        }`
+        : setupAttempt.timeout
+          ? `Timeout ${setupAttempt.timeout}`
+          : undefined
+      : undefined;
+    const environmentValue = parsedDetails?.environment || environmentLabel || undefined;
+    const setupStatusClassName =
+      setupStatus === "Failed"
+        ? "border-transparent bg-destructive text-destructive-foreground shadow"
+        : setupStatus === "Completed"
+          ? "border-emerald-600/40 bg-emerald-600/10 text-emerald-700 shadow-none dark:text-emerald-300"
+          : "border-border/80 bg-background/70 text-muted-foreground shadow-none";
     const collapsedSummaryContent =
       actionLabel === "Provisioned" && environmentLabel ? (
         <span className="inline-flex min-w-0 items-center gap-1.5">
@@ -1034,13 +1231,67 @@ function OperationRow({
             headerToneClass={headerToneClass}
             onToggle={onToggle}
           >
-            <div className="mt-0.5 space-y-0.5">
-              {detailLines.map((line, index) => (
-                <div key={`${message.id}:${index}`} className="font-mono ui-text-sm text-foreground/80">
-                  {line}
-                </div>
-              ))}
-            </div>
+            {hasParsedDetails ? (
+              <DetailCard className="mt-0.5 border-border/60 bg-background/50">
+                {environmentValue ? (
+                  <DetailRow label="Environment">
+                    <span className="font-mono ui-text-sm text-foreground/90">{environmentValue}</span>
+                  </DetailRow>
+                ) : null}
+                {setupAttempt?.scriptPath ? (
+                  <DetailRow label="Setup script">
+                    <span className="font-mono ui-text-sm text-foreground/90">{setupAttempt.scriptPath}</span>
+                  </DetailRow>
+                ) : null}
+                {setupStatus ? (
+                  <DetailRow label="Setup status">
+                    <Badge
+                      variant="outline"
+                      className={`h-5 rounded px-1.5 font-mono ui-text-2xs ${setupStatusClassName}`}
+                    >
+                      {setupStatus}
+                    </Badge>
+                  </DetailRow>
+                ) : null}
+                {setupTimeLabel ? (
+                  <DetailRow label="Setup time">
+                    <span className="font-mono ui-text-sm text-foreground/85">{setupTimeLabel}</span>
+                  </DetailRow>
+                ) : null}
+                {setupAttempt?.workspaceRoot ? (
+                  <DetailRow label="Workspace">
+                    <span
+                      className="block truncate font-mono ui-text-sm text-muted-foreground/90"
+                      title={setupAttempt.workspaceRoot}
+                    >
+                      {setupAttempt.workspaceRoot}
+                    </span>
+                  </DetailRow>
+                ) : null}
+                {outputText ? (
+                  <DetailRow label="Output" align="start">
+                    <pre className="max-h-[220px] overflow-auto whitespace-pre-wrap break-words rounded-md border border-border/70 bg-background/70 px-2 py-1.5 font-mono ui-text-xs leading-tight text-muted-foreground">
+                      {outputText}
+                    </pre>
+                  </DetailRow>
+                ) : null}
+                {additionalDetailsText ? (
+                  <DetailRow label="Details" align="start">
+                    <pre className="max-h-[220px] overflow-auto whitespace-pre-wrap break-words rounded-md border border-border/70 bg-background/70 px-2 py-1.5 font-mono ui-text-xs leading-tight text-muted-foreground">
+                      {additionalDetailsText}
+                    </pre>
+                  </DetailRow>
+                ) : null}
+              </DetailCard>
+            ) : (
+              <div className="mt-0.5 space-y-0.5">
+                {fallbackDetailLines.map((line, index) => (
+                  <div key={`${message.id}:${index}`} className="font-mono ui-text-sm text-foreground/80">
+                    {line}
+                  </div>
+                ))}
+              </div>
+            )}
           </ExpandableEntryContainer>
         </div>
       </div>
@@ -1238,12 +1489,47 @@ function OperationRow({
   );
 }
 
+function normalizeErrorMessageText(value: string): string {
+  const normalized = value.replaceAll("\r\n", "\n");
+  if (normalized.includes("\n")) return normalized;
+  if (!normalized.includes("\\n") && !normalized.includes("\\r\\n")) return normalized;
+  if (/[A-Za-z]:\\\\/.test(normalized)) return normalized;
+  return normalized.replaceAll("\\r\\n", "\n").replaceAll("\\n", "\n");
+}
+
+function isThreadProvisioningFailureTitle(value: string): boolean {
+  return /^Thread provisioning failed for project\s+.+$/i.test(value.trim());
+}
+
+function normalizeProvisioningErrorDetail(detail: string): string {
+  let normalized = normalizeErrorMessageText(detail).trim();
+  if (!normalized) return normalized;
+  if (!normalized.startsWith(".bb-env-setup.sh failed:")) {
+    return normalized;
+  }
+
+  normalized = normalized.replace(
+    /^(\.bb-env-setup\.sh failed:)\s*•\s*/i,
+    "$1\n• ",
+  );
+  return normalized.replace(/\s+•\s+/g, "\n• ");
+}
+
+function normalizeErrorDetailForDisplay(title: string, detail?: string): string | undefined {
+  const normalized = detail?.trim();
+  if (!normalized) return undefined;
+  if (title === "Thread provisioning failed") {
+    return normalizeProvisioningErrorDetail(normalized);
+  }
+  return normalizeErrorMessageText(normalized).trim();
+}
+
 function parseErrorDisplay(message: UIErrorMessage): {
   title: string;
   detail?: string;
   hint?: string;
 } {
-  const trimmed = message.message.trim();
+  const trimmed = normalizeErrorMessageText(message.message).trim();
   if (!trimmed) {
     return {
       title: "Error event",
@@ -1251,7 +1537,7 @@ function parseErrorDisplay(message: UIErrorMessage): {
   }
 
   const [titleCandidate, ...detailParts] = trimmed.split(" - ");
-  const detailFromDelimiter = detailParts.join(" - ").trim();
+  const detailFromDelimiter = normalizeErrorMessageText(detailParts.join(" - ")).trim();
   const titleFromDelimiter = titleCandidate?.trim();
 
   if (message.rawType === "system/error" && trimmed.startsWith("Project folder not found")) {
@@ -1263,6 +1549,24 @@ function parseErrorDisplay(message: UIErrorMessage): {
     return {
       title: "Project folder is missing",
       detail,
+    };
+  }
+
+  if (
+    titleFromDelimiter &&
+    isThreadProvisioningFailureTitle(titleFromDelimiter)
+  ) {
+    return {
+      title: "Thread provisioning failed",
+      detail: detailFromDelimiter
+        ? normalizeProvisioningErrorDetail(detailFromDelimiter)
+        : undefined,
+    };
+  }
+
+  if (isThreadProvisioningFailureTitle(trimmed)) {
+    return {
+      title: "Thread provisioning failed",
     };
   }
 
@@ -1305,6 +1609,8 @@ function ErrorRow({
       </span>
     </span>
   );
+  const detailText = normalizeErrorDetailForDisplay(display.title, display.detail);
+  const hasMultilineDetail = Boolean(detailText?.includes("\n"));
 
   if (!isExpandable) {
     return (
@@ -1331,10 +1637,16 @@ function ErrorRow({
           onToggle={onToggle}
         >
           <div className="space-y-1 rounded-md border border-destructive/25 bg-destructive/[0.06] px-2 py-1.5 ui-text-sm text-destructive/90">
-            {display.detail ? (
-              <p className="whitespace-pre-wrap break-words">
-                {display.detail}
-              </p>
+            {detailText ? (
+              hasMultilineDetail ? (
+                <pre className="max-h-[320px] overflow-auto whitespace-pre-wrap break-words rounded-md px-1 py-0.5 font-mono ui-text-xs leading-tight text-destructive/90">
+                  {detailText}
+                </pre>
+              ) : (
+                <p className="whitespace-pre-wrap break-words">
+                  {detailText}
+                </p>
+              )
             ) : null}
             {display.hint ? <p>{display.hint}</p> : null}
           </div>

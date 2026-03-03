@@ -190,10 +190,8 @@ function emitProvisioningEvent(
   context.onProvisioningEvent?.(event);
 }
 
-function truncateDetail(message: string, maxLength = 400): string {
-  const normalized = message.trim();
-  if (normalized.length <= maxLength) return normalized;
-  return `${normalized.slice(0, maxLength - 1)}…`;
+function normalizeDetail(message: string): string {
+  return message.trim();
 }
 
 function runOptionalEnvSetupHook(context: EnvironmentPrepareContext, workspaceRoot: string): void {
@@ -243,7 +241,7 @@ function runOptionalEnvSetupHook(context: EnvironmentPrepareContext, workspaceRo
         detail,
       );
     }
-    const message = truncateDetail(result.error.message);
+    const message = normalizeDetail(result.error.message);
     emitProvisioningEvent(context, {
       type: "env-setup",
       status: "failed",
@@ -258,7 +256,7 @@ function runOptionalEnvSetupHook(context: EnvironmentPrepareContext, workspaceRo
   if (result.status !== 0) {
     const stderr = result.stderr?.trim();
     const stdout = result.stdout?.trim();
-    const detail = truncateDetail(stderr || stdout || "unknown error");
+    const detail = normalizeDetail(stderr || stdout || "unknown error");
     emitProvisioningEvent(context, {
       type: "env-setup",
       status: "failed",
