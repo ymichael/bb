@@ -1992,24 +1992,39 @@ export class ThreadManager implements ThreadOrchestrator {
   ): void {
     if (this.provisioningTasks.has(threadId)) return;
 
-    const task = this._provisionThread(threadId, req, opts)
-      .catch((err) => {
-        this._cleanupThreadRuntime(threadId);
-        this._setThreadStatus(threadId, "provisioning_failed", true, {
-          force: true,
-        });
-        this._appendEvent(
-          threadId,
-          "system/error",
-          this._createProvisioningFailureEventData(err, req.projectId),
-        );
-        const message = this._toErrorMessage(err);
-        const reason = opts?.reason ? ` (${opts.reason})` : "";
-        console.error(`[thread ${threadId}] provisioning failed${reason}: ${message}`);
-      })
-      .finally(() => {
-        this.provisioningTasks.delete(threadId);
+    let task: Promise<void>;
+    task = new Promise<void>((resolveTask) => {
+      setImmediate(() => {
+        if (this.provisioningTasks.get(threadId) !== task) {
+          resolveTask();
+          return;
+        }
+
+        void this._provisionThread(threadId, req, opts)
+          .catch((err) => {
+            this._cleanupThreadRuntime(threadId);
+            this._setThreadStatus(threadId, "provisioning_failed", true, {
+              force: true,
+            });
+            this._appendEvent(
+              threadId,
+              "system/error",
+              this._createProvisioningFailureEventData(err, req.projectId),
+            );
+            const message = this._toErrorMessage(err);
+            const reason = opts?.reason ? ` (${opts.reason})` : "";
+            console.error(
+              `[thread ${threadId}] provisioning failed${reason}: ${message}`,
+            );
+          })
+          .finally(() => {
+            if (this.provisioningTasks.get(threadId) === task) {
+              this.provisioningTasks.delete(threadId);
+            }
+            resolveTask();
+          });
       });
+    });
 
     this.provisioningTasks.set(threadId, task);
   }

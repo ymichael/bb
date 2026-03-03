@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { EventEmitter, Readable, Writable } from "node:stream";
 import {
   accessSync,
@@ -190,6 +190,11 @@ describe("ThreadManager", () => {
     );
   });
 
+  afterEach(async () => {
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    await new Promise<void>((resolve) => setImmediate(resolve));
+  });
+
   describe("boot status healing", () => {
     function createBootManager(initialThreads: Thread[]) {
       const threadState = new Map(
@@ -358,6 +363,9 @@ describe("ThreadManager", () => {
       );
 
       await manager.spawn({ projectId: "proj-1" });
+      await vi.waitFor(() => {
+        expect(spawnMock).toHaveBeenCalled();
+      });
 
       expect(spawnMock).toHaveBeenCalledWith(
         "codex",
@@ -393,6 +401,65 @@ describe("ThreadManager", () => {
       expect(threadRepo.create).toHaveBeenCalledWith({
         projectId: "proj-1",
         environmentId: "local",
+      });
+    });
+
+    it("returns before provisioning work starts", async () => {
+      const customEnvironmentAdapter = {
+        info: {
+          id: "worktree",
+          displayName: "Git Worktree Workspace",
+          description: "",
+          capabilities: {
+            isolatedFilesystem: true,
+            ephemeralWorkspace: true,
+            supportsCleanup: true,
+          },
+        },
+        prepare: vi.fn(() => ({
+          cwd: "/tmp/thread-worktree",
+          env: {
+            BB_WORKSPACE_ROOT: "/tmp/thread-worktree",
+            BB_WORKSPACE_MODE: "worktree",
+          },
+          metadata: {
+            mode: "worktree",
+            workspaceRoot: "/tmp/thread-worktree",
+          },
+        })),
+      };
+      const managerWithCustomEnvironment = new ThreadManager(
+        threadRepo as any,
+        eventRepo as any,
+        projectRepo as any,
+        ws as any,
+        createCodexProviderAdapter(),
+        process.env,
+        customEnvironmentAdapter as any,
+      );
+
+      const project = { id: "proj-1", name: "Test", rootPath: "/test", createdAt: 1000, updatedAt: 1000 };
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(project);
+
+      const createdThread = makeThread({
+        id: "t-new",
+        status: "idle",
+        environmentId: "worktree",
+      });
+      (threadRepo.create as ReturnType<typeof vi.fn>).mockReturnValue(createdThread);
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeThread({ id: "t-new", status: "active", environmentId: "worktree" }),
+      );
+
+      const result = await managerWithCustomEnvironment.spawn({
+        projectId: "proj-1",
+        environmentId: "worktree",
+      });
+
+      expect(result.id).toBe("t-new");
+      expect(customEnvironmentAdapter.prepare).not.toHaveBeenCalled();
+      await vi.waitFor(() => {
+        expect(customEnvironmentAdapter.prepare).toHaveBeenCalledTimes(1);
       });
     });
 
@@ -434,7 +501,8 @@ describe("ThreadManager", () => {
         });
 
         const expectedPath = [bbBin, firstBin].join(delimiter);
-        const spawnOptions = (spawnMock as ReturnType<typeof vi.fn>).mock.calls[0]?.[2] as
+        const spawnCall = (spawnMock as ReturnType<typeof vi.fn>).mock.calls.at(-1);
+        const spawnOptions = spawnCall?.[2] as
           | { env?: Record<string, string | undefined> }
           | undefined;
         expect(spawnOptions?.env?.PATH).toBe(expectedPath);
@@ -480,7 +548,8 @@ describe("ThreadManager", () => {
           expect(fakeChild._stdinData.length).toBeGreaterThanOrEqual(2);
         });
 
-        const spawnOptions = (spawnMock as ReturnType<typeof vi.fn>).mock.calls[0]?.[2] as
+        const spawnCall = (spawnMock as ReturnType<typeof vi.fn>).mock.calls.at(-1);
+        const spawnOptions = spawnCall?.[2] as
           | { env?: Record<string, string | undefined> }
           | undefined;
         const injectedPath = spawnOptions?.env?.PATH;
@@ -518,8 +587,9 @@ describe("ThreadManager", () => {
       );
 
       await manager.spawn({ projectId: "proj-1" });
-
-      expect(manager.isActive("t-new")).toBe(true);
+      await vi.waitFor(() => {
+        expect(manager.isActive("t-new")).toBe(true);
+      });
       expect(manager.getActiveCount()).toBe(1);
     });
 
@@ -556,7 +626,9 @@ describe("ThreadManager", () => {
       await manager.spawn({ projectId: "proj-1" });
 
       // Should have written initialize + thread/start to stdin
-      expect(fakeChild._stdinData.length).toBeGreaterThanOrEqual(2);
+      await vi.waitFor(() => {
+        expect(fakeChild._stdinData.length).toBeGreaterThanOrEqual(2);
+      });
 
       // First message: initialize
       const initMsg = JSON.parse(fakeChild._stdinData[0].trim());
@@ -599,11 +671,16 @@ describe("ThreadManager", () => {
       });
 
       await vi.waitFor(() => {
-        expect(fakeChild._stdinData.length).toBe(3);
+        const hasTurnStart = fakeChild._stdinData
+          .map((entry) => JSON.parse(entry.trim()) as { method?: string })
+          .some((entry) => entry.method === "turn/start");
+        expect(hasTurnStart).toBe(true);
       });
 
-      // Should have written initialize + thread/start + turn/start
-      const turnMsg = JSON.parse(fakeChild._stdinData[2].trim());
+      const turnMsg = fakeChild._stdinData
+        .map((entry) => JSON.parse(entry.trim()) as Record<string, unknown>)
+        .find((entry) => entry.method === "turn/start") as Record<string, unknown>;
+      expect(turnMsg).toBeDefined();
       expect(turnMsg.jsonrpc).toBe("2.0");
       expect(turnMsg.method).toBe("turn/start");
       expect(turnMsg.params.threadId).toBe(CODEX_THREAD_ID);
@@ -628,7 +705,16 @@ describe("ThreadManager", () => {
         developerInstructions: "[bb system] test developer instructions",
       });
 
-      const startMsg = JSON.parse(fakeChild._stdinData[1].trim());
+      await vi.waitFor(() => {
+        const hasStart = fakeChild._stdinData
+          .map((entry) => JSON.parse(entry.trim()) as { method?: string })
+          .some((entry) => entry.method === "thread/start");
+        expect(hasStart).toBe(true);
+      });
+      const startMsg = fakeChild._stdinData
+        .map((entry) => JSON.parse(entry.trim()) as Record<string, unknown>)
+        .find((entry) => entry.method === "thread/start") as Record<string, unknown>;
+      expect(startMsg).toBeDefined();
       expect(startMsg.params.baseInstructions).toBe(
         "[bb system] test developer instructions",
       );
@@ -714,7 +800,16 @@ describe("ThreadManager", () => {
         developerInstructions: "[request instructions] add tests",
       });
 
-      const startMsg = JSON.parse(fakeChild._stdinData[1].trim());
+      await vi.waitFor(() => {
+        const hasStart = fakeChild._stdinData
+          .map((entry) => JSON.parse(entry.trim()) as { method?: string })
+          .some((entry) => entry.method === "thread/start");
+        expect(hasStart).toBe(true);
+      });
+      const startMsg = fakeChild._stdinData
+        .map((entry) => JSON.parse(entry.trim()) as Record<string, unknown>)
+        .find((entry) => entry.method === "thread/start") as Record<string, unknown>;
+      expect(startMsg).toBeDefined();
       expect(startMsg.params.baseInstructions).toBe(
         [
           "[project workflow] keep CI green",
@@ -805,28 +900,32 @@ describe("ThreadManager", () => {
         environmentId: "worktree",
       });
 
-      expect(eventRepo.create).toHaveBeenCalledWith(
-        expect.objectContaining({
-          threadId: "t-new",
-          type: "system/provisioning/env_setup",
-          data: expect.objectContaining({
-            status: "started",
-            scriptPath: ".bb-env-setup.sh",
-            timeoutMs: 600000,
+      await vi.waitFor(() => {
+        expect(eventRepo.create).toHaveBeenCalledWith(
+          expect.objectContaining({
+            threadId: "t-new",
+            type: "system/provisioning/env_setup",
+            data: expect.objectContaining({
+              status: "started",
+              scriptPath: ".bb-env-setup.sh",
+              timeoutMs: 600000,
+            }),
           }),
-        }),
-      );
-      expect(eventRepo.create).toHaveBeenCalledWith(
-        expect.objectContaining({
-          threadId: "t-new",
-          type: "system/provisioning/env_setup",
-          data: expect.objectContaining({
-            status: "completed",
-            scriptPath: ".bb-env-setup.sh",
-            durationMs: 42,
+        );
+      });
+      await vi.waitFor(() => {
+        expect(eventRepo.create).toHaveBeenCalledWith(
+          expect.objectContaining({
+            threadId: "t-new",
+            type: "system/provisioning/env_setup",
+            data: expect.objectContaining({
+              status: "completed",
+              scriptPath: ".bb-env-setup.sh",
+              durationMs: 42,
+            }),
           }),
-        }),
-      );
+        );
+      });
     });
 
     it("does not auto-generate spawn titles from input", async () => {
@@ -1085,7 +1184,16 @@ describe("ThreadManager", () => {
       await manager.spawn({ projectId: "proj-1" });
 
       // Only initialize + thread/start, no turn/start
-      expect(fakeChild._stdinData.length).toBe(2);
+      await vi.waitFor(() => {
+        const hasStart = fakeChild._stdinData
+          .map((entry) => JSON.parse(entry.trim()) as { method?: string })
+          .some((entry) => entry.method === "thread/start");
+        expect(hasStart).toBe(true);
+      });
+      const hasTurnStart = fakeChild._stdinData
+        .map((entry) => JSON.parse(entry.trim()) as { method?: string })
+        .some((entry) => entry.method === "turn/start");
+      expect(hasTurnStart).toBe(false);
     });
 
     it("persists initial input on outbound client/thread/start events", async () => {
@@ -1101,14 +1209,16 @@ describe("ThreadManager", () => {
       const input = [{ type: "text", text: "Fix provisioning status UI" }] as const;
       await manager.spawn({ projectId: "proj-1", input: [...input] });
 
-      expect(eventRepo.create).toHaveBeenCalledWith(
-        expect.objectContaining({
-          type: "client/thread/start",
-          data: expect.objectContaining({
-            input,
+      await vi.waitFor(() => {
+        expect(eventRepo.create).toHaveBeenCalledWith(
+          expect.objectContaining({
+            type: "client/thread/start",
+            data: expect.objectContaining({
+              input,
+            }),
           }),
-        }),
-      );
+        );
+      });
     });
 
     it("throws if project not found", async () => {
@@ -2248,7 +2358,9 @@ describe("ThreadManager", () => {
       );
 
       await manager.spawn({ projectId: "proj-1" });
-      expect(manager.isActive("t-new")).toBe(true);
+      await vi.waitFor(() => {
+        expect(manager.isActive("t-new")).toBe(true);
+      });
 
       // Simulate process exiting with code 0
       fakeChild._emitExit(0, null);
@@ -2271,6 +2383,9 @@ describe("ThreadManager", () => {
       const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
       await manager.spawn({ projectId: "proj-1" });
+      await vi.waitFor(() => {
+        expect(manager.isActive("t-new")).toBe(true);
+      });
 
       // Simulate process error
       fakeChild.emit("error", new Error("Process crashed"));
@@ -2301,7 +2416,10 @@ describe("ThreadManager", () => {
         input: [{ type: "text", text: "First" }],
       });
       await vi.waitFor(() => {
-        expect(child1._stdinData.length).toBeGreaterThanOrEqual(3);
+        const hasTurnStart = child1._stdinData
+          .map((entry) => JSON.parse(entry.trim()) as { method?: string })
+          .some((entry) => entry.method === "turn/start");
+        expect(hasTurnStart).toBe(true);
       });
 
       // initialize gets id=1, thread/start gets id=2, turn/start gets id=3
