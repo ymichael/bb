@@ -14,7 +14,7 @@ import {
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import type { ChildProcess } from "node:child_process";
-import type { Thread, ThreadEvent } from "@beanbag/agent-core";
+import { toRecord, type Thread, type ThreadEvent } from "@beanbag/agent-core";
 import type {
   ThreadRepository,
   EventRepository,
@@ -36,6 +36,39 @@ vi.mock("node:child_process", async (importOriginal) => {
 import { spawn as spawnMock } from "node:child_process";
 
 const CODEX_THREAD_ID = "codex-thread-abc-123";
+
+interface ParsedRpcMessage {
+  jsonrpc?: string;
+  method?: string;
+  id?: number;
+  params: Record<string, unknown>;
+}
+
+function parseRpcMessage(raw: string): ParsedRpcMessage {
+  const parsed = toRecord(JSON.parse(raw.trim()));
+  if (!parsed) {
+    return { params: {} };
+  }
+  return {
+    jsonrpc: typeof parsed.jsonrpc === "string" ? parsed.jsonrpc : undefined,
+    method: typeof parsed.method === "string" ? parsed.method : undefined,
+    id: typeof parsed.id === "number" ? parsed.id : undefined,
+    params: toRecord(parsed.params) ?? {},
+  };
+}
+
+function findRpcMessageByMethod(
+  rawMessages: string[],
+  method: string,
+): ParsedRpcMessage {
+  const message = rawMessages
+    .map((entry) => parseRpcMessage(entry))
+    .find((entry) => entry.method === method);
+  if (!message) {
+    throw new Error(`Expected ${method} message in fake child stdin`);
+  }
+  return message;
+}
 
 /**
  * Create a fake ChildProcess with piped stdio streams.
@@ -672,15 +705,12 @@ describe("ThreadManager", () => {
 
       await vi.waitFor(() => {
         const hasTurnStart = fakeChild._stdinData
-          .map((entry) => JSON.parse(entry.trim()) as { method?: string })
+          .map((entry) => parseRpcMessage(entry))
           .some((entry) => entry.method === "turn/start");
         expect(hasTurnStart).toBe(true);
       });
 
-      const turnMsg = fakeChild._stdinData
-        .map((entry) => JSON.parse(entry.trim()) as Record<string, unknown>)
-        .find((entry) => entry.method === "turn/start") as Record<string, unknown>;
-      expect(turnMsg).toBeDefined();
+      const turnMsg = findRpcMessageByMethod(fakeChild._stdinData, "turn/start");
       expect(turnMsg.jsonrpc).toBe("2.0");
       expect(turnMsg.method).toBe("turn/start");
       expect(turnMsg.params.threadId).toBe(CODEX_THREAD_ID);
@@ -707,14 +737,11 @@ describe("ThreadManager", () => {
 
       await vi.waitFor(() => {
         const hasStart = fakeChild._stdinData
-          .map((entry) => JSON.parse(entry.trim()) as { method?: string })
+          .map((entry) => parseRpcMessage(entry))
           .some((entry) => entry.method === "thread/start");
         expect(hasStart).toBe(true);
       });
-      const startMsg = fakeChild._stdinData
-        .map((entry) => JSON.parse(entry.trim()) as Record<string, unknown>)
-        .find((entry) => entry.method === "thread/start") as Record<string, unknown>;
-      expect(startMsg).toBeDefined();
+      const startMsg = findRpcMessageByMethod(fakeChild._stdinData, "thread/start");
       expect(startMsg.params.baseInstructions).toBe(
         "[bb system] test developer instructions",
       );
@@ -802,14 +829,11 @@ describe("ThreadManager", () => {
 
       await vi.waitFor(() => {
         const hasStart = fakeChild._stdinData
-          .map((entry) => JSON.parse(entry.trim()) as { method?: string })
+          .map((entry) => parseRpcMessage(entry))
           .some((entry) => entry.method === "thread/start");
         expect(hasStart).toBe(true);
       });
-      const startMsg = fakeChild._stdinData
-        .map((entry) => JSON.parse(entry.trim()) as Record<string, unknown>)
-        .find((entry) => entry.method === "thread/start") as Record<string, unknown>;
-      expect(startMsg).toBeDefined();
+      const startMsg = findRpcMessageByMethod(fakeChild._stdinData, "thread/start");
       expect(startMsg.params.baseInstructions).toBe(
         [
           "[project workflow] keep CI green",
@@ -1269,6 +1293,44 @@ describe("ThreadManager", () => {
         "status-changed",
         "work-status-changed",
       ]);
+    });
+
+    it("records client/thread/start first and preserves input when spawn setup fails", async () => {
+      const project = { id: "proj-1", name: "Test", rootPath: "/test", createdAt: 1000, updatedAt: 1000 };
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(project);
+
+      const createdThread = makeThread({ id: "t-input-fail", status: "idle" });
+      (threadRepo.create as ReturnType<typeof vi.fn>).mockReturnValue(createdThread);
+      const input = [{ type: "text", text: "Fix the provisioning crash" }] as const;
+
+      (spawnMock as ReturnType<typeof vi.fn>).mockImplementation(() => {
+        throw new Error("ENOENT: codex not found");
+      });
+
+      const result = await manager.spawn({ projectId: "proj-1", input: [...input] });
+      expect(result).toMatchObject({
+        id: "t-input-fail",
+        status: "idle",
+        titleFallback: "Fix the provisioning crash",
+      });
+
+      await vi.waitFor(() => {
+        expect(threadRepo.update).toHaveBeenCalledWith("t-input-fail", {
+          status: "provisioning_failed",
+        });
+      });
+      expect(eventRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "client/thread/start",
+          data: expect.objectContaining({
+            input,
+          }),
+        }),
+      );
+      const persistedEventTypes = (eventRepo.create as ReturnType<typeof vi.fn>).mock.calls
+        .map((call) => (call[0] as { type?: string }).type)
+        .filter((value): value is string => typeof value === "string");
+      expect(persistedEventTypes[0]).toBe("client/thread/start");
     });
 
     it("marks thread provisioning_failed when codex returns RPC error to thread/start", async () => {
@@ -2480,7 +2542,11 @@ describe("ThreadManager", () => {
           projectId: "proj-1",
           input,
         }),
-        { reason: "tell-after-provisioning-failure" },
+        expect.objectContaining({
+          reason: "tell-after-provisioning-failure",
+          source: "tell",
+          initiator: "agent",
+        }),
       );
     });
 
@@ -3408,6 +3474,75 @@ describe("ThreadManager", () => {
     });
   });
 
+  describe("getWorkStatus()", () => {
+    it("keeps worktree status unknown until provisioning completes", () => {
+      const projectRoot = "/tmp/proj-1";
+      const envSetupWorkspaceRoot = "/tmp/worktrees/proj-1/thread-1";
+      const thread = makeThread({
+        id: "thread-1",
+        projectId: "proj-1",
+        status: "provisioning_failed",
+        environmentId: "worktree",
+        title: "Provisioning failure repro",
+      });
+      const mockedStatus = {
+        state: "clean",
+        changedFiles: 0,
+        insertions: 0,
+        deletions: 0,
+        workspaceChangedFiles: 0,
+        workspaceInsertions: 0,
+        workspaceDeletions: 0,
+        hasUncommittedChanges: false,
+        hasCommittedUnmergedChanges: false,
+        aheadCount: 0,
+        behindCount: 0,
+        workspaceRoot: envSetupWorkspaceRoot,
+      };
+      const getStatus = vi.fn().mockReturnValue(mockedStatus);
+      const detectDefaultBranch = vi.fn().mockReturnValue("main");
+      (manager as any).gitStatusService = {
+        getStatus,
+        detectDefaultBranch,
+      };
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue({
+        id: "proj-1",
+        name: "Project",
+        rootPath: projectRoot,
+        createdAt: 1000,
+        updatedAt: 1000,
+      });
+      (eventRepo.getLatestByType as ReturnType<typeof vi.fn>).mockReturnValue(undefined);
+
+      const result = manager.getWorkStatus("thread-1");
+
+      expect(result).toBeUndefined();
+      expect(detectDefaultBranch).not.toHaveBeenCalled();
+      expect(getStatus).not.toHaveBeenCalled();
+
+      (eventRepo.getLatestByType as ReturnType<typeof vi.fn>).mockImplementation(
+        (_threadId: string, type: string) => {
+          if (type !== "system/provisioning/completed") return undefined;
+          return makeEvent({
+            type: "system/provisioning/completed",
+            data: { workspaceRoot: envSetupWorkspaceRoot },
+          });
+        },
+      );
+      const resolvedResult = manager.getWorkStatus("thread-1");
+      expect(detectDefaultBranch).toHaveBeenCalledWith(projectRoot);
+      expect(getStatus).toHaveBeenCalledWith(
+        expect.objectContaining({
+          workspaceRoot: envSetupWorkspaceRoot,
+          projectRoot,
+          defaultBranch: "main",
+        }),
+      );
+      expect(resolvedResult).toStrictEqual(mockedStatus);
+    });
+  });
+
   describe("list()", () => {
     it("delegates to threadRepo with filters", () => {
       const threads = [makeThread({ status: "idle" })];
@@ -3654,6 +3789,18 @@ describe("ThreadManager", () => {
   });
 
   describe("worktree operation broadcasts", () => {
+    beforeEach(() => {
+      (eventRepo.getLatestByType as ReturnType<typeof vi.fn>).mockImplementation(
+        (_threadId: string, type: string) => {
+          if (type !== "system/provisioning/completed") return undefined;
+          return makeEvent({
+            type: "system/provisioning/completed",
+            data: { workspaceRoot: "/tmp/proj-1" },
+          });
+        },
+      );
+    });
+
     it("passes includeUnstaged to provider commit-message generation", async () => {
       const providerCommitMessageGenerator = vi.fn().mockResolvedValue("feat: generated message");
       const autogenManager = new ThreadManager(
@@ -4132,6 +4279,93 @@ describe("ThreadManager", () => {
   });
 
   describe("getTimeline()", () => {
+    it("projects start-first provisioning failure into user, provisioning, and error rows", () => {
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeThread({ status: "provisioning_failed" }),
+      );
+      (eventRepo.getLatestSeq as ReturnType<typeof vi.fn>).mockReturnValue(5);
+      (eventRepo.listByThread as ReturnType<typeof vi.fn>).mockReturnValue([
+        makeEvent({
+          seq: 1,
+          type: "client/thread/start",
+          data: {
+            direction: "outbound",
+            source: "spawn",
+            initiator: "agent",
+            input: [{ type: "text", text: "Fix env setup script regression" }],
+            request: {
+              method: "thread/start",
+              params: {},
+            },
+            execution: {},
+          },
+        }),
+        makeEvent({
+          seq: 2,
+          type: "system/provisioning/started",
+          data: {
+            environmentId: "worktree",
+            environmentDisplayName: "Git Worktree Workspace",
+          },
+        }),
+        makeEvent({
+          seq: 3,
+          type: "system/provisioning/env_setup",
+          data: {
+            status: "started",
+            scriptPath: ".bb-env-setup.sh",
+            workspaceRoot: "/tmp/worktree",
+            timeoutMs: 600000,
+          },
+        }),
+        makeEvent({
+          seq: 4,
+          type: "system/provisioning/env_setup",
+          data: {
+            status: "failed",
+            scriptPath: ".bb-env-setup.sh",
+            workspaceRoot: "/tmp/worktree",
+            timeoutMs: 600000,
+            durationMs: 1593,
+            detail: "pnpm build failed",
+          },
+        }),
+        makeEvent({
+          seq: 5,
+          type: "system/error",
+          data: {
+            code: "thread_provisioning_failed",
+            message: "Thread provisioning failed for project proj-1",
+            detail: "pnpm build failed",
+          },
+        }),
+      ]);
+
+      const timeline = manager.getTimeline("thread-1");
+      const messageRows = timeline.rows.filter(
+        (row): row is Extract<(typeof timeline.rows)[number], { kind: "message" }> =>
+          row.kind === "message",
+      );
+
+      expect(messageRows).toHaveLength(3);
+      expect(messageRows[0]?.message.kind).toBe("user");
+      if (messageRows[0]?.message.kind === "user") {
+        expect(messageRows[0].message.text).toContain("Fix env setup script regression");
+      }
+
+      expect(messageRows[1]?.message.kind).toBe("operation");
+      if (messageRows[1]?.message.kind === "operation") {
+        expect(messageRows[1].message.opType).toBe("provisioning");
+        expect(messageRows[1].message.title).toContain("Provisioning");
+      }
+
+      expect(messageRows[2]?.message.kind).toBe("error");
+      if (messageRows[2]?.message.kind === "error") {
+        expect(messageRows[2].message.message).toContain("Thread provisioning failed");
+        expect(messageRows[2].message.message).toContain("pnpm build failed");
+      }
+    });
+
     it("includes provider thread/name/updated rows in the projected timeline", () => {
       (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
         makeThread({ status: "idle" }),

@@ -606,7 +606,7 @@ export class ThreadManager implements ThreadOrchestrator {
 
       for (const thread of projectThreads) {
         const workspaceRoot = this._resolveThreadWorkspaceRoot(thread, project.rootPath);
-        if (!existsSync(workspaceRoot) || workspaceRoot === project.rootPath) {
+        if (!workspaceRoot || !existsSync(workspaceRoot) || workspaceRoot === project.rootPath) {
           continue;
         }
 
@@ -778,7 +778,11 @@ export class ThreadManager implements ThreadOrchestrator {
     this._scheduleProvisioning(
       thread.id,
       { ...req, environmentId },
-      { rootPathHint: project.rootPath },
+      {
+        rootPathHint: project.rootPath,
+        source: "spawn",
+        initiator: "agent",
+      },
     );
     const hydratedThread = this._withPrimaryCheckoutState(thread);
     const promptTitleFallback = this._derivePromptFallbackTitle(req.input);
@@ -952,6 +956,8 @@ export class ThreadManager implements ThreadOrchestrator {
         },
         {
           reason: "tell-after-provisioning-failure",
+          source: "tell",
+          initiator: context.initiator,
         },
       );
       return;
@@ -1379,6 +1385,13 @@ export class ThreadManager implements ThreadOrchestrator {
       throw projectNotFoundError(thread.projectId);
     }
     const workspaceRoot = this._resolveThreadWorkspaceRoot(thread, project.rootPath);
+    if (!workspaceRoot) {
+      throw invalidRequestError(
+        thread.environmentId === "worktree"
+          ? "Thread worktree is unavailable; reprovision the thread first"
+          : "Thread workspace is unavailable",
+      );
+    }
     if (thread.environmentId === "worktree") {
       const defaultBranch = this.gitStatusService.detectDefaultBranch(project.rootPath);
       const status = this.gitStatusService.getStatus({
@@ -1520,6 +1533,13 @@ export class ThreadManager implements ThreadOrchestrator {
       throw projectNotFoundError(thread.projectId);
     }
     const workspaceRoot = this._resolveThreadWorkspaceRoot(thread, project.rootPath);
+    if (!workspaceRoot) {
+      throw invalidRequestError(
+        thread.environmentId === "worktree"
+          ? "Thread worktree is unavailable; reprovision the thread first"
+          : "Thread workspace is unavailable",
+      );
+    }
     const defaultBranch = this.gitStatusService.detectDefaultBranch(project.rootPath);
     let message = request?.message?.trim();
     if (!message) {
@@ -1617,7 +1637,7 @@ export class ThreadManager implements ThreadOrchestrator {
     }
 
     const workspaceRoot = this._resolveThreadWorkspaceRoot(thread, project.rootPath);
-    if (!existsSync(workspaceRoot)) {
+    if (!workspaceRoot || !existsSync(workspaceRoot)) {
       throw invalidRequestError("Thread worktree is unavailable; reprovision the thread first");
     }
 
@@ -1822,6 +1842,9 @@ export class ThreadManager implements ThreadOrchestrator {
 
     let committed = false;
     const workspaceRoot = this._resolveThreadWorkspaceRoot(thread, project.rootPath);
+    if (!workspaceRoot) {
+      throw invalidRequestError("Thread worktree is unavailable; reprovision the thread first");
+    }
     const defaultBranch = this.gitStatusService.detectDefaultBranch(project.rootPath);
     const requestedMergeBaseBranch = request?.mergeBaseBranch?.trim() || undefined;
     const before = this.gitStatusService.getStatus({
@@ -1988,7 +2011,12 @@ export class ThreadManager implements ThreadOrchestrator {
   private _scheduleProvisioning(
     threadId: string,
     req: SpawnThreadRequest,
-    opts?: { rootPathHint?: string; reason?: string },
+    opts?: {
+      rootPathHint?: string;
+      reason?: string;
+      source?: "spawn" | "tell";
+      initiator?: ThreadTurnInitiator;
+    },
   ): void {
     if (this.provisioningTasks.has(threadId)) return;
 
@@ -2032,7 +2060,11 @@ export class ThreadManager implements ThreadOrchestrator {
   private async _provisionThread(
     threadId: string,
     req: SpawnThreadRequest,
-    opts?: { rootPathHint?: string },
+    opts?: {
+      rootPathHint?: string;
+      source?: "spawn" | "tell";
+      initiator?: ThreadTurnInitiator;
+    },
   ): Promise<void> {
     const thread = this.threadRepo.getById(threadId);
     if (thread?.archivedAt !== undefined) return;
@@ -2041,6 +2073,31 @@ export class ThreadManager implements ThreadOrchestrator {
     if (!project) {
       throw projectNotFoundError(req.projectId);
     }
+
+    const requestedInput = req.input ?? [];
+    const preProvisionDeveloperInstructions = this._buildDeveloperInstructions({
+      projectWorkflowInstructions: project.workflowInstructions,
+      requestDeveloperInstructions: req.developerInstructions,
+    });
+    const preProvisionThreadStartParams = this.provider.createThreadStartParams(
+      preProvisionDeveloperInstructions
+        ? { ...req, developerInstructions: preProvisionDeveloperInstructions }
+        : req,
+      this._buildProviderThreadContext({
+        threadId,
+        projectId: req.projectId,
+      }),
+    );
+    this._persistOutboundStartEvent(
+      threadId,
+      "client/thread/start",
+      preProvisionThreadStartParams,
+      requestedInput,
+      {
+        source: opts?.source ?? "spawn",
+        initiator: opts?.initiator ?? "agent",
+      },
+    );
 
     // Ensure provisioning starts from a clean runtime state.
     this._cleanupThreadRuntime(threadId);
@@ -2092,7 +2149,6 @@ export class ThreadManager implements ThreadOrchestrator {
     if (hydratedThread) {
       this._invalidateThreadWorkStatus(hydratedThread);
     }
-    const requestedInput = req.input ?? [];
     const providerInput = this._normalizePromptInputForProvider(requestedInput);
 
     const effectiveDeveloperInstructions = this._buildDeveloperInstructions({
@@ -2118,16 +2174,6 @@ export class ThreadManager implements ThreadOrchestrator {
         threadId,
         projectId: req.projectId,
       }),
-    );
-    this._persistOutboundStartEvent(
-      threadId,
-      "client/thread/start",
-      threadStartParams,
-      requestedInput,
-      {
-        source: "spawn",
-        initiator: "agent",
-      },
     );
     const providerThreadId = await this._sendRequestAndAwaitThreadId(
       threadId,
@@ -2726,6 +2772,13 @@ export class ThreadManager implements ThreadOrchestrator {
     if (!project) return thread;
 
     const workspaceRoot = this._resolveThreadWorkspaceRoot(thread, project.rootPath);
+    if (!workspaceRoot) {
+      const hydrated: Thread = {
+        ...thread,
+        provisioningState: this._readProvisioningState(thread.id),
+      };
+      return this._withPrimaryCheckoutState(hydrated);
+    }
     const defaultBranch = this.gitStatusService.detectDefaultBranch(project.rootPath);
     const workspaceStatus = this.gitStatusService.getStatus({
       workspaceRoot,
@@ -2811,23 +2864,40 @@ export class ThreadManager implements ThreadOrchestrator {
     return this._normalizeThreadTitle(firstPromptText);
   }
 
-  private _resolveThreadWorkspaceRoot(thread: Thread, projectRoot: string): string {
+  private _resolveThreadWorkspaceRoot(thread: Thread, projectRoot: string): string | undefined {
+    if (thread.environmentId === "worktree") {
+      const completedWorkspaceRoot = this._readCompletedProvisioningWorkspaceRoot(thread.id);
+      if (!completedWorkspaceRoot) {
+        return undefined;
+      }
+      const runtime = this.environmentRuntimes.get(thread.id);
+      if (runtime?.session?.cwd) {
+        return runtime.session.cwd;
+      }
+      return completedWorkspaceRoot;
+    }
+
     const runtime = this.environmentRuntimes.get(thread.id);
     if (runtime?.session?.cwd) {
       return runtime.session.cwd;
     }
 
-    const latestProvisioningCompleted = this.eventRepo.getLatestByType(
-      thread.id,
-      "system/provisioning/completed",
-    );
-    if (latestProvisioningCompleted) {
-      const data = toRecord(latestProvisioningCompleted.data);
-      const workspaceRoot = getStringField(data, "workspaceRoot");
-      if (workspaceRoot) return workspaceRoot;
+    const completedWorkspaceRoot = this._readCompletedProvisioningWorkspaceRoot(thread.id);
+    if (completedWorkspaceRoot) {
+      return completedWorkspaceRoot;
     }
 
     return projectRoot;
+  }
+
+  private _readCompletedProvisioningWorkspaceRoot(threadId: string): string | undefined {
+    const provisioningEvent = this.eventRepo.getLatestByType(
+      threadId,
+      "system/provisioning/completed",
+    );
+    if (!provisioningEvent) return undefined;
+    const data = toRecord(provisioningEvent.data);
+    return getStringField(data, "workspaceRoot");
   }
 
   private _readProvisioningState(threadId: string): ThreadProvisioningState | undefined {
@@ -2869,6 +2939,7 @@ export class ThreadManager implements ThreadOrchestrator {
     const project = this.projectRepo.getById(thread.projectId);
     if (!project) return;
     const workspaceRoot = this._resolveThreadWorkspaceRoot(thread, project.rootPath);
+    if (!workspaceRoot) return;
     this.gitStatusService.invalidate(workspaceRoot);
   }
 
@@ -2878,6 +2949,7 @@ export class ThreadManager implements ThreadOrchestrator {
 
     if (thread.environmentId === "worktree") {
       const workspaceRoot = this._resolveThreadWorkspaceRoot(thread, project.rootPath);
+      if (!workspaceRoot) return;
       const defaultBranch = this.gitStatusService.detectDefaultBranch(project.rootPath);
       const workspaceStatus = this.gitStatusService.getStatus({
         workspaceRoot,
