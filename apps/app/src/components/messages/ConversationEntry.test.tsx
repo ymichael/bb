@@ -366,6 +366,31 @@ describe("ConversationEntry", () => {
     expect(html).not.toContain("Edited 1 file");
   });
 
+  it("uses unique files for collapsed '+N more' file-edit summaries", () => {
+    const message: UIMessage = {
+      ...baseMessage(),
+      kind: "file-edit",
+      callId: "edit-dedupe",
+      status: "completed",
+      changes: [
+        {
+          path: "/repo/src/same-file.ts",
+          kind: "update",
+          diff: "@@ -1 +1 @@\n-const a = 1;\n+const a = 2;",
+        },
+        {
+          path: "/repo/src/same-file.ts",
+          kind: "update",
+          diff: "@@ -2 +2 @@\n-const b = 1;\n+const b = 2;",
+        },
+      ],
+    };
+
+    const html = renderToStaticMarkup(<ConversationEntry message={message} />);
+    expect(html).toContain("same-file.ts");
+    expect(html).not.toContain("+1 more");
+  });
+
   it("renders file-add summary as 'Created <filename>'", () => {
     const message: UIMessage = {
       ...baseMessage(),

@@ -340,6 +340,117 @@ describe("buildThreadDetailRows", () => {
     expect(rows[1].message.calls).toHaveLength(2);
   });
 
+  it("merges consecutive file-edit rows and preserves inline diff entries", () => {
+    const messages: UIMessage[] = [
+      {
+        ...baseMessage("assistant-1", 1),
+        kind: "assistant-text",
+        turnId: "turn-1",
+        text: "Applying changes",
+        status: "completed",
+      },
+      {
+        ...baseMessage("file-1", 2),
+        kind: "file-edit",
+        turnId: "turn-1",
+        callId: "edit-1",
+        status: "completed",
+        changes: [
+          {
+            path: "/repo/src/new-file.ts",
+            kind: "add",
+            diff: "@@ -0,0 +1 @@\n+export const created = true;",
+          },
+        ],
+      },
+      {
+        ...baseMessage("file-2", 3),
+        kind: "file-edit",
+        turnId: "turn-1",
+        callId: "edit-2",
+        status: "completed",
+        changes: [
+          {
+            path: "/repo/src/old-file.ts",
+            kind: "delete",
+            diff: "@@ -1 +0,0 @@\n-export const removed = true;",
+          },
+        ],
+      },
+    ];
+
+    const rows = buildThreadDetailRows(messages);
+    expect(rows).toHaveLength(2);
+    expect(rows[0]?.kind).toBe("message");
+    expect(rows[1]?.kind).toBe("message");
+    if (rows[1]?.kind !== "message") return;
+    expect(rows[1].message.kind).toBe("file-edit");
+    if (rows[1].message.kind !== "file-edit") return;
+    expect(rows[1].message.changes).toHaveLength(2);
+    expect(rows[1].message.changes.map((change) => change.path)).toEqual([
+      "/repo/src/new-file.ts",
+      "/repo/src/old-file.ts",
+    ]);
+  });
+
+  it("merges consecutive file-edit rows inside tool groups", () => {
+    const messages: UIMessage[] = [
+      {
+        ...baseMessage("user-1", 1),
+        kind: "user",
+        turnId: "turn-1",
+        text: "apply the patch",
+      },
+      {
+        ...baseMessage("file-1", 2),
+        kind: "file-edit",
+        turnId: "turn-1",
+        callId: "edit-1",
+        status: "completed",
+        changes: [
+          {
+            path: "/repo/src/new-file.ts",
+            kind: "add",
+            diff: "@@ -0,0 +1 @@\n+export const created = true;",
+          },
+        ],
+      },
+      {
+        ...baseMessage("file-2", 3),
+        kind: "file-edit",
+        turnId: "turn-1",
+        callId: "edit-2",
+        status: "completed",
+        changes: [
+          {
+            path: "/repo/src/old-file.ts",
+            kind: "delete",
+            diff: "@@ -1 +0,0 @@\n-export const removed = true;",
+          },
+        ],
+      },
+      {
+        ...baseMessage("assistant-1", 4),
+        kind: "assistant-text",
+        turnId: "turn-1",
+        text: "done",
+        status: "completed",
+      },
+    ];
+
+    const rows = buildThreadDetailRows(messages);
+    expect(rows.map((row) => row.kind)).toEqual(["message", "tool-group", "message"]);
+
+    const group = rows.find((row) => row.kind === "tool-group");
+    expect(group).toBeDefined();
+    if (!group || group.kind !== "tool-group") return;
+    expect(group.summaryCount).toBe(2);
+    expect(group.messages).toHaveLength(1);
+    expect(group.messages[0]?.kind).toBe("file-edit");
+    if (group.messages[0]?.kind !== "file-edit") return;
+    expect(group.messages[0].changes).toHaveLength(2);
+  });
+
   it("merges consecutive provisioning operations into a single row", () => {
     const messages: UIMessage[] = [
       {

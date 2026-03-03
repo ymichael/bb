@@ -111,6 +111,18 @@ function fileNameFromPath(path: string): string {
   return candidate && candidate.length > 0 ? candidate : path;
 }
 
+function fileChangeIdentity(change: UIFileEditMessage["changes"][number]): string {
+  return (change.movePath ?? change.path).replaceAll("\\", "/");
+}
+
+function uniqueChangedFileCount(changes: UIFileEditMessage["changes"]): number {
+  const files = new Set<string>();
+  for (const change of changes) {
+    files.add(fileChangeIdentity(change));
+  }
+  return files.size;
+}
+
 type FileChangeAction = "created" | "deleted" | "renamed" | "edited";
 
 function normalizeToken(value: string | undefined): string {
@@ -817,7 +829,11 @@ function FileEditRow({
   const firstMoveFileName = firstChange?.movePath
     ? fileNameFromPath(firstChange.movePath)
     : undefined;
-  const extraCount = Math.max(0, message.changes.length - 1);
+  const uniqueFileCount = useMemo(
+    () => uniqueChangedFileCount(message.changes),
+    [message.changes],
+  );
+  const extraCount = Math.max(0, uniqueFileCount - 1);
   const collapsedFileLabel =
     firstMoveFileName && extraCount === 0
       ? `${firstFileName} → ${firstMoveFileName}`
@@ -856,7 +872,7 @@ function FileEditRow({
         ? "Failed to apply file changes"
         : message.status === "interrupted"
           ? "Declined file changes"
-          : `${actionLabel} ${message.changes.length === 1 ? "file" : "files"}`
+          : `${actionLabel} ${uniqueFileCount === 1 ? "file" : "files"}`
     : `${actionLabel} ${collapsedFileLabel}`;
   const collapsedSummaryContent = isExpanded ? (
     title

@@ -1,3 +1,4 @@
+import { assertNever } from "./assert-never.js";
 import type { UIMessage } from "./ui-message.js";
 
 type CollapsibleTurnMessage = UIMessage;
@@ -38,6 +39,12 @@ function isToolExploringMessage(
   message: CollapsibleTurnMessage,
 ): message is Extract<UIMessage, { kind: "tool-exploring" }> {
   return message.kind === "tool-exploring";
+}
+
+function isFileEditMessage(
+  message: CollapsibleTurnMessage,
+): message is Extract<UIMessage, { kind: "file-edit" }> {
+  return message.kind === "file-edit";
 }
 
 function isProvisioningOperation(
@@ -265,11 +272,36 @@ function mergePrimaryCheckoutOperations(messages: UIMessage[]): UIMessage[] {
   return merged;
 }
 
-function mergeToolExploringMessages(
+function mergeFileEditStatus(
+  left: Extract<UIMessage, { kind: "file-edit" }>["status"],
+  right: Extract<UIMessage, { kind: "file-edit" }>["status"],
+): Extract<UIMessage, { kind: "file-edit" }>["status"] {
+  const statusPriority = (status: Extract<UIMessage, { kind: "file-edit" }>["status"]): number => {
+    switch (status) {
+      case "completed":
+        return 0;
+      case "interrupted":
+        return 1;
+      case "pending":
+        return 2;
+      case "error":
+        return 3;
+      default:
+        return assertNever(status);
+    }
+  };
+
+  return statusPriority(left) >= statusPriority(right) ? left : right;
+}
+
+function mergeConsecutiveToolActivityMessages(
   messages: CollapsibleTurnMessage[],
 ): CollapsibleTurnMessage[] {
   const merged: CollapsibleTurnMessage[] = [];
-  let active: Extract<UIMessage, { kind: "tool-exploring" }> | null = null;
+  let active:
+    | Extract<UIMessage, { kind: "tool-exploring" }>
+    | Extract<UIMessage, { kind: "file-edit" }>
+    | null = null;
 
   const flush = () => {
     if (!active) return;
@@ -278,40 +310,85 @@ function mergeToolExploringMessages(
   };
 
   for (const message of messages) {
-    if (!isToolExploringMessage(message)) {
+    if (!isToolExploringMessage(message) && !isFileEditMessage(message)) {
       flush();
       merged.push(message);
       continue;
     }
 
     if (!active) {
-      active = {
-        ...message,
-        calls: [...message.calls],
-      };
+      active = isToolExploringMessage(message)
+        ? {
+            ...message,
+            calls: [...message.calls],
+          }
+        : {
+            ...message,
+            changes: message.changes.map((change) => ({ ...change })),
+          };
       continue;
     }
 
     if ((active.turnId ?? null) !== (message.turnId ?? null)) {
       flush();
-      active = {
-        ...message,
-        calls: [...message.calls],
-      };
+      active = isToolExploringMessage(message)
+        ? {
+            ...message,
+            calls: [...message.calls],
+          }
+        : {
+            ...message,
+            changes: message.changes.map((change) => ({ ...change })),
+          };
       continue;
     }
 
-    active.calls = [...active.calls, ...message.calls];
-    active.sourceSeqStart = Math.min(active.sourceSeqStart, message.sourceSeqStart);
-    active.sourceSeqEnd = Math.max(active.sourceSeqEnd, message.sourceSeqEnd);
-    active.createdAt = Math.max(active.createdAt, message.createdAt);
-    if (!active.turnId && message.turnId) {
-      active.turnId = message.turnId;
+    if (isToolExploringMessage(active) && isToolExploringMessage(message)) {
+      active.calls = [...active.calls, ...message.calls];
+      active.sourceSeqStart = Math.min(active.sourceSeqStart, message.sourceSeqStart);
+      active.sourceSeqEnd = Math.max(active.sourceSeqEnd, message.sourceSeqEnd);
+      active.createdAt = Math.max(active.createdAt, message.createdAt);
+      if (!active.turnId && message.turnId) {
+        active.turnId = message.turnId;
+      }
+      active.status =
+        active.status === "pending" || message.status === "pending"
+          ? "pending"
+          : "completed";
+      continue;
     }
-    active.status =
-      active.status === "pending" || message.status === "pending"
-        ? "pending"
-        : "completed";
+
+    if (isFileEditMessage(active) && isFileEditMessage(message)) {
+      active.changes = [
+        ...active.changes,
+        ...message.changes.map((change) => ({ ...change })),
+      ];
+      active.sourceSeqStart = Math.min(active.sourceSeqStart, message.sourceSeqStart);
+      active.sourceSeqEnd = Math.max(active.sourceSeqEnd, message.sourceSeqEnd);
+      active.createdAt = Math.max(active.createdAt, message.createdAt);
+      if (!active.turnId && message.turnId) {
+        active.turnId = message.turnId;
+      }
+      active.status = mergeFileEditStatus(active.status, message.status);
+      if (message.stdout) {
+        active.stdout = message.stdout;
+      }
+      if (message.stderr) {
+        active.stderr = message.stderr;
+      }
+      continue;
+    }
+
+    flush();
+    active = isToolExploringMessage(message)
+      ? {
+          ...message,
+          calls: [...message.calls],
+        }
+      : {
+          ...message,
+          changes: message.changes.map((change) => ({ ...change })),
+        };
   }
 
   flush();
@@ -322,6 +399,9 @@ function getToolGroupSummaryCount(messages: CollapsibleTurnMessage[]): number {
   return messages.reduce((count, message) => {
     if (message.kind === "tool-exploring") {
       return count + Math.max(1, message.calls.length);
+    }
+    if (message.kind === "file-edit") {
+      return count + Math.max(1, message.changes.length);
     }
     return count + 1;
   }, 0);
@@ -343,7 +423,7 @@ export function buildThreadDetailRows(
   const includeToolGroupMessages = options?.includeToolGroupMessages ?? true;
   const provisioningMergedMessages = mergeProvisioningOperations(messages);
   const primaryCheckoutMergedMessages = mergePrimaryCheckoutOperations(provisioningMergedMessages);
-  const mergedMessages = mergeToolExploringMessages(primaryCheckoutMergedMessages);
+  const mergedMessages = mergeConsecutiveToolActivityMessages(primaryCheckoutMergedMessages);
   const lastAssistantIndexByTurn = new Map<string, number>();
 
   for (const [index, message] of mergedMessages.entries()) {
@@ -392,7 +472,7 @@ export function buildThreadDetailRows(
 
     if (turnId && collapseGroup && index === collapseGroup.firstIndex) {
       const mergedGroupMessages = includeToolGroupMessages
-        ? mergeToolExploringMessages(collapseGroup.messages)
+        ? mergeConsecutiveToolActivityMessages(collapseGroup.messages)
         : [];
       const { sourceSeqStart, sourceSeqEnd } = getSourceSeqRange(collapseGroup.messages);
       rows.push({
