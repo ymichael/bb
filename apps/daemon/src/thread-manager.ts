@@ -778,11 +778,7 @@ export class ThreadManager implements ThreadOrchestrator {
     this._scheduleProvisioning(
       thread.id,
       { ...req, environmentId },
-      {
-        rootPathHint: project.rootPath,
-        source: "spawn",
-        initiator: "agent",
-      },
+      { rootPathHint: project.rootPath },
     );
     const hydratedThread = this._withPrimaryCheckoutState(thread);
     const promptTitleFallback = this._derivePromptFallbackTitle(req.input);
@@ -956,8 +952,6 @@ export class ThreadManager implements ThreadOrchestrator {
         },
         {
           reason: "tell-after-provisioning-failure",
-          source: "tell",
-          initiator: context.initiator,
         },
       );
       return;
@@ -2011,12 +2005,7 @@ export class ThreadManager implements ThreadOrchestrator {
   private _scheduleProvisioning(
     threadId: string,
     req: SpawnThreadRequest,
-    opts?: {
-      rootPathHint?: string;
-      reason?: string;
-      source?: "spawn" | "tell";
-      initiator?: ThreadTurnInitiator;
-    },
+    opts?: { rootPathHint?: string; reason?: string },
   ): void {
     if (this.provisioningTasks.has(threadId)) return;
 
@@ -2060,11 +2049,7 @@ export class ThreadManager implements ThreadOrchestrator {
   private async _provisionThread(
     threadId: string,
     req: SpawnThreadRequest,
-    opts?: {
-      rootPathHint?: string;
-      source?: "spawn" | "tell";
-      initiator?: ThreadTurnInitiator;
-    },
+    opts?: { rootPathHint?: string; reason?: string },
   ): Promise<void> {
     const thread = this.threadRepo.getById(threadId);
     if (thread?.archivedAt !== undefined) return;
@@ -2094,8 +2079,8 @@ export class ThreadManager implements ThreadOrchestrator {
       preProvisionThreadStartParams,
       requestedInput,
       {
-        source: opts?.source ?? "spawn",
-        initiator: opts?.initiator ?? "agent",
+        source: opts?.reason === "tell-after-provisioning-failure" ? "tell" : "spawn",
+        initiator: "agent",
       },
     );
 

@@ -3,6 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { toUIMessages } from "../src/to-ui-messages.js";
+import { buildThreadDetailRows } from "../src/thread-detail-rows.js";
 import type { ThreadEvent } from "../src/types.js";
 import type { UIMessage } from "../src/ui-message.js";
 
@@ -1626,6 +1627,109 @@ describe("toUIMessages replay coverage", () => {
           message.text.includes("Fix the sidebar menu state bug"),
       ),
     ).toBe(true);
+  });
+
+  it("projects start-first provisioning failure timelines into user + provisioning + error rows", () => {
+    const events: ThreadEvent[] = [
+      {
+        id: "evt-1",
+        threadId: "thread-1",
+        seq: 1,
+        type: "client/thread/start",
+        data: {
+          direction: "outbound",
+          source: "spawn",
+          initiator: "agent",
+          input: [{ type: "text", text: "Fix env setup script regression" }],
+          request: {
+            method: "thread/start",
+            params: {},
+          },
+          execution: {},
+        },
+        createdAt: 1,
+      },
+      {
+        id: "evt-2",
+        threadId: "thread-1",
+        seq: 2,
+        type: "system/provisioning/started",
+        data: {
+          environmentId: "worktree",
+          environmentDisplayName: "Git Worktree Workspace",
+        },
+        createdAt: 2,
+      },
+      {
+        id: "evt-3",
+        threadId: "thread-1",
+        seq: 3,
+        type: "system/provisioning/env_setup",
+        data: {
+          status: "started",
+          scriptPath: ".bb-env-setup.sh",
+          workspaceRoot: "/tmp/worktree",
+          timeoutMs: 600000,
+        },
+        createdAt: 3,
+      },
+      {
+        id: "evt-4",
+        threadId: "thread-1",
+        seq: 4,
+        type: "system/provisioning/env_setup",
+        data: {
+          status: "failed",
+          scriptPath: ".bb-env-setup.sh",
+          workspaceRoot: "/tmp/worktree",
+          timeoutMs: 600000,
+          durationMs: 1593,
+          detail: "pnpm build failed",
+        },
+        createdAt: 4,
+      },
+      {
+        id: "evt-5",
+        threadId: "thread-1",
+        seq: 5,
+        type: "system/error",
+        data: {
+          code: "thread_provisioning_failed",
+          message: "Thread provisioning failed for project proj-1",
+          detail: "pnpm build failed",
+        },
+        createdAt: 5,
+      },
+    ];
+
+    const projected = toUIMessages(events, {
+      threadStatus: "provisioning_failed",
+    });
+    const rows = buildThreadDetailRows(projected, {
+      includeToolGroupMessages: false,
+    });
+    const messageRows = rows.filter(
+      (row): row is Extract<(typeof rows)[number], { kind: "message" }> =>
+        row.kind === "message",
+    );
+
+    expect(messageRows).toHaveLength(3);
+    expect(messageRows[0]?.message.kind).toBe("user");
+    if (messageRows[0]?.message.kind === "user") {
+      expect(messageRows[0].message.text).toContain("Fix env setup script regression");
+    }
+
+    expect(messageRows[1]?.message.kind).toBe("operation");
+    if (messageRows[1]?.message.kind === "operation") {
+      expect(messageRows[1].message.opType).toBe("provisioning");
+      expect(messageRows[1].message.title).toContain("Provisioning");
+    }
+
+    expect(messageRows[2]?.message.kind).toBe("error");
+    if (messageRows[2]?.message.kind === "error") {
+      expect(messageRows[2].message.message).toContain("Thread provisioning failed");
+      expect(messageRows[2].message.message).toContain("pnpm build failed");
+    }
   });
 
   it("renders initial client thread input while idle when no user item events exist", () => {
