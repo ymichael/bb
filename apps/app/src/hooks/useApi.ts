@@ -2,6 +2,7 @@ import {
   useQuery,
   useMutation,
   useQueryClient,
+  type QueryKey,
 } from "@tanstack/react-query";
 import type {
   Project,
@@ -44,6 +45,63 @@ import * as api from "../lib/api";
 import { getAutoArchivePreferences } from "../lib/auto-archive-preferences";
 
 const DEFAULT_THREAD_EVENTS_LIMIT = 120;
+const THREAD_WORK_STATUS_QUERY_KEY = "threadWorkStatus";
+const THREAD_GIT_DIFF_QUERY_KEY = "threadGitDiff";
+type ThreadScopedQueryKeyPrefix =
+  | typeof THREAD_WORK_STATUS_QUERY_KEY
+  | typeof THREAD_GIT_DIFF_QUERY_KEY;
+
+function extractThreadIdFromThreadScopedQueryKey(
+  queryKey: QueryKey | undefined,
+  queryKeyPrefix: ThreadScopedQueryKeyPrefix,
+): string | undefined {
+  if (!queryKey || queryKey[0] !== queryKeyPrefix) {
+    return undefined;
+  }
+  const threadId = queryKey[1];
+  return typeof threadId === "string" ? threadId : undefined;
+}
+
+function resolveThreadScopedPlaceholder<TData>(
+  previousData: TData | undefined,
+  previousQueryKey: QueryKey | undefined,
+  nextThreadId: string,
+  queryKeyPrefix: ThreadScopedQueryKeyPrefix,
+): TData | undefined {
+  if (previousData === undefined) {
+    return undefined;
+  }
+  return extractThreadIdFromThreadScopedQueryKey(previousQueryKey, queryKeyPrefix) ===
+    nextThreadId
+    ? previousData
+    : undefined;
+}
+
+export function resolveThreadWorkStatusPlaceholder(
+  previousData: ThreadWorkStatus | null | undefined,
+  previousQueryKey: QueryKey | undefined,
+  nextThreadId: string,
+): ThreadWorkStatus | null | undefined {
+  return resolveThreadScopedPlaceholder(
+    previousData,
+    previousQueryKey,
+    nextThreadId,
+    THREAD_WORK_STATUS_QUERY_KEY,
+  );
+}
+
+export function resolveThreadGitDiffPlaceholder(
+  previousData: ThreadGitDiffResponse | undefined,
+  previousQueryKey: QueryKey | undefined,
+  nextThreadId: string,
+): ThreadGitDiffResponse | undefined {
+  return resolveThreadScopedPlaceholder(
+    previousData,
+    previousQueryKey,
+    nextThreadId,
+    THREAD_GIT_DIFF_QUERY_KEY,
+  );
+}
 
 // --- Projects ---
 
@@ -176,10 +234,11 @@ export function useThreadDefaultExecutionOptions(id: string) {
 
 export function useThreadWorkStatus(id: string, mergeBaseBranch?: string) {
   return useQuery<ThreadWorkStatus | null>({
-    queryKey: ["threadWorkStatus", id, mergeBaseBranch ?? null],
+    queryKey: [THREAD_WORK_STATUS_QUERY_KEY, id, mergeBaseBranch ?? null],
     queryFn: () => api.getThreadWorkStatus(id, mergeBaseBranch),
     enabled: !!id,
-    placeholderData: (previousData) => previousData,
+    placeholderData: (previousData, previousQuery) =>
+      resolveThreadWorkStatusPlaceholder(previousData, previousQuery?.queryKey, id),
     refetchOnWindowFocus: false,
   });
 }
@@ -244,7 +303,7 @@ export function useThreadGitDiff(
       : "combined";
   return useQuery<ThreadGitDiffResponse>({
     queryKey: [
-      "threadGitDiff",
+      THREAD_GIT_DIFF_QUERY_KEY,
       id,
       options?.selection?.type ?? "combined",
       selectionKey,
@@ -252,7 +311,8 @@ export function useThreadGitDiff(
     ],
     queryFn: () => api.getThreadGitDiff(id, options?.selection, options?.mergeBaseBranch),
     enabled: (options?.enabled ?? true) && !!id,
-    placeholderData: (previousData) => previousData,
+    placeholderData: (previousData, previousQuery) =>
+      resolveThreadGitDiffPlaceholder(previousData, previousQuery?.queryKey, id),
     refetchOnWindowFocus: false,
     staleTime: 5_000,
   });
