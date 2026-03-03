@@ -3,11 +3,14 @@ import {
   accessSync,
   constants,
   existsSync,
+  lstatSync,
   mkdirSync,
+  readFileSync,
+  watch,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { delimiter, join, resolve } from "node:path";
+import { delimiter, dirname, join, resolve } from "node:path";
 import {
   assertNever,
   createProviderEventEnvelope,
@@ -141,6 +144,51 @@ const THREAD_STATUS_CHANGE_KINDS: readonly ThreadChangeKind[] = [
   "status-changed",
   "work-status-changed",
 ];
+
+const PRIMARY_CHECKOUT_VALIDATION_TTL_MS = 2_000;
+
+function checkoutSnapshotsMatch(
+  left: GitCheckoutSnapshot,
+  right: GitCheckoutSnapshot,
+): boolean {
+  const branchMatches =
+    Boolean(left.branch) &&
+    Boolean(right.branch) &&
+    left.branch === right.branch;
+  const detachedHeadMatches =
+    left.detached &&
+    right.detached &&
+    left.head === right.head;
+  return branchMatches || detachedHeadMatches;
+}
+
+function resolveGitHeadPath(repoRoot: string): string | undefined {
+  const dotGitPath = join(repoRoot, ".git");
+  try {
+    const dotGitStat = lstatSync(dotGitPath);
+    if (dotGitStat.isDirectory()) {
+      return join(dotGitPath, "HEAD");
+    }
+    if (!dotGitStat.isFile()) {
+      return undefined;
+    }
+
+    const gitFileContents = readFileSync(dotGitPath, "utf-8");
+    const firstLine = gitFileContents.split("\n")[0]?.trim() ?? "";
+    const normalizedLine = firstLine.toLowerCase();
+    if (!normalizedLine.startsWith("gitdir:")) {
+      return undefined;
+    }
+    const relativeGitDir = firstLine.slice("gitdir:".length).trim();
+    if (relativeGitDir.length === 0) {
+      return undefined;
+    }
+    const gitDir = resolve(repoRoot, relativeGitDir);
+    return join(gitDir, "HEAD");
+  } catch {
+    return undefined;
+  }
+}
 
 function resolveBbBinDir(pathValue: string | undefined): string | undefined {
   if (!pathValue) return undefined;
@@ -368,6 +416,10 @@ export class ThreadManager implements ThreadOrchestrator {
   private titleFallbackByThreadId = new Map<string, string | null>();
   /** Per-project in-memory primary-checkout promotion status. */
   private primaryPromotionByProjectId = new Map<string, PrimaryPromotionState>();
+  /** Last successful external validation timestamp for active primary-checkout state. */
+  private primaryPromotionValidatedAtByProjectId = new Map<string, number>();
+  /** Filesystem watchers keyed by project while primary checkout is active. */
+  private primaryPromotionWatchersByProjectId = new Map<string, ReturnType<typeof watch>>();
   /** Prevents concurrent queued follow-up dispatch loops per thread. */
   private queueDispatchInFlight = new Set<string>();
   private rpcIdCounter = 0;
@@ -527,7 +579,9 @@ export class ThreadManager implements ThreadOrchestrator {
   }
 
   private _rebuildPrimaryPromotionStateFromGit(): void {
+    this._stopAllPrimaryPromotionWatches();
     this.primaryPromotionByProjectId.clear();
+    this.primaryPromotionValidatedAtByProjectId.clear();
     const projects = this.projectRepo.list();
     if (!Array.isArray(projects) || projects.length === 0) return;
     const allThreads = this.threadRepo.list({ includeArchived: true });
@@ -563,18 +617,11 @@ export class ThreadManager implements ThreadOrchestrator {
           continue;
         }
 
-        const branchMatches =
-          Boolean(projectCheckout.branch) &&
-          Boolean(workspaceCheckout.branch) &&
-          projectCheckout.branch === workspaceCheckout.branch;
-        const detachedHeadMatches =
-          projectCheckout.detached &&
-          projectCheckout.head === workspaceCheckout.head;
-        if (!branchMatches && !detachedHeadMatches) {
+        if (!checkoutSnapshotsMatch(projectCheckout, workspaceCheckout)) {
           continue;
         }
 
-        this.primaryPromotionByProjectId.set(project.id, {
+        this._setPrimaryPromotionState(project.id, {
           projectId: project.id,
           threadId: thread.id,
           promotedAt: Date.now(),
@@ -584,6 +631,122 @@ export class ThreadManager implements ThreadOrchestrator {
         break;
       }
     }
+  }
+
+  private _setPrimaryPromotionState(
+    projectId: string,
+    state: PrimaryPromotionState,
+  ): void {
+    this.primaryPromotionByProjectId.set(projectId, state);
+    this.primaryPromotionValidatedAtByProjectId.set(projectId, Date.now());
+    this._startPrimaryPromotionWatch(projectId);
+  }
+
+  private _clearPrimaryPromotionState(projectId: string): PrimaryPromotionState | undefined {
+    const existing = this.primaryPromotionByProjectId.get(projectId);
+    this.primaryPromotionByProjectId.delete(projectId);
+    this.primaryPromotionValidatedAtByProjectId.delete(projectId);
+    this._stopPrimaryPromotionWatch(projectId);
+    return existing;
+  }
+
+  private _startPrimaryPromotionWatch(projectId: string): void {
+    if (this.primaryPromotionWatchersByProjectId.has(projectId)) {
+      return;
+    }
+    const project = this.projectRepo.getById(projectId);
+    if (!project) return;
+    const gitHeadPath = resolveGitHeadPath(project.rootPath);
+    if (!gitHeadPath) return;
+    const gitDir = dirname(gitHeadPath);
+
+    try {
+      const watcher = watch(
+        gitDir,
+        { persistent: false },
+        (_eventType, filename) => {
+          if (
+            typeof filename === "string" &&
+            filename.length > 0 &&
+            filename !== "HEAD"
+          ) {
+            return;
+          }
+          this._ensurePrimaryPromotionStateIsCurrent(projectId, { force: true });
+        },
+      );
+      watcher.on("error", () => {
+        this._stopPrimaryPromotionWatch(projectId);
+      });
+      this.primaryPromotionWatchersByProjectId.set(projectId, watcher);
+    } catch {
+      // File watching can fail on some filesystems. Keep on-demand validation as fallback.
+    }
+  }
+
+  private _stopPrimaryPromotionWatch(projectId: string): void {
+    const watcher = this.primaryPromotionWatchersByProjectId.get(projectId);
+    if (!watcher) {
+      return;
+    }
+    watcher.close();
+    this.primaryPromotionWatchersByProjectId.delete(projectId);
+  }
+
+  private _stopAllPrimaryPromotionWatches(): void {
+    for (const watcher of this.primaryPromotionWatchersByProjectId.values()) {
+      watcher.close();
+    }
+    this.primaryPromotionWatchersByProjectId.clear();
+  }
+
+  private _ensurePrimaryPromotionStateIsCurrent(
+    projectId: string,
+    opts?: { force?: boolean },
+  ): void {
+    const active = this.primaryPromotionByProjectId.get(projectId);
+    if (!active) return;
+
+    const now = Date.now();
+    const lastValidatedAt = this.primaryPromotionValidatedAtByProjectId.get(projectId) ?? 0;
+    if (!opts?.force && now - lastValidatedAt < PRIMARY_CHECKOUT_VALIDATION_TTL_MS) {
+      return;
+    }
+    this.primaryPromotionValidatedAtByProjectId.set(projectId, now);
+
+    const project = this.projectRepo.getById(projectId);
+    if (!project) {
+      this._clearPrimaryPromotionState(projectId);
+      return;
+    }
+
+    let currentCheckout: GitCheckoutSnapshot;
+    try {
+      currentCheckout = this.gitStatusService.resolveCheckoutSnapshot(project.rootPath);
+    } catch {
+      return;
+    }
+
+    if (checkoutSnapshotsMatch(currentCheckout, active.promotedCheckout)) {
+      return;
+    }
+
+    const cleared = this._clearPrimaryPromotionState(projectId);
+    const demotedThreadId = cleared?.threadId ?? active.threadId;
+    this._appendEvent(
+      demotedThreadId,
+      "system/primary_checkout/updated",
+      {
+        action: "demote",
+        status: "completed",
+        message: "Primary checkout changed outside Beanbag; marked as demoted",
+        projectId,
+        activeThreadId: demotedThreadId,
+        ...(currentCheckout.branch ? { branch: currentCheckout.branch } : {}),
+      },
+      { broadcastChanges: ["events-appended"] },
+    );
+    this._broadcastThreadChanged(demotedThreadId, THREAD_STATUS_CHANGE_KINDS);
   }
 
   /**
@@ -1013,7 +1176,7 @@ export class ThreadManager implements ThreadOrchestrator {
     this.lastNotifiedCompletionEpochs.delete(threadId);
     const activePromotion = this.primaryPromotionByProjectId.get(thread.projectId);
     if (activePromotion?.threadId === threadId) {
-      this.primaryPromotionByProjectId.delete(thread.projectId);
+      this._clearPrimaryPromotionState(thread.projectId);
     }
     this._cleanupEnvironmentSession(threadId, { destroyWorkspace: true });
     this.threadRepo.update(threadId, {
@@ -1305,6 +1468,7 @@ export class ThreadManager implements ThreadOrchestrator {
   }
 
   getPrimaryCheckoutStatus(projectId: string): PrimaryCheckoutStatus {
+    this._ensurePrimaryPromotionStateIsCurrent(projectId);
     const active = this.primaryPromotionByProjectId.get(projectId);
     if (!active) {
       return { projectId };
@@ -1420,6 +1584,7 @@ export class ThreadManager implements ThreadOrchestrator {
       throw projectNotFoundError(thread.projectId);
     }
 
+    this._ensurePrimaryPromotionStateIsCurrent(project.id, { force: true });
     const existing = this.primaryPromotionByProjectId.get(project.id);
     if (existing && existing.threadId !== thread.id) {
       throw invalidRequestError(
@@ -1482,7 +1647,7 @@ export class ThreadManager implements ThreadOrchestrator {
         promotedCheckout: promoted.promotedCheckout,
         reconstructed: false,
       };
-      this.primaryPromotionByProjectId.set(project.id, nextState);
+      this._setPrimaryPromotionState(project.id, nextState);
       this._appendEvent(
         thread.id,
         "system/primary_checkout/updated",
@@ -1538,6 +1703,7 @@ export class ThreadManager implements ThreadOrchestrator {
       throw projectNotFoundError(thread.projectId);
     }
 
+    this._ensurePrimaryPromotionStateIsCurrent(project.id, { force: true });
     const active = this.primaryPromotionByProjectId.get(project.id);
     if (!active) {
       this._appendEvent(
@@ -1591,7 +1757,7 @@ export class ThreadManager implements ThreadOrchestrator {
 
       this.gitStatusService.discardLocalChanges(project.rootPath);
       this.gitStatusService.checkoutSnapshot(project.rootPath, demoteSnapshot);
-      this.primaryPromotionByProjectId.delete(project.id);
+      this._clearPrimaryPromotionState(project.id);
       this._appendEvent(
         active.threadId,
         "system/primary_checkout/updated",
@@ -1814,6 +1980,9 @@ export class ThreadManager implements ThreadOrchestrator {
     this.lastNotifiedCompletionTurnIds.clear();
     this.turnLifecycleEpochs.clear();
     this.lastNotifiedCompletionEpochs.clear();
+    this._stopAllPrimaryPromotionWatches();
+    this.primaryPromotionByProjectId.clear();
+    this.primaryPromotionValidatedAtByProjectId.clear();
   }
 
   private _scheduleProvisioning(
@@ -2579,6 +2748,7 @@ export class ThreadManager implements ThreadOrchestrator {
   }
 
   private _withPrimaryCheckoutState(thread: Thread): Thread {
+    this._ensurePrimaryPromotionStateIsCurrent(thread.projectId);
     const activePromotion = this.primaryPromotionByProjectId.get(thread.projectId);
     const isActivePrimary = activePromotion?.threadId === thread.id;
     const withPrimaryCheckout = !isActivePrimary

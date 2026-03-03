@@ -3374,6 +3374,130 @@ describe("ThreadManager", () => {
     });
   });
 
+  describe("primary checkout status reconciliation", () => {
+    it("demotes stale primary-checkout state when the project checkout changes externally", () => {
+      const thread = makeThread({
+        id: "thread-1",
+        projectId: "proj-1",
+        status: "idle",
+        title: "Primary thread",
+        environmentId: "worktree",
+      });
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue({
+        id: "proj-1",
+        name: "Test",
+        rootPath: "/tmp/proj-1",
+        createdAt: 1000,
+        updatedAt: 1000,
+      });
+      (eventRepo.getLatestSeq as ReturnType<typeof vi.fn>).mockReturnValue(0);
+      (eventRepo.create as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeEvent({ seq: 1, type: "system/primary_checkout/updated" }),
+      );
+
+      (manager as any).primaryPromotionByProjectId.set("proj-1", {
+        projectId: "proj-1",
+        threadId: "thread-1",
+        promotedAt: 1000,
+        promotedCheckout: {
+          branch: "feature/thread-1",
+          head: "abc123",
+          detached: false,
+        },
+        reconstructed: false,
+      });
+      (manager as any).primaryPromotionValidatedAtByProjectId.set("proj-1", 0);
+      const resolveCheckoutSnapshot = vi.fn().mockReturnValue({
+        branch: "main",
+        head: "def456",
+        detached: false,
+      });
+      (manager as any).gitStatusService = {
+        resolveCheckoutSnapshot,
+      };
+
+      const result = manager.getById("thread-1");
+
+      expect(result?.primaryCheckout).toBeUndefined();
+      expect((manager as any).primaryPromotionByProjectId.get("proj-1")).toBeUndefined();
+      expect(resolveCheckoutSnapshot).toHaveBeenCalledTimes(1);
+      expect(eventRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          threadId: "thread-1",
+          type: "system/primary_checkout/updated",
+          data: expect.objectContaining({
+            action: "demote",
+            status: "completed",
+            projectId: "proj-1",
+          }),
+        }),
+      );
+      expect(ws.broadcast).toHaveBeenCalledWith("thread", "thread-1", [
+        "events-appended",
+      ]);
+      expect(ws.broadcast).toHaveBeenCalledWith("thread", "thread-1", [
+        "status-changed",
+        "work-status-changed",
+      ]);
+    });
+
+    it("validates active primary-checkout status only once per project within a list response", () => {
+      (threadRepo.list as ReturnType<typeof vi.fn>).mockReturnValue([
+        makeThread({
+          id: "thread-1",
+          projectId: "proj-1",
+          status: "idle",
+          title: "Promoted",
+          environmentId: "worktree",
+        }),
+        makeThread({
+          id: "thread-2",
+          projectId: "proj-1",
+          status: "idle",
+          title: "Other",
+          environmentId: "worktree",
+        }),
+      ]);
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue({
+        id: "proj-1",
+        name: "Test",
+        rootPath: "/tmp/proj-1",
+        createdAt: 1000,
+        updatedAt: 1000,
+      });
+
+      (manager as any).primaryPromotionByProjectId.set("proj-1", {
+        projectId: "proj-1",
+        threadId: "thread-1",
+        promotedAt: 1000,
+        promotedCheckout: {
+          branch: "feature/thread-1",
+          head: "abc123",
+          detached: false,
+        },
+        reconstructed: false,
+      });
+      (manager as any).primaryPromotionValidatedAtByProjectId.set("proj-1", 0);
+      const resolveCheckoutSnapshot = vi.fn().mockReturnValue({
+        branch: "feature/thread-1",
+        head: "abc123",
+        detached: false,
+      });
+      (manager as any).gitStatusService = {
+        resolveCheckoutSnapshot,
+      };
+
+      const result = manager.list({ projectId: "proj-1" });
+
+      expect(result[0]?.primaryCheckout?.isActive).toBe(true);
+      expect(result[1]?.primaryCheckout).toBeUndefined();
+      expect(resolveCheckoutSnapshot).toHaveBeenCalledTimes(1);
+      expect(ws.broadcast).not.toHaveBeenCalled();
+    });
+
+  });
+
   describe("isActive()", () => {
     it("returns false when no process registered", () => {
       expect(manager.isActive("thread-1")).toBe(false);
