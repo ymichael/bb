@@ -131,7 +131,7 @@ const GIT_DIFF_PANEL_MAX_SIZE_PERCENT = 70;
 const GIT_DIFF_PANEL_DEFAULT_SIZE_PERCENT = 50;
 const TIMELINE_PANEL_DEFAULT_SIZE_PERCENT = 50;
 const GIT_DIFF_FILE_RENDER_SPINNER_MS = 150;
-const GIT_DIFF_SPLIT_VIEW_MIN_WIDTH_PX = 980;
+const GIT_DIFF_SPLIT_VIEW_MIN_WIDTH_PX = 760;
 const GIT_DIFF_PARSE_BATCH_THRESHOLD = 24;
 const GIT_DIFF_PARSE_INITIAL_BATCH_SIZE = 6;
 const GIT_DIFF_PARSE_BATCH_SIZE = 18;
@@ -1131,6 +1131,14 @@ export function ThreadDetailView() {
   const handleGitDiffDisplayModeChange = useCallback((nextMode: "unified" | "split") => {
     setHasExplicitGitDiffDisplayMode(true);
     setGitDiffDisplayMode(nextMode);
+  }, []);
+
+  const handleGitDiffPanelDragging = useCallback((isDragging: boolean) => {
+    setIsGitDiffPanelResizing(isDragging);
+    if (isDragging) {
+      // Treat panel resizing as opting back into responsive split/stacked mode.
+      setHasExplicitGitDiffDisplayMode(false);
+    }
   }, []);
 
   const handleLoadToolGroupMessages = useCallback(
@@ -2161,7 +2169,7 @@ export function ThreadDetailView() {
           {conversationShell}
         </Panel>
         <PanelResizeHandle
-          onDragging={setIsGitDiffPanelResizing}
+          onDragging={handleGitDiffPanelDragging}
           className={cn(
             "group relative w-3 shrink-0 cursor-col-resize bg-transparent transition-colors",
             isGitDiffPanelResizing && "bg-accent/25",
