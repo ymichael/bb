@@ -2542,11 +2542,7 @@ describe("ThreadManager", () => {
           projectId: "proj-1",
           input,
         }),
-        expect.objectContaining({
-          reason: "tell-after-provisioning-failure",
-          source: "tell",
-          initiator: "agent",
-        }),
+        { reason: "tell-after-provisioning-failure" },
       );
     });
 
