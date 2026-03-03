@@ -52,6 +52,9 @@ interface PromptBoxProps {
   onAttachFiles?: (files: File[]) => void | Promise<void>
   onRemoveAttachment?: (path: string) => void
   zenModeLayout?: ZenModeLayout
+  zenModeStorageKey?: string | null
+  zenModeResetKey?: string | number
+  resetZenModeOnSubmit?: boolean
   attachmentProjectId?: string
 }
 
@@ -121,6 +124,9 @@ export function PromptBox({
   onAttachFiles,
   onRemoveAttachment,
   zenModeLayout = "thread",
+  zenModeStorageKey,
+  zenModeResetKey,
+  resetZenModeOnSubmit = false,
   attachmentProjectId,
 }: PromptBoxProps) {
   const [isZenMode, setIsZenMode] = useState(false)
@@ -139,6 +145,7 @@ export function PromptBox({
   const [activeMention, setActiveMention] = useState<ActiveFileMention | null>(null)
   const [selectedMentionIndex, setSelectedMentionIndex] = useState(0)
   const [expandedImageIndex, setExpandedImageIndex] = useState<number | null>(null)
+  const resolvedZenModeStorageKey = zenModeStorageKey ?? ZEN_MODE_STORAGE_KEY[zenModeLayout]
 
   useEffect(() => {
     if (!textareaRef.current) return
@@ -154,15 +161,21 @@ export function PromptBox({
   }, [value])
 
   useEffect(() => {
-    if (typeof window === "undefined") return
-    const storageKey = ZEN_MODE_STORAGE_KEY[zenModeLayout]
-    const storedValue = window.localStorage.getItem(storageKey)
-    if (storedValue === "true") {
-      setIsZenMode(true)
+    if (!resolvedZenModeStorageKey) {
+      setIsZenMode(false)
       return
     }
+    if (typeof window === "undefined") return
+    const storedValue = window.localStorage.getItem(resolvedZenModeStorageKey)
+    setIsZenMode(storedValue === "true")
+  }, [resolvedZenModeStorageKey])
+
+  useEffect(() => {
+    if (zenModeResetKey === undefined) return
     setIsZenMode(false)
-  }, [zenModeLayout])
+    if (typeof window === "undefined" || !resolvedZenModeStorageKey) return
+    window.localStorage.removeItem(resolvedZenModeStorageKey)
+  }, [resolvedZenModeStorageKey, zenModeResetKey])
 
   useLayoutEffect(() => {
     const fromHeight = heightAnimationFromRef.current
@@ -423,7 +436,11 @@ export function PromptBox({
   const submitPrompt = useCallback(() => {
     if (!canSubmit) return
     onSubmit()
-  }, [canSubmit, onSubmit])
+    if (!resetZenModeOnSubmit || !isZenMode) return
+    setIsZenMode(false)
+    if (typeof window === "undefined" || !resolvedZenModeStorageKey) return
+    window.localStorage.removeItem(resolvedZenModeStorageKey)
+  }, [canSubmit, isZenMode, onSubmit, resetZenModeOnSubmit, resolvedZenModeStorageKey])
 
   const toggleZenMode = useCallback(() => {
     const textarea = textareaRef.current
@@ -435,9 +452,8 @@ export function PromptBox({
 
     setIsZenMode((previous) => {
       const next = !previous
-      if (typeof window !== "undefined") {
-        const storageKey = ZEN_MODE_STORAGE_KEY[zenModeLayout]
-        window.localStorage.setItem(storageKey, String(next))
+      if (typeof window !== "undefined" && resolvedZenModeStorageKey) {
+        window.localStorage.setItem(resolvedZenModeStorageKey, String(next))
       }
       return next
     })
@@ -453,7 +469,7 @@ export function PromptBox({
         nextTextarea.scrollTop = scrollTop
       }
     })
-  }, [zenModeLayout])
+  }, [resolvedZenModeStorageKey])
 
   const handleAttachmentInputChange = useCallback(
     (event: ChangeEvent<HTMLInputElement>) => {

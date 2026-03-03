@@ -1720,6 +1720,9 @@ export function ThreadDetailView() {
               onChange={promptDraft.setText}
               onSubmit={handleSend}
               zenModeLayout="thread"
+              zenModeStorageKey={null}
+              zenModeResetKey={threadId}
+              resetZenModeOnSubmit
               onStop={
                 thread.status === "active"
                   ? () => stopThread.mutate(thread.id)

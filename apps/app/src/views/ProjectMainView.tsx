@@ -16,8 +16,11 @@ import {
 import { usePromptDraftStorage } from "@/hooks/usePromptDraftStorage";
 import { usePromptFileMentions } from "@/hooks/usePromptFileMentions";
 import { usePromptModelReasoning } from "@/hooks/usePromptModelReasoning";
+import { getProjectScopedStorageKey } from "@/lib/project-scoped-storage";
 import { promptDraftToInput } from "@/lib/prompt-draft";
 import { formatDirtyWorkspaceLabel } from "@/lib/workspace-change-summary";
+
+const PROJECT_MAIN_ZEN_MODE_STORAGE_KEY = "bb.promptbox.zen-mode.project-main";
 
 export function ProjectMainView() {
   const { projectId } = useParams<{ projectId: string }>();
@@ -40,6 +43,10 @@ export function ProjectMainView() {
       }),
     [promptDraft.attachments, promptDraft.text],
   );
+  const projectMainZenModeStorageKey = useMemo(
+    () => getProjectScopedStorageKey(PROJECT_MAIN_ZEN_MODE_STORAGE_KEY, projectId),
+    [projectId],
+  );
   const {
     selectedModel,
     setSelectedModel,
@@ -54,7 +61,7 @@ export function ProjectMainView() {
     reasoningOptions,
     sandboxOptions,
     environmentOptions,
-  } = usePromptModelReasoning({ scope: "new-thread" });
+  } = usePromptModelReasoning({ scope: "new-thread", projectId });
   const environmentSelectorOptions = useMemo(
     () =>
       environmentOptions.map((option) => {
@@ -208,6 +215,7 @@ export function ProjectMainView() {
           onChange={promptDraft.setText}
           onSubmit={submitPrompt}
           zenModeLayout="project-main"
+          zenModeStorageKey={projectMainZenModeStorageKey}
           isSubmitting={spawnThread.isPending}
           submitDisabled={isSubmitDisabled}
           submitTitle={spawnThread.isPending ? "Submitting..." : "Submit (Enter)"}
