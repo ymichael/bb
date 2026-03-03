@@ -134,6 +134,64 @@ describe("toUIMessages replay coverage", () => {
     expect(tool?.output).toContain("interrupted");
   });
 
+  it("updates flushed pending tool calls in place without appending duplicate interrupted rows", () => {
+    const events: ThreadEvent[] = [
+      {
+        id: "evt-1",
+        threadId: "thread-1",
+        seq: 1,
+        type: "item/started",
+        data: {
+          item: {
+            type: "commandExecution",
+            id: "call-1",
+            command: "/bin/zsh -lc 'git rebase --continue'",
+            status: "inProgress",
+          },
+          turnId: "turn-1",
+        },
+        createdAt: 1,
+      },
+      {
+        id: "evt-2",
+        threadId: "thread-1",
+        seq: 2,
+        type: "item/commandExecution/outputDelta",
+        data: {
+          threadId: "thread-1",
+          turnId: "turn-1",
+          itemId: "call-1",
+          delta: "opened COMMIT_EDITMSG",
+        },
+        createdAt: 2,
+      },
+      {
+        id: "evt-3",
+        threadId: "thread-1",
+        seq: 3,
+        type: "item/reasoning/summaryTextDelta",
+        data: {
+          threadId: "thread-1",
+          turnId: "turn-1",
+          itemId: "rs-1",
+          delta: "thinking",
+        },
+        createdAt: 3,
+      },
+    ];
+
+    const projected = toUIMessages(events, { threadStatus: "idle" });
+    const tools = projected.filter(
+      (message): message is Extract<UIMessage, { kind: "tool-call" }> =>
+        message.kind === "tool-call" && message.callId === "call-1",
+    );
+
+    expect(tools).toHaveLength(1);
+    expect(tools[0]?.status).toBe("interrupted");
+    expect(tools[0]?.output).toContain("opened COMMIT_EDITMSG");
+    assertMonotonicSourceSeq(projected);
+  });
+
   it("keeps in-progress tools pending for active threads", () => {
     const events: ThreadEvent[] = [
       {

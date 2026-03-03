@@ -147,6 +147,43 @@ describe("ThreadGitStatusService", () => {
     expect(status.state).toBe("committed_unmerged");
   });
 
+  it("ignores merge-base branch-only commits when reporting thread diff stats", () => {
+    const repoRoot = makeTempDir();
+    git(repoRoot, "init");
+    git(repoRoot, "config", "user.name", "Beanbag Test");
+    git(repoRoot, "config", "user.email", "beanbag-test@example.com");
+    git(repoRoot, "checkout", "-b", "main");
+
+    writeFileSync(join(repoRoot, "README.md"), "initial\n", "utf8");
+    git(repoRoot, "add", "README.md");
+    git(repoRoot, "commit", "-m", "initial");
+
+    git(repoRoot, "checkout", "-b", "thread");
+    writeFileSync(join(repoRoot, "THREAD.md"), "thread only\n", "utf8");
+    git(repoRoot, "add", "THREAD.md");
+    git(repoRoot, "commit", "-m", "thread change");
+
+    git(repoRoot, "checkout", "main");
+    writeFileSync(join(repoRoot, "BASE_ONLY.md"), "main only\n", "utf8");
+    git(repoRoot, "add", "BASE_ONLY.md");
+    git(repoRoot, "commit", "-m", "main change");
+
+    git(repoRoot, "checkout", "thread");
+
+    const service = new ThreadGitStatusService();
+    const status = service.getStatus({
+      workspaceRoot: repoRoot,
+      projectRoot: repoRoot,
+      defaultBranch: "main",
+    });
+
+    expect(status.changedFiles).toBe(1);
+    expect(status.insertions).toBe(1);
+    expect(status.deletions).toBe(0);
+    expect(status.files?.some((entry) => entry.path === "THREAD.md" && entry.status === "A")).toBe(true);
+    expect(status.files?.some((entry) => entry.path === "BASE_ONLY.md")).toBe(false);
+  });
+
   it("refuses squash merge when project root has local changes", () => {
     const repoRoot = makeTempDir();
     const threadRoot = join(makeTempDir(), "thread-worktree");

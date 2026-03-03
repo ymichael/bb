@@ -2249,6 +2249,18 @@ function finalizePendingMessages(
       continue;
     }
 
+    const historyMatch = findCallInHistoryCells(state, call.callId);
+    if (historyMatch) {
+      mergeCallSummary(historyMatch.call, {
+        ...call,
+        parsedCmd: call.parsedCmd,
+      });
+      if (historyMatch.cell.kind === "tool-exploring") {
+        syncExploringStatus(historyMatch.cell);
+      }
+      continue;
+    }
+
     state.messages.push(createToolCallMessage(call));
   }
   state.toolActivity.runningCallsById.clear();

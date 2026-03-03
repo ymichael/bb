@@ -104,15 +104,19 @@ function countUntrackedFiles(statusLines: readonly string[]): number {
 
 function resolveMergeBaseDiffCounts(args: {
   workspaceRoot: string;
-  baseRef: string | undefined;
+  mergeBaseDiffRef: string | undefined;
   statusLines: readonly string[];
   fallback: DiffCounts;
 }): DiffCounts {
-  if (!args.baseRef) {
+  if (!args.mergeBaseDiffRef) {
     return args.fallback;
   }
 
-  const shortstatResult = runGit(args.workspaceRoot, ["diff", "--shortstat", args.baseRef]);
+  const shortstatResult = runGit(args.workspaceRoot, [
+    "diff",
+    "--shortstat",
+    args.mergeBaseDiffRef,
+  ]);
   if (!shortstatResult.ok) {
     return args.fallback;
   }
@@ -124,6 +128,22 @@ function resolveMergeBaseDiffCounts(args: {
     insertions: parsed.insertions,
     deletions: parsed.deletions,
   };
+}
+
+function resolveMergeBaseDiffRef(
+  workspaceRoot: string,
+  baseRef: string | undefined,
+): string | undefined {
+  if (!baseRef) {
+    return undefined;
+  }
+
+  const mergeBaseResult = runGit(workspaceRoot, ["merge-base", baseRef, "HEAD"]);
+  if (!mergeBaseResult.ok || !mergeBaseResult.stdout) {
+    return undefined;
+  }
+
+  return mergeBaseResult.stdout;
 }
 
 function parseAheadBehind(value: string): { behind: number; ahead: number } {
@@ -216,11 +236,11 @@ function parseNameStatusLine(line: string): { status: string; path: string } | u
 
 function resolveMergeBaseFileChanges(args: {
   workspaceRoot: string;
-  baseRef: string | undefined;
+  mergeBaseDiffRef: string | undefined;
   workspaceFiles: ReadonlyArray<{ status: string; path: string }>;
 }): Array<{ status: string; path: string }> {
   const fallback = args.workspaceFiles.slice(0, 60);
-  if (!args.baseRef) {
+  if (!args.mergeBaseDiffRef) {
     return fallback;
   }
 
@@ -228,7 +248,7 @@ function resolveMergeBaseFileChanges(args: {
     "diff",
     "--name-status",
     "--find-renames",
-    args.baseRef,
+    args.mergeBaseDiffRef,
   ]);
   if (!diffResult.ok) {
     return fallback;
@@ -708,13 +728,14 @@ export class ThreadGitStatusService {
     });
     const mergeBaseBranch = mergeBaseSelection.mergeBaseBranch;
     const baseRef = mergeBaseSelection.baseRef;
+    const mergeBaseDiffRef = resolveMergeBaseDiffRef(args.workspaceRoot, baseRef);
     const mergeBaseBranchOptions =
       mergeBaseBranch && !mergeBaseBranches.includes(mergeBaseBranch)
         ? [mergeBaseBranch, ...mergeBaseBranches]
         : mergeBaseBranches;
     const mergeBaseDiff = resolveMergeBaseDiffCounts({
       workspaceRoot: args.workspaceRoot,
-      baseRef,
+      mergeBaseDiffRef,
       statusLines,
       fallback: {
         changedFiles: workspaceChangedFiles,
@@ -724,7 +745,7 @@ export class ThreadGitStatusService {
     });
     const files = resolveMergeBaseFileChanges({
       workspaceRoot: args.workspaceRoot,
-      baseRef,
+      mergeBaseDiffRef,
       workspaceFiles,
     });
 
