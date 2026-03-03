@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   assertNever,
+  type Thread,
   type ThreadChangeKind,
   type ThreadEvent,
 } from "@beanbag/agent-core";
@@ -71,6 +72,23 @@ function toThreadChangeFlags(changes: readonly ThreadChangeKind[]): ThreadChange
   }
 
   return flags;
+}
+
+function shouldBypassTimelineEventThrottle(
+  status: Thread["status"] | undefined,
+): boolean {
+  if (!status) return false;
+  switch (status) {
+    case "created":
+    case "provisioning":
+    case "provisioning_failed":
+      return true;
+    case "active":
+    case "idle":
+      return false;
+    default:
+      return assertNever(status);
+  }
 }
 
 export function useWebSocket(): void {
@@ -188,7 +206,11 @@ export function useWebSocket(): void {
             lastTimelineRefetchAtByThread.set(id, now);
           } else {
             const lastRefetchAt = lastTimelineRefetchAtByThread.get(id) ?? 0;
-            if (now - lastRefetchAt >= TIMELINE_EVENT_REFETCH_INTERVAL_MS) {
+            const cachedThread = queryClient.getQueryData<Thread>(["thread", id]);
+            if (
+              shouldBypassTimelineEventThrottle(cachedThread?.status) ||
+              now - lastRefetchAt >= TIMELINE_EVENT_REFETCH_INTERVAL_MS
+            ) {
               queryClient.invalidateQueries({ queryKey: ["threadTimeline", id] });
               lastTimelineRefetchAtByThread.set(id, now);
             }

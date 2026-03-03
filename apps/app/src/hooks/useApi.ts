@@ -99,6 +99,90 @@ export function resolveThreadGitDiffPlaceholder(
   );
 }
 
+interface ThreadListFilters {
+  projectId?: string;
+  parentThreadId?: string;
+  includeArchived?: boolean;
+  includeWorkStatus?: boolean;
+}
+
+function isThreadListFilters(value: unknown): value is ThreadListFilters {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return false;
+  }
+  const maybeFilters = value as Record<string, unknown>;
+  if (
+    maybeFilters.projectId !== undefined &&
+    typeof maybeFilters.projectId !== "string"
+  ) {
+    return false;
+  }
+  if (
+    maybeFilters.parentThreadId !== undefined &&
+    typeof maybeFilters.parentThreadId !== "string"
+  ) {
+    return false;
+  }
+  if (
+    maybeFilters.includeArchived !== undefined &&
+    typeof maybeFilters.includeArchived !== "boolean"
+  ) {
+    return false;
+  }
+  if (
+    maybeFilters.includeWorkStatus !== undefined &&
+    typeof maybeFilters.includeWorkStatus !== "boolean"
+  ) {
+    return false;
+  }
+  return true;
+}
+
+function readThreadListFiltersFromQueryKey(
+  queryKey: readonly unknown[],
+): ThreadListFilters | undefined | null {
+  if (queryKey.length < 2) {
+    return undefined;
+  }
+  const rawFilters = queryKey[1];
+  if (rawFilters === undefined) {
+    return undefined;
+  }
+  if (!isThreadListFilters(rawFilters)) {
+    return null;
+  }
+  return rawFilters;
+}
+
+function threadMatchesListFilters(
+  thread: Thread,
+  filters: ThreadListFilters | undefined,
+): boolean {
+  if (thread.archivedAt !== undefined && !filters?.includeArchived) {
+    return false;
+  }
+  if (filters?.projectId && thread.projectId !== filters.projectId) {
+    return false;
+  }
+  if (
+    filters?.parentThreadId !== undefined &&
+    thread.parentThreadId !== filters.parentThreadId
+  ) {
+    return false;
+  }
+  return true;
+}
+
+function appendThreadIfMissing(
+  list: Thread[],
+  thread: Thread,
+): Thread[] {
+  if (list.some((candidate) => candidate.id === thread.id)) {
+    return list;
+  }
+  return [...list, thread];
+}
+
 // --- Projects ---
 
 export function useProjects() {
@@ -184,15 +268,13 @@ export function useUploadPromptAttachment() {
 
 // --- Query Hooks ---
 
-export function useThreads(filters?: {
-  projectId?: string;
-  parentThreadId?: string;
-  includeArchived?: boolean;
-  includeWorkStatus?: boolean;
-}, options?: { enabled?: boolean }) {
+export function useThreads(
+  filters?: ThreadListFilters,
+  options?: { enabled?: boolean },
+) {
   return useQuery<Thread[]>({
     queryKey: ["threads", filters],
-    queryFn: () => api.listThreads(filters),
+    queryFn: ({ signal }) => api.listThreads(filters, signal),
     enabled: options?.enabled ?? true,
     staleTime: 10_000,
   });
@@ -375,8 +457,36 @@ export function useSpawnThread() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (req: SpawnThreadRequest) => api.spawnThread(req),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["threads"] });
+    onMutate: async () => {
+      await queryClient.cancelQueries({ queryKey: ["threads"] });
+    },
+    onSuccess: (thread) => {
+      queryClient.setQueryData<Thread>(["thread", thread.id], thread);
+
+      const existingThreadLists = queryClient.getQueriesData<Thread[]>({
+        queryKey: ["threads"],
+      });
+      for (const [queryKey, list] of existingThreadLists) {
+        if (!list) {
+          continue;
+        }
+        const filters = readThreadListFiltersFromQueryKey(queryKey);
+        if (filters === null) {
+          continue;
+        }
+        if (!threadMatchesListFilters(thread, filters)) {
+          continue;
+        }
+        const nextList = appendThreadIfMissing(list, thread);
+        if (nextList !== list) {
+          queryClient.setQueryData<Thread[]>(queryKey, nextList);
+        }
+      }
+
+      void queryClient.refetchQueries({
+        queryKey: ["threads"],
+        type: "active",
+      });
       queryClient.invalidateQueries({ queryKey: ["status"] });
     },
   });

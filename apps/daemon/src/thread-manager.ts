@@ -566,7 +566,7 @@ export class ThreadManager implements ThreadOrchestrator {
       const environmentAdapter = this._resolveThreadEnvironmentAdapter({
         thread,
       });
-      this._spawnProcess(thread.id, project.rootPath, environmentAdapter);
+      await this._spawnProcess(thread.id, project.rootPath, environmentAdapter);
       this._sendInitialize(thread.id);
       const resumedThreadId = await this._sendRequestAndAwaitThreadId(
         thread.id,
@@ -2275,7 +2275,7 @@ export class ThreadManager implements ThreadOrchestrator {
       environmentDisplayName: environmentAdapter.info.displayName,
     });
 
-    const environmentRuntime = this._spawnProcess(
+    const environmentRuntime = await this._spawnProcess(
       threadId,
       opts?.rootPathHint ?? project.rootPath,
       environmentAdapter,
@@ -2497,22 +2497,25 @@ export class ThreadManager implements ThreadOrchestrator {
     });
   }
 
-  private _spawnProcess(
+  private async _spawnProcess(
     threadId: string,
     projectRootPath: string,
     environmentAdapter: EnvironmentAdapter,
-  ): ActiveEnvironmentRuntime {
+  ): Promise<ActiveEnvironmentRuntime> {
     const thread = this.threadRepo.getById(threadId);
     const projectId = thread?.projectId;
-    const environmentSession = environmentAdapter.prepare({
+    const prepareContext = {
       projectId: projectId ?? "",
       threadId,
       projectRootPath,
       runtimeEnv: this.runtimeEnv,
-      onProvisioningEvent: (event) => {
+      onProvisioningEvent: (event: EnvironmentProvisioningEvent) => {
         this._appendEnvironmentProvisioningEvent(threadId, event);
       },
-    });
+    };
+    const environmentSession = environmentAdapter.prepareAsync
+      ? await environmentAdapter.prepareAsync(prepareContext)
+      : environmentAdapter.prepare(prepareContext);
     this._setEnvironmentSession(threadId, environmentAdapter, environmentSession);
     const effectiveEnvironmentId = this._resolveEffectiveEnvironmentId(
       environmentAdapter,
@@ -2681,7 +2684,7 @@ export class ThreadManager implements ThreadOrchestrator {
       const environmentAdapter = this._resolveThreadEnvironmentAdapter({
         thread,
       });
-      this._spawnProcess(threadId, project.rootPath, environmentAdapter);
+      await this._spawnProcess(threadId, project.rootPath, environmentAdapter);
       this._sendInitialize(threadId);
       const resumedThreadId = await this._sendRequestAndAwaitThreadId(
         threadId,

@@ -204,15 +204,21 @@ async function throwHttpError(res: Response): Promise<never> {
   throw new Error(`HTTP ${res.status}: ${message}`);
 }
 
-async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
-  const opts: RequestInit = {
+async function request<T>(
+  method: string,
+  path: string,
+  body?: unknown,
+  opts?: { signal?: AbortSignal },
+): Promise<T> {
+  const requestInit: RequestInit = {
     method,
     headers: { "Content-Type": "application/json" },
+    ...(opts?.signal ? { signal: opts.signal } : {}),
   };
   if (body !== undefined) {
-    opts.body = JSON.stringify(body);
+    requestInit.body = JSON.stringify(body);
   }
-  const res = await fetch(`${BASE}${path}`, opts);
+  const res = await fetch(`${BASE}${path}`, requestInit);
   if (!res.ok) {
     await throwHttpError(res);
   }
@@ -364,7 +370,7 @@ export async function listThreads(filters?: {
   parentThreadId?: string;
   includeArchived?: boolean;
   includeWorkStatus?: boolean;
-}): Promise<Thread[]> {
+}, signal?: AbortSignal): Promise<Thread[]> {
   const params = new URLSearchParams();
   if (filters?.projectId) params.set("projectId", filters.projectId);
   if (filters?.parentThreadId) {
@@ -377,7 +383,7 @@ export async function listThreads(filters?: {
     params.set("includeWorkStatus", String(filters.includeWorkStatus));
   }
   const qs = params.toString();
-  return request<Thread[]>("GET", `/threads${qs ? `?${qs}` : ""}`);
+  return request<Thread[]>("GET", `/threads${qs ? `?${qs}` : ""}`, undefined, { signal });
 }
 
 export async function getThread(id: string): Promise<Thread> {

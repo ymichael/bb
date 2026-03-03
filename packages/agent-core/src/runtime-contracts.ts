@@ -162,6 +162,9 @@ export type EnvironmentProvisioningEvent =
 export interface EnvironmentAdapter {
   info: SystemEnvironmentInfo;
   prepare(context: EnvironmentPrepareContext): EnvironmentSession;
+  prepareAsync?(
+    context: EnvironmentPrepareContext,
+  ): Promise<EnvironmentSession>;
   customizeDeveloperInstructions?(
     currentInstructions: string | undefined,
     context: EnvironmentInstructionsContext,
