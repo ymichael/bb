@@ -88,6 +88,11 @@ const PRUNABLE_NOISE_EVENT_NORM_TYPES: readonly string[] = [
   "codex/event/turn_diff",
 ];
 
+const ALWAYS_PRUNABLE_NOISE_EVENT_NORM_TYPES: readonly string[] = [
+  "codex/event/agent_message_delta",
+  "codex/event/agent_message_content_delta",
+];
+
 const STORAGE_RECLAIM_MIN_INTERVAL_MS = 60_000;
 const STORAGE_RECLAIM_MIN_FREE_PAGES = 2_048;
 const STORAGE_RECLAIM_MAX_INCREMENTAL_PAGES = 8_192;
@@ -748,26 +753,81 @@ export class EventRepository {
   ): number {
     const latestSeq = this.getLatestSeq(threadId);
     if (latestSeq <= 0) return 0;
+
     const normalizedKeepRecent = Number.isFinite(keepRecent)
       ? Math.max(0, Math.floor(keepRecent))
       : 600;
     const cutoffSeq = latestSeq - normalizedKeepRecent;
-    if (cutoffSeq <= 0) return 0;
+    let totalRemoved = 0;
 
-    const result = this.db
+    if (cutoffSeq > 0) {
+      const historical = this.db
+        .delete(events)
+        .where(
+          and(
+            eq(events.threadId, threadId),
+            lte(events.seq, cutoffSeq),
+            or(
+              like(events.normType, "%delta%"),
+              inArray(events.normType, [...PRUNABLE_NOISE_EVENT_NORM_TYPES]),
+            ),
+          ),
+        )
+        .run() as { changes?: number };
+      totalRemoved += historical.changes ?? 0;
+    }
+
+    const alwaysPrunable = this.db
       .delete(events)
       .where(
         and(
           eq(events.threadId, threadId),
-          lte(events.seq, cutoffSeq),
-          or(
-            like(events.normType, "%delta%"),
-            inArray(events.normType, [...PRUNABLE_NOISE_EVENT_NORM_TYPES]),
-          ),
+          inArray(events.normType, [...ALWAYS_PRUNABLE_NOISE_EVENT_NORM_TYPES]),
         ),
       )
       .run() as { changes?: number };
-    return result.changes ?? 0;
+    totalRemoved += alwaysPrunable.changes ?? 0;
+
+    const resolvedAssistantDeltas = this.db
+      .delete(events)
+      .where(
+        and(
+          eq(events.threadId, threadId),
+          eq(events.normType, "item/agentmessage/delta"),
+          sql`EXISTS (
+            SELECT 1
+            FROM events completed
+            WHERE completed.thread_id = events.thread_id
+              AND completed.norm_type = 'item/completed'
+              AND lower(
+                coalesce(
+                  json_extract(completed.data, '$.item.type'),
+                  json_extract(completed.data, '$.payload.item.type'),
+                  json_extract(completed.data, '$.msg.item.type')
+                )
+              ) = 'agentmessage'
+              AND coalesce(
+                json_extract(completed.data, '$.item.id'),
+                json_extract(completed.data, '$.item_id'),
+                json_extract(completed.data, '$.payload.item.id'),
+                json_extract(completed.data, '$.payload.item_id'),
+                json_extract(completed.data, '$.msg.item.id'),
+                json_extract(completed.data, '$.msg.item_id')
+              ) = coalesce(
+                json_extract(events.data, '$.itemId'),
+                json_extract(events.data, '$.item_id'),
+                json_extract(events.data, '$.payload.itemId'),
+                json_extract(events.data, '$.payload.item_id'),
+                json_extract(events.data, '$.msg.item_id'),
+                json_extract(events.data, '$.msg.itemId')
+              )
+          )`,
+        ),
+      )
+      .run() as { changes?: number };
+    totalRemoved += resolvedAssistantDeltas.changes ?? 0;
+
+    return totalRemoved;
   }
 
   reclaimStorageIfNeeded(opts?: {

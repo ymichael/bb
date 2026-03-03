@@ -197,4 +197,56 @@ describe("event repository provider envelope indexing", () => {
       "item/completed",
     ]);
   });
+
+  it("prunes legacy assistant deltas and resolved item deltas regardless of recency cutoff", () => {
+    events.create({
+      threadId,
+      seq: 1,
+      type: "item/agentMessage/delta",
+      data: {
+        itemId: "msg-1",
+        delta: "chunk",
+      },
+    });
+    events.create({
+      threadId,
+      seq: 2,
+      type: "item/completed",
+      data: {
+        item: {
+          id: "msg-1",
+          type: "agentMessage",
+          text: "final response",
+        },
+      },
+    });
+    events.create({
+      threadId,
+      seq: 3,
+      type: "codex/event/agent_message_delta",
+      data: {
+        msg: { type: "agent_message_delta", delta: "chunk" },
+      },
+    });
+    events.create({
+      threadId,
+      seq: 4,
+      type: "codex/event/agent_message_content_delta",
+      data: {
+        msg: {
+          type: "agent_message_content_delta",
+          item_id: "msg-1",
+          delta: "chunk",
+        },
+      },
+    });
+
+    const removed = events.pruneHistoricalNoiseByThread(threadId, 10_000);
+    expect(removed).toBe(3);
+
+    const remaining = events.listByThread(threadId);
+    expect(remaining.map((event) => event.type)).toEqual([
+      "item/completed",
+    ]);
+  });
 });
