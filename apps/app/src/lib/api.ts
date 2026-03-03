@@ -20,14 +20,11 @@ import type {
   ThreadExecutionOptions,
   ThreadWorkStatus,
   UploadedPromptAttachment,
-  CommitThreadRequest,
-  CommitThreadResponse,
-  SquashMergeThreadRequest,
-  SquashMergeThreadResponse,
+  ThreadOperationRequest,
+  ThreadOperationResponse,
   PromoteThreadResponse,
   DemotePrimaryResponse,
   PrimaryCheckoutStatus,
-  CommitProjectResponse,
   ThreadTimelineResponse,
   ThreadToolGroupMessagesResponse,
   ThreadGitDiffSelection,
@@ -319,13 +316,6 @@ export async function getProjectWorkspaceStatus(projectId: string): Promise<Thre
   return request<ThreadWorkStatus>("GET", `/projects/${projectId}/workspace-status`);
 }
 
-export async function commitProjectWorkspace(
-  projectId: string,
-  req?: CommitThreadRequest,
-): Promise<CommitProjectResponse> {
-  return request<CommitProjectResponse>("POST", `/projects/${projectId}/commit`, req ?? {});
-}
-
 export async function transcribeVoiceInput(
   file: File,
   prompt?: string,
@@ -486,11 +476,11 @@ export async function getThreadPrimaryStatus(
   return request<PrimaryCheckoutStatus>("GET", `/threads/${id}/primary-status`);
 }
 
-export async function commitThread(
+export async function requestThreadOperation(
   id: string,
-  req?: CommitThreadRequest,
-): Promise<CommitThreadResponse> {
-  return request<CommitThreadResponse>("POST", `/threads/${id}/commit`, req ?? {});
+  req: ThreadOperationRequest,
+): Promise<ThreadOperationResponse> {
+  return request<ThreadOperationResponse>("POST", `/threads/${id}/operations`, req);
 }
 
 export async function promoteThread(id: string): Promise<PromoteThreadResponse> {
@@ -501,13 +491,6 @@ export async function demotePrimaryCheckout(
   id: string,
 ): Promise<DemotePrimaryResponse> {
   return request<DemotePrimaryResponse>("POST", `/threads/${id}/demote-primary`);
-}
-
-export async function squashMergeThread(
-  id: string,
-  req?: SquashMergeThreadRequest,
-): Promise<SquashMergeThreadResponse> {
-  return request<SquashMergeThreadResponse>("POST", `/threads/${id}/squash-merge`, req ?? {});
 }
 
 export async function getThreadEvents(

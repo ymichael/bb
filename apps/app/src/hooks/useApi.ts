@@ -28,11 +28,8 @@ import type {
   ThreadExecutionOptions,
   ThreadWorkStatus,
   UploadedPromptAttachment,
-  CommitThreadResponse,
-  CommitThreadRequest,
-  SquashMergeThreadRequest,
-  SquashMergeThreadResponse,
-  CommitProjectResponse,
+  ThreadOperationRequest,
+  ThreadOperationResponse,
   PromoteThreadResponse,
   DemotePrimaryResponse,
   ThreadTimelineResponse,
@@ -42,7 +39,6 @@ import type {
   ThreadQueuedMessage,
 } from "@beanbag/agent-core";
 import * as api from "../lib/api";
-import { getAutoArchivePreferences } from "../lib/auto-archive-preferences";
 
 const DEFAULT_THREAD_EVENTS_LIMIT = 120;
 const THREAD_WORK_STATUS_QUERY_KEY = "threadWorkStatus";
@@ -623,7 +619,7 @@ export function useMarkThreadUnread() {
   });
 }
 
-export function useCommitThread() {
+export function useRequestThreadOperation() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({
@@ -631,15 +627,12 @@ export function useCommitThread() {
       ...req
     }: {
       id: string;
-    } & CommitThreadRequest): Promise<CommitThreadResponse> =>
-      api.commitThread(id, {
-        ...req,
-        autoArchiveThreadOnCommit:
-          req.autoArchiveThreadOnCommit ??
-          getAutoArchivePreferences().autoArchiveThreadOnCommit,
-      }),
+    } & ThreadOperationRequest): Promise<ThreadOperationResponse> =>
+      api.requestThreadOperation(id, req),
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["thread", variables.id] });
+      queryClient.invalidateQueries({ queryKey: ["threadEvents", variables.id] });
+      queryClient.invalidateQueries({ queryKey: ["threadTimeline", variables.id] });
       queryClient.invalidateQueries({ queryKey: ["threadWorkStatus", variables.id] });
       queryClient.invalidateQueries({ queryKey: ["threads"] });
       queryClient.invalidateQueries({ queryKey: ["status"] });
@@ -672,49 +665,6 @@ export function useDemotePrimaryCheckout() {
       queryClient.invalidateQueries({ queryKey: ["threads"] });
       queryClient.invalidateQueries({ queryKey: ["threadTimeline", variables.id] });
       queryClient.invalidateQueries({ queryKey: ["threadEvents", variables.id] });
-      queryClient.invalidateQueries({ queryKey: ["status"] });
-    },
-  });
-}
-
-export function useSquashMergeThread() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: ({
-      id,
-      ...req
-    }: {
-      id: string;
-    } & SquashMergeThreadRequest): Promise<SquashMergeThreadResponse> =>
-      api.squashMergeThread(id, {
-        ...req,
-        autoArchiveThreadOnCommit:
-          req.autoArchiveThreadOnCommit ??
-          getAutoArchivePreferences().autoArchiveThreadOnCommit,
-      }),
-    onSuccess: (_data, variables) => {
-      queryClient.invalidateQueries({ queryKey: ["thread", variables.id] });
-      queryClient.invalidateQueries({ queryKey: ["threadWorkStatus", variables.id] });
-      queryClient.invalidateQueries({ queryKey: ["threads"] });
-      queryClient.invalidateQueries({ queryKey: ["status"] });
-    },
-  });
-}
-
-export function useCommitProjectWorkspace() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: ({
-      projectId,
-      ...req
-    }: {
-      projectId: string;
-    } & CommitThreadRequest): Promise<CommitProjectResponse> =>
-      api.commitProjectWorkspace(projectId, req),
-    onSuccess: (_data, variables) => {
-      queryClient.invalidateQueries({ queryKey: ["projectWorkspaceStatus", variables.projectId] });
-      queryClient.invalidateQueries({ queryKey: ["threads"] });
-      queryClient.invalidateQueries({ queryKey: ["thread"] });
       queryClient.invalidateQueries({ queryKey: ["status"] });
     },
   });

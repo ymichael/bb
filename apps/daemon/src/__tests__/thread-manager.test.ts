@@ -3745,6 +3745,137 @@ describe("ThreadManager", () => {
       expect(ws.broadcast).not.toHaveBeenCalled();
     });
 
+    it("forces freshness validation before promote thread operations", async () => {
+      const thread = makeThread({
+        id: "thread-1",
+        projectId: "proj-1",
+        status: "idle",
+        environmentId: "worktree",
+      });
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue({
+        id: "proj-1",
+        name: "Test",
+        rootPath: "/tmp/proj-1",
+        createdAt: 1000,
+        updatedAt: 1000,
+      });
+      (eventRepo.getLatestSeq as ReturnType<typeof vi.fn>).mockReturnValue(0);
+      (eventRepo.create as ReturnType<typeof vi.fn>).mockImplementation((event) =>
+        makeEvent({
+          threadId: event.threadId,
+          seq: event.seq,
+          type: event.type as string,
+          data: event.data,
+        })
+      );
+
+      (manager as any).primaryPromotionByProjectId.set("proj-1", {
+        projectId: "proj-1",
+        threadId: "thread-1",
+        promotedAt: 1000,
+        promotedCheckout: {
+          head: "abc123",
+          detached: false,
+        },
+        reconstructed: false,
+      });
+
+      const ensurePrimaryStatusSpy = vi
+        .spyOn(manager as any, "_ensurePrimaryPromotionStateIsCurrent")
+        .mockImplementation(() => {});
+
+      const result = await manager.promoteThread("thread-1");
+
+      expect(ensurePrimaryStatusSpy).toHaveBeenCalledWith("proj-1", { force: true });
+      expect(result).toMatchObject({
+        ok: true,
+        promoted: false,
+      });
+    });
+
+    it("forces freshness validation before demote primary-checkout operations", async () => {
+      const thread = makeThread({
+        id: "thread-1",
+        projectId: "proj-1",
+        status: "idle",
+        environmentId: "worktree",
+      });
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue({
+        id: "proj-1",
+        name: "Test",
+        rootPath: "/tmp/proj-1",
+        createdAt: 1000,
+        updatedAt: 1000,
+      });
+      (eventRepo.getLatestSeq as ReturnType<typeof vi.fn>).mockReturnValue(0);
+      (eventRepo.create as ReturnType<typeof vi.fn>).mockImplementation((event) =>
+        makeEvent({
+          threadId: event.threadId,
+          seq: event.seq,
+          type: event.type as string,
+          data: event.data,
+        })
+      );
+
+      const ensurePrimaryStatusSpy = vi
+        .spyOn(manager as any, "_ensurePrimaryPromotionStateIsCurrent")
+        .mockImplementation(() => {});
+
+      const result = await manager.demotePrimaryCheckout("thread-1");
+
+      expect(ensurePrimaryStatusSpy).toHaveBeenCalledWith("proj-1", { force: true });
+      expect(result).toMatchObject({
+        ok: true,
+        demoted: false,
+      });
+    });
+
+    it("rejects promote when another primary-checkout transition is already in flight", async () => {
+      const thread = makeThread({
+        id: "thread-1",
+        projectId: "proj-1",
+        status: "idle",
+        environmentId: "worktree",
+      });
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue({
+        id: "proj-1",
+        name: "Test",
+        rootPath: "/tmp/proj-1",
+        createdAt: 1000,
+        updatedAt: 1000,
+      });
+      (manager as any).primaryCheckoutTransitionsInFlight.add("proj-1");
+
+      await expect(manager.promoteThread("thread-1")).rejects.toThrow(
+        "Another primary-checkout promotion/demotion operation is already in progress for this project",
+      );
+    });
+
+    it("rejects demote when another primary-checkout transition is already in flight", async () => {
+      const thread = makeThread({
+        id: "thread-1",
+        projectId: "proj-1",
+        status: "idle",
+        environmentId: "worktree",
+      });
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue({
+        id: "proj-1",
+        name: "Test",
+        rootPath: "/tmp/proj-1",
+        createdAt: 1000,
+        updatedAt: 1000,
+      });
+      (manager as any).primaryCheckoutTransitionsInFlight.add("proj-1");
+
+      await expect(manager.demotePrimaryCheckout("thread-1")).rejects.toThrow(
+        "Another primary-checkout promotion/demotion operation is already in progress for this project",
+      );
+    });
+
   });
 
   describe("isActive()", () => {
@@ -3795,6 +3926,214 @@ describe("ThreadManager", () => {
           });
         },
       );
+    });
+
+    describe("requestThreadOperation()", () => {
+      it("dispatches commit intents immediately for idle threads", async () => {
+        const thread = makeThread({
+          id: "thread-1",
+          status: "idle",
+          environmentId: "worktree",
+        });
+        (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
+        (eventRepo.getLatestSeq as ReturnType<typeof vi.fn>).mockReturnValue(0);
+        (eventRepo.create as ReturnType<typeof vi.fn>).mockImplementation((event) =>
+          makeEvent({
+            threadId: event.threadId,
+            seq: event.seq,
+            type: event.type as string,
+            data: event.data,
+          })
+        );
+        const systemTellSpy = vi
+          .spyOn(manager, "systemTell")
+          .mockResolvedValue(undefined);
+
+        const result = await manager.requestThreadOperation("thread-1", {
+          operation: "commit",
+          options: {
+            includeUnstaged: true,
+            message: "feat: test commit",
+          },
+        });
+
+        expect(result).toMatchObject({
+          ok: true,
+          operation: "commit",
+          status: "dispatched",
+          queued: false,
+          demotedPrimaryCheckout: false,
+        });
+        expect(systemTellSpy).toHaveBeenCalledWith(
+          "thread-1",
+          expect.objectContaining({
+            input: [
+              expect.objectContaining({
+                type: "text",
+                text: expect.stringContaining("commit request"),
+              }),
+            ],
+          }),
+        );
+        expect(eventRepo.create).toHaveBeenCalledWith(
+          expect.objectContaining({
+            type: "system/thread_operation",
+            data: expect.objectContaining({
+              operation: "commit",
+              status: "requested",
+            }),
+          }),
+        );
+        expect(eventRepo.create).toHaveBeenCalledWith(
+          expect.objectContaining({
+            type: "system/thread_operation",
+            data: expect.objectContaining({
+              operation: "commit",
+              status: "dispatched",
+              dispatchMode: "immediate",
+            }),
+          }),
+        );
+      });
+
+      it("queues squash intents when a thread is active", async () => {
+        const thread = makeThread({
+          id: "thread-1",
+          status: "active",
+          environmentId: "worktree",
+          queuedMessages: [],
+        });
+        (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
+        (eventRepo.getLatestSeq as ReturnType<typeof vi.fn>).mockReturnValue(0);
+        (eventRepo.create as ReturnType<typeof vi.fn>).mockImplementation((event) =>
+          makeEvent({
+            threadId: event.threadId,
+            seq: event.seq,
+            type: event.type as string,
+            data: event.data,
+          })
+        );
+        const enqueueSpy = vi
+          .spyOn(manager, "enqueueFollowUp")
+          .mockReturnValue(thread);
+        const systemTellSpy = vi.spyOn(manager, "systemTell");
+
+        const result = await manager.requestThreadOperation("thread-1", {
+          operation: "squash_merge",
+          options: {
+            commitIfNeeded: true,
+          },
+        });
+
+        expect(result).toMatchObject({
+          ok: true,
+          operation: "squash_merge",
+          status: "queued",
+          queued: true,
+          demotedPrimaryCheckout: false,
+        });
+        expect(enqueueSpy).toHaveBeenCalledWith(
+          "thread-1",
+          expect.objectContaining({
+            input: [
+              expect.objectContaining({
+                type: "text",
+                text: expect.stringContaining("squash-merge request"),
+              }),
+            ],
+          }),
+        );
+        expect(systemTellSpy).not.toHaveBeenCalled();
+      });
+
+      it("demotes primary checkout before dispatching operation intents", async () => {
+        const thread = makeThread({
+          id: "thread-1",
+          status: "idle",
+          environmentId: "worktree",
+        });
+        (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
+        (eventRepo.getLatestSeq as ReturnType<typeof vi.fn>).mockReturnValue(0);
+        (eventRepo.create as ReturnType<typeof vi.fn>).mockImplementation((event) =>
+          makeEvent({
+            threadId: event.threadId,
+            seq: event.seq,
+            type: event.type as string,
+            data: event.data,
+          })
+        );
+        (manager as any).primaryPromotionByProjectId.set("proj-1", {
+          projectId: "proj-1",
+          threadId: "thread-1",
+          promotedAt: 1000,
+          promotedCheckout: {
+            head: "abc123",
+            detached: false,
+          },
+          reconstructed: false,
+        });
+
+        const demoteSpy = vi
+          .spyOn(manager, "demotePrimaryCheckout")
+          .mockResolvedValue({
+            ok: true,
+            demoted: true,
+            message: "Primary checkout demoted",
+            primaryStatus: { projectId: "proj-1" },
+          });
+        const systemTellSpy = vi
+          .spyOn(manager, "systemTell")
+          .mockResolvedValue(undefined);
+
+        const result = await manager.requestThreadOperation("thread-1", {
+          operation: "commit",
+          options: {},
+        });
+
+        expect(demoteSpy).toHaveBeenCalledWith("thread-1");
+        expect(systemTellSpy).toHaveBeenCalled();
+        expect(demoteSpy.mock.invocationCallOrder[0]).toBeLessThan(
+          systemTellSpy.mock.invocationCallOrder[0] ?? Number.POSITIVE_INFINITY,
+        );
+        expect(result.demotedPrimaryCheckout).toBe(true);
+      });
+
+      it("records failed thread-operation events when dispatch fails", async () => {
+        const thread = makeThread({
+          id: "thread-1",
+          status: "idle",
+          environmentId: "worktree",
+        });
+        (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
+        (eventRepo.getLatestSeq as ReturnType<typeof vi.fn>).mockReturnValue(0);
+        (eventRepo.create as ReturnType<typeof vi.fn>).mockImplementation((event) =>
+          makeEvent({
+            threadId: event.threadId,
+            seq: event.seq,
+            type: event.type as string,
+            data: event.data,
+          })
+        );
+        vi.spyOn(manager, "systemTell").mockRejectedValue(new Error("dispatch failed"));
+
+        await expect(
+          manager.requestThreadOperation("thread-1", {
+            operation: "commit",
+            options: {},
+          }),
+        ).rejects.toThrow("dispatch failed");
+
+        expect(eventRepo.create).toHaveBeenCalledWith(
+          expect.objectContaining({
+            type: "system/thread_operation",
+            data: expect.objectContaining({
+              operation: "commit",
+              status: "failed",
+              message: "dispatch failed",
+            }),
+          }),
+        );
+      });
     });
 
     it("passes includeUnstaged to provider commit-message generation", async () => {

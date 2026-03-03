@@ -35,6 +35,25 @@ function makeEvent(overrides: ThreadEventOverrides = {}): ThreadEvent {
   } as ThreadEvent;
 }
 
+function makeWorkStatus() {
+  return {
+    state: "clean",
+    changedFiles: 0,
+    insertions: 0,
+    deletions: 0,
+    workspaceChangedFiles: 0,
+    workspaceInsertions: 0,
+    workspaceDeletions: 0,
+    hasUncommittedChanges: false,
+    hasCommittedUnmergedChanges: false,
+    aheadCount: 0,
+    behindCount: 0,
+    mergeBaseBranches: ["main"],
+    mergeBaseBranch: "main",
+    defaultBranch: "main",
+  };
+}
+
 function mockThreadManager(): ThreadManager {
   return {
     spawn: vi.fn(),
@@ -47,6 +66,7 @@ function mockThreadManager(): ThreadManager {
     unarchive: vi.fn(),
     promoteThread: vi.fn(),
     demotePrimaryCheckout: vi.fn(),
+    requestThreadOperation: vi.fn(),
     markRead: vi.fn(),
     getById: vi.fn(),
     getWorkStatus: vi.fn(),
@@ -810,6 +830,147 @@ describe("Thread routes", () => {
       expect(await res.json()).toMatchObject({
         ok: true,
         demoted: true,
+      });
+    });
+  });
+
+  describe("POST /threads/:id/operations", () => {
+    it("requests a commit operation intent", async () => {
+      const thread = makeThread({ status: "idle" });
+      (threadManager.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
+      (threadManager.requestThreadOperation as ReturnType<typeof vi.fn>).mockResolvedValue({
+        ok: true,
+        operation: "commit",
+        status: "dispatched",
+        queued: false,
+        message: "Commit operation dispatched to the agent",
+        demotedPrimaryCheckout: false,
+      });
+
+      const res = await app.request("/threads/thread-1/operations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          operation: "commit",
+          options: {
+            includeUnstaged: true,
+            message: "feat: test",
+          },
+        }),
+      });
+
+      expect(res.status).toBe(202);
+      expect(threadManager.requestThreadOperation).toHaveBeenCalledWith("thread-1", {
+        operation: "commit",
+        options: {
+          includeUnstaged: true,
+          message: "feat: test",
+        },
+      });
+      expect(await res.json()).toMatchObject({
+        ok: true,
+        operation: "commit",
+      });
+    });
+
+    it("returns 400 for invalid operation payloads", async () => {
+      const thread = makeThread({ status: "idle" });
+      (threadManager.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
+
+      const res = await app.request("/threads/thread-1/operations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          operation: "unknown",
+        }),
+      });
+
+      expect(res.status).toBe(400);
+      expect(threadManager.requestThreadOperation).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("POST /threads/:id/commit", () => {
+    it("routes deprecated commit endpoint through operation intents", async () => {
+      const thread = makeThread({ status: "idle" });
+      (threadManager.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
+      (threadManager.getWorkStatus as ReturnType<typeof vi.fn>).mockReturnValue(makeWorkStatus());
+      (threadManager.requestThreadOperation as ReturnType<typeof vi.fn>).mockResolvedValue({
+        ok: true,
+        operation: "commit",
+        status: "queued",
+        queued: true,
+        message: "Commit operation queued for the agent",
+        demotedPrimaryCheckout: false,
+      });
+
+      const res = await app.request("/threads/thread-1/commit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          includeUnstaged: false,
+          message: "feat: test",
+        }),
+      });
+
+      expect(res.status).toBe(200);
+      expect(res.headers.get("deprecation")).toBe("true");
+      expect(threadManager.requestThreadOperation).toHaveBeenCalledWith("thread-1", {
+        operation: "commit",
+        options: {
+          includeUnstaged: false,
+          message: "feat: test",
+        },
+      });
+      expect(await res.json()).toMatchObject({
+        ok: true,
+        commitCreated: false,
+        queued: true,
+      });
+    });
+  });
+
+  describe("POST /threads/:id/squash-merge", () => {
+    it("routes deprecated squash endpoint through operation intents", async () => {
+      const thread = makeThread({ status: "active", environmentId: "worktree" });
+      (threadManager.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
+      (threadManager.getWorkStatus as ReturnType<typeof vi.fn>).mockReturnValue(makeWorkStatus());
+      (threadManager.requestThreadOperation as ReturnType<typeof vi.fn>).mockResolvedValue({
+        ok: true,
+        operation: "squash_merge",
+        status: "queued",
+        queued: true,
+        message: "Squash-merge operation queued for the agent",
+        demotedPrimaryCheckout: false,
+      });
+
+      const res = await app.request("/threads/thread-1/squash-merge", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          commitIfNeeded: true,
+          includeUnstaged: true,
+          commitMessage: "feat: prep",
+          mergeBaseBranch: "main",
+        }),
+      });
+
+      expect(res.status).toBe(200);
+      expect(res.headers.get("deprecation")).toBe("true");
+      expect(threadManager.requestThreadOperation).toHaveBeenCalledWith("thread-1", {
+        operation: "squash_merge",
+        options: {
+          commitIfNeeded: true,
+          includeUnstaged: true,
+          commitMessage: "feat: prep",
+          squashMessage: undefined,
+          mergeBaseBranch: "main",
+        },
+      });
+      expect(await res.json()).toMatchObject({
+        ok: true,
+        merged: false,
+        queued: true,
       });
     });
   });

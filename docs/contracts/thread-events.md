@@ -39,6 +39,10 @@ Notes:
 - `client/thread/start` -> `ClientOutboundStartEventData`
 - `client/turn/start` -> `ClientOutboundStartEventData`
 - `system/error` -> `SystemErrorEventData`
+- `system/thread_operation` -> `SystemThreadOperationEventData`
+- `system/primary_checkout/updated` -> `SystemPrimaryCheckoutUpdatedEventData`
+- `system/worktree/commit` -> `SystemWorktreeCommitEventData`
+- `system/worktree/squash_merge` -> `SystemWorktreeSquashMergeEventData`
 
 These are Beanbag-owned and must stay exhaustively handled.
 

@@ -26,6 +26,10 @@ Status mapping is defined in `apps/daemon/src/routes/error-response.ts`.
   - response: `Project[]`
 - `GET /projects/:id/files?query=&limit=`
   - response: `ProjectFileSuggestion[]`
+- `POST /projects/:id/commit` (deprecated)
+  - body: `commitThreadSchema`
+  - behavior: legacy direct commit flow (use `POST /threads` + operation prompt instead)
+  - deprecation headers: `Deprecation`, `Sunset`, `Link`
 
 ## Thread Endpoints
 
@@ -41,10 +45,21 @@ Status mapping is defined in `apps/daemon/src/routes/error-response.ts`.
 - `POST /threads/:id/tell`
   - body: `tellThreadSchema`
   - response: `{ ok: true }`
+- `POST /threads/:id/operations`
+  - body: `threadOperationSchema`
+  - response: `ThreadOperationResponse` (202)
 - `POST /threads/:id/stop`
   - response: `{ ok: true }`
 - `POST /threads/:id/archive`
   - response: `{ ok: true }`
+- `POST /threads/:id/commit` (deprecated compatibility route)
+  - body: `commitThreadSchema`
+  - behavior: forwards to operation-intent dispatch
+  - deprecation headers: `Deprecation`, `Sunset`, `Link`
+- `POST /threads/:id/squash-merge` (deprecated compatibility route)
+  - body: `squashMergeThreadSchema`
+  - behavior: forwards to operation-intent dispatch
+  - deprecation headers: `Deprecation`, `Sunset`, `Link`
 - `GET /threads/:id/events?afterSeq=`
   - response: `ThreadEvent[]`
 - `GET /threads/:id/output`

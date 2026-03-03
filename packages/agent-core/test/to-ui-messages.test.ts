@@ -1308,6 +1308,49 @@ describe("toUIMessages replay coverage", () => {
     expect(ops[1]?.detail).toContain("Duration 125ms");
   });
 
+  it("projects thread operation intent lifecycle events as operations", () => {
+    const events: ThreadEvent[] = [
+      {
+        id: "evt-1",
+        threadId: "thread-1",
+        seq: 1,
+        type: "system/thread_operation",
+        data: {
+          operation: "commit",
+          status: "requested",
+          message: "Commit operation requested",
+        },
+        createdAt: 1,
+      },
+      {
+        id: "evt-2",
+        threadId: "thread-1",
+        seq: 2,
+        type: "system/thread_operation",
+        data: {
+          operation: "commit",
+          status: "dispatched",
+          dispatchMode: "queued",
+          message: "Commit operation queued for the agent",
+        },
+        createdAt: 2,
+      },
+    ];
+
+    const projected = toUIMessages(events);
+    const ops = projected.filter(
+      (message): message is Extract<UIMessage, { kind: "operation" }> =>
+        message.kind === "operation",
+    );
+
+    expect(ops).toHaveLength(2);
+    expect(ops[0]?.opType).toBe("thread-operation-intent");
+    expect(ops[0]?.title).toBe("Commit requested");
+    expect(ops[1]?.opType).toBe("thread-operation-intent");
+    expect(ops[1]?.title).toBe("Commit queued");
+    expect(ops[1]?.detail).toContain("Will run after the active turn completes");
+  });
+
   it("wraps unknown events in debug mode and drops them otherwise", () => {
     const events: ThreadEvent[] = [
       {

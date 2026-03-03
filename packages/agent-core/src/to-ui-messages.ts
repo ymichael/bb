@@ -1331,6 +1331,55 @@ function parseOperationMessage(
     };
   }
 
+  if (eventTypeMatches(eventType, "system/thread_operation")) {
+    const payload = toEventRecord(event.data);
+    const operation = getStringField(payload, "operation");
+    const status = getStringField(payload, "status");
+    const dispatchMode = getStringField(payload, "dispatchMode");
+    const title = (() => {
+      if (operation === "commit") {
+        if (status === "requested") return "Commit requested";
+        if (status === "dispatched") {
+          return dispatchMode === "queued" ? "Commit queued" : "Commit dispatched";
+        }
+        if (status === "failed") return "Commit request failed";
+        // Persisted event payloads are open_external at read-time; keep generic fallback.
+        return "Commit operation update";
+      }
+      if (operation === "squash_merge") {
+        if (status === "requested") return "Squash merge requested";
+        if (status === "dispatched") {
+          return dispatchMode === "queued"
+            ? "Squash merge queued"
+            : "Squash merge dispatched";
+        }
+        if (status === "failed") return "Squash merge request failed";
+        // Persisted event payloads are open_external at read-time; keep generic fallback.
+        return "Squash merge operation update";
+      }
+      // Persisted event payloads are open_external at read-time; keep generic fallback.
+      return "Thread operation update";
+    })();
+
+    const detailParts = [
+      getStringField(payload, "message"),
+      dispatchMode === "queued" ? "Will run after the active turn completes" : undefined,
+    ].filter((value): value is string => Boolean(value));
+
+    return {
+      kind: "operation",
+      id: messageId(event.threadId, "op", `thread-operation:${event.seq}`),
+      threadId: event.threadId,
+      sourceSeqStart: event.seq,
+      sourceSeqEnd: event.seq,
+      createdAt: event.createdAt,
+      turnId: getTurnId(event.data),
+      opType: "thread-operation-intent",
+      title,
+      detail: detailParts.length > 0 ? detailParts.join(" • ") : undefined,
+    };
+  }
+
   if (eventTypeMatches(eventType, "system/worktree/commit")) {
     const payload = toEventRecord(event.data);
     const status = getStringField(payload, "status");

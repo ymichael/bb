@@ -387,6 +387,7 @@ describe("Project routes", () => {
         });
 
         expect(res.status).toBe(200);
+        expect(res.headers.get("deprecation")).toBe("true");
         expect(commitMessageGenerator).toHaveBeenCalledWith({
           cwd: repoRoot,
           includeUnstaged: false,
@@ -432,6 +433,7 @@ describe("Project routes", () => {
         });
 
         expect(res.status).toBe(500);
+        expect(res.headers.get("deprecation")).toBe("true");
         expect(await res.json()).toEqual({ error: "Failed to auto-generate commit message" });
       } finally {
         rmSync(repoRoot, { recursive: true, force: true });

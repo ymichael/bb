@@ -132,6 +132,11 @@ Show command context fallback:
 
 - `bb thread show [id]` defaults to `BB_THREAD_ID` when `id` is omitted.
 
+Agent-driven git operation commands:
+
+- `bb thread commit <id> [--message "..."] [--staged-only]`
+- `bb thread squash-merge <id> [--commit-if-needed] [--staged-only] [--commit-message "..."] [--squash-message "..."] [--merge-base-branch <branch>]`
+
 Provider and environment selection:
 
 - `BEANBAG_PROVIDER` selects the active provider adapter (`codex`, `pi-mono`, `claude-code`).

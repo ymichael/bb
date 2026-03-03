@@ -49,6 +49,15 @@ const ATTACHMENTS_ROOT_PATH = resolve(homedir(), ".beanbag", "attachments");
 const MAX_PROMPT_ATTACHMENT_BYTES = 25 * 1024 * 1024;
 const MAX_PROMPT_IMAGE_ATTACHMENT_BYTES = 10 * 1024 * 1024;
 const IMAGE_EXTENSION_PATTERN = /\.(png|jpe?g|webp|gif|bmp|svg)$/i;
+const DEPRECATION_SUNSET_DATE = "Tue, 30 Jun 2026 00:00:00 GMT";
+
+function setDeprecatedEndpointHeaders(c: {
+  header: (name: string, value: string) => void;
+}, successorPath: string): void {
+  c.header("Deprecation", "true");
+  c.header("Sunset", DEPRECATION_SUNSET_DATE);
+  c.header("Link", `<${successorPath}>; rel=\"successor-version\"`);
+}
 
 function sanitizeFileName(rawName: string): string {
   const base = basename(rawName).trim();
@@ -273,6 +282,8 @@ export function createProjectRoutes(
     })
     .post("/:id/commit", zValidator("json", commitThreadSchema.optional()), async (c) => {
       try {
+        const projectId = c.req.param("id");
+        setDeprecatedEndpointHeaders(c, "/api/v1/threads");
         const project = projectRepo.getById(c.req.param("id"));
         if (!project) {
           return c.json({ error: "Project not found" }, 404);

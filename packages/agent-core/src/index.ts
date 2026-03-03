@@ -54,6 +54,11 @@ export type {
   UpdateThreadRequest,
   CreateProjectRequest,
   UpdateProjectRequest,
+  ThreadOperationType,
+  CommitOperationOptions,
+  SquashMergeOperationOptions,
+  ThreadOperationRequest,
+  ThreadOperationResponse,
   CommitThreadRequest,
   CommitThreadResponse,
   SquashMergeThreadRequest,
@@ -107,6 +112,7 @@ export {
   updateProjectSchema,
   commitThreadSchema,
   squashMergeThreadSchema,
+  threadOperationSchema,
 } from "./schemas.js";
 
 export type {
@@ -158,6 +164,10 @@ export type {
 
 export { toUIMessages } from "./to-ui-messages.js";
 export { buildThreadDetailRows } from "./thread-detail-rows.js";
+export {
+  buildThreadOperationInstruction,
+  type ThreadOperationPromptTarget,
+} from "./thread-operation-prompts.js";
 export { assertNever } from "./assert-never.js";
 export { toRecord, getStringField } from "./unknown-helpers.js";
 export {

@@ -19,6 +19,7 @@ import {
   getStringField,
   resolveProviderEventMethod,
   buildThreadDetailRows,
+  buildThreadOperationInstruction,
   toRecord,
   toUIMessages,
   unwrapProviderEventPayload,
@@ -57,6 +58,9 @@ import {
   type SandboxMode,
   type SendQueuedThreadMessageRequest,
   type SendQueuedThreadMessageResponse,
+  type ThreadOperationRequest,
+  type ThreadOperationResponse,
+  type ThreadOperationType,
   type ThreadTimelineResponse,
   type ThreadGitDiffResponse,
   type ThreadGitDiffSelection,
@@ -98,6 +102,10 @@ import { InMemorySchedulerService } from "./scheduler-service.js";
 import { canTransitionThreadStatus } from "./thread-status-machine.js";
 import { ThreadGitStatusService, type GitCheckoutSnapshot } from "./thread-git-status.js";
 import { ThreadAttributedDiffService } from "./thread-attributed-diff.js";
+import {
+  evaluateThreadOperationPolicy,
+  type ThreadIntentDispatchMode,
+} from "./thread-operation-policy.js";
 
 export type PromptExecutionOptions = ProviderExecutionOptions;
 
@@ -420,6 +428,8 @@ export class ThreadManager implements ThreadOrchestrator {
   private primaryPromotionValidatedAtByProjectId = new Map<string, number>();
   /** Filesystem watchers keyed by project while primary checkout is active. */
   private primaryPromotionWatchersByProjectId = new Map<string, ReturnType<typeof watch>>();
+  /** Per-project mutex for promote/demote transitions. */
+  private primaryCheckoutTransitionsInFlight = new Set<string>();
   /** Prevents concurrent queued follow-up dispatch loops per thread. */
   private queueDispatchInFlight = new Set<string>();
   private rpcIdCounter = 0;
@@ -1511,6 +1521,96 @@ export class ThreadManager implements ThreadOrchestrator {
     );
   }
 
+  async requestThreadOperation(
+    threadId: string,
+    request: ThreadOperationRequest,
+  ): Promise<ThreadOperationResponse> {
+    const thread = this.threadRepo.getById(threadId);
+    if (!thread) {
+      throw threadNotFoundError(threadId);
+    }
+    if (thread.archivedAt !== undefined) {
+      throw threadArchivedError(threadId);
+    }
+    if (request.operation === "squash_merge" && thread.environmentId !== "worktree") {
+      throw invalidRequestError("Squash merge operations are only available for worktree threads");
+    }
+
+    const primaryPromotion = this.primaryPromotionByProjectId.get(thread.projectId);
+    const policyAction = this._resolveOperationPolicyAction(request.operation);
+    const policyDecision = evaluateThreadOperationPolicy(policyAction, {
+      status: thread.status,
+      archived: thread.archivedAt !== undefined,
+      primaryCheckoutActive: primaryPromotion?.threadId === thread.id,
+    });
+
+    if (!policyDecision.allowed) {
+      throw invalidRequestError(policyDecision.reason ?? "Operation is not allowed");
+    }
+
+    this._appendThreadOperationEvent(thread.id, request.operation, "requested", {
+      message: this._threadOperationRequestedMessage(request.operation),
+    });
+
+    let demotedPrimaryCheckout = false;
+    try {
+      if (policyDecision.requiresDemoteFirst) {
+        await this.demotePrimaryCheckout(thread.id);
+        demotedPrimaryCheckout = true;
+      }
+
+      const operationInstruction = buildThreadOperationInstruction(request, {
+        target: "thread",
+      });
+      const operationInput: PromptInput[] = [{
+        type: "text",
+        text: operationInstruction,
+      }];
+      const dispatchMode = policyDecision.dispatchMode;
+      if (dispatchMode === "queued") {
+        this.enqueueFollowUp(thread.id, {
+          input: operationInput,
+        });
+      } else if (dispatchMode === "immediate") {
+        await this.systemTell(thread.id, {
+          input: operationInput,
+        });
+      } else {
+        throw invalidRequestError("Operation dispatch mode is unavailable");
+      }
+
+      const queued = dispatchMode === "queued";
+      const responseMessage = this._threadOperationDispatchMessage(
+        request.operation,
+        dispatchMode,
+      );
+      this._appendThreadOperationEvent(thread.id, request.operation, "dispatched", {
+        message: responseMessage,
+        dispatchMode,
+        demotedPrimaryCheckout,
+      });
+
+      return {
+        ok: true,
+        operation: request.operation,
+        status: queued ? "queued" : "dispatched",
+        queued,
+        message: responseMessage,
+        demotedPrimaryCheckout,
+      };
+    } catch (err) {
+      const message = this._toErrorMessage(err);
+      this._appendThreadOperationEvent(thread.id, request.operation, "failed", {
+        message,
+        ...(demotedPrimaryCheckout ? { demotedPrimaryCheckout } : {}),
+      });
+      if (isDomainError(err)) {
+        throw err;
+      }
+      throw invalidRequestError(message);
+    }
+  }
+
   async commitThread(
     threadId: string,
     request?: CommitThreadRequest,
@@ -1593,114 +1693,128 @@ export class ThreadManager implements ThreadOrchestrator {
       throw invalidRequestError("Promotion is only available for worktree threads");
     }
 
+    const policyDecision = evaluateThreadOperationPolicy("promote", {
+      status: thread.status,
+      archived: thread.archivedAt !== undefined,
+      primaryCheckoutActive: false,
+    });
+    if (!policyDecision.allowed) {
+      throw invalidRequestError(policyDecision.reason ?? "Promotion is not allowed");
+    }
+
     const project = this.projectRepo.getById(thread.projectId);
     if (!project) {
       throw projectNotFoundError(thread.projectId);
     }
+    return this._runWithPrimaryCheckoutTransitionLock(project.id, async () => {
+      this._ensurePrimaryPromotionStateIsCurrent(project.id, { force: true });
+      const existing = this.primaryPromotionByProjectId.get(project.id);
+      if (existing && existing.threadId !== thread.id) {
+        throw invalidRequestError(
+          `Thread ${existing.threadId} is already promoted in the primary checkout for this project`,
+        );
+      }
 
-    this._ensurePrimaryPromotionStateIsCurrent(project.id, { force: true });
-    const existing = this.primaryPromotionByProjectId.get(project.id);
-    if (existing && existing.threadId !== thread.id) {
-      throw invalidRequestError(
-        `Thread ${existing.threadId} is already promoted in the primary checkout for this project`,
-      );
-    }
-
-    if (existing && existing.threadId === thread.id) {
-      this._appendEvent(
-        thread.id,
-        "system/primary_checkout/updated",
-        {
-          action: "promote",
-          status: "noop",
+      if (existing && existing.threadId === thread.id) {
+        this._appendEvent(
+          thread.id,
+          "system/primary_checkout/updated",
+          {
+            action: "promote",
+            status: "noop",
+            message: "Primary checkout is already promoted to this thread",
+            projectId: project.id,
+            activeThreadId: thread.id,
+            ...(existing.promotedCheckout.branch
+              ? { branch: existing.promotedCheckout.branch }
+              : {}),
+          },
+          { broadcastChanges: ["events-appended"] },
+        );
+        return {
+          ok: true,
+          promoted: false,
           message: "Primary checkout is already promoted to this thread",
-          projectId: project.id,
-          activeThreadId: thread.id,
-          ...(existing.promotedCheckout.branch
-            ? { branch: existing.promotedCheckout.branch }
-            : {}),
-        },
-        { broadcastChanges: ["events-appended"] },
-      );
-      return {
-        ok: true,
-        promoted: false,
-        message: "Primary checkout is already promoted to this thread",
-        primaryStatus: this.getPrimaryCheckoutStatus(project.id),
-      };
-    }
+          primaryStatus: this.getPrimaryCheckoutStatus(project.id),
+        };
+      }
 
-    const workspaceRoot = this._resolveThreadWorkspaceRoot(thread, project.rootPath);
-    if (!workspaceRoot || !existsSync(workspaceRoot)) {
-      throw invalidRequestError("Thread worktree is unavailable; reprovision the thread first");
-    }
-
-    this._appendEvent(
-      thread.id,
-      "system/primary_checkout/updated",
-      {
-        action: "promote",
-        status: "started",
-        message: "Promoting thread worktree into primary checkout",
-        projectId: project.id,
-        activeThreadId: thread.id,
-      },
-      { broadcastChanges: ["events-appended"] },
-    );
-
-    try {
-      const promoted = this.gitStatusService.promoteWorktreeIntoPrimary({
-        workspaceRoot,
-        projectRoot: project.rootPath,
-      });
-      const nextState: PrimaryPromotionState = {
-        projectId: project.id,
-        threadId: thread.id,
-        promotedAt: Date.now(),
-        previousCheckout: promoted.previousCheckout,
-        promotedCheckout: promoted.promotedCheckout,
-        reconstructed: false,
-      };
-      this._setPrimaryPromotionState(project.id, nextState);
+      const workspaceRoot = this._resolveThreadWorkspaceRoot(thread, project.rootPath);
+      if (workspaceRoot === project.rootPath) {
+        throw invalidRequestError(
+          "Thread worktree path is unavailable (workspace resolved to project root); reprovision before promoting",
+        );
+      }
+      if (!existsSync(workspaceRoot)) {
+        throw invalidRequestError("Thread worktree is unavailable; reprovision the thread first");
+      }
       this._appendEvent(
         thread.id,
         "system/primary_checkout/updated",
         {
           action: "promote",
-          status: "completed",
-          message: "Primary checkout now reflects this thread worktree",
-          projectId: project.id,
-          activeThreadId: thread.id,
-          ...(promoted.promotedCheckout.branch
-            ? { branch: promoted.promotedCheckout.branch }
-            : {}),
-        },
-        { broadcastChanges: ["events-appended"] },
-      );
-      this._broadcastThreadChanged(thread.id, THREAD_STATUS_CHANGE_KINDS);
-      return {
-        ok: true,
-        promoted: true,
-        message: "Primary checkout promoted",
-        primaryStatus: this.getPrimaryCheckoutStatus(project.id),
-      };
-    } catch (err) {
-      const message = this._toErrorMessage(err);
-      this._appendEvent(
-        thread.id,
-        "system/primary_checkout/updated",
-        {
-          action: "promote",
-          status: "failed",
-          message,
+          status: "started",
+          message: "Promoting thread worktree into primary checkout",
           projectId: project.id,
           activeThreadId: thread.id,
         },
         { broadcastChanges: ["events-appended"] },
       );
-      this._broadcastThreadChanged(thread.id, THREAD_STATUS_CHANGE_KINDS);
-      throw invalidRequestError(message);
-    }
+
+      try {
+        const promoted = this.gitStatusService.promoteWorktreeIntoPrimary({
+          workspaceRoot,
+          projectRoot: project.rootPath,
+        });
+        const nextState: PrimaryPromotionState = {
+          projectId: project.id,
+          threadId: thread.id,
+          promotedAt: Date.now(),
+          previousCheckout: promoted.previousCheckout,
+          promotedCheckout: promoted.promotedCheckout,
+          reconstructed: false,
+        };
+        this._setPrimaryPromotionState(project.id, nextState);
+        this._appendEvent(
+          thread.id,
+          "system/primary_checkout/updated",
+          {
+            action: "promote",
+            status: "completed",
+            message: "Primary checkout now reflects this thread worktree",
+            projectId: project.id,
+            activeThreadId: thread.id,
+            ...(promoted.promotedCheckout.branch
+              ? { branch: promoted.promotedCheckout.branch }
+              : {}),
+          },
+          { broadcastChanges: ["events-appended"] },
+        );
+        this._broadcastThreadChanged(thread.id, THREAD_STATUS_CHANGE_KINDS);
+        return {
+          ok: true,
+          promoted: true,
+          message: "Primary checkout promoted",
+          primaryStatus: this.getPrimaryCheckoutStatus(project.id),
+        };
+      } catch (err) {
+        const message = this._toErrorMessage(err);
+        this._appendEvent(
+          thread.id,
+          "system/primary_checkout/updated",
+          {
+            action: "promote",
+            status: "failed",
+            message,
+            projectId: project.id,
+            activeThreadId: thread.id,
+          },
+          { broadcastChanges: ["events-appended"] },
+        );
+        this._broadcastThreadChanged(thread.id, THREAD_STATUS_CHANGE_KINDS);
+        throw invalidRequestError(message);
+      }
+    });
   }
 
   async demotePrimaryCheckout(threadId: string): Promise<DemotePrimaryResponse> {
@@ -1716,103 +1830,112 @@ export class ThreadManager implements ThreadOrchestrator {
     if (!project) {
       throw projectNotFoundError(thread.projectId);
     }
+    const policyDecision = evaluateThreadOperationPolicy("demote", {
+      status: thread.status,
+      archived: thread.archivedAt !== undefined,
+      primaryCheckoutActive: false,
+    });
+    if (!policyDecision.allowed) {
+      throw invalidRequestError(policyDecision.reason ?? "Demotion is not allowed");
+    }
 
-    this._ensurePrimaryPromotionStateIsCurrent(project.id, { force: true });
-    const active = this.primaryPromotionByProjectId.get(project.id);
-    if (!active) {
-      this._appendEvent(
-        thread.id,
-        "system/primary_checkout/updated",
-        {
-          action: "demote",
-          status: "noop",
+    return this._runWithPrimaryCheckoutTransitionLock(project.id, async () => {
+      this._ensurePrimaryPromotionStateIsCurrent(project.id, { force: true });
+      const active = this.primaryPromotionByProjectId.get(project.id);
+      if (!active) {
+        this._appendEvent(
+          thread.id,
+          "system/primary_checkout/updated",
+          {
+            action: "demote",
+            status: "noop",
+            message: "Primary checkout is already demoted",
+            projectId: project.id,
+          },
+          { broadcastChanges: ["events-appended"] },
+        );
+        return {
+          ok: true,
+          demoted: false,
           message: "Primary checkout is already demoted",
-          projectId: project.id,
-        },
-        { broadcastChanges: ["events-appended"] },
-      );
-      return {
-        ok: true,
-        demoted: false,
-        message: "Primary checkout is already demoted",
-        primaryStatus: this.getPrimaryCheckoutStatus(project.id),
-      };
-    }
+          primaryStatus: this.getPrimaryCheckoutStatus(project.id),
+        };
+      }
 
-    if (active.threadId !== thread.id) {
-      throw invalidRequestError(
-        `Thread ${active.threadId} is currently promoted in primary checkout`,
-      );
-    }
-
-    const activeThread = this.threadRepo.getById(active.threadId);
-    this._appendEvent(
-      active.threadId,
-      "system/primary_checkout/updated",
-      {
-        action: "demote",
-        status: "started",
-        message: "Demoting primary checkout back to pre-promotion state",
-        projectId: project.id,
-        activeThreadId: active.threadId,
-      },
-      { broadcastChanges: ["events-appended"] },
-    );
-
-    try {
-      const fallbackDefaultCheckout =
-        this.gitStatusService.resolveDefaultBranchCheckout(project.rootPath);
-      const demoteSnapshot = active.previousCheckout ?? fallbackDefaultCheckout;
-      if (!demoteSnapshot) {
+      if (active.threadId !== thread.id) {
         throw invalidRequestError(
-          "Could not determine a branch/commit to restore. Checkout manually and retry.",
+          `Thread ${active.threadId} is currently promoted in primary checkout`,
         );
       }
-
-      this.gitStatusService.discardLocalChanges(project.rootPath);
-      this.gitStatusService.checkoutSnapshot(project.rootPath, demoteSnapshot);
-      this._clearPrimaryPromotionState(project.id);
+      const activeThread = this.threadRepo.getById(active.threadId);
       this._appendEvent(
         active.threadId,
         "system/primary_checkout/updated",
         {
           action: "demote",
-          status: "completed",
-          message: "Primary checkout restored from promoted state",
-          projectId: project.id,
-          ...(demoteSnapshot.branch ? { branch: demoteSnapshot.branch } : {}),
-        },
-        { broadcastChanges: ["events-appended"] },
-      );
-
-      if (activeThread) {
-        this._broadcastThreadChanged(activeThread.id, THREAD_STATUS_CHANGE_KINDS);
-      } else {
-        this._broadcastThreadChanged(active.threadId, THREAD_STATUS_CHANGE_KINDS);
-      }
-      return {
-        ok: true,
-        demoted: true,
-        message: "Primary checkout demoted",
-        primaryStatus: this.getPrimaryCheckoutStatus(project.id),
-      };
-    } catch (err) {
-      const message = this._toErrorMessage(err);
-      this._appendEvent(
-        active.threadId,
-        "system/primary_checkout/updated",
-        {
-          action: "demote",
-          status: "failed",
-          message,
+          status: "started",
+          message: "Demoting primary checkout back to pre-promotion state",
           projectId: project.id,
           activeThreadId: active.threadId,
         },
         { broadcastChanges: ["events-appended"] },
       );
-      this._broadcastThreadChanged(active.threadId, THREAD_STATUS_CHANGE_KINDS);
-      throw invalidRequestError(message);
-    }
+
+      try {
+        const fallbackDefaultCheckout =
+          this.gitStatusService.resolveDefaultBranchCheckout(project.rootPath);
+        const demoteSnapshot = active.previousCheckout ?? fallbackDefaultCheckout;
+        if (!demoteSnapshot) {
+          throw invalidRequestError(
+            "Could not determine a branch/commit to restore. Checkout manually and retry.",
+          );
+        }
+
+        this.gitStatusService.discardLocalChanges(project.rootPath);
+        this.gitStatusService.checkoutSnapshot(project.rootPath, demoteSnapshot);
+        this._clearPrimaryPromotionState(project.id);
+        this._appendEvent(
+          active.threadId,
+          "system/primary_checkout/updated",
+          {
+            action: "demote",
+            status: "completed",
+            message: "Primary checkout restored from promoted state",
+            projectId: project.id,
+            ...(demoteSnapshot.branch ? { branch: demoteSnapshot.branch } : {}),
+          },
+          { broadcastChanges: ["events-appended"] },
+        );
+
+        if (activeThread) {
+          this._broadcastThreadChanged(activeThread.id, THREAD_STATUS_CHANGE_KINDS);
+        } else {
+          this._broadcastThreadChanged(active.threadId, THREAD_STATUS_CHANGE_KINDS);
+        }
+        return {
+          ok: true,
+          demoted: true,
+          message: "Primary checkout demoted",
+          primaryStatus: this.getPrimaryCheckoutStatus(project.id),
+        };
+      } catch (err) {
+        const message = this._toErrorMessage(err);
+        this._appendEvent(
+          active.threadId,
+          "system/primary_checkout/updated",
+          {
+            action: "demote",
+            status: "failed",
+            message,
+            projectId: project.id,
+            activeThreadId: active.threadId,
+          },
+          { broadcastChanges: ["events-appended"] },
+        );
+        this._broadcastThreadChanged(active.threadId, THREAD_STATUS_CHANGE_KINDS);
+        throw invalidRequestError(message);
+      }
+    });
   }
 
   async squashMergeThread(
@@ -2747,6 +2870,102 @@ export class ThreadManager implements ThreadOrchestrator {
       data: data as ThreadEvent["data"],
       createdAt: Date.now(),
     };
+  }
+
+  private _resolveOperationPolicyAction(
+    operation: ThreadOperationType,
+  ): "commit-intent" | "squash-intent" {
+    switch (operation) {
+      case "commit":
+        return "commit-intent";
+      case "squash_merge":
+        return "squash-intent";
+      default:
+        return assertNever(operation);
+    }
+  }
+
+  private _threadOperationRequestedMessage(operation: ThreadOperationType): string {
+    switch (operation) {
+      case "commit":
+        return "Commit operation requested";
+      case "squash_merge":
+        return "Squash-merge operation requested";
+      default:
+        return assertNever(operation);
+    }
+  }
+
+  private _threadOperationDispatchMessage(
+    operation: ThreadOperationType,
+    dispatchMode: ThreadIntentDispatchMode,
+  ): string {
+    switch (operation) {
+      case "commit":
+        switch (dispatchMode) {
+          case "immediate":
+            return "Commit operation dispatched to the agent";
+          case "queued":
+            return "Commit operation queued for the agent";
+          default:
+            return assertNever(dispatchMode);
+        }
+      case "squash_merge":
+        switch (dispatchMode) {
+          case "immediate":
+            return "Squash-merge operation dispatched to the agent";
+          case "queued":
+            return "Squash-merge operation queued for the agent";
+          default:
+            return assertNever(dispatchMode);
+        }
+      default:
+        return assertNever(operation);
+    }
+  }
+
+  private _appendThreadOperationEvent(
+    threadId: string,
+    operation: ThreadOperationType,
+    status: ThreadEventDataForType<"system/thread_operation">["status"],
+    args: {
+      message: string;
+      dispatchMode?: ThreadEventDataForType<"system/thread_operation">["dispatchMode"];
+      demotedPrimaryCheckout?: boolean;
+    },
+  ): void {
+    this._appendEvent(
+      threadId,
+      "system/thread_operation",
+      {
+        operation,
+        status,
+        message: args.message,
+        ...(args.dispatchMode ? { dispatchMode: args.dispatchMode } : {}),
+        ...(args.demotedPrimaryCheckout !== undefined
+          ? { demotedPrimaryCheckout: args.demotedPrimaryCheckout }
+          : {}),
+      },
+      { broadcastChanges: ["events-appended"] },
+    );
+  }
+
+  private async _runWithPrimaryCheckoutTransitionLock<T>(
+    projectId: string,
+    fn: () => Promise<T>,
+  ): Promise<T> {
+    if (this.primaryCheckoutTransitionsInFlight.has(projectId)) {
+      throw invalidRequestError(
+        "Another primary-checkout promotion/demotion operation is already in progress for this project",
+      );
+    }
+
+    this.primaryCheckoutTransitionsInFlight.add(projectId);
+    try {
+      return await fn();
+    } finally {
+      this.primaryCheckoutTransitionsInFlight.delete(projectId);
+    }
   }
 
   private _hydrateThreadState(

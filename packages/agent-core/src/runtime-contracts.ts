@@ -10,6 +10,8 @@ import type {
   SendQueuedThreadMessageResponse,
   SquashMergeThreadRequest,
   SquashMergeThreadResponse,
+  ThreadOperationRequest,
+  ThreadOperationResponse,
   ProviderCapabilities,
   SpawnThreadRequest,
   SystemEnvironmentInfo,
@@ -202,6 +204,10 @@ export interface ThreadOrchestrator {
   updateThread(threadId: string, request: { title?: string }): Thread;
   markRead(threadId: string): Thread;
   markUnread(threadId: string): Thread;
+  requestThreadOperation(
+    threadId: string,
+    request: ThreadOperationRequest,
+  ): Promise<ThreadOperationResponse>;
   commitThread(
     threadId: string,
     request?: CommitThreadRequest,

@@ -37,10 +37,9 @@ import {
   useEnqueueThreadMessage,
   useSendQueuedThreadMessage,
   useDeleteQueuedThreadMessage,
-  useCommitThread,
+  useRequestThreadOperation,
   usePromoteThread,
   useDemotePrimaryCheckout,
-  useSquashMergeThread,
   useStopThread,
   useMarkThreadRead,
   useUnarchiveThread,
@@ -767,10 +766,10 @@ export function ThreadDetailView() {
   const enqueueThreadMessage = useEnqueueThreadMessage();
   const sendQueuedThreadMessage = useSendQueuedThreadMessage();
   const deleteQueuedThreadMessage = useDeleteQueuedThreadMessage();
-  const commitThread = useCommitThread();
+  const requestThreadCommitOperation = useRequestThreadOperation();
+  const requestThreadSquashOperation = useRequestThreadOperation();
   const promoteThread = usePromoteThread();
   const demotePrimaryCheckout = useDemotePrimaryCheckout();
-  const squashMergeThread = useSquashMergeThread();
   const stopThread = useStopThread();
   const unarchiveThread = useUnarchiveThread();
   const markThreadRead = useMarkThreadRead();
@@ -1835,14 +1834,17 @@ export function ThreadDetailView() {
                       threadWorkStatus.hasUncommittedChanges
                     )
                   }
-                  isCommitting={commitThread.isPending}
-                  isSquashMerging={squashMergeThread.isPending}
+                  isCommitting={requestThreadCommitOperation.isPending}
+                  isSquashMerging={requestThreadSquashOperation.isPending}
                   onCommit={async ({ includeUnstaged, message }) => {
                     if (!threadId) return;
-                    await commitThread.mutateAsync({
+                    await requestThreadCommitOperation.mutateAsync({
                       id: threadId,
-                      includeUnstaged,
-                      ...(message ? { message } : {}),
+                      operation: "commit",
+                      options: {
+                        includeUnstaged,
+                        ...(message ? { message } : {}),
+                      },
                     });
                   }}
                   onSquashMerge={async ({
@@ -1852,33 +1854,20 @@ export function ThreadDetailView() {
                     mergeBaseBranch,
                   }) => {
                     if (!threadId) return { message: "Thread unavailable", merged: false };
-                    const result = await squashMergeThread.mutateAsync({
+                    const result = await requestThreadSquashOperation.mutateAsync({
                       id: threadId,
-                      commitIfNeeded,
-                      includeUnstaged,
-                      ...(commitMessage ? { commitMessage } : {}),
-                      ...(mergeBaseBranch ? { mergeBaseBranch } : {}),
+                      operation: "squash_merge",
+                      options: {
+                        commitIfNeeded,
+                        includeUnstaged,
+                        ...(commitMessage ? { commitMessage } : {}),
+                        ...(mergeBaseBranch ? { mergeBaseBranch } : {}),
+                      },
                     });
-                    if (result.conflictFiles && result.conflictFiles.length > 0) {
-                      const branch =
-                        result.workStatus.mergeBaseBranch ??
-                        mergeBaseBranch ??
-                        threadWorkStatus.mergeBaseBranch ??
-                        threadWorkStatus.defaultBranch ??
-                        "main";
-                      const fileList = result.conflictFiles.slice(0, 12).join(", ");
-                      await tellThread.mutateAsync({
-                        id: threadId,
-                        input: [{
-                          type: "text",
-                          text:
-                            `Squash merge into ${branch} reported conflicts (${fileList}). ` +
-                            `Please merge ${branch} into this worktree branch, resolve conflicts, run relevant checks, and commit the fix. ` +
-                            "When done, let me know so I can retry squash merge.",
-                        }],
-                      }).catch(() => undefined);
-                    }
-                    return { message: result.message, merged: result.merged };
+                    return {
+                      message: result.message,
+                      merged: result.status === "dispatched",
+                    };
                   }}
                 />
               </DetailRow>

@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { FolderGit2, Laptop } from "lucide-react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
+import { buildThreadOperationInstruction } from "@beanbag/agent-core";
 import { PromptBox } from "@/components/promptbox/PromptBox";
 import { PromptOptionPicker } from "@/components/promptbox/PromptOptionPicker";
 import { PageShell } from "@/components/layout/PageShell";
 import { type StatusPillVariant } from "@/components/shared/StatusPill";
 import { StatusPillCommitPopover } from "@/components/shared/StatusPillCommitPopover";
 import {
-  useCommitProjectWorkspace,
   useProjectWorkspaceStatus,
   useProjects,
   useSpawnThread,
@@ -29,7 +29,7 @@ export function ProjectMainView() {
   const { data: projects, isLoading: projectsLoading } = useProjects();
   const { data: workspaceStatus, isLoading: threadsLoading } = useProjectWorkspaceStatus(projectId);
   const spawnThread = useSpawnThread();
-  const commitProjectWorkspace = useCommitProjectWorkspace();
+  const spawnCommitThread = useSpawnThread();
   const uploadPromptAttachment = useUploadPromptAttachment();
   const promptDraft = usePromptDraftStorage({ projectId, threadId: null });
   const fileMentions = usePromptFileMentions(projectId);
@@ -267,14 +267,29 @@ export function ProjectMainView() {
                   label={projectWorkspaceStatus.label}
                   variant={projectWorkspaceStatus.variant}
                   canCommit={Boolean(workspaceStatus?.hasUncommittedChanges)}
-                  isCommitting={commitProjectWorkspace.isPending}
+                  isCommitting={spawnCommitThread.isPending}
                   onCommit={async ({ includeUnstaged, message }) => {
                     if (!projectId) return;
-                    await commitProjectWorkspace.mutateAsync({
+                    const operationPrompt = buildThreadOperationInstruction(
+                      {
+                        operation: "commit",
+                        options: {
+                          includeUnstaged,
+                          ...(message ? { message } : {}),
+                        },
+                      },
+                      { target: "project_main" },
+                    );
+                    const thread = await spawnCommitThread.mutateAsync({
                       projectId,
-                      includeUnstaged,
-                      ...(message ? { message } : {}),
+                      input: [{ type: "text", text: operationPrompt }],
+                      model: activeModel?.model,
+                      reasoningLevel,
+                      sandboxMode,
+                      environmentId: "local",
+                      title: "Commit workspace changes",
                     });
+                    navigate(`/projects/${projectId}/threads/${thread.id}`);
                   }}
                 />
               </div>

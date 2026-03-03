@@ -136,6 +136,40 @@ export interface UpdateProjectRequest {
   workflowInstructions?: string;
 }
 
+export type ThreadOperationType = "commit" | "squash_merge";
+
+export interface CommitOperationOptions {
+  message?: string;
+  includeUnstaged?: boolean;
+}
+
+export interface SquashMergeOperationOptions {
+  commitIfNeeded?: boolean;
+  includeUnstaged?: boolean;
+  commitMessage?: string;
+  squashMessage?: string;
+  mergeBaseBranch?: string;
+}
+
+export type ThreadOperationRequest =
+  | {
+      operation: "commit";
+      options?: CommitOperationOptions;
+    }
+  | {
+      operation: "squash_merge";
+      options?: SquashMergeOperationOptions;
+    };
+
+export interface ThreadOperationResponse {
+  ok: true;
+  operation: ThreadOperationType;
+  status: "dispatched" | "queued";
+  queued: boolean;
+  message: string;
+  demotedPrimaryCheckout: boolean;
+}
+
 export interface CommitThreadRequest {
   message?: string;
   includeUnstaged?: boolean;

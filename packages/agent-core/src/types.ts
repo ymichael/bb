@@ -117,6 +117,7 @@ export type AppThreadEventType =
   | "client/turn/start"
   | "system/error"
   | "system/thread-title/updated"
+  | "system/thread_operation"
   | "system/primary_checkout/updated"
   | "system/worktree/commit"
   | "system/worktree/squash_merge"
@@ -186,6 +187,14 @@ export interface SystemPrimaryCheckoutUpdatedEventData {
   branch?: string;
 }
 
+export interface SystemThreadOperationEventData {
+  operation: "commit" | "squash_merge";
+  status: "requested" | "dispatched" | "failed";
+  message: string;
+  dispatchMode?: "immediate" | "queued";
+  demotedPrimaryCheckout?: boolean;
+}
+
 export interface SystemProvisioningStartedEventData {
   environmentId: string;
   environmentDisplayName?: string;
@@ -247,6 +256,7 @@ export type ThreadEventDataByType = CodexServerNotificationParamsByMethod & {
   "client/turn/start": ClientOutboundStartEventData;
   "system/error": SystemErrorEventData;
   "system/thread-title/updated": SystemThreadTitleUpdatedEventData;
+  "system/thread_operation": SystemThreadOperationEventData;
   "system/primary_checkout/updated": SystemPrimaryCheckoutUpdatedEventData;
   "system/worktree/commit": SystemWorktreeCommitEventData;
   "system/worktree/squash_merge": SystemWorktreeSquashMergeEventData;

@@ -101,3 +101,27 @@ export const squashMergeThreadSchema = z.object({
   mergeBaseBranch: z.string().min(1).optional(),
   autoArchiveThreadOnCommit: z.boolean().optional(),
 });
+
+const commitOperationOptionsSchema = z.object({
+  message: z.string().min(1).optional(),
+  includeUnstaged: z.boolean().optional(),
+});
+
+const squashMergeOperationOptionsSchema = z.object({
+  commitIfNeeded: z.boolean().optional(),
+  includeUnstaged: z.boolean().optional(),
+  commitMessage: z.string().min(1).optional(),
+  squashMessage: z.string().min(1).optional(),
+  mergeBaseBranch: z.string().min(1).optional(),
+});
+
+export const threadOperationSchema = z.discriminatedUnion("operation", [
+  z.object({
+    operation: z.literal("commit"),
+    options: commitOperationOptionsSchema.optional(),
+  }),
+  z.object({
+    operation: z.literal("squash_merge"),
+    options: squashMergeOperationOptionsSchema.optional(),
+  }),
+]);
