@@ -1802,7 +1802,7 @@ describe("toUIMessages replay coverage", () => {
     ).toBe(true);
   });
 
-  it("does not duplicate client thread input when a real user item event exists", () => {
+  it("keeps the client thread input and suppresses a matching later user item event", () => {
     const events: ThreadEvent[] = [
       {
         id: "evt-1",
@@ -1848,8 +1848,162 @@ describe("toUIMessages replay coverage", () => {
     );
 
     expect(userMessages).toHaveLength(1);
-    expect(userMessages[0]?.id).not.toContain("user-seed");
+    expect(userMessages[0]?.id).toContain("user-seed");
     expect(userMessages[0]?.text).toBe("Fix duplicate user messages");
+  });
+
+  it("deduplicates matching spawn thread/turn start inputs before provider user items arrive", () => {
+    const events: ThreadEvent[] = [
+      {
+        id: "evt-1",
+        threadId: "thread-1",
+        seq: 1,
+        type: "client/thread/start",
+        data: {
+          direction: "outbound",
+          source: "spawn",
+          initiator: "agent",
+          input: [{ type: "text", text: "Keep ordering sane" }],
+          request: {
+            method: "thread/start",
+            params: {},
+          },
+          execution: {},
+        },
+        createdAt: 1,
+      },
+      {
+        id: "evt-2",
+        threadId: "thread-1",
+        seq: 2,
+        type: "client/turn/start",
+        data: {
+          direction: "outbound",
+          source: "spawn",
+          initiator: "agent",
+          input: [{ type: "text", text: "Keep ordering sane" }],
+          request: {
+            method: "turn/start",
+            params: {},
+          },
+          execution: {},
+        },
+        createdAt: 2,
+      },
+    ];
+
+    const projected = toUIMessages(events, {
+      threadStatus: "active",
+    });
+    const userMessages = projected.filter(
+      (message): message is Extract<UIMessage, { kind: "user" }> =>
+        message.kind === "user",
+    );
+
+    expect(userMessages).toHaveLength(1);
+    expect(userMessages[0]?.id).toBe("thread-1:user-seed:1");
+    expect(userMessages[0]?.text).toBe("Keep ordering sane");
+  });
+
+  it("keeps start-first ordering by showing one client input before provisioning when matching spawn/user item events appear later", () => {
+    const events: ThreadEvent[] = [
+      {
+        id: "evt-1",
+        threadId: "thread-1",
+        seq: 1,
+        type: "client/thread/start",
+        data: {
+          direction: "outbound",
+          source: "spawn",
+          initiator: "agent",
+          input: [{ type: "text", text: "Keep ordering sane" }],
+          request: {
+            method: "thread/start",
+            params: {},
+          },
+          execution: {},
+        },
+        createdAt: 1,
+      },
+      {
+        id: "evt-2",
+        threadId: "thread-1",
+        seq: 2,
+        type: "system/provisioning/started",
+        data: {
+          environmentId: "worktree",
+          environmentDisplayName: "Git Worktree Workspace",
+        },
+        createdAt: 2,
+      },
+      {
+        id: "evt-3",
+        threadId: "thread-1",
+        seq: 3,
+        type: "system/provisioning/completed",
+        data: {
+          environmentId: "worktree",
+          workspaceRoot: "/tmp/worktree",
+          mode: "worktree",
+        },
+        createdAt: 3,
+      },
+      {
+        id: "evt-4",
+        threadId: "thread-1",
+        seq: 4,
+        type: "client/turn/start",
+        data: {
+          direction: "outbound",
+          source: "spawn",
+          initiator: "agent",
+          input: [{ type: "text", text: "Keep ordering sane" }],
+          request: {
+            method: "turn/start",
+            params: {},
+          },
+          execution: {},
+        },
+        createdAt: 4,
+      },
+      {
+        id: "evt-5",
+        threadId: "thread-1",
+        seq: 5,
+        type: "item/completed",
+        data: {
+          turnId: "turn-1",
+          item: {
+            id: "item-user-1",
+            type: "user_message",
+            content: [{ type: "text", text: "Keep ordering sane" }],
+          },
+        },
+        createdAt: 5,
+      },
+    ];
+
+    const projected = toUIMessages(events, {
+      threadStatus: "idle",
+    });
+    const rows = buildThreadDetailRows(projected, {
+      includeToolGroupMessages: false,
+    });
+    const messageRows = rows.filter(
+      (row): row is Extract<(typeof rows)[number], { kind: "message" }> =>
+        row.kind === "message",
+    );
+
+    expect(messageRows).toHaveLength(2);
+    expect(messageRows[0]?.message.kind).toBe("user");
+    if (messageRows[0]?.message.kind === "user") {
+      expect(messageRows[0].message.id).toContain("user-seed");
+      expect(messageRows[0].message.text).toBe("Keep ordering sane");
+    }
+    expect(messageRows[1]?.message.kind).toBe("operation");
+    if (messageRows[1]?.message.kind === "operation") {
+      expect(messageRows[1].message.opType).toBe("provisioning");
+    }
   });
 
   it("keeps non-duplicated initial client thread input alongside later user items", () => {
@@ -1997,7 +2151,7 @@ describe("toUIMessages replay coverage", () => {
     expect(users[0]?.attachments?.localImagePaths).toEqual(["/tmp/shot.png"]);
   });
 
-  it("deduplicates client start localImage against provider userMessage image data URL", () => {
+  it("deduplicates provider userMessage image data URL in favor of client start localImage", () => {
     const events: ThreadEvent[] = [
       {
         id: "evt-1",
@@ -2049,7 +2203,8 @@ describe("toUIMessages replay coverage", () => {
     );
 
     expect(users).toHaveLength(1);
-    expect(users[0]?.attachments?.webImages).toBe(1);
+    expect(users[0]?.attachments?.localImages).toBe(1);
+    expect(users[0]?.attachments?.localImagePaths).toEqual(["/tmp/shot.png"]);
   });
 
   it("formats system error messages with detail", () => {

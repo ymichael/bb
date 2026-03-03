@@ -346,17 +346,15 @@ function userMessageSignature(value: {
 
 function shouldRenderThreadStartInput(
   threadStatus: ToUIMessagesOptions["threadStatus"] | undefined,
-  hasMatchingUserItem: boolean,
 ): boolean {
   if (!threadStatus) return false;
   switch (threadStatus) {
     case "created":
     case "provisioning":
     case "provisioning_failed":
-      return true;
     case "idle":
     case "active":
-      return !hasMatchingUserItem;
+      return true;
     default:
       return assertNever(threadStatus);
   }
@@ -511,7 +509,6 @@ function parseUserFromClientStart(
   event: ThreadEvent,
   eventType: string,
   options?: ToUIMessagesOptions,
-  userItemSignatures: ReadonlySet<string> = new Set<string>(),
 ): UIUserMessage | null {
   if (
     !eventTypeMatchesAny(eventType, [
@@ -525,8 +522,7 @@ function parseUserFromClientStart(
   const payload = toEventRecord(event.data);
   const parsedInput = parsePromptInput(payload?.input);
   if (!parsedInput) return null;
-  const hasMatchingUserItem = userItemSignatures.has(userMessageSignature(parsedInput));
-  if (!shouldRenderThreadStartInput(options?.threadStatus, hasMatchingUserItem)) {
+  if (!shouldRenderThreadStartInput(options?.threadStatus)) {
     return null;
   }
 
@@ -2326,31 +2322,8 @@ export function toUIMessages(
     }
   }
   const orderedEvents = areEventsOrdered ? events : [...events].sort((a, b) => a.seq - b.seq);
-
-  const userItemSignatures = new Set<string>();
-  const hasClientStartInput = orderedEvents.some((event) =>
-    eventTypeMatchesAny(getEventType(event), [
-      "client/thread/start",
-      "client/turn/start",
-    ])
-  );
-  if (hasClientStartInput) {
-    for (const event of orderedEvents) {
-      const eventType = getEventType(event);
-      const userFromItem = parseUserFromItemEvent(event, eventType);
-      const userFromEvent = parseUserFromUserMessageEvent(event, eventType);
-      const userMessage = userFromItem ?? userFromEvent;
-      if (!userMessage) continue;
-      userItemSignatures.add(
-        userMessageSignature({
-          text: userMessage.text,
-          webImages: userMessage.attachments?.webImages ?? 0,
-          localImages: userMessage.attachments?.localImages ?? 0,
-          localFiles: userMessage.attachments?.localFiles ?? 0,
-        }),
-      );
-    }
-  }
+  const pendingClientStartUserSignatureCounts = new Map<string, number>();
+  const pendingClientThreadStartUserSignatureCounts = new Map<string, number>();
 
   for (const originalEvent of orderedEvents) {
     const eventType = getEventType(originalEvent);
@@ -2362,12 +2335,37 @@ export function toUIMessages(
       event,
       eventType,
       options,
-      userItemSignatures,
     );
     if (userFromClientThreadStart) {
+      const signature = userMessageSignature({
+        text: userFromClientThreadStart.text,
+        webImages: userFromClientThreadStart.attachments?.webImages ?? 0,
+        localImages: userFromClientThreadStart.attachments?.localImages ?? 0,
+        localFiles: userFromClientThreadStart.attachments?.localFiles ?? 0,
+      });
+      const startPayload = toEventRecord(event.data);
+      const startSource = getStringField(startPayload, "source");
+      const isClientThreadStart = eventTypeMatches(eventType, "client/thread/start");
+      const isClientTurnStart = eventTypeMatches(eventType, "client/turn/start");
+      const pendingThreadStartCount =
+        pendingClientThreadStartUserSignatureCounts.get(signature) ?? 0;
+      if (isClientTurnStart && startSource === "spawn" && pendingThreadStartCount > 0) {
+        continue;
+      }
+
       const key = `${userFromClientThreadStart.id}:${userFromClientThreadStart.text}`;
       if (!state.seenUserKeys.has(key)) {
         state.seenUserKeys.add(key);
+        pendingClientStartUserSignatureCounts.set(
+          signature,
+          (pendingClientStartUserSignatureCounts.get(signature) ?? 0) + 1,
+        );
+        if (isClientThreadStart) {
+          pendingClientThreadStartUserSignatureCounts.set(
+            signature,
+            pendingThreadStartCount + 1,
+          );
+        }
         flushToolActivityBeforeNonToolMessage(state);
         state.messages.push(userFromClientThreadStart);
       }
@@ -2378,6 +2376,37 @@ export function toUIMessages(
     const userFromEvent = parseUserFromUserMessageEvent(event, eventType);
     const userMessage = userFromItem ?? userFromEvent;
     if (userMessage) {
+      const signature = userMessageSignature({
+        text: userMessage.text,
+        webImages: userMessage.attachments?.webImages ?? 0,
+        localImages: userMessage.attachments?.localImages ?? 0,
+        localFiles: userMessage.attachments?.localFiles ?? 0,
+      });
+      const pendingClientStartCount =
+        pendingClientStartUserSignatureCounts.get(signature) ?? 0;
+      if (pendingClientStartCount > 0) {
+        if (pendingClientStartCount === 1) {
+          pendingClientStartUserSignatureCounts.delete(signature);
+        } else {
+          pendingClientStartUserSignatureCounts.set(
+            signature,
+            pendingClientStartCount - 1,
+          );
+        }
+        const pendingThreadStartCount =
+          pendingClientThreadStartUserSignatureCounts.get(signature) ?? 0;
+        if (pendingThreadStartCount === 1) {
+          pendingClientThreadStartUserSignatureCounts.delete(signature);
+        } else if (pendingThreadStartCount > 1) {
+          pendingClientThreadStartUserSignatureCounts.set(
+            signature,
+            pendingThreadStartCount - 1,
+          );
+        }
+        const dedupeKey = `${userMessage.turnId ?? userMessage.id}:${userMessage.text}`;
+        state.seenUserKeys.add(dedupeKey);
+        continue;
+      }
       const key = `${userMessage.turnId ?? userMessage.id}:${userMessage.text}`;
       if (!state.seenUserKeys.has(key)) {
         state.seenUserKeys.add(key);
