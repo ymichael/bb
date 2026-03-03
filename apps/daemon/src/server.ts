@@ -20,6 +20,7 @@ import {
 } from "@beanbag/agent-server";
 import { WSManager } from "./ws.js";
 import { ThreadManager } from "./thread-manager.js";
+import { ThreadGitStatusService } from "./thread-git-status.js";
 import { createApiRoutes } from "./routes/index.js";
 import { InMemorySchedulerService } from "./scheduler-service.js";
 import { createRestartRecommendationEvaluator } from "./restart-recommendation.js";
@@ -61,6 +62,7 @@ export function createServer(deps: ServerDeps) {
   const environmentAdapter = createEnvironmentAdapter();
   const environmentCatalog = listAvailableEnvironmentInfos();
   const scheduler = new InMemorySchedulerService();
+  const gitStatusService = new ThreadGitStatusService();
   const threadManager = new ThreadManager(
     deps.threadRepo,
     deps.eventRepo,
@@ -72,6 +74,7 @@ export function createServer(deps: ServerDeps) {
     providerCatalog,
     environmentCatalog,
     scheduler,
+    gitStatusService,
   );
 
   // WebSocket handler
@@ -92,6 +95,7 @@ export function createServer(deps: ServerDeps) {
     threadRepo: deps.threadRepo,
     eventRepo: deps.eventRepo,
     threadManager,
+    gitStatusService,
     wsManager,
     startTime,
     requestShutdown: deps.requestShutdown,

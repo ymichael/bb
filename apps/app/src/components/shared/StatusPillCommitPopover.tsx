@@ -108,6 +108,8 @@ export function StatusPillCommitPopover({
     switch (status.state) {
       case "clean":
         return isUpToDate ? (cleanTitle ?? "Up to date") : "Working tree clean";
+      case "untracked":
+        return "Not a Git repository";
       case "deleted":
         return "Workspace deleted";
       case "committed_unmerged":
@@ -128,6 +130,8 @@ export function StatusPillCommitPopover({
         return isUpToDate
           ? "No local or merge-base differences."
           : "No local file changes in the workspace.";
+      case "untracked":
+        return "Workspace is outside a Git repository.";
       case "deleted":
         return "This workspace no longer exists on disk.";
       case "dirty_uncommitted":

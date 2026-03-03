@@ -9,12 +9,14 @@ import { createProjectRoutes } from "./projects.js";
 import { createThreadRoutes } from "./threads.js";
 import { createSystemRoutes } from "./system.js";
 import type { WSManager } from "../ws.js";
+import type { ThreadGitStatusService } from "../thread-git-status.js";
 
 export interface ApiRouteDeps {
   projectRepo: ProjectRepository;
   threadRepo: ThreadRepository;
   eventRepo: EventRepository;
   threadManager: ThreadOrchestrator;
+  gitStatusService: ThreadGitStatusService;
   wsManager: WSManager;
   startTime: number;
   requestShutdown?: (reason: string) => void;
@@ -29,6 +31,7 @@ export function createApiRoutes(deps: ApiRouteDeps) {
       createProjectRoutes(deps.projectRepo, undefined, undefined, {
         threadRepo: deps.threadRepo,
         eventRepo: deps.eventRepo,
+        gitStatusService: deps.gitStatusService,
       }),
     )
     .route("/threads", createThreadRoutes(deps.threadManager))

@@ -337,6 +337,7 @@ export function createThreadRoutes(
           if (
             workStatus &&
             (
+              workStatus.state === "untracked" ||
               workStatus.state === "dirty_uncommitted" ||
               workStatus.state === "committed_unmerged" ||
               workStatus.state === "dirty_and_committed_unmerged"

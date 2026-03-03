@@ -44,4 +44,9 @@ describe("thread-work-status", () => {
       }),
     ).toBe("Clean");
   });
+
+  it("shows untracked label for non-git workspaces", () => {
+    expect(threadWorktreeCleanLabel(makeStatus("untracked"))).toBe("Untracked");
+    expect(threadWorkStatusVariant(makeStatus("untracked"))).toBe("outline");
+  });
 });

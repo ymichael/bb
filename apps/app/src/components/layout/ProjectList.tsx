@@ -632,6 +632,8 @@ function requiresArchiveConfirmation(
     case "clean":
     case "deleted":
       return false
+    case "untracked":
+      return true
     case "dirty_uncommitted":
     case "committed_unmerged":
     case "dirty_and_committed_unmerged":

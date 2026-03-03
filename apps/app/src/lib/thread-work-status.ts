@@ -5,7 +5,13 @@ import { formatDirtyWorkspaceLabel } from "@/lib/workspace-change-summary";
 export function threadWorktreeCleanLabel(
   status: ThreadWorkStatus | undefined,
 ): string {
-  if (!status || status.state !== "clean") {
+  if (!status) {
+    return "Clean";
+  }
+  if (status.state === "untracked") {
+    return "Untracked";
+  }
+  if (status.state !== "clean") {
     return "Clean";
   }
 
@@ -22,6 +28,8 @@ export function threadWorkStatusLabel(
   switch (status.state) {
     case "clean":
       return options?.cleanLabel ?? "Up to date";
+    case "untracked":
+      return "Untracked";
     case "deleted":
       return "Deleted";
     case "dirty_uncommitted":
@@ -42,6 +50,8 @@ export function threadWorkStatusVariant(
 
   switch (status.state) {
     case "clean":
+      return "outline";
+    case "untracked":
       return "outline";
     case "deleted":
       return options?.isArchivedThread ? "outline" : "destructive";

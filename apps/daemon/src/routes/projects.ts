@@ -165,9 +165,10 @@ export function createProjectRoutes(
   deps?: {
     threadRepo?: ThreadRepository;
     eventRepo?: EventRepository;
+    gitStatusService?: ThreadGitStatusService;
   },
 ) {
-  const gitStatusService = new ThreadGitStatusService();
+  const gitStatusService = deps?.gitStatusService ?? new ThreadGitStatusService();
   return new Hono()
     .post("/", zValidator("json", createProjectSchema), async (c) => {
       try {

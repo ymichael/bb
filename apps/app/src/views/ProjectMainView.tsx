@@ -98,6 +98,14 @@ export function ProjectMainView() {
     variant: StatusPillVariant;
     actionable: boolean;
   }>(() => {
+    if (workspaceStatus?.state === "untracked") {
+      return {
+        label: "Untracked",
+        variant: "outline",
+        actionable: false,
+      };
+    }
+
     if (workspaceStatus?.hasUncommittedChanges) {
       return {
         label: formatDirtyWorkspaceLabel(workspaceStatus),

@@ -67,6 +67,7 @@ export interface ThreadAgentDiffStats {
 
 export type ThreadWorkState =
   | "clean"
+  | "untracked"
   | "deleted"
   | "dirty_uncommitted"
   | "committed_unmerged"

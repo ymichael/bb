@@ -443,7 +443,7 @@ export class ThreadManager implements ThreadOrchestrator {
   private threadShellPath: string | undefined;
   private providerCatalog: SystemProviderInfo[];
   private environmentCatalog: SystemEnvironmentInfo[];
-  private gitStatusService = new ThreadGitStatusService();
+  private gitStatusService: ThreadGitStatusService;
   private attributedDiffService = new ThreadAttributedDiffService();
 
   constructor(
@@ -457,8 +457,10 @@ export class ThreadManager implements ThreadOrchestrator {
     providerCatalog?: SystemProviderInfo[],
     environmentCatalog?: SystemEnvironmentInfo[],
     private scheduler: SchedulerService = new InMemorySchedulerService(),
+    gitStatusService?: ThreadGitStatusService,
   ) {
     this.threadShellPath = resolveThreadShellPath(this.runtimeEnv.PATH);
+    this.gitStatusService = gitStatusService ?? new ThreadGitStatusService();
     this.providerCatalog =
       providerCatalog ??
       [
