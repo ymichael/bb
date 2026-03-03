@@ -77,6 +77,12 @@ export function useWebSocket(): void {
   const queryClient = useQueryClient();
 
   useEffect(() => {
+    const unsubscribeConnected = wsManager.onConnected(({ reconnected }) => {
+      if (reconnected) {
+        queryClient.invalidateQueries();
+      }
+    });
+
     const changedThreadKinds = new Map<string, Set<ThreadChangeKind>>();
     const globalChangeKinds = new Set<ThreadChangeKind>();
     const lastTimelineRefetchAtByThread = new Map<string, number>();
@@ -273,6 +279,7 @@ export function useWebSocket(): void {
       if (maxWaitTimer !== null) {
         clearTimeout(maxWaitTimer);
       }
+      unsubscribeConnected();
       unsubscribe();
       wsManager.unsubscribe("thread");
       wsManager.disconnect();

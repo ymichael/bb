@@ -6,13 +6,16 @@ import type {
 } from "@beanbag/agent-core";
 
 export type ChangeCallback = (message: ChangedMessage) => void;
+export type ConnectedCallback = (event: { reconnected: boolean }) => void;
 
 class WebSocketManager {
   private socket: WebSocket | null = null;
   private subscriptions = new Set<string>();
   private callbacks = new Set<ChangeCallback>();
+  private connectedCallbacks = new Set<ConnectedCallback>();
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private connected = false;
+  private hasConnected = false;
 
   connect(): void {
     if (this.socket) return;
@@ -28,12 +31,17 @@ class WebSocketManager {
     }
 
     this.socket.onopen = () => {
+      const reconnected = this.hasConnected;
       this.connected = true;
+      this.hasConnected = true;
       // Re-subscribe to all active subscriptions
       for (const key of this.subscriptions) {
         const parsed = parseSubKey(key);
         if (!parsed) continue;
         this.sendMessage({ type: "subscribe", entity: parsed.entity, id: parsed.id });
+      }
+      for (const callback of this.connectedCallbacks) {
+        callback({ reconnected });
       }
     };
 
@@ -93,6 +101,13 @@ class WebSocketManager {
     this.callbacks.add(callback);
     return () => {
       this.callbacks.delete(callback);
+    };
+  }
+
+  onConnected(callback: ConnectedCallback): () => void {
+    this.connectedCallbacks.add(callback);
+    return () => {
+      this.connectedCallbacks.delete(callback);
     };
   }
 
