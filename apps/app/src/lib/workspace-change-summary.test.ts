@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  formatChangeSummary,
   formatDirtyWorkspaceLabel,
   formatWorkspaceChangeSummary,
   formatWorkspaceChangedFilesLabel,
@@ -21,6 +22,16 @@ describe("workspace-change-summary", () => {
         workspaceDeletions: 4,
       }),
     ).toBe("3 files, +9 -4");
+  });
+
+  it("formats generic change summaries", () => {
+    expect(
+      formatChangeSummary({
+        changedFiles: 2,
+        insertions: 5,
+        deletions: 1,
+      }),
+    ).toBe("2 files, +5 -1");
   });
 
   it("omits +/- counts when only file-level changes exist", () => {

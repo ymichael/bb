@@ -113,6 +113,40 @@ describe("ThreadGitStatusService", () => {
     expect(statusAgainstRelease.mergeBaseBranches).toContain("release");
   });
 
+  it("reports merge-base diff stats for committed worktree changes", () => {
+    const repoRoot = makeTempDir();
+    git(repoRoot, "init");
+    git(repoRoot, "config", "user.name", "Beanbag Test");
+    git(repoRoot, "config", "user.email", "beanbag-test@example.com");
+    git(repoRoot, "checkout", "-b", "main");
+
+    writeFileSync(join(repoRoot, "README.md"), "initial\n", "utf8");
+    git(repoRoot, "add", "README.md");
+    git(repoRoot, "commit", "-m", "initial");
+
+    git(repoRoot, "checkout", "-b", "thread");
+    writeFileSync(join(repoRoot, "FEATURE.md"), "thread change\n", "utf8");
+    git(repoRoot, "add", "FEATURE.md");
+    git(repoRoot, "commit", "-m", "add feature");
+
+    const service = new ThreadGitStatusService();
+    const status = service.getStatus({
+      workspaceRoot: repoRoot,
+      projectRoot: repoRoot,
+      defaultBranch: "main",
+    });
+
+    expect(status.workspaceChangedFiles).toBe(0);
+    expect(status.workspaceInsertions).toBe(0);
+    expect(status.workspaceDeletions).toBe(0);
+    expect(status.changedFiles).toBe(1);
+    expect(status.insertions).toBe(1);
+    expect(status.deletions).toBe(0);
+    expect(status.files?.some((entry) => entry.path === "FEATURE.md" && entry.status === "A")).toBe(true);
+    expect(status.hasCommittedUnmergedChanges).toBe(true);
+    expect(status.state).toBe("committed_unmerged");
+  });
+
   it("refuses squash merge when project root has local changes", () => {
     const repoRoot = makeTempDir();
     const threadRoot = join(makeTempDir(), "thread-worktree");

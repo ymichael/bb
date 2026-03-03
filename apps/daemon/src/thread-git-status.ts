@@ -79,6 +79,42 @@ function parseShortstat(value: string): { files: number; insertions: number; del
   };
 }
 
+type DiffCounts = {
+  changedFiles: number;
+  insertions: number;
+  deletions: number;
+};
+
+function countUntrackedFiles(statusLines: readonly string[]): number {
+  return statusLines.reduce((count, line) => (
+    line.startsWith("?? ") ? count + 1 : count
+  ), 0);
+}
+
+function resolveMergeBaseDiffCounts(args: {
+  workspaceRoot: string;
+  baseRef: string | undefined;
+  statusLines: readonly string[];
+  fallback: DiffCounts;
+}): DiffCounts {
+  if (!args.baseRef) {
+    return args.fallback;
+  }
+
+  const shortstatResult = runGit(args.workspaceRoot, ["diff", "--shortstat", args.baseRef]);
+  if (!shortstatResult.ok) {
+    return args.fallback;
+  }
+
+  const parsed = parseShortstat(shortstatResult.stdout);
+  const untrackedFiles = countUntrackedFiles(args.statusLines);
+  return {
+    changedFiles: parsed.files + untrackedFiles,
+    insertions: parsed.insertions,
+    deletions: parsed.deletions,
+  };
+}
+
 function parseAheadBehind(value: string): { behind: number; ahead: number } {
   const [behindRaw, aheadRaw] = value.split("\t");
   const behind = Number.parseInt(behindRaw ?? "0", 10);
@@ -153,6 +189,62 @@ function parsePorcelainLine(line: string): { status: string; path: string } | un
     ? rawPath.slice(rawPath.lastIndexOf(" -> ") + 4)
     : rawPath;
   return { status, path };
+}
+
+function parseNameStatusLine(line: string): { status: string; path: string } | undefined {
+  const segments = line.split("\t");
+  if (segments.length < 2) return undefined;
+  const rawStatus = segments[0]?.trim() ?? "";
+  if (!rawStatus) return undefined;
+  const isRenameOrCopy = rawStatus.startsWith("R") || rawStatus.startsWith("C");
+  const path = (isRenameOrCopy ? segments[2] : segments[1])?.trim();
+  if (!path) return undefined;
+  // Git name-status values are open_external; preserve unknown status values intentionally.
+  return { status: rawStatus, path };
+}
+
+function resolveMergeBaseFileChanges(args: {
+  workspaceRoot: string;
+  baseRef: string | undefined;
+  workspaceFiles: ReadonlyArray<{ status: string; path: string }>;
+}): Array<{ status: string; path: string }> {
+  const fallback = args.workspaceFiles.slice(0, 60);
+  if (!args.baseRef) {
+    return fallback;
+  }
+
+  const diffResult = runGit(args.workspaceRoot, [
+    "diff",
+    "--name-status",
+    "--find-renames",
+    args.baseRef,
+  ]);
+  if (!diffResult.ok) {
+    return fallback;
+  }
+
+  const workspaceStatusByPath = new Map(
+    args.workspaceFiles.map((item) => [item.path, item.status]),
+  );
+  const mergeBaseFiles = diffResult.stdout
+    .split("\n")
+    .map((line) => parseNameStatusLine(line.trimEnd()))
+    .filter((item): item is { status: string; path: string } => Boolean(item))
+    .map((item) => ({
+      ...item,
+      status: workspaceStatusByPath.get(item.path) ?? item.status,
+    }));
+
+  const knownPaths = new Set(mergeBaseFiles.map((item) => item.path));
+  for (const workspaceFile of args.workspaceFiles) {
+    if (knownPaths.has(workspaceFile.path)) {
+      continue;
+    }
+    mergeBaseFiles.push(workspaceFile);
+    knownPaths.add(workspaceFile.path);
+  }
+
+  return mergeBaseFiles.slice(0, 60);
 }
 
 function safeMtime(path: string): number {
@@ -550,17 +642,17 @@ export class ThreadGitStatusService {
     const statusLines = statusResult.ok
       ? statusResult.stdout.split("\n").map((line) => line.trimEnd()).filter((line) => line.length > 0)
       : [];
-    const files = statusLines
+    const workspaceFiles = statusLines
       .map((line) => parsePorcelainLine(line))
       .filter((item): item is { status: string; path: string } => Boolean(item))
       .slice(0, 60);
-    const changedFiles = statusLines.length;
+    const workspaceChangedFiles = statusLines.length;
 
     const unstagedStat = parseShortstat(runGit(args.workspaceRoot, ["diff", "--shortstat"]).stdout);
     const stagedStat = parseShortstat(runGit(args.workspaceRoot, ["diff", "--cached", "--shortstat"]).stdout);
 
-    const insertions = unstagedStat.insertions + stagedStat.insertions;
-    const deletions = unstagedStat.deletions + stagedStat.deletions;
+    const workspaceInsertions = unstagedStat.insertions + stagedStat.insertions;
+    const workspaceDeletions = unstagedStat.deletions + stagedStat.deletions;
 
     const currentBranch = runGit(args.workspaceRoot, ["symbolic-ref", "--short", "HEAD"]);
     const mergeBaseBranches = listMergeBaseBranches(args.projectRoot, defaultBranch);
@@ -576,6 +668,21 @@ export class ThreadGitStatusService {
       mergeBaseBranch && !mergeBaseBranches.includes(mergeBaseBranch)
         ? [mergeBaseBranch, ...mergeBaseBranches]
         : mergeBaseBranches;
+    const mergeBaseDiff = resolveMergeBaseDiffCounts({
+      workspaceRoot: args.workspaceRoot,
+      baseRef,
+      statusLines,
+      fallback: {
+        changedFiles: workspaceChangedFiles,
+        insertions: workspaceInsertions,
+        deletions: workspaceDeletions,
+      },
+    });
+    const files = resolveMergeBaseFileChanges({
+      workspaceRoot: args.workspaceRoot,
+      baseRef,
+      workspaceFiles,
+    });
 
     let aheadCount = 0;
     let behindCount = 0;
@@ -588,16 +695,16 @@ export class ThreadGitStatusService {
       }
     }
 
-    const hasUncommittedChanges = changedFiles > 0;
+    const hasUncommittedChanges = workspaceChangedFiles > 0;
     const hasCommittedUnmergedChanges = aheadCount > 0;
     const status: ThreadWorkStatus = {
       state: toState({ hasUncommittedChanges, hasCommittedUnmergedChanges }),
-      changedFiles,
-      insertions,
-      deletions,
-      workspaceChangedFiles: changedFiles,
-      workspaceInsertions: insertions,
-      workspaceDeletions: deletions,
+      changedFiles: mergeBaseDiff.changedFiles,
+      insertions: mergeBaseDiff.insertions,
+      deletions: mergeBaseDiff.deletions,
+      workspaceChangedFiles,
+      workspaceInsertions,
+      workspaceDeletions,
       hasUncommittedChanges,
       hasCommittedUnmergedChanges,
       aheadCount,

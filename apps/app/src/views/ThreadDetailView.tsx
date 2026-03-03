@@ -77,7 +77,10 @@ import {
   threadWorkStatusLabel,
   threadWorkStatusVariant,
 } from "@/lib/thread-work-status";
-import { formatWorkspaceChangeSummary } from "@/lib/workspace-change-summary";
+import {
+  formatChangeSummary,
+  formatWorkspaceChangeSummary,
+} from "@/lib/workspace-change-summary";
 
 const SCROLL_THRESHOLD = 40;
 const QUEUED_FOLLOW_UP_PREVIEW_MAX_CHARS = 220;
@@ -775,6 +778,32 @@ export function ThreadDetailView() {
       : isProvisioning
       ? "Provisioning..."
       : undefined;
+  const isWorktreeThread = thread.environmentId === "worktree";
+  const promptBannerSummary = threadWorkStatus
+    ? isWorktreeThread
+      ? formatChangeSummary({
+          changedFiles: threadWorkStatus.changedFiles,
+          insertions: threadWorkStatus.insertions,
+          deletions: threadWorkStatus.deletions,
+        })
+      : formatWorkspaceChangeSummary(threadWorkStatus)
+    : "";
+  const showPromptGitStatsBanner = Boolean(
+    threadWorkStatus &&
+    (
+      isWorktreeThread
+        ? threadWorkStatus.changedFiles > 0
+        : threadWorkStatus.workspaceChangedFiles > 0
+    ),
+  );
+  const canExpandPromptChangeList = Boolean(
+    threadWorkStatus &&
+    (threadWorkStatus.files?.length ?? 0) > 0,
+  );
+  const promptBannerMergeBaseBranch =
+    selectedMergeBaseBranch ??
+    threadWorkStatus?.mergeBaseBranch ??
+    threadWorkStatus?.defaultBranch;
 
   const handleSend = async () => {
     if (promptInput.length === 0) return;
@@ -1128,39 +1157,49 @@ export function ThreadDetailView() {
               visible={showScrollToBottom}
               onClick={scrollToBottom}
             />
-            {threadWorkStatus && threadWorkStatus.workspaceChangedFiles > 0 ? (
+            {showPromptGitStatsBanner ? (
               <div className="mb-2 rounded-md border border-border/60 bg-muted/40 px-3 py-1.5 text-xs text-muted-foreground">
                 <div className="flex items-center justify-between gap-3">
-                  <button
-                    type="button"
-                    className="flex min-w-0 items-center gap-2 truncate text-left"
-                    onClick={() => setIsChangeListExpanded((prev) => !prev)}
-                  >
-                    <span className="truncate">
-                      {formatWorkspaceChangeSummary(threadWorkStatus)}
+                  {canExpandPromptChangeList ? (
+                    <button
+                      type="button"
+                      className="flex min-w-0 items-center gap-2 truncate text-left"
+                      onClick={() => setIsChangeListExpanded((prev) => !prev)}
+                    >
+                      <span className="truncate">{promptBannerSummary}</span>
+                      <ChevronDown
+                        className={`size-3.5 shrink-0 transition-transform duration-200 ${
+                          isChangeListExpanded ? "rotate-180" : ""
+                        }`}
+                      />
+                    </button>
+                  ) : (
+                    <span className="truncate">{promptBannerSummary}</span>
+                  )}
+                  {isWorktreeThread ? (
+                    <span className="shrink-0 text-xs text-muted-foreground/90">
+                      {promptBannerMergeBaseBranch
+                        ? `Merge base: ${promptBannerMergeBaseBranch}`
+                        : "Merge base comparison"}
                     </span>
-                    <ChevronDown
-                      className={`size-3.5 shrink-0 transition-transform duration-200 ${
-                        isChangeListExpanded ? "rotate-180" : ""
-                      }`}
-                    />
-                  </button>
-                  {thread.environmentId !== "worktree" ? (
+                  ) : (
                     <span className="shrink-0 text-xs text-muted-foreground/90">
                       Includes all threads in this working directory
                     </span>
-                  ) : null}
+                  )}
                 </div>
-                <div
-                  className={`overflow-hidden transition-all duration-200 ${
-                    isChangeListExpanded ? "mt-2 max-h-40 border-t border-border/50 pt-1 opacity-100" : "max-h-0 opacity-0"
-                  }`}
-                >
-                  <WorkspaceChangesList
-                    files={threadWorkStatus.files}
-                    workspaceRoot={threadWorkStatus.workspaceRoot}
-                  />
-                </div>
+                {canExpandPromptChangeList && threadWorkStatus ? (
+                  <div
+                    className={`overflow-hidden transition-all duration-200 ${
+                      isChangeListExpanded ? "mt-2 max-h-40 border-t border-border/50 pt-1 opacity-100" : "max-h-0 opacity-0"
+                    }`}
+                  >
+                    <WorkspaceChangesList
+                      files={threadWorkStatus.files}
+                      workspaceRoot={threadWorkStatus.workspaceRoot}
+                    />
+                  </div>
+                ) : null}
               </div>
             ) : null}
             <QueuedFollowUpList

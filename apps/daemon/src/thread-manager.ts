@@ -2484,7 +2484,7 @@ export class ThreadManager implements ThreadOrchestrator {
     const workStatus = { ...workspaceStatus };
 
     if (opts?.includeAttributedDiff) {
-      if (thread.agentDiffStats) {
+      if (thread.environmentId !== "worktree" && thread.agentDiffStats) {
         workStatus.changedFiles = thread.agentDiffStats.changedFiles;
         workStatus.insertions = thread.agentDiffStats.insertions;
         workStatus.deletions = thread.agentDiffStats.deletions;

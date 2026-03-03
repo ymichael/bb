@@ -1,5 +1,11 @@
 import type { ThreadWorkStatus } from "@beanbag/agent-core";
 
+type ChangeCounts = {
+  changedFiles: number;
+  insertions: number;
+  deletions: number;
+};
+
 type WorkspaceChangeCounts = Pick<
   ThreadWorkStatus,
   "workspaceChangedFiles" | "workspaceInsertions" | "workspaceDeletions"
@@ -9,17 +15,32 @@ export function formatWorkspaceChangedFilesLabel(changedFiles: number): string {
   return `${changedFiles} file${changedFiles === 1 ? "" : "s"}`;
 }
 
-export function hasWorkspaceLineChanges(counts: WorkspaceChangeCounts): boolean {
-  return counts.workspaceInsertions > 0 || counts.workspaceDeletions > 0;
+function hasLineChanges(counts: Pick<ChangeCounts, "insertions" | "deletions">): boolean {
+  return counts.insertions > 0 || counts.deletions > 0;
 }
 
-export function formatWorkspaceChangeSummary(counts: WorkspaceChangeCounts): string {
-  const filesLabel = formatWorkspaceChangedFilesLabel(counts.workspaceChangedFiles);
-  if (!hasWorkspaceLineChanges(counts)) {
+export function formatChangeSummary(counts: ChangeCounts): string {
+  const filesLabel = formatWorkspaceChangedFilesLabel(counts.changedFiles);
+  if (!hasLineChanges(counts)) {
     return filesLabel;
   }
 
-  return `${filesLabel}, +${counts.workspaceInsertions} -${counts.workspaceDeletions}`;
+  return `${filesLabel}, +${counts.insertions} -${counts.deletions}`;
+}
+
+export function hasWorkspaceLineChanges(counts: WorkspaceChangeCounts): boolean {
+  return hasLineChanges({
+    insertions: counts.workspaceInsertions,
+    deletions: counts.workspaceDeletions,
+  });
+}
+
+export function formatWorkspaceChangeSummary(counts: WorkspaceChangeCounts): string {
+  return formatChangeSummary({
+    changedFiles: counts.workspaceChangedFiles,
+    insertions: counts.workspaceInsertions,
+    deletions: counts.workspaceDeletions,
+  });
 }
 
 export function formatDirtyWorkspaceLabel(counts: WorkspaceChangeCounts): string {
