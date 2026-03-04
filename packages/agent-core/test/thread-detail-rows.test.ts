@@ -72,7 +72,7 @@ describe("buildThreadDetailRows primary-checkout operation collapsing", () => {
     expect(rows[0]?.detail).toContain("Primary checkout now reflects this thread worktree");
   });
 
-  it("keeps distinct promote and demote cycles as separate rows", () => {
+  it("collapses a completed promote/demote cycle into a single round-trip row", () => {
     const rows = getOperationRows([
       primaryCheckoutOperation(1, "Promoting primary checkout"),
       primaryCheckoutOperation(2, "Promoted to primary checkout"),
@@ -80,13 +80,10 @@ describe("buildThreadDetailRows primary-checkout operation collapsing", () => {
       primaryCheckoutOperation(4, "Demoted from primary checkout"),
     ]);
 
-    expect(rows).toHaveLength(2);
-    expect(rows[0]?.title).toBe("Promoted to primary checkout");
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.title).toBe("Promoted then demoted as primary checkout");
     expect(rows[0]?.sourceSeqStart).toBe(1);
-    expect(rows[0]?.sourceSeqEnd).toBe(2);
-    expect(rows[1]?.title).toBe("Demoted from primary checkout");
-    expect(rows[1]?.sourceSeqStart).toBe(3);
-    expect(rows[1]?.sourceSeqEnd).toBe(4);
+    expect(rows[0]?.sourceSeqEnd).toBe(4);
   });
 
   it("keeps an in-progress primary-checkout update visible while pending", () => {

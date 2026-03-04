@@ -710,6 +710,19 @@ describe("ConversationEntry", () => {
     expect(html).toContain("text-muted-foreground/70");
   });
 
+  it("renders collapsed primary-checkout round trips with a subtler tone", () => {
+    const message: UIMessage = {
+      ...baseMessage(),
+      kind: "operation",
+      opType: "primary-checkout",
+      title: "Promoted then demoted as primary checkout",
+    };
+
+    const html = renderToStaticMarkup(<ConversationEntry message={message} />);
+    expect(html).toContain("Promoted then demoted as primary checkout");
+    expect(html).toContain("text-muted-foreground/70");
+  });
+
   it("keeps in-progress primary-checkout operation titles at the default tone", () => {
     const message: UIMessage = {
       ...baseMessage(),

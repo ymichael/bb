@@ -269,6 +269,60 @@ function mergePrimaryCheckoutOperations(messages: UIMessage[]): UIMessage[] {
   }
 
   flush();
+  return mergePrimaryCheckoutCompletedRoundTrips(merged);
+}
+
+function mergePrimaryCheckoutCompletedRoundTrips(messages: UIMessage[]): UIMessage[] {
+  const merged: UIMessage[] = [];
+
+  for (let index = 0; index < messages.length; index += 1) {
+    const promoted = messages[index];
+    if (!promoted || !isPrimaryCheckoutOperation(promoted)) {
+      if (promoted) {
+        merged.push(promoted);
+      }
+      continue;
+    }
+
+    const promotedClass = classifyPrimaryCheckoutOperation(promoted);
+    if (promotedClass.action !== "promote" || promotedClass.phase !== "completed") {
+      merged.push(promoted);
+      continue;
+    }
+
+    const demoted = messages[index + 1];
+    if (!demoted || !isPrimaryCheckoutOperation(demoted)) {
+      merged.push(promoted);
+      continue;
+    }
+
+    const demotedClass = classifyPrimaryCheckoutOperation(demoted);
+    if (demotedClass.action !== "demote" || demotedClass.phase !== "completed") {
+      merged.push(promoted);
+      continue;
+    }
+
+    const details = [promoted.detail?.trim(), demoted.detail?.trim()].filter(
+      (value): value is string => Boolean(value),
+    );
+    const uniqueDetailLines = [...new Set(details)];
+
+    merged.push({
+      kind: "operation",
+      id: `${promoted.id}:primary-checkout-roundtrip:${demoted.id}`,
+      threadId: promoted.threadId,
+      sourceSeqStart: Math.min(promoted.sourceSeqStart, demoted.sourceSeqStart),
+      sourceSeqEnd: Math.max(promoted.sourceSeqEnd, demoted.sourceSeqEnd),
+      createdAt: Math.max(promoted.createdAt, demoted.createdAt),
+      turnId: demoted.turnId ?? promoted.turnId,
+      opType: "primary-checkout",
+      title: "Promoted then demoted as primary checkout",
+      detail: uniqueDetailLines.length > 0 ? uniqueDetailLines.join("\n") : undefined,
+    });
+
+    index += 1;
+  }
+
   return merged;
 }
 

@@ -1638,7 +1638,8 @@ function OperationRow({
     const hasDetails = detailLines.length > 0;
     const shouldUseSubtlePrimaryCheckoutTitle =
       message.title === "Promoted to primary checkout" ||
-      message.title === "Demoted from primary checkout";
+      message.title === "Demoted from primary checkout" ||
+      message.title === "Promoted then demoted as primary checkout";
     const primaryCheckoutTitleClassName = shouldUseSubtlePrimaryCheckoutTitle
       ? "text-muted-foreground/70"
       : undefined;
