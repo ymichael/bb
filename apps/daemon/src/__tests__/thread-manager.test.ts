@@ -3228,6 +3228,90 @@ describe("ThreadManager", () => {
       expect(cleanup).toHaveBeenCalledTimes(1);
     });
 
+    it("cleans persisted worktree when archive has no active runtime session", () => {
+      const projectRoot = "/tmp/proj-1";
+      const workspaceRoot = "/tmp/worktrees/proj-1/thread-1";
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeThread({
+          id: "thread-1",
+          status: "idle",
+          environmentId: "worktree",
+        }),
+      );
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue({
+        id: "proj-1",
+        name: "Project",
+        rootPath: projectRoot,
+        createdAt: 1000,
+        updatedAt: 1000,
+      });
+      (eventRepo.getLatestByType as ReturnType<typeof vi.fn>).mockImplementation(
+        (_threadId: string, type: string) =>
+          type === "system/provisioning/completed"
+            ? makeEvent({
+                type: "system/provisioning/completed",
+                data: {
+                  workspaceRoot,
+                  mode: "worktree",
+                },
+              })
+            : undefined,
+      );
+      const removeWorktreeWorkspace = vi.fn();
+      const invalidate = vi.fn();
+      (manager as any).gitStatusService = {
+        invalidate,
+        removeWorktreeWorkspace,
+      };
+
+      manager.archive("thread-1");
+
+      expect(removeWorktreeWorkspace).toHaveBeenCalledWith({
+        projectRoot,
+        workspaceRoot,
+      });
+    });
+
+    it("skips persisted cleanup when worktree provisioning fell back to local mode", () => {
+      const projectRoot = "/tmp/proj-1";
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeThread({
+          id: "thread-1",
+          status: "idle",
+          environmentId: "worktree",
+        }),
+      );
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue({
+        id: "proj-1",
+        name: "Project",
+        rootPath: projectRoot,
+        createdAt: 1000,
+        updatedAt: 1000,
+      });
+      (eventRepo.getLatestByType as ReturnType<typeof vi.fn>).mockImplementation(
+        (_threadId: string, type: string) =>
+          type === "system/provisioning/completed"
+            ? makeEvent({
+                type: "system/provisioning/completed",
+                data: {
+                  workspaceRoot: projectRoot,
+                  mode: "local",
+                },
+              })
+            : undefined,
+      );
+      const removeWorktreeWorkspace = vi.fn();
+      const invalidate = vi.fn();
+      (manager as any).gitStatusService = {
+        invalidate,
+        removeWorktreeWorkspace,
+      };
+
+      manager.archive("thread-1");
+
+      expect(removeWorktreeWorkspace).not.toHaveBeenCalled();
+    });
+
     it("rebroadcasts work status after async workspace cleanup settles", async () => {
       let resolveCleanup: (() => void) | undefined;
       const cleanup = vi.fn(

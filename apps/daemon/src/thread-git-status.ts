@@ -1264,6 +1264,12 @@ export class ThreadGitStatusService {
     }
   }
 
+  removeWorktreeWorkspace(args: { projectRoot: string; workspaceRoot: string }): void {
+    runGit(args.projectRoot, ["worktree", "remove", "--force", args.workspaceRoot]);
+    rmSync(args.workspaceRoot, { recursive: true, force: true });
+    this.invalidate(args.workspaceRoot);
+  }
+
   promoteWorktreeIntoPrimary(args: {
     workspaceRoot: string;
     projectRoot: string;

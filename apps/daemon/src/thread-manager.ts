@@ -2664,11 +2664,11 @@ export class ThreadManager implements ThreadOrchestrator {
     opts?: { destroyWorkspace?: boolean },
   ): void {
     const runtime = this.environmentRuntimes.get(threadId);
-    if (!runtime) return;
-    this.environmentRuntimes.delete(threadId);
+    if (runtime) {
+      this.environmentRuntimes.delete(threadId);
+    }
     if (!opts?.destroyWorkspace) return;
     this.workspaceCleanupInFlightThreadIds.add(threadId);
-    const { adapter, session } = runtime;
     const refreshWorkStatusAfterCleanup = () => {
       const thread = this.threadRepo.getById(threadId);
       if (!thread) return;
@@ -2678,26 +2678,40 @@ export class ThreadManager implements ThreadOrchestrator {
     const markWorkspaceCleanupSettled = () => {
       this.workspaceCleanupInFlightThreadIds.delete(threadId);
     };
-    if (!session.cleanup) {
-      markWorkspaceCleanupSettled();
-      refreshWorkStatusAfterCleanup();
-      return;
-    }
-    const reportCleanupFailure = (err: unknown) => {
+    const reportCleanupFailure = (environmentId: string, err: unknown) => {
       const message = err instanceof Error ? err.message : String(err);
       console.warn(
-        `[thread ${threadId}] environment cleanup failed (${adapter.info.id}): ${message}`,
+        `[thread ${threadId}] environment cleanup failed (${environmentId}): ${message}`,
       );
       this._appendEvent(
         threadId,
         "system/provisioning/cleanup_failed",
         {
-          environmentId: adapter.info.id,
+          environmentId,
           message: "Environment cleanup failed",
           detail: message,
         },
       );
     };
+
+    if (!runtime) {
+      const thread = this.threadRepo.getById(threadId);
+      try {
+        this._cleanupPersistedWorkspace(threadId);
+      } catch (err) {
+        reportCleanupFailure(thread?.environmentId ?? "worktree", err);
+      }
+      markWorkspaceCleanupSettled();
+      refreshWorkStatusAfterCleanup();
+      return;
+    }
+
+    const { adapter, session } = runtime;
+    if (!session.cleanup) {
+      markWorkspaceCleanupSettled();
+      refreshWorkStatusAfterCleanup();
+      return;
+    }
     try {
       const maybePromise = session.cleanup();
       if (
@@ -2707,7 +2721,9 @@ export class ThreadManager implements ThreadOrchestrator {
         typeof maybePromise.then === "function"
       ) {
         void maybePromise
-          .catch(reportCleanupFailure)
+          .catch((err) => {
+            reportCleanupFailure(adapter.info.id, err);
+          })
           .finally(() => {
             markWorkspaceCleanupSettled();
             refreshWorkStatusAfterCleanup();
@@ -2717,10 +2733,39 @@ export class ThreadManager implements ThreadOrchestrator {
       markWorkspaceCleanupSettled();
       refreshWorkStatusAfterCleanup();
     } catch (err) {
-      reportCleanupFailure(err);
+      reportCleanupFailure(adapter.info.id, err);
       markWorkspaceCleanupSettled();
       refreshWorkStatusAfterCleanup();
     }
+  }
+
+  private _cleanupPersistedWorkspace(threadId: string): void {
+    const thread = this.threadRepo.getById(threadId);
+    if (!thread || thread.environmentId !== "worktree") {
+      return;
+    }
+    const project = this.projectRepo.getById(thread.projectId);
+    if (!project) {
+      return;
+    }
+    const completedProvisioning = this._readCompletedProvisioningDetails(threadId);
+    const workspaceRoot = completedProvisioning?.workspaceRoot;
+    if (!workspaceRoot) {
+      return;
+    }
+    if (
+      completedProvisioning.mode !== undefined &&
+      completedProvisioning.mode !== "worktree"
+    ) {
+      return;
+    }
+    if (resolve(workspaceRoot) === resolve(project.rootPath)) {
+      return;
+    }
+    this.gitStatusService.removeWorktreeWorkspace({
+      projectRoot: project.rootPath,
+      workspaceRoot,
+    });
   }
 
   private _resolveEffectiveEnvironmentId(
@@ -3451,13 +3496,28 @@ export class ThreadManager implements ThreadOrchestrator {
   }
 
   private _readCompletedProvisioningWorkspaceRoot(threadId: string): string | undefined {
+    const data = this._readCompletedProvisioningDetails(threadId);
+    return data?.workspaceRoot;
+  }
+
+  private _readCompletedProvisioningDetails(
+    threadId: string,
+  ): { workspaceRoot?: string; mode?: string } | undefined {
     const provisioningEvent = this.eventRepo.getLatestByType(
       threadId,
       "system/provisioning/completed",
     );
     if (!provisioningEvent) return undefined;
     const data = toRecord(provisioningEvent.data);
-    return getStringField(data, "workspaceRoot");
+    const workspaceRoot = getStringField(data, "workspaceRoot");
+    const mode = getStringField(data, "mode");
+    if (!workspaceRoot && !mode) {
+      return undefined;
+    }
+    return {
+      ...(workspaceRoot ? { workspaceRoot } : {}),
+      ...(mode ? { mode } : {}),
+    };
   }
 
   private _readProvisioningState(threadId: string): ThreadProvisioningState | undefined {
