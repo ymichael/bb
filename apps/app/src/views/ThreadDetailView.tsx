@@ -745,7 +745,9 @@ export function ThreadDetailView() {
   const [selectedGitDiffCommitSha, setSelectedGitDiffCommitSha] = useState<string | null>(
     null,
   );
-  const { data: thread, isLoading, error } = useThread(threadId ?? "");
+  const { data: thread, isLoading, error } = useThread(threadId ?? "", {
+    refetchOnMount: "always",
+  });
   const { data: threadWorkStatus } = useThreadWorkStatus(
     threadId ?? "",
     selectedMergeBaseBranch,
@@ -753,6 +755,7 @@ export function ThreadDetailView() {
   const { data: parentThread } = useThread(thread?.parentThreadId ?? "");
   const { data: timeline, isLoading: timelineLoading } = useThreadTimeline(
     threadId ?? "",
+    { refetchOnMount: "always" },
   );
   const threadToolGroupMessages = useThreadToolGroupMessages();
   const { data: defaultExecutionOptions } = useThreadDefaultExecutionOptions(

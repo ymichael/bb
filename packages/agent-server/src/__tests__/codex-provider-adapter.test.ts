@@ -75,6 +75,20 @@ describe("codex provider adapter", () => {
     expect(adapter.shouldPersistEvent?.("item/completed", {})).toBe(true);
   });
 
+  it("suppresses websocket broadcasts for high-frequency non-visual notifications", () => {
+    const adapter = createCodexProviderAdapter();
+
+    expect(adapter.shouldBroadcastForEvent("item/agentMessage/delta")).toBe(false);
+    expect(adapter.shouldBroadcastForEvent("item/reasoning/summaryTextDelta")).toBe(
+      false,
+    );
+    expect(adapter.shouldBroadcastForEvent("item/reasoning/summaryPartAdded")).toBe(
+      false,
+    );
+    expect(adapter.shouldBroadcastForEvent("account/rateLimits/updated")).toBe(false);
+    expect(adapter.shouldBroadcastForEvent("item/completed")).toBe(true);
+  });
+
   it("derives status transitions from turn lifecycle events", () => {
     const adapter = createCodexProviderAdapter();
 

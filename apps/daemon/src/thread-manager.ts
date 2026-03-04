@@ -162,6 +162,7 @@ const ARCHIVED_NOISE_EVENT_KEEP_RECENT = 120;
 const ACTIVE_NOISE_EVENT_KEEP_RECENT = 1_000;
 const ACTIVE_NOISE_PRUNE_MIN_SEQ_DELTA = 250;
 const ACTIVE_NOISE_PRUNE_MIN_INTERVAL_MS = 30_000;
+const PROVIDER_EVENTS_BROADCAST_COALESCE_MS = 30;
 const PRUNABLE_NOISE_EVENT_TYPES: readonly string[] = [
   "account/ratelimits/updated",
   "thread/tokenusage/updated",
@@ -436,6 +437,14 @@ export class ThreadManager implements ThreadOrchestrator {
   private lastNoisePruneSeqByThread = new Map<string, number>();
   /** Last wall-clock timestamp where historical noise pruning ran for an active thread. */
   private lastNoisePruneAtByThread = new Map<string, number>();
+  /** Coalesced provider-originated thread change broadcasts keyed by thread id. */
+  private queuedProviderBroadcastsByThread = new Map<
+    string,
+    {
+      changes: Set<ThreadChangeKind>;
+      timer: ReturnType<typeof setTimeout> | null;
+    }
+  >();
   /** Memoized timeline projection per thread until event sequence or thread status changes. */
   private timelineByThread = new Map<string, ThreadTimelineCacheEntry>();
   /** Cached prompt-derived fallback titles for untitled threads. */
@@ -2391,6 +2400,12 @@ export class ThreadManager implements ThreadOrchestrator {
     this.queuedOperationsByThreadId.clear();
     this.operationDispatchInFlight.clear();
     this.projectOperationTransitionsInFlight.clear();
+    for (const queued of this.queuedProviderBroadcastsByThread.values()) {
+      if (queued.timer !== null) {
+        clearTimeout(queued.timer);
+      }
+    }
+    this.queuedProviderBroadcastsByThread.clear();
   }
 
   private _scheduleProvisioning(
@@ -3195,8 +3210,57 @@ export class ThreadManager implements ThreadOrchestrator {
     }
 
     if (changes.length > 0) {
-      this._broadcastThreadChanged(threadId, changes);
+      this._enqueueProviderThreadChanged(threadId, changes);
     }
+  }
+
+  private _flushQueuedProviderThreadChanged(threadId: string): void {
+    const queued = this.queuedProviderBroadcastsByThread.get(threadId);
+    if (!queued) return;
+    if (queued.timer !== null) {
+      clearTimeout(queued.timer);
+      queued.timer = null;
+    }
+    this.queuedProviderBroadcastsByThread.delete(threadId);
+    const changes = Array.from(queued.changes);
+    if (changes.length === 0) return;
+    this._broadcastThreadChanged(threadId, changes);
+  }
+
+  private _enqueueProviderThreadChanged(
+    threadId: string,
+    changes: readonly ThreadChangeKind[],
+  ): void {
+    const uniqueChanges = Array.from(new Set(changes));
+    if (uniqueChanges.length === 0) return;
+
+    let queued = this.queuedProviderBroadcastsByThread.get(threadId);
+    if (!queued) {
+      queued = {
+        changes: new Set<ThreadChangeKind>(),
+        timer: null,
+      };
+      this.queuedProviderBroadcastsByThread.set(threadId, queued);
+    }
+    for (const change of uniqueChanges) {
+      queued.changes.add(change);
+    }
+
+    const hasNonEventChange = uniqueChanges.some(
+      (change) => change !== "events-appended",
+    );
+    if (hasNonEventChange) {
+      this._flushQueuedProviderThreadChanged(threadId);
+      return;
+    }
+
+    if (queued.timer !== null) {
+      return;
+    }
+    queued.timer = setTimeout(() => {
+      this._flushQueuedProviderThreadChanged(threadId);
+    }, PROVIDER_EVENTS_BROADCAST_COALESCE_MS);
+    queued.timer.unref?.();
   }
 
   private _appendEvent(

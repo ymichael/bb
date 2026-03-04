@@ -8,8 +8,9 @@ import {
 import { wsManager } from "../lib/ws";
 
 const INVALIDATION_DEBOUNCE_MS = 250;
-const INVALIDATION_MAX_WAIT_MS = 1500;
-const TIMELINE_EVENT_REFETCH_INTERVAL_MS = 1500;
+// Keep realtime thread updates responsive while still coalescing bursts.
+const INVALIDATION_MAX_WAIT_MS = 500;
+const TIMELINE_EVENT_REFETCH_INTERVAL_MS = 500;
 
 interface ThreadChangeFlags {
   listChanged: boolean;

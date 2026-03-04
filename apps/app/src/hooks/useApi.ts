@@ -278,13 +278,20 @@ export function useThreads(
   });
 }
 
-export function useThread(id: string) {
+export function useThread(
+  id: string,
+  options?: {
+    enabled?: boolean;
+    refetchOnMount?: boolean | "always";
+  },
+) {
   const queryClient = useQueryClient();
   return useQuery<Thread>({
     queryKey: ["thread", id],
     queryFn: () => api.getThread(id),
-    enabled: !!id,
+    enabled: (options?.enabled ?? true) && !!id,
     staleTime: 5_000,
+    refetchOnMount: options?.refetchOnMount ?? true,
     initialData: () => {
       if (!id) return undefined;
       const threadLists = queryClient.getQueriesData<Thread[]>({
@@ -327,12 +334,13 @@ export function useThreadWorkStatusLookup() {
 
 export function useThreadTimeline(
   id: string,
-  options?: { enabled?: boolean; limit?: number },
+  options?: { enabled?: boolean; limit?: number; refetchOnMount?: boolean | "always" },
 ) {
   return useQuery<ThreadTimelineResponse>({
     queryKey: ["threadTimeline", id, options?.limit ?? null],
     queryFn: () => api.getThreadTimeline(id, options?.limit, false),
     enabled: (options?.enabled ?? true) && !!id,
+    refetchOnMount: options?.refetchOnMount ?? true,
   });
 }
 

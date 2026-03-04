@@ -333,6 +333,8 @@ export function createCodexProviderAdapter(
       const normalized = normalizeProviderEventType(method);
       if (normalized === "item/agentmessage/delta") return false;
       if (normalized === "item/reasoning/summarytextdelta") return false;
+      if (normalized === "account/ratelimits/updated") return false;
+      if (normalized === "item/reasoning/summarypartadded") return false;
       return true;
     },
     statusForEvent(method: string): Thread["status"] | undefined {
