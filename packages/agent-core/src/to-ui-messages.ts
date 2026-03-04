@@ -1270,6 +1270,8 @@ function parseOperationMessage(
     const payload = toEventRecord(event.data);
     const operation = getStringField(payload, "operation");
     const status = getStringField(payload, "status");
+    // Keep lifecycle naming aligned with thread-detail-rows collapsing so operation timelines
+    // remain familiar and mergeable across projections (requested → queued → running → terminal).
     const title = (() => {
       if (operation === "commit") {
         if (status === "requested") return "Commit requested";

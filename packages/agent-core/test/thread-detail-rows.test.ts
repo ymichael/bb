@@ -42,6 +42,43 @@ function provisioningOperation(
   };
 }
 
+function threadOperationIntent(
+  seq: number,
+  title: string,
+  detail?: string,
+): Extract<UIMessage, { kind: "operation" }> {
+  return {
+    kind: "operation",
+    id: `thread-operation-${seq}`,
+    threadId: "thread-1",
+    sourceSeqStart: seq,
+    sourceSeqEnd: seq,
+    createdAt: seq,
+    opType: "thread-operation-intent",
+    title,
+    ...(detail ? { detail } : {}),
+  };
+}
+
+function worktreeOperation(
+  seq: number,
+  opType: "worktree-commit" | "worktree-squash-merge",
+  title: string,
+  detail?: string,
+): Extract<UIMessage, { kind: "operation" }> {
+  return {
+    kind: "operation",
+    id: `worktree-operation-${seq}`,
+    threadId: "thread-1",
+    sourceSeqStart: seq,
+    sourceSeqEnd: seq,
+    createdAt: seq,
+    opType,
+    title,
+    ...(detail ? { detail } : {}),
+  };
+}
+
 function getOperationRows(messages: UIMessage[]): Array<Extract<UIMessage, { kind: "operation" }>> {
   return buildThreadDetailRows(messages)
     .filter((row): row is Extract<ThreadDetailRow, { kind: "message" }> =>
@@ -136,5 +173,78 @@ describe("buildThreadDetailRows provisioning operation collapsing", () => {
     expect(rows[0]?.detail).toContain(".bb-env-setup.ts • /tmp/worktree • Timeout 600s");
     expect(rows[0]?.detail).toContain(".bb-env-setup.ts • /tmp/worktree • Timeout 600s • Duration 3074ms");
     expect(rows[0]?.detail).toContain("worktree • /tmp/worktree");
+  });
+});
+
+describe("buildThreadDetailRows squash merge operation collapsing", () => {
+  it("prefers the canonical worktree squash outcome over duplicate lifecycle updates", () => {
+    const rows = getOperationRows([
+      threadOperationIntent(
+        1,
+        "Squash merge requested",
+        "Squash-merge operation requested",
+      ),
+      threadOperationIntent(
+        2,
+        "Squash merge queued",
+        "Squash-merge operation queued for deterministic execution",
+      ),
+      threadOperationIntent(
+        3,
+        "Squash merging changes",
+        "Running squash-merge operation",
+      ),
+      worktreeOperation(
+        4,
+        "worktree-squash-merge",
+        "Squash merged",
+        "Squash merged into main",
+      ),
+      threadOperationIntent(
+        5,
+        "Squash merge completed",
+        "Squash merged into main",
+      ),
+    ]);
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.opType).toBe("worktree-squash-merge");
+    expect(rows[0]?.title).toBe("Squash merged");
+    expect(rows[0]?.detail).toContain("Squash merged into main");
+  });
+
+  it("keeps in-progress squash lifecycle visible when no final worktree outcome exists yet", () => {
+    const rows = getOperationRows([
+      threadOperationIntent(
+        1,
+        "Squash merge requested",
+        "Squash-merge operation requested",
+      ),
+      {
+        kind: "user",
+        id: "prompt-2",
+        threadId: "thread-1",
+        sourceSeqStart: 2,
+        sourceSeqEnd: 2,
+        createdAt: 2,
+        text: "Please squash-merge the changes in this thread workspace.",
+      },
+      threadOperationIntent(
+        3,
+        "Squash merge queued",
+        "Squash-merge operation queued for deterministic execution",
+      ),
+      threadOperationIntent(
+        4,
+        "Squash merging changes",
+        "Running squash-merge operation",
+      ),
+    ]);
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.opType).toBe("thread-operation-intent");
+    expect(rows[0]?.title).toBe("Squash merging changes");
+    expect(rows[0]?.detail).toContain("Running squash-merge operation");
+    expect(rows[0]?.detail).toContain("Prompt:");
   });
 });

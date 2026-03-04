@@ -386,6 +386,21 @@ function classifyThreadOperationIntent(message: Extract<UIMessage, { kind: "oper
   }
 }
 
+function isTerminalThreadOperationIntentPhase(phase: ThreadOperationIntentPhase): boolean {
+  switch (phase) {
+    case "completed":
+    case "failed":
+      return true;
+    case "requested":
+    case "queued":
+    case "running":
+    case "update":
+      return false;
+    default:
+      return assertNever(phase);
+  }
+}
+
 function mergeThreadOperationIntentMessages(messages: UIMessage[]): UIMessage[] {
   const merged: UIMessage[] = [];
 
@@ -399,10 +414,7 @@ function mergeThreadOperationIntentMessages(messages: UIMessage[]): UIMessage[] 
     }
 
     const requestedClass = classifyThreadOperationIntent(requested);
-    if (
-      requestedClass.action !== "squash_merge" ||
-      requestedClass.phase !== "requested"
-    ) {
+    if (requestedClass.phase !== "requested" || requestedClass.action === "unknown") {
       merged.push(requested);
       continue;
     }
@@ -410,26 +422,38 @@ function mergeThreadOperationIntentMessages(messages: UIMessage[]): UIMessage[] 
     let cursor = index + 1;
     let promptMessage: Extract<UIMessage, { kind: "user" }> | null = null;
     const promptCandidate = messages[cursor];
-    if (promptCandidate?.kind === "user") {
+    if (requestedClass.action === "squash_merge" && promptCandidate?.kind === "user") {
       promptMessage = promptCandidate;
       cursor += 1;
     }
 
-    const lifecycleCandidate = messages[cursor];
-    if (!lifecycleCandidate || !isThreadOperationIntent(lifecycleCandidate)) {
+    const lifecycleMessages: Array<Extract<UIMessage, { kind: "operation" }>> = [];
+    while (true) {
+      const lifecycleCandidate = messages[cursor];
+      if (!lifecycleCandidate || !isThreadOperationIntent(lifecycleCandidate)) {
+        break;
+      }
+      const lifecycleClass = classifyThreadOperationIntent(lifecycleCandidate);
+      if (
+        lifecycleClass.action !== requestedClass.action ||
+        lifecycleClass.phase === "requested"
+      ) {
+        break;
+      }
+      lifecycleMessages.push(lifecycleCandidate);
+      cursor += 1;
+      if (isTerminalThreadOperationIntentPhase(lifecycleClass.phase)) {
+        break;
+      }
+    }
+
+    if (lifecycleMessages.length === 0) {
       merged.push(requested);
       continue;
     }
 
-    const lifecycleClass = classifyThreadOperationIntent(lifecycleCandidate);
-    if (
-      lifecycleClass.action !== "squash_merge" ||
-      (
-        lifecycleClass.phase !== "queued" &&
-        lifecycleClass.phase !== "running" &&
-        lifecycleClass.phase !== "completed"
-      )
-    ) {
+    const lifecycleCandidate = lifecycleMessages[lifecycleMessages.length - 1];
+    if (!lifecycleCandidate) {
       merged.push(requested);
       continue;
     }
@@ -449,8 +473,8 @@ function mergeThreadOperationIntentMessages(messages: UIMessage[]): UIMessage[] 
     }
 
     const sequence = promptMessage
-      ? [requested, promptMessage, lifecycleCandidate]
-      : [requested, lifecycleCandidate];
+      ? [requested, promptMessage, ...lifecycleMessages]
+      : [requested, ...lifecycleMessages];
 
     merged.push({
       kind: "operation",
@@ -468,7 +492,85 @@ function mergeThreadOperationIntentMessages(messages: UIMessage[]): UIMessage[] 
       detail: detailSections.length > 0 ? detailSections.join("\n\n") : undefined,
     });
 
-    index = cursor;
+    index = cursor - 1;
+  }
+
+  return merged;
+}
+
+function isWorktreeSquashMergeOperation(
+  message: UIMessage,
+): message is Extract<UIMessage, { kind: "operation" }> {
+  return message.kind === "operation" && message.opType === "worktree-squash-merge";
+}
+
+function isWorktreeCommitOperation(
+  message: UIMessage,
+): message is Extract<UIMessage, { kind: "operation" }> {
+  return message.kind === "operation" && message.opType === "worktree-commit";
+}
+
+function hasAdjacentSquashMergeOutcome(
+  messages: UIMessage[],
+  startIndex: number,
+  direction: -1 | 1,
+): boolean {
+  for (
+    let cursor = startIndex + direction;
+    cursor >= 0 && cursor < messages.length;
+    cursor += direction
+  ) {
+    const candidate = messages[cursor];
+    if (!candidate) break;
+
+    if (isWorktreeSquashMergeOperation(candidate)) {
+      return true;
+    }
+
+    if (isThreadOperationIntent(candidate)) {
+      const candidateClass = classifyThreadOperationIntent(candidate);
+      if (candidateClass.action === "squash_merge") {
+        continue;
+      }
+      return false;
+    }
+
+    if (isWorktreeCommitOperation(candidate)) {
+      continue;
+    }
+
+    return false;
+  }
+
+  return false;
+}
+
+function mergeSquashMergeOutcomeMessages(messages: UIMessage[]): UIMessage[] {
+  const merged: UIMessage[] = [];
+
+  for (let index = 0; index < messages.length; index += 1) {
+    const message = messages[index];
+    if (!message || !isThreadOperationIntent(message)) {
+      if (message) {
+        merged.push(message);
+      }
+      continue;
+    }
+
+    const classified = classifyThreadOperationIntent(message);
+    if (classified.action !== "squash_merge" || classified.phase === "failed") {
+      merged.push(message);
+      continue;
+    }
+
+    if (
+      hasAdjacentSquashMergeOutcome(messages, index, 1) ||
+      hasAdjacentSquashMergeOutcome(messages, index, -1)
+    ) {
+      continue;
+    }
+
+    merged.push(message);
   }
 
   return merged;
@@ -622,13 +724,17 @@ export function buildThreadDetailRows(
   messages: UIMessage[],
   options?: BuildThreadDetailRowsOptions,
 ): ThreadDetailRow[] {
+  // Timeline guardrail: keep one canonical row per user-visible operation whenever possible.
+  // If new lifecycle/outcome events are added, update these collapse passes so thread timelines
+  // stay familiar across projections instead of showing near-duplicate status updates.
   const includeToolGroupMessages = options?.includeToolGroupMessages ?? true;
   const provisioningMergedMessages = mergeProvisioningOperations(messages);
   const primaryCheckoutMergedMessages = mergePrimaryCheckoutOperations(provisioningMergedMessages);
   const threadOperationMergedMessages = mergeThreadOperationIntentMessages(
     primaryCheckoutMergedMessages,
   );
-  const mergedMessages = mergeConsecutiveToolActivityMessages(threadOperationMergedMessages);
+  const squashOutcomeMergedMessages = mergeSquashMergeOutcomeMessages(threadOperationMergedMessages);
+  const mergedMessages = mergeConsecutiveToolActivityMessages(squashOutcomeMergedMessages);
   const lastAssistantIndexByTurn = new Map<string, number>();
 
   for (const [index, message] of mergedMessages.entries()) {

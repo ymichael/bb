@@ -539,6 +539,49 @@ describe("buildThreadDetailRows", () => {
     expect(rows[0].message.detail).toContain(promptText);
   });
 
+  it("prefers a single canonical squash merge row when lifecycle and worktree outcomes overlap", () => {
+    const messages: UIMessage[] = [
+      {
+        ...baseMessage("squash-requested-1", 1),
+        kind: "operation",
+        opType: "thread-operation-intent",
+        title: "Squash merge requested",
+        detail: "Squash-merge operation requested",
+      },
+      {
+        ...baseMessage("squash-running-1", 2),
+        kind: "operation",
+        opType: "thread-operation-intent",
+        title: "Squash merging changes",
+        detail: "Running squash-merge operation",
+      },
+      {
+        ...baseMessage("squash-worktree-1", 3),
+        kind: "operation",
+        opType: "worktree-squash-merge",
+        title: "Squash merged",
+        detail: "Squash merged into main",
+      },
+      {
+        ...baseMessage("squash-completed-1", 4),
+        kind: "operation",
+        opType: "thread-operation-intent",
+        title: "Squash merge completed",
+        detail: "Squash merged into main",
+      },
+    ];
+
+    const rows = buildThreadDetailRows(messages);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.kind).toBe("message");
+    if (rows[0]?.kind !== "message") return;
+    expect(rows[0].message.kind).toBe("operation");
+    if (rows[0].message.kind !== "operation") return;
+    expect(rows[0].message.opType).toBe("worktree-squash-merge");
+    expect(rows[0].message.title).toBe("Squash merged");
+    expect(rows[0].message.detail).toContain("Squash merged into main");
+  });
+
   it("keeps compaction and thread title updates visible outside tool groups", () => {
     const messages: UIMessage[] = [
       {
