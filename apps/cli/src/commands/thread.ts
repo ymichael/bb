@@ -57,13 +57,9 @@ function parseThreadStatusEventMode(
 
 function printThreadOperationResult(result: ThreadOperationResponse): void {
   const flags = [
-    result.queued ? "queued" : "dispatched",
+    result.executionStatus,
     ...(result.demotedPrimaryCheckout ? ["demoted-primary-checkout"] : []),
   ];
-  if (flags.length === 0) {
-    console.log(result.message);
-    return;
-  }
   console.log(`${result.message} [${flags.join(", ")}]`);
 }
 

@@ -768,12 +768,12 @@ describe("ConversationEntry", () => {
       ...baseMessage(),
       kind: "operation",
       opType: "thread-operation-intent",
-      title: "Squash merge dispatched",
-      detail: `Squash-merge operation dispatched to the agent\n\nPrompt:\n${promptText}`,
+      title: "Squash merge queued",
+      detail: `Squash-merge operation queued for deterministic execution\n\nPrompt:\n${promptText}`,
     };
 
     const collapsedHtml = renderToStaticMarkup(<ConversationEntry message={message} />);
-    expect(collapsedHtml).toContain("Squash merge dispatched");
+    expect(collapsedHtml).toContain("Squash merge queued");
     expect(collapsedHtml).toContain("lucide-chevron-right");
     expect(collapsedHtml).not.toContain(promptText);
 
@@ -782,7 +782,7 @@ describe("ConversationEntry", () => {
     );
     expect(expandedHtml).toContain(promptText);
     expect(expandedHtml).not.toContain(">Prompt<");
-    expect(expandedHtml).not.toContain("Squash-merge operation dispatched to the agent");
+    expect(expandedHtml).not.toContain("Squash-merge operation queued for deterministic execution");
   });
 
   it("renders plan-updated operations as expandable rows", () => {

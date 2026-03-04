@@ -50,12 +50,11 @@ export function StatusPillCommitPopover({
     includeUnstaged: boolean;
     commitMessage?: string;
     mergeBaseBranch?: string;
-  }) => Promise<{ message: string; merged: boolean }>;
+  }) => Promise<void>;
 }) {
   const [open, setOpen] = useState(false);
   const [includeUnstaged, setIncludeUnstaged] = useState(true);
   const [commitMessage, setCommitMessage] = useState("");
-  const [actionMessage, setActionMessage] = useState<string | null>(null);
   const branchName = status?.currentBranch;
   const mergeDeltaSummary = status
     ? `${status.aheadCount} ahead · ${status.behindCount} behind`
@@ -260,12 +259,13 @@ export function StatusPillCommitPopover({
                   type="button"
                   disabled={!canCommit || isCommitting || Boolean(isSquashMerging)}
                   onClick={async () => {
+                    setOpen(false);
+                    const nextCommitMessage = commitMessage.trim() || undefined;
+                    setCommitMessage("");
                     await onCommit({
                       includeUnstaged,
-                      message: commitMessage.trim() || undefined,
+                      message: nextCommitMessage,
                     });
-                    setOpen(false);
-                    setCommitMessage("");
                   }}
                 >
                   {isCommitting ? "Committing..." : "Commit changes"}
@@ -276,17 +276,15 @@ export function StatusPillCommitPopover({
                     variant="secondary"
                     disabled={isCommitting || Boolean(isSquashMerging)}
                     onClick={async () => {
-                      const result = await onSquashMerge({
+                      setOpen(false);
+                      const nextCommitMessage = commitMessage.trim() || undefined;
+                      setCommitMessage("");
+                      await onSquashMerge({
                         commitIfNeeded: true,
                         includeUnstaged,
-                        commitMessage: commitMessage.trim() || undefined,
+                        commitMessage: nextCommitMessage,
                         mergeBaseBranch: selectedMergeBaseBranch,
                       });
-                      setActionMessage(result.message);
-                      if (result.merged) {
-                        setOpen(false);
-                        setCommitMessage("");
-                      }
                     }}
                   >
                     {isSquashMerging ? "Squashing..." : "Commit + squash merge"}
@@ -302,23 +300,17 @@ export function StatusPillCommitPopover({
                 variant="secondary"
                 disabled={Boolean(isSquashMerging)}
                 onClick={async () => {
-                  const result = await onSquashMerge({
+                  setOpen(false);
+                  await onSquashMerge({
                     commitIfNeeded: false,
                     includeUnstaged,
                     mergeBaseBranch: selectedMergeBaseBranch,
                   });
-                  setActionMessage(result.message);
-                  if (result.merged) {
-                    setOpen(false);
-                  }
                 }}
               >
                 {isSquashMerging ? "Squashing..." : "Squash merge"}
               </Button>
             </div>
-          ) : null}
-          {actionMessage ? (
-            <p className="text-xs text-muted-foreground">{actionMessage}</p>
           ) : null}
         </div>
       </PopoverContent>

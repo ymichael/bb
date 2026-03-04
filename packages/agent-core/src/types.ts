@@ -190,9 +190,9 @@ export interface SystemPrimaryCheckoutUpdatedEventData {
 
 export interface SystemThreadOperationEventData {
   operation: "commit" | "squash_merge";
-  status: "requested" | "dispatched" | "failed";
+  status: "requested" | "queued" | "running" | "completed" | "failed";
   message: string;
-  dispatchMode?: "immediate" | "queued";
+  operationId?: string;
   demotedPrimaryCheckout?: boolean;
 }
 

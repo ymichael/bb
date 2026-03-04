@@ -840,10 +840,12 @@ describe("Thread routes", () => {
       (threadManager.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
       (threadManager.requestThreadOperation as ReturnType<typeof vi.fn>).mockResolvedValue({
         ok: true,
+        operationId: "op-1",
         operation: "commit",
-        status: "dispatched",
+        status: "accepted",
+        executionStatus: "running",
         queued: false,
-        message: "Commit operation dispatched to the agent",
+        message: "Commit operation accepted and running",
         demotedPrimaryCheckout: false,
       });
 

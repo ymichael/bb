@@ -90,6 +90,7 @@ export const updateProjectSchema = z
 const commitOperationOptionsSchema = z.object({
   message: z.string().min(1).optional(),
   includeUnstaged: z.boolean().optional(),
+  autoArchiveOnSuccess: z.boolean().optional(),
 });
 
 const squashMergeOperationOptionsSchema = z.object({
@@ -98,6 +99,7 @@ const squashMergeOperationOptionsSchema = z.object({
   commitMessage: z.string().min(1).optional(),
   squashMessage: z.string().min(1).optional(),
   mergeBaseBranch: z.string().min(1).optional(),
+  autoArchiveOnSuccess: z.boolean().optional(),
 });
 
 export const threadOperationSchema = z.discriminatedUnion("operation", [

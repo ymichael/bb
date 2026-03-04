@@ -275,8 +275,9 @@ function mergePrimaryCheckoutOperations(messages: UIMessage[]): UIMessage[] {
 type ThreadOperationIntentAction = "commit" | "squash_merge" | "unknown";
 type ThreadOperationIntentPhase =
   | "requested"
-  | "dispatched"
   | "queued"
+  | "running"
+  | "completed"
   | "failed"
   | "update";
 
@@ -293,21 +294,25 @@ function classifyThreadOperationIntent(message: Extract<UIMessage, { kind: "oper
   switch (message.title) {
     case "Commit requested":
       return { action: "commit", phase: "requested" };
-    case "Commit dispatched":
-      return { action: "commit", phase: "dispatched" };
     case "Commit queued":
       return { action: "commit", phase: "queued" };
-    case "Commit request failed":
+    case "Committing changes":
+      return { action: "commit", phase: "running" };
+    case "Commit completed":
+      return { action: "commit", phase: "completed" };
+    case "Commit failed":
       return { action: "commit", phase: "failed" };
     case "Commit operation update":
       return { action: "commit", phase: "update" };
     case "Squash merge requested":
       return { action: "squash_merge", phase: "requested" };
-    case "Squash merge dispatched":
-      return { action: "squash_merge", phase: "dispatched" };
     case "Squash merge queued":
       return { action: "squash_merge", phase: "queued" };
-    case "Squash merge request failed":
+    case "Squash merging changes":
+      return { action: "squash_merge", phase: "running" };
+    case "Squash merge completed":
+      return { action: "squash_merge", phase: "completed" };
+    case "Squash merge failed":
       return { action: "squash_merge", phase: "failed" };
     case "Squash merge operation update":
       return { action: "squash_merge", phase: "update" };
@@ -356,18 +361,19 @@ function mergeThreadOperationIntentMessages(messages: UIMessage[]): UIMessage[] 
       cursor += 1;
     }
 
-    const dispatchedCandidate = messages[cursor];
-    if (!dispatchedCandidate || !isThreadOperationIntent(dispatchedCandidate)) {
+    const lifecycleCandidate = messages[cursor];
+    if (!lifecycleCandidate || !isThreadOperationIntent(lifecycleCandidate)) {
       merged.push(requested);
       continue;
     }
 
-    const dispatchedClass = classifyThreadOperationIntent(dispatchedCandidate);
+    const lifecycleClass = classifyThreadOperationIntent(lifecycleCandidate);
     if (
-      dispatchedClass.action !== "squash_merge" ||
+      lifecycleClass.action !== "squash_merge" ||
       (
-        dispatchedClass.phase !== "dispatched" &&
-        dispatchedClass.phase !== "queued"
+        lifecycleClass.phase !== "queued" &&
+        lifecycleClass.phase !== "running" &&
+        lifecycleClass.phase !== "completed"
       )
     ) {
       merged.push(requested);
@@ -376,9 +382,9 @@ function mergeThreadOperationIntentMessages(messages: UIMessage[]): UIMessage[] 
 
     const detailSections: string[] = [];
     const requestedDetail = requested.detail?.trim();
-    const dispatchedDetail = dispatchedCandidate.detail?.trim();
-    if (dispatchedDetail) {
-      detailSections.push(dispatchedDetail);
+    const lifecycleDetail = lifecycleCandidate.detail?.trim();
+    if (lifecycleDetail) {
+      detailSections.push(lifecycleDetail);
     } else if (requestedDetail) {
       detailSections.push(requestedDetail);
     }
@@ -389,22 +395,22 @@ function mergeThreadOperationIntentMessages(messages: UIMessage[]): UIMessage[] 
     }
 
     const sequence = promptMessage
-      ? [requested, promptMessage, dispatchedCandidate]
-      : [requested, dispatchedCandidate];
+      ? [requested, promptMessage, lifecycleCandidate]
+      : [requested, lifecycleCandidate];
 
     merged.push({
       kind: "operation",
-      id: `${requested.id}:thread-operation-intent:${dispatchedCandidate.id}`,
+      id: `${requested.id}:thread-operation-intent:${lifecycleCandidate.id}`,
       threadId: requested.threadId,
       sourceSeqStart: Math.min(...sequence.map((message) => message.sourceSeqStart)),
       sourceSeqEnd: Math.max(...sequence.map((message) => message.sourceSeqEnd)),
       createdAt: Math.max(...sequence.map((message) => message.createdAt)),
       turnId:
-        dispatchedCandidate.turnId ??
+        lifecycleCandidate.turnId ??
         promptMessage?.turnId ??
         requested.turnId,
       opType: "thread-operation-intent",
-      title: dispatchedCandidate.title,
+      title: lifecycleCandidate.title,
       detail: detailSections.length > 0 ? detailSections.join("\n\n") : undefined,
     });
 

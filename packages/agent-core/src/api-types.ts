@@ -147,6 +147,7 @@ export type ThreadOperationType = "commit" | "squash_merge";
 export interface CommitOperationOptions {
   message?: string;
   includeUnstaged?: boolean;
+  autoArchiveOnSuccess?: boolean;
 }
 
 export interface SquashMergeOperationOptions {
@@ -155,6 +156,7 @@ export interface SquashMergeOperationOptions {
   commitMessage?: string;
   squashMessage?: string;
   mergeBaseBranch?: string;
+  autoArchiveOnSuccess?: boolean;
 }
 
 export type ThreadOperationRequest =
@@ -169,8 +171,10 @@ export type ThreadOperationRequest =
 
 export interface ThreadOperationResponse {
   ok: true;
+  operationId: string;
   operation: ThreadOperationType;
-  status: "dispatched" | "queued";
+  status: "accepted";
+  executionStatus: "queued" | "running";
   queued: boolean;
   message: string;
   demotedPrimaryCheckout: boolean;

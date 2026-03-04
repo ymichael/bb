@@ -500,7 +500,7 @@ describe("buildThreadDetailRows", () => {
     expect(rows[0].message.detail).toContain("local • /Users/michael/Projects/bb");
   });
 
-  it("merges squash operation intent request/prompt/dispatch into one row", () => {
+  it("merges squash operation intent request/prompt/lifecycle into one row", () => {
     const promptText =
       "Please squash-merge the changes in this thread workspace.\n" +
       "Please use the default merge-base branch reported by git.";
@@ -518,11 +518,11 @@ describe("buildThreadDetailRows", () => {
         text: promptText,
       },
       {
-        ...baseMessage("squash-dispatched-1", 3),
+        ...baseMessage("squash-queued-1", 3),
         kind: "operation",
         opType: "thread-operation-intent",
-        title: "Squash merge dispatched",
-        detail: "Squash-merge operation dispatched to the agent",
+        title: "Squash merge queued",
+        detail: "Squash-merge operation queued for deterministic execution",
       },
     ];
 
@@ -533,8 +533,8 @@ describe("buildThreadDetailRows", () => {
     expect(rows[0].message.kind).toBe("operation");
     if (rows[0].message.kind !== "operation") return;
     expect(rows[0].message.opType).toBe("thread-operation-intent");
-    expect(rows[0].message.title).toBe("Squash merge dispatched");
-    expect(rows[0].message.detail).toContain("Squash-merge operation dispatched to the agent");
+    expect(rows[0].message.title).toBe("Squash merge queued");
+    expect(rows[0].message.detail).toContain("Squash-merge operation queued for deterministic execution");
     expect(rows[0].message.detail).toContain("Prompt:");
     expect(rows[0].message.detail).toContain(promptText);
   });

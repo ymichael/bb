@@ -3973,7 +3973,7 @@ describe("ThreadManager", () => {
     });
 
     describe("requestThreadOperation()", () => {
-      it("dispatches commit intents immediately for idle threads", async () => {
+      it("accepts commit operations and schedules deterministic execution for idle threads", async () => {
         const thread = makeThread({
           id: "thread-1",
           status: "idle",
@@ -3989,9 +3989,9 @@ describe("ThreadManager", () => {
             data: event.data,
           })
         );
-        const systemTellSpy = vi
-          .spyOn(manager, "systemTell")
-          .mockResolvedValue(undefined);
+        const scheduleDispatchSpy = vi
+          .spyOn(manager as any, "_scheduleQueuedOperationDispatch")
+          .mockImplementation(() => {});
 
         const result = await manager.requestThreadOperation("thread-1", {
           operation: "commit",
@@ -4004,21 +4004,12 @@ describe("ThreadManager", () => {
         expect(result).toMatchObject({
           ok: true,
           operation: "commit",
-          status: "dispatched",
+          status: "accepted",
+          executionStatus: "running",
           queued: false,
           demotedPrimaryCheckout: false,
         });
-        expect(systemTellSpy).toHaveBeenCalledWith(
-          "thread-1",
-          expect.objectContaining({
-            input: [
-              expect.objectContaining({
-                type: "text",
-                text: expect.stringContaining("Please commit the changes"),
-              }),
-            ],
-          }),
-        );
+        expect(scheduleDispatchSpy).toHaveBeenCalledWith("thread-1");
         expect(eventRepo.create).toHaveBeenCalledWith(
           expect.objectContaining({
             type: "system/thread_operation",
@@ -4028,19 +4019,9 @@ describe("ThreadManager", () => {
             }),
           }),
         );
-        expect(eventRepo.create).toHaveBeenCalledWith(
-          expect.objectContaining({
-            type: "system/thread_operation",
-            data: expect.objectContaining({
-              operation: "commit",
-              status: "dispatched",
-              dispatchMode: "immediate",
-            }),
-          }),
-        );
       });
 
-      it("queues squash intents when a thread is active", async () => {
+      it("queues squash operations when a thread is active", async () => {
         const thread = makeThread({
           id: "thread-1",
           status: "active",
@@ -4057,10 +4038,9 @@ describe("ThreadManager", () => {
             data: event.data,
           })
         );
-        const enqueueSpy = vi
-          .spyOn(manager, "enqueueFollowUp")
-          .mockReturnValue(thread);
-        const systemTellSpy = vi.spyOn(manager, "systemTell");
+        vi
+          .spyOn(manager as any, "_scheduleQueuedOperationDispatch")
+          .mockImplementation(() => {});
 
         const result = await manager.requestThreadOperation("thread-1", {
           operation: "squash_merge",
@@ -4072,25 +4052,23 @@ describe("ThreadManager", () => {
         expect(result).toMatchObject({
           ok: true,
           operation: "squash_merge",
-          status: "queued",
+          status: "accepted",
+          executionStatus: "queued",
           queued: true,
           demotedPrimaryCheckout: false,
         });
-        expect(enqueueSpy).toHaveBeenCalledWith(
-          "thread-1",
+        expect(eventRepo.create).toHaveBeenCalledWith(
           expect.objectContaining({
-            input: [
-              expect.objectContaining({
-                type: "text",
-                text: expect.stringContaining("Please squash-merge the changes"),
-              }),
-            ],
+            type: "system/thread_operation",
+            data: expect.objectContaining({
+              operation: "squash_merge",
+              status: "queued",
+            }),
           }),
         );
-        expect(systemTellSpy).not.toHaveBeenCalled();
       });
 
-      it("demotes primary checkout before dispatching operation intents", async () => {
+      it("demotes primary checkout before accepting operations", async () => {
         const thread = makeThread({
           id: "thread-1",
           status: "idle",
@@ -4125,9 +4103,9 @@ describe("ThreadManager", () => {
             message: "Primary checkout demoted",
             primaryStatus: { projectId: "proj-1" },
           });
-        const systemTellSpy = vi
-          .spyOn(manager, "systemTell")
-          .mockResolvedValue(undefined);
+        const scheduleDispatchSpy = vi
+          .spyOn(manager as any, "_scheduleQueuedOperationDispatch")
+          .mockImplementation(() => {});
 
         const result = await manager.requestThreadOperation("thread-1", {
           operation: "commit",
@@ -4135,14 +4113,14 @@ describe("ThreadManager", () => {
         });
 
         expect(demoteSpy).toHaveBeenCalledWith("thread-1");
-        expect(systemTellSpy).toHaveBeenCalled();
+        expect(scheduleDispatchSpy).toHaveBeenCalled();
         expect(demoteSpy.mock.invocationCallOrder[0]).toBeLessThan(
-          systemTellSpy.mock.invocationCallOrder[0] ?? Number.POSITIVE_INFINITY,
+          scheduleDispatchSpy.mock.invocationCallOrder[0] ?? Number.POSITIVE_INFINITY,
         );
         expect(result.demotedPrimaryCheckout).toBe(true);
       });
 
-      it("records failed thread-operation events when dispatch fails", async () => {
+      it("records failed thread-operation events when preflight demotion fails", async () => {
         const thread = makeThread({
           id: "thread-1",
           status: "idle",
@@ -4158,14 +4136,24 @@ describe("ThreadManager", () => {
             data: event.data,
           })
         );
-        vi.spyOn(manager, "systemTell").mockRejectedValue(new Error("dispatch failed"));
+        (manager as any).primaryPromotionByProjectId.set("proj-1", {
+          projectId: "proj-1",
+          threadId: "thread-1",
+          promotedAt: 1000,
+          promotedCheckout: {
+            head: "abc123",
+            detached: false,
+          },
+          reconstructed: false,
+        });
+        vi.spyOn(manager, "demotePrimaryCheckout").mockRejectedValue(new Error("demotion failed"));
 
         await expect(
           manager.requestThreadOperation("thread-1", {
             operation: "commit",
             options: {},
           }),
-        ).rejects.toThrow("dispatch failed");
+        ).rejects.toThrow("demotion failed");
 
         expect(eventRepo.create).toHaveBeenCalledWith(
           expect.objectContaining({
@@ -4173,7 +4161,7 @@ describe("ThreadManager", () => {
             data: expect.objectContaining({
               operation: "commit",
               status: "failed",
-              message: "dispatch failed",
+              message: "demotion failed",
             }),
           }),
         );

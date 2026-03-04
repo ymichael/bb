@@ -1,14 +1,14 @@
-import { spawn, spawnSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import { copyFileSync, existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
-import { createInterface } from "node:readline";
 import type { ProviderCommitMessageGeneratorArgs } from "./provider-adapter.js";
+import { generateOpenAIResponsesText } from "./openai-responses-model.js";
 
-const DEFAULT_TIMEOUT_MS = 45_000;
-const REQUEST_TIMEOUT_MS = 15_000;
+const DEFAULT_TIMEOUT_MS = 15_000;
 const MAX_PATCH_CHARS = 12_000;
 const MAX_OUTPUT_CHARS = 120;
+const COMMIT_MESSAGE_MAX_OUTPUT_TOKENS = 120;
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
@@ -28,32 +28,6 @@ function runGit(
   });
   if (result.status !== 0) return "";
   return result.stdout?.trim() ?? "";
-}
-
-function normalizeEventType(value: string): string {
-  return value.toLowerCase().replaceAll(".", "/");
-}
-
-function collectTextFragments(value: unknown, out: string[]): void {
-  if (typeof value === "string") {
-    if (value.length > 0) out.push(value);
-    return;
-  }
-
-  if (Array.isArray(value)) {
-    for (const entry of value) {
-      collectTextFragments(entry, out);
-    }
-    return;
-  }
-
-  const record = asRecord(value);
-  if (!record) return;
-  const candidates = [record.delta, record.text, record.content, record.value, record.item];
-  for (const candidate of candidates) {
-    if (candidate === undefined) continue;
-    collectTextFragments(candidate, out);
-  }
 }
 
 function buildPrompt(args: {
@@ -157,6 +131,15 @@ export function extractConventionalCommitLine(raw: string): string | undefined {
   return undefined;
 }
 
+function shouldSuppressCommitMessageGenerationError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const normalizedMessage = error.message.toLowerCase();
+  return (
+    normalizedMessage.includes("openai api key is missing") ||
+    normalizedMessage.includes("timed out")
+  );
+}
+
 export async function generateCodexCommitMessage(
   args: ProviderCommitMessageGeneratorArgs,
   timeoutMs: number = DEFAULT_TIMEOUT_MS,
@@ -179,220 +162,20 @@ export async function generateCodexCommitMessage(
       : "the currently staged changes",
   });
 
-  const child = spawn("codex", ["app-server"], {
-    stdio: ["pipe", "pipe", "pipe"],
-    cwd: args.cwd,
-  });
-  if (!child.stdin || !child.stdout) {
-    throw new Error("Failed to start codex app-server.");
-  }
-
-  const readline = createInterface({ input: child.stdout });
-  let requestId = 0;
-  let isClosed = false;
-  let completionSettled = false;
-  let responseText = "";
-  let sawDelta = false;
-
-  const pending = new Map<number, {
-    resolve: (result: unknown) => void;
-    reject: (error: Error) => void;
-    timeout: NodeJS.Timeout;
-  }>();
-
-  let resolveCompletion!: () => void;
-  let rejectCompletion!: (error: Error) => void;
-  const completion = new Promise<void>((resolve, reject) => {
-    resolveCompletion = resolve;
-    rejectCompletion = reject;
-  });
-
-  const settleCompletion = (error?: Error): void => {
-    if (completionSettled) return;
-    completionSettled = true;
-    if (error) {
-      rejectCompletion(error);
-      return;
-    }
-    resolveCompletion();
-  };
-
-  const rejectPending = (error: Error): void => {
-    for (const request of pending.values()) {
-      clearTimeout(request.timeout);
-      request.reject(error);
-    }
-    pending.clear();
-  };
-
-  const close = (): void => {
-    if (isClosed) return;
-    isClosed = true;
-    readline.close();
-    if (!child.stdin.destroyed) {
-      child.stdin.end();
-    }
-    if (child.exitCode === null) {
-      child.kill("SIGTERM");
-      setTimeout(() => {
-        if (child.exitCode === null) {
-          child.kill("SIGKILL");
-        }
-      }, 1_000).unref();
-    }
-  };
-
-  child.once("error", (err) => {
-    if (!completionSettled) {
-      settleCompletion(new Error(`Failed to start codex app-server: ${err.message}`));
-    }
-    rejectPending(new Error(`Failed to start codex app-server: ${err.message}`));
-  });
-
-  child.once("exit", (code, signal) => {
-    if (completionSettled || isClosed) return;
-    const reason = signal ? `signal ${signal}` : `exit code ${code ?? "unknown"}`;
-    const error = new Error(`codex app-server exited before commit message generation (${reason}).`);
-    settleCompletion(error);
-    rejectPending(error);
-  });
-
-  readline.on("line", (line) => {
-    const trimmed = line.trim();
-    if (!trimmed) return;
-
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(trimmed);
-    } catch {
-      return;
-    }
-
-    const message = asRecord(parsed);
-    if (!message) return;
-
-    if (typeof message.id === "number") {
-      const request = pending.get(message.id);
-      if (!request) return;
-      clearTimeout(request.timeout);
-      pending.delete(message.id);
-
-      const errorObj = asRecord(message.error);
-      if (errorObj && typeof errorObj.message === "string") {
-        request.reject(new Error(errorObj.message));
-        return;
-      }
-      request.resolve(message.result);
-      return;
-    }
-
-    if (typeof message.method !== "string") return;
-    const method = normalizeEventType(message.method);
-    const params = message.params;
-
-    if (
-      method === "item/agentmessage/delta" ||
-      method === "item/agent_message/delta" ||
-      method === "item/streamed" ||
-      method === "item/updated" ||
-      method === "thread/item/updated"
-    ) {
-      const fragments: string[] = [];
-      collectTextFragments(params, fragments);
-      if (fragments.length > 0) {
-        sawDelta = true;
-        responseText += fragments.join("");
-      }
-      return;
-    }
-
-    if (method === "item/completed") {
-      if (sawDelta) return;
-      const payload = asRecord(params);
-      const item = asRecord(payload?.item);
-      if (!item || item.type !== "agentMessage") return;
-
-      const fragments: string[] = [];
-      collectTextFragments(item, fragments);
-      if (fragments.length > 0) {
-        sawDelta = true;
-        responseText += fragments.join("");
-      }
-      return;
-    }
-
-    if (
-      method === "turn/completed" ||
-      method === "turn/end" ||
-      method === "response/completed" ||
-      method === "task/completed"
-    ) {
-      settleCompletion();
-    }
-  });
-
-  const sendRequest = (method: string, params: Record<string, unknown>): Promise<unknown> => {
-    const id = ++requestId;
-    return new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        pending.delete(id);
-        reject(new Error(`Timed out waiting for "${method}" response.`));
-      }, REQUEST_TIMEOUT_MS);
-
-      pending.set(id, { resolve, reject, timeout });
-
-      const payload = JSON.stringify({
-        jsonrpc: "2.0",
-        id,
-        method,
-        params,
-      });
-      child.stdin!.write(`${payload}\n`);
-    });
-  };
-
-  const timeout = setTimeout(() => {
-    settleCompletion(new Error(`Timed out after ${timeoutMs}ms.`));
-  }, timeoutMs);
-
   try {
-    await sendRequest("initialize", {
-      clientInfo: { name: "beanbag", version: "0.0.1" },
-      capabilities: {},
+    const result = await generateOpenAIResponsesText({
+      prompt,
+      timeoutMs,
+      maxOutputTokens: COMMIT_MESSAGE_MAX_OUTPUT_TOKENS,
+      temperature: 0,
     });
-
-    const startResult = await sendRequest("thread/start", {
-      approvalPolicy: "never",
-      sandbox: "workspace-write",
-    });
-    const payload = asRecord(startResult);
-    const threadId = typeof payload?.threadId === "string"
-      ? payload.threadId
-      : typeof asRecord(payload?.thread)?.id === "string"
-        ? String(asRecord(payload?.thread)?.id)
-        : undefined;
-    if (!threadId) throw new Error("Missing thread id from thread/start.");
-
-    await sendRequest("turn/start", {
-      threadId,
-      input: [{ type: "text", text: prompt }],
-    });
-
-    await completion;
-
-    if (!sawDelta && responseText.trim().length === 0) {
-      return undefined;
-    }
-
-    const raw = responseText.trim();
+    const raw = result.text.trim();
     const parsed = extractJsonValue(raw);
     return normalizeCommitMessage(parsed?.message) ?? extractConventionalCommitLine(raw);
-  } finally {
-    clearTimeout(timeout);
-    for (const request of pending.values()) {
-      clearTimeout(request.timeout);
+  } catch (error) {
+    if (shouldSuppressCommitMessageGenerationError(error)) {
+      return undefined;
     }
-    pending.clear();
-    close();
+    throw error;
   }
 }

@@ -1270,25 +1270,22 @@ function parseOperationMessage(
     const payload = toEventRecord(event.data);
     const operation = getStringField(payload, "operation");
     const status = getStringField(payload, "status");
-    const dispatchMode = getStringField(payload, "dispatchMode");
     const title = (() => {
       if (operation === "commit") {
         if (status === "requested") return "Commit requested";
-        if (status === "dispatched") {
-          return dispatchMode === "queued" ? "Commit queued" : "Commit dispatched";
-        }
-        if (status === "failed") return "Commit request failed";
+        if (status === "queued") return "Commit queued";
+        if (status === "running") return "Committing changes";
+        if (status === "completed") return "Commit completed";
+        if (status === "failed") return "Commit failed";
         // Persisted event payloads are open_external at read-time; keep generic fallback.
         return "Commit operation update";
       }
       if (operation === "squash_merge") {
         if (status === "requested") return "Squash merge requested";
-        if (status === "dispatched") {
-          return dispatchMode === "queued"
-            ? "Squash merge queued"
-            : "Squash merge dispatched";
-        }
-        if (status === "failed") return "Squash merge request failed";
+        if (status === "queued") return "Squash merge queued";
+        if (status === "running") return "Squash merging changes";
+        if (status === "completed") return "Squash merge completed";
+        if (status === "failed") return "Squash merge failed";
         // Persisted event payloads are open_external at read-time; keep generic fallback.
         return "Squash merge operation update";
       }
@@ -1298,7 +1295,6 @@ function parseOperationMessage(
 
     const detailParts = [
       getStringField(payload, "message"),
-      dispatchMode === "queued" ? "Will run after the active turn completes" : undefined,
     ].filter((value): value is string => Boolean(value));
 
     return {

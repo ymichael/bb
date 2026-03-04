@@ -100,6 +100,7 @@ import {
 } from "@/lib/prompt-draft";
 import { openPathInEditor } from "@/lib/api";
 import { getPathCommandForTarget } from "@/lib/open-path-preferences";
+import { getAutoArchivePreferences } from "@/lib/auto-archive-preferences";
 import { StatusPillCommitPopover } from "@/components/shared/StatusPillCommitPopover";
 import { StatusPill, type StatusPillVariant } from "@/components/shared/StatusPill";
 import { WorkspaceChangesList } from "@/components/shared/WorkspaceChangesList";
@@ -1830,12 +1831,14 @@ export function ThreadDetailView() {
                   isSquashMerging={requestThreadSquashOperation.isPending}
                   onCommit={async ({ includeUnstaged, message }) => {
                     if (!threadId) return;
+                    const autoArchiveOnSuccess = getAutoArchivePreferences().autoArchiveThreadOnCommit;
                     await requestThreadCommitOperation.mutateAsync({
                       id: threadId,
                       operation: "commit",
                       options: {
                         includeUnstaged,
                         ...(message ? { message } : {}),
+                        autoArchiveOnSuccess,
                       },
                     });
                   }}
@@ -1845,8 +1848,9 @@ export function ThreadDetailView() {
                     commitMessage,
                     mergeBaseBranch,
                   }) => {
-                    if (!threadId) return { message: "Thread unavailable", merged: false };
-                    const result = await requestThreadSquashOperation.mutateAsync({
+                    if (!threadId) return;
+                    const autoArchiveOnSuccess = getAutoArchivePreferences().autoArchiveThreadOnCommit;
+                    await requestThreadSquashOperation.mutateAsync({
                       id: threadId,
                       operation: "squash_merge",
                       options: {
@@ -1854,12 +1858,9 @@ export function ThreadDetailView() {
                         includeUnstaged,
                         ...(commitMessage ? { commitMessage } : {}),
                         ...(mergeBaseBranch ? { mergeBaseBranch } : {}),
+                        autoArchiveOnSuccess,
                       },
                     });
-                    return {
-                      message: result.message,
-                      merged: result.status === "dispatched",
-                    };
                   }}
                 />
               </DetailRow>

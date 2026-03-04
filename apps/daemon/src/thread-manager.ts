@@ -19,7 +19,6 @@ import {
   getStringField,
   resolveProviderEventMethod,
   buildThreadDetailRows,
-  buildThreadOperationInstruction,
   extractThreadContextWindowUsage,
   toRecord,
   toUIMessages,
@@ -102,7 +101,6 @@ import { ThreadGitStatusService, type GitCheckoutSnapshot } from "./thread-git-s
 import { ThreadAttributedDiffService } from "./thread-attributed-diff.js";
 import {
   evaluateThreadOperationPolicy,
-  type ThreadIntentDispatchMode,
 } from "./thread-operation-policy.js";
 
 export type PromptExecutionOptions = ProviderExecutionOptions;
@@ -129,6 +127,13 @@ interface PrimaryPromotionState {
   previousCheckout?: GitCheckoutSnapshot;
   promotedCheckout: GitCheckoutSnapshot;
   reconstructed: boolean;
+}
+
+interface QueuedThreadOperation {
+  operationId: string;
+  request: ThreadOperationRequest;
+  requestedAt: number;
+  demotedPrimaryCheckout: boolean;
 }
 
 type BootReconcileAction =
@@ -395,6 +400,12 @@ function normalizeQueuedSandboxMode(
   return value ?? "danger-full-access";
 }
 
+function isAutoArchiveOnSuccessEnabled(args: {
+  autoArchiveOnSuccess?: boolean;
+}): boolean {
+  return args.autoArchiveOnSuccess !== false;
+}
+
 export class ThreadManager implements ThreadOrchestrator {
   private processes = new Map<string, ChildProcess>();
   private runtimes = new Map<string, ProviderRuntime>();
@@ -439,6 +450,13 @@ export class ThreadManager implements ThreadOrchestrator {
   private primaryCheckoutTransitionsInFlight = new Set<string>();
   /** Prevents concurrent queued follow-up dispatch loops per thread. */
   private queueDispatchInFlight = new Set<string>();
+  /** Pending deterministic thread git operations keyed by thread id. */
+  private queuedOperationsByThreadId = new Map<string, QueuedThreadOperation[]>();
+  /** Prevents concurrent operation queue-drain loops per thread. */
+  private operationDispatchInFlight = new Set<string>();
+  /** Ensures only one deterministic git operation mutates a project at a time. */
+  private projectOperationTransitionsInFlight = new Set<string>();
+  private operationIdCounter = 0;
   private rpcIdCounter = 0;
   private threadShellPath: string | undefined;
   private providerCatalog: SystemProviderInfo[];
@@ -1123,6 +1141,337 @@ export class ThreadManager implements ThreadOrchestrator {
     }
   }
 
+  private _nextOperationId(): string {
+    this.operationIdCounter += 1;
+    return `op-${this.operationIdCounter.toString(36)}`;
+  }
+
+  private _enqueueThreadOperation(
+    threadId: string,
+    request: ThreadOperationRequest,
+    demotedPrimaryCheckout: boolean,
+    operationId?: string,
+  ): QueuedThreadOperation {
+    const queuedOperation: QueuedThreadOperation = {
+      operationId: operationId ?? this._nextOperationId(),
+      request,
+      requestedAt: Date.now(),
+      demotedPrimaryCheckout,
+    };
+    const queue = this.queuedOperationsByThreadId.get(threadId) ?? [];
+    queue.push(queuedOperation);
+    this.queuedOperationsByThreadId.set(threadId, queue);
+    return queuedOperation;
+  }
+
+  private _scheduleQueuedOperationDispatch(threadId: string): void {
+    if (this.operationDispatchInFlight.has(threadId)) return;
+    this.operationDispatchInFlight.add(threadId);
+    setImmediate(() => {
+      void this._drainQueuedOperations(threadId).finally(() => {
+        this.operationDispatchInFlight.delete(threadId);
+      });
+    });
+  }
+
+  private async _drainQueuedOperations(threadId: string): Promise<void> {
+    while (true) {
+      const thread = this.threadRepo.getById(threadId);
+      if (!thread) return;
+      if (thread.archivedAt !== undefined) return;
+      if (thread.status !== "idle") return;
+      if (this.projectOperationTransitionsInFlight.has(thread.projectId)) return;
+
+      const queue = this.queuedOperationsByThreadId.get(threadId);
+      const nextOperation = queue?.[0];
+      if (!nextOperation) return;
+
+      queue?.shift();
+      if (!queue || queue.length === 0) {
+        this.queuedOperationsByThreadId.delete(threadId);
+      } else {
+        this.queuedOperationsByThreadId.set(threadId, queue);
+      }
+
+      await this._runQueuedThreadOperation(thread, nextOperation);
+    }
+  }
+
+  private async _runQueuedThreadOperation(
+    thread: Thread,
+    queuedOperation: QueuedThreadOperation,
+  ): Promise<void> {
+    if (this.projectOperationTransitionsInFlight.has(thread.projectId)) {
+      const queue = this.queuedOperationsByThreadId.get(thread.id) ?? [];
+      queue.unshift(queuedOperation);
+      this.queuedOperationsByThreadId.set(thread.id, queue);
+      return;
+    }
+
+    this.projectOperationTransitionsInFlight.add(thread.projectId);
+    this._appendThreadOperationEvent(
+      thread.id,
+      queuedOperation.request.operation,
+      "running",
+      {
+        operationId: queuedOperation.operationId,
+        message: this._threadOperationRunningMessage(queuedOperation.request.operation),
+        demotedPrimaryCheckout: queuedOperation.demotedPrimaryCheckout,
+      },
+    );
+
+    try {
+      let completionMessage = "";
+      switch (queuedOperation.request.operation) {
+        case "commit": {
+          const result = await this._runWorktreeCommitOperation(
+            thread.id,
+            queuedOperation.request.options,
+          );
+          completionMessage = result.message;
+          break;
+        }
+        case "squash_merge": {
+          const result = await this._runWorktreeSquashMergeOperation(
+            thread.id,
+            queuedOperation.request.options,
+          );
+          completionMessage = result.message;
+          break;
+        }
+        default:
+          assertNever(queuedOperation.request);
+      }
+
+      this._appendThreadOperationEvent(
+        thread.id,
+        queuedOperation.request.operation,
+        "completed",
+        {
+          operationId: queuedOperation.operationId,
+          message: completionMessage,
+          demotedPrimaryCheckout: queuedOperation.demotedPrimaryCheckout,
+        },
+      );
+    } catch (err) {
+      this._appendThreadOperationEvent(
+        thread.id,
+        queuedOperation.request.operation,
+        "failed",
+        {
+          operationId: queuedOperation.operationId,
+          message: this._toErrorMessage(err),
+          demotedPrimaryCheckout: queuedOperation.demotedPrimaryCheckout,
+        },
+      );
+    } finally {
+      this.projectOperationTransitionsInFlight.delete(thread.projectId);
+      this._scheduleQueuedOperationDispatch(thread.id);
+      for (const candidateThreadId of this.queuedOperationsByThreadId.keys()) {
+        if (candidateThreadId === thread.id) continue;
+        const candidateThread = this.threadRepo.getById(candidateThreadId);
+        if (!candidateThread || candidateThread.projectId !== thread.projectId) continue;
+        this._scheduleQueuedOperationDispatch(candidateThreadId);
+      }
+    }
+  }
+
+  private async _resolveCommitMessage(args: {
+    workspaceRoot: string;
+    includeUnstaged?: boolean;
+    explicitMessage?: string;
+  }): Promise<string> {
+    const explicitMessage = args.explicitMessage?.trim();
+    if (explicitMessage) {
+      return explicitMessage;
+    }
+
+    if (!this.provider.generateCommitMessage) {
+      throw new Error("Commit message generation is unavailable");
+    }
+
+    const generated = await this.provider.generateCommitMessage({
+      cwd: args.workspaceRoot,
+      includeUnstaged: args.includeUnstaged,
+    });
+    const message = generated?.trim();
+    if (!message) {
+      throw new Error(
+        `Failed to auto-generate commit message (${this.provider.displayName})`,
+      );
+    }
+    return message;
+  }
+
+  private async _runWorktreeCommitOperation(
+    threadId: string,
+    request?: Extract<ThreadOperationRequest, { operation: "commit" }>["options"],
+  ): Promise<{ message: string }> {
+    const thread = this.threadRepo.getById(threadId);
+    if (!thread) {
+      throw threadNotFoundError(threadId);
+    }
+    if (thread.archivedAt !== undefined) {
+      throw threadArchivedError(threadId);
+    }
+    const project = this.projectRepo.getById(thread.projectId);
+    if (!project) {
+      throw projectNotFoundError(thread.projectId);
+    }
+    const workspaceRoot = this._resolveThreadWorkspaceRoot(thread, project.rootPath);
+    if (!workspaceRoot) {
+      throw invalidRequestError(
+        thread.environmentId === "worktree"
+          ? "Thread worktree is unavailable; reprovision the thread first"
+          : "Thread workspace is unavailable",
+      );
+    }
+
+    const defaultBranch = this.gitStatusService.detectDefaultBranch(project.rootPath);
+    const beforeStatus = this.gitStatusService.getStatus({
+      workspaceRoot,
+      projectRoot: project.rootPath,
+      defaultBranch,
+    });
+    const message = beforeStatus.hasUncommittedChanges
+      ? await this._resolveCommitMessage({
+          workspaceRoot,
+          includeUnstaged: request?.includeUnstaged,
+          explicitMessage: request?.message,
+        })
+      : request?.message?.trim();
+    const result = this.gitStatusService.commit({
+      workspaceRoot,
+      projectRoot: project.rootPath,
+      defaultBranch,
+      message,
+      includeUnstaged: request?.includeUnstaged,
+    });
+
+    this._appendEvent(
+      thread.id,
+      "system/worktree/commit",
+      {
+        status: result.commitCreated ? "committed" : "noop",
+        message: result.message,
+        ...(result.commitSha ? { commitSha: result.commitSha } : {}),
+        ...(request?.includeUnstaged !== undefined
+          ? { includeUnstaged: request.includeUnstaged }
+          : {}),
+      },
+      { broadcastChanges: ["events-appended", "work-status-changed"] },
+    );
+
+    if (
+      result.commitCreated &&
+      thread.environmentId === "local" &&
+      isAutoArchiveOnSuccessEnabled(request ?? {})
+    ) {
+      this.archive(thread.id);
+    }
+
+    return { message: result.message };
+  }
+
+  private async _runWorktreeSquashMergeOperation(
+    threadId: string,
+    request?: Extract<ThreadOperationRequest, { operation: "squash_merge" }>["options"],
+  ): Promise<{ message: string }> {
+    const thread = this.threadRepo.getById(threadId);
+    if (!thread) {
+      throw threadNotFoundError(threadId);
+    }
+    if (thread.archivedAt !== undefined) {
+      throw threadArchivedError(threadId);
+    }
+    if (thread.environmentId !== "worktree") {
+      throw invalidRequestError("Squash merge is only available for worktree threads");
+    }
+
+    const project = this.projectRepo.getById(thread.projectId);
+    if (!project) {
+      throw projectNotFoundError(thread.projectId);
+    }
+    const workspaceRoot = this._resolveThreadWorkspaceRoot(thread, project.rootPath);
+    if (!workspaceRoot) {
+      throw invalidRequestError("Thread worktree is unavailable; reprovision the thread first");
+    }
+
+    const options = request ?? {};
+    const defaultBranch = this.gitStatusService.detectDefaultBranch(project.rootPath);
+    const requestedMergeBaseBranch = options.mergeBaseBranch?.trim() || undefined;
+    const before = this.gitStatusService.getStatus({
+      workspaceRoot,
+      projectRoot: project.rootPath,
+      defaultBranch,
+      mergeBaseBranch: requestedMergeBaseBranch,
+    });
+    const mergeBaseBranch = before.mergeBaseBranch ?? defaultBranch;
+
+    let committed = false;
+    if (before.hasUncommittedChanges) {
+      if (options.commitIfNeeded !== true) {
+        throw invalidRequestError("Workspace has uncommitted changes; commit first");
+      }
+      const commitMessage = await this._resolveCommitMessage({
+        workspaceRoot,
+        includeUnstaged: options.includeUnstaged,
+        explicitMessage: options.commitMessage,
+      });
+      const commitResult = this.gitStatusService.commit({
+        workspaceRoot,
+        projectRoot: project.rootPath,
+        defaultBranch,
+        message: commitMessage,
+        includeUnstaged: options.includeUnstaged,
+      });
+      this._appendEvent(
+        thread.id,
+        "system/worktree/commit",
+        {
+          status: commitResult.commitCreated ? "committed" : "noop",
+          message: commitResult.message,
+          ...(commitResult.commitSha ? { commitSha: commitResult.commitSha } : {}),
+          ...(options.includeUnstaged !== undefined
+            ? { includeUnstaged: options.includeUnstaged }
+            : {}),
+        },
+        { broadcastChanges: ["events-appended", "work-status-changed"] },
+      );
+      committed = commitResult.commitCreated;
+    }
+
+    const mergeResult = this.gitStatusService.squashMergeWorktreeIntoDefaultBranch({
+      workspaceRoot,
+      projectRoot: project.rootPath,
+      defaultBranch: mergeBaseBranch,
+      message: options.squashMessage,
+    });
+    this.gitStatusService.invalidate(workspaceRoot);
+    this._appendEvent(
+      thread.id,
+      "system/worktree/squash_merge",
+      {
+        status: mergeResult.merged
+          ? "merged"
+          : mergeResult.conflictFiles && mergeResult.conflictFiles.length > 0
+            ? "conflict"
+            : "noop",
+        message: mergeResult.message,
+        committed,
+        ...(mergeBaseBranch ? { mergeBaseBranch } : {}),
+        ...(mergeResult.conflictFiles ? { conflictFiles: mergeResult.conflictFiles } : {}),
+      },
+      { broadcastChanges: ["events-appended", "work-status-changed"] },
+    );
+
+    if (mergeResult.merged && isAutoArchiveOnSuccessEnabled(options)) {
+      this.archive(thread.id);
+    }
+
+    return { message: mergeResult.message };
+  }
+
   /**
    * Stop an active thread by killing its process.
    */
@@ -1170,6 +1519,8 @@ export class ThreadManager implements ThreadOrchestrator {
     const thread = this.threadRepo.getById(threadId);
     if (!thread) return;
     this._invalidateThreadWorkStatus(thread);
+    this.queuedOperationsByThreadId.delete(threadId);
+    this.operationDispatchInFlight.delete(threadId);
 
     const child = this.processes.get(threadId);
     if (child) {
@@ -1613,10 +1964,7 @@ export class ThreadManager implements ThreadOrchestrator {
       throw invalidRequestError(policyDecision.reason ?? "Operation is not allowed");
     }
 
-    this._appendThreadOperationEvent(thread.id, request.operation, "requested", {
-      message: this._threadOperationRequestedMessage(request.operation),
-    });
-
+    const operationId = this._nextOperationId();
     let demotedPrimaryCheckout = false;
     try {
       if (policyDecision.requiresDemoteFirst) {
@@ -1624,48 +1972,49 @@ export class ThreadManager implements ThreadOrchestrator {
         demotedPrimaryCheckout = true;
       }
 
-      const operationInstruction = buildThreadOperationInstruction(request, {
-        target: "thread",
-      });
-      const operationInput: PromptInput[] = [{
-        type: "text",
-        text: operationInstruction,
-      }];
-      const dispatchMode = policyDecision.dispatchMode;
-      if (dispatchMode === "queued") {
-        this.enqueueFollowUp(thread.id, {
-          input: operationInput,
-        });
-      } else if (dispatchMode === "immediate") {
-        await this.systemTell(thread.id, {
-          input: operationInput,
-        });
-      } else {
-        throw invalidRequestError("Operation dispatch mode is unavailable");
-      }
-
-      const queued = dispatchMode === "queued";
-      const responseMessage = this._threadOperationDispatchMessage(
-        request.operation,
-        dispatchMode,
-      );
-      this._appendThreadOperationEvent(thread.id, request.operation, "dispatched", {
-        message: responseMessage,
-        dispatchMode,
+      this._appendThreadOperationEvent(thread.id, request.operation, "requested", {
+        operationId,
+        message: this._threadOperationRequestedMessage(request.operation),
         demotedPrimaryCheckout,
       });
+      this._enqueueThreadOperation(
+        thread.id,
+        request,
+        demotedPrimaryCheckout,
+        operationId,
+      );
+
+      const latestThread = this.threadRepo.getById(thread.id);
+      const shouldQueue =
+        policyDecision.shouldQueue === true ||
+        latestThread?.status !== "idle" ||
+        this.projectOperationTransitionsInFlight.has(thread.projectId);
+      if (shouldQueue) {
+        this._appendThreadOperationEvent(thread.id, request.operation, "queued", {
+          operationId,
+          message: this._threadOperationQueuedMessage(request.operation),
+          demotedPrimaryCheckout,
+        });
+      }
+
+      this._scheduleQueuedOperationDispatch(thread.id);
 
       return {
         ok: true,
+        operationId,
         operation: request.operation,
-        status: queued ? "queued" : "dispatched",
-        queued,
-        message: responseMessage,
+        status: "accepted",
+        executionStatus: shouldQueue ? "queued" : "running",
+        queued: shouldQueue,
+        message: shouldQueue
+          ? this._threadOperationAcceptedQueuedMessage(request.operation)
+          : this._threadOperationAcceptedRunningMessage(request.operation),
         demotedPrimaryCheckout,
       };
     } catch (err) {
       const message = this._toErrorMessage(err);
       this._appendThreadOperationEvent(thread.id, request.operation, "failed", {
+        operationId,
         message,
         ...(demotedPrimaryCheckout ? { demotedPrimaryCheckout } : {}),
       });
@@ -2031,6 +2380,10 @@ export class ThreadManager implements ThreadOrchestrator {
     this._stopAllPrimaryPromotionWatches();
     this.primaryPromotionByProjectId.clear();
     this.primaryPromotionValidatedAtByProjectId.clear();
+    this.queueDispatchInFlight.clear();
+    this.queuedOperationsByThreadId.clear();
+    this.operationDispatchInFlight.clear();
+    this.projectOperationTransitionsInFlight.clear();
   }
 
   private _scheduleProvisioning(
@@ -2285,6 +2638,8 @@ export class ThreadManager implements ThreadOrchestrator {
     this.lastNotifiedCompletionEpochs.delete(threadId);
     this.lastNoisePruneSeqByThread.delete(threadId);
     this.lastNoisePruneAtByThread.delete(threadId);
+    this.queuedOperationsByThreadId.delete(threadId);
+    this.operationDispatchInFlight.delete(threadId);
     this._cleanupEnvironmentSession(threadId);
   }
 
@@ -2810,12 +3165,12 @@ export class ThreadManager implements ThreadOrchestrator {
 
   private _resolveOperationPolicyAction(
     operation: ThreadOperationType,
-  ): "commit-intent" | "squash-intent" {
+  ): "commit" | "squash" {
     switch (operation) {
       case "commit":
-        return "commit-intent";
+        return "commit";
       case "squash_merge":
-        return "squash-intent";
+        return "squash";
       default:
         return assertNever(operation);
     }
@@ -2832,29 +3187,45 @@ export class ThreadManager implements ThreadOrchestrator {
     }
   }
 
-  private _threadOperationDispatchMessage(
-    operation: ThreadOperationType,
-    dispatchMode: ThreadIntentDispatchMode,
-  ): string {
+  private _threadOperationQueuedMessage(operation: ThreadOperationType): string {
     switch (operation) {
       case "commit":
-        switch (dispatchMode) {
-          case "immediate":
-            return "Commit operation dispatched to the agent";
-          case "queued":
-            return "Commit operation queued for the agent";
-          default:
-            return assertNever(dispatchMode);
-        }
+        return "Commit operation queued for deterministic execution";
       case "squash_merge":
-        switch (dispatchMode) {
-          case "immediate":
-            return "Squash-merge operation dispatched to the agent";
-          case "queued":
-            return "Squash-merge operation queued for the agent";
-          default:
-            return assertNever(dispatchMode);
-        }
+        return "Squash-merge operation queued for deterministic execution";
+      default:
+        return assertNever(operation);
+    }
+  }
+
+  private _threadOperationRunningMessage(operation: ThreadOperationType): string {
+    switch (operation) {
+      case "commit":
+        return "Running commit operation";
+      case "squash_merge":
+        return "Running squash-merge operation";
+      default:
+        return assertNever(operation);
+    }
+  }
+
+  private _threadOperationAcceptedQueuedMessage(operation: ThreadOperationType): string {
+    switch (operation) {
+      case "commit":
+        return "Commit operation accepted and queued";
+      case "squash_merge":
+        return "Squash-merge operation accepted and queued";
+      default:
+        return assertNever(operation);
+    }
+  }
+
+  private _threadOperationAcceptedRunningMessage(operation: ThreadOperationType): string {
+    switch (operation) {
+      case "commit":
+        return "Commit operation accepted and running";
+      case "squash_merge":
+        return "Squash-merge operation accepted and running";
       default:
         return assertNever(operation);
     }
@@ -2866,7 +3237,7 @@ export class ThreadManager implements ThreadOrchestrator {
     status: ThreadEventDataForType<"system/thread_operation">["status"],
     args: {
       message: string;
-      dispatchMode?: ThreadEventDataForType<"system/thread_operation">["dispatchMode"];
+      operationId?: string;
       demotedPrimaryCheckout?: boolean;
     },
   ): void {
@@ -2877,7 +3248,7 @@ export class ThreadManager implements ThreadOrchestrator {
         operation,
         status,
         message: args.message,
-        ...(args.dispatchMode ? { dispatchMode: args.dispatchMode } : {}),
+        ...(args.operationId ? { operationId: args.operationId } : {}),
         ...(args.demotedPrimaryCheckout !== undefined
           ? { demotedPrimaryCheckout: args.demotedPrimaryCheckout }
           : {}),
@@ -3632,6 +4003,7 @@ export class ThreadManager implements ThreadOrchestrator {
       const updatedThread = this.threadRepo.getById(threadId);
       if (updatedThread && updatedThread.archivedAt === undefined) {
         this._scheduleQueuedFollowUpDispatch(threadId);
+        this._scheduleQueuedOperationDispatch(threadId);
       }
     }
     return true;

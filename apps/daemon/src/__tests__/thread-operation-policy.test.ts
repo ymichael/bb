@@ -27,7 +27,7 @@ describe("evaluateThreadOperationPolicy", () => {
   });
 
   it("blocks all operations for archived threads", () => {
-    const actions = ["promote", "demote", "commit-intent", "squash-intent"] as const;
+    const actions = ["promote", "demote", "commit", "squash"] as const;
     for (const action of actions) {
       const decision = evaluateThreadOperationPolicy(action, {
         status: "idle",
@@ -38,41 +38,41 @@ describe("evaluateThreadOperationPolicy", () => {
     }
   });
 
-  it("dispatches commit/squash intents immediately for idle and queues for active", () => {
-    const commitIdle = evaluateThreadOperationPolicy("commit-intent", {
+  it("runs commit/squash immediately for idle and queues for active", () => {
+    const commitIdle = evaluateThreadOperationPolicy("commit", {
       status: "idle",
       archived: false,
       primaryCheckoutActive: false,
     });
-    const commitActive = evaluateThreadOperationPolicy("commit-intent", {
+    const commitActive = evaluateThreadOperationPolicy("commit", {
       status: "active",
       archived: false,
       primaryCheckoutActive: false,
     });
-    const squashIdle = evaluateThreadOperationPolicy("squash-intent", {
+    const squashIdle = evaluateThreadOperationPolicy("squash", {
       status: "idle",
       archived: false,
       primaryCheckoutActive: false,
     });
-    const squashActive = evaluateThreadOperationPolicy("squash-intent", {
+    const squashActive = evaluateThreadOperationPolicy("squash", {
       status: "active",
       archived: false,
       primaryCheckoutActive: false,
     });
 
-    expect(commitIdle).toMatchObject({ allowed: true, dispatchMode: "immediate" });
-    expect(commitActive).toMatchObject({ allowed: true, dispatchMode: "queued" });
-    expect(squashIdle).toMatchObject({ allowed: true, dispatchMode: "immediate" });
-    expect(squashActive).toMatchObject({ allowed: true, dispatchMode: "queued" });
+    expect(commitIdle).toMatchObject({ allowed: true, shouldQueue: false });
+    expect(commitActive).toMatchObject({ allowed: true, shouldQueue: true });
+    expect(squashIdle).toMatchObject({ allowed: true, shouldQueue: false });
+    expect(squashActive).toMatchObject({ allowed: true, shouldQueue: true });
   });
 
-  it("requires demotion before commit/squash intents when the thread is promoted", () => {
-    const commitDecision = evaluateThreadOperationPolicy("commit-intent", {
+  it("requires demotion before commit/squash operations when the thread is promoted", () => {
+    const commitDecision = evaluateThreadOperationPolicy("commit", {
       status: "idle",
       archived: false,
       primaryCheckoutActive: true,
     });
-    const squashDecision = evaluateThreadOperationPolicy("squash-intent", {
+    const squashDecision = evaluateThreadOperationPolicy("squash", {
       status: "active",
       archived: false,
       primaryCheckoutActive: true,
@@ -82,15 +82,15 @@ describe("evaluateThreadOperationPolicy", () => {
     expect(squashDecision.requiresDemoteFirst).toBe(true);
   });
 
-  it("blocks commit/squash intents for non-runnable provisioning statuses", () => {
+  it("blocks commit/squash operations for non-runnable provisioning statuses", () => {
     const statuses: ThreadStatus[] = ["created", "provisioning", "provisioning_failed"];
     for (const status of statuses) {
-      const commitDecision = evaluateThreadOperationPolicy("commit-intent", {
+      const commitDecision = evaluateThreadOperationPolicy("commit", {
         status,
         archived: false,
         primaryCheckoutActive: false,
       });
-      const squashDecision = evaluateThreadOperationPolicy("squash-intent", {
+      const squashDecision = evaluateThreadOperationPolicy("squash", {
         status,
         archived: false,
         primaryCheckoutActive: false,

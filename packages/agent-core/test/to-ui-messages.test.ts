@@ -1265,9 +1265,9 @@ describe("toUIMessages replay coverage", () => {
         type: "system/thread_operation",
         data: {
           operation: "commit",
-          status: "dispatched",
-          dispatchMode: "queued",
-          message: "Commit operation queued for the agent",
+          status: "queued",
+          operationId: "op-1",
+          message: "Commit operation queued for deterministic execution",
         },
         createdAt: 2,
       },
@@ -1284,7 +1284,7 @@ describe("toUIMessages replay coverage", () => {
     expect(ops[0]?.title).toBe("Commit requested");
     expect(ops[1]?.opType).toBe("thread-operation-intent");
     expect(ops[1]?.title).toBe("Commit queued");
-    expect(ops[1]?.detail).toContain("Will run after the active turn completes");
+    expect(ops[1]?.detail).toContain("deterministic execution");
   });
 
   it("wraps unknown events in debug mode and drops them otherwise", () => {

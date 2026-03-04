@@ -3,10 +3,8 @@ import { assertNever, type ThreadStatus } from "@beanbag/agent-core";
 export type ThreadOperationPolicyAction =
   | "promote"
   | "demote"
-  | "commit-intent"
-  | "squash-intent";
-
-export type ThreadIntentDispatchMode = "immediate" | "queued";
+  | "commit"
+  | "squash";
 
 export interface ThreadOperationPolicyContext {
   status: ThreadStatus;
@@ -17,16 +15,16 @@ export interface ThreadOperationPolicyContext {
 export interface ThreadOperationPolicyDecision {
   allowed: boolean;
   reason?: string;
-  dispatchMode?: ThreadIntentDispatchMode;
+  shouldQueue?: boolean;
   requiresDemoteFirst: boolean;
 }
 
-function resolveIntentDispatchMode(status: ThreadStatus): ThreadIntentDispatchMode | undefined {
+function resolveQueueBehavior(status: ThreadStatus): boolean | undefined {
   switch (status) {
     case "idle":
-      return "immediate";
+      return false;
     case "active":
-      return "queued";
+      return true;
     case "created":
     case "provisioning":
     case "provisioning_failed":
@@ -82,10 +80,10 @@ export function evaluateThreadOperationPolicy(
         allowed: true,
         requiresDemoteFirst: false,
       };
-    case "commit-intent":
-    case "squash-intent": {
-      const dispatchMode = resolveIntentDispatchMode(context.status);
-      if (!dispatchMode) {
+    case "commit":
+    case "squash": {
+      const shouldQueue = resolveQueueBehavior(context.status);
+      if (shouldQueue === undefined) {
         return {
           allowed: false,
           reason: resolveIntentStatusBlockReason(context.status),
@@ -94,7 +92,7 @@ export function evaluateThreadOperationPolicy(
       }
       return {
         allowed: true,
-        dispatchMode,
+        shouldQueue,
         requiresDemoteFirst: context.primaryCheckoutActive,
       };
     }
