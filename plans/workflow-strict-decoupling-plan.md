@@ -425,76 +425,121 @@ Compatibility/removal gates (must pass before cleanup):
 - Must preserve current readability characteristics (collapsed operation grouping, titles, and detail lines).
 
 # Implementation Steps
-1. Freeze and reset workflow WIP to this plan
-- Keep unrelated clean commits.
-- Treat remaining workflow WIP as replaceable unless it matches this plan.
+Execution model:
+- Ship in ordered phases; each phase must meet exit criteria before starting cleanup in later phases.
+- Keep compatibility wrappers in place until Phase 8.
+- Prefer one PR per task group; avoid mixing daemon + UI + CLI behavior changes in a single PR unless required for contract compilation.
 
-2. Land persistence + request scaffolding
-- Add workflow fields and migrations.
-- Add read/write adapters in repositories.
-- Backfill existing thread rows.
-- Add `workflowId` to spawn request contracts while keeping compatibility with `environmentId`.
-- Enforce workflow selection precedence and incompatible explicit selector validation.
+1. Phase 0: Baseline and WIP reset
+- Tasks:
+  - `P0.1` Freeze workflow WIP against this plan and isolate unrelated changes.
+  - `P0.2` Capture baseline behavior snapshots for Local/Worktree (thread detail rows, workspace status, operations timeline, CLI outputs).
+  - `P0.3` Add tracking checklist for phase status in this document.
+- Exit criteria:
+  - Baseline snapshots exist and are referenced by tests/fixtures.
+  - Remaining WIP is either aligned to this plan or explicitly dropped.
 
-3. Implement workflow registry and state loading
-- Registry keyed by `workflowId`.
-- Load thread workflow context with state migration support.
-- Implement unknown-workflow read-only behavior.
+2. Phase 1: Persistence and request contract scaffolding
+- Tasks:
+  - `P1.1` Add thread persistence fields (`workflowId`, `workflowStateVersion`, `workflowStateJson`) and DB migration/backfill (`local -> local`, `worktree -> worktree`).
+  - `P1.2` Add repository adapters for dual read/write during migration.
+  - `P1.3` Add `workflowId` to spawn contracts while keeping compatibility with `environmentId`.
+  - `P1.4` Define selector precedence + incompatible selector validation.
+  - `P1.5` Add canonical workflow action request envelope with `payload` and `clientRequestId`.
+- Exit criteria:
+  - Existing data migrates cleanly.
+  - Spawn flows support both selector forms with deterministic precedence.
+  - Action request contract is explicit about idempotency key transport.
 
-4. Implement capability APIs and manager dispatch
-- Add `WorkflowRuntimeApi`.
-- Keep capabilities infrastructure-level only (`append event`, `state`, `locks`, `llm`, `shell`), with no workflow-domain helpers.
-- Manager owns generic lock/queue/event envelopes only.
-- Enforce runtime API safety constraints for `shell.exec` and `llm.complete`.
+3. Phase 2: Workflow registry, runtime, and manager dispatch
+- Tasks:
+  - `P2.1` Implement workflow registry keyed by `workflowId`.
+  - `P2.2` Implement workflow context loading + state migration.
+  - `P2.3` Implement unknown-workflow read-only behavior.
+  - `P2.4` Implement `WorkflowRuntimeApi` (`events`, `state`, `locks`, `llm`, `shell`) with safety constraints.
+  - `P2.5` Implement generic manager dispatch + queue/lock envelopes.
+  - `P2.6` Enforce server-side action execution policy:
+    - reject `hidden`/`disabled` actions,
+    - enforce idempotency by `(threadId, actionId, clientRequestId)`.
+- Exit criteria:
+  - Manager has no new workflow-specific helper logic.
+  - Runtime API is infrastructure-level only.
+  - Action execution policy is enforced server-side.
 
-5. Port Local workflow definition
-- Move Local provisioning/metadata/actions/lifecycle/status/diff into Local definition.
-- Wire through registry and generic dispatcher.
-- Move developer-instruction composition for Local into workflow-owned composition hooks.
+4. Phase 3: Port Local workflow
+- Tasks:
+  - `P3.1` Move Local provisioning/metadata/actions/lifecycle/status/diff into Local workflow definition.
+  - `P3.2` Move Local developer-instruction composition into workflow-owned hooks.
+  - `P3.3` Wire Local through registry + generic dispatcher only.
+- Exit criteria:
+  - Local behavior parity passes contract tests.
+  - No manager special-case branch remains for Local behavior.
 
-6. Port Worktree workflow definition
-- Move all worktree-specific logic into Worktree definition, including promotion/demotion semantics.
-- Remove manager-owned worktree methods as equivalent workflow logic lands.
-- Move developer-instruction composition for Worktree into workflow-owned composition hooks.
+5. Phase 4: Port Worktree workflow
+- Tasks:
+  - `P4.1` Move Worktree provisioning/metadata/actions/lifecycle/status/diff into Worktree workflow definition.
+  - `P4.2` Move Worktree promote/demote logic into workflow actions.
+  - `P4.3` Move Worktree developer-instruction composition into workflow-owned hooks.
+  - `P4.4` Remove manager-owned worktree methods as replacements land.
+- Exit criteria:
+  - Worktree behavior parity passes contract tests.
+  - Promote/demote/commit/squash semantics are workflow-owned.
 
-7. Introduce workflow catalog/routes and compatibility wrappers
-- Add canonical workflow catalog and thread workflow routes.
-- Rewire old thread action/status routes to wrappers around workflow actions/status.
-- Rewire legacy environment catalog routes to compatibility wrappers over workflow catalog.
-- Rewire `/threads/:id/work-status` and `/threads/:id/git-diff` to compatibility wrappers over workflow status/diff contracts.
+6. Phase 5: Canonical routes, wrappers, and events
+- Tasks:
+  - `P5.1` Add canonical routes: catalog + metadata/actions/status/diff.
+  - `P5.2` Rewire legacy operation/status/diff routes to workflow-backed wrappers.
+  - `P5.3` Rewire legacy environment catalog routes to workflow-backed wrappers (no new `environment-registry` call sites).
+  - `P5.4` Add canonical workflow event family and emission.
+  - `P5.5` Add temporary projection adapter for mixed legacy/canonical events.
+- Exit criteria:
+  - Canonical routes functional for Local and Worktree.
+  - Wrappers return parity responses while migration is active.
+  - Timeline/projection reads mixed event families correctly.
 
-8. Migrate projection and event consumers
-- Update shared message mapping to canonical workflow events.
-- Add temporary adapter that can read both legacy and canonical workflow event families.
+7. Phase 6: UI migration
+- Tasks:
+  - `P6.1` Move thread detail/list surfaces to workflow metadata/status/actions contracts.
+  - `P6.2` Migrate project-main selector to workflow catalog.
+  - `P6.3` Migrate project-main workspace quick actions to workflow action contracts.
+  - `P6.4` Remove direct reads of `thread.primaryCheckout` and environment-specific legacy fields.
+- Exit criteria:
+  - UI parity matrix passes for required rows, badges, and workspace actions.
+  - UI no longer branches by `thread.environmentId`.
 
-9. Migrate UI surfaces
-- Update thread detail and project list surfaces to workflow metadata/status/actions.
-- Migrate project-main selector and workspace quick-action path to workflow-first contracts.
-- Keep fallback adapters only during migration window.
+8. Phase 7: CLI migration
+- Tasks:
+  - `P7.1` Add `thread action <threadId> <actionId>` backed by `POST /threads/:id/workflow/actions/:actionId`.
+  - `P7.2` Support `--payload <json>` and `--request-id <id>` for idempotent retries.
+  - `P7.3` Rewire `commit`, `squash-merge`, `promote`, and `demote` to workflow action APIs (aliases during transition).
+  - `P7.4` Rewire CLI work-status/diff reads to workflow status/diff APIs or wrappers.
+- Exit criteria:
+  - CLI can trigger arbitrary workflow actions.
+  - Legacy CLI commands behave as compatibility aliases only.
 
-10. Migrate CLI
-- Add `thread action <threadId> <actionId>` wired to `POST /threads/:id/workflow/actions/:actionId`.
-- Support `--payload <json>` and `--request-id <id>` for deterministic idempotent retries.
-- Rewire CLI operation commands to workflow action APIs.
-- Keep temporary aliases for legacy commands with deprecation text.
-- Rewire CLI work-status/diff reads to workflow status/diff APIs (or compatibility wrappers) with no direct `thread.primaryCheckout` dependency.
+9. Phase 8: Legacy retirement and cleanup
+- Tasks:
+  - `P8.1` Remove `demotePrimaryIfNeeded` from schemas, route logic, and callers.
+  - `P8.2` Remove legacy operation/primary-status/work-status/git-diff/environment endpoints after deprecation window.
+  - `P8.3` Remove legacy operation/primary-checkout types from shared contracts.
+  - `P8.4` Replace/remove all remaining `environment-registry` usage, then delete module/tests/index exports.
+  - `P8.5` Remove compatibility adapters and legacy projection branches.
+  - `P8.6` Drop compatibility fields (`environmentId`, `primaryCheckout`) once gates pass.
+- Exit criteria:
+  - Compatibility/removal gates are all satisfied.
+  - Legacy workflow/environment surfaces are removed from production code.
 
-11. Retire legacy request fields/routes/types
-- Remove `demotePrimaryIfNeeded` request field from API, route logic, and client callers.
-- Remove deprecated thread/system operation routes and legacy action request/response types.
-- Replace remaining `environment-registry` callers with workflow catalog/registry calls.
-
-12. Remove legacy surfaces
-- Delete legacy routes, types, and thread fields.
-- Delete manager workflow-specific helpers/state machines.
-- Remove compatibility adapters.
-- Remove `environment-registry` module/tests and index exports.
-
-13. Harden tests
-- Add ownership tests ensuring manager has no workflow-specific branches.
-- Add contract tests per workflow for metadata/actions/lifecycle/status/diff.
-- Add migration tests for backfilled and unknown workflow data.
-- Add CLI parity tests for workflow action paths.
+10. Phase 9: Hardening and release gate
+- Tasks:
+  - `P9.1` Add ownership tests for manager boundary.
+  - `P9.2` Add workflow contract tests (metadata/actions/lifecycle/status/diff) for Local + Worktree.
+  - `P9.3` Add migration tests (backfill + unknown workflow behavior).
+  - `P9.4` Add concurrency/idempotency tests (duplicate request IDs, lock contention, phase ordering).
+  - `P9.5` Add CLI parity tests for generic + alias action paths.
+  - `P9.6` Run full typecheck/test matrix and migration/behavior validations.
+- Exit criteria:
+  - Required validation checks in this document pass in CI.
+  - No outstanding architecture or migration gate violations remain.
 
 # Validation
 1. Compile/type checks

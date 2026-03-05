@@ -1,6 +1,7 @@
 import type {
   AvailableModel,
   ProviderCapabilities,
+  ProviderTitleGenerator,
   PromptInput,
   SandboxMode,
   SpawnThreadRequest,
@@ -180,6 +181,7 @@ export interface CreateCodexProviderAdapterOptions {
   processArgs?: string[];
   capabilities?: Partial<ProviderCapabilities>;
   listModels?: () => Promise<AvailableModel[]>;
+  titleGenerator?: ProviderTitleGenerator;
 }
 
 export function createCodexProviderAdapter(
@@ -363,6 +365,7 @@ export function createCodexProviderAdapter(
     deriveThreadTitle(input?: PromptInput[]): string | undefined {
       return deriveThreadTitleFromInput(input);
     },
+    generateThreadTitle: opts?.titleGenerator,
     inactiveSessionErrorMessage(threadId: string): string {
       return `Thread ${threadId} has no codex session`;
     },

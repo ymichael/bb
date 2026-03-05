@@ -3172,10 +3172,6 @@ export class ThreadManager implements ThreadOrchestrator {
       return;
     }
 
-    if (this.provider.shouldPersistEvent?.(msg.method, msg.params) === false) {
-      return;
-    }
-
     const eventType = toProviderEventType(msg.method);
     const normalizedType = this.provider.normalizeEventType(msg.method);
     const providerPayload = msg.params ?? {};
@@ -3187,18 +3183,23 @@ export class ThreadManager implements ThreadOrchestrator {
 
     const shouldBroadcast = this.provider.shouldBroadcastForEvent(msg.method);
     const changes: ThreadChangeKind[] = [];
-    if (shouldBroadcast) {
-      changes.push("events-appended");
-    }
+    const shouldPersistEvent =
+      this.provider.shouldPersistEvent?.(msg.method, msg.params) !== false;
+    let persistedEvent: ThreadEvent | undefined;
 
-    const persistedEvent = this._appendEvent(threadId, eventType, eventData, {
-      broadcastChanges: false,
-    });
-    this._maybePruneActiveThreadNoise(
-      threadId,
-      normalizedType,
-      persistedEvent.seq,
-    );
+    if (shouldPersistEvent) {
+      if (shouldBroadcast) {
+        changes.push("events-appended");
+      }
+      persistedEvent = this._appendEvent(threadId, eventType, eventData, {
+        broadcastChanges: false,
+      });
+      this._maybePruneActiveThreadNoise(
+        threadId,
+        normalizedType,
+        persistedEvent.seq,
+      );
+    }
 
     const titleChanged = this._syncTitleFromEvent(threadId, msg.method, providerPayload);
     if (shouldBroadcast && titleChanged) {
@@ -3211,7 +3212,9 @@ export class ThreadManager implements ThreadOrchestrator {
     }
 
     this._syncActiveTurnFromEvent(threadId, msg.method, providerPayload);
-    this._maybeNotifyParentOnChildTurnCompletion(threadId, persistedEvent);
+    if (persistedEvent) {
+      this._maybeNotifyParentOnChildTurnCompletion(threadId, persistedEvent);
+    }
     const thread = this.threadRepo.getById(threadId);
     if (thread) {
       this._invalidateThreadWorkStatus(thread);
