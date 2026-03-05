@@ -1000,7 +1000,7 @@ describe("ThreadManager", () => {
       expect(result.titleFallback).toBe("Fix flaky login redirect");
     });
 
-    it("auto-generates and persists thread names when provider title generation is enabled", async () => {
+    it("auto-generates and persists thread names when daemon title generation is enabled", async () => {
       const providerTitleGenerator = vi
         .fn()
         .mockResolvedValue("Generated Login Fix Title");
@@ -1009,7 +1009,14 @@ describe("ThreadManager", () => {
         eventRepo as any,
         projectRepo as any,
         ws as any,
-        createCodexProviderAdapter({ titleGenerator: providerTitleGenerator }),
+        createCodexProviderAdapter(),
+        process.env,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        providerTitleGenerator,
       );
 
       const project = { id: "proj-1", name: "Test", rootPath: "/test", createdAt: 1000, updatedAt: 1000 };

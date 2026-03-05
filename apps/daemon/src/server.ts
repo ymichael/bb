@@ -11,6 +11,7 @@ import type {
   EventRepository,
 } from "@beanbag/db";
 import {
+  createCodexLlmCompletionService,
   createEnvironmentAdapter,
   createProviderAdapter,
   listAvailableEnvironmentInfos,
@@ -51,6 +52,7 @@ export function createServer(deps: ServerDeps) {
   const environmentCatalog = listAvailableEnvironmentInfos();
   const scheduler = new InMemorySchedulerService();
   const gitStatusService = new ThreadGitStatusService();
+  const llmCompletionService = createCodexLlmCompletionService();
   const threadManager = new ThreadManager(
     deps.threadRepo,
     deps.eventRepo,
@@ -63,6 +65,7 @@ export function createServer(deps: ServerDeps) {
     environmentCatalog,
     scheduler,
     gitStatusService,
+    (args) => llmCompletionService.generateThreadTitle(args),
   );
 
   // WebSocket handler
