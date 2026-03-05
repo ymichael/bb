@@ -17,6 +17,17 @@ Success criteria:
 - Auto-archive-on-done behavior is driven by workflow status and user setting.
 - Adding a new workflow does not require editing manager business logic branches.
 
+# Status (2026-03-05 Reset)
+- The previous implementation attempt is rejected and will be rolled back before continuing.
+- Rejection reasons:
+  - `apps/daemon/src/thread-manager.ts` is still oversized and still owns workflow-specific behavior.
+  - Local/Worktree behavior was not moved into standalone workflow definition modules.
+- Restart constraints for the next attempt:
+  - Introduce explicit standalone workflow modules under `apps/daemon/src/workflows/` (registry + per-workflow definitions).
+  - Move all workflow-specific provisioning/metadata/actions/lifecycle/status/diff/developer-instruction logic into workflow definitions.
+  - Keep `ThreadManager` limited to generic orchestration, persistence coordination, dispatch, and lock/queue infrastructure.
+  - Do not count adapter wrappers as complete decoupling; true ownership must live in workflow definitions.
+
 # Scope
 In scope:
 - Introduce workflow contracts that cover provisioning, metadata, actions, lifecycle hooks, status, and diff extraction.
@@ -28,10 +39,10 @@ In scope:
   - client-side rendering paths that assume fixed workflow semantics.
 - Preserve current user-visible behavior parity where intended, except where explicitly improved by workflow contracts.
 - Define and execute a migration plan for DB, API, events, and UI.
-- Migrate spawn selection surfaces from environment-first to workflow-first (daemon/API/app/CLI), with compatibility mapping during transition.
+- Migrate spawn selection surfaces from environment-first to workflow-first (daemon/API/app/CLI) as a direct cutover.
 - Migrate project-main workspace-status + quick-commit UX to workflow-driven contracts.
 - Migrate developer-instruction composition ownership into workflows (while preserving project-level instructions behavior).
-- Migrate CLI thread commands off legacy promote/demote/operation endpoints.
+- Replace operation-specific CLI commands with a generic workflow action command.
 
 Out of scope:
 - Shipping a third workflow in this change.
@@ -304,59 +315,46 @@ Interface decisions for this plan:
 - `llm.complete` must include request/response telemetry through workflow events for auditability.
 
 # Migration Plan (Concrete)
-1. Phase 1: Add workflow persistence and spawn selection model (dual-read/write)
-- Add thread fields: `workflowId`, `workflowStateVersion`, `workflowStateJson`.
-- Backfill existing rows from `environmentId` mapping (`local -> local`, `worktree -> worktree`).
-- Add spawn request `workflowId?: string` while still accepting legacy `environmentId?: string`.
-- Define and enforce workflow resolution precedence:
-  - explicit `workflowId`,
-  - explicit `environmentId` mapping,
-  - persisted thread workflow (for reprovision/resume flows),
-  - daemon default workflow.
-- Reject incompatible explicit `workflowId` + `environmentId` pairs.
-- Keep `environmentId` as compatibility field during transition.
+No-wrapper policy:
+- Legacy daemon routes are removed in the same rewrite that introduces canonical workflow routes.
+- No compatibility route layer is allowed.
+- No mixed legacy/canonical event projection adapter is allowed.
 
-2. Phase 2: Introduce workflow APIs and workflow catalog with compatibility shims
+1. Phase 1: Persistence and request contract rewrite
+- Add thread fields: `workflowId`, `workflowStateVersion`, `workflowStateJson`.
+- Backfill existing rows from persisted `environmentId` mapping (`local -> local`, `worktree -> worktree`).
+- Make spawn/create contracts workflow-first (`workflowId` required in public API).
+- Remove public request/response contract usage of:
+  - `environmentId` as a selector,
+  - `demotePrimaryIfNeeded`,
+  - operation-specific promote/demote request surfaces.
+
+2. Phase 2: Standalone workflow runtime and registry
+- Create `apps/daemon/src/workflows/` with:
+  - `types.ts`,
+  - `registry.ts`,
+  - `local/*`,
+  - `worktree/*`,
+  - `unknown/*`.
+- Move all workflow-specific behavior into workflow definitions:
+  - provisioning,
+  - metadata,
+  - actions,
+  - lifecycle hooks,
+  - status,
+  - diff,
+  - developer-instruction composition.
+- Keep `ThreadManager` orchestration-only (dispatch, persistence coordination, locks/queueing, lifecycle plumbing).
+
+3. Phase 3: Canonical route cutover (single-step)
 - Add canonical workflow endpoints:
-  - `GET /system/workflows` (catalog for UI/CLI selection),
+  - `GET /system/workflows`,
   - `GET /threads/:id/workflow/metadata`,
   - `GET /threads/:id/workflow/actions`,
   - `POST /threads/:id/workflow/actions/:actionId`,
   - `GET /threads/:id/workflow/status`,
   - `GET /threads/:id/workflow/diff`.
-- Keep `/system/environment` and `/system/environments` as compatibility wrappers backed by workflow catalog data during transition.
-- Route legacy environment catalog requests through workflow catalog adapters only; do not add new call sites to `environment-registry`.
-- Keep legacy thread endpoints as wrappers during migration:
-  - operation endpoints (`/threads/:id/promote`, `/threads/:id/demote-primary`, `/threads/:id/operations`),
-  - workspace status/diff endpoints (`/threads/:id/work-status`, `/threads/:id/git-diff`),
-  - primary status endpoint (`/threads/:id/primary-status`).
-
-3. Phase 3: Event and projection migration
-- Add canonical workflow events (single family):
-  - `system/workflow/action`,
-  - `system/workflow/status`,
-  - `system/workflow/lifecycle`.
-- Add projection adapter that can read both legacy and canonical events and emit one normalized operation model for UI.
-- Stop writing legacy workflow-specific events once all consumers read canonical events.
-
-4. Phase 4: UI migration (thread + project-main)
-- Move thread detail/list rendering to workflow metadata/status/actions APIs.
-- Migrate project-main selector from environment-first to workflow-first (keep compatibility labels while wrappers exist).
-- Migrate project-main workspace status + quick-commit flow to workflow-driven metadata/actions.
-- Keep temporary fallback adapter for legacy fields only during migration window.
-
-5. Phase 5: CLI migration
-- Add/standardize workflow-native CLI flows:
-  - workflow-aware spawn selection,
-  - workflow action execution commands.
-- Add first-class generic action trigger command (`thread action <threadId> <actionId>`) with optional JSON payload and optional `clientRequestId` override.
-- Rewire promote/demote/commit/squash CLI paths through workflow action APIs.
-- Keep legacy CLI command aliases (`commit`, `squash-merge`, `promote`, `demote`) as wrappers over the generic workflow action command with deprecation text during transition.
-- Remove CLI reads of `thread.primaryCheckout` once workflow metadata/adornments are available.
-
-6. Phase 6: Retire legacy request fields and routes
-- Remove `demotePrimaryIfNeeded` from tell request schema/API and route handling.
-- Remove legacy endpoints after wrapper deprecation window:
+- Remove legacy daemon endpoints in the same phase:
   - `/threads/:id/primary-status`,
   - `/threads/:id/promote`,
   - `/threads/:id/demote-primary`,
@@ -365,26 +363,43 @@ Interface decisions for this plan:
   - `/threads/:id/git-diff`,
   - `/system/environment`,
   - `/system/environments`.
-- Remove legacy operation/primary-checkout response/request types from shared contracts.
-- Remove `environment-registry` exports and runtime usage; all environment selection/listing flows must resolve via workflow catalog/registry.
+- Remove legacy route wiring from OpenAPI/Hono route typing so clients cannot compile against deleted paths.
 
-7. Phase 7: Cleanup
-- Remove manager workflow-specific methods and state machines.
-- Drop compatibility fields (`environmentId`, `primaryCheckout`) after migration gates pass.
-- Remove projection adapter compatibility branches for legacy workflow events.
-- Delete `packages/agent-server/src/environment-registry.ts` and its tests once compatibility routes are removed.
+4. Phase 4: Canonical event cutover
+- Emit only canonical workflow event families:
+  - `system/workflow/action`,
+  - `system/workflow/status`,
+  - `system/workflow/lifecycle`.
+- Remove legacy workflow event writes.
+- Update projection/timeline readers to canonical events only (no mixed-event adapter).
 
-Compatibility/removal gates (must pass before cleanup):
-- 100% UI paths read workflow metadata/actions/status (no legacy thread-field reads).
-- No daemon route handlers directly dispatch legacy operations.
-- Spawn/create-thread paths are workflow-first (`workflowId`) with compatibility mapping only at boundaries.
-- Project-main workflow selector uses workflow catalog endpoint(s), not environment catalog endpoint(s).
-- CLI action paths use workflow action APIs only (legacy aliases optional during deprecation window).
-- No manager methods with workflow-specific names/logic remain.
-- No route or schema references `demotePrimaryIfNeeded`.
-- No workflow branching in manager/UI/CLI based on `thread.environmentId` or `thread.primaryCheckout`.
-- No `environment-registry` imports/usages remain in daemon/server entrypoints or route handlers.
-- Existing data opens without migration failures across supported versions.
+5. Phase 5: App rewrite to canonical workflow contracts
+- Move thread detail/list rendering to workflow metadata/status/actions/diff APIs.
+- Move project-main selector to workflow catalog only.
+- Rebuild workspace quick actions around workflow actions only.
+- Remove all UI logic keyed off `thread.environmentId` and `thread.primaryCheckout`.
+
+6. Phase 6: CLI rewrite to canonical workflow contracts
+- Add first-class generic action command:
+  - `thread action <threadId> <actionId>`.
+- Remove operation-specific commands (`commit`, `squash-merge`, `promote`, `demote`).
+- Rewire CLI status/diff reads to workflow endpoints only.
+- Remove CLI reliance on legacy primary-checkout fields.
+
+7. Phase 7: Contract and codebase cleanup
+- Remove legacy operation/primary-checkout types from shared contracts.
+- Remove `environment-registry` exports/usages and delete:
+  - `packages/agent-server/src/environment-registry.ts`,
+  - related tests and index exports.
+- Drop deprecated thread fields from shared API models once migrations and readers no longer require them.
+
+Rewrite gates (must pass before merge):
+- 100% daemon route surface for workflow behavior is canonical-only.
+- 100% app and CLI workflow behavior compiles and runs without legacy route references.
+- No route, schema, or caller references `demotePrimaryIfNeeded`.
+- No manager/UI/CLI branching on `thread.environmentId` or `thread.primaryCheckout`.
+- `ThreadManager` contains no workflow-specific action logic.
+- Existing data opens and runs through workflow definitions after DB backfill.
 
 # Unknown Workflow Behavior (Required)
 - Spawn with unknown `workflowId`: reject with 400.
@@ -418,42 +433,48 @@ Compatibility/removal gates (must pass before cleanup):
 
 6. Project-main workflow selector + workspace quick actions
 - Selector source: workflow catalog endpoint(s) and workflow IDs (not legacy environment endpoint assumptions).
-- Workspace status/quick commit path source: workflow metadata/actions (or workflow-backed compatibility adapter during migration).
+- Workspace status/quick commit path source: workflow metadata/actions only.
 
 7. Timeline/projection operation rendering
-- Source: normalized projection model from canonical workflow events (with temporary legacy adapter while migrating).
+- Source: normalized projection model from canonical workflow events only.
 - Must preserve current readability characteristics (collapsed operation grouping, titles, and detail lines).
 
 # Implementation Steps
 Execution model:
-- Ship in ordered phases; each phase must meet exit criteria before starting cleanup in later phases.
-- Keep compatibility wrappers in place until Phase 8.
-- Prefer one PR per task group; avoid mixing daemon + UI + CLI behavior changes in a single PR unless required for contract compilation.
+- Execute as a coordinated rewrite with no compatibility route layer.
+- Update daemon routes, shared contracts, app, and CLI in lockstep before merge.
+- Prefer phase-isolated commits, but do not merge partial compatibility states.
 
 1. Phase 0: Baseline and WIP reset
 - Tasks:
   - `P0.1` Freeze workflow WIP against this plan and isolate unrelated changes.
+  - `P0.1a` Roll back rejected workflow migration code, then restart from clean baseline.
   - `P0.2` Capture baseline behavior snapshots for Local/Worktree (thread detail rows, workspace status, operations timeline, CLI outputs).
   - `P0.3` Add tracking checklist for phase status in this document.
 - Exit criteria:
   - Baseline snapshots exist and are referenced by tests/fixtures.
   - Remaining WIP is either aligned to this plan or explicitly dropped.
 
-2. Phase 1: Persistence and request contract scaffolding
+2. Phase 1: Persistence and contract rewrite
 - Tasks:
   - `P1.1` Add thread persistence fields (`workflowId`, `workflowStateVersion`, `workflowStateJson`) and DB migration/backfill (`local -> local`, `worktree -> worktree`).
-  - `P1.2` Add repository adapters for dual read/write during migration.
-  - `P1.3` Add `workflowId` to spawn contracts while keeping compatibility with `environmentId`.
-  - `P1.4` Define selector precedence + incompatible selector validation.
-  - `P1.5` Add canonical workflow action request envelope with `payload` and `clientRequestId`.
+  - `P1.2` Make spawn/create contracts workflow-first and remove legacy selector inputs from public API.
+  - `P1.3` Remove `demotePrimaryIfNeeded` from request schemas/contracts.
+  - `P1.4` Add canonical workflow action request envelope with `payload` and `clientRequestId`.
 - Exit criteria:
   - Existing data migrates cleanly.
-  - Spawn flows support both selector forms with deterministic precedence.
+  - Spawn/create paths compile and run with workflow-only selector inputs.
   - Action request contract is explicit about idempotency key transport.
 
-3. Phase 2: Workflow registry, runtime, and manager dispatch
+3. Phase 2: Standalone workflow runtime and manager decoupling
 - Tasks:
   - `P2.1` Implement workflow registry keyed by `workflowId`.
+  - `P2.1a` Create standalone workflow module layout under `apps/daemon/src/workflows/`:
+    - `registry.ts`,
+    - `types.ts`,
+    - `local/`,
+    - `worktree/`,
+    - `unknown/`.
   - `P2.2` Implement workflow context loading + state migration.
   - `P2.3` Implement unknown-workflow read-only behavior.
   - `P2.4` Implement `WorkflowRuntimeApi` (`events`, `state`, `locks`, `llm`, `shell`) with safety constraints.
@@ -462,81 +483,52 @@ Execution model:
     - reject `hidden`/`disabled` actions,
     - enforce idempotency by `(threadId, actionId, clientRequestId)`.
 - Exit criteria:
-  - Manager has no new workflow-specific helper logic.
+  - Manager has no workflow-specific helper logic or workflow-specific action identifiers.
   - Runtime API is infrastructure-level only.
   - Action execution policy is enforced server-side.
+  - `ThreadManager` is materially reduced in size because workflow behavior is extracted into standalone modules.
 
-4. Phase 3: Port Local workflow
+4. Phase 3: Canonical daemon route cutover
 - Tasks:
-  - `P3.1` Move Local provisioning/metadata/actions/lifecycle/status/diff into Local workflow definition.
-  - `P3.2` Move Local developer-instruction composition into workflow-owned hooks.
-  - `P3.3` Wire Local through registry + generic dispatcher only.
+  - `P3.1` Add canonical workflow routes for catalog/metadata/actions/status/diff.
+  - `P3.2` Remove legacy daemon routes (`promote`, `demote-primary`, `operations`, `work-status`, `git-diff`, `primary-status`, `system/environment*`) in the same change set.
+  - `P3.3` Remove legacy route declarations from typed client surfaces.
 - Exit criteria:
-  - Local behavior parity passes contract tests.
-  - No manager special-case branch remains for Local behavior.
+  - Daemon workflow route surface is canonical-only.
+  - App/CLI cannot compile against removed legacy routes.
 
-5. Phase 4: Port Worktree workflow
+5. Phase 4: Canonical event cutover
 - Tasks:
-  - `P4.1` Move Worktree provisioning/metadata/actions/lifecycle/status/diff into Worktree workflow definition.
-  - `P4.2` Move Worktree promote/demote logic into workflow actions.
-  - `P4.3` Move Worktree developer-instruction composition into workflow-owned hooks.
-  - `P4.4` Remove manager-owned worktree methods as replacements land.
+  - `P4.1` Emit only canonical workflow events (`action`, `status`, `lifecycle`).
+  - `P4.2` Remove legacy workflow event writes and legacy-only projection paths.
 - Exit criteria:
-  - Worktree behavior parity passes contract tests.
-  - Promote/demote/commit/squash semantics are workflow-owned.
+  - Timeline/projection reads canonical workflow event families only.
 
-6. Phase 5: Canonical routes, wrappers, and events
+6. Phase 5: UI rewrite to workflow contracts
 - Tasks:
-  - `P5.1` Add canonical routes: catalog + metadata/actions/status/diff.
-  - `P5.2` Rewire legacy operation/status/diff routes to workflow-backed wrappers.
-  - `P5.3` Rewire legacy environment catalog routes to workflow-backed wrappers (no new `environment-registry` call sites).
-  - `P5.4` Add canonical workflow event family and emission.
-  - `P5.5` Add temporary projection adapter for mixed legacy/canonical events.
-- Exit criteria:
-  - Canonical routes functional for Local and Worktree.
-  - Wrappers return parity responses while migration is active.
-  - Timeline/projection reads mixed event families correctly.
-
-7. Phase 6: UI migration
-- Tasks:
-  - `P6.1` Move thread detail/list surfaces to workflow metadata/status/actions contracts.
-  - `P6.2` Migrate project-main selector to workflow catalog.
-  - `P6.3` Migrate project-main workspace quick actions to workflow action contracts.
-  - `P6.4` Remove direct reads of `thread.primaryCheckout` and environment-specific legacy fields.
+  - `P5.1` Move thread detail/list surfaces to workflow metadata/status/actions/diff contracts.
+  - `P5.2` Migrate project-main selector and workspace quick actions to workflow catalog/actions only.
+  - `P5.3` Remove direct reads of `thread.primaryCheckout` and environment-specific legacy fields.
 - Exit criteria:
   - UI parity matrix passes for required rows, badges, and workspace actions.
   - UI no longer branches by `thread.environmentId`.
 
-8. Phase 7: CLI migration
+7. Phase 6: CLI rewrite to workflow contracts
 - Tasks:
-  - `P7.1` Add `thread action <threadId> <actionId>` backed by `POST /threads/:id/workflow/actions/:actionId`.
-  - `P7.2` Support `--payload <json>` and `--request-id <id>` for idempotent retries.
-  - `P7.3` Rewire `commit`, `squash-merge`, `promote`, and `demote` to workflow action APIs (aliases during transition).
-  - `P7.4` Rewire CLI work-status/diff reads to workflow status/diff APIs or wrappers.
+  - `P6.1` Add `thread action <threadId> <actionId>` backed by `POST /threads/:id/workflow/actions/:actionId`.
+  - `P6.2` Support `--payload <json>` and `--request-id <id>` for idempotent retries.
+  - `P6.3` Remove operation-specific commands (`commit`, `squash-merge`, `promote`, `demote`) and route users to `thread action`.
+  - `P6.4` Rewire CLI work-status/diff reads to workflow status/diff APIs only.
 - Exit criteria:
   - CLI can trigger arbitrary workflow actions.
-  - Legacy CLI commands behave as compatibility aliases only.
+  - CLI has no legacy daemon route dependencies.
 
-9. Phase 8: Legacy retirement and cleanup
+8. Phase 7: Cleanup and hardening
 - Tasks:
-  - `P8.1` Remove `demotePrimaryIfNeeded` from schemas, route logic, and callers.
-  - `P8.2` Remove legacy operation/primary-status/work-status/git-diff/environment endpoints after deprecation window.
-  - `P8.3` Remove legacy operation/primary-checkout types from shared contracts.
-  - `P8.4` Replace/remove all remaining `environment-registry` usage, then delete module/tests/index exports.
-  - `P8.5` Remove compatibility adapters and legacy projection branches.
-  - `P8.6` Drop compatibility fields (`environmentId`, `primaryCheckout`) once gates pass.
-- Exit criteria:
-  - Compatibility/removal gates are all satisfied.
-  - Legacy workflow/environment surfaces are removed from production code.
-
-10. Phase 9: Hardening and release gate
-- Tasks:
-  - `P9.1` Add ownership tests for manager boundary.
-  - `P9.2` Add workflow contract tests (metadata/actions/lifecycle/status/diff) for Local + Worktree.
-  - `P9.3` Add migration tests (backfill + unknown workflow behavior).
-  - `P9.4` Add concurrency/idempotency tests (duplicate request IDs, lock contention, phase ordering).
-  - `P9.5` Add CLI parity tests for generic + alias action paths.
-  - `P9.6` Run full typecheck/test matrix and migration/behavior validations.
+  - `P7.1` Remove legacy operation/primary-checkout types from shared contracts.
+  - `P7.2` Replace/remove all remaining `environment-registry` usage, then delete module/tests/index exports.
+  - `P7.3` Drop compatibility fields (`environmentId`, `primaryCheckout`) once readers no longer require them.
+  - `P7.4` Add manager-boundary, workflow-contract, migration, and idempotency tests.
 - Exit criteria:
   - Required validation checks in this document pass in CI.
   - No outstanding architecture or migration gate violations remain.
@@ -556,6 +548,7 @@ Execution model:
 
 3. Architecture checks (required)
 - No manager-owned workflow business logic methods remain.
+- Standalone workflow definitions exist and are the sole owners of Local/Worktree workflow business logic.
 - No tests call private manager methods via casts.
 - No shared workflow capability API exposes operation-specific helpers (`commit`, `squash_merge`, `promote`, `demote`).
 - No shared workflow capability API exposes workflow-status/workspace-domain helpers that encode Local/Worktree semantics.
@@ -566,15 +559,10 @@ Execution model:
 
 4. Migration checks (required)
 - DB migration backfills old rows correctly.
-- Spawn/create selection precedence is covered end-to-end:
-  - `workflowId` only,
-  - `environmentId` only (mapped),
-  - both compatible,
-  - both incompatible (explicit error).
-- New workflow routes and legacy wrappers return equivalent behavior during transition.
+- Spawn/create paths require workflow selection and no longer accept legacy environment-selector request shapes.
+- Legacy daemon workflow endpoints are removed and no longer routable.
 - Canonical workflow events cover all migrated action/status/lifecycle flows.
-- Projection/timeline rendering remains equivalent while reading mixed legacy + canonical event families.
-- Legacy `work-status`/`git-diff` responses remain equivalent while backed by workflow definitions.
+- Projection/timeline rendering remains equivalent while reading canonical workflow event families only.
 - `demotePrimaryIfNeeded` is removed from request schemas, route handlers, and app/CLI callers.
 - CLI can execute arbitrary workflow actions via the generic `thread action` path (including payload + request-id handling).
 
@@ -585,7 +573,7 @@ Execution model:
 - Project list active badge parity is preserved.
 - Auto-archive runs from predicate evaluation (`done=true` + gates) and remains idempotent across repeated evaluations.
 - Project-main workflow selector and workspace quick actions keep parity after workflow-first migration.
-- CLI promote/demote/commit/squash commands execute through workflow actions and preserve user-visible behavior.
+- CLI uses `thread action` as the only action execution surface (zero operation-specific aliases).
 - Generic CLI workflow action command successfully triggers action execution and reports queued/running/completed/noop/failed outcomes.
 - Worktree demote/promote logic executes inside the Worktree workflow definition (not manager methods).
 
@@ -594,4 +582,4 @@ Execution model:
 - Whether action payload schemas should be strict JSON Schema or typed decode functions per workflow.
 - Whether optimistic UI state for action queue phases is needed for responsiveness, or server-only event updates are sufficient.
 - Whether `getWatchTargets()` needs global throttling/debouncing rules to avoid high-churn repo watching costs.
-- Rollout risk if legacy wrappers remain for too long and become de facto permanent APIs.
+- Rewrite risk: larger single-cutover blast radius across daemon/app/CLI requires strong integration validation before merge.
