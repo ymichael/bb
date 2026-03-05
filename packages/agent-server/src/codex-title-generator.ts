@@ -1,5 +1,5 @@
 import type { PromptInput } from "@beanbag/agent-core";
-import type { ProviderTitleGeneratorArgs } from "./provider-adapter.js";
+import type { LlmThreadTitleGenerationArgs } from "./llm-completion.js";
 import { generateOpenAIResponsesText } from "./openai-responses-model.js";
 
 const DEFAULT_TIMEOUT_MS = 15_000;
@@ -88,12 +88,13 @@ function shouldSuppressTitleGenerationError(error: unknown): boolean {
   const normalizedMessage = error.message.toLowerCase();
   return (
     normalizedMessage.includes("openai api key is missing") ||
+    normalizedMessage.includes("openai auth is missing") ||
     normalizedMessage.includes("timed out")
   );
 }
 
 export async function generateCodexThreadTitle(
-  args: ProviderTitleGeneratorArgs,
+  args: LlmThreadTitleGenerationArgs,
   timeoutMs: number = DEFAULT_TIMEOUT_MS,
 ): Promise<string | undefined> {
   const rawPrompt = extractPromptText(args.input);

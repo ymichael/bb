@@ -2,20 +2,44 @@ import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { resolve } from "node:path";
 
-const DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1";
+const DEFAULT_API_KEY_BASE_URL = "https://api.openai.com/v1";
+const DEFAULT_CHATGPT_BASE_URL = "https://chatgpt.com/backend-api/codex";
 const DEFAULT_TITLE_MODEL = "gpt-5.1-codex-mini";
+const DEFAULT_RESPONSES_INSTRUCTIONS =
+  "You are a concise assistant. Follow the user request and return only the requested output.";
 const DEFAULT_TIMEOUT_MS = 15_000;
 const MAX_UPSTREAM_ERROR_LENGTH = 220;
 
 interface CodexAuthFile {
+  auth_mode?: unknown;
   OPENAI_API_KEY?: unknown;
+  openai_api_key?: unknown;
+  tokens?: {
+    access_token?: unknown;
+    account_id?: unknown;
+  };
 }
+
+type ResponsesAuthMode = "apiKey" | "chatgpt";
+
+interface ResolvedResponsesAuth {
+  mode: ResponsesAuthMode;
+  bearerToken: string;
+  accountId?: string;
+}
+
+type KnownAuthMode = "apikey" | "apiKey" | "chatgpt" | "chatgptAuthTokens";
 
 interface OpenAIResponsesErrorPayload {
   error?: {
     message?: unknown;
   };
   message?: unknown;
+}
+
+interface ParsedSseResponsePayload {
+  text: string;
+  responseId?: string;
 }
 
 export interface GenerateOpenAIResponsesTextArgs {
@@ -37,9 +61,17 @@ function asRecord(value: unknown): Record<string, unknown> | null {
   return value as Record<string, unknown>;
 }
 
-function normalizeBaseUrl(): string {
+function asNonEmptyString(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function normalizeBaseUrl(authMode: ResponsesAuthMode): string {
   const raw = process.env.OPENAI_BASE_URL?.trim();
-  if (!raw) return DEFAULT_OPENAI_BASE_URL;
+  if (!raw) {
+    return authMode === "chatgpt" ? DEFAULT_CHATGPT_BASE_URL : DEFAULT_API_KEY_BASE_URL;
+  }
   return raw.endsWith("/") ? raw.slice(0, -1) : raw;
 }
 
@@ -107,6 +139,91 @@ function parseUpstreamErrorMessage(rawBody: string): string | null {
   return truncateErrorText(normalized);
 }
 
+function parseResponseIdFromRecord(value: Record<string, unknown>): string | undefined {
+  return typeof value.id === "string" ? value.id : undefined;
+}
+
+function parseSseResponsePayload(rawBody: string): ParsedSseResponsePayload | null {
+  if (!rawBody.includes("event:") || !rawBody.includes("data:")) {
+    return null;
+  }
+
+  const blocks = rawBody.split(/\n\n+/);
+  const textDeltas: string[] = [];
+  const textDone: string[] = [];
+  let textFromCompleted: string | null = null;
+  let responseId: string | undefined;
+
+  for (const block of blocks) {
+    if (!block.trim()) continue;
+
+    const dataLines = block
+      .split("\n")
+      .map((line) => line.trimStart())
+      .filter((line) => line.startsWith("data:"));
+    if (dataLines.length === 0) continue;
+
+    const dataPayload = dataLines
+      .map((line) => line.slice("data:".length).trim())
+      .join("\n")
+      .trim();
+    if (!dataPayload || dataPayload === "[DONE]") continue;
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(dataPayload);
+    } catch {
+      continue;
+    }
+
+    const eventRecord = asRecord(parsed);
+    if (!eventRecord) continue;
+
+    const type = asNonEmptyString(eventRecord.type);
+    if (!type) continue;
+
+    if (type === "response.output_text.delta") {
+      const delta = asNonEmptyString(eventRecord.delta);
+      if (delta) textDeltas.push(delta);
+      continue;
+    }
+
+    if (type === "response.output_text.done") {
+      const doneText = asNonEmptyString(eventRecord.text);
+      if (doneText) textDone.push(doneText);
+      continue;
+    }
+
+    if (type === "response.completed") {
+      const responseRecord = asRecord(eventRecord.response);
+      if (!responseRecord) continue;
+
+      responseId = parseResponseIdFromRecord(responseRecord) ?? responseId;
+      const completedText = collectOutputText(responseRecord).trim();
+      if (completedText) {
+        textFromCompleted = completedText;
+      }
+      continue;
+    }
+
+    if (type === "response.created" || type === "response.in_progress") {
+      const responseRecord = asRecord(eventRecord.response);
+      if (!responseRecord) continue;
+      responseId = parseResponseIdFromRecord(responseRecord) ?? responseId;
+    }
+  }
+
+  const text =
+    textFromCompleted ??
+    (textDone.length > 0 ? textDone.join("") : textDeltas.length > 0 ? textDeltas.join("") : "");
+  if (!text) return null;
+
+  return {
+    text,
+    responseId,
+  };
+}
+
 function collectOutputText(payload: Record<string, unknown>): string {
   const direct = payload.output_text;
   if (typeof direct === "string") return direct;
@@ -158,30 +275,101 @@ async function readCodexAuthFile(): Promise<CodexAuthFile | null> {
 }
 
 function resolveApiKeyFromAuthFile(authFile: CodexAuthFile | null): string | null {
-  const apiKeyFromEnv = process.env.OPENAI_API_KEY?.trim();
-  if (apiKeyFromEnv) return apiKeyFromEnv;
-
   const maybeApiKey = authFile?.OPENAI_API_KEY;
-  if (typeof maybeApiKey === "string" && maybeApiKey.trim().length > 0) {
-    return maybeApiKey.trim();
+  const directApiKey = asNonEmptyString(maybeApiKey);
+  if (directApiKey) {
+    return directApiKey;
   }
 
-  if (
-    maybeApiKey &&
-    typeof maybeApiKey === "object" &&
-    "value" in maybeApiKey &&
-    typeof (maybeApiKey as { value?: unknown }).value === "string"
-  ) {
-    const value = (maybeApiKey as { value: string }).value.trim();
-    if (value.length > 0) return value;
+  const maybeApiKeyRecord = asRecord(maybeApiKey);
+  if (maybeApiKeyRecord) {
+    const wrappedValue = asNonEmptyString(maybeApiKeyRecord.value);
+    if (wrappedValue) {
+      return wrappedValue;
+    }
+  }
+
+  const lowerCaseApiKey = asNonEmptyString(authFile?.openai_api_key);
+  if (lowerCaseApiKey) {
+    return lowerCaseApiKey;
   }
 
   return null;
 }
 
-async function resolveOpenAIApiKey(): Promise<string | null> {
+function resolveKnownAuthMode(value: unknown): KnownAuthMode | null {
+  if (
+    value === "apikey" ||
+    value === "apiKey" ||
+    value === "chatgpt" ||
+    value === "chatgptAuthTokens"
+  ) {
+    return value;
+  }
+  return null;
+}
+
+function resolveChatgptAuth(authFile: CodexAuthFile | null): ResolvedResponsesAuth | null {
+  const token = asNonEmptyString(authFile?.tokens?.access_token);
+  if (!token) return null;
+
+  const accountId = asNonEmptyString(authFile?.tokens?.account_id) ?? undefined;
+  return {
+    mode: "chatgpt",
+    bearerToken: token,
+    accountId,
+  };
+}
+
+function resolveResponsesAuthFromAuthFile(
+  authFile: CodexAuthFile | null,
+): ResolvedResponsesAuth | null {
+  const envApiKey = asNonEmptyString(process.env.OPENAI_API_KEY);
+  if (envApiKey) {
+    return {
+      mode: "apiKey",
+      bearerToken: envApiKey,
+    };
+  }
+
+  const authMode = resolveKnownAuthMode(authFile?.auth_mode);
+  const apiKeyAuth = resolveApiKeyFromAuthFile(authFile);
+  const chatgptAuth = resolveChatgptAuth(authFile);
+
+  if (authMode) {
+    switch (authMode) {
+      case "apikey":
+      case "apiKey":
+        return apiKeyAuth
+          ? {
+              mode: "apiKey",
+              bearerToken: apiKeyAuth,
+            }
+          : null;
+      case "chatgpt":
+      case "chatgptAuthTokens":
+        return chatgptAuth;
+      default: {
+        const exhausted: never = authMode;
+        throw new Error(`Unhandled auth mode: ${String(exhausted)}`);
+      }
+    }
+  }
+
+  // Tolerate older auth.json variants where mode might be absent.
+  if (apiKeyAuth) {
+    return {
+      mode: "apiKey",
+      bearerToken: apiKeyAuth,
+    };
+  }
+
+  return chatgptAuth;
+}
+
+async function resolveResponsesAuth(): Promise<ResolvedResponsesAuth | null> {
   const authFile = await readCodexAuthFile();
-  return resolveApiKeyFromAuthFile(authFile);
+  return resolveResponsesAuthFromAuthFile(authFile);
 }
 
 export async function generateOpenAIResponsesText(
@@ -192,18 +380,19 @@ export async function generateOpenAIResponsesText(
     throw new Error("OpenAI responses prompt cannot be empty.");
   }
 
-  const apiKey = await resolveOpenAIApiKey();
-  if (!apiKey) {
+  const auth = await resolveResponsesAuth();
+  if (!auth) {
     throw new Error(
-      "OpenAI API key is missing. Set OPENAI_API_KEY or run `codex login` with an API key saved in ~/.codex/auth.json.",
+      "OpenAI auth is missing. Set OPENAI_API_KEY or run `codex login`.",
     );
   }
 
   const timeoutMs = Math.max(1, args.timeoutMs ?? DEFAULT_TIMEOUT_MS);
   const model = resolveModel(args.model);
-  const endpoint = `${normalizeBaseUrl()}/responses`;
+  const endpoint = `${normalizeBaseUrl(auth.mode)}/responses`;
   const requestBody: Record<string, unknown> = {
     model,
+    instructions: DEFAULT_RESPONSES_INSTRUCTIONS,
     input: [
       {
         role: "user",
@@ -213,11 +402,22 @@ export async function generateOpenAIResponsesText(
     store: false,
   };
 
-  if (args.maxOutputTokens !== undefined) {
+  if (auth.mode === "chatgpt") {
+    requestBody.stream = true;
+  }
+  if (auth.mode === "apiKey" && args.maxOutputTokens !== undefined) {
     requestBody.max_output_tokens = args.maxOutputTokens;
   }
-  if (args.temperature !== undefined) {
+  if (auth.mode === "apiKey" && args.temperature !== undefined) {
     requestBody.temperature = args.temperature;
+  }
+
+  const headers = new Headers();
+  headers.set("Authorization", `Bearer ${auth.bearerToken}`);
+  headers.set("Content-Type", "application/json");
+  headers.set("User-Agent", "beanbag-agent-server/openai-responses");
+  if (auth.mode === "chatgpt" && auth.accountId) {
+    headers.set("ChatGPT-Account-ID", auth.accountId);
   }
 
   const abortController = new AbortController();
@@ -226,20 +426,12 @@ export async function generateOpenAIResponsesText(
   try {
     const response = await fetch(endpoint, {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-        "User-Agent": "beanbag-agent-server/openai-responses",
-      },
+      headers,
       body: JSON.stringify(requestBody),
       signal: abortController.signal,
     });
 
     const rawBody = await response.text();
-    const payload = rawBody ? (JSON.parse(rawBody) as unknown) : null;
-    const payloadRecord = asRecord(payload);
-    const responseId =
-      payloadRecord && typeof payloadRecord.id === "string" ? payloadRecord.id : undefined;
 
     if (!response.ok) {
       const upstreamMessage =
@@ -247,9 +439,21 @@ export async function generateOpenAIResponsesText(
       throw new Error(`OpenAI responses request failed: ${upstreamMessage}`);
     }
 
-    if (!payloadRecord) {
-      throw new Error("OpenAI responses returned an invalid JSON payload.");
+    const ssePayload = parseSseResponsePayload(rawBody);
+    if (ssePayload) {
+      return {
+        text: ssePayload.text,
+        model,
+        responseId: ssePayload.responseId,
+      };
     }
+
+    const payload = rawBody ? (JSON.parse(rawBody) as unknown) : null;
+    const payloadRecord = asRecord(payload);
+    if (!payloadRecord) {
+      throw new Error("OpenAI responses returned an invalid payload.");
+    }
+    const responseId = parseResponseIdFromRecord(payloadRecord);
 
     const text = collectOutputText(payloadRecord).trim();
     if (!text) {

@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import { copyFileSync, existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
-import type { ProviderCommitMessageGeneratorArgs } from "./provider-adapter.js";
+import type { LlmCommitMessageGenerationArgs } from "./llm-completion.js";
 import { generateOpenAIResponsesText } from "./openai-responses-model.js";
 
 const DEFAULT_TIMEOUT_MS = 15_000;
@@ -136,12 +136,13 @@ function shouldSuppressCommitMessageGenerationError(error: unknown): boolean {
   const normalizedMessage = error.message.toLowerCase();
   return (
     normalizedMessage.includes("openai api key is missing") ||
+    normalizedMessage.includes("openai auth is missing") ||
     normalizedMessage.includes("timed out")
   );
 }
 
 export async function generateCodexCommitMessage(
-  args: ProviderCommitMessageGeneratorArgs,
+  args: LlmCommitMessageGenerationArgs,
   timeoutMs: number = DEFAULT_TIMEOUT_MS,
 ): Promise<string | undefined> {
   const includeUnstaged = args.includeUnstaged !== false;
