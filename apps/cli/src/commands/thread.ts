@@ -1,11 +1,11 @@
 import { Command } from "commander";
 import {
-  assertNever,
   type Thread,
   type ThreadEvent,
   type ThreadOperationResponse,
   type ThreadStatus,
 } from "@beanbag/agent-core";
+import { assertNever } from "../assert-never.js";
 import { createClient, unwrap } from "../client.js";
 import {
   requireProjectId,
