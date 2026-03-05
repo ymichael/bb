@@ -57,8 +57,9 @@ describe("unwrap()", () => {
   });
 
   it("throws connection error with helpful message for ECONNREFUSED", async () => {
-    const connError = new TypeError("fetch failed");
-    (connError as any).cause = { code: "ECONNREFUSED" };
+    const connError = new TypeError("fetch failed", {
+      cause: { code: "ECONNREFUSED" },
+    });
 
     await expect(unwrap(Promise.reject(connError))).rejects.toThrow(
       "Cannot connect to Beanbag daemon. Ensure it is running and BB_DAEMON_URL is correct.",

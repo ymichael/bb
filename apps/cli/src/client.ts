@@ -7,17 +7,32 @@ export function createClient(baseUrl: string) {
 
 export type Client = ReturnType<typeof createClient>;
 
+type TypeErrorWithCause = TypeError & {
+  cause?: { code?: unknown };
+};
+
+function isTypeErrorWithCauseCode(
+  err: unknown,
+  expectedCode: string,
+): err is TypeErrorWithCause {
+  if (!(err instanceof TypeError)) {
+    return false;
+  }
+  const cause = (err as { cause?: unknown }).cause;
+  if (!cause || typeof cause !== "object") {
+    return false;
+  }
+  return (cause as { code?: unknown }).code === expectedCode;
+}
+
 export async function unwrap<T>(
   responsePromise: Promise<Response>,
 ): Promise<T> {
   let res: Response;
   try {
     res = await responsePromise;
-  } catch (err: unknown) {
-    if (
-      err instanceof TypeError &&
-      (err as any).cause?.code === "ECONNREFUSED"
-    ) {
+  } catch (err) {
+    if (isTypeErrorWithCauseCode(err, "ECONNREFUSED")) {
       throw new Error(
         "Cannot connect to Beanbag daemon. Ensure it is running and BB_DAEMON_URL is correct.",
       );

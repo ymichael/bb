@@ -76,10 +76,10 @@ describe("Project routes", () => {
       sizeBytes: 12,
     });
     const routes = createProjectRoutes(
-      projectRepo as any,
+      projectRepo,
       findProjectFiles as SearchProjectFilesFn,
       savePromptAttachment as StorePromptAttachmentFn,
-      { threadRepo: threadRepo as any, eventRepo: eventRepo as any },
+      { threadRepo: threadRepo, eventRepo: eventRepo },
     );
     app = new Hono().route("/projects", routes);
   });

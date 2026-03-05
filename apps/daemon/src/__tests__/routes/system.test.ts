@@ -83,7 +83,7 @@ describe("System routes", () => {
     getProviderInfo = vi.fn();
     transcribeVoice = vi.fn().mockResolvedValue({ text: "transcribed prompt" });
     openPath = vi.fn();
-    const routes = createSystemRoutes(threadManager as any, startTime, {
+    const routes = createSystemRoutes(threadManager, startTime, {
       pickFolder,
       listModels,
       getProviderInfo,
@@ -309,7 +309,7 @@ describe("System routes", () => {
     it("uses thread manager provider listing by default", async () => {
       const defaultApp = new Hono().route(
         "/system",
-        createSystemRoutes(threadManager as any, startTime, {
+        createSystemRoutes(threadManager, startTime, {
           pickFolder,
         }),
       );
@@ -351,7 +351,7 @@ describe("System routes", () => {
     it("uses thread manager provider info by default", async () => {
       const defaultApp = new Hono().route(
         "/system",
-        createSystemRoutes(threadManager as any, startTime, {
+        createSystemRoutes(threadManager, startTime, {
           pickFolder,
           listModels,
         }),
@@ -483,7 +483,7 @@ describe("System routes", () => {
     it("surfaces restart recommendation when provided", async () => {
       const restartAwareApp = new Hono().route(
         "/system",
-        createSystemRoutes(threadManager as any, startTime, {
+        createSystemRoutes(threadManager, startTime, {
           shouldRestart: () => true,
         }),
       );
@@ -510,7 +510,7 @@ describe("System routes", () => {
       const requestShutdown = vi.fn();
       const shutdownApp = new Hono().route(
         "/system",
-        createSystemRoutes(threadManager as any, startTime, {
+        createSystemRoutes(threadManager, startTime, {
           requestShutdown,
         }),
       );
@@ -544,7 +544,7 @@ describe("System routes", () => {
       const requestShutdown = vi.fn();
       const shutdownApp = new Hono().route(
         "/system",
-        createSystemRoutes(threadManager as any, startTime, {
+        createSystemRoutes(threadManager, startTime, {
           requestShutdown,
         }),
       );
@@ -572,7 +572,7 @@ describe("System routes", () => {
       const requestShutdown = vi.fn();
       const shutdownApp = new Hono().route(
         "/system",
-        createSystemRoutes(threadManager as any, startTime, {
+        createSystemRoutes(threadManager, startTime, {
           requestShutdown,
         }),
       );
@@ -602,7 +602,7 @@ describe("System routes", () => {
       const requestRestart = vi.fn();
       const restartApp = new Hono().route(
         "/system",
-        createSystemRoutes(threadManager as any, startTime, {
+        createSystemRoutes(threadManager, startTime, {
           requestRestart,
         }),
       );
@@ -636,7 +636,7 @@ describe("System routes", () => {
       const requestRestart = vi.fn();
       const restartApp = new Hono().route(
         "/system",
-        createSystemRoutes(threadManager as any, startTime, {
+        createSystemRoutes(threadManager, startTime, {
           requestRestart,
         }),
       );
@@ -665,7 +665,7 @@ describe("System routes", () => {
       const requestRestart = vi.fn();
       const restartApp = new Hono().route(
         "/system",
-        createSystemRoutes(threadManager as any, startTime, {
+        createSystemRoutes(threadManager, startTime, {
           requestRestart,
         }),
       );

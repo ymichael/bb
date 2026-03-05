@@ -90,7 +90,7 @@ describe("Thread routes", () => {
 
   beforeEach(() => {
     threadManager = mockThreadManager();
-    const routes = createThreadRoutes(threadManager as any);
+    const routes = createThreadRoutes(threadManager);
     app = new Hono().route("/threads", routes);
   });
 

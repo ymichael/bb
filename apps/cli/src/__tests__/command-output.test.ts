@@ -16,6 +16,12 @@ import { registerDaemonCommands } from "../commands/daemon.js";
 import { registerStatusCommand } from "../commands/status.js";
 import { registerThreadCommands } from "../commands/thread.js";
 
+type DaemonClient = ReturnType<typeof createClient>;
+
+function asDaemonClient(value: unknown): DaemonClient {
+  return value as DaemonClient;
+}
+
 function collectLogLines(logSpy: ReturnType<typeof vi.spyOn>): string[] {
   return logSpy.mock.calls.map((args: unknown[]) => args.join(" "));
 }
@@ -77,7 +83,7 @@ describe("CLI command output contracts", () => {
       updatedAt: 1,
     };
     const post = vi.fn(async () => thread);
-    createClientMock.mockReturnValue({
+    createClientMock.mockReturnValue(asDaemonClient({
       api: {
         v1: {
           threads: {
@@ -85,7 +91,7 @@ describe("CLI command output contracts", () => {
           },
         },
       },
-    } as any);
+    }));
 
     await runCommand(["thread", "spawn", "--prompt", "hello"], (program) =>
       registerThreadCommands(program, () => "http://daemon"),
@@ -110,7 +116,7 @@ describe("CLI command output contracts", () => {
       updatedAt: 1,
     };
     const post = vi.fn(async () => thread);
-    createClientMock.mockReturnValue({
+    createClientMock.mockReturnValue(asDaemonClient({
       api: {
         v1: {
           threads: {
@@ -118,7 +124,7 @@ describe("CLI command output contracts", () => {
           },
         },
       },
-    } as any);
+    }));
 
     await runCommand(
       ["thread", "spawn", "--parent-thread", "thread-parent"],
@@ -147,7 +153,7 @@ describe("CLI command output contracts", () => {
           headers: { "Content-Type": "application/json" },
         },
       ));
-    createClientMock.mockReturnValue({
+    createClientMock.mockReturnValue(asDaemonClient({
       api: {
         v1: {
           system: {
@@ -157,7 +163,7 @@ describe("CLI command output contracts", () => {
           },
         },
       },
-    } as any);
+    }));
     unwrapMock.mockImplementation(async (responsePromise: Promise<unknown>) => {
       const response = await responsePromise as Response;
       return response.json();
@@ -189,7 +195,7 @@ describe("CLI command output contracts", () => {
           headers: { "Content-Type": "application/json" },
         },
       ));
-    createClientMock.mockReturnValue({
+    createClientMock.mockReturnValue(asDaemonClient({
       api: {
         v1: {
           system: {
@@ -199,7 +205,7 @@ describe("CLI command output contracts", () => {
           },
         },
       },
-    } as any);
+    }));
 
     await expect(
       runCommand(["daemon", "restart"], (program) =>
