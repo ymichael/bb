@@ -10,7 +10,7 @@ export const COLLAPSIBLE_HEADER_BUTTON_BASE_CLASS =
   "inline-flex max-w-full items-center gap-1 overflow-hidden py-0.5 text-left text-sm";
 export const COLLAPSIBLE_HEADER_TEXT_CLASS = "min-w-0 truncate";
 export const COLLAPSIBLE_HEADER_CHEVRON_COLLAPSED_CLASS =
-  "size-4 shrink-0 opacity-0 transition-opacity group-hover:opacity-100";
+  "size-4 shrink-0 opacity-0 transition-[opacity,transform] duration-200 group-hover:translate-x-0.5 group-hover:opacity-100";
 
 export function getCollapsibleHeaderToneClass(isExpanded: boolean): string {
   return isExpanded
@@ -56,7 +56,7 @@ export function CollapsibleHeader({
     >
       <span className={summaryClass}>{summaryContent}</span>
       {isExpanded ? (
-        <ChevronDown className="size-4 shrink-0" />
+        <ChevronDown className="size-4 shrink-0 transition-transform duration-200 ease-out" />
       ) : (
         <ChevronRight className={COLLAPSIBLE_HEADER_CHEVRON_COLLAPSED_CLASS} />
       )}

@@ -698,7 +698,7 @@ function ToolGroupEntry({
             />
           </div>
           {isExpanded ? (
-            <div className="px-2 pb-1">
+            <div className="animate-in fade-in-0 slide-in-from-top-1 px-2 pb-1 duration-200">
               <div className="overflow-hidden rounded-md border border-border/60 bg-background/40">
                 {isLoadingMessages ? (
                   <div className="px-3 py-2 text-xs text-muted-foreground">

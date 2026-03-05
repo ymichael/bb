@@ -430,6 +430,96 @@ describe("ConversationEntry", () => {
     expect(html).not.toContain("+1 more");
   });
 
+  it("shows up to 3 filenames in aggregated file-edit summaries", () => {
+    const message: UIMessage = {
+      ...baseMessage(),
+      kind: "file-edit",
+      callId: "edit-multi-name-summary",
+      status: "completed",
+      changes: [
+        {
+          path: "/repo/src/alpha.ts",
+          kind: "update",
+          diff: "@@ -1 +1 @@\n-const alpha = 1;\n+const alpha = 2;",
+        },
+        {
+          path: "/repo/src/beta.ts",
+          kind: "update",
+          diff: "@@ -1 +1 @@\n-const beta = 1;\n+const beta = 2;",
+        },
+        {
+          path: "/repo/src/gamma.ts",
+          kind: "update",
+          diff: "@@ -1 +1 @@\n-const gamma = 1;\n+const gamma = 2;",
+        },
+        {
+          path: "/repo/src/delta.ts",
+          kind: "update",
+          diff: "@@ -1 +1 @@\n-const delta = 1;\n+const delta = 2;",
+        },
+      ],
+    };
+
+    const html = renderToStaticMarkup(<ConversationEntry message={message} />);
+    expect(html).toContain("alpha.ts, beta.ts, gamma.ts +1 more");
+  });
+
+  it("auto-expands only the latest diff while aggregated activity is active", () => {
+    const message: UIMessage = {
+      ...baseMessage(),
+      kind: "file-edit",
+      callId: "edit-active-auto-expand",
+      status: "completed",
+      changes: [
+        {
+          path: "/repo/src/alpha.ts",
+          kind: "update",
+          diff: "@@ -1 +1 @@\n-const alpha = 1;\n+const alpha = 2;",
+        },
+        {
+          path: "/repo/src/beta.ts",
+          kind: "update",
+          diff: "@@ -1 +1 @@\n-const beta = 1;\n+const beta = 2;",
+        },
+      ],
+    };
+
+    const html = renderToStaticMarkup(
+      <ConversationEntry
+        message={message}
+        initialExpanded
+        preferOngoingLabels
+      />,
+    );
+    expect(html).toContain("title=\"/repo/src/alpha.ts\">alpha.ts");
+    expect(html).toContain("title=\"/repo/src/beta.ts\">beta.ts");
+    expect((html.match(/<diffs-container>/g) ?? []).length).toBe(1);
+  });
+
+  it("keeps aggregated file diffs collapsed by default when activity is not active", () => {
+    const message: UIMessage = {
+      ...baseMessage(),
+      kind: "file-edit",
+      callId: "edit-inactive-collapsed",
+      status: "completed",
+      changes: [
+        {
+          path: "/repo/src/alpha.ts",
+          kind: "update",
+          diff: "@@ -1 +1 @@\n-const alpha = 1;\n+const alpha = 2;",
+        },
+        {
+          path: "/repo/src/beta.ts",
+          kind: "update",
+          diff: "@@ -1 +1 @@\n-const beta = 1;\n+const beta = 2;",
+        },
+      ],
+    };
+
+    const html = renderToStaticMarkup(<ConversationEntry message={message} initialExpanded />);
+    expect((html.match(/<diffs-container>/g) ?? []).length).toBe(0);
+  });
+
   it("renders file-add summary as 'Created <filename>'", () => {
     const message: UIMessage = {
       ...baseMessage(),

@@ -2,6 +2,13 @@ import { useRef, useCallback, useEffect } from "react"
 
 const SCROLL_THRESHOLD = 40
 
+function getScrollAnimationBehavior(): ScrollBehavior {
+  if (typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    return "auto"
+  }
+  return "smooth"
+}
+
 export function useAutoScroll(dep: unknown, resetDep?: unknown) {
   const containerRef = useRef<HTMLDivElement>(null)
   const stickRef = useRef(true)
@@ -9,7 +16,10 @@ export function useAutoScroll(dep: unknown, resetDep?: unknown) {
   const scrollToBottomIfSticking = useCallback(() => {
     const el = containerRef.current
     if (!el || !stickRef.current) return
-    el.scrollTop = el.scrollHeight
+    el.scrollTo({
+      top: el.scrollHeight,
+      behavior: getScrollAnimationBehavior(),
+    })
   }, [])
 
   const handleScroll = useCallback(() => {
@@ -72,7 +82,10 @@ export function useAutoScroll(dep: unknown, resetDep?: unknown) {
     if (resetDep === undefined) return
     stickRef.current = true
     if (containerRef.current) {
-      containerRef.current.scrollTop = containerRef.current.scrollHeight
+      containerRef.current.scrollTo({
+        top: containerRef.current.scrollHeight,
+        behavior: getScrollAnimationBehavior(),
+      })
     }
   }, [resetDep])
 

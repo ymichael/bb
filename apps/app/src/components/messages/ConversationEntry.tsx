@@ -116,12 +116,38 @@ function fileChangeIdentity(change: UIFileEditMessage["changes"][number]): strin
   return (change.movePath ?? change.path).replaceAll("\\", "/");
 }
 
-function uniqueChangedFileCount(changes: UIFileEditMessage["changes"]): number {
-  const files = new Set<string>();
+function formatFileChangeName(change: UIFileEditMessage["changes"][number]): string {
+  const sourceName = fileNameFromPath(change.path);
+  if (!change.movePath) return sourceName;
+  const destinationName = fileNameFromPath(change.movePath);
+  return `${sourceName} → ${destinationName}`;
+}
+
+function summarizeChangedFileNames(
+  changes: UIFileEditMessage["changes"],
+  maxNames: number,
+): {
+  names: string[];
+  totalUniqueFiles: number;
+  extraCount: number;
+} {
+  const seenFiles = new Set<string>();
+  const names: string[] = [];
+
   for (const change of changes) {
-    files.add(fileChangeIdentity(change));
+    const identity = fileChangeIdentity(change);
+    if (seenFiles.has(identity)) continue;
+    seenFiles.add(identity);
+    if (names.length < maxNames) {
+      names.push(formatFileChangeName(change));
+    }
   }
-  return files.size;
+
+  return {
+    names,
+    totalUniqueFiles: seenFiles.size,
+    extraCount: Math.max(0, seenFiles.size - names.length),
+  };
 }
 
 type FileChangeAction = "created" | "deleted" | "renamed" | "edited";
@@ -280,6 +306,13 @@ function isScrolledNearBottom(
   return distanceFromBottom <= SCROLL_STICK_THRESHOLD_PX;
 }
 
+function getScrollAnimationBehavior(): ScrollBehavior {
+  if (typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    return "auto";
+  }
+  return "smooth";
+}
+
 function useStickyBottomAutoScroll<ElementType extends HTMLElement>({
   isExpanded,
   scrollDep,
@@ -299,7 +332,10 @@ function useStickyBottomAutoScroll<ElementType extends HTMLElement>({
     if (!isExpanded || !shouldStickToBottomRef.current) return;
     const element = elementRef.current;
     if (!element) return;
-    element.scrollTop = element.scrollHeight;
+    element.scrollTo({
+      top: element.scrollHeight,
+      behavior: getScrollAnimationBehavior(),
+    });
   }, [isExpanded, scrollDep]);
 
   const handleScroll = () => {
@@ -341,7 +377,7 @@ function ExpandableEntryContainer({
         />
       </div>
       {isExpanded ? (
-        <div className="px-2 pb-1">
+        <div className="animate-in fade-in-0 slide-in-from-top-1 px-2 pb-1 duration-200">
           <div>{children}</div>
         </div>
       ) : null}
@@ -873,23 +909,19 @@ function FileEditRow({
     }),
     [preferredTheme],
   );
-  const firstChange = message.changes[0];
-  const firstPath = firstChange?.path;
-  const firstFileName = firstPath ? fileNameFromPath(firstPath) : "file";
-  const firstMoveFileName = firstChange?.movePath
-    ? fileNameFromPath(firstChange.movePath)
-    : undefined;
-  const uniqueFileCount = useMemo(
-    () => uniqueChangedFileCount(message.changes),
+  const { names: collapsedFileNames, totalUniqueFiles, extraCount } = useMemo(
+    () => summarizeChangedFileNames(message.changes, 3),
     [message.changes],
   );
-  const extraCount = Math.max(0, uniqueFileCount - 1);
+  const uniqueFileCount = totalUniqueFiles;
+  const collapsedFileLabelBase =
+    collapsedFileNames.length > 0
+      ? collapsedFileNames.join(", ")
+      : "file";
   const collapsedFileLabel =
-    firstMoveFileName && extraCount === 0
-      ? `${firstFileName} → ${firstMoveFileName}`
-      : extraCount > 0
-        ? `${firstFileName} +${extraCount} more`
-        : firstFileName;
+    extraCount > 0
+      ? `${collapsedFileLabelBase} +${extraCount} more`
+      : collapsedFileLabelBase;
   const collapsedStats = useMemo(
     () =>
       message.changes.reduce(
@@ -936,6 +968,40 @@ function FileEditRow({
       <span className="shrink-0 text-destructive/80">-{collapsedStats.removed}</span>
     </span>
   );
+  const isAggregatedChanges = message.changes.length > 1;
+  const isAggregationActive =
+    isAggregatedChanges && (message.status === "pending" || preferOngoingLabels);
+  const changeKeys = useMemo(
+    () =>
+      message.changes.map(
+        (change, index) => `${fileChangeIdentity(change)}:${index}`,
+      ),
+    [message.changes],
+  );
+  const changeKeySignature = useMemo(() => changeKeys.join("|"), [changeKeys]);
+  const lastChangeKey = changeKeys[changeKeys.length - 1];
+  const [expandedChangeKeys, setExpandedChangeKeys] = useState<Set<string>>(() => {
+    if (!isAggregationActive || !lastChangeKey) return new Set();
+    return new Set([lastChangeKey]);
+  });
+
+  useEffect(() => {
+    if (!isAggregatedChanges) {
+      setExpandedChangeKeys(new Set());
+      return;
+    }
+    if (!isAggregationActive || !lastChangeKey) {
+      setExpandedChangeKeys(new Set());
+      return;
+    }
+    setExpandedChangeKeys(new Set([lastChangeKey]));
+  }, [
+    changeKeySignature,
+    isAggregatedChanges,
+    isAggregationActive,
+    lastChangeKey,
+  ]);
+
   const headerToneClass = getCollapsibleHeaderToneClass(isExpanded);
 
   return (
@@ -949,52 +1015,97 @@ function FileEditRow({
           onToggle={onToggle}
         >
           <div className="font-mono ui-text-sm text-foreground/90">
-              {message.changes.map((change, index) => {
-                const action = fileChangeAction(change);
-                const stats = diffStats(change);
-                const fileName = fileNameFromPath(change.path);
-                const pathDetail = change.movePath
-                  ? `${change.path} → ${change.movePath}`
-                  : change.path;
-                const patch = getRenderablePatch(change);
-                return (
-                  <div
-                    key={`${change.path}:${change.movePath ?? ""}:${index}`}
-                    className={index === 0 ? "" : "mt-1.5"}
+            {message.changes.map((change, index) => {
+              const stats = diffStats(change);
+              const fileName = fileNameFromPath(change.path);
+              const pathDetail = change.movePath
+                ? `${change.path} → ${change.movePath}`
+                : change.path;
+              const patch = getRenderablePatch(change);
+              const changeKey = changeKeys[index] ?? `${fileChangeIdentity(change)}:${index}`;
+              const isChangeExpanded =
+                !isAggregatedChanges || expandedChangeKeys.has(changeKey);
+              const changeHeaderToneClass = getCollapsibleHeaderToneClass(isChangeExpanded);
+              const changeSummaryContent = (
+                <span className="inline-flex min-w-0 items-center gap-2 font-mono ui-text-sm text-foreground/90">
+                  <span
+                    className="min-w-0 flex-1 truncate"
+                    title={change.path}
                   >
-                    <div className="overflow-hidden rounded-lg border border-border/60 bg-background/70">
-                      <div className="flex items-center gap-2 px-3 pb-0.5 pt-2">
-                        <span
-                          className="min-w-0 flex-1 truncate font-mono ui-text-sm text-foreground/90"
-                          title={change.path}
-                        >
-                          {fileName}
-                        </span>
-                        <span className="shrink-0 font-mono ui-text-sm">
-                          <span className="text-emerald-600">+{stats.added}</span>{" "}
-                          <span className="text-destructive/80">-{stats.removed}</span>
-                        </span>
-                      </div>
-                      <div className="break-all px-3 pb-1 pt-0.5 font-mono ui-text-2xs text-muted-foreground/75">
-                        {pathDetail}
-                      </div>
-                      <div className="max-h-[240px] overflow-auto border-t border-border/60 pb-1">
-                        <div className="min-w-fit">
-                          {patch ? (
-                            <div style={DIFF_VIEW_STYLE}>
-                              <PatchDiff patch={patch} options={diffViewOptions} />
-                            </div>
-                          ) : (
-                            <div className="px-3 py-2 font-mono ui-text-xs text-muted-foreground/80">
-                              (No diff provided)
-                            </div>
-                          )}
+                    {fileName}
+                  </span>
+                  <span className="shrink-0">
+                    <span className="text-emerald-600">+{stats.added}</span>{" "}
+                    <span className="text-destructive/80">-{stats.removed}</span>
+                  </span>
+                </span>
+              );
+
+              return (
+                <div
+                  key={`${change.path}:${change.movePath ?? ""}:${index}`}
+                  className={index === 0 ? "" : "mt-1.5"}
+                >
+                  <div className="overflow-hidden rounded-lg border border-border/60 bg-background/70">
+                    <div className="px-3 pb-0.5 pt-2">
+                      {isAggregatedChanges ? (
+                        <CollapsibleHeader
+                          isExpanded={isChangeExpanded}
+                          onToggle={() => {
+                            setExpandedChangeKeys((currentKeys) => {
+                              const nextKeys = new Set(currentKeys);
+                              if (nextKeys.has(changeKey)) {
+                                nextKeys.delete(changeKey);
+                              } else {
+                                nextKeys.add(changeKey);
+                              }
+                              return nextKeys;
+                            });
+                          }}
+                          toneClassName={changeHeaderToneClass}
+                          className="w-full"
+                          summaryClassName="min-w-0"
+                          summaryContent={changeSummaryContent}
+                        />
+                      ) : (
+                        <div className="flex items-center gap-2">
+                          <span
+                            className="min-w-0 flex-1 truncate font-mono ui-text-sm text-foreground/90"
+                            title={change.path}
+                          >
+                            {fileName}
+                          </span>
+                          <span className="shrink-0 font-mono ui-text-sm">
+                            <span className="text-emerald-600">+{stats.added}</span>{" "}
+                            <span className="text-destructive/80">-{stats.removed}</span>
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                    <div className="break-all px-3 pb-1 pt-0.5 font-mono ui-text-2xs text-muted-foreground/75">
+                      {pathDetail}
+                    </div>
+                    {isChangeExpanded ? (
+                      <div className="animate-in fade-in-0 slide-in-from-top-1 duration-200">
+                        <div className="max-h-[240px] overflow-auto border-t border-border/60 pb-1">
+                          <div className="min-w-fit">
+                            {patch ? (
+                              <div style={DIFF_VIEW_STYLE}>
+                                <PatchDiff patch={patch} options={diffViewOptions} />
+                              </div>
+                            ) : (
+                              <div className="px-3 py-2 font-mono ui-text-xs text-muted-foreground/80">
+                                (No diff provided)
+                              </div>
+                            )}
+                          </div>
                         </div>
                       </div>
-                    </div>
+                    ) : null}
                   </div>
-                );
-              })}
+                </div>
+              );
+            })}
           </div>
         </ExpandableEntryContainer>
       </div>

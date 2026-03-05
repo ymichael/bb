@@ -2,6 +2,13 @@ import { useCallback, useEffect, useState, type RefObject } from "react";
 
 const SCROLL_THRESHOLD = 40;
 
+function getScrollAnimationBehavior(): ScrollBehavior {
+  if (typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    return "auto";
+  }
+  return "smooth";
+}
+
 function shouldShowIndicator(el: HTMLDivElement): boolean {
   const maxScrollOffset = el.scrollHeight - el.clientHeight;
   if (maxScrollOffset <= SCROLL_THRESHOLD) {
@@ -40,7 +47,10 @@ export function useScrollToBottomIndicator({
   const scrollToBottom = useCallback(() => {
     const el = containerRef.current;
     if (!el) return;
-    el.scrollTop = el.scrollHeight;
+    el.scrollTo({
+      top: el.scrollHeight,
+      behavior: getScrollAnimationBehavior(),
+    });
     // Keep upstream auto-scroll "stick to bottom" state in sync even when a
     // programmatic scroll does not fire a scroll event (or does not change).
     onBaseScroll?.();
