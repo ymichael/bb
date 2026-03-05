@@ -6,6 +6,7 @@ export default defineConfig({
     alias: workspaceTestAliases,
   },
   test: {
+    silent: "passed-only",
     name: "@beanbag/daemon",
     exclude: ["dist/**", "node_modules/**"],
   },

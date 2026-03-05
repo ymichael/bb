@@ -13,6 +13,7 @@ export default defineConfig({
     },
   },
   test: {
+    silent: "passed-only",
     environment: "node",
     include: ["src/**/*.test.ts", "src/**/*.test.tsx"],
   },

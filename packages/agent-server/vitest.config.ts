@@ -6,6 +6,7 @@ export default defineConfig({
     alias: workspaceTestAliases,
   },
   test: {
+    silent: "passed-only",
     name: "@beanbag/agent-server",
     include: ["src/__tests__/**/*.test.ts"],
     exclude: ["dist/**", "node_modules/**"],
