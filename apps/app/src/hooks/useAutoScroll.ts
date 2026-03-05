@@ -1,4 +1,4 @@
-import { useRef, useCallback, useEffect } from "react"
+import { useRef, useCallback, useEffect, useState } from "react"
 
 const SCROLL_THRESHOLD = 40
 
@@ -10,8 +10,15 @@ function getScrollAnimationBehavior(): ScrollBehavior {
 }
 
 export function useAutoScroll(dep: unknown, resetDep?: unknown) {
-  const containerRef = useRef<HTMLDivElement>(null)
+  const containerRef = useRef<HTMLDivElement | null>(null)
+  const [containerElement, setContainerElement] = useState<HTMLDivElement | null>(null)
   const stickRef = useRef(true)
+
+  const setContainerRef = useCallback((element: HTMLDivElement | null) => {
+    containerRef.current = element
+    setContainerElement((currentElement) =>
+      currentElement === element ? currentElement : element)
+  }, [])
 
   const scrollToBottomIfSticking = useCallback(() => {
     const el = containerRef.current
@@ -31,10 +38,10 @@ export function useAutoScroll(dep: unknown, resetDep?: unknown) {
 
   useEffect(() => {
     scrollToBottomIfSticking()
-  }, [dep, scrollToBottomIfSticking])
+  }, [containerElement, dep, scrollToBottomIfSticking])
 
   useEffect(() => {
-    const el = containerRef.current
+    const el = containerElement
     if (!el || typeof window === "undefined") return
 
     let frameId: number | null = null
@@ -76,18 +83,19 @@ export function useAutoScroll(dep: unknown, resetDep?: unknown) {
         window.cancelAnimationFrame(frameId)
       }
     }
-  }, [scrollToBottomIfSticking])
+  }, [containerElement, scrollToBottomIfSticking])
 
   useEffect(() => {
     if (resetDep === undefined) return
     stickRef.current = true
-    if (containerRef.current) {
-      containerRef.current.scrollTo({
-        top: containerRef.current.scrollHeight,
+    const el = containerRef.current
+    if (el) {
+      el.scrollTo({
+        top: el.scrollHeight,
         behavior: getScrollAnimationBehavior(),
       })
     }
-  }, [resetDep])
+  }, [containerElement, resetDep])
 
-  return { containerRef, handleScroll }
+  return { containerRef, containerElement, setContainerRef, handleScroll }
 }

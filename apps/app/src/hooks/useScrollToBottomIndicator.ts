@@ -20,24 +20,30 @@ function shouldShowIndicator(el: HTMLDivElement): boolean {
 
 export function useScrollToBottomIndicator({
   containerRef,
+  containerElement,
   onBaseScroll,
   resetDep,
 }: {
   containerRef: RefObject<HTMLDivElement | null>;
+  containerElement?: HTMLDivElement | null;
   onBaseScroll?: () => void;
   resetDep?: unknown;
 }) {
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
 
   const syncVisibility = useCallback(() => {
-    const el = containerRef.current;
+    const el = containerElement ?? containerRef.current;
     if (!el) return;
     setShowScrollToBottom(shouldShowIndicator(el));
-  }, [containerRef]);
+  }, [containerElement, containerRef]);
 
   useEffect(() => {
     setShowScrollToBottom(false);
   }, [resetDep]);
+
+  useEffect(() => {
+    syncVisibility();
+  }, [containerElement, syncVisibility]);
 
   const handleScroll = useCallback(() => {
     onBaseScroll?.();
@@ -45,7 +51,7 @@ export function useScrollToBottomIndicator({
   }, [onBaseScroll, syncVisibility]);
 
   const scrollToBottom = useCallback(() => {
-    const el = containerRef.current;
+    const el = containerElement ?? containerRef.current;
     if (!el) return;
     el.scrollTo({
       top: el.scrollHeight,
@@ -55,10 +61,10 @@ export function useScrollToBottomIndicator({
     // programmatic scroll does not fire a scroll event (or does not change).
     onBaseScroll?.();
     setShowScrollToBottom(false);
-  }, [containerRef, onBaseScroll]);
+  }, [containerElement, containerRef, onBaseScroll]);
 
   useEffect(() => {
-    const el = containerRef.current;
+    const el = containerElement ?? containerRef.current;
     if (!el) return;
 
     let frameId: number | null = null;
@@ -99,7 +105,7 @@ export function useScrollToBottomIndicator({
         window.cancelAnimationFrame(frameId);
       }
     };
-  }, [containerRef, syncVisibility]);
+  }, [containerElement, containerRef, syncVisibility]);
 
   return {
     showScrollToBottom,

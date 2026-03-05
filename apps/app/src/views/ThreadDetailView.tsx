@@ -1397,7 +1397,12 @@ export function ThreadDetailView() {
     scheduleGitDiffFileRender,
   ]);
 
-  const { containerRef, handleScroll: baseHandleScroll } = useAutoScroll(
+  const {
+    containerRef,
+    containerElement,
+    setContainerRef,
+    handleScroll: baseHandleScroll,
+  } = useAutoScroll(
     threadDetailRows,
     threadId,
   );
@@ -1406,12 +1411,13 @@ export function ThreadDetailView() {
   const { showScrollToBottom, handleScroll, scrollToBottom } =
     useScrollToBottomIndicator({
       containerRef,
+      containerElement,
       onBaseScroll: baseHandleScroll,
       resetDep: threadId,
     });
 
   useLayoutEffect(() => {
-    const scrollContainer = containerRef.current;
+    const scrollContainer = containerElement;
     const promptComposer = promptComposerRef.current;
     if (!scrollContainer || !promptComposer || typeof ResizeObserver === "undefined") {
       return;
@@ -1440,7 +1446,7 @@ export function ThreadDetailView() {
       observer.disconnect();
       promptComposerHeightRef.current = null;
     };
-  }, [containerRef, threadId]);
+  }, [containerElement, threadId]);
 
   const sendFollowUpInput = useCallback(
     async ({
@@ -1951,7 +1957,7 @@ export function ThreadDetailView() {
 
   const conversationShell = (
     <PageShell
-      scrollRef={containerRef}
+      scrollRef={setContainerRef}
       onScroll={handleScroll}
       shellClassName={isGitDiffPanelOpen ? "!mx-0 !mt-0 md:!mx-0 md:!mt-0" : undefined}
       contentClassName="gap-2 pt-0"
