@@ -11,17 +11,17 @@ describe("provider registry", () => {
     expect(provider.processCommand).toBeTruthy();
   });
 
-  it("creates additional first-party adapters", () => {
-    const pi = createProviderAdapter({ providerId: "pi-mono" });
-    const claude = createProviderAdapter({ providerId: "claude-code" });
-
-    expect(pi.id).toBe("pi-mono");
-    expect(claude.id).toBe("claude-code");
-    expect(claude.capabilities.supportsSteer).toBe(false);
+  it("rejects unsupported adapters", () => {
+    expect(() => createProviderAdapter({ providerId: "pi-mono" })).toThrow(
+      'Unsupported provider "pi-mono"',
+    );
+    expect(() => createProviderAdapter({ providerId: "claude-code" })).toThrow(
+      'Unsupported provider "claude-code"',
+    );
   });
 
   it("lists provider catalog", () => {
     const ids = listAvailableProviderInfos().map((provider) => provider.id);
-    expect(ids).toEqual(["codex", "pi-mono", "claude-code"]);
+    expect(ids).toEqual(["codex"]);
   });
 });

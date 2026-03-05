@@ -13,7 +13,7 @@ import type {
 
 const LOCAL_ENVIRONMENT_INFO: SystemEnvironmentInfo = {
   id: "local",
-  displayName: "Local Workspace",
+  displayName: "Direct Workspace",
   description: "Run directly in the project root on the host machine.",
   capabilities: {
     isolatedFilesystem: false,
@@ -237,26 +237,6 @@ function localSession(context: EnvironmentPrepareContext): EnvironmentSession {
   };
 }
 
-type WorktreeFallbackReason = "missing-git-root" | "worktree-add-failed";
-
-function localFallbackSession(
-  context: EnvironmentPrepareContext,
-  reason: WorktreeFallbackReason,
-): EnvironmentSession {
-  const fallback = localSession(context);
-  return {
-    ...fallback,
-    env: {
-      ...(fallback.env ?? {}),
-      BB_WORKSPACE_MODE: "local-fallback",
-    },
-    metadata: {
-      ...(fallback.metadata ?? {}),
-      fallbackReason: reason,
-    },
-  };
-}
-
 export function createLocalEnvironmentAdapter(): EnvironmentAdapter {
   return {
     info: { ...LOCAL_ENVIRONMENT_INFO },
@@ -312,8 +292,35 @@ function emitProvisioningEvent(
   context.onProvisioningEvent?.(event);
 }
 
-function normalizeDetail(message: string): string {
-  return message.trim();
+function normalizeDetail(message: string | Buffer): string {
+  return (typeof message === "string" ? message : message.toString("utf8")).trim();
+}
+
+function summarizeSpawnSyncFailure(result: {
+  error?: Error;
+  stderr?: string | Buffer;
+  stdout?: string | Buffer;
+  status?: number | null;
+  signal?: NodeJS.Signals | null;
+}): string {
+  if (result.error?.message) {
+    return normalizeDetail(result.error.message);
+  }
+  if (result.stderr !== undefined) {
+    const stderr = normalizeDetail(result.stderr);
+    if (stderr.length > 0) return stderr;
+  }
+  if (result.stdout !== undefined) {
+    const stdout = normalizeDetail(result.stdout);
+    if (stdout.length > 0) return stdout;
+  }
+  if (result.signal) {
+    return `terminated by signal ${result.signal}`;
+  }
+  if (typeof result.status === "number") {
+    return `exited with status ${result.status}`;
+  }
+  return "unknown error";
 }
 
 function runOptionalEnvSetupHook(context: EnvironmentPrepareContext, workspaceRoot: string): void {
@@ -496,7 +503,9 @@ export function createWorktreeEnvironmentAdapter(
       const projectRoot = context.projectRootPath;
       const gitDir = join(projectRoot, ".git");
       if (!existsSync(gitDir)) {
-        return localFallbackSession(context, "missing-git-root");
+        throw new Error(
+          "Worktree provisioning requires a git repository at the project root",
+        );
       }
 
       const { root: configuredWorktreeRoot, isGlobalRoot } =
@@ -541,7 +550,8 @@ export function createWorktreeEnvironmentAdapter(
               },
         );
         if (addResult.status !== 0) {
-          return localFallbackSession(context, "worktree-add-failed");
+          const detail = summarizeSpawnSyncFailure(addResult);
+          throw new Error(`Failed to create worktree: ${detail}`);
         }
         runOptionalEnvSetupHook(context, workspaceRoot);
       }
@@ -570,7 +580,9 @@ export function createWorktreeEnvironmentAdapter(
       const projectRoot = context.projectRootPath;
       const gitDir = join(projectRoot, ".git");
       if (!existsSync(gitDir)) {
-        return localFallbackSession(context, "missing-git-root");
+        throw new Error(
+          "Worktree provisioning requires a git repository at the project root",
+        );
       }
 
       const { root: configuredWorktreeRoot, isGlobalRoot } =
@@ -609,7 +621,12 @@ export function createWorktreeEnvironmentAdapter(
               },
             );
         if (addResult.status !== 0) {
-          return localFallbackSession(context, "worktree-add-failed");
+          const detailSource = addResult.error?.message ??
+            addResult.stderr ??
+            addResult.stdout ??
+            "unknown error";
+          const detail = normalizeDetail(detailSource);
+          throw new Error(`Failed to create worktree: ${detail}`);
         }
       }
       await runOptionalEnvSetupHookAsync(context, workspaceRoot);

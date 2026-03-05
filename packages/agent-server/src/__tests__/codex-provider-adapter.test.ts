@@ -71,6 +71,7 @@ describe("codex provider adapter", () => {
     expect(adapter.shouldPersistEvent?.("codex/event/item_started", {})).toBe(false);
     expect(adapter.shouldPersistEvent?.("codex/event/item_completed", {})).toBe(false);
     expect(adapter.shouldPersistEvent?.("codex/event/token_count", {})).toBe(false);
+    expect(adapter.shouldPersistEvent?.("thread/name/updated", {})).toBe(false);
     expect(adapter.shouldPersistEvent?.("item/started", {})).toBe(true);
     expect(adapter.shouldPersistEvent?.("item/completed", {})).toBe(true);
   });

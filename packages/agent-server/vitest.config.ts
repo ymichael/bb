@@ -1,6 +1,10 @@
 import { defineConfig } from "vitest/config";
+import { workspaceTestAliases } from "../../vitest.workspace-aliases";
 
 export default defineConfig({
+  resolve: {
+    alias: workspaceTestAliases,
+  },
   test: {
     name: "@beanbag/agent-server",
     include: ["src/__tests__/**/*.test.ts"],

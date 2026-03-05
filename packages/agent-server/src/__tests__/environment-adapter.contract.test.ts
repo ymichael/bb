@@ -156,30 +156,24 @@ describe("environment adapter contract", () => {
     expect(readFileSync(join(projectRoot, "README.md"), "utf-8")).toBe("initial\n");
   });
 
-  it("worktree adapter falls back to local mode outside git repos", () => {
+  it("worktree adapter fails outside git repos", () => {
     const projectRoot = makeTempDir("bb-env-contract-fallback-non-git-");
 
     const adapter = createWorktreeEnvironmentAdapter({
       worktreeRootName: ".beanbag-test-worktrees",
     });
-    const session = adapter.prepare(
-      createPrepareContext({
-        projectId: "proj-fallback",
-        threadId: "thread-fallback",
-        projectRootPath: projectRoot,
-      }),
-    );
-
-    assertSessionBaseContract({
-      session,
-      expectedWorkspaceRoot: projectRoot,
-      expectedMode: "local",
-    });
-    expect(session.env?.BB_WORKSPACE_MODE).toBe("local-fallback");
-    expect(session.metadata?.fallbackReason).toBe("missing-git-root");
+    expect(() =>
+      adapter.prepare(
+        createPrepareContext({
+          projectId: "proj-fallback",
+          threadId: "thread-fallback",
+          projectRootPath: projectRoot,
+        }),
+      )
+    ).toThrow("Worktree provisioning requires a git repository at the project root");
   });
 
-  it("worktree adapter falls back to local mode when git worktree add fails", () => {
+  it("worktree adapter fails when git worktree add fails", () => {
     const projectRoot = makeTempDir("bb-env-contract-fallback-failed-add-");
     initGitRepo(projectRoot);
 
@@ -187,21 +181,15 @@ describe("environment adapter contract", () => {
       gitCommand: join(projectRoot, "missing-git"),
       worktreeRootName: ".beanbag-test-worktrees",
     });
-    const session = adapter.prepare(
-      createPrepareContext({
-        projectId: "proj-fallback-failed-add",
-        threadId: "thread-fallback-failed-add",
-        projectRootPath: projectRoot,
-      }),
-    );
-
-    assertSessionBaseContract({
-      session,
-      expectedWorkspaceRoot: projectRoot,
-      expectedMode: "local",
-    });
-    expect(session.env?.BB_WORKSPACE_MODE).toBe("local-fallback");
-    expect(session.metadata?.fallbackReason).toBe("worktree-add-failed");
+    expect(() =>
+      adapter.prepare(
+        createPrepareContext({
+          projectId: "proj-fallback-failed-add",
+          threadId: "thread-fallback-failed-add",
+          projectRootPath: projectRoot,
+        }),
+      )
+    ).toThrow(/Failed to create worktree:/);
   });
 
   it("runs optional .bb-env-setup.sh only when provisioning a new workspace", () => {
