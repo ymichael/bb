@@ -20,7 +20,10 @@ import type {
   EventRepository,
   ProjectRepository,
 } from "@beanbag/db";
-import { createCodexProviderAdapter } from "@beanbag/agent-server";
+import {
+  createCodexProviderAdapter,
+  type LlmCompletionService,
+} from "@beanbag/agent-server";
 import { ThreadManager } from "../thread-manager.js";
 import { WSManager } from "../ws.js";
 
@@ -204,11 +207,23 @@ function createMocks() {
   return { threadRepo, eventRepo, projectRepo, ws };
 }
 
+function createMockLlmCompletionService(
+  overrides?: Partial<LlmCompletionService>,
+): LlmCompletionService {
+  return {
+    displayName: "Mock LLM",
+    generateThreadTitle: vi.fn().mockResolvedValue(undefined),
+    generateCommitMessage: vi.fn().mockResolvedValue(undefined),
+    ...overrides,
+  };
+}
+
 describe("ThreadManager", () => {
   let threadRepo: ReturnType<typeof createMocks>["threadRepo"];
   let eventRepo: ReturnType<typeof createMocks>["eventRepo"];
   let projectRepo: ReturnType<typeof createMocks>["projectRepo"];
   let ws: ReturnType<typeof createMocks>["ws"];
+  let llmCompletionService: LlmCompletionService;
   let manager: ThreadManager;
 
   beforeEach(() => {
@@ -218,17 +233,52 @@ describe("ThreadManager", () => {
     eventRepo = mocks.eventRepo;
     projectRepo = mocks.projectRepo;
     ws = mocks.ws;
+    llmCompletionService = createMockLlmCompletionService();
     manager = new ThreadManager(
       threadRepo as any,
       eventRepo as any,
       projectRepo as any,
       ws as any,
+      llmCompletionService,
     );
   });
 
   afterEach(async () => {
     await new Promise<void>((resolve) => setImmediate(resolve));
     await new Promise<void>((resolve) => setImmediate(resolve));
+  });
+
+  describe("commit message generation", () => {
+    it("resolves commit messages via the injected llm completion service", async () => {
+      const generateCommitMessage = llmCompletionService.generateCommitMessage as ReturnType<
+        typeof vi.fn
+      >;
+      generateCommitMessage.mockResolvedValue("feat: support commit generation");
+
+      const resolved = await (manager as any)._resolveCommitMessage({
+        workspaceRoot: "/tmp/workspace",
+        includeUnstaged: true,
+      });
+
+      expect(generateCommitMessage).toHaveBeenCalledWith({
+        cwd: "/tmp/workspace",
+        includeUnstaged: true,
+      });
+      expect(resolved).toBe("feat: support commit generation");
+    });
+
+    it("surfaces llm generator failures when no commit message is produced", async () => {
+      const generateCommitMessage = llmCompletionService.generateCommitMessage as ReturnType<
+        typeof vi.fn
+      >;
+      generateCommitMessage.mockResolvedValue(undefined);
+
+      await expect(
+        (manager as any)._resolveCommitMessage({
+          workspaceRoot: "/tmp/workspace",
+        }),
+      ).rejects.toThrow("Failed to auto-generate commit message (Mock LLM)");
+    });
   });
 
   describe("boot status healing", () => {
@@ -279,6 +329,7 @@ describe("ThreadManager", () => {
         bootEventRepo as any,
         bootProjectRepo as any,
         bootWs as any,
+        createMockLlmCompletionService(),
       );
 
       return {
@@ -470,6 +521,7 @@ describe("ThreadManager", () => {
         eventRepo as any,
         projectRepo as any,
         ws as any,
+        llmCompletionService,
         createCodexProviderAdapter(),
         process.env,
         customEnvironmentAdapter as any,
@@ -519,6 +571,7 @@ describe("ThreadManager", () => {
           eventRepo as any,
           projectRepo as any,
           ws as any,
+          llmCompletionService,
           createCodexProviderAdapter(),
           runtimeEnv,
         );
@@ -567,6 +620,7 @@ describe("ThreadManager", () => {
           eventRepo as any,
           projectRepo as any,
           ws as any,
+          llmCompletionService,
           createCodexProviderAdapter(),
           runtimeEnv,
         );
@@ -806,6 +860,7 @@ describe("ThreadManager", () => {
         eventRepo as any,
         projectRepo as any,
         ws as any,
+        llmCompletionService,
         createCodexProviderAdapter(),
         process.env,
         customEnvironmentAdapter as any,
@@ -912,6 +967,7 @@ describe("ThreadManager", () => {
         eventRepo as any,
         projectRepo as any,
         ws as any,
+        llmCompletionService,
         createCodexProviderAdapter(),
         process.env,
         customEnvironmentAdapter as any,
@@ -1001,14 +1057,18 @@ describe("ThreadManager", () => {
     });
 
     it("auto-generates and persists thread names when daemon title generation is enabled", async () => {
-      const providerTitleGenerator = vi
+      const titleGenerator = vi
         .fn()
         .mockResolvedValue("Generated Login Fix Title");
+      const titleLlmCompletionService = createMockLlmCompletionService({
+        generateThreadTitle: titleGenerator,
+      });
       const titleManager = new ThreadManager(
         threadRepo as any,
         eventRepo as any,
         projectRepo as any,
         ws as any,
+        titleLlmCompletionService,
         createCodexProviderAdapter(),
         process.env,
         undefined,
@@ -1016,7 +1076,6 @@ describe("ThreadManager", () => {
         undefined,
         undefined,
         undefined,
-        providerTitleGenerator,
       );
 
       const project = { id: "proj-1", name: "Test", rootPath: "/test", createdAt: 1000, updatedAt: 1000 };
@@ -1048,9 +1107,9 @@ describe("ThreadManager", () => {
       });
 
       await vi.waitFor(() => {
-        expect(providerTitleGenerator).toHaveBeenCalledTimes(1);
+        expect(titleGenerator).toHaveBeenCalledTimes(1);
       });
-      expect(providerTitleGenerator).toHaveBeenCalledWith({
+      expect(titleGenerator).toHaveBeenCalledWith({
         input: [{ type: "text", text: "Fix the login bug" }],
         cwd: "/test",
       });

@@ -109,12 +109,6 @@ export interface ProviderAdapter {
   outputFromEvent(event: ThreadEvent): string | undefined;
   listModels(): Promise<AvailableModel[]>;
   deriveThreadTitle(input?: PromptInput[]): string | undefined;
-  generateThreadTitle?(
-    args: ProviderTitleGeneratorArgs,
-  ): Promise<string | undefined>;
-  generateCommitMessage?(
-    args: ProviderCommitMessageGeneratorArgs,
-  ): Promise<string | undefined>;
   inactiveSessionErrorMessage(threadId: string): string;
 }
 

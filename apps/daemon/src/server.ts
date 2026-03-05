@@ -58,6 +58,7 @@ export function createServer(deps: ServerDeps) {
     deps.eventRepo,
     deps.projectRepo,
     wsManager,
+    llmCompletionService,
     provider,
     process.env,
     environmentAdapter,
@@ -65,7 +66,6 @@ export function createServer(deps: ServerDeps) {
     environmentCatalog,
     scheduler,
     gitStatusService,
-    (args) => llmCompletionService.generateThreadTitle(args),
   );
 
   // WebSocket handler

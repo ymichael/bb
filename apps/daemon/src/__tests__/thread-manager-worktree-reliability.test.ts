@@ -9,7 +9,10 @@ import type {
   ProjectRepository,
   ThreadRepository,
 } from "@beanbag/db";
-import { createWorktreeEnvironmentAdapter } from "@beanbag/agent-server";
+import {
+  createWorktreeEnvironmentAdapter,
+  type LlmCompletionService,
+} from "@beanbag/agent-server";
 import { ThreadManager } from "../thread-manager.js";
 import { WSManager } from "../ws.js";
 
@@ -22,7 +25,11 @@ function makeTempDir(prefix: string): string {
 }
 
 function git(cwd: string, ...args: string[]): string {
-  return execFileSync("git", args, { cwd, encoding: "utf-8" }).trim();
+  return execFileSync("git", args, {
+    cwd,
+    encoding: "utf-8",
+    stdio: ["ignore", "pipe", "pipe"],
+  }).trim();
 }
 
 function initGitRepo(repoRoot: string): void {
@@ -54,6 +61,11 @@ function createManager(args: {
   thread: Thread;
   projectRoot: string;
 }): ThreadManager {
+  const llmCompletionService: LlmCompletionService = {
+    displayName: "Mock LLM",
+    generateThreadTitle: vi.fn().mockResolvedValue(undefined),
+    generateCommitMessage: vi.fn().mockResolvedValue(undefined),
+  };
   const threadRepo = {
     create: vi.fn(),
     getById: vi.fn((threadId: string) => (threadId === args.thread.id ? args.thread : undefined)),
@@ -97,6 +109,7 @@ function createManager(args: {
     eventRepo,
     projectRepo,
     ws,
+    llmCompletionService,
   );
 }
 

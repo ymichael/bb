@@ -31,6 +31,7 @@ function git(cwd: string, ...args: string[]): string {
   return execFileSync("git", args, {
     cwd,
     encoding: "utf-8",
+    stdio: ["ignore", "pipe", "pipe"],
   }).trim();
 }
 
