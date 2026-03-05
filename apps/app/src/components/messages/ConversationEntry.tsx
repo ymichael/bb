@@ -55,6 +55,7 @@ interface ConversationEntryProps {
 }
 
 const DEBUG_EVENT_EXPANDED_MAX_LENGTH = 4000;
+const SCROLL_STICK_THRESHOLD_PX = 40;
 
 function formatDebugEventData(
   data: unknown,
@@ -266,6 +267,48 @@ function useLatestInitialExpanded(initialExpanded: boolean): {
   };
 
   return { isExpanded: state.isExpanded, onToggle };
+}
+
+function isScrolledNearBottom(
+  element: Pick<HTMLElement, "scrollHeight" | "clientHeight" | "scrollTop">,
+): boolean {
+  const maxScrollOffset = element.scrollHeight - element.clientHeight;
+  if (maxScrollOffset <= SCROLL_STICK_THRESHOLD_PX) {
+    return true;
+  }
+  const distanceFromBottom = maxScrollOffset - element.scrollTop;
+  return distanceFromBottom <= SCROLL_STICK_THRESHOLD_PX;
+}
+
+function useStickyBottomAutoScroll<ElementType extends HTMLElement>({
+  isExpanded,
+  scrollDep,
+}: {
+  isExpanded: boolean;
+  scrollDep: unknown;
+}) {
+  const elementRef = useRef<ElementType | null>(null);
+  const shouldStickToBottomRef = useRef(true);
+
+  useEffect(() => {
+    if (!isExpanded) return;
+    shouldStickToBottomRef.current = true;
+  }, [isExpanded]);
+
+  useEffect(() => {
+    if (!isExpanded || !shouldStickToBottomRef.current) return;
+    const element = elementRef.current;
+    if (!element) return;
+    element.scrollTop = element.scrollHeight;
+  }, [isExpanded, scrollDep]);
+
+  const handleScroll = () => {
+    const element = elementRef.current;
+    if (!element) return;
+    shouldStickToBottomRef.current = isScrolledNearBottom(element);
+  };
+
+  return { elementRef, handleScroll };
 }
 
 function ExpandableEntryContainer({
@@ -651,11 +694,15 @@ function ToolExploringRow({
   preferOngoingLabels?: boolean;
 }) {
   const { isExpanded, onToggle } = useLatestInitialExpanded(initialExpanded);
-  const detailRef = useRef<HTMLDivElement | null>(null);
   const detailLines = useMemo(
     () => buildExploringDetailLines(message.calls),
     [message.calls],
   );
+  const { elementRef: detailRef, handleScroll: handleDetailScroll } =
+    useStickyBottomAutoScroll<HTMLDivElement>({
+      isExpanded,
+      scrollDep: detailLines,
+    });
   const counts = useMemo(() => summarizeExploringCounts(message.calls), [message.calls]);
   const hasDetails = detailLines.length > 0;
   const headerToneClass = getCollapsibleHeaderToneClass(isExpanded);
@@ -676,13 +723,6 @@ function ToolExploringRow({
         </span>
       </span>
     );
-
-  useEffect(() => {
-    if (!isExpanded || message.status !== "pending") return;
-    const detailElement = detailRef.current;
-    if (!detailElement) return;
-    detailElement.scrollTop = detailElement.scrollHeight;
-  }, [detailLines, isExpanded, message.status]);
 
   if (!hasDetails) {
     return (
@@ -710,7 +750,11 @@ function ToolExploringRow({
           headerToneClass={headerToneClass}
           onToggle={onToggle}
         >
-          <div ref={detailRef} className="mt-0.5 max-h-[220px] space-y-0.5 overflow-auto">
+          <div
+            ref={detailRef}
+            onScroll={handleDetailScroll}
+            className="mt-0.5 max-h-[220px] space-y-0.5 overflow-auto"
+          >
             {detailLines.map((line, index) => (
               <div
                 key={`${message.id}:${index}`}
@@ -737,9 +781,13 @@ function ToolCallRow({
   preferOngoingLabels?: boolean;
 }) {
   const { isExpanded, onToggle } = useLatestInitialExpanded(initialExpanded);
-  const outputRef = useRef<HTMLPreElement | null>(null);
   const command = message.command ?? message.toolName;
   const outputText = message.output && message.output.length > 0 ? message.output : "(no output)";
+  const { elementRef: outputRef, handleScroll: handleOutputScroll } =
+    useStickyBottomAutoScroll<HTMLPreElement>({
+      isExpanded,
+      scrollDep: outputText,
+    });
   const renderedOutput = useMemo(() => ansiToHtml(outputText), [outputText]);
   const actionLabel =
     message.status === "error"
@@ -753,13 +801,6 @@ function ToolCallRow({
   const summaryText = isExpanded ? `${actionLabel} command` : `${actionLabel} ${command}`;
   const summaryContent = renderShimmeringSummary(summaryText, isRunning);
   const headerToneClass = getCollapsibleHeaderToneClass(isExpanded);
-
-  useEffect(() => {
-    if (!isExpanded || message.status !== "pending") return;
-    const outputElement = outputRef.current;
-    if (!outputElement) return;
-    outputElement.scrollTop = outputElement.scrollHeight;
-  }, [isExpanded, message.output, message.status]);
 
   return (
     <div className="group w-full" style={{ overflowAnchor: "none" }}>
@@ -775,6 +816,7 @@ function ToolCallRow({
               <div className="whitespace-pre-wrap break-words leading-tight">$ {command}</div>
               <pre
                 ref={outputRef}
+                onScroll={handleOutputScroll}
                 className="mt-1.5 max-h-[220px] overflow-auto whitespace-pre-wrap break-words leading-tight text-muted-foreground"
                 // ANSI conversion escapes XML/HTML and only emits style tags for terminal formatting.
                 dangerouslySetInnerHTML={{ __html: renderedOutput }}
