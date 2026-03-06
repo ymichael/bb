@@ -8,9 +8,10 @@ import type {
   AvailableModel,
   OpenPathEditor,
   OpenPathRequest,
-  Thread,
   SystemEnvironmentInfo,
   SystemProviderInfo,
+  SystemWorkflowInfo,
+  Thread,
   SystemStatus,
   ThreadOrchestrator,
 } from "@beanbag/agent-core";
@@ -28,8 +29,8 @@ type PickFolderFn = () => Promise<string | null>;
 type ListModelsFn = () => Promise<AvailableModel[]>;
 type ProviderInfoFn = () => SystemProviderInfo;
 type ProviderCatalogFn = () => SystemProviderInfo[];
-type EnvironmentInfoFn = () => SystemEnvironmentInfo;
 type EnvironmentCatalogFn = () => SystemEnvironmentInfo[];
+type WorkflowCatalogFn = () => SystemWorkflowInfo[];
 type TranscribeVoiceFn = (
   args: TranscribeVoiceInputArgs,
 ) => Promise<TranscribeVoiceInputResult>;
@@ -43,8 +44,8 @@ export interface CreateSystemRoutesOptions {
   listModels?: ListModelsFn;
   getProviderInfo?: ProviderInfoFn;
   listProviders?: ProviderCatalogFn;
-  getEnvironmentInfo?: EnvironmentInfoFn;
   listEnvironments?: EnvironmentCatalogFn;
+  listWorkflows?: WorkflowCatalogFn;
   transcribeVoice?: TranscribeVoiceFn;
   openPath?: OpenPathFn;
   requestShutdown?: RequestShutdownFn;
@@ -182,8 +183,8 @@ export function createSystemRoutes(
   const listModels = opts.listModels ?? (() => threadManager.listModels());
   const getProviderInfo = opts.getProviderInfo ?? (() => threadManager.getProviderInfo());
   const listProviders = opts.listProviders ?? (() => threadManager.listProviders());
-  const getEnvironmentInfo = opts.getEnvironmentInfo ?? (() => threadManager.getEnvironmentInfo());
   const listEnvironments = opts.listEnvironments ?? (() => threadManager.listEnvironments());
+  const listWorkflows = opts.listWorkflows ?? (() => threadManager.listWorkflows());
   const transcribeVoice = opts.transcribeVoice ?? transcribeVoiceInput;
   const openPath = opts.openPath ?? openPathInEditor;
   const requestShutdown = opts.requestShutdown ?? (() => {});
@@ -273,16 +274,16 @@ export function createSystemRoutes(
         return sendRouteError(c, err);
       }
     })
-    .get("/environment", async (c) => {
+    .get("/environments", async (c) => {
       try {
-        return c.json(getEnvironmentInfo());
+        return c.json(listEnvironments());
       } catch (err) {
         return sendRouteError(c, err);
       }
     })
-    .get("/environments", async (c) => {
+    .get("/workflows", async (c) => {
       try {
-        return c.json(listEnvironments());
+        return c.json(listWorkflows());
       } catch (err) {
         return sendRouteError(c, err);
       }

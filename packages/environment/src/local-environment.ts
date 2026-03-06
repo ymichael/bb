@@ -35,6 +35,13 @@ const LOCAL_ENVIRONMENT_INFO: SystemEnvironmentInfo = {
   id: "local",
   displayName: "Direct Workspace",
   description: "Run directly in the project root on the host machine.",
+  capabilities: {
+    host_filesystem: true,
+    isolated_workspace: false,
+    promote_primary_checkout: false,
+    demote_primary_checkout: false,
+    squash_merge: false,
+  },
 };
 
 class LocalEnvironment implements IEnvironment {
@@ -106,19 +113,6 @@ class LocalEnvironment implements IEnvironment {
       this,
       args,
       this.services?.llmCompletion,
-      (result) =>
-        this.services?.appendEvent?.(
-          "system/worktree/commit",
-          {
-            status: result.commitCreated ? "committed" : "noop",
-            message: result.message,
-            ...(result.commitSha ? { commitSha: result.commitSha } : {}),
-            ...(result.includeUnstaged !== undefined
-              ? { includeUnstaged: result.includeUnstaged }
-              : {}),
-          },
-          { broadcastChanges: ["events-appended", "work-status-changed"] },
-        ),
     );
   }
 

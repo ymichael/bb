@@ -82,14 +82,6 @@ export class EnvironmentService {
     private readonly callbacks: EnvironmentServiceCallbacks,
   ) {}
 
-  getEnvironmentInfo(): SystemEnvironmentInfo {
-    const [firstEnvironment] = this.environmentRegistry.list();
-    if (!firstEnvironment) {
-      throw new Error("No environments are registered");
-    }
-    return { ...firstEnvironment };
-  }
-
   listEnvironments(): SystemEnvironmentInfo[] {
     return this.environmentRegistry.list().map((environment) => ({ ...environment }));
   }
@@ -130,6 +122,10 @@ export class EnvironmentService {
 
   getRestoreFailure(threadId: string): string | undefined {
     return this.restoreFailuresByThreadId.get(threadId);
+  }
+
+  getEnvironmentRuntime(threadId: string): ActiveEnvironmentRuntime | undefined {
+    return this.environmentRuntimes.get(threadId);
   }
 
   getProjectWorkspaceStatus(projectId: string, rootPath: string): ThreadWorkStatus {

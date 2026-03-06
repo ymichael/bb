@@ -46,6 +46,13 @@ const WORKTREE_ENVIRONMENT_INFO: SystemEnvironmentInfo = {
   displayName: "Git Worktree Workspace",
   description:
     "Provision an isolated per-thread git worktree when the project is a git repository.",
+  capabilities: {
+    host_filesystem: true,
+    isolated_workspace: true,
+    promote_primary_checkout: true,
+    demote_primary_checkout: true,
+    squash_merge: true,
+  },
 };
 const DEFAULT_WORKTREE_ROOT = "~/.beanbag/worktrees";
 
@@ -256,19 +263,6 @@ class WorktreeEnvironment implements IEnvironment {
       this,
       args,
       this.services?.llmCompletion,
-      (result) =>
-        this.services?.appendEvent?.(
-          "system/worktree/commit",
-          {
-            status: result.commitCreated ? "committed" : "noop",
-            message: result.message,
-            ...(result.commitSha ? { commitSha: result.commitSha } : {}),
-            ...(result.includeUnstaged !== undefined
-              ? { includeUnstaged: result.includeUnstaged }
-              : {}),
-          },
-          { broadcastChanges: ["events-appended", "work-status-changed"] },
-        ),
     );
   }
 
@@ -417,24 +411,13 @@ class WorktreeEnvironment implements IEnvironment {
       "--count",
       `${mergeBaseBranch}...HEAD`,
     ]);
-    if (aheadResult.exitCode === 0) {
-      const [, aheadRaw] = aheadResult.stdout.split("\t");
-      const aheadCount = Number.parseInt(aheadRaw ?? "0", 10);
-      if (!Number.isNaN(aheadCount) && aheadCount <= 0) {
-        const result = { merged: false, message: "No commits to merge", committed };
-        this.services?.appendEvent?.(
-          "system/worktree/squash_merge",
-          {
-            status: "noop",
-            message: result.message,
-            committed,
-            ...(mergeBaseBranch ? { mergeBaseBranch } : {}),
-          },
-          { broadcastChanges: ["events-appended", "work-status-changed"] },
-        );
-        return result;
+      if (aheadResult.exitCode === 0) {
+        const [, aheadRaw] = aheadResult.stdout.split("\t");
+        const aheadCount = Number.parseInt(aheadRaw ?? "0", 10);
+        if (!Number.isNaN(aheadCount) && aheadCount <= 0) {
+          return { merged: false, message: "No commits to merge", committed };
+        }
       }
-    }
 
     const tempRoot = mkdtempSync(join(tmpdir(), "beanbag-squash-merge-"));
     const tempWorkspaceRoot = resolve(tempRoot, "integration");
@@ -463,7 +446,7 @@ class WorktreeEnvironment implements IEnvironment {
           "--diff-filter=U",
         ]);
         runGitAtPath(tempWorkspaceRoot, ["reset", "--hard"]);
-        const result = {
+        return {
           merged: false,
           message:
             `Squash merge has conflicts against ${mergeBaseBranch}. Rebase/merge ${mergeBaseBranch} into the worktree, resolve conflicts, and retry.`,
@@ -477,18 +460,6 @@ class WorktreeEnvironment implements IEnvironment {
               }
             : {}),
         };
-        this.services?.appendEvent?.(
-          "system/worktree/squash_merge",
-          {
-            status: "conflict",
-            message: result.message,
-            committed,
-            ...(mergeBaseBranch ? { mergeBaseBranch } : {}),
-            ...(result.conflictFiles ? { conflictFiles: result.conflictFiles } : {}),
-          },
-          { broadcastChanges: ["events-appended", "work-status-changed"] },
-        );
-        return result;
       }
 
       const hasSquashedChanges = runGitAtPath(tempWorkspaceRoot, [
@@ -497,18 +468,7 @@ class WorktreeEnvironment implements IEnvironment {
         "--quiet",
       ]);
       if (hasSquashedChanges.ok) {
-        const result = { merged: false, message: "No changes to merge after squash", committed };
-        this.services?.appendEvent?.(
-          "system/worktree/squash_merge",
-          {
-            status: "noop",
-            message: result.message,
-            committed,
-            ...(mergeBaseBranch ? { mergeBaseBranch } : {}),
-          },
-          { broadcastChanges: ["events-appended", "work-status-changed"] },
-        );
-        return result;
+        return { merged: false, message: "No changes to merge after squash", committed };
       }
 
       const sourceBranch = runGitAtPath(this.rootPath, ["symbolic-ref", "--quiet", "--short", "HEAD"]);
@@ -570,22 +530,11 @@ class WorktreeEnvironment implements IEnvironment {
         }
       }
 
-      const result = {
+      return {
         merged: true,
         message: `Squash-merged into ${mergeBaseBranch}`,
         committed,
       };
-      this.services?.appendEvent?.(
-        "system/worktree/squash_merge",
-        {
-          status: "merged",
-          message: result.message,
-          committed,
-          ...(mergeBaseBranch ? { mergeBaseBranch } : {}),
-        },
-        { broadcastChanges: ["events-appended", "work-status-changed"] },
-      );
-      return result;
     } finally {
       runGitAtPath(args.activeWorkspaceRoot, [
         "worktree",

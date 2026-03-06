@@ -5,6 +5,7 @@ import type {
   OpenPathRequest,
   SystemEnvironmentInfo,
   SystemProviderInfo,
+  SystemWorkflowInfo,
   Thread,
   ThreadOrchestrator,
 } from "@beanbag/agent-core";
@@ -39,11 +40,26 @@ function makeModel(overrides: Partial<AvailableModel> = {}): AvailableModel {
   };
 }
 
-function mockThreadManager(): ThreadOrchestrator {
+function mockOrchestrator(): ThreadOrchestrator {
   const environmentInfo: SystemEnvironmentInfo = {
     id: "local",
     displayName: "Local Workspace",
+    capabilities: {
+      host_filesystem: true,
+      isolated_workspace: false,
+      promote_primary_checkout: false,
+      demote_primary_checkout: false,
+      squash_merge: false,
+    },
   };
+  const workflows: SystemWorkflowInfo[] = [
+    {
+      kind: "noop",
+      displayName: "No Structured Workflow",
+      description: "No pre-defined branch, commit, or merge policy.",
+      requiredEnvironmentCapabilities: [],
+    },
+  ];
 
   return {
     list: vi.fn(),
@@ -52,13 +68,13 @@ function mockThreadManager(): ThreadOrchestrator {
     listModels: vi.fn(),
     getProviderInfo: vi.fn(),
     listProviders: vi.fn(() => []),
-    getEnvironmentInfo: vi.fn(() => environmentInfo),
     listEnvironments: vi.fn(() => [environmentInfo]),
+    listWorkflows: vi.fn(() => workflows),
   } as unknown as ThreadOrchestrator;
 }
 
 describe("System routes", () => {
-  let threadManager: ReturnType<typeof mockThreadManager>;
+  let threadManager: ReturnType<typeof mockOrchestrator>;
   let pickFolder: ReturnType<typeof vi.fn<() => Promise<string | null>>>;
   let listModels: ReturnType<typeof vi.fn<() => Promise<AvailableModel[]>>>;
   let getProviderInfo: ReturnType<typeof vi.fn<() => SystemProviderInfo>>;
@@ -72,7 +88,7 @@ describe("System routes", () => {
   const startTime = Date.now() - 3600_000;
 
   beforeEach(() => {
-    threadManager = mockThreadManager();
+    threadManager = mockOrchestrator();
     pickFolder = vi.fn();
     listModels = vi.fn();
     getProviderInfo = vi.fn();
@@ -412,38 +428,70 @@ describe("System routes", () => {
     });
   });
 
-  describe("GET /system/environment + /system/environments", () => {
-    it("returns active environment and environment catalog", async () => {
-      const activeEnvironment: SystemEnvironmentInfo = {
-        id: "worktree",
-        displayName: "Git Worktree Workspace",
-      };
+  describe("GET /system/environments + /system/workflows", () => {
+    it("returns environment and workflow catalogs", async () => {
       const environments: SystemEnvironmentInfo[] = [
         {
           id: "local",
           displayName: "Local Workspace",
+          capabilities: {
+            host_filesystem: true,
+            isolated_workspace: false,
+            promote_primary_checkout: false,
+            demote_primary_checkout: false,
+            squash_merge: false,
+          },
         },
-        activeEnvironment,
+        {
+          id: "worktree",
+          displayName: "Git Worktree Workspace",
+          capabilities: {
+            host_filesystem: true,
+            isolated_workspace: true,
+            promote_primary_checkout: true,
+            demote_primary_checkout: true,
+            squash_merge: true,
+          },
+        },
+      ];
+      const workflows: SystemWorkflowInfo[] = [
+        {
+          kind: "noop",
+          displayName: "No Structured Workflow",
+          description: "No pre-defined branch, commit, or merge policy.",
+          requiredEnvironmentCapabilities: [],
+        },
+        {
+          kind: "branch-commit-merge",
+          displayName: "Branch, Commit, Merge",
+          description: "Work in an isolated branch workspace and complete with commit and merge-back.",
+          requiredEnvironmentCapabilities: [
+            "isolated_workspace",
+            "promote_primary_checkout",
+            "demote_primary_checkout",
+            "squash_merge",
+          ],
+        },
       ];
 
       (
-        threadManager.getEnvironmentInfo as unknown as ReturnType<typeof vi.fn>
-      ).mockReturnValue(activeEnvironment);
-      (
         threadManager.listEnvironments as unknown as ReturnType<typeof vi.fn>
       ).mockReturnValue(environments);
+      (
+        threadManager.listWorkflows as unknown as ReturnType<typeof vi.fn>
+      ).mockReturnValue(workflows);
 
-      const [activeRes, allRes] = await Promise.all([
-        app.request("/system/environment"),
+      const [environmentRes, workflowRes] = await Promise.all([
         app.request("/system/environments"),
+        app.request("/system/workflows"),
       ]);
 
-      expect(activeRes.status).toBe(200);
-      expect(await activeRes.json()).toEqual(activeEnvironment);
-      expect(allRes.status).toBe(200);
-      expect(await allRes.json()).toEqual(environments);
-      expect(threadManager.getEnvironmentInfo).toHaveBeenCalledTimes(1);
+      expect(environmentRes.status).toBe(200);
+      expect(await environmentRes.json()).toEqual(environments);
+      expect(workflowRes.status).toBe(200);
+      expect(await workflowRes.json()).toEqual(workflows);
       expect(threadManager.listEnvironments).toHaveBeenCalledTimes(1);
+      expect(threadManager.listWorkflows).toHaveBeenCalledTimes(1);
     });
   });
 

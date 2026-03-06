@@ -7,10 +7,8 @@ import {
 } from "node:fs";
 import { join, resolve } from "node:path";
 import type {
-  ThreadGitDiffCommitSummary,
-  ThreadWorkStatus,
-} from "@beanbag/agent-core";
-import type {
+  EnvironmentCommitSummary,
+  EnvironmentWorkStatus,
   EnvironmentWorkspaceCommitOptions,
   EnvironmentWorkspaceCommitResult,
   EnvironmentWorkspaceCommitsOptions,
@@ -457,7 +455,7 @@ function resolveMergeBaseSelection(args: {
 function toState(args: {
   hasUncommittedChanges: boolean;
   hasCommittedUnmergedChanges: boolean;
-}): ThreadWorkStatus["state"] {
+}): EnvironmentWorkStatus["state"] {
   if (args.hasUncommittedChanges && args.hasCommittedUnmergedChanges) {
     return "dirty_and_committed_unmerged";
   }
@@ -480,7 +478,7 @@ function trimDiffForResponse(diff: string): EnvironmentWorkspaceDiffResult {
   };
 }
 
-function parseCommitSummaries(raw: string): ThreadGitDiffCommitSummary[] {
+function parseCommitSummaries(raw: string): EnvironmentCommitSummary[] {
   if (!raw) return [];
   return raw
     .split("\n")
@@ -498,12 +496,12 @@ function parseCommitSummaries(raw: string): ThreadGitDiffCommitSummary[] {
         subject: subject.length > 0 ? subject : "(no subject)",
         ...(authorName ? { authorName } : {}),
         ...(Number.isFinite(authoredAt) ? { authoredAt } : {}),
-      } satisfies ThreadGitDiffCommitSummary;
+      } satisfies EnvironmentCommitSummary;
     })
-    .filter((entry): entry is ThreadGitDiffCommitSummary => entry !== null);
+    .filter((entry): entry is EnvironmentCommitSummary => entry !== null);
 }
 
-function cleanStatus(workspaceRoot: string): ThreadWorkStatus {
+function cleanStatus(workspaceRoot: string): EnvironmentWorkStatus {
   return {
     state: "clean",
     changedFiles: 0,
@@ -520,14 +518,14 @@ function cleanStatus(workspaceRoot: string): ThreadWorkStatus {
   };
 }
 
-function untrackedStatus(workspaceRoot: string): ThreadWorkStatus {
+function untrackedStatus(workspaceRoot: string): EnvironmentWorkStatus {
   return {
     ...cleanStatus(workspaceRoot),
     state: "untracked",
   };
 }
 
-function deletedStatus(workspaceRoot: string): ThreadWorkStatus {
+function deletedStatus(workspaceRoot: string): EnvironmentWorkStatus {
   return {
     ...cleanStatus(workspaceRoot),
     state: "deleted",
@@ -537,7 +535,7 @@ function deletedStatus(workspaceRoot: string): ThreadWorkStatus {
 export function getGitWorkspaceStatus(
   environment: IEnvironment,
   args?: EnvironmentWorkspaceStatusOptions,
-): ThreadWorkStatus {
+): EnvironmentWorkStatus {
   const workspaceRoot = environment.getWorkspaceRootUnsafe();
   const workspaceExists = environment.exists();
   if (!workspaceExists) {
@@ -682,7 +680,7 @@ export function watchGitWorkspaceStatus(
 export function listGitWorkspaceCommitsSinceRef(
   environment: IEnvironment,
   args: EnvironmentWorkspaceCommitsOptions,
-): ThreadGitDiffCommitSummary[] {
+): EnvironmentCommitSummary[] {
   const baseRef = args.baseRef?.trim();
   if (!baseRef) return [];
   const logResult = runGit(environment, [
@@ -705,7 +703,7 @@ export function commitGitWorkspace(
     cwd: string;
     includeUnstaged?: boolean;
   }) => Promise<string | undefined>,
-  appendEvent?: (result: EnvironmentWorkspaceCommitResult) => void,
+  onResult?: (result: EnvironmentWorkspaceCommitResult) => void,
 ): Promise<EnvironmentWorkspaceCommitResult> {
   const before = getGitWorkspaceStatus(environment, {
     ...(args.defaultBranch ? { defaultBranch: args.defaultBranch } : {}),
@@ -718,7 +716,7 @@ export function commitGitWorkspace(
       workStatus: before,
       ...(args.includeUnstaged !== undefined ? { includeUnstaged: args.includeUnstaged } : {}),
     } satisfies EnvironmentWorkspaceCommitResult;
-    appendEvent?.(result);
+    onResult?.(result);
     return Promise.resolve(result);
   }
 
@@ -742,7 +740,7 @@ export function commitGitWorkspace(
       workStatus: afterNoop,
       ...(args.includeUnstaged !== undefined ? { includeUnstaged: args.includeUnstaged } : {}),
     } satisfies EnvironmentWorkspaceCommitResult;
-    appendEvent?.(result);
+    onResult?.(result);
     return Promise.resolve(result);
   }
 
@@ -775,7 +773,7 @@ export function commitGitWorkspace(
       ...(shaResult.ok && shaResult.stdout ? { commitSha: shaResult.stdout } : {}),
       ...(args.includeUnstaged !== undefined ? { includeUnstaged: args.includeUnstaged } : {}),
     } satisfies EnvironmentWorkspaceCommitResult;
-    appendEvent?.(result);
+    onResult?.(result);
     return result;
   })();
 }

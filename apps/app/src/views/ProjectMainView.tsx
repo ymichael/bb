@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { FolderGit2, Laptop } from "lucide-react";
+import { FolderGit2, GitBranchPlus, Laptop } from "lucide-react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { buildThreadOperationInstruction } from "@beanbag/agent-core";
 import { PromptBox } from "@/components/promptbox/PromptBox";
@@ -11,6 +11,7 @@ import {
   useProjectWorkspaceStatus,
   useProjects,
   useSpawnThread,
+  useSystemEnvironments,
   useUploadPromptAttachment,
 } from "@/hooks/useApi";
 import { usePromptDraftStorage } from "@/hooks/usePromptDraftStorage";
@@ -27,6 +28,7 @@ export function ProjectMainView() {
   const location = useLocation();
   const navigate = useNavigate();
   const { data: projects, isLoading: projectsLoading } = useProjects();
+  const { data: environments } = useSystemEnvironments();
   const { data: workspaceStatus, isLoading: threadsLoading } = useProjectWorkspaceStatus(projectId);
   const spawnThread = useSpawnThread();
   const spawnCommitThread = useSpawnThread();
@@ -56,26 +58,32 @@ export function ProjectMainView() {
     setSandboxMode,
     environmentId,
     setEnvironmentId,
+    workflowId,
+    setWorkflowId,
     activeModel,
     modelOptions,
     reasoningOptions,
     sandboxOptions,
     environmentOptions,
+    workflowOptions,
   } = usePromptModelReasoning({ scope: "new-thread", projectId });
   const environmentSelectorOptions = useMemo(
     () =>
       environmentOptions.map((option) => {
-        switch (option.value) {
-          case "local":
-            return { ...option, label: "Local", icon: Laptop };
-          case "worktree":
-            return { ...option, label: "New worktree", icon: FolderGit2 };
-          default:
-            // Intentionally preserve unknown environment IDs surfaced by the daemon.
-            return option;
+        const normalized = option.label.toLowerCase();
+        if (normalized.includes("isolated") || normalized.includes("worktree")) {
+          return { ...option, icon: FolderGit2 };
         }
+        if (normalized.includes("direct") || normalized.includes("local")) {
+          return { ...option, icon: Laptop };
+        }
+        return option;
       }),
     [environmentOptions],
+  );
+  const workflowSelectorOptions = useMemo(
+    () => workflowOptions.map((option) => ({ ...option, icon: GitBranchPlus })),
+    [workflowOptions],
   );
   const projectOptions = useMemo(() => {
     const knownOptions =
@@ -129,6 +137,10 @@ export function ProjectMainView() {
       actionable: false,
     };
   }, [workspaceStatus]);
+  const selectedEnvironment = useMemo(
+    () => environments?.find((environment) => environment.id === environmentId),
+    [environmentId, environments],
+  );
   const handleProjectChange = useCallback((nextProjectId: string) => {
     if (nextProjectId === projectId) return;
     navigate(`/projects/${nextProjectId}`);
@@ -191,6 +203,7 @@ export function ProjectMainView() {
         reasoningLevel,
         sandboxMode,
         environmentId,
+        workflowId,
       });
       promptDraft.clear();
       setAttachmentError(null);
@@ -257,6 +270,12 @@ export function ProjectMainView() {
                 options={sandboxOptions}
                 onChange={setSandboxMode}
               />
+              <PromptOptionPicker
+                label="Workflow"
+                value={workflowId}
+                options={workflowSelectorOptions}
+                onChange={setWorkflowId}
+              />
             </>
           }
         />
@@ -268,7 +287,10 @@ export function ProjectMainView() {
               options={environmentSelectorOptions}
               onChange={setEnvironmentId}
             />
-            {!threadsLoading && environmentId === "local" ? (
+            {!threadsLoading &&
+            workflowId === "noop" &&
+            selectedEnvironment?.capabilities.host_filesystem === true &&
+            selectedEnvironment.capabilities.isolated_workspace === false ? (
               <div className="flex items-center">
                 <StatusPillCommitPopover
                   status={workspaceStatus}
@@ -294,7 +316,8 @@ export function ProjectMainView() {
                       model: activeModel?.model,
                       reasoningLevel,
                       sandboxMode,
-                      environmentId: "local",
+                      environmentId,
+                      workflowId: "noop",
                       title: "Commit workspace changes",
                     });
                     navigate(`/projects/${projectId}/threads/${thread.id}`);

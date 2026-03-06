@@ -6,15 +6,25 @@ import type {
 import type { ThreadDetailRow } from "./thread-detail-rows.js";
 import type { UIMessage } from "./ui-message.js";
 import type {
+  EnvironmentCapabilities,
   ThreadQueuedMessage,
   ThreadStatus,
+  ThreadWorkflowState,
   ThreadWorkStatus,
+  WorkflowDefinitionSummary,
+  WorkflowKind,
 } from "./types.js";
 export type {
   PromptInput,
   ReasoningLevel,
   SandboxMode,
 } from "./shared-types.js";
+export type {
+  EnvironmentCapabilities,
+  ThreadWorkflowState,
+  WorkflowDefinitionSummary,
+  WorkflowKind,
+} from "./types.js";
 
 export interface ModelReasoningEffort {
   reasoningEffort: ReasoningLevel;
@@ -40,6 +50,7 @@ export interface SpawnThreadRequest {
   reasoningLevel?: ReasoningLevel;
   sandboxMode?: SandboxMode;
   environmentId?: string;
+  workflowId?: WorkflowKind;
   developerInstructions?: string;
   parentThreadId?: string;
 }
@@ -301,4 +312,7 @@ export interface SystemEnvironmentInfo {
   id: string;
   displayName: string;
   description?: string;
+  capabilities: EnvironmentCapabilities;
 }
+
+export interface SystemWorkflowInfo extends WorkflowDefinitionSummary {}

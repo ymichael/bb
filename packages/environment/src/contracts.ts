@@ -2,11 +2,6 @@ import type { ChildProcess, SpawnOptions } from "node:child_process";
 import type {
   PersistedEnvironmentRecord,
   SystemEnvironmentInfo,
-  ThreadChangeKind,
-  ThreadEventDataForType,
-  ThreadEventType,
-  ThreadGitDiffCommitSummary,
-  ThreadWorkStatus,
 } from "@beanbag/agent-core";
 
 export interface CreateEnvironmentContext {
@@ -18,11 +13,6 @@ export interface CreateEnvironmentContext {
 }
 
 export interface EnvironmentServices {
-  appendEvent?<TType extends ThreadEventType>(
-    type: TType,
-    data: ThreadEventDataForType<TType>,
-    opts?: { broadcastChanges?: readonly ThreadChangeKind[] | false },
-  ): void;
   llmCompletion?(args: {
     cwd: string;
     includeUnstaged?: boolean;
@@ -59,10 +49,10 @@ export interface IEnvironment {
   isIsolatedWorkspace(): boolean;
   getCheckoutSnapshot(): EnvironmentCheckoutSnapshot;
   getWorkspaceRootUnsafe(): string;
-  getWorkspaceStatus(args?: EnvironmentWorkspaceStatusOptions): ThreadWorkStatus;
+  getWorkspaceStatus(args?: EnvironmentWorkspaceStatusOptions): EnvironmentWorkStatus;
   watchWorkspaceStatus(onChange: () => void): () => void;
   commitWorkspace(args: EnvironmentWorkspaceCommitOptions): Promise<EnvironmentWorkspaceCommitResult>;
-  listWorkspaceCommitsSinceRef(args: EnvironmentWorkspaceCommitsOptions): ThreadGitDiffCommitSummary[];
+  listWorkspaceCommitsSinceRef(args: EnvironmentWorkspaceCommitsOptions): EnvironmentCommitSummary[];
   getWorkspaceDiff(args: EnvironmentWorkspaceDiffOptions): EnvironmentWorkspaceDiffResult;
   spawn(
     command: string,
@@ -110,9 +100,50 @@ export interface EnvironmentWorkspaceCommitResult {
   ok: true;
   commitCreated: boolean;
   message: string;
-  workStatus: ThreadWorkStatus;
+  workStatus: EnvironmentWorkStatus;
   commitSha?: string;
   includeUnstaged?: boolean;
+}
+
+export type EnvironmentWorkState =
+  | "clean"
+  | "untracked"
+  | "deleted"
+  | "dirty_uncommitted"
+  | "committed_unmerged"
+  | "dirty_and_committed_unmerged";
+
+export interface EnvironmentWorkFileChange {
+  path: string;
+  status: string;
+}
+
+export interface EnvironmentWorkStatus {
+  state: EnvironmentWorkState;
+  changedFiles: number;
+  insertions: number;
+  deletions: number;
+  workspaceChangedFiles: number;
+  workspaceInsertions: number;
+  workspaceDeletions: number;
+  hasUncommittedChanges: boolean;
+  hasCommittedUnmergedChanges: boolean;
+  aheadCount: number;
+  behindCount: number;
+  currentBranch?: string;
+  defaultBranch?: string;
+  mergeBaseBranch?: string;
+  mergeBaseBranches?: string[];
+  baseRef?: string;
+  files?: EnvironmentWorkFileChange[];
+}
+
+export interface EnvironmentCommitSummary {
+  sha: string;
+  shortSha: string;
+  subject: string;
+  authorName?: string;
+  authoredAt?: number;
 }
 
 export type EnvironmentWorkspaceDiffOptions =

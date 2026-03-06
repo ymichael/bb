@@ -22,6 +22,7 @@ import type {
   SystemShutdownRequest,
   SystemEnvironmentInfo,
   SystemProviderInfo,
+  SystemWorkflowInfo,
   AvailableModel,
   ProjectFileSuggestion,
   ThreadExecutionOptions,
@@ -429,18 +430,18 @@ export function useSystemProviders() {
   });
 }
 
-export function useSystemEnvironment() {
-  return useQuery<SystemEnvironmentInfo>({
-    queryKey: ["systemEnvironment"],
-    queryFn: () => api.getSystemEnvironment(),
-    staleTime: 60_000,
-  });
-}
-
 export function useSystemEnvironments() {
   return useQuery<SystemEnvironmentInfo[]>({
     queryKey: ["systemEnvironments"],
     queryFn: () => api.listSystemEnvironments(),
+    staleTime: 60_000,
+  });
+}
+
+export function useSystemWorkflows() {
+  return useQuery<SystemWorkflowInfo[]>({
+    queryKey: ["systemWorkflows"],
+    queryFn: () => api.listSystemWorkflows(),
     staleTime: 60_000,
   });
 }

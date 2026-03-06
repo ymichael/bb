@@ -41,6 +41,7 @@ import {
   useDemotePrimaryCheckout,
   useStopThread,
   useMarkThreadRead,
+  useSystemEnvironments,
   useUnarchiveThread,
   useThreadDefaultExecutionOptions,
   useUploadPromptAttachment,
@@ -814,6 +815,7 @@ export function ThreadDetailView() {
   const markThreadRead = useMarkThreadRead();
   const uploadPromptAttachment = useUploadPromptAttachment();
   const promptDraft = usePromptDraftStorage({ projectId, threadId });
+  const environmentCatalog = useSystemEnvironments();
   const fileMentions = usePromptFileMentions(projectId);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const [loadingToolGroupIds, setLoadingToolGroupIds] = useState<Set<string>>(new Set());
@@ -876,6 +878,7 @@ export function ThreadDetailView() {
     initialReasoningLevel: defaultExecutionOptions?.reasoningLevel,
     initialSandboxMode: defaultExecutionOptions?.sandboxMode,
     initialEnvironmentId: thread?.environmentId,
+    initialWorkflowId: thread?.workflowId,
   });
   const preferredTheme = usePreferredTheme();
   const gitDiffViewOptions = useMemo(
@@ -901,6 +904,20 @@ export function ThreadDetailView() {
   const isReasoningBlockActive = false;
   const isTimelineLoading = timelineLoading;
   const isThreadPrimaryCheckoutActive = thread?.primaryCheckout?.isActive === true;
+  const environmentInfo = useMemo(
+    () =>
+      environmentCatalog.data?.find((environment) => environment.id === thread?.environmentId),
+    [environmentCatalog.data, thread?.environmentId],
+  );
+  const supportsPrimaryCheckout = Boolean(
+    environmentInfo?.capabilities.promote_primary_checkout &&
+      environmentInfo?.capabilities.demote_primary_checkout &&
+      thread?.workflowId === "branch-commit-merge",
+  );
+  const supportsSquashMerge = Boolean(
+    environmentInfo?.capabilities.squash_merge &&
+      thread?.workflowId === "branch-commit-merge",
+  );
   const gitDiffSelection = useMemo(
     () =>
       selectedGitDiffCommitSha
@@ -1700,11 +1717,13 @@ export function ThreadDetailView() {
   const isArchivedThread = thread.archivedAt !== undefined;
   const showWorkspaceStatus =
     Boolean(threadWorkStatus) &&
-    !(thread.archivedAt !== undefined && thread.environmentId === "local");
+    !(thread.archivedAt !== undefined && environmentInfo?.capabilities.isolated_workspace !== true);
   const showThreadMetadata = Boolean(
     parentThreadId ||
       thread.archivedAt !== undefined ||
       thread.environmentId ||
+      thread.workflowId ||
+      thread.workflowState ||
       isPrimaryCheckoutActive ||
       showWorkspaceStatus,
   );
@@ -1875,10 +1894,26 @@ export function ThreadDetailView() {
                 label="Environment"
                 valueClassName="min-w-0 truncate"
               >
-                <span>{thread.environmentId}</span>
+                <span>{environmentInfo?.displayName ?? thread.environmentId}</span>
               </DetailRow>
             ) : null}
-            {thread.environmentId === "worktree" && !isArchivedThread ? (
+            {thread.workflowId ? (
+              <DetailRow
+                label="Workflow"
+                valueClassName="min-w-0 truncate"
+              >
+                <span>{thread.workflowId}</span>
+              </DetailRow>
+            ) : null}
+            {thread.workflowState ? (
+              <DetailRow
+                label="Workflow status"
+                valueClassName="min-w-0 truncate"
+              >
+                <span>{thread.workflowState.summary}</span>
+              </DetailRow>
+            ) : null}
+            {supportsPrimaryCheckout && !isArchivedThread ? (
               <DetailRow
                 label="Primary checkout"
                 valueClassName="min-w-0"
@@ -1948,7 +1983,7 @@ export function ThreadDetailView() {
                   }
                   canCommit={threadWorkStatus.hasUncommittedChanges}
                   canSquashMerge={
-                    thread.environmentId === "worktree" &&
+                    supportsSquashMerge &&
                     (
                       threadWorkStatus.hasCommittedUnmergedChanges ||
                       threadWorkStatus.hasUncommittedChanges

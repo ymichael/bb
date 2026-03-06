@@ -25,6 +25,7 @@
     "@beanbag/environment": "workspace:*",
     "@beanbag/agent-server": "workspace:*",
     "@beanbag/db": "workspace:*",
+    "@beanbag/workflow": "workspace:*",
     "@hono/node-server": "^1.13.0",
     "@hono/node-ws": "^1.1.0",
     "@hono/zod-validator": "^0.4.0",

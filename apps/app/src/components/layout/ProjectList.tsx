@@ -19,6 +19,7 @@ import {
   useMarkThreadRead,
   useMarkThreadUnread,
   useProjects,
+  useSystemEnvironments,
   useThreadWorkStatusLookup,
   useThreads,
   useUnarchiveThread,
@@ -83,6 +84,11 @@ export function ProjectList({
   isCreatingProject = false,
 }: ProjectListProps) {
   const { data: projects, isLoading: projectsLoading } = useProjects()
+  const { data: environments } = useSystemEnvironments()
+  const environmentById = useMemo(
+    () => new Map((environments ?? []).map((environment) => [environment.id, environment])),
+    [environments],
+  )
   const { data: threads, isLoading: threadsLoading } = useThreads()
   const archiveThread = useArchiveThread()
   const threadWorkStatusLookup = useThreadWorkStatusLookup()
@@ -429,6 +435,9 @@ export function ProjectList({
                           const showUnreadBadge = isUnreadDoneThread(thread)
                           const isThreadActionsOpen = openThreadActionsThreadId === thread.id
                           const isThreadActive = selectedThreadId === thread.id
+                          const environmentInfo = thread.environmentId
+                            ? environmentById.get(thread.environmentId)
+                            : undefined
 
                           return (
                             <div
@@ -465,7 +474,7 @@ export function ProjectList({
                                   <StatusPill variant="emphasis">active</StatusPill>
                                 ) : null}
                                 <span className="relative h-7 w-7 shrink-0">
-                                  {thread.environmentId === "worktree" ? (
+                                  {environmentInfo?.capabilities.isolated_workspace ? (
                                     <span
                                       className={cn(
                                         "absolute inset-0 flex items-center justify-center transition-opacity",

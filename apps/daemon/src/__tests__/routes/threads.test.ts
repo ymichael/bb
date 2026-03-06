@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { Hono } from "hono";
 import type { Thread, ThreadEvent } from "@beanbag/agent-core";
 import { createThreadRoutes } from "../../routes/threads.js";
-import type { ThreadManager } from "../../thread-manager.js";
+import type { Orchestrator } from "../../orchestrator.js";
 import { inactiveSessionError, threadArchivedError } from "../../domain-errors.js";
 
 function makeThread(overrides: Partial<Thread> = {}): Thread {
@@ -54,7 +54,7 @@ function makeWorkStatus() {
   };
 }
 
-function mockThreadManager(): ThreadManager {
+function mockOrchestrator(): Orchestrator {
   return {
     spawn: vi.fn(),
     tell: vi.fn(),
@@ -83,15 +83,15 @@ function mockThreadManager(): ThreadManager {
     isActive: vi.fn(),
     getActiveCount: vi.fn(),
     stopAll: vi.fn(),
-  } as unknown as ThreadManager;
+  } as unknown as Orchestrator;
 }
 
 describe("Thread routes", () => {
-  let threadManager: ReturnType<typeof mockThreadManager>;
+  let threadManager: ReturnType<typeof mockOrchestrator>;
   let app: Hono;
 
   beforeEach(() => {
-    threadManager = mockThreadManager();
+    threadManager = mockOrchestrator();
     const routes = createThreadRoutes(threadManager);
     app = new Hono().route("/threads", routes);
   });

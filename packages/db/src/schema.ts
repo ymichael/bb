@@ -26,6 +26,8 @@ export const threads = sqliteTable(
     status: text("status").notNull().default("created"),
     environmentId: text("environment_id"),
     environmentRecord: text("environment_record"),
+    workflowId: text("workflow_id"),
+    workflowState: text("workflow_state"),
     parentThreadId: text("parent_thread_id"),
     archivedAt: integer("archived_at"),
     lastReadAt: integer("last_read_at").notNull().default(0),

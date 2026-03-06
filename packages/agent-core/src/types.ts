@@ -20,6 +20,38 @@ export interface Project {
 }
 
 // Thread
+export type WorkflowKind = "noop" | "branch-commit-merge";
+export type EnvironmentCapability =
+  | "host_filesystem"
+  | "isolated_workspace"
+  | "promote_primary_checkout"
+  | "demote_primary_checkout"
+  | "squash_merge";
+
+export type EnvironmentCapabilities = Record<EnvironmentCapability, boolean>;
+
+export interface WorkflowCompatibilityResult {
+  ok: boolean;
+  missingRequirements: Array<{
+    capability: string;
+    reason: string;
+  }>;
+}
+
+export interface WorkflowDefinitionSummary {
+  kind: WorkflowKind;
+  displayName: string;
+  description?: string;
+  requiredEnvironmentCapabilities: EnvironmentCapability[];
+}
+
+export interface ThreadWorkflowState {
+  phase: "preparing" | "working" | "completed" | "failed";
+  summary: string;
+  terminal: boolean;
+  successful?: boolean;
+}
+
 export type ThreadStatus =
   | "created"
   | "provisioning"
@@ -48,6 +80,8 @@ export interface Thread {
   queuedMessages?: ThreadQueuedMessage[];
   environmentId?: string;
   environmentRecord?: PersistedEnvironmentRecord;
+  workflowId?: WorkflowKind;
+  workflowState?: ThreadWorkflowState;
   parentThreadId?: string;
   archivedAt?: number;
   lastReadAt?: number;

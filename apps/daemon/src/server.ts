@@ -21,7 +21,7 @@ import {
   listAvailableEnvironmentInfos,
 } from "@beanbag/environment";
 import { WSManager } from "./ws.js";
-import { ThreadManager } from "./thread-manager.js";
+import { Orchestrator } from "./orchestrator.js";
 import { createApiRoutes } from "./routes/index.js";
 import { InMemorySchedulerService } from "./scheduler-service.js";
 import { createRestartRecommendationEvaluator } from "./restart-recommendation.js";
@@ -55,7 +55,7 @@ export function createServer(deps: ServerDeps) {
   const environmentCatalog = listAvailableEnvironmentInfos(environmentRegistry);
   const scheduler = new InMemorySchedulerService();
   const llmCompletionService = createCodexLlmCompletionService();
-  const threadManager = new ThreadManager(
+  const threadManager = new Orchestrator(
     deps.threadRepo,
     deps.eventRepo,
     deps.projectRepo,

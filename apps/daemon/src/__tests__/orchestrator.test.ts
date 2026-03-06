@@ -36,7 +36,7 @@ import {
   createCodexProviderAdapter,
   type LlmCompletionService,
 } from "@beanbag/agent-server";
-import { ThreadManager } from "../thread-manager.js";
+import { Orchestrator } from "../orchestrator.js";
 import { WSManager } from "../ws.js";
 
 function makeWorkspaceStatus(): ThreadWorkStatus {
@@ -75,6 +75,13 @@ function createTestEnvironmentRegistry(args: {
     id: kind,
     displayName: args.displayName ?? "Git Worktree Workspace",
     description: "",
+    capabilities: {
+      host_filesystem: true,
+      isolated_workspace: kind === "worktree",
+      promote_primary_checkout: kind === "worktree",
+      demote_primary_checkout: kind === "worktree",
+      squash_merge: kind === "worktree",
+    },
   };
 
   return new EnvironmentRegistry().register({
@@ -122,6 +129,13 @@ function makeRuntimeEnvironment(args: {
     id: kind,
     displayName: kind === "worktree" ? "Git Worktree Workspace" : "Direct Workspace",
     description: "",
+    capabilities: {
+      host_filesystem: true,
+      isolated_workspace: kind === "worktree",
+      promote_primary_checkout: kind === "worktree",
+      demote_primary_checkout: kind === "worktree",
+      squash_merge: kind === "worktree",
+    },
   };
 
   return {
@@ -183,13 +197,13 @@ function makeRuntimeEnvironment(args: {
       return false;
     },
     supportsPromoteToActiveWorkspace() {
-      return false;
+      return kind === "worktree";
     },
     supportsDemoteFromActiveWorkspace() {
-      return false;
+      return kind === "worktree";
     },
     supportsSquashMergeIntoDefaultBranch() {
-      return false;
+      return kind === "worktree";
     },
     promoteToActiveWorkspace() {
       throw new Error("not implemented");
@@ -242,7 +256,7 @@ type FakeChildProcess = Omit<
   _emitExit: (code: number | null, signal: string | null) => void;
 };
 
-interface ThreadManagerTestHarness {
+interface OrchestratorTestHarness {
   processes: Map<string, unknown>;
   providerThreadIds: Map<string, string>;
   activeTurnIds: Map<string, string>;
@@ -271,7 +285,7 @@ interface ThreadManagerTestHarness {
   ) => void;
 }
 
-function asThreadManagerHarness(manager: ThreadManager): ThreadManagerTestHarness {
+function asOrchestratorHarness(manager: Orchestrator): OrchestratorTestHarness {
   const rawManager = manager as unknown as {
     agentServer: {
       sessions: Map<string, {
@@ -289,7 +303,10 @@ function asThreadManagerHarness(manager: ThreadManager): ThreadManagerTestHarnes
         };
       };
     };
-  } & ThreadManagerTestHarness;
+    environmentService: {
+      environmentRuntimes: Map<string, unknown>;
+    };
+  } & OrchestratorTestHarness;
   const sessions = rawManager.agentServer.sessions;
 
   const ensureSession = (threadId: string) => {
@@ -379,9 +396,10 @@ function asThreadManagerHarness(manager: ThreadManager): ThreadManagerTestHarnes
     processes,
     providerThreadIds,
     activeTurnIds,
+    environmentRuntimes: rawManager.environmentService.environmentRuntimes,
     provider: rawManager.agentServer.opts.provider,
   });
-  return rawManager as ThreadManagerTestHarness;
+  return rawManager as OrchestratorTestHarness;
 }
 
 function parseRpcMessage(raw: string): ParsedRpcMessage {
@@ -476,12 +494,15 @@ function createFakeChildProcess(opts?: { autoRespond?: boolean }): FakeChildProc
 }
 
 function makeThread(overrides: Partial<Thread> = {}): Thread {
+  const workflowId = overrides.workflowId ??
+    (overrides.environmentId === "worktree" ? "branch-commit-merge" : undefined);
   return {
     id: "thread-1",
     projectId: "proj-1",
     status: "active",
     createdAt: 1000,
     updatedAt: 1000,
+    ...(workflowId ? { workflowId } : {}),
     ...overrides,
   };
 }
@@ -548,13 +569,13 @@ function createMockLlmCompletionService(
   };
 }
 
-describe("ThreadManager", () => {
+describe("Orchestrator", () => {
   let threadRepo: ReturnType<typeof createMocks>["threadRepo"];
   let eventRepo: ReturnType<typeof createMocks>["eventRepo"];
   let projectRepo: ReturnType<typeof createMocks>["projectRepo"];
   let ws: ReturnType<typeof createMocks>["ws"];
   let llmCompletionService: LlmCompletionService;
-  let manager: ThreadManager;
+  let manager: Orchestrator;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -564,7 +585,7 @@ describe("ThreadManager", () => {
     projectRepo = mocks.projectRepo;
     ws = mocks.ws;
     llmCompletionService = createMockLlmCompletionService();
-    manager = new ThreadManager(
+    manager = new Orchestrator(
       threadRepo,
       eventRepo,
       projectRepo,
@@ -591,7 +612,7 @@ describe("ThreadManager", () => {
           capturedContext = context;
         },
       });
-      manager = new ThreadManager(
+      manager = new Orchestrator(
         threadRepo,
         eventRepo,
         projectRepo,
@@ -683,7 +704,7 @@ describe("ThreadManager", () => {
         close: vi.fn(),
       } as unknown as WSManager;
 
-      const bootManager = new ThreadManager(
+      const bootManager = new Orchestrator(
         bootThreadRepo,
         bootEventRepo,
         bootProjectRepo,
@@ -750,10 +771,10 @@ describe("ThreadManager", () => {
       ]);
 
       const scheduleProvisioningSpy = vi
-        .spyOn(asThreadManagerHarness(bootManager), "_scheduleProvisioning")
+        .spyOn(asOrchestratorHarness(bootManager), "_scheduleProvisioning")
         .mockImplementation(() => {});
       const cleanupRuntimeSpy = vi
-        .spyOn(asThreadManagerHarness(bootManager), "_cleanupThreadRuntime")
+        .spyOn(asOrchestratorHarness(bootManager), "_cleanupThreadRuntime")
         .mockImplementation(() => {});
 
       await bootManager.reconcileActiveThreadsOnBoot();
@@ -848,6 +869,12 @@ describe("ThreadManager", () => {
       expect(threadRepo.create).toHaveBeenCalledWith({
         projectId: "proj-1",
         environmentId: "local",
+        workflowId: "noop",
+        workflowState: {
+          phase: "preparing",
+          summary: "Preparing workflow",
+          terminal: false,
+        },
       });
     });
 
@@ -857,7 +884,7 @@ describe("ThreadManager", () => {
         rootPath: "/tmp/thread-worktree",
         onCreate,
       });
-      const managerWithCustomEnvironment = new ThreadManager(
+      const managerWithCustomEnvironment = new Orchestrator(
         threadRepo,
         eventRepo,
         projectRepo,
@@ -894,7 +921,7 @@ describe("ThreadManager", () => {
     });
 
     it("prepends bb path to PATH and injects it into thread/start config", async () => {
-      const tmpRoot = mkdtempSync(join(tmpdir(), "beanbag-thread-manager-"));
+      const tmpRoot = mkdtempSync(join(tmpdir(), "beanbag-orchestrator-"));
       const firstBin = join(tmpRoot, "first-bin");
       const bbBin = join(tmpRoot, "bb-bin");
       mkdirSync(firstBin, { recursive: true });
@@ -907,7 +934,7 @@ describe("ThreadManager", () => {
       const runtimeEnv = { ...process.env, PATH: pathValue };
 
       try {
-        const localManager = new ThreadManager(
+        const localManager = new Orchestrator(
           threadRepo,
           eventRepo,
           projectRepo,
@@ -946,7 +973,7 @@ describe("ThreadManager", () => {
     });
 
     it("creates a bb shim and injects it into PATH when bb is not on PATH", async () => {
-      const tmpRoot = mkdtempSync(join(tmpdir(), "beanbag-thread-manager-"));
+      const tmpRoot = mkdtempSync(join(tmpdir(), "beanbag-orchestrator-"));
       const firstBin = join(tmpRoot, "first-bin");
       const secondBin = join(tmpRoot, "second-bin");
       mkdirSync(firstBin, { recursive: true });
@@ -956,7 +983,7 @@ describe("ThreadManager", () => {
       const runtimeEnv = { ...process.env, PATH: pathValue };
 
       try {
-        const localManager = new ThreadManager(
+        const localManager = new Orchestrator(
           threadRepo,
           eventRepo,
           projectRepo,
@@ -1169,7 +1196,7 @@ describe("ThreadManager", () => {
       const customEnvironmentRegistry = createTestEnvironmentRegistry({
         rootPath: "/tmp/thread-worktree",
       });
-      const managerWithCustomEnvironment = new ThreadManager(
+      const managerWithCustomEnvironment = new Orchestrator(
         threadRepo,
         eventRepo,
         projectRepo,
@@ -1220,82 +1247,8 @@ describe("ThreadManager", () => {
         "[request instructions] add tests",
       );
       expect(startMsg.params.baseInstructions).toContain(
-        "[Beanbag worktree workflow]",
+        "[Beanbag branch-commit-merge workflow]",
       );
-    });
-
-    it("records environment provisioning events emitted by the environment", async () => {
-      const customEnvironmentRegistry = createTestEnvironmentRegistry({
-        rootPath: "/tmp/thread-worktree",
-        onCreate: (context) => {
-          context.services?.appendEvent?.("system/provisioning/env_setup", {
-            status: "started",
-            scriptPath: ".bb-env-setup.sh",
-            timeoutMs: 600000,
-          });
-          context.services?.appendEvent?.("system/provisioning/env_setup", {
-            status: "completed",
-            scriptPath: ".bb-env-setup.sh",
-            timeoutMs: 600000,
-            durationMs: 42,
-          });
-        },
-      });
-      const managerWithCustomEnvironment = new ThreadManager(
-        threadRepo,
-        eventRepo,
-        projectRepo,
-        ws,
-        llmCompletionService,
-        createCodexProviderAdapter(),
-        process.env,
-        customEnvironmentRegistry,
-      );
-
-      const project = { id: "proj-1", name: "Test", rootPath: "/test", createdAt: 1000, updatedAt: 1000 };
-      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(project);
-
-      const createdThread = makeThread({
-        id: "t-new",
-        status: "idle",
-        environmentId: "worktree",
-      });
-      (threadRepo.create as ReturnType<typeof vi.fn>).mockReturnValue(createdThread);
-      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
-        makeThread({ id: "t-new", status: "active", environmentId: "worktree" }),
-      );
-
-      await managerWithCustomEnvironment.spawn({
-        projectId: "proj-1",
-        environmentId: "worktree",
-      });
-
-      await vi.waitFor(() => {
-        expect(eventRepo.create).toHaveBeenCalledWith(
-          expect.objectContaining({
-            threadId: "t-new",
-            type: "system/provisioning/env_setup",
-            data: expect.objectContaining({
-              status: "started",
-              scriptPath: ".bb-env-setup.sh",
-              timeoutMs: 600000,
-            }),
-          }),
-        );
-      });
-      await vi.waitFor(() => {
-        expect(eventRepo.create).toHaveBeenCalledWith(
-          expect.objectContaining({
-            threadId: "t-new",
-            type: "system/provisioning/env_setup",
-            data: expect.objectContaining({
-              status: "completed",
-              scriptPath: ".bb-env-setup.sh",
-              durationMs: 42,
-            }),
-          }),
-        );
-      });
     });
 
     it("does not auto-generate spawn titles from input", async () => {
@@ -1316,6 +1269,12 @@ describe("ThreadManager", () => {
       expect(threadRepo.create).toHaveBeenCalledWith({
         projectId: "proj-1",
         environmentId: "local",
+        workflowId: "noop",
+        workflowState: {
+          phase: "preparing",
+          summary: "Preparing workflow",
+          terminal: false,
+        },
       });
     });
 
@@ -1342,7 +1301,7 @@ describe("ThreadManager", () => {
       const titleLlmCompletionService = createMockLlmCompletionService({
         generateThreadTitle: titleGenerator,
       });
-      const titleManager = new ThreadManager(
+      const titleManager = new Orchestrator(
         threadRepo,
         eventRepo,
         projectRepo,
@@ -2114,14 +2073,14 @@ describe("ThreadManager", () => {
       );
       await new Promise((r) => setTimeout(r, 50));
 
-      expect(asThreadManagerHarness(manager).activeTurnIds.get("t-new")).toBe("turn-77");
+      expect(asOrchestratorHarness(manager).activeTurnIds.get("t-new")).toBe("turn-77");
 
       fakeChild._pushStdout(
         JSON.stringify({ method: "turn/completed", params: { turnId: "turn-77" } }),
       );
       await new Promise((r) => setTimeout(r, 50));
 
-      expect(asThreadManagerHarness(manager).activeTurnIds.has("t-new")).toBe(false);
+      expect(asOrchestratorHarness(manager).activeTurnIds.has("t-new")).toBe(false);
     });
 
     it("notifies parent thread when a child turn completes", async () => {
@@ -2157,8 +2116,8 @@ describe("ThreadManager", () => {
         stdout: null,
         stderr: null,
       };
-      asThreadManagerHarness(manager).processes.set("parent-1", parentProcess);
-      asThreadManagerHarness(manager).providerThreadIds.set("parent-1", "codex-parent-thread");
+      asOrchestratorHarness(manager).processes.set("parent-1", parentProcess);
+      asOrchestratorHarness(manager).providerThreadIds.set("parent-1", "codex-parent-thread");
 
       await manager.spawn({ projectId: "proj-1", parentThreadId: "parent-1" });
 
@@ -2216,8 +2175,8 @@ describe("ThreadManager", () => {
         stdout: null,
         stderr: null,
       };
-      asThreadManagerHarness(manager).processes.set("parent-1", parentProcess);
-      asThreadManagerHarness(manager).providerThreadIds.set("parent-1", "codex-parent-thread");
+      asOrchestratorHarness(manager).processes.set("parent-1", parentProcess);
+      asOrchestratorHarness(manager).providerThreadIds.set("parent-1", "codex-parent-thread");
 
       await manager.spawn({ projectId: "proj-1", parentThreadId: "parent-1" });
 
@@ -2277,8 +2236,8 @@ describe("ThreadManager", () => {
         stdout: null,
         stderr: null,
       };
-      asThreadManagerHarness(manager).processes.set("parent-1", parentProcess);
-      asThreadManagerHarness(manager).providerThreadIds.set("parent-1", "codex-parent-thread");
+      asOrchestratorHarness(manager).processes.set("parent-1", parentProcess);
+      asOrchestratorHarness(manager).providerThreadIds.set("parent-1", "codex-parent-thread");
 
       await manager.spawn({ projectId: "proj-1", parentThreadId: "parent-1" });
 
@@ -2358,8 +2317,8 @@ describe("ThreadManager", () => {
         stdout: null,
         stderr: null,
       };
-      asThreadManagerHarness(manager).processes.set("parent-1", parentProcess);
-      asThreadManagerHarness(manager).providerThreadIds.set("parent-1", "codex-parent-thread");
+      asOrchestratorHarness(manager).processes.set("parent-1", parentProcess);
+      asOrchestratorHarness(manager).providerThreadIds.set("parent-1", "codex-parent-thread");
 
       await manager.spawn({ projectId: "proj-1", parentThreadId: "parent-1" });
 
@@ -2407,8 +2366,8 @@ describe("ThreadManager", () => {
         stdout: null,
         stderr: null,
       };
-      asThreadManagerHarness(manager).processes.set("parent-1", parentProcess);
-      asThreadManagerHarness(manager).providerThreadIds.set("parent-1", "codex-parent-thread");
+      asOrchestratorHarness(manager).processes.set("parent-1", parentProcess);
+      asOrchestratorHarness(manager).providerThreadIds.set("parent-1", "codex-parent-thread");
 
       await manager.spawn({ projectId: "proj-1", parentThreadId: "parent-1" });
 
@@ -2886,7 +2845,7 @@ describe("ThreadManager", () => {
         makeThread({ status: "provisioning_failed" }),
       );
       const scheduleProvisioningSpy = vi
-        .spyOn(asThreadManagerHarness(manager), "_scheduleProvisioning")
+        .spyOn(asOrchestratorHarness(manager), "_scheduleProvisioning")
         .mockImplementation(() => {});
 
       await expect(manager.tell("thread-1", { input })).resolves.toBeUndefined();
@@ -2989,7 +2948,7 @@ describe("ThreadManager", () => {
 
       // Register a process but no codex thread ID
       const fakeProcess = { kill: vi.fn(), stdin: null, stdout: null, stderr: null };
-      asThreadManagerHarness(manager).processes.set("thread-1", fakeProcess);
+      asOrchestratorHarness(manager).processes.set("thread-1", fakeProcess);
 
       await expect(
         manager.tell("thread-1", { input: [{ type: "text", text: "hello" }] }),
@@ -3016,8 +2975,8 @@ describe("ThreadManager", () => {
         stdout: null,
         stderr: null,
       };
-      asThreadManagerHarness(manager).processes.set("thread-1", fakeProcess);
-      asThreadManagerHarness(manager).providerThreadIds.set("thread-1", "codex-tid-123");
+      asOrchestratorHarness(manager).processes.set("thread-1", fakeProcess);
+      asOrchestratorHarness(manager).providerThreadIds.set("thread-1", "codex-tid-123");
 
       await manager.tell("thread-1", { input: [{ type: "text", text: "Do more work" }] });
 
@@ -3047,9 +3006,9 @@ describe("ThreadManager", () => {
         stdout: null,
         stderr: null,
       };
-      asThreadManagerHarness(manager).processes.set("thread-1", fakeProcess);
-      asThreadManagerHarness(manager).providerThreadIds.set("thread-1", "codex-tid-123");
-      asThreadManagerHarness(manager).activeTurnIds.set("thread-1", "turn-123");
+      asOrchestratorHarness(manager).processes.set("thread-1", fakeProcess);
+      asOrchestratorHarness(manager).providerThreadIds.set("thread-1", "codex-tid-123");
+      asOrchestratorHarness(manager).activeTurnIds.set("thread-1", "turn-123");
 
       await manager.tell("thread-1", {
         input: [{ type: "text", text: "Keep going" }],
@@ -3083,9 +3042,9 @@ describe("ThreadManager", () => {
         stdout: null,
         stderr: null,
       };
-      asThreadManagerHarness(manager).processes.set("thread-1", fakeProcess);
-      asThreadManagerHarness(manager).providerThreadIds.set("thread-1", "codex-tid-123");
-      asThreadManagerHarness(manager).activeTurnIds.set("thread-1", "turn-123");
+      asOrchestratorHarness(manager).processes.set("thread-1", fakeProcess);
+      asOrchestratorHarness(manager).providerThreadIds.set("thread-1", "codex-tid-123");
+      asOrchestratorHarness(manager).activeTurnIds.set("thread-1", "turn-123");
 
       await manager.tell("thread-1", {
         input: [{ type: "text", text: "Keep going" }],
@@ -3117,8 +3076,8 @@ describe("ThreadManager", () => {
         stdout: null,
         stderr: null,
       };
-      asThreadManagerHarness(manager).processes.set("thread-1", fakeProcess);
-      asThreadManagerHarness(manager).providerThreadIds.set("thread-1", "codex-tid-123");
+      asOrchestratorHarness(manager).processes.set("thread-1", fakeProcess);
+      asOrchestratorHarness(manager).providerThreadIds.set("thread-1", "codex-tid-123");
 
       await manager.tell("thread-1", {
         input: [{ type: "text", text: "Keep going" }],
@@ -3146,9 +3105,9 @@ describe("ThreadManager", () => {
         stdout: null,
         stderr: null,
       };
-      asThreadManagerHarness(manager).processes.set("thread-1", fakeProcess);
-      asThreadManagerHarness(manager).providerThreadIds.set("thread-1", "codex-tid-123");
-      asThreadManagerHarness(manager).activeTurnIds.set("thread-1", "turn-123");
+      asOrchestratorHarness(manager).processes.set("thread-1", fakeProcess);
+      asOrchestratorHarness(manager).providerThreadIds.set("thread-1", "codex-tid-123");
+      asOrchestratorHarness(manager).activeTurnIds.set("thread-1", "turn-123");
 
       await manager.tell(
         "thread-1",
@@ -3181,8 +3140,8 @@ describe("ThreadManager", () => {
         stdout: null,
         stderr: null,
       };
-      asThreadManagerHarness(manager).processes.set("thread-1", fakeProcess);
-      asThreadManagerHarness(manager).providerThreadIds.set("thread-1", "codex-tid-123");
+      asOrchestratorHarness(manager).processes.set("thread-1", fakeProcess);
+      asOrchestratorHarness(manager).providerThreadIds.set("thread-1", "codex-tid-123");
 
       await expect(
         manager.tell("thread-1", {
@@ -3207,9 +3166,9 @@ describe("ThreadManager", () => {
         stdout: null,
         stderr: null,
       };
-      asThreadManagerHarness(manager).processes.set("thread-1", fakeProcess);
-      asThreadManagerHarness(manager).providerThreadIds.set("thread-1", "codex-tid-123");
-      asThreadManagerHarness(manager).activeTurnIds.set("thread-1", "turn-123");
+      asOrchestratorHarness(manager).processes.set("thread-1", fakeProcess);
+      asOrchestratorHarness(manager).providerThreadIds.set("thread-1", "codex-tid-123");
+      asOrchestratorHarness(manager).activeTurnIds.set("thread-1", "turn-123");
 
       await expect(
         manager.tell(
@@ -3244,8 +3203,8 @@ describe("ThreadManager", () => {
         stdout: null,
         stderr: null,
       };
-      asThreadManagerHarness(manager).processes.set("thread-1", fakeProcess);
-      asThreadManagerHarness(manager).providerThreadIds.set("thread-1", "codex-tid-123");
+      asOrchestratorHarness(manager).processes.set("thread-1", fakeProcess);
+      asOrchestratorHarness(manager).providerThreadIds.set("thread-1", "codex-tid-123");
 
       await manager.tell("thread-1", {
         input: [
@@ -3288,8 +3247,8 @@ describe("ThreadManager", () => {
         stdout: null,
         stderr: null,
       };
-      asThreadManagerHarness(manager).processes.set("thread-1", fakeProcess);
-      asThreadManagerHarness(manager).providerThreadIds.set("thread-1", "codex-tid-123");
+      asOrchestratorHarness(manager).processes.set("thread-1", fakeProcess);
+      asOrchestratorHarness(manager).providerThreadIds.set("thread-1", "codex-tid-123");
 
       await manager.tell("thread-1", { input: [{ type: "text", text: "Continue" }] });
 
@@ -3315,8 +3274,8 @@ describe("ThreadManager", () => {
         stdout: null,
         stderr: null,
       };
-      asThreadManagerHarness(manager).processes.set("thread-1", fakeProcess);
-      asThreadManagerHarness(manager).providerThreadIds.set("thread-1", "codex-tid-123");
+      asOrchestratorHarness(manager).processes.set("thread-1", fakeProcess);
+      asOrchestratorHarness(manager).providerThreadIds.set("thread-1", "codex-tid-123");
 
       await manager.tell("thread-1", {
         input: [{ type: "text", text: "New candidate title text" }],
@@ -3351,8 +3310,8 @@ describe("ThreadManager", () => {
         stdout: null,
         stderr: null,
       };
-      asThreadManagerHarness(manager).processes.set("thread-1", fakeProcess);
-      asThreadManagerHarness(manager).providerThreadIds.set("thread-1", "codex-tid-123");
+      asOrchestratorHarness(manager).processes.set("thread-1", fakeProcess);
+      asOrchestratorHarness(manager).providerThreadIds.set("thread-1", "codex-tid-123");
 
       await manager.tell(
         "thread-1",
@@ -3389,8 +3348,8 @@ describe("ThreadManager", () => {
         stdout: null,
         stderr: null,
       };
-      asThreadManagerHarness(manager).processes.set("thread-1", fakeProcess);
-      asThreadManagerHarness(manager).providerThreadIds.set("thread-1", "codex-tid-123");
+      asOrchestratorHarness(manager).processes.set("thread-1", fakeProcess);
+      asOrchestratorHarness(manager).providerThreadIds.set("thread-1", "codex-tid-123");
       (eventRepo.create as ReturnType<typeof vi.fn>).mockClear();
 
       await manager.tell(
@@ -3431,8 +3390,8 @@ describe("ThreadManager", () => {
         stdout: null,
         stderr: null,
       };
-      asThreadManagerHarness(manager).processes.set("thread-1", fakeProcess);
-      asThreadManagerHarness(manager).providerThreadIds.set("thread-1", "codex-tid-123");
+      asOrchestratorHarness(manager).processes.set("thread-1", fakeProcess);
+      asOrchestratorHarness(manager).providerThreadIds.set("thread-1", "codex-tid-123");
       (eventRepo.create as ReturnType<typeof vi.fn>).mockClear();
 
       await manager.systemTell("thread-1", {
@@ -3470,7 +3429,7 @@ describe("ThreadManager", () => {
 
     it("kills the process with SIGTERM when an active process exists", () => {
       const fakeProcess = { kill: vi.fn(), exitCode: null, stdin: null, stdout: null };
-      asThreadManagerHarness(manager).processes.set("thread-1", fakeProcess);
+      asOrchestratorHarness(manager).processes.set("thread-1", fakeProcess);
 
       manager.stop("thread-1");
 
@@ -3482,7 +3441,7 @@ describe("ThreadManager", () => {
 
     it("does not destroy workspace environment on stop", () => {
       const cleanup = vi.fn();
-      asThreadManagerHarness(manager).environmentRuntimes.set("thread-1", {
+      asOrchestratorHarness(manager).environmentRuntimes.set("thread-1", {
         adapter: {
           info: {
             id: "worktree",
@@ -3524,16 +3483,16 @@ describe("ThreadManager", () => {
       (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
         makeThread({ id: "thread-1", status: "active" }),
       );
-      asThreadManagerHarness(manager).processes.set("thread-1", fakeProcess);
-      asThreadManagerHarness(manager).providerThreadIds.set("thread-1", "provider-thread-1");
-      asThreadManagerHarness(manager).activeTurnIds.set("thread-1", "turn-1");
+      asOrchestratorHarness(manager).processes.set("thread-1", fakeProcess);
+      asOrchestratorHarness(manager).providerThreadIds.set("thread-1", "provider-thread-1");
+      asOrchestratorHarness(manager).activeTurnIds.set("thread-1", "turn-1");
 
       manager.archive("thread-1");
 
       expect(fakeProcess.kill).toHaveBeenCalledWith("SIGTERM");
-      expect(asThreadManagerHarness(manager).processes.has("thread-1")).toBe(false);
-      expect(asThreadManagerHarness(manager).providerThreadIds.has("thread-1")).toBe(false);
-      expect(asThreadManagerHarness(manager).activeTurnIds.has("thread-1")).toBe(false);
+      expect(asOrchestratorHarness(manager).processes.has("thread-1")).toBe(false);
+      expect(asOrchestratorHarness(manager).providerThreadIds.has("thread-1")).toBe(false);
+      expect(asOrchestratorHarness(manager).activeTurnIds.has("thread-1")).toBe(false);
       expect(threadRepo.update).toHaveBeenCalledWith("thread-1", {
         status: "idle",
         archivedAt: expect.any(Number),
@@ -3545,7 +3504,7 @@ describe("ThreadManager", () => {
       (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
         makeThread({ id: "thread-1", status: "idle" }),
       );
-      asThreadManagerHarness(manager).environmentRuntimes.set("thread-1", {
+      asOrchestratorHarness(manager).environmentRuntimes.set("thread-1", {
         environment: makeRuntimeEnvironment({
           rootPath: "/tmp/worktree",
           dispose: cleanup,
@@ -3597,7 +3556,7 @@ describe("ThreadManager", () => {
       (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
         makeThread({ id: "thread-1", status: "idle", environmentId: "worktree" }),
       );
-      asThreadManagerHarness(manager).environmentRuntimes.set("thread-1", {
+      asOrchestratorHarness(manager).environmentRuntimes.set("thread-1", {
         environment: makeRuntimeEnvironment({
           rootPath: "/tmp/worktree",
           dispose: cleanup,
@@ -3721,7 +3680,7 @@ describe("ThreadManager", () => {
       ];
 
       const providerListModels = vi.fn().mockResolvedValue(models);
-      asThreadManagerHarness(manager).provider.listModels = providerListModels;
+      asOrchestratorHarness(manager).provider.listModels = providerListModels;
 
       await expect(manager.listModels()).resolves.toEqual(models);
       expect(providerListModels).toHaveBeenCalledTimes(1);
@@ -3904,7 +3863,7 @@ describe("ThreadManager", () => {
         makeEvent({ seq: 1, type: "turn/completed", data: {} }),
         makeEvent({ seq: 2, type: "turn/started", data: {} }),
       ]);
-      asThreadManagerHarness(manager).processes.set("thread-1", { kill: vi.fn(), stdin: null, stdout: null });
+      asOrchestratorHarness(manager).processes.set("thread-1", { kill: vi.fn(), stdin: null, stdout: null });
 
       const result = manager.getById("thread-1");
 
@@ -3921,7 +3880,7 @@ describe("ThreadManager", () => {
       const customEnvironmentRegistry = createTestEnvironmentRegistry({
         rootPath: envSetupWorkspaceRoot,
       });
-      const managerWithCustomEnvironment = new ThreadManager(
+      const managerWithCustomEnvironment = new Orchestrator(
         threadRepo,
         eventRepo,
         projectRepo,
@@ -4002,7 +3961,7 @@ describe("ThreadManager", () => {
               })
             : undefined,
       );
-      asThreadManagerHarness(manager).environmentRuntimes.set("thread-1", {
+      asOrchestratorHarness(manager).environmentRuntimes.set("thread-1", {
         environment: {
           kind: "worktree",
           info: {
@@ -4172,7 +4131,7 @@ describe("ThreadManager", () => {
         makeEvent({ seq: 1, type: "turn/completed", data: {} }),
         makeEvent({ seq: 2, type: "turn/started", data: {} }),
       ]);
-      asThreadManagerHarness(manager).processes.set("thread-1", { kill: vi.fn(), stdin: null, stdout: null });
+      asOrchestratorHarness(manager).processes.set("thread-1", { kill: vi.fn(), stdin: null, stdout: null });
 
       const result = manager.list();
 
@@ -4192,7 +4151,7 @@ describe("ThreadManager", () => {
         environmentId: "worktree",
       });
       (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
-      const projectRoot = mkdtempSync(join(tmpdir(), "beanbag-thread-manager-"));
+      const projectRoot = mkdtempSync(join(tmpdir(), "beanbag-orchestrator-"));
       git(projectRoot, "init");
       git(projectRoot, "config", "user.name", "Beanbag Test");
       git(projectRoot, "config", "user.email", "beanbag-test@example.com");
@@ -4212,7 +4171,7 @@ describe("ThreadManager", () => {
         makeEvent({ seq: 1, type: "system/primary_checkout/updated" }),
       );
 
-      asThreadManagerHarness(manager).primaryPromotionByProjectId.set("proj-1", {
+      asOrchestratorHarness(manager).primaryPromotionByProjectId.set("proj-1", {
         projectId: "proj-1",
         threadId: "thread-1",
         promotedAt: 1000,
@@ -4223,12 +4182,12 @@ describe("ThreadManager", () => {
         },
         reconstructed: false,
       });
-      asThreadManagerHarness(manager).primaryPromotionValidatedAtByProjectId.set("proj-1", 0);
+      asOrchestratorHarness(manager).primaryPromotionValidatedAtByProjectId.set("proj-1", 0);
 
       const result = manager.getById("thread-1");
 
       expect(result?.primaryCheckout).toBeUndefined();
-      expect(asThreadManagerHarness(manager).primaryPromotionByProjectId.get("proj-1")).toBeUndefined();
+      expect(asOrchestratorHarness(manager).primaryPromotionByProjectId.get("proj-1")).toBeUndefined();
       expect(eventRepo.create).toHaveBeenCalledWith(
         expect.objectContaining({
           threadId: "thread-1",
@@ -4266,7 +4225,7 @@ describe("ThreadManager", () => {
           environmentId: "worktree",
         }),
       ]);
-      const projectRoot = mkdtempSync(join(tmpdir(), "beanbag-thread-manager-"));
+      const projectRoot = mkdtempSync(join(tmpdir(), "beanbag-orchestrator-"));
       git(projectRoot, "init");
       git(projectRoot, "config", "user.name", "Beanbag Test");
       git(projectRoot, "config", "user.email", "beanbag-test@example.com");
@@ -4283,7 +4242,7 @@ describe("ThreadManager", () => {
         updatedAt: 1000,
       });
 
-      asThreadManagerHarness(manager).primaryPromotionByProjectId.set("proj-1", {
+      asOrchestratorHarness(manager).primaryPromotionByProjectId.set("proj-1", {
         projectId: "proj-1",
         threadId: "thread-1",
         promotedAt: 1000,
@@ -4294,7 +4253,7 @@ describe("ThreadManager", () => {
         },
         reconstructed: false,
       });
-      asThreadManagerHarness(manager).primaryPromotionValidatedAtByProjectId.set("proj-1", 0);
+      asOrchestratorHarness(manager).primaryPromotionValidatedAtByProjectId.set("proj-1", 0);
 
       const result = manager.list({ projectId: "proj-1" });
 
@@ -4319,7 +4278,7 @@ describe("ThreadManager", () => {
         createdAt: 1000,
         updatedAt: 1000,
       });
-      asThreadManagerHarness(manager).environmentRuntimes.set("thread-1", {
+      asOrchestratorHarness(manager).environmentRuntimes.set("thread-1", {
         environment: {
           kind: "worktree",
           info: {
@@ -4404,7 +4363,7 @@ describe("ThreadManager", () => {
         })
       );
 
-      asThreadManagerHarness(manager).primaryPromotionByProjectId.set("proj-1", {
+      asOrchestratorHarness(manager).primaryPromotionByProjectId.set("proj-1", {
         projectId: "proj-1",
         threadId: "thread-1",
         promotedAt: 1000,
@@ -4416,7 +4375,7 @@ describe("ThreadManager", () => {
       });
 
       const ensurePrimaryStatusSpy = vi
-        .spyOn(asThreadManagerHarness(manager), "_ensurePrimaryPromotionStateIsCurrent")
+        .spyOn(asOrchestratorHarness(manager), "_ensurePrimaryPromotionStateIsCurrent")
         .mockImplementation(() => {});
 
       const result = await manager.promoteThread("thread-1");
@@ -4454,7 +4413,7 @@ describe("ThreadManager", () => {
       );
 
       const ensurePrimaryStatusSpy = vi
-        .spyOn(asThreadManagerHarness(manager), "_ensurePrimaryPromotionStateIsCurrent")
+        .spyOn(asOrchestratorHarness(manager), "_ensurePrimaryPromotionStateIsCurrent")
         .mockImplementation(() => {});
 
       const result = await manager.demotePrimaryCheckout("thread-1");
@@ -4482,7 +4441,7 @@ describe("ThreadManager", () => {
         createdAt: 1000,
         updatedAt: 1000,
       });
-      asThreadManagerHarness(manager).environmentRuntimes.set("thread-1", {
+      asOrchestratorHarness(manager).environmentRuntimes.set("thread-1", {
         environment: {
           kind: "worktree",
           info: {
@@ -4557,7 +4516,7 @@ describe("ThreadManager", () => {
           run: vi.fn(),
         },
       });
-      asThreadManagerHarness(manager).primaryCheckoutTransitionsInFlight.add("proj-1");
+      asOrchestratorHarness(manager).primaryCheckoutTransitionsInFlight.add("proj-1");
 
       await expect(manager.promoteThread("thread-1")).rejects.toThrow(
         "Another primary-checkout promotion/demotion operation is already in progress for this project",
@@ -4579,7 +4538,7 @@ describe("ThreadManager", () => {
         createdAt: 1000,
         updatedAt: 1000,
       });
-      asThreadManagerHarness(manager).primaryCheckoutTransitionsInFlight.add("proj-1");
+      asOrchestratorHarness(manager).primaryCheckoutTransitionsInFlight.add("proj-1");
 
       await expect(manager.demotePrimaryCheckout("thread-1")).rejects.toThrow(
         "Another primary-checkout promotion/demotion operation is already in progress for this project",
@@ -4606,8 +4565,8 @@ describe("ThreadManager", () => {
         makeThread({ id: "t-1", status: "active" }),
         makeThread({ id: "t-2", status: "active" }),
       ]);
-      asThreadManagerHarness(manager).processes.set("t-1", { kill: vi.fn(), stdin: null, stdout: null });
-      asThreadManagerHarness(manager).processes.set("t-2", { kill: vi.fn(), stdin: null, stdout: null });
+      asOrchestratorHarness(manager).processes.set("t-1", { kill: vi.fn(), stdin: null, stdout: null });
+      asOrchestratorHarness(manager).processes.set("t-2", { kill: vi.fn(), stdin: null, stdout: null });
 
       expect(manager.getRunningCount()).toBe(2);
       expect(threadRepo.list).toHaveBeenCalledWith({ status: "active" });
@@ -4656,7 +4615,7 @@ describe("ThreadManager", () => {
           })
         );
         const scheduleDispatchSpy = vi
-          .spyOn(asThreadManagerHarness(manager), "_scheduleQueuedOperationDispatch")
+          .spyOn(asOrchestratorHarness(manager), "_scheduleQueuedOperationDispatch")
           .mockImplementation(() => {});
 
         const result = await manager.requestThreadOperation("thread-1", {
@@ -4704,7 +4663,7 @@ describe("ThreadManager", () => {
           createdAt: 1000,
           updatedAt: 1000,
         });
-        asThreadManagerHarness(manager).environmentRuntimes.set("thread-1", {
+        asOrchestratorHarness(manager).environmentRuntimes.set("thread-1", {
           environment: {
             kind: "worktree",
             info: {
@@ -4789,7 +4748,7 @@ describe("ThreadManager", () => {
           })
         );
         vi
-          .spyOn(asThreadManagerHarness(manager), "_scheduleQueuedOperationDispatch")
+          .spyOn(asOrchestratorHarness(manager), "_scheduleQueuedOperationDispatch")
           .mockImplementation(() => {});
 
         const result = await manager.requestThreadOperation("thread-1", {
@@ -4834,7 +4793,7 @@ describe("ThreadManager", () => {
             data: event.data,
           })
         );
-        asThreadManagerHarness(manager).primaryPromotionByProjectId.set("proj-1", {
+        asOrchestratorHarness(manager).primaryPromotionByProjectId.set("proj-1", {
           projectId: "proj-1",
           threadId: "thread-1",
           promotedAt: 1000,
@@ -4854,7 +4813,7 @@ describe("ThreadManager", () => {
             primaryStatus: { projectId: "proj-1" },
           });
         const scheduleDispatchSpy = vi
-          .spyOn(asThreadManagerHarness(manager), "_scheduleQueuedOperationDispatch")
+          .spyOn(asOrchestratorHarness(manager), "_scheduleQueuedOperationDispatch")
           .mockImplementation(() => {});
 
         const result = await manager.requestThreadOperation("thread-1", {
@@ -4886,7 +4845,7 @@ describe("ThreadManager", () => {
             data: event.data,
           })
         );
-        asThreadManagerHarness(manager).primaryPromotionByProjectId.set("proj-1", {
+        asOrchestratorHarness(manager).primaryPromotionByProjectId.set("proj-1", {
           projectId: "proj-1",
           threadId: "thread-1",
           promotedAt: 1000,
@@ -4930,8 +4889,8 @@ describe("ThreadManager", () => {
     it("kills all active processes and marks them idle", () => {
       const proc1 = { kill: vi.fn(), stdin: null, stdout: null };
       const proc2 = { kill: vi.fn(), stdin: null, stdout: null };
-      asThreadManagerHarness(manager).processes.set("thread-1", proc1);
-      asThreadManagerHarness(manager).processes.set("thread-2", proc2);
+      asOrchestratorHarness(manager).processes.set("thread-1", proc1);
+      asOrchestratorHarness(manager).processes.set("thread-2", proc2);
 
       expect(manager.getActiveCount()).toBe(2);
 
@@ -4960,7 +4919,7 @@ describe("ThreadManager", () => {
       (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
 
       // Call private method via bracket notation
-      asThreadManagerHarness(manager)._handleProcessExit("thread-1", 0, null);
+      asOrchestratorHarness(manager)._handleProcessExit("thread-1", 0, null);
 
       expect(threadRepo.update).toHaveBeenCalledWith("thread-1", {
         status: "idle",
@@ -4975,7 +4934,7 @@ describe("ThreadManager", () => {
       const thread = makeThread({ status: "active" });
       (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
 
-      asThreadManagerHarness(manager)._handleProcessExit("thread-1", null, "SIGTERM");
+      asOrchestratorHarness(manager)._handleProcessExit("thread-1", null, "SIGTERM");
 
       expect(threadRepo.update).toHaveBeenCalledWith("thread-1", {
         status: "idle",
@@ -4986,7 +4945,7 @@ describe("ThreadManager", () => {
       const thread = makeThread({ status: "active" });
       (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
 
-      asThreadManagerHarness(manager)._handleProcessExit("thread-1", 1, null);
+      asOrchestratorHarness(manager)._handleProcessExit("thread-1", 1, null);
 
       expect(threadRepo.update).toHaveBeenCalledWith("thread-1", {
         status: "idle",
@@ -5001,7 +4960,7 @@ describe("ThreadManager", () => {
       const thread = makeThread({ status: "idle" });
       (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
 
-      asThreadManagerHarness(manager)._handleProcessExit("thread-1", 0, null);
+      asOrchestratorHarness(manager)._handleProcessExit("thread-1", 0, null);
 
       expect(threadRepo.update).not.toHaveBeenCalled();
     });
@@ -5010,7 +4969,7 @@ describe("ThreadManager", () => {
       const thread = makeThread({ status: "idle" });
       (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
 
-      asThreadManagerHarness(manager)._handleProcessExit("thread-1", 1, null);
+      asOrchestratorHarness(manager)._handleProcessExit("thread-1", 1, null);
 
       expect(threadRepo.update).not.toHaveBeenCalled();
     });
@@ -5019,7 +4978,7 @@ describe("ThreadManager", () => {
       const thread = makeThread({ status: "idle" });
       (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
 
-      asThreadManagerHarness(manager)._handleProcessExit("thread-1", 0, null);
+      asOrchestratorHarness(manager)._handleProcessExit("thread-1", 0, null);
 
       expect(threadRepo.update).not.toHaveBeenCalled();
       expect(ws.broadcast).not.toHaveBeenCalled();
@@ -5030,7 +4989,7 @@ describe("ThreadManager", () => {
         undefined,
       );
 
-      asThreadManagerHarness(manager)._handleProcessExit("thread-1", 0, null);
+      asOrchestratorHarness(manager)._handleProcessExit("thread-1", 0, null);
 
       expect(threadRepo.update).not.toHaveBeenCalled();
       // Should not broadcast
@@ -5040,13 +4999,13 @@ describe("ThreadManager", () => {
     it("removes process from the internal map", () => {
       // Manually add a fake process to the internal map
       const fakeProcess = { kill: vi.fn(), stdin: null, stdout: null };
-      asThreadManagerHarness(manager).processes.set("thread-1", fakeProcess);
+      asOrchestratorHarness(manager).processes.set("thread-1", fakeProcess);
       expect(manager.isActive("thread-1")).toBe(true);
 
       const thread = makeThread({ status: "active" });
       (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
 
-      asThreadManagerHarness(manager)._handleProcessExit("thread-1", 0, null);
+      asOrchestratorHarness(manager)._handleProcessExit("thread-1", 0, null);
 
       expect(manager.isActive("thread-1")).toBe(false);
     });

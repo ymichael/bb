@@ -96,7 +96,7 @@ function parseProvisioningSetupLine(line: string): ProvisioningSetupAttempt | nu
 
 function isLikelyProvisioningEnvironmentToken(value: string): boolean {
   const normalized = value.trim().toLowerCase();
-  return normalized === "worktree" || normalized === "local" || normalized.includes("workspace");
+  return normalized.length > 0 && !normalized.startsWith("/") && !normalized.includes(":");
 }
 
 function parseProvisioningSummaryLine(
@@ -194,11 +194,7 @@ function parseProvisioningDetails(detail: string | undefined): ParsedProvisionin
 
 function normalizeProvisioningEnvironmentLabel(environment: string | undefined): string | undefined {
   const value = environment?.trim();
-  if (!value) return undefined;
-  const normalized = value.toLowerCase();
-  if (normalized.includes("worktree")) return "worktree";
-  if (normalized.includes("local")) return "local";
-  return value;
+  return value || undefined;
 }
 
 function provisioningSetupTimedOut(setupAttempt: ProvisioningSetupAttempt | undefined): boolean {

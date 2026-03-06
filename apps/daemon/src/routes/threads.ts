@@ -136,6 +136,7 @@ export function createThreadRoutes(
           ...(body.reasoningLevel ? { reasoningLevel: body.reasoningLevel } : {}),
           ...(body.sandboxMode ? { sandboxMode: body.sandboxMode } : {}),
           ...(body.environmentId ? { environmentId: body.environmentId } : {}),
+          ...(body.workflowId ? { workflowId: body.workflowId } : {}),
           ...(body.parentThreadId ? { parentThreadId: body.parentThreadId } : {}),
           ...(body.developerInstructions !== undefined
             ? { developerInstructions: body.developerInstructions }

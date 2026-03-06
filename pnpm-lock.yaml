@@ -169,6 +169,9 @@ importers:
       '@beanbag/environment':
         specifier: workspace:*
         version: link:../../packages/environment
+      '@beanbag/workflow':
+        specifier: workspace:*
+        version: link:../../packages/workflow
       '@hono/node-server':
         specifier: ^1.13.0
         version: 1.19.9(hono@4.11.9)
@@ -305,6 +308,28 @@ importers:
         version: 5.9.3
       vitest:
         specifier: ^4.0.0
+        version: 4.0.18(@types/node@22.19.10)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.21.0)
+
+  packages/workflow:
+    dependencies:
+      '@beanbag/agent-core':
+        specifier: workspace:*
+        version: link:../agent-core
+      '@beanbag/environment':
+        specifier: workspace:*
+        version: link:../environment
+    devDependencies:
+      '@beanbag/tsconfig':
+        specifier: workspace:*
+        version: link:../tsconfig
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.19.10
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
+      vitest:
+        specifier: ^4.0.18
         version: 4.0.18(@types/node@22.19.10)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.21.0)
 
 packages:

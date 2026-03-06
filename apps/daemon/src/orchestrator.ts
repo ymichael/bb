@@ -25,8 +25,9 @@ import {
   type ProviderExecutionOptions,
   type ProviderThreadContext,
   type SchedulerService,
-  type SystemEnvironmentInfo,
   type SystemProviderInfo,
+  type SystemEnvironmentInfo,
+  type SystemWorkflowInfo,
   type ThreadOrchestrator,
   type ThreadTurnInitiator,
   type ThreadExecutionOptions,
@@ -79,6 +80,7 @@ import {
   type LlmCompletionService,
   createCodexProviderAdapter,
 } from "@beanbag/agent-server";
+import { WorkflowService } from "@beanbag/workflow";
 import { WSManager } from "./ws.js";
 import {
   isDomainError,
@@ -96,9 +98,6 @@ import {
 } from "./domain-errors.js";
 import { InMemorySchedulerService } from "./scheduler-service.js";
 import { canTransitionThreadStatus } from "./thread-status-machine.js";
-import {
-  evaluateThreadOperationPolicy,
-} from "./thread-operation-policy.js";
 import {
   checkoutProjectSnapshot,
   detectProjectDefaultBranch,
@@ -150,12 +149,6 @@ const THREAD_STATUS_CHANGE_KINDS: readonly ThreadChangeKind[] = [
   "status-changed",
   "work-status-changed",
 ];
-const WORKTREE_GUIDED_WORKFLOW_INSTRUCTIONS = [
-  "[Beanbag worktree workflow]",
-  "- You are running inside a per-thread git worktree.",
-  "- Commit your work frequently so it can be safely promoted/tested and not lost.",
-  "- Preferred flow: iterate in this worktree -> promote to primary checkout for manual/E2E testing -> continue edits back in this worktree -> squash merge when done.",
-].join("\n");
 const ENV_SETUP_SCRIPT_NAME = ".bb-env-setup.sh";
 const ENV_SETUP_TIMEOUT_MS = 10 * 60 * 1000;
 const ENV_SETUP_NOT_FOUND_EXIT_CODE = 42;
@@ -377,15 +370,8 @@ function normalizeQueuedSandboxMode(
   return value ?? "danger-full-access";
 }
 
-function isAutoArchiveOnSuccessEnabled(args: {
-  autoArchiveOnSuccess?: boolean;
-}): boolean {
-  return args.autoArchiveOnSuccess !== false;
-}
-
-export class ThreadManager implements ThreadOrchestrator {
+export class Orchestrator implements ThreadOrchestrator {
   private environmentService: EnvironmentService;
-  private environmentRuntimes: Map<string, ActiveEnvironmentRuntime>;
   /** Threads explicitly titled by the caller should not be overwritten by event heuristics. */
   private lockedTitleThreadIds = new Set<string>();
   /** Ensure automatic title generation is attempted at most once per thread. */
@@ -435,6 +421,7 @@ export class ThreadManager implements ThreadOrchestrator {
   /** Tracks threads whose workspace deletion is in progress. */
   private workspaceCleanupInFlightThreadIds: Set<string>;
   private agentServer: AgentServer;
+  private workflowService = new WorkflowService();
   private operationIdCounter = 0;
   private threadShellPath: string | undefined;
   private environmentCatalog: SystemEnvironmentInfo[];
@@ -514,7 +501,6 @@ export class ThreadManager implements ThreadOrchestrator {
         },
       },
     );
-    this.environmentRuntimes = this.environmentService.environmentRuntimes;
     this.primaryPromotionByProjectId = this.environmentService.primaryPromotionByProjectId;
     this.primaryPromotionValidatedAtByProjectId =
       this.environmentService.primaryPromotionValidatedAtByProjectId;
@@ -714,10 +700,17 @@ export class ThreadManager implements ThreadOrchestrator {
     // Create thread record in DB
     const explicitTitle = this._normalizeThreadTitle(req.title);
     const environmentId = this._resolveRequestedEnvironmentId(req.environmentId);
+    const workflowId = this.workflowService.resolveWorkflowId(req.workflowId);
     const thread = this.threadRepo.create({
       projectId: req.projectId,
       ...(explicitTitle ? { title: explicitTitle } : {}),
       environmentId,
+      workflowId,
+      workflowState: {
+        phase: "preparing",
+        summary: "Preparing workflow",
+        terminal: false,
+      },
       ...(req.parentThreadId ? { parentThreadId: req.parentThreadId } : {}),
     });
     if (explicitTitle) {
@@ -1164,11 +1157,22 @@ export class ThreadManager implements ThreadOrchestrator {
       message: request?.message?.trim(),
       includeUnstaged: request?.includeUnstaged,
     });
+    this._appendEvent(thread.id, "system/worktree/commit", {
+      status: result.commitCreated ? "committed" : "noop",
+      message: result.message,
+      ...(result.commitSha ? { commitSha: result.commitSha } : {}),
+      ...(result.includeUnstaged !== undefined
+        ? { includeUnstaged: result.includeUnstaged }
+        : {}),
+    }, { broadcastChanges: ["events-appended", "work-status-changed"] });
 
     if (
       result.commitCreated &&
-      environment.kind === "local" &&
-      isAutoArchiveOnSuccessEnabled(request ?? {})
+      this.workflowService.shouldAutoArchiveOnSuccess({
+        workflowId: thread.workflowId ?? "noop",
+        operation: "commit",
+        requested: request?.autoArchiveOnSuccess,
+      })
     ) {
       this.archive(thread.id);
     }
@@ -1211,8 +1215,28 @@ export class ThreadManager implements ThreadOrchestrator {
           includeUnstaged: false,
         }),
     });
+    this._appendEvent(thread.id, "system/worktree/squash_merge", {
+      status: mergeResult.merged
+        ? "merged"
+        : mergeResult.conflictFiles && mergeResult.conflictFiles.length > 0
+          ? "conflict"
+          : "noop",
+      message: mergeResult.message,
+      ...(mergeResult.committed !== undefined ? { committed: mergeResult.committed } : {}),
+      ...(options.mergeBaseBranch?.trim()
+        ? { mergeBaseBranch: options.mergeBaseBranch.trim() }
+        : {}),
+      ...(mergeResult.conflictFiles ? { conflictFiles: mergeResult.conflictFiles } : {}),
+    }, { broadcastChanges: ["events-appended", "work-status-changed"] });
 
-    if (mergeResult.merged && isAutoArchiveOnSuccessEnabled(options)) {
+    if (
+      mergeResult.merged &&
+      this.workflowService.shouldAutoArchiveOnSuccess({
+        workflowId: thread.workflowId ?? "noop",
+        operation: "squash_merge",
+        requested: options.autoArchiveOnSuccess,
+      })
+    ) {
       this.archive(thread.id);
     }
 
@@ -1686,11 +1710,15 @@ export class ThreadManager implements ThreadOrchestrator {
 
     const primaryPromotion = this.primaryPromotionByProjectId.get(thread.projectId);
     const policyAction = this._resolveOperationPolicyAction(request.operation);
-    const policyDecision = evaluateThreadOperationPolicy(policyAction, {
+    const policyDecision = this.workflowService.evaluateOperationPolicy(
+      thread.workflowId ?? "noop",
+      policyAction,
+      {
       status: thread.status,
       archived: thread.archivedAt !== undefined,
       primaryCheckoutActive: primaryPromotion?.threadId === thread.id,
-    });
+      },
+    );
 
     if (!policyDecision.allowed) {
       throw invalidRequestError(policyDecision.reason ?? "Operation is not allowed");
@@ -1766,11 +1794,15 @@ export class ThreadManager implements ThreadOrchestrator {
       throw threadArchivedError(threadId);
     }
 
-    const policyDecision = evaluateThreadOperationPolicy("promote", {
+    const policyDecision = this.workflowService.evaluateOperationPolicy(
+      thread.workflowId ?? "noop",
+      "promote",
+      {
       status: thread.status,
       archived: thread.archivedAt !== undefined,
       primaryCheckoutActive: false,
-    });
+      },
+    );
     if (!policyDecision.allowed) {
       throw invalidRequestError(policyDecision.reason ?? "Promotion is not allowed");
     }
@@ -1901,11 +1933,15 @@ export class ThreadManager implements ThreadOrchestrator {
     if (!project) {
       throw projectNotFoundError(thread.projectId);
     }
-    const policyDecision = evaluateThreadOperationPolicy("demote", {
+    const policyDecision = this.workflowService.evaluateOperationPolicy(
+      thread.workflowId ?? "noop",
+      "demote",
+      {
       status: thread.status,
       archived: thread.archivedAt !== undefined,
       primaryCheckoutActive: false,
-    });
+      },
+    );
     if (!policyDecision.allowed) {
       throw invalidRequestError(policyDecision.reason ?? "Demotion is not allowed");
     }
@@ -2037,12 +2073,12 @@ export class ThreadManager implements ThreadOrchestrator {
     return this.agentServer.listProviders();
   }
 
-  getEnvironmentInfo(): SystemEnvironmentInfo {
-    return this.environmentService.getEnvironmentInfo();
-  }
-
   listEnvironments(): SystemEnvironmentInfo[] {
     return this.environmentService.listEnvironments();
+  }
+
+  listWorkflows(): SystemWorkflowInfo[] {
+    return this.workflowService.listDefinitions();
   }
 
   /**
@@ -2142,6 +2178,7 @@ export class ThreadManager implements ThreadOrchestrator {
     const preProvisionDeveloperInstructions = this._buildDeveloperInstructions({
       projectWorkflowInstructions: project.workflowInstructions,
       requestDeveloperInstructions: req.developerInstructions,
+      workflowId: thread?.workflowId,
     });
     const preProvisionRequest = preProvisionDeveloperInstructions
       ? { ...req, developerInstructions: preProvisionDeveloperInstructions }
@@ -2188,11 +2225,33 @@ export class ThreadManager implements ThreadOrchestrator {
       opts?.rootPathHint ?? project.rootPath,
       requestedEnvironmentId,
     );
+    const workflowId = thread?.workflowId ?? "noop";
+    const compatibility = this.workflowService
+      .getDefinition(workflowId)
+      .checkCompatibility(environmentRuntime.environment);
+    if (!compatibility.ok) {
+      this.threadRepo.update(threadId, {
+        workflowState: {
+          phase: "failed",
+          summary: compatibility.missingRequirements.map((item) => item.reason).join("; "),
+          terminal: true,
+          successful: false,
+        },
+      });
+      throw invalidRequestError(
+        compatibility.missingRequirements.map((item) => item.reason).join("; "),
+      );
+    }
     this.threadRepo.update(threadId, {
       environmentId: environmentRuntime.environment.kind,
       environmentRecord: {
         kind: environmentRuntime.environment.kind,
         state: environmentRuntime.environment.serialize(),
+      },
+      workflowState: {
+        phase: "working",
+        summary: "Workflow ready",
+        terminal: false,
       },
     });
     this._appendEvent(threadId, "system/provisioning/completed", {
@@ -2207,7 +2266,7 @@ export class ThreadManager implements ThreadOrchestrator {
     const effectiveDeveloperInstructions = this._buildDeveloperInstructions({
       projectWorkflowInstructions: project.workflowInstructions,
       requestDeveloperInstructions: req.developerInstructions,
-      environmentKind: environmentRuntime.environment.kind,
+      workflowId: thread?.workflowId,
     });
     const effectiveRequest = effectiveDeveloperInstructions
       ? { ...req, developerInstructions: effectiveDeveloperInstructions }
@@ -2333,9 +2392,6 @@ export class ThreadManager implements ThreadOrchestrator {
       projectRootPath,
       runtimeEnv: this.runtimeEnv,
       services: {
-        appendEvent: (type, data, opts) => {
-          this._appendEvent(threadId, type, data, opts);
-        },
         llmCompletion: async ({ cwd, includeUnstaged }) => {
           const generated = await this.llmCompletionService.generateCommitMessage({
             cwd,
@@ -2558,7 +2614,7 @@ export class ThreadManager implements ThreadOrchestrator {
     threadId: string;
     projectId: string;
   }): ProviderThreadContext {
-    const environmentRuntime = this.environmentRuntimes.get(args.threadId);
+    const environmentRuntime = this.environmentService.getEnvironmentRuntime(args.threadId);
     return {
       projectId: args.projectId,
       threadId: args.threadId,
@@ -2661,7 +2717,7 @@ export class ThreadManager implements ThreadOrchestrator {
   private _buildDeveloperInstructions(args: {
     projectWorkflowInstructions?: string;
     requestDeveloperInstructions?: string;
-    environmentKind?: string;
+    workflowId?: Thread["workflowId"];
   }): string | undefined {
     const projectInstructions = args.projectWorkflowInstructions?.trim();
     const requestInstructions = args.requestDeveloperInstructions?.trim();
@@ -2672,10 +2728,13 @@ export class ThreadManager implements ThreadOrchestrator {
     const currentInstructions = baseInstructions.length > 0
       ? baseInstructions
       : undefined;
-    if (args.environmentKind !== "worktree") {
+    const workflowId = args.workflowId ?? "noop";
+    const workflowInstructions =
+      this.workflowService.getDefinition(workflowId).buildInstructions();
+    if (!workflowInstructions) {
       return currentInstructions;
     }
-    const customized = [currentInstructions, WORKTREE_GUIDED_WORKFLOW_INSTRUCTIONS]
+    const customized = [currentInstructions, workflowInstructions]
       .filter((value): value is string => Boolean(value && value.trim().length > 0))
       .join("\n\n")
       .trim();
@@ -2825,12 +2884,12 @@ export class ThreadManager implements ThreadOrchestrator {
 
   private _resolveOperationPolicyAction(
     operation: ThreadOperationType,
-  ): "commit" | "squash" {
+  ): "commit" | "squash_merge" {
     switch (operation) {
       case "commit":
         return "commit";
       case "squash_merge":
-        return "squash";
+        return "squash_merge";
       default:
         return assertNever(operation);
     }
