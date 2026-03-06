@@ -134,6 +134,20 @@
       "when": 1772937600000,
       "tag": "0018_drop_thread_agent_diff_stats",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "6",
+      "when": 1772955000000,
+      "tag": "0019_thread_workflows",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "6",
+      "when": 1772955060000,
+      "tag": "0020_thread_workflow_state",
+      "breakpoints": true
     }
   ]
 }

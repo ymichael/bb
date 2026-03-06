@@ -16,6 +16,7 @@ import {
   createConnection,
   migrate,
 } from "@beanbag/db";
+import { createCodexProviderAdapter } from "@beanbag/agent-server";
 import { createServer } from "../../server.js";
 import {
   createFakeCodexBinDir,
@@ -91,6 +92,7 @@ export async function startDaemonE2eHarness(
 
   const dbPath = join(tempDir, "beanbag.db");
   const fakeCodexBinDir = createFakeCodexBinDir(tempDir, opts?.fakeCodex);
+  const fakeCodexCommand = join(fakeCodexBinDir, "codex");
   const previousPath = process.env.PATH;
   process.env.PATH = prependPathEntry(previousPath, fakeCodexBinDir);
 
@@ -110,6 +112,10 @@ export async function startDaemonE2eHarness(
       projectRepo,
       threadRepo,
       eventRepo,
+      provider: createCodexProviderAdapter({
+        processCommand: fakeCodexCommand,
+        processArgs: ["app-server"],
+      }),
     });
 
     await threadManager.reconcileActiveThreadsOnBoot();

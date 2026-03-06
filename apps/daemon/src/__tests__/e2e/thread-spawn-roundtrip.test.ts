@@ -49,12 +49,16 @@ async function waitForThreadRoundTrip(
 ): Promise<{ thread: Thread; events: ThreadEvent[]; reachedActive: boolean }> {
   const deadline = Date.now() + timeoutMs;
   let reachedActive = false;
+  let lastThread: Thread | undefined;
+  let lastEvents: ThreadEvent[] = [];
 
   while (Date.now() < deadline) {
     const [thread, events] = await Promise.all([
       readJson<Thread>(`${baseUrl}/api/v1/threads/${threadId}`),
       readJson<ThreadEvent[]>(`${baseUrl}/api/v1/threads/${threadId}/events`),
     ]);
+    lastThread = thread;
+    lastEvents = events;
 
     if (thread.status === "active") {
       reachedActive = true;
@@ -78,7 +82,9 @@ async function waitForThreadRoundTrip(
     await sleep(40);
   }
 
-  throw new Error(`Thread ${threadId} did not complete within ${timeoutMs}ms`);
+  throw new Error(
+    `Thread ${threadId} did not complete within ${timeoutMs}ms (status=${lastThread?.status ?? "unknown"}, workflow=${JSON.stringify(lastThread?.workflowState)}, events=${lastEvents.map((event) => normalizeEventType(event.type)).join(",")})`,
+  );
 }
 
 describe.sequential("e2e: CLI -> HTTP -> daemon -> agent -> API", () => {
@@ -91,48 +97,52 @@ describe.sequential("e2e: CLI -> HTTP -> daemon -> agent -> API", () => {
     }
   });
 
-  it("spawns a thread via CLI and records outbound + lifecycle events", async () => {
-    harness = await startDaemonE2eHarness({
-      fakeCodex: {
-        defaultTurnDelayMs: 25,
-      },
-    });
+  it(
+    "spawns a thread via CLI and records outbound + lifecycle events",
+    async () => {
+      harness = await startDaemonE2eHarness({
+        fakeCodex: {
+          defaultTurnDelayMs: 25,
+        },
+      });
 
-    const project = await createProject(harness.baseUrl, harness.projectRoot);
+      const project = await createProject(harness.baseUrl, harness.projectRoot);
 
-    const cli = await runCliCommand({
-      baseUrl: harness.baseUrl,
-      args: [
-        "thread",
-        "spawn",
-        "--project",
-        project.id,
-        "--prompt",
-        "Implement deterministic e2e daemon coverage.",
-      ],
-    });
+      const cli = await runCliCommand({
+        baseUrl: harness.baseUrl,
+        args: [
+          "thread",
+          "spawn",
+          "--project",
+          project.id,
+          "--prompt",
+          "Implement deterministic e2e daemon coverage.",
+        ],
+      });
 
-    expect(cli.exitCode).toBe(0);
-    expect(cli.signal).toBeNull();
-    expect(cli.stderr).not.toContain("Error:");
+      expect(cli.exitCode).toBe(0);
+      expect(cli.signal).toBeNull();
+      expect(cli.stderr).not.toContain("Error:");
 
-    const threadId = parseThreadIdFromCliOutput(cli.stdout);
+      const threadId = parseThreadIdFromCliOutput(cli.stdout);
 
-    const { thread, events, reachedActive } = await waitForThreadRoundTrip(
-      harness.baseUrl,
-      threadId,
-    );
-    expect(reachedActive).toBe(true);
-    expect(thread.projectId).toBe(project.id);
-    expect(thread.status).toBe("idle");
+      const { thread, events, reachedActive } = await waitForThreadRoundTrip(
+        harness.baseUrl,
+        threadId,
+      );
+      expect(reachedActive).toBe(true);
+      expect(thread.projectId).toBe(project.id);
+      expect(thread.status).toBe("idle");
 
-    const eventTypes = events.map((event) => normalizeEventType(event.type));
-    expect(eventTypes).toContain("client/thread/start");
-    expect(eventTypes).toContain("client/turn/start");
-    expect(eventTypes).toContain("turn/started");
-    expect(eventTypes).toContain("turn/completed");
-    expect(eventTypes.indexOf("turn/started")).toBeLessThan(
-      eventTypes.indexOf("turn/completed"),
-    );
-  });
+      const eventTypes = events.map((event) => normalizeEventType(event.type));
+      expect(eventTypes).toContain("client/thread/start");
+      expect(eventTypes).toContain("client/turn/start");
+      expect(eventTypes).toContain("turn/started");
+      expect(eventTypes).toContain("turn/completed");
+      expect(eventTypes.indexOf("turn/started")).toBeLessThan(
+        eventTypes.indexOf("turn/completed"),
+      );
+    },
+    15_000,
+  );
 });

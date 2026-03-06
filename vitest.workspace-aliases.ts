@@ -7,6 +7,7 @@ export const workspaceTestAliases = {
   "@beanbag/agent-core": path.resolve(repoRoot, "packages/agent-core/src/index.ts"),
   "@beanbag/environment": path.resolve(repoRoot, "packages/environment/src/index.ts"),
   "@beanbag/agent-server": path.resolve(repoRoot, "packages/agent-server/src/index.ts"),
+  "@beanbag/workflow": path.resolve(repoRoot, "packages/workflow/src/index.ts"),
   "@beanbag/db": path.resolve(repoRoot, "packages/db/src/index.ts"),
   "@beanbag/daemon": path.resolve(repoRoot, "apps/daemon/src/index.ts"),
   "@beanbag/cli": path.resolve(repoRoot, "apps/cli/src/index.ts"),

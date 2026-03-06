@@ -770,7 +770,7 @@ describe("ConversationEntry", () => {
 
     const html = renderToStaticMarkup(<ConversationEntry message={message} initialExpanded />);
     expect(html).toContain("Environment");
-    expect(html).toContain(">worktree<");
+    expect(html).toContain(">Git Worktree Workspace<");
     expect(html).not.toContain("Setup status");
     expect(html).not.toContain("Additional details");
   });
@@ -828,8 +828,7 @@ describe("ConversationEntry", () => {
 
     const html = renderToStaticMarkup(<ConversationEntry message={message} initialExpanded />);
     expect(html).toContain("Environment");
-    expect(html).toContain(">worktree<");
-    expect(html).not.toContain("Git Worktree Workspace");
+    expect(html).toContain(">Git Worktree Workspace<");
     expect(html).toContain("Setup script");
     expect(html).toContain(".bb-env-setup.sh");
     expect(html).toContain("Setup status");
