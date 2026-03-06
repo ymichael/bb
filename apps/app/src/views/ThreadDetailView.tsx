@@ -1856,7 +1856,7 @@ export function ThreadDetailView() {
     <>
       {showThreadMetadata ? (
         <section className="sticky top-0 z-10 shrink-0 bg-background pt-2">
-          <DetailCard layout="columns">
+          <DetailCard>
             {parentThreadId ? (
               <DetailRow
                 label="Parent thread"
