@@ -341,7 +341,12 @@ export class EnvironmentService {
   async promoteThreadEnvironment(args: {
     thread: Thread;
     ttlMs?: number;
-  }): Promise<{ promoted: boolean; status: PrimaryCheckoutStatus; state?: PrimaryPromotionState }> {
+  }): Promise<{
+    promoted: boolean;
+    status: PrimaryCheckoutStatus;
+    state?: PrimaryPromotionState;
+    reason?: "already-promoted-same-thread" | "already-promoted-other-thread";
+  }> {
     const project = this.projectRepo.getById(args.thread.projectId);
     if (!project) {
       throw new Error(`Project not found: ${args.thread.projectId}`);
@@ -350,9 +355,13 @@ export class EnvironmentService {
     const existing = this.primaryPromotionByProjectId.get(project.id);
     if (existing) {
       return {
-        promoted: existing.threadId !== args.thread.id ? false : false,
+        promoted: false,
         status: this.getPrimaryCheckoutStatus(project.id),
         state: existing,
+        reason:
+          existing.threadId === args.thread.id
+            ? "already-promoted-same-thread"
+            : "already-promoted-other-thread",
       };
     }
     const environment = this.restoreThreadEnvironment(args.thread, project.rootPath);
@@ -384,7 +393,12 @@ export class EnvironmentService {
   async demotePrimaryCheckout(args: {
     thread: Thread;
     ttlMs?: number;
-  }): Promise<{ demoted: boolean; status: PrimaryCheckoutStatus; snapshot?: EnvironmentCheckoutSnapshot; activeThreadId?: string }> {
+  }): Promise<{
+    demoted: boolean;
+    status: PrimaryCheckoutStatus;
+    snapshot?: EnvironmentCheckoutSnapshot;
+    activeThreadId?: string;
+  }> {
     const project = this.projectRepo.getById(args.thread.projectId);
     if (!project) {
       throw new Error(`Project not found: ${args.thread.projectId}`);

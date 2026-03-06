@@ -1785,14 +1785,18 @@ export class ThreadManager implements ThreadOrchestrator {
     }
     return this._runWithPrimaryCheckoutTransitionLock(project.id, async () => {
       this._ensurePrimaryPromotionStateIsCurrent(project.id, { force: true });
-      const existing = this.primaryPromotionByProjectId.get(project.id);
-      if (existing && existing.threadId !== thread.id) {
+      const result = await this.environmentService.promoteThreadEnvironment({
+        thread,
+        ttlMs: PRIMARY_CHECKOUT_VALIDATION_TTL_MS,
+      });
+
+      if (result.reason === "already-promoted-other-thread" && result.state) {
         throw invalidRequestError(
-          `Thread ${existing.threadId} is already promoted in the primary checkout for this project`,
+          `Thread ${result.state.threadId} is already promoted in the primary checkout for this project`,
         );
       }
 
-      if (existing && existing.threadId === thread.id) {
+      if (result.reason === "already-promoted-same-thread" && result.state) {
         this._appendEvent(
           thread.id,
           "system/primary_checkout/updated",
@@ -1802,8 +1806,8 @@ export class ThreadManager implements ThreadOrchestrator {
             message: "Primary checkout is already promoted to this thread",
             projectId: project.id,
             activeThreadId: thread.id,
-            ...(existing.promotedCheckout.branch
-              ? { branch: existing.promotedCheckout.branch }
+            ...(result.state.promotedCheckout.branch
+              ? { branch: result.state.promotedCheckout.branch }
               : {}),
           },
           { broadcastChanges: ["events-appended"] },
@@ -1812,7 +1816,7 @@ export class ThreadManager implements ThreadOrchestrator {
           ok: true,
           promoted: false,
           message: "Primary checkout is already promoted to this thread",
-          primaryStatus: this.getPrimaryCheckoutStatus(project.id),
+          primaryStatus: result.status,
         };
       }
 
@@ -1841,21 +1845,7 @@ export class ThreadManager implements ThreadOrchestrator {
       );
 
       try {
-        if (!environment.supportsPromoteToActiveWorkspace()) {
-          throw invalidRequestError("Promotion is not supported for this environment");
-        }
-        const promoted = environment.promoteToActiveWorkspace({
-          activeWorkspaceRoot: project.rootPath,
-        });
-        const nextState: PrimaryPromotionState = {
-          projectId: project.id,
-          threadId: thread.id,
-          promotedAt: Date.now(),
-          previousCheckout: promoted.previousCheckout,
-          promotedCheckout: promoted.promotedCheckout,
-          reconstructed: false,
-        };
-        this._setPrimaryPromotionState(project.id, nextState);
+        const promotedState = result.state;
         this._appendEvent(
           thread.id,
           "system/primary_checkout/updated",
@@ -1865,8 +1855,8 @@ export class ThreadManager implements ThreadOrchestrator {
             message: "Primary checkout now reflects this thread worktree",
             projectId: project.id,
             activeThreadId: thread.id,
-            ...(promoted.promotedCheckout.branch
-              ? { branch: promoted.promotedCheckout.branch }
+            ...(promotedState?.promotedCheckout.branch
+              ? { branch: promotedState.promotedCheckout.branch }
               : {}),
           },
           { broadcastChanges: ["events-appended"] },
@@ -1876,7 +1866,7 @@ export class ThreadManager implements ThreadOrchestrator {
           ok: true,
           promoted: true,
           message: "Primary checkout promoted",
-          primaryStatus: this.getPrimaryCheckoutStatus(project.id),
+          primaryStatus: result.status,
         };
       } catch (err) {
         const message = this._toErrorMessage(err);
@@ -1963,29 +1953,10 @@ export class ThreadManager implements ThreadOrchestrator {
       );
 
       try {
-        const fallbackDefaultCheckout =
-          resolveProjectDefaultBranchCheckout(project.rootPath);
-        const demoteSnapshot = active.previousCheckout ?? fallbackDefaultCheckout;
-        if (!demoteSnapshot) {
-          throw invalidRequestError(
-            "Could not determine a branch/commit to restore. Checkout manually and retry.",
-          );
-        }
-
-        const activeThreadEnvironment = activeThread
-          ? this._restoreThreadEnvironment(activeThread, project.rootPath)
-          : undefined;
-        if (!activeThreadEnvironment) {
-          throw invalidRequestError(this._restoreEnvironmentUnavailableMessage(active.threadId));
-        }
-        if (!activeThreadEnvironment.supportsDemoteFromActiveWorkspace()) {
-          throw invalidRequestError("Demotion is not supported for this environment");
-        }
-        activeThreadEnvironment.demoteFromActiveWorkspace({
-          activeWorkspaceRoot: project.rootPath,
-          snapshot: demoteSnapshot,
+        const result = await this.environmentService.demotePrimaryCheckout({
+          thread,
+          ttlMs: PRIMARY_CHECKOUT_VALIDATION_TTL_MS,
         });
-        this._clearPrimaryPromotionState(project.id);
         this._appendEvent(
           active.threadId,
           "system/primary_checkout/updated",
@@ -1994,7 +1965,7 @@ export class ThreadManager implements ThreadOrchestrator {
             status: "completed",
             message: "Primary checkout restored from promoted state",
             projectId: project.id,
-            ...(demoteSnapshot.branch ? { branch: demoteSnapshot.branch } : {}),
+            ...(result.snapshot?.branch ? { branch: result.snapshot.branch } : {}),
           },
           { broadcastChanges: ["events-appended"] },
         );
@@ -2008,7 +1979,7 @@ export class ThreadManager implements ThreadOrchestrator {
           ok: true,
           demoted: true,
           message: "Primary checkout demoted",
-          primaryStatus: this.getPrimaryCheckoutStatus(project.id),
+          primaryStatus: result.status,
         };
       } catch (err) {
         const message = this._toErrorMessage(err);
