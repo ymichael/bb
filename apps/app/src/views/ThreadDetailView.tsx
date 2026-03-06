@@ -1468,8 +1468,19 @@ export function ThreadDetailView() {
     syncTimelineScrollAnchor();
   }, [handleScroll, syncTimelineScrollAnchor]);
 
-  useLayoutEffect(() => {
-    syncTimelineScrollAnchor();
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      syncTimelineScrollAnchor();
+      return;
+    }
+
+    const frameId = window.requestAnimationFrame(() => {
+      syncTimelineScrollAnchor();
+    });
+
+    return () => {
+      window.cancelAnimationFrame(frameId);
+    };
   }, [syncTimelineScrollAnchor, threadDetailRows, isGitDiffPanelOpen]);
 
   useLayoutEffect(() => {
