@@ -48,11 +48,17 @@ export interface Thread {
   agentDiffStats?: ThreadAgentDiffStats;
   queuedMessages?: ThreadQueuedMessage[];
   environmentId?: string;
+  environmentRecord?: PersistedEnvironmentRecord;
   parentThreadId?: string;
   archivedAt?: number;
   lastReadAt?: number;
   createdAt: number;
   updatedAt: number;
+}
+
+export interface PersistedEnvironmentRecord {
+  kind: string;
+  state: unknown;
 }
 
 export type ThreadAgentDiffSource = "worktree_snapshot" | "local_tally";

@@ -33,7 +33,6 @@ export function listAvailableEnvironmentInfos(): SystemEnvironmentInfo[] {
     const adapter = createEnvironmentForId(environmentId);
     return {
       ...adapter.info,
-      capabilities: { ...adapter.info.capabilities },
     };
   });
 }

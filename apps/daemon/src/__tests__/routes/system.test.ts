@@ -43,11 +43,6 @@ function mockThreadManager(): ThreadOrchestrator {
   const environmentInfo: SystemEnvironmentInfo = {
     id: "local",
     displayName: "Local Workspace",
-    capabilities: {
-      isolatedFilesystem: false,
-      ephemeralWorkspace: false,
-      supportsCleanup: false,
-    },
   };
 
   return {
@@ -422,21 +417,11 @@ describe("System routes", () => {
       const activeEnvironment: SystemEnvironmentInfo = {
         id: "worktree",
         displayName: "Git Worktree Workspace",
-        capabilities: {
-          isolatedFilesystem: true,
-          ephemeralWorkspace: true,
-          supportsCleanup: true,
-        },
       };
       const environments: SystemEnvironmentInfo[] = [
         {
           id: "local",
           displayName: "Local Workspace",
-          capabilities: {
-            isolatedFilesystem: false,
-            ephemeralWorkspace: false,
-            supportsCleanup: false,
-          },
         },
         activeEnvironment,
       ];

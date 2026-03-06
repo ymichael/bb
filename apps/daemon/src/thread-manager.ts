@@ -24,10 +24,8 @@ import {
   toUIMessages,
   unwrapProviderEventPayload,
   type AvailableModel,
-  type EnvironmentAdapter,
-  type EnvironmentInstructionsContext,
   type EnvironmentProvisioningEvent,
-  type EnvironmentSession,
+  type PersistedEnvironmentRecord,
   type ProviderAdapter,
   type ProviderExecutionOptions,
   type ProviderThreadContext,
@@ -66,6 +64,13 @@ import {
   type ThreadToolGroupMessagesResponse,
   type ThreadChangeKind,
 } from "@beanbag/agent-core";
+import {
+  EnvironmentRegistry,
+  createDefaultEnvironmentRegistry,
+  normalizeEnvironmentKind,
+  type CreateEnvironmentContext,
+  type IEnvironment,
+} from "@beanbag/environment";
 import type {
   ThreadRepository,
   EventRepository,
@@ -73,8 +78,6 @@ import type {
 } from "@beanbag/db";
 import {
   createCodexProviderAdapter,
-  createEnvironmentAdapter,
-  createLocalEnvironmentAdapter,
   type LlmCompletionService,
   ProviderRuntime,
   ProviderRuntimeRpcError,
@@ -111,8 +114,7 @@ interface TellContext {
 }
 
 interface ActiveEnvironmentRuntime {
-  adapter: EnvironmentAdapter;
-  session: EnvironmentSession;
+  environment: IEnvironment;
 }
 
 interface ThreadTimelineCacheEntry {
@@ -156,6 +158,12 @@ const THREAD_STATUS_CHANGE_KINDS: readonly ThreadChangeKind[] = [
   "status-changed",
   "work-status-changed",
 ];
+const WORKTREE_GUIDED_WORKFLOW_INSTRUCTIONS = [
+  "[Beanbag worktree workflow]",
+  "- You are running inside a per-thread git worktree.",
+  "- Commit your work frequently so it can be safely promoted/tested and not lost.",
+  "- Preferred flow: iterate in this worktree -> promote to primary checkout for manual/E2E testing -> continue edits back in this worktree -> squash merge when done.",
+].join("\n");
 
 const PRIMARY_CHECKOUT_VALIDATION_TTL_MS = 2_000;
 const IDLE_NOISE_EVENT_KEEP_RECENT = 300;
@@ -484,7 +492,7 @@ export class ThreadManager implements ThreadOrchestrator {
     private llmCompletionService: LlmCompletionService,
     private provider: ProviderAdapter = createCodexProviderAdapter(),
     private runtimeEnv: NodeJS.ProcessEnv = process.env,
-    private environmentAdapter: EnvironmentAdapter = createLocalEnvironmentAdapter(),
+    private environmentRegistry: EnvironmentRegistry = createDefaultEnvironmentRegistry(),
     providerCatalog?: SystemProviderInfo[],
     environmentCatalog?: SystemEnvironmentInfo[],
     private scheduler: SchedulerService = new InMemorySchedulerService(),
@@ -503,12 +511,7 @@ export class ThreadManager implements ThreadOrchestrator {
       ];
     this.environmentCatalog =
       environmentCatalog ??
-      [
-        {
-          ...this.environmentAdapter.info,
-          capabilities: { ...this.environmentAdapter.info.capabilities },
-        },
-      ];
+      this.environmentRegistry.list();
   }
 
   /**
@@ -600,10 +603,10 @@ export class ThreadManager implements ThreadOrchestrator {
     }
 
     try {
-      const environmentAdapter = this._resolveThreadEnvironmentAdapter({
-        thread,
-      });
-      await this._spawnProcess(thread.id, project.rootPath, environmentAdapter);
+      const environmentKind = this._resolveRequestedEnvironmentId(
+        thread.environmentRecord?.kind ?? thread.environmentId,
+      );
+      await this._spawnProcess(thread.id, project.rootPath, environmentKind);
       this._sendInitialize(thread.id);
       const resumedThreadId = await this._sendRequestAndAwaitThreadId(
         thread.id,
@@ -2348,16 +2351,18 @@ export class ThreadManager implements ThreadOrchestrator {
   }
 
   getEnvironmentInfo(): SystemEnvironmentInfo {
+    const [firstEnvironment] = this.environmentCatalog;
+    if (!firstEnvironment) {
+      throw new Error("No environments are registered");
+    }
     return {
-      ...this.environmentAdapter.info,
-      capabilities: { ...this.environmentAdapter.info.capabilities },
+      ...firstEnvironment,
     };
   }
 
   listEnvironments(): SystemEnvironmentInfo[] {
     return this.environmentCatalog.map((environment) => ({
       ...environment,
-      capabilities: { ...environment.capabilities },
     }));
   }
 
@@ -2500,45 +2505,35 @@ export class ThreadManager implements ThreadOrchestrator {
       force: true,
     });
 
-    const environmentAdapter = this._resolveThreadEnvironmentAdapter({
-      thread,
-      requestedEnvironmentId: req.environmentId,
-    });
-    const requestedEnvironmentId =
-      req.environmentId ??
-      thread?.environmentId ??
-      environmentAdapter.info.id;
+    const requestedEnvironmentId = this._resolveRequestedEnvironmentId(
+      req.environmentId ?? thread?.environmentId,
+    );
     if (thread && thread.environmentId !== requestedEnvironmentId) {
       this.threadRepo.update(threadId, { environmentId: requestedEnvironmentId });
     }
+    const requestedEnvironmentInfo = this.environmentRegistry.get(requestedEnvironmentId).info;
     this._appendEvent(threadId, "system/provisioning/started", {
       environmentId: requestedEnvironmentId,
-      environmentDisplayName: environmentAdapter.info.displayName,
+      environmentDisplayName: requestedEnvironmentInfo.displayName,
     });
 
     const environmentRuntime = await this._spawnProcess(
       threadId,
       opts?.rootPathHint ?? project.rootPath,
-      environmentAdapter,
+      requestedEnvironmentId,
     );
+    this.threadRepo.update(threadId, {
+      environmentId: environmentRuntime.environment.kind,
+      environmentRecord: {
+        kind: environmentRuntime.environment.kind,
+        state: environmentRuntime.environment.serialize(),
+      },
+    });
     this._sendInitialize(threadId);
-    const effectiveEnvironmentId = this._resolveEffectiveEnvironmentId(
-      environmentRuntime.adapter,
-      environmentRuntime.session,
-    );
-    const fallbackReason = environmentRuntime.session.metadata?.fallbackReason;
-    if (fallbackReason && effectiveEnvironmentId !== requestedEnvironmentId) {
-      this._appendEvent(threadId, "system/provisioning/fallback", {
-        requestedEnvironmentId,
-        fallbackEnvironmentId: effectiveEnvironmentId,
-        reason: fallbackReason,
-      });
-    }
     this._appendEvent(threadId, "system/provisioning/completed", {
-      environmentId: effectiveEnvironmentId,
-      workspaceRoot: environmentRuntime.session.cwd,
-      mode: environmentRuntime.session.metadata?.mode,
-      ...(fallbackReason ? { fallbackReason } : {}),
+      environmentId: environmentRuntime.environment.kind,
+      workspaceRoot: environmentRuntime.environment.rootPath,
+      mode: environmentRuntime.environment.kind,
     });
     const hydratedThread = this.threadRepo.getById(threadId);
     if (hydratedThread) {
@@ -2549,17 +2544,7 @@ export class ThreadManager implements ThreadOrchestrator {
     const effectiveDeveloperInstructions = this._buildDeveloperInstructions({
       projectWorkflowInstructions: project.workflowInstructions,
       requestDeveloperInstructions: req.developerInstructions,
-      environmentAdapter: environmentRuntime.adapter,
-      environmentInstructionsContext: {
-        projectId: req.projectId,
-        threadId,
-        projectRootPath: project.rootPath,
-        workspaceRootPath: environmentRuntime.session.cwd,
-        requestedEnvironmentId,
-        effectiveEnvironmentId,
-        mode: environmentRuntime.session.metadata?.mode,
-        fallbackReason,
-      },
+      environmentKind: environmentRuntime.environment.kind,
     });
     const threadStartParams = this.provider.createThreadStartParams(
       effectiveDeveloperInstructions
@@ -2670,18 +2655,22 @@ export class ThreadManager implements ThreadOrchestrator {
 
   private _setEnvironmentSession(
     threadId: string,
-    adapter: EnvironmentAdapter,
-    session: EnvironmentSession,
+    environment: IEnvironment,
   ): void {
     this._cleanupEnvironmentSession(threadId);
-    this.environmentRuntimes.set(threadId, { adapter, session });
+    this.environmentRuntimes.set(threadId, { environment });
   }
 
   private _cleanupEnvironmentSession(
     threadId: string,
     opts?: { destroyWorkspace?: boolean },
   ): void {
-    const runtime = this.environmentRuntimes.get(threadId);
+    const runtime = this.environmentRuntimes.get(threadId) as
+      | (ActiveEnvironmentRuntime & {
+          adapter?: { info: { id: string } };
+          session?: { cleanup?: () => Promise<void> | void };
+        })
+      | undefined;
     if (runtime) {
       this.environmentRuntimes.delete(threadId);
     }
@@ -2724,14 +2713,21 @@ export class ThreadManager implements ThreadOrchestrator {
       return;
     }
 
-    const { adapter, session } = runtime;
-    if (!session.cleanup) {
+    const cleanup = runtime?.environment
+      ? () => runtime.environment.dispose()
+      : runtime?.session?.cleanup;
+    if (!cleanup) {
       markWorkspaceCleanupSettled();
       refreshWorkStatusAfterCleanup();
       return;
     }
+    const environmentId =
+      runtime?.environment?.kind ??
+      runtime?.adapter?.info.id ??
+      this.threadRepo.getById(threadId)?.environmentId ??
+      "worktree";
     try {
-      const maybePromise = session.cleanup();
+      const maybePromise = cleanup();
       if (
         maybePromise &&
         typeof maybePromise === "object" &&
@@ -2740,7 +2736,7 @@ export class ThreadManager implements ThreadOrchestrator {
       ) {
         void maybePromise
           .catch((err) => {
-            reportCleanupFailure(adapter.info.id, err);
+            reportCleanupFailure(environmentId, err);
           })
           .finally(() => {
             markWorkspaceCleanupSettled();
@@ -2751,7 +2747,7 @@ export class ThreadManager implements ThreadOrchestrator {
       markWorkspaceCleanupSettled();
       refreshWorkStatusAfterCleanup();
     } catch (err) {
-      reportCleanupFailure(adapter.info.id, err);
+      reportCleanupFailure(environmentId, err);
       markWorkspaceCleanupSettled();
       refreshWorkStatusAfterCleanup();
     }
@@ -2759,42 +2755,34 @@ export class ThreadManager implements ThreadOrchestrator {
 
   private _cleanupPersistedWorkspace(threadId: string): void {
     const thread = this.threadRepo.getById(threadId);
-    if (!thread || thread.environmentId !== "worktree") {
+    if (!thread) {
       return;
     }
     const project = this.projectRepo.getById(thread.projectId);
     if (!project) {
       return;
     }
-    const completedProvisioning = this._readCompletedProvisioningDetails(threadId);
-    const workspaceRoot = completedProvisioning?.workspaceRoot;
-    if (!workspaceRoot) {
+    if (!thread.environmentRecord && normalizeEnvironmentKind(thread.environmentId ?? "") === "worktree") {
+      const completedProvisioning = this._readCompletedProvisioningDetails(threadId);
+      const workspaceRoot = completedProvisioning?.workspaceRoot;
+      if (
+        !workspaceRoot ||
+        (completedProvisioning.mode !== undefined && completedProvisioning.mode !== "worktree") ||
+        resolve(workspaceRoot) === resolve(project.rootPath)
+      ) {
+        return;
+      }
+      this.gitStatusService.removeWorktreeWorkspace({
+        projectRoot: project.rootPath,
+        workspaceRoot,
+      });
       return;
     }
-    if (
-      completedProvisioning.mode !== undefined &&
-      completedProvisioning.mode !== "worktree"
-    ) {
+    const environment = this._restoreThreadEnvironment(thread, project.rootPath);
+    if (!environment || resolve(environment.rootPath) === resolve(project.rootPath)) {
       return;
     }
-    if (resolve(workspaceRoot) === resolve(project.rootPath)) {
-      return;
-    }
-    this.gitStatusService.removeWorktreeWorkspace({
-      projectRoot: project.rootPath,
-      workspaceRoot,
-    });
-  }
-
-  private _resolveEffectiveEnvironmentId(
-    adapter: EnvironmentAdapter,
-    session: EnvironmentSession,
-  ): string {
-    const mode = session.metadata?.mode;
-    if (adapter.info.id === "worktree" && mode === "local") {
-      return "local";
-    }
-    return adapter.info.id;
+    environment.dispose();
   }
 
   private _appendEnvironmentProvisioningEvent(
@@ -2811,15 +2799,13 @@ export class ThreadManager implements ThreadOrchestrator {
     });
   }
 
-  private async _spawnProcess(
+  private _createEnvironmentContext(
     threadId: string,
     projectRootPath: string,
-    environmentAdapter: EnvironmentAdapter,
-  ): Promise<ActiveEnvironmentRuntime> {
+  ): CreateEnvironmentContext {
     const thread = this.threadRepo.getById(threadId);
-    const projectId = thread?.projectId;
-    const prepareContext = {
-      projectId: projectId ?? "",
+    return {
+      projectId: thread?.projectId ?? "",
       threadId,
       projectRootPath,
       runtimeEnv: this.runtimeEnv,
@@ -2827,28 +2813,34 @@ export class ThreadManager implements ThreadOrchestrator {
         this._appendEnvironmentProvisioningEvent(threadId, event);
       },
     };
-    const environmentSession = environmentAdapter.prepareAsync
-      ? await environmentAdapter.prepareAsync(prepareContext)
-      : environmentAdapter.prepare(prepareContext);
-    this._setEnvironmentSession(threadId, environmentAdapter, environmentSession);
-    const effectiveEnvironmentId = this._resolveEffectiveEnvironmentId(
-      environmentAdapter,
-      environmentSession,
+  }
+
+  private async _spawnProcess(
+    threadId: string,
+    projectRootPath: string,
+    environmentKind: string,
+  ): Promise<ActiveEnvironmentRuntime> {
+    const environment = this.environmentRegistry.create(
+      environmentKind,
+      this._createEnvironmentContext(threadId, projectRootPath),
     );
+    this._setEnvironmentSession(threadId, environment);
     const sessionEnv = {
       ...this.runtimeEnv,
-      ...(environmentSession.env ?? {}),
+      ...environment.env,
     };
     const effectivePath = this.threadShellPath ?? sessionEnv.PATH;
+    const thread = this.threadRepo.getById(threadId);
+    const projectId = thread?.projectId;
     const child = spawn(this.provider.processCommand, this.provider.processArgs, {
       stdio: ["pipe", "pipe", "pipe"],
-      cwd: environmentSession.cwd,
+      cwd: environment.rootPath,
       env: {
         ...sessionEnv,
         ...(effectivePath ? { PATH: effectivePath } : {}),
         ...(projectId ? { BB_PROJECT_ID: projectId } : {}),
         BB_THREAD_ID: threadId,
-        BB_ENVIRONMENT_ID: effectiveEnvironmentId,
+        BB_ENVIRONMENT_ID: environment.kind,
       },
     });
 
@@ -2884,8 +2876,7 @@ export class ThreadManager implements ThreadOrchestrator {
     });
 
     return {
-      adapter: environmentAdapter,
-      session: environmentSession,
+      environment,
     };
   }
 
@@ -3000,10 +2991,10 @@ export class ThreadManager implements ThreadOrchestrator {
     }
 
     try {
-      const environmentAdapter = this._resolveThreadEnvironmentAdapter({
-        thread,
-      });
-      await this._spawnProcess(threadId, project.rootPath, environmentAdapter);
+      const environmentKind = this._resolveRequestedEnvironmentId(
+        thread.environmentRecord?.kind ?? thread.environmentId,
+      );
+      await this._spawnProcess(threadId, project.rootPath, environmentKind);
       this._sendInitialize(threadId);
       const resumedThreadId = await this._sendRequestAndAwaitThreadId(
         threadId,
@@ -3050,54 +3041,77 @@ export class ThreadManager implements ThreadOrchestrator {
     projectId: string;
   }): ProviderThreadContext {
     const environmentRuntime = this.environmentRuntimes.get(args.threadId);
-    const environmentSession = environmentRuntime?.session;
-    const environmentId = environmentRuntime
-      ? this._resolveEffectiveEnvironmentId(
-          environmentRuntime.adapter,
-          environmentRuntime.session,
-        )
-      : this.threadRepo.getById(args.threadId)?.environmentId ??
-        this.environmentAdapter.info.id;
+    const environment = environmentRuntime?.environment;
+    const environmentId =
+      environment?.kind ??
+      this.threadRepo.getById(args.threadId)?.environmentId ??
+      "local";
     return {
       projectId: args.projectId,
       threadId: args.threadId,
       ...(this.threadShellPath ? { path: this.threadShellPath } : {}),
-      ...(environmentSession?.cwd
-        ? { workspaceRoot: environmentSession.cwd }
+      ...(environment?.rootPath
+        ? { workspaceRoot: environment.rootPath }
         : {}),
       environmentId,
     };
   }
 
   private _resolveRequestedEnvironmentId(value?: string): string {
-    const normalized = (value ?? this.environmentAdapter.info.id).trim().toLowerCase();
-    if (!normalized) return this.environmentAdapter.info.id;
-    this._resolveEnvironmentAdapter(normalized);
+    const normalized = normalizeEnvironmentKind(value ?? process.env.BEANBAG_ENVIRONMENT ?? "local");
+    if (!normalized) return "local";
+    if (!this.environmentRegistry.has(normalized)) {
+      throw invalidRequestError(`Unsupported environment "${normalized}"`);
+    }
     return normalized;
   }
 
-  private _resolveEnvironmentAdapter(environmentId: string): EnvironmentAdapter {
-    if (environmentId === this.environmentAdapter.info.id) {
-      return this.environmentAdapter;
+  private _restoreThreadEnvironment(
+    thread: Thread,
+    projectRootPath: string,
+  ): IEnvironment | undefined {
+    const runtime = this.environmentRuntimes.get(thread.id);
+    if (runtime) {
+      return runtime.environment;
+    }
+    const environmentRecord =
+      thread.environmentRecord ??
+      this._buildLegacyEnvironmentRecord(thread, projectRootPath);
+    if (!environmentRecord) {
+      return undefined;
     }
     try {
-      return createEnvironmentAdapter({ environmentId });
-    } catch {
-      throw invalidRequestError(
-        `Unsupported environment "${environmentId}"`,
+      return this.environmentRegistry.restore(
+        environmentRecord,
+        this._createEnvironmentContext(thread.id, projectRootPath),
       );
+    } catch {
+      return undefined;
     }
   }
 
-  private _resolveThreadEnvironmentAdapter(args: {
-    thread?: Thread;
-    requestedEnvironmentId?: string;
-  }): EnvironmentAdapter {
-    const environmentId =
-      args.requestedEnvironmentId ??
-      args.thread?.environmentId ??
-      this.environmentAdapter.info.id;
-    return this._resolveEnvironmentAdapter(environmentId);
+  private _buildLegacyEnvironmentRecord(
+    thread: Thread,
+    projectRootPath: string,
+  ): PersistedEnvironmentRecord | undefined {
+    const environmentId = normalizeEnvironmentKind(thread.environmentId ?? "local");
+    if (environmentId === "local") {
+      return { kind: "local", state: {} };
+    }
+    if (environmentId !== "worktree") {
+      return undefined;
+    }
+    const workspaceRoot = this._readCompletedProvisioningWorkspaceRoot(thread.id);
+    if (!workspaceRoot || resolve(workspaceRoot) === resolve(projectRootPath)) {
+      return undefined;
+    }
+    return {
+      kind: "worktree",
+      state: {
+        workspaceRoot,
+        branchName: `bb/thread-${thread.id}`,
+      },
+    };
   }
 
   private _toErrorMessage(err: unknown): string {
@@ -3107,8 +3121,7 @@ export class ThreadManager implements ThreadOrchestrator {
   private _buildDeveloperInstructions(args: {
     projectWorkflowInstructions?: string;
     requestDeveloperInstructions?: string;
-    environmentAdapter?: EnvironmentAdapter;
-    environmentInstructionsContext?: EnvironmentInstructionsContext;
+    environmentKind?: string;
   }): string | undefined {
     const projectInstructions = args.projectWorkflowInstructions?.trim();
     const requestInstructions = args.requestDeveloperInstructions?.trim();
@@ -3119,15 +3132,14 @@ export class ThreadManager implements ThreadOrchestrator {
     const currentInstructions = baseInstructions.length > 0
       ? baseInstructions
       : undefined;
-    const customizeInstructions = args.environmentAdapter?.customizeDeveloperInstructions;
-    if (!customizeInstructions || !args.environmentInstructionsContext) {
+    if (args.environmentKind !== "worktree") {
       return currentInstructions;
     }
-    const customized = customizeInstructions(
-      currentInstructions,
-      args.environmentInstructionsContext,
-    )?.trim();
-    return customized && customized.length > 0 ? customized : undefined;
+    const customized = [currentInstructions, WORKTREE_GUIDED_WORKFLOW_INSTRUCTIONS]
+      .filter((value): value is string => Boolean(value && value.trim().length > 0))
+      .join("\n\n")
+      .trim();
+    return customized.length > 0 ? customized : undefined;
   }
 
   private _isMissingProviderThreadError(err: unknown): boolean {
@@ -3540,28 +3552,13 @@ export class ThreadManager implements ThreadOrchestrator {
   }
 
   private _resolveThreadWorkspaceRoot(thread: Thread, projectRoot: string): string | undefined {
-    if (thread.environmentId === "worktree") {
-      const completedWorkspaceRoot = this._readCompletedProvisioningWorkspaceRoot(thread.id);
-      if (!completedWorkspaceRoot) {
-        return undefined;
-      }
-      const runtime = this.environmentRuntimes.get(thread.id);
-      if (runtime?.session?.cwd) {
-        return runtime.session.cwd;
-      }
-      return completedWorkspaceRoot;
+    const environment = this._restoreThreadEnvironment(thread, projectRoot);
+    if (environment) {
+      return environment.rootPath;
     }
-
-    const runtime = this.environmentRuntimes.get(thread.id);
-    if (runtime?.session?.cwd) {
-      return runtime.session.cwd;
+    if (normalizeEnvironmentKind(thread.environmentId ?? "") === "worktree") {
+      return this._readCompletedProvisioningWorkspaceRoot(thread.id);
     }
-
-    const completedWorkspaceRoot = this._readCompletedProvisioningWorkspaceRoot(thread.id);
-    if (completedWorkspaceRoot) {
-      return completedWorkspaceRoot;
-    }
-
     return projectRoot;
   }
 

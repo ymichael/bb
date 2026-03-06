@@ -15,11 +15,6 @@ const LOCAL_ENVIRONMENT_INFO: SystemEnvironmentInfo = {
   id: "local",
   displayName: "Direct Workspace",
   description: "Run directly in the project root on the host machine.",
-  capabilities: {
-    isolatedFilesystem: false,
-    ephemeralWorkspace: false,
-    supportsCleanup: false,
-  },
 };
 
 const WORKTREE_ENVIRONMENT_INFO: SystemEnvironmentInfo = {
@@ -27,11 +22,6 @@ const WORKTREE_ENVIRONMENT_INFO: SystemEnvironmentInfo = {
   displayName: "Git Worktree Workspace",
   description:
     "Provision an isolated per-thread git worktree when the project is a git repository.",
-  capabilities: {
-    isolatedFilesystem: true,
-    ephemeralWorkspace: true,
-    supportsCleanup: true,
-  },
 };
 
 const ENV_SETUP_SCRIPT_NAME = ".bb-env-setup.sh";

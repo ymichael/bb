@@ -120,6 +120,13 @@
       "when": 1772376000000,
       "tag": "0016_thread_queued_messages",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "6",
+      "when": 1772899200000,
+      "tag": "0017_thread_environment_records",
+      "breakpoints": true
     }
   ]
 }

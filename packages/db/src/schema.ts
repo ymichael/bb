@@ -25,6 +25,7 @@ export const threads = sqliteTable(
     title: text("title"),
     status: text("status").notNull().default("created"),
     environmentId: text("environment_id"),
+    environmentRecord: text("environment_record"),
     agentDiffSource: text("agent_diff_source"),
     agentChangedFiles: integer("agent_changed_files"),
     agentInsertions: integer("agent_insertions"),

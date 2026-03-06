@@ -12,11 +12,13 @@ import type {
 } from "@beanbag/db";
 import {
   createCodexLlmCompletionService,
-  createEnvironmentAdapter,
   createProviderAdapter,
-  listAvailableEnvironmentInfos,
   listAvailableProviderInfos,
 } from "@beanbag/agent-server";
+import {
+  createDefaultEnvironmentRegistry,
+  listAvailableEnvironmentInfos,
+} from "@beanbag/environment";
 import { WSManager } from "./ws.js";
 import { ThreadManager } from "./thread-manager.js";
 import { ThreadGitStatusService } from "./thread-git-status.js";
@@ -48,8 +50,8 @@ export function createServer(deps: ServerDeps) {
   const wsManager = new WSManager();
   const provider = createProviderAdapter();
   const providerCatalog = listAvailableProviderInfos();
-  const environmentAdapter = createEnvironmentAdapter();
-  const environmentCatalog = listAvailableEnvironmentInfos();
+  const environmentRegistry = createDefaultEnvironmentRegistry();
+  const environmentCatalog = listAvailableEnvironmentInfos(environmentRegistry);
   const scheduler = new InMemorySchedulerService();
   const gitStatusService = new ThreadGitStatusService();
   const llmCompletionService = createCodexLlmCompletionService();
@@ -61,7 +63,7 @@ export function createServer(deps: ServerDeps) {
     llmCompletionService,
     provider,
     process.env,
-    environmentAdapter,
+    environmentRegistry,
     providerCatalog,
     environmentCatalog,
     scheduler,

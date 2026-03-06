@@ -13,7 +13,6 @@ describe("environment registry", () => {
   it("creates worktree environment", () => {
     const environment = createEnvironmentAdapter({ environmentId: "worktree" });
     expect(environment.info.id).toBe("worktree");
-    expect(environment.info.capabilities.isolatedFilesystem).toBe(true);
   });
 
   it("lists environment catalog", () => {

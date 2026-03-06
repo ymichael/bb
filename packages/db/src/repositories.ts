@@ -13,6 +13,7 @@ import {
 } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import type {
+  PersistedEnvironmentRecord,
   PromptInput,
   Project,
   ReasoningLevel,
@@ -331,6 +332,7 @@ export class ThreadRepository {
     projectId: string;
     title?: string;
     environmentId?: string;
+    environmentRecord?: PersistedEnvironmentRecord;
     parentThreadId?: string;
   }): Thread {
     const now = Date.now();
@@ -340,6 +342,9 @@ export class ThreadRepository {
       title: data.title ?? null,
       status: "created" as const,
       environmentId: data.environmentId ?? null,
+      environmentRecord: data.environmentRecord
+        ? JSON.stringify(data.environmentRecord)
+        : null,
       agentDiffSource: null,
       agentChangedFiles: null,
       agentInsertions: null,
@@ -402,6 +407,7 @@ export class ThreadRepository {
       status?: ThreadStatus;
       title?: string;
       environmentId?: string | null;
+      environmentRecord?: PersistedEnvironmentRecord | null;
       agentDiffStats?: ThreadAgentDiffStats | null;
       archivedAt?: number | null;
       lastReadAt?: number;
@@ -424,6 +430,11 @@ export class ThreadRepository {
     if (data.status !== undefined) updates.status = data.status;
     if (data.title !== undefined) updates.title = data.title;
     if (data.environmentId !== undefined) updates.environmentId = data.environmentId;
+    if (data.environmentRecord !== undefined) {
+      updates.environmentRecord = data.environmentRecord
+        ? JSON.stringify(data.environmentRecord)
+        : null;
+    }
     if (data.agentDiffStats !== undefined) {
       updates.agentDiffSource = data.agentDiffStats?.source ?? null;
       updates.agentChangedFiles = data.agentDiffStats?.changedFiles ?? null;
@@ -562,6 +573,7 @@ export class ThreadRepository {
       title: row.title ?? undefined,
       status: normalizeThreadStatus(row.status),
       environmentId: row.environmentId ?? undefined,
+      environmentRecord: parseEnvironmentRecord(row.environmentRecord),
       agentDiffStats,
       queuedMessages,
       parentThreadId: row.parentThreadId ?? undefined,
@@ -610,6 +622,26 @@ export class ThreadRepository {
       createdAt: row.createdAt,
     };
   }
+}
+
+function parseEnvironmentRecord(
+  value: string | null | undefined,
+): PersistedEnvironmentRecord | undefined {
+  if (!value) return undefined;
+  try {
+    const parsed = JSON.parse(value) as PersistedEnvironmentRecord;
+    if (
+      parsed &&
+      typeof parsed === "object" &&
+      typeof parsed.kind === "string" &&
+      "state" in parsed
+    ) {
+      return parsed;
+    }
+  } catch {
+    // Ignore malformed persisted environment records and treat them as missing.
+  }
+  return undefined;
 }
 
 // ---------------------------------------------------------------------------

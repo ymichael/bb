@@ -159,11 +159,6 @@ function toEnvironmentOptions(
         {
           id: "local",
           displayName: "Local Workspace",
-          capabilities: {
-            isolatedFilesystem: false,
-            ephemeralWorkspace: false,
-            supportsCleanup: false,
-          },
         },
       ];
   return source.map((environment) => ({

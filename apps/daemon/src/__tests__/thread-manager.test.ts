@@ -16,10 +16,15 @@ import { delimiter, join } from "node:path";
 import type { ChildProcess } from "node:child_process";
 import {
   toRecord,
-  type EnvironmentAdapter,
+  type SystemEnvironmentInfo,
   type Thread,
   type ThreadEvent,
 } from "@beanbag/agent-core";
+import {
+  EnvironmentRegistry,
+  type CreateEnvironmentContext,
+  type IEnvironment,
+} from "@beanbag/environment";
 import type {
   ThreadRepository,
   EventRepository,
@@ -31,6 +36,48 @@ import {
 } from "@beanbag/agent-server";
 import { ThreadManager } from "../thread-manager.js";
 import { WSManager } from "../ws.js";
+
+function createTestEnvironmentRegistry(args: {
+  kind?: string;
+  displayName?: string;
+  rootPath: string;
+  onCreate?: (context: CreateEnvironmentContext) => void;
+}): EnvironmentRegistry {
+  const kind = args.kind ?? "worktree";
+  const info: SystemEnvironmentInfo = {
+    id: kind,
+    displayName: args.displayName ?? "Git Worktree Workspace",
+    description: "",
+  };
+
+  return new EnvironmentRegistry().register({
+    kind,
+    info,
+    create(context: CreateEnvironmentContext): IEnvironment {
+      args.onCreate?.(context);
+      return {
+        kind,
+        info,
+        rootPath: args.rootPath,
+        env: {
+          BB_WORKSPACE_ROOT: args.rootPath,
+          BB_WORKSPACE_MODE: kind,
+        },
+        serialize() {
+          return { rootPath: args.rootPath };
+        },
+        dispose() {},
+        run: vi.fn(),
+      };
+    },
+    restore(_state: unknown, context: CreateEnvironmentContext): IEnvironment {
+      return this.create(context);
+    },
+    isState(_value: unknown): _value is unknown {
+      return true;
+    },
+  });
+}
 
 // Mock child_process.spawn while preserving other exports.
 vi.mock("node:child_process", async (importOriginal) => {
@@ -546,29 +593,11 @@ describe("ThreadManager", () => {
     });
 
     it("returns before provisioning work starts", async () => {
-      const customEnvironmentAdapter = {
-        info: {
-          id: "worktree",
-          displayName: "Git Worktree Workspace",
-          description: "",
-          capabilities: {
-            isolatedFilesystem: true,
-            ephemeralWorkspace: true,
-            supportsCleanup: true,
-          },
-        },
-        prepare: vi.fn(() => ({
-          cwd: "/tmp/thread-worktree",
-          env: {
-            BB_WORKSPACE_ROOT: "/tmp/thread-worktree",
-            BB_WORKSPACE_MODE: "worktree",
-          },
-          metadata: {
-            mode: "worktree",
-            workspaceRoot: "/tmp/thread-worktree",
-          },
-        })),
-      };
+      const onCreate = vi.fn();
+      const customEnvironmentRegistry = createTestEnvironmentRegistry({
+        rootPath: "/tmp/thread-worktree",
+        onCreate,
+      });
       const managerWithCustomEnvironment = new ThreadManager(
         threadRepo,
         eventRepo,
@@ -577,7 +606,7 @@ describe("ThreadManager", () => {
         llmCompletionService,
         createCodexProviderAdapter(),
         process.env,
-        customEnvironmentAdapter as EnvironmentAdapter,
+        customEnvironmentRegistry,
       );
 
       const project = { id: "proj-1", name: "Test", rootPath: "/test", createdAt: 1000, updatedAt: 1000 };
@@ -599,9 +628,9 @@ describe("ThreadManager", () => {
       });
 
       expect(result.id).toBe("t-new");
-      expect(customEnvironmentAdapter.prepare).not.toHaveBeenCalled();
+      expect(onCreate).not.toHaveBeenCalled();
       await vi.waitFor(() => {
-        expect(customEnvironmentAdapter.prepare).toHaveBeenCalledTimes(1);
+        expect(onCreate).toHaveBeenCalledTimes(1);
       });
     });
 
@@ -877,37 +906,10 @@ describe("ThreadManager", () => {
       );
     });
 
-    it("lets environment adapters customize developer instructions", async () => {
-      const customizeDeveloperInstructions = vi.fn(
-        (currentInstructions: string | undefined) =>
-          [currentInstructions, "[bb worktree] commit work often"]
-            .filter((value): value is string => Boolean(value))
-            .join("\n\n"),
-      );
-      const customEnvironmentAdapter = {
-        info: {
-          id: "worktree",
-          displayName: "Git Worktree Workspace",
-          description: "",
-          capabilities: {
-            isolatedFilesystem: true,
-            ephemeralWorkspace: true,
-            supportsCleanup: true,
-          },
-        },
-        prepare: vi.fn(() => ({
-          cwd: "/tmp/thread-worktree",
-          env: {
-            BB_WORKSPACE_ROOT: "/tmp/thread-worktree",
-            BB_WORKSPACE_MODE: "worktree",
-          },
-          metadata: {
-            mode: "worktree",
-            workspaceRoot: "/tmp/thread-worktree",
-          },
-        })),
-        customizeDeveloperInstructions,
-      };
+    it("adds worktree-specific developer instructions", async () => {
+      const customEnvironmentRegistry = createTestEnvironmentRegistry({
+        rootPath: "/tmp/thread-worktree",
+      });
       const managerWithCustomEnvironment = new ThreadManager(
         threadRepo,
         eventRepo,
@@ -916,7 +918,7 @@ describe("ThreadManager", () => {
         llmCompletionService,
         createCodexProviderAdapter(),
         process.env,
-        customEnvironmentAdapter as EnvironmentAdapter,
+        customEnvironmentRegistry,
       );
 
       const project = {
@@ -952,43 +954,21 @@ describe("ThreadManager", () => {
         expect(hasStart).toBe(true);
       });
       const startMsg = findRpcMessageByMethod(fakeChild._stdinData, "thread/start");
-      expect(startMsg.params.baseInstructions).toBe(
-        [
-          DEFAULT_BASE_INSTRUCTIONS,
-          "[project workflow] keep CI green",
-          "[request instructions] add tests",
-          "[bb worktree] commit work often",
-        ].join("\n\n"),
+      expect(startMsg.params.baseInstructions).toContain(
+        "[project workflow] keep CI green",
       );
-      expect(customizeDeveloperInstructions).toHaveBeenCalledWith(
-        [
-          "[project workflow] keep CI green",
-          "[request instructions] add tests",
-        ].join("\n\n"),
-        expect.objectContaining({
-          projectId: "proj-1",
-          threadId: "t-new",
-          requestedEnvironmentId: "worktree",
-          effectiveEnvironmentId: "worktree",
-          mode: "worktree",
-          workspaceRootPath: "/tmp/thread-worktree",
-        }),
+      expect(startMsg.params.baseInstructions).toContain(
+        "[request instructions] add tests",
+      );
+      expect(startMsg.params.baseInstructions).toContain(
+        "[Beanbag worktree workflow]",
       );
     });
 
-    it("records environment provisioning events emitted by the adapter", async () => {
-      const customEnvironmentAdapter = {
-        info: {
-          id: "worktree",
-          displayName: "Git Worktree Workspace",
-          description: "",
-          capabilities: {
-            isolatedFilesystem: true,
-            ephemeralWorkspace: true,
-            supportsCleanup: true,
-          },
-        },
-        prepare: vi.fn((context: { onProvisioningEvent?: (event: unknown) => void }) => {
+    it("records environment provisioning events emitted by the environment", async () => {
+      const customEnvironmentRegistry = createTestEnvironmentRegistry({
+        rootPath: "/tmp/thread-worktree",
+        onCreate: (context) => {
           context.onProvisioningEvent?.({
             type: "env-setup",
             status: "started",
@@ -1002,19 +982,8 @@ describe("ThreadManager", () => {
             timeoutMs: 600000,
             durationMs: 42,
           });
-          return {
-            cwd: "/tmp/thread-worktree",
-            env: {
-              BB_WORKSPACE_ROOT: "/tmp/thread-worktree",
-              BB_WORKSPACE_MODE: "worktree",
-            },
-            metadata: {
-              mode: "worktree",
-              workspaceRoot: "/tmp/thread-worktree",
-            },
-          };
-        }),
-      };
+        },
+      });
       const managerWithCustomEnvironment = new ThreadManager(
         threadRepo,
         eventRepo,
@@ -1023,7 +992,7 @@ describe("ThreadManager", () => {
         llmCompletionService,
         createCodexProviderAdapter(),
         process.env,
-        customEnvironmentAdapter as EnvironmentAdapter,
+        customEnvironmentRegistry,
       );
 
       const project = { id: "proj-1", name: "Test", rootPath: "/test", createdAt: 1000, updatedAt: 1000 };
@@ -3263,11 +3232,6 @@ describe("ThreadManager", () => {
             id: "worktree",
             displayName: "Git Worktree Workspace",
             description: "",
-            capabilities: {
-              isolatedFilesystem: true,
-              ephemeralWorkspace: true,
-              supportsCleanup: true,
-            },
           },
           prepare: vi.fn(),
         },
@@ -3331,11 +3295,6 @@ describe("ThreadManager", () => {
             id: "worktree",
             displayName: "Git Worktree Workspace",
             description: "",
-            capabilities: {
-              isolatedFilesystem: true,
-              ephemeralWorkspace: true,
-              supportsCleanup: true,
-            },
           },
           prepare: vi.fn(),
         },
@@ -3448,11 +3407,6 @@ describe("ThreadManager", () => {
             id: "worktree",
             displayName: "Git Worktree Workspace",
             description: "",
-            capabilities: {
-              isolatedFilesystem: true,
-              ephemeralWorkspace: true,
-              supportsCleanup: true,
-            },
           },
           prepare: vi.fn(),
         },
@@ -3891,11 +3845,6 @@ describe("ThreadManager", () => {
             id: "worktree",
             displayName: "Git Worktree Workspace",
             description: "",
-            capabilities: {
-              isolatedFilesystem: true,
-              ephemeralWorkspace: true,
-              supportsCleanup: true,
-            },
           },
           prepare: vi.fn(),
         },
