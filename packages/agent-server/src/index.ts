@@ -34,21 +34,6 @@ export {
   listAvailableProviderInfos,
 } from "./provider-registry.js";
 
-export type {
-  CreateWorktreeEnvironmentAdapterOptions,
-} from "./environment-adapter.js";
-export {
-  createLocalEnvironmentAdapter,
-  createWorktreeEnvironmentAdapter,
-} from "./environment-adapter.js";
-export type {
-  CreateEnvironmentAdapterOptions,
-} from "./environment-registry.js";
-export {
-  createEnvironmentAdapter,
-  listAvailableEnvironmentInfos,
-} from "./environment-registry.js";
-
 export {
   ProviderRuntime,
   ProviderRuntimeUnavailableError,

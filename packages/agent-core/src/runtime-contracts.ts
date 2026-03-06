@@ -112,32 +112,6 @@ export interface ProviderAdapter {
   inactiveSessionErrorMessage(threadId: string): string;
 }
 
-export interface EnvironmentPrepareContext {
-  projectId: string;
-  threadId: string;
-  projectRootPath: string;
-  runtimeEnv: Record<string, string | undefined>;
-  onProvisioningEvent?: (event: EnvironmentProvisioningEvent) => void;
-}
-
-export interface EnvironmentInstructionsContext {
-  projectId: string;
-  threadId: string;
-  projectRootPath: string;
-  workspaceRootPath: string;
-  requestedEnvironmentId: string;
-  effectiveEnvironmentId: string;
-  mode?: string;
-  fallbackReason?: string;
-}
-
-export interface EnvironmentSession {
-  cwd: string;
-  env?: Record<string, string | undefined>;
-  metadata?: Record<string, string>;
-  cleanup?: () => Promise<void> | void;
-}
-
 export type EnvironmentProvisioningEvent =
   | {
       type: "env-setup";
@@ -148,18 +122,6 @@ export type EnvironmentProvisioningEvent =
       durationMs?: number;
       detail?: string;
     };
-
-export interface EnvironmentAdapter {
-  info: SystemEnvironmentInfo;
-  prepare(context: EnvironmentPrepareContext): EnvironmentSession;
-  prepareAsync?(
-    context: EnvironmentPrepareContext,
-  ): Promise<EnvironmentSession>;
-  customizeDeveloperInstructions?(
-    currentInstructions: string | undefined,
-    context: EnvironmentInstructionsContext,
-  ): string | undefined;
-}
 
 export interface ThreadListFilters {
   projectId?: string;

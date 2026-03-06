@@ -69,6 +69,7 @@ import {
   createDefaultEnvironmentRegistry,
   normalizeEnvironmentKind,
   type CreateEnvironmentContext,
+  type EnvironmentSquashMergeMessageContext,
   type IEnvironment,
 } from "@beanbag/environment";
 import type {
@@ -164,6 +165,8 @@ const WORKTREE_GUIDED_WORKFLOW_INSTRUCTIONS = [
   "- Commit your work frequently so it can be safely promoted/tested and not lost.",
   "- Preferred flow: iterate in this worktree -> promote to primary checkout for manual/E2E testing -> continue edits back in this worktree -> squash merge when done.",
 ].join("\n");
+const ENV_SETUP_SCRIPT_NAME = ".bb-env-setup.sh";
+const ENV_SETUP_TIMEOUT_MS = 10 * 60 * 1000;
 
 const PRIMARY_CHECKOUT_VALIDATION_TTL_MS = 2_000;
 const IDLE_NOISE_EVENT_KEEP_RECENT = 300;
@@ -1340,10 +1343,12 @@ export class ThreadManager implements ThreadOrchestrator {
     }
 
     const defaultBranch = this.gitStatusService.detectDefaultBranch(project.rootPath);
+    const environment = this._restoreThreadEnvironment(thread, project.rootPath);
     const beforeStatus = this.gitStatusService.getStatus({
       workspaceRoot,
       projectRoot: project.rootPath,
       defaultBranch,
+      environment,
     });
     const message = beforeStatus.hasUncommittedChanges
       ? await this._resolveCommitMessage({
@@ -1358,6 +1363,7 @@ export class ThreadManager implements ThreadOrchestrator {
       defaultBranch,
       message,
       includeUnstaged: request?.includeUnstaged,
+      environment,
     });
 
     this._appendEvent(
@@ -1412,11 +1418,16 @@ export class ThreadManager implements ThreadOrchestrator {
     const options = request ?? {};
     const defaultBranch = this.gitStatusService.detectDefaultBranch(project.rootPath);
     const requestedMergeBaseBranch = options.mergeBaseBranch?.trim() || undefined;
+    const environment = this._restoreThreadEnvironment(thread, project.rootPath);
+    if (!environment || !environment.supportsSquashMergeIntoDefaultBranch()) {
+      throw invalidRequestError("Squash merge is not supported for this environment");
+    }
     const before = this.gitStatusService.getStatus({
       workspaceRoot,
       projectRoot: project.rootPath,
       defaultBranch,
       mergeBaseBranch: requestedMergeBaseBranch,
+      environment,
     });
     const mergeBaseBranch = before.mergeBaseBranch ?? defaultBranch;
 
@@ -1436,6 +1447,7 @@ export class ThreadManager implements ThreadOrchestrator {
         defaultBranch,
         message: commitMessage,
         includeUnstaged: options.includeUnstaged,
+        environment,
       });
       this._appendEvent(
         thread.id,
@@ -1453,12 +1465,11 @@ export class ThreadManager implements ThreadOrchestrator {
       committed = commitResult.commitCreated;
     }
 
-    const mergeResult = await this.gitStatusService.squashMergeWorktreeIntoDefaultBranch({
-      workspaceRoot,
-      projectRoot: project.rootPath,
+    const mergeResult = await environment.squashMergeIntoDefaultBranch({
+      activeWorkspaceRoot: project.rootPath,
       defaultBranch: mergeBaseBranch,
       message: options.squashMessage,
-      resolveMessage: async ({ tempWorkspaceRoot }) =>
+      resolveMessage: async ({ tempWorkspaceRoot }: EnvironmentSquashMergeMessageContext) =>
         this.llmCompletionService.generateCommitMessage({
           cwd: tempWorkspaceRoot,
           includeUnstaged: false,
@@ -1522,7 +1533,7 @@ export class ThreadManager implements ThreadOrchestrator {
     this.lastNotifiedCompletionEpochs.delete(threadId);
     this.lastNoisePruneSeqByThread.delete(threadId);
     this.lastNoisePruneAtByThread.delete(threadId);
-    this._cleanupEnvironmentSession(threadId);
+    this._cleanupEnvironmentRuntime(threadId);
     this.threadRepo.update(threadId, { status: "idle" });
     this._pruneHistoricalNoiseEvents(threadId, IDLE_NOISE_EVENT_KEEP_RECENT);
     this._broadcastThreadChanged(threadId, THREAD_STATUS_CHANGE_KINDS);
@@ -1570,7 +1581,7 @@ export class ThreadManager implements ThreadOrchestrator {
     if (activePromotion?.threadId === threadId) {
       this._clearPrimaryPromotionState(thread.projectId);
     }
-    this._cleanupEnvironmentSession(threadId, { destroyWorkspace: true });
+    this._cleanupEnvironmentRuntime(threadId, { destroyWorkspace: true });
     this.threadRepo.update(threadId, {
       status: "idle",
       archivedAt: thread.archivedAt ?? Date.now(),
@@ -1791,16 +1802,19 @@ export class ThreadManager implements ThreadOrchestrator {
       );
     }
     if (thread.environmentId === "worktree") {
+      const environment = this._restoreThreadEnvironment(thread, project.rootPath);
       const defaultBranch = this.gitStatusService.detectDefaultBranch(project.rootPath);
       const status = this.gitStatusService.getStatus({
         workspaceRoot,
         projectRoot: project.rootPath,
         defaultBranch,
         mergeBaseBranch,
+        environment,
       });
       const commits = this.gitStatusService.listCommitsSinceRef({
         workspaceRoot,
         baseRef: status.baseRef,
+        environment,
       });
       const hasSelectedCommit =
         selection.type === "commit" &&
@@ -1813,10 +1827,12 @@ export class ThreadManager implements ThreadOrchestrator {
           ? this.gitStatusService.getCommitDiff({
               workspaceRoot,
               commitSha: normalizedSelection.sha,
+              environment,
             })
           : this.gitStatusService.getCombinedDiffSinceRef({
               workspaceRoot,
               baseRef: status.baseRef,
+              environment,
             });
       return {
         mode: "worktree_commits",
@@ -1831,7 +1847,10 @@ export class ThreadManager implements ThreadOrchestrator {
       };
     }
 
-    const diffResult = this.gitStatusService.getWorkingTreeDiff(workspaceRoot);
+    const diffResult = this.gitStatusService.getWorkingTreeDiff(
+      workspaceRoot,
+      this._restoreThreadEnvironment(thread, project.rootPath),
+    );
     return {
       mode: "local_uncommitted",
       workspaceRoot,
@@ -1899,6 +1918,7 @@ export class ThreadManager implements ThreadOrchestrator {
       projectRoot: project.rootPath,
       defaultBranch,
       mergeBaseBranch,
+      environment: this._restoreThreadEnvironment(thread, project.rootPath),
     });
     const workStatus = { ...workspaceStatus };
 
@@ -2105,8 +2125,9 @@ export class ThreadManager implements ThreadOrchestrator {
         };
       }
 
-      const workspaceRoot = this._resolveThreadWorkspaceRoot(thread, project.rootPath);
-      if (!workspaceRoot || workspaceRoot === project.rootPath) {
+      const environment = this._restoreThreadEnvironment(thread, project.rootPath);
+      const workspaceRoot = environment?.getWorkspaceRoot();
+      if (!environment || !workspaceRoot || workspaceRoot === project.rootPath) {
         throw invalidRequestError(
           "Thread worktree path is unavailable (workspace resolved to project root); reprovision before promoting",
         );
@@ -2128,9 +2149,11 @@ export class ThreadManager implements ThreadOrchestrator {
       );
 
       try {
-        const promoted = this.gitStatusService.promoteWorktreeIntoPrimary({
-          workspaceRoot,
-          projectRoot: project.rootPath,
+        if (!environment.supportsPromoteToActiveWorkspace()) {
+          throw invalidRequestError("Promotion is not supported for this environment");
+        }
+        const promoted = environment.promoteToActiveWorkspace({
+          activeWorkspaceRoot: project.rootPath,
         });
         const nextState: PrimaryPromotionState = {
           projectId: project.id,
@@ -2257,8 +2280,19 @@ export class ThreadManager implements ThreadOrchestrator {
           );
         }
 
-        this.gitStatusService.discardLocalChanges(project.rootPath);
-        this.gitStatusService.checkoutSnapshot(project.rootPath, demoteSnapshot);
+        const activeThreadEnvironment = activeThread
+          ? this._restoreThreadEnvironment(activeThread, project.rootPath)
+          : undefined;
+        if (!activeThreadEnvironment) {
+          throw invalidRequestError("Thread environment is unavailable; reprovision before demoting");
+        }
+        if (!activeThreadEnvironment.supportsDemoteFromActiveWorkspace()) {
+          throw invalidRequestError("Demotion is not supported for this environment");
+        }
+        activeThreadEnvironment.demoteFromActiveWorkspace({
+          activeWorkspaceRoot: project.rootPath,
+          snapshot: demoteSnapshot,
+        });
         this._clearPrimaryPromotionState(project.id);
         this._appendEvent(
           active.threadId,
@@ -2387,7 +2421,7 @@ export class ThreadManager implements ThreadOrchestrator {
     this.runtimes.clear();
     this.processes.clear();
     for (const [threadId] of this.environmentRuntimes) {
-      this._cleanupEnvironmentSession(threadId);
+      this._cleanupEnvironmentRuntime(threadId);
     }
     this.environmentRuntimes.clear();
     this.providerThreadIds.clear();
@@ -2532,7 +2566,7 @@ export class ThreadManager implements ThreadOrchestrator {
     this._sendInitialize(threadId);
     this._appendEvent(threadId, "system/provisioning/completed", {
       environmentId: environmentRuntime.environment.kind,
-      workspaceRoot: environmentRuntime.environment.rootPath,
+      workspaceRoot: environmentRuntime.environment.getWorkspaceRoot(),
       mode: environmentRuntime.environment.kind,
     });
     const hydratedThread = this.threadRepo.getById(threadId);
@@ -2650,18 +2684,18 @@ export class ThreadManager implements ThreadOrchestrator {
     this.lastNoisePruneAtByThread.delete(threadId);
     this.queuedOperationsByThreadId.delete(threadId);
     this.operationDispatchInFlight.delete(threadId);
-    this._cleanupEnvironmentSession(threadId);
+    this._cleanupEnvironmentRuntime(threadId);
   }
 
-  private _setEnvironmentSession(
+  private _setEnvironmentRuntime(
     threadId: string,
     environment: IEnvironment,
   ): void {
-    this._cleanupEnvironmentSession(threadId);
+    this._cleanupEnvironmentRuntime(threadId);
     this.environmentRuntimes.set(threadId, { environment });
   }
 
-  private _cleanupEnvironmentSession(
+  private _cleanupEnvironmentRuntime(
     threadId: string,
     opts?: { destroyWorkspace?: boolean },
   ): void {
@@ -2735,7 +2769,7 @@ export class ThreadManager implements ThreadOrchestrator {
         typeof maybePromise.then === "function"
       ) {
         void maybePromise
-          .catch((err) => {
+          .catch((err: unknown) => {
             reportCleanupFailure(environmentId, err);
           })
           .finally(() => {
@@ -2779,7 +2813,7 @@ export class ThreadManager implements ThreadOrchestrator {
       return;
     }
     const environment = this._restoreThreadEnvironment(thread, project.rootPath);
-    if (!environment || resolve(environment.rootPath) === resolve(project.rootPath)) {
+    if (!environment || resolve(environment.getWorkspaceRoot()) === resolve(project.rootPath)) {
       return;
     }
     environment.dispose();
@@ -2815,6 +2849,58 @@ export class ThreadManager implements ThreadOrchestrator {
     };
   }
 
+  private _runOptionalEnvironmentSetup(
+    threadId: string,
+    environment: IEnvironment,
+  ): void {
+    if (!environment.shouldRunSetupScript()) {
+      return;
+    }
+    const workspaceRoot = environment.getWorkspaceRoot();
+    const scriptPath = resolve(workspaceRoot, ENV_SETUP_SCRIPT_NAME);
+    if (!existsSync(scriptPath)) {
+      return;
+    }
+    const startedAt = Date.now();
+    this._appendEnvironmentProvisioningEvent(threadId, {
+      type: "env-setup",
+      status: "started",
+      scriptPath: ENV_SETUP_SCRIPT_NAME,
+      workspaceRoot,
+      timeoutMs: ENV_SETUP_TIMEOUT_MS,
+    });
+    const thread = this.threadRepo.getById(threadId);
+    const result = environment.run("sh", [scriptPath], {
+      timeoutMs: ENV_SETUP_TIMEOUT_MS,
+      env: {
+        ...(thread?.projectId ? { BB_PROJECT_ID: thread.projectId } : {}),
+        BB_THREAD_ID: threadId,
+        BB_ENV_SETUP_TIMEOUT_MS: String(ENV_SETUP_TIMEOUT_MS),
+      },
+    });
+    if (result.exitCode !== 0) {
+      const detail = (result.stderr || result.stdout || "unknown error").trim();
+      this._appendEnvironmentProvisioningEvent(threadId, {
+        type: "env-setup",
+        status: "failed",
+        scriptPath: ENV_SETUP_SCRIPT_NAME,
+        workspaceRoot,
+        timeoutMs: ENV_SETUP_TIMEOUT_MS,
+        durationMs: Date.now() - startedAt,
+        detail,
+      });
+      throw new Error(`${ENV_SETUP_SCRIPT_NAME} failed: ${detail}`);
+    }
+    this._appendEnvironmentProvisioningEvent(threadId, {
+      type: "env-setup",
+      status: "completed",
+      scriptPath: ENV_SETUP_SCRIPT_NAME,
+      workspaceRoot,
+      timeoutMs: ENV_SETUP_TIMEOUT_MS,
+      durationMs: Date.now() - startedAt,
+    });
+  }
+
   private async _spawnProcess(
     threadId: string,
     projectRootPath: string,
@@ -2824,19 +2910,21 @@ export class ThreadManager implements ThreadOrchestrator {
       environmentKind,
       this._createEnvironmentContext(threadId, projectRootPath),
     );
-    this._setEnvironmentSession(threadId, environment);
-    const sessionEnv = {
+    this._runOptionalEnvironmentSetup(threadId, environment);
+    this._setEnvironmentRuntime(threadId, environment);
+    const executionContext = environment.getExecutionContext();
+    const processEnv = {
       ...this.runtimeEnv,
-      ...environment.env,
+      ...executionContext.env,
     };
-    const effectivePath = this.threadShellPath ?? sessionEnv.PATH;
+    const effectivePath = this.threadShellPath ?? processEnv.PATH;
     const thread = this.threadRepo.getById(threadId);
     const projectId = thread?.projectId;
     const child = spawn(this.provider.processCommand, this.provider.processArgs, {
       stdio: ["pipe", "pipe", "pipe"],
-      cwd: environment.rootPath,
+      cwd: executionContext.cwd,
       env: {
-        ...sessionEnv,
+        ...processEnv,
         ...(effectivePath ? { PATH: effectivePath } : {}),
         ...(projectId ? { BB_PROJECT_ID: projectId } : {}),
         BB_THREAD_ID: threadId,
@@ -3050,8 +3138,8 @@ export class ThreadManager implements ThreadOrchestrator {
       projectId: args.projectId,
       threadId: args.threadId,
       ...(this.threadShellPath ? { path: this.threadShellPath } : {}),
-      ...(environment?.rootPath
-        ? { workspaceRoot: environment.rootPath }
+      ...(environment
+        ? { workspaceRoot: environment.getWorkspaceRoot() }
         : {}),
       environmentId,
     };
@@ -3451,6 +3539,7 @@ export class ThreadManager implements ThreadOrchestrator {
       projectRoot: project.rootPath,
       defaultBranch,
       mergeBaseBranch: opts?.mergeBaseBranch,
+      environment: this._restoreThreadEnvironment(thread, project.rootPath),
     });
     const workStatus = { ...workspaceStatus };
 
@@ -3554,7 +3643,7 @@ export class ThreadManager implements ThreadOrchestrator {
   private _resolveThreadWorkspaceRoot(thread: Thread, projectRoot: string): string | undefined {
     const environment = this._restoreThreadEnvironment(thread, projectRoot);
     if (environment) {
-      return environment.rootPath;
+      return environment.getWorkspaceRoot();
     }
     if (normalizeEnvironmentKind(thread.environmentId ?? "") === "worktree") {
       return this._readCompletedProvisioningWorkspaceRoot(thread.id);
@@ -3642,6 +3731,7 @@ export class ThreadManager implements ThreadOrchestrator {
         workspaceRoot,
         projectRoot: project.rootPath,
         defaultBranch,
+        environment: this._restoreThreadEnvironment(thread, project.rootPath),
       });
       this.threadRepo.update(
         thread.id,
@@ -3841,7 +3931,7 @@ export class ThreadManager implements ThreadOrchestrator {
     this.lastNotifiedCompletionTurnIds.delete(threadId);
     this.turnLifecycleEpochs.delete(threadId);
     this.lastNotifiedCompletionEpochs.delete(threadId);
-    this._cleanupEnvironmentSession(threadId);
+    this._cleanupEnvironmentRuntime(threadId);
 
     const thread = this.threadRepo.getById(threadId);
     if (!thread) return;

@@ -1,15 +1,20 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, rmSync } from "node:fs";
-import { homedir } from "node:os";
+import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
-import type {
-  EnvironmentProvisioningEvent,
-  SystemEnvironmentInfo,
-} from "@beanbag/agent-core";
+import type { SystemEnvironmentInfo } from "@beanbag/agent-core";
 import type {
   CreateEnvironmentContext,
+  DemoteEnvironmentOptions,
+  DemoteEnvironmentResult,
+  EnvironmentCommandOptions,
   EnvironmentDefinition,
+  EnvironmentCheckoutSnapshot,
+  EnvironmentSquashMergeOptions,
+  EnvironmentSquashMergeResult,
   IEnvironment,
+  PromoteEnvironmentOptions,
+  PromoteEnvironmentResult,
 } from "./contracts.js";
 import { runCommand } from "./process.js";
 
@@ -19,7 +24,6 @@ export interface WorktreeEnvironmentState {
 }
 
 export interface CreateWorktreeEnvironmentDefinitionOptions {
-  gitCommand?: string;
   worktreeRootName?: string;
 }
 
@@ -29,9 +33,6 @@ const WORKTREE_ENVIRONMENT_INFO: SystemEnvironmentInfo = {
   description:
     "Provision an isolated per-thread git worktree when the project is a git repository.",
 };
-
-const ENV_SETUP_SCRIPT_NAME = ".bb-env-setup.sh";
-const ENV_SETUP_TIMEOUT_MS = 10 * 60 * 1000;
 const DEFAULT_WORKTREE_ROOT = "~/.beanbag/worktrees";
 
 function toChildEnv(
@@ -40,23 +41,15 @@ function toChildEnv(
   return env;
 }
 
-function emitProvisioningEvent(
-  context: CreateEnvironmentContext,
-  event: EnvironmentProvisioningEvent,
-): void {
-  context.onProvisioningEvent?.(event);
-}
-
 function normalizeDetail(message: string | Buffer): string {
   return (typeof message === "string" ? message : message.toString("utf8")).trim();
 }
 
-function runGit(
-  gitCommand: string,
+function runGitAtPath(
   cwd: string,
   args: string[],
-): { ok: boolean; stdout: string } {
-  const result = spawnSync(gitCommand, args, {
+): { ok: boolean; stdout: string; stderr: string } {
+  const result = spawnSync("git", args, {
     cwd,
     encoding: "utf-8",
     stdio: "pipe",
@@ -64,28 +57,18 @@ function runGit(
   return {
     ok: result.status === 0,
     stdout: result.stdout?.trim() ?? "",
+    stderr: result.stderr?.trim() ?? result.error?.message ?? "",
   };
 }
 
-function hasLocalBranch(
-  gitCommand: string,
-  projectRoot: string,
-  branch: string,
-): boolean {
-  return runGit(
-    gitCommand,
-    projectRoot,
-    ["show-ref", "--verify", "--quiet", `refs/heads/${branch}`],
-  ).ok;
+function hasLocalBranch(projectRoot: string, branch: string): boolean {
+  return runGitAtPath(projectRoot, ["show-ref", "--verify", "--quiet", `refs/heads/${branch}`]).ok;
 }
 
-function resolveWorktreeStartRef(
-  gitCommand: string,
-  projectRoot: string,
-): string | undefined {
-  if (hasLocalBranch(gitCommand, projectRoot, "main")) return "main";
-  if (hasLocalBranch(gitCommand, projectRoot, "master")) return "master";
-  const headBranch = runGit(gitCommand, projectRoot, ["symbolic-ref", "--short", "HEAD"]);
+function resolveWorktreeStartRef(projectRoot: string): string | undefined {
+  if (hasLocalBranch(projectRoot, "main")) return "main";
+  if (hasLocalBranch(projectRoot, "master")) return "master";
+  const headBranch = runGitAtPath(projectRoot, ["symbolic-ref", "--short", "HEAD"]);
   return headBranch.ok && headBranch.stdout.length > 0 ? headBranch.stdout : undefined;
 }
 
@@ -139,89 +122,71 @@ function resolveConfiguredWorktreeRoot(
   };
 }
 
-function runOptionalEnvSetupHook(
-  context: CreateEnvironmentContext,
-  workspaceRoot: string,
-): void {
-  const scriptPath = resolve(workspaceRoot, ENV_SETUP_SCRIPT_NAME);
-  if (!existsSync(scriptPath)) return;
-  const startedAt = Date.now();
-  emitProvisioningEvent(context, {
-    type: "env-setup",
-    status: "started",
-    scriptPath: ENV_SETUP_SCRIPT_NAME,
-    workspaceRoot,
-    timeoutMs: ENV_SETUP_TIMEOUT_MS,
-  });
+function hasLocalWorkingChanges(repoRoot: string): boolean {
+  const status = runGitAtPath(repoRoot, ["status", "--porcelain"]);
+  return status.ok && status.stdout.trim().length > 0;
+}
 
-  const result = spawnSync("sh", [scriptPath], {
-    cwd: workspaceRoot,
-    env: toChildEnv({
-      ...context.runtimeEnv,
-      BB_PROJECT_ID: context.projectId,
-      BB_THREAD_ID: context.threadId,
-      BB_WORKSPACE_ROOT: workspaceRoot,
-      BB_WORKSPACE_MODE: "worktree",
-      BB_ENV_SETUP_TIMEOUT_MS: String(ENV_SETUP_TIMEOUT_MS),
-    }),
-    stdio: "pipe",
-    encoding: "utf-8",
-    timeout: ENV_SETUP_TIMEOUT_MS,
-  });
-
-  if (result.error) {
-    const detail = normalizeDetail(result.error.message);
-    emitProvisioningEvent(context, {
-      type: "env-setup",
-      status: "failed",
-      scriptPath: ENV_SETUP_SCRIPT_NAME,
-      workspaceRoot,
-      timeoutMs: ENV_SETUP_TIMEOUT_MS,
-      durationMs: Date.now() - startedAt,
-      detail,
-    });
-    throw new Error(`Failed to run ${ENV_SETUP_SCRIPT_NAME}: ${detail}`);
-  }
-  if (result.status !== 0) {
-    const detail = summarizeSpawnSyncFailure(result);
-    emitProvisioningEvent(context, {
-      type: "env-setup",
-      status: "failed",
-      scriptPath: ENV_SETUP_SCRIPT_NAME,
-      workspaceRoot,
-      timeoutMs: ENV_SETUP_TIMEOUT_MS,
-      durationMs: Date.now() - startedAt,
-      detail,
-    });
-    throw new Error(`${ENV_SETUP_SCRIPT_NAME} failed: ${detail}`);
+function resolveCheckoutSnapshot(repoRoot: string): EnvironmentCheckoutSnapshot {
+  const headResult = runGitAtPath(repoRoot, ["rev-parse", "HEAD"]);
+  if (!headResult.ok || !headResult.stdout) {
+    throw new Error("Failed to resolve HEAD");
   }
 
-  emitProvisioningEvent(context, {
-    type: "env-setup",
-    status: "completed",
-    scriptPath: ENV_SETUP_SCRIPT_NAME,
-    workspaceRoot,
-    timeoutMs: ENV_SETUP_TIMEOUT_MS,
-    durationMs: Date.now() - startedAt,
-  });
+  const branchResult = runGitAtPath(repoRoot, ["symbolic-ref", "--quiet", "--short", "HEAD"]);
+  if (branchResult.ok && branchResult.stdout) {
+    return {
+      branch: branchResult.stdout,
+      head: headResult.stdout,
+      detached: false,
+    };
+  }
+
+  return {
+    head: headResult.stdout,
+    detached: true,
+  };
+}
+
+function hasRepoLocalBranch(repoRoot: string, branch: string): boolean {
+  return runGitAtPath(repoRoot, ["show-ref", "--verify", "--quiet", `refs/heads/${branch}`]).ok;
+}
+
+function checkoutSnapshot(repoRoot: string, snapshot: EnvironmentCheckoutSnapshot): void {
+  const branch = snapshot.branch?.trim();
+  if (branch && hasRepoLocalBranch(repoRoot, branch)) {
+    const branchCheckout = runGitAtPath(repoRoot, ["checkout", "--ignore-other-worktrees", branch]);
+    if (branchCheckout.ok) return;
+  }
+
+  const detachedCheckout = runGitAtPath(repoRoot, ["checkout", "--detach", snapshot.head]);
+  if (!detachedCheckout.ok) {
+    throw new Error(detachedCheckout.stderr || "Failed to checkout detached HEAD");
+  }
+}
+
+function resolveDefaultBranch(repoRoot: string): string | undefined {
+  const remoteHead = runGitAtPath(repoRoot, ["symbolic-ref", "--quiet", "refs/remotes/origin/HEAD"]);
+  if (remoteHead.ok && remoteHead.stdout.startsWith("refs/remotes/origin/")) {
+    return remoteHead.stdout.slice("refs/remotes/origin/".length);
+  }
+  if (hasLocalBranch(repoRoot, "main")) return "main";
+  if (hasLocalBranch(repoRoot, "master")) return "master";
+  return undefined;
 }
 
 class WorktreeEnvironment implements IEnvironment {
   readonly kind = "worktree";
   readonly info = { ...WORKTREE_ENVIRONMENT_INFO };
-  readonly rootPath: string;
-  readonly env: Record<string, string | undefined>;
+  private readonly rootPath: string;
+  private readonly env: Record<string, string | undefined>;
 
   constructor(
-    private readonly gitCommand: string,
     private readonly projectRoot: string,
     private readonly state: WorktreeEnvironmentState,
   ) {
     this.rootPath = state.workspaceRoot;
-    this.env = {
-      BB_WORKSPACE_ROOT: state.workspaceRoot,
-      BB_WORKSPACE_MODE: "worktree",
-    };
+    this.env = {};
   }
 
   serialize(): WorktreeEnvironmentState {
@@ -230,7 +195,7 @@ class WorktreeEnvironment implements IEnvironment {
 
   dispose(): void {
     spawnSync(
-      this.gitCommand,
+      "git",
       ["worktree", "remove", "--force", this.state.workspaceRoot],
       {
         cwd: this.projectRoot,
@@ -240,10 +205,266 @@ class WorktreeEnvironment implements IEnvironment {
     rmSync(this.state.workspaceRoot, { recursive: true, force: true });
   }
 
-  run(command: string, args: string[]) {
-    return runCommand(command, args, {
+  getWorkspaceRoot(): string {
+    return this.rootPath;
+  }
+
+  getExecutionContext(): { cwd: string; env: Record<string, string | undefined> } {
+    return {
       cwd: this.rootPath,
-      env: this.env,
+      env: { ...this.env },
+    };
+  }
+
+  shouldRunSetupScript(): boolean {
+    return true;
+  }
+
+  supportsPromoteToActiveWorkspace(): boolean {
+    return true;
+  }
+
+  supportsDemoteFromActiveWorkspace(): boolean {
+    return true;
+  }
+
+  supportsSquashMergeIntoDefaultBranch(): boolean {
+    return true;
+  }
+
+  promoteToActiveWorkspace(args: PromoteEnvironmentOptions): PromoteEnvironmentResult {
+    if (hasLocalWorkingChanges(args.activeWorkspaceRoot)) {
+      throw new Error(
+        "Primary checkout has local changes. Commit, stash, or discard changes before promoting a thread.",
+      );
+    }
+    if (hasLocalWorkingChanges(this.rootPath)) {
+      throw new Error(
+        "Thread worktree has local changes. Commit, stash, or discard changes before promoting a thread.",
+      );
+    }
+
+    const previousCheckout = resolveCheckoutSnapshot(args.activeWorkspaceRoot);
+    const promotedCheckout = resolveCheckoutSnapshot(this.rootPath);
+
+    try {
+      checkoutSnapshot(args.activeWorkspaceRoot, promotedCheckout);
+      return {
+        previousCheckout,
+        promotedCheckout,
+      };
+    } catch (err) {
+      try {
+        checkoutSnapshot(args.activeWorkspaceRoot, previousCheckout);
+      } catch (restoreErr) {
+        const restoreMessage = restoreErr instanceof Error
+          ? restoreErr.message
+          : String(restoreErr);
+        throw new Error(
+          `${err instanceof Error ? err.message : String(err)} (failed to restore primary checkout: ${restoreMessage})`,
+        );
+      }
+      throw err;
+    }
+  }
+
+  demoteFromActiveWorkspace(args: DemoteEnvironmentOptions): DemoteEnvironmentResult {
+    const reset = runGitAtPath(args.activeWorkspaceRoot, ["reset", "--hard"]);
+    if (!reset.ok) {
+      throw new Error(reset.stderr || "Failed to reset primary checkout");
+    }
+    const clean = runGitAtPath(args.activeWorkspaceRoot, ["clean", "-fd"]);
+    if (!clean.ok) {
+      throw new Error(clean.stderr || "Failed to clean primary checkout");
+    }
+    checkoutSnapshot(args.activeWorkspaceRoot, args.snapshot);
+    return {
+      restoredCheckout: args.snapshot,
+    };
+  }
+
+  async squashMergeIntoDefaultBranch(
+    args: EnvironmentSquashMergeOptions,
+  ): Promise<EnvironmentSquashMergeResult> {
+    const mergeBaseBranch =
+      args.defaultBranch ?? resolveDefaultBranch(args.activeWorkspaceRoot);
+    if (!mergeBaseBranch) {
+      throw new Error("Could not determine merge base branch");
+    }
+    const statusResult = this.run("git", ["status", "--porcelain"]);
+    if (statusResult.exitCode !== 0) {
+      throw new Error(statusResult.stderr || "Failed to inspect worktree status");
+    }
+    if (statusResult.stdout.trim().length > 0) {
+      throw new Error("Workspace has uncommitted changes; commit first");
+    }
+    if (hasLocalWorkingChanges(args.activeWorkspaceRoot)) {
+      throw new Error(
+        "Project root has local changes that could be lost; commit or stash them before squash merge",
+      );
+    }
+
+    const workspaceHead = this.run("git", ["rev-parse", "HEAD"]);
+    if (workspaceHead.exitCode !== 0 || !workspaceHead.stdout) {
+      throw new Error("Failed to resolve worktree HEAD");
+    }
+
+    const currentProjectBranch = runGitAtPath(args.activeWorkspaceRoot, ["symbolic-ref", "--short", "HEAD"]);
+    const defaultHead = runGitAtPath(args.activeWorkspaceRoot, ["rev-parse", mergeBaseBranch]);
+    if (!defaultHead.ok || !defaultHead.stdout) {
+      throw new Error(`Failed to resolve ${mergeBaseBranch}`);
+    }
+
+    const aheadResult = this.run("git", [
+      "rev-list",
+      "--left-right",
+      "--count",
+      `${mergeBaseBranch}...HEAD`,
+    ]);
+    if (aheadResult.exitCode === 0) {
+      const [, aheadRaw] = aheadResult.stdout.split("\t");
+      const aheadCount = Number.parseInt(aheadRaw ?? "0", 10);
+      if (!Number.isNaN(aheadCount) && aheadCount <= 0) {
+        return { merged: false, message: "No commits to merge" };
+      }
+    }
+
+    const tempRoot = mkdtempSync(join(tmpdir(), "beanbag-squash-merge-"));
+    const tempWorkspaceRoot = resolve(tempRoot, "integration");
+
+    try {
+      const addWorktree = runGitAtPath(args.activeWorkspaceRoot, [
+        "worktree",
+        "add",
+        "--detach",
+        tempWorkspaceRoot,
+        defaultHead.stdout,
+      ]);
+      if (!addWorktree.ok) {
+        throw new Error(addWorktree.stderr || "Failed to prepare integration worktree");
+      }
+
+      const squashResult = runGitAtPath(tempWorkspaceRoot, [
+        "merge",
+        "--squash",
+        workspaceHead.stdout,
+      ]);
+      if (!squashResult.ok) {
+        const conflictFiles = runGitAtPath(tempWorkspaceRoot, [
+          "diff",
+          "--name-only",
+          "--diff-filter=U",
+        ]);
+        runGitAtPath(tempWorkspaceRoot, ["reset", "--hard"]);
+        return {
+          merged: false,
+          message:
+            `Squash merge has conflicts against ${mergeBaseBranch}. Rebase/merge ${mergeBaseBranch} into the worktree, resolve conflicts, and retry.`,
+          ...(conflictFiles.ok && conflictFiles.stdout
+            ? {
+                conflictFiles: conflictFiles.stdout
+                  .split("\n")
+                  .map((line) => line.trim())
+                  .filter((line) => line.length > 0),
+              }
+            : {}),
+        };
+      }
+
+      const hasSquashedChanges = runGitAtPath(tempWorkspaceRoot, [
+        "diff",
+        "--cached",
+        "--quiet",
+      ]);
+      if (hasSquashedChanges.ok) {
+        return { merged: false, message: "No changes to merge after squash" };
+      }
+
+      const sourceBranch = runGitAtPath(this.rootPath, ["symbolic-ref", "--quiet", "--short", "HEAD"]);
+      const defaultMessage = `chore: squash merge from ${sourceBranch.ok && sourceBranch.stdout ? sourceBranch.stdout : "worktree"}`;
+      let message = args.message?.trim();
+      if (!message && args.resolveMessage) {
+        try {
+          const resolved = await args.resolveMessage({
+            tempWorkspaceRoot,
+            mergeBaseBranch,
+            sourceBranch: sourceBranch.ok ? sourceBranch.stdout : undefined,
+            defaultMessage,
+          });
+          const trimmed = resolved?.trim();
+          if (trimmed) {
+            message = trimmed;
+          }
+        } catch {
+          // Fall back to the default message when generation fails.
+        }
+      }
+      const finalMessage = message || defaultMessage;
+      const commitResult = runGitAtPath(tempWorkspaceRoot, [
+        "commit",
+        "-m",
+        finalMessage,
+      ]);
+      if (!commitResult.ok) {
+        throw new Error(commitResult.stderr || "Failed to commit squashed merge");
+      }
+
+      const mergedHead = runGitAtPath(tempWorkspaceRoot, ["rev-parse", "HEAD"]);
+      if (!mergedHead.ok || !mergedHead.stdout) {
+        throw new Error("Failed to resolve squashed merge commit");
+      }
+
+      const updateRef = runGitAtPath(args.activeWorkspaceRoot, [
+        "update-ref",
+        `refs/heads/${mergeBaseBranch}`,
+        mergedHead.stdout,
+        defaultHead.stdout,
+      ]);
+      if (!updateRef.ok) {
+        throw new Error(
+          updateRef.stderr || `${mergeBaseBranch} moved during squash merge; please retry`,
+        );
+      }
+
+      if (currentProjectBranch.ok && currentProjectBranch.stdout === mergeBaseBranch) {
+        const resetResult = runGitAtPath(args.activeWorkspaceRoot, [
+          "reset",
+          "--hard",
+          mergedHead.stdout,
+        ]);
+        if (!resetResult.ok) {
+          throw new Error(
+            resetResult.stderr || `Squash merged into ${mergeBaseBranch}, but failed to refresh checkout`,
+          );
+        }
+      }
+
+      return { merged: true, message: `Squash-merged into ${mergeBaseBranch}` };
+    } finally {
+      runGitAtPath(args.activeWorkspaceRoot, [
+        "worktree",
+        "remove",
+        "--force",
+        tempWorkspaceRoot,
+      ]);
+      rmSync(tempRoot, { recursive: true, force: true });
+    }
+  }
+
+  run(
+    command: string,
+    args: string[],
+    options?: EnvironmentCommandOptions,
+  ) {
+    const executionContext = this.getExecutionContext();
+    return runCommand(command, args, {
+      cwd: options?.cwd ?? executionContext.cwd,
+      env: {
+        ...executionContext.env,
+        ...(options?.env ?? {}),
+      },
+      ...(options?.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),
+      ...(options?.rawOutput ? { rawOutput: true } : {}),
     });
   }
 }
@@ -251,7 +472,6 @@ class WorktreeEnvironment implements IEnvironment {
 export function createWorktreeEnvironmentDefinition(
   opts?: CreateWorktreeEnvironmentDefinitionOptions,
 ): EnvironmentDefinition<WorktreeEnvironmentState> {
-  const gitCommand = opts?.gitCommand ?? process.env.BEANBAG_GIT_COMMAND ?? "git";
   const worktreeRootName =
     opts?.worktreeRootName ??
     process.env.BEANBAG_WORKTREE_ROOT ??
@@ -276,18 +496,18 @@ export function createWorktreeEnvironmentDefinition(
       mkdirSync(worktreeRoot, { recursive: true });
 
       if (!existsSync(workspaceRoot)) {
-        const startRef = resolveWorktreeStartRef(gitCommand, projectRoot);
-        const branchAddArgs = hasLocalBranch(gitCommand, projectRoot, branchName)
+        const startRef = resolveWorktreeStartRef(projectRoot);
+        const branchAddArgs = hasLocalBranch(projectRoot, branchName)
           ? ["worktree", "add", workspaceRoot, branchName]
           : ["worktree", "add", "-b", branchName, workspaceRoot, ...(startRef ? [startRef] : [])];
-        const branchAddResult = spawnSync(gitCommand, branchAddArgs, {
+        const branchAddResult = spawnSync("git", branchAddArgs, {
           cwd: projectRoot,
           env: toChildEnv(context.runtimeEnv),
           stdio: "pipe",
         });
         const addResult = branchAddResult.status === 0
           ? branchAddResult
-          : spawnSync(gitCommand, ["worktree", "add", "--detach", workspaceRoot], {
+          : spawnSync("git", ["worktree", "add", "--detach", workspaceRoot], {
               cwd: projectRoot,
               env: toChildEnv(context.runtimeEnv),
               stdio: "pipe",
@@ -295,10 +515,9 @@ export function createWorktreeEnvironmentDefinition(
         if (addResult.status !== 0) {
           throw new Error(`Failed to create worktree: ${summarizeSpawnSyncFailure(addResult)}`);
         }
-        runOptionalEnvSetupHook(context, workspaceRoot);
       }
 
-      return new WorktreeEnvironment(gitCommand, projectRoot, {
+      return new WorktreeEnvironment(projectRoot, {
         workspaceRoot,
         branchName,
       });
@@ -307,7 +526,7 @@ export function createWorktreeEnvironmentDefinition(
       if (!existsSync(state.workspaceRoot)) {
         throw new Error(`Worktree workspace is unavailable: ${state.workspaceRoot}`);
       }
-      return new WorktreeEnvironment(gitCommand, context.projectRootPath, state);
+      return new WorktreeEnvironment(context.projectRootPath, state);
     },
     isState(value: unknown): value is WorktreeEnvironmentState {
       return (

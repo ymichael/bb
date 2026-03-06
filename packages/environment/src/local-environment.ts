@@ -1,8 +1,16 @@
 import type { SystemEnvironmentInfo } from "@beanbag/agent-core";
 import type {
   CreateEnvironmentContext,
+  DemoteEnvironmentOptions,
+  DemoteEnvironmentResult,
+  EnvironmentCommandOptions,
   EnvironmentDefinition,
+  EnvironmentCheckoutSnapshot,
+  EnvironmentSquashMergeOptions,
+  EnvironmentSquashMergeResult,
   IEnvironment,
+  PromoteEnvironmentOptions,
+  PromoteEnvironmentResult,
 } from "./contracts.js";
 import { runCommand } from "./process.js";
 
@@ -17,15 +25,12 @@ const LOCAL_ENVIRONMENT_INFO: SystemEnvironmentInfo = {
 class LocalEnvironment implements IEnvironment {
   readonly kind = "local";
   readonly info = { ...LOCAL_ENVIRONMENT_INFO };
-  readonly rootPath: string;
-  readonly env: Record<string, string | undefined>;
+  private readonly rootPath: string;
+  private readonly env: Record<string, string | undefined>;
 
   constructor(context: CreateEnvironmentContext) {
     this.rootPath = context.projectRootPath;
-    this.env = {
-      BB_WORKSPACE_ROOT: context.projectRootPath,
-      BB_WORKSPACE_MODE: "local",
-    };
+    this.env = {};
   }
 
   serialize(): LocalEnvironmentState {
@@ -34,10 +39,61 @@ class LocalEnvironment implements IEnvironment {
 
   dispose(): void {}
 
-  run(command: string, args: string[]) {
-    return runCommand(command, args, {
+  getWorkspaceRoot(): string {
+    return this.rootPath;
+  }
+
+  getExecutionContext(): { cwd: string; env: Record<string, string | undefined> } {
+    return {
       cwd: this.rootPath,
-      env: this.env,
+      env: { ...this.env },
+    };
+  }
+
+  shouldRunSetupScript(): boolean {
+    return false;
+  }
+
+  supportsPromoteToActiveWorkspace(): boolean {
+    return false;
+  }
+
+  supportsDemoteFromActiveWorkspace(): boolean {
+    return false;
+  }
+
+  supportsSquashMergeIntoDefaultBranch(): boolean {
+    return false;
+  }
+
+  promoteToActiveWorkspace(_args: PromoteEnvironmentOptions): PromoteEnvironmentResult {
+    throw new Error("Promotion is not supported for local environments");
+  }
+
+  demoteFromActiveWorkspace(_args: DemoteEnvironmentOptions): DemoteEnvironmentResult {
+    throw new Error("Demotion is not supported for local environments");
+  }
+
+  async squashMergeIntoDefaultBranch(
+    _args: EnvironmentSquashMergeOptions,
+  ): Promise<EnvironmentSquashMergeResult> {
+    throw new Error("Squash merge is not supported for local environments");
+  }
+
+  run(
+    command: string,
+    args: string[],
+    options?: EnvironmentCommandOptions,
+  ) {
+    const executionContext = this.getExecutionContext();
+    return runCommand(command, args, {
+      cwd: options?.cwd ?? executionContext.cwd,
+      env: {
+        ...executionContext.env,
+        ...(options?.env ?? {}),
+      },
+      ...(options?.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),
+      ...(options?.rawOutput ? { rawOutput: true } : {}),
     });
   }
 }

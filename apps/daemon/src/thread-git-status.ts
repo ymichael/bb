@@ -1,15 +1,11 @@
 import { spawn, spawnSync } from "node:child_process";
 import {
-  copyFileSync,
   existsSync,
   lstatSync,
   mkdirSync,
-  mkdtempSync,
   readFileSync,
-  readlinkSync,
   rmSync,
   statSync,
-  symlinkSync,
   watch,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -18,6 +14,7 @@ import type {
   ThreadGitDiffCommitSummary,
   ThreadWorkStatus,
 } from "@beanbag/agent-core";
+import type { IEnvironment } from "@beanbag/environment";
 
 type CacheEntry = {
   checkedAt: number;
@@ -36,16 +33,12 @@ const CACHE_TTL_MS = 1_500;
 const MAX_DIFF_RESPONSE_CHARS = 220_000;
 const COMMIT_SUMMARY_FIELD_SEPARATOR = "\u001f";
 const GIT_COMMAND_TIMEOUT_MS = 20_000;
+let activeGitRunner: IEnvironment | undefined;
 
 export interface GitCheckoutSnapshot {
   branch?: string;
   head: string;
   detached: boolean;
-}
-
-export interface PromoteWorktreeResult {
-  previousCheckout: GitCheckoutSnapshot;
-  promotedCheckout: GitCheckoutSnapshot;
 }
 
 export interface GitDiffResult {
@@ -61,24 +54,16 @@ export interface WorktreeCommitResult {
   commitSha?: string;
 }
 
-export interface WorktreeSquashMergeResult {
-  merged: boolean;
-  message: string;
-  conflictFiles?: string[];
-}
-
-export interface WorktreeSquashMergeMessageContext {
-  tempWorkspaceRoot: string;
-  mergeBaseBranch: string;
-  sourceBranch?: string;
-  defaultMessage: string;
-}
-
-export type WorktreeSquashMergeMessageResolver = (
-  context: WorktreeSquashMergeMessageContext,
-) => Promise<string | undefined> | string | undefined;
-
-function runGit(cwd: string, args: string[]): { ok: boolean; stdout: string; stderr: string; code: number | null } {
+function runGitAtPath(cwd: string, args: string[]): { ok: boolean; stdout: string; stderr: string; code: number | null } {
+  if (activeGitRunner) {
+    const result = activeGitRunner.run("git", args, { cwd });
+    return {
+      ok: result.exitCode === 0,
+      stdout: result.stdout,
+      stderr: result.stderr,
+      code: result.exitCode,
+    };
+  }
   const result = spawnSync("git", args, {
     cwd,
     encoding: "utf-8",
@@ -100,7 +85,19 @@ function runGit(cwd: string, args: string[]): { ok: boolean; stdout: string; std
   };
 }
 
-function runGitRaw(cwd: string, args: string[]): { ok: boolean; stdout: string; stderr: string; code: number | null } {
+function runGitRawAtPath(cwd: string, args: string[]): { ok: boolean; stdout: string; stderr: string; code: number | null } {
+  if (activeGitRunner) {
+    const result = activeGitRunner.run("git", args, {
+      cwd,
+      rawOutput: true,
+    });
+    return {
+      ok: result.exitCode === 0,
+      stdout: result.stdout,
+      stderr: result.stderr,
+      code: result.exitCode,
+    };
+  }
   const result = spawnSync("git", args, {
     cwd,
     encoding: "utf-8",
@@ -122,10 +119,29 @@ function runGitRaw(cwd: string, args: string[]): { ok: boolean; stdout: string; 
   };
 }
 
-function runGitAsync(
+function withGitRunner<T>(environment: IEnvironment | undefined, fn: () => T): T {
+  const previousRunner = activeGitRunner;
+  activeGitRunner = environment;
+  try {
+    return fn();
+  } finally {
+    activeGitRunner = previousRunner;
+  }
+}
+
+function runGitAtPathAsync(
   cwd: string,
   args: string[],
 ): Promise<{ ok: boolean; stdout: string; stderr: string; code: number | null }> {
+  if (activeGitRunner) {
+    const result = activeGitRunner.run("git", args, { cwd });
+    return Promise.resolve({
+      ok: result.exitCode === 0,
+      stdout: result.stdout,
+      stderr: result.stderr,
+      code: result.exitCode,
+    });
+  }
   return new Promise((resolve) => {
     const child = spawn("git", args, {
       cwd,
@@ -171,10 +187,22 @@ function runGitAsync(
   });
 }
 
-function runGitRawAsync(
+function runGitRawAtPathAsync(
   cwd: string,
   args: string[],
 ): Promise<{ ok: boolean; stdout: string; stderr: string; code: number | null }> {
+  if (activeGitRunner) {
+    const result = activeGitRunner.run("git", args, {
+      cwd,
+      rawOutput: true,
+    });
+    return Promise.resolve({
+      ok: result.exitCode === 0,
+      stdout: result.stdout,
+      stderr: result.stderr,
+      code: result.exitCode,
+    });
+  }
   return new Promise((resolve) => {
     const child = spawn("git", args, {
       cwd,
@@ -258,7 +286,7 @@ function resolveMergeBaseDiffCounts(args: {
     return args.fallback;
   }
 
-  const shortstatResult = runGit(args.workspaceRoot, [
+  const shortstatResult = runGitAtPath(args.workspaceRoot, [
     "diff",
     "--shortstat",
     args.mergeBaseDiffRef,
@@ -286,7 +314,7 @@ async function resolveMergeBaseDiffCountsAsync(args: {
     return args.fallback;
   }
 
-  const shortstatResult = await runGitAsync(args.workspaceRoot, [
+  const shortstatResult = await runGitAtPathAsync(args.workspaceRoot, [
     "diff",
     "--shortstat",
     args.mergeBaseDiffRef,
@@ -312,7 +340,7 @@ function resolveMergeBaseDiffRef(
     return undefined;
   }
 
-  const mergeBaseResult = runGit(workspaceRoot, ["merge-base", baseRef, "HEAD"]);
+  const mergeBaseResult = runGitAtPath(workspaceRoot, ["merge-base", baseRef, "HEAD"]);
   if (!mergeBaseResult.ok || !mergeBaseResult.stdout) {
     return undefined;
   }
@@ -328,7 +356,7 @@ async function resolveMergeBaseDiffRefAsync(
     return undefined;
   }
 
-  const mergeBaseResult = await runGitAsync(workspaceRoot, ["merge-base", baseRef, "HEAD"]);
+  const mergeBaseResult = await runGitAtPathAsync(workspaceRoot, ["merge-base", baseRef, "HEAD"]);
   if (!mergeBaseResult.ok || !mergeBaseResult.stdout) {
     return undefined;
   }
@@ -355,7 +383,7 @@ function countUnmergedAheadCommits(
     return 0;
   }
 
-  const cherryResult = runGit(workspaceRoot, ["cherry", baseRef, "HEAD"]);
+  const cherryResult = runGitAtPath(workspaceRoot, ["cherry", baseRef, "HEAD"]);
   if (!cherryResult.ok) {
     return aheadCount;
   }
@@ -395,7 +423,7 @@ async function countUnmergedAheadCommitsAsync(
     return 0;
   }
 
-  const cherryResult = await runGitAsync(workspaceRoot, ["cherry", baseRef, "HEAD"]);
+  const cherryResult = await runGitAtPathAsync(workspaceRoot, ["cherry", baseRef, "HEAD"]);
   if (!cherryResult.ok) {
     return aheadCount;
   }
@@ -435,7 +463,7 @@ function hasCommittedContentDeltaByPaths(args: {
 }): boolean | undefined {
   for (let index = 0; index < args.paths.length; index += COMMITTED_CONTENT_DIFF_CHUNK_SIZE) {
     const chunk = args.paths.slice(index, index + COMMITTED_CONTENT_DIFF_CHUNK_SIZE);
-    const diffResult = runGit(args.workspaceRoot, [
+    const diffResult = runGitAtPath(args.workspaceRoot, [
       "diff",
       "--quiet",
       `${args.baseRef}..HEAD`,
@@ -459,7 +487,7 @@ async function hasCommittedContentDeltaByPathsAsync(args: {
 }): Promise<boolean | undefined> {
   for (let index = 0; index < args.paths.length; index += COMMITTED_CONTENT_DIFF_CHUNK_SIZE) {
     const chunk = args.paths.slice(index, index + COMMITTED_CONTENT_DIFF_CHUNK_SIZE);
-    const diffResult = await runGitAsync(args.workspaceRoot, [
+    const diffResult = await runGitAtPathAsync(args.workspaceRoot, [
       "diff",
       "--quiet",
       `${args.baseRef}..HEAD`,
@@ -486,7 +514,7 @@ function resolveCommittedUnmergedChanges(args: {
     return args.aheadCount > 0;
   }
 
-  const changedPathsResult = runGitRaw(args.workspaceRoot, [
+  const changedPathsResult = runGitRawAtPath(args.workspaceRoot, [
     "diff",
     "--name-only",
     "--find-renames",
@@ -523,7 +551,7 @@ async function resolveCommittedUnmergedChangesAsync(args: {
     return args.aheadCount > 0;
   }
 
-  const changedPathsResult = await runGitRawAsync(args.workspaceRoot, [
+  const changedPathsResult = await runGitRawAtPathAsync(args.workspaceRoot, [
     "diff",
     "--name-only",
     "--find-renames",
@@ -598,7 +626,7 @@ function resolveMergeBaseFileChanges(args: {
     return fallback;
   }
 
-  const diffResult = runGit(args.workspaceRoot, [
+  const diffResult = runGitAtPath(args.workspaceRoot, [
     "diff",
     "--name-status",
     "--find-renames",
@@ -642,7 +670,7 @@ async function resolveMergeBaseFileChangesAsync(args: {
     return fallback;
   }
 
-  const diffResult = await runGitAsync(args.workspaceRoot, [
+  const diffResult = await runGitAtPathAsync(args.workspaceRoot, [
     "diff",
     "--name-status",
     "--find-renames",
@@ -763,15 +791,15 @@ function toState(args: {
 }
 
 function resolveDefaultBranch(projectRoot: string): string | undefined {
-  const remoteHead = runGit(projectRoot, ["symbolic-ref", "--quiet", "refs/remotes/origin/HEAD"]);
+  const remoteHead = runGitAtPath(projectRoot, ["symbolic-ref", "--quiet", "refs/remotes/origin/HEAD"]);
   if (remoteHead.ok && remoteHead.stdout.startsWith("refs/remotes/origin/")) {
     return remoteHead.stdout.slice("refs/remotes/origin/".length);
   }
 
-  const hasMain = runGit(projectRoot, ["show-ref", "--verify", "--quiet", "refs/heads/main"]);
+  const hasMain = runGitAtPath(projectRoot, ["show-ref", "--verify", "--quiet", "refs/heads/main"]);
   if (hasMain.ok) return "main";
 
-  const hasMaster = runGit(projectRoot, ["show-ref", "--verify", "--quiet", "refs/heads/master"]);
+  const hasMaster = runGitAtPath(projectRoot, ["show-ref", "--verify", "--quiet", "refs/heads/master"]);
   if (hasMaster.ok) return "master";
 
   return undefined;
@@ -780,7 +808,7 @@ function resolveDefaultBranch(projectRoot: string): string | undefined {
 async function resolveDefaultBranchAsync(
   projectRoot: string,
 ): Promise<string | undefined> {
-  const remoteHead = await runGitAsync(projectRoot, [
+  const remoteHead = await runGitAtPathAsync(projectRoot, [
     "symbolic-ref",
     "--quiet",
     "refs/remotes/origin/HEAD",
@@ -789,7 +817,7 @@ async function resolveDefaultBranchAsync(
     return remoteHead.stdout.slice("refs/remotes/origin/".length);
   }
 
-  const hasMain = await runGitAsync(projectRoot, [
+  const hasMain = await runGitAtPathAsync(projectRoot, [
     "show-ref",
     "--verify",
     "--quiet",
@@ -797,7 +825,7 @@ async function resolveDefaultBranchAsync(
   ]);
   if (hasMain.ok) return "main";
 
-  const hasMaster = await runGitAsync(projectRoot, [
+  const hasMaster = await runGitAtPathAsync(projectRoot, [
     "show-ref",
     "--verify",
     "--quiet",
@@ -812,12 +840,12 @@ function resolveBaseRef(workspaceRoot: string, branch: string | undefined): stri
   if (!branch) return undefined;
 
   const localRef = `refs/heads/${branch}`;
-  if (runGit(workspaceRoot, ["show-ref", "--verify", "--quiet", localRef]).ok) {
+  if (runGitAtPath(workspaceRoot, ["show-ref", "--verify", "--quiet", localRef]).ok) {
     return branch;
   }
 
   const remoteRef = `refs/remotes/origin/${branch}`;
-  if (runGit(workspaceRoot, ["show-ref", "--verify", "--quiet", remoteRef]).ok) {
+  if (runGitAtPath(workspaceRoot, ["show-ref", "--verify", "--quiet", remoteRef]).ok) {
     return `origin/${branch}`;
   }
 
@@ -833,7 +861,7 @@ async function resolveBaseRefAsync(
   const localRef = `refs/heads/${branch}`;
   if (
     (
-      await runGitAsync(workspaceRoot, [
+      await runGitAtPathAsync(workspaceRoot, [
         "show-ref",
         "--verify",
         "--quiet",
@@ -847,7 +875,7 @@ async function resolveBaseRefAsync(
   const remoteRef = `refs/remotes/origin/${branch}`;
   if (
     (
-      await runGitAsync(workspaceRoot, [
+      await runGitAtPathAsync(workspaceRoot, [
         "show-ref",
         "--verify",
         "--quiet",
@@ -862,7 +890,7 @@ async function resolveBaseRefAsync(
 }
 
 function listMergeBaseBranches(projectRoot: string, defaultBranch: string | undefined): string[] {
-  const localBranches = runGit(projectRoot, [
+  const localBranches = runGitAtPath(projectRoot, [
     "for-each-ref",
     "--format=%(refname:short)",
     "refs/heads",
@@ -895,7 +923,7 @@ async function listMergeBaseBranchesAsync(
   projectRoot: string,
   defaultBranch: string | undefined,
 ): Promise<string[]> {
-  const localBranches = await runGitAsync(projectRoot, [
+  const localBranches = await runGitAtPathAsync(projectRoot, [
     "for-each-ref",
     "--format=%(refname:short)",
     "refs/heads",
@@ -975,7 +1003,7 @@ async function resolveMergeBaseSelectionAsync(args: {
 }
 
 function hasLocalWorkingChanges(repoRoot: string): boolean {
-  const status = runGit(repoRoot, ["status", "--porcelain"]);
+  const status = runGitAtPath(repoRoot, ["status", "--porcelain"]);
   if (!status.ok) {
     return false;
   }
@@ -983,19 +1011,19 @@ function hasLocalWorkingChanges(repoRoot: string): boolean {
 }
 
 function hasLocalBranch(repoRoot: string, branch: string): boolean {
-  return runGit(
+  return runGitAtPath(
     repoRoot,
     ["show-ref", "--verify", "--quiet", `refs/heads/${branch}`],
   ).ok;
 }
 
 function resolveCheckoutSnapshot(repoRoot: string): GitCheckoutSnapshot {
-  const headResult = runGit(repoRoot, ["rev-parse", "HEAD"]);
+  const headResult = runGitAtPath(repoRoot, ["rev-parse", "HEAD"]);
   if (!headResult.ok || !headResult.stdout) {
     throw new Error("Failed to resolve HEAD");
   }
 
-  const branchResult = runGit(repoRoot, ["symbolic-ref", "--quiet", "--short", "HEAD"]);
+  const branchResult = runGitAtPath(repoRoot, ["symbolic-ref", "--quiet", "--short", "HEAD"]);
   if (branchResult.ok && branchResult.stdout) {
     return {
       branch: branchResult.stdout,
@@ -1013,14 +1041,14 @@ function resolveCheckoutSnapshot(repoRoot: string): GitCheckoutSnapshot {
 function checkoutSnapshot(repoRoot: string, snapshot: GitCheckoutSnapshot): void {
   const branch = snapshot.branch?.trim();
   if (branch && hasLocalBranch(repoRoot, branch)) {
-    const branchCheckout = runGit(
+    const branchCheckout = runGitAtPath(
       repoRoot,
       ["checkout", "--ignore-other-worktrees", branch],
     );
     if (branchCheckout.ok) return;
   }
 
-  const detachedCheckout = runGit(repoRoot, ["checkout", "--detach", snapshot.head]);
+  const detachedCheckout = runGitAtPath(repoRoot, ["checkout", "--detach", snapshot.head]);
   if (!detachedCheckout.ok) {
     throw new Error(detachedCheckout.stderr || "Failed to checkout detached HEAD");
   }
@@ -1063,60 +1091,6 @@ function parseCommitSummaries(raw: string): ThreadGitDiffCommitSummary[] {
       } satisfies ThreadGitDiffCommitSummary;
     })
     .filter((entry): entry is ThreadGitDiffCommitSummary => entry !== null);
-}
-
-function copyFileSystemEntry(sourcePath: string, targetPath: string): void {
-  const stat = lstatSync(sourcePath);
-  if (stat.isDirectory()) {
-    mkdirSync(targetPath, { recursive: true });
-    return;
-  }
-  if (stat.isSymbolicLink()) {
-    rmSync(targetPath, { recursive: true, force: true });
-    mkdirSync(dirname(targetPath), { recursive: true });
-    const linkTarget = readlinkSync(sourcePath);
-    symlinkSync(linkTarget, targetPath);
-    return;
-  }
-
-  mkdirSync(dirname(targetPath), { recursive: true });
-  if (existsSync(targetPath) && lstatSync(targetPath).isDirectory()) {
-    rmSync(targetPath, { recursive: true, force: true });
-  }
-  copyFileSync(sourcePath, targetPath);
-}
-
-function applyBinaryDiffPatch(projectRoot: string, patch: string): void {
-  if (patch.trim().length === 0) return;
-  const applyResult = spawnSync(
-    "git",
-    ["apply", "--allow-empty", "--whitespace=nowarn", "-"],
-    {
-      cwd: projectRoot,
-      encoding: "utf-8",
-      stdio: "pipe",
-      input: patch,
-    },
-  );
-  if (applyResult.status !== 0) {
-    const stderr = applyResult.stderr?.trim();
-    throw new Error(stderr || "Failed to apply worktree patch to primary checkout");
-  }
-}
-
-function syncUntrackedFilesFromWorkspace(workspaceRoot: string, projectRoot: string): void {
-  const untracked = runGit(
-    workspaceRoot,
-    ["ls-files", "--others", "--exclude-standard", "-z"],
-  );
-  if (!untracked.ok || !untracked.stdout) return;
-
-  for (const relativePath of parseNulSeparatedList(untracked.stdout)) {
-    const sourcePath = join(workspaceRoot, relativePath);
-    if (!existsSync(sourcePath)) continue;
-    const targetPath = join(projectRoot, relativePath);
-    copyFileSystemEntry(sourcePath, targetPath);
-  }
 }
 
 function cleanStatus(workspaceRoot: string): ThreadWorkStatus {
@@ -1255,7 +1229,7 @@ export class ThreadGitStatusService {
     const defaultBranch = this.detectDefaultBranch(projectRoot);
     if (!defaultBranch) return undefined;
     if (!hasLocalBranch(projectRoot, defaultBranch)) return undefined;
-    const headResult = runGit(projectRoot, ["rev-parse", defaultBranch]);
+    const headResult = runGitAtPath(projectRoot, ["rev-parse", defaultBranch]);
     if (!headResult.ok || !headResult.stdout) return undefined;
     return {
       branch: defaultBranch,
@@ -1265,63 +1239,20 @@ export class ThreadGitStatusService {
   }
 
   discardLocalChanges(repoRoot: string): void {
-    const reset = runGit(repoRoot, ["reset", "--hard"]);
+    const reset = runGitAtPath(repoRoot, ["reset", "--hard"]);
     if (!reset.ok) {
       throw new Error(reset.stderr || "Failed to reset primary checkout");
     }
-    const clean = runGit(repoRoot, ["clean", "-fd"]);
+    const clean = runGitAtPath(repoRoot, ["clean", "-fd"]);
     if (!clean.ok) {
       throw new Error(clean.stderr || "Failed to clean primary checkout");
     }
   }
 
   removeWorktreeWorkspace(args: { projectRoot: string; workspaceRoot: string }): void {
-    runGit(args.projectRoot, ["worktree", "remove", "--force", args.workspaceRoot]);
+    runGitAtPath(args.projectRoot, ["worktree", "remove", "--force", args.workspaceRoot]);
     rmSync(args.workspaceRoot, { recursive: true, force: true });
     this.invalidate(args.workspaceRoot);
-  }
-
-  promoteWorktreeIntoPrimary(args: {
-    workspaceRoot: string;
-    projectRoot: string;
-  }): PromoteWorktreeResult {
-    if (!this.isCleanWorkspace(args.projectRoot)) {
-      throw new Error(
-        "Primary checkout has local changes. Commit, stash, or discard changes before promoting a thread.",
-      );
-    }
-
-    const previousCheckout = this.resolveCheckoutSnapshot(args.projectRoot);
-    const promotedCheckout = this.resolveCheckoutSnapshot(args.workspaceRoot);
-
-    try {
-      checkoutSnapshot(args.projectRoot, promotedCheckout);
-
-      const patchResult = runGitRaw(args.workspaceRoot, ["diff", "--binary", "HEAD"]);
-      if (!patchResult.ok) {
-        throw new Error(patchResult.stderr || "Failed to generate worktree patch");
-      }
-      applyBinaryDiffPatch(args.projectRoot, patchResult.stdout);
-      syncUntrackedFilesFromWorkspace(args.workspaceRoot, args.projectRoot);
-
-      this.invalidate(args.workspaceRoot);
-      return {
-        previousCheckout,
-        promotedCheckout,
-      };
-    } catch (err) {
-      try {
-        checkoutSnapshot(args.projectRoot, previousCheckout);
-      } catch (restoreErr) {
-        const restoreMessage = restoreErr instanceof Error
-          ? restoreErr.message
-          : String(restoreErr);
-        throw new Error(
-          `${err instanceof Error ? err.message : String(err)} (failed to restore primary checkout: ${restoreMessage})`,
-        );
-      }
-      throw err;
-    }
   }
 
   getStatus(args: {
@@ -1329,132 +1260,135 @@ export class ThreadGitStatusService {
     projectRoot: string;
     defaultBranch?: string;
     mergeBaseBranch?: string;
+    environment?: IEnvironment;
   }): ThreadWorkStatus {
-    if (!existsSync(args.workspaceRoot)) {
-      this._stopWatchingWorkspace(args.workspaceRoot);
-      return deletedStatus(args.workspaceRoot);
-    }
-
-    const isGitRepo = runGit(args.workspaceRoot, ["rev-parse", "--is-inside-work-tree"]);
-    if (!isGitRepo.ok || isGitRepo.stdout !== "true") {
-      this._stopWatchingWorkspace(args.workspaceRoot);
-      return untrackedStatus(args.workspaceRoot);
-    }
-    this._ensureWorkspaceWatcher(args.workspaceRoot);
-
-    const requestedMergeBaseBranch = args.mergeBaseBranch?.trim() || undefined;
-    const defaultBranch = args.defaultBranch ?? this.detectDefaultBranch(args.projectRoot);
-    const fingerprint = createFingerprint(args.workspaceRoot);
-    const cached = this.cache.get(args.workspaceRoot);
-    const now = Date.now();
-    if (
-      cached &&
-      cached.fingerprint === fingerprint &&
-      cached.defaultBranch === defaultBranch &&
-      cached.mergeBaseBranch === requestedMergeBaseBranch &&
-      now - cached.checkedAt < CACHE_TTL_MS
-    ) {
-      return cached.status;
-    }
-
-    const statusResult = runGit(args.workspaceRoot, [
-      "status",
-      "--porcelain",
-      "--untracked-files=all",
-    ]);
-    const statusLines = statusResult.ok
-      ? statusResult.stdout.split("\n").map((line) => line.trimEnd()).filter((line) => line.length > 0)
-      : [];
-    const workspaceFiles = statusLines
-      .map((line) => parsePorcelainLine(line))
-      .filter((item): item is { status: string; path: string } => Boolean(item))
-      .slice(0, 60);
-    const workspaceChangedFiles = statusLines.length;
-
-    const unstagedStat = parseShortstat(runGit(args.workspaceRoot, ["diff", "--shortstat"]).stdout);
-    const stagedStat = parseShortstat(runGit(args.workspaceRoot, ["diff", "--cached", "--shortstat"]).stdout);
-
-    const workspaceInsertions = unstagedStat.insertions + stagedStat.insertions;
-    const workspaceDeletions = unstagedStat.deletions + stagedStat.deletions;
-
-    const currentBranch = runGit(args.workspaceRoot, ["symbolic-ref", "--short", "HEAD"]);
-    const mergeBaseBranches = listMergeBaseBranches(args.projectRoot, defaultBranch);
-    const mergeBaseSelection = resolveMergeBaseSelection({
-      workspaceRoot: args.workspaceRoot,
-      defaultBranch,
-      requestedMergeBaseBranch,
-    });
-    const mergeBaseBranch = mergeBaseSelection.mergeBaseBranch;
-    const baseRef = mergeBaseSelection.baseRef;
-    const mergeBaseDiffRef = resolveMergeBaseDiffRef(args.workspaceRoot, baseRef);
-    const mergeBaseBranchOptions =
-      mergeBaseBranch && !mergeBaseBranches.includes(mergeBaseBranch)
-        ? [mergeBaseBranch, ...mergeBaseBranches]
-        : mergeBaseBranches;
-    const mergeBaseDiff = resolveMergeBaseDiffCounts({
-      workspaceRoot: args.workspaceRoot,
-      mergeBaseDiffRef,
-      statusLines,
-      fallback: {
-        changedFiles: workspaceChangedFiles,
-        insertions: workspaceInsertions,
-        deletions: workspaceDeletions,
-      },
-    });
-    const files = resolveMergeBaseFileChanges({
-      workspaceRoot: args.workspaceRoot,
-      mergeBaseDiffRef,
-      workspaceFiles,
-    });
-
-    let aheadCount = 0;
-    let behindCount = 0;
-    if (baseRef) {
-      const aheadBehind = runGit(args.workspaceRoot, ["rev-list", "--left-right", "--count", `${baseRef}...HEAD`]);
-      if (aheadBehind.ok) {
-        const parsed = parseAheadBehind(aheadBehind.stdout);
-        aheadCount = countUnmergedAheadCommits(args.workspaceRoot, baseRef, parsed.ahead);
-        behindCount = parsed.behind;
+    return withGitRunner(args.environment, () => {
+      if (!existsSync(args.workspaceRoot)) {
+        this._stopWatchingWorkspace(args.workspaceRoot);
+        return deletedStatus(args.workspaceRoot);
       }
-    }
 
-    const hasUncommittedChanges = workspaceChangedFiles > 0;
-    const hasCommittedUnmergedChanges = resolveCommittedUnmergedChanges({
-      workspaceRoot: args.workspaceRoot,
-      baseRef,
-      mergeBaseDiffRef,
-      aheadCount,
+      const isGitRepo = runGitAtPath(args.workspaceRoot, ["rev-parse", "--is-inside-work-tree"]);
+      if (!isGitRepo.ok || isGitRepo.stdout !== "true") {
+        this._stopWatchingWorkspace(args.workspaceRoot);
+        return untrackedStatus(args.workspaceRoot);
+      }
+      this._ensureWorkspaceWatcher(args.workspaceRoot);
+
+      const requestedMergeBaseBranch = args.mergeBaseBranch?.trim() || undefined;
+      const defaultBranch = args.defaultBranch ?? this.detectDefaultBranch(args.projectRoot);
+      const fingerprint = createFingerprint(args.workspaceRoot);
+      const cached = this.cache.get(args.workspaceRoot);
+      const now = Date.now();
+      if (
+        cached &&
+        cached.fingerprint === fingerprint &&
+        cached.defaultBranch === defaultBranch &&
+        cached.mergeBaseBranch === requestedMergeBaseBranch &&
+        now - cached.checkedAt < CACHE_TTL_MS
+      ) {
+        return cached.status;
+      }
+
+      const statusResult = runGitAtPath(args.workspaceRoot, [
+        "status",
+        "--porcelain",
+        "--untracked-files=all",
+      ]);
+      const statusLines = statusResult.ok
+        ? statusResult.stdout.split("\n").map((line) => line.trimEnd()).filter((line) => line.length > 0)
+        : [];
+      const workspaceFiles = statusLines
+        .map((line) => parsePorcelainLine(line))
+        .filter((item): item is { status: string; path: string } => Boolean(item))
+        .slice(0, 60);
+      const workspaceChangedFiles = statusLines.length;
+
+      const unstagedStat = parseShortstat(runGitAtPath(args.workspaceRoot, ["diff", "--shortstat"]).stdout);
+      const stagedStat = parseShortstat(runGitAtPath(args.workspaceRoot, ["diff", "--cached", "--shortstat"]).stdout);
+
+      const workspaceInsertions = unstagedStat.insertions + stagedStat.insertions;
+      const workspaceDeletions = unstagedStat.deletions + stagedStat.deletions;
+
+      const currentBranch = runGitAtPath(args.workspaceRoot, ["symbolic-ref", "--short", "HEAD"]);
+      const mergeBaseBranches = listMergeBaseBranches(args.projectRoot, defaultBranch);
+      const mergeBaseSelection = resolveMergeBaseSelection({
+        workspaceRoot: args.workspaceRoot,
+        defaultBranch,
+        requestedMergeBaseBranch,
+      });
+      const mergeBaseBranch = mergeBaseSelection.mergeBaseBranch;
+      const baseRef = mergeBaseSelection.baseRef;
+      const mergeBaseDiffRef = resolveMergeBaseDiffRef(args.workspaceRoot, baseRef);
+      const mergeBaseBranchOptions =
+        mergeBaseBranch && !mergeBaseBranches.includes(mergeBaseBranch)
+          ? [mergeBaseBranch, ...mergeBaseBranches]
+          : mergeBaseBranches;
+      const mergeBaseDiff = resolveMergeBaseDiffCounts({
+        workspaceRoot: args.workspaceRoot,
+        mergeBaseDiffRef,
+        statusLines,
+        fallback: {
+          changedFiles: workspaceChangedFiles,
+          insertions: workspaceInsertions,
+          deletions: workspaceDeletions,
+        },
+      });
+      const files = resolveMergeBaseFileChanges({
+        workspaceRoot: args.workspaceRoot,
+        mergeBaseDiffRef,
+        workspaceFiles,
+      });
+
+      let aheadCount = 0;
+      let behindCount = 0;
+      if (baseRef) {
+        const aheadBehind = runGitAtPath(args.workspaceRoot, ["rev-list", "--left-right", "--count", `${baseRef}...HEAD`]);
+        if (aheadBehind.ok) {
+          const parsed = parseAheadBehind(aheadBehind.stdout);
+          aheadCount = countUnmergedAheadCommits(args.workspaceRoot, baseRef, parsed.ahead);
+          behindCount = parsed.behind;
+        }
+      }
+
+      const hasUncommittedChanges = workspaceChangedFiles > 0;
+      const hasCommittedUnmergedChanges = resolveCommittedUnmergedChanges({
+        workspaceRoot: args.workspaceRoot,
+        baseRef,
+        mergeBaseDiffRef,
+        aheadCount,
+      });
+      const status: ThreadWorkStatus = {
+        state: toState({ hasUncommittedChanges, hasCommittedUnmergedChanges }),
+        changedFiles: mergeBaseDiff.changedFiles,
+        insertions: mergeBaseDiff.insertions,
+        deletions: mergeBaseDiff.deletions,
+        workspaceChangedFiles,
+        workspaceInsertions,
+        workspaceDeletions,
+        hasUncommittedChanges,
+        hasCommittedUnmergedChanges,
+        aheadCount,
+        behindCount,
+        ...(currentBranch.ok && currentBranch.stdout ? { currentBranch: currentBranch.stdout } : {}),
+        ...(defaultBranch ? { defaultBranch } : {}),
+        ...(mergeBaseBranch ? { mergeBaseBranch } : {}),
+        ...(mergeBaseBranchOptions.length > 0 ? { mergeBaseBranches: mergeBaseBranchOptions } : {}),
+        ...(baseRef ? { baseRef } : {}),
+        ...(files.length > 0 ? { files } : {}),
+        workspaceRoot: args.workspaceRoot,
+      };
+
+      this.cache.set(args.workspaceRoot, {
+        checkedAt: now,
+        fingerprint,
+        defaultBranch,
+        mergeBaseBranch: requestedMergeBaseBranch,
+        status,
+      });
+
+      return status;
     });
-    const status: ThreadWorkStatus = {
-      state: toState({ hasUncommittedChanges, hasCommittedUnmergedChanges }),
-      changedFiles: mergeBaseDiff.changedFiles,
-      insertions: mergeBaseDiff.insertions,
-      deletions: mergeBaseDiff.deletions,
-      workspaceChangedFiles,
-      workspaceInsertions,
-      workspaceDeletions,
-      hasUncommittedChanges,
-      hasCommittedUnmergedChanges,
-      aheadCount,
-      behindCount,
-      ...(currentBranch.ok && currentBranch.stdout ? { currentBranch: currentBranch.stdout } : {}),
-      ...(defaultBranch ? { defaultBranch } : {}),
-      ...(mergeBaseBranch ? { mergeBaseBranch } : {}),
-      ...(mergeBaseBranchOptions.length > 0 ? { mergeBaseBranches: mergeBaseBranchOptions } : {}),
-      ...(baseRef ? { baseRef } : {}),
-      ...(files.length > 0 ? { files } : {}),
-      workspaceRoot: args.workspaceRoot,
-    };
-
-    this.cache.set(args.workspaceRoot, {
-      checkedAt: now,
-      fingerprint,
-      defaultBranch,
-      mergeBaseBranch: requestedMergeBaseBranch,
-      status,
-    });
-
-    return status;
   }
 
   async getStatusAsync(args: {
@@ -1462,136 +1396,139 @@ export class ThreadGitStatusService {
     projectRoot: string;
     defaultBranch?: string;
     mergeBaseBranch?: string;
+    environment?: IEnvironment;
   }): Promise<ThreadWorkStatus> {
-    if (!existsSync(args.workspaceRoot)) {
-      this._stopWatchingWorkspace(args.workspaceRoot);
-      return deletedStatus(args.workspaceRoot);
-    }
-
-    const isGitRepo = await runGitAsync(args.workspaceRoot, ["rev-parse", "--is-inside-work-tree"]);
-    if (!isGitRepo.ok || isGitRepo.stdout !== "true") {
-      this._stopWatchingWorkspace(args.workspaceRoot);
-      return untrackedStatus(args.workspaceRoot);
-    }
-    this._ensureWorkspaceWatcher(args.workspaceRoot);
-
-    const requestedMergeBaseBranch = args.mergeBaseBranch?.trim() || undefined;
-    const defaultBranch = args.defaultBranch ?? await this.detectDefaultBranchAsync(args.projectRoot);
-    const fingerprint = createFingerprint(args.workspaceRoot);
-    const cached = this.cache.get(args.workspaceRoot);
-    const now = Date.now();
-    if (
-      cached &&
-      cached.fingerprint === fingerprint &&
-      cached.defaultBranch === defaultBranch &&
-      cached.mergeBaseBranch === requestedMergeBaseBranch &&
-      now - cached.checkedAt < CACHE_TTL_MS
-    ) {
-      return cached.status;
-    }
-
-    const statusResult = await runGitAsync(args.workspaceRoot, [
-      "status",
-      "--porcelain",
-      "--untracked-files=all",
-    ]);
-    const statusLines = statusResult.ok
-      ? statusResult.stdout.split("\n").map((line) => line.trimEnd()).filter((line) => line.length > 0)
-      : [];
-    const workspaceFiles = statusLines
-      .map((line) => parsePorcelainLine(line))
-      .filter((item): item is { status: string; path: string } => Boolean(item))
-      .slice(0, 60);
-    const workspaceChangedFiles = statusLines.length;
-
-    const unstagedShortstat = await runGitAsync(args.workspaceRoot, ["diff", "--shortstat"]);
-    const stagedShortstat = await runGitAsync(args.workspaceRoot, ["diff", "--cached", "--shortstat"]);
-    const unstagedStat = parseShortstat(unstagedShortstat.stdout);
-    const stagedStat = parseShortstat(stagedShortstat.stdout);
-    const workspaceInsertions = unstagedStat.insertions + stagedStat.insertions;
-    const workspaceDeletions = unstagedStat.deletions + stagedStat.deletions;
-
-    const currentBranch = await runGitAsync(args.workspaceRoot, ["symbolic-ref", "--short", "HEAD"]);
-    const mergeBaseBranches = await listMergeBaseBranchesAsync(args.projectRoot, defaultBranch);
-    const mergeBaseSelection = await resolveMergeBaseSelectionAsync({
-      workspaceRoot: args.workspaceRoot,
-      defaultBranch,
-      requestedMergeBaseBranch,
-    });
-    const mergeBaseBranch = mergeBaseSelection.mergeBaseBranch;
-    const baseRef = mergeBaseSelection.baseRef;
-    const mergeBaseDiffRef = await resolveMergeBaseDiffRefAsync(args.workspaceRoot, baseRef);
-    const mergeBaseBranchOptions =
-      mergeBaseBranch && !mergeBaseBranches.includes(mergeBaseBranch)
-        ? [mergeBaseBranch, ...mergeBaseBranches]
-        : mergeBaseBranches;
-    const mergeBaseDiff = await resolveMergeBaseDiffCountsAsync({
-      workspaceRoot: args.workspaceRoot,
-      mergeBaseDiffRef,
-      statusLines,
-      fallback: {
-        changedFiles: workspaceChangedFiles,
-        insertions: workspaceInsertions,
-        deletions: workspaceDeletions,
-      },
-    });
-    const files = await resolveMergeBaseFileChangesAsync({
-      workspaceRoot: args.workspaceRoot,
-      mergeBaseDiffRef,
-      workspaceFiles,
-    });
-
-    let aheadCount = 0;
-    let behindCount = 0;
-    if (baseRef) {
-      const aheadBehind = await runGitAsync(
-        args.workspaceRoot,
-        ["rev-list", "--left-right", "--count", `${baseRef}...HEAD`],
-      );
-      if (aheadBehind.ok) {
-        const parsed = parseAheadBehind(aheadBehind.stdout);
-        aheadCount = await countUnmergedAheadCommitsAsync(args.workspaceRoot, baseRef, parsed.ahead);
-        behindCount = parsed.behind;
+    return withGitRunner(args.environment, async () => {
+      if (!existsSync(args.workspaceRoot)) {
+        this._stopWatchingWorkspace(args.workspaceRoot);
+        return deletedStatus(args.workspaceRoot);
       }
-    }
 
-    const hasUncommittedChanges = workspaceChangedFiles > 0;
-    const hasCommittedUnmergedChanges = await resolveCommittedUnmergedChangesAsync({
-      workspaceRoot: args.workspaceRoot,
-      baseRef,
-      mergeBaseDiffRef,
-      aheadCount,
+      const isGitRepo = await runGitAtPathAsync(args.workspaceRoot, ["rev-parse", "--is-inside-work-tree"]);
+      if (!isGitRepo.ok || isGitRepo.stdout !== "true") {
+        this._stopWatchingWorkspace(args.workspaceRoot);
+        return untrackedStatus(args.workspaceRoot);
+      }
+      this._ensureWorkspaceWatcher(args.workspaceRoot);
+
+      const requestedMergeBaseBranch = args.mergeBaseBranch?.trim() || undefined;
+      const defaultBranch = args.defaultBranch ?? await this.detectDefaultBranchAsync(args.projectRoot);
+      const fingerprint = createFingerprint(args.workspaceRoot);
+      const cached = this.cache.get(args.workspaceRoot);
+      const now = Date.now();
+      if (
+        cached &&
+        cached.fingerprint === fingerprint &&
+        cached.defaultBranch === defaultBranch &&
+        cached.mergeBaseBranch === requestedMergeBaseBranch &&
+        now - cached.checkedAt < CACHE_TTL_MS
+      ) {
+        return cached.status;
+      }
+
+      const statusResult = await runGitAtPathAsync(args.workspaceRoot, [
+        "status",
+        "--porcelain",
+        "--untracked-files=all",
+      ]);
+      const statusLines = statusResult.ok
+        ? statusResult.stdout.split("\n").map((line) => line.trimEnd()).filter((line) => line.length > 0)
+        : [];
+      const workspaceFiles = statusLines
+        .map((line) => parsePorcelainLine(line))
+        .filter((item): item is { status: string; path: string } => Boolean(item))
+        .slice(0, 60);
+      const workspaceChangedFiles = statusLines.length;
+
+      const unstagedShortstat = await runGitAtPathAsync(args.workspaceRoot, ["diff", "--shortstat"]);
+      const stagedShortstat = await runGitAtPathAsync(args.workspaceRoot, ["diff", "--cached", "--shortstat"]);
+      const unstagedStat = parseShortstat(unstagedShortstat.stdout);
+      const stagedStat = parseShortstat(stagedShortstat.stdout);
+      const workspaceInsertions = unstagedStat.insertions + stagedStat.insertions;
+      const workspaceDeletions = unstagedStat.deletions + stagedStat.deletions;
+
+      const currentBranch = await runGitAtPathAsync(args.workspaceRoot, ["symbolic-ref", "--short", "HEAD"]);
+      const mergeBaseBranches = await listMergeBaseBranchesAsync(args.projectRoot, defaultBranch);
+      const mergeBaseSelection = await resolveMergeBaseSelectionAsync({
+        workspaceRoot: args.workspaceRoot,
+        defaultBranch,
+        requestedMergeBaseBranch,
+      });
+      const mergeBaseBranch = mergeBaseSelection.mergeBaseBranch;
+      const baseRef = mergeBaseSelection.baseRef;
+      const mergeBaseDiffRef = await resolveMergeBaseDiffRefAsync(args.workspaceRoot, baseRef);
+      const mergeBaseBranchOptions =
+        mergeBaseBranch && !mergeBaseBranches.includes(mergeBaseBranch)
+          ? [mergeBaseBranch, ...mergeBaseBranches]
+          : mergeBaseBranches;
+      const mergeBaseDiff = await resolveMergeBaseDiffCountsAsync({
+        workspaceRoot: args.workspaceRoot,
+        mergeBaseDiffRef,
+        statusLines,
+        fallback: {
+          changedFiles: workspaceChangedFiles,
+          insertions: workspaceInsertions,
+          deletions: workspaceDeletions,
+        },
+      });
+      const files = await resolveMergeBaseFileChangesAsync({
+        workspaceRoot: args.workspaceRoot,
+        mergeBaseDiffRef,
+        workspaceFiles,
+      });
+
+      let aheadCount = 0;
+      let behindCount = 0;
+      if (baseRef) {
+        const aheadBehind = await runGitAtPathAsync(
+          args.workspaceRoot,
+          ["rev-list", "--left-right", "--count", `${baseRef}...HEAD`],
+        );
+        if (aheadBehind.ok) {
+          const parsed = parseAheadBehind(aheadBehind.stdout);
+          aheadCount = await countUnmergedAheadCommitsAsync(args.workspaceRoot, baseRef, parsed.ahead);
+          behindCount = parsed.behind;
+        }
+      }
+
+      const hasUncommittedChanges = workspaceChangedFiles > 0;
+      const hasCommittedUnmergedChanges = await resolveCommittedUnmergedChangesAsync({
+        workspaceRoot: args.workspaceRoot,
+        baseRef,
+        mergeBaseDiffRef,
+        aheadCount,
+      });
+      const status: ThreadWorkStatus = {
+        state: toState({ hasUncommittedChanges, hasCommittedUnmergedChanges }),
+        changedFiles: mergeBaseDiff.changedFiles,
+        insertions: mergeBaseDiff.insertions,
+        deletions: mergeBaseDiff.deletions,
+        workspaceChangedFiles,
+        workspaceInsertions,
+        workspaceDeletions,
+        hasUncommittedChanges,
+        hasCommittedUnmergedChanges,
+        aheadCount,
+        behindCount,
+        ...(currentBranch.ok && currentBranch.stdout ? { currentBranch: currentBranch.stdout } : {}),
+        ...(defaultBranch ? { defaultBranch } : {}),
+        ...(mergeBaseBranch ? { mergeBaseBranch } : {}),
+        ...(mergeBaseBranchOptions.length > 0 ? { mergeBaseBranches: mergeBaseBranchOptions } : {}),
+        ...(baseRef ? { baseRef } : {}),
+        ...(files.length > 0 ? { files } : {}),
+        workspaceRoot: args.workspaceRoot,
+      };
+
+      this.cache.set(args.workspaceRoot, {
+        checkedAt: now,
+        fingerprint,
+        defaultBranch,
+        mergeBaseBranch: requestedMergeBaseBranch,
+        status,
+      });
+
+      return status;
     });
-    const status: ThreadWorkStatus = {
-      state: toState({ hasUncommittedChanges, hasCommittedUnmergedChanges }),
-      changedFiles: mergeBaseDiff.changedFiles,
-      insertions: mergeBaseDiff.insertions,
-      deletions: mergeBaseDiff.deletions,
-      workspaceChangedFiles,
-      workspaceInsertions,
-      workspaceDeletions,
-      hasUncommittedChanges,
-      hasCommittedUnmergedChanges,
-      aheadCount,
-      behindCount,
-      ...(currentBranch.ok && currentBranch.stdout ? { currentBranch: currentBranch.stdout } : {}),
-      ...(defaultBranch ? { defaultBranch } : {}),
-      ...(mergeBaseBranch ? { mergeBaseBranch } : {}),
-      ...(mergeBaseBranchOptions.length > 0 ? { mergeBaseBranches: mergeBaseBranchOptions } : {}),
-      ...(baseRef ? { baseRef } : {}),
-      ...(files.length > 0 ? { files } : {}),
-      workspaceRoot: args.workspaceRoot,
-    };
-
-    this.cache.set(args.workspaceRoot, {
-      checkedAt: now,
-      fingerprint,
-      defaultBranch,
-      mergeBaseBranch: requestedMergeBaseBranch,
-      status,
-    });
-
-    return status;
   }
 
   commit(args: {
@@ -1600,264 +1537,141 @@ export class ThreadGitStatusService {
     defaultBranch?: string;
     message?: string;
     includeUnstaged?: boolean;
+    environment?: IEnvironment;
   }): WorktreeCommitResult {
-    const before = this.getStatus(args);
-    if (!before.hasUncommittedChanges) {
-      return {
-        ok: true,
-        commitCreated: false,
-        message: "Working directory is clean",
-        workStatus: before,
-      };
-    }
-
-    const includeUnstaged = args.includeUnstaged ?? true;
-    if (includeUnstaged) {
-      const addResult = runGit(args.workspaceRoot, ["add", "-A"]);
-      if (!addResult.ok) {
-        throw new Error(addResult.stderr || "Failed to stage changes");
-      }
-    }
-
-    const hasStagedChanges = runGit(args.workspaceRoot, ["diff", "--cached", "--quiet"]);
-    if (hasStagedChanges.ok) {
-      const afterNoop = this.getStatus(args);
-      return {
-        ok: true,
-        commitCreated: false,
-        message: "No staged changes to commit",
-        workStatus: afterNoop,
-      };
-    }
-
-    const commitMessage = args.message?.trim();
-    if (!commitMessage) {
-      throw new Error("Commit message is required");
-    }
-    const commitResult = runGit(args.workspaceRoot, ["commit", "-m", commitMessage]);
-    if (!commitResult.ok) {
-      throw new Error(commitResult.stderr || "Commit failed");
-    }
-
-    this.invalidate(args.workspaceRoot);
-    const after = this.getStatus(args);
-    const shaResult = runGit(args.workspaceRoot, ["rev-parse", "HEAD"]);
-
-    return {
-      ok: true,
-      commitCreated: true,
-      message: "Committed changes",
-      workStatus: after,
-      ...(shaResult.ok && shaResult.stdout ? { commitSha: shaResult.stdout } : {}),
-    };
-  }
-
-  async squashMergeWorktreeIntoDefaultBranch(args: {
-    workspaceRoot: string;
-    projectRoot: string;
-    defaultBranch?: string;
-    message?: string;
-    resolveMessage?: WorktreeSquashMergeMessageResolver;
-  }): Promise<WorktreeSquashMergeResult> {
-    const mergeBaseBranch = args.defaultBranch ?? this.detectDefaultBranch(args.projectRoot);
-    if (!mergeBaseBranch) {
-      throw new Error("Could not determine merge base branch");
-    }
-
-    const workspaceStatus = this.getStatus({
-      workspaceRoot: args.workspaceRoot,
-      projectRoot: args.projectRoot,
-      defaultBranch: mergeBaseBranch,
-      mergeBaseBranch,
-    });
-    if (workspaceStatus.hasUncommittedChanges) {
-      throw new Error("Workspace has uncommitted changes; commit first");
-    }
-    if (workspaceStatus.aheadCount <= 0) {
-      return { merged: false, message: "No commits to merge" };
-    }
-
-    if (hasLocalWorkingChanges(args.projectRoot)) {
-      throw new Error(
-        "Project root has local changes that could be lost; commit or stash them before squash merge",
-      );
-    }
-
-    const workspaceHead = runGit(args.workspaceRoot, ["rev-parse", "HEAD"]);
-    if (!workspaceHead.ok || !workspaceHead.stdout) {
-      throw new Error("Failed to resolve worktree HEAD");
-    }
-
-    const currentProjectBranch = runGit(args.projectRoot, ["symbolic-ref", "--short", "HEAD"]);
-    const defaultHead = runGit(args.projectRoot, ["rev-parse", mergeBaseBranch]);
-    if (!defaultHead.ok || !defaultHead.stdout) {
-      throw new Error(`Failed to resolve ${mergeBaseBranch}`);
-    }
-
-    const tempRoot = mkdtempSync(join(tmpdir(), "beanbag-squash-merge-"));
-    const tempWorkspaceRoot = resolve(tempRoot, "integration");
-    try {
-      const addWorktree = runGit(args.projectRoot, [
-        "worktree",
-        "add",
-        "--detach",
-        tempWorkspaceRoot,
-        defaultHead.stdout,
-      ]);
-      if (!addWorktree.ok) {
-        throw new Error(addWorktree.stderr || "Failed to prepare integration worktree");
-      }
-
-      const squashResult = runGit(tempWorkspaceRoot, ["merge", "--squash", workspaceHead.stdout]);
-      if (!squashResult.ok) {
-        const conflictFiles = runGit(tempWorkspaceRoot, ["diff", "--name-only", "--diff-filter=U"]);
-        runGit(tempWorkspaceRoot, ["reset", "--hard"]);
+    return withGitRunner(args.environment, () => {
+      const before = this.getStatus(args);
+      if (!before.hasUncommittedChanges) {
         return {
-          merged: false,
-          message:
-            `Squash merge has conflicts against ${mergeBaseBranch}. Rebase/merge ${mergeBaseBranch} into the worktree, resolve conflicts, and retry.`,
-          ...(conflictFiles.ok && conflictFiles.stdout
-            ? {
-                conflictFiles: conflictFiles.stdout
-                  .split("\n")
-                  .map((line) => line.trim())
-                  .filter((line) => line.length > 0),
-              }
-            : {}),
+          ok: true,
+          commitCreated: false,
+          message: "Working directory is clean",
+          workStatus: before,
         };
       }
 
-      const hasSquashedChanges = runGit(tempWorkspaceRoot, ["diff", "--cached", "--quiet"]);
-      if (hasSquashedChanges.ok) {
-        return { merged: false, message: "No changes to merge after squash" };
-      }
-
-      const defaultMessage = `chore: squash merge from ${workspaceStatus.currentBranch ?? "worktree"}`;
-      let message = args.message?.trim();
-      if (!message && args.resolveMessage) {
-        try {
-          const resolved = await args.resolveMessage({
-            tempWorkspaceRoot,
-            mergeBaseBranch,
-            sourceBranch: workspaceStatus.currentBranch,
-            defaultMessage,
-          });
-          const trimmed = resolved?.trim();
-          if (trimmed) {
-            message = trimmed;
-          }
-        } catch {
-          // Fall back to the default message when generation fails.
+      const includeUnstaged = args.includeUnstaged ?? true;
+      if (includeUnstaged) {
+        const addResult = runGitAtPath(args.workspaceRoot, ["add", "-A"]);
+        if (!addResult.ok) {
+          throw new Error(addResult.stderr || "Failed to stage changes");
         }
       }
-      const finalMessage = message || defaultMessage;
-      const commitResult = runGit(tempWorkspaceRoot, ["commit", "-m", finalMessage]);
+
+      const hasStagedChanges = runGitAtPath(args.workspaceRoot, ["diff", "--cached", "--quiet"]);
+      if (hasStagedChanges.ok) {
+        const afterNoop = this.getStatus(args);
+        return {
+          ok: true,
+          commitCreated: false,
+          message: "No staged changes to commit",
+          workStatus: afterNoop,
+        };
+      }
+
+      const commitMessage = args.message?.trim();
+      if (!commitMessage) {
+        throw new Error("Commit message is required");
+      }
+      const commitResult = runGitAtPath(args.workspaceRoot, ["commit", "-m", commitMessage]);
       if (!commitResult.ok) {
-        throw new Error(commitResult.stderr || "Failed to commit squashed merge");
+        throw new Error(commitResult.stderr || "Commit failed");
       }
 
-      const mergedHead = runGit(tempWorkspaceRoot, ["rev-parse", "HEAD"]);
-      if (!mergedHead.ok || !mergedHead.stdout) {
-        throw new Error("Failed to resolve squashed merge commit");
-      }
+      this.invalidate(args.workspaceRoot);
+      const after = this.getStatus(args);
+      const shaResult = runGitAtPath(args.workspaceRoot, ["rev-parse", "HEAD"]);
 
-      const updateRef = runGit(args.projectRoot, [
-        "update-ref",
-        `refs/heads/${mergeBaseBranch}`,
-        mergedHead.stdout,
-        defaultHead.stdout,
-      ]);
-      if (!updateRef.ok) {
-        throw new Error(
-          updateRef.stderr || `${mergeBaseBranch} moved during squash merge; please retry`,
-        );
-      }
-
-      if (currentProjectBranch.ok && currentProjectBranch.stdout === mergeBaseBranch) {
-        const resetResult = runGit(args.projectRoot, ["reset", "--hard", mergedHead.stdout]);
-        if (!resetResult.ok) {
-          throw new Error(
-            resetResult.stderr || `Squash merged into ${mergeBaseBranch}, but failed to refresh checkout`,
-          );
-        }
-      }
-
-      return { merged: true, message: `Squash-merged into ${mergeBaseBranch}` };
-    } finally {
-      runGit(args.projectRoot, ["worktree", "remove", "--force", tempWorkspaceRoot]);
-      rmSync(tempRoot, { recursive: true, force: true });
-    }
+      return {
+        ok: true,
+        commitCreated: true,
+        message: "Committed changes",
+        workStatus: after,
+        ...(shaResult.ok && shaResult.stdout ? { commitSha: shaResult.stdout } : {}),
+      };
+    });
   }
 
-  getWorkingTreeDiff(workspaceRoot: string): GitDiffResult {
-    const diffResult = runGitRaw(workspaceRoot, ["diff", "--binary", "HEAD"]);
-    if (diffResult.ok) {
-      return trimDiffForResponse(diffResult.stdout);
-    }
-    const fallbackDiffResult = runGitRaw(workspaceRoot, ["diff", "--binary"]);
-    if (!fallbackDiffResult.ok) {
-      throw new Error(
-        fallbackDiffResult.stderr || diffResult.stderr || "Failed to compute working tree diff",
-      );
-    }
-    return trimDiffForResponse(fallbackDiffResult.stdout);
+  getWorkingTreeDiff(workspaceRoot: string, environment?: IEnvironment): GitDiffResult {
+    return withGitRunner(environment, () => {
+      const diffResult = runGitRawAtPath(workspaceRoot, ["diff", "--binary", "HEAD"]);
+      if (diffResult.ok) {
+        return trimDiffForResponse(diffResult.stdout);
+      }
+      const fallbackDiffResult = runGitRawAtPath(workspaceRoot, ["diff", "--binary"]);
+      if (!fallbackDiffResult.ok) {
+        throw new Error(
+          fallbackDiffResult.stderr || diffResult.stderr || "Failed to compute working tree diff",
+        );
+      }
+      return trimDiffForResponse(fallbackDiffResult.stdout);
+    });
   }
 
   listCommitsSinceRef(args: {
     workspaceRoot: string;
     baseRef?: string;
+    environment?: IEnvironment;
   }): ThreadGitDiffCommitSummary[] {
-    const baseRef = args.baseRef?.trim();
-    if (!baseRef) return [];
-    const logResult = runGit(args.workspaceRoot, [
-      "log",
-      "--reverse",
-      "--max-count=120",
-      `--format=%H${COMMIT_SUMMARY_FIELD_SEPARATOR}%h${COMMIT_SUMMARY_FIELD_SEPARATOR}%ct${COMMIT_SUMMARY_FIELD_SEPARATOR}%an${COMMIT_SUMMARY_FIELD_SEPARATOR}%s`,
-      `${baseRef}..HEAD`,
-    ]);
-    if (!logResult.ok || !logResult.stdout) {
-      return [];
-    }
-    return parseCommitSummaries(logResult.stdout);
+    return withGitRunner(args.environment, () => {
+      const baseRef = args.baseRef?.trim();
+      if (!baseRef) return [];
+      const logResult = runGitAtPath(args.workspaceRoot, [
+        "log",
+        "--reverse",
+        "--max-count=120",
+        `--format=%H${COMMIT_SUMMARY_FIELD_SEPARATOR}%h${COMMIT_SUMMARY_FIELD_SEPARATOR}%ct${COMMIT_SUMMARY_FIELD_SEPARATOR}%an${COMMIT_SUMMARY_FIELD_SEPARATOR}%s`,
+        `${baseRef}..HEAD`,
+      ]);
+      if (!logResult.ok || !logResult.stdout) {
+        return [];
+      }
+      return parseCommitSummaries(logResult.stdout);
+    });
   }
 
   getCombinedDiffSinceRef(args: {
     workspaceRoot: string;
     baseRef?: string;
+    environment?: IEnvironment;
   }): GitDiffResult {
-    const baseRef = args.baseRef?.trim();
-    if (!baseRef) {
-      return { diff: "", truncated: false };
-    }
-    const mergeBaseDiffRef = resolveMergeBaseDiffRef(args.workspaceRoot, baseRef);
-    if (!mergeBaseDiffRef) {
-      return { diff: "", truncated: false };
-    }
-    const diffResult = runGitRaw(args.workspaceRoot, ["diff", "--binary", mergeBaseDiffRef]);
-    if (!diffResult.ok) {
-      throw new Error(diffResult.stderr || "Failed to compute worktree commit diff");
-    }
-    return trimDiffForResponse(diffResult.stdout);
+    return withGitRunner(args.environment, () => {
+      const baseRef = args.baseRef?.trim();
+      if (!baseRef) {
+        return { diff: "", truncated: false };
+      }
+      const mergeBaseDiffRef = resolveMergeBaseDiffRef(args.workspaceRoot, baseRef);
+      if (!mergeBaseDiffRef) {
+        return { diff: "", truncated: false };
+      }
+      const diffResult = runGitRawAtPath(args.workspaceRoot, ["diff", "--binary", mergeBaseDiffRef]);
+      if (!diffResult.ok) {
+        throw new Error(diffResult.stderr || "Failed to compute worktree commit diff");
+      }
+      return trimDiffForResponse(diffResult.stdout);
+    });
   }
 
   getCommitDiff(args: {
     workspaceRoot: string;
     commitSha: string;
+    environment?: IEnvironment;
   }): GitDiffResult {
-    const commitSha = args.commitSha.trim();
-    if (commitSha.length === 0) {
-      throw new Error("Commit SHA is required");
-    }
-    const showResult = runGitRaw(args.workspaceRoot, [
-      "show",
-      "--binary",
-      "--format=",
-      commitSha,
-    ]);
-    if (!showResult.ok) {
-      throw new Error(showResult.stderr || "Failed to compute commit diff");
-    }
-    return trimDiffForResponse(showResult.stdout);
+    return withGitRunner(args.environment, () => {
+      const commitSha = args.commitSha.trim();
+      if (commitSha.length === 0) {
+        throw new Error("Commit SHA is required");
+      }
+      const showResult = runGitRawAtPath(args.workspaceRoot, [
+        "show",
+        "--binary",
+        "--format=",
+        commitSha,
+      ]);
+      if (!showResult.ok) {
+        throw new Error(showResult.stderr || "Failed to compute commit diff");
+      }
+      return trimDiffForResponse(showResult.stdout);
+    });
   }
 }

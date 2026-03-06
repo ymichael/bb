@@ -22,21 +22,82 @@ export interface EnvironmentCommandOptions {
   cwd?: string;
   env?: Record<string, string | undefined>;
   timeoutMs?: number;
+  rawOutput?: boolean;
 }
 
 export interface IEnvironment {
   readonly kind: string;
   readonly info: SystemEnvironmentInfo;
-  readonly rootPath: string;
-  readonly env: Record<string, string | undefined>;
 
   serialize(): unknown;
   dispose(): void;
+  getWorkspaceRoot(): string;
+  getExecutionContext(): {
+    cwd: string;
+    env: Record<string, string | undefined>;
+  };
+  shouldRunSetupScript(): boolean;
+  supportsPromoteToActiveWorkspace(): boolean;
+  supportsDemoteFromActiveWorkspace(): boolean;
+  supportsSquashMergeIntoDefaultBranch(): boolean;
+  promoteToActiveWorkspace(args: PromoteEnvironmentOptions): PromoteEnvironmentResult;
+  demoteFromActiveWorkspace(args: DemoteEnvironmentOptions): DemoteEnvironmentResult;
+  squashMergeIntoDefaultBranch(
+    args: EnvironmentSquashMergeOptions,
+  ): Promise<EnvironmentSquashMergeResult>;
   run(
     command: string,
     args: string[],
     options?: EnvironmentCommandOptions,
-  ): Promise<EnvironmentCommandResult>;
+  ): EnvironmentCommandResult;
+}
+
+export interface EnvironmentCheckoutSnapshot {
+  branch?: string;
+  head: string;
+  detached: boolean;
+}
+
+export interface PromoteEnvironmentResult {
+  previousCheckout: EnvironmentCheckoutSnapshot;
+  promotedCheckout: EnvironmentCheckoutSnapshot;
+}
+
+export interface PromoteEnvironmentOptions {
+  activeWorkspaceRoot: string;
+}
+
+export interface DemoteEnvironmentResult {
+  restoredCheckout: EnvironmentCheckoutSnapshot;
+}
+
+export interface DemoteEnvironmentOptions {
+  activeWorkspaceRoot: string;
+  snapshot: EnvironmentCheckoutSnapshot;
+}
+
+export interface EnvironmentSquashMergeMessageContext {
+  tempWorkspaceRoot: string;
+  mergeBaseBranch: string;
+  sourceBranch?: string;
+  defaultMessage: string;
+}
+
+export type EnvironmentSquashMergeMessageResolver = (
+  context: EnvironmentSquashMergeMessageContext,
+) => Promise<string | undefined> | string | undefined;
+
+export interface EnvironmentSquashMergeOptions {
+  activeWorkspaceRoot: string;
+  defaultBranch?: string;
+  message?: string;
+  resolveMessage?: EnvironmentSquashMergeMessageResolver;
+}
+
+export interface EnvironmentSquashMergeResult {
+  merged: boolean;
+  message: string;
+  conflictFiles?: string[];
 }
 
 export interface EnvironmentDefinition<TState = unknown> {

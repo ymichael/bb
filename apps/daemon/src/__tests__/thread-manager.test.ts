@@ -58,15 +58,40 @@ function createTestEnvironmentRegistry(args: {
       return {
         kind,
         info,
-        rootPath: args.rootPath,
-        env: {
-          BB_WORKSPACE_ROOT: args.rootPath,
-          BB_WORKSPACE_MODE: kind,
-        },
         serialize() {
           return { rootPath: args.rootPath };
         },
         dispose() {},
+        getWorkspaceRoot() {
+          return args.rootPath;
+        },
+        getExecutionContext() {
+          return {
+            cwd: args.rootPath,
+            env: {},
+          };
+        },
+        shouldRunSetupScript() {
+          return false;
+        },
+        supportsPromoteToActiveWorkspace() {
+          return false;
+        },
+        supportsDemoteFromActiveWorkspace() {
+          return false;
+        },
+        supportsSquashMergeIntoDefaultBranch() {
+          return false;
+        },
+        promoteToActiveWorkspace() {
+          throw new Error("not implemented in test environment");
+        },
+        demoteFromActiveWorkspace() {
+          throw new Error("not implemented in test environment");
+        },
+        async squashMergeIntoDefaultBranch() {
+          throw new Error("not implemented in test environment");
+        },
         run: vi.fn(),
       };
     },

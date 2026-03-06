@@ -3,7 +3,15 @@ export type {
   EnvironmentCommandOptions,
   EnvironmentCommandResult,
   EnvironmentDefinition,
+  DemoteEnvironmentOptions,
+  DemoteEnvironmentResult,
+  EnvironmentSquashMergeMessageContext,
+  EnvironmentSquashMergeMessageResolver,
+  EnvironmentSquashMergeOptions,
+  EnvironmentSquashMergeResult,
   IEnvironment,
+  PromoteEnvironmentOptions,
+  PromoteEnvironmentResult,
 } from "./contracts.js";
 export {
   EnvironmentRegistry,

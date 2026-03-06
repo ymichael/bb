@@ -245,69 +245,6 @@ describe("ThreadGitStatusService", () => {
     expect(status.state).toBe("committed_unmerged");
   });
 
-  it("uses a resolved squash message when no explicit message is provided", async () => {
-    const repoRoot = createRepoWithThreadAheadOfMain();
-    const service = new ThreadGitStatusService();
-    const resolveMessage = vi
-      .fn()
-      .mockImplementation(async ({ tempWorkspaceRoot }: { tempWorkspaceRoot: string }) => {
-        expect(git(tempWorkspaceRoot, "diff", "--cached", "--name-only")).toContain("README.md");
-        return "feat: integrate thread updates";
-      });
-
-    const result = await service.squashMergeWorktreeIntoDefaultBranch({
-      workspaceRoot: repoRoot,
-      projectRoot: repoRoot,
-      defaultBranch: "main",
-      resolveMessage,
-    });
-
-    expect(result).toEqual({ merged: true, message: "Squash-merged into main" });
-    expect(resolveMessage).toHaveBeenCalledTimes(1);
-    expect(git(repoRoot, "show", "-s", "--format=%s", "main")).toBe(
-      "feat: integrate thread updates",
-    );
-  });
-
-  it("falls back to default squash message when message resolution fails", async () => {
-    const repoRoot = createRepoWithThreadAheadOfMain();
-    const service = new ThreadGitStatusService();
-    const resolveMessage = vi.fn().mockRejectedValue(new Error("generation failed"));
-
-    const result = await service.squashMergeWorktreeIntoDefaultBranch({
-      workspaceRoot: repoRoot,
-      projectRoot: repoRoot,
-      defaultBranch: "main",
-      resolveMessage,
-    });
-
-    expect(result).toEqual({ merged: true, message: "Squash-merged into main" });
-    expect(resolveMessage).toHaveBeenCalledTimes(1);
-    expect(git(repoRoot, "show", "-s", "--format=%s", "main")).toBe(
-      "chore: squash merge from thread",
-    );
-  });
-
-  it("prefers explicit squash messages over resolved messages", async () => {
-    const repoRoot = createRepoWithThreadAheadOfMain();
-    const service = new ThreadGitStatusService();
-    const resolveMessage = vi.fn();
-
-    const result = await service.squashMergeWorktreeIntoDefaultBranch({
-      workspaceRoot: repoRoot,
-      projectRoot: repoRoot,
-      defaultBranch: "main",
-      message: "feat: custom squash message",
-      resolveMessage,
-    });
-
-    expect(result).toEqual({ merged: true, message: "Squash-merged into main" });
-    expect(resolveMessage).not.toHaveBeenCalled();
-    expect(git(repoRoot, "show", "-s", "--format=%s", "main")).toBe(
-      "feat: custom squash message",
-    );
-  });
-
   it("ignores merge-base branch-only commits when reporting thread diff stats", () => {
     const repoRoot = makeTempDir();
     git(repoRoot, "init");
@@ -465,38 +402,4 @@ describe("ThreadGitStatusService", () => {
     expect(status.files?.some((entry) => entry.path === "README.md" && entry.status === "M?")).toBe(true);
   });
 
-  it("promotes dirty worktree changes (tracked + untracked) into primary checkout", () => {
-    const repoRoot = makeTempDir();
-    const threadRoot = join(makeTempDir(), "thread-worktree");
-    git(repoRoot, "init");
-    git(repoRoot, "config", "user.name", "Beanbag Test");
-    git(repoRoot, "config", "user.email", "beanbag-test@example.com");
-    git(repoRoot, "checkout", "-b", "main");
-
-    writeFileSync(join(repoRoot, "README.md"), "initial\n", "utf8");
-    git(repoRoot, "add", "README.md");
-    git(repoRoot, "commit", "-m", "initial");
-
-    git(repoRoot, "worktree", "add", "-b", "thread", threadRoot, "main");
-    writeFileSync(join(threadRoot, "README.md"), "initial\nthread edit\n", "utf8");
-    mkdirSync(join(threadRoot, "notes"), { recursive: true });
-    writeFileSync(join(threadRoot, "notes", "todo.md"), "note\n", "utf8");
-
-    const service = new ThreadGitStatusService();
-    const result = service.promoteWorktreeIntoPrimary({
-      workspaceRoot: threadRoot,
-      projectRoot: repoRoot,
-    });
-
-    expect(result.promotedCheckout.branch).toBe("thread");
-    expect(git(repoRoot, "status", "--porcelain")).toContain("README.md");
-    expect(existsSync(join(repoRoot, "notes", "todo.md"))).toBe(true);
-    expect(git(repoRoot, "rev-parse", "--abbrev-ref", "HEAD")).toBe("thread");
-
-    service.discardLocalChanges(repoRoot);
-    service.checkoutSnapshot(repoRoot, result.previousCheckout);
-
-    expect(git(repoRoot, "rev-parse", "--abbrev-ref", "HEAD")).toBe("main");
-    expect(git(repoRoot, "status", "--porcelain")).toBe("");
-  });
 });
