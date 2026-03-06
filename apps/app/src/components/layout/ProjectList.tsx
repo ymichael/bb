@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
-import { assertNever, type Thread } from "@beanbag/agent-core"
+import type { Thread } from "@beanbag/agent-core"
 import {
   AlertTriangle,
   ChevronRight,
@@ -58,6 +58,7 @@ import {
   ThreadRenameDialog,
   type ThreadRenameDialogTarget,
 } from "@/components/thread/ThreadRenameDialog"
+import { requiresArchiveConfirmation } from "@/lib/thread-archive"
 import {
   Dialog,
   DialogContent,
@@ -236,7 +237,10 @@ export function ProjectList({
     const workStatus =
       thread.workStatus ??
       (await threadWorkStatusLookup.mutateAsync(thread.id).catch(() => null))
-    if (requiresArchiveConfirmation(workStatus)) {
+    const environmentInfo = thread.environmentId
+      ? environmentById.get(thread.environmentId)
+      : undefined
+    if (requiresArchiveConfirmation(workStatus, environmentInfo)) {
       setArchiveConfirmationThread(thread)
       return
     }
@@ -622,25 +626,4 @@ export function ProjectList({
       />
     </SidebarGroup>
   )
-}
-
-function requiresArchiveConfirmation(
-  workStatus: Thread["workStatus"] | null | undefined,
-): boolean {
-  if (!workStatus) {
-    return false
-  }
-  switch (workStatus.state) {
-    case "clean":
-    case "deleted":
-      return false
-    case "untracked":
-      return true
-    case "dirty_uncommitted":
-    case "committed_unmerged":
-    case "dirty_and_committed_unmerged":
-      return true
-    default:
-      return assertNever(workStatus.state)
-  }
 }

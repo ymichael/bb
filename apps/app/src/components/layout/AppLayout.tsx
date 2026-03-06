@@ -30,6 +30,7 @@ import {
   useMarkThreadRead,
   useMarkThreadUnread,
   useProjects,
+  useSystemEnvironments,
   useThread,
   useThreads,
   useThreadWorkStatusLookup,
@@ -51,6 +52,7 @@ import {
   isThreadGitDiffPanelOpen,
   withThreadGitDiffPanelOpen,
 } from "@/lib/thread-git-diff-panel"
+import { requiresArchiveConfirmation } from "@/lib/thread-archive"
 
 const SIDEBAR_WIDTH_KEY = "beanbag.sidebar.width"
 const SIDEBAR_MIN_WIDTH = 240
@@ -207,6 +209,11 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const location = useLocation()
   const navigate = useNavigate()
   const { data: projects, isLoading: projectsLoading } = useProjects()
+  const { data: environments } = useSystemEnvironments()
+  const environmentById = useMemo(
+    () => new Map((environments ?? []).map((environment) => [environment.id, environment])),
+    [environments],
+  )
   const { data: threads } = useThreads()
   const archiveThread = useArchiveThread()
   const unarchiveThread = useUnarchiveThread()
@@ -253,6 +260,10 @@ export function AppLayout({ children }: { children: ReactNode }) {
     projectName ??
     (projectId ? (projectsLoading ? "Loading project…" : projectId) : undefined)
   const { data: thread } = useThread(threadId)
+  const threadEnvironmentInfo = useMemo(
+    () => (thread?.environmentId ? environmentById.get(thread.environmentId) : undefined),
+    [environmentById, thread?.environmentId],
+  )
   const threadDisplayTitle = thread
     ? getThreadDisplayTitle(thread)
     : threadId
@@ -308,15 +319,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
     const workStatus =
       thread.workStatus ??
       (await threadWorkStatusLookup.mutateAsync(thread.id).catch(() => null))
-    if (
-      workStatus &&
-      (
-        workStatus.state === "untracked" ||
-        workStatus.state === "dirty_uncommitted" ||
-        workStatus.state === "committed_unmerged" ||
-        workStatus.state === "dirty_and_committed_unmerged"
-      )
-    ) {
+    if (requiresArchiveConfirmation(workStatus, threadEnvironmentInfo)) {
       const confirmed = window.confirm(
         "This thread has uncommitted or unmerged work. Archive anyway?"
       )
@@ -336,7 +339,14 @@ export function AppLayout({ children }: { children: ReactNode }) {
         navigate(`/projects/${thread.projectId}`)
       },
     })
-  }, [archiveThread, navigate, thread, threadWorkStatusLookup, unarchiveThread])
+  }, [
+    archiveThread,
+    navigate,
+    thread,
+    threadEnvironmentInfo,
+    threadWorkStatusLookup,
+    unarchiveThread,
+  ])
 
   const gitDiffPanelOpen = threadMatch
     ? isThreadGitDiffPanelOpen(location.search)
