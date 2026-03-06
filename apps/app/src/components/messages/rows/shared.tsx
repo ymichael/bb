@@ -18,15 +18,7 @@ export const EVENT_LARGE_DETAIL_MAX_HEIGHT_CLASS = "max-h-[320px]";
 export const DEBUG_EVENT_EXPANDED_MAX_LENGTH = 4000;
 
 export function OngoingEventLabel({ text }: { text: string }) {
-  return (
-    <span className="inline-flex items-center gap-1.5">
-      <span
-        aria-hidden="true"
-        className="size-1.5 rounded-full bg-current opacity-75 animate-pulse"
-      />
-      <span className="animate-shine">{text}</span>
-    </span>
-  );
+  return <span className="animate-shine">{text}</span>;
 }
 
 export function renderShimmeringSummary(text: string, shouldShimmer: boolean): ReactNode {

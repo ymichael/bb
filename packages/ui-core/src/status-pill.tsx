@@ -1,13 +1,19 @@
 import type { ReactNode } from "react";
 import { cx } from "./utils.js";
 
-export type StatusPillVariant = "default" | "secondary" | "destructive" | "outline";
+export type StatusPillVariant =
+  | "default"
+  | "secondary"
+  | "destructive"
+  | "outline"
+  | "emphasis";
 
 const STATUS_PILL_VARIANT_CLASS: Record<StatusPillVariant, string> = {
   default: "border-transparent bg-primary text-primary-foreground",
   secondary: "border-transparent bg-secondary text-secondary-foreground",
   destructive: "border-transparent bg-destructive text-white",
   outline: "border-border bg-background text-foreground",
+  emphasis: "border-transparent bg-accent text-accent-foreground",
 };
 
 export interface StatusPillProps {

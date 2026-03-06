@@ -1559,10 +1559,9 @@ export function ThreadDetailView() {
       : parentThreadId;
   const isPrimaryCheckoutActive = thread.primaryCheckout?.isActive === true;
   const primaryCheckoutStatusLabel = isPrimaryCheckoutActive ? "Active" : "Not active";
-  const primaryCheckoutStatusVariant: StatusPillVariant = "outline";
-  const primaryCheckoutStatusPillClassName = isPrimaryCheckoutActive
-    ? "border-transparent bg-foreground text-background"
-    : undefined;
+  const primaryCheckoutStatusVariant: StatusPillVariant = isPrimaryCheckoutActive
+    ? "emphasis"
+    : "outline";
   const isPrimaryCheckoutMutationPending = promoteThread.isPending || demotePrimaryCheckout.isPending;
   const primaryCheckoutActionLabel = isPrimaryCheckoutActive
     ? demotePrimaryCheckout.isPending
@@ -1730,12 +1729,11 @@ export function ThreadDetailView() {
     <>
       {showThreadMetadata ? (
         <section className="sticky top-0 z-10 shrink-0 bg-background pt-2">
-          <DetailCard>
+          <DetailCard layout="columns">
             {parentThreadId ? (
               <DetailRow
                 label="Parent thread"
                 valueClassName="min-w-0 truncate"
-                align="center"
               >
                 <Link
                   to={`/projects/${projectId}/threads/${parentThreadId}`}
@@ -1749,7 +1747,6 @@ export function ThreadDetailView() {
               <DetailRow
                 label="Environment"
                 valueClassName="min-w-0 truncate"
-                align="center"
               >
                 <span>{thread.environmentId}</span>
               </DetailRow>
@@ -1758,12 +1755,10 @@ export function ThreadDetailView() {
               <DetailRow
                 label="Primary checkout"
                 valueClassName="min-w-0"
-                align="center"
               >
                 <div className="flex min-w-0 items-center gap-2">
                   <StatusPill
                     variant={primaryCheckoutStatusVariant}
-                    className={primaryCheckoutStatusPillClassName}
                   >
                     {primaryCheckoutStatusLabel}
                   </StatusPill>
@@ -1798,7 +1793,6 @@ export function ThreadDetailView() {
               <DetailRow
                 label="Workspace status"
                 valueClassName="min-w-0"
-                align="center"
               >
                 <StatusPillCommitPopover
                   threadId={thread.id}
@@ -1875,8 +1869,6 @@ export function ThreadDetailView() {
               <DetailRow
                 label="Archived"
                 valueClassName="min-w-0 truncate"
-                align="center"
-                className="group"
               >
                 <ArchiveTimestampAction
                   isPending={

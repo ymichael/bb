@@ -373,8 +373,12 @@ export function OperationRow({
           : undefined
       : undefined;
     const environmentValue = normalizeProvisioningEnvironmentLabel(parsedDetails?.environment || environmentLabel || undefined);
-    const setupStatusVariant: StatusPillVariant = setupStatus === "Failed" ? "destructive" : "outline";
-    const setupStatusClassName = setupStatus === "Completed" ? "border-transparent bg-foreground text-background" : undefined;
+    const setupStatusVariant: StatusPillVariant =
+      setupStatus === "Failed"
+        ? "destructive"
+        : setupStatus === "Completed"
+        ? "emphasis"
+        : "outline";
     const collapsedSummaryContent = actionLabel === "Provisioned" && environmentLabel ? (
       <span className="inline-flex min-w-0 items-center gap-1.5"><span className="shrink-0 text-muted-foreground/90">Provisioned</span><span className="truncate font-semibold text-foreground/95">{environmentLabel}</span></span>
     ) : shimmeringTitle;
@@ -392,7 +396,7 @@ export function OperationRow({
               <EventMetaList className="mt-0.5">
                 {environmentValue ? <EventMetaItem label="Environment"><span>{environmentValue}</span></EventMetaItem> : null}
                 {setupScriptLabel ? <EventMetaItem label="Setup script">{setupScriptPath ? <OpenPathButton path={setupScriptPath} target="file" title={setupScriptLabel}>{setupScriptLabel}</OpenPathButton> : <span className="block truncate text-xs text-muted-foreground/90" title={setupScriptLabel}>{setupScriptLabel}</span>}</EventMetaItem> : null}
-                {setupStatus ? <EventMetaItem label="Setup status"><StatusPill variant={setupStatusVariant} className={setupStatusClassName}>{setupStatus}</StatusPill></EventMetaItem> : null}
+                {setupStatus ? <EventMetaItem label="Setup status"><StatusPill variant={setupStatusVariant}>{setupStatus}</StatusPill></EventMetaItem> : null}
                 {setupTimeLabel ? <EventMetaItem label="Setup time"><span className="font-mono ui-text-sm text-foreground/85">{setupTimeLabel}</span></EventMetaItem> : null}
                 {workspacePath ? <EventMetaItem label="Workspace"><OpenPathButton path={workspacePath} target="directory" title={workspacePath}>{workspacePath}</OpenPathButton></EventMetaItem> : null}
                 {outputText ? <EventMetaItem label="Output" align="start"><EventCodeBlock maxHeightClassName={EVENT_DETAIL_MAX_HEIGHT_CLASS}>{outputText}</EventCodeBlock></EventMetaItem> : null}

@@ -462,12 +462,7 @@ export function ProjectList({
                               </NavLink>
                               <span className="flex h-7 shrink-0 items-center justify-end gap-1 pl-1">
                                 {thread.primaryCheckout?.isActive ? (
-                                  <StatusPill
-                                    variant="outline"
-                                    className="border-transparent bg-foreground text-background"
-                                  >
-                                    active
-                                  </StatusPill>
+                                  <StatusPill variant="emphasis">active</StatusPill>
                                 ) : null}
                                 <span className="relative h-7 w-7 shrink-0">
                                   {thread.environmentId === "worktree" ? (

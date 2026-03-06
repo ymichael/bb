@@ -8,17 +8,10 @@ const variantMap: Record<Status, StatusPillVariant> = {
   created: "outline",
   provisioning: "outline",
   provisioning_failed: "destructive",
-  active: "outline",
+  active: "emphasis",
   idle: "outline",
 };
 
 export function StatusBadge({ status }: { status: Status }) {
-  return (
-    <StatusPill
-      variant={variantMap[status]}
-      className={status === "active" ? "border-transparent bg-foreground text-background" : undefined}
-    >
-      {formatSnakeCaseLabel(status)}
-    </StatusPill>
-  );
+  return <StatusPill variant={variantMap[status]}>{formatSnakeCaseLabel(status)}</StatusPill>;
 }
