@@ -12,6 +12,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import type {
   EnvironmentCommitSummary,
+  EnvironmentWorkFileChange,
   EnvironmentWorkStatus,
   EnvironmentWorkspaceCommitOptions,
   EnvironmentWorkspaceCommitResult,
@@ -43,6 +44,8 @@ type GitRunResult = {
   stderr: string;
   code: number | null;
 };
+
+const WORKSPACE_STATUS_WATCH_DEBOUNCE_MS = 75;
 
 function runGit(
   environment: IEnvironment,
@@ -339,6 +342,37 @@ function resolveMergeBaseFileChanges(args: {
   }
 
   return mergeBaseFiles.slice(0, 60);
+}
+
+function serializeWorkspaceFiles(
+  files: readonly EnvironmentWorkFileChange[] | undefined,
+): string[] {
+  if (!files) {
+    return [];
+  }
+  return files.map((file) => `${file.status}\u0000${file.path}`);
+}
+
+function createEnvironmentWorkStatusFingerprint(status: EnvironmentWorkStatus): string {
+  return JSON.stringify({
+    state: status.state,
+    changedFiles: status.changedFiles,
+    insertions: status.insertions,
+    deletions: status.deletions,
+    workspaceChangedFiles: status.workspaceChangedFiles,
+    workspaceInsertions: status.workspaceInsertions,
+    workspaceDeletions: status.workspaceDeletions,
+    hasUncommittedChanges: status.hasUncommittedChanges,
+    hasCommittedUnmergedChanges: status.hasCommittedUnmergedChanges,
+    aheadCount: status.aheadCount,
+    behindCount: status.behindCount,
+    currentBranch: status.currentBranch ?? null,
+    defaultBranch: status.defaultBranch ?? null,
+    mergeBaseBranch: status.mergeBaseBranch ?? null,
+    mergeBaseBranches: status.mergeBaseBranches ?? [],
+    baseRef: status.baseRef ?? null,
+    files: serializeWorkspaceFiles(status.files),
+  });
 }
 
 function safeMtime(path: string): number {
@@ -676,16 +710,40 @@ export function watchGitWorkspaceStatus(
 
   const workspaceRoot = environment.getWorkspaceRootUnsafe();
   const watchTargets = Array.from(new Set(resolveGitMetadataPaths(workspaceRoot)));
+  let lastFingerprint = createEnvironmentWorkStatusFingerprint(
+    getGitWorkspaceStatus(environment),
+  );
+  let pendingCheckTimer: ReturnType<typeof setTimeout> | null = null;
+  let disposed = false;
+  const scheduleStatusCheck = () => {
+    if (disposed) {
+      return;
+    }
+    if (pendingCheckTimer !== null) {
+      clearTimeout(pendingCheckTimer);
+    }
+    // `git status` can rewrite metadata like `.git/index` during reads. Only
+    // notify callers when the computed work status actually changed.
+    pendingCheckTimer = setTimeout(() => {
+      pendingCheckTimer = null;
+      const nextFingerprint = createEnvironmentWorkStatusFingerprint(
+        getGitWorkspaceStatus(environment),
+      );
+      if (nextFingerprint === lastFingerprint) {
+        return;
+      }
+      lastFingerprint = nextFingerprint;
+      onChange();
+    }, WORKSPACE_STATUS_WATCH_DEBOUNCE_MS);
+  };
   const watchers = watchTargets.flatMap((target) => {
     if (!existsSync(target)) {
       return [];
     }
     try {
-      const watcher = watch(target, { persistent: false }, () => {
-        onChange();
-      });
+      const watcher = watch(target, { persistent: false }, scheduleStatusCheck);
       watcher.on("error", () => {
-        onChange();
+        scheduleStatusCheck();
       });
       return [watcher];
     } catch {
@@ -694,6 +752,11 @@ export function watchGitWorkspaceStatus(
   });
 
   return () => {
+    disposed = true;
+    if (pendingCheckTimer !== null) {
+      clearTimeout(pendingCheckTimer);
+      pendingCheckTimer = null;
+    }
     for (const watcher of watchers) {
       try {
         watcher.close();
