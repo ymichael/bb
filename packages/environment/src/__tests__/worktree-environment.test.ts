@@ -56,9 +56,9 @@ async function createRepoWithThreadAheadOfMain() {
   return { repoRoot, environment };
 }
 
-afterEach(() => {
+afterEach(async () => {
   for (const environment of environments.splice(0)) {
-    environment.dispose();
+    await environment.dispose();
   }
   for (const dir of tempDirs.splice(0)) {
     rmSync(dir, { recursive: true, force: true });

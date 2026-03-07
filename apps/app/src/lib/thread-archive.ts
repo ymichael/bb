@@ -3,6 +3,7 @@ import {
   type SystemEnvironmentInfo,
   type ThreadWorkStatus,
 } from "@beanbag/agent-core"
+import { HttpError } from "./api"
 
 type ArchiveEnvironmentShape = Pick<SystemEnvironmentInfo, "capabilities">
 
@@ -26,4 +27,12 @@ export function requiresArchiveConfirmation(
     default:
       return assertNever(workStatus.state)
   }
+}
+
+export function isArchiveForceRequiredError(error: unknown): error is HttpError {
+  return (
+    error instanceof HttpError &&
+    error.status === 409 &&
+    error.code === "worktree_not_clean"
+  )
 }

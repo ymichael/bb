@@ -20,7 +20,6 @@ import {
   useMarkThreadUnread,
   useProjects,
   useSystemEnvironments,
-  useThreadWorkStatusLookup,
   useThreads,
   useUnarchiveThread,
   useUpdateProject,
@@ -58,7 +57,10 @@ import {
   ThreadRenameDialog,
   type ThreadRenameDialogTarget,
 } from "@/components/thread/ThreadRenameDialog"
-import { requiresArchiveConfirmation } from "@/lib/thread-archive"
+import {
+  isArchiveForceRequiredError,
+  requiresArchiveConfirmation,
+} from "@/lib/thread-archive"
 import {
   Dialog,
   DialogContent,
@@ -68,6 +70,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { StatusPill } from "@/components/shared/StatusPill"
+import { toast } from "sonner"
 
 interface ProjectListProps {
   onNewProject: () => void
@@ -92,7 +95,6 @@ export function ProjectList({
   )
   const { data: threads, isLoading: threadsLoading } = useThreads()
   const archiveThread = useArchiveThread()
-  const threadWorkStatusLookup = useThreadWorkStatusLookup()
   const markThreadRead = useMarkThreadRead()
   const markThreadUnread = useMarkThreadUnread()
   const updateThread = useUpdateThread()
@@ -231,21 +233,28 @@ export function ProjectList({
     })
   }
 
-  const requestArchiveThread = async (thread: Thread) => {
+  const requestArchiveThread = (thread: Thread) => {
     if (archiveThread.isPending) return
 
-    const workStatus =
-      thread.workStatus ??
-      (await threadWorkStatusLookup.mutateAsync(thread.id).catch(() => null))
     const environmentInfo = thread.environmentId
       ? environmentById.get(thread.environmentId)
       : undefined
-    if (requiresArchiveConfirmation(workStatus, environmentInfo)) {
+    if (requiresArchiveConfirmation(thread.workStatus, environmentInfo)) {
       setArchiveConfirmationThread(thread)
       return
     }
 
-    archiveThread.mutate({ id: thread.id })
+    archiveThread.mutate({ id: thread.id }, {
+      onError: (error) => {
+        if (isArchiveForceRequiredError(error)) {
+          setArchiveConfirmationThread(thread)
+          return
+        }
+        toast.error(
+          error instanceof Error ? error.message : "Failed to archive thread.",
+        )
+      },
+    })
   }
 
   const requestRenameThread = (thread: Thread) => {

@@ -79,7 +79,7 @@ describe("EnvironmentRegistry", () => {
       expect(restored.kind).toBe("worktree");
       expect(restored.getWorkspaceRootUnsafe()).toBe(join(worktreeRoot, "thread-1"));
 
-      restored.dispose();
+      await restored.dispose();
     } finally {
       rmSync(projectRoot, { recursive: true, force: true });
     }

@@ -1,5 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { rm } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 import type {
@@ -285,16 +286,13 @@ class WorktreeEnvironment implements IEnvironment {
     }
   }
 
-  dispose(): void {
-    spawnSync(
-      "git",
+  async dispose(): Promise<void> {
+    await runGitAtPathAsync(
+      this.projectRoot,
       ["worktree", "remove", "--force", this.state.workspaceRoot],
-      {
-        cwd: this.projectRoot,
-        stdio: "pipe",
-      },
+      this.env,
     );
-    rmSync(this.state.workspaceRoot, { recursive: true, force: true });
+    await rm(this.state.workspaceRoot, { recursive: true, force: true });
   }
 
   exists(): boolean {

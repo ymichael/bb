@@ -3,7 +3,11 @@ import type {
   SystemEnvironmentInfo,
   ThreadWorkStatus,
 } from "@beanbag/agent-core"
-import { requiresArchiveConfirmation } from "./thread-archive"
+import { HttpError } from "./api"
+import {
+  isArchiveForceRequiredError,
+  requiresArchiveConfirmation,
+} from "./thread-archive"
 
 function makeStatus(state: ThreadWorkStatus["state"]): ThreadWorkStatus {
   return {
@@ -67,6 +71,27 @@ describe("thread-archive", () => {
       requiresArchiveConfirmation(
         makeStatus("deleted"),
         makeEnvironment(true),
+      ),
+    ).toBe(false)
+  })
+
+  it("recognizes force-required archive conflicts", () => {
+    expect(
+      isArchiveForceRequiredError(
+        new HttpError({
+          status: 409,
+          message: "Thread workspace has uncommitted or unmerged work",
+          code: "worktree_not_clean",
+        }),
+      ),
+    ).toBe(true)
+    expect(
+      isArchiveForceRequiredError(
+        new HttpError({
+          status: 500,
+          message: "Internal error",
+          code: "internal_error",
+        }),
       ),
     ).toBe(false)
   })

@@ -158,7 +158,7 @@ export class EnvironmentService {
       await this.callbacks.runOptionalSetup(threadId, environment);
     } catch (error) {
       try {
-        environment.dispose();
+        await Promise.resolve(environment.dispose());
       } catch {
         // Best-effort cleanup for partially provisioned environments.
       }
@@ -211,12 +211,11 @@ export class EnvironmentService {
     };
 
     if (!runtime) {
-      try {
-        this.cleanupPersistedWorkspace(threadId);
-      } catch (error) {
-        reportFailure(this.threadRepo.getById(threadId)?.environmentId ?? "unknown", error);
-      }
-      refresh();
+      void this.cleanupPersistedWorkspace(threadId)
+        .catch((error: unknown) => {
+          reportFailure(this.threadRepo.getById(threadId)?.environmentId ?? "unknown", error);
+        })
+        .finally(refresh);
       return;
     }
 
@@ -231,7 +230,7 @@ export class EnvironmentService {
     }
   }
 
-  cleanupPersistedWorkspace(threadId: string): void {
+  async cleanupPersistedWorkspace(threadId: string): Promise<void> {
     const thread = this.threadRepo.getById(threadId);
     if (!thread) return;
     const project = this.projectRepo.getById(thread.projectId);
@@ -240,7 +239,7 @@ export class EnvironmentService {
     if (!environment || !environment.isIsolatedWorkspace()) {
       return;
     }
-    environment.dispose();
+    await Promise.resolve(environment.dispose());
   }
 
   rebuildPrimaryPromotionStateFromGit(): void {

@@ -366,12 +366,6 @@ export function useThreadWorkStatus(id: string, mergeBaseBranch?: string) {
   });
 }
 
-export function useThreadWorkStatusLookup() {
-  return useMutation({
-    mutationFn: (id: string) => api.getThreadWorkStatus(id),
-  });
-}
-
 export function useThreadTimeline(
   id: string,
   options?: { enabled?: boolean; limit?: number; refetchOnMount?: boolean | "always" },

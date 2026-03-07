@@ -33,7 +33,6 @@ import {
   useSystemEnvironments,
   useThread,
   useThreads,
-  useThreadWorkStatusLookup,
   useUnarchiveThread,
   useUpdateThread,
 } from "@/hooks/useApi"
@@ -52,7 +51,11 @@ import {
   isThreadGitDiffPanelOpen,
   withThreadGitDiffPanelOpen,
 } from "@/lib/thread-git-diff-panel"
-import { requiresArchiveConfirmation } from "@/lib/thread-archive"
+import {
+  isArchiveForceRequiredError,
+  requiresArchiveConfirmation,
+} from "@/lib/thread-archive"
+import { toast } from "sonner"
 
 const SIDEBAR_WIDTH_KEY = "beanbag.sidebar.width"
 const SIDEBAR_MIN_WIDTH = 240
@@ -220,7 +223,6 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const markThreadRead = useMarkThreadRead()
   const markThreadUnread = useMarkThreadUnread()
   const updateThread = useUpdateThread()
-  const threadWorkStatusLookup = useThreadWorkStatusLookup()
   const showHeader = location.pathname !== "/"
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
@@ -309,28 +311,34 @@ export function AppLayout({ children }: { children: ReactNode }) {
     [updateThread]
   )
 
-  const toggleArchiveThread = useCallback(async () => {
+  const toggleArchiveThread = useCallback(() => {
     if (!thread) return
     if (thread.archivedAt !== undefined) {
       unarchiveThread.mutate({ id: thread.id })
       return
     }
 
-    const workStatus =
-      thread.workStatus ??
-      (await threadWorkStatusLookup.mutateAsync(thread.id).catch(() => null))
-    if (requiresArchiveConfirmation(workStatus, threadEnvironmentInfo)) {
+    const archiveWithForce = () => {
+      archiveThread.mutate({ id: thread.id, force: true }, {
+        onSuccess: () => {
+          navigate(`/projects/${thread.projectId}`)
+        },
+        onError: (error) => {
+          toast.error(
+            error instanceof Error ? error.message : "Failed to archive thread.",
+          )
+        },
+      })
+    }
+
+    if (requiresArchiveConfirmation(thread.workStatus, threadEnvironmentInfo)) {
       const confirmed = window.confirm(
         "This thread has uncommitted or unmerged work. Archive anyway?"
       )
       if (!confirmed) {
         return
       }
-      archiveThread.mutate({ id: thread.id, force: true }, {
-        onSuccess: () => {
-          navigate(`/projects/${thread.projectId}`)
-        },
-      })
+      archiveWithForce()
       return
     }
 
@@ -338,13 +346,26 @@ export function AppLayout({ children }: { children: ReactNode }) {
       onSuccess: () => {
         navigate(`/projects/${thread.projectId}`)
       },
+      onError: (error) => {
+        if (isArchiveForceRequiredError(error)) {
+          const confirmed = window.confirm(
+            "This thread has uncommitted or unmerged work. Archive anyway?"
+          )
+          if (confirmed) {
+            archiveWithForce()
+          }
+          return
+        }
+        toast.error(
+          error instanceof Error ? error.message : "Failed to archive thread.",
+        )
+      },
     })
   }, [
     archiveThread,
     navigate,
     thread,
     threadEnvironmentInfo,
-    threadWorkStatusLookup,
     unarchiveThread,
   ])
 

@@ -59,7 +59,7 @@ export interface IEnvironment {
 
   serialize(): unknown;
   prepare?(): Promise<void>;
-  dispose(): void;
+  dispose(): void | Promise<void>;
   exists(): boolean;
   supportsHostFilesystemAccess(): boolean;
   isIsolatedWorkspace(): boolean;

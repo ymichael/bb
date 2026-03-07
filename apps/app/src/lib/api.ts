@@ -130,6 +130,25 @@ export class SystemShutdownBlockedError extends Error {
   }
 }
 
+export class HttpError extends Error {
+  readonly status: number;
+  readonly code?: string;
+  readonly body?: unknown;
+
+  constructor(args: {
+    status: number;
+    message: string;
+    code?: string;
+    body?: unknown;
+  }) {
+    super(`HTTP ${args.status}: ${args.message}`);
+    this.name = "HttpError";
+    this.status = args.status;
+    this.code = args.code;
+    this.body = args.body;
+  }
+}
+
 function extractErrorMessage(value: unknown): string | null {
   if (typeof value === "string") {
     const normalized = normalizeErrorText(value);
@@ -193,15 +212,55 @@ function deriveHttpErrorMessage(
   return (extractErrorMessage(normalized) ?? statusText) || "Request failed";
 }
 
+function parseHttpErrorBody(
+  rawBody: string,
+  contentType: string | null,
+): unknown | undefined {
+  const normalized = normalizeErrorText(rawBody);
+  if (normalized.length === 0) {
+    return undefined;
+  }
+
+  const shouldParseAsJson =
+    (contentType?.includes("application/json") ?? false) ||
+    normalized.startsWith("{") ||
+    normalized.startsWith("[");
+  if (!shouldParseAsJson) {
+    return undefined;
+  }
+
+  try {
+    return JSON.parse(normalized) as unknown;
+  } catch {
+    return undefined;
+  }
+}
+
+function extractErrorCode(value: unknown): string | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+  return typeof value.code === "string" && value.code.trim().length > 0
+    ? value.code
+    : undefined;
+}
+
 async function throwHttpError(res: Response): Promise<never> {
   const rawBody = await res.text().catch(() => "");
+  const contentType = res.headers.get("content-type");
   const message = deriveHttpErrorMessage(
     res.status,
     res.statusText,
     rawBody,
-    res.headers.get("content-type"),
+    contentType,
   );
-  throw new Error(`HTTP ${res.status}: ${message}`);
+  const body = parseHttpErrorBody(rawBody, contentType);
+  throw new HttpError({
+    status: res.status,
+    message,
+    code: extractErrorCode(body),
+    body,
+  });
 }
 
 async function request<T>(
