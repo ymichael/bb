@@ -120,6 +120,7 @@ import {
   isThreadGitDiffPanelOpen,
   withThreadGitDiffPanelOpen,
 } from "@/lib/thread-git-diff-panel";
+import { supportsPrimaryCheckoutMetadata } from "@/lib/thread-primary-checkout";
 import { cn } from "@/lib/utils";
 
 const SCROLL_THRESHOLD = 40;
@@ -915,7 +916,8 @@ export function ThreadDetailView() {
   const squashMergeAction = builtInActionsById.get("squash_merge");
   const promoteAction = builtInActionsById.get("promote");
   const demoteAction = builtInActionsById.get("demote");
-  const supportsPrimaryCheckout = Boolean(promoteAction || demoteAction);
+  const supportsPrimaryCheckout =
+    isThreadPrimaryCheckoutActive || supportsPrimaryCheckoutMetadata(environmentInfo?.capabilities);
   const supportsSquashMerge = squashMergeAction?.available === true;
   const gitDiffSelection = useMemo(
     () =>
@@ -1716,6 +1718,7 @@ export function ThreadDetailView() {
     ? "Promoting..."
     : "Promote";
   const isArchivedThread = thread.archivedAt !== undefined;
+  const showPrimaryCheckoutMetadata = supportsPrimaryCheckout && !isArchivedThread;
   const showWorkspaceStatus =
     Boolean(threadWorkStatus) &&
     !(thread.archivedAt !== undefined && environmentInfo?.capabilities.isolated_workspace !== true);
@@ -1723,7 +1726,7 @@ export function ThreadDetailView() {
     parentThreadId ||
       thread.archivedAt !== undefined ||
       thread.environmentId ||
-      isPrimaryCheckoutActive ||
+      showPrimaryCheckoutMetadata ||
       showWorkspaceStatus,
   );
   const provisioningStatusLabel =
@@ -1896,7 +1899,7 @@ export function ThreadDetailView() {
                 <span>{environmentInfo?.displayName ?? thread.environmentId}</span>
               </DetailRow>
             ) : null}
-            {supportsPrimaryCheckout && !isArchivedThread ? (
+            {showPrimaryCheckoutMetadata ? (
               <DetailRow
                 label="Primary checkout"
                 valueClassName="min-w-0"
