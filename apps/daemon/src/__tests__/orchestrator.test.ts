@@ -16,6 +16,7 @@ import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import type { ChildProcess } from "node:child_process";
 import {
+  buildSquashMergeConflictFollowUpInstruction,
   toRecord,
   type SystemEnvironmentInfo,
   type Thread,
@@ -543,6 +544,9 @@ function createMocks() {
     update: vi.fn(),
     markRead: vi.fn(),
     delete: vi.fn(),
+    enqueueQueuedMessage: vi.fn(),
+    getQueuedMessage: vi.fn(),
+    deleteQueuedMessage: vi.fn(),
   } as unknown as ThreadRepository;
 
   const eventRepo = {
@@ -551,6 +555,7 @@ function createMocks() {
     listByThread: vi.fn(),
     getLatestSeq: vi.fn(),
     getLatestByType: vi.fn(),
+    getLatestExecutionOptions: vi.fn(),
   } as unknown as EventRepository;
 
   const projectRepo = {
@@ -700,6 +705,7 @@ describe("Orchestrator", () => {
         updateData: vi.fn(),
         listByThread: vi.fn(),
         getLatestSeq: vi.fn(),
+        getLatestExecutionOptions: vi.fn(),
       } as unknown as EventRepository;
 
       const bootProjectRepo = {
@@ -5524,6 +5530,93 @@ describe("Orchestrator", () => {
             }),
           }),
         );
+      });
+
+      it("queues a follow-up thread message when squash merge hits conflicts", async () => {
+        const thread = makeThread({
+          id: "thread-1",
+          projectId: "proj-1",
+          status: "idle",
+          environmentId: "worktree",
+        });
+        (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
+        (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue({
+          id: "proj-1",
+          name: "Test",
+          rootPath: "/tmp/proj-1",
+          createdAt: 1000,
+          updatedAt: 1000,
+        });
+        (eventRepo.getLatestSeq as ReturnType<typeof vi.fn>).mockReturnValue(0);
+        (eventRepo.create as ReturnType<typeof vi.fn>).mockImplementation((event) =>
+          makeEvent({
+            threadId: event.threadId,
+            seq: event.seq,
+            type: event.type as string,
+            data: event.data,
+          })
+        );
+        (threadRepo.enqueueQueuedMessage as ReturnType<typeof vi.fn>).mockReturnValue({
+          id: "queued-1",
+          input: [],
+          reasoningLevel: "medium",
+          sandboxMode: "danger-full-access",
+          createdAt: 1000,
+        });
+        (threadRepo.deleteQueuedMessage as ReturnType<typeof vi.fn>).mockReturnValue(false);
+        asOrchestratorHarness(manager).environmentRuntimes.set("thread-1", {
+          threadId: "thread-1",
+          projectId: "proj-1",
+          rootPath: "/tmp/proj-1",
+          workspaceRoot: "/tmp/worktrees/proj-1/thread-1",
+          branchName: "bb/thread-1",
+          environment: makeRuntimeEnvironment({
+            rootPath: "/tmp/worktrees/proj-1/thread-1",
+            overrides: {
+              supportsSquashMergeIntoDefaultBranch() {
+                return true;
+              },
+              async squashMergeIntoDefaultBranch() {
+                return {
+                  merged: false,
+                  message: "Squash merge has conflicts against main.",
+                  conflictFiles: ["src/conflicted.ts", "README.md"],
+                };
+              },
+            },
+          }),
+        });
+        const scheduleFollowUpSpy = vi
+          .spyOn(asOrchestratorHarness(manager), "_scheduleQueuedFollowUpDispatch")
+          .mockImplementation(() => {});
+
+        await (asOrchestratorHarness(manager) as any)._runWorktreeSquashMergeOperation("thread-1", {
+          mergeBaseBranch: "main",
+          squashMessage: "feat: ship thread changes",
+        });
+
+        expect(threadRepo.enqueueQueuedMessage).toHaveBeenCalledWith(
+          "thread-1",
+          expect.objectContaining({
+            input: [
+              {
+                type: "text",
+                text: buildSquashMergeConflictFollowUpInstruction(
+                  {
+                    operation: "squash_merge",
+                    options: {
+                      mergeBaseBranch: "main",
+                      squashMessage: "feat: ship thread changes",
+                    },
+                  },
+                  { conflictFiles: ["src/conflicted.ts", "README.md"] },
+                ),
+              },
+            ],
+          }),
+        );
+        expect(scheduleFollowUpSpy).toHaveBeenCalledWith("thread-1");
+        expect(ws.broadcast).toHaveBeenCalledWith("thread", "thread-1", ["queue-changed"]);
       });
     });
 

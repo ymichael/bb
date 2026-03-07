@@ -15,6 +15,7 @@ import {
   getStringField,
   resolveProviderEventMethod,
   buildThreadDetailRows,
+  buildSquashMergeConflictFollowUpInstruction,
   extractThreadContextWindowUsage,
   toRecord,
   toUIMessages,
@@ -1228,6 +1229,13 @@ export class Orchestrator implements ThreadOrchestrator {
       ...(mergeResult.conflictFiles ? { conflictFiles: mergeResult.conflictFiles } : {}),
     }, { broadcastChanges: ["events-appended", "work-status-changed"] });
 
+    if (!mergeResult.merged && mergeResult.conflictFiles && mergeResult.conflictFiles.length > 0) {
+      this._enqueueSquashMergeConflictFollowUp(thread.id, {
+        operation: "squash_merge",
+        ...(request ? { options: request } : {}),
+      }, mergeResult.conflictFiles);
+    }
+
     if (
       mergeResult.merged &&
       this._shouldAutoArchiveThread({
@@ -1242,6 +1250,30 @@ export class Orchestrator implements ThreadOrchestrator {
     }
 
     return { message: mergeResult.message };
+  }
+
+  private _enqueueSquashMergeConflictFollowUp(
+    threadId: string,
+    request: Extract<ThreadOperationRequest, { operation: "squash_merge" }>,
+    conflictFiles: string[],
+  ): void {
+    const input: PromptInput[] = [
+      {
+        type: "text",
+        text: buildSquashMergeConflictFollowUpInstruction(request, { conflictFiles }),
+      },
+    ];
+
+    this._normalizePromptInputForProvider(input);
+    const defaultOptions = this.getDefaultExecutionOptions(threadId);
+    this.threadRepo.enqueueQueuedMessage(threadId, {
+      input,
+      model: defaultOptions?.model,
+      reasoningLevel: normalizeQueuedReasoningLevel(defaultOptions?.reasoningLevel),
+      sandboxMode: normalizeQueuedSandboxMode(defaultOptions?.sandboxMode),
+    });
+    this._broadcastThreadChanged(threadId, ["queue-changed"]);
+    this._scheduleQueuedFollowUpDispatch(threadId);
   }
 
   /**

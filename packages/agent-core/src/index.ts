@@ -164,6 +164,7 @@ export { buildThreadDetailRows } from "./thread-detail-rows.js";
 export { extractThreadContextWindowUsage } from "./thread-context-window-usage.js";
 export {
   buildThreadOperationInstruction,
+  buildSquashMergeConflictFollowUpInstruction,
   type ThreadOperationPromptTarget,
 } from "./thread-operation-prompts.js";
 export { assertNever } from "./assert-never.js";

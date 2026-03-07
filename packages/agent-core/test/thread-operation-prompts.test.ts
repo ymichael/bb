@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { buildThreadOperationInstruction } from "../src/thread-operation-prompts.js";
+import {
+  buildSquashMergeConflictFollowUpInstruction,
+  buildThreadOperationInstruction,
+} from "../src/thread-operation-prompts.js";
 
 describe("buildThreadOperationInstruction", () => {
   it("builds commit instructions with explicit options", () => {
@@ -31,5 +34,25 @@ describe("buildThreadOperationInstruction", () => {
     expect(prompt).toContain("project primary checkout");
     expect(prompt).toContain("release");
     expect(prompt).toContain("Please squash-merge the changes");
+  });
+
+  it("builds squash conflict follow-up instructions with conflicted files", () => {
+    const prompt = buildSquashMergeConflictFollowUpInstruction(
+      {
+        operation: "squash_merge",
+        options: {
+          mergeBaseBranch: "main",
+          squashMessage: "feat: merge thread work",
+        },
+      },
+      {
+        conflictFiles: ["src/app.ts", "README.md"],
+      },
+    );
+
+    expect(prompt).toContain("Squash merge to main failed with conflicts.");
+    expect(prompt).toContain("Conflicted files: src/app.ts, README.md.");
+    expect(prompt).toContain("Please resolve them and try the squash merge again.");
+    expect(prompt).toContain("whether the retry succeeded");
   });
 });

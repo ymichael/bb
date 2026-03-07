@@ -70,6 +70,25 @@ function buildSquashMergeInstruction(
   return steps.join("\n");
 }
 
+export function buildSquashMergeConflictFollowUpInstruction(
+  request: Extract<ThreadOperationRequest, { operation: "squash_merge" }>,
+  options?: {
+    target?: ThreadOperationPromptTarget;
+    conflictFiles?: string[];
+  },
+): string {
+  const conflictFiles = options?.conflictFiles?.filter((file) => file.trim().length > 0) ?? [];
+  const mergeBaseBranch = request.options?.mergeBaseBranch?.trim() || "the default branch";
+  const steps = [
+    `Squash merge to ${mergeBaseBranch} failed with conflicts. Please resolve them and try the squash merge again.`,
+  ];
+  if (conflictFiles.length > 0) {
+    steps.push(`Conflicted files: ${conflictFiles.join(", ")}.`);
+  }
+  steps.push("Please reply with what you resolved, whether the retry succeeded, and any blockers.");
+  return steps.join("\n");
+}
+
 export function buildThreadOperationInstruction(
   request: ThreadOperationRequest,
   options?: { target?: ThreadOperationPromptTarget },
