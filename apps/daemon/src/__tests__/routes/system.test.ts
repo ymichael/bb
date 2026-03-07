@@ -5,7 +5,6 @@ import type {
   OpenPathRequest,
   SystemEnvironmentInfo,
   SystemProviderInfo,
-  SystemWorkflowInfo,
   Thread,
   ThreadOrchestrator,
 } from "@beanbag/agent-core";
@@ -52,14 +51,6 @@ function mockOrchestrator(): ThreadOrchestrator {
       squash_merge: false,
     },
   };
-  const workflows: SystemWorkflowInfo[] = [
-    {
-      kind: "noop",
-      displayName: "No Structured Workflow",
-      description: "No pre-defined branch, commit, or merge policy.",
-      requiredEnvironmentCapabilities: [],
-    },
-  ];
 
   return {
     list: vi.fn(),
@@ -69,7 +60,6 @@ function mockOrchestrator(): ThreadOrchestrator {
     getProviderInfo: vi.fn(),
     listProviders: vi.fn(() => []),
     listEnvironments: vi.fn(() => [environmentInfo]),
-    listWorkflows: vi.fn(() => workflows),
   } as unknown as ThreadOrchestrator;
 }
 
@@ -428,8 +418,8 @@ describe("System routes", () => {
     });
   });
 
-  describe("GET /system/environments + /system/workflows", () => {
-    it("returns environment and workflow catalogs", async () => {
+  describe("GET /system/environments", () => {
+    it("returns the environment catalog", async () => {
       const environments: SystemEnvironmentInfo[] = [
         {
           id: "local",
@@ -454,44 +444,15 @@ describe("System routes", () => {
           },
         },
       ];
-      const workflows: SystemWorkflowInfo[] = [
-        {
-          kind: "noop",
-          displayName: "No Structured Workflow",
-          description: "No pre-defined branch, commit, or merge policy.",
-          requiredEnvironmentCapabilities: [],
-        },
-        {
-          kind: "branch-commit-merge",
-          displayName: "Branch, Commit, Merge",
-          description: "Work in an isolated branch workspace and complete with commit and merge-back.",
-          requiredEnvironmentCapabilities: [
-            "isolated_workspace",
-            "promote_primary_checkout",
-            "demote_primary_checkout",
-            "squash_merge",
-          ],
-        },
-      ];
-
       (
         threadManager.listEnvironments as unknown as ReturnType<typeof vi.fn>
       ).mockReturnValue(environments);
-      (
-        threadManager.listWorkflows as unknown as ReturnType<typeof vi.fn>
-      ).mockReturnValue(workflows);
 
-      const [environmentRes, workflowRes] = await Promise.all([
-        app.request("/system/environments"),
-        app.request("/system/workflows"),
-      ]);
+      const environmentRes = await app.request("/system/environments");
 
       expect(environmentRes.status).toBe(200);
       expect(await environmentRes.json()).toEqual(environments);
-      expect(workflowRes.status).toBe(200);
-      expect(await workflowRes.json()).toEqual(workflows);
       expect(threadManager.listEnvironments).toHaveBeenCalledTimes(1);
-      expect(threadManager.listWorkflows).toHaveBeenCalledTimes(1);
     });
   });
 

@@ -10,7 +10,6 @@ import type {
   OpenPathRequest,
   SystemEnvironmentInfo,
   SystemProviderInfo,
-  SystemWorkflowInfo,
   Thread,
   SystemStatus,
   ThreadOrchestrator,
@@ -30,7 +29,6 @@ type ListModelsFn = () => Promise<AvailableModel[]>;
 type ProviderInfoFn = () => SystemProviderInfo;
 type ProviderCatalogFn = () => SystemProviderInfo[];
 type EnvironmentCatalogFn = () => SystemEnvironmentInfo[];
-type WorkflowCatalogFn = () => SystemWorkflowInfo[];
 type TranscribeVoiceFn = (
   args: TranscribeVoiceInputArgs,
 ) => Promise<TranscribeVoiceInputResult>;
@@ -45,7 +43,6 @@ export interface CreateSystemRoutesOptions {
   getProviderInfo?: ProviderInfoFn;
   listProviders?: ProviderCatalogFn;
   listEnvironments?: EnvironmentCatalogFn;
-  listWorkflows?: WorkflowCatalogFn;
   transcribeVoice?: TranscribeVoiceFn;
   openPath?: OpenPathFn;
   requestShutdown?: RequestShutdownFn;
@@ -184,7 +181,6 @@ export function createSystemRoutes(
   const getProviderInfo = opts.getProviderInfo ?? (() => threadManager.getProviderInfo());
   const listProviders = opts.listProviders ?? (() => threadManager.listProviders());
   const listEnvironments = opts.listEnvironments ?? (() => threadManager.listEnvironments());
-  const listWorkflows = opts.listWorkflows ?? (() => threadManager.listWorkflows());
   const transcribeVoice = opts.transcribeVoice ?? transcribeVoiceInput;
   const openPath = opts.openPath ?? openPathInEditor;
   const requestShutdown = opts.requestShutdown ?? (() => {});
@@ -277,13 +273,6 @@ export function createSystemRoutes(
     .get("/environments", async (c) => {
       try {
         return c.json(listEnvironments());
-      } catch (err) {
-        return sendRouteError(c, err);
-      }
-    })
-    .get("/workflows", async (c) => {
-      try {
-        return c.json(listWorkflows());
       } catch (err) {
         return sendRouteError(c, err);
       }

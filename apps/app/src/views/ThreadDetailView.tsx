@@ -42,7 +42,6 @@ import {
   useStopThread,
   useMarkThreadRead,
   useSystemEnvironments,
-  useSystemWorkflows,
   useUnarchiveThread,
   useThreadDefaultExecutionOptions,
   useUploadPromptAttachment,
@@ -817,7 +816,6 @@ export function ThreadDetailView() {
   const uploadPromptAttachment = useUploadPromptAttachment();
   const promptDraft = usePromptDraftStorage({ projectId, threadId });
   const environmentCatalog = useSystemEnvironments();
-  const workflowCatalog = useSystemWorkflows();
   const fileMentions = usePromptFileMentions(projectId);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const [loadingToolGroupIds, setLoadingToolGroupIds] = useState<Set<string>>(new Set());
@@ -880,7 +878,6 @@ export function ThreadDetailView() {
     initialReasoningLevel: defaultExecutionOptions?.reasoningLevel,
     initialSandboxMode: defaultExecutionOptions?.sandboxMode,
     initialEnvironmentId: thread?.environmentId,
-    initialWorkflowId: thread?.workflowId,
   });
   const preferredTheme = usePreferredTheme();
   const gitDiffViewOptions = useMemo(
@@ -911,19 +908,15 @@ export function ThreadDetailView() {
       environmentCatalog.data?.find((environment) => environment.id === thread?.environmentId),
     [environmentCatalog.data, thread?.environmentId],
   );
-  const workflowInfo = useMemo(
-    () => workflowCatalog.data?.find((workflow) => workflow.kind === thread?.workflowId),
-    [thread?.workflowId, workflowCatalog.data],
+  const builtInActionsById = useMemo(
+    () => new Map((thread?.builtInActions ?? []).map((action) => [action.id, action])),
+    [thread?.builtInActions],
   );
-  const supportsPrimaryCheckout = Boolean(
-    environmentInfo?.capabilities.promote_primary_checkout &&
-      environmentInfo?.capabilities.demote_primary_checkout &&
-      thread?.workflowId === "branch-commit-merge",
-  );
-  const supportsSquashMerge = Boolean(
-    environmentInfo?.capabilities.squash_merge &&
-      thread?.workflowId === "branch-commit-merge",
-  );
+  const squashMergeAction = builtInActionsById.get("squash_merge");
+  const promoteAction = builtInActionsById.get("promote");
+  const demoteAction = builtInActionsById.get("demote");
+  const supportsPrimaryCheckout = Boolean(promoteAction || demoteAction);
+  const supportsSquashMerge = squashMergeAction?.available === true;
   const gitDiffSelection = useMemo(
     () =>
       selectedGitDiffCommitSha
@@ -1730,8 +1723,6 @@ export function ThreadDetailView() {
     parentThreadId ||
       thread.archivedAt !== undefined ||
       thread.environmentId ||
-      thread.workflowId ||
-      thread.workflowState ||
       isPrimaryCheckoutActive ||
       showWorkspaceStatus,
   );
@@ -1905,22 +1896,6 @@ export function ThreadDetailView() {
                 <span>{environmentInfo?.displayName ?? thread.environmentId}</span>
               </DetailRow>
             ) : null}
-            {thread.workflowId ? (
-              <DetailRow
-                label="Workflow"
-                valueClassName="min-w-0 truncate"
-              >
-                <span>{workflowInfo?.displayName ?? thread.workflowId}</span>
-              </DetailRow>
-            ) : null}
-            {thread.workflowState ? (
-              <DetailRow
-                label="Workflow status"
-                valueClassName="min-w-0 truncate"
-              >
-                <span>{thread.workflowState.summary}</span>
-              </DetailRow>
-            ) : null}
             {supportsPrimaryCheckout && !isArchivedThread ? (
               <DetailRow
                 label="Primary checkout"
@@ -1939,7 +1914,10 @@ export function ThreadDetailView() {
                     className="h-auto px-0 py-0 ui-text-xs underline"
                     disabled={
                       thread.archivedAt !== undefined ||
-                      isPrimaryCheckoutMutationPending
+                      isPrimaryCheckoutMutationPending ||
+                      (isPrimaryCheckoutActive
+                        ? demoteAction?.available === false
+                        : promoteAction?.available === false)
                     }
                     onClick={() => {
                       const action = isPrimaryCheckoutActive
@@ -1991,7 +1969,7 @@ export function ThreadDetailView() {
                   }
                   canCommit={threadWorkStatus.hasUncommittedChanges}
                   canSquashMerge={
-                    supportsSquashMerge &&
+                    squashMergeAction?.available === true &&
                     (
                       threadWorkStatus.hasCommittedUnmergedChanges ||
                       threadWorkStatus.hasUncommittedChanges

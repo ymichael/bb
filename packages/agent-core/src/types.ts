@@ -13,14 +13,13 @@ export interface Project {
   id: string;
   name: string;
   rootPath: string;
-  workflowInstructions?: string;
+  projectInstructions?: string;
   rootPathExists?: boolean;
   createdAt: number;
   updatedAt: number;
 }
 
 // Thread
-export type WorkflowKind = "noop" | "branch-commit-merge";
 export type EnvironmentCapability =
   | "host_filesystem"
   | "isolated_workspace"
@@ -30,26 +29,19 @@ export type EnvironmentCapability =
 
 export type EnvironmentCapabilities = Record<EnvironmentCapability, boolean>;
 
-export interface WorkflowCompatibilityResult {
-  ok: boolean;
-  missingRequirements: Array<{
-    capability: string;
-    reason: string;
-  }>;
-}
+export type ThreadBuiltInActionId =
+  | "commit"
+  | "squash_merge"
+  | "promote"
+  | "demote";
 
-export interface WorkflowDefinitionSummary {
-  kind: WorkflowKind;
-  displayName: string;
-  description?: string;
-  requiredEnvironmentCapabilities: EnvironmentCapability[];
-}
-
-export interface ThreadWorkflowState {
-  phase: "preparing" | "working" | "completed" | "failed";
-  summary: string;
-  terminal: boolean;
-  successful?: boolean;
+export interface ThreadBuiltInAction {
+  id: ThreadBuiltInActionId;
+  label: string;
+  available: boolean;
+  disabledReason?: string;
+  queuesWhenActive: boolean;
+  requiresDemoteFirst: boolean;
 }
 
 export type ThreadStatus =
@@ -80,8 +72,7 @@ export interface Thread {
   queuedMessages?: ThreadQueuedMessage[];
   environmentId?: string;
   environmentRecord?: PersistedEnvironmentRecord;
-  workflowId?: WorkflowKind;
-  workflowState?: ThreadWorkflowState;
+  builtInActions?: ThreadBuiltInAction[];
   parentThreadId?: string;
   archivedAt?: number;
   lastReadAt?: number;

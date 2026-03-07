@@ -7,12 +7,11 @@ import type { ThreadDetailRow } from "./thread-detail-rows.js";
 import type { UIMessage } from "./ui-message.js";
 import type {
   EnvironmentCapabilities,
+  ThreadBuiltInAction,
+  ThreadBuiltInActionId,
   ThreadQueuedMessage,
   ThreadStatus,
-  ThreadWorkflowState,
   ThreadWorkStatus,
-  WorkflowDefinitionSummary,
-  WorkflowKind,
 } from "./types.js";
 export type {
   PromptInput,
@@ -21,9 +20,8 @@ export type {
 } from "./shared-types.js";
 export type {
   EnvironmentCapabilities,
-  ThreadWorkflowState,
-  WorkflowDefinitionSummary,
-  WorkflowKind,
+  ThreadBuiltInAction,
+  ThreadBuiltInActionId,
 } from "./types.js";
 
 export interface ModelReasoningEffort {
@@ -50,7 +48,6 @@ export interface SpawnThreadRequest {
   reasoningLevel?: ReasoningLevel;
   sandboxMode?: SandboxMode;
   environmentId?: string;
-  workflowId?: WorkflowKind;
   developerInstructions?: string;
   parentThreadId?: string;
 }
@@ -149,7 +146,7 @@ export interface CreateProjectRequest {
 export interface UpdateProjectRequest {
   name?: string;
   rootPath?: string;
-  workflowInstructions?: string;
+  projectInstructions?: string;
 }
 
 export type ThreadOperationType = "commit" | "squash_merge";
@@ -314,5 +311,3 @@ export interface SystemEnvironmentInfo {
   description?: string;
   capabilities: EnvironmentCapabilities;
 }
-
-export interface SystemWorkflowInfo extends WorkflowDefinitionSummary {}

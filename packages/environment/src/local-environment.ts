@@ -100,6 +100,10 @@ class LocalEnvironment implements IEnvironment {
     return this.rootPath;
   }
 
+  buildAgentInstructions(): string | undefined {
+    return undefined;
+  }
+
   getWorkspaceStatus(args?: EnvironmentWorkspaceStatusOptions) {
     return getGitWorkspaceStatus(this, args);
   }

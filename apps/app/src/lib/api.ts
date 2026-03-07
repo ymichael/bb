@@ -14,7 +14,6 @@ import type {
   SystemStatus,
   SystemEnvironmentInfo,
   SystemProviderInfo,
-  SystemWorkflowInfo,
   AvailableModel,
   ProjectFileSuggestion,
   ThreadExecutionOptions,
@@ -584,10 +583,6 @@ export async function listSystemProviders(): Promise<SystemProviderInfo[]> {
 
 export async function listSystemEnvironments(): Promise<SystemEnvironmentInfo[]> {
   return request<SystemEnvironmentInfo[]>("GET", "/system/environments");
-}
-
-export async function listSystemWorkflows(): Promise<SystemWorkflowInfo[]> {
-  return request<SystemWorkflowInfo[]>("GET", "/system/workflows");
 }
 
 export async function getSystemRestartPolicy(): Promise<SystemRestartPolicy> {

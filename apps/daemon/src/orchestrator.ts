@@ -27,12 +27,13 @@ import {
   type SchedulerService,
   type SystemProviderInfo,
   type SystemEnvironmentInfo,
-  type SystemWorkflowInfo,
   type ThreadOrchestrator,
   type ThreadTurnInitiator,
   type ThreadExecutionOptions,
   type ThreadWorkStatus,
   type Thread,
+  type ThreadBuiltInAction,
+  type ThreadBuiltInActionId,
   type ThreadEvent,
   type ThreadEventData,
   type ThreadEventDataForType,
@@ -64,6 +65,7 @@ import {
   EnvironmentRegistry,
   createDefaultEnvironmentRegistry,
   type CreateEnvironmentContext,
+  type EnvironmentCommitSummary,
   type EnvironmentCheckoutSnapshot,
   type EnvironmentSquashMergeMessageContext,
   type IEnvironment,
@@ -77,10 +79,10 @@ import {
   AgentServer,
   type AgentServerNotification,
   AgentServerSessionError,
+  type LlmCommitMessageGenerationArgs,
   type LlmCompletionService,
   createCodexProviderAdapter,
 } from "@beanbag/agent-server";
-import { WorkflowService } from "@beanbag/workflow";
 import { WSManager } from "./ws.js";
 import {
   isDomainError,
@@ -402,6 +404,11 @@ export class Orchestrator implements ThreadOrchestrator {
   private timelineByThread = new Map<string, ThreadTimelineCacheEntry>();
   /** Cached prompt-derived fallback titles for untitled threads. */
   private titleFallbackByThreadId = new Map<string, string | null>();
+  /** Cached provisioning completion state derived from provisioning lifecycle events. */
+  private provisioningCompletionStateByThreadId = new Map<
+    string,
+    ThreadProvisioningState | null
+  >();
   /** Per-project in-memory primary-checkout promotion status. */
   private primaryPromotionByProjectId: Map<string, PrimaryPromotionState>;
   /** Last successful external validation timestamp for active primary-checkout state. */
@@ -421,7 +428,6 @@ export class Orchestrator implements ThreadOrchestrator {
   /** Tracks threads whose workspace deletion is in progress. */
   private workspaceCleanupInFlightThreadIds: Set<string>;
   private agentServer: AgentServer;
-  private workflowService = new WorkflowService();
   private operationIdCounter = 0;
   private threadShellPath: string | undefined;
   private environmentCatalog: SystemEnvironmentInfo[];
@@ -700,17 +706,10 @@ export class Orchestrator implements ThreadOrchestrator {
     // Create thread record in DB
     const explicitTitle = this._normalizeThreadTitle(req.title);
     const environmentId = this._resolveRequestedEnvironmentId(req.environmentId);
-    const workflowId = this.workflowService.resolveWorkflowId(req.workflowId);
     const thread = this.threadRepo.create({
       projectId: req.projectId,
       ...(explicitTitle ? { title: explicitTitle } : {}),
       environmentId,
-      workflowId,
-      workflowState: {
-        phase: "preparing",
-        summary: "Preparing workflow",
-        terminal: false,
-      },
       ...(req.parentThreadId ? { parentThreadId: req.parentThreadId } : {}),
     });
     if (explicitTitle) {
@@ -1168,9 +1167,10 @@ export class Orchestrator implements ThreadOrchestrator {
 
     if (
       result.commitCreated &&
-      this.workflowService.shouldAutoArchiveOnSuccess({
-        workflowId: thread.workflowId ?? "noop",
-        operation: "commit",
+      this._shouldAutoArchiveThread({
+        thread,
+        projectRootPath: project.rootPath,
+        environment,
         requested: request?.autoArchiveOnSuccess,
       })
     ) {
@@ -1231,9 +1231,11 @@ export class Orchestrator implements ThreadOrchestrator {
 
     if (
       mergeResult.merged &&
-      this.workflowService.shouldAutoArchiveOnSuccess({
-        workflowId: thread.workflowId ?? "noop",
-        operation: "squash_merge",
+      this._shouldAutoArchiveThread({
+        thread,
+        projectRootPath: project.rootPath,
+        environment,
+        mergeBaseBranch: options.mergeBaseBranch?.trim() || undefined,
         requested: options.autoArchiveOnSuccess,
       })
     ) {
@@ -1519,7 +1521,7 @@ export class Orchestrator implements ThreadOrchestrator {
       });
       const hasSelectedCommit =
         selection.type === "commit" &&
-        commits.some((commit) => commit.sha === selection.sha);
+        commits.some((commit: EnvironmentCommitSummary) => commit.sha === selection.sha);
       const normalizedSelection: ThreadGitDiffSelection = hasSelectedCommit
         ? selection
         : { type: "combined" };
@@ -1615,7 +1617,7 @@ export class Orchestrator implements ThreadOrchestrator {
   getById(threadId: string): Thread | undefined {
     const thread = this.threadRepo.getById(threadId);
     if (!thread) return undefined;
-    return this._withPrimaryCheckoutState(thread);
+    return this._hydrateThreadState(thread);
   }
 
   getWorkStatus(threadId: string, mergeBaseBranch?: string) {
@@ -1708,26 +1710,14 @@ export class Orchestrator implements ThreadOrchestrator {
       }
     }
 
-    const primaryPromotion = this.primaryPromotionByProjectId.get(thread.projectId);
-    const policyAction = this._resolveOperationPolicyAction(request.operation);
-    const policyDecision = this.workflowService.evaluateOperationPolicy(
-      thread.workflowId ?? "noop",
-      policyAction,
-      {
-      status: thread.status,
-      archived: thread.archivedAt !== undefined,
-      primaryCheckoutActive: primaryPromotion?.threadId === thread.id,
-      },
-    );
-
-    if (!policyDecision.allowed) {
-      throw invalidRequestError(policyDecision.reason ?? "Operation is not allowed");
-    }
+    const requiresDemoteFirst =
+      this.primaryPromotionByProjectId.get(thread.projectId)?.threadId === thread.id;
+    const builtInAction = this._getThreadBuiltInAction(thread, request.operation);
 
     const operationId = this._nextOperationId();
     let demotedPrimaryCheckout = false;
     try {
-      if (policyDecision.requiresDemoteFirst) {
+      if (requiresDemoteFirst) {
         await this.demotePrimaryCheckout(thread.id);
         demotedPrimaryCheckout = true;
       }
@@ -1746,7 +1736,7 @@ export class Orchestrator implements ThreadOrchestrator {
 
       const latestThread = this.threadRepo.getById(thread.id);
       const shouldQueue =
-        policyDecision.shouldQueue === true ||
+        builtInAction.queuesWhenActive ||
         latestThread?.status !== "idle" ||
         this.projectOperationTransitionsInFlight.has(thread.projectId);
       if (shouldQueue) {
@@ -1792,19 +1782,6 @@ export class Orchestrator implements ThreadOrchestrator {
     }
     if (thread.archivedAt !== undefined) {
       throw threadArchivedError(threadId);
-    }
-
-    const policyDecision = this.workflowService.evaluateOperationPolicy(
-      thread.workflowId ?? "noop",
-      "promote",
-      {
-      status: thread.status,
-      archived: thread.archivedAt !== undefined,
-      primaryCheckoutActive: false,
-      },
-    );
-    if (!policyDecision.allowed) {
-      throw invalidRequestError(policyDecision.reason ?? "Promotion is not allowed");
     }
 
     const project = this.projectRepo.getById(thread.projectId);
@@ -1933,19 +1910,6 @@ export class Orchestrator implements ThreadOrchestrator {
     if (!project) {
       throw projectNotFoundError(thread.projectId);
     }
-    const policyDecision = this.workflowService.evaluateOperationPolicy(
-      thread.workflowId ?? "noop",
-      "demote",
-      {
-      status: thread.status,
-      archived: thread.archivedAt !== undefined,
-      primaryCheckoutActive: false,
-      },
-    );
-    if (!policyDecision.allowed) {
-      throw invalidRequestError(policyDecision.reason ?? "Demotion is not allowed");
-    }
-
     return this._runWithPrimaryCheckoutTransitionLock(project.id, async () => {
       this._ensurePrimaryPromotionStateIsCurrent(project.id, { force: true });
       const active = this.primaryPromotionByProjectId.get(project.id);
@@ -2077,10 +2041,6 @@ export class Orchestrator implements ThreadOrchestrator {
     return this.environmentService.listEnvironments();
   }
 
-  listWorkflows(): SystemWorkflowInfo[] {
-    return this.workflowService.listDefinitions();
-  }
-
   /**
    * Stop all active processes. Called during graceful shutdown.
    */
@@ -2176,9 +2136,8 @@ export class Orchestrator implements ThreadOrchestrator {
 
     const requestedInput = req.input ?? [];
     const preProvisionDeveloperInstructions = this._buildDeveloperInstructions({
-      projectWorkflowInstructions: project.workflowInstructions,
+      projectInstructions: project.projectInstructions,
       requestDeveloperInstructions: req.developerInstructions,
-      workflowId: thread?.workflowId,
     });
     const preProvisionRequest = preProvisionDeveloperInstructions
       ? { ...req, developerInstructions: preProvisionDeveloperInstructions }
@@ -2225,33 +2184,11 @@ export class Orchestrator implements ThreadOrchestrator {
       opts?.rootPathHint ?? project.rootPath,
       requestedEnvironmentId,
     );
-    const workflowId = thread?.workflowId ?? "noop";
-    const compatibility = this.workflowService
-      .getDefinition(workflowId)
-      .checkCompatibility(environmentRuntime.environment);
-    if (!compatibility.ok) {
-      this.threadRepo.update(threadId, {
-        workflowState: {
-          phase: "failed",
-          summary: compatibility.missingRequirements.map((item) => item.reason).join("; "),
-          terminal: true,
-          successful: false,
-        },
-      });
-      throw invalidRequestError(
-        compatibility.missingRequirements.map((item) => item.reason).join("; "),
-      );
-    }
     this.threadRepo.update(threadId, {
       environmentId: environmentRuntime.environment.kind,
       environmentRecord: {
         kind: environmentRuntime.environment.kind,
         state: environmentRuntime.environment.serialize(),
-      },
-      workflowState: {
-        phase: "working",
-        summary: "Workflow ready",
-        terminal: false,
       },
     });
     this._appendEvent(threadId, "system/provisioning/completed", {
@@ -2264,9 +2201,9 @@ export class Orchestrator implements ThreadOrchestrator {
     const providerInput = this._normalizePromptInputForProvider(requestedInput);
 
     const effectiveDeveloperInstructions = this._buildDeveloperInstructions({
-      projectWorkflowInstructions: project.workflowInstructions,
+      projectInstructions: project.projectInstructions,
       requestDeveloperInstructions: req.developerInstructions,
-      workflowId: thread?.workflowId,
+      environment: environmentRuntime.environment,
     });
     const effectiveRequest = effectiveDeveloperInstructions
       ? { ...req, developerInstructions: effectiveDeveloperInstructions }
@@ -2392,7 +2329,7 @@ export class Orchestrator implements ThreadOrchestrator {
       projectRootPath,
       runtimeEnv: this.runtimeEnv,
       services: {
-        llmCompletion: async ({ cwd, includeUnstaged }) => {
+        llmCompletion: async ({ cwd, includeUnstaged }: LlmCommitMessageGenerationArgs) => {
           const generated = await this.llmCompletionService.generateCommitMessage({
             cwd,
             includeUnstaged,
@@ -2715,11 +2652,11 @@ export class Orchestrator implements ThreadOrchestrator {
   }
 
   private _buildDeveloperInstructions(args: {
-    projectWorkflowInstructions?: string;
+    projectInstructions?: string;
     requestDeveloperInstructions?: string;
-    workflowId?: Thread["workflowId"];
+    environment?: IEnvironment;
   }): string | undefined {
-    const projectInstructions = args.projectWorkflowInstructions?.trim();
+    const projectInstructions = args.projectInstructions?.trim();
     const requestInstructions = args.requestDeveloperInstructions?.trim();
     const baseInstructions = [projectInstructions, requestInstructions]
       .filter((value): value is string => Boolean(value))
@@ -2728,13 +2665,11 @@ export class Orchestrator implements ThreadOrchestrator {
     const currentInstructions = baseInstructions.length > 0
       ? baseInstructions
       : undefined;
-    const workflowId = args.workflowId ?? "noop";
-    const workflowInstructions =
-      this.workflowService.getDefinition(workflowId).buildInstructions();
-    if (!workflowInstructions) {
+    const environmentInstructions = args.environment?.buildAgentInstructions?.();
+    if (!environmentInstructions) {
       return currentInstructions;
     }
-    const customized = [currentInstructions, workflowInstructions]
+    const customized = [currentInstructions, environmentInstructions]
       .filter((value): value is string => Boolean(value && value.trim().length > 0))
       .join("\n\n")
       .trim();
@@ -2867,6 +2802,7 @@ export class Orchestrator implements ThreadOrchestrator {
       data,
     });
     this.timelineByThread.delete(threadId);
+    this._cacheProvisioningStateFromEvent(threadId, type, data);
     const broadcastChanges = opts?.broadcastChanges ?? ["events-appended"];
     if (broadcastChanges !== false) {
       this._broadcastThreadChanged(threadId, broadcastChanges);
@@ -2882,17 +2818,213 @@ export class Orchestrator implements ThreadOrchestrator {
     };
   }
 
-  private _resolveOperationPolicyAction(
-    operation: ThreadOperationType,
-  ): "commit" | "squash_merge" {
-    switch (operation) {
-      case "commit":
-        return "commit";
-      case "squash_merge":
-        return "squash_merge";
+  private _threadBuiltInAction(
+    id: ThreadBuiltInActionId,
+    args: {
+      label: string;
+      available: boolean;
+      disabledReason?: string;
+      queuesWhenActive: boolean;
+      requiresDemoteFirst: boolean;
+    },
+  ): ThreadBuiltInAction {
+    return {
+      id,
+      label: args.label,
+      available: args.available,
+      ...(args.disabledReason ? { disabledReason: args.disabledReason } : {}),
+      queuesWhenActive: args.queuesWhenActive,
+      requiresDemoteFirst: args.requiresDemoteFirst,
+    };
+  }
+
+  private _threadActionStatusBlockReason(thread: Thread): string | undefined {
+    switch (thread.status) {
+      case "idle":
+      case "active":
+        return undefined;
+      case "created":
+      case "provisioning":
+        return "Thread provisioning is in progress";
+      case "provisioning_failed":
+        return "Thread provisioning failed; reprovision the thread before requesting actions";
       default:
-        return assertNever(operation);
+        return assertNever(thread.status);
     }
+  }
+
+  private _buildThreadBuiltInActions(args: {
+    thread: Thread;
+    environment?: IEnvironment;
+    workStatus?: ThreadWorkStatus;
+  }): ThreadBuiltInAction[] {
+    this._ensurePrimaryPromotionStateIsCurrent(args.thread.projectId);
+    const activePromotion = this.primaryPromotionByProjectId.get(args.thread.projectId);
+    const primaryCheckoutActive = activePromotion?.threadId === args.thread.id;
+    const anotherThreadPromoted =
+      activePromotion && activePromotion.threadId !== args.thread.id
+        ? activePromotion.threadId
+        : undefined;
+    const requiresDemoteFirst = primaryCheckoutActive;
+    const archivedReason =
+      args.thread.archivedAt !== undefined ? "Archived threads cannot run built-in actions" : undefined;
+    const statusReason = archivedReason ?? this._threadActionStatusBlockReason(args.thread);
+    const environmentReason = this._restoreEnvironmentUnavailableMessage(args.thread.id);
+    const environment = args.environment;
+    const workStatus = args.workStatus;
+    const isGitWorkspace = Boolean(workStatus && workStatus.state !== "untracked" && workStatus.state !== "deleted");
+    const currentBranch = workStatus?.currentBranch;
+    const defaultBranch = workStatus?.defaultBranch;
+
+    const commitDisabledReason = (() => {
+      if (statusReason) return statusReason;
+      if (!environment) return environmentReason;
+      if (!isGitWorkspace) return "Commit is only available inside a git repository";
+      if (!workStatus?.hasUncommittedChanges) return "No uncommitted changes to commit";
+      return undefined;
+    })();
+
+    const squashDisabledReason = (() => {
+      if (statusReason) return statusReason;
+      if (!environment) return environmentReason;
+      if (!environment.supportsSquashMergeIntoDefaultBranch()) {
+        return "Squash merge is not supported for this environment";
+      }
+      if (!isGitWorkspace) return "Squash merge is only available inside a git repository";
+      if (!currentBranch || !defaultBranch) return "Could not determine the current branch";
+      if (currentBranch === defaultBranch) {
+        return "Squash merge is only available on non-default branches";
+      }
+      if (!workStatus?.hasCommittedUnmergedChanges) {
+        return "No committed branch changes to merge";
+      }
+      return undefined;
+    })();
+
+    const promoteDisabledReason = (() => {
+      if (archivedReason) return archivedReason;
+      if (!environment) return environmentReason;
+      if (!environment.isIsolatedWorkspace() || !environment.supportsPromoteToActiveWorkspace()) {
+        return "Promotion is only available for isolated thread workspaces";
+      }
+      if (anotherThreadPromoted) {
+        return `Thread ${anotherThreadPromoted} is currently promoted in primary checkout`;
+      }
+      if (primaryCheckoutActive) {
+        return "Primary checkout is already promoted to this thread";
+      }
+      if (args.thread.status !== "idle") {
+        return "Promotion requires an idle thread";
+      }
+      return undefined;
+    })();
+
+    const demoteDisabledReason = (() => {
+      if (archivedReason) return archivedReason;
+      if (!environment) return environmentReason;
+      if (!environment.supportsDemoteFromActiveWorkspace()) {
+        return "Demotion is not supported for this environment";
+      }
+      if (!primaryCheckoutActive) {
+        return "Primary checkout is already demoted";
+      }
+      return undefined;
+    })();
+
+    return [
+      this._threadBuiltInAction("commit", {
+        label: "Commit",
+        available: commitDisabledReason === undefined,
+        disabledReason: commitDisabledReason,
+        queuesWhenActive: true,
+        requiresDemoteFirst,
+      }),
+      this._threadBuiltInAction("squash_merge", {
+        label: "Squash merge",
+        available: squashDisabledReason === undefined,
+        disabledReason: squashDisabledReason,
+        queuesWhenActive: true,
+        requiresDemoteFirst,
+      }),
+      this._threadBuiltInAction("promote", {
+        label: "Promote",
+        available: promoteDisabledReason === undefined,
+        disabledReason: promoteDisabledReason,
+        queuesWhenActive: false,
+        requiresDemoteFirst: false,
+      }),
+      this._threadBuiltInAction("demote", {
+        label: "Demote",
+        available: demoteDisabledReason === undefined,
+        disabledReason: demoteDisabledReason,
+        queuesWhenActive: false,
+        requiresDemoteFirst: false,
+      }),
+    ];
+  }
+
+  private _getThreadBuiltInAction(
+    thread: Thread,
+    actionId: ThreadBuiltInActionId,
+  ): ThreadBuiltInAction {
+    const hydrated = this._hydrateThreadState(thread);
+    const action = hydrated.builtInActions?.find((candidate) => candidate.id === actionId);
+    if (action) return action;
+    return this._threadBuiltInAction(actionId, {
+      label: actionId,
+      available: false,
+      disabledReason: "Action is unavailable",
+      queuesWhenActive: false,
+      requiresDemoteFirst: false,
+    });
+  }
+
+  private _threadHasMeaningfulBranchWork(threadId: string): boolean {
+    const events = this.eventRepo.listByThread(threadId);
+    return events.some((event) => {
+      if (event.type === "system/worktree/commit") {
+        const data = toRecord(event.data);
+        return getStringField(data, "status") === "committed";
+      }
+      if (event.type === "system/worktree/squash_merge") {
+        const data = toRecord(event.data);
+        const status = getStringField(data, "status");
+        return status === "merged" || status === "conflict";
+      }
+      return false;
+    });
+  }
+
+  private _shouldAutoArchiveThread(args: {
+    thread: Thread;
+    projectRootPath: string;
+    environment: IEnvironment;
+    mergeBaseBranch?: string;
+    requested?: boolean;
+  }): boolean {
+    if (args.requested !== true) {
+      return false;
+    }
+
+    const defaultBranch = detectProjectDefaultBranch(args.projectRootPath);
+    const status = args.environment.getWorkspaceStatus({
+      defaultBranch,
+      mergeBaseBranch: args.mergeBaseBranch,
+    });
+    if (!status.currentBranch || !status.defaultBranch) {
+      return false;
+    }
+    if (status.currentBranch === status.defaultBranch) {
+      return false;
+    }
+
+    const hadMeaningfulBranchWork =
+      status.behindCount > 0 || this._threadHasMeaningfulBranchWork(args.thread.id);
+    if (!hadMeaningfulBranchWork) {
+      return false;
+    }
+
+    return !status.hasUncommittedChanges && !status.hasCommittedUnmergedChanges;
   }
 
   private _threadOperationRequestedMessage(operation: ThreadOperationType): string {
@@ -2998,14 +3130,24 @@ export class Orchestrator implements ThreadOrchestrator {
     thread: Thread,
     opts?: { mergeBaseBranch?: string },
   ): Thread {
+    const provisioningState = this._readProvisioningState(thread.id);
     const project = this.projectRepo.getById(thread.projectId);
-    if (!project) return thread;
+    if (!project) {
+      const hydrated: Thread = provisioningState
+        ? {
+            ...thread,
+            provisioningState,
+          }
+        : thread;
+      return this._withPrimaryCheckoutState(hydrated);
+    }
 
     const environment = this._restoreThreadEnvironment(thread, project.rootPath);
     if (!environment) {
       const hydrated: Thread = {
         ...thread,
-        provisioningState: this._readProvisioningState(thread.id),
+        builtInActions: this._buildThreadBuiltInActions({ thread }),
+        ...(provisioningState ? { provisioningState } : {}),
       };
       return this._withPrimaryCheckoutState(hydrated);
     }
@@ -3013,7 +3155,12 @@ export class Orchestrator implements ThreadOrchestrator {
       const hydrated: Thread = {
         ...thread,
         workStatus: this._buildDeletedWorkStatus(),
-        provisioningState: this._readProvisioningState(thread.id),
+        builtInActions: this._buildThreadBuiltInActions({
+          thread,
+          environment,
+          workStatus: this._buildDeletedWorkStatus(),
+        }),
+        ...(provisioningState ? { provisioningState } : {}),
       };
       return this._withPrimaryCheckoutState(hydrated);
     }
@@ -3027,7 +3174,12 @@ export class Orchestrator implements ThreadOrchestrator {
     const hydrated: Thread = {
       ...thread,
       workStatus: { ...workspaceStatus },
-      provisioningState: this._readProvisioningState(thread.id),
+      builtInActions: this._buildThreadBuiltInActions({
+        thread,
+        environment,
+        workStatus: workspaceStatus,
+      }),
+      ...(provisioningState ? { provisioningState } : {}),
     };
     return this._withPrimaryCheckoutState(hydrated);
   }
@@ -3118,27 +3270,37 @@ export class Orchestrator implements ThreadOrchestrator {
         message: "Provisioning failed",
       };
     }
-
-    const latestProvisioningCompleted = this.eventRepo.getLatestByType(
-      threadId,
-      "system/provisioning/completed",
-    );
-    if (latestProvisioningCompleted) {
-      const data = toRecord(latestProvisioningCompleted.data);
-      const fallbackReason = getStringField(data, "fallbackReason");
-      if (fallbackReason) {
-        return {
-          readiness: "degraded",
-          message: fallbackReason,
-          fallbackReason,
-        };
-      }
-      return {
-        readiness: "ready",
-      };
+    if (this.provisioningCompletionStateByThreadId.has(threadId)) {
+      return this.provisioningCompletionStateByThreadId.get(threadId) ?? undefined;
     }
-
     return undefined;
+  }
+
+  private _cacheProvisioningStateFromEvent(
+    threadId: string,
+    type: ThreadEventType,
+    data: ThreadEventData,
+  ): void {
+    if (type === "system/provisioning/completed") {
+      const eventData = toRecord(data);
+      const fallbackReason = getStringField(eventData, "fallbackReason");
+      this.provisioningCompletionStateByThreadId.set(
+        threadId,
+        fallbackReason
+          ? {
+              readiness: "degraded",
+              message: fallbackReason,
+              fallbackReason,
+            }
+          : {
+              readiness: "ready",
+            },
+      );
+      return;
+    }
+    if (type === "system/provisioning/started") {
+      this.provisioningCompletionStateByThreadId.delete(threadId);
+    }
   }
 
   private _nextEventSeq(threadId: string): number {

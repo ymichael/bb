@@ -12,7 +12,6 @@ import type {
   SpawnThreadRequest,
   SystemEnvironmentInfo,
   SystemProviderInfo,
-  SystemWorkflowInfo,
   TellThreadRequest,
   ThreadExecutionOptions,
   ThreadGitDiffResponse,
@@ -195,7 +194,6 @@ export interface ThreadOrchestrator {
   getProviderInfo(): SystemProviderInfo;
   listProviders(): SystemProviderInfo[];
   listEnvironments(): SystemEnvironmentInfo[];
-  listWorkflows(): SystemWorkflowInfo[];
   reconcileActiveThreadsOnBoot(): Promise<void>;
   stopAll(): void;
 }

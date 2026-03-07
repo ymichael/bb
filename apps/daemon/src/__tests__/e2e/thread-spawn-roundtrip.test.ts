@@ -83,7 +83,7 @@ async function waitForThreadRoundTrip(
   }
 
   throw new Error(
-    `Thread ${threadId} did not complete within ${timeoutMs}ms (status=${lastThread?.status ?? "unknown"}, workflow=${JSON.stringify(lastThread?.workflowState)}, events=${lastEvents.map((event) => normalizeEventType(event.type)).join(",")})`,
+    `Thread ${threadId} did not complete within ${timeoutMs}ms (status=${lastThread?.status ?? "unknown"}, actions=${JSON.stringify(lastThread?.builtInActions)}, events=${lastEvents.map((event) => normalizeEventType(event.type)).join(",")})`,
   );
 }
 

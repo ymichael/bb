@@ -148,6 +148,20 @@
       "when": 1772955060000,
       "tag": "0020_thread_workflow_state",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "6",
+      "when": 1773000000000,
+      "tag": "0021_project_instructions",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "6",
+      "when": 1773000060000,
+      "tag": "0022_drop_thread_workflow_columns",
+      "breakpoints": true
     }
   ]
 }

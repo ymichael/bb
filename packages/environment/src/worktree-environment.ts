@@ -55,6 +55,12 @@ const WORKTREE_ENVIRONMENT_INFO: EnvironmentInfo = {
   },
 };
 const DEFAULT_WORKTREE_ROOT = "~/.beanbag/worktrees";
+const WORKTREE_AGENT_INSTRUCTIONS = [
+  "[Beanbag worktree environment]",
+  "- You are working in an isolated per-thread git worktree on a dedicated branch.",
+  "- Commit meaningful work before reporting completion so changes are not stranded in the worktree.",
+  "- Use the primary checkout only for manual verification when needed, then demote back to the thread worktree.",
+].join("\n");
 
 function toChildEnv(
   env: Record<string, string | undefined>,
@@ -248,6 +254,10 @@ class WorktreeEnvironment implements IEnvironment {
 
   getWorkspaceRootUnsafe(): string {
     return this.rootPath;
+  }
+
+  buildAgentInstructions(): string | undefined {
+    return WORKTREE_AGENT_INSTRUCTIONS;
   }
 
   getWorkspaceStatus(args?: EnvironmentWorkspaceStatusOptions) {

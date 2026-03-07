@@ -83,7 +83,9 @@ export class EnvironmentService {
   ) {}
 
   listEnvironments(): SystemEnvironmentInfo[] {
-    return this.environmentRegistry.list().map((environment) => ({ ...environment }));
+    return this.environmentRegistry.list().map((environment: SystemEnvironmentInfo) => ({
+      ...environment,
+    }));
   }
 
   resolveRequestedEnvironmentId(value?: string): string {

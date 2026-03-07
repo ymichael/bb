@@ -97,6 +97,11 @@ function createTestEnvironmentRegistry(args: {
           serialize() {
             return { rootPath: args.rootPath };
           },
+          buildAgentInstructions() {
+            return kind === "worktree"
+              ? "[Beanbag worktree environment]"
+              : undefined;
+          },
           promoteToActiveWorkspace() {
             throw new Error("not implemented in test environment");
           },
@@ -125,6 +130,10 @@ function makeRuntimeEnvironment(args: {
   overrides?: Partial<IEnvironment>;
 }): IEnvironment {
   const kind = args.kind ?? "worktree";
+  const {
+    buildAgentInstructions: overrideBuildAgentInstructions,
+    ...overrides
+  } = args.overrides ?? {};
   const info: SystemEnvironmentInfo = {
     id: kind,
     displayName: kind === "worktree" ? "Git Worktree Workspace" : "Direct Workspace",
@@ -215,7 +224,8 @@ function makeRuntimeEnvironment(args: {
       throw new Error("not implemented");
     },
     run: vi.fn(),
-    ...args.overrides,
+    ...overrides,
+    buildAgentInstructions: overrideBuildAgentInstructions ?? (() => undefined),
   };
 }
 
@@ -494,15 +504,12 @@ function createFakeChildProcess(opts?: { autoRespond?: boolean }): FakeChildProc
 }
 
 function makeThread(overrides: Partial<Thread> = {}): Thread {
-  const workflowId = overrides.workflowId ??
-    (overrides.environmentId === "worktree" ? "branch-commit-merge" : undefined);
   return {
     id: "thread-1",
     projectId: "proj-1",
     status: "active",
     createdAt: 1000,
     updatedAt: 1000,
-    ...(workflowId ? { workflowId } : {}),
     ...overrides,
   };
 }
@@ -869,12 +876,6 @@ describe("Orchestrator", () => {
       expect(threadRepo.create).toHaveBeenCalledWith({
         projectId: "proj-1",
         environmentId: "local",
-        workflowId: "noop",
-        workflowState: {
-          phase: "preparing",
-          summary: "Preparing workflow",
-          terminal: false,
-        },
       });
     });
 
@@ -1213,7 +1214,7 @@ describe("Orchestrator", () => {
         rootPath: "/test",
         createdAt: 1000,
         updatedAt: 1000,
-        workflowInstructions: "[project workflow] keep CI green",
+        projectInstructions: "[project instructions] keep CI green",
       };
       (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(project);
 
@@ -1241,13 +1242,13 @@ describe("Orchestrator", () => {
       });
       const startMsg = findRpcMessageByMethod(fakeChild._stdinData, "thread/start");
       expect(startMsg.params.baseInstructions).toContain(
-        "[project workflow] keep CI green",
+        "[project instructions] keep CI green",
       );
       expect(startMsg.params.baseInstructions).toContain(
         "[request instructions] add tests",
       );
       expect(startMsg.params.baseInstructions).toContain(
-        "[Beanbag branch-commit-merge workflow]",
+        "[Beanbag worktree environment]",
       );
     });
 
@@ -1269,12 +1270,6 @@ describe("Orchestrator", () => {
       expect(threadRepo.create).toHaveBeenCalledWith({
         projectId: "proj-1",
         environmentId: "local",
-        workflowId: "noop",
-        workflowState: {
-          phase: "preparing",
-          summary: "Preparing workflow",
-          terminal: false,
-        },
       });
     });
 

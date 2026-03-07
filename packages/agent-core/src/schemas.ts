@@ -33,7 +33,6 @@ export const spawnThreadSchema = z.object({
     .enum(["read-only", "workspace-write", "danger-full-access"])
     .optional(),
   environmentId: z.string().min(1).optional(),
-  workflowId: z.enum(["noop", "branch-commit-merge"]).optional(),
   developerInstructions: z.string().optional(),
   parentThreadId: z.string().optional(),
 });
@@ -78,13 +77,13 @@ export const updateProjectSchema = z
   .object({
     name: z.string().optional(),
     rootPath: z.string().optional(),
-    workflowInstructions: z.string().optional(),
+    projectInstructions: z.string().optional(),
   })
   .refine(
     (value) =>
       value.name !== undefined ||
       value.rootPath !== undefined ||
-      value.workflowInstructions !== undefined,
+      value.projectInstructions !== undefined,
     "At least one field must be provided",
   );
 

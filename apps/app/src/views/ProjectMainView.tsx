@@ -58,14 +58,11 @@ export function ProjectMainView() {
     setSandboxMode,
     environmentId,
     setEnvironmentId,
-    workflowId,
-    setWorkflowId,
     activeModel,
     modelOptions,
     reasoningOptions,
     sandboxOptions,
     environmentOptions,
-    workflowOptions,
   } = usePromptModelReasoning({ scope: "new-thread", projectId });
   const environmentSelectorOptions = useMemo(
     () =>
@@ -199,7 +196,6 @@ export function ProjectMainView() {
         reasoningLevel,
         sandboxMode,
         environmentId,
-        workflowId,
       });
       promptDraft.clear();
       setAttachmentError(null);
@@ -277,14 +273,7 @@ export function ProjectMainView() {
               options={environmentSelectorOptions}
               onChange={setEnvironmentId}
             />
-            <PromptOptionPicker
-              label="Workflow"
-              value={workflowId}
-              options={workflowOptions}
-              onChange={setWorkflowId}
-            />
             {!threadsLoading &&
-            workflowId === "noop" &&
             selectedEnvironment?.capabilities.host_filesystem === true &&
             selectedEnvironment.capabilities.isolated_workspace === false ? (
               <div className="flex items-center">
@@ -313,7 +302,6 @@ export function ProjectMainView() {
                       reasoningLevel,
                       sandboxMode,
                       environmentId,
-                      workflowId: "noop",
                       title: "Commit workspace changes",
                     });
                     navigate(`/projects/${projectId}/threads/${thread.id}`);

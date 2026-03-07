@@ -10,7 +10,7 @@ export const projects = sqliteTable("projects", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
   rootPath: text("root_path").notNull(),
-  workflowInstructions: text("workflow_instructions"),
+  projectInstructions: text("project_instructions"),
   createdAt: integer("created_at").notNull(),
   updatedAt: integer("updated_at").notNull(),
 });
@@ -26,8 +26,6 @@ export const threads = sqliteTable(
     status: text("status").notNull().default("created"),
     environmentId: text("environment_id"),
     environmentRecord: text("environment_record"),
-    workflowId: text("workflow_id"),
-    workflowState: text("workflow_state"),
     parentThreadId: text("parent_thread_id"),
     archivedAt: integer("archived_at"),
     lastReadAt: integer("last_read_at").notNull().default(0),

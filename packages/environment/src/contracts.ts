@@ -64,6 +64,7 @@ export interface IEnvironment {
   isIsolatedWorkspace(): boolean;
   getCheckoutSnapshot(): EnvironmentCheckoutSnapshot;
   getWorkspaceRootUnsafe(): string;
+  buildAgentInstructions?(): string | undefined;
   getWorkspaceStatus(args?: EnvironmentWorkspaceStatusOptions): EnvironmentWorkStatus;
   watchWorkspaceStatus(onChange: () => void): () => void;
   commitWorkspace(args: EnvironmentWorkspaceCommitOptions): Promise<EnvironmentWorkspaceCommitResult>;

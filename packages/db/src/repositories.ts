@@ -21,13 +21,11 @@ import type {
   Thread,
   ThreadQueuedMessage,
   ThreadStatus,
-  ThreadWorkflowState,
   ThreadEvent,
   ThreadEventData,
   ThreadEventType,
   ThreadExecutionOptions,
   PersistedThreadEventData,
-  WorkflowKind,
 } from "@beanbag/agent-core";
 import {
   extractProviderThreadIdFromPersistedEventData,
@@ -221,11 +219,6 @@ function parseQueuedPromptInput(rawInput: string): PromptInput[] {
   return validationResult.data;
 }
 
-function parseWorkflowState(rawState: string | null): ThreadWorkflowState | undefined {
-  if (!rawState) return undefined;
-  return JSON.parse(rawState) as ThreadWorkflowState;
-}
-
 function toReasoningLevel(value: string): ReasoningLevel {
   if (
     value === "low" ||
@@ -261,19 +254,19 @@ export class ProjectRepository {
       id: row.id,
       name: row.name,
       rootPath: row.rootPath,
-      workflowInstructions: row.workflowInstructions ?? undefined,
+      projectInstructions: row.projectInstructions ?? undefined,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
     };
   }
 
-  create(data: { name: string; rootPath: string; workflowInstructions?: string }): Project {
+  create(data: { name: string; rootPath: string; projectInstructions?: string }): Project {
     const now = Date.now();
     const row = {
       id: nanoid(),
       name: data.name,
       rootPath: data.rootPath,
-      workflowInstructions: data.workflowInstructions ?? null,
+      projectInstructions: data.projectInstructions ?? null,
       createdAt: now,
       updatedAt: now,
     };
@@ -294,7 +287,7 @@ export class ProjectRepository {
 
   update(
     id: string,
-    data: { name?: string; rootPath?: string; workflowInstructions?: string },
+    data: { name?: string; rootPath?: string; projectInstructions?: string },
   ): Project | undefined {
     const existing = this.db.select().from(projects).where(eq(projects.id, id)).get();
     if (!existing) return undefined;
@@ -302,8 +295,8 @@ export class ProjectRepository {
     const updates: Record<string, unknown> = { updatedAt: Date.now() };
     if (data.name !== undefined) updates.name = data.name;
     if (data.rootPath !== undefined) updates.rootPath = data.rootPath;
-    if (data.workflowInstructions !== undefined) {
-      updates.workflowInstructions = data.workflowInstructions;
+    if (data.projectInstructions !== undefined) {
+      updates.projectInstructions = data.projectInstructions;
     }
 
     this.db.update(projects).set(updates).where(eq(projects.id, id)).run();
@@ -328,8 +321,6 @@ export class ThreadRepository {
     title?: string;
     environmentId?: string;
     environmentRecord?: PersistedEnvironmentRecord;
-    workflowId?: WorkflowKind;
-    workflowState?: ThreadWorkflowState;
     parentThreadId?: string;
   }): Thread {
     const now = Date.now();
@@ -342,8 +333,6 @@ export class ThreadRepository {
       environmentRecord: data.environmentRecord
         ? JSON.stringify(data.environmentRecord)
         : null,
-      workflowId: data.workflowId ?? null,
-      workflowState: data.workflowState ? JSON.stringify(data.workflowState) : null,
       parentThreadId: data.parentThreadId ?? null,
       archivedAt: null,
       lastReadAt: now,
@@ -402,8 +391,6 @@ export class ThreadRepository {
       title?: string;
       environmentId?: string | null;
       environmentRecord?: PersistedEnvironmentRecord | null;
-      workflowId?: WorkflowKind | null;
-      workflowState?: ThreadWorkflowState | null;
       archivedAt?: number | null;
       lastReadAt?: number;
     },
@@ -428,12 +415,6 @@ export class ThreadRepository {
     if (data.environmentRecord !== undefined) {
       updates.environmentRecord = data.environmentRecord
         ? JSON.stringify(data.environmentRecord)
-        : null;
-    }
-    if (data.workflowId !== undefined) updates.workflowId = data.workflowId;
-    if (data.workflowState !== undefined) {
-      updates.workflowState = data.workflowState
-        ? JSON.stringify(data.workflowState)
         : null;
     }
     if (data.archivedAt !== undefined) updates.archivedAt = data.archivedAt;
@@ -553,8 +534,6 @@ export class ThreadRepository {
       status: normalizeThreadStatus(row.status),
       environmentId: row.environmentId ?? undefined,
       environmentRecord: parseEnvironmentRecord(row.environmentRecord),
-      workflowId: (row.workflowId as WorkflowKind | null) ?? undefined,
-      workflowState: parseWorkflowState(row.workflowState),
       queuedMessages,
       parentThreadId: row.parentThreadId ?? undefined,
       archivedAt: row.archivedAt ?? undefined,

@@ -182,11 +182,11 @@ export function createProjectRoutes(
     .patch("/:id", zValidator("json", updateProjectSchema), async (c) => {
       try {
         const projectId = c.req.param("id");
-        const { name, rootPath, workflowInstructions } = c.req.valid("json");
+        const { name, rootPath, projectInstructions } = c.req.valid("json");
         const updated = projectRepo.update(projectId, {
           name,
           rootPath,
-          workflowInstructions,
+          projectInstructions,
         });
         if (!updated) {
           return c.json({ error: "Project not found" }, 404);
