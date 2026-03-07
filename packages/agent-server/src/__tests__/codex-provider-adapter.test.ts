@@ -259,6 +259,48 @@ describe("codex provider adapter", () => {
     });
   });
 
+  it("maps service tier overrides to Codex thread, resume, and turn params", () => {
+    const adapter = createCodexProviderAdapter();
+
+    expect(
+      adapter.createThreadStartParams(
+        {
+          projectId: "proj-1",
+          serviceTier: "fast",
+        },
+        {
+          projectId: "proj-1",
+          threadId: "thread-1",
+        },
+      ),
+    ).toMatchObject({
+      service_tier: "fast",
+    });
+
+    expect(
+      adapter.createThreadResumeParams(
+        "provider-thread-1",
+        {
+          projectId: "proj-1",
+          threadId: "thread-1",
+        },
+        { serviceTier: "fast" },
+      ),
+    ).toMatchObject({
+      service_tier: "fast",
+    });
+
+    expect(
+      adapter.createTurnStartParams(
+        "provider-thread-1",
+        [{ type: "text", text: "Continue" }],
+        { serviceTier: "fast" },
+      ),
+    ).toMatchObject({
+      service_tier: "fast",
+    });
+  });
+
   it("merges reasoning config with thread env config", () => {
     const adapter = createCodexProviderAdapter();
 

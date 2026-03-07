@@ -337,6 +337,7 @@ describe("System routes", () => {
           supportsRename: true,
           supportsModelList: true,
           supportsReasoningLevels: true,
+          supportsServiceTier: true,
           supportsMultimodalInput: true,
         },
       };
@@ -365,6 +366,7 @@ describe("System routes", () => {
           supportsRename: true,
           supportsModelList: true,
           supportsReasoningLevels: true,
+          supportsServiceTier: true,
           supportsMultimodalInput: true,
         },
       };
@@ -391,6 +393,7 @@ describe("System routes", () => {
             supportsRename: true,
             supportsModelList: true,
             supportsReasoningLevels: true,
+            supportsServiceTier: true,
             supportsMultimodalInput: true,
           },
         },
@@ -402,6 +405,7 @@ describe("System routes", () => {
             supportsRename: true,
             supportsModelList: false,
             supportsReasoningLevels: false,
+            supportsServiceTier: false,
             supportsMultimodalInput: true,
           },
         },

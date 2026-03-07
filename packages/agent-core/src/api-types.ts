@@ -2,6 +2,7 @@ import type {
   PromptInput,
   ReasoningLevel,
   SandboxMode,
+  ServiceTier,
 } from "./shared-types.js";
 import type { ThreadDetailRow } from "./thread-detail-rows.js";
 import type { UIMessage } from "./ui-message.js";
@@ -17,6 +18,7 @@ export type {
   PromptInput,
   ReasoningLevel,
   SandboxMode,
+  ServiceTier,
 } from "./shared-types.js";
 export type {
   EnvironmentCapabilities,
@@ -45,6 +47,7 @@ export interface SpawnThreadRequest {
   title?: string;
   input?: PromptInput[];
   model?: string;
+  serviceTier?: ServiceTier;
   reasoningLevel?: ReasoningLevel;
   sandboxMode?: SandboxMode;
   environmentId?: string;
@@ -57,6 +60,7 @@ export type TellThreadMode = "auto" | "start" | "steer";
 export interface TellThreadRequest {
   input: PromptInput[];
   model?: string;
+  serviceTier?: ServiceTier;
   reasoningLevel?: ReasoningLevel;
   sandboxMode?: SandboxMode;
   mode?: TellThreadMode;
@@ -66,6 +70,7 @@ export interface TellThreadRequest {
 export interface EnqueueThreadMessageRequest {
   input: PromptInput[];
   model?: string;
+  serviceTier?: ServiceTier;
   reasoningLevel?: ReasoningLevel;
   sandboxMode?: SandboxMode;
 }
@@ -85,6 +90,7 @@ export interface UpdateThreadRequest {
 
 export interface ThreadExecutionOptions {
   model?: string;
+  serviceTier?: ServiceTier;
   reasoningLevel?: ReasoningLevel;
   sandboxMode?: SandboxMode;
   approvalPolicy?: string;
@@ -296,6 +302,7 @@ export interface ProviderCapabilities {
   supportsRename: boolean;
   supportsModelList: boolean;
   supportsReasoningLevels: boolean;
+  supportsServiceTier: boolean;
   supportsMultimodalInput: boolean;
 }
 

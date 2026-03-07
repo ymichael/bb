@@ -3,6 +3,7 @@ import { FolderGit2, Laptop } from "lucide-react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { buildThreadOperationInstruction } from "@beanbag/agent-core";
 import { PromptBox } from "@/components/promptbox/PromptBox";
+import { PromptModelPicker } from "@/components/promptbox/PromptModelPicker";
 import { PromptOptionPicker } from "@/components/promptbox/PromptOptionPicker";
 import { PageShell } from "@/components/layout/PageShell";
 import { type StatusPillVariant } from "@/components/shared/StatusPill";
@@ -52,6 +53,8 @@ export function ProjectMainView() {
   const {
     selectedModel,
     setSelectedModel,
+    serviceTier,
+    setServiceTier,
     reasoningLevel,
     setReasoningLevel,
     sandboxMode,
@@ -63,6 +66,7 @@ export function ProjectMainView() {
     reasoningOptions,
     sandboxOptions,
     environmentOptions,
+    supportsServiceTier,
   } = usePromptModelReasoning({ scope: "new-thread", projectId });
   const environmentSelectorOptions = useMemo(
     () =>
@@ -193,6 +197,7 @@ export function ProjectMainView() {
         input: promptInput,
         projectId,
         model: activeModel?.model,
+        serviceTier,
         reasoningLevel,
         sandboxMode,
         environmentId,
@@ -244,11 +249,13 @@ export function ProjectMainView() {
           attachmentError={attachmentError}
           footerStart={
             <>
-              <PromptOptionPicker
-                label="Model"
+              <PromptModelPicker
                 value={activeModel?.model ?? selectedModel}
                 options={modelOptions}
                 onChange={setSelectedModel}
+                fastModeEnabled={serviceTier === "fast"}
+                onFastModeChange={(enabled) => setServiceTier(enabled ? "fast" : undefined)}
+                showFastModeToggle={supportsServiceTier}
               />
               <PromptOptionPicker
                 label="Reasoning"

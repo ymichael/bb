@@ -213,6 +213,28 @@ describe("Thread routes", () => {
       });
     });
 
+    it("forwards service tier when provided", async () => {
+      const thread = makeThread({ id: "new-thread" });
+      (threadManager.spawn as ReturnType<typeof vi.fn>).mockResolvedValue(thread);
+
+      const res = await app.request("/threads", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          projectId: "proj-1",
+          input: [{ type: "text", text: "Do work" }],
+          serviceTier: "fast",
+        }),
+      });
+
+      expect(res.status).toBe(201);
+      expect(threadManager.spawn).toHaveBeenCalledWith({
+        projectId: "proj-1",
+        input: [{ type: "text", text: "Do work" }],
+        serviceTier: "fast",
+      });
+    });
+
     it("returns 400 for invalid body", async () => {
       const res = await app.request("/threads", {
         method: "POST",
@@ -326,6 +348,7 @@ describe("Thread routes", () => {
       );
       (threadManager.getDefaultExecutionOptions as ReturnType<typeof vi.fn>).mockReturnValue({
         model: "gpt-5-codex",
+        serviceTier: "fast",
         reasoningLevel: "high",
         sandboxMode: "workspace-write",
         source: "client/turn/start",
@@ -336,6 +359,7 @@ describe("Thread routes", () => {
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual({
         model: "gpt-5-codex",
+        serviceTier: "fast",
         reasoningLevel: "high",
         sandboxMode: "workspace-write",
         source: "client/turn/start",
@@ -430,6 +454,27 @@ describe("Thread routes", () => {
         "thread-1",
         { input: [{ type: "text", text: "Do more stuff" }] },
         { model: "gpt-5-codex", reasoningLevel: "high" },
+      );
+    });
+
+    it("forwards service tier override when provided", async () => {
+      const thread = makeThread();
+      (threadManager.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
+
+      const res = await app.request("/threads/thread-1/tell", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          input: [{ type: "text", text: "Do more stuff" }],
+          serviceTier: "fast",
+        }),
+      });
+
+      expect(res.status).toBe(200);
+      expect(threadManager.tell).toHaveBeenCalledWith(
+        "thread-1",
+        { input: [{ type: "text", text: "Do more stuff" }] },
+        expect.objectContaining({ serviceTier: "fast" }),
       );
     });
 

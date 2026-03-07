@@ -73,6 +73,7 @@ export type {
   AvailableModel,
   ReasoningLevel,
   SandboxMode,
+  ServiceTier,
   TellThreadMode,
   ThreadExecutionOptions,
   SystemStatus,

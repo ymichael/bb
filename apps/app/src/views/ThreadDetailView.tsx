@@ -54,6 +54,7 @@ import {
 } from "@/components/messages/CollapsibleHeader";
 import { ConversationWorkingIndicator } from "@/components/messages/ConversationWorkingIndicator";
 import { PromptBox } from "@/components/promptbox/PromptBox";
+import { PromptModelPicker } from "@/components/promptbox/PromptModelPicker";
 import { PromptOptionPicker } from "@/components/promptbox/PromptOptionPicker";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -83,6 +84,7 @@ import {
   formatEnvironmentDisplayName,
   toRecord,
   type PromptInput,
+  type ServiceTier,
   type ThreadQueuedMessage,
   type UIMessage,
 } from "@beanbag/agent-core";
@@ -864,6 +866,8 @@ export function ThreadDetailView() {
   const {
     selectedModel,
     setSelectedModel,
+    serviceTier,
+    setServiceTier,
     reasoningLevel,
     setReasoningLevel,
     sandboxMode,
@@ -874,9 +878,11 @@ export function ThreadDetailView() {
     sandboxOptions,
     supportsModelList,
     supportsReasoningLevels,
+    supportsServiceTier,
   } = usePromptModelReasoning({
     scope: "thread",
     initialModel: defaultExecutionOptions?.model,
+    initialServiceTier: defaultExecutionOptions?.serviceTier,
     initialReasoningLevel: defaultExecutionOptions?.reasoningLevel,
     initialSandboxMode: defaultExecutionOptions?.sandboxMode,
     initialEnvironmentId: thread?.environmentId,
@@ -1594,12 +1600,14 @@ export function ThreadDetailView() {
       input,
       mode,
       model,
+      serviceTier: executionServiceTier,
       reasoningLevel: executionReasoningLevel,
       sandboxMode: executionSandboxMode,
     }: {
       input: PromptInput[];
       mode?: "auto" | "steer";
       model?: string;
+      serviceTier?: ServiceTier;
       reasoningLevel?: "low" | "medium" | "high" | "xhigh";
       sandboxMode?: "read-only" | "workspace-write" | "danger-full-access";
     }) => {
@@ -1618,6 +1626,7 @@ export function ThreadDetailView() {
           ? {}
           : {
               ...(model ? { model } : {}),
+              ...(executionServiceTier ? { serviceTier: executionServiceTier } : {}),
               ...(executionReasoningLevel ? { reasoningLevel: executionReasoningLevel } : {}),
               ...(executionSandboxMode ? { sandboxMode: executionSandboxMode } : {}),
             }),
@@ -1781,6 +1790,7 @@ export function ThreadDetailView() {
           id: thread.id,
           input: promptInput,
           model: activeModel?.model ?? selectedModel,
+          serviceTier,
           reasoningLevel,
           sandboxMode,
         });
@@ -1796,6 +1806,7 @@ export function ThreadDetailView() {
       await sendFollowUpInput({
         input: promptInput,
         model: activeModel?.model ?? selectedModel,
+        serviceTier,
         reasoningLevel,
         sandboxMode,
       });
@@ -2217,11 +2228,13 @@ export function ThreadDetailView() {
               footerStart={
                 <>
                   {supportsModelList ? (
-                    <PromptOptionPicker
-                      label="Model"
+                    <PromptModelPicker
                       value={activeModel?.model ?? selectedModel}
                       options={modelOptions}
                       onChange={setSelectedModel}
+                      fastModeEnabled={serviceTier === "fast"}
+                      onFastModeChange={(enabled) => setServiceTier(enabled ? "fast" : undefined)}
+                      showFastModeToggle={supportsServiceTier}
                     />
                   ) : null}
                   {supportsReasoningLevels ? (

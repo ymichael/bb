@@ -62,6 +62,9 @@ function withExecutionOptions(
   if (options.model) {
     nextParams.model = options.model;
   }
+  if (options.serviceTier) {
+    nextParams.service_tier = options.serviceTier;
+  }
   if (options.reasoningLevel) {
     return withConfigValues(nextParams, {
       model_reasoning_effort: options.reasoningLevel,
@@ -190,6 +193,7 @@ export function createCodexProviderAdapter(
     supportsRename: true,
     supportsModelList: true,
     supportsReasoningLevels: true,
+    supportsServiceTier: true,
     supportsMultimodalInput: true,
     ...(opts?.capabilities ?? {}),
   };

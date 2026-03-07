@@ -4,6 +4,7 @@ import type {
   AvailableModel,
   ReasoningLevel,
   SandboxMode,
+  ServiceTier,
   SystemEnvironmentInfo,
 } from "@beanbag/agent-core";
 import { getProjectScopedStorageKey } from "@/lib/project-scoped-storage";
@@ -14,6 +15,7 @@ import {
 } from "./useApi";
 
 const MODEL_STORAGE_KEY = "beanbag.promptbox.model";
+const SERVICE_TIER_STORAGE_KEY = "beanbag.promptbox.service-tier";
 const REASONING_STORAGE_KEY = "beanbag.promptbox.reasoning";
 const SANDBOX_STORAGE_KEY = "beanbag.promptbox.sandbox";
 const ENVIRONMENT_STORAGE_KEY = "beanbag.promptbox.environment";
@@ -79,6 +81,7 @@ interface PromptOption<T extends string> {
 
 interface PromptModelReasoningStorageKeys {
   model: string;
+  serviceTier: string;
   reasoning: string;
   sandbox: string;
   environment: string;
@@ -88,6 +91,7 @@ interface UsePromptModelReasoningOptions {
   scope?: "new-thread" | "thread";
   projectId?: string | null;
   initialModel?: string;
+  initialServiceTier?: ServiceTier;
   initialReasoningLevel?: ReasoningLevel;
   initialSandboxMode?: SandboxMode;
   initialEnvironmentId?: string;
@@ -105,11 +109,16 @@ function isSandboxMode(value: unknown): value is SandboxMode {
   );
 }
 
+function isServiceTier(value: unknown): value is ServiceTier {
+  return value === "fast" || value === "flex";
+}
+
 function getPromptModelReasoningStorageKeys(
   projectId?: string | null,
 ): PromptModelReasoningStorageKeys {
   return {
     model: getProjectScopedStorageKey(MODEL_STORAGE_KEY, projectId),
+    serviceTier: getProjectScopedStorageKey(SERVICE_TIER_STORAGE_KEY, projectId),
     reasoning: getProjectScopedStorageKey(REASONING_STORAGE_KEY, projectId),
     sandbox: getProjectScopedStorageKey(SANDBOX_STORAGE_KEY, projectId),
     environment: getProjectScopedStorageKey(ENVIRONMENT_STORAGE_KEY, projectId),
@@ -144,6 +153,14 @@ function getStoredReasoningLevel(
 ): ReasoningLevel {
   const raw = readStoredString(storageKeys.reasoning, fallbackStorageKeys?.reasoning);
   return isReasoningLevel(raw) ? raw : "medium";
+}
+
+function getStoredServiceTier(
+  storageKeys: PromptModelReasoningStorageKeys,
+  fallbackStorageKeys?: PromptModelReasoningStorageKeys,
+): ServiceTier | undefined {
+  const raw = readStoredString(storageKeys.serviceTier, fallbackStorageKeys?.serviceTier);
+  return isServiceTier(raw) ? raw : undefined;
 }
 
 function getStoredSandboxMode(
@@ -206,11 +223,18 @@ export function usePromptModelReasoning(options?: UsePromptModelReasoningOptions
   const supportsModelList = providerInfoQuery.data?.capabilities.supportsModelList ?? true;
   const supportsReasoningLevels =
     providerInfoQuery.data?.capabilities.supportsReasoningLevels ?? true;
+  const supportsServiceTier =
+    providerInfoQuery.data?.capabilities.supportsServiceTier ?? false;
 
   const [selectedModel, setSelectedModel] = useState<string>(() =>
     scope === "new-thread"
       ? getStoredModel(storageKeys, fallbackStorageKeys)
       : (options?.initialModel ?? ""),
+  );
+  const [serviceTier, setServiceTier] = useState<ServiceTier | undefined>(() =>
+    scope === "new-thread"
+      ? getStoredServiceTier(storageKeys, fallbackStorageKeys)
+      : options?.initialServiceTier,
   );
   const [reasoningLevel, setReasoningLevel] = useState<ReasoningLevel>(() =>
     scope === "new-thread"
@@ -291,7 +315,6 @@ export function usePromptModelReasoning(options?: UsePromptModelReasoningOptions
     () => toEnvironmentOptions(environmentsQuery.data),
     [environmentsQuery.data],
   );
-
   useEffect(() => {
     if (availableModels.length === 0) return;
     if (availableModels.some((model) => model.model === selectedModel)) return;
@@ -300,6 +323,13 @@ export function usePromptModelReasoning(options?: UsePromptModelReasoningOptions
       availableModels.find((model) => model.isDefault)?.model ?? availableModels[0].model;
     setSelectedModel(fallbackModel);
   }, [availableModels, selectedModel]);
+
+  useEffect(() => {
+    if (supportsServiceTier) return;
+    if (serviceTier !== undefined) {
+      setServiceTier(undefined);
+    }
+  }, [serviceTier, supportsServiceTier]);
 
   useEffect(() => {
     if (!supportsReasoningLevels && reasoningLevel !== "medium") {
@@ -324,6 +354,7 @@ export function usePromptModelReasoning(options?: UsePromptModelReasoningOptions
     }
 
     setSelectedModel(getStoredModel(storageKeys, fallbackStorageKeys));
+    setServiceTier(getStoredServiceTier(storageKeys, fallbackStorageKeys));
     setReasoningLevel(getStoredReasoningLevel(storageKeys, fallbackStorageKeys));
     setSandboxMode(getStoredSandboxMode(storageKeys, fallbackStorageKeys));
     setEnvironmentId(getStoredEnvironmentId(storageKeys, fallbackStorageKeys));
@@ -336,6 +367,11 @@ export function usePromptModelReasoning(options?: UsePromptModelReasoningOptions
       setSelectedModel(options.initialModel);
     }
   }, [options?.initialModel, scope]);
+
+  useEffect(() => {
+    if (scope !== "thread") return;
+    setServiceTier(options?.initialServiceTier);
+  }, [options?.initialServiceTier, scope]);
 
   useEffect(() => {
     if (scope !== "thread") return;
@@ -369,6 +405,17 @@ export function usePromptModelReasoning(options?: UsePromptModelReasoningOptions
     if (scope !== "new-thread") return;
     if (hydratedStorageKey !== storageKeys.model) return;
     if (typeof window === "undefined") return;
+    if (serviceTier) {
+      window.localStorage.setItem(storageKeys.serviceTier, serviceTier);
+      return;
+    }
+    window.localStorage.removeItem(storageKeys.serviceTier);
+  }, [hydratedStorageKey, scope, serviceTier, storageKeys.model, storageKeys.serviceTier]);
+
+  useEffect(() => {
+    if (scope !== "new-thread") return;
+    if (hydratedStorageKey !== storageKeys.model) return;
+    if (typeof window === "undefined") return;
     window.localStorage.setItem(storageKeys.reasoning, reasoningLevel);
   }, [hydratedStorageKey, reasoningLevel, scope, storageKeys.model, storageKeys.reasoning]);
 
@@ -389,6 +436,8 @@ export function usePromptModelReasoning(options?: UsePromptModelReasoningOptions
   return {
     selectedModel,
     setSelectedModel,
+    serviceTier,
+    setServiceTier,
     reasoningLevel,
     setReasoningLevel,
     sandboxMode,
@@ -402,5 +451,6 @@ export function usePromptModelReasoning(options?: UsePromptModelReasoningOptions
     environmentOptions,
     supportsModelList,
     supportsReasoningLevels,
+    supportsServiceTier,
   };
 }

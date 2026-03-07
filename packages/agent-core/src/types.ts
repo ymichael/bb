@@ -6,6 +6,7 @@ import type {
   PromptInput,
   ReasoningLevel,
   SandboxMode,
+  ServiceTier,
 } from "./shared-types.js";
 
 // Project
@@ -55,6 +56,7 @@ export interface ThreadQueuedMessage {
   id: string;
   input: PromptInput[];
   model?: string;
+  serviceTier?: ServiceTier;
   reasoningLevel: ReasoningLevel;
   sandboxMode: SandboxMode;
   createdAt: number;
@@ -167,6 +169,7 @@ export type ThreadTurnInitiator = "user" | "agent" | "system";
 
 export interface ClientExecutionOptionsSnapshot {
   model?: string;
+  serviceTier?: ServiceTier;
   reasoningLevel?: ReasoningLevel;
   sandboxMode?: SandboxMode;
   approvalPolicy?: string;

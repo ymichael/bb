@@ -314,7 +314,10 @@ export class AgentServer {
     }
 
     const hasExecutionOverrides = Boolean(
-      args.options?.model || args.options?.reasoningLevel || args.options?.sandboxMode,
+      args.options?.model ||
+      args.options?.serviceTier ||
+      args.options?.reasoningLevel ||
+      args.options?.sandboxMode,
     );
     const requestedMode = args.mode ?? "auto";
     const activeTurnId = session.activeTurnId;
@@ -340,7 +343,7 @@ export class AgentServer {
       if (hasExecutionOverrides) {
         throw new AgentServerSessionError(
           "unsupported_operation",
-          "Tell mode 'steer' does not support model or reasoning overrides",
+          "Tell mode 'steer' does not support model, speed, or reasoning overrides",
         );
       }
     }

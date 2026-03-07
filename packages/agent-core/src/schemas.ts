@@ -28,6 +28,7 @@ export const spawnThreadSchema = z.object({
   title: z.string().min(1).optional(),
   input: z.array(promptInputSchema).min(1).optional(),
   model: z.string().optional(),
+  serviceTier: z.enum(["fast", "flex"]).optional(),
   reasoningLevel: z.enum(["low", "medium", "high", "xhigh"]).optional(),
   sandboxMode: z
     .enum(["read-only", "workspace-write", "danger-full-access"])
@@ -40,6 +41,7 @@ export const spawnThreadSchema = z.object({
 export const tellThreadSchema = z.object({
   input: z.array(promptInputSchema).min(1),
   model: z.string().optional(),
+  serviceTier: z.enum(["fast", "flex"]).optional(),
   reasoningLevel: z.enum(["low", "medium", "high", "xhigh"]).optional(),
   sandboxMode: z
     .enum(["read-only", "workspace-write", "danger-full-access"])
@@ -51,6 +53,7 @@ export const tellThreadSchema = z.object({
 export const enqueueThreadMessageSchema = z.object({
   input: z.array(promptInputSchema).min(1),
   model: z.string().optional(),
+  serviceTier: z.enum(["fast", "flex"]).optional(),
   reasoningLevel: z.enum(["low", "medium", "high", "xhigh"]).optional(),
   sandboxMode: z
     .enum(["read-only", "workspace-write", "danger-full-access"])

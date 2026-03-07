@@ -49,6 +49,7 @@ export const queuedThreadMessages = sqliteTable(
       .references(() => threads.id, { onDelete: "cascade" }),
     input: text("input").notNull().default("[]"),
     model: text("model"),
+    serviceTier: text("service_tier"),
     reasoningLevel: text("reasoning_level").notNull(),
     sandboxMode: text("sandbox_mode").notNull(),
     createdAt: integer("created_at").notNull(),

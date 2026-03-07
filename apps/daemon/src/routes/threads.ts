@@ -161,6 +161,7 @@ export function createThreadRoutes(
           ...(body.title ? { title: body.title } : {}),
           ...(body.input ? { input: body.input } : {}),
           ...(body.model ? { model: body.model } : {}),
+          ...(body.serviceTier ? { serviceTier: body.serviceTier } : {}),
           ...(body.reasoningLevel ? { reasoningLevel: body.reasoningLevel } : {}),
           ...(body.sandboxMode ? { sandboxMode: body.sandboxMode } : {}),
           ...(body.environmentId ? { environmentId: body.environmentId } : {}),
@@ -275,6 +276,7 @@ export function createThreadRoutes(
           const {
             input,
             model,
+            serviceTier,
             reasoningLevel,
             sandboxMode,
             mode,
@@ -294,8 +296,8 @@ export function createThreadRoutes(
           }
           const tellRequest = mode ? { input, mode } : { input };
           const options =
-            model || reasoningLevel || sandboxMode
-              ? { model, reasoningLevel, sandboxMode }
+            model || serviceTier || reasoningLevel || sandboxMode
+              ? { model, serviceTier, reasoningLevel, sandboxMode }
               : undefined;
           if (options) {
             await threadManager.tell(threadId, tellRequest, options);
@@ -314,7 +316,7 @@ export function createThreadRoutes(
       async (c) => {
         try {
           const threadId = c.req.param("id");
-          const { input, model, reasoningLevel, sandboxMode } = c.req.valid("json");
+          const { input, model, serviceTier, reasoningLevel, sandboxMode } = c.req.valid("json");
           validatePromptInputAttachments(input);
           const thread = getThreadForRouteLookup(threadManager, threadId);
           if (!thread) {
@@ -324,6 +326,7 @@ export function createThreadRoutes(
           const updatedThread = threadManager.enqueueFollowUp(threadId, {
             input,
             model,
+            serviceTier,
             reasoningLevel,
             sandboxMode,
           });

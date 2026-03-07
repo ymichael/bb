@@ -18,6 +18,7 @@ import type {
   Project,
   ReasoningLevel,
   SandboxMode,
+  ServiceTier,
   Thread,
   ThreadQueuedMessage,
   ThreadStatus,
@@ -129,6 +130,9 @@ function parseThreadExecutionOptions(
   if (!execution) return undefined;
 
   const model = getStringField(execution, "model");
+  const serviceTier = toThreadExecutionServiceTier(
+    getStringField(execution, "serviceTier"),
+  );
   const reasoningLevel = toThreadExecutionReasoningLevel(
     getStringField(execution, "reasoningLevel"),
   );
@@ -139,6 +143,7 @@ function parseThreadExecutionOptions(
 
   const hasAny =
     Boolean(model) ||
+    Boolean(serviceTier) ||
     Boolean(reasoningLevel) ||
     Boolean(sandboxMode) ||
     Boolean(approvalPolicy);
@@ -146,6 +151,7 @@ function parseThreadExecutionOptions(
 
   return {
     ...(model ? { model } : {}),
+    ...(serviceTier ? { serviceTier } : {}),
     ...(reasoningLevel ? { reasoningLevel } : {}),
     ...(sandboxMode ? { sandboxMode } : {}),
     ...(approvalPolicy ? { approvalPolicy } : {}),
@@ -165,6 +171,16 @@ function isThreadStatus(status: string): status is ThreadStatus {
 function normalizeThreadStatus(status: string): ThreadStatus {
   if (isThreadStatus(status)) return status;
   throw new Error(`Invalid persisted thread status: ${status}`);
+}
+
+function toThreadExecutionServiceTier(
+  value: string | undefined,
+): ThreadExecutionOptions["serviceTier"] | undefined {
+  if (value === undefined) return undefined;
+  if (value === "fast" || value === "flex") {
+    return value;
+  }
+  throw new Error(`Invalid persisted service tier: ${value}`);
 }
 
 function toThreadExecutionReasoningLevel(
@@ -437,6 +453,7 @@ export class ThreadRepository {
     data: {
       input: PromptInput[];
       model?: string;
+      serviceTier?: ServiceTier;
       reasoningLevel: ReasoningLevel;
       sandboxMode: SandboxMode;
     },
@@ -446,6 +463,7 @@ export class ThreadRepository {
       threadId,
       input: JSON.stringify(data.input),
       model: data.model ?? null,
+      serviceTier: data.serviceTier ?? null,
       reasoningLevel: data.reasoningLevel,
       sandboxMode: data.sandboxMode,
       createdAt: Date.now(),
@@ -576,6 +594,7 @@ export class ThreadRepository {
       id: row.id,
       input: parseQueuedPromptInput(row.input),
       model: row.model ?? undefined,
+      serviceTier: toThreadExecutionServiceTier(row.serviceTier ?? undefined),
       reasoningLevel: toReasoningLevel(row.reasoningLevel),
       sandboxMode: toSandboxMode(row.sandboxMode),
       createdAt: row.createdAt,

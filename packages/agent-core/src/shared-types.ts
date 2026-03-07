@@ -1,5 +1,7 @@
 export type ReasoningLevel = "low" | "medium" | "high" | "xhigh";
 
+export type ServiceTier = "fast" | "flex";
+
 export type SandboxMode =
   | "read-only"
   | "workspace-write"

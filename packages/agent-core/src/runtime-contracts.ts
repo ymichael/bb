@@ -20,7 +20,12 @@ import type {
   ThreadToolGroupMessagesRequest,
   ThreadToolGroupMessagesResponse,
 } from "./api-types.js";
-import type { PromptInput, ReasoningLevel, SandboxMode } from "./shared-types.js";
+import type {
+  PromptInput,
+  ReasoningLevel,
+  SandboxMode,
+  ServiceTier,
+} from "./shared-types.js";
 import type {
   Thread,
   ThreadEnvironmentStartReason,
@@ -31,6 +36,7 @@ import type {
 
 export interface ProviderExecutionOptions {
   model?: string;
+  serviceTier?: ServiceTier;
   reasoningLevel?: ReasoningLevel;
   sandboxMode?: SandboxMode;
 }

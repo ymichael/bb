@@ -3572,7 +3572,7 @@ describe("Orchestrator", () => {
           },
         ),
       ).rejects.toThrow(
-        "Tell mode 'steer' does not support model or reasoning overrides",
+        "Tell mode 'steer' does not support model, speed, or reasoning overrides",
       );
     });
 

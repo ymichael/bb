@@ -26,6 +26,7 @@ import {
   type ProviderExecutionOptions,
   type ProviderThreadContext,
   type SchedulerService,
+  type ServiceTier,
   type SystemProviderInfo,
   type SystemEnvironmentInfo,
   type ThreadOrchestrator,
@@ -305,6 +306,15 @@ function toReasoningLevel(
   return undefined;
 }
 
+function toServiceTier(
+  value: unknown,
+): ThreadExecutionOptions["serviceTier"] | undefined {
+  if (value === "fast" || value === "flex") {
+    return value;
+  }
+  return undefined;
+}
+
 function toSandboxMode(
   value: unknown,
 ): ThreadExecutionOptions["sandboxMode"] | undefined {
@@ -366,6 +376,19 @@ function normalizeQueuedReasoningLevel(
   value: ReasoningLevel | undefined,
 ): ReasoningLevel {
   return value ?? "medium";
+}
+
+function normalizeQueuedServiceTier(
+  value: ServiceTier | undefined,
+): ServiceTier | undefined {
+  if (value === undefined) return undefined;
+  switch (value) {
+    case "fast":
+    case "flex":
+      return value;
+    default:
+      return assertNever(value);
+  }
 }
 
 function normalizeQueuedSandboxMode(
@@ -778,6 +801,9 @@ export class Orchestrator implements ThreadOrchestrator {
     this.threadRepo.enqueueQueuedMessage(threadId, {
       input: request.input,
       model: request.model ?? defaultOptions?.model,
+      serviceTier: normalizeQueuedServiceTier(
+        request.serviceTier ?? defaultOptions?.serviceTier,
+      ),
       reasoningLevel: normalizeQueuedReasoningLevel(
         request.reasoningLevel ?? defaultOptions?.reasoningLevel,
       ),
@@ -896,6 +922,7 @@ export class Orchestrator implements ThreadOrchestrator {
           projectId: thread.projectId,
           input: requestedInput,
           model: options?.model,
+          serviceTier: options?.serviceTier,
           reasoningLevel: options?.reasoningLevel,
           sandboxMode: options?.sandboxMode,
           environmentId: thread.environmentId,
@@ -955,6 +982,9 @@ export class Orchestrator implements ThreadOrchestrator {
         ? undefined
         : {
             ...(queuedMessage.model ? { model: queuedMessage.model } : {}),
+            ...(queuedMessage.serviceTier
+              ? { serviceTier: queuedMessage.serviceTier }
+              : {}),
             reasoningLevel: queuedMessage.reasoningLevel,
             sandboxMode: queuedMessage.sandboxMode,
           };
@@ -2732,6 +2762,7 @@ export class Orchestrator implements ThreadOrchestrator {
         {
           projectId: thread.projectId,
           model: options?.model,
+          serviceTier: options?.serviceTier,
           reasoningLevel: options?.reasoningLevel,
           sandboxMode: options?.sandboxMode,
           environmentId: thread.environmentId,
@@ -2776,6 +2807,7 @@ export class Orchestrator implements ThreadOrchestrator {
       sandbox: request.sandboxMode ?? "danger-full-access",
       baseInstructions,
       ...(request.model ? { model: request.model } : {}),
+      ...(request.serviceTier ? { service_tier: request.serviceTier } : {}),
       ...(request.reasoningLevel
         ? { config: { model_reasoning_effort: request.reasoningLevel } }
         : {}),
@@ -2818,6 +2850,7 @@ export class Orchestrator implements ThreadOrchestrator {
       approvalPolicy: "never",
       sandboxPolicy,
       ...(options?.model ? { model: options.model } : {}),
+      ...(options?.serviceTier ? { service_tier: options.serviceTier } : {}),
       ...(options?.reasoningLevel
         ? { config: { model_reasoning_effort: options.reasoningLevel } }
         : {}),
@@ -3612,6 +3645,7 @@ export class Orchestrator implements ThreadOrchestrator {
     params: Record<string, unknown>,
   ): ThreadExecutionOptions {
     const model = getStringField(params, "model");
+    const serviceTier = toServiceTier(getStringField(params, "service_tier"));
     const approvalPolicy = getStringField(params, "approvalPolicy");
     const config = toRecord(params.config);
     const reasoningLevel = toReasoningLevel(config?.model_reasoning_effort);
@@ -3630,6 +3664,7 @@ export class Orchestrator implements ThreadOrchestrator {
 
     return {
       ...(model ? { model } : {}),
+      ...(serviceTier ? { serviceTier } : {}),
       ...(reasoningLevel ? { reasoningLevel } : {}),
       ...(sandboxMode ? { sandboxMode } : {}),
       ...(approvalPolicy ? { approvalPolicy } : {}),

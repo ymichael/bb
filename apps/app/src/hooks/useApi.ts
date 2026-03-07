@@ -519,6 +519,7 @@ export function useTellThread() {
       id,
       input,
       model,
+      serviceTier,
       reasoningLevel,
       sandboxMode,
       mode,
@@ -527,6 +528,7 @@ export function useTellThread() {
       api.tellThread(id, {
         input,
         model,
+        serviceTier,
         reasoningLevel,
         sandboxMode,
         mode,
@@ -551,10 +553,17 @@ export function useEnqueueThreadMessage() {
       id,
       input,
       model,
+      serviceTier,
       reasoningLevel,
       sandboxMode,
     }: { id: string } & EnqueueThreadMessageRequest): Promise<ThreadQueuedMessage> =>
-      api.enqueueThreadMessage(id, { input, model, reasoningLevel, sandboxMode }),
+      api.enqueueThreadMessage(id, {
+        input,
+        model,
+        serviceTier,
+        reasoningLevel,
+        sandboxMode,
+      }),
     onSuccess: (queuedMessage, variables) => {
       updateCachedThread(queryClient, variables.id, (thread) =>
         appendQueuedThreadMessage(thread, queuedMessage),
