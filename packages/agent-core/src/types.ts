@@ -214,9 +214,21 @@ export interface SystemThreadOperationEventData {
   demotedPrimaryCheckout?: boolean;
 }
 
+export type ThreadProvisioningReason =
+  | "thread-created"
+  | "boot-created-thread"
+  | "tell-after-provisioning-failure"
+  | "resume-missing-provider-thread";
+
+export type ThreadEnvironmentStartReason =
+  | ThreadProvisioningReason
+  | "boot-active-resume"
+  | "resume-existing-provider-session";
+
 export interface SystemProvisioningStartedEventData {
   environmentId: string;
   environmentDisplayName?: string;
+  reason?: ThreadProvisioningReason;
 }
 
 export interface SystemProvisioningEnvSetupEventData {
@@ -225,6 +237,7 @@ export interface SystemProvisioningEnvSetupEventData {
   timeoutMs?: number;
   durationMs?: number;
   detail?: string;
+  reason?: ThreadEnvironmentStartReason;
 }
 
 export interface SystemProvisioningFallbackEventData {
@@ -237,6 +250,7 @@ export interface SystemProvisioningFallbackEventData {
 export interface SystemProvisioningCompletedEventData {
   environmentId: string;
   fallbackReason?: string;
+  reason?: ThreadProvisioningReason;
 }
 
 export interface SystemProvisioningCleanupFailedEventData {

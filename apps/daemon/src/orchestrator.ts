@@ -61,6 +61,8 @@ import {
   type ThreadToolGroupMessagesRequest,
   type ThreadToolGroupMessagesResponse,
   type ThreadChangeKind,
+  type ThreadProvisioningReason,
+  type ThreadEnvironmentStartReason,
 } from "@beanbag/agent-core";
 import {
   EnvironmentRegistry,
@@ -491,8 +493,8 @@ export class Orchestrator implements ThreadOrchestrator {
           );
           this._broadcastThreadChanged(threadId, THREAD_STATUS_CHANGE_KINDS);
         },
-        runOptionalSetup: (threadId, environment) =>
-          this._runOptionalEnvironmentSetup(threadId, environment),
+        runOptionalSetup: (threadId, environment, reason) =>
+          this._runOptionalEnvironmentSetup(threadId, environment, reason),
         spawnProviderProcess: ({ threadId, projectId, environment }) => {
           const spawnSpec = this.agentServer.getSpawnSpec();
           return environment.spawn(spawnSpec.command, spawnSpec.args, {
@@ -557,6 +559,8 @@ export class Orchestrator implements ThreadOrchestrator {
           this._scheduleProvisioning(thread.id, {
             projectId: thread.projectId,
             environmentId: thread.environmentId,
+          }, {
+            reason: "boot-created-thread",
           });
           break;
         case "mark-provisioning-failed":
@@ -630,6 +634,7 @@ export class Orchestrator implements ThreadOrchestrator {
         thread.id,
         project.rootPath,
         environmentKind,
+        "boot-active-resume",
       );
       const resumed = await this.agentServer.resumeSession({
         threadId: thread.id,
@@ -720,7 +725,10 @@ export class Orchestrator implements ThreadOrchestrator {
     this._scheduleProvisioning(
       thread.id,
       { ...req, environmentId },
-      { rootPathHint: project.rootPath },
+      {
+        rootPathHint: project.rootPath,
+        reason: "thread-created",
+      },
     );
     const hydratedThread = this._withPrimaryCheckoutState(thread);
     const promptTitleFallback = this._derivePromptFallbackTitle(req.input);
@@ -2211,7 +2219,7 @@ export class Orchestrator implements ThreadOrchestrator {
   private _scheduleProvisioning(
     threadId: string,
     req: SpawnThreadRequest,
-    opts?: { rootPathHint?: string; reason?: string },
+    opts?: { rootPathHint?: string; reason: ThreadProvisioningReason },
   ): void {
     if (this.provisioningTasks.has(threadId)) return;
 
@@ -2255,7 +2263,7 @@ export class Orchestrator implements ThreadOrchestrator {
   private async _provisionThread(
     threadId: string,
     req: SpawnThreadRequest,
-    opts?: { rootPathHint?: string; reason?: string },
+    opts?: { rootPathHint?: string; reason: ThreadProvisioningReason },
   ): Promise<void> {
     const thread = this.threadRepo.getById(threadId);
     if (thread?.archivedAt !== undefined) return;
@@ -2280,7 +2288,8 @@ export class Orchestrator implements ThreadOrchestrator {
         projectId: req.projectId,
       }),
     );
-    const startSource = opts?.reason === "tell-after-provisioning-failure" ? "tell" : "spawn";
+    const provisioningReason = opts?.reason ?? "thread-created";
+    const startSource = provisioningReason === "tell-after-provisioning-failure" ? "tell" : "spawn";
     const persistedThreadStartEvent = this._persistOutboundStartEvent(
       threadId,
       "client/thread/start",
@@ -2308,12 +2317,14 @@ export class Orchestrator implements ThreadOrchestrator {
     this._appendEvent(threadId, "system/provisioning/started", {
       environmentId: requestedEnvironmentId,
       environmentDisplayName: requestedEnvironmentInfo.displayName,
+      reason: provisioningReason,
     });
 
     const environmentRuntime = await this._spawnProcess(
       threadId,
       opts?.rootPathHint ?? project.rootPath,
       requestedEnvironmentId,
+      provisioningReason,
     );
     this.threadRepo.update(threadId, {
       environmentId: environmentRuntime.environment.kind,
@@ -2324,6 +2335,7 @@ export class Orchestrator implements ThreadOrchestrator {
     });
     this._appendEvent(threadId, "system/provisioning/completed", {
       environmentId: environmentRuntime.environment.kind,
+      reason: provisioningReason,
     });
     const hydratedThread = this.threadRepo.getById(threadId);
     if (hydratedThread) {
@@ -2446,6 +2458,7 @@ export class Orchestrator implements ThreadOrchestrator {
       ...(event.timeoutMs !== undefined ? { timeoutMs: event.timeoutMs } : {}),
       ...(event.durationMs !== undefined ? { durationMs: event.durationMs } : {}),
       ...(event.detail ? { detail: event.detail } : {}),
+      ...(event.reason ? { reason: event.reason } : {}),
     });
   }
 
@@ -2480,6 +2493,7 @@ export class Orchestrator implements ThreadOrchestrator {
   private async _runOptionalEnvironmentSetup(
     threadId: string,
     environment: IEnvironment,
+    reason: ThreadEnvironmentStartReason,
   ): Promise<void> {
     if (!environment.shouldRunSetupScript()) {
       return;
@@ -2499,6 +2513,7 @@ export class Orchestrator implements ThreadOrchestrator {
       status: "started",
       scriptPath: ENV_SETUP_SCRIPT_NAME,
       timeoutMs: ENV_SETUP_TIMEOUT_MS,
+      reason,
     });
     let sawSetupOutput = false;
     const runEnvironmentCommand =
@@ -2524,6 +2539,7 @@ export class Orchestrator implements ThreadOrchestrator {
             scriptPath: ENV_SETUP_SCRIPT_NAME,
             timeoutMs: ENV_SETUP_TIMEOUT_MS,
             detail: line,
+            reason,
           });
         },
         onStderrLine: (line) => {
@@ -2535,6 +2551,7 @@ export class Orchestrator implements ThreadOrchestrator {
             scriptPath: ENV_SETUP_SCRIPT_NAME,
             timeoutMs: ENV_SETUP_TIMEOUT_MS,
             detail: line,
+            reason,
           });
         },
       },
@@ -2548,6 +2565,7 @@ export class Orchestrator implements ThreadOrchestrator {
         timeoutMs: ENV_SETUP_TIMEOUT_MS,
         durationMs: Date.now() - startedAt,
         ...(sawSetupOutput ? {} : { detail }),
+        reason,
       });
       throw new Error(`${ENV_SETUP_SCRIPT_NAME} failed: ${detail}`);
     }
@@ -2557,6 +2575,7 @@ export class Orchestrator implements ThreadOrchestrator {
       scriptPath: ENV_SETUP_SCRIPT_NAME,
       timeoutMs: ENV_SETUP_TIMEOUT_MS,
       durationMs: Date.now() - startedAt,
+      reason,
     });
   }
 
@@ -2564,11 +2583,13 @@ export class Orchestrator implements ThreadOrchestrator {
     threadId: string,
     projectRootPath: string,
     environmentKind: string,
+    reason: ThreadEnvironmentStartReason,
   ): Promise<ActiveEnvironmentRuntime> {
     return this.environmentService.provisionThreadEnvironment(
       threadId,
       projectRootPath,
       environmentKind,
+      reason,
     );
   }
 
@@ -2672,6 +2693,7 @@ export class Orchestrator implements ThreadOrchestrator {
         threadId,
         project.rootPath,
         environmentKind,
+        "resume-existing-provider-session",
       );
       const resumed = await this.agentServer.resumeSession({
         threadId,
@@ -2702,7 +2724,10 @@ export class Orchestrator implements ThreadOrchestrator {
           sandboxMode: options?.sandboxMode,
           environmentId: thread.environmentId,
         },
-        { rootPathHint: project.rootPath },
+        {
+          rootPathHint: project.rootPath,
+          reason: "resume-missing-provider-thread",
+        },
       );
       const reprovisionedThreadId = this.agentServer.getSessionState(threadId).providerThreadId;
       if (reprovisionedThreadId) return reprovisionedThreadId;

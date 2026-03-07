@@ -6,6 +6,7 @@ import {
   type SystemEnvironmentInfo,
   type Thread,
   type ThreadChangeKind,
+  type ThreadEnvironmentStartReason,
 } from "@beanbag/agent-core";
 import {
   type CreateEnvironmentContext,
@@ -44,7 +45,11 @@ interface EnvironmentServiceCallbacks {
     threadId: string;
     currentCheckout: EnvironmentCheckoutSnapshot;
   }) => void;
-  runOptionalSetup: (threadId: string, environment: IEnvironment) => Promise<void>;
+  runOptionalSetup: (
+    threadId: string,
+    environment: IEnvironment,
+    reason: ThreadEnvironmentStartReason,
+  ) => Promise<void>;
   spawnProviderProcess: (args: {
     threadId: string;
     projectId?: string;
@@ -146,16 +151,20 @@ export class EnvironmentService {
     threadId: string,
     projectRootPath: string,
     environmentKind: string,
+    reason: ThreadEnvironmentStartReason,
   ): Promise<ActiveEnvironmentRuntime> {
     const environment = this.environmentRegistry.create(
       environmentKind,
       this.callbacks.createContext(threadId, projectRootPath),
     );
     try {
+      const existedBeforePrepare = environment.exists();
       if (typeof environment.prepare === "function") {
         await environment.prepare();
       }
-      await this.callbacks.runOptionalSetup(threadId, environment);
+      if (!existedBeforePrepare) {
+        await this.callbacks.runOptionalSetup(threadId, environment, reason);
+      }
     } catch (error) {
       try {
         await Promise.resolve(environment.dispose());

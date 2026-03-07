@@ -7,6 +7,8 @@ export type {
   ThreadPrimaryCheckoutState,
   ThreadProvisioningReadiness,
   ThreadProvisioningState,
+  ThreadProvisioningReason,
+  ThreadEnvironmentStartReason,
   ThreadQueuedMessage,
   ThreadBuiltInAction,
   ThreadBuiltInActionId,

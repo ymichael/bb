@@ -23,6 +23,7 @@ import type {
 import type { PromptInput, ReasoningLevel, SandboxMode } from "./shared-types.js";
 import type {
   Thread,
+  ThreadEnvironmentStartReason,
   ThreadEvent,
   ThreadWorkStatus,
   ThreadTurnInitiator,
@@ -118,6 +119,7 @@ export type EnvironmentProvisioningEvent =
       timeoutMs?: number;
       durationMs?: number;
       detail?: string;
+      reason?: ThreadEnvironmentStartReason;
     };
 
 export interface ThreadListFilters {

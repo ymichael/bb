@@ -803,6 +803,9 @@ describe("Orchestrator", () => {
           projectId: "proj-1",
           environmentId: undefined,
         },
+        {
+          reason: "boot-created-thread",
+        },
       );
       expect(cleanupRuntimeSpy).toHaveBeenCalledWith("boot-provisioning");
       expect(bootThreadRepo.update).toHaveBeenCalledWith(
@@ -933,12 +936,9 @@ describe("Orchestrator", () => {
     });
 
     it("emits env-setup started before optional setup finishes", async () => {
-      const workspaceRoot = mkdtempSync(join(tmpdir(), "beanbag-orchestrator-env-setup-"));
-      writeFileSync(
-        join(workspaceRoot, ".bb-env-setup.sh"),
-        "#!/usr/bin/env sh\nsleep 0\n",
-        "utf8",
-      );
+      const tempRoot = mkdtempSync(join(tmpdir(), "beanbag-orchestrator-env-setup-"));
+      const workspaceRoot = join(tempRoot, "workspace");
+      let workspaceExists = false;
 
       let resolveSetup:
         | ((result: { exitCode: number; stdout: string; stderr: string }) => void)
@@ -969,6 +969,18 @@ describe("Orchestrator", () => {
             rootPath: workspaceRoot,
             overrides: {
               info,
+              async prepare() {
+                mkdirSync(workspaceRoot, { recursive: true });
+                writeFileSync(
+                  join(workspaceRoot, ".bb-env-setup.sh"),
+                  "#!/usr/bin/env sh\nsleep 0\n",
+                  "utf8",
+                );
+                workspaceExists = true;
+              },
+              exists() {
+                return workspaceExists;
+              },
               shouldRunSetupScript() {
                 return true;
               },
@@ -1051,6 +1063,7 @@ describe("Orchestrator", () => {
               type: "system/provisioning/env_setup",
               data: expect.objectContaining({
                 status: "started",
+                reason: "thread-created",
               }),
             }),
           );
@@ -1079,22 +1092,20 @@ describe("Orchestrator", () => {
               type: "system/provisioning/env_setup",
               data: expect.objectContaining({
                 status: "completed",
+                reason: "thread-created",
               }),
             }),
           );
         });
       } finally {
-        rmSync(workspaceRoot, { recursive: true, force: true });
+        rmSync(tempRoot, { recursive: true, force: true });
       }
     });
 
     it("streams env-setup output while the setup script is still running", async () => {
-      const workspaceRoot = mkdtempSync(join(tmpdir(), "beanbag-orchestrator-env-stream-"));
-      writeFileSync(
-        join(workspaceRoot, ".bb-env-setup.sh"),
-        "#!/usr/bin/env sh\nsleep 0\n",
-        "utf8",
-      );
+      const tempRoot = mkdtempSync(join(tmpdir(), "beanbag-orchestrator-env-stream-"));
+      const workspaceRoot = join(tempRoot, "workspace");
+      let workspaceExists = false;
 
       let resolveSetup:
         | ((result: { exitCode: number; stdout: string; stderr: string }) => void)
@@ -1125,6 +1136,18 @@ describe("Orchestrator", () => {
             rootPath: workspaceRoot,
             overrides: {
               info,
+              async prepare() {
+                mkdirSync(workspaceRoot, { recursive: true });
+                writeFileSync(
+                  join(workspaceRoot, ".bb-env-setup.sh"),
+                  "#!/usr/bin/env sh\nsleep 0\n",
+                  "utf8",
+                );
+                workspaceExists = true;
+              },
+              exists() {
+                return workspaceExists;
+              },
               shouldRunSetupScript() {
                 return true;
               },
@@ -1255,7 +1278,7 @@ describe("Orchestrator", () => {
           );
         });
       } finally {
-        rmSync(workspaceRoot, { recursive: true, force: true });
+        rmSync(tempRoot, { recursive: true, force: true });
       }
     });
 
@@ -1409,6 +1432,31 @@ describe("Orchestrator", () => {
         "status-changed",
         "work-status-changed",
       ]);
+    });
+
+    it("records the provisioning reason when spawning a thread", async () => {
+      const project = { id: "proj-1", name: "Test", rootPath: "/test", createdAt: 1000, updatedAt: 1000 };
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(project);
+
+      const createdThread = makeThread({ id: "t-new", status: "idle" });
+      (threadRepo.create as ReturnType<typeof vi.fn>).mockReturnValue(createdThread);
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeThread({ id: "t-new", status: "active" }),
+      );
+
+      await manager.spawn({ projectId: "proj-1" });
+
+      await vi.waitFor(() => {
+        expect(eventRepo.create).toHaveBeenCalledWith(
+          expect.objectContaining({
+            threadId: "t-new",
+            type: "system/provisioning/started",
+            data: expect.objectContaining({
+              reason: "thread-created",
+            }),
+          }),
+        );
+      });
     });
 
     it("sends initialize and thread/start JSON-RPC to the child process stdin", async () => {
@@ -3259,6 +3307,15 @@ describe("Orchestrator", () => {
       });
       expect(reprovisionMethods).toContain("thread/start");
       expect(reprovisionMethods).toContain("turn/start");
+      expect(eventRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          threadId: "thread-1",
+          type: "system/provisioning/started",
+          data: expect.objectContaining({
+            reason: "resume-missing-provider-thread",
+          }),
+        }),
+      );
     });
 
     it("throws if thread has no active process", async () => {
