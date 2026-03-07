@@ -47,6 +47,7 @@ export type {
 } from "./protocol.js";
 
 export { THREAD_CHANGE_KINDS } from "./protocol.js";
+export { formatEnvironmentDisplayName } from "./environment-display-name.js";
 
 export type {
   SpawnThreadRequest,

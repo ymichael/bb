@@ -1,5 +1,6 @@
 import type { ThreadEvent } from "./types.js";
 import { assertNever } from "./assert-never.js";
+import { formatEnvironmentDisplayName } from "./environment-display-name.js";
 import {
   normalizeThreadEventType,
   resolveProviderEventMethod,
@@ -1277,9 +1278,10 @@ function parseOperationMessage(
 
   if (eventTypeMatches(eventType, "system/provisioning/started")) {
     const payload = toEventRecord(event.data);
-    const environmentDisplayName =
-      getStringField(payload, "environmentDisplayName") ??
-      getStringField(payload, "environmentId");
+    const environmentDisplayName = formatEnvironmentDisplayName({
+      id: getStringField(payload, "environmentId"),
+      displayName: getStringField(payload, "environmentDisplayName"),
+    });
     return {
       kind: "operation",
       id: messageId(event.threadId, "op", `provisioning-started:${event.seq}`),
@@ -1496,9 +1498,17 @@ function parseOperationMessage(
     const requestedEnvironmentId = getStringField(payload, "requestedEnvironmentId");
     const fallbackEnvironmentId = getStringField(payload, "fallbackEnvironmentId");
     const reason = getStringField(payload, "reason");
+    const requestedEnvironmentLabel = formatEnvironmentDisplayName({
+      id: requestedEnvironmentId,
+      displayName: requestedEnvironmentId,
+    });
+    const fallbackEnvironmentLabel = formatEnvironmentDisplayName({
+      id: fallbackEnvironmentId,
+      displayName: fallbackEnvironmentId,
+    });
     const detailParts = [
-      requestedEnvironmentId && fallbackEnvironmentId
-        ? `Requested ${requestedEnvironmentId}, using ${fallbackEnvironmentId}`
+      requestedEnvironmentLabel && fallbackEnvironmentLabel
+        ? `Requested ${requestedEnvironmentLabel}, using ${fallbackEnvironmentLabel}`
         : undefined,
       reason ? `Reason: ${reason}` : undefined,
       getStringField(payload, "detail"),
@@ -1519,8 +1529,12 @@ function parseOperationMessage(
 
   if (eventTypeMatches(eventType, "system/provisioning/completed")) {
     const payload = toEventRecord(event.data);
+    const environmentDisplayName = formatEnvironmentDisplayName({
+      id: getStringField(payload, "environmentId"),
+      displayName: getStringField(payload, "environmentDisplayName"),
+    });
     const detailParts = [
-      getStringField(payload, "environmentId"),
+      environmentDisplayName,
       getStringField(payload, "fallbackReason"),
     ].filter((value): value is string => Boolean(value));
     return {
@@ -1539,8 +1553,12 @@ function parseOperationMessage(
 
   if (eventTypeMatches(eventType, "system/provisioning/cleanup_failed")) {
     const payload = toEventRecord(event.data);
+    const environmentDisplayName = formatEnvironmentDisplayName({
+      id: getStringField(payload, "environmentId"),
+      displayName: getStringField(payload, "environmentDisplayName"),
+    });
     const detailParts = [
-      getStringField(payload, "environmentId"),
+      environmentDisplayName,
       getStringField(payload, "message"),
       getStringField(payload, "detail"),
     ].filter((value): value is string => Boolean(value));

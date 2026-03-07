@@ -212,7 +212,7 @@ describe("buildThreadDetailRows provisioning operation collapsing", () => {
 
     expect(rows).toHaveLength(1);
     expect(rows[0]?.opType).toBe("provisioning");
-    expect(rows[0]?.title).toBe("Provisioned Git Worktree Workspace");
+    expect(rows[0]?.title).toBe("Provisioned Worktree");
     expect(rows[0]?.sourceSeqStart).toBe(1);
     expect(rows[0]?.sourceSeqEnd).toBe(4);
     expect(rows[0]?.detail).toContain("Environment: Git Worktree Workspace");

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { formatEnvironmentDisplayName } from "@beanbag/agent-core";
 import type {
   AvailableModel,
   ReasoningLevel,
@@ -166,7 +167,11 @@ function toEnvironmentOptions(
   const source = environments && environments.length > 0 ? environments : FALLBACK_ENVIRONMENTS;
   return source.map((environment) => ({
     value: environment.id,
-    label: environment.displayName,
+    label:
+      formatEnvironmentDisplayName({
+        id: environment.id,
+        displayName: environment.displayName,
+      }) ?? environment.id,
   }));
 }
 

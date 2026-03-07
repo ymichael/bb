@@ -80,6 +80,7 @@ import {
   PromptComposerShell,
 } from "@beanbag/ui-core";
 import {
+  formatEnvironmentDisplayName,
   toRecord,
   type PromptInput,
   type ThreadQueuedMessage,
@@ -1896,7 +1897,12 @@ export function ThreadDetailView() {
                 label="Environment"
                 valueClassName="min-w-0 truncate"
               >
-                <span>{environmentInfo?.displayName ?? thread.environmentId}</span>
+                <span>
+                  {formatEnvironmentDisplayName({
+                    id: thread.environmentId,
+                    displayName: environmentInfo?.displayName,
+                  }) ?? thread.environmentId}
+                </span>
               </DetailRow>
             ) : null}
             {showPrimaryCheckoutMetadata ? (

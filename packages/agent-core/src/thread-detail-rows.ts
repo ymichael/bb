@@ -1,4 +1,5 @@
 import { assertNever } from "./assert-never.js";
+import { formatEnvironmentDisplayName } from "./environment-display-name.js";
 import type {
   UIMessage,
   UIPrimaryCheckoutAction,
@@ -71,11 +72,13 @@ function parseProvisioningEnvironment(detail: string | undefined): string | unde
   if (!detail) return undefined;
   const fromEnvironmentPrefix = detail.match(/^Environment:\s*(.+)$/);
   if (fromEnvironmentPrefix?.[1]) {
-    return fromEnvironmentPrefix[1].trim();
+    const value = fromEnvironmentPrefix[1].trim();
+    return formatEnvironmentDisplayName({ id: value, displayName: value });
   }
   const [firstToken] = detail.split(" • ");
   const value = firstToken?.trim();
-  return value && value.length > 0 ? value : undefined;
+  if (!value || value.length === 0) return undefined;
+  return formatEnvironmentDisplayName({ id: value, displayName: value });
 }
 
 function mergeProvisioningOperations(messages: UIMessage[]): UIMessage[] {

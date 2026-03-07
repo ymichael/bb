@@ -491,7 +491,7 @@ describe("buildThreadDetailRows", () => {
     expect(rows[0].message.kind).toBe("operation");
     if (rows[0].message.kind !== "operation") return;
     expect(rows[0].message.opType).toBe("provisioning");
-    expect(rows[0].message.title).toBe("Provisioned Local Workspace");
+    expect(rows[0].message.title).toBe("Provisioned Direct");
     expect(rows[0].message.detail).toContain("Environment: Local Workspace");
     expect(rows[0].message.detail).toContain(".bb-env-setup.ts • /Users/michael/Projects/bb • Timeout 600s");
     expect(rows[0].message.detail).toContain(

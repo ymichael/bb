@@ -1,5 +1,9 @@
 import { ExpandablePanel, EventCodeBlock, EventMetaItem, EventMetaList } from "@beanbag/ui-core";
-import { assertNever, type UIOperationMessage } from "@beanbag/agent-core";
+import {
+  assertNever,
+  formatEnvironmentDisplayName,
+  type UIOperationMessage,
+} from "@beanbag/agent-core";
 import { OpenPathButton } from "@/components/shared/OpenPathButton";
 import { StatusPill, type StatusPillVariant } from "@/components/shared/StatusPill";
 import {
@@ -194,7 +198,8 @@ function parseProvisioningDetails(detail: string | undefined): ParsedProvisionin
 
 function normalizeProvisioningEnvironmentLabel(environment: string | undefined): string | undefined {
   const value = environment?.trim();
-  return value || undefined;
+  if (!value) return undefined;
+  return formatEnvironmentDisplayName({ id: value, displayName: value });
 }
 
 function provisioningSetupTimedOut(setupAttempt: ProvisioningSetupAttempt | undefined): boolean {

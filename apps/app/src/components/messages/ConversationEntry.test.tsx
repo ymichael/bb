@@ -766,13 +766,13 @@ describe("ConversationEntry", () => {
       ...baseMessage(),
       kind: "operation",
       opType: "provisioning",
-      title: "Provisioned Local Workspace",
-      detail: "Environment: Local Workspace\nlocal • /Users/michael/Projects/bb",
+      title: "Provisioned Direct",
+      detail: "Environment: Direct\nDirect • /Users/michael/Projects/bb",
     };
 
     const html = renderToStaticMarkup(<ConversationEntry message={message} />);
     expect(html).toContain("Provisioned");
-    expect(html).toContain("Local Workspace");
+    expect(html).toContain("Direct");
     expect(html).toContain("lucide-chevron-right");
   });
 
@@ -781,13 +781,13 @@ describe("ConversationEntry", () => {
       ...baseMessage(),
       kind: "operation",
       opType: "provisioning",
-      title: "Provisioned Git Worktree Workspace",
-      detail: "Environment: Git Worktree Workspace\nworktree • /tmp/worktree",
+      title: "Provisioned Worktree",
+      detail: "Environment: Worktree\nWorktree • /tmp/worktree",
     };
 
     const html = renderToStaticMarkup(<ConversationEntry message={message} initialExpanded />);
     expect(html).toContain("Environment");
-    expect(html).toContain(">Git Worktree Workspace<");
+    expect(html).toContain(">Worktree<");
     expect(html).not.toContain("Setup status");
     expect(html).not.toContain("Additional details");
   });
@@ -797,10 +797,10 @@ describe("ConversationEntry", () => {
       ...baseMessage(),
       kind: "operation",
       opType: "provisioning",
-      title: "Provisioned Git Worktree Workspace",
+      title: "Provisioned Worktree",
       detail:
-        "Environment: Git Worktree Workspace\n" +
-        "worktree • /tmp/worktree • fallback because worktree bootstrap was unavailable",
+        "Environment: Worktree\n" +
+        "Worktree • /tmp/worktree • fallback because worktree bootstrap was unavailable",
     };
 
     const html = renderToStaticMarkup(<ConversationEntry message={message} initialExpanded />);
@@ -814,11 +814,11 @@ describe("ConversationEntry", () => {
       ...baseMessage(),
       kind: "operation",
       opType: "provisioning",
-      title: "Provisioned Git Worktree Workspace",
+      title: "Provisioned Worktree",
       detail:
-        "Environment: Git Worktree Workspace\n" +
+        "Environment: Worktree\n" +
         ".bb-env-setup.sh • /tmp/worktree • Duration 10200ms\n" +
-        "worktree • /tmp/worktree",
+        "Worktree • /tmp/worktree",
     };
 
     const html = renderToStaticMarkup(<ConversationEntry message={message} initialExpanded />);
@@ -835,9 +835,9 @@ describe("ConversationEntry", () => {
       ...baseMessage(),
       kind: "operation",
       opType: "provisioning",
-      title: "Provisioning Git Worktree Workspace...",
+      title: "Provisioning Worktree...",
       detail:
-        "Environment: Git Worktree Workspace\n" +
+        "Environment: Worktree\n" +
         ".bb-env-setup.sh • /tmp/worktree • Timeout 600s\n" +
         ".bb-env-setup.sh • /tmp/worktree • Timeout 600s • Duration 5988ms • turbo 2.8.3\n" +
         "@beanbag/daemon:build: ERROR: command failed",
@@ -845,7 +845,7 @@ describe("ConversationEntry", () => {
 
     const html = renderToStaticMarkup(<ConversationEntry message={message} initialExpanded />);
     expect(html).toContain("Environment");
-    expect(html).toContain(">Git Worktree Workspace<");
+    expect(html).toContain(">Worktree<");
     expect(html).toContain("Setup script");
     expect(html).toContain(".bb-env-setup.sh");
     expect(html).toContain("Setup status");
@@ -864,9 +864,9 @@ describe("ConversationEntry", () => {
       ...baseMessage(),
       kind: "operation",
       opType: "provisioning",
-      title: "Provisioning Git Worktree Workspace...",
+      title: "Provisioning Worktree...",
       detail:
-        "Environment: Git Worktree Workspace\n" +
+        "Environment: Worktree\n" +
         ".bb-env-setup.sh • /tmp/worktree • Timeout 600s\n" +
         ".bb-env-setup.sh • /tmp/worktree • Timeout 600s • Duration 600000ms • .bb-env-setup.sh timed out after 10 minutes",
     };
@@ -882,11 +882,11 @@ describe("ConversationEntry", () => {
       ...baseMessage(),
       kind: "operation",
       opType: "provisioning",
-      title: "Provisioning Git Worktree Workspace...",
+      title: "Provisioning Worktree...",
     };
 
     const html = renderToStaticMarkup(<ConversationEntry message={message} />);
-    expect(html).toContain("Provisioning Git Worktree Workspace...");
+    expect(html).toContain("Provisioning Worktree...");
     expect(html).toContain("animate-shine");
   });
 
