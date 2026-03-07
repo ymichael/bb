@@ -292,6 +292,7 @@ interface OrchestratorTestHarness {
     projectId: string,
     opts?: { force?: boolean },
   ) => void;
+  _scheduleQueuedFollowUpDispatch: (threadId: string) => void;
   _scheduleQueuedOperationDispatch: (threadId: string) => void;
   _handleProcessExit: (
     threadId: string,
