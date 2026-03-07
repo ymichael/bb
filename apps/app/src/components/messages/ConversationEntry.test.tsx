@@ -189,6 +189,23 @@ describe("ConversationEntry", () => {
     expect(html).not.toContain("[32m");
   });
 
+  it("keeps tool output on a single line and scrollable instead of wrapping", () => {
+    const message: UIMessage = {
+      ...baseMessage(),
+      kind: "tool-call",
+      toolName: "exec_command",
+      callId: "call-nowrap-output",
+      command: "npm run build",
+      status: "completed",
+      output: "a very long output line that should stay on one line",
+    };
+
+    const html = renderToStaticMarkup(<ConversationEntry message={message} initialExpanded />);
+    expect(html).toContain(
+      "<pre class=\"mt-1.5 max-h-[220px] overflow-auto whitespace-pre leading-tight text-muted-foreground\">",
+    );
+  });
+
   it("clamps expanded tool-call command lines to two lines", () => {
     const longCommand = "python -c \"print('this is a very long command that should wrap across more than two lines in the UI display')\" --flag-one --flag-two --flag-three --flag-four";
     const message: UIMessage = {

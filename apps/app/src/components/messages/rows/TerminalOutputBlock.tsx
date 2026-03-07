@@ -49,7 +49,7 @@ export function TerminalOutputBlock({
         <pre
           ref={outputRef}
           onScroll={handleOutputScroll}
-          className={`${command ? "mt-1.5 " : ""}${maxHeightClassName} overflow-auto whitespace-pre-wrap break-words leading-tight text-muted-foreground`}
+          className={`${command ? "mt-1.5 " : ""}${maxHeightClassName} overflow-auto whitespace-pre leading-tight text-muted-foreground`}
           dangerouslySetInnerHTML={{ __html: renderedOutput }}
         >
         </pre>
