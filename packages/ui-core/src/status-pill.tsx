@@ -13,7 +13,7 @@ const STATUS_PILL_VARIANT_CLASS: Record<StatusPillVariant, string> = {
   secondary: "border-transparent bg-secondary text-secondary-foreground",
   destructive: "border-transparent bg-destructive text-white",
   outline: "border-border bg-background text-foreground",
-  emphasis: "border-transparent bg-accent text-accent-foreground",
+  emphasis: "border-transparent bg-foreground text-background",
 };
 
 export interface StatusPillProps {
