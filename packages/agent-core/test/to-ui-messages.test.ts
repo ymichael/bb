@@ -131,8 +131,58 @@ describe("toUIMessages replay coverage", () => {
     );
 
     expect(tool).toBeDefined();
+    expect(tool?.command).toBe("ls plans");
     expect(tool?.status).toBe("interrupted");
     expect(tool?.output).toContain("interrupted");
+  });
+
+  it("strips shell wrappers from string-form exec command lifecycle events", () => {
+    const events: ThreadEvent[] = [
+      {
+        id: "evt-1",
+        threadId: "thread-1",
+        seq: 1,
+        type: "exec_command_begin",
+        data: {
+          call_id: "call-1",
+          turn_id: "turn-1",
+          command: '/bin/bash -lc "npm test -- --runInBand"',
+          cwd: "/repo",
+          parsed_cmd: [{ type: "unknown", cmd: "npm test -- --runInBand" }],
+          source: "agent",
+          status: "pending",
+        },
+        createdAt: 1,
+      },
+      {
+        id: "evt-2",
+        threadId: "thread-1",
+        seq: 2,
+        type: "exec_command_end",
+        data: {
+          call_id: "call-1",
+          turn_id: "turn-1",
+          command: '/bin/bash -lc "npm test -- --runInBand"',
+          cwd: "/repo",
+          parsed_cmd: [{ type: "unknown", cmd: "npm test -- --runInBand" }],
+          source: "agent",
+          aggregated_output: "ok",
+          exit_code: 0,
+          status: "completed",
+        },
+        createdAt: 2,
+      },
+    ];
+
+    const projected = toUIMessages(events, { threadStatus: "idle" });
+    const tool = projected.find(
+      (message): message is Extract<UIMessage, { kind: "tool-call" }> =>
+        message.kind === "tool-call",
+    );
+
+    expect(tool).toBeDefined();
+    expect(tool?.command).toBe("npm test -- --runInBand");
+    expect(tool?.status).toBe("completed");
   });
 
   it("updates flushed pending tool calls in place without appending duplicate interrupted rows", () => {

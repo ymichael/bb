@@ -761,6 +761,40 @@ function toToolStatus(value: unknown): UIToolCallMessage["status"] | undefined {
   return undefined;
 }
 
+const SHELL_WRAPPER_NAMES = new Set(["sh", "bash", "zsh"]);
+
+function unwrapQuotedShellArg(value: string): string {
+  if (value.length < 2) return value;
+  const quote = value[0];
+  if ((quote !== "'" && quote !== '"') || value[value.length - 1] !== quote) {
+    return value;
+  }
+  return value.slice(1, -1);
+}
+
+function isKnownShellWrapper(value: string): boolean {
+  const shellName = value.split("/").pop() ?? value;
+  // Shell wrapper names are open_external runtime values; unknown shells intentionally
+  // preserve the original command payload for display.
+  return SHELL_WRAPPER_NAMES.has(shellName);
+}
+
+function extractShellCommandFromString(value: string): string | undefined {
+  const trimmed = value.trim();
+  if (trimmed.length === 0) return undefined;
+
+  const match = /^(\S+)\s+(-lc|-c)\s+([\s\S]+)$/.exec(trimmed);
+  if (!match) return trimmed;
+
+  const shellProgram = match[1];
+  const commandArg = match[3];
+  if (!shellProgram || !commandArg || !isKnownShellWrapper(shellProgram)) {
+    return trimmed;
+  }
+
+  return unwrapQuotedShellArg(commandArg.trim());
+}
+
 function toProvisioningSetupStatus(
   value: unknown,
 ): UIProvisioningSetupStatus | undefined {
@@ -786,13 +820,18 @@ function toProvisioningSetupStatus(
 }
 
 function extractShellCommand(value: unknown): string | undefined {
-  if (typeof value === "string" && value.length > 0) return value;
+  if (typeof value === "string") return extractShellCommandFromString(value);
 
   if (Array.isArray(value)) {
     const parts = value.filter((entry): entry is string => typeof entry === "string");
     if (parts.length === 0) return undefined;
 
-    if (parts.length >= 3 && (parts[1] === "-lc" || parts[1] === "-c")) {
+    if (
+      parts.length >= 3 &&
+      (parts[1] === "-lc" || parts[1] === "-c") &&
+      parts[0] &&
+      isKnownShellWrapper(parts[0])
+    ) {
       return parts[2] || undefined;
     }
 
