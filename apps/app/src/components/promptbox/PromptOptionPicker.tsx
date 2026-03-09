@@ -46,7 +46,7 @@ export function PromptOptionPicker<T extends string>({
           aria-label={label}
           title={`${label}: ${selectedLabel}`}
           className={cn(
-            "h-8 w-fit max-w-full min-w-0 items-center gap-1 border-none bg-transparent px-1 text-xs leading-none text-muted-foreground/75 shadow-none hover:bg-transparent hover:text-foreground",
+            "h-8 w-fit max-w-full min-w-0 items-center gap-1 border-none bg-transparent px-1 text-xs leading-tight text-muted-foreground/75 shadow-none hover:bg-transparent hover:text-foreground",
             selectedIsWarning &&
               "text-amber-600 hover:text-amber-700 dark:text-amber-400 dark:hover:text-amber-300",
             className

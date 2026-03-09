@@ -43,7 +43,7 @@ export function PromptModelPicker({
           aria-label="Model"
           title={`Model: ${selectedLabel}${fastModeEnabled ? " (Fast mode)" : ""}`}
           className={cn(
-            "h-8 w-fit max-w-full min-w-0 items-center gap-1 border-none bg-transparent px-1 text-xs leading-none text-muted-foreground/75 shadow-none hover:bg-transparent hover:text-foreground",
+            "h-8 w-fit max-w-full min-w-0 items-center gap-1 border-none bg-transparent px-1 text-xs leading-tight text-muted-foreground/75 shadow-none hover:bg-transparent hover:text-foreground",
             className,
           )}
         >
