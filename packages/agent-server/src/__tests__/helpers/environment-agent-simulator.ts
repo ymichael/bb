@@ -13,6 +13,7 @@ import {
   type EnvironmentAgentReplayRequest,
   type EnvironmentAgentReplayResponse,
   type EnvironmentAgentStatusSnapshot,
+  isEnvironmentAgentControlRequest,
   type JsonLineTransport,
   type JsonLineTransportHandlers,
 } from "@beanbag/environment-agent";
@@ -220,8 +221,8 @@ export class EnvironmentAgentSimulator {
       this.handleProviderRequest(parsed);
       return;
     }
-    if (isRecord(parsed) && parsed.environmentAgentMessage === true) {
-      this.handleControlRequest(parsed as EnvironmentAgentControlRequest);
+    if (isEnvironmentAgentControlRequest(parsed)) {
+      this.handleControlRequest(parsed);
     }
   }
 
