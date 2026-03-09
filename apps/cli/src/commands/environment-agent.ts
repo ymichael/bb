@@ -1,11 +1,16 @@
 import { Command } from "commander";
-import { EnvironmentAgentRuntime } from "@beanbag/environment-agent";
+import {
+  EnvironmentAgentRuntime,
+  createEnvironmentAgentHttpServer,
+} from "@beanbag/environment-agent";
 
 interface EnvironmentAgentOptions {
   providerCommand: string;
   providerArg?: string[];
   providerLaunchCommand?: string;
   providerLaunchArg?: string[];
+  httpPort?: string;
+  httpHost?: string;
 }
 
 export function registerEnvironmentAgentCommand(program: Command): void {
@@ -33,7 +38,9 @@ export function registerEnvironmentAgentCommand(program: Command): void {
       collectRepeatableOption,
       [],
     )
-    .action((opts: EnvironmentAgentOptions) => {
+    .option("--http-port <port>", "Run as an HTTP environment-agent on the given port")
+    .option("--http-host <host>", "HTTP bind host for environment-agent", "127.0.0.1")
+    .action(async (opts: EnvironmentAgentOptions) => {
       const providerCommand = opts.providerCommand?.trim();
       if (!providerCommand) {
         console.error("Missing required --provider-command");
@@ -49,8 +56,24 @@ export function registerEnvironmentAgentCommand(program: Command): void {
         providerArgs: opts.providerArg ?? [],
         providerLaunchCommand: opts.providerLaunchCommand?.trim(),
         providerLaunchArgs: opts.providerLaunchArg ?? [],
+        attachProcessStdio: !opts.httpPort,
       });
       const child = runtime.start();
+
+      if (opts.httpPort) {
+        const httpPort = Number.parseInt(opts.httpPort, 10);
+        if (!Number.isFinite(httpPort) || httpPort < 0) {
+          console.error("Invalid --http-port");
+          process.exit(1);
+          return;
+        }
+        const server = await createEnvironmentAgentHttpServer({
+          runtime,
+          host: opts.httpHost?.trim() || "127.0.0.1",
+          port: httpPort,
+        });
+        console.error(`environment-agent http listening on ${server.baseUrl}`);
+      }
 
       const forwardSignal = (signal: NodeJS.Signals) => {
         try {

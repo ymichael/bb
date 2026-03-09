@@ -45,4 +45,8 @@ export {
   EnvironmentAgentClientError,
   createEnvironmentAgentClient,
   createChildProcessEnvironmentAgentClient,
+  createHttpEnvironmentAgentClient,
 } from "./client.js";
+
+export type { EnvironmentAgentHttpServer } from "./http-server.js";
+export { createEnvironmentAgentHttpServer } from "./http-server.js";

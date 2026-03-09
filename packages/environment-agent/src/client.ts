@@ -195,3 +195,115 @@ export function createChildProcessEnvironmentAgentClient(
 ): EnvironmentAgentClient {
   return createEnvironmentAgentClient(createChildProcessJsonLineTransport(child));
 }
+
+export async function createHttpEnvironmentAgentClient(args: {
+  baseUrl: string;
+  headers?: Record<string, string>;
+}): Promise<EnvironmentAgentClient> {
+  const headers = {
+    "content-type": "application/json",
+    ...(args.headers ?? {}),
+  };
+  let handlers: JsonLineTransportHandlers | undefined;
+  let closed = false;
+  const abortController = new AbortController();
+
+  const streamPromise = fetch(`${args.baseUrl}/stream`, {
+    method: "GET",
+    headers: args.headers,
+    signal: abortController.signal,
+  }).then(async (response) => {
+    if (!response.ok || !response.body) {
+      throw new EnvironmentAgentClientError(
+        `Environment agent stream failed: ${response.status}`,
+      );
+    }
+
+    const reader = response.body
+      .pipeThrough(new TextDecoderStream())
+      .getReader();
+    let buffer = "";
+    while (!closed) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += value;
+      const lines = buffer.split(/\r\n|\n|\r/g);
+      buffer = lines.pop() ?? "";
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        handlers?.onLine(line);
+      }
+    }
+  }).catch((error) => {
+    if (!closed) {
+      handlers?.onClose?.(
+        error instanceof Error ? error : new EnvironmentAgentClientError(String(error)),
+      );
+    }
+  });
+
+  const transport: JsonLineTransport = {
+    setHandlers(nextHandlers) {
+      handlers = nextHandlers;
+    },
+    send(line) {
+      void fetch(`${args.baseUrl}/provider-line`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ line }),
+      }).then((response) => {
+        if (!response.ok) {
+          throw new EnvironmentAgentClientError(
+            `Environment agent provider send failed: ${response.status}`,
+          );
+        }
+      }).catch((error) => {
+        handlers?.onClose?.(
+          error instanceof Error ? error : new EnvironmentAgentClientError(String(error)),
+        );
+      });
+    },
+    close(reason) {
+      if (closed) return;
+      closed = true;
+      abortController.abort();
+      handlers?.onClose?.(reason);
+    },
+  };
+
+  void streamPromise;
+  const client = createEnvironmentAgentClient(transport);
+
+  const postJson = async <TResponse>(path: string, body: unknown): Promise<TResponse> => {
+    const response = await fetch(`${args.baseUrl}${path}`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(body),
+    });
+    if (!response.ok) {
+      throw new EnvironmentAgentClientError(
+        `Environment agent request failed: ${response.status}`,
+      );
+    }
+    return response.json() as Promise<TResponse>;
+  };
+
+  return {
+    providerTransport: client.providerTransport,
+    acknowledge(request) {
+      return postJson<EnvironmentAgentAckResponse>("/control/ack", request);
+    },
+    replay(request) {
+      return postJson<EnvironmentAgentReplayResponse>("/control/replay", request);
+    },
+    status() {
+      return postJson<EnvironmentAgentStatusSnapshot>("/control/status", {});
+    },
+    getLatestObservedSequence() {
+      return client.getLatestObservedSequence();
+    },
+    close(reason) {
+      client.close(reason);
+    },
+  };
+}

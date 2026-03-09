@@ -24,6 +24,7 @@ export interface EnvironmentAgentRuntimeOptions {
   providerLaunchArgs?: string[];
   onStdoutLine?: (line: string) => void;
   onStderrLine?: (line: string) => void;
+  attachProcessStdio?: boolean;
 }
 
 type ProtocolInbound =
@@ -37,6 +38,9 @@ export class EnvironmentAgentRuntime {
   private lastAckedSequence = 0;
   private pendingCommandCount = 0;
   private providerChild: ChildProcess | null = null;
+  private readonly stdoutLineSubscribers = new Set<(line: string) => void>();
+  private readonly stderrLineSubscribers = new Set<(line: string) => void>();
+  private readonly eventSubscribers = new Set<(event: EnvironmentAgentEventEnvelope) => void>();
 
   constructor(private readonly opts: EnvironmentAgentRuntimeOptions) {}
 
@@ -57,21 +61,25 @@ export class EnvironmentAgentRuntime {
     });
     this.providerChild = child;
 
-    process.stdin.setEncoding("utf-8");
-    process.stdin.on("data", (chunk: string) => {
-      for (const line of chunk.split(/\r\n|\n|\r/g)) {
-        if (!line.trim()) continue;
-        if (this.handleProtocolLine(line)) continue;
-        child.stdin?.write(`${line}\n`);
-      }
-    });
+    if (this.opts.attachProcessStdio !== false) {
+      process.stdin.setEncoding("utf-8");
+      process.stdin.on("data", (chunk: string) => {
+        for (const line of chunk.split(/\r\n|\n|\r/g)) {
+          if (!line.trim()) continue;
+          this.handleInboundLine(line);
+        }
+      });
+    }
 
     child.stdout?.setEncoding("utf-8");
     child.stdout?.on("data", (chunk: string) => {
       for (const line of chunk.split(/\r\n|\n|\r/g)) {
         if (!line.trim()) continue;
         this.opts.onStdoutLine?.(line);
-        process.stdout.write(`${line}\n`);
+        this.emitProviderStdoutLine(line);
+        if (this.opts.attachProcessStdio !== false) {
+          process.stdout.write(`${line}\n`);
+        }
         this.appendEvent(this.toProviderEvent(line));
       }
     });
@@ -81,7 +89,10 @@ export class EnvironmentAgentRuntime {
       for (const line of chunk.split(/\r\n|\n|\r/g)) {
         if (!line.trim()) continue;
         this.opts.onStderrLine?.(line);
-        process.stderr.write(`${line}\n`);
+        this.emitProviderStderrLine(line);
+        if (this.opts.attachProcessStdio !== false) {
+          process.stderr.write(`${line}\n`);
+        }
       }
     });
 
@@ -110,8 +121,37 @@ export class EnvironmentAgentRuntime {
       event,
     };
     this.events.push(envelope);
-    this.writeLiveEvent(envelope);
+    this.emitEvent(envelope);
+    if (this.opts.attachProcessStdio !== false) {
+      this.writeLiveEvent(envelope);
+    }
     return envelope;
+  }
+
+  sendProviderLine(line: string): void {
+    if (!line.trim()) return;
+    this.providerChild?.stdin?.write(`${line}\n`);
+  }
+
+  subscribeToProviderStdout(listener: (line: string) => void): () => void {
+    this.stdoutLineSubscribers.add(listener);
+    return () => {
+      this.stdoutLineSubscribers.delete(listener);
+    };
+  }
+
+  subscribeToProviderStderr(listener: (line: string) => void): () => void {
+    this.stderrLineSubscribers.add(listener);
+    return () => {
+      this.stderrLineSubscribers.delete(listener);
+    };
+  }
+
+  subscribeToEvents(listener: (event: EnvironmentAgentEventEnvelope) => void): () => void {
+    this.eventSubscribers.add(listener);
+    return () => {
+      this.eventSubscribers.delete(listener);
+    };
   }
 
   acknowledge(request: EnvironmentAgentAckRequest): EnvironmentAgentAckResponse {
@@ -173,6 +213,11 @@ export class EnvironmentAgentRuntime {
     };
   }
 
+  handleInboundLine(line: string): void {
+    if (this.handleProtocolLine(line)) return;
+    this.sendProviderLine(line);
+  }
+
   private handleProtocolLine(line: string): boolean {
     let parsed: unknown;
     try {
@@ -204,6 +249,24 @@ export class EnvironmentAgentRuntime {
       return true;
     }
     return false;
+  }
+
+  private emitProviderStdoutLine(line: string): void {
+    for (const subscriber of this.stdoutLineSubscribers) {
+      subscriber(line);
+    }
+  }
+
+  private emitProviderStderrLine(line: string): void {
+    for (const subscriber of this.stderrLineSubscribers) {
+      subscriber(line);
+    }
+  }
+
+  private emitEvent(event: EnvironmentAgentEventEnvelope): void {
+    for (const subscriber of this.eventSubscribers) {
+      subscriber(event);
+    }
   }
 
   private handleControlRequest(request: EnvironmentAgentControlRequest): void {
