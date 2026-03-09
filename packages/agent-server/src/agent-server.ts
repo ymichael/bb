@@ -479,11 +479,11 @@ export class AgentServer {
     const session = this.sessions.get(threadId);
     if (!session) return;
 
+    this.sessions.delete(threadId);
+    this.clearSessionState(threadId);
     session.runtime.close(
       reason ? new Error(reason) : undefined,
     );
-    this.sessions.delete(threadId);
-    this.clearSessionState(threadId);
   }
 
   stopAllSessions(reason?: string): void {

@@ -428,6 +428,38 @@ describe("AgentServer environment-agent control plane", () => {
     } satisfies Partial<AgentServerSessionError>);
   });
 
+  it("does not emit session-exit callbacks when the daemon intentionally stops all sessions", async () => {
+    const onSessionExit = vi.fn();
+    const agentServer = new AgentServer({
+      provider: createCodexProviderAdapter(),
+      onSessionExit,
+    });
+    const simulator = createEnvironmentAgentSimulator();
+
+    await agentServer.startSession({
+      threadId: "thread-1",
+      connectSession: () => ({
+        transport: "http",
+        client: simulator.createClient(),
+      }),
+      request: {
+        projectId: "project-1",
+        title: "Test thread",
+        input: [{ type: "text", text: "hello" }],
+      },
+      context: {
+        projectId: "project-1",
+        threadId: "thread-1",
+        path: process.env.PATH ?? "",
+      },
+    });
+
+    agentServer.stopAllSessions("Beanbag daemon shutdown");
+
+    expect(agentServer.isSessionActive("thread-1")).toBe(false);
+    expect(onSessionExit).not.toHaveBeenCalled();
+  });
+
   it("maps provider rpc failures through the environment-agent-backed runtime", async () => {
     const agentServer = new AgentServer({
       provider: createCodexProviderAdapter(),

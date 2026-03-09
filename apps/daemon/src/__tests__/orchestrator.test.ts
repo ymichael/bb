@@ -6170,6 +6170,48 @@ describe("Orchestrator", () => {
       expect(stopWatchingWorkspaceStatus).toHaveBeenCalledTimes(1);
       expect(dispose).not.toHaveBeenCalled();
     });
+
+    it("does not mark active managed sessions idle during daemon shutdown mode", async () => {
+      const project = {
+        id: "proj-1",
+        name: "Test",
+        rootPath: "/my/project",
+        createdAt: 1000,
+        updatedAt: 1000,
+      };
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(project);
+
+      const createdThread = makeThread({ id: "thread-1", status: "idle" });
+      const activeThread = makeThread({ id: "thread-1", status: "active" });
+      (threadRepo.create as ReturnType<typeof vi.fn>).mockReturnValue(createdThread);
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockImplementation((threadId: string) =>
+        threadId === "thread-1" ? activeThread : undefined,
+      );
+      asOrchestratorHarness(manager).environmentRuntimes.set("thread-1", {
+        environment: makeRuntimeEnvironment({
+          rootPath: "/my/project",
+        }),
+        startedAt: Date.now(),
+        projectId: "proj-1",
+      });
+
+      const fakeChild = createFakeChildProcess();
+      (spawnMock as ReturnType<typeof vi.fn>).mockReturnValue(fakeChild);
+
+      await manager.spawn({ projectId: "proj-1" });
+      await vi.waitFor(() => {
+        expect(
+          (manager as unknown as { agentServer: { isSessionActive: (threadId: string) => boolean } })
+            .agentServer.isSessionActive("thread-1"),
+        ).toBe(true);
+      });
+
+      (threadRepo.update as ReturnType<typeof vi.fn>).mockClear();
+
+      manager.stopAll({ preserveEnvironments: true });
+
+      expect(threadRepo.update).not.toHaveBeenCalledWith("thread-1", { status: "idle" });
+    });
   });
 
   describe("_handleProcessExit()", () => {
