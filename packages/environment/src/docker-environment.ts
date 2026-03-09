@@ -25,6 +25,7 @@ import type {
   PromoteEnvironmentResult,
 } from "./contracts.js";
 import { runCommand, runCommandAsync, spawnCommand } from "./process.js";
+import { resolveEnvironmentAgentConnectionTarget } from "./environment-agent-target.js";
 import {
   createWorktreeEnvironmentDefinition,
   type CreateWorktreeEnvironmentDefinitionOptions,
@@ -226,7 +227,9 @@ class DockerEnvironment implements IEnvironment {
   }
 
   getAgentConnectionTarget(): EnvironmentAgentConnectionTarget {
-    return {
+    return resolveEnvironmentAgentConnectionTarget({
+      runtimeEnv: this.runtimeEnv,
+      defaultTarget: {
       transport: "command-stdio",
       command: "bb",
       args: ["environment-agent"],
@@ -236,7 +239,8 @@ class DockerEnvironment implements IEnvironment {
         command: this.dockerBin,
         args: ["exec", "-i", this.state.containerName],
       },
-    };
+      },
+    });
   }
 
   getCheckoutSnapshot(): EnvironmentCheckoutSnapshot {
