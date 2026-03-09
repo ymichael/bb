@@ -50,3 +50,12 @@ export {
 
 export type { EnvironmentAgentHttpServer } from "./http-server.js";
 export { createEnvironmentAgentHttpServer } from "./http-server.js";
+
+export type {
+  EnvironmentAgentServiceCliOptions,
+  EnvironmentAgentServiceOptions,
+} from "./service.js";
+export {
+  resolveEnvironmentAgentServiceOptions,
+  startEnvironmentAgentService,
+} from "./service.js";
