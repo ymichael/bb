@@ -7,6 +7,28 @@ function primaryCheckoutOperation(
   title: string,
   detail?: string,
 ): Extract<UIMessage, { kind: "operation" }> {
+  const primaryCheckout = (() => {
+    switch (title) {
+      case "Promoting primary checkout":
+        return { action: "promote", phase: "started" } as const;
+      case "Promoted to primary checkout":
+        return { action: "promote", phase: "completed" } as const;
+      case "Primary checkout promotion failed":
+        return { action: "promote", phase: "failed" } as const;
+      case "Primary checkout already promoted":
+        return { action: "promote", phase: "noop" } as const;
+      case "Demoting primary checkout":
+        return { action: "demote", phase: "started" } as const;
+      case "Demoted from primary checkout":
+        return { action: "demote", phase: "completed" } as const;
+      case "Primary checkout demotion failed":
+        return { action: "demote", phase: "failed" } as const;
+      case "Primary checkout already demoted":
+        return { action: "demote", phase: "noop" } as const;
+      default:
+        return undefined;
+    }
+  })();
   return {
     kind: "operation",
     id: `op-${seq}`,
@@ -16,6 +38,7 @@ function primaryCheckoutOperation(
     createdAt: seq,
     opType: "primary-checkout",
     title,
+    ...(primaryCheckout ? { primaryCheckout } : {}),
     ...(detail ? { detail } : {}),
   };
 }
@@ -76,6 +99,36 @@ function threadOperationIntent(
     operationId?: string;
   },
 ): Extract<UIMessage, { kind: "operation" }> {
+  const inferredThreadOperation = (() => {
+    switch (title) {
+      case "Commit requested":
+        return { action: "commit", phase: "requested" } as const;
+      case "Commit queued":
+        return { action: "commit", phase: "queued" } as const;
+      case "Committing changes":
+        return { action: "commit", phase: "running" } as const;
+      case "Commit completed":
+        return { action: "commit", phase: "completed" } as const;
+      case "Commit failed":
+        return { action: "commit", phase: "failed" } as const;
+      case "Commit operation update":
+        return { action: "commit", phase: "update" } as const;
+      case "Squash merge requested":
+        return { action: "squash_merge", phase: "requested" } as const;
+      case "Squash merge queued":
+        return { action: "squash_merge", phase: "queued" } as const;
+      case "Squash merging changes":
+        return { action: "squash_merge", phase: "running" } as const;
+      case "Squash merge completed":
+        return { action: "squash_merge", phase: "completed" } as const;
+      case "Squash merge failed":
+        return { action: "squash_merge", phase: "failed" } as const;
+      case "Squash merge operation update":
+        return { action: "squash_merge", phase: "update" } as const;
+      default:
+        return undefined;
+    }
+  })();
   return {
     kind: "operation",
     id: `thread-operation-${seq}`,
@@ -85,12 +138,12 @@ function threadOperationIntent(
     createdAt: seq,
     opType: "thread-operation-intent",
     title,
-    ...(options?.action && options?.phase
+    ...((options?.action && options?.phase) || inferredThreadOperation
       ? {
           threadOperation: {
-            action: options.action,
-            phase: options.phase,
-            ...(options.operationId ? { operationId: options.operationId } : {}),
+            action: options?.action ?? inferredThreadOperation?.action ?? "commit",
+            phase: options?.phase ?? inferredThreadOperation?.phase ?? "update",
+            ...(options?.operationId ? { operationId: options.operationId } : {}),
           },
         }
       : {}),
@@ -202,6 +255,35 @@ describe("buildThreadDetailRows primary-checkout operation collapsing", () => {
     expect(rows[0]?.title).toBe("Primary checkout promotion update");
     expect(rows[0]?.sourceSeqStart).toBe(1);
     expect(rows[0]?.sourceSeqEnd).toBe(2);
+  });
+
+  it("does not collapse primary-checkout rows that only share display titles", () => {
+    const rows = getOperationRows([
+      {
+        kind: "operation",
+        id: "op-1",
+        threadId: "thread-1",
+        sourceSeqStart: 1,
+        sourceSeqEnd: 1,
+        createdAt: 1,
+        opType: "primary-checkout",
+        title: "Promoting primary checkout",
+      },
+      {
+        kind: "operation",
+        id: "op-2",
+        threadId: "thread-1",
+        sourceSeqStart: 2,
+        sourceSeqEnd: 2,
+        createdAt: 2,
+        opType: "primary-checkout",
+        title: "Promoted to primary checkout",
+      },
+    ]);
+
+    expect(rows).toHaveLength(2);
+    expect(rows[0]?.sourceSeqStart).toBe(1);
+    expect(rows[1]?.sourceSeqStart).toBe(2);
   });
 });
 
@@ -540,6 +622,35 @@ describe("buildThreadDetailRows commit operation collapsing", () => {
     expect(rows[0]?.sourceSeqStart).toBe(1);
     expect(rows[0]?.sourceSeqEnd).toBe(2);
     expect(rows[0]?.detail).toContain("Committed changes");
+  });
+
+  it("does not collapse thread-operation lifecycle rows that only share display titles", () => {
+    const rows = getOperationRows([
+      {
+        kind: "operation",
+        id: "thread-operation-1",
+        threadId: "thread-1",
+        sourceSeqStart: 1,
+        sourceSeqEnd: 1,
+        createdAt: 1,
+        opType: "thread-operation-intent",
+        title: "Committing changes",
+      },
+      {
+        kind: "operation",
+        id: "thread-operation-2",
+        threadId: "thread-1",
+        sourceSeqStart: 2,
+        sourceSeqEnd: 2,
+        createdAt: 2,
+        opType: "thread-operation-intent",
+        title: "Commit completed",
+      },
+    ]);
+
+    expect(rows).toHaveLength(2);
+    expect(rows[0]?.sourceSeqStart).toBe(1);
+    expect(rows[1]?.sourceSeqStart).toBe(2);
   });
 
   it("does not merge commit lifecycle updates across different operation ids", () => {

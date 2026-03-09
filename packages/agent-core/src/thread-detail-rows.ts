@@ -254,43 +254,14 @@ function isPrimaryCheckoutOperation(
 function classifyPrimaryCheckoutOperation(message: Extract<UIMessage, { kind: "operation" }>): {
   action: PrimaryCheckoutAction;
   phase: PrimaryCheckoutPhase;
-} {
-  if (message.primaryCheckout) {
-    return {
-      action: message.primaryCheckout.action,
-      phase: message.primaryCheckout.phase,
-    };
+} | null {
+  if (!message.primaryCheckout) {
+    return null;
   }
-
-  switch (message.title) {
-    case "Promoting primary checkout":
-      return { action: "promote", phase: "started" };
-    case "Promoted to primary checkout":
-      return { action: "promote", phase: "completed" };
-    case "Primary checkout promotion failed":
-      return { action: "promote", phase: "failed" };
-    case "Primary checkout already promoted":
-      return { action: "promote", phase: "noop" };
-    case "Demoting primary checkout":
-      return { action: "demote", phase: "started" };
-    case "Demoted from primary checkout":
-      return { action: "demote", phase: "completed" };
-    case "Primary checkout demotion failed":
-      return { action: "demote", phase: "failed" };
-    case "Primary checkout already demoted":
-      return { action: "demote", phase: "noop" };
-    default: {
-      const normalizedTitle = message.title.toLowerCase();
-      // Operation titles are persisted/read-time open_external; unknown values are intentionally tolerated.
-      if (normalizedTitle.includes("promot")) {
-        return { action: "promote", phase: "update" };
-      }
-      if (normalizedTitle.includes("demot")) {
-        return { action: "demote", phase: "update" };
-      }
-      return { action: "unknown", phase: "update" };
-    }
-  }
+  return {
+    action: message.primaryCheckout.action,
+    phase: message.primaryCheckout.phase,
+  };
 }
 
 function mergePrimaryCheckoutOperations(messages: UIMessage[]): UIMessage[] {
@@ -331,6 +302,7 @@ function mergePrimaryCheckoutOperations(messages: UIMessage[]): UIMessage[] {
       opType: "primary-checkout",
       title: last.title,
       detail: uniqueDetailLines.length > 0 ? uniqueDetailLines.join("\n") : undefined,
+      ...(last.primaryCheckout ? { primaryCheckout: last.primaryCheckout } : {}),
     });
 
     active = [];
@@ -345,7 +317,7 @@ function mergePrimaryCheckoutOperations(messages: UIMessage[]): UIMessage[] {
     }
 
     const classified = classifyPrimaryCheckoutOperation(message);
-    if (classified.action === "unknown") {
+    if (!classified || classified.action === "unknown") {
       flush();
       merged.push(message);
       continue;
@@ -391,7 +363,7 @@ function mergePrimaryCheckoutCompletedRoundTrips(messages: UIMessage[]): UIMessa
     }
 
     const promotedClass = classifyPrimaryCheckoutOperation(promoted);
-    if (promotedClass.action !== "promote" || promotedClass.phase !== "completed") {
+    if (!promotedClass || promotedClass.action !== "promote" || promotedClass.phase !== "completed") {
       merged.push(promoted);
       continue;
     }
@@ -403,7 +375,7 @@ function mergePrimaryCheckoutCompletedRoundTrips(messages: UIMessage[]): UIMessa
     }
 
     const demotedClass = classifyPrimaryCheckoutOperation(demoted);
-    if (demotedClass.action !== "demote" || demotedClass.phase !== "completed") {
+    if (!demotedClass || demotedClass.action !== "demote" || demotedClass.phase !== "completed") {
       merged.push(promoted);
       continue;
     }
@@ -449,56 +421,17 @@ function isThreadOperationIntent(
 
 function classifyThreadOperationIntent(
   message: Extract<UIMessage, { kind: "operation" }>,
-): ClassifiedThreadOperationIntent {
-  if (message.threadOperation) {
-    return {
-      action: message.threadOperation.action,
-      phase: message.threadOperation.phase,
-      ...(message.threadOperation.operationId
-        ? { operationId: message.threadOperation.operationId }
-        : {}),
-    };
+): ClassifiedThreadOperationIntent | null {
+  if (!message.threadOperation) {
+    return null;
   }
-
-  switch (message.title) {
-    case "Commit requested":
-      return { action: "commit", phase: "requested" };
-    case "Commit queued":
-      return { action: "commit", phase: "queued" };
-    case "Committing changes":
-      return { action: "commit", phase: "running" };
-    case "Commit completed":
-      return { action: "commit", phase: "completed" };
-    case "Commit failed":
-      return { action: "commit", phase: "failed" };
-    case "Commit operation update":
-      return { action: "commit", phase: "update" };
-    case "Squash merge requested":
-      return { action: "squash_merge", phase: "requested" };
-    case "Squash merge queued":
-      return { action: "squash_merge", phase: "queued" };
-    case "Squash merging changes":
-      return { action: "squash_merge", phase: "running" };
-    case "Squash merge completed":
-      return { action: "squash_merge", phase: "completed" };
-    case "Squash merge failed":
-      return { action: "squash_merge", phase: "failed" };
-    case "Squash merge operation update":
-      return { action: "squash_merge", phase: "update" };
-    case "Thread operation update":
-      return { action: "unknown", phase: "update" };
-    default: {
-      const normalizedTitle = message.title.toLowerCase();
-      // Operation titles are persisted/read-time open_external; unknown values are intentionally tolerated.
-      if (normalizedTitle.includes("squash")) {
-        return { action: "squash_merge", phase: "update" };
-      }
-      if (normalizedTitle.includes("commit")) {
-        return { action: "commit", phase: "update" };
-      }
-      return { action: "unknown", phase: "update" };
-    }
-  }
+  return {
+    action: message.threadOperation.action,
+    phase: message.threadOperation.phase,
+    ...(message.threadOperation.operationId
+      ? { operationId: message.threadOperation.operationId }
+      : {}),
+  };
 }
 
 function areThreadOperationIdsCompatible(
@@ -539,7 +472,7 @@ function mergeThreadOperationIntentMessages(messages: UIMessage[]): UIMessage[] 
     }
 
     const initialClass = classifyThreadOperationIntent(initial);
-    if (initialClass.action === "unknown") {
+    if (!initialClass || initialClass.action === "unknown") {
       merged.push(initial);
       continue;
     }
@@ -564,6 +497,9 @@ function mergeThreadOperationIntentMessages(messages: UIMessage[]): UIMessage[] 
         break;
       }
       const lifecycleClass = classifyThreadOperationIntent(lifecycleCandidate);
+      if (!lifecycleClass) {
+        break;
+      }
       if (
         lifecycleClass.action !== initialClass.action ||
         lifecycleClass.phase === "requested" ||
@@ -621,6 +557,9 @@ function mergeThreadOperationIntentMessages(messages: UIMessage[]): UIMessage[] 
       opType: "thread-operation-intent",
       title: lifecycleCandidate.title,
       detail: detailSections.length > 0 ? detailSections.join("\n\n") : undefined,
+      ...(lifecycleCandidate.threadOperation
+        ? { threadOperation: lifecycleCandidate.threadOperation }
+        : {}),
     });
 
     index = cursor - 1;
@@ -673,6 +612,9 @@ function hasAdjacentThreadOperationOutcome(
 
     if (isThreadOperationIntent(candidate)) {
       const candidateClass = classifyThreadOperationIntent(candidate);
+      if (!candidateClass) {
+        return false;
+      }
       if (candidateClass.action === action) {
         if (!areThreadOperationIdsCompatible(operationId, candidateClass.operationId)) {
           return false;
@@ -705,7 +647,7 @@ function mergeThreadOperationOutcomeMessages(messages: UIMessage[]): UIMessage[]
     }
 
     const classified = classifyThreadOperationIntent(message);
-    if (classified.action === "unknown" || classified.phase === "failed") {
+    if (!classified || classified.action === "unknown" || classified.phase === "failed") {
       merged.push(message);
       continue;
     }
