@@ -190,3 +190,66 @@ export interface EnvironmentAgentStatusSnapshot {
   pendingEventCount: number;
   pendingCommandCount: number;
 }
+
+interface EnvironmentAgentControlMessageBase {
+  environmentAgentMessage: true;
+  requestId: string;
+}
+
+export type EnvironmentAgentControlRequest =
+  | (EnvironmentAgentControlMessageBase & {
+      type: "ack";
+      payload: EnvironmentAgentAckRequest;
+    })
+  | (EnvironmentAgentControlMessageBase & {
+      type: "replay";
+      payload: EnvironmentAgentReplayRequest;
+    })
+  | (EnvironmentAgentControlMessageBase & {
+      type: "status";
+    });
+
+export type EnvironmentAgentControlResponse =
+  | (EnvironmentAgentControlMessageBase & {
+      type: "ack.response";
+      payload: EnvironmentAgentAckResponse;
+    })
+  | (EnvironmentAgentControlMessageBase & {
+      type: "replay.response";
+      payload: EnvironmentAgentReplayResponse;
+    })
+  | (EnvironmentAgentControlMessageBase & {
+      type: "status.response";
+      payload: EnvironmentAgentStatusSnapshot;
+    });
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
+}
+
+export function isEnvironmentAgentControlRequest(
+  value: unknown,
+): value is EnvironmentAgentControlRequest {
+  const record = asRecord(value);
+  if (!record) return false;
+  if (record.environmentAgentMessage !== true) return false;
+  if (typeof record.requestId !== "string" || record.requestId.length === 0) return false;
+  const type = record.type;
+  return type === "ack" || type === "replay" || type === "status";
+}
+
+export function isEnvironmentAgentControlResponse(
+  value: unknown,
+): value is EnvironmentAgentControlResponse {
+  const record = asRecord(value);
+  if (!record) return false;
+  if (record.environmentAgentMessage !== true) return false;
+  if (typeof record.requestId !== "string" || record.requestId.length === 0) return false;
+  const type = record.type;
+  return (
+    type === "ack.response" ||
+    type === "replay.response" ||
+    type === "status.response"
+  );
+}

@@ -4,12 +4,14 @@ import {
   type EnvironmentAgentAckRequest,
   type EnvironmentAgentAckResponse,
   type EnvironmentAgentCommandAck,
+  type EnvironmentAgentControlRequest,
   type EnvironmentAgentConnectionTarget,
   type EnvironmentAgentEvent,
   type EnvironmentAgentEventEnvelope,
   type EnvironmentAgentReplayRequest,
   type EnvironmentAgentReplayResponse,
   type EnvironmentAgentStatusSnapshot,
+  isEnvironmentAgentControlRequest,
 } from "./protocol.js";
 
 export interface EnvironmentAgentRuntimeOptions {
@@ -185,6 +187,10 @@ export class EnvironmentAgentRuntime {
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
       return false;
     }
+    if (isEnvironmentAgentControlRequest(parsed)) {
+      this.handleControlRequest(parsed);
+      return true;
+    }
     const record = parsed as Record<string, unknown>;
     const type = record.type;
     if (type === "ack") {
@@ -202,6 +208,48 @@ export class EnvironmentAgentRuntime {
       return true;
     }
     return false;
+  }
+
+  private handleControlRequest(request: EnvironmentAgentControlRequest): void {
+    switch (request.type) {
+      case "ack":
+        this.writeControlResponse(request.requestId, "ack.response", this.acknowledge(request.payload));
+        break;
+      case "replay":
+        this.writeControlResponse(
+          request.requestId,
+          "replay.response",
+          this.replay(request.payload),
+        );
+        break;
+      case "status":
+        this.writeControlResponse(
+          request.requestId,
+          "status.response",
+          this.getStatusSnapshot(),
+        );
+        break;
+      default:
+        request satisfies never;
+    }
+  }
+
+  private writeControlResponse(
+    requestId: string,
+    type: "ack.response" | "replay.response" | "status.response",
+    payload:
+      | EnvironmentAgentAckResponse
+      | EnvironmentAgentReplayResponse
+      | EnvironmentAgentStatusSnapshot,
+  ): void {
+    process.stdout.write(
+      `${JSON.stringify({
+        environmentAgentMessage: true,
+        requestId,
+        type,
+        payload,
+      })}\n`,
+    );
   }
 
   private resolveThreadId(): string {

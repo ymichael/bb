@@ -1,5 +1,8 @@
 import type { ChildProcess } from "node:child_process";
-import { createChildProcessJsonLineTransport } from "@beanbag/environment-agent";
+import {
+  createChildProcessEnvironmentAgentClient,
+  type EnvironmentAgentClient,
+} from "@beanbag/environment-agent";
 import {
   assertNever,
   createProviderEventEnvelope,
@@ -78,6 +81,7 @@ export interface AgentServerOptions {
 
 interface ManagedSession {
   child: ChildProcess;
+  agentClient: EnvironmentAgentClient;
   runtime: ProviderRuntime;
   providerThreadId?: string;
   activeTurnId?: string;
@@ -449,9 +453,10 @@ export class AgentServer {
     seed?: { providerThreadId?: string; activeTurnId?: string },
   ): ManagedSession {
     this.disposeSession(threadId);
+    const agentClient = createChildProcessEnvironmentAgentClient(child);
     const runtime = new ProviderRuntime({
       threadId,
-      transport: createChildProcessJsonLineTransport(child),
+      transport: agentClient.providerTransport,
       onNotification: (msg) => {
         this.handleNotification(threadId, msg);
       },
@@ -468,6 +473,7 @@ export class AgentServer {
 
     const session: ManagedSession = {
       child,
+      agentClient,
       runtime,
       providerThreadId: seed?.providerThreadId,
       activeTurnId: seed?.activeTurnId,

@@ -15,8 +15,14 @@ export type {
   EnvironmentAgentAckRequest,
   EnvironmentAgentAckResponse,
   EnvironmentAgentStatusSnapshot,
+  EnvironmentAgentControlRequest,
+  EnvironmentAgentControlResponse,
 } from "./protocol.js";
 export { ENVIRONMENT_AGENT_PROTOCOL_VERSION } from "./protocol.js";
+export {
+  isEnvironmentAgentControlRequest,
+  isEnvironmentAgentControlResponse,
+} from "./protocol.js";
 
 export type {
   JsonLineTransport,
@@ -31,3 +37,10 @@ export {
   EnvironmentAgentRuntime,
   connectionTargetFromRuntimeOptions,
 } from "./runtime.js";
+
+export type { EnvironmentAgentClient } from "./client.js";
+export {
+  EnvironmentAgentClientError,
+  createEnvironmentAgentClient,
+  createChildProcessEnvironmentAgentClient,
+} from "./client.js";
