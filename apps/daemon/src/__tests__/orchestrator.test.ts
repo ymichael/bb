@@ -320,6 +320,7 @@ interface OrchestratorTestHarness {
 
 function asOrchestratorHarness(manager: Orchestrator): OrchestratorTestHarness {
   const rawManager = manager as unknown as {
+    activeTurnIdByThreadId: Map<string, string>;
     agentServer: {
       sessions: Map<string, {
         agentClient?: { __fakeChild?: unknown };
@@ -341,6 +342,7 @@ function asOrchestratorHarness(manager: Orchestrator): OrchestratorTestHarness {
     };
   } & OrchestratorTestHarness;
   const sessions = rawManager.agentServer.sessions;
+  const orchestratorActiveTurnIds = rawManager.activeTurnIdByThreadId;
 
   const ensureSession = (threadId: string) => {
     let session = sessions.get(threadId);
@@ -382,7 +384,6 @@ function asOrchestratorHarness(manager: Orchestrator): OrchestratorTestHarness {
       },
       runtime,
       providerThreadId: sessions.get(threadId)?.providerThreadId,
-      activeTurnId: sessions.get(threadId)?.activeTurnId,
     });
     return processes;
   };
@@ -410,23 +411,14 @@ function asOrchestratorHarness(manager: Orchestrator): OrchestratorTestHarness {
   };
 
   const activeTurnIds = new Map<string, string>() as Map<string, string>;
-  activeTurnIds.get = (threadId: string) => sessions.get(threadId)?.activeTurnId;
+  activeTurnIds.get = (threadId: string) => orchestratorActiveTurnIds.get(threadId);
   activeTurnIds.set = (threadId: string, activeTurnId: string) => {
-    ensureSession(threadId).activeTurnId = activeTurnId;
+    orchestratorActiveTurnIds.set(threadId, activeTurnId);
     return activeTurnIds;
   };
-  activeTurnIds.has = (threadId: string) => Boolean(sessions.get(threadId)?.activeTurnId);
-  activeTurnIds.delete = (threadId: string) => {
-    const session = sessions.get(threadId);
-    if (!session) return false;
-    delete session.activeTurnId;
-    return true;
-  };
-  activeTurnIds.clear = () => {
-    for (const session of sessions.values()) {
-      delete session.activeTurnId;
-    }
-  };
+  activeTurnIds.has = (threadId: string) => orchestratorActiveTurnIds.has(threadId);
+  activeTurnIds.delete = (threadId: string) => orchestratorActiveTurnIds.delete(threadId);
+  activeTurnIds.clear = () => orchestratorActiveTurnIds.clear();
   Object.assign(rawManager, {
     processes,
     providerThreadIds,

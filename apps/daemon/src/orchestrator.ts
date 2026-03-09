@@ -414,6 +414,8 @@ export class Orchestrator implements ThreadOrchestrator {
   private lastNotifiedCompletionTurnIds = new Map<string, string>();
   /** Lifecycle epoch counter, incremented on each turn/start or turn/started event. */
   private turnLifecycleEpochs = new Map<string, number>();
+  /** Last known active turn id derived from delivered provider lifecycle events. */
+  private activeTurnIdByThreadId = new Map<string, string>();
   /** Fallback dedupe keyed by turn lifecycle epoch when completion events omit turn IDs. */
   private lastNotifiedCompletionEpochs = new Map<string, number>();
   /** Last event sequence where historical noise pruning ran for an active thread. */
@@ -844,9 +846,10 @@ export class Orchestrator implements ThreadOrchestrator {
     const providerThreadId = await this._ensureProviderSession(threadId, options);
     const tellMode = request.mode ?? "auto";
     const activeTurnId =
-      this.agentServer.getSessionState(threadId).activeTurnId ??
+      this.activeTurnIdByThreadId.get(threadId) ??
       this._resolvePersistedActiveTurnId(threadId);
     if (activeTurnId) {
+      this.activeTurnIdByThreadId.set(threadId, activeTurnId);
       this.agentServer.hydrateSessionState(threadId, { activeTurnId });
     }
 
@@ -1240,6 +1243,7 @@ export class Orchestrator implements ThreadOrchestrator {
     this.agentServer.stopSession(threadId, `[thread ${threadId}] Stopping thread`);
     this.lastNotifiedCompletionTurnIds.delete(threadId);
     this.turnLifecycleEpochs.delete(threadId);
+    this.activeTurnIdByThreadId.delete(threadId);
     this.lastNotifiedCompletionEpochs.delete(threadId);
     this.lastNoisePruneSeqByThread.delete(threadId);
     this.lastNoisePruneAtByThread.delete(threadId);
@@ -1262,6 +1266,7 @@ export class Orchestrator implements ThreadOrchestrator {
     this.agentServer.stopSession(threadId, `[thread ${threadId}] Archiving thread`);
     this.lastNotifiedCompletionTurnIds.delete(threadId);
     this.turnLifecycleEpochs.delete(threadId);
+    this.activeTurnIdByThreadId.delete(threadId);
     this.lastNotifiedCompletionEpochs.delete(threadId);
     this.lastNoisePruneSeqByThread.delete(threadId);
     this.lastNoisePruneAtByThread.delete(threadId);
@@ -2290,6 +2295,7 @@ export class Orchestrator implements ThreadOrchestrator {
     this.eventSeqCounters.clear();
     this.lastNotifiedCompletionTurnIds.clear();
     this.turnLifecycleEpochs.clear();
+    this.activeTurnIdByThreadId.clear();
     this.lastNotifiedCompletionEpochs.clear();
     this.queueDispatchInFlight.clear();
     this.queuedOperationsByThreadId.clear();
@@ -2512,6 +2518,7 @@ export class Orchestrator implements ThreadOrchestrator {
     this.environmentAgentReplayCursorByThreadId.delete(threadId);
     this.lastNotifiedCompletionTurnIds.delete(threadId);
     this.turnLifecycleEpochs.delete(threadId);
+    this.activeTurnIdByThreadId.delete(threadId);
     this.lastNotifiedCompletionEpochs.delete(threadId);
     this.lastNoisePruneSeqByThread.delete(threadId);
     this.lastNoisePruneAtByThread.delete(threadId);
@@ -3902,6 +3909,7 @@ export class Orchestrator implements ThreadOrchestrator {
     this.eventSeqCounters.delete(threadId);
     this.lastNotifiedCompletionTurnIds.delete(threadId);
     this.turnLifecycleEpochs.delete(threadId);
+    this.activeTurnIdByThreadId.delete(threadId);
     this.lastNotifiedCompletionEpochs.delete(threadId);
     this._cleanupEnvironmentRuntime(threadId);
 
@@ -3938,12 +3946,12 @@ export class Orchestrator implements ThreadOrchestrator {
       const nextEpoch = (this.turnLifecycleEpochs.get(threadId) ?? 0) + 1;
       this.turnLifecycleEpochs.set(threadId, nextEpoch);
       if (event.turnId) {
-        this.agentServer.hydrateSessionState(threadId, { activeTurnId: event.turnId });
+        this.activeTurnIdByThreadId.set(threadId, event.turnId);
       }
       return;
     }
     if (state === "idle") {
-      this.agentServer.hydrateSessionState(threadId, { activeTurnId: undefined });
+      this.activeTurnIdByThreadId.delete(threadId);
     }
   }
 
