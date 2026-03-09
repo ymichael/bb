@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Thread, ThreadEvent } from "@beanbag/agent-core";
+import * as environmentAgent from "@beanbag/environment-agent";
 import type { EnvironmentService } from "../environment-service.js";
 import type {
   ThreadRepository,
@@ -635,14 +636,31 @@ describe("Orchestrator environment-agent delivery and replay", () => {
 
   it("swallows retry-delivery failures while nudging the environment agent", async () => {
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
-    const retrySpy = vi
-      .spyOn(
-        (manager as unknown as {
-          agentServer: { retryEnvironmentAgentDelivery: (threadId: string) => Promise<unknown> };
-        }).agentServer,
-        "retryEnvironmentAgentDelivery",
-      )
-      .mockRejectedValue(new Error("transport down"));
+    const retryClient = {
+      retryDaemonDelivery: vi.fn().mockRejectedValue(new Error("transport down")),
+      close: vi.fn(),
+    };
+    const createClientSpy = vi
+      .spyOn(environmentAgent, "createHttpEnvironmentAgentClient")
+      .mockResolvedValue(retryClient as never);
+    const thread = makeThread({
+      environmentRecord: {
+        kind: "worktree",
+        state: {
+          workspaceRoot: "/test",
+          branchName: "bb/thread-1",
+        },
+      },
+    });
+    (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
+    (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue({
+      id: "proj-1",
+      name: "Project",
+      rootPath: "/test",
+      createdAt: 1,
+      updatedAt: 1,
+    });
+    installAuthorizedEnvironmentRuntime("thread-1", "test-token");
 
     await (
       manager as unknown as {
@@ -650,7 +668,12 @@ describe("Orchestrator environment-agent delivery and replay", () => {
       }
     )._nudgeEnvironmentAgentDelivery("thread-1");
 
-    expect(retrySpy).toHaveBeenCalledWith("thread-1");
+    expect(createClientSpy).toHaveBeenCalledWith({
+      baseUrl: "http://127.0.0.1:4312",
+      headers: { authorization: "test-token" },
+    });
+    expect(retryClient.retryDaemonDelivery).toHaveBeenCalledTimes(1);
+    expect(retryClient.close).toHaveBeenCalledTimes(1);
     expect(warnSpy).toHaveBeenCalledWith(
       "[thread thread-1] Failed to nudge environment-agent delivery: transport down",
     );

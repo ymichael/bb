@@ -29,6 +29,7 @@ import {
 } from "@beanbag/environment";
 import {
   ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+  createHttpEnvironmentAgentClient,
   type EnvironmentAgentClient,
   type EnvironmentAgentEventEnvelope,
 } from "@beanbag/environment-agent";
@@ -622,11 +623,17 @@ describe("Orchestrator", () => {
       const archivedIdsWithEnvironmentRecord = initialThreads
         .filter((thread) => thread.archivedAt !== undefined && thread.environmentRecord)
         .map((thread) => thread.id);
+      const nonArchivedIdsWithEnvironmentRecord = initialThreads
+        .filter((thread) => thread.archivedAt === undefined && thread.environmentRecord)
+        .map((thread) => thread.id);
       const bootThreadRepo = {
         create: vi.fn(),
         getById: vi.fn((threadId: string) => threadState.get(threadId)),
         list: vi.fn(() => Array.from(threadState.values())),
         listArchivedIdsWithEnvironmentRecord: vi.fn(() => archivedIdsWithEnvironmentRecord),
+        listNonArchivedIdsWithEnvironmentRecord: vi.fn(
+          () => nonArchivedIdsWithEnvironmentRecord,
+        ),
         update: vi.fn((threadId: string, updates: Partial<Thread>) => {
           const existing = threadState.get(threadId);
           if (!existing) return undefined;
@@ -710,11 +717,88 @@ describe("Orchestrator", () => {
       await bootManager.reconcileActiveThreadsOnBoot();
 
       expect(bootThreadRepo.listArchivedIdsWithEnvironmentRecord).toHaveBeenCalledTimes(1);
+      expect(bootThreadRepo.listNonArchivedIdsWithEnvironmentRecord).toHaveBeenCalledTimes(1);
       expect(cleanupEnvironmentRuntimeSpy).toHaveBeenCalledTimes(1);
       expect(cleanupEnvironmentRuntimeSpy).toHaveBeenCalledWith(
         "boot-archived-with-environment",
         { destroyWorkspace: true },
       );
+    });
+
+    it("nudges delivery for non-archived threads with persisted environments", async () => {
+      const createClientMock = vi.mocked(createHttpEnvironmentAgentClient);
+      const retryClient = {
+        retryDaemonDelivery: vi.fn().mockResolvedValue({
+          protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+          latestSequence: 0,
+          connectedToDaemon: true,
+          pendingEventCount: 0,
+          pendingCommandCount: 0,
+          deliveryState: "healthy" as const,
+          retryAttemptCount: 0,
+        }),
+        close: vi.fn(),
+      } as unknown as EnvironmentAgentClient;
+      createClientMock.mockResolvedValueOnce(retryClient);
+
+      const {
+        bootManager,
+        bootProjectRepo,
+        bootThreadRepo,
+      } = createBootManager([
+        makeThread({
+          id: "boot-active-with-environment",
+          projectId: "proj-1",
+          status: "active",
+          environmentRecord: {
+            kind: "worktree",
+            state: {
+              workspaceRoot: "/tmp/worktree",
+              branchName: "bb/thread-1",
+            },
+          },
+        }),
+        makeThread({
+          id: "boot-idle-without-environment",
+          projectId: "proj-1",
+          status: "idle",
+        }),
+      ]);
+      asOrchestratorHarness(bootManager).environmentRuntimes.set(
+        "boot-active-with-environment",
+        {
+          environment: makeRuntimeEnvironment({
+            rootPath: "/tmp/project",
+            overrides: {
+              getAgentConnectionTarget() {
+                return {
+                  transport: "http" as const,
+                  baseUrl: "http://127.0.0.1:4312",
+                };
+              },
+            },
+          }),
+          startedAt: Date.now(),
+          projectId: "proj-1",
+        },
+      );
+      (bootProjectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue({
+        id: "proj-1",
+        name: "Project",
+        rootPath: "/tmp/project",
+        createdAt: 1,
+        updatedAt: 1,
+      });
+
+      await bootManager.reconcileActiveThreadsOnBoot();
+
+      expect(bootThreadRepo.listNonArchivedIdsWithEnvironmentRecord).toHaveBeenCalledTimes(1);
+      expect(createClientMock).toHaveBeenCalledWith({
+        baseUrl: "http://127.0.0.1:4312",
+      });
+      expect(retryClient.retryDaemonDelivery).toHaveBeenCalledTimes(1);
+      expect(retryClient.close).toHaveBeenCalledTimes(1);
+      expect(bootProjectRepo.getById).toHaveBeenCalledWith("proj-1");
     });
 
     it("does not use the broad thread listing path during boot", async () => {

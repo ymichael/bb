@@ -390,8 +390,8 @@ export class EnvironmentService {
     const candidateThreadIds =
       typeof this.threadRepo.listProjectNonArchivedIdsWithEnvironmentRecord === "function"
         ? this.threadRepo.listProjectNonArchivedIdsWithEnvironmentRecord(project.id)
-        : this.threadRepo
-          .list({ projectId: project.id })
+        : (this.threadRepo
+          .list({ projectId: project.id }) ?? [])
           .filter((thread) => thread.environmentRecord)
           .map((thread) => thread.id);
 

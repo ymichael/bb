@@ -559,6 +559,7 @@ export class Orchestrator implements ThreadOrchestrator {
   /**
    * Startup only reconstructs minimal daemon state:
    * - finalize archived environments that still claim persisted resources
+   * - nudge environment-agent delivery for non-archived threads with persisted environments
    */
   async reconcileActiveThreadsOnBoot(): Promise<void> {
     const archivedThreadIds =
@@ -568,6 +569,16 @@ export class Orchestrator implements ThreadOrchestrator {
     for (const threadId of archivedThreadIds) {
       this._cleanupEnvironmentRuntime(threadId, { destroyWorkspace: true });
     }
+
+    const threadIdsWithPersistedEnvironments =
+      typeof this.threadRepo.listNonArchivedIdsWithEnvironmentRecord === "function"
+        ? this.threadRepo.listNonArchivedIdsWithEnvironmentRecord()
+        : [];
+    await Promise.all(
+      threadIdsWithPersistedEnvironments.map((threadId) =>
+        this._nudgeEnvironmentAgentDelivery(threadId),
+      ),
+    );
   }
 
   private _rebuildPrimaryPromotionStateFromGit(): void {
@@ -2565,7 +2576,33 @@ export class Orchestrator implements ThreadOrchestrator {
 
   private async _nudgeEnvironmentAgentDelivery(threadId: string): Promise<void> {
     try {
-      await this.agentServer.retryEnvironmentAgentDelivery(threadId);
+      const thread = this.threadRepo.getById(threadId);
+      if (!thread || thread.archivedAt !== undefined) {
+        return;
+      }
+      const project = this.projectRepo.getById(thread.projectId);
+      if (!project) {
+        return;
+      }
+
+      const environment = this.environmentService.restoreThreadEnvironment(
+        thread,
+        project.rootPath,
+      );
+      const target = environment?.getAgentConnectionTarget();
+      if (!target) {
+        return;
+      }
+
+      const client = await createHttpEnvironmentAgentClient({
+        baseUrl: target.baseUrl,
+        ...(target.headers ? { headers: target.headers } : {}),
+      });
+      try {
+        await client.retryDaemonDelivery();
+      } finally {
+        client.close();
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       console.warn(
