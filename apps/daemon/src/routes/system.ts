@@ -62,9 +62,9 @@ const shutdownRequestSchema = z.object({
 });
 
 const RESTART_POLICY_BY_STATUS: Record<Thread["status"], string> = {
-  created: "reprovision",
-  provisioning: "mark-provisioning-failed",
-  active: "attempt-resume-or-idle",
+  created: "set-idle",
+  provisioning: "set-idle",
+  active: "set-idle",
   idle: "noop",
   provisioning_failed: "noop",
 };

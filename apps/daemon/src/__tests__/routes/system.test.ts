@@ -467,9 +467,9 @@ describe("System routes", () => {
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual({
         restartPolicyByStatus: {
-          created: "reprovision",
-          provisioning: "mark-provisioning-failed",
-          active: "attempt-resume-or-idle",
+          created: "set-idle",
+          provisioning: "set-idle",
+          active: "set-idle",
           idle: "noop",
           provisioning_failed: "noop",
         },
@@ -491,9 +491,9 @@ describe("System routes", () => {
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual({
         restartPolicyByStatus: {
-          created: "reprovision",
-          provisioning: "mark-provisioning-failed",
-          active: "attempt-resume-or-idle",
+          created: "set-idle",
+          provisioning: "set-idle",
+          active: "set-idle",
           idle: "noop",
           provisioning_failed: "noop",
         },

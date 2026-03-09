@@ -256,9 +256,7 @@ export interface SystemStatus {
 }
 
 export type SystemRestartAction =
-  | "reprovision"
-  | "mark-provisioning-failed"
-  | "attempt-resume-or-idle"
+  | "set-idle"
   | "noop";
 
 export interface SystemRestartPolicy {
