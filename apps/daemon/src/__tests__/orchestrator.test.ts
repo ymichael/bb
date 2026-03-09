@@ -622,21 +622,11 @@ describe("Orchestrator", () => {
       const archivedIdsWithEnvironmentRecord = initialThreads
         .filter((thread) => thread.archivedAt !== undefined && thread.environmentRecord)
         .map((thread) => thread.id);
-      const nonArchivedIdsByStatus = (statuses: readonly Thread["status"][]) =>
-        initialThreads
-          .filter(
-            (thread) =>
-              thread.archivedAt === undefined &&
-              statuses.includes(thread.status),
-          )
-          .map((thread) => thread.id);
       const bootThreadRepo = {
         create: vi.fn(),
         getById: vi.fn((threadId: string) => threadState.get(threadId)),
         list: vi.fn(() => Array.from(threadState.values())),
         listArchivedIdsWithEnvironmentRecord: vi.fn(() => archivedIdsWithEnvironmentRecord),
-        listNonArchivedIdsByStatuses: vi.fn((statuses: readonly Thread["status"][]) =>
-          nonArchivedIdsByStatus(statuses)),
         update: vi.fn((threadId: string, updates: Partial<Thread>) => {
           const existing = threadState.get(threadId);
           if (!existing) return undefined;
@@ -690,33 +680,6 @@ describe("Orchestrator", () => {
       };
     }
 
-    it("normalizes stale daemon-runtime statuses to idle on boot", async () => {
-      const {
-        bootManager,
-        bootThreadRepo,
-        threadState,
-      } = createBootManager([
-        makeThread({ id: "boot-created", status: "created" }),
-        makeThread({ id: "boot-provisioning", status: "provisioning" }),
-        makeThread({ id: "boot-active", status: "active" }),
-        makeThread({ id: "boot-idle", status: "idle" }),
-        makeThread({ id: "boot-provisioning-failed", status: "provisioning_failed" }),
-      ]);
-
-      await bootManager.reconcileActiveThreadsOnBoot();
-
-      expect(bootThreadRepo.listNonArchivedIdsByStatuses).toHaveBeenCalledWith([
-        "created",
-        "provisioning",
-        "active",
-      ]);
-      expect(threadState.get("boot-created")?.status).toBe("idle");
-      expect(threadState.get("boot-provisioning")?.status).toBe("idle");
-      expect(threadState.get("boot-active")?.status).toBe("idle");
-      expect(threadState.get("boot-idle")?.status).toBe("idle");
-      expect(threadState.get("boot-provisioning-failed")?.status).toBe("provisioning_failed");
-    });
-
     it("finalizes archived environments through targeted archived queries", async () => {
       const {
         bootManager,
@@ -767,36 +730,6 @@ describe("Orchestrator", () => {
 
       expect(bootProjectRepo.list).not.toHaveBeenCalled();
       expect(bootThreadRepo.list).not.toHaveBeenCalled();
-    });
-
-    it("does not attempt provider-session resume based on persisted active status", async () => {
-      const {
-        bootManager,
-      } = createBootManager([
-        makeThread({ id: "boot-active", status: "active" }),
-      ]);
-      const spawnSpy = vi.spyOn(
-        bootManager as unknown as {
-          _spawnProcess: (
-            threadId: string,
-            projectRootPath: string,
-            environmentKind: string,
-            reason: string,
-          ) => Promise<unknown>;
-        },
-        "_spawnProcess",
-      );
-      const retrySpy = vi.spyOn(
-        (bootManager as unknown as {
-          agentServer: { retryEnvironmentAgentDelivery: (threadId: string) => Promise<unknown> };
-        }).agentServer,
-        "retryEnvironmentAgentDelivery",
-      );
-
-      await bootManager.reconcileActiveThreadsOnBoot();
-
-      expect(spawnSpy).not.toHaveBeenCalled();
-      expect(retrySpy).not.toHaveBeenCalled();
     });
   });
 

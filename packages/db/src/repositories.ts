@@ -416,21 +416,6 @@ export class ThreadRepository {
       .map((row) => row.id);
   }
 
-  listNonArchivedIdsByStatuses(statuses: readonly ThreadStatus[]): string[] {
-    if (statuses.length === 0) return [];
-    return this.db
-      .select({ id: threads.id })
-      .from(threads)
-      .where(
-        and(
-          isNull(threads.archivedAt),
-          inArray(threads.status, [...statuses]),
-        ),
-      )
-      .all()
-      .map((row) => row.id);
-  }
-
   listProjectNonArchivedIdsWithEnvironmentRecord(projectId: string): string[] {
     return this.db
       .select({ id: threads.id })

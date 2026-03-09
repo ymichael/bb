@@ -256,7 +256,6 @@ export interface SystemStatus {
 }
 
 export type SystemRestartAction =
-  | "set-idle"
   | "noop";
 
 export interface SystemRestartPolicy {

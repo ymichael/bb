@@ -172,12 +172,6 @@ const PRUNABLE_NOISE_EVENT_TYPES: readonly string[] = [
   "item/reasoning/summarypartadded",
   "turn/diff/updated",
 ];
-const BOOT_NORMALIZED_RUNTIME_STATUSES: readonly Thread["status"][] = [
-  "created",
-  "provisioning",
-  "active",
-];
-
 function checkoutSnapshotsMatch(
   left: EnvironmentCheckoutSnapshot,
   right: EnvironmentCheckoutSnapshot,
@@ -565,7 +559,6 @@ export class Orchestrator implements ThreadOrchestrator {
   /**
    * Startup only reconstructs minimal daemon state:
    * - finalize archived environments that still claim persisted resources
-   * - normalize stale daemon-runtime statuses back to idle
    */
   async reconcileActiveThreadsOnBoot(): Promise<void> {
     const archivedThreadIds =
@@ -574,24 +567,6 @@ export class Orchestrator implements ThreadOrchestrator {
         : [];
     for (const threadId of archivedThreadIds) {
       this._cleanupEnvironmentRuntime(threadId, { destroyWorkspace: true });
-    }
-
-    const runtimeStatusThreadIds =
-      typeof this.threadRepo.listNonArchivedIdsByStatuses === "function"
-        ? this.threadRepo.listNonArchivedIdsByStatuses(BOOT_NORMALIZED_RUNTIME_STATUSES)
-        : [];
-    for (const threadId of runtimeStatusThreadIds) {
-      this._setThreadStatus(threadId, "idle", true, {
-        touchUpdatedAt: false,
-      });
-      const hydratedThread = this.threadRepo.getById(threadId);
-      if (
-        hydratedThread &&
-        hydratedThread.status === "idle" &&
-        (hydratedThread.queuedMessages?.length ?? 0) > 0
-      ) {
-        this._scheduleQueuedFollowUpDispatch(threadId);
-      }
     }
   }
 
