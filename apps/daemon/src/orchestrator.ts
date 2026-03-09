@@ -2098,14 +2098,15 @@ export class Orchestrator implements ThreadOrchestrator {
    * Check if a thread's process is currently active.
    */
   isActive(threadId: string): boolean {
-    return this.agentServer.isSessionActive(threadId);
+    return this.threadRepo.getById(threadId)?.status === "active";
   }
 
   /**
    * Get count of currently active (running) thread processes.
    */
   getActiveCount(): number {
-    return this.agentServer.getActiveSessionCount();
+    const activeThreads = this.threadRepo.list({ status: "active" });
+    return Array.isArray(activeThreads) ? activeThreads.length : 0;
   }
 
   /**

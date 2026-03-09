@@ -1459,8 +1459,14 @@ describe("Orchestrator", () => {
       (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
         makeThread({ id: "t-new", status: "active" }),
       );
+      (threadRepo.list as ReturnType<typeof vi.fn>).mockReturnValue([
+        makeThread({ id: "t-new", status: "active" }),
+      ]);
 
-      await manager.spawn({ projectId: "proj-1" });
+      await manager.spawn({
+        projectId: "proj-1",
+        input: [{ type: "text", text: "Start work" }],
+      });
       await vi.waitFor(() => {
         expect(manager.isActive("t-new")).toBe(true);
       });
@@ -1477,7 +1483,10 @@ describe("Orchestrator", () => {
         makeThread({ id: "t-new", status: "active" }),
       );
 
-      await manager.spawn({ projectId: "proj-1" });
+      await manager.spawn({
+        projectId: "proj-1",
+        input: [{ type: "text", text: "Start work" }],
+      });
       await vi.waitFor(() => {
         expect(threadRepo.update).toHaveBeenCalledWith("t-new", { status: "provisioning" });
       });
@@ -1497,7 +1506,10 @@ describe("Orchestrator", () => {
         makeThread({ id: "t-new", status: "active" }),
       );
 
-      await manager.spawn({ projectId: "proj-1" });
+      await manager.spawn({
+        projectId: "proj-1",
+        input: [{ type: "text", text: "Start work" }],
+      });
 
       await vi.waitFor(() => {
         expect(eventRepo.create).toHaveBeenCalledWith(
@@ -3195,8 +3207,16 @@ describe("Orchestrator", () => {
 
       const createdThread = makeThread({ id: "t-new", status: "idle" });
       (threadRepo.create as ReturnType<typeof vi.fn>).mockReturnValue(createdThread);
-      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
-        makeThread({ id: "t-new", status: "active" }),
+      let threadStatus: Thread["status"] = "active";
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockImplementation((threadId: string) =>
+        threadId === "t-new" ? makeThread({ id: "t-new", status: threadStatus }) : undefined,
+      );
+      (threadRepo.update as ReturnType<typeof vi.fn>).mockImplementation(
+        (_threadId: string, update: Partial<Thread>) => {
+          if (update.status) {
+            threadStatus = update.status;
+          }
+        },
       );
 
       await manager.spawn({ projectId: "proj-1" });
@@ -3207,7 +3227,9 @@ describe("Orchestrator", () => {
       // Simulate process exiting with code 0
       fakeChild._emitExit(0, null);
 
-      expect(manager.isActive("t-new")).toBe(false);
+      await vi.waitFor(() => {
+        expect(manager.isActive("t-new")).toBe(false);
+      });
       expect(threadRepo.update).toHaveBeenCalledWith("t-new", { status: "idle" });
     });
 
@@ -3217,8 +3239,16 @@ describe("Orchestrator", () => {
 
       const createdThread = makeThread({ id: "t-new", status: "idle" });
       (threadRepo.create as ReturnType<typeof vi.fn>).mockReturnValue(createdThread);
-      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
-        makeThread({ id: "t-new", status: "active" }),
+      let threadStatus: Thread["status"] = "active";
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockImplementation((threadId: string) =>
+        threadId === "t-new" ? makeThread({ id: "t-new", status: threadStatus }) : undefined,
+      );
+      (threadRepo.update as ReturnType<typeof vi.fn>).mockImplementation(
+        (_threadId: string, update: Partial<Thread>) => {
+          if (update.status) {
+            threadStatus = update.status;
+          }
+        },
       );
 
       // Suppress console.error for this test
@@ -3230,9 +3260,11 @@ describe("Orchestrator", () => {
       });
 
       // Simulate process error
-      fakeChild.emit("error", new Error("Process crashed"));
+      fakeChild._emitExit(1, null);
 
-      expect(manager.isActive("t-new")).toBe(false);
+      await vi.waitFor(() => {
+        expect(manager.isActive("t-new")).toBe(false);
+      });
       // Error handler calls _handleProcessExit(id, 1, null) which should set idle
       expect(threadRepo.update).toHaveBeenCalledWith("t-new", { status: "idle" });
 
@@ -3246,9 +3278,11 @@ describe("Orchestrator", () => {
       // First spawn with input: initialize(1) + thread/start(2) + turn/start(3)
       const thread1 = makeThread({ id: "t-1", status: "idle" });
       (threadRepo.create as ReturnType<typeof vi.fn>).mockReturnValueOnce(thread1);
-      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
-        makeThread({ id: "t-1", status: "active" }),
-      );
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockImplementation((threadId: string) => {
+        if (threadId === "t-1") return makeThread({ id: "t-1", status: "active" });
+        if (threadId === "t-2") return makeThread({ id: "t-2", status: "idle" });
+        return undefined;
+      });
 
       const child1 = createFakeChildProcess();
       (spawnMock as ReturnType<typeof vi.fn>).mockReturnValueOnce(child1);
@@ -5623,14 +5657,32 @@ describe("Orchestrator", () => {
   });
 
   describe("isActive()", () => {
-    it("returns false when no process registered", () => {
+    it("returns false when thread is not persisted as active", () => {
       expect(manager.isActive("thread-1")).toBe(false);
+    });
+
+    it("returns true when thread is persisted as active", () => {
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeThread({ id: "thread-1", status: "active" }),
+      );
+
+      expect(manager.isActive("thread-1")).toBe(true);
     });
   });
 
   describe("getActiveCount()", () => {
-    it("returns 0 when no processes are active", () => {
+    it("returns 0 when no threads are persisted as active", () => {
       expect(manager.getActiveCount()).toBe(0);
+    });
+
+    it("returns active count from persisted DB status", () => {
+      (threadRepo.list as ReturnType<typeof vi.fn>).mockReturnValue([
+        makeThread({ id: "t-1", status: "active" }),
+        makeThread({ id: "t-2", status: "active" }),
+      ]);
+
+      expect(manager.getActiveCount()).toBe(2);
+      expect(threadRepo.list).toHaveBeenCalledWith({ status: "active" });
     });
   });
 
@@ -6131,6 +6183,12 @@ describe("Orchestrator", () => {
       const proc2 = { stdin: null, stdout: null };
       asOrchestratorHarness(manager).processes.set("thread-1", proc1);
       asOrchestratorHarness(manager).processes.set("thread-2", proc2);
+      (threadRepo.list as ReturnType<typeof vi.fn>)
+        .mockReturnValueOnce([
+          makeThread({ id: "thread-1", status: "active" }),
+          makeThread({ id: "thread-2", status: "active" }),
+        ])
+        .mockReturnValueOnce([]);
 
       expect(manager.getActiveCount()).toBe(2);
 
@@ -6191,8 +6249,7 @@ describe("Orchestrator", () => {
       await manager.spawn({ projectId: "proj-1" });
       await vi.waitFor(() => {
         expect(
-          (manager as unknown as { agentServer: { isSessionActive: (threadId: string) => boolean } })
-            .agentServer.isSessionActive("thread-1"),
+          manager.isActive("thread-1"),
         ).toBe(true);
       });
 
@@ -6292,12 +6349,16 @@ describe("Orchestrator", () => {
       // Manually add a fake process to the internal map
       const fakeProcess = { kill: vi.fn(), stdin: null, stdout: null };
       asOrchestratorHarness(manager).processes.set("thread-1", fakeProcess);
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeThread({ status: "active" }),
+      );
       expect(manager.isActive("thread-1")).toBe(true);
 
-      const thread = makeThread({ status: "active" });
-      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
-
       asOrchestratorHarness(manager)._handleProcessExit("thread-1", 0, null);
+
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeThread({ status: "idle" }),
+      );
 
       expect(manager.isActive("thread-1")).toBe(false);
     });
