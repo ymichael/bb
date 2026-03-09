@@ -208,12 +208,17 @@ export class EnvironmentService {
     });
   }
 
-  cleanupEnvironmentRuntime(threadId: string, opts?: { destroyWorkspace?: boolean }): void {
+  cleanupEnvironmentRuntime(
+    threadId: string,
+    opts?: { destroyWorkspace?: boolean; disposeEnvironment?: boolean },
+  ): void {
     const runtime = this.environmentRuntimes.get(threadId);
     if (runtime) {
       runtime.stopWatchingWorkspaceStatus?.();
       this.environmentRuntimes.delete(threadId);
     }
+    const shouldDisposeEnvironment = opts?.disposeEnvironment ?? true;
+    if (!shouldDisposeEnvironment) return;
     if (!opts?.destroyWorkspace) return;
 
     this.workspaceCleanupInFlightThreadIds.add(threadId);
@@ -464,9 +469,12 @@ export class EnvironmentService {
     };
   }
 
-  stopAll(): void {
+  stopAll(opts?: { preserveEnvironments?: boolean }): void {
+    const disposeEnvironments = !(opts?.preserveEnvironments ?? false);
     for (const [threadId] of this.environmentRuntimes) {
-      this.cleanupEnvironmentRuntime(threadId);
+      this.cleanupEnvironmentRuntime(threadId, {
+        disposeEnvironment: disposeEnvironments,
+      });
     }
     this.environmentRuntimes.clear();
     this.stopAllPrimaryPromotionWatches();

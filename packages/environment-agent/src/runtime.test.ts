@@ -221,4 +221,45 @@ describe("EnvironmentAgentRuntime", () => {
       });
     expect(deliveredSequences).toEqual([[1]]);
   });
+
+  it("preserves daemon base path prefixes when pushing buffered events", async () => {
+    const deliveredPaths: string[] = [];
+    const daemon = createServer((request, response) => {
+      deliveredPaths.push(request.url ?? "");
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(
+        JSON.stringify({
+          protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+          threadId: "thread-1",
+          acknowledgedSequence: 1,
+        }),
+      );
+    });
+    await new Promise<void>((resolve) => daemon.listen(0, "127.0.0.1", resolve));
+    cleanup.push(
+      () =>
+        new Promise<void>((resolve, reject) => {
+          daemon.close((error) => (error ? reject(error) : resolve()));
+        }),
+    );
+    const address = daemon.address();
+    if (!address || typeof address === "string") {
+      throw new Error("Failed to resolve daemon server address");
+    }
+
+    const runtime = new EnvironmentAgentRuntime({
+      threadId: "thread-1",
+      daemonConnection: {
+        daemonUrl: `http://${address.address}:${address.port}/api/v1`,
+        authToken: "secret-token",
+        threadId: "thread-1",
+      },
+    });
+
+    runtime.start();
+
+    await expect.poll(() => deliveredPaths).toEqual([
+      "/api/v1/threads/thread-1/environment-agent/deliver",
+    ]);
+  });
 });

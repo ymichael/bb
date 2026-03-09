@@ -316,6 +316,70 @@ describe("Orchestrator environment-agent delivery and replay", () => {
     expect(thread.environmentAgentCursor).toBe(2);
   });
 
+  it("persists environment-agent delivery without a live managed session", async () => {
+    const thread = makeThread({
+      id: "thread-1",
+      projectId: "proj-1",
+      status: "active",
+      environmentAgentCursor: 0,
+    } as Thread & { environmentAgentCursor: number }) as Thread & {
+      environmentAgentCursor: number;
+    };
+    const createdEvents: ThreadEvent[] = [];
+    (threadRepo.getById as ReturnType<typeof vi.fn>).mockImplementation(
+      (threadId: string) => (threadId === "thread-1" ? thread : undefined),
+    );
+    (threadRepo.update as ReturnType<typeof vi.fn>).mockImplementation(
+      (_threadId: string, updates: Partial<Thread> & { environmentAgentCursor?: number }) => {
+        Object.assign(thread, updates);
+        return thread;
+      },
+    );
+    (eventRepo.create as ReturnType<typeof vi.fn>).mockImplementation(
+      (event: ThreadEvent) => {
+        createdEvents.push(event);
+        return event;
+      },
+    );
+    installAuthorizedEnvironmentRuntime("thread-1", "Bearer test-token");
+
+    await expect(
+      manager.ingestEnvironmentAgentEvents({
+        threadId: "thread-1",
+        authorizationHeader: "Bearer test-token",
+        events: [
+          {
+            protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+            sequence: 1,
+            emittedAt: 1_001,
+            threadId: "thread-1",
+            event: {
+              type: "provider.event",
+              threadId: "thread-1",
+              method: "turn/completed",
+              payload: { turnId: "turn-1" },
+            },
+          },
+        ],
+      }),
+    ).resolves.toMatchObject({
+      protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+      threadId: "thread-1",
+      acknowledgedSequence: 1,
+    });
+
+    expect(thread.environmentAgentCursor).toBe(1);
+    expect(thread.status).toBe("idle");
+    expect(createdEvents).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          threadId: "thread-1",
+          type: "turn/completed",
+        }),
+      ]),
+    );
+  });
+
   it("treats duplicate or gapped delivery as idempotent and preserves the cursor", async () => {
     const thread = makeThread({
       id: "thread-1",

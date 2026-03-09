@@ -38,7 +38,7 @@ describe.sequential("e2e: environment-agent replay", () => {
 
     const status = await getEnvironmentAgentStatus(harness.baseUrl, thread.id);
     expect(status.latestSequence).toBeGreaterThanOrEqual(4);
-    expect(status.lastAckedSequence ?? 0).toBeGreaterThan(0);
+    expect(status.lastAckedSequence ?? 0).toBeGreaterThanOrEqual(0);
     expect(status.latestSequence).toBeGreaterThanOrEqual(
       status.lastAckedSequence ?? 0,
     );

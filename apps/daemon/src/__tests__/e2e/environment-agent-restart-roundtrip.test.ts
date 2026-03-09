@@ -3,9 +3,7 @@ import {
   allocateLocalPort,
   createProject,
   createThread,
-  deliverEnvironmentAgentEvents,
   listThreadEvents,
-  replayEnvironmentAgentEvents,
   sleep,
   waitForThreadStatus,
 } from "./environment-agent-api.js";
@@ -24,7 +22,7 @@ describe.sequential("e2e: environment-agent restart recovery", () => {
     }
   });
 
-  it("replays buffered provider events after daemon restart using the persisted cursor", async () => {
+  it("recovers buffered provider events automatically after daemon restart", async () => {
     const port = await allocateLocalPort();
     harness = await startDaemonE2eHarness({
       port,
@@ -59,35 +57,7 @@ describe.sequential("e2e: environment-agent restart recovery", () => {
       },
     });
 
-    const replay = await replayEnvironmentAgentEvents(harness.baseUrl, thread.id, {
-      afterSequence: cursorBeforeRestart,
-    });
-    expect(replay.fromSequenceExclusive).toBe(cursorBeforeRestart);
-    expect(replay.events.length).toBeGreaterThan(0);
-    expect(
-      replay.events.some(
-        (event) =>
-          event.event.type === "provider.event" &&
-          event.event.method === "turn/completed",
-      ),
-    ).toBe(true);
-
-    const authorization = harness.getEnvironmentAgentAuthorization(thread.id);
-    expect(authorization).toMatch(/^Bearer /);
-
-    const delivered = await deliverEnvironmentAgentEvents(
-      harness.baseUrl,
-      thread.id,
-      authorization!,
-      {
-        protocolVersion: 1,
-        threadId: thread.id,
-        events: replay.events,
-      },
-    );
-    expect(delivered.acknowledgedSequence).toBe(replay.toSequenceInclusive);
-
-    await waitForThreadStatus(harness.baseUrl, thread.id, "idle");
+    await waitForThreadStatus(harness.baseUrl, thread.id, "idle", 12_000);
 
     const events = await listThreadEvents(harness.baseUrl, thread.id);
     expect(events.filter((event) => event.type === "turn/started")).toHaveLength(1);

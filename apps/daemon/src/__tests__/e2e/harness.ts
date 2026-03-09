@@ -152,6 +152,9 @@ export async function startDaemonE2eHarness(
       projectRepo,
       threadRepo,
       eventRepo,
+      ...(opts?.port
+        ? { daemonBaseUrl: `http://127.0.0.1:${opts.port}/api/v1` }
+        : {}),
       provider: createCodexProviderAdapter({
         processCommand: workspaceFakeCodexPath ? "node" : fakeCodexCommand,
         processArgs: workspaceFakeCodexPath
@@ -213,6 +216,7 @@ export async function startDaemonE2eHarness(
         rawThreadManager.agentServer.opts.onSessionExit = undefined;
       }
       rawThreadManager.agentServer?.stopAllSessions?.("Beanbag daemon restart");
+      threadManager.stopAll({ preserveEnvironments: true });
       await sleep(120);
       await closeDaemon();
     };

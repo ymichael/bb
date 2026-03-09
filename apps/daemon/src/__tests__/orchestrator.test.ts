@@ -676,18 +676,35 @@ describe("Orchestrator", () => {
       };
     }
 
-    it("resets persisted active threads to idle when they cannot be resumed", async () => {
+    it("keeps persisted active threads active when boot cannot attach yet but recovery is still possible", async () => {
       const {
         bootManager,
+        bootEventRepo,
+        bootProjectRepo,
         bootThreadRepo,
         bootWs,
+        threadState,
       } = createBootManager([
         makeThread({ id: "boot-active", status: "active" }),
       ]);
+      (bootProjectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue({
+        id: "proj-1",
+        name: "Test",
+        rootPath: "/test",
+        createdAt: 1000,
+        updatedAt: 1000,
+      });
+      (bootEventRepo.getLatestTurnLifecycle as unknown as ReturnType<typeof vi.fn>) = vi
+        .fn()
+        .mockReturnValue({
+          normType: "turn/started",
+          turnId: "turn-1",
+        });
 
       await bootManager.reconcileActiveThreadsOnBoot();
 
-      expect(bootThreadRepo.update).toHaveBeenCalledWith(
+      expect(threadState.get("boot-active")?.status).toBe("active");
+      expect(bootThreadRepo.update).not.toHaveBeenCalledWith(
         "boot-active",
         {
           status: "idle",
@@ -696,7 +713,7 @@ describe("Orchestrator", () => {
           touchUpdatedAt: false,
         },
       );
-      expect(bootWs.broadcast).toHaveBeenCalledWith("thread", "boot-active", [
+      expect(bootWs.broadcast).not.toHaveBeenCalledWith("thread", "boot-active", [
         "status-changed",
         "work-status-changed",
       ]);
@@ -6284,6 +6301,27 @@ describe("Orchestrator", () => {
 
       expect(threadRepo.update).not.toHaveBeenCalled();
       expect(manager.getActiveCount()).toBe(0);
+    });
+
+    it("preserves managed environments during daemon shutdown mode", () => {
+      const dispose = vi.fn();
+      const stopWatchingWorkspaceStatus = vi.fn();
+      asOrchestratorHarness(manager).environmentService.environmentRuntimes.set("thread-1", {
+        environment: makeRuntimeEnvironment({
+          rootPath: "/test",
+          dispose,
+        }),
+        agentConnectionTarget: {
+          transport: "http",
+          baseUrl: "http://127.0.0.1:4312",
+        },
+        stopWatchingWorkspaceStatus,
+      });
+
+      manager.stopAll({ preserveEnvironments: true });
+
+      expect(stopWatchingWorkspaceStatus).toHaveBeenCalledTimes(1);
+      expect(dispose).not.toHaveBeenCalled();
     });
   });
 

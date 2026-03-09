@@ -649,8 +649,11 @@ export class Orchestrator implements ThreadOrchestrator {
     const latestLifecycle = this._latestTurnLifecycleStatus(thread.id);
     const shouldAttemptResume = latestLifecycle !== "idle";
 
-    if (!project || !providerThreadId || !shouldAttemptResume) {
+    if (!project || !shouldAttemptResume) {
       this._setThreadStatus(thread.id, "idle", true, { touchUpdatedAt: false });
+      return;
+    }
+    if (!providerThreadId) {
       return;
     }
 
@@ -684,7 +687,6 @@ export class Orchestrator implements ThreadOrchestrator {
       await this._nudgeEnvironmentAgentDelivery(thread.id);
     } catch {
       this._cleanupThreadRuntime(thread.id);
-      this._setThreadStatus(thread.id, "idle", true, { touchUpdatedAt: false });
     }
   }
 
@@ -2337,9 +2339,11 @@ export class Orchestrator implements ThreadOrchestrator {
   /**
    * Stop all active processes. Called during graceful shutdown.
    */
-  stopAll(): void {
+  stopAll(opts?: { preserveEnvironments?: boolean }): void {
     this.agentServer.stopAllSessions("Beanbag daemon shutdown");
-    this.environmentService.stopAll();
+    this.environmentService.stopAll({
+      preserveEnvironments: opts?.preserveEnvironments,
+    });
     this.autoTitleAttemptedThreadIds.clear();
     this.titleFallbackByThreadId.clear();
     this.provisioningTasks.clear();

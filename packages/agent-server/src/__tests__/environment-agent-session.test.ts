@@ -59,7 +59,7 @@ describe("AgentServer environment-agent control plane", () => {
 
     await expect(agentServer.getEnvironmentAgentStatus("thread-1")).resolves.toMatchObject({
       latestSequence: 3,
-      pendingEventCount: 2,
+      pendingEventCount: 3,
     });
 
     await expect(
@@ -87,7 +87,12 @@ describe("AgentServer environment-agent control plane", () => {
       threadId: "thread-1",
     });
 
-    expect(simulator.ackRequests.map((request) => request.sequence)).toContain(1);
+    expect(simulator.ackRequests).toEqual([
+      expect.objectContaining({
+        sequence: 3,
+        threadId: "thread-1",
+      }),
+    ]);
   });
 
   it("passes resolved provider launch auth through provider ensure", async () => {
@@ -194,7 +199,43 @@ describe("AgentServer environment-agent control plane", () => {
         normalizedMethod: "turn/started",
       }),
     );
-    expect(simulator.ackRequests.map((request) => request.sequence)).toContain(5);
+    expect(simulator.ackRequests).toEqual([]);
+  });
+
+  it("ingests replayed provider notifications without an active session", async () => {
+    const onNotification = vi.fn();
+    const agentServer = new AgentServer({
+      provider: createCodexProviderAdapter(),
+      onNotification,
+    });
+
+    await expect(
+      agentServer.ingestReplayedEnvironmentAgentEvents({
+        threadId: "thread-1",
+        events: [
+          {
+            protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+            sequence: 5,
+            emittedAt: 1_000,
+            threadId: "thread-1",
+            event: {
+              type: "provider.event",
+              threadId: "thread-1",
+              method: "turn/started",
+              payload: { turnId: "turn-2" },
+            },
+          },
+        ],
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(onNotification).toHaveBeenCalledWith(
+      "thread-1",
+      expect.objectContaining({
+        method: "turn/started",
+        normalizedMethod: "turn/started",
+      }),
+    );
   });
 
   it("preserves replay window semantics through the session", async () => {
@@ -288,7 +329,7 @@ describe("AgentServer environment-agent control plane", () => {
     });
   });
 
-  it("acknowledges live provider notifications at the highest observed sequence", async () => {
+  it("tracks live provider notifications without advancing the delivery ack cursor", async () => {
     const onNotification = vi.fn();
     const agentServer = new AgentServer({
       provider: createCodexProviderAdapter(),
@@ -316,7 +357,9 @@ describe("AgentServer environment-agent control plane", () => {
 
     simulator.emitProviderNotification("turn/started", { turnId: "turn-2" }, { sequence: 2 });
     await vi.waitFor(() => {
-      expect(simulator.ackRequests.map((request) => request.sequence)).toContain(2);
+      expect(agentServer.getSessionState("thread-1")).toMatchObject({
+        activeTurnId: "turn-2",
+      });
     });
     expect(agentServer.getSessionState("thread-1")).toMatchObject({
       activeTurnId: "turn-2",
@@ -324,7 +367,13 @@ describe("AgentServer environment-agent control plane", () => {
 
     simulator.emitProviderNotification("turn/completed", { turnId: "turn-2" }, { sequence: 3 });
     await vi.waitFor(() => {
-      expect(simulator.ackRequests.map((request) => request.sequence)).toContain(3);
+      expect(onNotification).toHaveBeenCalledWith(
+        "thread-1",
+        expect.objectContaining({
+          method: "turn/completed",
+          normalizedMethod: "turn/completed",
+        }),
+      );
     });
     expect(onNotification).toHaveBeenCalledWith(
       "thread-1",
@@ -336,6 +385,7 @@ describe("AgentServer environment-agent control plane", () => {
     expect(agentServer.getSessionState("thread-1")).toMatchObject({
       activeTurnId: undefined,
     });
+    expect(simulator.ackRequests).toEqual([]);
   });
 
   it("drops the session when the environment-agent transport closes", async () => {

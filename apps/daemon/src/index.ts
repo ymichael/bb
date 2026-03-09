@@ -160,7 +160,7 @@ async function main(): Promise<void> {
       `\nReceived ${signal}. ${restartRequested ? "Restarting" : "Shutting down"} gracefully...`,
     );
 
-    threadManagerRef?.stopAll();
+    threadManagerRef?.stopAll({ preserveEnvironments: true });
     wsManagerRef?.close();
     await closeHttpServer(httpServer);
 

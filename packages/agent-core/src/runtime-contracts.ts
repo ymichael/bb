@@ -222,7 +222,7 @@ export interface ThreadOrchestrator {
   listProviders(): SystemProviderInfo[];
   listEnvironments(): SystemEnvironmentInfo[];
   reconcileActiveThreadsOnBoot(): Promise<void>;
-  stopAll(): void;
+  stopAll(opts?: { preserveEnvironments?: boolean }): void;
 }
 
 export interface ThreadSchedule {

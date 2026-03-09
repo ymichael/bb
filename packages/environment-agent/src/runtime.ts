@@ -383,7 +383,10 @@ export class EnvironmentAgentRuntime {
 
     try {
       const response = await fetch(
-        new URL(`/threads/${threadId}/environment-agent/deliver`, daemonUrl),
+        this.resolveDaemonEndpointUrl(
+          daemonUrl,
+          `threads/${threadId}/environment-agent/deliver`,
+        ),
         {
           method: "POST",
           headers: {
@@ -439,6 +442,11 @@ export class EnvironmentAgentRuntime {
 
   private resolveThreadId(): string {
     return this.opts.threadId ?? process.env.BB_THREAD_ID ?? "unknown-thread";
+  }
+
+  private resolveDaemonEndpointUrl(daemonUrl: string, relativePath: string): URL {
+    const normalizedBase = daemonUrl.endsWith("/") ? daemonUrl : `${daemonUrl}/`;
+    return new URL(relativePath, normalizedBase);
   }
 
   private toProviderEvent(line: string): EnvironmentAgentEvent {
