@@ -28,7 +28,10 @@ import {
   type CreateEnvironmentContext,
   type IEnvironment,
 } from "@beanbag/environment";
-import type { EnvironmentAgentClient } from "@beanbag/environment-agent";
+import {
+  ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+  type EnvironmentAgentClient,
+} from "@beanbag/environment-agent";
 import type {
   ThreadRepository,
   EventRepository,
@@ -1264,6 +1267,213 @@ describe("Orchestrator", () => {
       expect(updatedIds).not.toContain("boot-idle");
       expect(updatedIds).not.toContain("boot-provisioning-failed");
       expect(updatedIds).not.toContain("boot-archived-idle");
+    });
+  });
+
+  describe("environment-agent delivery", () => {
+    function installAuthorizedEnvironmentRuntime(threadId: string, authorization: string): void {
+      (
+        manager as unknown as {
+          environmentService: Pick<EnvironmentService, "setEnvironmentRuntime">;
+        }
+      ).environmentService.setEnvironmentRuntime(
+        threadId,
+        makeRuntimeEnvironment({
+          rootPath: "/test",
+          overrides: {
+            getAgentConnectionTarget() {
+              return {
+                transport: "http" as const,
+                baseUrl: "http://127.0.0.1:4312",
+                headers: { authorization },
+              };
+            },
+          },
+        }),
+      );
+    }
+
+    it("only ingests contiguous unseen environment-agent events and advances the cursor", async () => {
+      const thread = makeThread({
+        id: "thread-1",
+        projectId: "proj-1",
+        environmentAgentCursor: 1,
+      } as Thread & { environmentAgentCursor: number });
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockImplementation(
+        (threadId: string) => (threadId === "thread-1" ? thread : undefined),
+      );
+      (threadRepo.update as ReturnType<typeof vi.fn>).mockImplementation(
+        (_threadId: string, updates: Partial<Thread> & { environmentAgentCursor?: number }) => {
+          Object.assign(thread, updates);
+          return thread;
+        },
+      );
+      installAuthorizedEnvironmentRuntime("thread-1", "Bearer test-token");
+
+      const ingestSpy = vi
+        .spyOn(
+          (manager as unknown as { agentServer: { ingestReplayedEnvironmentAgentEvents: (args: unknown) => Promise<void> } }).agentServer,
+          "ingestReplayedEnvironmentAgentEvents",
+        )
+        .mockResolvedValue(undefined);
+
+      const events = [
+        {
+          protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+          sequence: 1,
+          emittedAt: 1_000,
+          threadId: "thread-1",
+          event: { type: "environment.ready", threadId: "thread-1" },
+        },
+        {
+          protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+          sequence: 2,
+          emittedAt: 1_001,
+          threadId: "thread-1",
+          event: {
+            type: "provider.event",
+            threadId: "thread-1",
+            method: "turn/started",
+            payload: { turnId: "turn-1" },
+          },
+        },
+        {
+          protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+          sequence: 4,
+          emittedAt: 1_003,
+          threadId: "thread-1",
+          event: {
+            type: "provider.event",
+            threadId: "thread-1",
+            method: "turn/completed",
+            payload: { turnId: "turn-1" },
+          },
+        },
+        {
+          protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+          sequence: 3,
+          emittedAt: 1_002,
+          threadId: "thread-1",
+          event: {
+            type: "provider.event",
+            threadId: "thread-1",
+            method: "turn/completed",
+            payload: { turnId: "turn-1" },
+          },
+        },
+      ];
+
+      await expect(
+        manager.ingestEnvironmentAgentEvents({
+          threadId: "thread-1",
+          authorizationHeader: "Bearer test-token",
+          events,
+        }),
+      ).resolves.toMatchObject({
+        protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+        threadId: "thread-1",
+        acknowledgedSequence: 2,
+      });
+
+      expect(ingestSpy).toHaveBeenCalledWith({
+        threadId: "thread-1",
+        events: [events[1]],
+      });
+      expect(thread.environmentAgentCursor).toBe(2);
+      expect(threadRepo.update).toHaveBeenCalledWith(
+        "thread-1",
+        { environmentAgentCursor: 2 },
+        { touchUpdatedAt: false },
+      );
+    });
+
+    it("treats duplicate or gapped delivery as idempotent and preserves the cursor", async () => {
+      const thread = makeThread({
+        id: "thread-1",
+        projectId: "proj-1",
+        environmentAgentCursor: 2,
+      } as Thread & { environmentAgentCursor: number });
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockImplementation(
+        (threadId: string) => (threadId === "thread-1" ? thread : undefined),
+      );
+      installAuthorizedEnvironmentRuntime("thread-1", "Bearer test-token");
+
+      const ingestSpy = vi
+        .spyOn(
+          (manager as unknown as { agentServer: { ingestReplayedEnvironmentAgentEvents: (args: unknown) => Promise<void> } }).agentServer,
+          "ingestReplayedEnvironmentAgentEvents",
+        )
+        .mockResolvedValue(undefined);
+
+      await expect(
+        manager.ingestEnvironmentAgentEvents({
+          threadId: "thread-1",
+          authorizationHeader: "Bearer test-token",
+          events: [
+            {
+              protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+              sequence: 1,
+              emittedAt: 1_000,
+              threadId: "thread-1",
+              event: { type: "environment.ready", threadId: "thread-1" },
+            },
+            {
+              protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+              sequence: 4,
+              emittedAt: 1_003,
+              threadId: "thread-1",
+              event: {
+                type: "provider.event",
+                threadId: "thread-1",
+                method: "turn/completed",
+                payload: { turnId: "turn-1" },
+              },
+            },
+          ],
+        }),
+      ).resolves.toMatchObject({
+        protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+        threadId: "thread-1",
+        acknowledgedSequence: 2,
+      });
+
+      expect(ingestSpy).not.toHaveBeenCalled();
+      expect(threadRepo.update).not.toHaveBeenCalledWith(
+        "thread-1",
+        expect.objectContaining({ environmentAgentCursor: expect.any(Number) }),
+        expect.anything(),
+      );
+      expect(thread.environmentAgentCursor).toBe(2);
+    });
+
+    it("rejects unauthorized environment-agent delivery", async () => {
+      const thread = makeThread({
+        id: "thread-1",
+        projectId: "proj-1",
+        environmentAgentCursor: 0,
+      } as Thread & { environmentAgentCursor: number });
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockImplementation(
+        (threadId: string) => (threadId === "thread-1" ? thread : undefined),
+      );
+      installAuthorizedEnvironmentRuntime("thread-1", "Bearer test-token");
+
+      await expect(
+        manager.ingestEnvironmentAgentEvents({
+          threadId: "thread-1",
+          authorizationHeader: "Bearer wrong-token",
+          events: [
+            {
+              protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+              sequence: 1,
+              emittedAt: 1_000,
+              threadId: "thread-1",
+              event: { type: "environment.ready", threadId: "thread-1" },
+            },
+          ],
+        }),
+      ).rejects.toMatchObject({
+        message: "Unauthorized environment-agent delivery",
+      });
     });
   });
 

@@ -187,6 +187,22 @@ export class EnvironmentAgentSimulator {
     );
   }
 
+  emitProviderNotification(
+    method: string,
+    payload: unknown,
+    options?: { sequence?: number; threadId?: string; emittedAt?: number },
+  ): EnvironmentAgentEventEnvelope<Extract<EnvironmentAgentEvent, { type: "provider.event" }>> {
+    const envelope = this.emitProviderEvent(method, payload, options);
+    this.transport.emitLine(
+      JSON.stringify({
+        jsonrpc: "2.0",
+        method,
+        params: payload,
+      }),
+    );
+    return envelope;
+  }
+
   emitProviderStderr(line: string): void {
     this.transport.emitStderrLine(line);
   }

@@ -3,7 +3,7 @@ import {
   type EnvironmentAgentEventEnvelope,
 } from "@beanbag/environment-agent";
 import { describe, expect, it, vi } from "vitest";
-import { AgentServer } from "../agent-server.js";
+import { AgentServer, AgentServerSessionError } from "../agent-server.js";
 import { createCodexProviderAdapter } from "../codex-provider-adapter.js";
 import { createEnvironmentAgentSimulator } from "./helpers/environment-agent-simulator.js";
 
@@ -142,5 +142,92 @@ describe("AgentServer environment-agent control plane", () => {
       }),
     );
     expect(simulator.ackRequests.map((request) => request.sequence)).toContain(5);
+  });
+
+  it("acknowledges live provider notifications at the highest observed sequence", async () => {
+    const onNotification = vi.fn();
+    const agentServer = new AgentServer({
+      provider: createCodexProviderAdapter(),
+      onNotification,
+    });
+    const simulator = createEnvironmentAgentSimulator();
+
+    await agentServer.startSession({
+      threadId: "thread-1",
+      connectSession: () => ({
+        transport: "http",
+        client: simulator.createClient(),
+      }),
+      request: {
+        projectId: "project-1",
+        title: "Test thread",
+        input: [{ type: "text", text: "hello" }],
+      },
+      context: {
+        projectId: "project-1",
+        threadId: "thread-1",
+        path: process.env.PATH ?? "",
+      },
+    });
+
+    simulator.emitProviderNotification("turn/started", { turnId: "turn-2" }, { sequence: 2 });
+    await vi.waitFor(() => {
+      expect(simulator.ackRequests.map((request) => request.sequence)).toContain(2);
+    });
+    expect(agentServer.getSessionState("thread-1")).toMatchObject({
+      activeTurnId: "turn-2",
+    });
+
+    simulator.emitProviderNotification("turn/completed", { turnId: "turn-2" }, { sequence: 3 });
+    await vi.waitFor(() => {
+      expect(simulator.ackRequests.map((request) => request.sequence)).toContain(3);
+    });
+    expect(onNotification).toHaveBeenCalledWith(
+      "thread-1",
+      expect.objectContaining({
+        method: "turn/completed",
+        normalizedMethod: "turn/completed",
+      }),
+    );
+    expect(agentServer.getSessionState("thread-1")).toMatchObject({
+      activeTurnId: undefined,
+    });
+  });
+
+  it("maps provider rpc failures through the environment-agent-backed runtime", async () => {
+    const agentServer = new AgentServer({
+      provider: createCodexProviderAdapter(),
+    });
+    const simulator = createEnvironmentAgentSimulator();
+
+    simulator.onProviderRequest("thread/start", () => ({
+      error: {
+        code: -32_000,
+        message: "provider exploded",
+      },
+    }));
+
+    await expect(
+      agentServer.startSession({
+        threadId: "thread-1",
+        connectSession: () => ({
+          transport: "http",
+          client: simulator.createClient(),
+        }),
+        request: {
+          projectId: "project-1",
+          title: "Test thread",
+          input: [{ type: "text", text: "hello" }],
+        },
+        context: {
+          projectId: "project-1",
+          threadId: "thread-1",
+          path: process.env.PATH ?? "",
+        },
+      }),
+    ).rejects.toMatchObject({
+      code: "provider_rpc_error",
+      name: "AgentServerSessionError",
+    } satisfies Partial<AgentServerSessionError>);
   });
 });
