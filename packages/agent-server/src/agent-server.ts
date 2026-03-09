@@ -2,6 +2,10 @@ import type { ChildProcess } from "node:child_process";
 import {
   createChildProcessEnvironmentAgentClient,
   type EnvironmentAgentClient,
+  ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+  type EnvironmentAgentAckResponse,
+  type EnvironmentAgentReplayResponse,
+  type EnvironmentAgentStatusSnapshot,
 } from "@beanbag/environment-agent";
 import {
   assertNever,
@@ -243,6 +247,39 @@ export class AgentServer {
 
   listActiveSessionIds(): string[] {
     return Array.from(this.sessions.keys());
+  }
+
+  async getEnvironmentAgentStatus(
+    threadId: string,
+  ): Promise<EnvironmentAgentStatusSnapshot> {
+    const session = this.requireSession(threadId);
+    return session.agentClient.status();
+  }
+
+  async replayEnvironmentAgentEvents(args: {
+    threadId: string;
+    afterSequence: number;
+    limit?: number;
+  }): Promise<EnvironmentAgentReplayResponse> {
+    const session = this.requireSession(args.threadId);
+    return session.agentClient.replay({
+      protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+      afterSequence: args.afterSequence,
+      limit: args.limit,
+      threadId: args.threadId,
+    });
+  }
+
+  async acknowledgeEnvironmentAgent(args: {
+    threadId: string;
+    sequence: number;
+  }): Promise<EnvironmentAgentAckResponse> {
+    const session = this.requireSession(args.threadId);
+    return session.agentClient.acknowledge({
+      protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+      sequence: args.sequence,
+      threadId: args.threadId,
+    });
   }
 
   async startSession(args: {
@@ -528,6 +565,17 @@ export class AgentServer {
     existing.runtime.close();
     this.sessions.delete(threadId);
     this.clearSessionState(threadId);
+  }
+
+  private requireSession(threadId: string): ManagedSession {
+    const session = this.sessions.get(threadId);
+    if (!session) {
+      throw new AgentServerSessionError(
+        "inactive_session",
+        this.opts.provider.inactiveSessionErrorMessage(threadId),
+      );
+    }
+    return session;
   }
 
   private send(runtime: ProviderRuntime, threadId: string, msg: object): void {
