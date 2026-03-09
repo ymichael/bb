@@ -43,3 +43,8 @@ export type {
   WorktreeEnvironmentState,
 } from "./worktree-environment.js";
 export { createWorktreeEnvironmentDefinition } from "./worktree-environment.js";
+export type {
+  CreateDockerEnvironmentDefinitionOptions,
+  DockerEnvironmentState,
+} from "./docker-environment.js";
+export { createDockerEnvironmentDefinition } from "./docker-environment.js";

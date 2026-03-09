@@ -9,17 +9,26 @@ import {
   createWorktreeEnvironmentDefinition,
   type CreateWorktreeEnvironmentDefinitionOptions,
 } from "./worktree-environment.js";
+import {
+  createDockerEnvironmentDefinition,
+  type CreateDockerEnvironmentDefinitionOptions,
+} from "./docker-environment.js";
 
 export interface CreateDefaultEnvironmentRegistryOptions {
   worktree?: CreateWorktreeEnvironmentDefinitionOptions;
+  docker?: CreateDockerEnvironmentDefinitionOptions;
 }
 
 export function createDefaultEnvironmentRegistry(
   opts?: CreateDefaultEnvironmentRegistryOptions,
 ): EnvironmentRegistry {
-  return new EnvironmentRegistry()
+  const registry = new EnvironmentRegistry()
     .register(createLocalEnvironmentDefinition())
     .register(createWorktreeEnvironmentDefinition(opts?.worktree));
+  if (opts?.docker) {
+    registry.register(createDockerEnvironmentDefinition(opts.docker));
+  }
+  return registry;
 }
 
 export function listAvailableEnvironmentInfos(
