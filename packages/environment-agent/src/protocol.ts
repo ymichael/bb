@@ -1,9 +1,11 @@
-export type EnvironmentAgentTransportKind = "host-stdio" | "http";
+export type EnvironmentAgentTransportKind = "command-stdio" | "http";
 
 export type EnvironmentAgentConnectionTarget =
   | {
-      transport: "host-stdio";
-      cwd: string;
+      transport: "command-stdio";
+      command: string;
+      args: string[];
+      cwd?: string;
       env?: Record<string, string | undefined>;
     }
   | {

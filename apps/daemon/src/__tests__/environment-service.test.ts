@@ -68,7 +68,9 @@ function createTestEnvironment(args: { existsInitially: boolean }): IEnvironment
     },
     getAgentConnectionTarget() {
       return {
-        transport: "host-stdio" as const,
+        transport: "command-stdio" as const,
+        command: "bb",
+        args: ["environment-agent"],
         cwd: "/tmp/thread-1",
         env: {},
       };

@@ -51,7 +51,9 @@ function createEnvironment(getStatusOutput: () => string): IEnvironment {
     supportsHostFilesystemAccess: () => true,
     isIsolatedWorkspace: () => true,
     getAgentConnectionTarget: () => ({
-      transport: "host-stdio",
+      transport: "command-stdio",
+      command: "bb",
+      args: ["environment-agent"],
       cwd: "/repo",
       env: {},
     }),

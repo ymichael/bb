@@ -172,7 +172,9 @@ function makeRuntimeEnvironment(args: {
     },
     getAgentConnectionTarget() {
       return {
-        transport: "host-stdio" as const,
+        transport: "command-stdio" as const,
+        command: "bb",
+        args: ["environment-agent"],
         cwd: args.rootPath,
         env: {},
       };
@@ -848,7 +850,7 @@ describe("Orchestrator", () => {
       (eventRepo.getLatestSeq as ReturnType<typeof vi.fn>).mockReturnValue(0);
     });
 
-    it("spawns codex app-server with correct args and cwd", async () => {
+    it("spawns environment-agent with the provider runtime args and cwd", async () => {
       const project = { id: "proj-1", name: "Test", rootPath: "/my/project", createdAt: 1000, updatedAt: 1000 };
       (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(project);
 
@@ -864,8 +866,14 @@ describe("Orchestrator", () => {
       });
 
       expect(spawnMock).toHaveBeenCalledWith(
-        "codex",
-        ["app-server"],
+        "bb",
+        [
+          "environment-agent",
+          "--provider-command",
+          "codex",
+          "--provider-arg",
+          "app-server",
+        ],
         expect.objectContaining({
           stdio: ["pipe", "pipe", "pipe"],
           cwd: "/my/project",

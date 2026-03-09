@@ -80,7 +80,9 @@ class LocalEnvironment implements IEnvironment {
 
   getAgentConnectionTarget(): EnvironmentAgentConnectionTarget {
     return {
-      transport: "host-stdio",
+      transport: "command-stdio",
+      command: "bb",
+      args: ["environment-agent"],
       cwd: this.rootPath,
       env: { ...this.env },
     };

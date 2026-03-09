@@ -2645,18 +2645,29 @@ export class Orchestrator implements ThreadOrchestrator {
     agentConnectionTarget: EnvironmentAgentConnectionTarget;
   }): ChildProcess {
     switch (args.agentConnectionTarget.transport) {
-      case "host-stdio":
-        return spawn(args.spawnSpec.command, args.spawnSpec.args, {
-          cwd: args.agentConnectionTarget.cwd,
-          env: {
-            ...this.runtimeEnv,
-            ...(args.agentConnectionTarget.env ?? {}),
-            ...(this.threadShellPath ? { PATH: this.threadShellPath } : {}),
-            ...(args.projectId ? { BB_PROJECT_ID: args.projectId } : {}),
-            BB_THREAD_ID: args.threadId,
+      case "command-stdio":
+        return spawn(
+          args.agentConnectionTarget.command,
+          [
+            ...args.agentConnectionTarget.args,
+            "--provider-command",
+            args.spawnSpec.command,
+            ...args.spawnSpec.args.flatMap((value) => ["--provider-arg", value]),
+          ],
+          {
+            ...(args.agentConnectionTarget.cwd
+              ? { cwd: args.agentConnectionTarget.cwd }
+              : {}),
+            env: {
+              ...this.runtimeEnv,
+              ...(args.agentConnectionTarget.env ?? {}),
+              ...(this.threadShellPath ? { PATH: this.threadShellPath } : {}),
+              ...(args.projectId ? { BB_PROJECT_ID: args.projectId } : {}),
+              BB_THREAD_ID: args.threadId,
+            },
+            stdio: ["pipe", "pipe", "pipe"],
           },
-          stdio: ["pipe", "pipe", "pipe"],
-        });
+        );
       case "http":
         throw new Error(
           `HTTP environment agent transport is not wired yet for thread ${args.threadId}`,
