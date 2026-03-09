@@ -163,7 +163,7 @@ function subKey(entity: RealtimeEntity, id?: string): string {
 }
 
 function isRealtimeEntity(value: string): value is RealtimeEntity {
-  return value === "thread";
+  return value === "thread" || value === "system";
 }
 
 export function parseSubKey(

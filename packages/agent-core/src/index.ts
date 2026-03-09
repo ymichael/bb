@@ -41,6 +41,7 @@ export type {
 export type {
   RealtimeEntity,
   ThreadChangeKind,
+  SystemChangeKind,
   SubscribeMessage,
   UnsubscribeMessage,
   ClientMessage,
@@ -48,7 +49,7 @@ export type {
   ServerMessage,
 } from "./protocol.js";
 
-export { THREAD_CHANGE_KINDS } from "./protocol.js";
+export { THREAD_CHANGE_KINDS, SYSTEM_CHANGE_KINDS } from "./protocol.js";
 export { formatEnvironmentDisplayName } from "./environment-display-name.js";
 
 export type {

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { THREAD_CHANGE_KINDS } from "@beanbag/agent-core";
+import { SYSTEM_CHANGE_KINDS, THREAD_CHANGE_KINDS } from "@beanbag/agent-core";
 import { WSManager } from "../ws.js";
 
 // Minimal mock WebSocket that emulates the 'ws' library interface
@@ -192,6 +192,25 @@ describe("WSManager", () => {
       // Entity-level broadcast without id
       wsManager.broadcast("thread");
       expect(idOnlySub.send).not.toHaveBeenCalled();
+    });
+
+    it("broadcasts system changes to system subscribers", () => {
+      const socket = createMockSocket();
+      wsManager.handleConnection(socket);
+
+      socket._emit(
+        "message",
+        Buffer.from(JSON.stringify({ type: "subscribe", entity: "system" })),
+      );
+
+      wsManager.broadcast("system");
+      expect(socket.send).toHaveBeenCalledWith(
+        JSON.stringify({
+          type: "changed",
+          entity: "system",
+          changes: [...SYSTEM_CHANGE_KINDS],
+        }),
+      );
     });
   });
 

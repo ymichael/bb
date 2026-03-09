@@ -4,6 +4,7 @@ import { parseSubKey } from "./ws"
 describe("parseSubKey", () => {
   it("parses entity-only subscription keys", () => {
     expect(parseSubKey("thread")).toEqual({ entity: "thread" })
+    expect(parseSubKey("system")).toEqual({ entity: "system" })
   })
 
   it("parses entity + id subscription keys", () => {

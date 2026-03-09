@@ -1,9 +1,11 @@
 import type { WebSocket } from "ws";
 import {
+  SYSTEM_CHANGE_KINDS,
   THREAD_CHANGE_KINDS,
   type ClientMessage,
   type RealtimeEntity,
   type ServerMessage,
+  type SystemChangeKind,
   type ThreadChangeKind,
 } from "@beanbag/agent-core";
 
@@ -100,13 +102,31 @@ export class WSManager {
    * Subscribers who subscribed to the entity without an id get all changes.
    * Subscribers who subscribed with a specific id only get changes for that id.
    */
-  broadcast(entity: RealtimeEntity, id?: string, changes?: ThreadChangeKind[]): void {
-    const msg: ServerMessage = {
-      type: "changed",
-      entity,
-      id,
-      changes: [...(changes ?? THREAD_CHANGE_KINDS)],
-    };
+  broadcast(entity: "thread", id?: string, changes?: ThreadChangeKind[]): void;
+  broadcast(entity: "system", id?: undefined, changes?: SystemChangeKind[]): void;
+  broadcast(
+    entity: RealtimeEntity,
+    id?: string,
+    changes?: ThreadChangeKind[] | SystemChangeKind[],
+  ): void {
+    let msg: ServerMessage;
+    switch (entity) {
+      case "thread":
+        msg = {
+          type: "changed",
+          entity,
+          ...(id ? { id } : {}),
+          changes: [...((changes as ThreadChangeKind[] | undefined) ?? THREAD_CHANGE_KINDS)],
+        };
+        break;
+      case "system":
+        msg = {
+          type: "changed",
+          entity,
+          changes: [...((changes as SystemChangeKind[] | undefined) ?? SYSTEM_CHANGE_KINDS)],
+        };
+        break;
+    }
     const raw = JSON.stringify(msg);
 
     const recipients = new Set<WebSocket>();

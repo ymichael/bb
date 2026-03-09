@@ -24,7 +24,7 @@ import { WSManager } from "./ws.js";
 import { Orchestrator } from "./orchestrator.js";
 import { createApiRoutes } from "./routes/index.js";
 import { InMemorySchedulerService } from "./scheduler-service.js";
-import { createRestartRecommendationEvaluator } from "./restart-recommendation.js";
+import { createRestartRecommendationMonitor } from "./restart-recommendation.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -88,7 +88,11 @@ export function createServer(deps: ServerDeps) {
 
   // API routes
   const startTime = Date.now();
-  const shouldRestart = createRestartRecommendationEvaluator(startTime);
+  const restartRecommendationMonitor = createRestartRecommendationMonitor(startTime, {
+    onChange: () => {
+      wsManager.broadcast("system", undefined, ["restart-policy-changed"]);
+    },
+  });
   const apiRoutes = createApiRoutes({
     projectRepo: deps.projectRepo,
     threadRepo: deps.threadRepo,
@@ -98,7 +102,7 @@ export function createServer(deps: ServerDeps) {
     startTime,
     requestShutdown: deps.requestShutdown,
     requestRestart: deps.requestRestart,
-    shouldRestart,
+    shouldRestart: () => restartRecommendationMonitor.shouldRestart(),
   });
 
   const appWithRoutes = app.route("/api/v1", apiRoutes);
@@ -132,6 +136,7 @@ export function createServer(deps: ServerDeps) {
     injectWebSocket,
     wsManager,
     threadManager,
+    restartRecommendationMonitor,
   };
 }
 

@@ -1,4 +1,4 @@
-export type RealtimeEntity = "thread";
+export type RealtimeEntity = "thread" | "system";
 
 export const THREAD_CHANGE_KINDS = [
   "thread-created",
@@ -13,6 +13,12 @@ export const THREAD_CHANGE_KINDS = [
 ] as const;
 
 export type ThreadChangeKind = (typeof THREAD_CHANGE_KINDS)[number];
+
+export const SYSTEM_CHANGE_KINDS = [
+  "restart-policy-changed",
+] as const;
+
+export type SystemChangeKind = (typeof SYSTEM_CHANGE_KINDS)[number];
 
 // Client -> Server
 export interface SubscribeMessage {
@@ -30,11 +36,19 @@ export interface UnsubscribeMessage {
 export type ClientMessage = SubscribeMessage | UnsubscribeMessage;
 
 // Server -> Client
-export interface ChangedMessage {
+export interface ThreadChangedMessage {
   type: "changed";
-  entity: RealtimeEntity;
+  entity: "thread";
   id?: string;
   changes: ThreadChangeKind[];
 }
+
+export interface SystemChangedMessage {
+  type: "changed";
+  entity: "system";
+  changes: SystemChangeKind[];
+}
+
+export type ChangedMessage = ThreadChangedMessage | SystemChangedMessage;
 
 export type ServerMessage = ChangedMessage;

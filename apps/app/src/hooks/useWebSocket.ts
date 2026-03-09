@@ -204,6 +204,7 @@ export function useWebSocket(): void {
 
     // Subscribe to thread changes.
     wsManager.subscribe("thread");
+    wsManager.subscribe("system");
 
     // Invalidate React Query caches on changes
     const unsubscribe = wsManager.onChanged((message) => {
@@ -231,8 +232,11 @@ export function useWebSocket(): void {
           }
           scheduleInvalidations();
           break;
+        case "system":
+          queryClient.invalidateQueries({ queryKey: ["systemRestartPolicy"] });
+          break;
         default:
-          assertNever(message.entity);
+          assertNever(message);
       }
     });
 
@@ -246,6 +250,7 @@ export function useWebSocket(): void {
       unsubscribeConnected();
       unsubscribe();
       wsManager.unsubscribe("thread");
+      wsManager.unsubscribe("system");
       wsManager.disconnect();
     };
   }, [queryClient]);

@@ -145,6 +145,9 @@ async function main(): Promise<void> {
   let restartRequested = false;
   let threadManagerRef: ReturnType<typeof createServer>["threadManager"] | undefined;
   let wsManagerRef: ReturnType<typeof createServer>["wsManager"] | undefined;
+  let restartRecommendationMonitorRef:
+    | ReturnType<typeof createServer>["restartRecommendationMonitor"]
+    | undefined;
 
   const shutdown = async (
     signal: string,
@@ -161,6 +164,7 @@ async function main(): Promise<void> {
     );
 
     threadManagerRef?.stopAll({ preserveEnvironments: true });
+    restartRecommendationMonitorRef?.close();
     wsManagerRef?.close();
     await closeHttpServer(httpServer);
 
@@ -184,7 +188,7 @@ async function main(): Promise<void> {
   };
 
   // Create server
-  const { app, injectWebSocket, wsManager, threadManager } =
+  const { app, injectWebSocket, wsManager, threadManager, restartRecommendationMonitor } =
     createServer({
       projectRepo,
       threadRepo,
@@ -199,6 +203,7 @@ async function main(): Promise<void> {
     });
   threadManagerRef = threadManager;
   wsManagerRef = wsManager;
+  restartRecommendationMonitorRef = restartRecommendationMonitor;
 
   console.log("Reconciling active threads with provider...");
   await threadManager.reconcileActiveThreadsOnBoot();
