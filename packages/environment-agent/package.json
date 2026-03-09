@@ -16,7 +16,7 @@
     "dev": "tsc --watch --preserveWatchOutput",
     "clean": "rm -rf dist tsconfig.tsbuildinfo",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run --passWithNoTests"
+    "test": "vitest run --config vitest.config.ts"
   },
   "devDependencies": {
     "@beanbag/tsconfig": "workspace:*",

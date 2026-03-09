@@ -1,4 +1,5 @@
 export type EnvironmentAgentTransportKind = "command-stdio" | "http";
+export const ENVIRONMENT_AGENT_PROTOCOL_VERSION = 1 as const;
 
 export type EnvironmentAgentConnectionTarget =
   | {
@@ -7,6 +8,7 @@ export type EnvironmentAgentConnectionTarget =
       args: string[];
       cwd?: string;
       env?: Record<string, string | undefined>;
+      daemonConnection?: EnvironmentAgentDaemonConnectionConfig;
       providerLaunch?: {
         command: string;
         args: string[];
@@ -16,7 +18,27 @@ export type EnvironmentAgentConnectionTarget =
       transport: "http";
       baseUrl: string;
       headers?: Record<string, string>;
+      daemonConnection?: EnvironmentAgentDaemonConnectionConfig;
     };
+
+export interface EnvironmentAgentDaemonConnectionConfig {
+  daemonUrl?: string;
+  authToken?: string;
+  threadId?: string;
+  projectId?: string;
+  environmentId?: string;
+  lastAckedSequence?: number;
+}
+
+export interface EnvironmentAgentCommandMetadata {
+  protocolVersion: typeof ENVIRONMENT_AGENT_PROTOCOL_VERSION;
+  commandId: string;
+  idempotencyKey: string;
+  sentAt: number;
+  threadId?: string;
+  projectId?: string;
+  expectedAfterSequence?: number;
+}
 
 export type EnvironmentAgentCommand =
   | {
@@ -57,8 +79,23 @@ export type EnvironmentAgentCommand =
 export interface EnvironmentAgentCommandEnvelope<
   TCommand extends EnvironmentAgentCommand = EnvironmentAgentCommand,
 > {
-  idempotencyKey: string;
+  meta: EnvironmentAgentCommandMetadata;
   command: TCommand;
+}
+
+export type EnvironmentAgentCommandDeliveryState =
+  | "accepted"
+  | "duplicate"
+  | "rejected";
+
+export interface EnvironmentAgentCommandAck {
+  protocolVersion: typeof ENVIRONMENT_AGENT_PROTOCOL_VERSION;
+  commandId: string;
+  idempotencyKey: string;
+  state: EnvironmentAgentCommandDeliveryState;
+  acknowledgedAt: number;
+  latestSequence: number;
+  message?: string;
 }
 
 export type EnvironmentAgentEvent =
@@ -104,11 +141,52 @@ export type EnvironmentAgentEvent =
 export interface EnvironmentAgentEventEnvelope<
   TEvent extends EnvironmentAgentEvent = EnvironmentAgentEvent,
 > {
+  protocolVersion: typeof ENVIRONMENT_AGENT_PROTOCOL_VERSION;
   sequence: number;
   emittedAt: number;
+  threadId: string;
   event: TEvent;
 }
 
 export interface EnvironmentAgentReplayCursor {
   sequence: number;
+}
+
+export interface EnvironmentAgentReplayRequest {
+  protocolVersion: typeof ENVIRONMENT_AGENT_PROTOCOL_VERSION;
+  afterSequence: number;
+  limit?: number;
+  threadId?: string;
+}
+
+export interface EnvironmentAgentReplayResponse {
+  protocolVersion: typeof ENVIRONMENT_AGENT_PROTOCOL_VERSION;
+  fromSequenceExclusive: number;
+  toSequenceInclusive: number;
+  events: EnvironmentAgentEventEnvelope[];
+  hasMore: boolean;
+}
+
+export interface EnvironmentAgentAckRequest {
+  protocolVersion: typeof ENVIRONMENT_AGENT_PROTOCOL_VERSION;
+  sequence: number;
+  threadId?: string;
+}
+
+export interface EnvironmentAgentAckResponse {
+  protocolVersion: typeof ENVIRONMENT_AGENT_PROTOCOL_VERSION;
+  acknowledgedSequence: number;
+  threadId?: string;
+}
+
+export interface EnvironmentAgentStatusSnapshot {
+  protocolVersion: typeof ENVIRONMENT_AGENT_PROTOCOL_VERSION;
+  threadId?: string;
+  projectId?: string;
+  environmentId?: string;
+  latestSequence: number;
+  lastAckedSequence?: number;
+  connectedToDaemon: boolean;
+  pendingEventCount: number;
+  pendingCommandCount: number;
 }
