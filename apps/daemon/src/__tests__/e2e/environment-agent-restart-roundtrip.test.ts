@@ -1,42 +1,18 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { createServer } from "node:net";
 import {
+  allocateLocalPort,
   createProject,
   createThread,
   deliverEnvironmentAgentEvents,
   listThreadEvents,
   replayEnvironmentAgentEvents,
+  sleep,
   waitForThreadStatus,
 } from "./environment-agent-api.js";
 import {
   startDaemonE2eHarness,
   type DaemonE2eHarness,
 } from "./harness.js";
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-async function allocatePort(): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const server = createServer();
-    server.once("error", reject);
-    server.listen(0, "127.0.0.1", () => {
-      const address = server.address();
-      if (!address || typeof address === "string") {
-        server.close(() => reject(new Error("Failed to allocate test port")));
-        return;
-      }
-      server.close((error) => {
-        if (error) {
-          reject(error);
-          return;
-        }
-        resolve(address.port);
-      });
-    });
-  });
-}
 
 describe.sequential("e2e: environment-agent restart recovery", () => {
   let harness: DaemonE2eHarness | undefined;
@@ -49,7 +25,7 @@ describe.sequential("e2e: environment-agent restart recovery", () => {
   });
 
   it("replays buffered provider events after daemon restart using the persisted cursor", async () => {
-    const port = await allocatePort();
+    const port = await allocateLocalPort();
     harness = await startDaemonE2eHarness({
       port,
       fakeCodex: {

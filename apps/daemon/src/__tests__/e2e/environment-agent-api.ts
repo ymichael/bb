@@ -1,3 +1,4 @@
+import { createServer } from "node:net";
 import type {
   EnvironmentAgentDeliveryRequest,
   EnvironmentAgentDeliveryResponse,
@@ -127,4 +128,56 @@ export async function getEnvironmentAgentStatus(
   return readJson<EnvironmentAgentStatusSnapshot>(
     `${baseUrl}/api/v1/threads/${threadId}/environment-agent/status`,
   );
+}
+
+export function makeProviderEventDeliveryRequest(args: {
+  threadId: string;
+  sequence: number;
+  method: string;
+  payload: unknown;
+  emittedAt?: number;
+}): EnvironmentAgentDeliveryRequest {
+  return {
+    protocolVersion: 1,
+    threadId: args.threadId,
+    events: [
+      {
+        protocolVersion: 1,
+        sequence: args.sequence,
+        emittedAt: args.emittedAt ?? 1_000 + args.sequence,
+        threadId: args.threadId,
+        event: {
+          type: "provider.event",
+          threadId: args.threadId,
+          method: args.method,
+          payload: args.payload,
+        },
+      },
+    ],
+  };
+}
+
+export function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+export async function allocateLocalPort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const server = createServer();
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      const address = server.address();
+      if (!address || typeof address === "string") {
+        server.close(() => reject(new Error("Failed to allocate test port")));
+        return;
+      }
+      server.close((error) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+        resolve(address.port);
+      });
+    });
+  });
 }

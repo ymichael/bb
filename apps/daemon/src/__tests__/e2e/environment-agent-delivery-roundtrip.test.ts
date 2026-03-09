@@ -1,7 +1,4 @@
 import { afterEach, describe, expect, it } from "vitest";
-import type {
-  EnvironmentAgentDeliveryRequest,
-} from "@beanbag/environment-agent";
 import {
   startDaemonE2eHarness,
   type DaemonE2eHarness,
@@ -11,6 +8,7 @@ import {
   createThread,
   deliverEnvironmentAgentEvents,
   listThreadEvents,
+  makeProviderEventDeliveryRequest,
   readError,
   waitForThreadStatus,
 } from "./environment-agent-api.js";
@@ -46,24 +44,12 @@ describe.sequential("e2e: environment-agent delivery", () => {
         (event) => event.type === "turn/completed",
       ).length;
 
-      const turnStartedDelivery: EnvironmentAgentDeliveryRequest = {
-        protocolVersion: 1,
+      const turnStartedDelivery = makeProviderEventDeliveryRequest({
         threadId: thread.id,
-        events: [
-          {
-            protocolVersion: 1,
-            sequence: nextSequence,
-            emittedAt: 1_000 + nextSequence,
-            threadId: thread.id,
-            event: {
-              type: "provider.event",
-              threadId: thread.id,
-              method: "turn/started",
-              payload: { turnId: "turn-e2e" },
-            },
-          },
-        ],
-      };
+        sequence: nextSequence,
+        method: "turn/started",
+        payload: { turnId: "turn-e2e" },
+      });
 
       const delivered = await deliverEnvironmentAgentEvents(
         harness.baseUrl,
@@ -92,24 +78,13 @@ describe.sequential("e2e: environment-agent delivery", () => {
         afterDuplicateEvents.filter((event) => event.type === "turn/started"),
       ).toHaveLength(initialTurnStartedCount + 1);
 
-      const turnCompletedDelivery: EnvironmentAgentDeliveryRequest = {
-        protocolVersion: 1,
+      const turnCompletedDelivery = makeProviderEventDeliveryRequest({
         threadId: thread.id,
-        events: [
-          {
-            protocolVersion: 1,
-            sequence: nextSequence + 1,
-            emittedAt: 1_001 + nextSequence,
-            threadId: thread.id,
-            event: {
-              type: "provider.event",
-              threadId: thread.id,
-              method: "turn/completed",
-              payload: { turnId: "turn-e2e" },
-            },
-          },
-        ],
-      };
+        sequence: nextSequence + 1,
+        method: "turn/completed",
+        payload: { turnId: "turn-e2e" },
+        emittedAt: 1_001 + nextSequence,
+      });
 
       const completed = await deliverEnvironmentAgentEvents(
         harness.baseUrl,
@@ -147,24 +122,13 @@ describe.sequential("e2e: environment-agent delivery", () => {
     expect(authorization).toMatch(/^Bearer /);
 
     const initialCursor = harness.getEnvironmentAgentCursor(thread.id);
-    const unauthorizedBody: EnvironmentAgentDeliveryRequest = {
-      protocolVersion: 1,
+    const unauthorizedBody = makeProviderEventDeliveryRequest({
       threadId: thread.id,
-      events: [
-        {
-          protocolVersion: 1,
-          sequence: initialCursor + 1,
-          emittedAt: 2_000,
-          threadId: thread.id,
-          event: {
-            type: "provider.event",
-            threadId: thread.id,
-            method: "turn/started",
-            payload: { turnId: "turn-unauthorized" },
-          },
-        },
-      ],
-    };
+      sequence: initialCursor + 1,
+      method: "turn/started",
+      payload: { turnId: "turn-unauthorized" },
+      emittedAt: 2_000,
+    });
 
     const unauthorized = await readError(
       `${harness.baseUrl}/api/v1/threads/${thread.id}/environment-agent/deliver`,
@@ -181,24 +145,13 @@ describe.sequential("e2e: environment-agent delivery", () => {
     expect(unauthorized.body).toContain("Unauthorized environment-agent delivery");
     expect(harness.getEnvironmentAgentCursor(thread.id)).toBe(initialCursor);
 
-    const gappedBody: EnvironmentAgentDeliveryRequest = {
-      protocolVersion: 1,
+    const gappedBody = makeProviderEventDeliveryRequest({
       threadId: thread.id,
-      events: [
-        {
-          protocolVersion: 1,
-          sequence: initialCursor + 2,
-          emittedAt: 2_001,
-          threadId: thread.id,
-          event: {
-            type: "provider.event",
-            threadId: thread.id,
-            method: "turn/completed",
-            payload: { turnId: "turn-gap" },
-          },
-        },
-      ],
-    };
+      sequence: initialCursor + 2,
+      method: "turn/completed",
+      payload: { turnId: "turn-gap" },
+      emittedAt: 2_001,
+    });
     const gapped = await deliverEnvironmentAgentEvents(
       harness.baseUrl,
       thread.id,
