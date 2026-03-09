@@ -35,12 +35,6 @@ export function parsePromptDraftStorage(rawValue: string | null): PromptDraftSta
 
   try {
     const parsed = JSON.parse(rawValue) as unknown;
-    if (typeof parsed === "string") {
-      return {
-        text: parsed,
-        attachments: [],
-      };
-    }
     if (isRecord(parsed)) {
       const text = typeof parsed.text === "string" ? parsed.text : "";
       const attachments = Array.isArray(parsed.attachments)
@@ -49,11 +43,7 @@ export function parsePromptDraftStorage(rawValue: string | null): PromptDraftSta
       return { text, attachments };
     }
   } catch {
-    // Backward-compatible fallback for legacy raw text storage.
-    return {
-      text: rawValue,
-      attachments: [],
-    };
+    return emptyPromptDraftState();
   }
 
   return emptyPromptDraftState();

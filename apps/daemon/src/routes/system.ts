@@ -238,7 +238,7 @@ export function createSystemRoutes(
         const body = await c.req.parseBody();
         const file = body.file;
         if (!(file instanceof File)) {
-          return c.json({ error: "Expected multipart file field named 'file'" }, 400);
+          throw invalidRequestError("Expected multipart file field named 'file'");
         }
         const promptField = body.prompt;
         const prompt = typeof promptField === "string" ? promptField : undefined;

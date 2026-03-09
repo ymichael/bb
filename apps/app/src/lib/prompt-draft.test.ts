@@ -7,10 +7,10 @@ import {
 } from "./prompt-draft";
 
 describe("prompt draft helpers", () => {
-  it("parses legacy raw text drafts", () => {
+  it("drops invalid legacy raw text drafts", () => {
     const parsed = parsePromptDraftStorage("Investigate flaky login redirect");
     expect(parsed).toEqual({
-      text: "Investigate flaky login redirect",
+      text: "",
       attachments: [],
     });
   });

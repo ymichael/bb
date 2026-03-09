@@ -201,6 +201,8 @@ describe("System routes", () => {
 
       expect(res.status).toBe(400);
       expect(await res.json()).toEqual({
+        code: "invalid_request",
+        message: "Expected multipart file field named 'file'",
         error: "Expected multipart file field named 'file'",
       });
       expect(transcribeVoice).not.toHaveBeenCalled();
