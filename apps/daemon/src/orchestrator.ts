@@ -1323,9 +1323,28 @@ export class Orchestrator implements ThreadOrchestrator {
       this.threadRepo.update(threadId, { title: nextTitle });
       this.titleFallbackByThreadId.delete(threadId);
       this.lockedTitleThreadIds.add(threadId);
-      const providerThreadId = this.agentServer.getSessionState(threadId).providerThreadId;
+      const providerThreadId = this._resolvePersistedProviderThreadId(threadId);
       if (providerThreadId) {
-        this._sendThreadNameSet(threadId, providerThreadId, nextTitle);
+        void this._withEnvironmentAgentAccess(
+          threadId,
+          async ({ client, thread: latestThread, providerLaunch }) => {
+            await this.agentServer.renameThreadCommand({
+              client,
+              threadId,
+              providerThreadId,
+              title: nextTitle,
+              context: this._buildProviderThreadContext({
+                threadId,
+                projectId: latestThread.projectId,
+              }),
+              providerLaunch,
+            });
+            await this._replayBufferedEnvironmentAgentEvents(threadId);
+          },
+        ).catch((error) => {
+          const message = error instanceof Error ? error.message : String(error);
+          console.error(`[thread ${threadId}] Failed to rename provider thread: ${message}`);
+        });
       }
       didChange = true;
     }
@@ -4248,10 +4267,29 @@ export class Orchestrator implements ThreadOrchestrator {
 
   private _sendThreadNameSet(
     threadId: string,
-    _providerThreadId: string,
+    providerThreadId: string,
     title: string,
   ): void {
-    this.agentServer.renameSession(threadId, title);
+    void this._withEnvironmentAgentAccess(
+      threadId,
+      async ({ client, thread, providerLaunch }) => {
+        await this.agentServer.renameThreadCommand({
+          client,
+          threadId,
+          providerThreadId,
+          title,
+          context: this._buildProviderThreadContext({
+            threadId,
+            projectId: thread.projectId,
+          }),
+          providerLaunch,
+        });
+        await this._replayBufferedEnvironmentAgentEvents(threadId);
+      },
+    ).catch((error) => {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(`[thread ${threadId}] Failed to rename provider thread: ${message}`);
+    });
   }
 
   private _normalizeThreadTitle(value: unknown): string | undefined {

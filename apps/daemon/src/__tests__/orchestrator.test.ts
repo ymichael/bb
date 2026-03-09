@@ -5711,6 +5711,67 @@ describe("Orchestrator", () => {
     });
   });
 
+  describe("updateThread()", () => {
+    it("renames the provider thread through the environment-agent command path", async () => {
+      const project = {
+        id: "proj-1",
+        name: "Test",
+        rootPath: "/my/project",
+        createdAt: 1000,
+        updatedAt: 1000,
+      };
+      let currentTitle: string | undefined;
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(project);
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockImplementation((threadId: string) =>
+        threadId === "thread-1"
+          ? makeThread({
+              id: "thread-1",
+              projectId: "proj-1",
+              status: "idle",
+              title: currentTitle,
+              environmentId: "local",
+            })
+          : undefined,
+      );
+      (threadRepo.update as ReturnType<typeof vi.fn>).mockImplementation(
+        (_threadId: string, update: Partial<Thread>) => {
+          if (typeof update.title === "string") {
+            currentTitle = update.title;
+          }
+        },
+      );
+      (eventRepo as typeof eventRepo & { getLatestProviderThreadId: ReturnType<typeof vi.fn> })
+        .getLatestProviderThreadId = vi.fn().mockReturnValue("provider-thread-1");
+      const fakeChild = createFakeChildProcess();
+      (spawnMock as ReturnType<typeof vi.fn>).mockReturnValue(fakeChild);
+      asOrchestratorHarness(manager).environmentRuntimes.set("thread-1", {
+        environment: makeRuntimeEnvironment({
+          rootPath: "/my/project",
+        }),
+        agentConnectionTarget: {
+          transport: "http",
+          baseUrl: "http://127.0.0.1:4312",
+        },
+      });
+
+      const updated = manager.updateThread("thread-1", { title: "Renamed thread" });
+      await vi.waitFor(() => {
+        const hasRename = fakeChild._stdinData
+          .map((entry) => JSON.parse(entry.trim()) as { method?: string })
+          .some((entry) => entry.method === "thread/name/set");
+        expect(hasRename).toBe(true);
+      });
+
+      expect(updated.title).toBe("Renamed thread");
+      expect(threadRepo.update).toHaveBeenCalledWith("thread-1", { title: "Renamed thread" });
+      const rename = findRpcMessageByMethod(fakeChild._stdinData, "thread/name/set");
+      expect(rename.params).toEqual({
+        threadId: "provider-thread-1",
+        name: "Renamed thread",
+      });
+    });
+  });
+
   describe("worktree operation broadcasts", () => {
     beforeEach(() => {
       (eventRepo.getLatestByType as ReturnType<typeof vi.fn>).mockImplementation(
