@@ -156,7 +156,7 @@ describe("event repository provider envelope indexing", () => {
     ]);
   });
 
-  it("retains legacy codex rows when pruning standardized noise event sets", () => {
+  it("prunes legacy codex rows when they age out of the supported history window", () => {
     events.create({
       threadId,
       seq: 1,
@@ -188,13 +188,11 @@ describe("event repository provider envelope indexing", () => {
     });
 
     const removed = events.pruneHistoricalNoiseByThread(threadId, 2);
-    expect(removed).toBe(0);
+    expect(removed).toBe(2);
 
     const remaining = events.listByThread(threadId);
-    expect(remaining.map((event) => event.seq)).toEqual([1, 2, 3, 4]);
+    expect(remaining.map((event) => event.seq)).toEqual([3, 4]);
     expect(remaining.map((event) => event.type)).toEqual([
-      "codex/event/turn_diff",
-      "codex/event/agent_reasoning",
       "codex/event/user_message",
       "item/completed",
     ]);

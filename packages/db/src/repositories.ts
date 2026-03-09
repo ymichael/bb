@@ -74,6 +74,10 @@ const PRUNABLE_NOISE_EVENT_NORM_TYPES: readonly string[] = [
   "thread/tokenusage/updated",
   "item/reasoning/summarypartadded",
   "turn/diff/updated",
+  "codex/event/token_count",
+  "codex/event/turn_diff",
+  "codex/event/agent_reasoning",
+  "codex/event/user_message",
 ];
 
 const ALWAYS_PRUNABLE_NOISE_EVENT_NORM_TYPES: readonly string[] = [];
