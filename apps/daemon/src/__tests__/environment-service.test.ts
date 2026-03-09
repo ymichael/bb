@@ -134,7 +134,11 @@ function createTestEnvironment(args: { existsInitially: boolean; disposeSpy?: ()
   };
 }
 
-function createService(args: { existsInitially: boolean; disposeSpy?: () => void }) {
+function createService(args: {
+  existsInitially: boolean;
+  disposeSpy?: () => void;
+  restoreImpl?: (state: unknown, context: CreateEnvironmentContext) => IEnvironment;
+}) {
   const environment = createTestEnvironment(args);
   const environmentRegistry = new EnvironmentRegistry().register({
     kind: "worktree",
@@ -142,7 +146,10 @@ function createService(args: { existsInitially: boolean; disposeSpy?: () => void
     create(_context: CreateEnvironmentContext): IEnvironment {
       return environment;
     },
-    restore(_state: unknown, _context: CreateEnvironmentContext): IEnvironment {
+    restore(state: unknown, context: CreateEnvironmentContext): IEnvironment {
+      if (args.restoreImpl) {
+        return args.restoreImpl(state, context);
+      }
       return environment;
     },
     isState(_value: unknown): _value is unknown {
@@ -150,19 +157,24 @@ function createService(args: { existsInitially: boolean; disposeSpy?: () => void
     },
   });
 
+  const threadState: Thread = {
+    id: "thread-1",
+    projectId: "proj-1",
+    status: "idle",
+    environmentRecord: {
+      kind: "worktree",
+      state: {},
+    },
+    environmentAgentCursor: 12,
+    createdAt: 1000,
+    updatedAt: 1000,
+  };
   const threadRepo = {
-    getById: vi.fn((_threadId: string) =>
-      ({
-        id: "thread-1",
-        projectId: "proj-1",
-        status: "idle",
-        environmentRecord: {
-          kind: "worktree",
-          state: {},
-        },
-        createdAt: 1000,
-        updatedAt: 1000,
-      }) satisfies Thread),
+    getById: vi.fn((_threadId: string) => threadState),
+    update: vi.fn((_threadId: string, data: Record<string, unknown>) => {
+      Object.assign(threadState as Record<string, unknown>, data);
+      return threadState;
+    }),
   } as unknown as ThreadRepository;
 
   const projectRepo = {
@@ -208,7 +220,7 @@ function createService(args: { existsInitially: boolean; disposeSpy?: () => void
     },
   );
 
-  return { service, runOptionalSetup };
+  return { service, runOptionalSetup, threadRepo, threadState };
 }
 
 describe("EnvironmentService", () => {
@@ -248,7 +260,7 @@ describe("EnvironmentService", () => {
 
   it("disposes restored environments during persisted cleanup even when no runtime is active", async () => {
     const disposeSpy = vi.fn();
-    const { service } = createService({
+    const { service, threadRepo, threadState } = createService({
       existsInitially: true,
       disposeSpy,
     });
@@ -256,5 +268,65 @@ describe("EnvironmentService", () => {
     await service.cleanupPersistedEnvironment("thread-1");
 
     expect(disposeSpy).toHaveBeenCalledTimes(1);
+    expect(threadRepo.update).toHaveBeenCalledWith(
+      "thread-1",
+      {
+        environmentRecord: null,
+        environmentAgentCursor: null,
+      },
+      { touchUpdatedAt: false },
+    );
+    expect(threadState.environmentRecord).toBeNull();
+    expect(threadState.environmentAgentCursor).toBeNull();
+  });
+
+  it("clears stale persisted environment state when the archived workspace is already gone", async () => {
+    const { service, threadRepo, threadState } = createService({
+      existsInitially: true,
+      restoreImpl: () => {
+        throw new Error("Worktree workspace is unavailable: /tmp/missing-thread-1");
+      },
+    });
+
+    await expect(service.cleanupPersistedEnvironment("thread-1")).resolves.toBeUndefined();
+
+    expect(threadRepo.update).toHaveBeenCalledWith(
+      "thread-1",
+      {
+        environmentRecord: null,
+        environmentAgentCursor: null,
+      },
+      { touchUpdatedAt: false },
+    );
+    expect(threadState.environmentRecord).toBeNull();
+    expect(threadState.environmentAgentCursor).toBeNull();
+  });
+
+  it("clears persisted environment state after destroying an active runtime", async () => {
+    const disposeSpy = vi.fn();
+    const { service, threadRepo, threadState } = createService({
+      existsInitially: true,
+      disposeSpy,
+    });
+    const runtimeEnvironment = createTestEnvironment({
+      existsInitially: true,
+      disposeSpy,
+    });
+    service.setEnvironmentRuntime("thread-1", runtimeEnvironment);
+
+    service.cleanupEnvironmentRuntime("thread-1", { destroyWorkspace: true });
+    await new Promise<void>((resolve) => setImmediate(resolve));
+
+    expect(disposeSpy).toHaveBeenCalledTimes(1);
+    expect(threadRepo.update).toHaveBeenCalledWith(
+      "thread-1",
+      {
+        environmentRecord: null,
+        environmentAgentCursor: null,
+      },
+      { touchUpdatedAt: false },
+    );
+    expect(threadState.environmentRecord).toBeNull();
+    expect(threadState.environmentAgentCursor).toBeNull();
   });
 });

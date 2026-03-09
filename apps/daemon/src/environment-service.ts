@@ -61,6 +61,11 @@ interface EnvironmentServiceCallbacks {
   }) => AgentServerSessionConnection | Promise<AgentServerSessionConnection>;
 }
 
+function isUnavailableCleanupTargetError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  return error.message.includes("workspace is unavailable");
+}
+
 function checkoutSnapshotsMatch(
   left: EnvironmentCheckoutSnapshot,
   right: EnvironmentCheckoutSnapshot,
@@ -245,6 +250,9 @@ export class EnvironmentService {
     const environmentId = runtime.environment.kind;
     try {
       void Promise.resolve(runtime.environment.dispose())
+        .then(() => {
+          this.clearPersistedEnvironmentState(threadId);
+        })
         .catch((error: unknown) => reportFailure(environmentId, error))
         .finally(refresh);
     } catch (error) {
@@ -258,11 +266,33 @@ export class EnvironmentService {
     if (!thread) return;
     const project = this.projectRepo.getById(thread.projectId);
     if (!project) return;
-    const environment = this.restoreThreadEnvironment(thread, project.rootPath);
+    let environment: IEnvironment | undefined;
+    try {
+      environment = this.restoreThreadEnvironment(thread, project.rootPath);
+    } catch (error) {
+      if (isUnavailableCleanupTargetError(error)) {
+        this.clearPersistedEnvironmentState(threadId);
+        return;
+      }
+      throw error;
+    }
     if (!environment) {
       return;
     }
     await Promise.resolve(environment.dispose());
+    this.clearPersistedEnvironmentState(threadId);
+  }
+
+  private clearPersistedEnvironmentState(threadId: string): void {
+    this.threadRepo.update(
+      threadId,
+      {
+        environmentRecord: null,
+        environmentAgentCursor: null,
+      },
+      { touchUpdatedAt: false },
+    );
+    this.restoreFailuresByThreadId.delete(threadId);
   }
 
   rebuildPrimaryPromotionStateFromGit(): void {
