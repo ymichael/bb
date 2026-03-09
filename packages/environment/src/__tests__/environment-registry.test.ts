@@ -44,6 +44,8 @@ describe("EnvironmentRegistry", () => {
   it("restores worktree environments from persisted state", async () => {
     const projectRoot = makeTempDir("bb-env-project-");
     const worktreeRoot = join(projectRoot, ".worktrees");
+    const projectId = `proj-${Date.now()}`;
+    const threadId = `thread-${Date.now()}`;
 
     try {
       git(projectRoot, "init", "-b", "main");
@@ -62,8 +64,8 @@ describe("EnvironmentRegistry", () => {
           }),
         );
       const environment = registry.create("worktree", {
-        projectId: "proj-1",
-        threadId: "thread-1",
+        projectId,
+        threadId,
         projectRootPath: projectRoot,
         runtimeEnv: {},
       });
@@ -74,15 +76,15 @@ describe("EnvironmentRegistry", () => {
           state: environment.serialize(),
         },
         {
-          projectId: "proj-1",
-          threadId: "thread-1",
+          projectId,
+          threadId,
           projectRootPath: projectRoot,
           runtimeEnv: {},
         },
       );
 
       expect(restored.kind).toBe("worktree");
-      expect(restored.getWorkspaceRootUnsafe()).toBe(join(worktreeRoot, "thread-1"));
+      expect(restored.getWorkspaceRootUnsafe()).toBe(join(worktreeRoot, threadId));
 
       await restored.dispose();
     } finally {

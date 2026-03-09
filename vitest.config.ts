@@ -9,6 +9,9 @@ export default defineConfig({
       "apps/app",
       "packages/agent-core",
       "packages/agent-server",
+      "packages/db",
+      "packages/environment",
+      "packages/ui-core",
     ],
   },
 });
