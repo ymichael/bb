@@ -96,21 +96,22 @@ describe.sequential("e2e: thread detail stays responsive while provisioning", ()
           defaultTurnDelayMs: 10,
         },
       });
+      const currentHarness = harness;
 
-      git(harness.projectRoot, "init", "-b", "main");
-      git(harness.projectRoot, "config", "user.name", "Beanbag");
-      git(harness.projectRoot, "config", "user.email", "beanbag@example.com");
-      writeFileSync(join(harness.projectRoot, "README.md"), "hello\n", "utf8");
+      git(currentHarness.projectRoot, "init", "-b", "main");
+      git(currentHarness.projectRoot, "config", "user.name", "Beanbag");
+      git(currentHarness.projectRoot, "config", "user.email", "beanbag@example.com");
+      writeFileSync(join(currentHarness.projectRoot, "README.md"), "hello\n", "utf8");
       writeFileSync(
-        join(harness.projectRoot, ".bb-env-setup.sh"),
+        join(currentHarness.projectRoot, ".bb-env-setup.sh"),
         "#!/usr/bin/env sh\nsleep 2\n",
         { encoding: "utf8", mode: 0o755 },
       );
-      git(harness.projectRoot, "add", "README.md", ".bb-env-setup.sh");
-      git(harness.projectRoot, "commit", "-m", "init");
+      git(currentHarness.projectRoot, "add", "README.md", ".bb-env-setup.sh");
+      git(currentHarness.projectRoot, "commit", "-m", "init");
 
-      const project = await createProject(harness.baseUrl, harness.projectRoot);
-      const thread = await readJson<Thread>(`${harness.baseUrl}/api/v1/threads`, {
+      const project = await createProject(currentHarness.baseUrl, currentHarness.projectRoot);
+      const thread = await readJson<Thread>(`${currentHarness.baseUrl}/api/v1/threads`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -125,9 +126,9 @@ describe.sequential("e2e: thread detail stays responsive while provisioning", ()
       await sleep(150);
 
       const [threadResult, timelineResult] = await Promise.all([
-        timedJson<Thread>(`${harness.baseUrl}/api/v1/threads/${thread.id}`),
+        timedJson<Thread>(`${currentHarness.baseUrl}/api/v1/threads/${thread.id}`),
         timedJson<ThreadTimelineResponse>(
-          `${harness.baseUrl}/api/v1/threads/${thread.id}/timeline`,
+          `${currentHarness.baseUrl}/api/v1/threads/${thread.id}/timeline`,
         ),
       ]);
 
@@ -137,7 +138,7 @@ describe.sequential("e2e: thread detail stays responsive while provisioning", ()
       await expect
         .poll(async () => {
           const timeline = await readJson<ThreadTimelineResponse>(
-            `${harness.baseUrl}/api/v1/threads/${thread.id}/timeline`,
+            `${currentHarness.baseUrl}/api/v1/threads/${thread.id}/timeline`,
           );
           return timeline.rows.some(
             (row) =>
@@ -149,7 +150,7 @@ describe.sequential("e2e: thread detail stays responsive while provisioning", ()
         .toBe(true);
 
       const completedThread = await waitForThreadToLeaveProvisioning(
-        harness.baseUrl,
+        currentHarness.baseUrl,
         thread.id,
       );
       expect(["active", "idle"]).toContain(completedThread.status);

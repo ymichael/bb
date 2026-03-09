@@ -1,5 +1,6 @@
 import { spawnSync } from "node:child_process";
 import type { ChildProcess } from "node:child_process";
+import { createServer } from "node:net";
 import path from "node:path";
 import type { EnvironmentAgentConnectionTarget } from "@beanbag/environment-agent";
 import type {
@@ -25,10 +26,12 @@ import type {
   PromoteEnvironmentResult,
 } from "./contracts.js";
 import {
-  disposeManagedHostEnvironmentAgent,
-  ensureManagedHostEnvironmentAgent,
-  resolveManagedHostEnvironmentAgentTarget,
-} from "./host-environment-agent.js";
+  DEFAULT_DOCKER_ENVIRONMENT_AGENT_CONTAINER_PORT,
+  disposeManagedDockerEnvironmentAgent,
+  ensureManagedDockerEnvironmentAgent,
+  resolveDockerEnvironmentImage,
+  resolveManagedDockerEnvironmentAgentTarget,
+} from "./docker-environment-agent.js";
 import { runCommand, runCommandAsync, spawnCommand } from "./process.js";
 import {
   resolveEnvironmentAgentConnectionTarget,
@@ -44,6 +47,8 @@ export interface DockerEnvironmentState {
   containerName: string;
   image: string;
   mountPath: string;
+  agentHostPort?: number;
+  agentContainerPort?: number;
 }
 
 export interface CreateDockerEnvironmentDefinitionOptions {
@@ -85,19 +90,6 @@ function resolveContainerName(args: {
   containerPrefix: string;
 }): string {
   return `${args.containerPrefix}-${sanitizeContainerSegment(args.threadId)}`;
-}
-
-function resolveDockerImage(args: {
-  configuredImage?: string;
-  runtimeEnv: Record<string, string | undefined>;
-}): string {
-  const image = args.configuredImage ?? args.runtimeEnv.BEANBAG_DOCKER_IMAGE;
-  if (!image || image.trim().length === 0) {
-    throw new Error(
-      "Docker environment requires BEANBAG_DOCKER_IMAGE or an explicit image option",
-    );
-  }
-  return image.trim();
 }
 
 function toDockerExecArgs(args: {
@@ -183,57 +175,44 @@ class DockerEnvironment implements IEnvironment {
 
   async prepare(): Promise<void> {
     await this.inner.prepare?.();
-    if (this.containerExists()) {
-      this.ensureContainerRunning();
-    } else {
-      const result = spawnSync(
-        this.dockerBin,
-        [
-          "run",
-          "-d",
-          "--name",
-          this.state.containerName,
-          "-v",
-          `${this.getWorkspaceRootUnsafe()}:${this.state.mountPath}`,
-          "-w",
-          this.state.mountPath,
-          this.state.image,
-          "sleep",
-          "infinity",
-        ],
-        {
-          encoding: "utf-8",
-          stdio: "pipe",
-        },
-      );
-      if (result.status !== 0) {
-        throw new Error(
-          result.stderr || result.stdout || "Failed to create Docker container",
-        );
-      }
+    if (!this.state.agentHostPort) {
+      this.state.agentHostPort = await allocatePort();
+    }
+    if (!this.state.agentContainerPort) {
+      this.state.agentContainerPort = DEFAULT_DOCKER_ENVIRONMENT_AGENT_CONTAINER_PORT;
     }
 
-    await ensureManagedHostEnvironmentAgent({
+    if (this.containerExists()) {
+      if (!this.containerHasExpectedPortMapping()) {
+        this.removeContainer();
+        this.createContainer();
+      } else {
+        this.ensureContainerRunning();
+      }
+    } else {
+      this.createContainer();
+    }
+
+    await ensureManagedDockerEnvironmentAgent({
       workspaceRootPath: this.getWorkspaceRootUnsafe(),
       threadId: this.threadId,
       projectId: this.projectId,
       environmentId: this.kind,
       runtimeEnv: this.runtimeEnv,
+      dockerBin: this.dockerBin,
+      containerName: this.state.containerName,
+      hostPort: this.state.agentHostPort,
+      containerPort: this.state.agentContainerPort,
     });
   }
 
   async dispose(): Promise<void> {
-    await disposeManagedHostEnvironmentAgent({
+    disposeManagedDockerEnvironmentAgent({
       projectId: this.projectId,
       threadId: this.threadId,
       environmentId: this.kind,
-      runtimeEnv: this.runtimeEnv,
     });
-    spawnSync(
-      this.dockerBin,
-      ["rm", "-f", this.state.containerName],
-      { encoding: "utf-8", stdio: "pipe" },
-    );
+    this.removeContainer();
     await Promise.resolve(this.inner.dispose());
   }
 
@@ -250,7 +229,7 @@ class DockerEnvironment implements IEnvironment {
   }
 
   getAgentConnectionTarget(): EnvironmentAgentConnectionTarget {
-    const managedTarget = resolveManagedHostEnvironmentAgentTarget({
+    const managedTarget = resolveManagedDockerEnvironmentAgentTarget({
       projectId: this.projectId,
       threadId: this.threadId,
       environmentId: this.kind,
@@ -453,6 +432,84 @@ class DockerEnvironment implements IEnvironment {
       );
     }
   }
+
+  private containerHasExpectedPortMapping(): boolean {
+    const hostPort = this.state.agentHostPort;
+    const containerPort = this.state.agentContainerPort;
+    if (!hostPort || !containerPort) {
+      return false;
+    }
+    const inspectResult = spawnSync(
+      this.dockerBin,
+      [
+        "inspect",
+        "-f",
+        `{{with index .NetworkSettings.Ports "${containerPort}/tcp"}}{{(index . 0).HostPort}}{{end}}`,
+        this.state.containerName,
+      ],
+      { encoding: "utf-8", stdio: "pipe" },
+    );
+    return inspectResult.status === 0 && inspectResult.stdout.trim() === String(hostPort);
+  }
+
+  private createContainer(): void {
+    const result = spawnSync(
+      this.dockerBin,
+      [
+        "run",
+        "-d",
+        "--name",
+        this.state.containerName,
+        "-p",
+        `${this.state.agentHostPort}:${this.state.agentContainerPort}`,
+        "-v",
+        `${this.getWorkspaceRootUnsafe()}:${this.state.mountPath}`,
+        "-w",
+        this.state.mountPath,
+        this.state.image,
+        "sleep",
+        "infinity",
+      ],
+      {
+        encoding: "utf-8",
+        stdio: "pipe",
+      },
+    );
+    if (result.status !== 0) {
+      throw new Error(
+        result.stderr || result.stdout || "Failed to create Docker container",
+      );
+    }
+  }
+
+  private removeContainer(): void {
+    spawnSync(
+      this.dockerBin,
+      ["rm", "-f", this.state.containerName],
+      { encoding: "utf-8", stdio: "pipe" },
+    );
+  }
+}
+
+async function allocatePort(): Promise<number> {
+  return new Promise<number>((resolvePromise, reject) => {
+    const server = createServer();
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      const address = server.address();
+      if (!address || typeof address === "string") {
+        server.close(() => reject(new Error("Failed to allocate docker environment-agent port")));
+        return;
+      }
+      server.close((error) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+        resolvePromise(address.port);
+      });
+    });
+  });
 }
 
 export function createDockerEnvironmentDefinition(
@@ -472,7 +529,7 @@ export function createDockerEnvironmentDefinition(
     create(context: CreateEnvironmentContext): IEnvironment {
       const inner = worktreeDefinition.create(context);
       const worktreeState = inner.serialize() as WorktreeEnvironmentState;
-      const image = resolveDockerImage({
+      const image = resolveDockerEnvironmentImage({
         configuredImage: opts?.image,
         runtimeEnv: context.runtimeEnv,
       });
@@ -488,6 +545,7 @@ export function createDockerEnvironmentDefinition(
           }),
           image,
           mountPath,
+          agentContainerPort: DEFAULT_DOCKER_ENVIRONMENT_AGENT_CONTAINER_PORT,
         },
         context.runtimeEnv,
         dockerBin,
@@ -504,6 +562,12 @@ export function createDockerEnvironmentDefinition(
           containerName: state.containerName,
           image: state.image,
           mountPath: state.mountPath,
+          ...(typeof state.agentHostPort === "number"
+            ? { agentHostPort: state.agentHostPort }
+            : {}),
+          ...(typeof state.agentContainerPort === "number"
+            ? { agentContainerPort: state.agentContainerPort }
+            : {}),
         },
         context.runtimeEnv,
         dockerBin,
@@ -516,6 +580,10 @@ export function createDockerEnvironmentDefinition(
         typeof record.containerName === "string" &&
         typeof record.image === "string" &&
         typeof record.mountPath === "string" &&
+        (record.agentHostPort === undefined ||
+          typeof record.agentHostPort === "number") &&
+        (record.agentContainerPort === undefined ||
+          typeof record.agentContainerPort === "number") &&
         Boolean(record.worktree) &&
         typeof record.worktree === "object"
       );

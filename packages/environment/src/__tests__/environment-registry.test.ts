@@ -5,6 +5,7 @@ import { spawnSync } from "node:child_process";
 import { describe, expect, it } from "vitest";
 import {
   EnvironmentRegistry,
+  createDefaultEnvironmentRegistry,
   createDockerEnvironmentDefinition,
   createLocalEnvironmentDefinition,
   createWorktreeEnvironmentDefinition,
@@ -154,5 +155,15 @@ describe("EnvironmentRegistry", () => {
     } finally {
       rmSync(projectRoot, { recursive: true, force: true });
     }
+  });
+
+  it("includes docker in the default environment registry", () => {
+    const registry = createDefaultEnvironmentRegistry();
+
+    expect(registry.list().map((item) => item.id)).toEqual([
+      "local",
+      "worktree",
+      "docker",
+    ]);
   });
 });
