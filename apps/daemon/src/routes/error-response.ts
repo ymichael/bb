@@ -6,7 +6,7 @@ import { isDomainError } from "../domain-errors.js";
 type ApiErrorCode = DomainErrorCode | "internal_error";
 
 interface ApiErrorBody {
-  code: ApiErrorCode;
+  code: string;
   message: string;
   retryable?: boolean;
   details?: unknown;
@@ -45,7 +45,7 @@ function statusFromCode(code: ApiErrorCode): ApiErrorStatus {
 }
 
 function createBody(
-  code: ApiErrorCode,
+  code: string,
   message: string,
   opts?: { retryable?: boolean; details?: unknown },
 ): ApiErrorBody {
@@ -58,17 +58,40 @@ function createBody(
   };
 }
 
+export function sendApiError(
+  c: Context,
+  args: {
+    status: ApiErrorStatus;
+    code: string;
+    message: string;
+    retryable?: boolean;
+    details?: unknown;
+  },
+): Response {
+  return c.json(
+    createBody(args.code, args.message, {
+      retryable: args.retryable,
+      details: args.details,
+    }),
+    args.status,
+  );
+}
+
 export function sendRouteError(c: Context, err: unknown): Response {
   if (isDomainError(err)) {
-    return c.json(
-      createBody(err.code, err.message, {
-        retryable: err.retryable,
-        details: err.details,
-      }),
-      statusFromCode(err.code),
-    );
+    return sendApiError(c, {
+      status: statusFromCode(err.code),
+      code: err.code,
+      message: err.message,
+      retryable: err.retryable,
+      details: err.details,
+    });
   }
 
   const message = err instanceof Error ? err.message : "Unknown error";
-  return c.json(createBody("internal_error", message), 500);
+  return sendApiError(c, {
+    status: 500,
+    code: "internal_error",
+    message,
+  });
 }

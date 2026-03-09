@@ -10,6 +10,7 @@ import type {
 } from "@beanbag/agent-core";
 import { createProjectRoutes } from "../../routes/projects.js";
 import type { EventRepository, ProjectRepository, ThreadRepository } from "@beanbag/db";
+import { invalidRequestError } from "../../domain-errors.js";
 
 function makeProject(overrides: Partial<Project> = {}): Project {
   return {
@@ -145,6 +146,8 @@ describe("Project routes", () => {
 
       expect(res.status).toBe(500);
       const body = await res.json();
+      expect(body.code).toBe("internal_error");
+      expect(body.message).toBe("Unique constraint violated");
       expect(body.error).toBe("Unique constraint violated");
     });
   });
@@ -185,6 +188,8 @@ describe("Project routes", () => {
 
       expect(res.status).toBe(500);
       const body = await res.json();
+      expect(body.code).toBe("internal_error");
+      expect(body.message).toBe("DB error");
       expect(body.error).toBe("DB error");
     });
   });
@@ -226,7 +231,9 @@ describe("Project routes", () => {
 
       expect(res.status).toBe(404);
       const body = await res.json();
-      expect(body.error).toBe("Project not found");
+      expect(body.code).toBe("project_not_found");
+      expect(body.message).toBe("Project unknown not found");
+      expect(body.error).toBe("Project unknown not found");
     });
 
     it("returns 400 when body has no updatable fields", async () => {
@@ -276,7 +283,11 @@ describe("Project routes", () => {
       });
 
       expect(res.status).toBe(404);
-      expect(await res.json()).toEqual({ error: "Project not found" });
+      expect(await res.json()).toEqual({
+        code: "project_not_found",
+        message: "Project missing not found",
+        error: "Project missing not found",
+      });
       expect(projectRepo.delete).not.toHaveBeenCalled();
     });
   });
@@ -322,7 +333,9 @@ describe("Project routes", () => {
 
       expect(res.status).toBe(404);
       const body = await res.json();
-      expect(body.error).toBe("Project not found");
+      expect(body.code).toBe("project_not_found");
+      expect(body.message).toBe("Project unknown not found");
+      expect(body.error).toBe("Project unknown not found");
       expect(findProjectFiles).not.toHaveBeenCalled();
     });
 
@@ -336,6 +349,8 @@ describe("Project routes", () => {
 
       expect(res.status).toBe(500);
       const body = await res.json();
+      expect(body.code).toBe("internal_error");
+      expect(body.message).toBe("Search failed");
       expect(body.error).toBe("Search failed");
     });
   });
@@ -378,7 +393,11 @@ describe("Project routes", () => {
       });
 
       expect(res.status).toBe(404);
-      expect(await res.json()).toEqual({ error: "Project not found" });
+      expect(await res.json()).toEqual({
+        code: "project_not_found",
+        message: "Project missing not found",
+        error: "Project missing not found",
+      });
       expect(savePromptAttachment).not.toHaveBeenCalled();
     });
 
@@ -395,6 +414,8 @@ describe("Project routes", () => {
 
       expect(res.status).toBe(400);
       expect(await res.json()).toEqual({
+        code: "invalid_request",
+        message: "Expected multipart file field named 'file'",
         error: "Expected multipart file field named 'file'",
       });
       expect(savePromptAttachment).not.toHaveBeenCalled();
@@ -404,10 +425,9 @@ describe("Project routes", () => {
       (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
         makeProject({ id: "proj-2", rootPath: "/repo/root" }),
       );
-      savePromptAttachment.mockRejectedValueOnce({
-        code: "invalid_request",
-        message: "Attachment too large",
-      });
+      savePromptAttachment.mockRejectedValueOnce(
+        invalidRequestError("Attachment too large"),
+      );
 
       const formData = new FormData();
       formData.set("file", new File(["hello"], "notes.txt", { type: "text/plain" }));
@@ -417,7 +437,11 @@ describe("Project routes", () => {
       });
 
       expect(res.status).toBe(400);
-      expect(await res.json()).toEqual({ error: "Attachment too large" });
+      expect(await res.json()).toEqual({
+        code: "invalid_request",
+        message: "Attachment too large",
+        error: "Attachment too large",
+      });
     });
   });
 
@@ -458,6 +482,8 @@ describe("Project routes", () => {
 
       expect(res.status).toBe(400);
       expect(await res.json()).toEqual({
+        code: "invalid_request",
+        message: "Attachment path is outside project scope",
         error: "Attachment path is outside project scope",
       });
     });

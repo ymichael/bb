@@ -14,7 +14,12 @@ import {
 import { z } from "zod";
 import type { EventRepository, ProjectRepository, ThreadRepository } from "@beanbag/db";
 import { searchProjectFiles } from "../project-file-search.js";
-import { invalidRequestError } from "../domain-errors.js";
+import {
+  invalidRequestError,
+  projectNotFoundError,
+  unsupportedOperationError,
+} from "../domain-errors.js";
+import { sendApiError, sendRouteError } from "./error-response.js";
 
 const projectFileQuerySchema = z.object({
   query: z.string().default(""),
@@ -175,8 +180,7 @@ export function createProjectRoutes(
         const project = projectRepo.create({ name, rootPath });
         return c.json(withProjectPathStatus(project), 201);
       } catch (err) {
-        const message = err instanceof Error ? err.message : "Unknown error";
-        return c.json({ error: message }, 500);
+        return sendRouteError(c, err);
       }
     })
     .patch("/:id", zValidator("json", updateProjectSchema), async (c) => {
@@ -189,12 +193,11 @@ export function createProjectRoutes(
           projectInstructions,
         });
         if (!updated) {
-          return c.json({ error: "Project not found" }, 404);
+          return sendRouteError(c, projectNotFoundError(projectId));
         }
         return c.json(withProjectPathStatus(updated));
       } catch (err) {
-        const message = err instanceof Error ? err.message : "Unknown error";
-        return c.json({ error: message }, 500);
+        return sendRouteError(c, err);
       }
     })
     .delete("/:id", async (c) => {
@@ -202,7 +205,7 @@ export function createProjectRoutes(
         const projectId = c.req.param("id");
         const project = projectRepo.getById(projectId);
         if (!project) {
-          return c.json({ error: "Project not found" }, 404);
+          return sendRouteError(c, projectNotFoundError(projectId));
         }
 
         if (deps?.threadRepo && deps.eventRepo) {
@@ -219,8 +222,7 @@ export function createProjectRoutes(
         projectRepo.delete(projectId);
         return c.json({ ok: true });
       } catch (err) {
-        const message = err instanceof Error ? err.message : "Unknown error";
-        return c.json({ error: message }, 500);
+        return sendRouteError(c, err);
       }
     })
     .get("/", async (c) => {
@@ -228,15 +230,15 @@ export function createProjectRoutes(
         const projects = projectRepo.list();
         return c.json(projects.map((project) => withProjectPathStatus(project)));
       } catch (err) {
-        const message = err instanceof Error ? err.message : "Unknown error";
-        return c.json({ error: message }, 500);
+        return sendRouteError(c, err);
       }
     })
     .get("/:id/files", zValidator("query", projectFileQuerySchema), async (c) => {
       try {
-        const project = projectRepo.getById(c.req.param("id"));
+        const projectId = c.req.param("id");
+        const project = projectRepo.getById(projectId);
         if (!project) {
-          return c.json({ error: "Project not found" }, 404);
+          return sendRouteError(c, projectNotFoundError(projectId));
         }
 
         const { query, limit } = c.req.valid("query");
@@ -246,38 +248,38 @@ export function createProjectRoutes(
         const files = await findProjectFiles(project.rootPath, query, limit);
         return c.json(files);
       } catch (err) {
-        const message = err instanceof Error ? err.message : "Unknown error";
-        return c.json({ error: message }, 500);
+        return sendRouteError(c, err);
       }
     })
     .get("/:id/workspace-status", async (c) => {
       try {
-        const project = projectRepo.getById(c.req.param("id"));
+        const projectId = c.req.param("id");
+        const project = projectRepo.getById(projectId);
         if (!project) {
-          return c.json({ error: "Project not found" }, 404);
+          return sendRouteError(c, projectNotFoundError(projectId));
         }
         const getProjectWorkspaceStatus = deps?.getProjectWorkspaceStatus;
         if (!getProjectWorkspaceStatus) {
-          return c.json({ error: "Project workspace status is unavailable" }, 500);
+          throw unsupportedOperationError("Project workspace status is unavailable");
         }
         const status = getProjectWorkspaceStatus(project.id, project.rootPath);
         return c.json(status);
       } catch (err) {
-        const message = err instanceof Error ? err.message : "Unknown error";
-        return c.json({ error: message }, 500);
+        return sendRouteError(c, err);
       }
     })
     .post("/:id/attachments", async (c) => {
       try {
-        const project = projectRepo.getById(c.req.param("id"));
+        const projectId = c.req.param("id");
+        const project = projectRepo.getById(projectId);
         if (!project) {
-          return c.json({ error: "Project not found" }, 404);
+          return sendRouteError(c, projectNotFoundError(projectId));
         }
 
         const body = await c.req.parseBody();
         const file = body.file;
         if (!(file instanceof File)) {
-          return c.json({ error: "Expected multipart file field named 'file'" }, 400);
+          throw invalidRequestError("Expected multipart file field named 'file'");
         }
 
         const uploaded = await savePromptAttachment({
@@ -286,34 +288,29 @@ export function createProjectRoutes(
         });
         return c.json(uploaded, 201);
       } catch (err) {
-        const message = err instanceof Error
-          ? err.message
-          : err && typeof err === "object" && "message" in err
-            ? String((err as { message?: unknown }).message)
-            : "Unknown error";
-        const status = err && typeof err === "object" && "code" in err
-          ? (err as { code?: string }).code === "invalid_request"
-            ? 400
-            : 500
-          : 500;
-        return c.json({ error: message }, status);
+        return sendRouteError(c, err);
       }
     })
     .get("/:id/attachments/content", zValidator("query", projectAttachmentQuerySchema), async (c) => {
       try {
-        const project = projectRepo.getById(c.req.param("id"));
+        const projectId = c.req.param("id");
+        const project = projectRepo.getById(projectId);
         if (!project) {
-          return c.json({ error: "Project not found" }, 404);
+          return sendRouteError(c, projectNotFoundError(projectId));
         }
 
         const { path } = c.req.valid("query");
         const attachmentsDir = resolveProjectAttachmentDirectory(project.id);
         const requestedPath = resolve(path);
         if (!isPathWithinDirectory(requestedPath, attachmentsDir)) {
-          return c.json({ error: "Attachment path is outside project scope" }, 400);
+          throw invalidRequestError("Attachment path is outside project scope");
         }
         if (!existsSync(requestedPath)) {
-          return c.json({ error: "Attachment not found" }, 404);
+          return sendApiError(c, {
+            status: 404,
+            code: "attachment_not_found",
+            message: "Attachment not found",
+          });
         }
 
         const bytes = readFileSync(requestedPath);
@@ -321,10 +318,7 @@ export function createProjectRoutes(
         c.header("Cache-Control", "private, max-age=60");
         return c.body(bytes);
       } catch (err) {
-        const message = err instanceof Error
-          ? err.message
-          : "Unknown error";
-        return c.json({ error: message }, 500);
+        return sendRouteError(c, err);
       }
     });
 }
