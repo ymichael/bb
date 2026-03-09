@@ -303,51 +303,7 @@ export class EnvironmentService {
     if (!Array.isArray(projects) || projects.length === 0) return;
 
     for (const project of projects) {
-      let projectCheckout: EnvironmentCheckoutSnapshot;
-      try {
-        projectCheckout = resolveProjectCheckoutSnapshot(project.rootPath);
-      } catch {
-        continue;
-      }
-
-      const candidateThreadIds =
-        typeof this.threadRepo.listProjectNonArchivedIdsWithEnvironmentRecord === "function"
-          ? this.threadRepo.listProjectNonArchivedIdsWithEnvironmentRecord(project.id)
-          : this.threadRepo
-            .list({ projectId: project.id })
-            .filter((thread) => thread.environmentRecord)
-            .map((thread) => thread.id);
-      if (candidateThreadIds.length === 0) {
-        continue;
-      }
-
-      for (const threadId of candidateThreadIds) {
-        const thread = this.threadRepo.getById(threadId);
-        if (!thread || thread.archivedAt !== undefined) {
-          continue;
-        }
-        const environment = this.restoreThreadEnvironment(thread, project.rootPath);
-        if (!environment || !environment.exists() || !environment.isIsolatedWorkspace()) {
-          continue;
-        }
-        let workspaceCheckout: EnvironmentCheckoutSnapshot;
-        try {
-          workspaceCheckout = environment.getCheckoutSnapshot();
-        } catch {
-          continue;
-        }
-        if (!checkoutSnapshotsMatch(projectCheckout, workspaceCheckout)) {
-          continue;
-        }
-        this.setPrimaryPromotionState(project.id, {
-          projectId: project.id,
-          threadId: thread.id,
-          promotedAt: Date.now(),
-          promotedCheckout: workspaceCheckout,
-          reconstructed: true,
-        });
-        break;
-      }
+      this.reconstructPrimaryPromotionStateForProject(project.id, { force: true });
     }
   }
 
@@ -369,12 +325,18 @@ export class EnvironmentService {
     projectId: string,
     opts?: { force?: boolean; ttlMs?: number },
   ): void {
-    const active = this.primaryPromotionByProjectId.get(projectId);
-    if (!active) return;
     const now = Date.now();
-    const lastValidatedAt = this.primaryPromotionValidatedAtByProjectId.get(projectId) ?? 0;
     const ttlMs = opts?.ttlMs ?? 2_000;
+    const active = this.primaryPromotionByProjectId.get(projectId);
+    const lastValidatedAt = this.primaryPromotionValidatedAtByProjectId.get(projectId) ?? 0;
     if (!opts?.force && now - lastValidatedAt < ttlMs) {
+      return;
+    }
+    if (!active) {
+      this.reconstructPrimaryPromotionStateForProject(projectId, {
+        force: opts?.force,
+        ttlMs,
+      });
       return;
     }
     this.primaryPromotionValidatedAtByProjectId.set(projectId, now);
@@ -398,6 +360,71 @@ export class EnvironmentService {
       threadId: cleared?.threadId ?? active.threadId,
       currentCheckout,
     });
+  }
+
+  private reconstructPrimaryPromotionStateForProject(
+    projectId: string,
+    opts?: { force?: boolean; ttlMs?: number },
+  ): void {
+    const now = Date.now();
+    const ttlMs = opts?.ttlMs ?? 2_000;
+    const lastValidatedAt = this.primaryPromotionValidatedAtByProjectId.get(projectId) ?? 0;
+    if (!opts?.force && now - lastValidatedAt < ttlMs) {
+      return;
+    }
+
+    const project = this.projectRepo.getById(projectId);
+    if (!project) {
+      this.clearPrimaryPromotionState(projectId);
+      return;
+    }
+
+    let projectCheckout: EnvironmentCheckoutSnapshot;
+    try {
+      projectCheckout = resolveProjectCheckoutSnapshot(project.rootPath);
+    } catch {
+      this.primaryPromotionValidatedAtByProjectId.set(projectId, now);
+      return;
+    }
+
+    const candidateThreadIds =
+      typeof this.threadRepo.listProjectNonArchivedIdsWithEnvironmentRecord === "function"
+        ? this.threadRepo.listProjectNonArchivedIdsWithEnvironmentRecord(project.id)
+        : this.threadRepo
+          .list({ projectId: project.id })
+          .filter((thread) => thread.environmentRecord)
+          .map((thread) => thread.id);
+
+    for (const threadId of candidateThreadIds) {
+      const thread = this.threadRepo.getById(threadId);
+      if (!thread || thread.archivedAt !== undefined) {
+        continue;
+      }
+      const environment = this.restoreThreadEnvironment(thread, project.rootPath);
+      if (!environment || !environment.exists() || !environment.isIsolatedWorkspace()) {
+        continue;
+      }
+      let workspaceCheckout: EnvironmentCheckoutSnapshot;
+      try {
+        workspaceCheckout = environment.getCheckoutSnapshot();
+      } catch {
+        continue;
+      }
+      if (!checkoutSnapshotsMatch(projectCheckout, workspaceCheckout)) {
+        continue;
+      }
+      this.setPrimaryPromotionState(project.id, {
+        projectId: project.id,
+        threadId: thread.id,
+        promotedAt: Date.now(),
+        promotedCheckout: workspaceCheckout,
+        reconstructed: true,
+      });
+      return;
+    }
+
+    this.clearPrimaryPromotionState(projectId);
+    this.primaryPromotionValidatedAtByProjectId.set(projectId, now);
   }
 
   getPrimaryCheckoutStatus(projectId: string): PrimaryCheckoutStatus {

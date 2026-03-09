@@ -757,6 +757,7 @@ describe("Orchestrator", () => {
     it("does not use the broad thread listing path during boot", async () => {
       const {
         bootManager,
+        bootProjectRepo,
         bootThreadRepo,
       } = createBootManager([
         makeThread({ id: "boot-active", status: "active" }),
@@ -764,6 +765,7 @@ describe("Orchestrator", () => {
 
       await bootManager.reconcileActiveThreadsOnBoot();
 
+      expect(bootProjectRepo.list).not.toHaveBeenCalled();
       expect(bootThreadRepo.list).not.toHaveBeenCalled();
     });
 

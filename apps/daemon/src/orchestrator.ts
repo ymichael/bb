@@ -564,12 +564,10 @@ export class Orchestrator implements ThreadOrchestrator {
 
   /**
    * Startup only reconstructs minimal daemon state:
-   * - rebuild primary-checkout state from current git/workspace reality
    * - finalize archived environments that still claim persisted resources
    * - normalize stale daemon-runtime statuses back to idle
    */
   async reconcileActiveThreadsOnBoot(): Promise<void> {
-    this._rebuildPrimaryPromotionStateFromGit();
     const archivedThreadIds =
       typeof this.threadRepo.listArchivedIdsWithEnvironmentRecord === "function"
         ? this.threadRepo.listArchivedIdsWithEnvironmentRecord()
