@@ -908,6 +908,87 @@ describe("Orchestrator", () => {
       });
     });
 
+    it("passes provider launch wrapper args through the environment agent target", async () => {
+      const wrappedEnvironment = makeRuntimeEnvironment({
+        kind: "worktree",
+        rootPath: "/wrapped/project",
+        overrides: {
+          getAgentConnectionTarget() {
+            return {
+              transport: "command-stdio",
+              command: "bb",
+              args: ["environment-agent"],
+              cwd: "/wrapped/project",
+              env: {},
+              providerLaunch: {
+                command: "docker",
+                args: ["exec", "-i", "bb-thread-container"],
+              },
+            };
+          },
+        },
+      });
+      const environmentRegistry = new EnvironmentRegistry().register({
+        kind: "worktree",
+        info: wrappedEnvironment.info,
+        create(): IEnvironment {
+          return wrappedEnvironment;
+        },
+        restore(): IEnvironment {
+          return wrappedEnvironment;
+        },
+        isState(_value: unknown): _value is unknown {
+          return true;
+        },
+      });
+      const managerWithWrapper = new Orchestrator(
+        threadRepo,
+        eventRepo,
+        projectRepo,
+        ws,
+        llmCompletionService,
+        createCodexProviderAdapter(),
+        process.env,
+        environmentRegistry,
+      );
+
+      const project = { id: "proj-1", name: "Test", rootPath: "/wrapped/project", createdAt: 1000, updatedAt: 1000 };
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(project);
+
+      const createdThread = makeThread({ id: "t-new", status: "idle", environmentId: "worktree" });
+      (threadRepo.create as ReturnType<typeof vi.fn>).mockReturnValue(createdThread);
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeThread({ id: "t-new", status: "active", environmentId: "worktree" }),
+      );
+
+      await managerWithWrapper.spawn({ projectId: "proj-1", environmentId: "worktree" });
+      await vi.waitFor(() => {
+        expect(spawnMock).toHaveBeenCalled();
+      });
+
+      expect(spawnMock).toHaveBeenCalledWith(
+        "bb",
+        [
+          "environment-agent",
+          "--provider-command",
+          "codex",
+          "--provider-launch-command",
+          "docker",
+          "--provider-launch-arg",
+          "exec",
+          "--provider-launch-arg",
+          "-i",
+          "--provider-launch-arg",
+          "bb-thread-container",
+          "--provider-arg",
+          "app-server",
+        ],
+        expect.objectContaining({
+          cwd: "/wrapped/project",
+        }),
+      );
+    });
+
     it("returns before provisioning work starts", async () => {
       const onCreate = vi.fn();
       const customEnvironmentRegistry = createTestEnvironmentRegistry({

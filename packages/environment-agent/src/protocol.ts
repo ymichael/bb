@@ -7,6 +7,10 @@ export type EnvironmentAgentConnectionTarget =
       args: string[];
       cwd?: string;
       env?: Record<string, string | undefined>;
+      providerLaunch?: {
+        command: string;
+        args: string[];
+      };
     }
   | {
       transport: "http";

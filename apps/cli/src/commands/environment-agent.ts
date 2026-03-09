@@ -4,6 +4,8 @@ import { Command } from "commander";
 interface EnvironmentAgentOptions {
   providerCommand: string;
   providerArg?: string[];
+  providerLaunchCommand?: string;
+  providerLaunchArg?: string[];
 }
 
 export function registerEnvironmentAgentCommand(program: Command): void {
@@ -21,6 +23,16 @@ export function registerEnvironmentAgentCommand(program: Command): void {
       collectRepeatableOption,
       [],
     )
+    .option(
+      "--provider-launch-command <command>",
+      "Optional command wrapper used to launch the provider runtime",
+    )
+    .option(
+      "--provider-launch-arg <arg>",
+      "Optional provider launcher argument (repeatable)",
+      collectRepeatableOption,
+      [],
+    )
     .action((opts: EnvironmentAgentOptions) => {
       const providerCommand = opts.providerCommand?.trim();
       if (!providerCommand) {
@@ -29,11 +41,18 @@ export function registerEnvironmentAgentCommand(program: Command): void {
         return;
       }
 
-      const child = spawn(providerCommand, opts.providerArg ?? [], {
+      const providerLaunchCommand = opts.providerLaunchCommand?.trim();
+      const child = spawn(
+        providerLaunchCommand || providerCommand,
+        providerLaunchCommand
+          ? [...(opts.providerLaunchArg ?? []), providerCommand, ...(opts.providerArg ?? [])]
+          : (opts.providerArg ?? []),
+        {
         cwd: process.cwd(),
         env: process.env,
         stdio: ["pipe", "pipe", "pipe"],
-      });
+        },
+      );
 
       process.stdin.pipe(child.stdin!);
       child.stdout?.pipe(process.stdout);

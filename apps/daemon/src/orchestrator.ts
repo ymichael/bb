@@ -2652,6 +2652,16 @@ export class Orchestrator implements ThreadOrchestrator {
             ...args.agentConnectionTarget.args,
             "--provider-command",
             args.spawnSpec.command,
+            ...(args.agentConnectionTarget.providerLaunch
+              ? [
+                  "--provider-launch-command",
+                  args.agentConnectionTarget.providerLaunch.command,
+                  ...args.agentConnectionTarget.providerLaunch.args.flatMap((value) => [
+                    "--provider-launch-arg",
+                    value,
+                  ]),
+                ]
+              : []),
             ...args.spawnSpec.args.flatMap((value) => ["--provider-arg", value]),
           ],
           {
