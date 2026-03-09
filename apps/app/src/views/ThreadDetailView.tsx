@@ -793,10 +793,15 @@ export function ThreadDetailView() {
   const { data: thread, isLoading, error } = useThread(threadId ?? "", {
     refetchOnMount: "always",
   });
-  const { data: threadWorkStatus } = useThreadWorkStatus(
+  const {
+    data: threadWorkStatus,
+    error: threadWorkStatusError,
+  } = useThreadWorkStatus(
     threadId ?? "",
     selectedMergeBaseBranch,
   );
+  const resolvedThreadWorkStatus =
+    threadWorkStatusError ? undefined : (threadWorkStatus ?? undefined);
   const { data: parentThread } = useThread(thread?.parentThreadId ?? "");
   const { data: timeline, isLoading: timelineLoading } = useThreadTimeline(
     threadId ?? "",
@@ -1130,21 +1135,22 @@ export function ThreadDetailView() {
   }, [threadId]);
 
   useEffect(() => {
-    if (!threadWorkStatus) return;
-    const mergeBaseBranches = threadWorkStatus.mergeBaseBranches ?? [];
-    const fallbackBranch = threadWorkStatus.mergeBaseBranch ?? mergeBaseBranches[0];
+    if (!resolvedThreadWorkStatus) return;
+    const mergeBaseBranches = resolvedThreadWorkStatus.mergeBaseBranches ?? [];
+    const fallbackBranch =
+      resolvedThreadWorkStatus.mergeBaseBranch ?? mergeBaseBranches[0];
     if (!fallbackBranch) return;
     if (
       selectedMergeBaseBranch &&
       (
-        selectedMergeBaseBranch === threadWorkStatus.mergeBaseBranch ||
+        selectedMergeBaseBranch === resolvedThreadWorkStatus.mergeBaseBranch ||
         mergeBaseBranches.includes(selectedMergeBaseBranch)
       )
     ) {
       return;
     }
     setSelectedMergeBaseBranch(fallbackBranch);
-  }, [selectedMergeBaseBranch, threadWorkStatus]);
+  }, [selectedMergeBaseBranch, resolvedThreadWorkStatus]);
 
   useEffect(() => {
     if (!threadGitDiff) return;
@@ -1735,7 +1741,7 @@ export function ThreadDetailView() {
   const isArchivedThread = thread.archivedAt !== undefined;
   const showPrimaryCheckoutMetadata = supportsPrimaryCheckout && !isArchivedThread;
   const showWorkspaceStatus =
-    Boolean(threadWorkStatus) &&
+    (Boolean(resolvedThreadWorkStatus) || Boolean(threadWorkStatusError)) &&
     !(thread.archivedAt !== undefined && environmentInfo?.capabilities.isolated_workspace !== true);
   const showThreadMetadata = Boolean(
     parentThreadId ||
@@ -1751,35 +1757,35 @@ export function ThreadDetailView() {
       ? "Provisioning..."
       : undefined;
   const showBranchComparisonUi = Boolean(
-    threadWorkStatus?.mergeBaseBranch ||
-      threadWorkStatus?.defaultBranch ||
-      (threadWorkStatus?.mergeBaseBranches?.length ?? 0) > 0,
+    resolvedThreadWorkStatus?.mergeBaseBranch ||
+      resolvedThreadWorkStatus?.defaultBranch ||
+      (resolvedThreadWorkStatus?.mergeBaseBranches?.length ?? 0) > 0,
   );
-  const promptBannerSummary = threadWorkStatus
+  const promptBannerSummary = resolvedThreadWorkStatus
     ? showBranchComparisonUi
       ? formatChangeSummary({
-          changedFiles: threadWorkStatus.changedFiles,
-          insertions: threadWorkStatus.insertions,
-          deletions: threadWorkStatus.deletions,
+          changedFiles: resolvedThreadWorkStatus.changedFiles,
+          insertions: resolvedThreadWorkStatus.insertions,
+          deletions: resolvedThreadWorkStatus.deletions,
         })
-      : formatWorkspaceChangeSummary(threadWorkStatus)
+      : formatWorkspaceChangeSummary(resolvedThreadWorkStatus)
     : "";
   const showPromptGitStatsBanner = Boolean(
-    threadWorkStatus &&
+    resolvedThreadWorkStatus &&
     (
       showBranchComparisonUi
-        ? threadWorkStatus.changedFiles > 0
-        : threadWorkStatus.workspaceChangedFiles > 0
+        ? resolvedThreadWorkStatus.changedFiles > 0
+        : resolvedThreadWorkStatus.workspaceChangedFiles > 0
     ),
   );
   const canExpandPromptChangeList = Boolean(
-    threadWorkStatus &&
-    (threadWorkStatus.files?.length ?? 0) > 0,
+    resolvedThreadWorkStatus &&
+    (resolvedThreadWorkStatus.files?.length ?? 0) > 0,
   );
   const promptBannerMergeBaseBranch =
     selectedMergeBaseBranch ??
-    threadWorkStatus?.mergeBaseBranch ??
-    threadWorkStatus?.defaultBranch;
+    resolvedThreadWorkStatus?.mergeBaseBranch ??
+    resolvedThreadWorkStatus?.defaultBranch;
 
   const handleSend = async () => {
     if (promptInput.length === 0) return;
@@ -1967,42 +1973,44 @@ export function ThreadDetailView() {
                 </div>
               </DetailRow>
             ) : null}
-            {showWorkspaceStatus && threadWorkStatus ? (
+            {showWorkspaceStatus ? (
               <DetailRow
                 label="Workspace status"
                 valueClassName="min-w-0"
               >
                 <StatusPillCommitPopover
                   threadId={thread.id}
-                  status={threadWorkStatus}
-                  label={threadWorkStatusLabel(threadWorkStatus, {
+                  status={resolvedThreadWorkStatus}
+                  label={threadWorkStatusLabel(resolvedThreadWorkStatus, {
                     cleanLabel:
                       showBranchComparisonUi
-                        ? threadWorktreeCleanLabel(threadWorkStatus)
+                        ? threadWorktreeCleanLabel(resolvedThreadWorkStatus)
                         : undefined,
                   })}
-                  variant={threadWorkStatusVariant(threadWorkStatus, {
+                  variant={threadWorkStatusVariant(resolvedThreadWorkStatus, {
                     isArchivedThread: thread.archivedAt !== undefined,
                   })}
                   cleanTitle={
                     showBranchComparisonUi
-                      ? threadWorktreeCleanLabel(threadWorkStatus)
+                      ? threadWorktreeCleanLabel(resolvedThreadWorkStatus)
                       : undefined
                   }
                   showMergeBaseDetails={showBranchComparisonUi}
-                  mergeBaseBranch={selectedMergeBaseBranch ?? threadWorkStatus.mergeBaseBranch}
-                  mergeBaseBranchOptions={threadWorkStatus.mergeBaseBranches}
+                  mergeBaseBranch={
+                    selectedMergeBaseBranch ?? resolvedThreadWorkStatus?.mergeBaseBranch
+                  }
+                  mergeBaseBranchOptions={resolvedThreadWorkStatus?.mergeBaseBranches}
                   onMergeBaseBranchChange={
                     showBranchComparisonUi
                       ? setSelectedMergeBaseBranch
                       : undefined
                   }
-                  canCommit={threadWorkStatus.hasUncommittedChanges}
+                  canCommit={Boolean(resolvedThreadWorkStatus?.hasUncommittedChanges)}
                   canSquashMerge={
                     squashMergeAction?.available === true &&
                     (
-                      threadWorkStatus.hasCommittedUnmergedChanges ||
-                      threadWorkStatus.hasUncommittedChanges
+                      Boolean(resolvedThreadWorkStatus?.hasCommittedUnmergedChanges) ||
+                      Boolean(resolvedThreadWorkStatus?.hasUncommittedChanges)
                     )
                   }
                   isCommitting={requestThreadCommitOperation.isPending}
@@ -2160,7 +2168,7 @@ export function ThreadDetailView() {
                     </span>
                   )}
                 </div>
-                {canExpandPromptChangeList && threadWorkStatus ? (
+                {canExpandPromptChangeList && resolvedThreadWorkStatus ? (
                   <div
                     className={`grid overflow-hidden transition-[grid-template-rows,opacity,margin,padding,border-color] duration-200 ease-out ${
                       isChangeListExpanded
@@ -2173,7 +2181,7 @@ export function ThreadDetailView() {
                   >
                     <div className="overflow-hidden">
                       <WorkspaceChangesList
-                        files={threadWorkStatus.files}
+                        files={resolvedThreadWorkStatus.files}
                         threadId={thread.id}
                         onFileClick={handlePromptBannerFileClick}
                       />
