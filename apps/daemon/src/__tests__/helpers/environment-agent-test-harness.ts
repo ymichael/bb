@@ -164,18 +164,31 @@ export function createFakeChildProcess(opts?: {
 
         stdinData.push(data);
 
-        if (autoRespond && msg.method === "thread/start" && msg.id) {
-          process.nextTick(() => {
-            child.stdout.push(
-              JSON.stringify({
-                id: msg.id,
-                result: {
-                  thread: { id: CODEX_THREAD_ID },
-                  model: "test-model",
-                },
-              }) + "\n",
-            );
-          });
+        if (autoRespond && msg.id) {
+          if (msg.method === "initialize") {
+            process.nextTick(() => {
+              child.stdout.push(
+                JSON.stringify({
+                  id: msg.id,
+                  result: {
+                    capabilities: {},
+                  },
+                }) + "\n",
+              );
+            });
+          } else if (msg.method === "thread/start" || msg.method === "thread/resume") {
+            process.nextTick(() => {
+              child.stdout.push(
+                JSON.stringify({
+                  id: msg.id,
+                  result: {
+                    thread: { id: CODEX_THREAD_ID },
+                    model: "test-model",
+                  },
+                }) + "\n",
+              );
+            });
+          }
         }
       } catch {
         stdinData.push(data);
