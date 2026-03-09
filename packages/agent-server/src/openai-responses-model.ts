@@ -1,6 +1,8 @@
-import { readFile } from "node:fs/promises";
-import { homedir } from "node:os";
-import { resolve } from "node:path";
+import {
+  readCodexAuthFile,
+  resolveApiKeyFromCodexAuthFile,
+  type CodexAuthFile,
+} from "./codex-auth.js";
 
 const DEFAULT_API_KEY_BASE_URL = "https://api.openai.com/v1";
 const DEFAULT_CHATGPT_BASE_URL = "https://chatgpt.com/backend-api/codex";
@@ -9,16 +11,6 @@ const DEFAULT_RESPONSES_INSTRUCTIONS =
   "You are a concise assistant. Follow the user request and return only the requested output.";
 const DEFAULT_TIMEOUT_MS = 15_000;
 const MAX_UPSTREAM_ERROR_LENGTH = 220;
-
-interface CodexAuthFile {
-  auth_mode?: unknown;
-  OPENAI_API_KEY?: unknown;
-  openai_api_key?: unknown;
-  tokens?: {
-    access_token?: unknown;
-    account_id?: unknown;
-  };
-}
 
 type ResponsesAuthMode = "apiKey" | "chatgpt";
 
@@ -263,40 +255,6 @@ function collectOutputText(payload: Record<string, unknown>): string {
   return fragments.join("");
 }
 
-async function readCodexAuthFile(): Promise<CodexAuthFile | null> {
-  const authPath = resolve(homedir(), ".codex", "auth.json");
-  try {
-    const raw = await readFile(authPath, "utf8");
-    const parsed = JSON.parse(raw);
-    return asRecord(parsed) as CodexAuthFile | null;
-  } catch {
-    return null;
-  }
-}
-
-function resolveApiKeyFromAuthFile(authFile: CodexAuthFile | null): string | null {
-  const maybeApiKey = authFile?.OPENAI_API_KEY;
-  const directApiKey = asNonEmptyString(maybeApiKey);
-  if (directApiKey) {
-    return directApiKey;
-  }
-
-  const maybeApiKeyRecord = asRecord(maybeApiKey);
-  if (maybeApiKeyRecord) {
-    const wrappedValue = asNonEmptyString(maybeApiKeyRecord.value);
-    if (wrappedValue) {
-      return wrappedValue;
-    }
-  }
-
-  const lowerCaseApiKey = asNonEmptyString(authFile?.openai_api_key);
-  if (lowerCaseApiKey) {
-    return lowerCaseApiKey;
-  }
-
-  return null;
-}
-
 function resolveKnownAuthMode(value: unknown): KnownAuthMode | null {
   if (
     value === "apikey" ||
@@ -333,7 +291,7 @@ function resolveResponsesAuthFromAuthFile(
   }
 
   const authMode = resolveKnownAuthMode(authFile?.auth_mode);
-  const apiKeyAuth = resolveApiKeyFromAuthFile(authFile);
+  const apiKeyAuth = resolveApiKeyFromCodexAuthFile(authFile);
   const chatgptAuth = resolveChatgptAuth(authFile);
 
   if (authMode) {

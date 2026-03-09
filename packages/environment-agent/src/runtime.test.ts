@@ -1,4 +1,7 @@
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { createServer } from "node:http";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   ENVIRONMENT_AGENT_PROTOCOL_VERSION,
@@ -104,6 +107,56 @@ describe("EnvironmentAgentRuntime", () => {
       running: false,
       launched: false,
     });
+  });
+
+  it("materializes launch env and auth files before spawning the provider", async () => {
+    const tempHome = await mkdtemp(join(tmpdir(), "beanbag-env-agent-runtime-"));
+    cleanup.push(() => rm(tempHome, { recursive: true, force: true }));
+
+    const runtime = new EnvironmentAgentRuntime({
+      threadId: "thread-1",
+    });
+    const lines: string[] = [];
+    const unsubscribe = runtime.subscribeToProviderStdout((line) => {
+      lines.push(line);
+    });
+    cleanup.push(unsubscribe);
+
+    runtime.ensureProviderStatus({
+      command: "node",
+      args: [
+        "-e",
+        [
+          "const fs = require('node:fs');",
+          "const path = require('node:path');",
+          "const authPath = path.join(process.env.HOME, '.codex', 'auth.json');",
+          "console.log(JSON.stringify({",
+          "  apiKey: process.env.OPENAI_API_KEY,",
+          "  authFile: fs.readFileSync(authPath, 'utf8')",
+          "}));",
+        ].join(""),
+      ],
+      env: {
+        HOME: tempHome,
+        OPENAI_API_KEY: "sk-test-123",
+      },
+      files: [
+        {
+          placement: "home",
+          path: ".codex/auth.json",
+          content: '{"auth_mode":"chatgpt"}',
+        },
+      ],
+    });
+
+    await expect.poll(() => lines.length).toBeGreaterThan(0);
+    expect(JSON.parse(lines[0] ?? "{}")).toEqual({
+      apiKey: "sk-test-123",
+      authFile: '{"auth_mode":"chatgpt"}',
+    });
+    await expect(readFile(join(tempHome, ".codex", "auth.json"), "utf8")).resolves.toBe(
+      '{"auth_mode":"chatgpt"}',
+    );
   });
 
   it("pushes buffered events back to the daemon and advances the ack cursor", async () => {

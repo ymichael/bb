@@ -51,6 +51,7 @@ import {
   findRpcMessageByMethod,
   parseRpcMessage,
   respondToEnvironmentAgentControlMessage,
+  respondToProviderRpcMessage,
   type FakeChildProcess,
 } from "./helpers/environment-agent-test-harness.js";
 
@@ -740,18 +741,13 @@ describe("Orchestrator", () => {
               callback();
               return;
             }
-            if (msg.method === "thread/resume" && msg.id) {
-              process.nextTick(() => {
-                resumeChild.stdout!.push(
-                  JSON.stringify({
-                    id: msg.id,
-                    result: {
-                      thread: { id: "persisted-thread-1" },
-                      model: "test-model",
-                    },
-                  }) + "\n",
-                );
-              });
+            if (
+              respondToProviderRpcMessage(resumeChild, msg, {
+                threadId: "persisted-thread-1",
+              })
+            ) {
+              callback();
+              return;
             }
           } catch {}
           callback();
@@ -856,18 +852,13 @@ describe("Orchestrator", () => {
               callback();
               return;
             }
-            if (msg.method === "thread/resume" && msg.id) {
-              process.nextTick(() => {
-                resumeChild.stdout!.push(
-                  JSON.stringify({
-                    id: msg.id,
-                    result: {
-                      thread: { id: "persisted-thread-1" },
-                      model: "test-model",
-                    },
-                  }) + "\n",
-                );
-              });
+            if (
+              respondToProviderRpcMessage(resumeChild, msg, {
+                threadId: "persisted-thread-1",
+              })
+            ) {
+              callback();
+              return;
             }
           } catch {}
           callback();
@@ -2256,6 +2247,10 @@ describe("Orchestrator", () => {
               callback();
               return;
             }
+            if (msg.method === "initialize" && respondToProviderRpcMessage(errorChild, msg)) {
+              callback();
+              return;
+            }
             if (msg.method === "thread/start" && msg.id) {
               process.nextTick(() => {
                 errorChild.stdout!.push(
@@ -2288,11 +2283,35 @@ describe("Orchestrator", () => {
 
         // Use non-auto-responding child — thread/start will never get a response
         const silentChild = createFakeChildProcess({ autoRespond: false });
+        silentChild.stdin = new Writable({
+          write(chunk: Buffer, _encoding: string, callback: () => void) {
+            const data = chunk.toString();
+            silentChild._stdinData.push(data);
+            try {
+              const msg = JSON.parse(data.trim());
+              if (respondToEnvironmentAgentControlMessage(silentChild, msg)) {
+                callback();
+                return;
+              }
+              if (msg.method === "initialize" && respondToProviderRpcMessage(silentChild, msg)) {
+                callback();
+                return;
+              }
+            } catch {}
+            callback();
+          },
+        });
         (spawnMock as ReturnType<typeof vi.fn>).mockReturnValue(silentChild);
 
         await manager.spawn({ projectId: "proj-1" });
 
-        // Advance past the 10s timeout
+        // Provisioning starts on setImmediate. Wait until thread/start is sent
+        // before advancing the request timeout.
+        vi.runAllTicks();
+        await vi.advanceTimersByTimeAsync(0);
+        await vi.waitFor(() => {
+          expect(silentChild._stdinData.join("")).toContain('"method":"thread/start"');
+        });
         await vi.advanceTimersByTimeAsync(10_001);
         await vi.waitFor(() => {
           expect(threadRepo.update).toHaveBeenCalledWith("t-timeout", {
@@ -3478,6 +3497,10 @@ describe("Orchestrator", () => {
               callback();
               return;
             }
+            if (msg.method === "initialize" && respondToProviderRpcMessage(resumeChild, msg)) {
+              callback();
+              return;
+            }
             if (msg.method === "thread/resume" && msg.id) {
               process.nextTick(() => {
                 resumeChild.stdout!.push(
@@ -3573,18 +3596,13 @@ describe("Orchestrator", () => {
               callback();
               return;
             }
-            if (msg.method === "thread/resume" && msg.id) {
-              process.nextTick(() => {
-                resumeChild.stdout!.push(
-                  JSON.stringify({
-                    id: msg.id,
-                    result: {
-                      thread: { id: "persisted-thread-1" },
-                      model: "test-model",
-                    },
-                  }) + "\n",
-                );
-              });
+            if (
+              respondToProviderRpcMessage(resumeChild, msg, {
+                threadId: "persisted-thread-1",
+              })
+            ) {
+              callback();
+              return;
             }
           } catch {}
           callback();
@@ -3764,24 +3782,26 @@ describe("Orchestrator", () => {
                 } else if (respondToEnvironmentAgentControlMessage(resumeChild, msg)) {
                   callback();
                   return;
+                } else if (
+                  respondToProviderRpcMessage(resumeChild, msg, {
+                    threadId: "persisted-thread-1",
+                  })
+                ) {
+                  callback();
+                  return;
                 }
                 callback();
                 return;
               }
 
               resumeChild._stdinData.push(data);
-              if (msg.method === "thread/resume" && msg.id) {
-                process.nextTick(() => {
-                  resumeChild.stdout!.push(
-                    JSON.stringify({
-                      id: msg.id,
-                      result: {
-                        thread: { id: "persisted-thread-1" },
-                        model: "test-model",
-                      },
-                    }) + "\n",
-                  );
-                });
+              if (
+                respondToProviderRpcMessage(resumeChild, msg, {
+                  threadId: "persisted-thread-1",
+                })
+              ) {
+                callback();
+                return;
               }
             } catch {
               resumeChild._stdinData.push(data);

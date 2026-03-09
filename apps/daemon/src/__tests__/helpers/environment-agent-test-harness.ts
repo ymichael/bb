@@ -119,6 +119,53 @@ export function respondToEnvironmentAgentControlMessage(
   }
 }
 
+export function respondToProviderRpcMessage(
+  child: Pick<FakeChildProcess, "stdout">,
+  msg: {
+    id?: number;
+    method?: string;
+  },
+  opts?: {
+    threadId?: string;
+    model?: string;
+  },
+): boolean {
+  if (!msg.id) {
+    return false;
+  }
+
+  switch (msg.method) {
+    case "initialize":
+      process.nextTick(() => {
+        child.stdout.push(
+          JSON.stringify({
+            id: msg.id,
+            result: {
+              capabilities: {},
+            },
+          }) + "\n",
+        );
+      });
+      return true;
+    case "thread/start":
+    case "thread/resume":
+      process.nextTick(() => {
+        child.stdout.push(
+          JSON.stringify({
+            id: msg.id,
+            result: {
+              thread: { id: opts?.threadId ?? CODEX_THREAD_ID },
+              model: opts?.model ?? "test-model",
+            },
+          }) + "\n",
+        );
+      });
+      return true;
+    default:
+      return false;
+  }
+}
+
 export function parseRpcMessage(raw: string): ParsedRpcMessage {
   const parsed = toRecord(JSON.parse(raw.trim()));
   if (!parsed) {
@@ -164,31 +211,9 @@ export function createFakeChildProcess(opts?: {
 
         stdinData.push(data);
 
-        if (autoRespond && msg.id) {
-          if (msg.method === "initialize") {
-            process.nextTick(() => {
-              child.stdout.push(
-                JSON.stringify({
-                  id: msg.id,
-                  result: {
-                    capabilities: {},
-                  },
-                }) + "\n",
-              );
-            });
-          } else if (msg.method === "thread/start" || msg.method === "thread/resume") {
-            process.nextTick(() => {
-              child.stdout.push(
-                JSON.stringify({
-                  id: msg.id,
-                  result: {
-                    thread: { id: CODEX_THREAD_ID },
-                    model: "test-model",
-                  },
-                }) + "\n",
-              );
-            });
-          }
+        if (autoRespond && respondToProviderRpcMessage(child, msg)) {
+          callback();
+          return;
         }
       } catch {
         stdinData.push(data);

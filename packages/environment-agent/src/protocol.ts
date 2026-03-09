@@ -11,6 +11,16 @@ export interface EnvironmentAgentProviderSpec {
   args: string[];
   launchCommand?: string;
   launchArgs?: string[];
+  env?: Record<string, string>;
+  files?: EnvironmentAgentProviderFile[];
+}
+
+export type EnvironmentAgentProviderFilePlacement = "home";
+
+export interface EnvironmentAgentProviderFile {
+  path: string;
+  content: string;
+  placement: EnvironmentAgentProviderFilePlacement;
 }
 
 export interface EnvironmentAgentProviderStatus {

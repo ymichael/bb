@@ -1,5 +1,6 @@
 import type {
   AvailableModel,
+  ProviderLaunchConfiguration,
   ProviderCapabilities,
   PromptInput,
   SandboxMode,
@@ -8,6 +9,7 @@ import type {
   ThreadEvent,
 } from "@beanbag/agent-core";
 import { assertNever, unwrapProviderEventPayload } from "@beanbag/agent-core";
+import { resolveCodexProviderLaunchConfiguration } from "./codex-auth.js";
 import { listCodexModels } from "./codex-models.js";
 import type {
   ProviderAdapter,
@@ -209,6 +211,9 @@ export function createCodexProviderAdapter(
     capabilities,
     processCommand: opts?.processCommand ?? "codex",
     processArgs: opts?.processArgs ?? ["app-server"],
+    async resolveLaunchConfiguration(): Promise<ProviderLaunchConfiguration | undefined> {
+      return resolveCodexProviderLaunchConfiguration();
+    },
     clientInfo: {
       name: "beanbag",
       version: "0.0.1",

@@ -4,6 +4,8 @@ export type {
   EnvironmentAgentDaemonConnectionConfig,
   EnvironmentAgentProviderLaunchWrapper,
   EnvironmentAgentProviderSpec,
+  EnvironmentAgentProviderFile,
+  EnvironmentAgentProviderFilePlacement,
   EnvironmentAgentProviderStatus,
   EnvironmentAgentCommand,
   EnvironmentAgentCommandMetadata,

@@ -65,12 +65,31 @@ export type ProviderCommitMessageGenerator = (
   args: ProviderCommitMessageGeneratorArgs,
 ) => Promise<string | undefined>;
 
+export type ProviderLaunchFilePlacement = "home";
+
+export interface ProviderLaunchFile {
+  path: string;
+  content: string;
+  placement: ProviderLaunchFilePlacement;
+}
+
+export interface ProviderLaunchConfiguration {
+  env?: Record<string, string>;
+  files?: ProviderLaunchFile[];
+}
+
 export interface ProviderAdapter {
   id: string;
   displayName: string;
   capabilities: ProviderCapabilities;
   processCommand: string;
   processArgs: string[];
+  resolveLaunchConfiguration?(
+    context: ProviderThreadContext,
+  ):
+    | ProviderLaunchConfiguration
+    | Promise<ProviderLaunchConfiguration | undefined>
+    | undefined;
   clientInfo: { name: string; version: string };
   initializeMethod: string;
   createInitializeParams?(

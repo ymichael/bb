@@ -325,6 +325,7 @@ export class AgentServer {
     const session = await this.createManagedSession(
       args.threadId,
       args.connectSession(),
+      args.context,
     );
     const params = this.opts.provider.createThreadStartParams(args.request, args.context);
     try {
@@ -355,8 +356,9 @@ export class AgentServer {
     const session = await this.createManagedSession(
       args.threadId,
       args.connectSession(),
+      args.context,
       {
-      providerThreadId: args.providerThreadId,
+        providerThreadId: args.providerThreadId,
       },
     );
     try {
@@ -523,6 +525,7 @@ export class AgentServer {
     connection:
       | AgentServerSessionConnection
       | Promise<AgentServerSessionConnection>,
+    context: ProviderThreadContext,
     seed?: { providerThreadId?: string; activeTurnId?: string },
   ): Promise<ManagedSession> {
     this.disposeSession(threadId);
@@ -559,10 +562,17 @@ export class AgentServer {
         activeTurnId: seed?.activeTurnId,
       };
       this.sessions.set(threadId, session);
+      const launchConfig = await this.opts.provider.resolveLaunchConfiguration?.(context);
 
       await agentClient.ensureProviderRunning({
         command: this.opts.provider.processCommand,
         args: [...this.opts.provider.processArgs],
+        ...(launchConfig?.env ? { env: { ...launchConfig.env } } : {}),
+        ...(launchConfig?.files
+          ? {
+              files: launchConfig.files.map((file) => ({ ...file })),
+            }
+          : {}),
         ...(resolvedConnection.providerLaunch
           ? {
               launchCommand: resolvedConnection.providerLaunch.command,

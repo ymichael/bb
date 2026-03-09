@@ -90,6 +90,59 @@ describe("AgentServer environment-agent control plane", () => {
     expect(simulator.ackRequests.map((request) => request.sequence)).toContain(1);
   });
 
+  it("passes resolved provider launch auth through provider ensure", async () => {
+    const provider = createCodexProviderAdapter();
+    provider.resolveLaunchConfiguration = async () => ({
+      env: {
+        OPENAI_API_KEY: "sk-test-123",
+      },
+      files: [
+        {
+          placement: "home",
+          path: ".codex/auth.json",
+          content: '{"auth_mode":"chatgpt"}',
+        },
+      ],
+    });
+    const agentServer = new AgentServer({ provider });
+    const simulator = createEnvironmentAgentSimulator();
+
+    await agentServer.startSession({
+      threadId: "thread-1",
+      connectSession: () => ({
+        transport: "http",
+        client: simulator.createClient(),
+      }),
+      request: {
+        projectId: "project-1",
+        title: "Test thread",
+        input: [{ type: "text", text: "hello" }],
+      },
+      context: {
+        projectId: "project-1",
+        threadId: "thread-1",
+        path: process.env.PATH ?? "",
+      },
+    });
+
+    expect(simulator.ensureRequests).toContainEqual(
+      expect.objectContaining({
+        command: "codex",
+        args: ["app-server"],
+        env: {
+          OPENAI_API_KEY: "sk-test-123",
+        },
+        files: [
+          {
+            placement: "home",
+            path: ".codex/auth.json",
+            content: '{"auth_mode":"chatgpt"}',
+          },
+        ],
+      }),
+    );
+  });
+
   it("ingests replayed provider notifications through the normal notification path", async () => {
     const onNotification = vi.fn();
     const agentServer = new AgentServer({

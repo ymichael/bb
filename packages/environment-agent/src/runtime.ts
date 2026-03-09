@@ -1,4 +1,7 @@
 import { spawn, type ChildProcess } from "node:child_process";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import {
   ENVIRONMENT_AGENT_PROTOCOL_VERSION,
   type EnvironmentAgentAckRequest,
@@ -8,6 +11,7 @@ import {
   type EnvironmentAgentDeliveryResponse,
   type EnvironmentAgentEvent,
   type EnvironmentAgentEventEnvelope,
+  type EnvironmentAgentProviderFile,
   type EnvironmentAgentProviderSpec,
   type EnvironmentAgentProviderStatus,
   type EnvironmentAgentReplayRequest,
@@ -250,6 +254,8 @@ export class EnvironmentAgentRuntime {
       args: [...(spec?.args ?? this.opts.providerArgs ?? [])],
       launchCommand: spec?.launchCommand ?? this.opts.providerLaunchCommand,
       launchArgs: [...(spec?.launchArgs ?? this.opts.providerLaunchArgs ?? [])],
+      ...(spec?.env ? { env: { ...spec.env } } : {}),
+      ...(spec?.files ? { files: spec.files.map((file) => ({ ...file })) } : {}),
     };
   }
 
@@ -258,10 +264,11 @@ export class EnvironmentAgentRuntime {
     const args = spec.launchCommand?.trim()
       ? [...(spec.launchArgs ?? []), spec.command, ...spec.args]
       : spec.args;
+    const env = this.resolveProviderEnvironment(spec);
 
     const child = spawn(command, args, {
       cwd: process.cwd(),
-      env: process.env,
+      env,
       stdio: ["pipe", "pipe", "pipe"],
     });
 
@@ -296,6 +303,55 @@ export class EnvironmentAgentRuntime {
     });
 
     return child;
+  }
+
+  private resolveProviderEnvironment(
+    spec: EnvironmentAgentProviderSpec,
+  ): NodeJS.ProcessEnv {
+    const env: NodeJS.ProcessEnv = {
+      ...process.env,
+      ...(spec.env ?? {}),
+    };
+    if (!spec.files || spec.files.length === 0) {
+      return env;
+    }
+
+    const homeDir = env.HOME?.trim() || this.resolveManagedProviderHomeDir();
+    this.materializeProviderFiles(homeDir, spec.files);
+    env.HOME = homeDir;
+    return env;
+  }
+
+  private materializeProviderFiles(
+    homeDir: string,
+    files: EnvironmentAgentProviderFile[],
+  ): void {
+    for (const file of files) {
+      const targetPath = this.resolveProviderFilePath(homeDir, file);
+      mkdirSync(path.dirname(targetPath), { recursive: true });
+      writeFileSync(targetPath, file.content, "utf8");
+    }
+  }
+
+  private resolveManagedProviderHomeDir(): string {
+    return path.join(
+      tmpdir(),
+      "beanbag-environment-agent",
+      this.resolveThreadId(),
+      "provider-home",
+    );
+  }
+
+  private resolveProviderFilePath(
+    homeDir: string,
+    file: EnvironmentAgentProviderFile,
+  ): string {
+    switch (file.placement) {
+      case "home":
+        return path.join(homeDir, file.path);
+    }
+    const exhausted: never = file.placement;
+    throw new Error(`Unsupported provider file placement: ${String(exhausted)}`);
   }
 
   private hasDaemonDeliveryConfig(): boolean {
