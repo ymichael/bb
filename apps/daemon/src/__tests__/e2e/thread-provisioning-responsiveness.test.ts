@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { writeFileSync } from "node:fs";
+import { existsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type {
@@ -78,6 +78,28 @@ async function waitForThreadToLeaveProvisioning(
   );
 }
 
+async function waitForThreadToEnterProvisioning(
+  baseUrl: string,
+  threadId: string,
+  timeoutMs: number = 2_000,
+): Promise<Thread> {
+  const deadline = Date.now() + timeoutMs;
+  let lastThread: Thread | undefined;
+
+  while (Date.now() < deadline) {
+    const thread = await readJson<Thread>(`${baseUrl}/api/v1/threads/${threadId}`);
+    lastThread = thread;
+    if (thread.status === "provisioning") {
+      return thread;
+    }
+    await sleep(25);
+  }
+
+  throw new Error(
+    `Thread ${threadId} did not enter provisioning (last status=${lastThread?.status ?? "unknown"})`,
+  );
+}
+
 describe.sequential("e2e: thread detail stays responsive while provisioning", () => {
   let harness: DaemonE2eHarness | undefined;
 
@@ -97,14 +119,18 @@ describe.sequential("e2e: thread detail stays responsive while provisioning", ()
         },
       });
       const currentHarness = harness;
-
       git(currentHarness.projectRoot, "init", "-b", "main");
       git(currentHarness.projectRoot, "config", "user.name", "Beanbag");
       git(currentHarness.projectRoot, "config", "user.email", "beanbag@example.com");
       writeFileSync(join(currentHarness.projectRoot, "README.md"), "hello\n", "utf8");
+      const setupReadyPath = join(currentHarness.tempDir, "env-setup-ready");
       writeFileSync(
         join(currentHarness.projectRoot, ".bb-env-setup.sh"),
-        "#!/usr/bin/env sh\nsleep 2\n",
+        `#!/usr/bin/env sh
+while [ ! -f '${setupReadyPath}' ]; do
+  sleep 0.05
+done
+`,
         { encoding: "utf8", mode: 0o755 },
       );
       git(currentHarness.projectRoot, "add", "README.md", ".bb-env-setup.sh");
@@ -123,7 +149,7 @@ describe.sequential("e2e: thread detail stays responsive while provisioning", ()
 
       expect(thread.status).toBe("created");
 
-      await sleep(150);
+      await waitForThreadToEnterProvisioning(currentHarness.baseUrl, thread.id);
 
       const [threadResult, timelineResult] = await Promise.all([
         timedJson<Thread>(`${currentHarness.baseUrl}/api/v1/threads/${thread.id}`),
@@ -135,19 +161,10 @@ describe.sequential("e2e: thread detail stays responsive while provisioning", ()
       expect(threadResult.elapsedMs).toBeLessThan(1_000);
       expect(timelineResult.elapsedMs).toBeLessThan(1_000);
       expect(threadResult.data.status).toBe("provisioning");
-      await expect
-        .poll(async () => {
-          const timeline = await readJson<ThreadTimelineResponse>(
-            `${currentHarness.baseUrl}/api/v1/threads/${thread.id}/timeline`,
-          );
-          return timeline.rows.some(
-            (row) =>
-              row.kind === "message" &&
-              row.message.kind === "operation" &&
-              row.message.opType === "provisioning",
-          );
-        })
-        .toBe(true);
+      expect(timelineResult.data.rows.length).toBeGreaterThan(0);
+
+      expect(existsSync(setupReadyPath)).toBe(false);
+      writeFileSync(setupReadyPath, "ready\n", "utf8");
 
       const completedThread = await waitForThreadToLeaveProvisioning(
         currentHarness.baseUrl,

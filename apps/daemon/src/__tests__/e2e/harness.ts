@@ -38,8 +38,6 @@ const TSX_CLI_PATH = resolve(
   "dist",
   "cli.mjs",
 );
-const PNPM_BIN = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
-let cliArtifactsEnsured = false;
 
 function prependPathEntry(
   pathValue: string | undefined,
@@ -77,6 +75,9 @@ export interface StartDaemonE2eHarnessOptions {
   fakeCodex?: FakeCodexOptions;
   useWorkspaceFakeCodex?: boolean;
   initGitRepo?: boolean;
+  tempDir?: string;
+  preserveTempDirOnCleanup?: boolean;
+  port?: number;
 }
 
 export interface DaemonE2eHarness {
@@ -85,18 +86,19 @@ export interface DaemonE2eHarness {
   tempDir: string;
   dbPath: string;
   projectRoot: string;
+  getEnvironmentAgentAuthorization: (threadId: string) => string | undefined;
+  getEnvironmentAgentCursor: (threadId: string) => number;
+  shutdownForRestart: () => Promise<void>;
   cleanup: () => Promise<void>;
 }
 
 export async function startDaemonE2eHarness(
   opts?: StartDaemonE2eHarnessOptions,
 ): Promise<DaemonE2eHarness> {
-  ensureCliArtifactsAvailable();
-
-  const tempDir = mkdtempSync(join(tmpdir(), "beanbag-daemon-e2e-"));
+  const tempDir = opts?.tempDir ?? mkdtempSync(join(tmpdir(), "beanbag-daemon-e2e-"));
   const projectRoot = join(tempDir, "project");
   mkdirSync(projectRoot, { recursive: true });
-  if (opts?.initGitRepo) {
+  if (opts?.initGitRepo && !existsSync(join(projectRoot, ".git"))) {
     execFileSync("git", ["init", "-b", "main"], {
       cwd: projectRoot,
       stdio: "pipe",
@@ -165,30 +167,54 @@ export async function startDaemonE2eHarness(
         {
           fetch: app.fetch,
           hostname: "127.0.0.1",
-          port: 0,
+          port: opts?.port ?? 0,
         },
         (info) => resolvePort(info.port),
       );
       injectWebSocket(httpServer);
     });
 
-    let cleanedUp = false;
-    const cleanup = async (): Promise<void> => {
-      if (cleanedUp) return;
-      cleanedUp = true;
+    let closed = false;
+    let stopped = false;
 
-      threadManager.stopAll();
+    const closeDaemon = async (): Promise<void> => {
+      if (closed) return;
+      closed = true;
       wsManager.close();
       if (httpServer) {
         await closeHttpServer(httpServer);
       }
-      // stopAll sends SIGTERM and clears runtime state synchronously, but child
-      // "exit" callbacks can still run on the next ticks and touch repositories.
-      await sleep(120);
-
       sqliteClient?.close?.();
       process.env.PATH = previousPath;
-      rmSync(tempDir, { recursive: true, force: true });
+    };
+
+    const cleanup = async (): Promise<void> => {
+      if (!stopped) {
+        stopped = true;
+        threadManager.stopAll();
+        // stopAll sends SIGTERM and clears runtime state synchronously, but child
+        // "exit" callbacks can still run on the next ticks and touch repositories.
+        await sleep(120);
+      }
+      await closeDaemon();
+      if (!opts?.preserveTempDirOnCleanup) {
+        rmSync(tempDir, { recursive: true, force: true });
+      }
+    };
+
+    const shutdownForRestart = async (): Promise<void> => {
+      const rawThreadManager = threadManager as unknown as {
+        agentServer?: {
+          opts?: { onSessionExit?: (threadId: string, event: unknown) => void };
+          stopAllSessions?: (reason?: string) => void;
+        };
+      };
+      if (rawThreadManager.agentServer?.opts) {
+        rawThreadManager.agentServer.opts.onSessionExit = undefined;
+      }
+      rawThreadManager.agentServer?.stopAllSessions?.("Beanbag daemon restart");
+      await sleep(120);
+      await closeDaemon();
     };
 
     return {
@@ -197,6 +223,19 @@ export async function startDaemonE2eHarness(
       tempDir,
       dbPath,
       projectRoot,
+      getEnvironmentAgentAuthorization: (threadId: string) =>
+        (
+          threadManager as unknown as {
+            _resolveEnvironmentAgentAuthorization: (threadId: string) => string | undefined;
+          }
+        )._resolveEnvironmentAgentAuthorization(threadId),
+      getEnvironmentAgentCursor: (threadId: string) =>
+        (
+          threadRepo.getById(threadId) as
+            | ({ environmentAgentCursor?: number } & Record<string, unknown>)
+            | undefined
+        )?.environmentAgentCursor ?? 0,
+      shutdownForRestart,
       cleanup,
     };
   } catch (err) {
@@ -215,32 +254,12 @@ interface CliLaunchTarget {
   args: string[];
 }
 
-function ensureCliArtifactsAvailable(): void {
-  if (cliArtifactsEnsured && existsSync(CLI_DIST_PATH)) {
-    return;
-  }
-
-  const packagesToBuild = [
-    "@beanbag/environment-agent",
-    "@beanbag/agent-server",
-    "@beanbag/environment",
-    "@beanbag/db",
-    "@beanbag/cli",
-  ] as const;
-
-  for (const pkg of packagesToBuild) {
-    execFileSync(PNPM_BIN, ["--filter", pkg, "build"], {
-      cwd: WORKSPACE_ROOT,
-      stdio: "pipe",
-    });
-  }
-
-  cliArtifactsEnsured = true;
-}
-
 function resolveCliLaunchTarget(): CliLaunchTarget {
-  if (!existsSync(CLI_DIST_PATH)) {
-    ensureCliArtifactsAvailable();
+  if (existsSync(TSX_CLI_PATH) && existsSync(CLI_SOURCE_PATH)) {
+    return {
+      command: process.execPath,
+      args: [TSX_CLI_PATH, CLI_SOURCE_PATH],
+    };
   }
 
   if (existsSync(CLI_DIST_PATH)) {
@@ -250,15 +269,8 @@ function resolveCliLaunchTarget(): CliLaunchTarget {
     };
   }
 
-  if (existsSync(TSX_CLI_PATH) && existsSync(CLI_SOURCE_PATH)) {
-    return {
-      command: process.execPath,
-      args: [TSX_CLI_PATH, CLI_SOURCE_PATH],
-    };
-  }
-
   throw new Error(
-    "Unable to launch CLI: missing apps/cli/dist/index.js and tsx fallback.",
+    "Unable to launch CLI: missing tsx source runner and apps/cli/dist/index.js fallback.",
   );
 }
 

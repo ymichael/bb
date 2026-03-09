@@ -18,7 +18,7 @@
     "clean": "rm -rf dist",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:e2e": "vitest run --dir src/__tests__/e2e"
+    "test:e2e": "vitest run --dir src/__tests__/e2e --fileParallelism=false --maxWorkers=1"
   },
   "dependencies": {
     "@beanbag/agent-core": "workspace:*",
