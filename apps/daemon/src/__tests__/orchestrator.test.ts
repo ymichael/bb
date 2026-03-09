@@ -3475,12 +3475,13 @@ describe("Orchestrator", () => {
 
       (spawnMock as ReturnType<typeof vi.fn>).mockReturnValueOnce(resumeChild);
 
-      const replaySpy = vi
-        .spyOn(
-          (manager as unknown as { agentServer: { replayEnvironmentAgentEvents: (args: unknown) => Promise<unknown> } }).agentServer,
-          "replayEnvironmentAgentEvents",
-        )
-        .mockResolvedValue({
+      const createClientMock = vi.mocked(createHttpEnvironmentAgentClient);
+      createClientMock.mockImplementationOnce(async () => {
+        return createFakeEnvironmentAgentClient(resumeChild);
+      });
+      createClientMock.mockImplementationOnce(async () => {
+        const client = createFakeEnvironmentAgentClient(resumeChild);
+        client.replay = vi.fn().mockResolvedValue({
           fromSequenceExclusive: 0,
           toSequenceInclusive: 3,
           hasMore: false,
@@ -3499,13 +3500,10 @@ describe("Orchestrator", () => {
             },
           ],
         });
+        return client;
+      });
 
       await expect(manager.tell("thread-1", { input })).resolves.toBeUndefined();
-
-      expect(replaySpy).toHaveBeenCalledWith({
-        threadId: "thread-1",
-        afterSequence: 0,
-      });
       const sentMethods = resumeChild._stdinData.map((line) => {
         try {
           return JSON.parse(line.trim()).method as string;

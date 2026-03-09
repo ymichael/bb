@@ -543,11 +543,15 @@ export class Orchestrator implements ThreadOrchestrator {
       agentServerOrProvider instanceof AgentServer
         ? undefined
         : agentServerOrProvider;
-    this.agentServer =
+    const providerAdapter =
       agentServerOrProvider instanceof AgentServer
-        ? agentServerOrProvider
-        : new AgentServer({
-        provider: provider ?? createCodexProviderAdapter(),
+        ? undefined
+        : provider ?? createCodexProviderAdapter();
+    if (agentServerOrProvider instanceof AgentServer) {
+      this.agentServer = agentServerOrProvider;
+    } else {
+      this.agentServer = new AgentServer({
+        provider: providerAdapter!,
         ...(providerCatalog ? { providerCatalog } : {}),
         onNotification: (threadId, event) => {
           this._handleAgentServerNotification(threadId, event);
@@ -557,6 +561,7 @@ export class Orchestrator implements ThreadOrchestrator {
         },
         logger: console,
       });
+    }
   }
 
   /**

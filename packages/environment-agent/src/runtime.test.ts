@@ -165,7 +165,24 @@ describe("EnvironmentAgentRuntime", () => {
       providerCommand: "node",
       providerArgs: [
         "-e",
-        "process.stdin.setEncoding('utf8');process.stdin.on('data',d=>{for (const line of d.trim().split(/\\n/)) { if (!line) continue; console.log(line); }});",
+        [
+          "process.stdin.setEncoding('utf8');",
+          "let buffer='';",
+          "process.stdin.on('data',chunk=>{",
+          "buffer+=chunk;",
+          "const parts=buffer.split(/\\r\\n|\\n|\\r/g);",
+          "buffer=parts.pop() ?? '';",
+          "for (const line of parts) {",
+          "if (!line.trim()) continue;",
+          "const msg = JSON.parse(line);",
+          "if (msg.method === 'initialize') {",
+          "console.log(JSON.stringify({ id: msg.id, result: { capabilities: {} } }));",
+          "} else if (msg.method === 'thread/start') {",
+          "console.log(JSON.stringify({ id: msg.id, result: { thread: { id: 'provider-thread-1' } } }));",
+          "}",
+          "}",
+          "});",
+        ].join(""),
       ],
     });
     const lines: string[] = [];
@@ -174,7 +191,7 @@ describe("EnvironmentAgentRuntime", () => {
     });
     cleanup.push(unsubscribe);
 
-    const ack = runtime.executeCommand({
+    const ack = await runtime.executeCommand({
       meta: {
         protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
         commandId: "cmd-1",
@@ -188,14 +205,23 @@ describe("EnvironmentAgentRuntime", () => {
         threadId: "thread-1",
         projectId: "project-1",
         params: { cwd: "/tmp/project" },
+        initialize: {
+          method: "initialize",
+          params: { clientInfo: { name: "beanbag", version: "0.0.1" } },
+        },
       },
     });
 
     expect(ack.state).toBe("accepted");
-    await expect.poll(() => lines.length).toBeGreaterThan(0);
+    expect(ack.result).toEqual({ thread: { id: "provider-thread-1" } });
+    await expect.poll(() => lines.length).toBeGreaterThanOrEqual(2);
     expect(JSON.parse(lines[0] ?? "{}")).toMatchObject({
-      method: "thread/start",
-      params: { cwd: "/tmp/project" },
+      id: 1,
+      result: { capabilities: {} },
+    });
+    expect(JSON.parse(lines[1] ?? "{}")).toMatchObject({
+      id: 2,
+      result: { thread: { id: "provider-thread-1" } },
     });
   });
 

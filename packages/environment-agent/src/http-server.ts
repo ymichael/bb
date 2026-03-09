@@ -105,7 +105,7 @@ export async function createEnvironmentAgentHttpServer(args: {
 
       if (method === "POST" && url.pathname === "/control/command") {
         const body = (await readJsonBody(request)) as EnvironmentAgentCommandEnvelope;
-        writeJson(response, 200, args.runtime.executeCommand(body));
+        writeJson(response, 200, await args.runtime.executeCommand(body));
         return;
       }
 

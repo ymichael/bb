@@ -45,8 +45,16 @@ export class EnvironmentAgentRuntime {
   private sequence = 0;
   private providerRequestId = 0;
   private lastAckedSequence = 0;
-  private pendingCommandCount = 0;
+  private providerInitializedPid: number | undefined;
   private providerChild: ChildProcess | null = null;
+  private readonly pendingProviderRequests = new Map<
+    number,
+    {
+      resolve: (value: unknown) => void;
+      reject: (reason: Error) => void;
+      timeout: ReturnType<typeof setTimeout>;
+    }
+  >();
   private readonly stdoutLineSubscribers = new Set<(line: string) => void>();
   private readonly stderrLineSubscribers = new Set<(line: string) => void>();
   private readonly eventSubscribers = new Set<(event: EnvironmentAgentEventEnvelope) => void>();
@@ -174,6 +182,7 @@ export class EnvironmentAgentRuntime {
     idempotencyKey: string;
     state: EnvironmentAgentCommandAck["state"];
     message?: string;
+    result?: unknown;
   }): EnvironmentAgentCommandAck {
     return {
       protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
@@ -183,6 +192,7 @@ export class EnvironmentAgentRuntime {
       acknowledgedAt: Date.now(),
       latestSequence: this.sequence,
       ...(args.message ? { message: args.message } : {}),
+      ...(args.result !== undefined ? { result: args.result } : {}),
     };
   }
 
@@ -198,7 +208,7 @@ export class EnvironmentAgentRuntime {
         : {}),
       connectedToDaemon: this.connectedToDaemon,
       pendingEventCount: Math.max(0, this.sequence - this.lastAckedSequence),
-      pendingCommandCount: this.pendingCommandCount,
+      pendingCommandCount: this.pendingProviderRequests.size,
       deliveryState: this.deliveryState,
       ...(this.deliveryIssue ? { deliveryIssue: this.deliveryIssue } : {}),
       retryAttemptCount: this.deliveryRetryAttemptCount,
@@ -237,16 +247,17 @@ export class EnvironmentAgentRuntime {
       });
   }
 
-  executeCommand(
+  async executeCommand(
     envelope: EnvironmentAgentCommandEnvelope,
-  ): EnvironmentAgentCommandAck {
+  ): Promise<EnvironmentAgentCommandAck> {
     try {
-      this.ensureProviderForCommand(envelope.command);
-      this.sendProviderLine(this.toProviderCommandLine(envelope.command));
+      await this.ensureProviderForCommand(envelope.command);
+      const result = await this.requestProviderCommand(envelope.command);
       return this.createCommandAck({
         commandId: envelope.meta.commandId,
         idempotencyKey: envelope.meta.idempotencyKey,
         state: "accepted",
+        result,
       });
     } catch (error) {
       return this.createCommandAck({
@@ -325,6 +336,9 @@ export class EnvironmentAgentRuntime {
         if (!line.trim()) continue;
         this.opts.onStdoutLine?.(line);
         this.emitProviderStdoutLine(line);
+        if (this.tryResolveProviderRequest(line)) {
+          continue;
+        }
         this.appendEvent(this.toProviderEvent(line));
       }
     });
@@ -342,6 +356,12 @@ export class EnvironmentAgentRuntime {
       if (this.providerChild === child) {
         this.providerChild = null;
       }
+      if (this.providerInitializedPid === child.pid) {
+        this.providerInitializedPid = undefined;
+      }
+      this.rejectPendingProviderRequests(
+        new Error(`Provider runtime exited (code=${String(_code)}, signal=${String(_signal)})`),
+      );
       this.opts.onStderrLine?.(
         `provider runtime exited (code=${String(_code)}, signal=${String(_signal)})`,
       );
@@ -636,32 +656,42 @@ export class EnvironmentAgentRuntime {
     };
   }
 
-  private ensureProviderForCommand(command: EnvironmentAgentCommand): void {
+  private async ensureProviderForCommand(command: EnvironmentAgentCommand): Promise<void> {
     switch (command.type) {
       case "thread.start":
       case "thread.resume":
       case "thread.stop":
       case "turn.start":
       case "turn.steer":
-      case "thread.rename":
-        if (!this.ensureProviderRunning()) {
+      case "thread.rename": {
+        const child = this.ensureProviderRunning();
+        if (!child) {
           throw new Error("Provider runtime is unavailable");
         }
+        if (!command.initialize) {
+          return;
+        }
+        if (this.providerInitializedPid === child.pid) {
+          return;
+        }
+        await this.requestProvider({
+          method: command.initialize.method,
+          params: command.initialize.params,
+        });
+        this.providerInitializedPid = child.pid ?? undefined;
         return;
+      }
       case "workspace.status":
       case "workspace.diff":
         return;
     }
   }
 
-  private toProviderCommandLine(command: EnvironmentAgentCommand): string {
-    const message = {
-      jsonrpc: "2.0" as const,
+  private requestProviderCommand(command: EnvironmentAgentCommand): Promise<unknown> {
+    return this.requestProvider({
       method: this.toProviderMethod(command),
-      id: ++this.providerRequestId,
       params: this.toProviderParams(command),
-    };
-    return JSON.stringify(message);
+    });
   }
 
   private toProviderMethod(command: EnvironmentAgentCommand): string {
@@ -677,7 +707,7 @@ export class EnvironmentAgentRuntime {
       case "turn.steer":
         return "turn/steer";
       case "thread.rename":
-        return "thread/name-set";
+        return "thread/name/set";
       case "workspace.status":
         return "workspace/status";
       case "workspace.diff":
@@ -699,5 +729,95 @@ export class EnvironmentAgentRuntime {
       case "workspace.diff":
         return { threadId: command.threadId };
     }
+  }
+
+  private requestProvider(args: {
+    method: string;
+    params: unknown;
+    timeoutMs?: number;
+  }): Promise<unknown> {
+    const child = this.providerChild;
+    if (!child?.stdin || child.killed || child.exitCode !== null) {
+      return Promise.reject(new Error("Provider runtime is unavailable"));
+    }
+
+    const id = ++this.providerRequestId;
+    const timeoutMs = Math.max(1, args.timeoutMs ?? 10_000);
+    const message = JSON.stringify({
+      jsonrpc: "2.0",
+      id,
+      method: args.method,
+      params: args.params,
+    });
+
+    return new Promise<unknown>((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        this.pendingProviderRequests.delete(id);
+        reject(
+          new Error(
+            `Timed out waiting for provider response to ${args.method} (${id})`,
+          ),
+        );
+      }, timeoutMs);
+      this.pendingProviderRequests.set(id, { resolve, reject, timeout });
+      try {
+        child.stdin.write(`${message}\n`);
+      } catch (error) {
+        clearTimeout(timeout);
+        this.pendingProviderRequests.delete(id);
+        reject(error instanceof Error ? error : new Error(String(error)));
+      }
+    });
+  }
+
+  private tryResolveProviderRequest(line: string): boolean {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(line);
+    } catch {
+      return false;
+    }
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return false;
+    }
+    const record = parsed as Record<string, unknown>;
+    const id = typeof record.id === "number" ? record.id : undefined;
+    if (id === undefined) {
+      return false;
+    }
+    const pending = this.pendingProviderRequests.get(id);
+    if (!pending) {
+      return false;
+    }
+    clearTimeout(pending.timeout);
+    this.pendingProviderRequests.delete(id);
+    if (record.error !== undefined) {
+      pending.reject(new Error(this.toProviderErrorMessage(record.error)));
+      return true;
+    }
+    pending.resolve(record.result);
+    return true;
+  }
+
+  private rejectPendingProviderRequests(error: Error): void {
+    for (const [id, pending] of this.pendingProviderRequests) {
+      clearTimeout(pending.timeout);
+      pending.reject(error);
+      this.pendingProviderRequests.delete(id);
+    }
+  }
+
+  private toProviderErrorMessage(error: unknown): string {
+    if (typeof error === "string" && error.length > 0) {
+      return error;
+    }
+    if (!error || typeof error !== "object" || Array.isArray(error)) {
+      return JSON.stringify(error);
+    }
+    const record = error as Record<string, unknown>;
+    if (typeof record.message === "string" && record.message.length > 0) {
+      return record.message;
+    }
+    return JSON.stringify(error);
   }
 }

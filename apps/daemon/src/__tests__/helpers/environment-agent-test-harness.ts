@@ -163,6 +163,19 @@ export function respondToProviderRpcMessage(
         );
       });
       return true;
+    case "turn/start":
+    case "turn/steer":
+    case "thread/stop":
+    case "thread/name/set":
+      process.nextTick(() => {
+        child.stdout.push(
+          JSON.stringify({
+            id: msg.id,
+            result: {},
+          }) + "\n",
+        );
+      });
+      return true;
     default:
       return false;
   }
@@ -295,6 +308,40 @@ export function createFakeEnvironmentAgentClient(
     launchArgs?: string[];
   }> = [];
 
+  let rpcId = 10_000;
+  const sendRpcRequest = (method: string, params: unknown): Promise<unknown> => {
+    const id = ++rpcId;
+    return new Promise((resolve, reject) => {
+      const onData = (chunk: string | Buffer) => {
+        const value = typeof chunk === "string" ? chunk : chunk.toString("utf8");
+        for (const line of value.split(/\r\n|\n|\r/g)) {
+          if (!line.trim()) continue;
+          try {
+            const parsed = JSON.parse(line) as {
+              id?: unknown;
+              result?: unknown;
+              error?: unknown;
+            };
+            if (parsed.id !== id) continue;
+            child.stdout.off("data", onData);
+            if (parsed.error !== undefined) {
+              reject(new Error(JSON.stringify(parsed.error)));
+              return;
+            }
+            resolve(parsed.result);
+            return;
+          } catch {
+            continue;
+          }
+        }
+      };
+      child.stdout.on("data", onData);
+      child.stdin.write(
+        `${JSON.stringify({ jsonrpc: "2.0", id, method, params })}\n`,
+      );
+    });
+  };
+
   return {
     __fakeChild: child,
     __ensureSpecs: ensureSpecs,
@@ -322,14 +369,54 @@ export function createFakeEnvironmentAgentClient(
         pid: child.pid,
       };
     },
-    sendCommand: async (envelope) => ({
-      protocolVersion: 1,
-      commandId: envelope.meta.commandId,
-      idempotencyKey: envelope.meta.idempotencyKey,
-      state: "accepted",
-      acknowledgedAt: Date.now(),
-      latestSequence: 0,
-    }),
+    sendCommand: async (envelope) => {
+      const command = envelope.command;
+      const initialize =
+        "initialize" in command ? command.initialize : undefined;
+      if (initialize) {
+        await sendRpcRequest(initialize.method, initialize.params);
+      }
+      let method: string;
+      switch (command.type) {
+        case "thread.start":
+          method = "thread/start";
+          break;
+        case "thread.resume":
+          method = "thread/resume";
+          break;
+        case "thread.stop":
+          method = "thread/stop";
+          break;
+        case "turn.start":
+          method = "turn/start";
+          break;
+        case "turn.steer":
+          method = "turn/steer";
+          break;
+        case "thread.rename":
+          method = "thread/name/set";
+          break;
+        case "workspace.status":
+          method = "workspace/status";
+          break;
+        case "workspace.diff":
+          method = "workspace/diff";
+          break;
+      }
+      const result = await sendRpcRequest(
+        method,
+        "params" in command ? command.params ?? { threadId: command.threadId } : { threadId: command.threadId },
+      );
+      return {
+        protocolVersion: 1,
+        commandId: envelope.meta.commandId,
+        idempotencyKey: envelope.meta.idempotencyKey,
+        state: "accepted",
+        acknowledgedAt: Date.now(),
+        latestSequence: 0,
+        result,
+      };
+    },
     retryDaemonDelivery: async () => ({
       protocolVersion: 1,
       latestSequence: 0,

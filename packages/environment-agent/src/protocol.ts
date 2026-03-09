@@ -57,12 +57,18 @@ export interface EnvironmentAgentCommandMetadata {
   expectedAfterSequence?: number;
 }
 
+export interface EnvironmentAgentInitializeRequest {
+  method: string;
+  params: unknown;
+}
+
 export type EnvironmentAgentCommand =
   | {
       type: "thread.start";
       threadId: string;
       projectId: string;
       params: unknown;
+      initialize?: EnvironmentAgentInitializeRequest;
     }
   | {
       type: "thread.resume";
@@ -70,17 +76,20 @@ export type EnvironmentAgentCommand =
       projectId: string;
       providerThreadId: string;
       params: unknown;
+      initialize?: EnvironmentAgentInitializeRequest;
     }
   | {
       type: "thread.stop";
       threadId: string;
       params?: unknown;
+      initialize?: EnvironmentAgentInitializeRequest;
     }
   | {
       type: "turn.start";
       threadId: string;
       providerThreadId: string;
       params: unknown;
+      initialize?: EnvironmentAgentInitializeRequest;
     }
   | {
       type: "turn.steer";
@@ -88,6 +97,7 @@ export type EnvironmentAgentCommand =
       providerThreadId: string;
       turnId: string;
       params: unknown;
+      initialize?: EnvironmentAgentInitializeRequest;
     }
   | {
       type: "thread.rename";
@@ -95,6 +105,7 @@ export type EnvironmentAgentCommand =
       providerThreadId: string;
       title: string;
       params: unknown;
+      initialize?: EnvironmentAgentInitializeRequest;
     }
   | {
       type: "workspace.status";
@@ -125,6 +136,7 @@ export interface EnvironmentAgentCommandAck {
   acknowledgedAt: number;
   latestSequence: number;
   message?: string;
+  result?: unknown;
 }
 
 export type EnvironmentAgentEvent =

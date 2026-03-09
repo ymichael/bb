@@ -9,6 +9,7 @@ export type {
   EnvironmentAgentProviderStatus,
   EnvironmentAgentCommand,
   EnvironmentAgentCommandMetadata,
+  EnvironmentAgentInitializeRequest,
   EnvironmentAgentCommandEnvelope,
   EnvironmentAgentCommandAck,
   EnvironmentAgentCommandDeliveryState,

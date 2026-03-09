@@ -59,11 +59,14 @@ Out of scope:
      - status/replay/ack/retry
 
 4. Remove `AgentServer` authority from orchestrator control flow.
-   - Replace `agentServer.startSession()` in spawn/provisioning with stateless HTTP `thread/start`.
-   - Replace `agentServer.resumeSession()` with stateless HTTP `thread/resume`.
-   - Replace `agentServer.sendTurn()` with stateless HTTP `turn/start` / `turn/steer`.
-   - Replace `agentServer.stopSession()` / `stopAllSessions()` with stateless HTTP `thread/stop` only where explicit thread stop is intended.
-   - Remove the assumption that daemon shutdown must stop provider runtime unless product semantics explicitly require it.
+  - Replace `agentServer.startSession()` in spawn/provisioning with stateless HTTP `thread/start`.
+  - Replace `agentServer.resumeSession()` with stateless HTTP `thread/resume`.
+  - Replace `agentServer.sendTurn()` with stateless HTTP `turn/start` / `turn/steer`.
+  - Replace `agentServer.stopSession()` / `stopAllSessions()` with stateless HTTP `thread/stop` only where explicit thread stop is intended.
+  - Remove the assumption that daemon shutdown must stop provider runtime unless product semantics explicitly require it.
+  - Sequencing note:
+    - do not switch orchestrator command paths until live provider notifications, stderr, and replay-triggered lifecycle updates no longer depend on a managed session-backed stream attachment
+    - otherwise spawn/tell will lose immediate lifecycle updates even if command RPCs succeed
 
 5. Eliminate daemon-owned in-memory session state.
    - Remove `providerThreadId` / `activeTurnId` from `ManagedSession` as authoritative daemon state.
@@ -73,11 +76,15 @@ Out of scope:
    - Keep only minimal per-request local variables; no long-lived thread session map should be needed in steady state.
 
 6. Redefine live notification handling.
-   - Stop treating a daemon stream attachment as the source of truth for thread liveness.
-   - Prefer delivered/buffered environment-agent events as the authoritative update path.
-   - If command calls need immediate follow-up responses, use:
-     - delivered events
-     - explicit status reads
+  - Stop treating a daemon stream attachment as the source of truth for thread liveness.
+  - Prefer delivered/buffered environment-agent events as the authoritative update path.
+  - Replace current live-session responsibilities explicitly:
+    - provider notification ingestion
+    - stderr/auth-refresh warning handling
+    - active turn tracking derived from delivered lifecycle events
+  - If command calls need immediate follow-up responses, use:
+    - delivered events
+    - explicit status reads
      - or bounded request-scoped stream attachment only for that request
    - Do not reintroduce daemon-owned persistent subscriptions unless strictly necessary.
 

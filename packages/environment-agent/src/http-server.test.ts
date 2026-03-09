@@ -101,7 +101,24 @@ describe("environment-agent HTTP transport", () => {
       providerCommand: "node",
       providerArgs: [
         "-e",
-        "process.stdin.setEncoding('utf8');process.stdin.on('data',d=>{for (const line of d.trim().split(/\\n/)) { if (!line) continue; console.log(line); }});",
+        [
+          "process.stdin.setEncoding('utf8');",
+          "let buffer='';",
+          "process.stdin.on('data',chunk=>{",
+          "buffer+=chunk;",
+          "const parts=buffer.split(/\\r\\n|\\n|\\r/g);",
+          "buffer=parts.pop() ?? '';",
+          "for (const line of parts) {",
+          "if (!line.trim()) continue;",
+          "const msg = JSON.parse(line);",
+          "if (msg.method === 'initialize') {",
+          "console.log(JSON.stringify({ id: msg.id, result: { capabilities: {} } }));",
+          "} else if (msg.method === 'thread/start') {",
+          "console.log(JSON.stringify({ id: msg.id, result: { thread: { id: 'provider-thread-1' } } }));",
+          "}",
+          "}",
+          "});",
+        ].join(""),
       ],
     });
     runtime.start();
@@ -137,17 +154,26 @@ describe("environment-agent HTTP transport", () => {
           threadId: "thread-1",
           projectId: "proj-1",
           params: { model: "gpt-5" },
+          initialize: {
+            method: "initialize",
+            params: { clientInfo: { name: "beanbag", version: "0.0.1" } },
+          },
         },
       }),
     ).resolves.toMatchObject({
       commandId: "cmd-1",
       state: "accepted",
+      result: { thread: { id: "provider-thread-1" } },
     });
 
-    await expect.poll(() => received.length).toBeGreaterThan(0);
+    await expect.poll(() => received.length).toBeGreaterThanOrEqual(2);
     expect(JSON.parse(received[0] ?? "{}")).toMatchObject({
-      method: "thread/start",
-      params: { model: "gpt-5" },
+      id: 1,
+      result: { capabilities: {} },
+    });
+    expect(JSON.parse(received[1] ?? "{}")).toMatchObject({
+      id: 2,
+      result: { thread: { id: "provider-thread-1" } },
     });
 
     client.close();
