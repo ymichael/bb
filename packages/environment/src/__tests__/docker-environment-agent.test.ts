@@ -6,6 +6,7 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
+import { createServer } from "node:http";
 import { homedir, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -251,5 +252,97 @@ describe("docker environment-agent helper", () => {
 
     const stateDir = join(homedir(), ".beanbag", "environment-agents", "project-1");
     cleanupPaths.push(stateDir);
+  });
+
+  it("reuses an already running environment-agent for the same docker container", async () => {
+    const workspaceRoot = makeTempDir("bb-docker-agent-existing-workspace-");
+    const server = await new Promise<import("node:http").Server>((resolve) => {
+      const next = createServer((request, response) => {
+        if (request.url === "/control/status" && request.method === "POST") {
+          response.writeHead(200, { "content-type": "application/json" });
+          response.end("{}");
+          return;
+        }
+        response.writeHead(404);
+        response.end();
+      });
+      next.listen(0, "127.0.0.1", () => resolve(next));
+    });
+    const address = server.address();
+    if (!address || typeof address === "string") {
+      throw new Error("Expected test server address");
+    }
+    cleanupPaths.push(join(homedir(), ".beanbag", "environment-agents", "project-existing"));
+
+    const stateFile = join(
+      homedir(),
+      ".beanbag",
+      "environment-agents",
+      "project-existing",
+      "docker-thread-existing.json",
+    );
+    mkdirSync(dirname(stateFile), { recursive: true });
+    writeFileSync(
+      stateFile,
+      JSON.stringify(
+        {
+          version: 1,
+          baseUrl: `http://127.0.0.1:${address.port}`,
+          authToken: "existing-auth-token",
+          threadId: "thread-existing",
+          projectId: "project-existing",
+          environmentId: "docker",
+          workspaceRoot,
+          containerName: "beanbag-thread-thread-existing",
+          hostPort: address.port,
+          containerPort: 4310,
+          installRoot: "/opt/beanbag/environment-agent",
+        },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+
+    try {
+      const run = vi.fn(() => ({
+        exitCode: 0,
+        stdout: "",
+        stderr: "",
+      }));
+
+      await ensureManagedDockerEnvironmentAgent({
+        workspaceRootPath: workspaceRoot,
+        threadId: "thread-existing",
+        projectId: "project-existing",
+        environmentId: "docker",
+        runtimeEnv: {},
+        dockerBin: "docker",
+        containerName: "beanbag-thread-thread-existing",
+        hostPort: address.port,
+      }, {
+        run,
+      });
+
+      expect(run).not.toHaveBeenCalled();
+      expect(
+        resolveManagedDockerEnvironmentAgentTarget({
+          projectId: "project-existing",
+          threadId: "thread-existing",
+          environmentId: "docker",
+          runtimeEnv: {},
+        }),
+      ).toEqual({
+        transport: "http",
+        baseUrl: `http://127.0.0.1:${address.port}`,
+        headers: {
+          authorization: "Bearer existing-auth-token",
+        },
+      });
+    } finally {
+      await new Promise<void>((resolve) => {
+        server.close(() => resolve());
+      });
+    }
   });
 });
