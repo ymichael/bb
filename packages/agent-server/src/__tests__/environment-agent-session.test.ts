@@ -186,7 +186,10 @@ describe("AgentServer environment-agent control plane", () => {
 
     await agentServer.startSession({
       threadId: "thread-1",
-      spawnProcess: () => child,
+      connectSession: () => ({
+        transport: "child_process",
+        child,
+      }),
       request: {
         projectId: "project-1",
         title: "Test thread",
@@ -244,7 +247,10 @@ describe("AgentServer environment-agent control plane", () => {
 
     await agentServer.startSession({
       threadId: "thread-1",
-      spawnProcess: () => child,
+      connectSession: () => ({
+        transport: "child_process",
+        child,
+      }),
       request: {
         projectId: "project-1",
         title: "Test thread",

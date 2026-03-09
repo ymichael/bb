@@ -1,4 +1,3 @@
-import type { ChildProcess } from "node:child_process";
 import {
   type ThreadWorkStatus,
   type EnvironmentProvisioningEvent,
@@ -8,6 +7,7 @@ import {
   type ThreadChangeKind,
   type ThreadEnvironmentStartReason,
 } from "@beanbag/agent-core";
+import type { AgentServerSessionConnection } from "@beanbag/agent-server";
 import {
   type CreateEnvironmentContext,
   type EnvironmentCheckoutSnapshot,
@@ -25,7 +25,9 @@ export interface ActiveEnvironmentRuntime {
   environment: IEnvironment;
   agentConnectionTarget: EnvironmentAgentConnectionTarget;
   stopWatchingWorkspaceStatus?: () => void;
-  spawnProcess?: () => ChildProcess;
+  connectSession?: () =>
+    | AgentServerSessionConnection
+    | Promise<AgentServerSessionConnection>;
 }
 
 export interface PrimaryPromotionState {
@@ -56,7 +58,7 @@ interface EnvironmentServiceCallbacks {
     threadId: string;
     projectId?: string;
     agentConnectionTarget: EnvironmentAgentConnectionTarget;
-  }) => ChildProcess;
+  }) => AgentServerSessionConnection | Promise<AgentServerSessionConnection>;
 }
 
 function checkoutSnapshotsMatch(
@@ -182,7 +184,7 @@ export class EnvironmentService {
     if (!runtime) {
       throw new Error(`Missing environment runtime for thread ${threadId}`);
     }
-    runtime.spawnProcess = () => this.callbacks.spawnProviderProcess({
+    runtime.connectSession = () => this.callbacks.spawnProviderProcess({
       threadId,
       projectId: thread?.projectId,
       agentConnectionTarget: runtime.agentConnectionTarget,

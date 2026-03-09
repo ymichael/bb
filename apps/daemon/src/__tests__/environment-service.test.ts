@@ -1,4 +1,3 @@
-import type { ChildProcess } from "node:child_process";
 import { describe, expect, it, vi } from "vitest";
 import type {
   SystemEnvironmentInfo,
@@ -6,6 +5,7 @@ import type {
   ThreadWorkStatus,
   ThreadEnvironmentStartReason,
 } from "@beanbag/agent-core";
+import type { AgentServerSessionConnection } from "@beanbag/agent-server";
 import {
   EnvironmentRegistry,
   type CreateEnvironmentContext,
@@ -106,7 +106,7 @@ function createTestEnvironment(args: { existsInitially: boolean }): IEnvironment
       return { diff: "", truncated: false };
     },
     spawn() {
-      return {} as ChildProcess;
+      return {} as never;
     },
     shouldRunSetupScript() {
       return true;
@@ -190,7 +190,12 @@ function createService(args: { existsInitially: boolean }) {
       onCleanupFailure: vi.fn(),
       onPrimaryCheckoutDemoted: vi.fn(),
       runOptionalSetup,
-      spawnProviderProcess: vi.fn(() => ({} as ChildProcess)),
+      spawnProviderProcess: vi.fn(
+        (): AgentServerSessionConnection => ({
+          transport: "child_process",
+          child: {} as never,
+        }),
+      ),
     },
   );
 

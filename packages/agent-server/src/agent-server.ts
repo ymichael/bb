@@ -57,6 +57,16 @@ export interface AgentServerSessionState {
   hasActiveRuntime: boolean;
 }
 
+export type AgentServerSessionConnection =
+  | {
+      transport: "child_process";
+      child: ChildProcess;
+    }
+  | {
+      transport: "http";
+      client: EnvironmentAgentClient;
+    };
+
 export interface AgentServerNotification {
   method: string;
   normalizedMethod: string;
@@ -85,7 +95,7 @@ export interface AgentServerOptions {
 }
 
 interface ManagedSession {
-  child: ChildProcess;
+  child?: ChildProcess;
   agentClient: EnvironmentAgentClient;
   runtime: ProviderRuntime;
   providerThreadId?: string;
@@ -309,11 +319,16 @@ export class AgentServer {
 
   async startSession(args: {
     threadId: string;
-    spawnProcess: () => ChildProcess;
+    connectSession: () =>
+      | AgentServerSessionConnection
+      | Promise<AgentServerSessionConnection>;
     request: SpawnThreadRequest;
     context: ProviderThreadContext;
   }): Promise<{ providerThreadId: string }> {
-    const session = this.createManagedSession(args.threadId, args.spawnProcess());
+    const session = await this.createManagedSession(
+      args.threadId,
+      args.connectSession(),
+    );
     const params = this.opts.provider.createThreadStartParams(args.request, args.context);
     try {
       const providerThreadId = await this.requestThreadId(
@@ -333,14 +348,20 @@ export class AgentServer {
 
   async resumeSession(args: {
     threadId: string;
-    spawnProcess: () => ChildProcess;
+    connectSession: () =>
+      | AgentServerSessionConnection
+      | Promise<AgentServerSessionConnection>;
     providerThreadId: string;
     context: ProviderThreadContext;
     options?: ProviderExecutionOptions;
   }): Promise<{ providerThreadId: string }> {
-    const session = this.createManagedSession(args.threadId, args.spawnProcess(), {
+    const session = await this.createManagedSession(
+      args.threadId,
+      args.connectSession(),
+      {
       providerThreadId: args.providerThreadId,
-    });
+      },
+    );
     try {
       const providerThreadId = await this.requestThreadId(
         session.runtime,
@@ -471,12 +492,14 @@ export class AgentServer {
     if (!session) return;
 
     try {
-      session.child.kill("SIGTERM");
-      setTimeout(() => {
-        if (session.child.exitCode === null) {
-          session.child.kill("SIGKILL");
-        }
-      }, 5000);
+      if (session.child) {
+        session.child.kill("SIGTERM");
+        setTimeout(() => {
+          if (session.child?.exitCode === null) {
+            session.child.kill("SIGKILL");
+          }
+        }, 5000);
+      }
     } catch {
       // ignore shutdown errors
     }
@@ -513,82 +536,102 @@ export class AgentServer {
 
   private createManagedSession(
     threadId: string,
-    child: ChildProcess,
+    connection:
+      | AgentServerSessionConnection
+      | Promise<AgentServerSessionConnection>,
     seed?: { providerThreadId?: string; activeTurnId?: string },
-  ): ManagedSession {
+  ): Promise<ManagedSession> {
     this.disposeSession(threadId);
-    const agentClient = createChildProcessEnvironmentAgentClient(child);
-    const runtime = new ProviderRuntime({
-      threadId,
-      transport: agentClient.providerTransport,
-      onNotification: (msg) => {
-        this.handleNotification(threadId, msg);
-      },
-      onUnmatchedRpcError: (requestId, errorMessage) => {
-        this.opts.logger?.error(
-          `[thread ${threadId}] Provider RPC error (request ${requestId}):`,
-          errorMessage,
-        );
-      },
-      onStderrLine: (line) => {
-        this.handleProviderStderrLine(threadId, line);
-      },
-    });
-
-    const session: ManagedSession = {
-      child,
-      agentClient,
-      runtime,
-      providerThreadId: seed?.providerThreadId,
-      activeTurnId: seed?.activeTurnId,
-    };
-    this.sessions.set(threadId, session);
-
-    this.send(runtime, threadId, {
-      jsonrpc: "2.0",
-      method: this.opts.provider.initializeMethod,
-      id: ++this.rpcIdCounter,
-      params:
-        this.opts.provider.createInitializeParams?.(this.opts.provider.clientInfo) ?? {
-          clientInfo: this.opts.provider.clientInfo,
+    return Promise.resolve(connection).then((resolvedConnection) => {
+      const agentClient =
+        resolvedConnection.transport === "child_process"
+          ? createChildProcessEnvironmentAgentClient(resolvedConnection.child)
+          : resolvedConnection.client;
+      const runtime = new ProviderRuntime({
+        threadId,
+        transport: agentClient.providerTransport,
+        onNotification: (msg) => {
+          this.handleNotification(threadId, msg);
         },
-    });
+        onUnmatchedRpcError: (requestId, errorMessage) => {
+          this.opts.logger?.error(
+            `[thread ${threadId}] Provider RPC error (request ${requestId}):`,
+            errorMessage,
+          );
+        },
+        onStderrLine: (line) => {
+          this.handleProviderStderrLine(threadId, line);
+        },
+        onClosed: () => {
+          const current = this.sessions.get(threadId);
+          if (current?.runtime !== runtime) return;
+          this.sessions.delete(threadId);
+          this.clearSessionState(threadId);
+          this.opts.onSessionExit?.(threadId, { code: null, signal: null });
+        },
+      });
 
-    child.on("exit", (code, signal) => {
-      const current = this.sessions.get(threadId);
-      if (current?.child !== child) return;
-      runtime.close(
-        new Error(
-          `[thread ${threadId}] Process exited (${signal ?? code ?? "unknown"})`,
-        ),
-      );
-      this.sessions.delete(threadId);
-      this.clearSessionState(threadId);
-      this.opts.onSessionExit?.(threadId, { code, signal });
-    });
+      const session: ManagedSession = {
+        ...(resolvedConnection.transport === "child_process"
+          ? { child: resolvedConnection.child }
+          : {}),
+        agentClient,
+        runtime,
+        providerThreadId: seed?.providerThreadId,
+        activeTurnId: seed?.activeTurnId,
+      };
+      this.sessions.set(threadId, session);
 
-    child.on("error", (error) => {
-      this.opts.logger?.error(`[thread ${threadId}] Process error: ${error.message}`);
-      runtime.close(new Error(`[thread ${threadId}] Process error: ${error.message}`));
-      const current = this.sessions.get(threadId);
-      if (current?.child === child) {
-        this.sessions.delete(threadId);
-        this.clearSessionState(threadId);
+      this.send(runtime, threadId, {
+        jsonrpc: "2.0",
+        method: this.opts.provider.initializeMethod,
+        id: ++this.rpcIdCounter,
+        params:
+          this.opts.provider.createInitializeParams?.(this.opts.provider.clientInfo) ?? {
+            clientInfo: this.opts.provider.clientInfo,
+          },
+      });
+
+      if (resolvedConnection.transport === "child_process") {
+        const child = resolvedConnection.child;
+        child.on("exit", (code, signal) => {
+          const current = this.sessions.get(threadId);
+          if (current?.child !== child) return;
+          runtime.close(
+            new Error(
+              `[thread ${threadId}] Process exited (${signal ?? code ?? "unknown"})`,
+            ),
+          );
+          this.sessions.delete(threadId);
+          this.clearSessionState(threadId);
+          this.opts.onSessionExit?.(threadId, { code, signal });
+        });
+
+        child.on("error", (error) => {
+          this.opts.logger?.error(`[thread ${threadId}] Process error: ${error.message}`);
+          runtime.close(new Error(`[thread ${threadId}] Process error: ${error.message}`));
+          const current = this.sessions.get(threadId);
+          if (current?.child === child) {
+            this.sessions.delete(threadId);
+            this.clearSessionState(threadId);
+          }
+          this.opts.onSessionExit?.(threadId, { code: 1, signal: null });
+        });
       }
-      this.opts.onSessionExit?.(threadId, { code: 1, signal: null });
-    });
 
-    return session;
+      return session;
+    });
   }
 
   private disposeSession(threadId: string): void {
     const existing = this.sessions.get(threadId);
     if (!existing) return;
     try {
-      existing.child.kill("SIGTERM");
+      existing.child?.kill("SIGTERM");
     } catch {
       // ignore shutdown errors
     }
+    existing.agentClient.close();
     existing.runtime.close();
     this.sessions.delete(threadId);
     this.clearSessionState(threadId);

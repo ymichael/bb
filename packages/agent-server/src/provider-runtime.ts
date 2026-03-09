@@ -57,6 +57,7 @@ export interface ProviderRuntimeOptions {
   onNotification: (msg: ProviderRuntimeNotification) => void;
   onUnmatchedRpcError?: (id: JsonRpcId, message: string) => void;
   onStderrLine?: (line: string) => void;
+  onClosed?: (reason?: Error) => void;
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -168,6 +169,7 @@ export class ProviderRuntime {
       pending.reject(closeError);
       this.pending.delete(id);
     }
+    this.opts.onClosed?.(closeError);
   }
 
   private _handleLine(line: string): void {

@@ -86,12 +86,14 @@ import type {
 } from "@beanbag/db";
 import {
   AgentServer,
+  type AgentServerSessionConnection,
   type AgentServerNotification,
   AgentServerSessionError,
   type LlmCommitMessageGenerationArgs,
   type LlmCompletionService,
   createCodexProviderAdapter,
 } from "@beanbag/agent-server";
+import { createHttpEnvironmentAgentClient } from "@beanbag/environment-agent";
 import { WSManager } from "./ws.js";
 import {
   isDomainError,
@@ -526,11 +528,9 @@ export class Orchestrator implements ThreadOrchestrator {
         runOptionalSetup: (threadId, environment, reason) =>
           this._runOptionalEnvironmentSetup(threadId, environment, reason),
         spawnProviderProcess: ({ threadId, projectId, agentConnectionTarget }) => {
-          const spawnSpec = this.agentServer.getSpawnSpec();
-          return this._spawnEnvironmentAgentProcess({
+          return this._connectEnvironmentAgentSession({
             threadId,
             projectId,
-            spawnSpec,
             agentConnectionTarget,
           });
         },
@@ -665,7 +665,7 @@ export class Orchestrator implements ThreadOrchestrator {
       );
       const resumed = await this.agentServer.resumeSession({
         threadId: thread.id,
-        spawnProcess: environmentRuntime.spawnProcess!,
+        connectSession: environmentRuntime.connectSession!,
         providerThreadId,
         context: this._buildProviderThreadContext({
           threadId: thread.id,
@@ -2454,7 +2454,7 @@ export class Orchestrator implements ThreadOrchestrator {
     );
     const started = await this.agentServer.startSession({
       threadId,
-      spawnProcess: environmentRuntime.spawnProcess!,
+      connectSession: environmentRuntime.connectSession!,
       request: effectiveRequest,
       context: providerContext,
     });
@@ -2721,53 +2721,80 @@ export class Orchestrator implements ThreadOrchestrator {
     );
   }
 
+  private async _connectEnvironmentAgentSession(args: {
+    threadId: string;
+    projectId?: string;
+    agentConnectionTarget: EnvironmentAgentConnectionTarget;
+  }): Promise<AgentServerSessionConnection> {
+    switch (args.agentConnectionTarget.transport) {
+      case "command-stdio": {
+        const commandTarget = args.agentConnectionTarget;
+        return {
+          transport: "child_process",
+          child: this._spawnEnvironmentAgentProcess({
+            threadId: args.threadId,
+            ...(args.projectId ? { projectId: args.projectId } : {}),
+            spawnSpec: this.agentServer.getSpawnSpec(),
+            agentConnectionTarget: commandTarget,
+          }),
+        };
+      }
+      case "http":
+        return {
+          transport: "http",
+          client: await createHttpEnvironmentAgentClient({
+            baseUrl: args.agentConnectionTarget.baseUrl,
+            ...(args.agentConnectionTarget.headers
+              ? { headers: args.agentConnectionTarget.headers }
+              : {}),
+          }),
+        };
+      default:
+        assertNever(args.agentConnectionTarget);
+    }
+  }
+
   private _spawnEnvironmentAgentProcess(args: {
     threadId: string;
     projectId?: string;
     spawnSpec: { command: string; args: string[] };
-    agentConnectionTarget: EnvironmentAgentConnectionTarget;
+    agentConnectionTarget: Extract<
+      EnvironmentAgentConnectionTarget,
+      { transport: "command-stdio" }
+    >;
   }): ChildProcess {
-    switch (args.agentConnectionTarget.transport) {
-      case "command-stdio":
-        return spawn(
-          args.agentConnectionTarget.command,
-          [
-            ...args.agentConnectionTarget.args,
-            "--provider-command",
-            args.spawnSpec.command,
-            ...(args.agentConnectionTarget.providerLaunch
-              ? [
-                  "--provider-launch-command",
-                  args.agentConnectionTarget.providerLaunch.command,
-                  ...args.agentConnectionTarget.providerLaunch.args.flatMap((value) => [
-                    "--provider-launch-arg",
-                    value,
-                  ]),
-                ]
-              : []),
-            ...args.spawnSpec.args.flatMap((value) => ["--provider-arg", value]),
-          ],
-          {
-            ...(args.agentConnectionTarget.cwd
-              ? { cwd: args.agentConnectionTarget.cwd }
-              : {}),
-            env: {
-              ...this.runtimeEnv,
-              ...(args.agentConnectionTarget.env ?? {}),
-              ...(this.threadShellPath ? { PATH: this.threadShellPath } : {}),
-              ...(args.projectId ? { BB_PROJECT_ID: args.projectId } : {}),
-              BB_THREAD_ID: args.threadId,
-            },
-            stdio: ["pipe", "pipe", "pipe"],
-          },
-        );
-      case "http":
-        throw new Error(
-          `HTTP environment agent transport is not wired yet for thread ${args.threadId}`,
-        );
-      default:
-        assertNever(args.agentConnectionTarget);
-    }
+    return spawn(
+      args.agentConnectionTarget.command,
+      [
+        ...args.agentConnectionTarget.args,
+        "--provider-command",
+        args.spawnSpec.command,
+        ...(args.agentConnectionTarget.providerLaunch
+          ? [
+              "--provider-launch-command",
+              args.agentConnectionTarget.providerLaunch.command,
+              ...args.agentConnectionTarget.providerLaunch.args.flatMap((value) => [
+                "--provider-launch-arg",
+                value,
+              ]),
+            ]
+          : []),
+        ...args.spawnSpec.args.flatMap((value) => ["--provider-arg", value]),
+      ],
+      {
+        ...(args.agentConnectionTarget.cwd
+          ? { cwd: args.agentConnectionTarget.cwd }
+          : {}),
+        env: {
+          ...this.runtimeEnv,
+          ...(args.agentConnectionTarget.env ?? {}),
+          ...(this.threadShellPath ? { PATH: this.threadShellPath } : {}),
+          ...(args.projectId ? { BB_PROJECT_ID: args.projectId } : {}),
+          BB_THREAD_ID: args.threadId,
+        },
+        stdio: ["pipe", "pipe", "pipe"],
+      },
+    );
   }
 
   private _resolvePersistedProviderThreadId(threadId: string): string | undefined {
@@ -2874,7 +2901,7 @@ export class Orchestrator implements ThreadOrchestrator {
       );
       const resumed = await this.agentServer.resumeSession({
         threadId,
-        spawnProcess: environmentRuntime.spawnProcess!,
+        connectSession: environmentRuntime.connectSession!,
         providerThreadId: persistedThreadId,
         context: this._buildProviderThreadContext({
           threadId,
