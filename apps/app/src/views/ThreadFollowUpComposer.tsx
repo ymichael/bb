@@ -358,9 +358,9 @@ export function ThreadFollowUpComposer({
           attachmentError={attachmentError}
           footerStart={
             <>
-              {supportsModelList ? (
+              {supportsModelList && modelOptions.length > 0 ? (
                 <PromptModelPicker
-                  value={activeModel?.model ?? selectedModel ?? modelOptions[0]?.value ?? ""}
+                  value={activeModel?.model ?? selectedModel}
                   options={modelOptions}
                   onChange={onSelectedModelChange}
                   fastModeEnabled={serviceTier === "fast"}
@@ -370,10 +370,10 @@ export function ThreadFollowUpComposer({
                   showFastModeToggle={supportsServiceTier}
                 />
               ) : null}
-              {supportsReasoningLevels ? (
+              {supportsReasoningLevels && reasoningOptions.length > 0 ? (
                 <PromptOptionPicker
                   label="Reasoning"
-                  value={reasoningLevel ?? reasoningOptions[0]?.value ?? "medium"}
+                  value={reasoningLevel}
                   options={reasoningOptions}
                   onChange={onReasoningLevelChange}
                 />

@@ -20,42 +20,6 @@ const REASONING_STORAGE_KEY = "beanbag.promptbox.reasoning";
 const SANDBOX_STORAGE_KEY = "beanbag.promptbox.sandbox";
 const ENVIRONMENT_STORAGE_KEY = "beanbag.promptbox.environment";
 
-const FALLBACK_REASONING_OPTIONS = [
-  { value: "low", label: "Low" },
-  { value: "medium", label: "Medium" },
-  { value: "high", label: "High" },
-  { value: "xhigh", label: "Extra High" },
-] as const;
-
-const FALLBACK_MODELS: AvailableModel[] = [
-  {
-    id: "gpt-5.3-codex",
-    model: "gpt-5.3-codex",
-    displayName: "gpt-5.3-codex",
-    description: "Latest frontier agentic coding model.",
-    supportedReasoningEfforts: FALLBACK_REASONING_OPTIONS.map((option) => ({
-      reasoningEffort: option.value,
-      description: `${option.label} reasoning effort`,
-    })),
-    defaultReasoningEffort: "medium",
-    isDefault: true,
-  },
-];
-
-const FALLBACK_ENVIRONMENTS: SystemEnvironmentInfo[] = [
-  {
-    id: "local",
-    displayName: "Local Workspace",
-    capabilities: {
-      host_filesystem: true,
-      isolated_workspace: false,
-      promote_primary_checkout: false,
-      demote_primary_checkout: false,
-      squash_merge: false,
-    },
-  },
-];
-
 const REASONING_LABELS: Record<ReasoningLevel, string> = {
   low: "Low",
   medium: "Medium",
@@ -125,64 +89,43 @@ function getPromptModelReasoningStorageKeys(
   };
 }
 
-function readStoredString(primaryStorageKey: string, fallbackStorageKey?: string): string | null {
+function readStoredString(primaryStorageKey: string): string | null {
   if (typeof window === "undefined") return null;
-
-  const scopedValue = window.localStorage.getItem(primaryStorageKey);
-  if (scopedValue !== null) {
-    return scopedValue;
-  }
-
-  if (!fallbackStorageKey || fallbackStorageKey === primaryStorageKey) {
-    return null;
-  }
-
-  return window.localStorage.getItem(fallbackStorageKey);
+  return window.localStorage.getItem(primaryStorageKey);
 }
 
-function getStoredModel(
-  storageKeys: PromptModelReasoningStorageKeys,
-  fallbackStorageKeys?: PromptModelReasoningStorageKeys,
-): string {
-  return readStoredString(storageKeys.model, fallbackStorageKeys?.model) ?? "";
+function getStoredModel(storageKeys: PromptModelReasoningStorageKeys): string {
+  return readStoredString(storageKeys.model) ?? "";
 }
 
-function getStoredReasoningLevel(
-  storageKeys: PromptModelReasoningStorageKeys,
-  fallbackStorageKeys?: PromptModelReasoningStorageKeys,
-): ReasoningLevel {
-  const raw = readStoredString(storageKeys.reasoning, fallbackStorageKeys?.reasoning);
+function getStoredReasoningLevel(storageKeys: PromptModelReasoningStorageKeys): ReasoningLevel {
+  const raw = readStoredString(storageKeys.reasoning);
   return isReasoningLevel(raw) ? raw : "medium";
 }
 
 function getStoredServiceTier(
   storageKeys: PromptModelReasoningStorageKeys,
-  fallbackStorageKeys?: PromptModelReasoningStorageKeys,
 ): ServiceTier | undefined {
-  const raw = readStoredString(storageKeys.serviceTier, fallbackStorageKeys?.serviceTier);
+  const raw = readStoredString(storageKeys.serviceTier);
   return isServiceTier(raw) ? raw : undefined;
 }
 
-function getStoredSandboxMode(
-  storageKeys: PromptModelReasoningStorageKeys,
-  fallbackStorageKeys?: PromptModelReasoningStorageKeys,
-): SandboxMode {
-  const raw = readStoredString(storageKeys.sandbox, fallbackStorageKeys?.sandbox);
+function getStoredSandboxMode(storageKeys: PromptModelReasoningStorageKeys): SandboxMode {
+  const raw = readStoredString(storageKeys.sandbox);
   return isSandboxMode(raw) ? raw : "danger-full-access";
 }
 
-function getStoredEnvironmentId(
-  storageKeys: PromptModelReasoningStorageKeys,
-  fallbackStorageKeys?: PromptModelReasoningStorageKeys,
-): string {
-  return readStoredString(storageKeys.environment, fallbackStorageKeys?.environment) ?? "local";
+function getStoredEnvironmentId(storageKeys: PromptModelReasoningStorageKeys): string {
+  return readStoredString(storageKeys.environment) ?? "";
 }
 
 function toEnvironmentOptions(
   environments: readonly SystemEnvironmentInfo[] | undefined,
 ): PromptOption<string>[] {
-  const source = environments && environments.length > 0 ? environments : FALLBACK_ENVIRONMENTS;
-  return source.map((environment) => ({
+  if (!environments || environments.length === 0) {
+    return [];
+  }
+  return environments.map((environment) => ({
     value: environment.id,
     label:
       formatEnvironmentDisplayName({
@@ -212,44 +155,40 @@ export function usePromptModelReasoning(options?: UsePromptModelReasoningOptions
     () => getPromptModelReasoningStorageKeys(options?.projectId),
     [options?.projectId],
   );
-  const fallbackStorageKeys = useMemo(
-    () => (options?.projectId ? getPromptModelReasoningStorageKeys() : undefined),
-    [options?.projectId],
-  );
 
   const availableModelsQuery = useAvailableModels();
   const environmentsQuery = useSystemEnvironments();
   const providerInfoQuery = useSystemProvider();
-  const supportsModelList = providerInfoQuery.data?.capabilities.supportsModelList ?? true;
+  const supportsModelList = providerInfoQuery.data?.capabilities.supportsModelList ?? false;
   const supportsReasoningLevels =
-    providerInfoQuery.data?.capabilities.supportsReasoningLevels ?? true;
+    providerInfoQuery.data?.capabilities.supportsReasoningLevels ?? false;
   const supportsServiceTier =
     providerInfoQuery.data?.capabilities.supportsServiceTier ?? false;
 
   const [selectedModel, setSelectedModel] = useState<string>(() =>
     scope === "new-thread"
-      ? getStoredModel(storageKeys, fallbackStorageKeys)
+      ? getStoredModel(storageKeys)
       : (options?.initialModel ?? ""),
   );
   const [serviceTier, setServiceTier] = useState<ServiceTier | undefined>(() =>
     scope === "new-thread"
-      ? getStoredServiceTier(storageKeys, fallbackStorageKeys)
+      ? getStoredServiceTier(storageKeys)
       : options?.initialServiceTier,
   );
   const [reasoningLevel, setReasoningLevel] = useState<ReasoningLevel>(() =>
     scope === "new-thread"
-      ? getStoredReasoningLevel(storageKeys, fallbackStorageKeys)
+      ? getStoredReasoningLevel(storageKeys)
       : (options?.initialReasoningLevel ?? "medium"),
   );
   const [sandboxMode, setSandboxMode] = useState<SandboxMode>(() =>
     scope === "new-thread"
-      ? getStoredSandboxMode(storageKeys, fallbackStorageKeys)
+      ? getStoredSandboxMode(storageKeys)
       : (options?.initialSandboxMode ?? "danger-full-access"),
   );
   const [environmentId, setEnvironmentId] = useState<string>(() =>
     scope === "new-thread"
-      ? getStoredEnvironmentId(storageKeys, fallbackStorageKeys)
-      : (options?.initialEnvironmentId ?? "local"),
+      ? getStoredEnvironmentId(storageKeys)
+      : (options?.initialEnvironmentId ?? ""),
   );
   const [hydratedStorageKey, setHydratedStorageKey] = useState<string | null>(() =>
     scope === "new-thread" ? storageKeys.model : null,
@@ -261,7 +200,7 @@ export function usePromptModelReasoning(options?: UsePromptModelReasoningOptions
       availableModelsQuery.data &&
       availableModelsQuery.data.length > 0
         ? availableModelsQuery.data
-        : FALLBACK_MODELS,
+        : [],
     [availableModelsQuery.data, supportsModelList],
   );
 
@@ -283,14 +222,13 @@ export function usePromptModelReasoning(options?: UsePromptModelReasoningOptions
   );
 
   const reasoningOptions = useMemo((): PromptOption<ReasoningLevel>[] => {
-    if (!supportsReasoningLevels) {
-      return [{ value: "medium", label: REASONING_LABELS.medium }];
+    if (!supportsReasoningLevels || !activeModel) {
+      return [];
     }
 
     const options: PromptOption<ReasoningLevel>[] = [];
     const seen = new Set<ReasoningLevel>();
-    const efforts =
-      activeModel?.supportedReasoningEfforts ?? FALLBACK_MODELS[0].supportedReasoningEfforts;
+    const efforts = activeModel.supportedReasoningEfforts;
 
     for (const effort of efforts) {
       if (seen.has(effort.reasoningEffort)) continue;
@@ -302,10 +240,7 @@ export function usePromptModelReasoning(options?: UsePromptModelReasoningOptions
     }
 
     if (options.length === 0) {
-      return FALLBACK_REASONING_OPTIONS.map((option) => ({
-        value: option.value,
-        label: option.label,
-      }));
+      return [];
     }
 
     return options;
@@ -336,6 +271,9 @@ export function usePromptModelReasoning(options?: UsePromptModelReasoningOptions
       setReasoningLevel("medium");
       return;
     }
+    if (reasoningOptions.length === 0) {
+      return;
+    }
     if (!reasoningOptions.some((option) => option.value === reasoningLevel)) {
       setReasoningLevel(activeModel?.defaultReasoningEffort ?? reasoningOptions[0].value);
     }
@@ -353,13 +291,13 @@ export function usePromptModelReasoning(options?: UsePromptModelReasoningOptions
       return;
     }
 
-    setSelectedModel(getStoredModel(storageKeys, fallbackStorageKeys));
-    setServiceTier(getStoredServiceTier(storageKeys, fallbackStorageKeys));
-    setReasoningLevel(getStoredReasoningLevel(storageKeys, fallbackStorageKeys));
-    setSandboxMode(getStoredSandboxMode(storageKeys, fallbackStorageKeys));
-    setEnvironmentId(getStoredEnvironmentId(storageKeys, fallbackStorageKeys));
+    setSelectedModel(getStoredModel(storageKeys));
+    setServiceTier(getStoredServiceTier(storageKeys));
+    setReasoningLevel(getStoredReasoningLevel(storageKeys));
+    setSandboxMode(getStoredSandboxMode(storageKeys));
+    setEnvironmentId(getStoredEnvironmentId(storageKeys));
     setHydratedStorageKey(storageKeys.model);
-  }, [fallbackStorageKeys, scope, storageKeys]);
+  }, [scope, storageKeys]);
 
   useEffect(() => {
     if (scope !== "thread") return;
@@ -397,7 +335,11 @@ export function usePromptModelReasoning(options?: UsePromptModelReasoningOptions
   useEffect(() => {
     if (scope !== "new-thread") return;
     if (hydratedStorageKey !== storageKeys.model) return;
-    if (typeof window === "undefined" || !selectedModel) return;
+    if (typeof window === "undefined") return;
+    if (!selectedModel) {
+      window.localStorage.removeItem(storageKeys.model);
+      return;
+    }
     window.localStorage.setItem(storageKeys.model, selectedModel);
   }, [hydratedStorageKey, scope, selectedModel, storageKeys.model]);
 
@@ -430,7 +372,11 @@ export function usePromptModelReasoning(options?: UsePromptModelReasoningOptions
     if (scope !== "new-thread") return;
     if (hydratedStorageKey !== storageKeys.model) return;
     if (typeof window === "undefined") return;
-    window.localStorage.setItem(storageKeys.environment, environmentId);
+    if (environmentId) {
+      window.localStorage.setItem(storageKeys.environment, environmentId);
+      return;
+    }
+    window.localStorage.removeItem(storageKeys.environment);
   }, [environmentId, hydratedStorageKey, scope, storageKeys.environment, storageKeys.model]);
 
   return {

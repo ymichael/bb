@@ -66,6 +66,8 @@ export function ProjectMainView() {
     reasoningOptions,
     sandboxOptions,
     environmentOptions,
+    supportsModelList,
+    supportsReasoningLevels,
     supportsServiceTier,
   } = usePromptModelReasoning({ scope: "new-thread", projectId });
   const environmentSelectorOptions = useMemo(
@@ -195,10 +197,10 @@ export function ProjectMainView() {
         input: promptInput,
         projectId,
         model: activeModel?.model,
-        serviceTier,
-        reasoningLevel,
+        ...(supportsServiceTier && serviceTier ? { serviceTier } : {}),
+        ...(supportsReasoningLevels ? { reasoningLevel } : {}),
         sandboxMode,
-        environmentId,
+        ...(environmentId ? { environmentId } : {}),
       });
       promptDraft.clear();
       setAttachmentError(null);
@@ -247,20 +249,24 @@ export function ProjectMainView() {
           attachmentError={attachmentError}
           footerStart={
             <>
-              <PromptModelPicker
-                value={activeModel?.model ?? selectedModel}
-                options={modelOptions}
-                onChange={setSelectedModel}
-                fastModeEnabled={serviceTier === "fast"}
-                onFastModeChange={(enabled) => setServiceTier(enabled ? "fast" : undefined)}
-                showFastModeToggle={supportsServiceTier}
-              />
-              <PromptOptionPicker
-                label="Reasoning"
-                value={reasoningLevel}
-                options={reasoningOptions}
-                onChange={setReasoningLevel}
-              />
+              {supportsModelList && modelOptions.length > 0 ? (
+                <PromptModelPicker
+                  value={activeModel?.model ?? selectedModel}
+                  options={modelOptions}
+                  onChange={setSelectedModel}
+                  fastModeEnabled={serviceTier === "fast"}
+                  onFastModeChange={(enabled) => setServiceTier(enabled ? "fast" : undefined)}
+                  showFastModeToggle={supportsServiceTier}
+                />
+              ) : null}
+              {supportsReasoningLevels && reasoningOptions.length > 0 ? (
+                <PromptOptionPicker
+                  label="Reasoning"
+                  value={reasoningLevel}
+                  options={reasoningOptions}
+                  onChange={setReasoningLevel}
+                />
+              ) : null}
               <PromptOptionPicker
                 label="Sandbox"
                 value={sandboxMode}
@@ -272,12 +278,14 @@ export function ProjectMainView() {
         />
         <div className="flex items-center px-3.5">
           <div className="flex flex-wrap items-center gap-2">
-            <PromptOptionPicker
-              label="Environment"
-              value={environmentId}
-              options={environmentSelectorOptions}
-              onChange={setEnvironmentId}
-            />
+            {environmentSelectorOptions.length > 0 ? (
+              <PromptOptionPicker
+                label="Environment"
+                value={environmentId}
+                options={environmentSelectorOptions}
+                onChange={setEnvironmentId}
+              />
+            ) : null}
             {!threadsLoading &&
             selectedEnvironment?.capabilities.host_filesystem === true &&
             selectedEnvironment.capabilities.isolated_workspace === false ? (

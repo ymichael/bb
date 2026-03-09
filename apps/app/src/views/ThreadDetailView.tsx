@@ -1285,8 +1285,8 @@ export function ThreadDetailView() {
           id: thread.id,
           input: promptInput,
           model: activeModel?.model ?? selectedModel,
-          serviceTier,
-          reasoningLevel,
+          ...(supportsServiceTier && serviceTier ? { serviceTier } : {}),
+          ...(supportsReasoningLevels ? { reasoningLevel } : {}),
           sandboxMode,
         });
         promptDraft.clear();
@@ -1301,8 +1301,8 @@ export function ThreadDetailView() {
       await sendFollowUpInput({
         input: promptInput,
         model: activeModel?.model ?? selectedModel,
-        serviceTier,
-        reasoningLevel,
+        ...(supportsServiceTier && serviceTier ? { serviceTier } : {}),
+        ...(supportsReasoningLevels ? { reasoningLevel } : {}),
         sandboxMode,
       });
       promptDraft.clear();
