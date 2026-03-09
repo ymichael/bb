@@ -40,7 +40,9 @@ async function createRepoWithThreadAheadOfMain() {
 
   commitReadme(repoRoot, "initial\n", "initial");
 
-  const environment = createWorktreeEnvironmentDefinition().create({
+  const environment = createWorktreeEnvironmentDefinition({
+    manageEnvironmentAgent: false,
+  }).create({
     projectId: `project-${suffix}`,
     threadId: `thread-${suffix}`,
     projectRootPath: repoRoot,

@@ -5,6 +5,7 @@ import { spawnSync } from "node:child_process";
 import { describe, expect, it } from "vitest";
 import {
   EnvironmentRegistry,
+  createDefaultEnvironmentRegistry,
   createDockerEnvironmentDefinition,
   createLocalEnvironmentDefinition,
   createWorktreeEnvironmentDefinition,
@@ -55,7 +56,10 @@ describe("EnvironmentRegistry", () => {
       const registry = new EnvironmentRegistry()
         .register(createLocalEnvironmentDefinition())
         .register(
-          createWorktreeEnvironmentDefinition({ worktreeRootName: ".worktrees" }),
+          createWorktreeEnvironmentDefinition({
+            worktreeRootName: ".worktrees",
+            manageEnvironmentAgent: false,
+          }),
         );
       const environment = registry.create("worktree", {
         projectId: "proj-1",
@@ -109,7 +113,7 @@ describe("EnvironmentRegistry", () => {
       )).toThrow(/Worktree workspace is unavailable/);
   });
 
-  it("creates opt-in docker environments with a wrapped provider launch target", () => {
+  it("creates docker environments with a direct environment-agent target", () => {
     const projectRoot = makeTempDir("bb-docker-env-project-");
 
     try {
@@ -146,13 +150,19 @@ describe("EnvironmentRegistry", () => {
         headers: {
           authorization: "Bearer secret-token",
         },
-        providerLaunch: {
-          command: "docker",
-          args: ["exec", "-i", "beanbag-thread-thread-1"],
-        },
       });
     } finally {
       rmSync(projectRoot, { recursive: true, force: true });
     }
+  });
+
+  it("includes docker in the default environment registry", () => {
+    const registry = createDefaultEnvironmentRegistry();
+
+    expect(registry.list().map((item) => item.id)).toEqual([
+      "local",
+      "worktree",
+      "docker",
+    ]);
   });
 });

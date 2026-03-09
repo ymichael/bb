@@ -52,11 +52,7 @@ export function createServer(deps: ServerDeps) {
   const wsManager = new WSManager();
   const provider = deps.provider ?? createProviderAdapter();
   const providerCatalog = listAvailableProviderInfos();
-  const environmentRegistry = createDefaultEnvironmentRegistry(
-    process.env.BEANBAG_ENABLE_DOCKER_ENVIRONMENT === "true"
-      ? { docker: {} }
-      : undefined,
-  );
+  const environmentRegistry = createDefaultEnvironmentRegistry();
   const environmentCatalog = listAvailableEnvironmentInfos(environmentRegistry);
   const scheduler = new InMemorySchedulerService();
   const llmCompletionService = createCodexLlmCompletionService();

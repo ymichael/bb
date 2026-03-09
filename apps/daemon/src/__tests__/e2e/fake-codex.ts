@@ -30,6 +30,23 @@ export function createFakeCodexBinDir(
   return binDir;
 }
 
+export function createFakeCodexScriptFile(
+  rootDir: string,
+  opts?: FakeCodexOptions,
+): string {
+  const settings: Required<FakeCodexOptions> = {
+    ...DEFAULT_FAKE_CODEX_OPTIONS,
+    ...opts,
+  };
+
+  const scriptDir = join(rootDir, ".beanbag-test");
+  const scriptPath = join(scriptDir, "fake-codex.cjs");
+  mkdirSync(scriptDir, { recursive: true });
+  writeFileSync(scriptPath, buildFakeCodexScript(settings), "utf-8");
+  chmodSync(scriptPath, 0o755);
+  return scriptPath;
+}
+
 function buildFakeCodexScript(settings: Required<FakeCodexOptions>): string {
   const fallbackDelay = String(settings.defaultTurnDelayMs);
   const fallbackDuplicate = settings.defaultDuplicateTurnCompletion ? "1" : "0";

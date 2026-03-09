@@ -8,7 +8,10 @@ import type {
 function toChildEnv(
   env: Record<string, string | undefined>,
 ): NodeJS.ProcessEnv {
-  return env;
+  return {
+    ...process.env,
+    ...env,
+  };
 }
 
 export function runCommand(

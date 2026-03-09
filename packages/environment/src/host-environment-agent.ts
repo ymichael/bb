@@ -7,6 +7,7 @@ import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import type { EnvironmentAgentConnectionTarget } from "@beanbag/environment-agent";
+import { resolveDockerEnvironmentAgentArtifactEntry } from "./docker-environment-agent.js";
 
 const HOST = "127.0.0.1";
 const START_TIMEOUT_MS = 5_000;
@@ -176,23 +177,31 @@ async function waitForEnvironmentAgent(baseUrl: string, authToken: string): Prom
   throw new Error(`Timed out waiting for environment-agent at ${baseUrl}`);
 }
 
-function resolveEnvironmentAgentLaunchCommand(): {
+export function resolveManagedHostEnvironmentAgentLaunchCommand(): {
   command: string;
   args: string[];
 } {
-  const localCliEntry = fileURLToPath(
-    new URL("../../../apps/cli/dist/index.js", import.meta.url),
-  );
-  if (existsSync(localCliEntry)) {
+  try {
+    const artifactEntry = resolveDockerEnvironmentAgentArtifactEntry();
     return {
       command: process.execPath,
-      args: [localCliEntry],
+      args: [artifactEntry],
+    };
+  } catch {
+    const localCliEntry = fileURLToPath(
+      new URL("../../../apps/cli/dist/index.js", import.meta.url),
+    );
+    if (existsSync(localCliEntry)) {
+      return {
+        command: process.execPath,
+        args: [localCliEntry, "environment-agent"],
+      };
+    }
+    return {
+      command: "bb",
+      args: ["environment-agent"],
     };
   }
-  return {
-    command: "bb",
-    args: [],
-  };
 }
 
 export async function ensureManagedHostEnvironmentAgent(args: {
@@ -232,12 +241,11 @@ export async function ensureManagedHostEnvironmentAgent(args: {
 
   const port = await allocatePort();
   const authToken = randomBytes(24).toString("hex");
-  const { command, args: commandArgs } = resolveEnvironmentAgentLaunchCommand();
+  const { command, args: commandArgs } = resolveManagedHostEnvironmentAgentLaunchCommand();
   const child = spawn(
     command,
     [
       ...commandArgs,
-      "environment-agent",
       "--http-host",
       HOST,
       "--http-port",

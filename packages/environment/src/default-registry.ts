@@ -24,10 +24,8 @@ export function createDefaultEnvironmentRegistry(
 ): EnvironmentRegistry {
   const registry = new EnvironmentRegistry()
     .register(createLocalEnvironmentDefinition())
-    .register(createWorktreeEnvironmentDefinition(opts?.worktree));
-  if (opts?.docker) {
-    registry.register(createDockerEnvironmentDefinition(opts.docker));
-  }
+    .register(createWorktreeEnvironmentDefinition(opts?.worktree))
+    .register(createDockerEnvironmentDefinition(opts?.docker));
   return registry;
 }
 

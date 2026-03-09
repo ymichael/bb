@@ -1,9 +1,13 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { resolveManagedHostEnvironmentAgentTarget } from "../host-environment-agent.js";
+import {
+  resolveManagedHostEnvironmentAgentLaunchCommand,
+  resolveManagedHostEnvironmentAgentTarget,
+} from "../host-environment-agent.js";
 
 const tempDirs: string[] = [];
 const cleanupPaths: string[] = [];
@@ -25,6 +29,21 @@ afterEach(() => {
 });
 
 describe("resolveManagedHostEnvironmentAgentTarget", () => {
+  it("launches the standalone environment-agent artifact directly", () => {
+    const artifactEntry = fileURLToPath(
+      new URL("../../../environment-agent/dist/environment-agent.bundle.mjs", import.meta.url),
+    );
+    mkdirSync(dirname(artifactEntry), { recursive: true });
+    if (!existsSync(artifactEntry)) {
+      writeFileSync(artifactEntry, "console.log('agent')\n", "utf8");
+    }
+
+    expect(resolveManagedHostEnvironmentAgentLaunchCommand()).toEqual({
+      command: process.execPath,
+      args: [artifactEntry],
+    });
+  });
+
   it("returns an http target when a managed agent record exists", () => {
     vi.spyOn(process, "kill").mockImplementation((_pid: number, _signal?: string | number) => {
       return true;

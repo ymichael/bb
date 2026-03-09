@@ -20,6 +20,7 @@ import { createCodexProviderAdapter } from "@beanbag/agent-server";
 import { createServer } from "../../server.js";
 import {
   createFakeCodexBinDir,
+  createFakeCodexScriptFile,
   type FakeCodexOptions,
 } from "./fake-codex.js";
 
@@ -74,6 +75,8 @@ function sleep(ms: number): Promise<void> {
 
 export interface StartDaemonE2eHarnessOptions {
   fakeCodex?: FakeCodexOptions;
+  useWorkspaceFakeCodex?: boolean;
+  initGitRepo?: boolean;
 }
 
 export interface DaemonE2eHarness {
@@ -93,10 +96,41 @@ export async function startDaemonE2eHarness(
   const tempDir = mkdtempSync(join(tmpdir(), "beanbag-daemon-e2e-"));
   const projectRoot = join(tempDir, "project");
   mkdirSync(projectRoot, { recursive: true });
+  if (opts?.initGitRepo) {
+    execFileSync("git", ["init", "-b", "main"], {
+      cwd: projectRoot,
+      stdio: "pipe",
+    });
+    execFileSync("git", ["config", "user.name", "Beanbag Test"], {
+      cwd: projectRoot,
+      stdio: "pipe",
+    });
+    execFileSync("git", ["config", "user.email", "beanbag-test@example.com"], {
+      cwd: projectRoot,
+      stdio: "pipe",
+    });
+    execFileSync("git", ["commit", "--allow-empty", "-m", "init"], {
+      cwd: projectRoot,
+      stdio: "pipe",
+    });
+  }
 
   const dbPath = join(tempDir, "beanbag.db");
   const fakeCodexBinDir = createFakeCodexBinDir(tempDir, opts?.fakeCodex);
   const fakeCodexCommand = join(fakeCodexBinDir, "codex");
+  const workspaceFakeCodexPath = opts?.useWorkspaceFakeCodex
+    ? createFakeCodexScriptFile(projectRoot, opts.fakeCodex)
+    : undefined;
+  if (workspaceFakeCodexPath && opts?.initGitRepo) {
+    execFileSync("git", ["add", ".beanbag-test/fake-codex.cjs"], {
+      cwd: projectRoot,
+      stdio: "pipe",
+    });
+    execFileSync("git", ["commit", "-m", "add fake codex"], {
+      cwd: projectRoot,
+      stdio: "pipe",
+    });
+  }
   const previousPath = process.env.PATH;
   process.env.PATH = prependPathEntry(previousPath, fakeCodexBinDir);
 
@@ -117,8 +151,10 @@ export async function startDaemonE2eHarness(
       threadRepo,
       eventRepo,
       provider: createCodexProviderAdapter({
-        processCommand: fakeCodexCommand,
-        processArgs: ["app-server"],
+        processCommand: workspaceFakeCodexPath ? "node" : fakeCodexCommand,
+        processArgs: workspaceFakeCodexPath
+          ? ["/workspace/.beanbag-test/fake-codex.cjs", "app-server"]
+          : ["app-server"],
       }),
     });
 
