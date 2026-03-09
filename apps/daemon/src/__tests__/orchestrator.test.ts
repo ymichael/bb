@@ -856,6 +856,179 @@ describe("Orchestrator", () => {
       ]);
     });
 
+    it("resumes active threads on boot when provider state is still available", async () => {
+      const {
+        bootManager,
+        bootEventRepo,
+        bootProjectRepo,
+        bootThreadRepo,
+        threadState,
+      } = createBootManager([
+        makeThread({ id: "boot-active", status: "active" }),
+      ]);
+
+      (bootProjectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue({
+        id: "proj-1",
+        name: "Test",
+        rootPath: "/test",
+        createdAt: 1000,
+        updatedAt: 1000,
+      });
+      (bootEventRepo.getLatestProviderThreadId as unknown as ReturnType<typeof vi.fn>) = vi
+        .fn()
+        .mockReturnValue("persisted-thread-1");
+      (bootEventRepo.getLatestTurnLifecycle as unknown as ReturnType<typeof vi.fn>) = vi
+        .fn()
+        .mockReturnValue({
+          normType: "turn/started",
+          turnId: "turn-1",
+        });
+
+      const resumeChild = createFakeChildProcess({ autoRespond: false });
+      resumeChild.stdin = new Writable({
+        write(chunk: Buffer, _encoding: string, callback: () => void) {
+          const data = chunk.toString();
+          resumeChild._stdinData.push(data);
+          try {
+            const msg = JSON.parse(data.trim());
+            if (msg.environmentAgentMessage === true && msg.requestId) {
+              if (msg.type === "provider.ensure") {
+                process.nextTick(() => {
+                  resumeChild.stdout!.push(
+                    JSON.stringify({
+                      environmentAgentMessage: true,
+                      requestId: msg.requestId,
+                      type: "provider.ensure.response",
+                      payload: {
+                        running: true,
+                        launched: true,
+                        pid: 12345,
+                      },
+                    }) + "\n",
+                  );
+                });
+              } else if (msg.type === "replay") {
+                process.nextTick(() => {
+                  resumeChild.stdout!.push(
+                    JSON.stringify({
+                      environmentAgentMessage: true,
+                      requestId: msg.requestId,
+                      type: "replay.response",
+                      payload: {
+                        protocolVersion: 1,
+                        fromSequenceExclusive: msg.payload?.afterSequence ?? 0,
+                        toSequenceInclusive: msg.payload?.afterSequence ?? 0,
+                        events: [],
+                        hasMore: false,
+                      },
+                    }) + "\n",
+                  );
+                });
+              } else if (msg.type === "ack") {
+                process.nextTick(() => {
+                  resumeChild.stdout!.push(
+                    JSON.stringify({
+                      environmentAgentMessage: true,
+                      requestId: msg.requestId,
+                      type: "ack.response",
+                      payload: {
+                        protocolVersion: 1,
+                        acknowledgedSequence: msg.payload?.sequence ?? 0,
+                      },
+                    }) + "\n",
+                  );
+                });
+              } else if (msg.type === "status") {
+                process.nextTick(() => {
+                  resumeChild.stdout!.push(
+                    JSON.stringify({
+                      environmentAgentMessage: true,
+                      requestId: msg.requestId,
+                      type: "status.response",
+                      payload: {
+                        protocolVersion: 1,
+                        latestSequence: 0,
+                        connectedToDaemon: true,
+                        pendingEventCount: 0,
+                        pendingCommandCount: 0,
+                      },
+                    }) + "\n",
+                  );
+                });
+              }
+              callback();
+              return;
+            }
+            if (msg.method === "thread/resume" && msg.id) {
+              process.nextTick(() => {
+                resumeChild.stdout!.push(
+                  JSON.stringify({
+                    id: msg.id,
+                    result: {
+                      thread: { id: "persisted-thread-1" },
+                      model: "test-model",
+                    },
+                  }) + "\n",
+                );
+              });
+            }
+          } catch {}
+          callback();
+        },
+      });
+
+      vi.spyOn(
+        bootManager as unknown as {
+          _spawnProcess: (
+            threadId: string,
+            projectRootPath: string,
+            environmentKind: string,
+            reason: string,
+          ) => Promise<{
+            environment: IEnvironment;
+            agentConnectionTarget: {
+              transport: "command-stdio";
+              command: string;
+              args: string[];
+              cwd: string;
+              env: Record<string, string | undefined>;
+            };
+            connectSession: () => { transport: "child_process"; child: ChildProcess };
+          }>;
+        },
+        "_spawnProcess",
+      ).mockResolvedValue({
+        environment: makeRuntimeEnvironment({ rootPath: "/test" }),
+        agentConnectionTarget: {
+          transport: "command-stdio",
+          command: "bb",
+          args: ["environment-agent"],
+          cwd: "/test",
+          env: {},
+        },
+        connectSession: () => ({
+          transport: "child_process",
+          child: resumeChild,
+        }),
+      });
+
+      await bootManager.reconcileActiveThreadsOnBoot();
+
+      expect(threadState.get("boot-active")?.status).toBe("active");
+      expect(bootThreadRepo.update).not.toHaveBeenCalledWith(
+        "boot-active",
+        { status: "idle" },
+        { touchUpdatedAt: false },
+      );
+      expect(resumeChild._stdinData.some((line) => {
+        try {
+          return JSON.parse(line.trim()).method === "thread/resume";
+        } catch {
+          return false;
+        }
+      })).toBe(true);
+    });
+
     it("applies the restart policy matrix across persisted thread statuses", async () => {
       const {
         bootManager,
