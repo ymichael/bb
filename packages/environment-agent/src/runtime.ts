@@ -115,6 +115,7 @@ export class EnvironmentAgentRuntime {
       event,
     };
     this.events.push(envelope);
+    this.writeLiveEvent(envelope);
     return envelope;
   }
 
@@ -247,6 +248,16 @@ export class EnvironmentAgentRuntime {
         environmentAgentMessage: true,
         requestId,
         type,
+        payload,
+      })}\n`,
+    );
+  }
+
+  private writeLiveEvent(payload: EnvironmentAgentEventEnvelope): void {
+    process.stdout.write(
+      `${JSON.stringify({
+        environmentAgentMessage: true,
+        type: "event.emitted",
         payload,
       })}\n`,
     );

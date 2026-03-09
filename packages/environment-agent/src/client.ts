@@ -6,9 +6,11 @@ import {
 } from "./transport.js";
 import {
   isEnvironmentAgentControlResponse,
+  isEnvironmentAgentLiveEventMessage,
   type EnvironmentAgentAckRequest,
   type EnvironmentAgentAckResponse,
   type EnvironmentAgentControlRequest,
+  type EnvironmentAgentEventEnvelope,
   type EnvironmentAgentReplayRequest,
   type EnvironmentAgentReplayResponse,
   type EnvironmentAgentStatusSnapshot,
@@ -29,6 +31,7 @@ export interface EnvironmentAgentClient {
   acknowledge(request: EnvironmentAgentAckRequest): Promise<EnvironmentAgentAckResponse>;
   replay(request: EnvironmentAgentReplayRequest): Promise<EnvironmentAgentReplayResponse>;
   status(): Promise<EnvironmentAgentStatusSnapshot>;
+  getLatestObservedSequence(): number;
   close(reason?: Error): void;
 }
 
@@ -44,6 +47,7 @@ class EnvironmentAgentClientImpl implements EnvironmentAgentClient {
   private providerHandlers: JsonLineTransportHandlers | undefined;
   private readonly pending = new Map<string, PendingControlRequest>();
   private requestCounter = 0;
+  private latestObservedSequence = 0;
   private closed = false;
 
   constructor(private readonly transport: JsonLineTransport) {
@@ -92,6 +96,10 @@ class EnvironmentAgentClientImpl implements EnvironmentAgentClient {
     });
   }
 
+  getLatestObservedSequence(): number {
+    return this.latestObservedSequence;
+  }
+
   close(reason?: Error): void {
     if (this.closed) return;
     this.closed = true;
@@ -109,6 +117,11 @@ class EnvironmentAgentClientImpl implements EnvironmentAgentClient {
 
   private handleLine(line: string): void {
     const parsed = parseJson(line);
+    if (parsed && isEnvironmentAgentLiveEventMessage(parsed)) {
+      this.recordObservedEvent(parsed.payload);
+      return;
+    }
+
     if (!parsed || !isEnvironmentAgentControlResponse(parsed)) {
       this.providerHandlers?.onLine(line);
       return;
@@ -118,6 +131,10 @@ class EnvironmentAgentClientImpl implements EnvironmentAgentClient {
     if (!pending) return;
     this.pending.delete(parsed.requestId);
     pending.resolve(parsed.payload);
+  }
+
+  private recordObservedEvent(event: EnvironmentAgentEventEnvelope): void {
+    this.latestObservedSequence = Math.max(this.latestObservedSequence, event.sequence);
   }
 
   private request<TResponse>(

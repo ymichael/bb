@@ -223,6 +223,12 @@ export type EnvironmentAgentControlResponse =
       payload: EnvironmentAgentStatusSnapshot;
     });
 
+export interface EnvironmentAgentLiveEventMessage {
+  environmentAgentMessage: true;
+  type: "event.emitted";
+  payload: EnvironmentAgentEventEnvelope;
+}
+
 function asRecord(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   return value as Record<string, unknown>;
@@ -252,4 +258,13 @@ export function isEnvironmentAgentControlResponse(
     type === "replay.response" ||
     type === "status.response"
   );
+}
+
+export function isEnvironmentAgentLiveEventMessage(
+  value: unknown,
+): value is EnvironmentAgentLiveEventMessage {
+  const record = asRecord(value);
+  if (!record) return false;
+  if (record.environmentAgentMessage !== true) return false;
+  return record.type === "event.emitted";
 }

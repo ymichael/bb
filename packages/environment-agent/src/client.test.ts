@@ -89,4 +89,28 @@ describe("EnvironmentAgentClient", () => {
       '{"jsonrpc":"2.0","method":"turn/started","params":{}}',
     );
   });
+
+  it("tracks the latest observed event sequence from live event envelopes", () => {
+    const transport = createFakeTransport();
+    const client = createEnvironmentAgentClient(transport);
+
+    transport.emitStdout(
+      JSON.stringify({
+        environmentAgentMessage: true,
+        type: "event.emitted",
+        payload: {
+          protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+          sequence: 4,
+          emittedAt: 1000,
+          threadId: "thread-1",
+          event: {
+            type: "environment.ready",
+            threadId: "thread-1",
+          },
+        },
+      }),
+    );
+
+    expect(client.getLatestObservedSequence()).toBe(4);
+  });
 });

@@ -89,6 +89,7 @@ interface ManagedSession {
   runtime: ProviderRuntime;
   providerThreadId?: string;
   activeTurnId?: string;
+  lastAckedEnvironmentSequence?: number;
 }
 
 function toProviderEventType(method: string): ThreadEventType {
@@ -298,6 +299,7 @@ export class AgentServer {
         params,
       );
       session.providerThreadId = providerThreadId;
+      await this.acknowledgeLatestEnvironmentSequence(args.threadId, session);
       return { providerThreadId };
     } catch (error) {
       this.disposeSession(args.threadId);
@@ -327,6 +329,7 @@ export class AgentServer {
         ),
       );
       session.providerThreadId = providerThreadId;
+      await this.acknowledgeLatestEnvironmentSequence(args.threadId, session);
       return { providerThreadId };
     } catch (error) {
       this.disposeSession(args.threadId);
@@ -662,6 +665,31 @@ export class AgentServer {
       ...(turnState ? { turnState } : {}),
       ...(turnId ? { turnId } : {}),
     });
+
+    void this.acknowledgeLatestEnvironmentSequence(threadId, session).catch((error) => {
+      this.opts.logger?.warn(
+        `[thread ${threadId}] Failed to acknowledge environment-agent sequence: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    });
+  }
+
+  private async acknowledgeLatestEnvironmentSequence(
+    threadId: string,
+    session: ManagedSession | undefined,
+  ): Promise<void> {
+    if (!session) return;
+    const latestObservedSequence = session.agentClient.getLatestObservedSequence();
+    if (latestObservedSequence <= 0) return;
+    if ((session.lastAckedEnvironmentSequence ?? 0) >= latestObservedSequence) return;
+
+    const response = await session.agentClient.acknowledge({
+      protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+      sequence: latestObservedSequence,
+      threadId,
+    });
+    session.lastAckedEnvironmentSequence = response.acknowledgedSequence;
   }
 
   private handleProviderStderrLine(threadId: string, line: string): void {

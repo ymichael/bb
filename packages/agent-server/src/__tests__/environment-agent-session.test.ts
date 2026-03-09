@@ -2,7 +2,7 @@ import { EventEmitter } from "node:events";
 import type { ChildProcess } from "node:child_process";
 import { Readable, Writable } from "node:stream";
 import { describe, expect, it, vi } from "vitest";
-import { ENVIRONMENT_AGENT_PROTOCOL_VERSION } from "@beanbag/environment-agent";
+import { ENVIRONMENT_AGENT_PROTOCOL_VERSION } from "../../../environment-agent/src/index.js";
 import { AgentServer } from "../agent-server.js";
 import { createCodexProviderAdapter } from "../codex-provider-adapter.js";
 
@@ -11,16 +11,19 @@ type FakeChildProcess = Omit<ChildProcess, "stdout" | "stderr" | "stdin"> & {
   stdout: Readable;
   stderr: Readable;
   _emitExit: (code: number | null, signal: string | null) => void;
+  _stdinLines: string[];
 };
 
 function createFakeChildProcess(): FakeChildProcess {
   const child = new EventEmitter() as unknown as FakeChildProcess;
+  const stdinLines: string[] = [];
 
   child.stdout = new Readable({ read() {} });
   child.stderr = new Readable({ read() {} });
   child.stdin = new Writable({
     write(chunk: Buffer, _encoding, callback) {
       const line = chunk.toString().trim();
+      stdinLines.push(line);
       if (!line) {
         callback();
         return;
@@ -111,6 +114,26 @@ function createFakeChildProcess(): FakeChildProcess {
       }
 
       if (record.jsonrpc === "2.0" && typeof record.id !== "undefined") {
+        if (record.method === "thread/start") {
+          process.nextTick(() => {
+            child.stdout.push(
+              JSON.stringify({
+                environmentAgentMessage: true,
+                type: "event.emitted",
+                payload: {
+                  protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+                  sequence: 1,
+                  emittedAt: 999,
+                  threadId: "thread-1",
+                  event: {
+                    type: "environment.ready",
+                    threadId: "thread-1",
+                  },
+                },
+              }) + "\n",
+            );
+          });
+        }
         process.nextTick(() => {
           child.stdout.push(
             JSON.stringify({
@@ -140,6 +163,7 @@ function createFakeChildProcess(): FakeChildProcess {
     configurable: true,
   });
   child.kill = vi.fn();
+  child._stdinLines = stdinLines;
   child._emitExit = (code: number | null, signal: string | null) => {
     Object.defineProperty(child, "exitCode", {
       value: code,
@@ -203,5 +227,9 @@ describe("AgentServer environment-agent control plane", () => {
       acknowledgedSequence: 3,
       threadId: "thread-1",
     });
+
+    expect(
+      child._stdinLines.some((line) => line.includes('"type":"ack"') && line.includes('"sequence":1')),
+    ).toBe(true);
   });
 });

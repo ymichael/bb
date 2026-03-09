@@ -17,11 +17,13 @@ export type {
   EnvironmentAgentStatusSnapshot,
   EnvironmentAgentControlRequest,
   EnvironmentAgentControlResponse,
+  EnvironmentAgentLiveEventMessage,
 } from "./protocol.js";
 export { ENVIRONMENT_AGENT_PROTOCOL_VERSION } from "./protocol.js";
 export {
   isEnvironmentAgentControlRequest,
   isEnvironmentAgentControlResponse,
+  isEnvironmentAgentLiveEventMessage,
 } from "./protocol.js";
 
 export type {
