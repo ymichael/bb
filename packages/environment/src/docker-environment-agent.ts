@@ -216,6 +216,54 @@ function executeOrThrow(args: {
   }
 }
 
+export function ensureDockerEnvironmentImageAvailable(
+  args: {
+    dockerBin: string;
+    image: string;
+    runtimeEnv: Record<string, string | undefined>;
+    cwd: string;
+  },
+  deps?: {
+    run?: CommandExecutor;
+    resolveAssetsRoot?: () => string;
+  },
+): void {
+  const executor = deps?.run ?? runCommand;
+  const inspectResult = executor(
+    args.dockerBin,
+    ["image", "inspect", args.image],
+    {
+      cwd: args.cwd,
+      env: args.runtimeEnv,
+      rawOutput: true,
+    },
+  );
+  if (inspectResult.exitCode === 0) {
+    return;
+  }
+
+  if (args.image !== DEFAULT_DOCKER_ENVIRONMENT_IMAGE) {
+    throw new Error(
+      `Docker image ${args.image} is unavailable. Build or pull it first, or use ${DEFAULT_DOCKER_ENVIRONMENT_IMAGE}.`,
+    );
+  }
+
+  const assetsRoot = (deps?.resolveAssetsRoot ?? resolveDefaultDockerEnvironmentAssetsRoot)();
+  executeOrThrow({
+    executor,
+    command: args.dockerBin,
+    commandArgs: [
+      "build",
+      "-t",
+      args.image,
+      assetsRoot,
+    ],
+    cwd: args.cwd,
+    env: args.runtimeEnv,
+    description: `build docker image ${args.image}`,
+  });
+}
+
 export async function ensureManagedDockerEnvironmentAgent(
   args: {
     workspaceRootPath: string;

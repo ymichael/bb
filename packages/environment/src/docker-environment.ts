@@ -28,6 +28,7 @@ import type {
 import {
   DEFAULT_DOCKER_ENVIRONMENT_AGENT_CONTAINER_PORT,
   disposeManagedDockerEnvironmentAgent,
+  ensureDockerEnvironmentImageAvailable,
   ensureManagedDockerEnvironmentAgent,
   resolveDockerEnvironmentImage,
   resolveManagedDockerEnvironmentAgentTarget,
@@ -175,6 +176,12 @@ class DockerEnvironment implements IEnvironment {
 
   async prepare(): Promise<void> {
     await this.inner.prepare?.();
+    ensureDockerEnvironmentImageAvailable({
+      dockerBin: this.dockerBin,
+      image: this.state.image,
+      runtimeEnv: this.runtimeEnv,
+      cwd: this.getWorkspaceRootUnsafe(),
+    });
     if (!this.state.agentHostPort) {
       this.state.agentHostPort = await allocatePort();
     }

@@ -12,6 +12,7 @@ import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   DEFAULT_DOCKER_ENVIRONMENT_IMAGE,
+  ensureDockerEnvironmentImageAvailable,
   ensureManagedDockerEnvironmentAgent,
   resolveDefaultDockerEnvironmentAssetsRoot,
   resolveDockerEnvironmentAgentArtifactEntry,
@@ -71,6 +72,75 @@ describe("docker environment-agent helper", () => {
         runtimeEnv: {},
       }),
     ).toBe(DEFAULT_DOCKER_ENVIRONMENT_IMAGE);
+  });
+
+  it("builds the default local image when it is missing", () => {
+    const commands: Array<{ command: string; args: string[] }> = [];
+
+    ensureDockerEnvironmentImageAvailable(
+      {
+        dockerBin: "docker",
+        image: DEFAULT_DOCKER_ENVIRONMENT_IMAGE,
+        runtimeEnv: {},
+        cwd: "/tmp/workspace",
+      },
+      {
+        run(command, args) {
+          commands.push({ command, args });
+          if (args[0] === "image" && args[1] === "inspect") {
+            return {
+              exitCode: 1,
+              stdout: "",
+              stderr: "missing",
+            };
+          }
+          return {
+            exitCode: 0,
+            stdout: "",
+            stderr: "",
+          };
+        },
+        resolveAssetsRoot: () => "/repo/packages/environment/docker",
+      },
+    );
+
+    expect(commands).toEqual([
+      {
+        command: "docker",
+        args: ["image", "inspect", DEFAULT_DOCKER_ENVIRONMENT_IMAGE],
+      },
+      {
+        command: "docker",
+        args: [
+          "build",
+          "-t",
+          DEFAULT_DOCKER_ENVIRONMENT_IMAGE,
+          "/repo/packages/environment/docker",
+        ],
+      },
+    ]);
+  });
+
+  it("fails fast when a custom docker image is missing", () => {
+    expect(() =>
+      ensureDockerEnvironmentImageAvailable(
+        {
+          dockerBin: "docker",
+          image: "custom/environment:dev",
+          runtimeEnv: {},
+          cwd: "/tmp/workspace",
+        },
+        {
+          run() {
+            return {
+              exitCode: 1,
+              stdout: "",
+              stderr: "missing",
+            };
+          },
+        },
+      ),
+    ).toThrow(/custom\/environment:dev/);
   });
 
   it("installs and starts the environment-agent in the container", async () => {
