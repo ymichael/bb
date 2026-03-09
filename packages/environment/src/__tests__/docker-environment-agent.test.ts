@@ -1,4 +1,11 @@
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -36,6 +43,12 @@ describe("docker environment-agent helper", () => {
     const assetsRoot = resolveDefaultDockerEnvironmentAssetsRoot();
 
     expect(existsSync(join(assetsRoot, "Dockerfile"))).toBe(true);
+    const dockerfile = readFileSync(join(assetsRoot, "Dockerfile"), "utf8");
+    expect(dockerfile).toContain("FROM node:22-bookworm-slim");
+    expect(dockerfile).toContain("git");
+    expect(dockerfile).toContain("docker-ce-cli");
+    expect(dockerfile).toContain("curl -fsSL https://bun.sh/install | bash");
+    expect(dockerfile).toContain("corepack prepare pnpm@9.15.0 --activate");
   });
 
   it("resolves the built environment-agent artifact entry", () => {
