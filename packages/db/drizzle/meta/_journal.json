@@ -169,6 +169,13 @@
       "when": 1773100800000,
       "tag": "0023_thread_queue_service_tier",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "6",
+      "when": 1773101400000,
+      "tag": "0024_thread_environment_agent_cursor",
+      "breakpoints": true
     }
   ]
 }

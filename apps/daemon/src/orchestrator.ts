@@ -2517,7 +2517,14 @@ export class Orchestrator implements ThreadOrchestrator {
   private async _replayBufferedEnvironmentAgentEvents(
     threadId: string,
   ): Promise<void> {
-    const afterSequence = this.environmentAgentReplayCursorByThreadId.get(threadId) ?? 0;
+    const persistedCursor =
+      (
+        this.threadRepo.getById(threadId) as
+          | (Thread & { environmentAgentCursor?: number })
+          | undefined
+      )?.environmentAgentCursor ?? 0;
+    const afterSequence =
+      this.environmentAgentReplayCursorByThreadId.get(threadId) ?? persistedCursor;
     const replay = await this.agentServer.replayEnvironmentAgentEvents({
       threadId,
       afterSequence,
@@ -2528,9 +2535,21 @@ export class Orchestrator implements ThreadOrchestrator {
         events: replay.events,
       });
     }
-    this.environmentAgentReplayCursorByThreadId.set(
+    this._setEnvironmentAgentReplayCursor(
       threadId,
       Math.max(afterSequence, replay.toSequenceInclusive),
+    );
+  }
+
+  private _setEnvironmentAgentReplayCursor(
+    threadId: string,
+    sequence: number,
+  ): void {
+    this.environmentAgentReplayCursorByThreadId.set(threadId, sequence);
+    this.threadRepo.update(
+      threadId,
+      { environmentAgentCursor: sequence } as { environmentAgentCursor: number },
+      { touchUpdatedAt: false },
     );
   }
 
