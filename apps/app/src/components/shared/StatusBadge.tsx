@@ -1,6 +1,6 @@
 import type { ThreadStatus } from "@beanbag/agent-core";
+import { StatusPill, type StatusPillVariant } from "@beanbag/ui-core";
 import { formatSnakeCaseLabel } from "@/lib/formatting";
-import { StatusPill, type StatusPillVariant } from "./StatusPill";
 
 type Status = ThreadStatus;
 

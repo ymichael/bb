@@ -1,5 +1,5 @@
 import { assertNever, type ThreadWorkStatus } from "@beanbag/agent-core";
-import type { StatusPillVariant } from "@/components/shared/StatusPill";
+import type { StatusPillVariant } from "@beanbag/ui-core";
 import { formatDirtyWorkspaceLabel } from "@/lib/workspace-change-summary";
 
 export function threadWorktreeCleanLabel(

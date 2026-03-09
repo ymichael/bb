@@ -1,15 +1,15 @@
 import { useMemo } from "react";
-import { ExpandablePanel } from "@beanbag/ui-core";
+import {
+  COLLAPSIBLE_HEADER_STATIC_TONE_CLASS,
+  COLLAPSIBLE_HEADER_TEXT_CLASS,
+  ExpandablePanel,
+  getCollapsibleHeaderToneClass,
+} from "@beanbag/ui-core";
 import {
   assertNever,
   type UIToolExploringMessage,
   type UIToolParsedIntent,
 } from "@beanbag/agent-core";
-import {
-  COLLAPSIBLE_HEADER_STATIC_TONE_CLASS,
-  COLLAPSIBLE_HEADER_TEXT_CLASS,
-  getCollapsibleHeaderToneClass,
-} from "@/components/messages/CollapsibleHeader";
 import {
   EVENT_DETAIL_MAX_HEIGHT_CLASS,
   renderShimmeringSummary,

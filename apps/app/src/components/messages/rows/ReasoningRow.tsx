@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
-import { ExpandablePanel } from "@beanbag/ui-core";
-import type { UIAssistantReasoningMessage } from "@beanbag/agent-core";
 import {
   COLLAPSIBLE_HEADER_STATIC_TONE_CLASS,
+  ExpandablePanel,
   getCollapsibleHeaderToneClass,
-} from "@/components/messages/CollapsibleHeader";
+} from "@beanbag/ui-core";
+import type { UIAssistantReasoningMessage } from "@beanbag/agent-core";
 import { ConversationMarkdown } from "../ConversationMarkdown";
 
 function getReasoningTitle(reasoning: string): string {

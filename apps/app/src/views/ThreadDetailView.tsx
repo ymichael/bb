@@ -32,9 +32,6 @@ import {
 import {
   ConversationEntry,
 } from "@/components/messages/ConversationEntry";
-import {
-  getCollapsibleHeaderToneClass,
-} from "@/components/messages/CollapsibleHeader";
 import { ConversationWorkingIndicator } from "@/components/messages/ConversationWorkingIndicator";
 import { Button } from "@/components/ui/button";
 import { useAutoScroll } from "@/hooks/useAutoScroll";
@@ -44,12 +41,16 @@ import { usePromptDraftStorage } from "@/hooks/usePromptDraftStorage";
 import { usePromptFileMentions } from "@/hooks/usePromptFileMentions";
 import { usePreferredTheme } from "@/hooks/useTheme";
 import { PageShell } from "@/components/layout/PageShell";
-import { DetailCard, DetailRow } from "@/components/shared/DetailCard";
 import {
   DEFAULT_SCROLL_STICK_THRESHOLD_PX,
+  DetailCard,
+  DetailRow,
   ConversationEmptyState,
   ConversationTimeline,
   ExpandablePanel,
+  getCollapsibleHeaderToneClass,
+  StatusPill,
+  type StatusPillVariant,
 } from "@beanbag/ui-core";
 import {
   formatEnvironmentDisplayName,
@@ -73,7 +74,6 @@ import {
 import { HttpError } from "@/lib/api";
 import { getAutoArchivePreferences } from "@/lib/auto-archive-preferences";
 import { StatusPillCommitPopover } from "@/components/shared/StatusPillCommitPopover";
-import { StatusPill, type StatusPillVariant } from "@/components/shared/StatusPill";
 import { ArchiveTimestampAction } from "@/components/shared/ArchiveTimestampAction";
 import {
   threadWorktreeCleanLabel,

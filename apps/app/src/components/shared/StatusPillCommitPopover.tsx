@@ -1,6 +1,11 @@
 import { useState } from "react";
 import { assertNever, type ThreadWorkStatus } from "@beanbag/agent-core";
-import { EventMetaItem, EventMetaList } from "@beanbag/ui-core";
+import {
+  EventMetaItem,
+  EventMetaList,
+  StatusPill,
+  type StatusPillVariant,
+} from "@beanbag/ui-core";
 import { PromptOptionPicker } from "@/components/promptbox/PromptOptionPicker";
 import { Button } from "@/components/ui/button";
 import {
@@ -13,7 +18,6 @@ import {
   formatWorkspaceChangedFilesLabel,
   hasWorkspaceLineChanges,
 } from "@/lib/workspace-change-summary";
-import { StatusPill, type StatusPillVariant } from "./StatusPill";
 import { WorkspaceChangesList } from "./WorkspaceChangesList";
 
 export function StatusPillCommitPopover({

@@ -69,7 +69,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { StatusPill } from "@/components/shared/StatusPill"
+import { StatusPill } from "@beanbag/ui-core"
 import { toast } from "sonner"
 
 interface ProjectListProps {

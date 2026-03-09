@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { PatchDiff } from "@pierre/diffs/react";
 import type { UIFileEditMessage } from "@beanbag/agent-core";
-import { ExpandablePanel } from "@beanbag/ui-core";
 import {
   CollapsibleHeader,
   COLLAPSIBLE_HEADER_TEXT_CLASS,
+  ExpandablePanel,
   getCollapsibleHeaderToneClass,
-} from "@/components/messages/CollapsibleHeader";
+} from "@beanbag/ui-core";
 import { usePreferredTheme } from "@/hooks/useTheme";
 import {
   renderShimmeringSummary,

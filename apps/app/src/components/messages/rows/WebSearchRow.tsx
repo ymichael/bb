@@ -1,5 +1,5 @@
 import type { UIWebSearchMessage } from "@beanbag/agent-core";
-import { COLLAPSIBLE_HEADER_STATIC_TONE_CLASS } from "@/components/messages/CollapsibleHeader";
+import { COLLAPSIBLE_HEADER_STATIC_TONE_CLASS } from "@beanbag/ui-core";
 import { renderShimmeringSummary } from "./shared";
 
 export function WebSearchRow({

@@ -5,8 +5,8 @@ import { PromptBox } from "@/components/promptbox/PromptBox";
 import { PromptModelPicker } from "@/components/promptbox/PromptModelPicker";
 import { PromptOptionPicker } from "@/components/promptbox/PromptOptionPicker";
 import { PageShell } from "@/components/layout/PageShell";
-import { type StatusPillVariant } from "@/components/shared/StatusPill";
 import { StatusPillCommitPopover } from "@/components/shared/StatusPillCommitPopover";
+import { type StatusPillVariant } from "@beanbag/ui-core";
 import {
   useProjectWorkspaceStatus,
   useProjects,

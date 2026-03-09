@@ -1,4 +1,14 @@
-import { ExpandablePanel, EventCodeBlock, EventMetaItem, EventMetaList } from "@beanbag/ui-core";
+import {
+  COLLAPSIBLE_HEADER_STATIC_TONE_CLASS,
+  COLLAPSIBLE_HEADER_TEXT_CLASS,
+  ExpandablePanel,
+  EventCodeBlock,
+  EventMetaItem,
+  EventMetaList,
+  StatusPill,
+  type StatusPillVariant,
+  getCollapsibleHeaderToneClass,
+} from "@beanbag/ui-core";
 import {
   assertNever,
   formatEnvironmentDisplayName,
@@ -6,12 +16,6 @@ import {
   type UIProvisioningSetupMetadata,
 } from "@beanbag/agent-core";
 import { OpenPathButton } from "@/components/shared/OpenPathButton";
-import { StatusPill, type StatusPillVariant } from "@/components/shared/StatusPill";
-import {
-  COLLAPSIBLE_HEADER_STATIC_TONE_CLASS,
-  COLLAPSIBLE_HEADER_TEXT_CLASS,
-  getCollapsibleHeaderToneClass,
-} from "@/components/messages/CollapsibleHeader";
 import { resolveWorkspaceAbsolutePath } from "@/lib/workspace-path";
 import {
   EVENT_DETAIL_MAX_HEIGHT_CLASS,

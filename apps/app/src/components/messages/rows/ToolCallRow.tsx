@@ -1,6 +1,5 @@
-import { ExpandablePanel } from "@beanbag/ui-core";
+import { ExpandablePanel, getCollapsibleHeaderToneClass } from "@beanbag/ui-core";
 import type { UIToolCallMessage } from "@beanbag/agent-core";
-import { getCollapsibleHeaderToneClass } from "@/components/messages/CollapsibleHeader";
 import {
   renderShimmeringSummary,
   useLatestInitialExpanded,
