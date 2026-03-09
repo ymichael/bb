@@ -3904,6 +3904,111 @@ describe("Orchestrator", () => {
       );
     });
 
+    it("steers into the active turn after replaying buffered resume events", async () => {
+      const input = [{ type: "text" as const, text: "Continue the in-flight turn" }];
+      const thread = makeThread({
+        id: "thread-1",
+        projectId: "proj-1",
+        status: "idle",
+        environmentAgentCursor: 0,
+      } as Thread & { environmentAgentCursor: number }) as Thread & {
+        environmentAgentCursor: number;
+      };
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockImplementation(
+        (threadId: string) => (threadId === "thread-1" ? thread : undefined),
+      );
+      (threadRepo.update as ReturnType<typeof vi.fn>).mockImplementation(
+        (_threadId: string, updates: Partial<Thread> & { environmentAgentCursor?: number }) => {
+          Object.assign(thread, updates);
+          return thread;
+        },
+      );
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue({
+        id: "proj-1",
+        name: "Test",
+        rootPath: "/test",
+        createdAt: 1000,
+        updatedAt: 1000,
+      });
+      (eventRepo).getLatestProviderThreadId = vi
+        .fn()
+        .mockReturnValue("persisted-thread-1");
+
+      const resumeChild = createFakeChildProcess({ autoRespond: false });
+      resumeChild.stdin = new Writable({
+        write(chunk: Buffer, _encoding: string, callback: () => void) {
+          const data = chunk.toString();
+          resumeChild._stdinData.push(data);
+          try {
+            const msg = JSON.parse(data.trim());
+            if (respondToEnvironmentAgentControlMessage(resumeChild, msg)) {
+              callback();
+              return;
+            }
+            if (msg.method === "thread/resume" && msg.id) {
+              process.nextTick(() => {
+                resumeChild.stdout!.push(
+                  JSON.stringify({
+                    id: msg.id,
+                    result: {
+                      thread: { id: "persisted-thread-1" },
+                      model: "test-model",
+                    },
+                  }) + "\n",
+                );
+              });
+            }
+          } catch {}
+          callback();
+        },
+      });
+
+      (spawnMock as ReturnType<typeof vi.fn>).mockReturnValueOnce(resumeChild);
+
+      const replaySpy = vi
+        .spyOn(
+          (manager as unknown as { agentServer: { replayEnvironmentAgentEvents: (args: unknown) => Promise<unknown> } }).agentServer,
+          "replayEnvironmentAgentEvents",
+        )
+        .mockResolvedValue({
+          fromSequenceExclusive: 0,
+          toSequenceInclusive: 3,
+          hasMore: false,
+          events: [
+            {
+              protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+              sequence: 3,
+              emittedAt: 1_003,
+              threadId: "thread-1",
+              event: {
+                type: "provider.event",
+                threadId: "thread-1",
+                method: "turn/started",
+                payload: { turnId: "turn-buffered" },
+              },
+            },
+          ],
+        });
+
+      await expect(manager.tell("thread-1", { input })).resolves.toBeUndefined();
+
+      expect(replaySpy).toHaveBeenCalledWith({
+        threadId: "thread-1",
+        afterSequence: 0,
+      });
+      const sentMethods = resumeChild._stdinData.map((line) => {
+        try {
+          return JSON.parse(line.trim()).method as string;
+        } catch {
+          return "";
+        }
+      });
+      expect(sentMethods).toContain("thread/resume");
+      expect(sentMethods).toContain("turn/steer");
+      expect(sentMethods).not.toContain("turn/start");
+      expect(thread.environmentAgentCursor).toBe(3);
+    });
+
     it("records provisioning completion when resumed threads need fresh env setup", async () => {
       const workspaceRoot = mkdtempSync(join(tmpdir(), "beanbag-resume-env-setup-"));
       writeFileSync(join(workspaceRoot, ".bb-env-setup.sh"), "#!/bin/sh\nexit 0\n", "utf8");
