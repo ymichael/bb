@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import {
   type OpenPathRequest,
+  type ThreadOrchestrator,
   enqueueThreadMessageSchema,
   sendQueuedThreadMessageSchema,
   spawnThreadSchema,
@@ -9,12 +10,16 @@ import {
   tellThreadSchema,
   updateThreadSchema,
   type PromptInput,
-  type Thread,
   type ThreadGitDiffSelection,
-  type ThreadOrchestrator,
+  type Thread,
 } from "@beanbag/agent-core";
 import { z } from "zod";
 import { isAbsolute } from "node:path";
+import type {
+  EnvironmentAgentDeliveryRequest,
+  EnvironmentAgentEventEnvelope,
+  EnvironmentAgentStatusSnapshot,
+} from "@beanbag/environment-agent";
 import { invalidRequestError, threadNotFoundError } from "../domain-errors.js";
 import { sendRouteError } from "./error-response.js";
 import { openPathInEditor } from "./system.js";
@@ -37,6 +42,36 @@ const eventsQuerySchema = z.object({
       if (!Number.isFinite(parsed) || parsed <= 0) return undefined;
       return parsed;
     }),
+});
+
+const environmentAgentReplayQuerySchema = z.object({
+  afterSequence: z
+    .string()
+    .optional()
+    .transform((value) => {
+      if (!value) return 0;
+      const parsed = Number.parseInt(value, 10);
+      if (!Number.isFinite(parsed) || parsed < 0) return 0;
+      return parsed;
+    }),
+  limit: z
+    .string()
+    .optional()
+    .transform((value) => {
+      if (!value) return undefined;
+      const parsed = Number.parseInt(value, 10);
+      if (!Number.isFinite(parsed) || parsed <= 0) return undefined;
+      return parsed;
+    }),
+});
+
+const environmentAgentDeliveryBodySchema = z.object({
+  protocolVersion: z.number().int().optional(),
+  threadId: z.string().min(1),
+  projectId: z.string().optional(),
+  environmentId: z.string().optional(),
+  afterSequence: z.number().int().min(0).optional(),
+  events: z.array(z.custom<EnvironmentAgentEventEnvelope>()),
 });
 
 const workStatusQuerySchema = z.object({
@@ -97,6 +132,34 @@ type RouteThreadLookupCapableOrchestrator = ThreadOrchestrator & {
   isPrimaryCheckoutActive?: (threadId: string) => boolean;
 };
 
+type RouteEnvironmentAgentCapableOrchestrator = ThreadOrchestrator & {
+  getEnvironmentAgentStatus?: (
+    threadId: string,
+  ) => Promise<EnvironmentAgentStatusSnapshot>;
+  retryEnvironmentAgentDelivery?: (
+    threadId: string,
+  ) => Promise<EnvironmentAgentStatusSnapshot>;
+  ingestEnvironmentAgentEvents?: (args: {
+    threadId: string;
+    authorizationHeader?: string;
+    events: EnvironmentAgentEventEnvelope[];
+  }) => Promise<{
+    protocolVersion: number;
+    threadId: string;
+    acknowledgedSequence: number;
+  }>;
+  replayEnvironmentAgentEvents?: (args: {
+    threadId: string;
+    afterSequence: number;
+    limit?: number;
+  }) => Promise<{
+    events: EnvironmentAgentEventEnvelope[];
+    fromSequenceExclusive: number;
+    toSequenceInclusive: number;
+    hasMore: boolean;
+  }>;
+};
+
 function validatePromptInputAttachments(input: PromptInput[]): void {
   let attachmentCount = 0;
   for (const chunk of input) {
@@ -149,6 +212,8 @@ export function createThreadRoutes(
   },
 ) {
   const openPath = opts?.openPath ?? openPathInEditor;
+  const environmentAgentAccessor =
+    threadManager as RouteEnvironmentAgentCapableOrchestrator;
   return new Hono()
     .post("/", zValidator("json", spawnThreadSchema), async (c) => {
       try {
@@ -250,6 +315,78 @@ export function createThreadRoutes(
         return sendRouteError(c, err);
       }
     })
+    .get("/:id/environment-agent/status", async (c) => {
+      try {
+        const threadId = c.req.param("id");
+        const thread = getThreadForRouteLookup(threadManager, threadId);
+        if (!thread) {
+          return sendRouteError(c, threadNotFoundError(threadId));
+        }
+        if (!environmentAgentAccessor.getEnvironmentAgentStatus) {
+          throw invalidRequestError("Environment-agent status is unavailable");
+        }
+        const status = await environmentAgentAccessor.getEnvironmentAgentStatus(
+          threadId,
+        );
+        return c.json(status);
+      } catch (err) {
+        return sendRouteError(c, err);
+      }
+    })
+    .post(
+      "/:id/environment-agent/deliver",
+      zValidator("json", environmentAgentDeliveryBodySchema),
+      async (c) => {
+        try {
+          const threadId = c.req.param("id");
+          const thread = getThreadForRouteLookup(threadManager, threadId);
+          if (!thread) {
+            return sendRouteError(c, threadNotFoundError(threadId));
+          }
+          if (!environmentAgentAccessor.ingestEnvironmentAgentEvents) {
+            throw invalidRequestError("Environment-agent delivery is unavailable");
+          }
+          const body = c.req.valid("json") as EnvironmentAgentDeliveryRequest;
+          if (body.threadId !== threadId) {
+            throw invalidRequestError("Environment-agent delivery thread mismatch");
+          }
+          const response =
+            await environmentAgentAccessor.ingestEnvironmentAgentEvents({
+              threadId,
+              authorizationHeader: c.req.header("authorization"),
+              events: body.events,
+            });
+          return c.json(response);
+        } catch (err) {
+          return sendRouteError(c, err);
+        }
+      },
+    )
+    .get(
+      "/:id/environment-agent/events",
+      zValidator("query", environmentAgentReplayQuerySchema),
+      async (c) => {
+        try {
+          const threadId = c.req.param("id");
+          const thread = getThreadForRouteLookup(threadManager, threadId);
+          if (!thread) {
+            return sendRouteError(c, threadNotFoundError(threadId));
+          }
+          if (!environmentAgentAccessor.replayEnvironmentAgentEvents) {
+            throw invalidRequestError("Environment-agent replay is unavailable");
+          }
+          const query = c.req.valid("query");
+          const replay = await environmentAgentAccessor.replayEnvironmentAgentEvents({
+            threadId,
+            afterSequence: query.afterSequence,
+            ...(query.limit ? { limit: query.limit } : {}),
+          });
+          return c.json(replay);
+        } catch (err) {
+          return sendRouteError(c, err);
+        }
+      },
+    )
     .patch(
       "/:id",
       zValidator("json", updateThreadSchema),

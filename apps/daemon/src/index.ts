@@ -181,6 +181,7 @@ async function main(): Promise<void> {
       projectRepo,
       threadRepo,
       eventRepo,
+      daemonBaseUrl: `http://127.0.0.1:${port}/api/v1`,
       requestShutdown: (reason) => {
         void shutdown(reason);
       },

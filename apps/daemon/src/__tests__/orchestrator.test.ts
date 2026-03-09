@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { execFileSync } from "node:child_process";
 import { EventEmitter, Readable, Writable } from "node:stream";
+import type { ChildProcess } from "node:child_process";
 import {
   accessSync,
   chmodSync,
@@ -14,7 +15,6 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
-import type { ChildProcess } from "node:child_process";
 import {
   buildSquashMergeConflictFollowUpInstruction,
   toRecord,
@@ -28,6 +28,7 @@ import {
   type CreateEnvironmentContext,
   type IEnvironment,
 } from "@beanbag/environment";
+import type { EnvironmentAgentClient } from "@beanbag/environment-agent";
 import type {
   ThreadRepository,
   EventRepository,
@@ -170,6 +171,12 @@ function makeRuntimeEnvironment(args: {
     isIsolatedWorkspace() {
       return kind === "worktree";
     },
+    getAgentConnectionTarget() {
+      return {
+        transport: "http" as const,
+        baseUrl: "http://127.0.0.1:4312",
+      };
+    },
     getCheckoutSnapshot() {
       return {
         branch: "bb/thread-1",
@@ -205,7 +212,7 @@ function makeRuntimeEnvironment(args: {
         command,
         commandArgs,
         options,
-      );
+      ) as unknown as ChildProcess;
     },
     shouldRunSetupScript() {
       return false;
@@ -245,6 +252,21 @@ vi.mock("node:child_process", async (importOriginal) => {
 
 import { spawn as spawnMock } from "node:child_process";
 
+vi.mock("@beanbag/environment-agent", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@beanbag/environment-agent")>();
+  return {
+    ...actual,
+    createHttpEnvironmentAgentClient: vi.fn(async () => {
+      const child =
+        ((spawnMock as unknown as { (): FakeChildProcess | undefined })() as
+          | FakeChildProcess
+          | undefined) ??
+        createFakeChildProcess();
+      return createFakeEnvironmentAgentClient(child);
+    }),
+  };
+});
+
 const CODEX_THREAD_ID = "codex-thread-abc-123";
 const DEFAULT_BASE_INSTRUCTIONS =
   "You are a coding agent working on a project thread. Follow the instructions carefully and write clean, working code.";
@@ -270,6 +292,97 @@ type FakeChildProcess = Omit<
   _pushStderr: (line: string) => void;
   _emitExit: (code: number | null, signal: string | null) => void;
 };
+
+function respondToEnvironmentAgentControlMessage(
+  child: Pick<FakeChildProcess, "stdout">,
+  msg: {
+    environmentAgentMessage?: boolean;
+    requestId?: string;
+    type?: string;
+    payload?: {
+      afterSequence?: number;
+      sequence?: number;
+      threadId?: string;
+    };
+  },
+): boolean {
+  if (msg.environmentAgentMessage !== true || !msg.requestId) {
+    return false;
+  }
+
+  switch (msg.type) {
+    case "provider.ensure":
+      process.nextTick(() => {
+        child.stdout.push(
+          JSON.stringify({
+            environmentAgentMessage: true,
+            requestId: msg.requestId,
+            type: "provider.ensure.response",
+            payload: {
+              running: true,
+              launched: true,
+              pid: 12345,
+            },
+          }) + "\n",
+        );
+      });
+      return true;
+    case "replay":
+      process.nextTick(() => {
+        child.stdout.push(
+          JSON.stringify({
+            environmentAgentMessage: true,
+            requestId: msg.requestId,
+            type: "replay.response",
+            payload: {
+              protocolVersion: 1,
+              fromSequenceExclusive: msg.payload?.afterSequence ?? 0,
+              toSequenceInclusive: msg.payload?.afterSequence ?? 0,
+              events: [],
+              hasMore: false,
+            },
+          }) + "\n",
+        );
+      });
+      return true;
+    case "ack":
+      process.nextTick(() => {
+        child.stdout.push(
+          JSON.stringify({
+            environmentAgentMessage: true,
+            requestId: msg.requestId,
+            type: "ack.response",
+            payload: {
+              protocolVersion: 1,
+              acknowledgedSequence: msg.payload?.sequence ?? 0,
+              ...(msg.payload?.threadId ? { threadId: msg.payload.threadId } : {}),
+            },
+          }) + "\n",
+        );
+      });
+      return true;
+    case "status":
+      process.nextTick(() => {
+        child.stdout.push(
+          JSON.stringify({
+            environmentAgentMessage: true,
+            requestId: msg.requestId,
+            type: "status.response",
+            payload: {
+              protocolVersion: 1,
+              latestSequence: 0,
+              connectedToDaemon: true,
+              pendingEventCount: 0,
+              pendingCommandCount: 0,
+            },
+          }) + "\n",
+        );
+      });
+      return true;
+    default:
+      return false;
+  }
+}
 
 interface OrchestratorTestHarness {
   processes: Map<string, unknown>;
@@ -305,7 +418,7 @@ function asOrchestratorHarness(manager: Orchestrator): OrchestratorTestHarness {
   const rawManager = manager as unknown as {
     agentServer: {
       sessions: Map<string, {
-        child: unknown;
+        agentClient?: { __fakeChild?: unknown };
         runtime: {
           send?: (msg: object) => void;
           close?: (error?: Error) => void;
@@ -332,11 +445,11 @@ function asOrchestratorHarness(manager: Orchestrator): OrchestratorTestHarness {
         stdin: {
           write: vi.fn(),
         },
-        kill: vi.fn(),
-        exitCode: null,
       };
       session = {
-        child,
+        agentClient: {
+          __fakeChild: child,
+        },
         runtime: {
           send(msg: object) {
             child.stdin?.write?.(`${JSON.stringify(msg)}\n`);
@@ -350,7 +463,7 @@ function asOrchestratorHarness(manager: Orchestrator): OrchestratorTestHarness {
   };
 
   const processes = new Map<string, unknown>() as Map<string, unknown>;
-  processes.get = (threadId: string) => sessions.get(threadId)?.child;
+  processes.get = (threadId: string) => sessions.get(threadId)?.agentClient?.__fakeChild;
   processes.set = (threadId: string, child: unknown) => {
     const runtime = {
       send(msg: object) {
@@ -360,7 +473,9 @@ function asOrchestratorHarness(manager: Orchestrator): OrchestratorTestHarness {
       close: vi.fn(),
     };
     sessions.set(threadId, {
-      child,
+      agentClient: {
+        __fakeChild: child,
+      },
       runtime,
       providerThreadId: sessions.get(threadId)?.providerThreadId,
       activeTurnId: sessions.get(threadId)?.activeTurnId,
@@ -461,29 +576,31 @@ function createFakeChildProcess(opts?: { autoRespond?: boolean }): FakeChildProc
   child.stdin = new Writable({
     write(chunk: Buffer, _encoding: string, callback: () => void) {
       const data = chunk.toString();
-      stdinData.push(data);
-
-      // Auto-respond to thread/start requests
-      if (autoRespond) {
-        try {
-          const msg = JSON.parse(data.trim());
-          if (msg.method === "thread/start" && msg.id) {
-            // Emit the response on stdout after a tick
-            process.nextTick(() => {
-              child.stdout.push(
-                JSON.stringify({
-                  id: msg.id,
-                  result: {
-                    thread: { id: CODEX_THREAD_ID },
-                    model: "test-model",
-                  },
-                }) + "\n",
-              );
-            });
-          }
-        } catch {
-          // not JSON, ignore
+      try {
+        const msg = JSON.parse(data.trim());
+        if (respondToEnvironmentAgentControlMessage(child, msg)) {
+          callback();
+          return;
         }
+
+        stdinData.push(data);
+
+        if (autoRespond && msg.method === "thread/start" && msg.id) {
+          // Emit the response on stdout after a tick
+          process.nextTick(() => {
+            child.stdout.push(
+              JSON.stringify({
+                id: msg.id,
+                result: {
+                  thread: { id: CODEX_THREAD_ID },
+                  model: "test-model",
+                },
+              }) + "\n",
+            );
+          });
+        }
+      } catch {
+        stdinData.push(data);
       }
 
       callback();
@@ -507,6 +624,110 @@ function createFakeChildProcess(opts?: { autoRespond?: boolean }): FakeChildProc
   };
 
   return child;
+}
+
+function createFakeEnvironmentAgentClient(
+  child: FakeChildProcess,
+): EnvironmentAgentClient & {
+  __fakeChild: FakeChildProcess;
+  __ensureSpecs: Array<{ command: string; args: string[]; launchCommand?: string; launchArgs?: string[] }>;
+} {
+  let handlers:
+    | {
+        onLine: (line: string) => void;
+        onStderrLine?: (line: string) => void;
+        onClose?: (reason?: Error) => void;
+      }
+    | undefined;
+
+  child.stdout.setEncoding("utf8");
+  child.stdout.on("data", (chunk: string | Buffer) => {
+    const value = typeof chunk === "string" ? chunk : chunk.toString("utf8");
+    for (const line of value.split(/\r\n|\n|\r/g)) {
+      if (!line.trim()) continue;
+      handlers?.onLine(line);
+    }
+  });
+  child.stderr.setEncoding("utf8");
+  child.stderr.on("data", (chunk: string | Buffer) => {
+    const value = typeof chunk === "string" ? chunk : chunk.toString("utf8");
+    for (const line of value.split(/\r\n|\n|\r/g)) {
+      if (!line.trim()) continue;
+      handlers?.onStderrLine?.(line);
+    }
+  });
+  child.on("exit", (code: number | null, signal: string | null) => {
+    handlers?.onClose?.(
+      new Error(`Process exited (${signal ?? code ?? "unknown"})`),
+    );
+  });
+  child.on("error", (error: Error) => {
+    handlers?.onClose?.(error instanceof Error ? error : new Error(String(error)));
+  });
+
+  const ensureSpecs: Array<{
+    command: string;
+    args: string[];
+    launchCommand?: string;
+    launchArgs?: string[];
+  }> = [];
+
+  return {
+    __fakeChild: child,
+    __ensureSpecs: ensureSpecs,
+    providerTransport: {
+      setHandlers(nextHandlers) {
+        handlers = nextHandlers;
+      },
+      send(line) {
+        child.stdin.write(`${line}\n`);
+      },
+      close(reason) {
+        handlers?.onClose?.(reason);
+      },
+    },
+    ensureProviderRunning: async (spec) => {
+      ensureSpecs.push({
+        command: spec.command,
+        args: [...spec.args],
+        ...(spec.launchCommand ? { launchCommand: spec.launchCommand } : {}),
+        ...(spec.launchArgs ? { launchArgs: [...spec.launchArgs] } : {}),
+      });
+      return {
+        running: true,
+        launched: true,
+        pid: child.pid,
+      };
+    },
+    retryDaemonDelivery: async () => ({
+      protocolVersion: 1,
+      latestSequence: 0,
+      connectedToDaemon: true,
+      pendingEventCount: 0,
+      pendingCommandCount: 0,
+    }),
+    acknowledge: async (request) => ({
+      protocolVersion: 1,
+      acknowledgedSequence: request.sequence,
+      ...(request.threadId ? { threadId: request.threadId } : {}),
+    }),
+    replay: async (request) => ({
+      protocolVersion: 1,
+      fromSequenceExclusive: request.afterSequence,
+      toSequenceInclusive: request.afterSequence,
+      events: [],
+      hasMore: false,
+    }),
+    status: async () => ({
+      protocolVersion: 1,
+      latestSequence: 0,
+      connectedToDaemon: true,
+      pendingEventCount: 0,
+      pendingCommandCount: 0,
+    }),
+    getLatestObservedSequence: () => 0,
+    close: vi.fn(),
+  };
 }
 
 function makeThread(overrides: Partial<Thread> = {}): Thread {
@@ -586,6 +807,17 @@ function createMockLlmCompletionService(
   };
 }
 
+function createTestRuntimeEnv(
+  overrides: NodeJS.ProcessEnv = {},
+): NodeJS.ProcessEnv {
+  return {
+    ...process.env,
+    BEANBAG_ENVIRONMENT_AGENT_BASE_URL: "http://127.0.0.1:4312",
+    BEANBAG_ENVIRONMENT_AGENT_AUTH_TOKEN: "test-token",
+    ...overrides,
+  };
+}
+
 describe("Orchestrator", () => {
   let threadRepo: ReturnType<typeof createMocks>["threadRepo"];
   let eventRepo: ReturnType<typeof createMocks>["eventRepo"];
@@ -608,6 +840,8 @@ describe("Orchestrator", () => {
       projectRepo,
       ws,
       llmCompletionService,
+      undefined,
+      createTestRuntimeEnv(),
     );
   });
 
@@ -636,7 +870,7 @@ describe("Orchestrator", () => {
         ws,
         llmCompletionService,
         createCodexProviderAdapter(),
-        process.env,
+        createTestRuntimeEnv(),
         customEnvironmentRegistry,
       );
       (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
@@ -766,6 +1000,207 @@ describe("Orchestrator", () => {
       ]);
     });
 
+    it("resumes active threads on boot when provider state is still available", async () => {
+      const {
+        bootManager,
+        bootEventRepo,
+        bootProjectRepo,
+        bootThreadRepo,
+        threadState,
+      } = createBootManager([
+        makeThread({ id: "boot-active", status: "active" }),
+      ]);
+
+      (bootProjectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue({
+        id: "proj-1",
+        name: "Test",
+        rootPath: "/test",
+        createdAt: 1000,
+        updatedAt: 1000,
+      });
+      (bootEventRepo.getLatestProviderThreadId as unknown as ReturnType<typeof vi.fn>) = vi
+        .fn()
+        .mockReturnValue("persisted-thread-1");
+      (bootEventRepo.getLatestTurnLifecycle as unknown as ReturnType<typeof vi.fn>) = vi
+        .fn()
+        .mockReturnValue({
+          normType: "turn/started",
+          turnId: "turn-1",
+        });
+
+      const resumeChild = createFakeChildProcess({ autoRespond: false });
+      resumeChild.stdin = new Writable({
+        write(chunk: Buffer, _encoding: string, callback: () => void) {
+          const data = chunk.toString();
+          resumeChild._stdinData.push(data);
+          try {
+            const msg = JSON.parse(data.trim());
+            if (respondToEnvironmentAgentControlMessage(resumeChild, msg)) {
+              callback();
+              return;
+            }
+            if (msg.method === "thread/resume" && msg.id) {
+              process.nextTick(() => {
+                resumeChild.stdout!.push(
+                  JSON.stringify({
+                    id: msg.id,
+                    result: {
+                      thread: { id: "persisted-thread-1" },
+                      model: "test-model",
+                    },
+                  }) + "\n",
+                );
+              });
+            }
+          } catch {}
+          callback();
+        },
+      });
+
+      vi.spyOn(
+        bootManager as unknown as {
+          _spawnProcess: (
+            threadId: string,
+            projectRootPath: string,
+            environmentKind: string,
+            reason: string,
+          ) => Promise<{
+            environment: IEnvironment;
+            agentConnectionTarget: {
+              transport: "http";
+              baseUrl: string;
+            };
+            connectSession: () => {
+              transport: "http";
+              client: EnvironmentAgentClient;
+            };
+          }>;
+        },
+        "_spawnProcess",
+      ).mockResolvedValue({
+        environment: makeRuntimeEnvironment({ rootPath: "/test" }),
+        agentConnectionTarget: {
+          transport: "http",
+          baseUrl: "http://127.0.0.1:4312",
+        },
+        connectSession: () => ({
+          transport: "http",
+          client: createFakeEnvironmentAgentClient(resumeChild),
+        }),
+      });
+
+      await bootManager.reconcileActiveThreadsOnBoot();
+
+      expect(threadState.get("boot-active")?.status).toBe("active");
+      expect(bootThreadRepo.update).not.toHaveBeenCalledWith(
+        "boot-active",
+        { status: "idle" },
+        { touchUpdatedAt: false },
+      );
+      expect(resumeChild._stdinData.some((line) => {
+        try {
+          return JSON.parse(line.trim()).method === "thread/resume";
+        } catch {
+          return false;
+        }
+      })).toBe(true);
+    });
+
+    it("attempts boot resume even when no lifecycle event was persisted yet", async () => {
+      const {
+        bootManager,
+        bootEventRepo,
+        bootProjectRepo,
+      } = createBootManager([
+        makeThread({ id: "boot-active", status: "active" }),
+      ]);
+
+      (bootProjectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue({
+        id: "proj-1",
+        name: "Test",
+        rootPath: "/test",
+        createdAt: 1000,
+        updatedAt: 1000,
+      });
+      (bootEventRepo.getLatestProviderThreadId as unknown as ReturnType<typeof vi.fn>) = vi
+        .fn()
+        .mockReturnValue("persisted-thread-1");
+      (bootEventRepo.getLatestTurnLifecycle as unknown as ReturnType<typeof vi.fn>) = vi
+        .fn()
+        .mockReturnValue(undefined);
+
+      const resumeChild = createFakeChildProcess({ autoRespond: false });
+      resumeChild.stdin = new Writable({
+        write(chunk: Buffer, _encoding: string, callback: () => void) {
+          const data = chunk.toString();
+          resumeChild._stdinData.push(data);
+          try {
+            const msg = JSON.parse(data.trim());
+            if (respondToEnvironmentAgentControlMessage(resumeChild, msg)) {
+              callback();
+              return;
+            }
+            if (msg.method === "thread/resume" && msg.id) {
+              process.nextTick(() => {
+                resumeChild.stdout!.push(
+                  JSON.stringify({
+                    id: msg.id,
+                    result: {
+                      thread: { id: "persisted-thread-1" },
+                      model: "test-model",
+                    },
+                  }) + "\n",
+                );
+              });
+            }
+          } catch {}
+          callback();
+        },
+      });
+
+      vi.spyOn(
+        bootManager as unknown as {
+          _spawnProcess: (
+            threadId: string,
+            projectRootPath: string,
+            environmentKind: string,
+            reason: string,
+          ) => Promise<{
+            environment: IEnvironment;
+            agentConnectionTarget: {
+              transport: "http";
+              baseUrl: string;
+            };
+            connectSession: () => {
+              transport: "http";
+              client: EnvironmentAgentClient;
+            };
+          }>;
+        },
+        "_spawnProcess",
+      ).mockResolvedValue({
+        environment: makeRuntimeEnvironment({ rootPath: "/test" }),
+        agentConnectionTarget: {
+          transport: "http",
+          baseUrl: "http://127.0.0.1:4312",
+        },
+        connectSession: () => ({
+          transport: "http",
+          client: createFakeEnvironmentAgentClient(resumeChild),
+        }),
+      });
+
+      await bootManager.reconcileActiveThreadsOnBoot();
+
+      expect(resumeChild._stdinData.some((line) => {
+        try {
+          return JSON.parse(line.trim()).method === "thread/resume";
+        } catch {
+          return false;
+        }
+      })).toBe(true);
+    });
+
     it("applies the restart policy matrix across persisted thread statuses", async () => {
       const {
         bootManager,
@@ -841,7 +1276,7 @@ describe("Orchestrator", () => {
       (eventRepo.getLatestSeq as ReturnType<typeof vi.fn>).mockReturnValue(0);
     });
 
-    it("spawns codex app-server with correct args and cwd", async () => {
+    it("ensures the provider runtime through the environment agent", async () => {
       const project = { id: "proj-1", name: "Test", rootPath: "/my/project", createdAt: 1000, updatedAt: 1000 };
       (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(project);
 
@@ -856,23 +1291,18 @@ describe("Orchestrator", () => {
         expect(spawnMock).toHaveBeenCalled();
       });
 
-      expect(spawnMock).toHaveBeenCalledWith(
-        "codex",
-        ["app-server"],
-        expect.objectContaining({
-          stdio: ["pipe", "pipe", "pipe"],
-          cwd: "/my/project",
-          env: expect.objectContaining({
-            BB_PROJECT_ID: "proj-1",
-            BB_THREAD_ID: "t-new",
-          }),
-        }),
-      );
+      const session = (manager as unknown as {
+        agentServer: {
+          sessions: Map<string, { agentClient: { __ensureSpecs: Array<unknown> } }>;
+        };
+      }).agentServer.sessions.get("t-new");
 
-      const spawnOptions = (spawnMock as ReturnType<typeof vi.fn>).mock.calls[0]?.[2] as
-        | { env?: Record<string, string | undefined> }
-        | undefined;
-      expect(spawnOptions?.env?.BB_TASK_ID).toBeUndefined();
+      expect(session?.agentClient.__ensureSpecs).toEqual([
+        {
+          command: "codex",
+          args: ["app-server"],
+        },
+      ]);
     });
 
     it("creates a thread record in the DB", async () => {
@@ -893,6 +1323,77 @@ describe("Orchestrator", () => {
       });
     });
 
+    it("passes provider launch wrapper args through provider ensure", async () => {
+      const wrappedEnvironment = makeRuntimeEnvironment({
+        kind: "worktree",
+        rootPath: "/wrapped/project",
+        overrides: {
+          getAgentConnectionTarget() {
+            return {
+              transport: "http",
+              baseUrl: "http://127.0.0.1:4312",
+              providerLaunch: {
+                command: "docker",
+                args: ["exec", "-i", "bb-thread-container"],
+              },
+            };
+          },
+        },
+      });
+      const environmentRegistry = new EnvironmentRegistry().register({
+        kind: "worktree",
+        info: wrappedEnvironment.info,
+        create(): IEnvironment {
+          return wrappedEnvironment;
+        },
+        restore(): IEnvironment {
+          return wrappedEnvironment;
+        },
+        isState(_value: unknown): _value is unknown {
+          return true;
+        },
+      });
+      const managerWithWrapper = new Orchestrator(
+        threadRepo,
+        eventRepo,
+        projectRepo,
+        ws,
+        llmCompletionService,
+        createCodexProviderAdapter(),
+        createTestRuntimeEnv(),
+        environmentRegistry,
+      );
+
+      const project = { id: "proj-1", name: "Test", rootPath: "/wrapped/project", createdAt: 1000, updatedAt: 1000 };
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(project);
+
+      const createdThread = makeThread({ id: "t-new", status: "idle", environmentId: "worktree" });
+      (threadRepo.create as ReturnType<typeof vi.fn>).mockReturnValue(createdThread);
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeThread({ id: "t-new", status: "active", environmentId: "worktree" }),
+      );
+
+      await managerWithWrapper.spawn({ projectId: "proj-1", environmentId: "worktree" });
+      await vi.waitFor(() => {
+        expect(spawnMock).toHaveBeenCalled();
+      });
+
+      const session = (managerWithWrapper as unknown as {
+        agentServer: {
+          sessions: Map<string, { agentClient: { __ensureSpecs: Array<unknown> } }>;
+        };
+      }).agentServer.sessions.get("t-new");
+
+      expect(session?.agentClient.__ensureSpecs).toEqual([
+        {
+          command: "codex",
+          args: ["app-server"],
+          launchCommand: "docker",
+          launchArgs: ["exec", "-i", "bb-thread-container"],
+        },
+      ]);
+    });
+
     it("returns before provisioning work starts", async () => {
       const onCreate = vi.fn();
       const customEnvironmentRegistry = createTestEnvironmentRegistry({
@@ -906,7 +1407,7 @@ describe("Orchestrator", () => {
         ws,
         llmCompletionService,
         createCodexProviderAdapter(),
-        process.env,
+        createTestRuntimeEnv(),
         customEnvironmentRegistry,
       );
 
@@ -1012,7 +1513,7 @@ describe("Orchestrator", () => {
         ws,
         llmCompletionService,
         createCodexProviderAdapter(),
-        process.env,
+        createTestRuntimeEnv(),
         customEnvironmentRegistry,
       );
 
@@ -1192,7 +1693,7 @@ describe("Orchestrator", () => {
         ws,
         llmCompletionService,
         createCodexProviderAdapter(),
-        process.env,
+        createTestRuntimeEnv(),
         customEnvironmentRegistry,
       );
 
@@ -1293,7 +1794,7 @@ describe("Orchestrator", () => {
       chmodSync(bbPath, 0o755);
 
       const pathValue = [firstBin, bbBin].join(delimiter);
-      const runtimeEnv = { ...process.env, PATH: pathValue };
+      const runtimeEnv = { ...createTestRuntimeEnv(), PATH: pathValue };
 
       try {
         const localManager = new Orchestrator(
@@ -1321,12 +1822,6 @@ describe("Orchestrator", () => {
         });
 
         const expectedPath = [bbBin, firstBin].join(delimiter);
-        const spawnCall = (spawnMock as ReturnType<typeof vi.fn>).mock.calls.at(-1);
-        const spawnOptions = spawnCall?.[2] as
-          | { env?: Record<string, string | undefined> }
-          | undefined;
-        expect(spawnOptions?.env?.PATH).toBe(expectedPath);
-
         const startMsg = JSON.parse(fakeChild._stdinData[1].trim());
         expect(startMsg.params.config["shell_environment_policy.set.PATH"]).toBe(expectedPath);
       } finally {
@@ -1342,7 +1837,7 @@ describe("Orchestrator", () => {
       mkdirSync(secondBin, { recursive: true });
 
       const pathValue = [firstBin, secondBin].join(delimiter);
-      const runtimeEnv = { ...process.env, PATH: pathValue };
+      const runtimeEnv = { ...createTestRuntimeEnv(), PATH: pathValue };
 
       try {
         const localManager = new Orchestrator(
@@ -1369,11 +1864,9 @@ describe("Orchestrator", () => {
           expect(fakeChild._stdinData.length).toBeGreaterThanOrEqual(2);
         });
 
-        const spawnCall = (spawnMock as ReturnType<typeof vi.fn>).mock.calls.at(-1);
-        const spawnOptions = spawnCall?.[2] as
-          | { env?: Record<string, string | undefined> }
-          | undefined;
-        const injectedPath = spawnOptions?.env?.PATH;
+        const startMsg = JSON.parse(fakeChild._stdinData[1].trim());
+        const injectedPath =
+          startMsg.params.config["shell_environment_policy.set.PATH"];
         expect(typeof injectedPath).toBe("string");
         expect(injectedPath).toBeTruthy();
 
@@ -1388,10 +1881,7 @@ describe("Orchestrator", () => {
         expect(hasNodeRunner || hasTsxRunner).toBe(true);
         expect(shimScript).toContain('"$@"');
 
-        const startMsg = JSON.parse(fakeChild._stdinData[1].trim());
-        expect(startMsg.params.config["shell_environment_policy.set.PATH"]).toBe(
-          injectedPath,
-        );
+        expect(injectedPath).toBe(startMsg.params.config["shell_environment_policy.set.PATH"]);
       } finally {
         rmSync(tmpRoot, { recursive: true, force: true });
       }
@@ -1590,7 +2080,7 @@ describe("Orchestrator", () => {
         ws,
         llmCompletionService,
         createCodexProviderAdapter(),
-        process.env,
+        createTestRuntimeEnv(),
         customEnvironmentRegistry,
       );
 
@@ -1689,7 +2179,7 @@ describe("Orchestrator", () => {
         ws,
         titleLlmCompletionService,
         createCodexProviderAdapter(),
-        process.env,
+        createTestRuntimeEnv(),
         undefined,
         undefined,
         undefined,
@@ -2046,6 +2536,10 @@ describe("Orchestrator", () => {
           errorChild._stdinData.push(data);
           try {
             const msg = JSON.parse(data.trim());
+            if (respondToEnvironmentAgentControlMessage(errorChild, msg)) {
+              callback();
+              return;
+            }
             if (msg.method === "thread/start" && msg.id) {
               process.nextTick(() => {
                 errorChild.stdout!.push(
@@ -3264,6 +3758,10 @@ describe("Orchestrator", () => {
           resumeChild._stdinData.push(data);
           try {
             const msg = JSON.parse(data.trim());
+            if (respondToEnvironmentAgentControlMessage(resumeChild, msg)) {
+              callback();
+              return;
+            }
             if (msg.method === "thread/resume" && msg.id) {
               process.nextTick(() => {
                 resumeChild.stdout!.push(
@@ -3381,7 +3879,7 @@ describe("Orchestrator", () => {
           ws,
           llmCompletionService,
           createCodexProviderAdapter(),
-          process.env,
+          createTestRuntimeEnv(),
           customEnvironmentRegistry,
         );
         const input = [{ type: "text" as const, text: "Resume and continue" }];
@@ -3422,9 +3920,35 @@ describe("Orchestrator", () => {
         resumeChild.stdin = new Writable({
           write(chunk: Buffer, _encoding: string, callback: () => void) {
             const data = chunk.toString();
-            resumeChild._stdinData.push(data);
             try {
               const msg = JSON.parse(data.trim());
+              if (msg.environmentAgentMessage === true && msg.requestId) {
+                if (msg.type === "replay") {
+                  process.nextTick(() => {
+                    resumeChild.stdout!.push(
+                      JSON.stringify({
+                        environmentAgentMessage: true,
+                        requestId: msg.requestId,
+                        type: "replay.response",
+                        payload: {
+                          protocolVersion: 1,
+                          fromSequenceExclusive: msg.payload?.afterSequence ?? 0,
+                          toSequenceInclusive: msg.payload?.afterSequence ?? 0,
+                          events: [],
+                          hasMore: false,
+                        },
+                      }) + "\n",
+                    );
+                  });
+                } else if (respondToEnvironmentAgentControlMessage(resumeChild, msg)) {
+                  callback();
+                  return;
+                }
+                callback();
+                return;
+              }
+
+              resumeChild._stdinData.push(data);
               if (msg.method === "thread/resume" && msg.id) {
                 process.nextTick(() => {
                   resumeChild.stdout!.push(
@@ -3438,7 +3962,9 @@ describe("Orchestrator", () => {
                   );
                 });
               }
-            } catch {}
+            } catch {
+              resumeChild._stdinData.push(data);
+            }
             callback();
           },
         });
@@ -3960,12 +4486,11 @@ describe("Orchestrator", () => {
     });
 
     it("kills the process with SIGTERM when an active process exists", () => {
-      const fakeProcess = { kill: vi.fn(), exitCode: null, stdin: null, stdout: null };
+      const fakeProcess = { stdin: null, stdout: null };
       asOrchestratorHarness(manager).processes.set("thread-1", fakeProcess);
 
       manager.stop("thread-1");
 
-      expect(fakeProcess.kill).toHaveBeenCalledWith("SIGTERM");
       expect(threadRepo.update).toHaveBeenCalledWith("thread-1", {
         status: "idle",
       });
@@ -4011,7 +4536,7 @@ describe("Orchestrator", () => {
     });
 
     it("kills running process and clears runtime state when archiving", () => {
-      const fakeProcess = { kill: vi.fn(), exitCode: null, stdin: null, stdout: null };
+      const fakeProcess = { stdin: null, stdout: null };
       (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
         makeThread({ id: "thread-1", status: "active" }),
       );
@@ -4021,7 +4546,6 @@ describe("Orchestrator", () => {
 
       manager.archive("thread-1");
 
-      expect(fakeProcess.kill).toHaveBeenCalledWith("SIGTERM");
       expect(asOrchestratorHarness(manager).processes.has("thread-1")).toBe(false);
       expect(asOrchestratorHarness(manager).providerThreadIds.has("thread-1")).toBe(false);
       expect(asOrchestratorHarness(manager).activeTurnIds.has("thread-1")).toBe(false);
@@ -4419,7 +4943,7 @@ describe("Orchestrator", () => {
         ws,
         llmCompletionService,
         createCodexProviderAdapter(),
-        process.env,
+        createTestRuntimeEnv(),
         customEnvironmentRegistry,
       );
       const thread = makeThread({
@@ -5908,8 +6432,8 @@ describe("Orchestrator", () => {
     });
 
     it("kills all active processes and marks them idle", () => {
-      const proc1 = { kill: vi.fn(), stdin: null, stdout: null };
-      const proc2 = { kill: vi.fn(), stdin: null, stdout: null };
+      const proc1 = { stdin: null, stdout: null };
+      const proc2 = { stdin: null, stdout: null };
       asOrchestratorHarness(manager).processes.set("thread-1", proc1);
       asOrchestratorHarness(manager).processes.set("thread-2", proc2);
 
@@ -5917,8 +6441,6 @@ describe("Orchestrator", () => {
 
       manager.stopAll();
 
-      expect(proc1.kill).toHaveBeenCalledWith("SIGTERM");
-      expect(proc2.kill).toHaveBeenCalledWith("SIGTERM");
       expect(threadRepo.update).toHaveBeenCalledWith(
         "thread-1",
         { status: "idle" },

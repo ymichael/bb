@@ -19,7 +19,8 @@
     "test": "vitest run --config vitest.config.ts"
   },
   "dependencies": {
-    "@beanbag/agent-core": "workspace:*"
+    "@beanbag/agent-core": "workspace:*",
+    "@beanbag/environment-agent": "workspace:*"
   },
   "devDependencies": {
     "@beanbag/tsconfig": "workspace:*",

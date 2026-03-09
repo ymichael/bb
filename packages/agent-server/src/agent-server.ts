@@ -1,4 +1,11 @@
-import type { ChildProcess } from "node:child_process";
+import {
+  type EnvironmentAgentClient,
+  ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+  type EnvironmentAgentAckResponse,
+  type EnvironmentAgentEventEnvelope,
+  type EnvironmentAgentReplayResponse,
+  type EnvironmentAgentStatusSnapshot,
+} from "@beanbag/environment-agent";
 import {
   assertNever,
   createProviderEventEnvelope,
@@ -48,6 +55,16 @@ export interface AgentServerSessionState {
   hasActiveRuntime: boolean;
 }
 
+export type AgentServerSessionConnection =
+  {
+    transport: "http";
+    client: EnvironmentAgentClient;
+    providerLaunch?: {
+      command: string;
+      args: string[];
+    };
+  };
+
 export interface AgentServerNotification {
   method: string;
   normalizedMethod: string;
@@ -76,10 +93,11 @@ export interface AgentServerOptions {
 }
 
 interface ManagedSession {
-  child: ChildProcess;
+  agentClient: EnvironmentAgentClient;
   runtime: ProviderRuntime;
   providerThreadId?: string;
   activeTurnId?: string;
+  lastAckedEnvironmentSequence?: number;
 }
 
 function toProviderEventType(method: string): ThreadEventType {
@@ -137,13 +155,6 @@ export class AgentServer {
       return [];
     }
     return this.opts.provider.listModels();
-  }
-
-  getSpawnSpec(): { command: string; args: string[] } {
-    return {
-      command: this.opts.provider.processCommand,
-      args: [...this.opts.provider.processArgs],
-    };
   }
 
   normalizePromptInput(input: PromptInput[]): PromptInput[] {
@@ -240,13 +251,81 @@ export class AgentServer {
     return Array.from(this.sessions.keys());
   }
 
+  async getEnvironmentAgentStatus(
+    threadId: string,
+  ): Promise<EnvironmentAgentStatusSnapshot> {
+    const session = this.requireSession(threadId);
+    return session.agentClient.status();
+  }
+
+  async retryEnvironmentAgentDelivery(
+    threadId: string,
+  ): Promise<EnvironmentAgentStatusSnapshot> {
+    const session = this.requireSession(threadId);
+    return session.agentClient.retryDaemonDelivery();
+  }
+
+  async replayEnvironmentAgentEvents(args: {
+    threadId: string;
+    afterSequence: number;
+    limit?: number;
+  }): Promise<EnvironmentAgentReplayResponse> {
+    const session = this.requireSession(args.threadId);
+    return session.agentClient.replay({
+      protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+      afterSequence: args.afterSequence,
+      limit: args.limit,
+      threadId: args.threadId,
+    });
+  }
+
+  async acknowledgeEnvironmentAgent(args: {
+    threadId: string;
+    sequence: number;
+  }): Promise<EnvironmentAgentAckResponse> {
+    const session = this.requireSession(args.threadId);
+    return session.agentClient.acknowledge({
+      protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+      sequence: args.sequence,
+      threadId: args.threadId,
+    });
+  }
+
+  async ingestReplayedEnvironmentAgentEvents(args: {
+    threadId: string;
+    events: EnvironmentAgentEventEnvelope[];
+  }): Promise<void> {
+    const session = this.requireSession(args.threadId);
+    let highestSequence = 0;
+
+    for (const envelope of args.events) {
+      highestSequence = Math.max(highestSequence, envelope.sequence);
+      const event = envelope.event;
+      if (event.type !== "provider.event") continue;
+      if (event.method === "provider.stdout") continue;
+      this.handleNotification(args.threadId, {
+        method: event.method,
+        params: event.payload,
+      });
+    }
+
+    if (highestSequence > 0) {
+      await this.acknowledgeEnvironmentSequence(args.threadId, session, highestSequence);
+    }
+  }
+
   async startSession(args: {
     threadId: string;
-    spawnProcess: () => ChildProcess;
+    connectSession: () =>
+      | AgentServerSessionConnection
+      | Promise<AgentServerSessionConnection>;
     request: SpawnThreadRequest;
     context: ProviderThreadContext;
   }): Promise<{ providerThreadId: string }> {
-    const session = this.createManagedSession(args.threadId, args.spawnProcess());
+    const session = await this.createManagedSession(
+      args.threadId,
+      args.connectSession(),
+    );
     const params = this.opts.provider.createThreadStartParams(args.request, args.context);
     try {
       const providerThreadId = await this.requestThreadId(
@@ -256,6 +335,7 @@ export class AgentServer {
         params,
       );
       session.providerThreadId = providerThreadId;
+      await this.acknowledgeLatestEnvironmentSequence(args.threadId, session);
       return { providerThreadId };
     } catch (error) {
       this.disposeSession(args.threadId);
@@ -265,14 +345,20 @@ export class AgentServer {
 
   async resumeSession(args: {
     threadId: string;
-    spawnProcess: () => ChildProcess;
+    connectSession: () =>
+      | AgentServerSessionConnection
+      | Promise<AgentServerSessionConnection>;
     providerThreadId: string;
     context: ProviderThreadContext;
     options?: ProviderExecutionOptions;
   }): Promise<{ providerThreadId: string }> {
-    const session = this.createManagedSession(args.threadId, args.spawnProcess(), {
+    const session = await this.createManagedSession(
+      args.threadId,
+      args.connectSession(),
+      {
       providerThreadId: args.providerThreadId,
-    });
+      },
+    );
     try {
       const providerThreadId = await this.requestThreadId(
         session.runtime,
@@ -285,6 +371,7 @@ export class AgentServer {
         ),
       );
       session.providerThreadId = providerThreadId;
+      await this.acknowledgeLatestEnvironmentSequence(args.threadId, session);
       return { providerThreadId };
     } catch (error) {
       this.disposeSession(args.threadId);
@@ -401,17 +488,6 @@ export class AgentServer {
     const session = this.sessions.get(threadId);
     if (!session) return;
 
-    try {
-      session.child.kill("SIGTERM");
-      setTimeout(() => {
-        if (session.child.exitCode === null) {
-          session.child.kill("SIGKILL");
-        }
-      }, 5000);
-    } catch {
-      // ignore shutdown errors
-    }
-
     session.runtime.close(
       reason ? new Error(reason) : undefined,
     );
@@ -444,83 +520,89 @@ export class AgentServer {
 
   private createManagedSession(
     threadId: string,
-    child: ChildProcess,
+    connection:
+      | AgentServerSessionConnection
+      | Promise<AgentServerSessionConnection>,
     seed?: { providerThreadId?: string; activeTurnId?: string },
-  ): ManagedSession {
+  ): Promise<ManagedSession> {
     this.disposeSession(threadId);
-    const runtime = new ProviderRuntime({
-      threadId,
-      child,
-      onNotification: (msg) => {
-        this.handleNotification(threadId, msg);
-      },
-      onUnmatchedRpcError: (requestId, errorMessage) => {
-        this.opts.logger?.error(
-          `[thread ${threadId}] Provider RPC error (request ${requestId}):`,
-          errorMessage,
-        );
-      },
-      onStderrLine: (line) => {
-        this.handleProviderStderrLine(threadId, line);
-      },
-    });
-
-    const session: ManagedSession = {
-      child,
-      runtime,
-      providerThreadId: seed?.providerThreadId,
-      activeTurnId: seed?.activeTurnId,
-    };
-    this.sessions.set(threadId, session);
-
-    this.send(runtime, threadId, {
-      jsonrpc: "2.0",
-      method: this.opts.provider.initializeMethod,
-      id: ++this.rpcIdCounter,
-      params:
-        this.opts.provider.createInitializeParams?.(this.opts.provider.clientInfo) ?? {
-          clientInfo: this.opts.provider.clientInfo,
+    return Promise.resolve(connection).then(async (resolvedConnection) => {
+      const agentClient = resolvedConnection.client;
+      const runtime = new ProviderRuntime({
+        threadId,
+        transport: agentClient.providerTransport,
+        onNotification: (msg) => {
+          this.handleNotification(threadId, msg);
         },
-    });
+        onUnmatchedRpcError: (requestId, errorMessage) => {
+          this.opts.logger?.error(
+            `[thread ${threadId}] Provider RPC error (request ${requestId}):`,
+            errorMessage,
+          );
+        },
+        onStderrLine: (line) => {
+          this.handleProviderStderrLine(threadId, line);
+        },
+        onClosed: () => {
+          const current = this.sessions.get(threadId);
+          if (current?.runtime !== runtime) return;
+          this.sessions.delete(threadId);
+          this.clearSessionState(threadId);
+          this.opts.onSessionExit?.(threadId, { code: null, signal: null });
+        },
+      });
 
-    child.on("exit", (code, signal) => {
-      const current = this.sessions.get(threadId);
-      if (current?.child !== child) return;
-      runtime.close(
-        new Error(
-          `[thread ${threadId}] Process exited (${signal ?? code ?? "unknown"})`,
-        ),
-      );
-      this.sessions.delete(threadId);
-      this.clearSessionState(threadId);
-      this.opts.onSessionExit?.(threadId, { code, signal });
-    });
+      const session: ManagedSession = {
+        agentClient,
+        runtime,
+        providerThreadId: seed?.providerThreadId,
+        activeTurnId: seed?.activeTurnId,
+      };
+      this.sessions.set(threadId, session);
 
-    child.on("error", (error) => {
-      this.opts.logger?.error(`[thread ${threadId}] Process error: ${error.message}`);
-      runtime.close(new Error(`[thread ${threadId}] Process error: ${error.message}`));
-      const current = this.sessions.get(threadId);
-      if (current?.child === child) {
-        this.sessions.delete(threadId);
-        this.clearSessionState(threadId);
-      }
-      this.opts.onSessionExit?.(threadId, { code: 1, signal: null });
-    });
+      await agentClient.ensureProviderRunning({
+        command: this.opts.provider.processCommand,
+        args: [...this.opts.provider.processArgs],
+        ...(resolvedConnection.providerLaunch
+          ? {
+              launchCommand: resolvedConnection.providerLaunch.command,
+              launchArgs: [...resolvedConnection.providerLaunch.args],
+            }
+          : {}),
+      });
 
-    return session;
+      this.send(runtime, threadId, {
+        jsonrpc: "2.0",
+        method: this.opts.provider.initializeMethod,
+        id: ++this.rpcIdCounter,
+        params:
+          this.opts.provider.createInitializeParams?.(this.opts.provider.clientInfo) ?? {
+            clientInfo: this.opts.provider.clientInfo,
+          },
+      });
+
+      return session;
+    });
   }
 
   private disposeSession(threadId: string): void {
     const existing = this.sessions.get(threadId);
     if (!existing) return;
-    try {
-      existing.child.kill("SIGTERM");
-    } catch {
-      // ignore shutdown errors
-    }
+    existing.agentClient.close();
     existing.runtime.close();
     this.sessions.delete(threadId);
     this.clearSessionState(threadId);
+  }
+
+  private requireSession(threadId: string): ManagedSession {
+    const session = this.sessions.get(threadId);
+    if (!session) {
+      throw new AgentServerSessionError(
+        "inactive_session",
+        this.opts.provider.inactiveSessionErrorMessage(threadId),
+      );
+    }
+    return session;
   }
 
   private send(runtime: ProviderRuntime, threadId: string, msg: object): void {
@@ -607,6 +689,38 @@ export class AgentServer {
       ...(turnState ? { turnState } : {}),
       ...(turnId ? { turnId } : {}),
     });
+
+    void this.acknowledgeLatestEnvironmentSequence(threadId, session).catch((error) => {
+      this.opts.logger?.warn(
+        `[thread ${threadId}] Failed to acknowledge environment-agent sequence: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    });
+  }
+
+  private async acknowledgeLatestEnvironmentSequence(
+    threadId: string,
+    session: ManagedSession | undefined,
+  ): Promise<void> {
+    if (!session) return;
+    const latestObservedSequence = session.agentClient.getLatestObservedSequence();
+    if (latestObservedSequence <= 0) return;
+    await this.acknowledgeEnvironmentSequence(threadId, session, latestObservedSequence);
+  }
+
+  private async acknowledgeEnvironmentSequence(
+    threadId: string,
+    session: ManagedSession,
+    sequence: number,
+  ): Promise<void> {
+    if ((session.lastAckedEnvironmentSequence ?? 0) >= sequence) return;
+    const response = await session.agentClient.acknowledge({
+      protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+      sequence,
+      threadId,
+    });
+    session.lastAckedEnvironmentSequence = response.acknowledgedSequence;
   }
 
   private handleProviderStderrLine(threadId: string, line: string): void {

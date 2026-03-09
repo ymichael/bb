@@ -1,15 +1,15 @@
 {
-  "name": "@beanbag/agent-server",
+  "name": "@beanbag/environment-agent",
   "version": "0.0.1",
   "type": "module",
   "exports": {
     ".": {
       "import": "./dist/index.js",
-      "types": "./dist/index.d.ts"
+      "types": "./src/index.ts"
     }
   },
   "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
+  "types": "./src/index.ts",
   "files": ["dist"],
   "scripts": {
     "build": "rm -rf dist tsconfig.tsbuildinfo && tsc",
@@ -17,11 +17,6 @@
     "clean": "rm -rf dist tsconfig.tsbuildinfo",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --config vitest.config.ts"
-  },
-  "dependencies": {
-    "@beanbag/agent-core": "workspace:*",
-    "@beanbag/environment-agent": "workspace:*",
-    "tsx": "^4.20.0"
   },
   "devDependencies": {
     "@beanbag/tsconfig": "workspace:*",

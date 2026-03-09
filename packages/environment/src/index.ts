@@ -28,6 +28,7 @@ export type {
   PromoteEnvironmentOptions,
   PromoteEnvironmentResult,
 } from "./contracts.js";
+export type { EnvironmentAgentConnectionTarget } from "@beanbag/environment-agent";
 export {
   EnvironmentRegistry,
 } from "./contracts.js";
@@ -42,3 +43,8 @@ export type {
   WorktreeEnvironmentState,
 } from "./worktree-environment.js";
 export { createWorktreeEnvironmentDefinition } from "./worktree-environment.js";
+export type {
+  CreateDockerEnvironmentDefinitionOptions,
+  DockerEnvironmentState,
+} from "./docker-environment.js";
+export { createDockerEnvironmentDefinition } from "./docker-environment.js";

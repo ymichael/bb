@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { Hono } from "hono";
 import type { Thread, ThreadEvent } from "@beanbag/agent-core";
+import { ENVIRONMENT_AGENT_PROTOCOL_VERSION } from "@beanbag/environment-agent";
 import { createThreadRoutes } from "../../routes/threads.js";
 import type { Orchestrator } from "../../orchestrator.js";
 import { inactiveSessionError, threadArchivedError } from "../../domain-errors.js";
@@ -73,6 +74,9 @@ function mockOrchestrator(): Orchestrator {
     getWorkStatus: vi.fn(),
     getPrimaryCheckoutStatus: vi.fn(),
     getDefaultExecutionOptions: vi.fn(),
+    getEnvironmentAgentStatus: vi.fn(),
+    ingestEnvironmentAgentEvents: vi.fn(),
+    replayEnvironmentAgentEvents: vi.fn(),
     list: vi.fn(),
     getTimeline: vi.fn(),
     getToolGroupMessages: vi.fn(),
@@ -281,6 +285,131 @@ describe("Thread routes", () => {
       expect(body.error).toBe("Project not found");
     });
 
+  });
+
+  describe("GET /threads/:id/environment-agent/status", () => {
+    it("returns thread-scoped environment-agent status", async () => {
+      (threadManager.getById as ReturnType<typeof vi.fn>).mockReturnValue(makeThread());
+      (threadManager.getEnvironmentAgentStatus as ReturnType<typeof vi.fn>).mockResolvedValue({
+        protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+        threadId: "thread-1",
+        latestSequence: 4,
+        connectedToDaemon: true,
+        pendingEventCount: 1,
+        pendingCommandCount: 0,
+      });
+
+      const res = await app.request("/threads/thread-1/environment-agent/status");
+
+      expect(res.status).toBe(200);
+      await expect(res.json()).resolves.toMatchObject({
+        threadId: "thread-1",
+        latestSequence: 4,
+      });
+      expect(threadManager.getEnvironmentAgentStatus).toHaveBeenCalledWith("thread-1");
+    });
+
+    it("returns 409 when the environment-agent session is inactive", async () => {
+      (threadManager.getById as ReturnType<typeof vi.fn>).mockReturnValue(makeThread());
+      (threadManager.getEnvironmentAgentStatus as ReturnType<typeof vi.fn>).mockRejectedValue(
+        inactiveSessionError("provider session is inactive"),
+      );
+
+      const res = await app.request("/threads/thread-1/environment-agent/status");
+
+      expect(res.status).toBe(409);
+      await expect(res.json()).resolves.toMatchObject({
+        code: "inactive_session",
+      });
+    });
+  });
+
+  describe("GET /threads/:id/environment-agent/events", () => {
+    it("replays environment-agent events from the requested sequence", async () => {
+      (threadManager.getById as ReturnType<typeof vi.fn>).mockReturnValue(makeThread());
+      (threadManager.replayEnvironmentAgentEvents as ReturnType<typeof vi.fn>).mockResolvedValue({
+        fromSequenceExclusive: 2,
+        toSequenceInclusive: 4,
+        hasMore: false,
+        events: [
+          {
+            protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+            sequence: 3,
+            emittedAt: 1000,
+            threadId: "thread-1",
+            event: {
+              type: "environment.ready",
+              threadId: "thread-1",
+            },
+          },
+        ],
+      });
+
+      const res = await app.request(
+        "/threads/thread-1/environment-agent/events?afterSequence=2&limit=10",
+      );
+
+      expect(res.status).toBe(200);
+      await expect(res.json()).resolves.toMatchObject({
+        fromSequenceExclusive: 2,
+        toSequenceInclusive: 4,
+        hasMore: false,
+      });
+      expect(threadManager.replayEnvironmentAgentEvents).toHaveBeenCalledWith({
+        threadId: "thread-1",
+        afterSequence: 2,
+        limit: 10,
+      });
+    });
+  });
+
+  describe("POST /threads/:id/environment-agent/deliver", () => {
+    it("ingests authenticated environment-agent events", async () => {
+      (threadManager.getById as ReturnType<typeof vi.fn>).mockReturnValue(makeThread());
+      (threadManager.ingestEnvironmentAgentEvents as ReturnType<typeof vi.fn>).mockResolvedValue({
+        protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+        threadId: "thread-1",
+        acknowledgedSequence: 4,
+      });
+
+      const res = await app.request("/threads/thread-1/environment-agent/deliver", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: "Bearer secret-token",
+        },
+        body: JSON.stringify({
+          protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+          threadId: "thread-1",
+          events: [
+            {
+              protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+              sequence: 4,
+              emittedAt: 1000,
+              threadId: "thread-1",
+              event: {
+                type: "environment.ready",
+                threadId: "thread-1",
+              },
+            },
+          ],
+        }),
+      });
+
+      expect(res.status).toBe(200);
+      await expect(res.json()).resolves.toMatchObject({
+        acknowledgedSequence: 4,
+      });
+      expect(threadManager.ingestEnvironmentAgentEvents).toHaveBeenCalledWith({
+        threadId: "thread-1",
+        authorizationHeader: "Bearer secret-token",
+        events: [
+          expect.objectContaining({
+            sequence: 4,
+          }),
+        ],
+      });
+    });
   });
 
   describe("GET /threads", () => {

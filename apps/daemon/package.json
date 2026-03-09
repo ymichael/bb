@@ -23,6 +23,7 @@
   "dependencies": {
     "@beanbag/agent-core": "workspace:*",
     "@beanbag/environment": "workspace:*",
+    "@beanbag/environment-agent": "workspace:*",
     "@beanbag/agent-server": "workspace:*",
     "@beanbag/db": "workspace:*",
     "@hono/node-server": "^1.13.0",

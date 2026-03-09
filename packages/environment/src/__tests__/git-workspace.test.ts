@@ -50,6 +50,10 @@ function createEnvironment(getStatusOutput: () => string): IEnvironment {
     exists: () => true,
     supportsHostFilesystemAccess: () => true,
     isIsolatedWorkspace: () => true,
+    getAgentConnectionTarget: () => ({
+      transport: "http",
+      baseUrl: "http://127.0.0.1:4312",
+    }),
     getCheckoutSnapshot: () => ({
       head: "head",
       detached: false,

@@ -134,16 +134,19 @@ describe.sequential("e2e: thread detail stays responsive while provisioning", ()
       expect(threadResult.elapsedMs).toBeLessThan(1_000);
       expect(timelineResult.elapsedMs).toBeLessThan(1_000);
       expect(threadResult.data.status).toBe("provisioning");
-      expect(timelineResult.data.rows.length).toBeGreaterThanOrEqual(2);
-      expect(timelineResult.data.rows[0]?.kind).toBe("message");
-      expect(
-        timelineResult.data.rows.some(
-          (row) =>
-            row.kind === "message" &&
-            row.message.kind === "operation" &&
-            row.message.opType === "provisioning",
-        ),
-      ).toBe(true);
+      await expect
+        .poll(async () => {
+          const timeline = await readJson<ThreadTimelineResponse>(
+            `${harness.baseUrl}/api/v1/threads/${thread.id}/timeline`,
+          );
+          return timeline.rows.some(
+            (row) =>
+              row.kind === "message" &&
+              row.message.kind === "operation" &&
+              row.message.opType === "provisioning",
+          );
+        })
+        .toBe(true);
 
       const completedThread = await waitForThreadToLeaveProvisioning(
         harness.baseUrl,

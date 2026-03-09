@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { rm } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
+import type { EnvironmentAgentConnectionTarget } from "@beanbag/environment-agent";
 import type {
   CreateEnvironmentContext,
   DemoteEnvironmentOptions,
@@ -31,6 +32,14 @@ import {
   listGitWorkspaceCommitsSinceRef,
   watchGitWorkspaceStatus,
 } from "./git-workspace.js";
+import {
+  resolveEnvironmentAgentConnectionTarget,
+} from "./environment-agent-target.js";
+import {
+  disposeManagedHostEnvironmentAgent,
+  ensureManagedHostEnvironmentAgent,
+  resolveManagedHostEnvironmentAgentTarget,
+} from "./host-environment-agent.js";
 import { runCommand, runCommandAsync, spawnCommand } from "./process.js";
 
 export interface WorktreeEnvironmentState {
@@ -40,6 +49,7 @@ export interface WorktreeEnvironmentState {
 
 export interface CreateWorktreeEnvironmentDefinitionOptions {
   worktreeRootName?: string;
+  manageEnvironmentAgent?: boolean;
 }
 
 const WORKTREE_ENVIRONMENT_INFO: EnvironmentInfo = {
@@ -212,20 +222,29 @@ function resolveDefaultBranch(repoRoot: string): string | undefined {
 class WorktreeEnvironment implements IEnvironment {
   readonly kind = "worktree";
   readonly info = { ...WORKTREE_ENVIRONMENT_INFO };
+  private readonly projectId: string;
+  private readonly threadId: string;
   private readonly rootPath: string;
   private readonly env: Record<string, string | undefined>;
   private readonly services: CreateEnvironmentContext["services"];
+  private readonly manageEnvironmentAgent: boolean;
   private preparePromise: Promise<void> | null = null;
 
   constructor(
+    projectId: string,
+    threadId: string,
     private readonly projectRoot: string,
     private readonly state: WorktreeEnvironmentState,
     runtimeEnv: Record<string, string | undefined>,
     services?: CreateEnvironmentContext["services"],
+    manageEnvironmentAgent = true,
   ) {
+    this.projectId = projectId;
+    this.threadId = threadId;
     this.rootPath = state.workspaceRoot;
     this.env = { ...runtimeEnv };
     this.services = services;
+    this.manageEnvironmentAgent = manageEnvironmentAgent;
   }
 
   serialize(): WorktreeEnvironmentState {
@@ -234,6 +253,15 @@ class WorktreeEnvironment implements IEnvironment {
 
   async prepare(): Promise<void> {
     if (existsSync(this.state.workspaceRoot)) {
+      if (this.manageEnvironmentAgent) {
+        await ensureManagedHostEnvironmentAgent({
+          workspaceRootPath: this.state.workspaceRoot,
+          threadId: this.threadId,
+          projectId: this.projectId,
+          environmentId: this.kind,
+          runtimeEnv: this.env,
+        });
+      }
       return;
     }
     if (this.preparePromise) {
@@ -284,9 +312,27 @@ class WorktreeEnvironment implements IEnvironment {
         `Failed to create worktree: ${addResult.stderr || addResult.stdout || "unknown error"}`,
       );
     }
+
+    if (this.manageEnvironmentAgent) {
+      await ensureManagedHostEnvironmentAgent({
+        workspaceRootPath: this.state.workspaceRoot,
+        threadId: this.threadId,
+        projectId: this.projectId,
+        environmentId: this.kind,
+        runtimeEnv: this.env,
+      });
+    }
   }
 
   async dispose(): Promise<void> {
+    if (this.manageEnvironmentAgent) {
+      await disposeManagedHostEnvironmentAgent({
+        projectId: this.projectId,
+        threadId: this.threadId,
+        environmentId: this.kind,
+        runtimeEnv: this.env,
+      });
+    }
     await runGitAtPathAsync(
       this.projectRoot,
       ["worktree", "remove", "--force", this.state.workspaceRoot],
@@ -305,6 +351,29 @@ class WorktreeEnvironment implements IEnvironment {
 
   isIsolatedWorkspace(): boolean {
     return true;
+  }
+
+  getAgentConnectionTarget(): EnvironmentAgentConnectionTarget {
+    if (!this.manageEnvironmentAgent && !this.env.BEANBAG_ENVIRONMENT_AGENT_BASE_URL?.trim()) {
+      throw new Error("Worktree environment-agent management is disabled");
+    }
+    const managedTarget = resolveManagedHostEnvironmentAgentTarget({
+      projectId: this.projectId,
+      threadId: this.threadId,
+      environmentId: this.kind,
+      runtimeEnv: this.env,
+    });
+    if (!managedTarget && !this.env.BEANBAG_ENVIRONMENT_AGENT_BASE_URL?.trim()) {
+      throw new Error("Missing managed environment-agent target for worktree environment");
+    }
+    return resolveEnvironmentAgentConnectionTarget({
+      runtimeEnv: this.env,
+      defaultTarget:
+        managedTarget ?? {
+          transport: "http",
+          baseUrl: "http://127.0.0.1:0",
+        },
+    });
   }
 
   getCheckoutSnapshot(): EnvironmentCheckoutSnapshot {
@@ -682,6 +751,7 @@ export function createWorktreeEnvironmentDefinition(
     opts?.worktreeRootName ??
     process.env.BEANBAG_WORKTREE_ROOT ??
     DEFAULT_WORKTREE_ROOT;
+  const manageEnvironmentAgent = opts?.manageEnvironmentAgent ?? true;
 
   return {
     kind: "worktree",
@@ -702,6 +772,8 @@ export function createWorktreeEnvironmentDefinition(
       mkdirSync(worktreeRoot, { recursive: true });
 
       return new WorktreeEnvironment(
+        context.projectId,
+        context.threadId,
         projectRoot,
         {
           workspaceRoot,
@@ -709,6 +781,7 @@ export function createWorktreeEnvironmentDefinition(
         },
         context.runtimeEnv,
         context.services,
+        manageEnvironmentAgent,
       );
     },
     restore(state: WorktreeEnvironmentState, context: CreateEnvironmentContext): IEnvironment {
@@ -716,10 +789,13 @@ export function createWorktreeEnvironmentDefinition(
         throw new Error(`Worktree workspace is unavailable: ${state.workspaceRoot}`);
       }
       return new WorktreeEnvironment(
+        context.projectId,
+        context.threadId,
         context.projectRootPath,
         state,
         context.runtimeEnv,
         context.services,
+        manageEnvironmentAgent,
       );
     },
     isState(value: unknown): value is WorktreeEnvironmentState {

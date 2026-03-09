@@ -1,4 +1,3 @@
-import type { ChildProcess } from "node:child_process";
 import {
   accessSync,
   constants,
@@ -74,6 +73,13 @@ import {
   type EnvironmentSquashMergeMessageContext,
   type IEnvironment,
 } from "@beanbag/environment";
+import type { EnvironmentAgentConnectionTarget } from "@beanbag/environment-agent";
+import type {
+  EnvironmentAgentDeliveryResponse,
+  EnvironmentAgentEventEnvelope,
+  EnvironmentAgentStatusSnapshot,
+} from "@beanbag/environment-agent";
+import { ENVIRONMENT_AGENT_PROTOCOL_VERSION } from "@beanbag/environment-agent";
 import type {
   ThreadRepository,
   EventRepository,
@@ -81,12 +87,14 @@ import type {
 } from "@beanbag/db";
 import {
   AgentServer,
+  type AgentServerSessionConnection,
   type AgentServerNotification,
   AgentServerSessionError,
   type LlmCommitMessageGenerationArgs,
   type LlmCompletionService,
   createCodexProviderAdapter,
 } from "@beanbag/agent-server";
+import { createHttpEnvironmentAgentClient } from "@beanbag/environment-agent";
 import { WSManager } from "./ws.js";
 import {
   isDomainError,
@@ -429,6 +437,8 @@ export class Orchestrator implements ThreadOrchestrator {
   private timelineByThread = new Map<string, ThreadTimelineCacheEntry>();
   /** Cached prompt-derived fallback titles for untitled threads. */
   private titleFallbackByThreadId = new Map<string, string | null>();
+  /** Latest replay cursor consumed from each environment-agent event log. */
+  private environmentAgentReplayCursorByThreadId = new Map<string, number>();
   /** Cached provisioning completion state derived from provisioning lifecycle events. */
   private provisioningCompletionStateByThreadId = new Map<
     string,
@@ -518,16 +528,11 @@ export class Orchestrator implements ThreadOrchestrator {
         },
         runOptionalSetup: (threadId, environment, reason) =>
           this._runOptionalEnvironmentSetup(threadId, environment, reason),
-        spawnProviderProcess: ({ threadId, projectId, environment }) => {
-          const spawnSpec = this.agentServer.getSpawnSpec();
-          return environment.spawn(spawnSpec.command, spawnSpec.args, {
-            stdio: ["pipe", "pipe", "pipe"],
-            env: {
-              ...(this.threadShellPath ? { PATH: this.threadShellPath } : {}),
-              ...(projectId ? { BB_PROJECT_ID: projectId } : {}),
-              BB_THREAD_ID: threadId,
-              BB_ENVIRONMENT_ID: environment.kind,
-            },
+        spawnProviderProcess: ({ threadId, projectId, agentConnectionTarget }) => {
+          return this._connectEnvironmentAgentSession({
+            threadId,
+            projectId,
+            agentConnectionTarget,
           });
         },
       },
@@ -642,9 +647,9 @@ export class Orchestrator implements ThreadOrchestrator {
     const project = this.projectRepo.getById(thread.projectId);
     const providerThreadId = this._resolvePersistedProviderThreadId(thread.id);
     const latestLifecycle = this._latestTurnLifecycleStatus(thread.id);
-    const shouldRemainActive = latestLifecycle === "active";
+    const shouldAttemptResume = latestLifecycle !== "idle";
 
-    if (!project || !providerThreadId || !shouldRemainActive) {
+    if (!project || !providerThreadId || !shouldAttemptResume) {
       this._setThreadStatus(thread.id, "idle", true, { touchUpdatedAt: false });
       return;
     }
@@ -661,7 +666,7 @@ export class Orchestrator implements ThreadOrchestrator {
       );
       const resumed = await this.agentServer.resumeSession({
         threadId: thread.id,
-        spawnProcess: environmentRuntime.spawnProcess!,
+        connectSession: environmentRuntime.connectSession!,
         providerThreadId,
         context: this._buildProviderThreadContext({
           threadId: thread.id,
@@ -676,6 +681,7 @@ export class Orchestrator implements ThreadOrchestrator {
           activeTurnId,
         });
       }
+      await this._nudgeEnvironmentAgentDelivery(thread.id);
     } catch {
       this._cleanupThreadRuntime(thread.id);
       this._setThreadStatus(thread.id, "idle", true, { touchUpdatedAt: false });
@@ -2222,6 +2228,112 @@ export class Orchestrator implements ThreadOrchestrator {
     return this.environmentService.listEnvironments();
   }
 
+  async getEnvironmentAgentStatus(
+    threadId: string,
+  ): Promise<EnvironmentAgentStatusSnapshot> {
+    const thread = this.threadRepo.getById(threadId);
+    if (!thread) {
+      throw threadNotFoundError(threadId);
+    }
+    try {
+      return await this.agentServer.getEnvironmentAgentStatus(threadId);
+    } catch (error) {
+      this._rethrowAgentServerError(threadId, error);
+    }
+  }
+
+  async replayEnvironmentAgentEvents(args: {
+    threadId: string;
+    afterSequence: number;
+    limit?: number;
+  }): Promise<{
+    events: EnvironmentAgentEventEnvelope[];
+    fromSequenceExclusive: number;
+    toSequenceInclusive: number;
+    hasMore: boolean;
+  }> {
+    const thread = this.threadRepo.getById(args.threadId);
+    if (!thread) {
+      throw threadNotFoundError(args.threadId);
+    }
+    try {
+      return await this.agentServer.replayEnvironmentAgentEvents(args);
+    } catch (error) {
+      this._rethrowAgentServerError(args.threadId, error);
+    }
+  }
+
+  async ingestEnvironmentAgentEvents(args: {
+    threadId: string;
+    authorizationHeader?: string;
+    events: EnvironmentAgentEventEnvelope[];
+  }): Promise<EnvironmentAgentDeliveryResponse> {
+    const thread = this.threadRepo.getById(args.threadId);
+    if (!thread) {
+      throw threadNotFoundError(args.threadId);
+    }
+
+    this._assertEnvironmentAgentAuthorization(args.threadId, args.authorizationHeader);
+
+    const persistedCursor =
+      (this.threadRepo.getById(args.threadId) as
+        | (Thread & { environmentAgentCursor?: number })
+        | undefined)?.environmentAgentCursor ?? 0;
+    const currentCursor =
+      this.environmentAgentReplayCursorByThreadId.get(args.threadId) ?? persistedCursor;
+
+    const newEvents: EnvironmentAgentEventEnvelope[] = [];
+    let expectedSequence = currentCursor + 1;
+    for (const event of args.events) {
+      if (event.sequence < expectedSequence) {
+        continue;
+      }
+      if (event.sequence !== expectedSequence) {
+        break;
+      }
+      newEvents.push(event);
+      expectedSequence += 1;
+    }
+
+    if (newEvents.length === 0) {
+      return {
+        protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+        threadId: args.threadId,
+        acknowledgedSequence: currentCursor,
+      };
+    }
+
+    try {
+      await this.agentServer.ingestReplayedEnvironmentAgentEvents({
+        threadId: args.threadId,
+        events: newEvents,
+      });
+      const acknowledgedSequence = newEvents[newEvents.length - 1]!.sequence;
+      this._setEnvironmentAgentReplayCursor(args.threadId, acknowledgedSequence);
+      return {
+        protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+        threadId: args.threadId,
+        acknowledgedSequence,
+      };
+    } catch (error) {
+      this._rethrowAgentServerError(args.threadId, error);
+    }
+  }
+
+  async retryEnvironmentAgentDelivery(
+    threadId: string,
+  ): Promise<EnvironmentAgentStatusSnapshot> {
+    const thread = this.threadRepo.getById(threadId);
+    if (!thread) {
+      throw threadNotFoundError(threadId);
+    }
+    try {
+      return await this.agentServer.retryEnvironmentAgentDelivery(threadId);
+    } catch (error) {
+      this._rethrowAgentServerError(threadId, error);
+    }
+  }
+
   /**
    * Stop all active processes. Called during graceful shutdown.
    */
@@ -2250,6 +2362,7 @@ export class Orchestrator implements ThreadOrchestrator {
     this.queuedOperationsByThreadId.clear();
     this.operationDispatchInFlight.clear();
     this.projectOperationTransitionsInFlight.clear();
+    this.environmentAgentReplayCursorByThreadId.clear();
     for (const queued of this.queuedProviderBroadcastsByThread.values()) {
       if (queued.timer !== null) {
         clearTimeout(queued.timer);
@@ -2414,10 +2527,11 @@ export class Orchestrator implements ThreadOrchestrator {
     );
     const started = await this.agentServer.startSession({
       threadId,
-      spawnProcess: environmentRuntime.spawnProcess!,
+      connectSession: environmentRuntime.connectSession!,
       request: effectiveRequest,
       context: providerContext,
     });
+    await this._replayBufferedEnvironmentAgentEvents(threadId);
     const providerThreadId = started.providerThreadId;
     const hydratedThreadAfterStart = this.threadRepo.getById(threadId);
     if (
@@ -2462,6 +2576,7 @@ export class Orchestrator implements ThreadOrchestrator {
   private _cleanupThreadRuntime(threadId: string): void {
     this.agentServer.stopSession(threadId);
     this.eventSeqCounters.delete(threadId);
+    this.environmentAgentReplayCursorByThreadId.delete(threadId);
     this.lastNotifiedCompletionTurnIds.delete(threadId);
     this.turnLifecycleEpochs.delete(threadId);
     this.lastNotifiedCompletionEpochs.delete(threadId);
@@ -2470,6 +2585,89 @@ export class Orchestrator implements ThreadOrchestrator {
     this.queuedOperationsByThreadId.delete(threadId);
     this.operationDispatchInFlight.delete(threadId);
     this.environmentService.cleanupEnvironmentRuntime(threadId);
+  }
+
+  private async _replayBufferedEnvironmentAgentEvents(
+    threadId: string,
+  ): Promise<void> {
+    const persistedCursor =
+      (
+        this.threadRepo.getById(threadId) as
+          | (Thread & { environmentAgentCursor?: number })
+          | undefined
+      )?.environmentAgentCursor ?? 0;
+    const afterSequence =
+      this.environmentAgentReplayCursorByThreadId.get(threadId) ?? persistedCursor;
+    const replay = await this.agentServer.replayEnvironmentAgentEvents({
+      threadId,
+      afterSequence,
+    });
+    if (replay.events.length > 0) {
+      await this.agentServer.ingestReplayedEnvironmentAgentEvents({
+        threadId,
+        events: replay.events,
+      });
+    }
+    this._setEnvironmentAgentReplayCursor(
+      threadId,
+      Math.max(afterSequence, replay.toSequenceInclusive),
+    );
+  }
+
+  private _setEnvironmentAgentReplayCursor(
+    threadId: string,
+    sequence: number,
+  ): void {
+    this.environmentAgentReplayCursorByThreadId.set(threadId, sequence);
+    this.threadRepo.update(
+      threadId,
+      { environmentAgentCursor: sequence } as { environmentAgentCursor: number },
+      { touchUpdatedAt: false },
+    );
+  }
+
+  private _assertEnvironmentAgentAuthorization(
+    threadId: string,
+    authorizationHeader?: string,
+  ): void {
+    const expectedAuthorization = this._resolveEnvironmentAgentAuthorization(threadId);
+    if (!expectedAuthorization || authorizationHeader !== expectedAuthorization) {
+      throw invalidRequestError("Unauthorized environment-agent delivery");
+    }
+  }
+
+  private _resolveEnvironmentAgentAuthorization(threadId: string): string | undefined {
+    const runtime = this.environmentService.getEnvironmentRuntime(threadId);
+    if (runtime?.agentConnectionTarget.headers?.authorization) {
+      return runtime.agentConnectionTarget.headers.authorization;
+    }
+
+    const thread = this.threadRepo.getById(threadId);
+    if (!thread) {
+      return undefined;
+    }
+    const project = this.projectRepo.getById(thread.projectId);
+    if (!project) {
+      return undefined;
+    }
+
+    try {
+      const restored = this.environmentService.restoreThreadEnvironment(thread, project.rootPath);
+      return restored?.getAgentConnectionTarget().headers?.authorization;
+    } catch {
+      return undefined;
+    }
+  }
+
+  private async _nudgeEnvironmentAgentDelivery(threadId: string): Promise<void> {
+    try {
+      await this.agentServer.retryEnvironmentAgentDelivery(threadId);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.warn(
+        `[thread ${threadId}] Failed to nudge environment-agent delivery: ${message}`,
+      );
+    }
   }
 
   private _setEnvironmentRuntime(
@@ -2640,6 +2838,30 @@ export class Orchestrator implements ThreadOrchestrator {
     );
   }
 
+  private async _connectEnvironmentAgentSession(args: {
+    threadId: string;
+    projectId?: string;
+    agentConnectionTarget: EnvironmentAgentConnectionTarget;
+  }): Promise<AgentServerSessionConnection> {
+    return {
+      transport: "http",
+      client: await createHttpEnvironmentAgentClient({
+        baseUrl: args.agentConnectionTarget.baseUrl,
+        ...(args.agentConnectionTarget.headers
+          ? { headers: args.agentConnectionTarget.headers }
+          : {}),
+      }),
+      ...(args.agentConnectionTarget.providerLaunch
+        ? {
+            providerLaunch: {
+              command: args.agentConnectionTarget.providerLaunch.command,
+              args: [...args.agentConnectionTarget.providerLaunch.args],
+            },
+          }
+        : {}),
+    };
+  }
+
   private _resolvePersistedProviderThreadId(threadId: string): string | undefined {
     const indexedLookup =
       typeof this.eventRepo.getLatestProviderThreadId === "function"
@@ -2744,7 +2966,7 @@ export class Orchestrator implements ThreadOrchestrator {
       );
       const resumed = await this.agentServer.resumeSession({
         threadId,
-        spawnProcess: environmentRuntime.spawnProcess!,
+        connectSession: environmentRuntime.connectSession!,
         providerThreadId: persistedThreadId,
         context: this._buildProviderThreadContext({
           threadId,
@@ -2752,6 +2974,7 @@ export class Orchestrator implements ThreadOrchestrator {
         }),
         options,
       });
+      await this._replayBufferedEnvironmentAgentEvents(threadId);
       return resumed.providerThreadId;
     } catch (err) {
       this._cleanupThreadRuntime(threadId);

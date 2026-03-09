@@ -138,6 +138,9 @@ importers:
       '@beanbag/daemon':
         specifier: workspace:*
         version: link:../daemon
+      '@beanbag/environment-agent':
+        specifier: workspace:*
+        version: link:../../packages/environment-agent
       commander:
         specifier: ^13.0.0
         version: 13.1.0
@@ -169,6 +172,9 @@ importers:
       '@beanbag/environment':
         specifier: workspace:*
         version: link:../../packages/environment
+      '@beanbag/environment-agent':
+        specifier: workspace:*
+        version: link:../../packages/environment-agent
       '@hono/node-server':
         specifier: ^1.13.0
         version: 1.19.9(hono@4.11.9)
@@ -222,6 +228,9 @@ importers:
       '@beanbag/agent-core':
         specifier: workspace:*
         version: link:../agent-core
+      '@beanbag/environment-agent':
+        specifier: workspace:*
+        version: link:../environment-agent
       tsx:
         specifier: ^4.20.0
         version: 4.21.0
@@ -272,6 +281,24 @@ importers:
       '@beanbag/agent-core':
         specifier: workspace:*
         version: link:../agent-core
+      '@beanbag/environment-agent':
+        specifier: workspace:*
+        version: link:../environment-agent
+    devDependencies:
+      '@beanbag/tsconfig':
+        specifier: workspace:*
+        version: link:../tsconfig
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.19.10
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
+      vitest:
+        specifier: ^4.0.0
+        version: 4.0.18(@types/node@22.19.10)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.21.0)
+
+  packages/environment-agent:
     devDependencies:
       '@beanbag/tsconfig':
         specifier: workspace:*

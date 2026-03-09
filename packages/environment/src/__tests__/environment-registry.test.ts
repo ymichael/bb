@@ -5,6 +5,7 @@ import { spawnSync } from "node:child_process";
 import { describe, expect, it } from "vitest";
 import {
   EnvironmentRegistry,
+  createDockerEnvironmentDefinition,
   createLocalEnvironmentDefinition,
   createWorktreeEnvironmentDefinition,
 } from "../index.js";
@@ -106,5 +107,52 @@ describe("EnvironmentRegistry", () => {
           runtimeEnv: {},
         },
       )).toThrow(/Worktree workspace is unavailable/);
+  });
+
+  it("creates opt-in docker environments with a wrapped provider launch target", () => {
+    const projectRoot = makeTempDir("bb-docker-env-project-");
+
+    try {
+      git(projectRoot, "init", "-b", "main");
+      git(projectRoot, "config", "user.name", "Beanbag");
+      git(projectRoot, "config", "user.email", "beanbag@example.com");
+      spawnSync("sh", ["-lc", "printf 'hello\\n' > README.md"], { cwd: projectRoot });
+      git(projectRoot, "add", "README.md");
+      git(projectRoot, "commit", "-m", "init");
+
+      const registry = new EnvironmentRegistry()
+        .register(createLocalEnvironmentDefinition())
+        .register(
+          createDockerEnvironmentDefinition({
+            image: "beanbag/test-image:latest",
+            worktree: { worktreeRootName: ".worktrees" },
+          }),
+        );
+
+      const environment = registry.create("docker", {
+        projectId: "proj-1",
+        threadId: "thread-1",
+        projectRootPath: projectRoot,
+        runtimeEnv: {
+          BEANBAG_ENVIRONMENT_AGENT_BASE_URL: "http://127.0.0.1:4312",
+          BEANBAG_ENVIRONMENT_AGENT_AUTH_TOKEN: "secret-token",
+        },
+      });
+
+      expect(environment.kind).toBe("docker");
+      expect(environment.getAgentConnectionTarget()).toEqual({
+        transport: "http",
+        baseUrl: "http://127.0.0.1:4312",
+        headers: {
+          authorization: "Bearer secret-token",
+        },
+        providerLaunch: {
+          command: "docker",
+          args: ["exec", "-i", "beanbag-thread-thread-1"],
+        },
+      });
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
   });
 });

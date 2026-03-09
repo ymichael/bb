@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@beanbag/agent-core": "workspace:*",
+    "@beanbag/environment-agent": "workspace:*",
     "@beanbag/daemon": "workspace:*",
     "commander": "^13.0.0",
     "hono": "^4.7.0"

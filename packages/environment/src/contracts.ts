@@ -2,6 +2,7 @@ import type { ChildProcess, SpawnOptions } from "node:child_process";
 import type {
   PersistedEnvironmentRecord,
 } from "@beanbag/agent-core";
+import type { EnvironmentAgentConnectionTarget } from "@beanbag/environment-agent";
 
 export type EnvironmentCapability =
   | "host_filesystem"
@@ -65,6 +66,7 @@ export interface IEnvironment {
   exists(): boolean;
   supportsHostFilesystemAccess(): boolean;
   isIsolatedWorkspace(): boolean;
+  getAgentConnectionTarget(): EnvironmentAgentConnectionTarget;
   getCheckoutSnapshot(): EnvironmentCheckoutSnapshot;
   getWorkspaceRootUnsafe(): string;
   buildAgentInstructions?(): string | undefined;

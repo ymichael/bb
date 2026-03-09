@@ -1,4 +1,5 @@
 import { existsSync } from "node:fs";
+import type { EnvironmentAgentConnectionTarget } from "@beanbag/environment-agent";
 import type {
   CreateEnvironmentContext,
   DemoteEnvironmentOptions,
@@ -27,6 +28,14 @@ import {
   listGitWorkspaceCommitsSinceRef,
   watchGitWorkspaceStatus,
 } from "./git-workspace.js";
+import {
+  resolveEnvironmentAgentConnectionTarget,
+} from "./environment-agent-target.js";
+import {
+  disposeManagedHostEnvironmentAgent,
+  ensureManagedHostEnvironmentAgent,
+  resolveManagedHostEnvironmentAgentTarget,
+} from "./host-environment-agent.js";
 import { runCommand, runCommandAsync, spawnCommand } from "./process.js";
 
 interface LocalEnvironmentState {}
@@ -47,11 +56,15 @@ const LOCAL_ENVIRONMENT_INFO: EnvironmentInfo = {
 class LocalEnvironment implements IEnvironment {
   readonly kind = "local";
   readonly info = { ...LOCAL_ENVIRONMENT_INFO };
+  private readonly projectId: string;
+  private readonly threadId: string;
   private readonly rootPath: string;
   private readonly env: Record<string, string | undefined>;
   private readonly services: CreateEnvironmentContext["services"];
 
   constructor(context: CreateEnvironmentContext) {
+    this.projectId = context.projectId;
+    this.threadId = context.threadId;
     this.rootPath = context.projectRootPath;
     this.env = { ...context.runtimeEnv };
     this.services = context.services;
@@ -61,9 +74,24 @@ class LocalEnvironment implements IEnvironment {
     return {};
   }
 
-  async prepare(): Promise<void> {}
+  async prepare(): Promise<void> {
+    await ensureManagedHostEnvironmentAgent({
+      workspaceRootPath: this.rootPath,
+      threadId: this.threadId,
+      projectId: this.projectId,
+      environmentId: this.kind,
+      runtimeEnv: this.env,
+    });
+  }
 
-  dispose(): void {}
+  async dispose(): Promise<void> {
+    await disposeManagedHostEnvironmentAgent({
+      projectId: this.projectId,
+      threadId: this.threadId,
+      environmentId: this.kind,
+      runtimeEnv: this.env,
+    });
+  }
 
   exists(): boolean {
     return existsSync(this.rootPath);
@@ -75,6 +103,26 @@ class LocalEnvironment implements IEnvironment {
 
   isIsolatedWorkspace(): boolean {
     return false;
+  }
+
+  getAgentConnectionTarget(): EnvironmentAgentConnectionTarget {
+    const managedTarget = resolveManagedHostEnvironmentAgentTarget({
+      projectId: this.projectId,
+      threadId: this.threadId,
+      environmentId: this.kind,
+      runtimeEnv: this.env,
+    });
+    if (!managedTarget && !this.env.BEANBAG_ENVIRONMENT_AGENT_BASE_URL?.trim()) {
+      throw new Error("Missing managed environment-agent target for local environment");
+    }
+    return resolveEnvironmentAgentConnectionTarget({
+      runtimeEnv: this.env,
+      defaultTarget:
+        managedTarget ?? {
+          transport: "http",
+          baseUrl: "http://127.0.0.1:0",
+        },
+    });
   }
 
   getCheckoutSnapshot(): EnvironmentCheckoutSnapshot {

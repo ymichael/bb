@@ -34,6 +34,7 @@ export interface ServerDeps {
   threadRepo: ThreadRepository;
   eventRepo: EventRepository;
   provider?: ProviderAdapter;
+  daemonBaseUrl?: string;
   requestShutdown?: (reason: string) => void;
   requestRestart?: (reason: string) => void;
 }
@@ -51,10 +52,20 @@ export function createServer(deps: ServerDeps) {
   const wsManager = new WSManager();
   const provider = deps.provider ?? createProviderAdapter();
   const providerCatalog = listAvailableProviderInfos();
-  const environmentRegistry = createDefaultEnvironmentRegistry();
+  const environmentRegistry = createDefaultEnvironmentRegistry(
+    process.env.BEANBAG_ENABLE_DOCKER_ENVIRONMENT === "true"
+      ? { docker: {} }
+      : undefined,
+  );
   const environmentCatalog = listAvailableEnvironmentInfos(environmentRegistry);
   const scheduler = new InMemorySchedulerService();
   const llmCompletionService = createCodexLlmCompletionService();
+  const daemonRuntimeEnv = {
+    ...process.env,
+    ...(deps.daemonBaseUrl
+      ? { BEANBAG_DAEMON_URL: deps.daemonBaseUrl }
+      : {}),
+  };
   const threadManager = new Orchestrator(
     deps.threadRepo,
     deps.eventRepo,
@@ -62,7 +73,7 @@ export function createServer(deps: ServerDeps) {
     wsManager,
     llmCompletionService,
     provider,
-    process.env,
+    daemonRuntimeEnv,
     environmentRegistry,
     providerCatalog,
     environmentCatalog,

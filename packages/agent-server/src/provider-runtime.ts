@@ -1,5 +1,4 @@
-import type { ChildProcess } from "node:child_process";
-import { createInterface, type Interface } from "node:readline";
+import type { JsonLineTransport } from "@beanbag/environment-agent";
 
 type JsonRpcId = string | number;
 
@@ -54,10 +53,11 @@ export interface ProviderRuntimeNotification {
 
 export interface ProviderRuntimeOptions {
   threadId: string;
-  child: ChildProcess;
+  transport: JsonLineTransport;
   onNotification: (msg: ProviderRuntimeNotification) => void;
   onUnmatchedRpcError?: (id: JsonRpcId, message: string) => void;
   onStderrLine?: (line: string) => void;
+  onClosed?: (reason?: Error) => void;
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -81,13 +81,10 @@ function getErrorMessage(value: unknown): string {
 
 export class ProviderRuntime {
   private pending = new Map<JsonRpcId, PendingRequest>();
-  private stdoutRl: Interface | undefined;
-  private stderrRl: Interface | undefined;
   private closed = false;
 
   constructor(private opts: ProviderRuntimeOptions) {
-    this._setupStdout();
-    this._setupStderr();
+    this._setupTransport();
   }
 
   send(msg: object): void {
@@ -97,13 +94,14 @@ export class ProviderRuntime {
       );
     }
 
-    if (!this.opts.child.stdin) {
+    try {
+      this.opts.transport.send(JSON.stringify(msg));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
       throw new ProviderRuntimeUnavailableError(
-        `[thread ${this.opts.threadId}] No stdin on child process`,
+        `[thread ${this.opts.threadId}] Failed to write provider message: ${message}`,
       );
     }
-
-    this.opts.child.stdin.write(`${JSON.stringify(msg)}\n`);
   }
 
   request(
@@ -114,14 +112,6 @@ export class ProviderRuntime {
       return Promise.reject(
         new ProviderRuntimeUnavailableError(
           `[thread ${this.opts.threadId}] Provider runtime is closed`,
-        ),
-      );
-    }
-
-    if (!this.opts.child.stdin) {
-      return Promise.reject(
-        new ProviderRuntimeUnavailableError(
-          `[thread ${this.opts.threadId}] No stdin on child process`,
         ),
       );
     }
@@ -147,19 +137,20 @@ export class ProviderRuntime {
 
       this.pending.set(msg.id, { resolve, reject, timeout });
 
-      this.opts.child.stdin!.write(`${JSON.stringify(msg)}\n`, (err) => {
-        if (!err) return;
-
+      try {
+        this.opts.transport.send(JSON.stringify(msg));
+      } catch (error) {
         const request = this.pending.get(msg.id);
         if (!request) return;
         clearTimeout(request.timeout);
         this.pending.delete(msg.id);
+        const message = error instanceof Error ? error.message : String(error);
         reject(
           new ProviderRuntimeUnavailableError(
-            `[thread ${this.opts.threadId}] Failed to write RPC request ${msg.id}: ${err.message}`,
+            `[thread ${this.opts.threadId}] Failed to write RPC request ${msg.id}: ${message}`,
           ),
         );
-      });
+      }
     });
   }
 
@@ -171,28 +162,17 @@ export class ProviderRuntime {
       reason ??
       new Error(`[thread ${this.opts.threadId}] Provider runtime closed`);
 
-    if (this.stdoutRl) {
-      this.stdoutRl.close();
-      this.stdoutRl = undefined;
-    }
-
-    if (this.stderrRl) {
-      this.stderrRl.close();
-      this.stderrRl = undefined;
-    }
+    this.opts.transport.close(closeError);
 
     for (const [id, pending] of this.pending) {
       clearTimeout(pending.timeout);
       pending.reject(closeError);
       this.pending.delete(id);
     }
+    this.opts.onClosed?.(closeError);
   }
 
-  private _setupStdout(): void {
-    if (!this.opts.child.stdout) return;
-
-    this.stdoutRl = createInterface({ input: this.opts.child.stdout });
-    this.stdoutRl.on("line", (line) => {
+  private _handleLine(line: string): void {
       const trimmed = line.trim();
       if (!trimmed) return;
 
@@ -240,15 +220,19 @@ export class ProviderRuntime {
           params: msg.params,
         });
       }
-    });
   }
 
-  private _setupStderr(): void {
-    if (!this.opts.child.stderr) return;
-
-    this.stderrRl = createInterface({ input: this.opts.child.stderr });
-    this.stderrRl.on("line", (line) => {
-      this.opts.onStderrLine?.(line);
+  private _setupTransport(): void {
+    this.opts.transport.setHandlers({
+      onLine: (line: string) => {
+        this._handleLine(line);
+      },
+      onStderrLine: (line: string) => {
+        this.opts.onStderrLine?.(line);
+      },
+      onClose: (reason?: Error) => {
+        this.close(reason);
+      },
     });
   }
 }
