@@ -1,4 +1,8 @@
-import type { UIMessage } from "@beanbag/agent-core";
+import {
+  assertNever,
+  type UIMessage,
+} from "@beanbag/agent-core";
+import { shouldShimmerOperationTitle } from "@/components/messages/rows/operationOngoingState";
 import type { ThreadDetailRow } from "./threadDetailRows";
 
 function isProvisioningActivityOperation(
@@ -34,6 +38,30 @@ export function isActivityRow(row: ThreadDetailRow): boolean {
   return isActivityMessage(row.message);
 }
 
+function isMessageShowingOngoingState(
+  message: UIMessage,
+  preferOngoingLabels = false,
+): boolean {
+  switch (message.kind) {
+    case "assistant-reasoning":
+      return message.status === "streaming";
+    case "tool-call":
+    case "tool-exploring":
+    case "web-search":
+    case "file-edit":
+      return message.status === "pending" || preferOngoingLabels;
+    case "operation":
+      return shouldShimmerOperationTitle(message);
+    case "assistant-text":
+    case "user":
+    case "error":
+    case "debug/raw-event":
+      return false;
+    default:
+      return assertNever(message);
+  }
+}
+
 export function findLatestActivityRowId(rows: ThreadDetailRow[]): string | null {
   for (let index = rows.length - 1; index >= 0; index -= 1) {
     const row = rows[index];
@@ -50,6 +78,36 @@ export function shouldHighlightLatestActivity(
   if (!latestActivityRowId) return false;
   const lastRow = rows[rows.length - 1];
   return Boolean(lastRow && lastRow.id === latestActivityRowId);
+}
+
+export function isLastThreadRowShowingOngoingState(
+  rows: ThreadDetailRow[],
+  latestActivityRowId: string | null,
+): boolean {
+  const lastRow = rows[rows.length - 1];
+  if (!lastRow) return false;
+
+  switch (lastRow.kind) {
+    case "message":
+      return isMessageShowingOngoingState(
+        lastRow.message,
+        lastRow.id === latestActivityRowId,
+      );
+    case "tool-group": {
+      const latestActivityMessageId = findLatestActivityMessageId(lastRow.messages);
+      if (!latestActivityMessageId) return false;
+      const latestActivityMessage = lastRow.messages.find(
+        (message) => message.id === latestActivityMessageId,
+      );
+      if (!latestActivityMessage) return false;
+      return isMessageShowingOngoingState(
+        latestActivityMessage,
+        lastRow.id === latestActivityRowId,
+      );
+    }
+    default:
+      return assertNever(lastRow);
+  }
 }
 
 export function findLatestActivityMessageId(messages: UIMessage[]): string | null {

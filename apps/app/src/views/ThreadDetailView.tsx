@@ -63,6 +63,7 @@ import { type ThreadDetailToolGroupRow } from "./threadDetailRows";
 import {
   findLatestActivityMessageId,
   findLatestActivityRowId,
+  isLastThreadRowShowingOngoingState,
   shouldHighlightLatestActivity,
 } from "./threadDetailActivity";
 import {
@@ -417,9 +418,14 @@ export function ThreadDetailView() {
     () => shouldHighlightLatestActivity(threadDetailRows, latestActivityRowId),
     [latestActivityRowId, threadDetailRows],
   );
+  const isLastThreadRowShowingOngoingIndicator = useMemo(
+    () => isLastThreadRowShowingOngoingState(threadDetailRows, latestActivityRowId),
+    [latestActivityRowId, threadDetailRows],
+  );
 
   const isReasoningBlockActive = false;
   const isTimelineLoading = timelineLoading;
+  const isThreadTimelinePending = isTimelineLoading && threadDetailRows.length === 0;
   const isThreadPrimaryCheckoutActive = thread?.primaryCheckout?.isActive === true;
   const environmentInfo = useMemo(
     () =>
@@ -1572,7 +1578,7 @@ export function ThreadDetailView() {
         </section>
       ) : null}
       <ConversationTimeline>
-        {isTimelineLoading && threadDetailRows.length === 0 ? (
+        {isThreadTimelinePending ? (
           <ConversationEmptyState
             message="Loading thread..."
             spacing="compact"
@@ -1609,7 +1615,9 @@ export function ThreadDetailView() {
           })
         )}
       </ConversationTimeline>
-      {thread.status === "active" ? (
+      {thread.status === "active" &&
+      !isThreadTimelinePending &&
+      !isLastThreadRowShowingOngoingIndicator ? (
         <ConversationWorkingIndicator isThinking={isReasoningBlockActive} />
       ) : null}
     </>

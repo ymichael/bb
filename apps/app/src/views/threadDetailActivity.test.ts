@@ -4,6 +4,7 @@ import type { ThreadDetailRow } from "./threadDetailRows";
 import {
   findLatestActivityMessageId,
   findLatestActivityRowId,
+  isLastThreadRowShowingOngoingState,
   shouldHighlightLatestActivity,
 } from "./threadDetailActivity";
 
@@ -214,5 +215,84 @@ describe("threadDetailActivity", () => {
     ];
 
     expect(findLatestActivityMessageId(messages)).toBe("provisioning-1");
+  });
+
+  it("treats a trailing in-progress tool row as ongoing thread activity", () => {
+    const rows: ThreadDetailRow[] = [
+      {
+        kind: "message",
+        id: "tool-1",
+        message: {
+          ...baseMessage("tool-1", 1),
+          kind: "tool-call",
+          turnId: "turn-1",
+          toolName: "exec_command",
+          callId: "call-1",
+          command: "ls",
+          status: "pending",
+        },
+      },
+    ];
+
+    expect(isLastThreadRowShowingOngoingState(rows, "tool-1")).toBe(true);
+  });
+
+  it("treats a trailing streaming reasoning row as ongoing thread activity", () => {
+    const rows: ThreadDetailRow[] = [
+      {
+        kind: "message",
+        id: "reasoning-1",
+        message: {
+          ...baseMessage("reasoning-1", 1),
+          kind: "assistant-reasoning",
+          text: "**Thinking**",
+          status: "streaming",
+        },
+      },
+    ];
+
+    expect(isLastThreadRowShowingOngoingState(rows, null)).toBe(true);
+  });
+
+  it("treats a trailing latest tool group with ongoing labels as ongoing thread activity", () => {
+    const rows: ThreadDetailRow[] = [
+      {
+        kind: "tool-group",
+        id: "group-1",
+        turnId: "turn-1",
+        summaryCount: 1,
+        sourceSeqStart: 1,
+        sourceSeqEnd: 1,
+        messages: [
+          {
+            ...baseMessage("exploring-1", 1),
+            kind: "tool-exploring",
+            turnId: "turn-1",
+            status: "completed",
+            calls: [],
+          },
+        ],
+      },
+    ];
+
+    expect(isLastThreadRowShowingOngoingState(rows, "group-1")).toBe(true);
+  });
+
+  it("does not treat a trailing completed assistant summary as ongoing thread activity", () => {
+    const rows: ThreadDetailRow[] = [
+      {
+        kind: "message",
+        id: "assistant-1",
+        message: {
+          ...baseMessage("assistant-1", 1),
+          kind: "assistant-text",
+          turnId: "turn-1",
+          text: "Explored src/views/ThreadDetailView.tsx",
+          status: "completed",
+        },
+      },
+    ];
+
+    expect(isLastThreadRowShowingOngoingState(rows, null)).toBe(false);
   });
 });

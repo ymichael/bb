@@ -61,6 +61,7 @@ const apiState = vi.hoisted(() => {
       ],
       contextWindowUsage: null,
     },
+    timelineLoading: false,
     workStatus: {
       state: "dirty_uncommitted",
       changedFiles: 2,
@@ -124,7 +125,7 @@ vi.mock("../hooks/useApi", () => ({
   }),
   useThreadTimeline: () => ({
     data: apiState.timeline,
-    isLoading: false,
+    isLoading: apiState.timelineLoading,
   }),
   useThreadGitDiff: () => ({
     data: apiState.gitDiff,
@@ -291,8 +292,8 @@ vi.mock("./ThreadGitDiffPanel", () => ({
 }));
 
 describe("ThreadDetailView", () => {
-  it("renders the thread view with extracted composer and git diff panel props", () => {
-    const html = renderToStaticMarkup(
+  const renderThreadDetailView = () =>
+    renderToStaticMarkup(
       <MemoryRouter initialEntries={["/projects/project-1/threads/thread-1?secondaryPanel=git-diff"]}>
         <Routes>
           <Route
@@ -303,11 +304,113 @@ describe("ThreadDetailView", () => {
       </MemoryRouter>,
     );
 
+  it("renders the thread view with extracted composer and git diff panel props", () => {
+    apiState.thread.status = "idle";
+    apiState.timelineLoading = false;
+    apiState.timeline = {
+      rows: [
+        {
+          kind: "message",
+          id: "assistant-1",
+          message: {
+            id: "assistant-1",
+            threadId: "thread-1",
+            kind: "assistant-text",
+            text: "Rendered message",
+            sourceSeqStart: 1,
+            sourceSeqEnd: 1,
+            createdAt: 1,
+            turnId: "turn-1",
+            status: "completed",
+          },
+        },
+      ],
+      contextWindowUsage: null,
+    };
+
+    const html = renderThreadDetailView();
+
     expect(html).toContain("Parent thread");
     expect(html).toContain('href="/projects/project-1/threads/thread-parent"');
     expect(html).toContain("Rendered message");
     expect(html).toContain("Ask for follow-up changes|1|Local Env");
     expect(html).toContain("1 file");
     expect(html).toContain("+1 -1");
+  });
+
+  it("hides the working indicator while the thread timeline is still loading", () => {
+    apiState.thread.status = "active";
+    apiState.timelineLoading = true;
+    apiState.timeline = {
+      rows: [],
+      contextWindowUsage: null,
+    };
+
+    const html = renderThreadDetailView();
+
+    expect(html).toContain("Loading thread...");
+    expect(html).not.toContain("working");
+  });
+
+  it("keeps the working indicator once the active thread timeline has loaded", () => {
+    apiState.thread.status = "active";
+    apiState.timelineLoading = false;
+    apiState.timeline = {
+      rows: [
+        {
+          kind: "message",
+          id: "assistant-1",
+          message: {
+            id: "assistant-1",
+            threadId: "thread-1",
+            kind: "assistant-text",
+            text: "Explored src/views/ThreadDetailView.tsx",
+            sourceSeqStart: 1,
+            sourceSeqEnd: 1,
+            createdAt: 1,
+            turnId: "turn-1",
+            status: "completed",
+          },
+        },
+      ],
+      contextWindowUsage: null,
+    };
+
+    const html = renderThreadDetailView();
+
+    expect(html).not.toContain("Loading thread...");
+    expect(html).toContain("working");
+  });
+
+  it("hides the working indicator when the last thread row is already in-progress", () => {
+    apiState.thread.status = "active";
+    apiState.timelineLoading = false;
+    apiState.timeline = {
+      rows: [
+        {
+          kind: "message",
+          id: "tool-1",
+          message: {
+            id: "tool-1",
+            threadId: "thread-1",
+            kind: "tool-call",
+            toolName: "exec_command",
+            callId: "call-1",
+            command: "ls",
+            sourceSeqStart: 1,
+            sourceSeqEnd: 1,
+            createdAt: 1,
+            turnId: "turn-1",
+            status: "pending",
+          },
+        },
+      ],
+      contextWindowUsage: null,
+    };
+
+    const html = renderThreadDetailView();
+
+    expect(html).not.toContain("Loading thread...");
+    expect(html).not.toContain("working");
   });
 });

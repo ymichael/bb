@@ -17,15 +17,13 @@ import {
 } from "@beanbag/agent-core";
 import { OpenPathButton } from "@/components/shared/OpenPathButton";
 import { resolveWorkspaceAbsolutePath } from "@/lib/workspace-path";
+import { shouldShimmerOperationTitle } from "./operationOngoingState";
 import {
   EVENT_DETAIL_MAX_HEIGHT_CLASS,
   renderShimmeringSummary,
   useLatestInitialExpanded,
 } from "./shared";
 import { TerminalOutputBlock } from "./TerminalOutputBlock";
-
-type ThreadOperationIntentPhase = NonNullable<UIOperationMessage["threadOperation"]>["phase"];
-type PrimaryCheckoutPhase = NonNullable<UIOperationMessage["primaryCheckout"]>["phase"];
 
 function splitNonEmptyLines(value: string | undefined): string[] {
   if (!value) return [];
@@ -98,92 +96,6 @@ function getProvisioningSetupStatus(
       return "Running";
     default:
       return assertNever(setup.status);
-  }
-}
-
-function isShimmeringThreadOperationIntentPhase(phase: ThreadOperationIntentPhase): boolean {
-  switch (phase) {
-    case "requested":
-    case "queued":
-    case "running":
-      return true;
-    case "completed":
-    case "failed":
-    case "update":
-      return false;
-    default:
-      return assertNever(phase);
-  }
-}
-
-function isShimmeringPrimaryCheckoutPhase(phase: PrimaryCheckoutPhase): boolean {
-  switch (phase) {
-    case "started":
-      return true;
-    case "completed":
-    case "failed":
-    case "noop":
-    case "update":
-      return false;
-    default:
-      return assertNever(phase);
-  }
-}
-
-function shouldShimmerProvisioningOperation(message: UIOperationMessage): boolean {
-  if (message.title.startsWith("Provisioning ")) return true;
-  if (message.title.startsWith("Provisioned ")) return false;
-  if (
-    message.title === "Environment setup completed" ||
-    message.title === "Environment setup failed"
-  ) {
-    return false;
-  }
-  return message.title.endsWith("...");
-}
-
-function shouldShimmerThreadOperationIntent(message: UIOperationMessage): boolean {
-  if (message.threadOperation) {
-    return isShimmeringThreadOperationIntentPhase(message.threadOperation.phase);
-  }
-  switch (message.title) {
-    case "Commit requested":
-    case "Commit queued":
-    case "Committing changes":
-    case "Squash merge requested":
-    case "Squash merge queued":
-    case "Squash merging changes":
-      return true;
-    default:
-      return false;
-  }
-}
-
-function shouldShimmerPrimaryCheckoutOperation(message: UIOperationMessage): boolean {
-  if (message.primaryCheckout) {
-    return isShimmeringPrimaryCheckoutPhase(message.primaryCheckout.phase);
-  }
-  switch (message.title) {
-    case "Promoting primary checkout":
-    case "Demoting primary checkout":
-      return true;
-    default:
-      return false;
-  }
-}
-
-function shouldShimmerOperationTitle(message: UIOperationMessage): boolean {
-  switch (message.opType) {
-    case "mcp-progress":
-      return true;
-    case "provisioning":
-      return shouldShimmerProvisioningOperation(message);
-    case "thread-operation-intent":
-      return shouldShimmerThreadOperationIntent(message);
-    case "primary-checkout":
-      return shouldShimmerPrimaryCheckoutOperation(message);
-    default:
-      return false;
   }
 }
 
