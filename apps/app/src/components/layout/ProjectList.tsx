@@ -3,9 +3,9 @@ import type { Thread } from "@beanbag/agent-core"
 import {
   AlertTriangle,
   ChevronRight,
+  CircleDashed,
   Folder,
   FolderOpen,
-  LoaderCircle,
   MoreHorizontal,
   PencilLine,
   SquarePen,
@@ -367,7 +367,7 @@ export function ProjectList({
                         }}
                       >
                         {updateProject.isPending ? (
-                          <LoaderCircle className="size-4 animate-spin" />
+                          <CircleDashed className="size-4 animate-spin" />
                         ) : (
                           <Wrench className="size-4" />
                         )}
@@ -475,7 +475,7 @@ export function ProjectList({
                               />
                               <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center text-sidebar-foreground/60">
                                 {isBusyThread ? (
-                                  <LoaderCircle className="size-3.5 animate-spin" />
+                                  <CircleDashed className="size-3.5 animate-spin" />
                                 ) : showUnreadBadge ? (
                                   <span
                                     className="size-1.5 rounded-full bg-primary"
