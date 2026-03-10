@@ -4227,7 +4227,6 @@ describe("Orchestrator", () => {
 
       manager.archive("thread-1");
 
-      expect(asOrchestratorHarness(manager).processes.has("thread-1")).toBe(false);
       expect(asOrchestratorHarness(manager).providerThreadIds.has("thread-1")).toBe(false);
       expect(asOrchestratorHarness(manager).activeTurnIds.has("thread-1")).toBe(false);
       expect(threadRepo.update).toHaveBeenCalledWith("thread-1", {

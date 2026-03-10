@@ -1258,7 +1258,6 @@ export class Orchestrator implements ThreadOrchestrator {
       liveClient.close();
       this.liveEnvironmentAgentClientsByThreadId.delete(threadId);
     }
-    this.agentServer.stopSession(threadId, `[thread ${threadId}] Stopping thread`);
     this.providerThreadIdByThreadId.delete(threadId);
     this.lastNotifiedCompletionTurnIds.delete(threadId);
     this.turnLifecycleEpochs.delete(threadId);
@@ -1287,7 +1286,6 @@ export class Orchestrator implements ThreadOrchestrator {
       liveClient.close();
       this.liveEnvironmentAgentClientsByThreadId.delete(threadId);
     }
-    this.agentServer.stopSession(threadId, `[thread ${threadId}] Archiving thread`);
     this.providerThreadIdByThreadId.delete(threadId);
     this.lastNotifiedCompletionTurnIds.delete(threadId);
     this.turnLifecycleEpochs.delete(threadId);
@@ -2330,7 +2328,6 @@ export class Orchestrator implements ThreadOrchestrator {
    * Stop all active processes. Called during graceful shutdown.
    */
   stopAll(opts?: { preserveEnvironments?: boolean }): void {
-    this.agentServer.stopAllSessions("Beanbag daemon shutdown");
     for (const client of this.liveEnvironmentAgentClientsByThreadId.values()) {
       client.close();
     }
@@ -2608,7 +2605,6 @@ export class Orchestrator implements ThreadOrchestrator {
       liveClient.close();
       this.liveEnvironmentAgentClientsByThreadId.delete(threadId);
     }
-    this.agentServer.stopSession(threadId);
     this.eventSeqCounters.delete(threadId);
     this.environmentAgentReplayCursorByThreadId.delete(threadId);
     this.lastNotifiedCompletionTurnIds.delete(threadId);
@@ -4106,7 +4102,6 @@ export class Orchestrator implements ThreadOrchestrator {
     _code: number | null,
     _signal: string | null,
   ): void {
-    this.agentServer.stopSession(threadId);
     this.eventSeqCounters.delete(threadId);
     this.lastNotifiedCompletionTurnIds.delete(threadId);
     this.turnLifecycleEpochs.delete(threadId);
