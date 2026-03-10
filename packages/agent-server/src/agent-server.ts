@@ -27,13 +27,7 @@ import {
   type ThreadEventType,
 } from "@beanbag/agent-core";
 import type { ProviderAdapter } from "./provider-adapter.js";
-import {
-  ProviderRuntime,
-  ProviderRuntimeRpcError,
-  ProviderRuntimeTimeoutError,
-  ProviderRuntimeUnavailableError,
-  type ProviderRuntimeNotification,
-} from "./provider-runtime.js";
+import type { ProviderRuntimeNotification } from "./provider-runtime.js";
 
 export type AgentServerSessionErrorCode =
   | "inactive_session"
@@ -54,22 +48,6 @@ export class AgentServerSessionError extends Error {
   }
 }
 
-export interface AgentServerSessionState {
-  providerThreadId?: string;
-  activeTurnId?: string;
-  hasActiveRuntime: boolean;
-}
-
-export type AgentServerSessionConnection =
-  {
-    transport: "http";
-    client: EnvironmentAgentClient;
-    providerLaunch?: {
-      command: string;
-      args: string[];
-    };
-  };
-
 export interface AgentServerNotification {
   method: string;
   normalizedMethod: string;
@@ -83,26 +61,12 @@ export interface AgentServerNotification {
   turnId?: string;
 }
 
-export interface AgentServerSessionExit {
-  code: number | null;
-  signal: string | null;
-}
-
 export interface AgentServerOptions {
   provider: ProviderAdapter;
   providerCatalog?: SystemProviderInfo[];
   onNotification?: (threadId: string, event: AgentServerNotification) => void;
-  onSessionExit?: (threadId: string, event: AgentServerSessionExit) => void;
   onProviderStderrLine?: (threadId: string, line: string) => void;
   logger?: Pick<Console, "warn" | "error">;
-}
-
-interface ManagedSession {
-  agentClient: EnvironmentAgentClient;
-  runtime: ProviderRuntime;
-  unsubscribeEvents?: () => void;
-  providerThreadId?: string;
-  activeTurnId?: string;
 }
 
 function toProviderEventType(method: string): ThreadEventType {
@@ -122,7 +86,6 @@ function toTurnLifecycleState(
 }
 
 export class AgentServer {
-  private readonly sessions = new Map<string, ManagedSession>();
   private readonly authRefreshWarningThreadIds = new Set<string>();
   private readonly suppressedAuthStderrDepth = new Map<string, number>();
   private rpcIdCounter = 0;
@@ -216,44 +179,6 @@ export class AgentServer {
 
   outputFromEvent(event: ThreadEvent): string | undefined {
     return this.opts.provider.outputFromEvent(event);
-  }
-
-  hydrateSessionState(
-    threadId: string,
-    state: {
-      providerThreadId?: string;
-      activeTurnId?: string;
-    },
-  ): void {
-    const existing = this.sessions.get(threadId);
-    if (!existing) return;
-    if (state.providerThreadId) {
-      existing.providerThreadId = state.providerThreadId;
-    }
-    if (state.activeTurnId !== undefined) {
-      existing.activeTurnId = state.activeTurnId;
-    }
-  }
-
-  getSessionState(threadId: string): AgentServerSessionState {
-    const session = this.sessions.get(threadId);
-    return {
-      providerThreadId: session?.providerThreadId,
-      activeTurnId: session?.activeTurnId,
-      hasActiveRuntime: Boolean(session),
-    };
-  }
-
-  isSessionActive(threadId: string): boolean {
-    return this.sessions.has(threadId);
-  }
-
-  getActiveSessionCount(): number {
-    return this.sessions.size;
-  }
-
-  listActiveSessionIds(): string[] {
-    return Array.from(this.sessions.keys());
   }
 
   async startThreadCommand(args: {
@@ -433,46 +358,6 @@ export class AgentServer {
     });
   }
 
-  async getEnvironmentAgentStatus(
-    threadId: string,
-  ): Promise<EnvironmentAgentStatusSnapshot> {
-    const session = this.requireSession(threadId);
-    return session.agentClient.status();
-  }
-
-  async retryEnvironmentAgentDelivery(
-    threadId: string,
-  ): Promise<EnvironmentAgentStatusSnapshot> {
-    const session = this.requireSession(threadId);
-    return session.agentClient.retryDaemonDelivery();
-  }
-
-  async replayEnvironmentAgentEvents(args: {
-    threadId: string;
-    afterSequence: number;
-    limit?: number;
-  }): Promise<EnvironmentAgentReplayResponse> {
-    const session = this.requireSession(args.threadId);
-    return session.agentClient.replay({
-      protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
-      afterSequence: args.afterSequence,
-      limit: args.limit,
-      threadId: args.threadId,
-    });
-  }
-
-  async acknowledgeEnvironmentAgent(args: {
-    threadId: string;
-    sequence: number;
-  }): Promise<EnvironmentAgentAckResponse> {
-    const session = this.requireSession(args.threadId);
-    return session.agentClient.acknowledge({
-      protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
-      sequence: args.sequence,
-      threadId: args.threadId,
-    });
-  }
-
   async ingestReplayedEnvironmentAgentEvents(args: {
     threadId: string;
     events: EnvironmentAgentEventEnvelope[];
@@ -482,201 +367,9 @@ export class AgentServer {
     }
   }
 
-  async startSession(args: {
-    threadId: string;
-    connectSession: () =>
-      | AgentServerSessionConnection
-      | Promise<AgentServerSessionConnection>;
-    request: SpawnThreadRequest;
-    context: ProviderThreadContext;
-  }): Promise<{ providerThreadId: string }> {
-    const session = await this.createManagedSession(
-      args.threadId,
-      args.connectSession(),
-      args.context,
-    );
-    const params = this.opts.provider.createThreadStartParams(args.request, args.context);
-    try {
-      const providerThreadId = await this.requestThreadId(
-        session.runtime,
-        args.threadId,
-        this.opts.provider.threadStartMethod,
-        params,
-      );
-      session.providerThreadId = providerThreadId;
-      return { providerThreadId };
-    } catch (error) {
-      this.disposeSession(args.threadId);
-      throw error;
-    }
-  }
-
-  async resumeSession(args: {
-    threadId: string;
-    connectSession: () =>
-      | AgentServerSessionConnection
-      | Promise<AgentServerSessionConnection>;
-    providerThreadId: string;
-    context: ProviderThreadContext;
-    options?: ProviderExecutionOptions;
-  }): Promise<{ providerThreadId: string }> {
-    const session = await this.createManagedSession(
-      args.threadId,
-      args.connectSession(),
-      args.context,
-      {
-        providerThreadId: args.providerThreadId,
-      },
-    );
-    try {
-      const providerThreadId = await this.requestThreadId(
-        session.runtime,
-        args.threadId,
-        this.opts.provider.threadResumeMethod,
-        this.opts.provider.createThreadResumeParams(
-          args.providerThreadId,
-          args.context,
-          args.options,
-        ),
-      );
-      session.providerThreadId = providerThreadId;
-      return { providerThreadId };
-    } catch (error) {
-      this.disposeSession(args.threadId);
-      throw error;
-    }
-  }
-
-  async sendTurn(args: {
-    threadId: string;
-    input: PromptInput[];
-    options?: ProviderExecutionOptions;
-    mode?: "auto" | "steer" | "start";
-  }): Promise<{ mode: "steer" | "start"; providerThreadId: string }> {
-    const session = this.sessions.get(args.threadId);
-    if (!session) {
-      throw new AgentServerSessionError(
-        "inactive_session",
-        this.opts.provider.inactiveSessionErrorMessage(args.threadId),
-      );
-    }
-    const providerThreadId = session.providerThreadId;
-    if (!providerThreadId) {
-      throw new AgentServerSessionError(
-        "inactive_session",
-        this.opts.provider.inactiveSessionErrorMessage(args.threadId),
-      );
-    }
-
-    const hasExecutionOverrides = Boolean(
-      args.options?.model ||
-      args.options?.serviceTier ||
-      args.options?.reasoningLevel ||
-      args.options?.sandboxMode,
-    );
-    const requestedMode = args.mode ?? "auto";
-    const activeTurnId = session.activeTurnId;
-    const steerSupported = Boolean(
-      this.opts.provider.turnSteerMethod && this.opts.provider.createTurnSteerParams,
-    );
-    const shouldUseSteer =
-      requestedMode !== "start" &&
-      steerSupported &&
-      Boolean(activeTurnId) &&
-      (requestedMode === "steer" || !hasExecutionOverrides);
-
-    if (requestedMode === "steer") {
-      if (!steerSupported) {
-        throw new AgentServerSessionError(
-          "unsupported_operation",
-          `${this.opts.provider.displayName} does not support turn/steer`,
-        );
-      }
-      if (!activeTurnId) {
-        throw new AgentServerSessionError("no_active_turn", "No active turn");
-      }
-      if (hasExecutionOverrides) {
-        throw new AgentServerSessionError(
-          "unsupported_operation",
-          "Tell mode 'steer' does not support model, speed, or reasoning overrides",
-        );
-      }
-    }
-
-    if (shouldUseSteer && activeTurnId) {
-      this.send(session.runtime, args.threadId, {
-        jsonrpc: "2.0",
-        method: this.opts.provider.turnSteerMethod!,
-        id: ++this.rpcIdCounter,
-        params: this.opts.provider.createTurnSteerParams!(
-          providerThreadId,
-          activeTurnId,
-          args.input,
-        ),
-      });
-      return { mode: "steer", providerThreadId };
-    }
-
-    this.send(session.runtime, args.threadId, {
-      jsonrpc: "2.0",
-      method: this.opts.provider.turnStartMethod,
-      id: ++this.rpcIdCounter,
-      params: this.opts.provider.createTurnStartParams(
-        providerThreadId,
-        args.input,
-        args.options,
-      ),
-    });
-    return { mode: "start", providerThreadId };
-  }
-
-  renameSession(threadId: string, title: string): void {
-    if (!this.opts.provider.threadNameSetMethod) return;
-    if (!this.opts.provider.createThreadNameSetParams) return;
-
-    const session = this.sessions.get(threadId);
-    if (!session?.providerThreadId) return;
-
-    try {
-      this.send(session.runtime, threadId, {
-        jsonrpc: "2.0",
-        method: this.opts.provider.threadNameSetMethod,
-        id: ++this.rpcIdCounter,
-        params: this.opts.provider.createThreadNameSetParams(session.providerThreadId, title),
-      });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Unknown error";
-      this.opts.logger?.error(
-        `[thread ${threadId}] Failed to send ${this.opts.provider.threadNameSetMethod}: ${message}`,
-      );
-    }
-  }
-
-  stopSession(threadId: string, reason?: string): void {
-    const session = this.sessions.get(threadId);
-    if (!session) return;
-
-    this.sessions.delete(threadId);
-    this.clearSessionState(threadId);
-    session.runtime.close(
-      reason ? new Error(reason) : undefined,
-    );
-  }
-
-  stopAllSessions(reason?: string): void {
-    for (const [threadId] of this.sessions) {
-      this.stopSession(threadId, reason);
-    }
-  }
-
   clearSessionState(threadId: string): void {
     this.authRefreshWarningThreadIds.delete(threadId);
     this.suppressedAuthStderrDepth.delete(threadId);
-    const session = this.sessions.get(threadId);
-    if (session) {
-      session.providerThreadId = undefined;
-      session.activeTurnId = undefined;
-    }
   }
 
   isMissingProviderThreadError(error: unknown): boolean {
@@ -684,80 +377,6 @@ export class AgentServer {
       error instanceof AgentServerSessionError &&
       error.code === "missing_provider_thread"
     );
-  }
-
-  private createManagedSession(
-    threadId: string,
-    connection:
-      | AgentServerSessionConnection
-      | Promise<AgentServerSessionConnection>,
-    context: ProviderThreadContext,
-    seed?: { providerThreadId?: string; activeTurnId?: string },
-  ): Promise<ManagedSession> {
-    this.disposeSession(threadId);
-    return Promise.resolve(connection).then(async (resolvedConnection) => {
-      const agentClient = resolvedConnection.client;
-      const unsubscribeEvents = agentClient.subscribeToEvents((event) => {
-        this.handleEnvironmentAgentEvent(threadId, event.event);
-      });
-      const runtime = new ProviderRuntime({
-        threadId,
-        transport: agentClient.providerTransport,
-        // Provider notifications, stderr, and unmatched RPC errors are delivered
-        // through environment-agent live/replayed events instead of the raw session stream.
-        onNotification: () => {},
-        onUnmatchedRpcError: () => {},
-        onStderrLine: () => {},
-        onClosed: () => {
-          const current = this.sessions.get(threadId);
-          if (current?.runtime !== runtime) return;
-          this.sessions.delete(threadId);
-          this.clearSessionState(threadId);
-          this.opts.onSessionExit?.(threadId, { code: null, signal: null });
-        },
-      });
-
-      const session: ManagedSession = {
-        agentClient,
-        runtime,
-        unsubscribeEvents,
-        providerThreadId: seed?.providerThreadId,
-        activeTurnId: seed?.activeTurnId,
-      };
-      this.sessions.set(threadId, session);
-      const launchConfig = await this.opts.provider.resolveLaunchConfiguration?.(context);
-
-      await agentClient.ensureProviderRunning({
-        command: this.opts.provider.processCommand,
-        args: [...this.opts.provider.processArgs],
-        ...(launchConfig?.env ? { env: { ...launchConfig.env } } : {}),
-        ...(launchConfig?.files
-          ? {
-              files: launchConfig.files.map((file) => ({ ...file })),
-            }
-          : {}),
-        ...(resolvedConnection.providerLaunch
-          ? {
-              launchCommand: resolvedConnection.providerLaunch.command,
-              launchArgs: [...resolvedConnection.providerLaunch.args],
-            }
-          : {}),
-      });
-
-      await this.requestInitialize(runtime, threadId);
-
-      return session;
-    });
-  }
-
-  private disposeSession(threadId: string): void {
-    const existing = this.sessions.get(threadId);
-    if (!existing) return;
-    existing.unsubscribeEvents?.();
-    existing.agentClient.close();
-    existing.runtime.close();
-    this.sessions.delete(threadId);
-    this.clearSessionState(threadId);
   }
 
   private handleEnvironmentAgentEvent(
@@ -786,113 +405,12 @@ export class AgentServer {
     }
   }
 
-  private requireSession(threadId: string): ManagedSession {
-    const session = this.sessions.get(threadId);
-    if (!session) {
-      throw new AgentServerSessionError(
-        "inactive_session",
-        this.opts.provider.inactiveSessionErrorMessage(threadId),
-      );
-    }
-    return session;
-  }
-
-  private send(runtime: ProviderRuntime, threadId: string, msg: object): void {
-    try {
-      runtime.send(msg);
-    } catch (error) {
-      if (error instanceof ProviderRuntimeUnavailableError) {
-        throw new AgentServerSessionError("provider_unavailable", error.message);
-      }
-      throw error;
-    }
-  }
-
-  private async requestInitialize(
-    runtime: ProviderRuntime,
-    threadId: string,
-  ): Promise<void> {
-    const requestId = ++this.rpcIdCounter;
-    try {
-      await runtime.request({
-        jsonrpc: "2.0",
-        method: this.opts.provider.initializeMethod,
-        id: requestId,
-        params:
-          this.opts.provider.createInitializeParams?.(this.opts.provider.clientInfo) ?? {
-            clientInfo: this.opts.provider.clientInfo,
-          },
-      });
-    } catch (error) {
-      if (error instanceof ProviderRuntimeTimeoutError) {
-        throw new AgentServerSessionError("provider_timeout", error.message);
-      }
-      if (error instanceof ProviderRuntimeRpcError) {
-        throw new AgentServerSessionError("provider_rpc_error", error.message);
-      }
-      if (error instanceof ProviderRuntimeUnavailableError) {
-        throw new AgentServerSessionError("provider_unavailable", error.message);
-      }
-      throw error;
-    }
-  }
-
-  private async requestThreadId(
-    runtime: ProviderRuntime,
-    threadId: string,
-    method: string,
-    params: Record<string, unknown>,
-  ): Promise<string> {
-    const requestId = ++this.rpcIdCounter;
-    let result: unknown;
-    try {
-      result = await runtime.request({
-        jsonrpc: "2.0",
-        method,
-        id: requestId,
-        params,
-      });
-    } catch (error) {
-      if (error instanceof ProviderRuntimeTimeoutError) {
-        throw new AgentServerSessionError("provider_timeout", error.message);
-      }
-      if (error instanceof ProviderRuntimeRpcError) {
-        const message = error.message;
-        if (message.toLowerCase().includes("no rollout found for thread id")) {
-          throw new AgentServerSessionError("missing_provider_thread", message);
-        }
-        throw new AgentServerSessionError("provider_rpc_error", message);
-      }
-      if (error instanceof ProviderRuntimeUnavailableError) {
-        throw new AgentServerSessionError("provider_unavailable", error.message);
-      }
-      throw error;
-    }
-
-    const providerThreadId = this.opts.provider.extractThreadIdFromResult(result);
-    if (!providerThreadId) {
-      throw new AgentServerSessionError(
-        "provider_rpc_error",
-        `[thread ${threadId}] RPC response missing thread ID. Response: ${JSON.stringify(result)}`,
-      );
-    }
-    return providerThreadId;
-  }
-
   private handleNotification(threadId: string, msg: ProviderRuntimeNotification): void {
     if (typeof msg.method !== "string") return;
 
     const normalizedMethod = this.opts.provider.normalizeEventType(msg.method);
     const turnState = toTurnLifecycleState(normalizedMethod);
     const turnId = extractTurnIdFromPersistedEventData(msg.params);
-    const session = this.sessions.get(threadId);
-    if (session) {
-      if (turnState === "active") {
-        session.activeTurnId = turnId ?? session.activeTurnId;
-      } else if (turnState === "idle") {
-        session.activeTurnId = undefined;
-      }
-    }
 
     this.opts.onNotification?.(threadId, {
       method: msg.method,

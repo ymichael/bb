@@ -90,7 +90,6 @@ import type {
 } from "@beanbag/db";
 import {
   AgentServer,
-  type AgentServerSessionConnection,
   type AgentServerNotification,
   AgentServerSessionError,
   type LlmCommitMessageGenerationArgs,
@@ -125,6 +124,7 @@ import {
 import {
   EnvironmentService,
   type ActiveEnvironmentRuntime,
+  type EnvironmentAgentControlConnection,
   type PrimaryPromotionState,
 } from "./environment-service.js";
 
@@ -561,9 +561,6 @@ export class Orchestrator implements ThreadOrchestrator {
         ...(providerCatalog ? { providerCatalog } : {}),
         onNotification: (threadId, event) => {
           this._handleAgentServerNotification(threadId, event);
-        },
-        onSessionExit: (threadId, event) => {
-          this._handleProcessExit(threadId, event.code, event.signal);
         },
         logger: console,
       });
@@ -3010,9 +3007,8 @@ export class Orchestrator implements ThreadOrchestrator {
     threadId: string;
     projectId?: string;
     agentConnectionTarget: EnvironmentAgentConnectionTarget;
-  }): Promise<AgentServerSessionConnection> {
+  }): Promise<EnvironmentAgentControlConnection> {
     return {
-      transport: "http",
       client: await createHttpEnvironmentAgentClient({
         baseUrl: args.agentConnectionTarget.baseUrl,
         ...(args.agentConnectionTarget.headers

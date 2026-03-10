@@ -7,14 +7,16 @@ import {
   type ThreadChangeKind,
   type ThreadEnvironmentStartReason,
 } from "@beanbag/agent-core";
-import type { AgentServerSessionConnection } from "@beanbag/agent-server";
 import {
   type CreateEnvironmentContext,
   type EnvironmentCheckoutSnapshot,
   type EnvironmentRegistry,
   type IEnvironment,
 } from "@beanbag/environment";
-import type { EnvironmentAgentConnectionTarget } from "@beanbag/environment-agent";
+import type {
+  EnvironmentAgentClient,
+  EnvironmentAgentConnectionTarget,
+} from "@beanbag/environment-agent";
 import type { ProjectRepository, ThreadRepository } from "@beanbag/db";
 import {
   resolveProjectCheckoutSnapshot,
@@ -25,9 +27,14 @@ export interface ActiveEnvironmentRuntime {
   environment: IEnvironment;
   agentConnectionTarget: EnvironmentAgentConnectionTarget;
   stopWatchingWorkspaceStatus?: () => void;
-  connectSession?: () =>
-    | AgentServerSessionConnection
-    | Promise<AgentServerSessionConnection>;
+}
+
+export interface EnvironmentAgentControlConnection {
+  client: EnvironmentAgentClient;
+  providerLaunch?: {
+    command: string;
+    args: string[];
+  };
 }
 
 export interface PrimaryPromotionState {
@@ -58,7 +65,7 @@ interface EnvironmentServiceCallbacks {
     threadId: string;
     projectId?: string;
     agentConnectionTarget: EnvironmentAgentConnectionTarget;
-  }) => AgentServerSessionConnection | Promise<AgentServerSessionConnection>;
+  }) => EnvironmentAgentControlConnection | Promise<EnvironmentAgentControlConnection>;
 }
 
 function isUnavailableCleanupTargetError(error: unknown): boolean {
@@ -189,11 +196,6 @@ export class EnvironmentService {
     if (!runtime) {
       throw new Error(`Missing environment runtime for thread ${threadId}`);
     }
-    runtime.connectSession = () => this.callbacks.spawnProviderProcess({
-      threadId,
-      projectId: thread?.projectId,
-      agentConnectionTarget: runtime.agentConnectionTarget,
-    });
     return runtime;
   }
 

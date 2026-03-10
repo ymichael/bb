@@ -8,93 +8,6 @@ import { createCodexProviderAdapter } from "../codex-provider-adapter.js";
 import { createEnvironmentAgentSimulator } from "./helpers/environment-agent-simulator.js";
 
 describe("AgentServer environment-agent control plane", () => {
-  it("surfaces environment-agent status, replay, and ack through the session", async () => {
-    const agentServer = new AgentServer({
-      provider: createCodexProviderAdapter(),
-    });
-    const simulator = createEnvironmentAgentSimulator();
-
-    simulator.setReplayEvents([
-      {
-        protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
-        sequence: 2,
-        emittedAt: 1_000,
-        threadId: "thread-1",
-        event: {
-          type: "environment.ready",
-          threadId: "thread-1",
-        },
-      } satisfies EnvironmentAgentEventEnvelope,
-      {
-        protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
-        sequence: 3,
-        emittedAt: 1_001,
-        threadId: "thread-1",
-        event: {
-          type: "provider.event",
-          threadId: "thread-1",
-          method: "turn/completed",
-          payload: { turnId: "turn-1" },
-        },
-      } satisfies EnvironmentAgentEventEnvelope,
-    ]);
-
-    await agentServer.startSession({
-      threadId: "thread-1",
-      connectSession: () => ({
-        transport: "http",
-        client: simulator.createClient(),
-      }),
-      request: {
-        projectId: "project-1",
-        title: "Test thread",
-        input: [{ type: "text", text: "hello" }],
-      },
-      context: {
-        projectId: "project-1",
-        threadId: "thread-1",
-        path: process.env.PATH ?? "",
-      },
-    });
-
-    await expect(agentServer.getEnvironmentAgentStatus("thread-1")).resolves.toMatchObject({
-      latestSequence: 3,
-      pendingEventCount: 3,
-    });
-
-    await expect(
-      agentServer.replayEnvironmentAgentEvents({
-        threadId: "thread-1",
-        afterSequence: 1,
-      }),
-    ).resolves.toMatchObject({
-      fromSequenceExclusive: 1,
-      toSequenceInclusive: 3,
-      events: expect.arrayContaining([
-        expect.objectContaining({
-          sequence: 2,
-        }),
-      ]),
-    });
-
-    await expect(
-      agentServer.acknowledgeEnvironmentAgent({
-        threadId: "thread-1",
-        sequence: 3,
-      }),
-    ).resolves.toMatchObject({
-      acknowledgedSequence: 3,
-      threadId: "thread-1",
-    });
-
-    expect(simulator.ackRequests).toEqual([
-      expect.objectContaining({
-        sequence: 3,
-        threadId: "thread-1",
-      }),
-    ]);
-  });
-
   it("passes resolved provider launch auth through provider ensure", async () => {
     const provider = createCodexProviderAdapter();
     provider.resolveLaunchConfiguration = async () => ({
@@ -112,12 +25,10 @@ describe("AgentServer environment-agent control plane", () => {
     const agentServer = new AgentServer({ provider });
     const simulator = createEnvironmentAgentSimulator();
 
-    await agentServer.startSession({
+    await agentServer.startThreadCommand({
+      client: simulator.createClient(),
       threadId: "thread-1",
-      connectSession: () => ({
-        transport: "http",
-        client: simulator.createClient(),
-      }),
+      projectId: "project-1",
       request: {
         projectId: "project-1",
         title: "Test thread",
@@ -184,6 +95,33 @@ describe("AgentServer environment-agent control plane", () => {
     );
   });
 
+  it("resumes threads through stateless environment-agent commands", async () => {
+    const agentServer = new AgentServer({
+      provider: createCodexProviderAdapter(),
+    });
+    const simulator = createEnvironmentAgentSimulator();
+
+    const resumed = await agentServer.resumeThreadCommand({
+      client: simulator.createClient(),
+      threadId: "thread-1",
+      projectId: "project-1",
+      providerThreadId: "provider-thread-1",
+      context: {
+        projectId: "project-1",
+        threadId: "thread-1",
+        path: process.env.PATH ?? "",
+      },
+    });
+
+    expect(resumed).toEqual({ providerThreadId: "provider-thread-1" });
+    expect(simulator.providerRequests).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ method: "initialize" }),
+        expect.objectContaining({ method: "thread/resume" }),
+      ]),
+    );
+  });
+
   it("sends turn commands through stateless environment-agent commands", async () => {
     const agentServer = new AgentServer({
       provider: createCodexProviderAdapter(),
@@ -217,30 +155,75 @@ describe("AgentServer environment-agent control plane", () => {
     );
   });
 
+  it("renames threads through stateless environment-agent commands", async () => {
+    const agentServer = new AgentServer({
+      provider: createCodexProviderAdapter(),
+    });
+    const simulator = createEnvironmentAgentSimulator();
+    simulator.onProviderRequest("thread/name/set", () => ({ result: { ok: true } }));
+
+    await expect(
+      agentServer.renameThreadCommand({
+        client: simulator.createClient(),
+        threadId: "thread-1",
+        providerThreadId: "provider-thread-1",
+        title: "Renamed thread",
+        context: {
+          projectId: "project-1",
+          threadId: "thread-1",
+          path: process.env.PATH ?? "",
+        },
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(simulator.providerRequests).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ method: "initialize" }),
+        expect.objectContaining({ method: "thread/name/set" }),
+      ]),
+    );
+  });
+
+  it("maps provider rpc failures through stateless command acks", async () => {
+    const agentServer = new AgentServer({
+      provider: createCodexProviderAdapter(),
+    });
+    const simulator = createEnvironmentAgentSimulator();
+
+    simulator.onProviderRequest("thread/start", () => ({
+      error: {
+        code: -32_000,
+        message: "provider exploded",
+      },
+    }));
+
+    await expect(
+      agentServer.startThreadCommand({
+        client: simulator.createClient(),
+        threadId: "thread-1",
+        projectId: "project-1",
+        request: {
+          projectId: "project-1",
+          title: "Test thread",
+          input: [{ type: "text", text: "hello" }],
+        },
+        context: {
+          projectId: "project-1",
+          threadId: "thread-1",
+          path: process.env.PATH ?? "",
+        },
+      }),
+    ).rejects.toMatchObject({
+      code: "provider_rpc_error",
+      name: "AgentServerSessionError",
+    } satisfies Partial<AgentServerSessionError>);
+  });
+
   it("ingests replayed provider notifications through the normal notification path", async () => {
     const onNotification = vi.fn();
     const agentServer = new AgentServer({
       provider: createCodexProviderAdapter(),
       onNotification,
-    });
-    const simulator = createEnvironmentAgentSimulator();
-
-    await agentServer.startSession({
-      threadId: "thread-1",
-      connectSession: () => ({
-        transport: "http",
-        client: simulator.createClient(),
-      }),
-      request: {
-        projectId: "project-1",
-        title: "Test thread",
-        input: [{ type: "text", text: "hello" }],
-      },
-      context: {
-        projectId: "project-1",
-        threadId: "thread-1",
-        path: process.env.PATH ?? "",
-      },
     });
 
     await agentServer.ingestReplayedEnvironmentAgentEvents({
@@ -260,43 +243,6 @@ describe("AgentServer environment-agent control plane", () => {
         },
       ],
     });
-
-    expect(onNotification).toHaveBeenCalledWith(
-      "thread-1",
-      expect.objectContaining({
-        method: "turn/started",
-        normalizedMethod: "turn/started",
-      }),
-    );
-    expect(simulator.ackRequests).toEqual([]);
-  });
-
-  it("ingests replayed provider notifications without an active session", async () => {
-    const onNotification = vi.fn();
-    const agentServer = new AgentServer({
-      provider: createCodexProviderAdapter(),
-      onNotification,
-    });
-
-    await expect(
-      agentServer.ingestReplayedEnvironmentAgentEvents({
-        threadId: "thread-1",
-        events: [
-          {
-            protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
-            sequence: 5,
-            emittedAt: 1_000,
-            threadId: "thread-1",
-            event: {
-              type: "provider.event",
-              threadId: "thread-1",
-              method: "turn/started",
-              payload: { turnId: "turn-2" },
-            },
-          },
-        ],
-      }),
-    ).resolves.toBeUndefined();
 
     expect(onNotification).toHaveBeenCalledWith(
       "thread-1",
@@ -380,9 +326,11 @@ describe("AgentServer environment-agent control plane", () => {
     expect(logger.warn).not.toHaveBeenCalled();
   });
 
-  it("preserves replay window semantics through the session", async () => {
+  it("preserves replay window semantics through delivered event envelopes", async () => {
+    const collected: EnvironmentAgentEventEnvelope[] = [];
     const agentServer = new AgentServer({
       provider: createCodexProviderAdapter(),
+      onNotification: vi.fn(),
     });
     const simulator = createEnvironmentAgentSimulator();
 
@@ -423,219 +371,23 @@ describe("AgentServer environment-agent control plane", () => {
       } satisfies EnvironmentAgentEventEnvelope,
     ]);
 
-    await agentServer.startSession({
+    const replay = await simulator.createClient().replay({
+      protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+      afterSequence: 0,
+      limit: 2,
       threadId: "thread-1",
-      connectSession: () => ({
-        transport: "http",
-        client: simulator.createClient(),
-      }),
-      request: {
-        projectId: "project-1",
-        title: "Test thread",
-        input: [{ type: "text", text: "hello" }],
-      },
-      context: {
-        projectId: "project-1",
-        threadId: "thread-1",
-        path: process.env.PATH ?? "",
-      },
+    });
+    collected.push(...replay.events);
+    await agentServer.ingestReplayedEnvironmentAgentEvents({
+      threadId: "thread-1",
+      events: replay.events,
     });
 
-    await expect(
-      agentServer.replayEnvironmentAgentEvents({
-        threadId: "thread-1",
-        afterSequence: 0,
-        limit: 2,
-      }),
-    ).resolves.toMatchObject({
+    expect(collected).toHaveLength(2);
+    expect(replay).toMatchObject({
       fromSequenceExclusive: 0,
       toSequenceInclusive: 2,
       hasMore: true,
-      events: [
-        expect.objectContaining({ sequence: 1 }),
-        expect.objectContaining({ sequence: 2 }),
-      ],
     });
-
-    await expect(
-      agentServer.replayEnvironmentAgentEvents({
-        threadId: "thread-1",
-        afterSequence: 2,
-        limit: 2,
-      }),
-    ).resolves.toMatchObject({
-      fromSequenceExclusive: 2,
-      toSequenceInclusive: 3,
-      hasMore: false,
-      events: [expect.objectContaining({ sequence: 3 })],
-    });
-  });
-
-  it("tracks live provider notifications without advancing the delivery ack cursor", async () => {
-    const onNotification = vi.fn();
-    const agentServer = new AgentServer({
-      provider: createCodexProviderAdapter(),
-      onNotification,
-    });
-    const simulator = createEnvironmentAgentSimulator();
-
-    await agentServer.startSession({
-      threadId: "thread-1",
-      connectSession: () => ({
-        transport: "http",
-        client: simulator.createClient(),
-      }),
-      request: {
-        projectId: "project-1",
-        title: "Test thread",
-        input: [{ type: "text", text: "hello" }],
-      },
-      context: {
-        projectId: "project-1",
-        threadId: "thread-1",
-        path: process.env.PATH ?? "",
-      },
-    });
-
-    simulator.emitProviderNotification("turn/started", { turnId: "turn-2" }, { sequence: 2 });
-    await vi.waitFor(() => {
-      expect(agentServer.getSessionState("thread-1")).toMatchObject({
-        activeTurnId: "turn-2",
-      });
-    });
-    expect(agentServer.getSessionState("thread-1")).toMatchObject({
-      activeTurnId: "turn-2",
-    });
-
-    simulator.emitProviderNotification("turn/completed", { turnId: "turn-2" }, { sequence: 3 });
-    await vi.waitFor(() => {
-      expect(onNotification).toHaveBeenCalledWith(
-        "thread-1",
-        expect.objectContaining({
-          method: "turn/completed",
-          normalizedMethod: "turn/completed",
-        }),
-      );
-    });
-    expect(onNotification).toHaveBeenCalledWith(
-      "thread-1",
-      expect.objectContaining({
-        method: "turn/completed",
-        normalizedMethod: "turn/completed",
-      }),
-    );
-    expect(agentServer.getSessionState("thread-1")).toMatchObject({
-      activeTurnId: undefined,
-    });
-    expect(simulator.ackRequests).toEqual([]);
-  });
-
-  it("drops the session when the environment-agent transport closes", async () => {
-    const onSessionExit = vi.fn();
-    const agentServer = new AgentServer({
-      provider: createCodexProviderAdapter(),
-      onSessionExit,
-    });
-    const simulator = createEnvironmentAgentSimulator();
-
-    await agentServer.startSession({
-      threadId: "thread-1",
-      connectSession: () => ({
-        transport: "http",
-        client: simulator.createClient(),
-      }),
-      request: {
-        projectId: "project-1",
-        title: "Test thread",
-        input: [{ type: "text", text: "hello" }],
-      },
-      context: {
-        projectId: "project-1",
-        threadId: "thread-1",
-        path: process.env.PATH ?? "",
-      },
-    });
-
-    simulator.close(new Error("socket closed"));
-
-    await vi.waitFor(() => {
-      expect(agentServer.isSessionActive("thread-1")).toBe(false);
-    });
-    expect(onSessionExit).toHaveBeenCalledWith("thread-1", {
-      code: null,
-      signal: null,
-    });
-    await expect(agentServer.getEnvironmentAgentStatus("thread-1")).rejects.toMatchObject({
-      code: "inactive_session",
-    } satisfies Partial<AgentServerSessionError>);
-  });
-
-  it("does not emit session-exit callbacks when the daemon intentionally stops all sessions", async () => {
-    const onSessionExit = vi.fn();
-    const agentServer = new AgentServer({
-      provider: createCodexProviderAdapter(),
-      onSessionExit,
-    });
-    const simulator = createEnvironmentAgentSimulator();
-
-    await agentServer.startSession({
-      threadId: "thread-1",
-      connectSession: () => ({
-        transport: "http",
-        client: simulator.createClient(),
-      }),
-      request: {
-        projectId: "project-1",
-        title: "Test thread",
-        input: [{ type: "text", text: "hello" }],
-      },
-      context: {
-        projectId: "project-1",
-        threadId: "thread-1",
-        path: process.env.PATH ?? "",
-      },
-    });
-
-    agentServer.stopAllSessions("Beanbag daemon shutdown");
-
-    expect(agentServer.isSessionActive("thread-1")).toBe(false);
-    expect(onSessionExit).not.toHaveBeenCalled();
-  });
-
-  it("maps provider rpc failures through the environment-agent-backed runtime", async () => {
-    const agentServer = new AgentServer({
-      provider: createCodexProviderAdapter(),
-    });
-    const simulator = createEnvironmentAgentSimulator();
-
-    simulator.onProviderRequest("thread/start", () => ({
-      error: {
-        code: -32_000,
-        message: "provider exploded",
-      },
-    }));
-
-    await expect(
-      agentServer.startSession({
-        threadId: "thread-1",
-        connectSession: () => ({
-          transport: "http",
-          client: simulator.createClient(),
-        }),
-        request: {
-          projectId: "project-1",
-          title: "Test thread",
-          input: [{ type: "text", text: "hello" }],
-        },
-        context: {
-          projectId: "project-1",
-          threadId: "thread-1",
-          path: process.env.PATH ?? "",
-        },
-      }),
-    ).rejects.toMatchObject({
-      code: "provider_rpc_error",
-      name: "AgentServerSessionError",
-    } satisfies Partial<AgentServerSessionError>);
   });
 });

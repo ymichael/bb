@@ -322,16 +322,11 @@ function asOrchestratorHarness(manager: Orchestrator): OrchestratorTestHarness {
   const rawManager = manager as unknown as {
     activeTurnIdByThreadId: Map<string, string>;
     providerThreadIdByThreadId: Map<string, string>;
+    liveEnvironmentAgentClientsByThreadId: Map<string, {
+      __fakeChild?: unknown;
+      close?: (reason?: Error) => void;
+    }>;
     agentServer: {
-      sessions: Map<string, {
-        agentClient?: { __fakeChild?: unknown };
-        runtime: {
-          send?: (msg: object) => void;
-          close?: (error?: Error) => void;
-        };
-        providerThreadId?: string;
-        activeTurnId?: string;
-      }>;
       opts: {
         provider: {
           listModels: (...args: unknown[]) => unknown;
@@ -342,36 +337,29 @@ function asOrchestratorHarness(manager: Orchestrator): OrchestratorTestHarness {
       environmentRuntimes: Map<string, unknown>;
     };
   } & OrchestratorTestHarness;
-  const sessions = rawManager.agentServer.sessions;
+  const liveClients = rawManager.liveEnvironmentAgentClientsByThreadId;
   const orchestratorActiveTurnIds = rawManager.activeTurnIdByThreadId;
   const orchestratorProviderThreadIds = rawManager.providerThreadIdByThreadId;
 
-  const ensureSession = (threadId: string) => {
-    let session = sessions.get(threadId);
-    if (!session) {
+  const ensureLiveClient = (threadId: string) => {
+    let client = liveClients.get(threadId);
+    if (!client) {
       const child: any = {
         stdin: {
           write: vi.fn(),
         },
       };
-      session = {
-        agentClient: {
-          __fakeChild: child,
-        },
-        runtime: {
-          send(msg: object) {
-            child.stdin?.write?.(`${JSON.stringify(msg)}\n`);
-          },
-          close: vi.fn(),
-        },
+      client = {
+        __fakeChild: child,
+        close: vi.fn(),
       };
-      sessions.set(threadId, session);
+      liveClients.set(threadId, client);
     }
-    return session;
+    return client;
   };
 
   const processes = new Map<string, unknown>() as Map<string, unknown>;
-  processes.get = (threadId: string) => sessions.get(threadId)?.agentClient?.__fakeChild;
+  processes.get = (threadId: string) => liveClients.get(threadId)?.__fakeChild;
   processes.set = (threadId: string, child: unknown) => {
     let environmentAgentChild = child as FakeChildProcess;
     if (
@@ -410,30 +398,20 @@ function asOrchestratorHarness(manager: Orchestrator): OrchestratorTestHarness {
     (spawnMock as unknown as ReturnType<typeof vi.fn>).mockReturnValue(
       environmentAgentChild,
     );
-    const runtime = {
-      send(msg: object) {
-        const writable = (child as any)?.stdin;
-        writable?.write?.(`${JSON.stringify(msg)}\n`);
-      },
+    liveClients.set(threadId, {
+      __fakeChild: environmentAgentChild,
       close: vi.fn(),
-    };
-    sessions.set(threadId, {
-      agentClient: {
-        __fakeChild: environmentAgentChild,
-      },
-      runtime,
-      providerThreadId: sessions.get(threadId)?.providerThreadId,
     });
     return processes;
   };
-  processes.has = (threadId: string) => sessions.has(threadId);
-  processes.delete = (threadId: string) => sessions.delete(threadId);
-  processes.clear = () => sessions.clear();
+  processes.has = (threadId: string) => liveClients.has(threadId);
+  processes.delete = (threadId: string) => liveClients.delete(threadId);
+  processes.clear = () => liveClients.clear();
 
   const providerThreadIds = new Map<string, string>() as Map<string, string>;
   providerThreadIds.get = (threadId: string) => orchestratorProviderThreadIds.get(threadId);
   providerThreadIds.set = (threadId: string, providerThreadId: string) => {
-    ensureSession(threadId);
+    ensureLiveClient(threadId);
     orchestratorProviderThreadIds.set(threadId, providerThreadId);
     return providerThreadIds;
   };

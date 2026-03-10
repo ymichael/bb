@@ -5,7 +5,6 @@ import type {
   ThreadWorkStatus,
   ThreadEnvironmentStartReason,
 } from "@beanbag/agent-core";
-import type { AgentServerSessionConnection } from "@beanbag/agent-server";
 import {
   EnvironmentRegistry,
   type CreateEnvironmentContext,
@@ -222,8 +221,7 @@ function createService(args: {
       onPrimaryCheckoutDemoted: vi.fn(),
       runOptionalSetup,
       spawnProviderProcess: vi.fn(
-        (): AgentServerSessionConnection => ({
-          transport: "http",
+        () => ({
           client: {} as never,
         }),
       ),
@@ -448,8 +446,7 @@ describe("EnvironmentService", () => {
         onPrimaryCheckoutDemoted: vi.fn(),
         runOptionalSetup: vi.fn().mockResolvedValue(undefined),
         spawnProviderProcess: vi.fn(
-          (): AgentServerSessionConnection => ({
-            transport: "http",
+          () => ({
             client: {} as never,
           }),
         ),
@@ -576,8 +573,7 @@ describe("EnvironmentService", () => {
         onPrimaryCheckoutDemoted: vi.fn(),
         runOptionalSetup: vi.fn().mockResolvedValue(undefined),
         spawnProviderProcess: vi.fn(
-          (): AgentServerSessionConnection => ({
-            transport: "http",
+          () => ({
             client: {} as never,
           }),
         ),

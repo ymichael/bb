@@ -36,9 +36,6 @@ export {
 export type {
   AgentServerOptions,
   AgentServerNotification,
-  AgentServerSessionExit,
-  AgentServerSessionState,
-  AgentServerSessionConnection,
   AgentServerSessionErrorCode,
 } from "./agent-server.js";
 export {
