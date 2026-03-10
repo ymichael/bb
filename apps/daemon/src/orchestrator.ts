@@ -127,6 +127,7 @@ import {
   type EnvironmentAgentControlConnection,
   type PrimaryPromotionState,
 } from "./environment-service.js";
+import { measureAsync, measureSync } from "./perf.js";
 
 export type PromptExecutionOptions = ProviderExecutionOptions;
 
@@ -444,6 +445,8 @@ export class Orchestrator implements ThreadOrchestrator {
   >();
   /** Memoized timeline projection per thread until event sequence or thread status changes. */
   private timelineByThread = new Map<string, ThreadTimelineCacheEntry>();
+  /** Cached workspace status snapshots keyed by thread id and merge-base branch. */
+  private workStatusByThreadAndMergeBase = new Map<string, ThreadWorkStatus>();
   /** Cached prompt-derived fallback titles for untitled threads. */
   private titleFallbackByThreadId = new Map<string, string | null>();
   /** Latest replay cursor consumed from each environment-agent event log. */
@@ -1443,64 +1446,69 @@ export class Orchestrator implements ThreadOrchestrator {
     limit?: number,
     includeToolGroupMessages: boolean = false,
   ): ThreadTimelineResponse {
-    const thread = this.threadRepo.getById(threadId);
-    const latestSeq = this.eventRepo.getLatestSeq(threadId);
-    const requestKey = `${limit ?? "all"}:${includeToolGroupMessages ? "with-tool-messages" : "summary-only"}`;
-    const existingCache = this.timelineByThread.get(threadId);
-    if (
-      existingCache &&
-      existingCache.latestSeq === latestSeq &&
-      existingCache.threadStatus === thread?.status
-    ) {
-      const cached = existingCache.byRequestKey.get(requestKey);
-      if (cached) {
-        return cached;
+    return measureSync("orchestrator.getTimeline", () => {
+      const thread = this.threadRepo.getById(threadId);
+      const latestSeq = this.eventRepo.getLatestSeq(threadId);
+      const requestKey = `${limit ?? "all"}:${includeToolGroupMessages ? "with-tool-messages" : "summary-only"}`;
+      const existingCache = this.timelineByThread.get(threadId);
+      if (
+        existingCache &&
+        existingCache.latestSeq === latestSeq &&
+        existingCache.threadStatus === thread?.status
+      ) {
+        const cached = existingCache.byRequestKey.get(requestKey);
+        if (cached) {
+          return cached;
+        }
       }
-    }
+      const events = this.eventRepo.listByThread(
+        threadId,
+        undefined,
+        limit,
+        TIMELINE_NOISE_EVENT_TYPES,
+      );
+      const uiMessages = toUIMessages(events, {
+        includeDebugRawEvents: false,
+        includeOptionalOperations: false,
+        threadStatus: thread?.status,
+      });
+      const visibleMessages = uiMessages.filter(
+        (entry) => entry.kind !== "assistant-reasoning",
+      );
+      const rows = buildThreadDetailRows(visibleMessages, {
+        includeToolGroupMessages,
+      });
+      const latestTokenUsageEvent = this.eventRepo.getLatestByType(
+        threadId,
+        "thread/tokenUsage/updated",
+      );
+      const contextWindowUsage = latestTokenUsageEvent
+        ? extractThreadContextWindowUsage([latestTokenUsageEvent])
+        : null;
+      const timeline: ThreadTimelineResponse = contextWindowUsage
+        ? { rows, contextWindowUsage }
+        : { rows };
 
-    const events = this.eventRepo.listByThread(
+      if (
+        !existingCache ||
+        existingCache.latestSeq !== latestSeq ||
+        existingCache.threadStatus !== thread?.status
+      ) {
+        this.timelineByThread.set(threadId, {
+          latestSeq,
+          threadStatus: thread?.status,
+          byRequestKey: new Map([[requestKey, timeline]]),
+        });
+      } else {
+        existingCache.byRequestKey.set(requestKey, timeline);
+      }
+
+      return timeline;
+    }, {
       threadId,
-      undefined,
-      limit,
-      TIMELINE_NOISE_EVENT_TYPES,
-    );
-    const uiMessages = toUIMessages(events, {
-      includeDebugRawEvents: false,
-      includeOptionalOperations: false,
-      threadStatus: thread?.status,
-    });
-    const visibleMessages = uiMessages.filter(
-      (entry) => entry.kind !== "assistant-reasoning",
-    );
-    const rows = buildThreadDetailRows(visibleMessages, {
+      ...(limit !== undefined ? { limit } : {}),
       includeToolGroupMessages,
     });
-    const latestTokenUsageEvent = this.eventRepo.getLatestByType(
-      threadId,
-      "thread/tokenUsage/updated",
-    );
-    const contextWindowUsage = latestTokenUsageEvent
-      ? extractThreadContextWindowUsage([latestTokenUsageEvent])
-      : null;
-    const timeline: ThreadTimelineResponse = contextWindowUsage
-      ? { rows, contextWindowUsage }
-      : { rows };
-
-    if (
-      !existingCache ||
-      existingCache.latestSeq !== latestSeq ||
-      existingCache.threadStatus !== thread?.status
-    ) {
-      this.timelineByThread.set(threadId, {
-        latestSeq,
-        threadStatus: thread?.status,
-        byRequestKey: new Map([[requestKey, timeline]]),
-      });
-    } else {
-      existingCache.byRequestKey.set(requestKey, timeline);
-    }
-
-    return timeline;
   }
 
   getToolGroupMessages(
@@ -1683,38 +1691,55 @@ export class Orchestrator implements ThreadOrchestrator {
    * Get the thread record by id.
    */
   getById(threadId: string): Thread | undefined {
-    const thread = this.threadRepo.getById(threadId);
-    if (!thread) return undefined;
-    return this._hydrateThreadState(thread);
+    return measureSync("orchestrator.getById", () => {
+      const thread = this.threadRepo.getById(threadId);
+      if (!thread) return undefined;
+      return this._withDefaultExecutionOptions(this._hydrateThreadState(thread));
+    }, { threadId });
   }
 
   getWorkStatus(threadId: string, mergeBaseBranch?: string) {
-    const thread = this.threadRepo.getById(threadId);
-    if (!thread) return undefined;
-    return this._hydrateThreadState(thread, { mergeBaseBranch }).workStatus;
+    return measureSync("orchestrator.getWorkStatus", () => {
+      const thread = this.threadRepo.getById(threadId);
+      if (!thread) return undefined;
+      return this._hydrateThreadState(thread, { mergeBaseBranch }).workStatus;
+    }, {
+      threadId,
+      ...(mergeBaseBranch ? { mergeBaseBranch } : {}),
+    });
   }
 
   async getWorkStatusAsync(
     threadId: string,
     mergeBaseBranch?: string,
   ): Promise<ThreadWorkStatus | undefined> {
-    const thread = this.threadRepo.getById(threadId);
-    if (!thread) return undefined;
-    const project = this.projectRepo.getById(thread.projectId);
-    if (!project) return undefined;
+    return measureAsync("orchestrator.getWorkStatusAsync", async () => {
+      const thread = this.threadRepo.getById(threadId);
+      if (!thread) return undefined;
+      const project = this.projectRepo.getById(thread.projectId);
+      if (!project) return undefined;
 
-    const environment = this._restoreThreadEnvironment(thread, project.rootPath);
-    if (!environment) return undefined;
-    if (this._shouldForceDeletedWorkStatus(thread)) {
-      return this._buildDeletedWorkStatus();
-    }
+      const environment = this._restoreThreadEnvironment(thread, project.rootPath);
+      if (!environment) return undefined;
+      if (this._shouldForceDeletedWorkStatus(thread)) {
+        return this._buildDeletedWorkStatus();
+      }
 
-    const defaultBranch = detectProjectDefaultBranch(project.rootPath);
-    const workspaceStatus = environment.getWorkspaceStatus({
-      defaultBranch,
-      mergeBaseBranch,
+      const cachedWorkStatus = this._getCachedWorkStatus(threadId, mergeBaseBranch);
+      if (cachedWorkStatus) {
+        return cachedWorkStatus;
+      }
+
+      const defaultBranch = detectProjectDefaultBranch(project.rootPath);
+      const workspaceStatus = environment.getWorkspaceStatus({
+        defaultBranch,
+        mergeBaseBranch,
+      });
+      return this._cacheWorkStatus(threadId, workspaceStatus, mergeBaseBranch);
+    }, {
+      threadId,
+      ...(mergeBaseBranch ? { mergeBaseBranch } : {}),
     });
-    return { ...workspaceStatus };
   }
 
   getProjectWorkspaceStatus(projectId: string, rootPath: string): ThreadWorkStatus {
@@ -1737,7 +1762,11 @@ export class Orchestrator implements ThreadOrchestrator {
   getDefaultExecutionOptions(
     threadId: string,
   ): ThreadExecutionOptions | undefined {
-    return this.eventRepo.getLatestExecutionOptions(threadId);
+    return measureSync(
+      "orchestrator.getDefaultExecutionOptions",
+      () => this.eventRepo.getLatestExecutionOptions(threadId),
+      { threadId },
+    );
   }
 
   /**
@@ -1760,87 +1789,92 @@ export class Orchestrator implements ThreadOrchestrator {
     threadId: string,
     request: ThreadOperationRequest,
   ): Promise<ThreadOperationResponse> {
-    const thread = this.threadRepo.getById(threadId);
-    if (!thread) {
-      throw threadNotFoundError(threadId);
-    }
-    if (thread.archivedAt !== undefined) {
-      throw threadArchivedError(threadId);
-    }
-    if (request.operation === "squash_merge") {
-      const project = this.projectRepo.getById(thread.projectId);
-      if (!project) {
-        throw projectNotFoundError(thread.projectId);
+    return measureAsync("orchestrator.requestThreadOperation", async () => {
+      const thread = this.threadRepo.getById(threadId);
+      if (!thread) {
+        throw threadNotFoundError(threadId);
       }
-      const environment = this._restoreThreadEnvironment(thread, project.rootPath);
-      if (!environment || !environment.supportsSquashMergeIntoDefaultBranch()) {
-        throw invalidRequestError("Squash merge is not supported for this environment");
+      if (thread.archivedAt !== undefined) {
+        throw threadArchivedError(threadId);
       }
-    }
-
-    const requiresDemoteFirst =
-      this.primaryPromotionByProjectId.get(thread.projectId)?.threadId === thread.id;
-    const builtInAction = this._getThreadBuiltInAction(thread, request.operation);
-
-    const operationId = this._nextOperationId();
-    let demotedPrimaryCheckout = false;
-    try {
-      if (requiresDemoteFirst) {
-        await this.demotePrimaryCheckout(thread.id);
-        demotedPrimaryCheckout = true;
+      if (request.operation === "squash_merge") {
+        const project = this.projectRepo.getById(thread.projectId);
+        if (!project) {
+          throw projectNotFoundError(thread.projectId);
+        }
+        const environment = this._restoreThreadEnvironment(thread, project.rootPath);
+        if (!environment || !environment.supportsSquashMergeIntoDefaultBranch()) {
+          throw invalidRequestError("Squash merge is not supported for this environment");
+        }
       }
 
-      this._appendThreadOperationEvent(thread.id, request.operation, "requested", {
-        operationId,
-        message: this._threadOperationRequestedMessage(request.operation),
-        demotedPrimaryCheckout,
-      });
-      this._enqueueThreadOperation(
-        thread.id,
-        request,
-        demotedPrimaryCheckout,
-        operationId,
-      );
+      const requiresDemoteFirst =
+        this.primaryPromotionByProjectId.get(thread.projectId)?.threadId === thread.id;
+      const builtInAction = this._getThreadBuiltInAction(thread, request.operation);
 
-      const latestThread = this.threadRepo.getById(thread.id);
-      const shouldQueue =
-        builtInAction.queuesWhenActive ||
-        latestThread?.status !== "idle" ||
-        this.projectOperationTransitionsInFlight.has(thread.projectId);
-      if (shouldQueue) {
-        this._appendThreadOperationEvent(thread.id, request.operation, "queued", {
+      const operationId = this._nextOperationId();
+      let demotedPrimaryCheckout = false;
+      try {
+        if (requiresDemoteFirst) {
+          await this.demotePrimaryCheckout(thread.id);
+          demotedPrimaryCheckout = true;
+        }
+
+        this._appendThreadOperationEvent(thread.id, request.operation, "requested", {
           operationId,
-          message: this._threadOperationQueuedMessage(request.operation),
+          message: this._threadOperationRequestedMessage(request.operation),
           demotedPrimaryCheckout,
         });
-      }
+        this._enqueueThreadOperation(
+          thread.id,
+          request,
+          demotedPrimaryCheckout,
+          operationId,
+        );
 
-      this._scheduleQueuedOperationDispatch(thread.id);
+        const latestThread = this.threadRepo.getById(thread.id);
+        const shouldQueue =
+          builtInAction.queuesWhenActive ||
+          latestThread?.status !== "idle" ||
+          this.projectOperationTransitionsInFlight.has(thread.projectId);
+        if (shouldQueue) {
+          this._appendThreadOperationEvent(thread.id, request.operation, "queued", {
+            operationId,
+            message: this._threadOperationQueuedMessage(request.operation),
+            demotedPrimaryCheckout,
+          });
+        }
 
-      return {
-        ok: true,
-        operationId,
-        operation: request.operation,
-        status: "accepted",
-        executionStatus: shouldQueue ? "queued" : "running",
-        queued: shouldQueue,
-        message: shouldQueue
-          ? this._threadOperationAcceptedQueuedMessage(request.operation)
-          : this._threadOperationAcceptedRunningMessage(request.operation),
-        demotedPrimaryCheckout,
-      };
-    } catch (err) {
-      const message = this._toErrorMessage(err);
-      this._appendThreadOperationEvent(thread.id, request.operation, "failed", {
-        operationId,
-        message,
-        ...(demotedPrimaryCheckout ? { demotedPrimaryCheckout } : {}),
-      });
-      if (isDomainError(err)) {
-        throw err;
+        this._scheduleQueuedOperationDispatch(thread.id);
+
+        return {
+          ok: true,
+          operationId,
+          operation: request.operation,
+          status: "accepted",
+          executionStatus: shouldQueue ? "queued" : "running",
+          queued: shouldQueue,
+          message: shouldQueue
+            ? this._threadOperationAcceptedQueuedMessage(request.operation)
+            : this._threadOperationAcceptedRunningMessage(request.operation),
+          demotedPrimaryCheckout,
+        };
+      } catch (err) {
+        const message = this._toErrorMessage(err);
+        this._appendThreadOperationEvent(thread.id, request.operation, "failed", {
+          operationId,
+          message,
+          ...(demotedPrimaryCheckout ? { demotedPrimaryCheckout } : {}),
+        });
+        if (isDomainError(err)) {
+          throw err;
+        }
+        throw invalidRequestError(message);
       }
-      throw invalidRequestError(message);
-    }
+    }, {
+      threadId,
+      operation: request.operation,
+    });
   }
 
   async promoteThread(threadId: string): Promise<PromoteThreadResponse> {
@@ -3942,10 +3976,15 @@ export class Orchestrator implements ThreadOrchestrator {
     }
     const defaultBranch = detectProjectDefaultBranch(project.rootPath);
     const workspaceStatus = environment
-      ? environment.getWorkspaceStatus({
-          defaultBranch,
-          mergeBaseBranch: opts?.mergeBaseBranch,
-        })
+      ? this._getCachedWorkStatus(thread.id, opts?.mergeBaseBranch) ??
+        this._cacheWorkStatus(
+          thread.id,
+          environment.getWorkspaceStatus({
+            defaultBranch,
+            mergeBaseBranch: opts?.mergeBaseBranch,
+          }),
+          opts?.mergeBaseBranch,
+        )
       : this._buildDeletedWorkStatus();
     const hydrated: Thread = {
       ...thread,
@@ -3958,6 +3997,40 @@ export class Orchestrator implements ThreadOrchestrator {
       ...(provisioningState ? { provisioningState } : {}),
     };
     return this._withPrimaryCheckoutState(hydrated);
+  }
+
+  private _workStatusCacheKey(threadId: string, mergeBaseBranch?: string): string {
+    return `${threadId}::${mergeBaseBranch ?? ""}`;
+  }
+
+  private _getCachedWorkStatus(
+    threadId: string,
+    mergeBaseBranch?: string,
+  ): ThreadWorkStatus | undefined {
+    const cached = this.workStatusByThreadAndMergeBase.get(
+      this._workStatusCacheKey(threadId, mergeBaseBranch),
+    );
+    return cached ? { ...cached } : undefined;
+  }
+
+  private _cacheWorkStatus(
+    threadId: string,
+    status: ThreadWorkStatus,
+    mergeBaseBranch?: string,
+  ): ThreadWorkStatus {
+    this.workStatusByThreadAndMergeBase.set(
+      this._workStatusCacheKey(threadId, mergeBaseBranch),
+      { ...status },
+    );
+    return { ...status };
+  }
+
+  private _clearThreadWorkStatusCache(threadId: string): void {
+    for (const key of this.workStatusByThreadAndMergeBase.keys()) {
+      if (key.startsWith(`${threadId}::`)) {
+        this.workStatusByThreadAndMergeBase.delete(key);
+      }
+    }
   }
 
   private _shouldForceDeletedWorkStatus(thread: Thread): boolean {
@@ -3994,6 +4067,17 @@ export class Orchestrator implements ThreadOrchestrator {
           },
         };
     return this._withThreadTitleFallback(withPrimaryCheckout);
+  }
+
+  private _withDefaultExecutionOptions(thread: Thread): Thread {
+    const defaultExecutionOptions = this.eventRepo.getLatestExecutionOptions(thread.id);
+    if (!defaultExecutionOptions) {
+      return thread;
+    }
+    return {
+      ...thread,
+      defaultExecutionOptions,
+    };
   }
 
   private _withThreadTitleFallback(thread: Thread): Thread {
@@ -4531,6 +4615,13 @@ export class Orchestrator implements ThreadOrchestrator {
   ): void {
     const uniqueChanges = Array.from(new Set(changes));
     if (uniqueChanges.length === 0) return;
+    if (
+      uniqueChanges.includes("work-status-changed") ||
+      uniqueChanges.includes("status-changed") ||
+      uniqueChanges.includes("thread-created")
+    ) {
+      this._clearThreadWorkStatusCache(threadId);
+    }
     this.ws.broadcast("thread", threadId, uniqueChanges);
   }
 

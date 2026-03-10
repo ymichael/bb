@@ -346,20 +346,27 @@ export function useThread(
   });
 }
 
-export function useThreadDefaultExecutionOptions(id: string) {
+export function useThreadDefaultExecutionOptions(
+  id: string,
+  options?: { enabled?: boolean },
+) {
   return useQuery<ThreadExecutionOptions | null>({
     queryKey: ["threadDefaultExecutionOptions", id],
     queryFn: () => api.getThreadDefaultExecutionOptions(id),
-    enabled: !!id,
+    enabled: (options?.enabled ?? true) && !!id,
     refetchOnWindowFocus: false,
   });
 }
 
-export function useThreadWorkStatus(id: string, mergeBaseBranch?: string) {
+export function useThreadWorkStatus(
+  id: string,
+  mergeBaseBranch?: string,
+  options?: { enabled?: boolean },
+) {
   return useQuery<ThreadWorkStatus | null>({
     queryKey: [THREAD_WORK_STATUS_QUERY_KEY, id, mergeBaseBranch ?? null],
     queryFn: () => api.getThreadWorkStatus(id, mergeBaseBranch),
-    enabled: !!id,
+    enabled: (options?.enabled ?? true) && !!id,
     placeholderData: (previousData, previousQuery) =>
       resolveThreadWorkStatusPlaceholder(previousData, previousQuery?.queryKey, id),
     refetchOnWindowFocus: false,

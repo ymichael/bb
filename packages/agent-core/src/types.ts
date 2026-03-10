@@ -8,6 +8,7 @@ import type {
   SandboxMode,
   ServiceTier,
 } from "./shared-types.js";
+import type { ThreadExecutionOptions } from "./api-types.js";
 
 // Project
 export interface Project {
@@ -77,6 +78,7 @@ export interface Thread {
   environmentRecord?: PersistedEnvironmentRecord;
   environmentAgentCursor?: number;
   builtInActions?: ThreadBuiltInAction[];
+  defaultExecutionOptions?: ThreadExecutionOptions;
   parentThreadId?: string;
   archivedAt?: number;
   lastReadAt?: number;

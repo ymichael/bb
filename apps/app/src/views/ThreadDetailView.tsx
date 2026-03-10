@@ -11,6 +11,7 @@ import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { Panel, PanelGroup } from "react-resizable-panels";
 import {
   useThread,
+  useThreads,
   useThreadWorkStatus,
   useThreadTimeline,
   useThreadGitDiff,
@@ -26,7 +27,6 @@ import {
   useMarkThreadRead,
   useSystemEnvironments,
   useUnarchiveThread,
-  useThreadDefaultExecutionOptions,
   useUploadPromptAttachment,
 } from "../hooks/useApi";
 import {
@@ -280,7 +280,7 @@ export function ThreadDetailView() {
     null,
   );
   const { data: thread, isLoading, error } = useThread(threadId ?? "", {
-    refetchOnMount: "always",
+    refetchOnMount: true,
   });
   const {
     data: threadWorkStatus,
@@ -288,18 +288,29 @@ export function ThreadDetailView() {
   } = useThreadWorkStatus(
     threadId ?? "",
     selectedMergeBaseBranch,
+    {
+      enabled:
+        Boolean(threadId) &&
+        Boolean(selectedMergeBaseBranch) &&
+        selectedMergeBaseBranch !== thread?.workStatus?.mergeBaseBranch,
+    },
   );
-  const resolvedThreadWorkStatus =
-    threadWorkStatusError ? undefined : (threadWorkStatus ?? undefined);
-  const { data: parentThread } = useThread(thread?.parentThreadId ?? "");
+  const resolvedThreadWorkStatus = selectedMergeBaseBranch
+    ? (threadWorkStatusError ? undefined : (threadWorkStatus ?? thread?.workStatus))
+    : thread?.workStatus;
+  const { data: threads } = useThreads(undefined, { enabled: false });
+  const parentThread = useMemo(
+    () =>
+      thread?.parentThreadId
+        ? threads?.find((candidate) => candidate.id === thread.parentThreadId)
+        : undefined,
+    [thread?.parentThreadId, threads],
+  );
   const { data: timeline, isLoading: timelineLoading } = useThreadTimeline(
     threadId ?? "",
-    { refetchOnMount: "always" },
+    { refetchOnMount: true },
   );
   const threadToolGroupMessages = useThreadToolGroupMessages();
-  const { data: defaultExecutionOptions } = useThreadDefaultExecutionOptions(
-    threadId ?? "",
-  );
   const tellThread = useTellThread();
   const enqueueThreadMessage = useEnqueueThreadMessage();
   const sendQueuedThreadMessage = useSendQueuedThreadMessage();
@@ -375,10 +386,10 @@ export function ThreadDetailView() {
     supportsServiceTier,
   } = usePromptModelReasoning({
     scope: "thread",
-    initialModel: defaultExecutionOptions?.model,
-    initialServiceTier: defaultExecutionOptions?.serviceTier,
-    initialReasoningLevel: defaultExecutionOptions?.reasoningLevel,
-    initialSandboxMode: defaultExecutionOptions?.sandboxMode,
+    initialModel: thread?.defaultExecutionOptions?.model,
+    initialServiceTier: thread?.defaultExecutionOptions?.serviceTier,
+    initialReasoningLevel: thread?.defaultExecutionOptions?.reasoningLevel,
+    initialSandboxMode: thread?.defaultExecutionOptions?.sandboxMode,
     initialEnvironmentId: thread?.environmentId,
   });
   const preferredTheme = usePreferredTheme();

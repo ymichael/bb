@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { performance } from "node:perf_hooks";
 import { Hono } from "hono";
 import { logger } from "hono/logger";
 import { serveStatic } from "@hono/node-server/serve-static";
@@ -25,6 +26,7 @@ import { Orchestrator } from "./orchestrator.js";
 import { createApiRoutes } from "./routes/index.js";
 import { InMemorySchedulerService } from "./scheduler-service.js";
 import { createRestartRecommendationMonitor } from "./restart-recommendation.js";
+import { isPerfDebugEnabled, logPerf } from "./perf.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -44,6 +46,21 @@ export function createServer(deps: ServerDeps) {
 
   // Request logging
   app.use(logger());
+  app.use(async (c, next) => {
+    const startedAt = performance.now();
+    await next();
+    if (!isPerfDebugEnabled()) {
+      return;
+    }
+    const durationMs = Math.round((performance.now() - startedAt) * 100) / 100;
+    c.header("x-beanbag-handler-ms", String(durationMs));
+    logPerf("http.request", {
+      method: c.req.method,
+      path: new URL(c.req.url).pathname,
+      status: c.res.status,
+      durationMs,
+    });
+  });
 
   // WebSocket setup
   const { injectWebSocket, upgradeWebSocket } = createNodeWebSocket({ app });

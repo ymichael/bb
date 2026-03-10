@@ -1,6 +1,8 @@
 import { spawnSync } from "node:child_process";
 import type { EnvironmentCheckoutSnapshot } from "@beanbag/environment";
 
+const defaultBranchByRepoRoot = new Map<string, string | undefined>();
+
 function runGitAtPath(
   cwd: string,
   args: string[],
@@ -22,12 +24,24 @@ function hasLocalBranch(repoRoot: string, branch: string): boolean {
 }
 
 export function detectProjectDefaultBranch(repoRoot: string): string | undefined {
+  if (defaultBranchByRepoRoot.has(repoRoot)) {
+    return defaultBranchByRepoRoot.get(repoRoot);
+  }
   const remoteHead = runGitAtPath(repoRoot, ["symbolic-ref", "--quiet", "refs/remotes/origin/HEAD"]);
   if (remoteHead.ok && remoteHead.stdout.startsWith("refs/remotes/origin/")) {
-    return remoteHead.stdout.slice("refs/remotes/origin/".length);
+    const defaultBranch = remoteHead.stdout.slice("refs/remotes/origin/".length);
+    defaultBranchByRepoRoot.set(repoRoot, defaultBranch);
+    return defaultBranch;
   }
-  if (hasLocalBranch(repoRoot, "main")) return "main";
-  if (hasLocalBranch(repoRoot, "master")) return "master";
+  if (hasLocalBranch(repoRoot, "main")) {
+    defaultBranchByRepoRoot.set(repoRoot, "main");
+    return "main";
+  }
+  if (hasLocalBranch(repoRoot, "master")) {
+    defaultBranchByRepoRoot.set(repoRoot, "master");
+    return "master";
+  }
+  defaultBranchByRepoRoot.set(repoRoot, undefined);
   return undefined;
 }
 

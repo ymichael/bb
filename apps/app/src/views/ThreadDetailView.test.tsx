@@ -115,6 +115,9 @@ vi.mock("../hooks/useApi", () => ({
     isLoading: false,
     error: null,
   }),
+  useThreads: () => ({
+    data: [apiState.thread, apiState.parentThread],
+  }),
   useThreadWorkStatus: () => ({
     data: apiState.workStatus,
     error: null,
@@ -142,9 +145,6 @@ vi.mock("../hooks/useApi", () => ({
     data: apiState.environments,
   }),
   useUnarchiveThread: () => apiState.pendingMutation,
-  useThreadDefaultExecutionOptions: () => ({
-    data: {},
-  }),
   useUploadPromptAttachment: () => apiState.pendingMutation,
 }));
 

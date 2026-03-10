@@ -306,7 +306,7 @@ export function createThreadRoutes(
     })
     .get("/:id/default-execution-options", async (c) => {
       try {
-        const thread = threadManager.getById(c.req.param("id"));
+        const thread = getThreadForRouteLookup(threadManager, c.req.param("id"));
         if (!thread) {
           return sendRouteError(c, threadNotFoundError(c.req.param("id")));
         }
@@ -396,7 +396,7 @@ export function createThreadRoutes(
       zValidator("json", updateThreadSchema),
       async (c) => {
         try {
-          const thread = threadManager.getById(c.req.param("id"));
+          const thread = getThreadForRouteLookup(threadManager, c.req.param("id"));
           if (!thread) {
             return sendRouteError(c, threadNotFoundError(c.req.param("id")));
           }
@@ -805,7 +805,7 @@ export function createThreadRoutes(
     )
     .get("/:id/output", async (c) => {
       try {
-        const thread = threadManager.getById(c.req.param("id"));
+        const thread = getThreadForRouteLookup(threadManager, c.req.param("id"));
         if (!thread) {
           return sendRouteError(c, threadNotFoundError(c.req.param("id")));
         }
