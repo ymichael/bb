@@ -581,6 +581,11 @@ export function ThreadDetailView() {
   }, [threadId]);
 
   useEffect(() => {
+    timelineScrollAnchorRef.current = null;
+    timelineContainerWidthRef.current = null;
+  }, [threadId]);
+
+  useEffect(() => {
     setSelectedMergeBaseBranch(undefined);
   }, [threadId]);
 
@@ -1601,6 +1606,7 @@ export function ThreadDetailView() {
 
   const conversationShell = (
     <PageShell
+      key={threadId ?? "thread-detail"}
       scrollRef={setContainerRef}
       onScroll={handleTimelineScroll}
       shellClassName="!mx-0 !mt-0 md:!mx-0 md:!mt-0"

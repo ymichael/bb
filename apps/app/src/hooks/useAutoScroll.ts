@@ -1,4 +1,4 @@
-import { useRef, useCallback, useEffect, useState } from "react"
+import { useRef, useCallback, useEffect, useLayoutEffect, useState } from "react"
 import {
   DEFAULT_SCROLL_STICK_THRESHOLD_PX,
 } from "@beanbag/ui-core";
@@ -86,9 +86,21 @@ export function useAutoScroll(dep: unknown, resetDep?: unknown) {
     }
   }, [containerElement, scrollToBottomIfSticking])
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (resetDep === undefined) return
     scrollToBottom()
+
+    if (typeof window === "undefined") {
+      return
+    }
+
+    const frameId = window.requestAnimationFrame(() => {
+      scrollToBottom()
+    })
+
+    return () => {
+      window.cancelAnimationFrame(frameId)
+    }
   }, [containerElement, resetDep, scrollToBottom])
 
   return { containerRef, containerElement, setContainerRef, handleScroll, scrollToBottom }
