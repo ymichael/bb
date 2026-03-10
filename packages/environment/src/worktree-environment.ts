@@ -324,7 +324,7 @@ class WorktreeEnvironment implements IEnvironment {
     }
   }
 
-  async dispose(): Promise<void> {
+  async suspend(): Promise<void> {
     if (this.manageEnvironmentAgent) {
       await disposeManagedHostEnvironmentAgent({
         projectId: this.projectId,
@@ -333,6 +333,10 @@ class WorktreeEnvironment implements IEnvironment {
         runtimeEnv: this.env,
       });
     }
+  }
+
+  async destroy(): Promise<void> {
+    await this.suspend();
     await runGitAtPathAsync(
       this.projectRoot,
       ["worktree", "remove", "--force", this.state.workspaceRoot],

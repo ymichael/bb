@@ -86,7 +86,7 @@ describe("EnvironmentRegistry", () => {
       expect(restored.kind).toBe("worktree");
       expect(restored.getWorkspaceRootUnsafe()).toBe(join(worktreeRoot, threadId));
 
-      await restored.dispose();
+      await restored.destroy();
     } finally {
       rmSync(projectRoot, { recursive: true, force: true });
     }

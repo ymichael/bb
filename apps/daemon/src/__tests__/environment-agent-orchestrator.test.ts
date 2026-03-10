@@ -105,7 +105,8 @@ function makeRuntimeEnvironment(args: {
     serialize() {
       return {};
     },
-    dispose() {},
+    suspend() {},
+    destroy() {},
     exists() {
       return true;
     },

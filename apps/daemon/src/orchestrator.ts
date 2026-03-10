@@ -164,6 +164,7 @@ const ENV_SETUP_TIMEOUT_MS = 10 * 60 * 1000;
 
 const PRIMARY_CHECKOUT_VALIDATION_TTL_MS = 2_000;
 const IDLE_NOISE_EVENT_KEEP_RECENT = 300;
+const DEFAULT_IDLE_ENVIRONMENT_SUSPEND_TIMEOUT_MS = 5 * 60 * 1000;
 const ARCHIVED_NOISE_EVENT_KEEP_RECENT = 120;
 const ACTIVE_NOISE_EVENT_KEEP_RECENT = 1_000;
 const ACTIVE_NOISE_PRUNE_MIN_SEQ_DELTA = 250;
@@ -418,6 +419,11 @@ export class Orchestrator implements ThreadOrchestrator {
   private activeTurnIdByThreadId = new Map<string, string>();
   /** Provider thread ids attached in the current daemon process. */
   private providerThreadIdByThreadId = new Map<string, string>();
+  /** Pending idle-suspend timers keyed by thread id. */
+  private idleEnvironmentSuspendTimersByThreadId = new Map<
+    string,
+    ReturnType<typeof setTimeout>
+  >();
   /** Long-lived environment-agent stream subscriptions keyed by thread. */
   private liveEnvironmentAgentClientsByThreadId = new Map<string, EnvironmentAgentClient>();
   /** Serializes live environment-agent event ingestion per thread. */
@@ -1249,9 +1255,10 @@ export class Orchestrator implements ThreadOrchestrator {
   }
 
   /**
-   * Stop an active thread by killing its process.
+   * Stop an active thread by suspending its live runtime.
    */
   stop(threadId: string): void {
+    this._cancelIdleEnvironmentSuspend(threadId);
     const liveClient = this.liveEnvironmentAgentClientsByThreadId.get(threadId);
     if (liveClient) {
       liveClient.close();
@@ -1273,11 +1280,12 @@ export class Orchestrator implements ThreadOrchestrator {
   }
 
   /**
-   * Archive a thread and stop any active process.
+   * Archive a thread and destroy any persisted environment state.
    */
   archive(threadId: string): void {
     const thread = this.threadRepo.getById(threadId);
     if (!thread) return;
+    this._cancelIdleEnvironmentSuspend(threadId);
     this.queuedOperationsByThreadId.delete(threadId);
     this.operationDispatchInFlight.delete(threadId);
 
@@ -2351,6 +2359,10 @@ export class Orchestrator implements ThreadOrchestrator {
     this.operationDispatchInFlight.clear();
     this.projectOperationTransitionsInFlight.clear();
     this.environmentAgentReplayCursorByThreadId.clear();
+    for (const timer of this.idleEnvironmentSuspendTimersByThreadId.values()) {
+      clearTimeout(timer);
+    }
+    this.idleEnvironmentSuspendTimersByThreadId.clear();
     for (const queued of this.queuedProviderBroadcastsByThread.values()) {
       if (queued.timer !== null) {
         clearTimeout(queued.timer);
@@ -2607,6 +2619,7 @@ export class Orchestrator implements ThreadOrchestrator {
   }
 
   private _cleanupThreadRuntime(threadId: string): void {
+    this._cancelIdleEnvironmentSuspend(threadId);
     const liveClient = this.liveEnvironmentAgentClientsByThreadId.get(threadId);
     if (liveClient) {
       liveClient.close();
@@ -2623,7 +2636,7 @@ export class Orchestrator implements ThreadOrchestrator {
     this.lastNoisePruneAtByThread.delete(threadId);
     this.queuedOperationsByThreadId.delete(threadId);
     this.operationDispatchInFlight.delete(threadId);
-    this.environmentService.cleanupEnvironmentRuntime(threadId);
+    this.environmentService.suspendEnvironmentRuntime(threadId);
   }
 
   private async _replayBufferedEnvironmentAgentEvents(
@@ -2791,6 +2804,55 @@ export class Orchestrator implements ThreadOrchestrator {
     };
   }
 
+  private async _ensureEnvironmentAgentAccess(threadId: string): Promise<{
+    thread: Thread;
+    projectRootPath: string;
+    target: EnvironmentAgentConnectionTarget;
+    resetReplayCursor: boolean;
+  }> {
+    const thread = this.threadRepo.getById(threadId);
+    if (!thread) {
+      throw threadNotFoundError(threadId);
+    }
+
+    const runtime = this.environmentService.getEnvironmentRuntime(threadId);
+    if (runtime?.agentConnectionTarget) {
+      return {
+        thread,
+        projectRootPath: "",
+        target: runtime.agentConnectionTarget,
+        resetReplayCursor: false,
+      };
+    }
+
+    const runtimeEnvTarget = this._resolveEnvironmentAgentConnectionTargetFromRuntimeEnv();
+    if (runtimeEnvTarget) {
+      return {
+        thread,
+        projectRootPath: "",
+        target: runtimeEnvTarget,
+        resetReplayCursor: false,
+      };
+    }
+
+    const project = this.projectRepo.getById(thread.projectId);
+    if (!project) {
+      throw projectNotFoundError(thread.projectId);
+    }
+
+    const ensured = await this.environmentService.ensureThreadEnvironmentRuntime(
+      thread,
+      project.rootPath,
+      "resume-existing-provider-session",
+    );
+    return {
+      thread,
+      projectRootPath: project.rootPath,
+      target: ensured.runtime.agentConnectionTarget,
+      resetReplayCursor: ensured.resetReplayCursor,
+    };
+  }
+
   private async _withEnvironmentAgentAccess<T>(
     threadId: string,
     action: (args: {
@@ -2800,7 +2862,10 @@ export class Orchestrator implements ThreadOrchestrator {
       providerLaunch?: EnvironmentAgentConnectionTarget["providerLaunch"];
     }) => Promise<T>,
   ): Promise<T> {
-    const resolved = this._resolveEnvironmentAgentAccess(threadId);
+    const resolved = await this._ensureEnvironmentAgentAccess(threadId);
+    if (resolved.resetReplayCursor) {
+      this._setEnvironmentAgentReplayCursor(threadId, 0);
+    }
     return this._withEnvironmentAgentTarget({
       thread: resolved.thread,
       projectRootPath: resolved.projectRootPath,
@@ -2822,7 +2887,11 @@ export class Orchestrator implements ThreadOrchestrator {
     if (this.liveEnvironmentAgentClientsByThreadId.has(threadId)) {
       return;
     }
-    const target = targetOverride ?? this._resolveEnvironmentAgentAccess(threadId).target;
+    const ensured = targetOverride ? undefined : await this._ensureEnvironmentAgentAccess(threadId);
+    if (ensured?.resetReplayCursor) {
+      this._setEnvironmentAgentReplayCursor(threadId, 0);
+    }
+    const target = targetOverride ?? ensured!.target;
     const client = await createHttpEnvironmentAgentClient({
       baseUrl: target.baseUrl,
       ...(target.headers ? { headers: target.headers } : {}),
@@ -2894,11 +2963,15 @@ export class Orchestrator implements ThreadOrchestrator {
     threadId: string,
     opts?: { destroyWorkspace?: boolean },
   ): void {
-    this.environmentService.cleanupEnvironmentRuntime(threadId, opts);
+    if (opts?.destroyWorkspace) {
+      this.environmentService.destroyEnvironmentRuntime(threadId);
+      return;
+    }
+    this.environmentService.detachEnvironmentRuntime(threadId);
   }
 
   private _cleanupPersistedEnvironment(threadId: string): void {
-    this.environmentService.cleanupPersistedEnvironment(threadId);
+    void this.environmentService.destroyPersistedEnvironment(threadId);
   }
 
   private _appendEnvironmentProvisioningEvent(
@@ -3188,15 +3261,15 @@ export class Orchestrator implements ThreadOrchestrator {
     }
 
     try {
-      const environmentKind = this._resolveRequestedEnvironmentId(
-        thread.environmentRecord?.kind ?? thread.environmentId,
-      );
-      const environmentRuntime = await this._spawnProcess(
-        threadId,
-        project.rootPath,
-        environmentKind,
-        "resume-existing-provider-session",
-      );
+      const { runtime: environmentRuntime, resetReplayCursor } =
+        await this.environmentService.ensureThreadEnvironmentRuntime(
+          thread,
+          project.rootPath,
+          "resume-existing-provider-session",
+        );
+      if (resetReplayCursor) {
+        this._setEnvironmentAgentReplayCursor(threadId, 0);
+      }
       await this._ensureLiveEnvironmentAgentSubscription(
         threadId,
         environmentRuntime.agentConnectionTarget,
@@ -4372,6 +4445,10 @@ export class Orchestrator implements ThreadOrchestrator {
     }
     if (thread.archivedAt !== undefined && nextStatus === "active") return false;
 
+    if (nextStatus !== "idle") {
+      this._cancelIdleEnvironmentSuspend(threadId);
+    }
+
     if (thread.status === nextStatus) return false;
     if (!opts?.force && !canTransitionThreadStatus(thread.status, nextStatus)) {
       return false;
@@ -4395,9 +4472,57 @@ export class Orchestrator implements ThreadOrchestrator {
       if (updatedThread && updatedThread.archivedAt === undefined) {
         this._scheduleQueuedFollowUpDispatch(threadId);
         this._scheduleQueuedOperationDispatch(threadId);
+        this._scheduleIdleEnvironmentSuspend(threadId);
       }
     }
     return true;
+  }
+
+  private _resolveIdleEnvironmentSuspendTimeoutMs(): number {
+    const raw = this.runtimeEnv.BEANBAG_IDLE_ENVIRONMENT_SUSPEND_TIMEOUT_MS?.trim();
+    if (!raw) return DEFAULT_IDLE_ENVIRONMENT_SUSPEND_TIMEOUT_MS;
+    const parsed = Number(raw);
+    if (!Number.isFinite(parsed) || parsed < 0) {
+      return DEFAULT_IDLE_ENVIRONMENT_SUSPEND_TIMEOUT_MS;
+    }
+    return parsed;
+  }
+
+  private _cancelIdleEnvironmentSuspend(threadId: string): void {
+    const timer = this.idleEnvironmentSuspendTimersByThreadId.get(threadId);
+    if (!timer) return;
+    clearTimeout(timer);
+    this.idleEnvironmentSuspendTimersByThreadId.delete(threadId);
+  }
+
+  private _scheduleIdleEnvironmentSuspend(threadId: string): void {
+    this._cancelIdleEnvironmentSuspend(threadId);
+    const timeoutMs = this._resolveIdleEnvironmentSuspendTimeoutMs();
+    if (timeoutMs === 0) return;
+
+    const timer = setTimeout(() => {
+      this.idleEnvironmentSuspendTimersByThreadId.delete(threadId);
+      this._autoSuspendIdleThreadEnvironment(threadId);
+    }, timeoutMs);
+    timer.unref?.();
+    this.idleEnvironmentSuspendTimersByThreadId.set(threadId, timer);
+  }
+
+  private _autoSuspendIdleThreadEnvironment(threadId: string): void {
+    const thread = this.threadRepo.getById(threadId);
+    if (!thread) return;
+    if (thread.archivedAt !== undefined) return;
+    if (thread.status !== "idle") return;
+    if (!thread.environmentRecord) return;
+
+    const liveClient = this.liveEnvironmentAgentClientsByThreadId.get(threadId);
+    if (liveClient) {
+      liveClient.close();
+      this.liveEnvironmentAgentClientsByThreadId.delete(threadId);
+    }
+    this.liveEnvironmentAgentIngestByThreadId.delete(threadId);
+    this.providerThreadIdByThreadId.delete(threadId);
+    this.environmentService.suspendEnvironmentRuntime(threadId);
   }
 
   private _broadcastThreadChanged(

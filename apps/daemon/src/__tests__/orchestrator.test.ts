@@ -146,7 +146,7 @@ function createTestEnvironmentRegistry(args: {
 function makeRuntimeEnvironment(args: {
   kind?: string;
   rootPath: string;
-  dispose?: () => Promise<void> | void;
+  cleanup?: () => Promise<void> | void;
   overrides?: Partial<IEnvironment>;
 }): IEnvironment {
   const kind = args.kind ?? "worktree";
@@ -173,8 +173,11 @@ function makeRuntimeEnvironment(args: {
     serialize() {
       return {};
     },
-    dispose() {
-      return args.dispose?.();
+    suspend() {
+      return args.cleanup?.();
+    },
+    destroy() {
+      return args.cleanup?.();
     },
     exists() {
       return true;
@@ -803,6 +806,7 @@ describe("Orchestrator", () => {
           deliveryState: "healthy" as const,
           retryAttemptCount: 0,
         }),
+        subscribeToEvents: vi.fn(() => () => {}),
         close: vi.fn(),
       } as unknown as EnvironmentAgentClient;
       createClientMock.mockResolvedValueOnce(retryClient);
@@ -844,8 +848,11 @@ describe("Orchestrator", () => {
               },
             },
           }),
-          startedAt: Date.now(),
-          projectId: "proj-1",
+          agentConnectionTarget: {
+            transport: "http" as const,
+            baseUrl: "http://127.0.0.1:4312",
+          },
+          stopWatchingWorkspaceStatus: vi.fn(),
         },
       );
       (bootProjectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue({
@@ -4211,6 +4218,57 @@ describe("Orchestrator", () => {
 
       expect(cleanup).not.toHaveBeenCalled();
     });
+
+    it("auto-suspends idle environments after the configured timeout", async () => {
+      vi.useFakeTimers();
+      try {
+        const thread = makeThread({
+          id: "thread-1",
+          status: "active",
+          environmentId: "worktree",
+          environmentRecord: {
+            kind: "worktree",
+            state: {},
+          },
+        });
+        (threadRepo.getById as ReturnType<typeof vi.fn>).mockImplementation(
+          (threadId: string) => (threadId === "thread-1" ? thread : undefined),
+        );
+        (threadRepo.update as ReturnType<typeof vi.fn>).mockImplementation(
+          (_threadId: string, updates: Partial<Thread>) => {
+            Object.assign(thread, updates);
+            return thread;
+          },
+        );
+
+        const cleanup = vi.fn();
+        const stopWatchingWorkspaceStatus = vi.fn();
+        asOrchestratorHarness(manager).environmentRuntimes.set("thread-1", {
+          environment: makeRuntimeEnvironment({
+            rootPath: "/tmp/worktree",
+            cleanup,
+          }),
+          agentConnectionTarget: {
+            transport: "http",
+            baseUrl: "http://127.0.0.1:4312",
+          },
+          stopWatchingWorkspaceStatus,
+        });
+
+        (manager as unknown as {
+          _setThreadStatus: (threadId: string, status: Thread["status"]) => boolean;
+        })._setThreadStatus("thread-1", "idle");
+
+        await vi.advanceTimersByTimeAsync(5 * 60 * 1000);
+        await vi.runOnlyPendingTimersAsync();
+
+        expect(cleanup).toHaveBeenCalledTimes(1);
+        expect(stopWatchingWorkspaceStatus).toHaveBeenCalledTimes(1);
+        expect(asOrchestratorHarness(manager).environmentRuntimes.has("thread-1")).toBe(false);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
   });
 
   describe("archive()", () => {
@@ -4259,7 +4317,7 @@ describe("Orchestrator", () => {
       asOrchestratorHarness(manager).environmentRuntimes.set("thread-1", {
         environment: makeRuntimeEnvironment({
           rootPath: "/tmp/worktree",
-          dispose: cleanup,
+          cleanup,
         }),
       });
 
@@ -4314,7 +4372,7 @@ describe("Orchestrator", () => {
       asOrchestratorHarness(manager).environmentRuntimes.set("thread-1", {
         environment: makeRuntimeEnvironment({
           rootPath: "/tmp/worktree",
-          dispose: cleanup,
+          cleanup,
         }),
       });
 
@@ -4757,7 +4815,11 @@ describe("Orchestrator", () => {
               branchName: "bb/thread-1",
             };
           },
-          dispose: () =>
+          suspend: () =>
+            new Promise<void>((resolve) => {
+              resolveCleanup = resolve;
+            }),
+          destroy: () =>
             new Promise<void>((resolve) => {
               resolveCleanup = resolve;
             }),
@@ -5193,7 +5255,8 @@ describe("Orchestrator", () => {
           serialize() {
             return {};
           },
-          dispose() {},
+          suspend() {},
+          destroy() {},
           exists() {
             return true;
           },
@@ -5558,7 +5621,8 @@ describe("Orchestrator", () => {
           serialize() {
             return {};
           },
-          dispose() {},
+          suspend() {},
+          destroy() {},
           exists() {
             return true;
           },
@@ -5862,7 +5926,8 @@ describe("Orchestrator", () => {
             serialize() {
               return {};
             },
-            dispose() {},
+            suspend() {},
+            destroy() {},
             exists() {
               return true;
             },
@@ -6265,7 +6330,7 @@ describe("Orchestrator", () => {
       asOrchestratorHarness(manager).environmentRuntimes.set("thread-1", {
         environment: makeRuntimeEnvironment({
           rootPath: "/test",
-          dispose,
+          cleanup: dispose,
         }),
         agentConnectionTarget: {
           transport: "http",

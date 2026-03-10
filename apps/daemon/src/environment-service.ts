@@ -159,8 +159,23 @@ export class EnvironmentService {
     try {
       return environment.getWorkspaceStatus();
     } finally {
-      environment.dispose();
+      void environment.destroy();
     }
+  }
+
+  private async prepareEnvironment(
+    threadId: string,
+    environment: IEnvironment,
+    reason: ThreadEnvironmentStartReason,
+  ): Promise<{ existedBeforePrepare: boolean }> {
+    const existedBeforePrepare = environment.exists();
+    if (typeof environment.prepare === "function") {
+      await environment.prepare();
+    }
+    if (!existedBeforePrepare) {
+      await this.callbacks.runOptionalSetup(threadId, environment, reason);
+    }
+    return { existedBeforePrepare };
   }
 
   async provisionThreadEnvironment(
@@ -174,16 +189,10 @@ export class EnvironmentService {
       this.callbacks.createContext(threadId, projectRootPath),
     );
     try {
-      const existedBeforePrepare = environment.exists();
-      if (typeof environment.prepare === "function") {
-        await environment.prepare();
-      }
-      if (!existedBeforePrepare) {
-        await this.callbacks.runOptionalSetup(threadId, environment, reason);
-      }
+      await this.prepareEnvironment(threadId, environment, reason);
     } catch (error) {
       try {
-        await Promise.resolve(environment.dispose());
+        await Promise.resolve(environment.destroy());
       } catch {
         // Best-effort cleanup for partially provisioned environments.
       }
@@ -199,8 +208,56 @@ export class EnvironmentService {
     return runtime;
   }
 
+  async ensureThreadEnvironmentRuntime(
+    thread: Thread,
+    projectRootPath: string,
+    reason: ThreadEnvironmentStartReason,
+  ): Promise<{ runtime: ActiveEnvironmentRuntime; resetReplayCursor: boolean }> {
+    const existingRuntime = this.environmentRuntimes.get(thread.id);
+    if (existingRuntime) {
+      return { runtime: existingRuntime, resetReplayCursor: false };
+    }
+
+    const environmentId = thread.environmentRecord?.kind ?? thread.environmentId ?? "local";
+    const environment =
+      this.restoreThreadEnvironment(thread, projectRootPath) ??
+      this.environmentRegistry.create(
+        environmentId,
+        this.callbacks.createContext(thread.id, projectRootPath),
+      );
+
+    let hadAgentTarget = false;
+    try {
+      environment.getAgentConnectionTarget();
+      hadAgentTarget = true;
+    } catch {
+      hadAgentTarget = false;
+    }
+
+    try {
+      await this.prepareEnvironment(thread.id, environment, reason);
+    } catch (error) {
+      try {
+        await Promise.resolve(environment.destroy());
+      } catch {
+        // Best-effort cleanup for partially restored environments.
+      }
+      throw error;
+    }
+
+    this.setEnvironmentRuntime(thread.id, environment);
+    const runtime = this.environmentRuntimes.get(thread.id);
+    if (!runtime) {
+      throw new Error(`Missing environment runtime for thread ${thread.id}`);
+    }
+    return {
+      runtime,
+      resetReplayCursor: thread.status === "idle" && !hadAgentTarget,
+    };
+  }
+
   setEnvironmentRuntime(threadId: string, environment: IEnvironment): void {
-    this.cleanupEnvironmentRuntime(threadId);
+    this.suspendEnvironmentRuntime(threadId);
     const agentConnectionTarget = environment.getAgentConnectionTarget();
     const stopWatchingWorkspaceStatus = environment.watchWorkspaceStatus(() => {
       if (!this.threadRepo.getById(threadId)) {
@@ -215,18 +272,31 @@ export class EnvironmentService {
     });
   }
 
-  cleanupEnvironmentRuntime(
-    threadId: string,
-    opts?: { destroyWorkspace?: boolean; disposeEnvironment?: boolean },
-  ): void {
+  detachEnvironmentRuntime(threadId: string): ActiveEnvironmentRuntime | undefined {
     const runtime = this.environmentRuntimes.get(threadId);
     if (runtime) {
       runtime.stopWatchingWorkspaceStatus?.();
       this.environmentRuntimes.delete(threadId);
     }
-    const shouldDisposeEnvironment = opts?.disposeEnvironment ?? true;
-    if (!shouldDisposeEnvironment) return;
-    if (!opts?.destroyWorkspace) return;
+    return runtime;
+  }
+
+  suspendEnvironmentRuntime(threadId: string): void {
+    const runtime = this.detachEnvironmentRuntime(threadId);
+    if (!runtime) return;
+
+    const environmentId = runtime.environment.kind;
+    try {
+      void Promise.resolve(runtime.environment.suspend()).catch((error: unknown) =>
+        this.callbacks.onCleanupFailure(threadId, environmentId, error),
+      );
+    } catch (error) {
+      this.callbacks.onCleanupFailure(threadId, environmentId, error);
+    }
+  }
+
+  destroyEnvironmentRuntime(threadId: string): void {
+    const runtime = this.detachEnvironmentRuntime(threadId);
 
     this.workspaceCleanupInFlightThreadIds.add(threadId);
     const refresh = () => {
@@ -241,7 +311,7 @@ export class EnvironmentService {
     };
 
     if (!runtime) {
-      void this.cleanupPersistedEnvironment(threadId)
+      void this.destroyPersistedEnvironment(threadId)
         .catch((error: unknown) => {
           reportFailure(this.threadRepo.getById(threadId)?.environmentId ?? "unknown", error);
         })
@@ -251,7 +321,7 @@ export class EnvironmentService {
 
     const environmentId = runtime.environment.kind;
     try {
-      void Promise.resolve(runtime.environment.dispose())
+      void Promise.resolve(runtime.environment.destroy())
         .then(() => {
           this.clearPersistedEnvironmentState(threadId);
         })
@@ -263,7 +333,7 @@ export class EnvironmentService {
     }
   }
 
-  async cleanupPersistedEnvironment(threadId: string): Promise<void> {
+  async destroyPersistedEnvironment(threadId: string): Promise<void> {
     const thread = this.threadRepo.getById(threadId);
     if (!thread) return;
     const project = this.projectRepo.getById(thread.projectId);
@@ -281,7 +351,7 @@ export class EnvironmentService {
     if (!environment) {
       return;
     }
-    await Promise.resolve(environment.dispose());
+    await Promise.resolve(environment.destroy());
     this.clearPersistedEnvironmentState(threadId);
   }
 
@@ -562,15 +632,26 @@ export class EnvironmentService {
   }
 
   stopAll(opts?: { preserveEnvironments?: boolean }): void {
-    const disposeEnvironments = !(opts?.preserveEnvironments ?? false);
+    const preserveEnvironments = opts?.preserveEnvironments ?? false;
     const runtimeThreadIds = new Set(this.environmentRuntimes.keys());
     for (const [threadId] of this.environmentRuntimes) {
-      this.cleanupEnvironmentRuntime(threadId, {
-        disposeEnvironment: disposeEnvironments,
-      });
+      if (preserveEnvironments) {
+        this.detachEnvironmentRuntime(threadId);
+      } else {
+        this.destroyEnvironmentRuntime(threadId);
+      }
     }
-    if (disposeEnvironments) {
+    if (!preserveEnvironments) {
       const projects = this.projectRepo.list();
+      if (!Array.isArray(projects) || projects.length === 0) {
+        this.environmentRuntimes.clear();
+        this.stopAllPrimaryPromotionWatches();
+        this.primaryPromotionByProjectId.clear();
+        this.primaryPromotionValidatedAtByProjectId.clear();
+        this.workspaceCleanupInFlightThreadIds.clear();
+        this.restoreFailuresByThreadId.clear();
+        return;
+      }
       for (const project of projects) {
         const threadIds =
           typeof this.threadRepo.listProjectNonArchivedIdsWithEnvironmentRecord === "function"
@@ -578,9 +659,9 @@ export class EnvironmentService {
             : [];
         for (const threadId of threadIds) {
           if (runtimeThreadIds.has(threadId)) continue;
-          this.cleanupEnvironmentRuntime(threadId, {
-            destroyWorkspace: true,
-            disposeEnvironment: true,
+          void this.destroyPersistedEnvironment(threadId).catch((error: unknown) => {
+            const environmentId = this.threadRepo.getById(threadId)?.environmentId ?? "unknown";
+            this.callbacks.onCleanupFailure(threadId, environmentId, error);
           });
         }
       }

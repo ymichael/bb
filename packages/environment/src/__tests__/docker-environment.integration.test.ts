@@ -67,7 +67,7 @@ async function createDockerEnvironmentForTest() {
 
 afterEach(async () => {
   for (const environment of environments.splice(0)) {
-    await environment.dispose();
+    await environment.destroy();
   }
   for (const dir of tempDirs.splice(0)) {
     rmSync(dir, { recursive: true, force: true });

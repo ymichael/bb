@@ -452,6 +452,27 @@ export function disposeManagedDockerEnvironmentAgent(args: {
   projectId: string;
   threadId: string;
   environmentId: string;
+  dockerBin: string;
+  containerName: string;
+  workspaceRootPath: string;
+  runtimeEnv: Record<string, string | undefined>;
 }): void {
+  if (!args.runtimeEnv.BEANBAG_ENVIRONMENT_AGENT_BASE_URL?.trim()) {
+    runCommand(
+      args.dockerBin,
+      [
+        "exec",
+        args.containerName,
+        "sh",
+        "-lc",
+        "pkill -f 'environment-agent.bundle.mjs' || true",
+      ],
+      {
+        cwd: args.workspaceRootPath,
+        env: args.runtimeEnv,
+        rawOutput: true,
+      },
+    );
+  }
   removeRecord(args);
 }

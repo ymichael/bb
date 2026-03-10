@@ -52,7 +52,7 @@ function makeWorkspaceStatus(): ThreadWorkStatus {
   };
 }
 
-function createTestEnvironment(args: { existsInitially: boolean; disposeSpy?: () => void }): IEnvironment {
+function createTestEnvironment(args: { existsInitially: boolean; destroySpy?: () => void }): IEnvironment {
   let exists = args.existsInitially;
 
   return {
@@ -64,8 +64,11 @@ function createTestEnvironment(args: { existsInitially: boolean; disposeSpy?: ()
     async prepare() {
       exists = true;
     },
-    dispose() {
-      args.disposeSpy?.();
+    suspend() {
+      args.destroySpy?.();
+    },
+    destroy() {
+      args.destroySpy?.();
     },
     exists() {
       return exists;
@@ -144,7 +147,7 @@ function createTestEnvironment(args: { existsInitially: boolean; disposeSpy?: ()
 
 function createService(args: {
   existsInitially: boolean;
-  disposeSpy?: () => void;
+  destroySpy?: () => void;
   restoreImpl?: (state: unknown, context: CreateEnvironmentContext) => IEnvironment;
 }) {
   const environment = createTestEnvironment(args);
@@ -279,16 +282,16 @@ describe("EnvironmentService", () => {
     expect(runOptionalSetup).not.toHaveBeenCalled();
   });
 
-  it("disposes restored environments during persisted cleanup even when no runtime is active", async () => {
-    const disposeSpy = vi.fn();
+  it("destroys restored environments during persisted cleanup even when no runtime is active", async () => {
+    const destroySpy = vi.fn();
     const { service, threadRepo, threadState } = createService({
       existsInitially: true,
-      disposeSpy,
+      destroySpy,
     });
 
-    await service.cleanupPersistedEnvironment("thread-1");
+    await service.destroyPersistedEnvironment("thread-1");
 
-    expect(disposeSpy).toHaveBeenCalledTimes(1);
+    expect(destroySpy).toHaveBeenCalledTimes(1);
     expect(threadRepo.update).toHaveBeenCalledWith(
       "thread-1",
       {
@@ -309,7 +312,7 @@ describe("EnvironmentService", () => {
       },
     });
 
-    await expect(service.cleanupPersistedEnvironment("thread-1")).resolves.toBeUndefined();
+    await expect(service.destroyPersistedEnvironment("thread-1")).resolves.toBeUndefined();
 
     expect(threadRepo.update).toHaveBeenCalledWith(
       "thread-1",
@@ -324,21 +327,21 @@ describe("EnvironmentService", () => {
   });
 
   it("clears persisted environment state after destroying an active runtime", async () => {
-    const disposeSpy = vi.fn();
+    const destroySpy = vi.fn();
     const { service, threadRepo, threadState } = createService({
       existsInitially: true,
-      disposeSpy,
+      destroySpy,
     });
     const runtimeEnvironment = createTestEnvironment({
       existsInitially: true,
-      disposeSpy,
+      destroySpy,
     });
     service.setEnvironmentRuntime("thread-1", runtimeEnvironment);
 
-    service.cleanupEnvironmentRuntime("thread-1", { destroyWorkspace: true });
+    service.destroyEnvironmentRuntime("thread-1");
     await new Promise<void>((resolve) => setImmediate(resolve));
 
-    expect(disposeSpy).toHaveBeenCalledTimes(1);
+    expect(destroySpy).toHaveBeenCalledTimes(1);
     expect(threadRepo.update).toHaveBeenCalledWith(
       "thread-1",
       {
@@ -351,17 +354,45 @@ describe("EnvironmentService", () => {
     expect(threadState.environmentAgentCursor).toBeNull();
   });
 
-  it("stopAll cleans up persisted environments even when no runtime is restored", async () => {
-    const disposeSpy = vi.fn();
+  it("suspends an active runtime without clearing persisted environment state", async () => {
+    const destroySpy = vi.fn();
     const { service, threadRepo, threadState } = createService({
       existsInitially: true,
-      disposeSpy,
+      destroySpy,
+    });
+    const runtimeEnvironment = createTestEnvironment({
+      existsInitially: true,
+      destroySpy,
+    });
+    service.setEnvironmentRuntime("thread-1", runtimeEnvironment);
+
+    service.suspendEnvironmentRuntime("thread-1");
+    await new Promise<void>((resolve) => setImmediate(resolve));
+
+    expect(destroySpy).toHaveBeenCalledTimes(1);
+    expect(threadRepo.update).not.toHaveBeenCalledWith(
+      "thread-1",
+      {
+        environmentRecord: null,
+        environmentAgentCursor: null,
+      },
+      { touchUpdatedAt: false },
+    );
+    expect(threadState.environmentRecord).not.toBeNull();
+    expect(threadState.environmentAgentCursor).toBe(12);
+  });
+
+  it("stopAll cleans up persisted environments even when no runtime is restored", async () => {
+    const destroySpy = vi.fn();
+    const { service, threadRepo, threadState } = createService({
+      existsInitially: true,
+      destroySpy,
     });
 
     service.stopAll();
     await new Promise<void>((resolve) => setImmediate(resolve));
 
-    expect(disposeSpy).toHaveBeenCalledTimes(1);
+    expect(destroySpy).toHaveBeenCalledTimes(1);
     expect(threadRepo.update).toHaveBeenCalledWith(
       "thread-1",
       {

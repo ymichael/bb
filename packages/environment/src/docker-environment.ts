@@ -216,14 +216,23 @@ class DockerEnvironment implements IEnvironment {
     });
   }
 
-  async dispose(): Promise<void> {
+  async suspend(): Promise<void> {
     disposeManagedDockerEnvironmentAgent({
       projectId: this.projectId,
       threadId: this.threadId,
       environmentId: this.kind,
+      dockerBin: this.dockerBin,
+      containerName: this.state.containerName,
+      workspaceRootPath: this.getWorkspaceRootUnsafe(),
+      runtimeEnv: this.runtimeEnv,
     });
+    await Promise.resolve(this.inner.suspend());
+  }
+
+  async destroy(): Promise<void> {
+    await this.suspend();
     this.removeContainer();
-    await Promise.resolve(this.inner.dispose());
+    await Promise.resolve(this.inner.destroy());
   }
 
   exists(): boolean {

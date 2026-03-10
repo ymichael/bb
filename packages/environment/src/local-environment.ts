@@ -84,13 +84,17 @@ class LocalEnvironment implements IEnvironment {
     });
   }
 
-  async dispose(): Promise<void> {
+  async suspend(): Promise<void> {
     await disposeManagedHostEnvironmentAgent({
       projectId: this.projectId,
       threadId: this.threadId,
       environmentId: this.kind,
       runtimeEnv: this.env,
     });
+  }
+
+  async destroy(): Promise<void> {
+    await this.suspend();
   }
 
   exists(): boolean {
