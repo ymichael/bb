@@ -38,6 +38,25 @@ export function isActivityRow(row: ThreadDetailRow): boolean {
   return isActivityMessage(row.message);
 }
 
+function shouldPreferOngoingLabelsForMessage(message: UIMessage): boolean {
+  switch (message.kind) {
+    case "tool-call":
+    case "tool-exploring":
+    case "web-search":
+    case "file-edit":
+      return message.status === "completed";
+    case "assistant-reasoning":
+    case "assistant-text":
+    case "user":
+    case "operation":
+    case "error":
+    case "debug/raw-event":
+      return false;
+    default:
+      return assertNever(message);
+  }
+}
+
 function isMessageShowingOngoingState(
   message: UIMessage,
   preferOngoingLabels = false,
@@ -49,7 +68,10 @@ function isMessageShowingOngoingState(
     case "tool-exploring":
     case "web-search":
     case "file-edit":
-      return message.status === "pending" || preferOngoingLabels;
+      return (
+        message.status === "pending" ||
+        (preferOngoingLabels && shouldPreferOngoingLabelsForMessage(message))
+      );
     case "operation":
       return shouldShimmerOperationTitle(message);
     case "assistant-text":
@@ -80,19 +102,43 @@ export function shouldHighlightLatestActivity(
   return Boolean(lastRow && lastRow.id === latestActivityRowId);
 }
 
+export function shouldPreferOngoingLabelsForRow(
+  row: ThreadDetailRow,
+  latestActivityRowId: string | null,
+): boolean {
+  if (row.id !== latestActivityRowId) return false;
+
+  switch (row.kind) {
+    case "message":
+      return shouldPreferOngoingLabelsForMessage(row.message);
+    case "tool-group": {
+      const latestActivityMessageId = findLatestActivityMessageId(row.messages);
+      if (!latestActivityMessageId) return false;
+      const latestActivityMessage = row.messages.find(
+        (message) => message.id === latestActivityMessageId,
+      );
+      if (!latestActivityMessage) return false;
+      return shouldPreferOngoingLabelsForMessage(latestActivityMessage);
+    }
+    default:
+      return assertNever(row);
+  }
+}
+
 export function isLastThreadRowShowingOngoingState(
   rows: ThreadDetailRow[],
   latestActivityRowId: string | null,
 ): boolean {
   const lastRow = rows[rows.length - 1];
   if (!lastRow) return false;
+  const preferOngoingLabels = shouldPreferOngoingLabelsForRow(
+    lastRow,
+    latestActivityRowId,
+  );
 
   switch (lastRow.kind) {
     case "message":
-      return isMessageShowingOngoingState(
-        lastRow.message,
-        lastRow.id === latestActivityRowId,
-      );
+      return isMessageShowingOngoingState(lastRow.message, preferOngoingLabels);
     case "tool-group": {
       const latestActivityMessageId = findLatestActivityMessageId(lastRow.messages);
       if (!latestActivityMessageId) return false;
@@ -100,10 +146,7 @@ export function isLastThreadRowShowingOngoingState(
         (message) => message.id === latestActivityMessageId,
       );
       if (!latestActivityMessage) return false;
-      return isMessageShowingOngoingState(
-        latestActivityMessage,
-        lastRow.id === latestActivityRowId,
-      );
+      return isMessageShowingOngoingState(latestActivityMessage, preferOngoingLabels);
     }
     default:
       return assertNever(lastRow);

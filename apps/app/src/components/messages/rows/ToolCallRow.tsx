@@ -28,16 +28,17 @@ export function ToolCallRow({
   const { isExpanded, onToggle } = useLatestInitialExpanded(initialExpanded);
   const command = message.command ?? message.toolName;
   const outputText = message.output && message.output.length > 0 ? message.output : "(no output)";
+  const preferRunningLabel = preferOngoingLabels && message.status === "completed";
   const actionLabel =
     message.status === "error"
       ? "Failed"
       : message.status === "interrupted"
         ? "Declined"
-        : message.status === "pending" || preferOngoingLabels
+        : message.status === "pending" || preferRunningLabel
           ? "Running"
           : "Ran";
   const duration = formatSummaryDuration(message.durationMs);
-  const isRunning = message.status === "pending" || preferOngoingLabels;
+  const isRunning = message.status === "pending" || preferRunningLabel;
   const tone = getToolCallTone(message);
   const summaryContent = (
     <EventTitle

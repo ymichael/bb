@@ -199,21 +199,22 @@ export function FileEditRow({
           };
         },
         { added: 0, removed: 0 },
-      ),
+    ),
     [message.changes],
   );
+  const preferApplyingLabel = preferOngoingLabels && message.status === "completed";
   const actionLabel = useMemo(() => {
     if (message.status === "error") return "Failed";
     if (message.status === "interrupted") return "Declined";
-    if (message.status === "pending" || preferOngoingLabels) return "Applying";
+    if (message.status === "pending" || preferApplyingLabel) return "Applying";
     if (message.changes.length === 0) return "Edited";
     const actions = message.changes.map((change) => fileChangeAction(change));
     const first = actions[0];
     const hasMixed = actions.some((action) => action !== first);
     if (hasMixed || !first) return "Changed";
     return fileChangeActionLabel(first);
-  }, [message.changes, message.status, preferOngoingLabels]);
-  const isApplying = message.status === "pending" || preferOngoingLabels;
+  }, [message.changes, message.status, preferApplyingLabel]);
+  const isApplying = message.status === "pending" || preferApplyingLabel;
   const tone = message.status === "error" ? "destructive" : "default";
   const summaryLabel =
     isExpanded && uniqueFileCount > 1

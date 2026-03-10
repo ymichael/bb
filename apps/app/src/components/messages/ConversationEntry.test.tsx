@@ -190,6 +190,24 @@ describe("ConversationEntry", () => {
     expect(html).not.toContain("text-destructive");
   });
 
+  it("does not shimmer failed exec_command rows when ongoing labels are preferred", () => {
+    const message: UIMessage = {
+      ...baseMessage(),
+      kind: "tool-call",
+      toolName: "exec_command",
+      callId: "call-err",
+      command: "npm test",
+      status: "error",
+      output: "tests failed",
+    };
+
+    const html = renderToStaticMarkup(
+      <ConversationEntry message={message} preferOngoingLabels />,
+    );
+    expect(html).toContain(">Failed<");
+    expect(html).not.toContain("animate-shine");
+  });
+
   it("keeps completed tool activity summaries stable when expanded", () => {
     const message: UIMessage = {
       ...baseMessage(),

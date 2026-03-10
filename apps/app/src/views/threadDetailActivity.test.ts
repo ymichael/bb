@@ -31,6 +31,9 @@ describe("threadDetailActivity", () => {
         summaryCount: 2,
         sourceSeqStart: 1,
         sourceSeqEnd: 1,
+        startedAt: 1,
+        createdAt: 1,
+        status: "completed",
         messages: [],
       },
       {
@@ -71,6 +74,9 @@ describe("threadDetailActivity", () => {
         summaryCount: 1,
         sourceSeqStart: 2,
         sourceSeqEnd: 2,
+        startedAt: 2,
+        createdAt: 2,
+        status: "completed",
         messages: [],
       },
     ];
@@ -237,6 +243,46 @@ describe("threadDetailActivity", () => {
     expect(isLastThreadRowShowingOngoingState(rows, "tool-1")).toBe(true);
   });
 
+  it("treats a trailing latest completed tool row as ongoing thread activity", () => {
+    const rows: ThreadDetailRow[] = [
+      {
+        kind: "message",
+        id: "tool-1",
+        message: {
+          ...baseMessage("tool-1", 1),
+          kind: "tool-call",
+          turnId: "turn-1",
+          toolName: "exec_command",
+          callId: "call-1",
+          command: "ls",
+          status: "completed",
+        },
+      },
+    ];
+
+    expect(isLastThreadRowShowingOngoingState(rows, "tool-1")).toBe(true);
+  });
+
+  it("does not treat a trailing failed tool row as ongoing thread activity", () => {
+    const rows: ThreadDetailRow[] = [
+      {
+        kind: "message",
+        id: "tool-1",
+        message: {
+          ...baseMessage("tool-1", 1),
+          kind: "tool-call",
+          turnId: "turn-1",
+          toolName: "exec_command",
+          callId: "call-1",
+          command: "ls",
+          status: "error",
+        },
+      },
+    ];
+
+    expect(isLastThreadRowShowingOngoingState(rows, "tool-1")).toBe(false);
+  });
+
   it("treats a trailing streaming reasoning row as ongoing thread activity", () => {
     const rows: ThreadDetailRow[] = [
       {
@@ -263,6 +309,9 @@ describe("threadDetailActivity", () => {
         summaryCount: 1,
         sourceSeqStart: 1,
         sourceSeqEnd: 1,
+        startedAt: 1,
+        createdAt: 1,
+        status: "completed",
         messages: [
           {
             ...baseMessage("exploring-1", 1),

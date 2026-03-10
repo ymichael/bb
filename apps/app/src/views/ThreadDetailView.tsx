@@ -87,7 +87,11 @@ import {
   type GitDiffSelectionOption,
   ThreadGitDiffPanel,
 } from "./ThreadGitDiffPanel";
-import { isLastThreadRowShowingOngoingState } from "./threadDetailActivity";
+import {
+  findLatestActivityRowId,
+  isLastThreadRowShowingOngoingState,
+  shouldPreferOngoingLabelsForRow,
+} from "./threadDetailActivity";
 import {
   doesGitDiffFileMatchPath,
   getGitDiffParseKey,
@@ -391,9 +395,13 @@ export function ThreadDetailView() {
 
   const threadDetailRows = useMemo(() => timeline?.rows ?? [], [timeline?.rows]);
   const contextWindowUsage = timeline?.contextWindowUsage ?? undefined;
-  const isLastThreadRowShowingOngoingIndicator = useMemo(
-    () => isLastThreadRowShowingOngoingState(threadDetailRows),
+  const latestActivityRowId = useMemo(
+    () => findLatestActivityRowId(threadDetailRows),
     [threadDetailRows],
+  );
+  const isLastThreadRowShowingOngoingIndicator = useMemo(
+    () => isLastThreadRowShowingOngoingState(threadDetailRows, latestActivityRowId),
+    [latestActivityRowId, threadDetailRows],
   );
 
   const isReasoningBlockActive = false;
@@ -1577,6 +1585,10 @@ export function ThreadDetailView() {
         ) : (
           threadDetailRows.map((entry, entryIndex) => {
             const isLastRow = entryIndex === threadDetailRows.length - 1;
+            const preferOngoingLabels =
+              thread.status === "active" &&
+              isLastRow &&
+              shouldPreferOngoingLabelsForRow(entry, latestActivityRowId);
             return (
               <div
                 key={`${threadId}:${entry.id}`}
@@ -1594,14 +1606,14 @@ export function ThreadDetailView() {
                     isLoadingMessages={loadingToolGroupIds.has(entry.id)}
                     onLoadMessages={() => handleLoadToolGroupMessages(entry)}
                     initialExpanded={isLastRow}
-                    preferOngoingLabels={thread.status === "active" && isLastRow}
+                    preferOngoingLabels={preferOngoingLabels}
                   />
                 ) : (
                   <ConversationEntry
                     message={entry.message}
                     projectId={projectId}
                     initialExpanded={isLastRow}
-                    preferOngoingLabels={thread.status === "active" && isLastRow}
+                    preferOngoingLabels={preferOngoingLabels}
                   />
                 )}
               </div>
