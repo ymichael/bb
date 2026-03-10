@@ -286,6 +286,12 @@ class DockerEnvironment implements IEnvironment {
     return this.inner.getWorkspaceStatus(args);
   }
 
+  getWorkspaceStatusAsync(args?: EnvironmentWorkspaceStatusOptions) {
+    return this.inner.getWorkspaceStatusAsync
+      ? this.inner.getWorkspaceStatusAsync(args)
+      : Promise.resolve(this.inner.getWorkspaceStatus(args));
+  }
+
   watchWorkspaceStatus(onChange: () => void): () => void {
     return this.inner.watchWorkspaceStatus(onChange);
   }
@@ -302,10 +308,26 @@ class DockerEnvironment implements IEnvironment {
     return this.inner.listWorkspaceCommitsSinceRef(args);
   }
 
+  listWorkspaceCommitsSinceRefAsync(
+    args: EnvironmentWorkspaceCommitsOptions,
+  ): Promise<EnvironmentCommitSummary[]> {
+    return this.inner.listWorkspaceCommitsSinceRefAsync
+      ? this.inner.listWorkspaceCommitsSinceRefAsync(args)
+      : Promise.resolve(this.inner.listWorkspaceCommitsSinceRef(args));
+  }
+
   getWorkspaceDiff(
     args: EnvironmentWorkspaceDiffOptions,
   ): EnvironmentWorkspaceDiffResult {
     return this.inner.getWorkspaceDiff(args);
+  }
+
+  getWorkspaceDiffAsync(
+    args: EnvironmentWorkspaceDiffOptions,
+  ): Promise<EnvironmentWorkspaceDiffResult> {
+    return this.inner.getWorkspaceDiffAsync
+      ? this.inner.getWorkspaceDiffAsync(args)
+      : Promise.resolve(this.inner.getWorkspaceDiff(args));
   }
 
   spawn(

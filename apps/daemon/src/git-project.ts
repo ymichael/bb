@@ -1,7 +1,5 @@
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import type { EnvironmentCheckoutSnapshot } from "@beanbag/environment";
-
-const defaultBranchByRepoRoot = new Map<string, string | undefined>();
 
 function runGitAtPath(
   cwd: string,
@@ -19,29 +17,67 @@ function runGitAtPath(
   };
 }
 
+async function runGitAtPathAsync(
+  cwd: string,
+  args: string[],
+): Promise<{ ok: boolean; stdout: string; stderr: string }> {
+  return await new Promise((resolve, reject) => {
+    const child = spawn("git", args, {
+      cwd,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.setEncoding("utf-8");
+    child.stderr.setEncoding("utf-8");
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk;
+    });
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk;
+    });
+    child.on("error", reject);
+    child.on("close", (code) => {
+      resolve({
+        ok: code === 0,
+        stdout: stdout.trim(),
+        stderr: stderr.trim(),
+      });
+    });
+  });
+}
+
 function hasLocalBranch(repoRoot: string, branch: string): boolean {
   return runGitAtPath(repoRoot, ["show-ref", "--verify", "--quiet", `refs/heads/${branch}`]).ok;
 }
 
 export function detectProjectDefaultBranch(repoRoot: string): string | undefined {
-  if (defaultBranchByRepoRoot.has(repoRoot)) {
-    return defaultBranchByRepoRoot.get(repoRoot);
-  }
   const remoteHead = runGitAtPath(repoRoot, ["symbolic-ref", "--quiet", "refs/remotes/origin/HEAD"]);
   if (remoteHead.ok && remoteHead.stdout.startsWith("refs/remotes/origin/")) {
-    const defaultBranch = remoteHead.stdout.slice("refs/remotes/origin/".length);
-    defaultBranchByRepoRoot.set(repoRoot, defaultBranch);
-    return defaultBranch;
+    return remoteHead.stdout.slice("refs/remotes/origin/".length);
   }
-  if (hasLocalBranch(repoRoot, "main")) {
-    defaultBranchByRepoRoot.set(repoRoot, "main");
+  if (hasLocalBranch(repoRoot, "main")) return "main";
+  if (hasLocalBranch(repoRoot, "master")) return "master";
+  return undefined;
+}
+
+export async function detectProjectDefaultBranchAsync(
+  repoRoot: string,
+): Promise<string | undefined> {
+  const remoteHead = await runGitAtPathAsync(repoRoot, [
+    "symbolic-ref",
+    "--quiet",
+    "refs/remotes/origin/HEAD",
+  ]);
+  if (remoteHead.ok && remoteHead.stdout.startsWith("refs/remotes/origin/")) {
+    return remoteHead.stdout.slice("refs/remotes/origin/".length);
+  }
+  if ((await runGitAtPathAsync(repoRoot, ["show-ref", "--verify", "--quiet", "refs/heads/main"])).ok) {
     return "main";
   }
-  if (hasLocalBranch(repoRoot, "master")) {
-    defaultBranchByRepoRoot.set(repoRoot, "master");
+  if ((await runGitAtPathAsync(repoRoot, ["show-ref", "--verify", "--quiet", "refs/heads/master"])).ok) {
     return "master";
   }
-  defaultBranchByRepoRoot.set(repoRoot, undefined);
   return undefined;
 }
 

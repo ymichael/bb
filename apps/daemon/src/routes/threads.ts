@@ -129,6 +129,7 @@ const MAX_PROMPT_ATTACHMENT_INPUTS = 12;
 
 type RouteThreadLookupCapableOrchestrator = ThreadOrchestrator & {
   getRawById?: (threadId: string) => Thread | undefined;
+  getByIdAsync?: (threadId: string) => Promise<Thread | undefined>;
   isPrimaryCheckoutActive?: (threadId: string) => boolean;
 };
 
@@ -161,6 +162,14 @@ type RouteEnvironmentAgentCapableOrchestrator = ThreadOrchestrator & {
     toSequenceInclusive: number;
     hasMore: boolean;
   }>;
+};
+
+type RouteGitDiffCapableOrchestrator = ThreadOrchestrator & {
+  getGitDiffAsync?: (
+    threadId: string,
+    selection?: ThreadGitDiffSelection,
+    mergeBaseBranch?: string,
+  ) => Promise<ReturnType<ThreadOrchestrator["getGitDiff"]>>;
 };
 
 function validatePromptInputAttachments(input: PromptInput[]): void {
@@ -295,7 +304,10 @@ export function createThreadRoutes(
     })
     .get("/:id", async (c) => {
       try {
-        const thread = threadManager.getById(c.req.param("id"));
+        const routeLookupManager = threadManager as RouteThreadLookupCapableOrchestrator;
+        const thread = routeLookupManager.getByIdAsync
+          ? await routeLookupManager.getByIdAsync(c.req.param("id"))
+          : threadManager.getById(c.req.param("id"));
         if (!thread) {
           return sendRouteError(c, threadNotFoundError(c.req.param("id")));
         }
@@ -718,11 +730,18 @@ export function createThreadRoutes(
           } else {
             selection = { type: "combined" };
           }
-          const result = threadManager.getGitDiff(
-            c.req.param("id"),
-            selection,
-            query.mergeBaseBranch,
-          );
+          const gitDiffAccessor = threadManager as RouteGitDiffCapableOrchestrator;
+          const result = gitDiffAccessor.getGitDiffAsync
+            ? await gitDiffAccessor.getGitDiffAsync(
+                c.req.param("id"),
+                selection,
+                query.mergeBaseBranch,
+              )
+            : threadManager.getGitDiff(
+                c.req.param("id"),
+                selection,
+                query.mergeBaseBranch,
+              );
           return c.json(result);
         } catch (err) {
           return sendRouteError(c, err);

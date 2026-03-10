@@ -72,10 +72,19 @@ export interface IEnvironment {
   getWorkspaceRootUnsafe(): string;
   buildAgentInstructions?(): string | undefined;
   getWorkspaceStatus(args?: EnvironmentWorkspaceStatusOptions): EnvironmentWorkStatus;
+  getWorkspaceStatusAsync?(
+    args?: EnvironmentWorkspaceStatusOptions,
+  ): Promise<EnvironmentWorkStatus>;
   watchWorkspaceStatus(onChange: () => void): () => void;
   commitWorkspace(args: EnvironmentWorkspaceCommitOptions): Promise<EnvironmentWorkspaceCommitResult>;
   listWorkspaceCommitsSinceRef(args: EnvironmentWorkspaceCommitsOptions): EnvironmentCommitSummary[];
+  listWorkspaceCommitsSinceRefAsync?(
+    args: EnvironmentWorkspaceCommitsOptions,
+  ): Promise<EnvironmentCommitSummary[]>;
   getWorkspaceDiff(args: EnvironmentWorkspaceDiffOptions): EnvironmentWorkspaceDiffResult;
+  getWorkspaceDiffAsync?(
+    args: EnvironmentWorkspaceDiffOptions,
+  ): Promise<EnvironmentWorkspaceDiffResult>;
   spawn(
     command: string,
     args: string[],

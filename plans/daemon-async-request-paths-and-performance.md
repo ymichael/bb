@@ -6,7 +6,8 @@ The target state is:
 
 - no `spawnSync`/`execSync` on daemon, environment, or agent-server production hot paths
 - lightweight thread/detail reads that do not synchronously recompute git state inline
-- cached, event-driven workspace status snapshots instead of request-path git inspection
+- async, non-blocking workspace/git reads on all hot request paths
+- cached, event-driven workspace status snapshots only where freshness guarantees are explicit and strong enough to avoid stale data bugs
 - incremental timeline updates instead of repeated full refetch/rebuilds
 - clear instrumentation proving queueing time, handler time, and blocking time separately
 
@@ -38,8 +39,9 @@ Current status:
   - removed the thread-detail `default-execution-options` fetch by serving that data on the thread payload
   - removed the thread-detail parent-thread network fetch in favor of cached thread-list data
   - stopped the thread-detail view from eagerly fetching merge-base work status when the base thread payload already has the same branch
-  - added a lightweight in-memory default-branch cache and thread work-status cache to reduce repeated sync git/status work
-  - added local/worktree environment workspace-status caching with watcher/mutation invalidation
+  - removed the short-lived caching experiments in daemon/environment so the async migration is the primary fix path
+  - added async environment workspace read APIs for status, diff, and commit listing
+  - switched the thread detail route and git diff route to prefer async daemon/environment reads
 - In progress:
   - reducing remaining request-path sync git/process work
   - deciding the right long-term thread-detail read model (`GET /threads/:id` vs composite read endpoint)
@@ -70,7 +72,7 @@ Current status:
   - `GET /threads/:id/output`
 - Keep `GET /threads/:id` as a separate redesign item rather than a mechanical swap, because its current payload shape depends on hydration.
 
-3. Eliminate sync process execution from production hot paths
+3. Eliminate sync process execution from production hot paths (async before cache)
 
 - Audit all production `spawnSync`/`execSync` usage and classify each call site as:
   - request path
@@ -86,6 +88,7 @@ Current status:
   - production code in `packages/environment/src/docker-environment.ts`, `local-environment.ts`, and `worktree-environment.ts`
 - Keep temporary compatibility wrappers only if they are clearly marked and not used from request handlers.
 - Add a lint rule or repository check to prevent new sync child-process calls in production code.
+- Do not add new caching in place of async conversions unless the cache invalidation/freshness model is explicit enough to guarantee non-stale reads.
 
 4. Split lightweight thread metadata from expensive hydrated state
 

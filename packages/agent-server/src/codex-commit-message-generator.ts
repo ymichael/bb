@@ -1,5 +1,5 @@
-import { spawnSync } from "node:child_process";
-import { copyFileSync, existsSync, mkdtempSync, rmSync } from "node:fs";
+import { spawn } from "node:child_process";
+import { copyFile, mkdtemp, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 import type { LlmCommitMessageGenerationArgs } from "./llm-completion.js";
@@ -15,19 +15,31 @@ function asRecord(value: unknown): Record<string, unknown> | null {
   return value as Record<string, unknown>;
 }
 
-function runGit(
+async function runGit(
   cwd: string,
   args: string[],
   envOverrides?: Record<string, string>,
-): string {
-  const result = spawnSync("git", args, {
-    cwd,
-    encoding: "utf-8",
-    stdio: "pipe",
-    ...(envOverrides ? { env: { ...process.env, ...envOverrides } } : {}),
+): Promise<string> {
+  return await new Promise((resolveResult) => {
+    const child = spawn("git", args, {
+      cwd,
+      stdio: ["ignore", "pipe", "pipe"],
+      ...(envOverrides ? { env: { ...process.env, ...envOverrides } } : {}),
+    });
+    let stdout = "";
+    child.stdout.setEncoding("utf-8");
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk;
+    });
+    child.on("error", () => resolveResult(""));
+    child.on("close", (code) => {
+      if (code !== 0) {
+        resolveResult("");
+        return;
+      }
+      resolveResult(stdout.trim());
+    });
   });
-  if (result.status !== 0) return "";
-  return result.stdout?.trim() ?? "";
 }
 
 function buildPrompt(args: {
@@ -63,36 +75,34 @@ interface CommitDiffSnapshot {
   patch: string;
 }
 
-function readStagedSnapshot(
+async function readStagedSnapshot(
   cwd: string,
   envOverrides?: Record<string, string>,
-): CommitDiffSnapshot {
+): Promise<CommitDiffSnapshot> {
   return {
-    files: runGit(cwd, ["diff", "--cached", "--name-status"], envOverrides),
-    shortstat: runGit(cwd, ["diff", "--cached", "--shortstat"], envOverrides),
-    patch: runGit(cwd, ["diff", "--cached", "--unified=0", "--no-color"], envOverrides),
+    files: await runGit(cwd, ["diff", "--cached", "--name-status"], envOverrides),
+    shortstat: await runGit(cwd, ["diff", "--cached", "--shortstat"], envOverrides),
+    patch: await runGit(cwd, ["diff", "--cached", "--unified=0", "--no-color"], envOverrides),
   };
 }
 
-function withSyntheticIndexSnapshot(cwd: string): CommitDiffSnapshot | undefined {
-  const gitIndexPathRaw = runGit(cwd, ["rev-parse", "--git-path", "index"]);
+async function withSyntheticIndexSnapshot(cwd: string): Promise<CommitDiffSnapshot | undefined> {
+  const gitIndexPathRaw = await runGit(cwd, ["rev-parse", "--git-path", "index"]);
   if (!gitIndexPathRaw) return undefined;
 
   const gitIndexPath = isAbsolute(gitIndexPathRaw)
     ? gitIndexPathRaw
     : resolve(cwd, gitIndexPathRaw);
-  const tempDir = mkdtempSync(join(tmpdir(), "beanbag-commit-msg-"));
+  const tempDir = await mkdtemp(join(tmpdir(), "beanbag-commit-msg-"));
   const tempIndexPath = join(tempDir, "index");
 
   try {
-    if (existsSync(gitIndexPath)) {
-      copyFileSync(gitIndexPath, tempIndexPath);
-    }
+    await stat(gitIndexPath).then(() => copyFile(gitIndexPath, tempIndexPath)).catch(() => {});
     const envOverrides = { GIT_INDEX_FILE: tempIndexPath };
-    runGit(cwd, ["add", "-A"], envOverrides);
-    return readStagedSnapshot(cwd, envOverrides);
+    await runGit(cwd, ["add", "-A"], envOverrides);
+    return await readStagedSnapshot(cwd, envOverrides);
   } finally {
-    rmSync(tempDir, { recursive: true, force: true });
+    await rm(tempDir, { recursive: true, force: true });
   }
 }
 
@@ -147,8 +157,8 @@ export async function generateCodexCommitMessage(
 ): Promise<string | undefined> {
   const includeUnstaged = args.includeUnstaged !== false;
   const snapshot = includeUnstaged
-    ? withSyntheticIndexSnapshot(args.cwd) ?? readStagedSnapshot(args.cwd)
-    : readStagedSnapshot(args.cwd);
+    ? await withSyntheticIndexSnapshot(args.cwd) ?? await readStagedSnapshot(args.cwd)
+    : await readStagedSnapshot(args.cwd);
   const files = snapshot.files;
   if (!files) return undefined;
   const shortstat = snapshot.shortstat;

@@ -1,4 +1,4 @@
-import { spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { isAbsolute } from "node:path";
 import { Hono } from "hono";
@@ -122,16 +122,12 @@ export function openPathInEditor(request: OpenPathRequest): void {
     const commandWithPath = customCommand.includes("{path}")
       ? customCommand.replaceAll("{path}", quotedPath)
       : `${customCommand} ${quotedPath}`;
-    const result = spawnSync(commandWithPath, {
+    const child = spawn(commandWithPath, {
       stdio: "ignore",
       shell: true,
+      detached: true,
     });
-    if (result.error) {
-      throw result.error;
-    }
-    if ((result.status ?? 0) !== 0) {
-      throw new Error(`Open command failed: ${customCommand}`);
-    }
+    child.unref();
     return;
   }
 
@@ -139,13 +135,11 @@ export function openPathInEditor(request: OpenPathRequest): void {
 
   const editorCommand = toEditorCommand(editor);
   if (editorCommand) {
-    const editorResult = spawnSync(editorCommand, [path], { stdio: "ignore" });
-    if (editorResult.error) {
-      throw editorResult.error;
-    }
-    if ((editorResult.status ?? 0) !== 0) {
-      throw new Error(`Editor command failed: ${editorCommand}`);
-    }
+    const child = spawn(editorCommand, [path], {
+      stdio: "ignore",
+      detached: true,
+    });
+    child.unref();
     return;
   }
 
@@ -162,13 +156,11 @@ export function openPathInEditor(request: OpenPathRequest): void {
       : platform === "win32"
         ? ["/c", "start", "", path]
         : [path];
-  const result = spawnSync(command, commandArgs, { stdio: "ignore" });
-  if (result.error) {
-    throw result.error;
-  }
-  if ((result.status ?? 0) !== 0) {
-    throw new Error(`Failed to open path: ${path}`);
-  }
+  const child = spawn(command, commandArgs, {
+    stdio: "ignore",
+    detached: true,
+  });
+  child.unref();
 }
 
 export function createSystemRoutes(
