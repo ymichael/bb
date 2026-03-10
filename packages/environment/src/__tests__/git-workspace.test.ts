@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { IEnvironment, EnvironmentCommandResult } from "../contracts.js";
-import { watchGitWorkspaceStatus } from "../git-workspace.js";
+import { getGitWorkspaceStatus, watchGitWorkspaceStatus } from "../git-workspace.js";
 
 const watchListeners: Array<() => void> = [];
 
@@ -161,5 +161,80 @@ describe("watchGitWorkspaceStatus", () => {
     expect(onChange).toHaveBeenCalledTimes(1);
 
     stopWatching();
+  });
+});
+
+describe("getGitWorkspaceStatus", () => {
+  it("falls back to collapsed untracked status output when exhaustive porcelain overflows", () => {
+    const environment = createEnvironment(() => "");
+    const run = vi.fn((_command: string, args: string[]) => {
+      if (args[0] === "rev-parse" && args[1] === "--is-inside-work-tree") {
+        return ok("true");
+      }
+      if (args[0] === "symbolic-ref" && args[1] === "--quiet") {
+        return ok("refs/remotes/origin/main");
+      }
+      if (
+        args[0] === "status" &&
+        args.includes("--untracked-files=all")
+      ) {
+        return {
+          exitCode: null,
+          stdout: "",
+          stderr: "spawnSync git ENOBUFS",
+        };
+      }
+      if (
+        args[0] === "status" &&
+        args.includes("--untracked-files=normal")
+      ) {
+        return ok(" M README.md\n?? .pnpm-store/");
+      }
+      if (args[0] === "diff" && args[1] === "--shortstat") {
+        return ok(" 1 file changed, 1 insertion(+), 5 deletions(-)");
+      }
+      if (args[0] === "diff" && args[1] === "--cached" && args[2] === "--shortstat") {
+        return ok("");
+      }
+      if (args[0] === "symbolic-ref" && args[1] === "--short") {
+        return ok("feature");
+      }
+      if (args[0] === "for-each-ref") {
+        return ok("feature\nmain");
+      }
+      if (args[0] === "show-ref") {
+        return ok("");
+      }
+      if (args[0] === "merge-base") {
+        return ok("abc123");
+      }
+      if (args[0] === "rev-list") {
+        return ok("0\t0");
+      }
+      if (args[0] === "diff" && args[1] === "--name-status") {
+        return ok("");
+      }
+      if (args[0] === "cherry") {
+        return ok("");
+      }
+      return ok("");
+    });
+
+    const overflowEnvironment: IEnvironment = {
+      ...environment,
+      run,
+    };
+
+    const status = getGitWorkspaceStatus(overflowEnvironment, { defaultBranch: "main" });
+
+    expect(status.state).toBe("dirty_uncommitted");
+    expect(status.hasUncommittedChanges).toBe(true);
+    expect(status.workspaceChangedFiles).toBe(2);
+    expect(status.workspaceInsertions).toBe(1);
+    expect(status.workspaceDeletions).toBe(5);
+    expect(status.files).toEqual([
+      { status: "M?", path: "README.md" },
+      { status: "A?", path: ".pnpm-store/" },
+    ]);
   });
 });

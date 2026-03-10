@@ -92,6 +92,20 @@ describe.skipIf(!hasDocker())("DockerEnvironment integration", () => {
       });
       expect(statusResponse.status).toBe(200);
 
+      const gitTopLevel = environment.run("git", ["rev-parse", "--show-toplevel"], {
+        rawOutput: true,
+        timeoutMs: 20_000,
+      });
+      expect(gitTopLevel.exitCode).toBe(0);
+      expect(gitTopLevel.stdout.trim()).toBe("/workspace");
+
+      const gitDir = environment.run("git", ["rev-parse", "--git-dir"], {
+        rawOutput: true,
+        timeoutMs: 20_000,
+      });
+      expect(gitDir.exitCode).toBe(0);
+      expect(gitDir.stdout.trim().length).toBeGreaterThan(0);
+
       const commands = [
         ["node", "--version"],
         ["git", "--version"],

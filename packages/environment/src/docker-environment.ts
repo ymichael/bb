@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process";
 import type { ChildProcess } from "node:child_process";
 import { createServer } from "node:net";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import type { EnvironmentAgentConnectionTarget } from "@beanbag/environment-agent";
 import type {
@@ -161,6 +162,7 @@ class DockerEnvironment implements IEnvironment {
   constructor(
     private readonly projectId: string,
     private readonly threadId: string,
+    private readonly projectRootPath: string,
     private readonly inner: IEnvironment,
     private readonly state: DockerEnvironmentState,
     private readonly runtimeEnv: Record<string, string | undefined>,
@@ -199,6 +201,7 @@ class DockerEnvironment implements IEnvironment {
     } else {
       this.createContainer();
     }
+    this.verifyGitRepositoryAccessibleInContainer();
 
     await ensureManagedDockerEnvironmentAgent({
       workspaceRootPath: this.getWorkspaceRootUnsafe(),
@@ -452,6 +455,7 @@ class DockerEnvironment implements IEnvironment {
   }
 
   private createContainer(): void {
+    const gitMetadataMountArgs = this.resolveGitMetadataMountArgs();
     const result = spawnSync(
       this.dockerBin,
       [
@@ -463,6 +467,7 @@ class DockerEnvironment implements IEnvironment {
         `${this.state.agentHostPort}:${this.state.agentContainerPort}`,
         "-v",
         `${this.getWorkspaceRootUnsafe()}:${this.state.mountPath}`,
+        ...gitMetadataMountArgs,
         "-w",
         this.state.mountPath,
         this.state.image,
@@ -487,6 +492,73 @@ class DockerEnvironment implements IEnvironment {
       ["rm", "-f", this.state.containerName],
       { encoding: "utf-8", stdio: "pipe" },
     );
+  }
+
+  private resolveGitMetadataMountArgs(): string[] {
+    const mountRoots = new Set<string>();
+    const workspaceGitFile = path.join(this.getWorkspaceRootUnsafe(), ".git");
+    if (existsSync(workspaceGitFile)) {
+      const rawGitFile = readFileSync(workspaceGitFile, "utf-8").trim();
+      const prefix = "gitdir:";
+      if (rawGitFile.startsWith(prefix)) {
+        const rawGitDir = rawGitFile.slice(prefix.length).trim();
+        const resolvedGitDir = path.isAbsolute(rawGitDir)
+          ? rawGitDir
+          : path.resolve(this.getWorkspaceRootUnsafe(), rawGitDir);
+        const worktreesRoot = path.dirname(resolvedGitDir);
+        if (path.basename(worktreesRoot) === "worktrees") {
+          mountRoots.add(path.dirname(worktreesRoot));
+        }
+      }
+    }
+
+    const projectGitRoot = path.join(this.projectRootPath, ".git");
+    if (existsSync(projectGitRoot)) {
+      mountRoots.add(projectGitRoot);
+    }
+
+    if (mountRoots.size === 0) {
+      return [];
+    }
+
+    return Array.from(mountRoots).flatMap((mountRoot) => [
+      "-v",
+      `${mountRoot}:${mountRoot}`,
+    ]);
+  }
+
+  private verifyGitRepositoryAccessibleInContainer(): void {
+    const commands: ReadonlyArray<readonly string[]> = [
+      ["git", "rev-parse", "--show-toplevel"],
+      ["git", "rev-parse", "--git-dir"],
+    ];
+
+    for (const commandArgs of commands) {
+      const result = spawnSync(
+        this.dockerBin,
+        [
+          "exec",
+          "-i",
+          "-w",
+          this.state.mountPath,
+          this.state.containerName,
+          ...commandArgs,
+        ],
+        {
+          encoding: "utf-8",
+          stdio: "pipe",
+        },
+      );
+      if (result.status === 0) {
+        continue;
+      }
+      const renderedCommand = commandArgs.join(" ");
+      throw new Error(
+        result.stderr ||
+          result.stdout ||
+          `Docker workspace git check failed: ${renderedCommand}`,
+      );
+    }
   }
 }
 
@@ -535,6 +607,7 @@ export function createDockerEnvironmentDefinition(
       return new DockerEnvironment(
         context.projectId,
         context.threadId,
+        context.projectRootPath,
         inner,
         {
           worktree: worktreeState,
@@ -555,6 +628,7 @@ export function createDockerEnvironmentDefinition(
       return new DockerEnvironment(
         context.projectId,
         context.threadId,
+        context.projectRootPath,
         inner,
         {
           worktree: { ...state.worktree },

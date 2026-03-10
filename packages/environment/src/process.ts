@@ -32,9 +32,12 @@ export function runCommand(
   const stdout = options.rawOutput
     ? (result.stdout ?? "")
     : (result.stdout?.trimEnd() ?? "");
-  const stderr = options.rawOutput
+  const stderrText = options.rawOutput
     ? (result.stderr ?? "")
-    : (result.stderr?.trimEnd() ?? result.error?.message ?? "");
+    : (result.stderr?.trimEnd() ?? "");
+  const stderr = stderrText.length > 0
+    ? stderrText
+    : (result.error?.message ?? "");
   return {
     exitCode: result.status,
     stdout,

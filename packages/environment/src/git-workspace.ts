@@ -289,6 +289,39 @@ function parsePorcelainLine(line: string): WorkspaceFile | undefined {
   return { status, path };
 }
 
+function parsePorcelainLines(stdout: string): WorkspaceFile[] {
+  return stdout
+    .split("\n")
+    .map((line) => line.trimEnd())
+    .filter((line) => line.length > 0)
+    .map((line) => parsePorcelainLine(line))
+    .filter((item): item is WorkspaceFile => Boolean(item));
+}
+
+function resolveWorkspaceStatusLines(
+  environment: IEnvironment,
+): WorkspaceFile[] {
+  const fullStatusResult = runGit(environment, [
+    "status",
+    "--porcelain",
+    "--untracked-files=all",
+  ]);
+  if (fullStatusResult.ok) {
+    return parsePorcelainLines(fullStatusResult.stdout);
+  }
+
+  const fallbackStatusResult = runGit(environment, [
+    "status",
+    "--porcelain",
+    "--untracked-files=normal",
+  ]);
+  if (fallbackStatusResult.ok) {
+    return parsePorcelainLines(fallbackStatusResult.stdout);
+  }
+
+  return [];
+}
+
 function parseNameStatusLine(line: string): WorkspaceFile | undefined {
   const segments = line.split("\t");
   if (segments.length < 2) return undefined;
@@ -550,6 +583,9 @@ function normalizeResolvedCleanStatus(status: EnvironmentWorkStatus): Environmen
     changedFiles: 0,
     insertions: 0,
     deletions: 0,
+    workspaceChangedFiles: 0,
+    workspaceInsertions: 0,
+    workspaceDeletions: 0,
     files: [],
   };
 }
@@ -626,19 +662,11 @@ export function getGitWorkspaceStatus(
   const requestedMergeBaseBranch = args?.mergeBaseBranch?.trim() || undefined;
   const defaultBranch = args?.defaultBranch ?? resolveDefaultBranch(environment);
 
-  const statusResult = runGit(environment, [
-    "status",
-    "--porcelain",
-    "--untracked-files=all",
-  ]);
-  const statusLines = statusResult.ok
-    ? statusResult.stdout.split("\n").map((line) => line.trimEnd()).filter((line) => line.length > 0)
-    : [];
-  const workspaceFiles = statusLines
-    .map((line) => parsePorcelainLine(line))
-    .filter((item): item is WorkspaceFile => Boolean(item))
-    .slice(0, 60);
-  const workspaceChangedFiles = statusLines.length;
+  const workspaceFiles = resolveWorkspaceStatusLines(environment).slice(0, 60);
+  const statusLines = workspaceFiles.map((item) =>
+    item.status === "A?" ? `?? ${item.path}` : `${item.status.padEnd(2, " ")} ${item.path}`
+  );
+  const workspaceChangedFiles = workspaceFiles.length;
 
   const unstagedStat = parseShortstat(runGit(environment, ["diff", "--shortstat"]).stdout);
   const stagedStat = parseShortstat(runGit(environment, ["diff", "--cached", "--shortstat"]).stdout);
