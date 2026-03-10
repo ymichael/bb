@@ -1,4 +1,4 @@
-import { type ComponentProps, type RefObject } from "react";
+import { type ComponentProps, type ComponentType, type RefObject } from "react";
 import { CornerDownRight, Pencil, Trash2, ChevronDown } from "lucide-react";
 import {
   type ReasoningLevel,
@@ -9,6 +9,7 @@ import {
 import { PromptBox } from "@/components/promptbox/PromptBox";
 import { PromptModelPicker } from "@/components/promptbox/PromptModelPicker";
 import {
+  PromptOptionDisplay,
   PromptOptionPicker,
   type PromptOption,
 } from "@/components/promptbox/PromptOptionPicker";
@@ -186,6 +187,8 @@ export function ThreadFollowUpComposer({
   sandboxMode,
   sandboxOptions,
   onSandboxModeChange,
+  environmentLabel,
+  environmentIcon,
   contextWindowUsage,
 }: {
   composerRef: RefObject<HTMLDivElement | null>;
@@ -245,6 +248,8 @@ export function ThreadFollowUpComposer({
   sandboxMode?: SandboxMode;
   sandboxOptions: readonly PromptOption<SandboxMode>[];
   onSandboxModeChange: (value: SandboxMode) => void;
+  environmentLabel?: string;
+  environmentIcon?: ComponentType<{ className?: string }>;
   contextWindowUsage?: ComponentProps<typeof ThreadContextWindowIndicator>["usage"];
 }) {
   return (
@@ -392,9 +397,21 @@ export function ThreadFollowUpComposer({
             </>
           }
         />
-        {contextWindowUsage ? (
-          <div className="mt-1 flex justify-end pr-0.5">
-            <ThreadContextWindowIndicator usage={contextWindowUsage} />
+        {environmentLabel || contextWindowUsage ? (
+          <div className="mt-1 flex items-center justify-between gap-2 px-3.5">
+            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+              {environmentLabel ? (
+                <PromptOptionDisplay
+                  label="Environment"
+                  value={environmentLabel}
+                  icon={environmentIcon}
+                  className="h-6 px-0"
+                />
+              ) : null}
+            </div>
+            {contextWindowUsage ? (
+              <ThreadContextWindowIndicator usage={contextWindowUsage} />
+            ) : null}
           </div>
         ) : null}
       </PromptComposerShell>

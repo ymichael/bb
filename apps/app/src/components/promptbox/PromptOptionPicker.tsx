@@ -9,11 +9,32 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
 
+const PROMPT_OPTION_BASE_CLASS_NAME =
+  "h-8 w-fit max-w-full min-w-0 items-center gap-1 px-1 text-xs leading-tight text-muted-foreground/75"
+const PROMPT_OPTION_INTERACTIVE_CLASS_NAME =
+  "border-none bg-transparent shadow-none hover:bg-transparent hover:text-foreground"
+const PROMPT_OPTION_CONTENT_CLASS_NAME = "flex min-w-0 items-center gap-1.5"
+const PROMPT_OPTION_WARNING_TEXT_CLASS_NAME =
+  "text-amber-600 dark:text-amber-400"
+const PROMPT_OPTION_WARNING_INTERACTIVE_CLASS_NAME =
+  "hover:text-amber-700 dark:hover:text-amber-300"
+const PROMPT_OPTION_WARNING_ICON_CLASS_NAME =
+  "text-amber-500/90 dark:text-amber-300"
+
 export interface PromptOption<T extends string> {
   value: T
   label: string
   tone?: "default" | "warning"
   icon?: ComponentType<{ className?: string }>
+}
+
+interface PromptOptionDisplayProps {
+  label: string
+  value: string
+  tone?: "default" | "warning"
+  icon?: ComponentType<{ className?: string }>
+  className?: string
+  title?: string
 }
 
 interface PromptOptionPickerProps<T extends string> {
@@ -22,6 +43,33 @@ interface PromptOptionPickerProps<T extends string> {
   options: readonly PromptOption<T>[]
   onChange: (value: T) => void
   className?: string
+}
+
+export function PromptOptionDisplay({
+  label,
+  value,
+  tone = "default",
+  icon: Icon,
+  className,
+  title,
+}: PromptOptionDisplayProps) {
+  return (
+    <div
+      title={title ?? `${label}: ${value}`}
+      className={cn(
+        "inline-flex",
+        PROMPT_OPTION_BASE_CLASS_NAME,
+        tone === "warning" && PROMPT_OPTION_WARNING_TEXT_CLASS_NAME,
+        className
+      )}
+    >
+      <span className={PROMPT_OPTION_CONTENT_CLASS_NAME}>
+        {Icon ? <Icon className="size-3.5 shrink-0" /> : null}
+        <span className="sr-only">{label}: </span>
+        <span className="truncate">{value}</span>
+      </span>
+    </div>
+  )
 }
 
 export function PromptOptionPicker<T extends string>({
@@ -46,13 +94,14 @@ export function PromptOptionPicker<T extends string>({
           aria-label={label}
           title={`${label}: ${selectedLabel}`}
           className={cn(
-            "h-8 w-fit max-w-full min-w-0 items-center gap-1 border-none bg-transparent px-1 text-xs leading-tight text-muted-foreground/75 shadow-none hover:bg-transparent hover:text-foreground",
-            selectedIsWarning &&
-              "text-amber-600 hover:text-amber-700 dark:text-amber-400 dark:hover:text-amber-300",
+            PROMPT_OPTION_BASE_CLASS_NAME,
+            PROMPT_OPTION_INTERACTIVE_CLASS_NAME,
+            selectedIsWarning && PROMPT_OPTION_WARNING_TEXT_CLASS_NAME,
+            selectedIsWarning && PROMPT_OPTION_WARNING_INTERACTIVE_CLASS_NAME,
             className
           )}
         >
-          <span className="flex min-w-0 items-center gap-1.5">
+          <span className={PROMPT_OPTION_CONTENT_CLASS_NAME}>
             {SelectedIcon ? <SelectedIcon className="size-3.5 shrink-0" /> : null}
             <span className="truncate">{selectedLabel}</span>
           </span>
@@ -60,7 +109,7 @@ export function PromptOptionPicker<T extends string>({
             className={cn(
               "size-3.5",
               selectedIsWarning
-                ? "text-amber-500/90 dark:text-amber-300"
+                ? PROMPT_OPTION_WARNING_ICON_CLASS_NAME
                 : "text-muted-foreground"
             )}
           />

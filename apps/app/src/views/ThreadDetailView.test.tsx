@@ -145,6 +145,9 @@ vi.mock("../hooks/useApi", () => ({
     data: apiState.environments,
   }),
   useUnarchiveThread: () => apiState.pendingMutation,
+  useThreadDefaultExecutionOptions: () => ({
+    data: {},
+  }),
   useUploadPromptAttachment: () => apiState.pendingMutation,
 }));
 
@@ -273,10 +276,12 @@ vi.mock("./ThreadFollowUpComposer", () => ({
   ThreadFollowUpComposer: ({
     promptPlaceholder,
     queuedMessages,
+    environmentLabel,
   }: {
     promptPlaceholder: string;
     queuedMessages: { id: string }[];
-  }) => <div>{`${promptPlaceholder}|${queuedMessages.length}`}</div>,
+    environmentLabel?: string;
+  }) => <div>{`${promptPlaceholder}|${queuedMessages.length}|${environmentLabel ?? ""}`}</div>,
 }));
 
 vi.mock("./ThreadGitDiffPanel", () => ({
@@ -300,9 +305,8 @@ describe("ThreadDetailView", () => {
 
     expect(html).toContain("Parent thread");
     expect(html).toContain('href="/projects/project-1/threads/thread-parent"');
-    expect(html).toContain("Local Env");
     expect(html).toContain("Rendered message");
-    expect(html).toContain("Ask for follow-up changes|1");
+    expect(html).toContain("Ask for follow-up changes|1|Local Env");
     expect(html).toContain("1 file");
     expect(html).toContain("+1 -1");
   });
