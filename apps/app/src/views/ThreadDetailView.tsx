@@ -298,9 +298,6 @@ export function ThreadDetailView() {
     threadId ?? "",
   );
   const threadToolGroupMessages = useThreadToolGroupMessages();
-  const { data: defaultExecutionOptions } = useThreadDefaultExecutionOptions(
-    threadId ?? "",
-  );
   const tellThread = useTellThread();
   const enqueueThreadMessage = useEnqueueThreadMessage();
   const sendQueuedThreadMessage = useSendQueuedThreadMessage();
