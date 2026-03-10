@@ -87,6 +87,7 @@ import {
   type GitDiffSelectionOption,
   ThreadGitDiffPanel,
 } from "./ThreadGitDiffPanel";
+import { isLastThreadRowShowingOngoingState } from "./threadDetailActivity";
 import {
   doesGitDiffFileMatchPath,
   getGitDiffParseKey,
@@ -393,6 +394,10 @@ export function ThreadDetailView() {
 
   const threadDetailRows = useMemo(() => timeline?.rows ?? [], [timeline?.rows]);
   const contextWindowUsage = timeline?.contextWindowUsage ?? undefined;
+  const isLastThreadRowShowingOngoingIndicator = useMemo(
+    () => isLastThreadRowShowingOngoingState(threadDetailRows),
+    [threadDetailRows],
+  );
 
   const isReasoningBlockActive = false;
   const isTimelineLoading = timelineLoading;
@@ -1607,7 +1612,9 @@ export function ThreadDetailView() {
           })
         )}
       </ConversationTimeline>
-      {thread.status === "active" && !isThreadTimelinePending ? (
+      {thread.status === "active" &&
+      !isThreadTimelinePending &&
+      !isLastThreadRowShowingOngoingIndicator ? (
         <ConversationWorkingIndicator isThinking={isReasoningBlockActive} />
       ) : null}
     </>
