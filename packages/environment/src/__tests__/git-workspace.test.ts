@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { IEnvironment, EnvironmentCommandResult } from "../contracts.js";
-import { getGitWorkspaceStatus, watchGitWorkspaceStatus } from "../git-workspace.js";
+import { getGitWorkspaceStatusAsync, watchGitWorkspaceStatus } from "../git-workspace.js";
 
 const watchListeners: Array<() => void> = [];
 
@@ -85,7 +85,10 @@ function createEnvironment(getStatusOutput: () => string): IEnvironment {
     squashMergeIntoDefaultBranch: async () => {
       throw new Error("not implemented");
     },
-    run: (_command, args) => {
+    run: () => {
+      throw new Error("not used in this test");
+    },
+    runAsync: async (_command, args) => {
       if (args[0] === "rev-parse" && args[1] === "--is-inside-work-tree") {
         return ok("true");
       }
@@ -137,7 +140,7 @@ afterEach(() => {
 });
 
 describe("watchGitWorkspaceStatus", () => {
-  it("ignores metadata churn when the computed work status is unchanged", () => {
+  it("ignores metadata churn when the computed work status is unchanged", async () => {
     vi.useFakeTimers();
     let statusOutput = "";
     const environment = createEnvironment(() => statusOutput);
@@ -149,7 +152,7 @@ describe("watchGitWorkspaceStatus", () => {
     for (const listener of watchListeners) {
       listener();
     }
-    vi.advanceTimersByTime(100);
+    await vi.advanceTimersByTimeAsync(100);
 
     expect(onChange).not.toHaveBeenCalled();
 
@@ -157,7 +160,7 @@ describe("watchGitWorkspaceStatus", () => {
     for (const listener of watchListeners) {
       listener();
     }
-    vi.advanceTimersByTime(100);
+    await vi.advanceTimersByTimeAsync(100);
 
     expect(onChange).toHaveBeenCalledTimes(1);
 
@@ -166,7 +169,7 @@ describe("watchGitWorkspaceStatus", () => {
 });
 
 describe("getGitWorkspaceStatus", () => {
-  it("falls back to collapsed untracked status output when exhaustive porcelain overflows", () => {
+  it("falls back to collapsed untracked status output when exhaustive porcelain overflows", async () => {
     const environment = createEnvironment(() => "");
     const run = vi.fn((_command: string, args: string[]) => {
       if (args[0] === "rev-parse" && args[1] === "--is-inside-work-tree") {
@@ -223,10 +226,10 @@ describe("getGitWorkspaceStatus", () => {
 
     const overflowEnvironment: IEnvironment = {
       ...environment,
-      run,
+      runAsync: run,
     };
 
-    const status = getGitWorkspaceStatus(overflowEnvironment, { defaultBranch: "main" });
+    const status = await getGitWorkspaceStatusAsync(overflowEnvironment, { defaultBranch: "main" });
 
     expect(status.state).toBe("dirty_uncommitted");
     expect(status.hasUncommittedChanges).toBe(true);

@@ -40,11 +40,15 @@ Current status:
   - removed the thread-detail parent-thread network fetch in favor of cached thread-list data
   - stopped the thread-detail view from eagerly fetching merge-base work status when the base thread payload already has the same branch
   - removed the short-lived caching experiments in daemon/environment so the async migration is the primary fix path
-  - added async environment workspace read APIs for status, diff, and commit listing
-  - switched the thread detail route and git diff route to prefer async daemon/environment reads
+  - converted production child-process hot paths from sync to async across daemon, environment, docker environment, and agent-server code
+  - made thread detail, work-status, git diff, checkout snapshot, promote/demote, and docker container lifecycle paths prefer async environment APIs
+  - changed production sync environment/git/process helpers to fail fast instead of silently blocking the event loop
+  - added a repo lint guard that bans `spawnSync` / `execSync` / `execFileSync` in production TypeScript code
+  - reintroduced only default-branch caching in `git-project.ts`
 - In progress:
-  - reducing remaining request-path sync git/process work
+  - removing remaining synchronous filesystem work in hot paths where it is still materially observable
   - deciding the right long-term thread-detail read model (`GET /threads/:id` vs composite read endpoint)
+  - defining the first safe post-async cache beyond default-branch detection
 
 1. Confirm and instrument the blocking before broad refactors
 

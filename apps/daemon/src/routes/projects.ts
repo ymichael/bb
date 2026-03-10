@@ -171,6 +171,10 @@ export function createProjectRoutes(
     threadRepo?: ThreadRepository;
     eventRepo?: EventRepository;
     getProjectWorkspaceStatus?: (projectId: string, rootPath: string) => ThreadWorkStatus;
+    getProjectWorkspaceStatusAsync?: (
+      projectId: string,
+      rootPath: string,
+    ) => Promise<ThreadWorkStatus>;
   },
 ) {
   return new Hono()
@@ -258,11 +262,14 @@ export function createProjectRoutes(
         if (!project) {
           return sendRouteError(c, projectNotFoundError(projectId));
         }
+        const getProjectWorkspaceStatusAsync = deps?.getProjectWorkspaceStatusAsync;
         const getProjectWorkspaceStatus = deps?.getProjectWorkspaceStatus;
-        if (!getProjectWorkspaceStatus) {
+        if (!getProjectWorkspaceStatusAsync && !getProjectWorkspaceStatus) {
           throw unsupportedOperationError("Project workspace status is unavailable");
         }
-        const status = getProjectWorkspaceStatus(project.id, project.rootPath);
+        const status = getProjectWorkspaceStatusAsync
+          ? await getProjectWorkspaceStatusAsync(project.id, project.rootPath)
+          : getProjectWorkspaceStatus!(project.id, project.rootPath);
         return c.json(status);
       } catch (err) {
         return sendRouteError(c, err);

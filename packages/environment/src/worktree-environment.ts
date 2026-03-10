@@ -1,6 +1,5 @@
-import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
-import { rm } from "node:fs/promises";
+import { existsSync, mkdirSync } from "node:fs";
+import { mkdtemp, rm } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 import type { EnvironmentAgentConnectionTarget } from "@beanbag/environment-agent";
@@ -9,9 +8,11 @@ import type {
   DemoteEnvironmentOptions,
   DemoteEnvironmentResult,
   EnvironmentCommandOptions,
+  EnvironmentCommandResult,
   EnvironmentSpawnOptions,
   EnvironmentDefinition,
   EnvironmentCheckoutSnapshot,
+  EnvironmentCommitSummary,
   EnvironmentInfo,
   EnvironmentWorkspaceCommitOptions,
   EnvironmentWorkspaceCommitResult,
@@ -19,6 +20,7 @@ import type {
   EnvironmentWorkspaceDiffOptions,
   EnvironmentWorkspaceDiffResult,
   EnvironmentWorkspaceStatusOptions,
+  EnvironmentWorkStatus,
   EnvironmentSquashMergeOptions,
   EnvironmentSquashMergeResult,
   IEnvironment,
@@ -27,11 +29,8 @@ import type {
 } from "./contracts.js";
 import {
   commitGitWorkspace,
-  getGitWorkspaceDiff,
   getGitWorkspaceDiffAsync,
-  getGitWorkspaceStatus,
   getGitWorkspaceStatusAsync,
-  listGitWorkspaceCommitsSinceRef,
   listGitWorkspaceCommitsSinceRefAsync,
   watchGitWorkspaceStatus,
 } from "./git-workspace.js";
@@ -43,7 +42,7 @@ import {
   ensureManagedHostEnvironmentAgent,
   resolveManagedHostEnvironmentAgentTarget,
 } from "./host-environment-agent.js";
-import { runCommand, runCommandAsync, spawnCommand } from "./process.js";
+import { runCommandAsync, spawnCommand } from "./process.js";
 
 export interface WorktreeEnvironmentState {
   workspaceRoot: string;
@@ -76,22 +75,6 @@ const WORKTREE_AGENT_INSTRUCTIONS = [
   "- Use the primary checkout only for manual verification when needed, then demote back to the thread worktree.",
 ].join("\n");
 
-function runGitAtPath(
-  cwd: string,
-  args: string[],
-): { ok: boolean; stdout: string; stderr: string } {
-  const result = spawnSync("git", args, {
-    cwd,
-    encoding: "utf-8",
-    stdio: "pipe",
-  });
-  return {
-    ok: result.status === 0,
-    stdout: result.stdout?.trim() ?? "",
-    stderr: result.stderr?.trim() ?? result.error?.message ?? "",
-  };
-}
-
 async function runGitAtPathAsync(
   cwd: string,
   args: string[],
@@ -106,10 +89,6 @@ async function runGitAtPathAsync(
     stdout: result.stdout,
     stderr: result.stderr,
   };
-}
-
-function hasLocalBranch(projectRoot: string, branch: string): boolean {
-  return runGitAtPath(projectRoot, ["show-ref", "--verify", "--quiet", `refs/heads/${branch}`]).ok;
 }
 
 async function hasLocalBranchAsync(
@@ -169,18 +148,28 @@ function resolveConfiguredWorktreeRoot(
   };
 }
 
-function hasLocalWorkingChanges(repoRoot: string): boolean {
-  const status = runGitAtPath(repoRoot, ["status", "--porcelain"]);
+async function hasLocalWorkingChangesAsync(
+  repoRoot: string,
+  env: Record<string, string | undefined>,
+): Promise<boolean> {
+  const status = await runGitAtPathAsync(repoRoot, ["status", "--porcelain"], env);
   return status.ok && status.stdout.trim().length > 0;
 }
 
-function resolveCheckoutSnapshot(repoRoot: string): EnvironmentCheckoutSnapshot {
-  const headResult = runGitAtPath(repoRoot, ["rev-parse", "HEAD"]);
+async function resolveCheckoutSnapshotAsync(
+  repoRoot: string,
+  env: Record<string, string | undefined>,
+): Promise<EnvironmentCheckoutSnapshot> {
+  const headResult = await runGitAtPathAsync(repoRoot, ["rev-parse", "HEAD"], env);
   if (!headResult.ok || !headResult.stdout) {
     throw new Error("Failed to resolve HEAD");
   }
 
-  const branchResult = runGitAtPath(repoRoot, ["symbolic-ref", "--quiet", "--short", "HEAD"]);
+  const branchResult = await runGitAtPathAsync(
+    repoRoot,
+    ["symbolic-ref", "--quiet", "--short", "HEAD"],
+    env,
+  );
   if (branchResult.ok && branchResult.stdout) {
     return {
       branch: branchResult.stdout,
@@ -195,30 +184,56 @@ function resolveCheckoutSnapshot(repoRoot: string): EnvironmentCheckoutSnapshot 
   };
 }
 
-function hasRepoLocalBranch(repoRoot: string, branch: string): boolean {
-  return runGitAtPath(repoRoot, ["show-ref", "--verify", "--quiet", `refs/heads/${branch}`]).ok;
-}
-
-function checkoutSnapshot(repoRoot: string, snapshot: EnvironmentCheckoutSnapshot): void {
+async function checkoutSnapshotAsync(
+  repoRoot: string,
+  snapshot: EnvironmentCheckoutSnapshot,
+  env: Record<string, string | undefined>,
+): Promise<void> {
   const branch = snapshot.branch?.trim();
-  if (branch && hasRepoLocalBranch(repoRoot, branch)) {
-    const branchCheckout = runGitAtPath(repoRoot, ["checkout", "--ignore-other-worktrees", branch]);
+  if (
+    branch &&
+    (await runGitAtPathAsync(
+      repoRoot,
+      ["show-ref", "--verify", "--quiet", `refs/heads/${branch}`],
+      env,
+    )).ok
+  ) {
+    const branchCheckout = await runGitAtPathAsync(
+      repoRoot,
+      ["checkout", "--ignore-other-worktrees", branch],
+      env,
+    );
     if (branchCheckout.ok) return;
   }
 
-  const detachedCheckout = runGitAtPath(repoRoot, ["checkout", "--detach", snapshot.head]);
+  const detachedCheckout = await runGitAtPathAsync(
+    repoRoot,
+    ["checkout", "--detach", snapshot.head],
+    env,
+  );
   if (!detachedCheckout.ok) {
     throw new Error(detachedCheckout.stderr || "Failed to checkout detached HEAD");
   }
 }
 
 function resolveDefaultBranch(repoRoot: string): string | undefined {
-  const remoteHead = runGitAtPath(repoRoot, ["symbolic-ref", "--quiet", "refs/remotes/origin/HEAD"]);
+  return undefined;
+}
+
+async function resolveDefaultBranchAsync(
+  repoRoot: string,
+  env: Record<string, string | undefined>,
+): Promise<string | undefined> {
+  const remoteHead = await runGitAtPathAsync(
+    repoRoot,
+    ["symbolic-ref", "--quiet", "refs/remotes/origin/HEAD"],
+    env,
+  );
   if (remoteHead.ok && remoteHead.stdout.startsWith("refs/remotes/origin/")) {
     return remoteHead.stdout.slice("refs/remotes/origin/".length);
   }
-  if (hasLocalBranch(repoRoot, "main")) return "main";
-  if (hasLocalBranch(repoRoot, "master")) return "master";
+  if (await hasLocalBranchAsync(repoRoot, "main", env)) return "main";
+  if (await hasLocalBranchAsync(repoRoot, "master", env)) return "master";
   return undefined;
 }
 
@@ -384,7 +399,11 @@ class WorktreeEnvironment implements IEnvironment {
   }
 
   getCheckoutSnapshot(): EnvironmentCheckoutSnapshot {
-    return resolveCheckoutSnapshot(this.rootPath);
+    throw new Error("Synchronous checkout snapshot is unsupported; use getCheckoutSnapshotAsync");
+  }
+
+  getCheckoutSnapshotAsync(): Promise<EnvironmentCheckoutSnapshot> {
+    return resolveCheckoutSnapshotAsync(this.rootPath, this.env);
   }
 
   getWorkspaceRootUnsafe(): string {
@@ -395,8 +414,8 @@ class WorktreeEnvironment implements IEnvironment {
     return WORKTREE_AGENT_INSTRUCTIONS;
   }
 
-  getWorkspaceStatus(args?: EnvironmentWorkspaceStatusOptions) {
-    return getGitWorkspaceStatus(this, args);
+  getWorkspaceStatus(_args?: EnvironmentWorkspaceStatusOptions): EnvironmentWorkStatus {
+    throw new Error("Synchronous workspace status is unsupported; use getWorkspaceStatusAsync");
   }
 
   getWorkspaceStatusAsync(args?: EnvironmentWorkspaceStatusOptions) {
@@ -415,16 +434,18 @@ class WorktreeEnvironment implements IEnvironment {
     );
   }
 
-  listWorkspaceCommitsSinceRef(args: EnvironmentWorkspaceCommitsOptions) {
-    return listGitWorkspaceCommitsSinceRef(this, args);
+  listWorkspaceCommitsSinceRef(_args: EnvironmentWorkspaceCommitsOptions): EnvironmentCommitSummary[] {
+    throw new Error(
+      "Synchronous workspace commit listing is unsupported; use listWorkspaceCommitsSinceRefAsync",
+    );
   }
 
   listWorkspaceCommitsSinceRefAsync(args: EnvironmentWorkspaceCommitsOptions) {
     return listGitWorkspaceCommitsSinceRefAsync(this, args);
   }
 
-  getWorkspaceDiff(args: EnvironmentWorkspaceDiffOptions): EnvironmentWorkspaceDiffResult {
-    return getGitWorkspaceDiff(this, args);
+  getWorkspaceDiff(_args: EnvironmentWorkspaceDiffOptions): EnvironmentWorkspaceDiffResult {
+    throw new Error("Synchronous workspace diff is unsupported; use getWorkspaceDiffAsync");
   }
 
   getWorkspaceDiffAsync(args: EnvironmentWorkspaceDiffOptions) {
@@ -471,29 +492,38 @@ class WorktreeEnvironment implements IEnvironment {
   }
 
   promoteToActiveWorkspace(args: PromoteEnvironmentOptions): PromoteEnvironmentResult {
-    if (hasLocalWorkingChanges(args.activeWorkspaceRoot)) {
+    throw new Error("Synchronous promotion is unsupported; use promoteToActiveWorkspaceAsync");
+  }
+
+  async promoteToActiveWorkspaceAsync(
+    args: PromoteEnvironmentOptions,
+  ): Promise<PromoteEnvironmentResult> {
+    if (await hasLocalWorkingChangesAsync(args.activeWorkspaceRoot, this.env)) {
       throw new Error(
         "Primary checkout has local changes. Commit, stash, or discard changes before promoting a thread.",
       );
     }
-    if (hasLocalWorkingChanges(this.rootPath)) {
+    if (await hasLocalWorkingChangesAsync(this.rootPath, this.env)) {
       throw new Error(
         "Thread worktree has local changes. Commit, stash, or discard changes before promoting a thread.",
       );
     }
 
-    const previousCheckout = resolveCheckoutSnapshot(args.activeWorkspaceRoot);
-    const promotedCheckout = resolveCheckoutSnapshot(this.rootPath);
+    const previousCheckout = await resolveCheckoutSnapshotAsync(
+      args.activeWorkspaceRoot,
+      this.env,
+    );
+    const promotedCheckout = await resolveCheckoutSnapshotAsync(this.rootPath, this.env);
 
     try {
-      checkoutSnapshot(args.activeWorkspaceRoot, promotedCheckout);
+      await checkoutSnapshotAsync(args.activeWorkspaceRoot, promotedCheckout, this.env);
       return {
         previousCheckout,
         promotedCheckout,
       };
     } catch (err) {
       try {
-        checkoutSnapshot(args.activeWorkspaceRoot, previousCheckout);
+        await checkoutSnapshotAsync(args.activeWorkspaceRoot, previousCheckout, this.env);
       } catch (restoreErr) {
         const restoreMessage = restoreErr instanceof Error
           ? restoreErr.message
@@ -507,15 +537,21 @@ class WorktreeEnvironment implements IEnvironment {
   }
 
   demoteFromActiveWorkspace(args: DemoteEnvironmentOptions): DemoteEnvironmentResult {
-    const reset = runGitAtPath(args.activeWorkspaceRoot, ["reset", "--hard"]);
+    throw new Error("Synchronous demotion is unsupported; use demoteFromActiveWorkspaceAsync");
+  }
+
+  async demoteFromActiveWorkspaceAsync(
+    args: DemoteEnvironmentOptions,
+  ): Promise<DemoteEnvironmentResult> {
+    const reset = await runGitAtPathAsync(args.activeWorkspaceRoot, ["reset", "--hard"], this.env);
     if (!reset.ok) {
       throw new Error(reset.stderr || "Failed to reset primary checkout");
     }
-    const clean = runGitAtPath(args.activeWorkspaceRoot, ["clean", "-fd"]);
+    const clean = await runGitAtPathAsync(args.activeWorkspaceRoot, ["clean", "-fd"], this.env);
     if (!clean.ok) {
       throw new Error(clean.stderr || "Failed to clean primary checkout");
     }
-    checkoutSnapshot(args.activeWorkspaceRoot, args.snapshot);
+    await checkoutSnapshotAsync(args.activeWorkspaceRoot, args.snapshot, this.env);
     return {
       restoredCheckout: args.snapshot,
     };
@@ -525,11 +561,11 @@ class WorktreeEnvironment implements IEnvironment {
     args: EnvironmentSquashMergeOptions,
   ): Promise<EnvironmentSquashMergeResult> {
     const mergeBaseBranch =
-      args.defaultBranch ?? resolveDefaultBranch(args.activeWorkspaceRoot);
+      args.defaultBranch ?? await resolveDefaultBranchAsync(args.activeWorkspaceRoot, this.env);
     if (!mergeBaseBranch) {
       throw new Error("Could not determine merge base branch");
     }
-    const statusResult = this.run("git", ["status", "--porcelain"]);
+    const statusResult = await this.runAsync("git", ["status", "--porcelain"]);
     if (statusResult.exitCode !== 0) {
       throw new Error(statusResult.stderr || "Failed to inspect worktree status");
     }
@@ -561,24 +597,32 @@ class WorktreeEnvironment implements IEnvironment {
         };
       }
     }
-    if (hasLocalWorkingChanges(args.activeWorkspaceRoot)) {
+    if (await hasLocalWorkingChangesAsync(args.activeWorkspaceRoot, this.env)) {
       throw new Error(
         "Project root has local changes that could be lost; commit or stash them before squash merge",
       );
     }
 
-    const workspaceHead = this.run("git", ["rev-parse", "HEAD"]);
+    const workspaceHead = await this.runAsync("git", ["rev-parse", "HEAD"]);
     if (workspaceHead.exitCode !== 0 || !workspaceHead.stdout) {
       throw new Error("Failed to resolve worktree HEAD");
     }
 
-    const currentProjectBranch = runGitAtPath(args.activeWorkspaceRoot, ["symbolic-ref", "--short", "HEAD"]);
-    const defaultHead = runGitAtPath(args.activeWorkspaceRoot, ["rev-parse", mergeBaseBranch]);
+    const currentProjectBranch = await runGitAtPathAsync(
+      args.activeWorkspaceRoot,
+      ["symbolic-ref", "--short", "HEAD"],
+      this.env,
+    );
+    const defaultHead = await runGitAtPathAsync(
+      args.activeWorkspaceRoot,
+      ["rev-parse", mergeBaseBranch],
+      this.env,
+    );
     if (!defaultHead.ok || !defaultHead.stdout) {
       throw new Error(`Failed to resolve ${mergeBaseBranch}`);
     }
 
-    const aheadResult = this.run("git", [
+    const aheadResult = await this.runAsync("git", [
       "rev-list",
       "--left-right",
       "--count",
@@ -592,33 +636,33 @@ class WorktreeEnvironment implements IEnvironment {
         }
       }
 
-    const tempRoot = mkdtempSync(join(tmpdir(), "beanbag-squash-merge-"));
+    const tempRoot = await mkdtemp(join(tmpdir(), "beanbag-squash-merge-"));
     const tempWorkspaceRoot = resolve(tempRoot, "integration");
 
     try {
-      const addWorktree = runGitAtPath(args.activeWorkspaceRoot, [
+      const addWorktree = await runGitAtPathAsync(args.activeWorkspaceRoot, [
         "worktree",
         "add",
         "--detach",
         tempWorkspaceRoot,
         defaultHead.stdout,
-      ]);
+      ], this.env);
       if (!addWorktree.ok) {
         throw new Error(addWorktree.stderr || "Failed to prepare integration worktree");
       }
 
-      const squashResult = runGitAtPath(tempWorkspaceRoot, [
+      const squashResult = await runGitAtPathAsync(tempWorkspaceRoot, [
         "merge",
         "--squash",
         workspaceHead.stdout,
-      ]);
+      ], this.env);
       if (!squashResult.ok) {
-        const conflictFiles = runGitAtPath(tempWorkspaceRoot, [
+        const conflictFiles = await runGitAtPathAsync(tempWorkspaceRoot, [
           "diff",
           "--name-only",
           "--diff-filter=U",
-        ]);
-        runGitAtPath(tempWorkspaceRoot, ["reset", "--hard"]);
+        ], this.env);
+        await runGitAtPathAsync(tempWorkspaceRoot, ["reset", "--hard"], this.env);
         return {
           merged: false,
           message:
@@ -636,11 +680,11 @@ class WorktreeEnvironment implements IEnvironment {
         };
       }
 
-      const hasSquashedChanges = runGitAtPath(tempWorkspaceRoot, [
+      const hasSquashedChanges = await runGitAtPathAsync(tempWorkspaceRoot, [
         "diff",
         "--cached",
         "--quiet",
-      ]);
+      ], this.env);
       if (hasSquashedChanges.ok) {
         return {
           merged: false,
@@ -650,7 +694,11 @@ class WorktreeEnvironment implements IEnvironment {
         };
       }
 
-      const sourceBranch = runGitAtPath(this.rootPath, ["symbolic-ref", "--quiet", "--short", "HEAD"]);
+      const sourceBranch = await runGitAtPathAsync(
+        this.rootPath,
+        ["symbolic-ref", "--quiet", "--short", "HEAD"],
+        this.env,
+      );
       const defaultMessage = `chore: squash merge from ${sourceBranch.ok && sourceBranch.stdout ? sourceBranch.stdout : "worktree"}`;
       let message = args.message?.trim();
       if (!message && args.resolveMessage) {
@@ -670,38 +718,38 @@ class WorktreeEnvironment implements IEnvironment {
         }
       }
       const finalMessage = message || defaultMessage;
-      const commitResult = runGitAtPath(tempWorkspaceRoot, [
+      const commitResult = await runGitAtPathAsync(tempWorkspaceRoot, [
         "commit",
         "-m",
         finalMessage,
-      ]);
+      ], this.env);
       if (!commitResult.ok) {
         throw new Error(commitResult.stderr || "Failed to commit squashed merge");
       }
 
-      const mergedHead = runGitAtPath(tempWorkspaceRoot, ["rev-parse", "HEAD"]);
+      const mergedHead = await runGitAtPathAsync(tempWorkspaceRoot, ["rev-parse", "HEAD"], this.env);
       if (!mergedHead.ok || !mergedHead.stdout) {
         throw new Error("Failed to resolve squashed merge commit");
       }
 
       if (currentProjectBranch.ok && currentProjectBranch.stdout === mergeBaseBranch) {
-        const resetResult = runGitAtPath(args.activeWorkspaceRoot, [
+        const resetResult = await runGitAtPathAsync(args.activeWorkspaceRoot, [
           "reset",
           "--hard",
           mergedHead.stdout,
-        ]);
+        ], this.env);
         if (!resetResult.ok) {
           throw new Error(
             resetResult.stderr || `Squash merged into ${mergeBaseBranch}, but failed to refresh checkout`,
           );
         }
       } else {
-        const updateRef = runGitAtPath(args.activeWorkspaceRoot, [
+        const updateRef = await runGitAtPathAsync(args.activeWorkspaceRoot, [
           "update-ref",
           `refs/heads/${mergeBaseBranch}`,
           mergedHead.stdout,
           defaultHead.stdout,
-        ]);
+        ], this.env);
         if (!updateRef.ok) {
           throw new Error(
             updateRef.stderr || `${mergeBaseBranch} moved during squash merge; please retry`,
@@ -716,31 +764,22 @@ class WorktreeEnvironment implements IEnvironment {
         ...(prepCommit ? { prepCommit } : {}),
       };
     } finally {
-      runGitAtPath(args.activeWorkspaceRoot, [
+      await runGitAtPathAsync(args.activeWorkspaceRoot, [
         "worktree",
         "remove",
         "--force",
         tempWorkspaceRoot,
-      ]);
-      rmSync(tempRoot, { recursive: true, force: true });
+      ], this.env);
+      await rm(tempRoot, { recursive: true, force: true });
     }
   }
 
   run(
-    command: string,
-    args: string[],
-    options?: EnvironmentCommandOptions,
-  ) {
-    const executionContext = this._executionContext();
-    return runCommand(command, args, {
-      cwd: options?.cwd ?? executionContext.cwd,
-      env: {
-        ...executionContext.env,
-        ...(options?.env ?? {}),
-      },
-      ...(options?.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),
-      ...(options?.rawOutput ? { rawOutput: true } : {}),
-    });
+    _command: string,
+    _args: string[],
+    _options?: EnvironmentCommandOptions,
+  ): EnvironmentCommandResult {
+    throw new Error("Synchronous process execution is unsupported; use runAsync");
   }
 
   runAsync(

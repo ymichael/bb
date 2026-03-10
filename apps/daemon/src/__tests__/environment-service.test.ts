@@ -12,13 +12,13 @@ import {
 } from "@beanbag/environment";
 import type { ProjectRepository, ThreadRepository } from "@beanbag/db";
 import { EnvironmentService } from "../environment-service.js";
-import { resolveProjectCheckoutSnapshot } from "../git-project.js";
+import { resolveProjectCheckoutSnapshotAsync } from "../git-project.js";
 
 vi.mock("../git-project.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../git-project.js")>();
   return {
     ...actual,
-    resolveProjectCheckoutSnapshot: vi.fn(actual.resolveProjectCheckoutSnapshot),
+    resolveProjectCheckoutSnapshotAsync: vi.fn(actual.resolveProjectCheckoutSnapshotAsync),
   };
 });
 
@@ -405,7 +405,7 @@ describe("EnvironmentService", () => {
     expect(threadState.environmentAgentCursor).toBeNull();
   });
 
-  it("rebuilds primary promotion state through per-project environment candidates", () => {
+  it("rebuilds primary promotion state through per-project environment candidates", async () => {
     const environment = createTestEnvironment({ existsInitially: true });
     const environmentRegistry = new EnvironmentRegistry().register({
       kind: "worktree",
@@ -490,7 +490,7 @@ describe("EnvironmentService", () => {
       })),
       update: vi.fn(),
     } as unknown as ProjectRepository;
-    vi.mocked(resolveProjectCheckoutSnapshot).mockReturnValue({
+    vi.mocked(resolveProjectCheckoutSnapshotAsync).mockResolvedValue({
       branch: "bb/thread-thread-1",
       head: "abc123",
       detached: false,
@@ -520,7 +520,7 @@ describe("EnvironmentService", () => {
       },
     );
 
-    service.rebuildPrimaryPromotionStateFromGit();
+    await service.rebuildPrimaryPromotionStateFromGitAsync();
 
     expect(
       (threadRepo as unknown as { list: ReturnType<typeof vi.fn> }).list,
@@ -532,7 +532,7 @@ describe("EnvironmentService", () => {
     });
   });
 
-  it("lazily reconstructs primary promotion state on first project status lookup", () => {
+  it("lazily reconstructs primary promotion state on first project status lookup", async () => {
     const environment = createTestEnvironment({ existsInitially: true });
     const environmentRegistry = new EnvironmentRegistry().register({
       kind: "worktree",
@@ -617,7 +617,7 @@ describe("EnvironmentService", () => {
       })),
       update: vi.fn(),
     } as unknown as ProjectRepository;
-    vi.mocked(resolveProjectCheckoutSnapshot).mockReturnValue({
+    vi.mocked(resolveProjectCheckoutSnapshotAsync).mockResolvedValue({
       branch: "bb/thread-thread-1",
       head: "abc123",
       detached: false,
@@ -647,7 +647,7 @@ describe("EnvironmentService", () => {
       },
     );
 
-    service.ensurePrimaryPromotionStateIsCurrent("proj-1");
+    await service.ensurePrimaryPromotionStateIsCurrentAsync("proj-1");
 
     expect(
       (threadRepo as unknown as { list: ReturnType<typeof vi.fn> }).list,

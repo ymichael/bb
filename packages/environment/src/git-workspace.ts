@@ -1,10 +1,8 @@
-import { spawn, spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import {
   existsSync,
   lstatSync,
-  mkdtempSync,
   readFileSync,
-  rmSync,
   statSync,
   watch,
 } from "node:fs";
@@ -52,11 +50,22 @@ type GitRunResult = {
 const WORKSPACE_STATUS_WATCH_DEBOUNCE_MS = 75;
 
 function runGit(
+  _environment: IEnvironment,
+  _args: string[],
+  _options?: { rawOutput?: boolean },
+): GitRunResult {
+  throw new Error("Synchronous git execution is unsupported; use runGitAsync");
+}
+
+async function runGitAsync(
   environment: IEnvironment,
   args: string[],
   options?: { rawOutput?: boolean },
-): GitRunResult {
-  const result = environment.run("git", args, {
+): Promise<GitRunResult> {
+  if (!environment.runAsync) {
+    throw new Error("Async git execution requires environment.runAsync");
+  }
+  const result = await environment.runAsync("git", args, {
     ...(options?.rawOutput ? { rawOutput: true } : {}),
   });
   return {
@@ -65,25 +74,6 @@ function runGit(
     stderr: result.stderr,
     code: result.exitCode,
   };
-}
-
-async function runGitAsync(
-  environment: IEnvironment,
-  args: string[],
-  options?: { rawOutput?: boolean },
-): Promise<GitRunResult> {
-  if (environment.runAsync) {
-    const result = await environment.runAsync("git", args, {
-      ...(options?.rawOutput ? { rawOutput: true } : {}),
-    });
-    return {
-      ok: result.exitCode === 0,
-      stdout: result.stdout,
-      stderr: result.stderr,
-      code: result.exitCode,
-    };
-  }
-  return runGit(environment, args, options);
 }
 
 function parseShortstat(value: string): { files: number; insertions: number; deletions: number } {
@@ -274,51 +264,14 @@ async function countUnmergedAheadCommitsAsync(
   return unmergedCount;
 }
 
-function baseRefContainsCommittedDiff(args: {
+function baseRefContainsCommittedDiff(_args: {
   environment: IEnvironment;
   baseRef: string;
   diffPatch: string;
 }): boolean | undefined {
-  const workspaceRoot = args.environment.getWorkspaceRootUnsafe();
-  const tempDir = mkdtempSync(join(tmpdir(), COMMITTED_DIFF_INDEX_DIR_PREFIX));
-  const indexPath = join(tempDir, "index");
-  const gitEnv = {
-    ...process.env,
-    GIT_INDEX_FILE: indexPath,
-  };
-
-  try {
-    const readTreeResult = spawnSync("git", ["read-tree", args.baseRef], {
-      cwd: workspaceRoot,
-      env: gitEnv,
-      stdio: "pipe",
-      encoding: "utf-8",
-    });
-    if (readTreeResult.status !== 0) {
-      return undefined;
-    }
-
-    const reverseApplyResult = spawnSync(
-      "git",
-      ["apply", "--cached", "--reverse", "--check", "--unidiff-zero", "-"],
-      {
-        cwd: workspaceRoot,
-        env: gitEnv,
-        stdio: "pipe",
-        encoding: "utf-8",
-        input: args.diffPatch,
-      },
-    );
-    if (reverseApplyResult.status === 0) {
-      return true;
-    }
-    if (reverseApplyResult.status === 1) {
-      return false;
-    }
-    return undefined;
-  } finally {
-    rmSync(tempDir, { recursive: true, force: true });
-  }
+  throw new Error(
+    "Synchronous committed-diff checks are unsupported; use baseRefContainsCommittedDiffAsync",
+  );
 }
 
 async function baseRefContainsCommittedDiffAsync(args: {
@@ -1013,102 +966,10 @@ function deletedStatus(workspaceRoot: string): EnvironmentWorkStatus {
 }
 
 export function getGitWorkspaceStatus(
-  environment: IEnvironment,
-  args?: EnvironmentWorkspaceStatusOptions,
+  _environment: IEnvironment,
+  _args?: EnvironmentWorkspaceStatusOptions,
 ): EnvironmentWorkStatus {
-  const workspaceRoot = environment.getWorkspaceRootUnsafe();
-  const workspaceExists = environment.exists();
-  if (!workspaceExists) {
-    return deletedStatus(workspaceRoot);
-  }
-
-  const isGitRepo = runGit(environment, ["rev-parse", "--is-inside-work-tree"]);
-  if (!isGitRepo.ok || isGitRepo.stdout !== "true") {
-    return untrackedStatus(workspaceRoot);
-  }
-
-  const requestedMergeBaseBranch = args?.mergeBaseBranch?.trim() || undefined;
-  const defaultBranch = args?.defaultBranch ?? resolveDefaultBranch(environment);
-
-  const workspaceFiles = resolveWorkspaceStatusLines(environment).slice(0, 60);
-  const statusLines = workspaceFiles.map((item) =>
-    item.status === "A?" ? `?? ${item.path}` : `${item.status.padEnd(2, " ")} ${item.path}`
-  );
-  const workspaceChangedFiles = workspaceFiles.length;
-
-  const unstagedStat = parseShortstat(runGit(environment, ["diff", "--shortstat"]).stdout);
-  const stagedStat = parseShortstat(runGit(environment, ["diff", "--cached", "--shortstat"]).stdout);
-  const workspaceInsertions = unstagedStat.insertions + stagedStat.insertions;
-  const workspaceDeletions = unstagedStat.deletions + stagedStat.deletions;
-
-  const currentBranch = runGit(environment, ["symbolic-ref", "--short", "HEAD"]);
-  const mergeBaseBranches = listMergeBaseBranches(environment, defaultBranch);
-  const mergeBaseSelection = resolveMergeBaseSelection({
-    environment,
-    defaultBranch,
-    requestedMergeBaseBranch,
-  });
-  const mergeBaseBranch = mergeBaseSelection.mergeBaseBranch;
-  const baseRef = mergeBaseSelection.baseRef;
-  const mergeBaseDiffRef = resolveMergeBaseDiffRef(environment, baseRef);
-  const mergeBaseBranchOptions =
-    mergeBaseBranch && !mergeBaseBranches.includes(mergeBaseBranch)
-      ? [mergeBaseBranch, ...mergeBaseBranches]
-      : mergeBaseBranches;
-  const mergeBaseDiff = resolveMergeBaseDiffCounts({
-    environment,
-    mergeBaseDiffRef,
-    statusLines,
-    fallback: {
-      changedFiles: workspaceChangedFiles,
-      insertions: workspaceInsertions,
-      deletions: workspaceDeletions,
-    },
-  });
-  const files = resolveMergeBaseFileChanges({
-    environment,
-    mergeBaseDiffRef,
-    workspaceFiles,
-  });
-
-  let aheadCount = 0;
-  let behindCount = 0;
-  if (baseRef) {
-    const aheadBehind = runGit(environment, ["rev-list", "--left-right", "--count", `${baseRef}...HEAD`]);
-    if (aheadBehind.ok) {
-      const parsed = parseAheadBehind(aheadBehind.stdout);
-      aheadCount = countUnmergedAheadCommits(environment, baseRef, parsed.ahead);
-      behindCount = parsed.behind;
-    }
-  }
-
-  const hasUncommittedChanges = workspaceChangedFiles > 0;
-  const hasCommittedUnmergedChanges = resolveCommittedUnmergedChanges({
-    environment,
-    baseRef,
-    mergeBaseDiffRef,
-    aheadCount,
-  });
-
-  return normalizeResolvedCleanStatus({
-    state: toState({ hasUncommittedChanges, hasCommittedUnmergedChanges }),
-    changedFiles: mergeBaseDiff.changedFiles,
-    insertions: mergeBaseDiff.insertions,
-    deletions: mergeBaseDiff.deletions,
-    workspaceChangedFiles,
-    workspaceInsertions,
-    workspaceDeletions,
-    hasUncommittedChanges,
-    hasCommittedUnmergedChanges,
-    aheadCount,
-    behindCount,
-    ...(currentBranch.ok && currentBranch.stdout ? { currentBranch: currentBranch.stdout } : {}),
-    ...(defaultBranch ? { defaultBranch } : {}),
-    ...(mergeBaseBranch ? { mergeBaseBranch } : {}),
-    ...(mergeBaseBranchOptions.length > 0 ? { mergeBaseBranches: mergeBaseBranchOptions } : {}),
-    ...(baseRef ? { baseRef } : {}),
-    files,
-  });
+  throw new Error("Synchronous workspace status is unsupported; use getGitWorkspaceStatusAsync");
 }
 
 export async function getGitWorkspaceStatusAsync(
@@ -1229,11 +1090,31 @@ export function watchGitWorkspaceStatus(
 
   const workspaceRoot = environment.getWorkspaceRootUnsafe();
   const watchTargets = Array.from(new Set(resolveGitMetadataPaths(workspaceRoot)));
-  let lastFingerprint = createEnvironmentWorkStatusFingerprint(
-    getGitWorkspaceStatus(environment),
-  );
+  let lastFingerprint: string | null = null;
   let pendingCheckTimer: ReturnType<typeof setTimeout> | null = null;
+  let pendingCheckPromise: Promise<void> | null = null;
   let disposed = false;
+
+  const recomputeFingerprint = async () => {
+    const nextFingerprint = createEnvironmentWorkStatusFingerprint(
+      await getGitWorkspaceStatusAsync(environment),
+    );
+    if (disposed) {
+      return;
+    }
+    if (lastFingerprint === null) {
+      lastFingerprint = nextFingerprint;
+      return;
+    }
+    if (nextFingerprint === lastFingerprint) {
+      return;
+    }
+    lastFingerprint = nextFingerprint;
+    onChange();
+  };
+
+  void recomputeFingerprint();
+
   const scheduleStatusCheck = () => {
     if (disposed) {
       return;
@@ -1241,18 +1122,18 @@ export function watchGitWorkspaceStatus(
     if (pendingCheckTimer !== null) {
       clearTimeout(pendingCheckTimer);
     }
-    // `git status` can rewrite metadata like `.git/index` during reads. Only
-    // notify callers when the computed work status actually changed.
     pendingCheckTimer = setTimeout(() => {
       pendingCheckTimer = null;
-      const nextFingerprint = createEnvironmentWorkStatusFingerprint(
-        getGitWorkspaceStatus(environment),
-      );
-      if (nextFingerprint === lastFingerprint) {
+      if (pendingCheckPromise) {
         return;
       }
-      lastFingerprint = nextFingerprint;
-      onChange();
+      pendingCheckPromise = recomputeFingerprint()
+        .catch(() => {
+          // Ignore transient git status failures while watching.
+        })
+        .finally(() => {
+          pendingCheckPromise = null;
+        });
     }, WORKSPACE_STATUS_WATCH_DEBOUNCE_MS);
   };
   const watchers = watchTargets.flatMap((target) => {
@@ -1287,22 +1168,12 @@ export function watchGitWorkspaceStatus(
 }
 
 export function listGitWorkspaceCommitsSinceRef(
-  environment: IEnvironment,
-  args: EnvironmentWorkspaceCommitsOptions,
+  _environment: IEnvironment,
+  _args: EnvironmentWorkspaceCommitsOptions,
 ): EnvironmentCommitSummary[] {
-  const baseRef = args.baseRef?.trim();
-  if (!baseRef) return [];
-  const logResult = runGit(environment, [
-    "log",
-    "--reverse",
-    "--max-count=120",
-    `--format=%H${COMMIT_SUMMARY_FIELD_SEPARATOR}%h${COMMIT_SUMMARY_FIELD_SEPARATOR}%ct${COMMIT_SUMMARY_FIELD_SEPARATOR}%an${COMMIT_SUMMARY_FIELD_SEPARATOR}%s`,
-    `${baseRef}..HEAD`,
-  ]);
-  if (!logResult.ok || !logResult.stdout) {
-    return [];
-  }
-  return parseCommitSummaries(logResult.stdout);
+  throw new Error(
+    "Synchronous workspace commit listing is unsupported; use listGitWorkspaceCommitsSinceRefAsync",
+  );
 }
 
 export async function listGitWorkspaceCommitsSinceRefAsync(
@@ -1407,61 +1278,10 @@ export function commitGitWorkspace(
 }
 
 export function getGitWorkspaceDiff(
-  environment: IEnvironment,
-  args: EnvironmentWorkspaceDiffOptions,
+  _environment: IEnvironment,
+  _args: EnvironmentWorkspaceDiffOptions,
 ): EnvironmentWorkspaceDiffResult {
-  switch (args.type) {
-    case "working_tree": {
-      const diffResult = runGit(environment, ["diff", "--binary", "HEAD"], { rawOutput: true });
-      if (diffResult.ok) {
-        return trimDiffForResponse(diffResult.stdout);
-      }
-      const fallbackDiffResult = runGit(environment, ["diff", "--binary"], { rawOutput: true });
-      if (!fallbackDiffResult.ok) {
-        throw new Error(
-          fallbackDiffResult.stderr || diffResult.stderr || "Failed to compute working tree diff",
-        );
-      }
-      return trimDiffForResponse(fallbackDiffResult.stdout);
-    }
-    case "combined": {
-      const baseRef = args.baseRef?.trim();
-      if (!baseRef) {
-        return { diff: "", truncated: false };
-      }
-      const mergeBaseDiffRef = resolveMergeBaseDiffRef(environment, baseRef);
-      if (!mergeBaseDiffRef) {
-        return { diff: "", truncated: false };
-      }
-      const diffResult = runGit(environment, ["diff", "--binary", mergeBaseDiffRef], {
-        rawOutput: true,
-      });
-      if (!diffResult.ok) {
-        throw new Error(diffResult.stderr || "Failed to compute worktree commit diff");
-      }
-      return trimDiffForResponse(diffResult.stdout);
-    }
-    case "commit": {
-      const commitSha = args.commitSha.trim();
-      if (commitSha.length === 0) {
-        throw new Error("Commit SHA is required");
-      }
-      const showResult = runGit(environment, [
-        "show",
-        "--binary",
-        "--format=",
-        commitSha,
-      ], { rawOutput: true });
-      if (!showResult.ok) {
-        throw new Error(showResult.stderr || "Failed to compute commit diff");
-      }
-      return trimDiffForResponse(showResult.stdout);
-    }
-    default: {
-      const _exhaustive: never = args;
-      return _exhaustive;
-    }
-  }
+  throw new Error("Synchronous workspace diff is unsupported; use getGitWorkspaceDiffAsync");
 }
 
 export async function getGitWorkspaceDiffAsync(

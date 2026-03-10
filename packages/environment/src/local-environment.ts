@@ -5,9 +5,11 @@ import type {
   DemoteEnvironmentOptions,
   DemoteEnvironmentResult,
   EnvironmentCommandOptions,
+  EnvironmentCommandResult,
   EnvironmentSpawnOptions,
   EnvironmentDefinition,
   EnvironmentCheckoutSnapshot,
+  EnvironmentCommitSummary,
   EnvironmentInfo,
   EnvironmentWorkspaceCommitOptions,
   EnvironmentWorkspaceCommitResult,
@@ -15,6 +17,7 @@ import type {
   EnvironmentWorkspaceDiffOptions,
   EnvironmentWorkspaceDiffResult,
   EnvironmentWorkspaceStatusOptions,
+  EnvironmentWorkStatus,
   EnvironmentSquashMergeOptions,
   EnvironmentSquashMergeResult,
   IEnvironment,
@@ -23,11 +26,8 @@ import type {
 } from "./contracts.js";
 import {
   commitGitWorkspace,
-  getGitWorkspaceDiff,
   getGitWorkspaceDiffAsync,
-  getGitWorkspaceStatus,
   getGitWorkspaceStatusAsync,
-  listGitWorkspaceCommitsSinceRef,
   listGitWorkspaceCommitsSinceRefAsync,
   watchGitWorkspaceStatus,
 } from "./git-workspace.js";
@@ -39,7 +39,7 @@ import {
   ensureManagedHostEnvironmentAgent,
   resolveManagedHostEnvironmentAgentTarget,
 } from "./host-environment-agent.js";
-import { runCommand, runCommandAsync, spawnCommand } from "./process.js";
+import { runCommandAsync, spawnCommand } from "./process.js";
 
 interface LocalEnvironmentState {}
 
@@ -133,12 +133,16 @@ class LocalEnvironment implements IEnvironment {
   }
 
   getCheckoutSnapshot(): EnvironmentCheckoutSnapshot {
-    const headResult = this.run("git", ["rev-parse", "HEAD"]);
+    throw new Error("Synchronous checkout snapshot is unsupported; use getCheckoutSnapshotAsync");
+  }
+
+  async getCheckoutSnapshotAsync(): Promise<EnvironmentCheckoutSnapshot> {
+    const headResult = await this.runAsync("git", ["rev-parse", "HEAD"]);
     if (headResult.exitCode !== 0 || !headResult.stdout) {
       throw new Error("Failed to resolve HEAD");
     }
 
-    const branchResult = this.run("git", ["symbolic-ref", "--quiet", "--short", "HEAD"]);
+    const branchResult = await this.runAsync("git", ["symbolic-ref", "--quiet", "--short", "HEAD"]);
     if (branchResult.exitCode === 0 && branchResult.stdout) {
       return {
         branch: branchResult.stdout,
@@ -161,8 +165,8 @@ class LocalEnvironment implements IEnvironment {
     return undefined;
   }
 
-  getWorkspaceStatus(args?: EnvironmentWorkspaceStatusOptions) {
-    return getGitWorkspaceStatus(this, args);
+  getWorkspaceStatus(_args?: EnvironmentWorkspaceStatusOptions): EnvironmentWorkStatus {
+    throw new Error("Synchronous workspace status is unsupported; use getWorkspaceStatusAsync");
   }
 
   getWorkspaceStatusAsync(args?: EnvironmentWorkspaceStatusOptions) {
@@ -181,16 +185,18 @@ class LocalEnvironment implements IEnvironment {
     );
   }
 
-  listWorkspaceCommitsSinceRef(args: EnvironmentWorkspaceCommitsOptions) {
-    return listGitWorkspaceCommitsSinceRef(this, args);
+  listWorkspaceCommitsSinceRef(_args: EnvironmentWorkspaceCommitsOptions): EnvironmentCommitSummary[] {
+    throw new Error(
+      "Synchronous workspace commit listing is unsupported; use listWorkspaceCommitsSinceRefAsync",
+    );
   }
 
   listWorkspaceCommitsSinceRefAsync(args: EnvironmentWorkspaceCommitsOptions) {
     return listGitWorkspaceCommitsSinceRefAsync(this, args);
   }
 
-  getWorkspaceDiff(args: EnvironmentWorkspaceDiffOptions): EnvironmentWorkspaceDiffResult {
-    return getGitWorkspaceDiff(this, args);
+  getWorkspaceDiff(_args: EnvironmentWorkspaceDiffOptions): EnvironmentWorkspaceDiffResult {
+    throw new Error("Synchronous workspace diff is unsupported; use getWorkspaceDiffAsync");
   }
 
   getWorkspaceDiffAsync(args: EnvironmentWorkspaceDiffOptions) {
@@ -251,20 +257,11 @@ class LocalEnvironment implements IEnvironment {
   }
 
   run(
-    command: string,
-    args: string[],
-    options?: EnvironmentCommandOptions,
-  ) {
-    const executionContext = this._executionContext();
-    return runCommand(command, args, {
-      cwd: options?.cwd ?? executionContext.cwd,
-      env: {
-        ...executionContext.env,
-        ...(options?.env ?? {}),
-      },
-      ...(options?.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),
-      ...(options?.rawOutput ? { rawOutput: true } : {}),
-    });
+    _command: string,
+    _args: string[],
+    _options?: EnvironmentCommandOptions,
+  ): EnvironmentCommandResult {
+    throw new Error("Synchronous process execution is unsupported; use runAsync");
   }
 
   runAsync(

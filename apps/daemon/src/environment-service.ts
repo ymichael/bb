@@ -19,8 +19,8 @@ import type {
 } from "@beanbag/environment-agent";
 import type { ProjectRepository, ThreadRepository } from "@beanbag/db";
 import {
-  resolveProjectCheckoutSnapshot,
-  resolveProjectDefaultBranchCheckout,
+  resolveProjectCheckoutSnapshotAsync,
+  resolveProjectDefaultBranchCheckoutAsync,
 } from "./git-project.js";
 
 export interface ActiveEnvironmentRuntime {
@@ -93,6 +93,7 @@ export class EnvironmentService {
   readonly primaryPromotionByProjectId = new Map<string, PrimaryPromotionState>();
   readonly primaryPromotionValidatedAtByProjectId = new Map<string, number>();
   readonly primaryPromotionWatchersByProjectId = new Map<string, () => void>();
+  readonly primaryPromotionRefreshByProjectId = new Map<string, Promise<void>>();
   readonly workspaceCleanupInFlightThreadIds = new Set<string>();
   readonly restoreFailuresByThreadId = new Map<string, string>();
 
@@ -152,12 +153,18 @@ export class EnvironmentService {
   }
 
   getProjectWorkspaceStatus(projectId: string, rootPath: string): ThreadWorkStatus {
+    throw new Error("Synchronous project workspace status is unsupported; use getProjectWorkspaceStatusAsync");
+  }
+
+  async getProjectWorkspaceStatusAsync(projectId: string, rootPath: string): Promise<ThreadWorkStatus> {
     const environment = this.environmentRegistry.create(
       "local",
       this.callbacks.createContext(`project-status:${projectId}`, rootPath),
     );
     try {
-      return environment.getWorkspaceStatus();
+      return environment.getWorkspaceStatusAsync
+        ? await environment.getWorkspaceStatusAsync()
+        : environment.getWorkspaceStatus();
     } finally {
       void environment.destroy();
     }
@@ -368,15 +375,21 @@ export class EnvironmentService {
   }
 
   rebuildPrimaryPromotionStateFromGit(): void {
+    void this.rebuildPrimaryPromotionStateFromGitAsync();
+  }
+
+  async rebuildPrimaryPromotionStateFromGitAsync(): Promise<void> {
     this.stopAllPrimaryPromotionWatches();
     this.primaryPromotionByProjectId.clear();
     this.primaryPromotionValidatedAtByProjectId.clear();
     const projects = this.projectRepo.list();
     if (!Array.isArray(projects) || projects.length === 0) return;
 
-    for (const project of projects) {
-      this.reconstructPrimaryPromotionStateForProject(project.id, { force: true });
-    }
+    await Promise.all(
+      projects.map((project) =>
+        this.reconstructPrimaryPromotionStateForProject(project.id, { force: true })
+      ),
+    );
   }
 
   setPrimaryPromotionState(projectId: string, state: PrimaryPromotionState): void {
@@ -412,6 +425,30 @@ export class EnvironmentService {
     projectId: string,
     opts?: { force?: boolean; ttlMs?: number },
   ): void {
+    void this.ensurePrimaryPromotionStateIsCurrentAsync(projectId, opts);
+  }
+
+  async ensurePrimaryPromotionStateIsCurrentAsync(
+    projectId: string,
+    opts?: { force?: boolean; ttlMs?: number },
+  ): Promise<void> {
+    const existingRefresh = this.primaryPromotionRefreshByProjectId.get(projectId);
+    if (existingRefresh) {
+      await existingRefresh;
+      return;
+    }
+    const refresh = this._ensurePrimaryPromotionStateIsCurrentAsync(projectId, opts)
+      .finally(() => {
+        this.primaryPromotionRefreshByProjectId.delete(projectId);
+      });
+    this.primaryPromotionRefreshByProjectId.set(projectId, refresh);
+    await refresh;
+  }
+
+  private async _ensurePrimaryPromotionStateIsCurrentAsync(
+    projectId: string,
+    opts?: { force?: boolean; ttlMs?: number },
+  ): Promise<void> {
     const now = Date.now();
     const ttlMs = opts?.ttlMs ?? 2_000;
     const active = this.primaryPromotionByProjectId.get(projectId);
@@ -420,7 +457,7 @@ export class EnvironmentService {
       return;
     }
     if (!active) {
-      this.reconstructPrimaryPromotionStateForProject(projectId, {
+      await this.reconstructPrimaryPromotionStateForProject(projectId, {
         force: opts?.force,
         ttlMs,
       });
@@ -434,7 +471,7 @@ export class EnvironmentService {
     }
     let currentCheckout: EnvironmentCheckoutSnapshot;
     try {
-      currentCheckout = resolveProjectCheckoutSnapshot(project.rootPath);
+      currentCheckout = await resolveProjectCheckoutSnapshotAsync(project.rootPath);
     } catch {
       return;
     }
@@ -449,10 +486,10 @@ export class EnvironmentService {
     });
   }
 
-  private reconstructPrimaryPromotionStateForProject(
+  private async reconstructPrimaryPromotionStateForProject(
     projectId: string,
     opts?: { force?: boolean; ttlMs?: number },
-  ): void {
+  ): Promise<void> {
     const now = Date.now();
     const ttlMs = opts?.ttlMs ?? 2_000;
     const lastValidatedAt = this.primaryPromotionValidatedAtByProjectId.get(projectId) ?? 0;
@@ -468,7 +505,7 @@ export class EnvironmentService {
 
     let projectCheckout: EnvironmentCheckoutSnapshot;
     try {
-      projectCheckout = resolveProjectCheckoutSnapshot(project.rootPath);
+      projectCheckout = await resolveProjectCheckoutSnapshotAsync(project.rootPath);
     } catch {
       this.primaryPromotionValidatedAtByProjectId.set(projectId, now);
       return;
@@ -496,7 +533,9 @@ export class EnvironmentService {
     }
     let workspaceCheckout: EnvironmentCheckoutSnapshot;
     try {
-      workspaceCheckout = environment.getCheckoutSnapshot();
+      workspaceCheckout = environment.getCheckoutSnapshotAsync
+        ? await environment.getCheckoutSnapshotAsync()
+        : environment.getCheckoutSnapshot();
     } catch {
       this.clearPrimaryPromotionState(projectId);
       this.primaryPromotionValidatedAtByProjectId.set(projectId, now);
@@ -546,7 +585,10 @@ export class EnvironmentService {
     if (!project) {
       throw new Error(`Project not found: ${args.thread.projectId}`);
     }
-    this.ensurePrimaryPromotionStateIsCurrent(project.id, { force: true, ttlMs: args.ttlMs });
+    await this.ensurePrimaryPromotionStateIsCurrentAsync(project.id, {
+      force: true,
+      ttlMs: args.ttlMs,
+    });
     const existing = this.primaryPromotionByProjectId.get(project.id);
     if (existing) {
       return {
@@ -566,9 +608,13 @@ export class EnvironmentService {
     if (!environment.isIsolatedWorkspace() || !environment.exists()) {
       throw new Error("Thread worktree is unavailable; reprovision the thread first");
     }
-    const promoted = environment.promoteToActiveWorkspace({
-      activeWorkspaceRoot: project.rootPath,
-    });
+    const promoted = environment.promoteToActiveWorkspaceAsync
+      ? await environment.promoteToActiveWorkspaceAsync({
+          activeWorkspaceRoot: project.rootPath,
+        })
+      : environment.promoteToActiveWorkspace({
+          activeWorkspaceRoot: project.rootPath,
+        });
     const state: PrimaryPromotionState = {
       projectId: project.id,
       threadId: args.thread.id,
@@ -598,7 +644,10 @@ export class EnvironmentService {
     if (!project) {
       throw new Error(`Project not found: ${args.thread.projectId}`);
     }
-    this.ensurePrimaryPromotionStateIsCurrent(project.id, { force: true, ttlMs: args.ttlMs });
+    await this.ensurePrimaryPromotionStateIsCurrentAsync(project.id, {
+      force: true,
+      ttlMs: args.ttlMs,
+    });
     const active = this.primaryPromotionByProjectId.get(project.id);
     if (!active) {
       return { demoted: false, status: this.getPrimaryCheckoutStatus(project.id) };
@@ -613,15 +662,24 @@ export class EnvironmentService {
     if (!environment || !environment.supportsDemoteFromActiveWorkspace()) {
       throw new Error("Demotion is not supported for this environment");
     }
-    const fallbackDefaultCheckout = resolveProjectDefaultBranchCheckout(project.rootPath);
+    const fallbackDefaultCheckout = await resolveProjectDefaultBranchCheckoutAsync(
+      project.rootPath,
+    );
     const snapshot = active.previousCheckout ?? fallbackDefaultCheckout;
     if (!snapshot) {
       throw new Error("Could not determine a branch/commit to restore. Checkout manually and retry.");
     }
-    environment.demoteFromActiveWorkspace({
-      activeWorkspaceRoot: project.rootPath,
-      snapshot,
-    });
+    if (environment.demoteFromActiveWorkspaceAsync) {
+      await environment.demoteFromActiveWorkspaceAsync({
+        activeWorkspaceRoot: project.rootPath,
+        snapshot,
+      });
+    } else {
+      environment.demoteFromActiveWorkspace({
+        activeWorkspaceRoot: project.rootPath,
+        snapshot,
+      });
+    }
     this.clearPrimaryPromotionState(project.id);
     return {
       demoted: true,

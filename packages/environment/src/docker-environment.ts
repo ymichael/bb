@@ -1,7 +1,6 @@
-import { spawnSync } from "node:child_process";
 import type { ChildProcess } from "node:child_process";
 import { createServer } from "node:net";
-import { existsSync, readFileSync } from "node:fs";
+import { access, readFile } from "node:fs/promises";
 import path from "node:path";
 import type { EnvironmentAgentConnectionTarget } from "@beanbag/environment-agent";
 import type {
@@ -9,6 +8,7 @@ import type {
   DemoteEnvironmentOptions,
   DemoteEnvironmentResult,
   EnvironmentCommandOptions,
+  EnvironmentCommandResult,
   EnvironmentDefinition,
   EnvironmentCheckoutSnapshot,
   EnvironmentCommitSummary,
@@ -22,6 +22,7 @@ import type {
   EnvironmentWorkspaceDiffOptions,
   EnvironmentWorkspaceDiffResult,
   EnvironmentWorkspaceStatusOptions,
+  EnvironmentWorkStatus,
   IEnvironment,
   PromoteEnvironmentOptions,
   PromoteEnvironmentResult,
@@ -34,7 +35,7 @@ import {
   resolveDockerEnvironmentImage,
   resolveManagedDockerEnvironmentAgentTarget,
 } from "./docker-environment-agent.js";
-import { runCommand, runCommandAsync, spawnCommand } from "./process.js";
+import { runCommandAsync, spawnCommand } from "./process.js";
 import {
   resolveEnvironmentAgentConnectionTarget,
 } from "./environment-agent-target.js";
@@ -178,7 +179,7 @@ class DockerEnvironment implements IEnvironment {
 
   async prepare(): Promise<void> {
     await this.inner.prepare?.();
-    ensureDockerEnvironmentImageAvailable({
+    await ensureDockerEnvironmentImageAvailable({
       dockerBin: this.dockerBin,
       image: this.state.image,
       runtimeEnv: this.runtimeEnv,
@@ -191,17 +192,17 @@ class DockerEnvironment implements IEnvironment {
       this.state.agentContainerPort = DEFAULT_DOCKER_ENVIRONMENT_AGENT_CONTAINER_PORT;
     }
 
-    if (this.containerExists()) {
-      if (!this.containerHasExpectedPortMapping()) {
-        this.removeContainer();
-        this.createContainer();
+    if (await this.containerExistsAsync()) {
+      if (!await this.containerHasExpectedPortMappingAsync()) {
+        await this.removeContainerAsync();
+        await this.createContainerAsync();
       } else {
-        this.ensureContainerRunning();
+        await this.ensureContainerRunningAsync();
       }
     } else {
-      this.createContainer();
+      await this.createContainerAsync();
     }
-    this.verifyGitRepositoryAccessibleInContainer();
+    await this.verifyGitRepositoryAccessibleInContainerAsync();
 
     await ensureManagedDockerEnvironmentAgent({
       workspaceRootPath: this.getWorkspaceRootUnsafe(),
@@ -217,7 +218,7 @@ class DockerEnvironment implements IEnvironment {
   }
 
   async suspend(): Promise<void> {
-    disposeManagedDockerEnvironmentAgent({
+    await disposeManagedDockerEnvironmentAgent({
       projectId: this.projectId,
       threadId: this.threadId,
       environmentId: this.kind,
@@ -231,12 +232,12 @@ class DockerEnvironment implements IEnvironment {
 
   async destroy(): Promise<void> {
     await this.suspend();
-    this.removeContainer();
+    await this.removeContainerAsync();
     await Promise.resolve(this.inner.destroy());
   }
 
   exists(): boolean {
-    return this.inner.exists() && this.containerExists();
+    return this.inner.exists();
   }
 
   supportsHostFilesystemAccess(): boolean {
@@ -268,7 +269,13 @@ class DockerEnvironment implements IEnvironment {
   }
 
   getCheckoutSnapshot(): EnvironmentCheckoutSnapshot {
-    return this.inner.getCheckoutSnapshot();
+    throw new Error("Synchronous checkout snapshot is unsupported; use getCheckoutSnapshotAsync");
+  }
+
+  getCheckoutSnapshotAsync(): Promise<EnvironmentCheckoutSnapshot> {
+    return this.inner.getCheckoutSnapshotAsync
+      ? this.inner.getCheckoutSnapshotAsync()
+      : Promise.resolve(this.inner.getCheckoutSnapshot());
   }
 
   getWorkspaceRootUnsafe(): string {
@@ -282,8 +289,8 @@ class DockerEnvironment implements IEnvironment {
     return base ? `${base}\n${dockerNote}` : dockerNote;
   }
 
-  getWorkspaceStatus(args?: EnvironmentWorkspaceStatusOptions) {
-    return this.inner.getWorkspaceStatus(args);
+  getWorkspaceStatus(_args?: EnvironmentWorkspaceStatusOptions): EnvironmentWorkStatus {
+    throw new Error("Synchronous workspace status is unsupported; use getWorkspaceStatusAsync");
   }
 
   getWorkspaceStatusAsync(args?: EnvironmentWorkspaceStatusOptions) {
@@ -303,9 +310,11 @@ class DockerEnvironment implements IEnvironment {
   }
 
   listWorkspaceCommitsSinceRef(
-    args: EnvironmentWorkspaceCommitsOptions,
+    _args: EnvironmentWorkspaceCommitsOptions,
   ): EnvironmentCommitSummary[] {
-    return this.inner.listWorkspaceCommitsSinceRef(args);
+    throw new Error(
+      "Synchronous workspace commit listing is unsupported; use listWorkspaceCommitsSinceRefAsync",
+    );
   }
 
   listWorkspaceCommitsSinceRefAsync(
@@ -317,9 +326,9 @@ class DockerEnvironment implements IEnvironment {
   }
 
   getWorkspaceDiff(
-    args: EnvironmentWorkspaceDiffOptions,
+    _args: EnvironmentWorkspaceDiffOptions,
   ): EnvironmentWorkspaceDiffResult {
-    return this.inner.getWorkspaceDiff(args);
+    throw new Error("Synchronous workspace diff is unsupported; use getWorkspaceDiffAsync");
   }
 
   getWorkspaceDiffAsync(
@@ -370,12 +379,28 @@ class DockerEnvironment implements IEnvironment {
     return this.inner.supportsSquashMergeIntoDefaultBranch();
   }
 
-  promoteToActiveWorkspace(args: PromoteEnvironmentOptions): PromoteEnvironmentResult {
-    return this.inner.promoteToActiveWorkspace(args);
+  promoteToActiveWorkspace(_args: PromoteEnvironmentOptions): PromoteEnvironmentResult {
+    throw new Error("Synchronous promotion is unsupported; use promoteToActiveWorkspaceAsync");
   }
 
-  demoteFromActiveWorkspace(args: DemoteEnvironmentOptions): DemoteEnvironmentResult {
-    return this.inner.demoteFromActiveWorkspace(args);
+  promoteToActiveWorkspaceAsync(
+    args: PromoteEnvironmentOptions,
+  ): Promise<PromoteEnvironmentResult> {
+    return this.inner.promoteToActiveWorkspaceAsync
+      ? this.inner.promoteToActiveWorkspaceAsync(args)
+      : Promise.resolve(this.inner.promoteToActiveWorkspace(args));
+  }
+
+  demoteFromActiveWorkspace(_args: DemoteEnvironmentOptions): DemoteEnvironmentResult {
+    throw new Error("Synchronous demotion is unsupported; use demoteFromActiveWorkspaceAsync");
+  }
+
+  demoteFromActiveWorkspaceAsync(
+    args: DemoteEnvironmentOptions,
+  ): Promise<DemoteEnvironmentResult> {
+    return this.inner.demoteFromActiveWorkspaceAsync
+      ? this.inner.demoteFromActiveWorkspaceAsync(args)
+      : Promise.resolve(this.inner.demoteFromActiveWorkspace(args));
   }
 
   squashMergeIntoDefaultBranch(
@@ -385,28 +410,11 @@ class DockerEnvironment implements IEnvironment {
   }
 
   run(
-    command: string,
-    args: string[],
-    options?: EnvironmentCommandOptions,
-  ) {
-    return runCommand(
-      this.dockerBin,
-      toDockerExecArgs({
-        mountPath: this.state.mountPath,
-        workspaceRoot: this.getWorkspaceRootUnsafe(),
-        containerName: this.state.containerName,
-        command,
-        commandArgs: args,
-        cwd: options?.cwd,
-        env: options?.env,
-      }),
-      {
-        cwd: this.getWorkspaceRootUnsafe(),
-        env: this.runtimeEnv,
-        ...(options?.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),
-        ...(options?.rawOutput ? { rawOutput: true } : {}),
-      },
-    );
+    _command: string,
+    _args: string[],
+    _options?: EnvironmentCommandOptions,
+  ): EnvironmentCommandResult {
+    throw new Error("Synchronous process execution is unsupported; use runAsync");
   }
 
   runAsync(
@@ -436,100 +444,84 @@ class DockerEnvironment implements IEnvironment {
     );
   }
 
-  private containerExists(): boolean {
-    const result = spawnSync(
-      this.dockerBin,
-      ["inspect", this.state.containerName],
-      { encoding: "utf-8", stdio: "pipe" },
-    );
-    return result.status === 0;
+  private async runDockerCommandAsync(args: string[]): Promise<{ exitCode: number | null; stdout: string; stderr: string }> {
+    return runCommandAsync(this.dockerBin, args, {
+      cwd: this.getWorkspaceRootUnsafe(),
+      env: this.runtimeEnv,
+      rawOutput: true,
+    });
   }
 
-  private ensureContainerRunning(): void {
-    const stateResult = spawnSync(
-      this.dockerBin,
-      ["inspect", "-f", "{{.State.Running}}", this.state.containerName],
-      { encoding: "utf-8", stdio: "pipe" },
-    );
-    if (stateResult.status === 0 && stateResult.stdout.trim() === "true") {
+  private async containerExistsAsync(): Promise<boolean> {
+    const result = await this.runDockerCommandAsync(["inspect", this.state.containerName]);
+    return result.exitCode === 0;
+  }
+
+  private async ensureContainerRunningAsync(): Promise<void> {
+    const stateResult = await this.runDockerCommandAsync([
+      "inspect",
+      "-f",
+      "{{.State.Running}}",
+      this.state.containerName,
+    ]);
+    if (stateResult.exitCode === 0 && stateResult.stdout.trim() === "true") {
       return;
     }
-    const startResult = spawnSync(
-      this.dockerBin,
-      ["start", this.state.containerName],
-      { encoding: "utf-8", stdio: "pipe" },
-    );
-    if (startResult.status !== 0) {
+    const startResult = await this.runDockerCommandAsync(["start", this.state.containerName]);
+    if (startResult.exitCode !== 0) {
       throw new Error(
         startResult.stderr || startResult.stdout || "Failed to start Docker container",
       );
     }
   }
 
-  private containerHasExpectedPortMapping(): boolean {
+  private async containerHasExpectedPortMappingAsync(): Promise<boolean> {
     const hostPort = this.state.agentHostPort;
     const containerPort = this.state.agentContainerPort;
     if (!hostPort || !containerPort) {
       return false;
     }
-    const inspectResult = spawnSync(
-      this.dockerBin,
-      [
-        "inspect",
-        "-f",
-        `{{with index .NetworkSettings.Ports "${containerPort}/tcp"}}{{(index . 0).HostPort}}{{end}}`,
-        this.state.containerName,
-      ],
-      { encoding: "utf-8", stdio: "pipe" },
-    );
-    return inspectResult.status === 0 && inspectResult.stdout.trim() === String(hostPort);
+    const inspectResult = await this.runDockerCommandAsync([
+      "inspect",
+      "-f",
+      `{{with index .NetworkSettings.Ports "${containerPort}/tcp"}}{{(index . 0).HostPort}}{{end}}`,
+      this.state.containerName,
+    ]);
+    return inspectResult.exitCode === 0 && inspectResult.stdout.trim() === String(hostPort);
   }
 
-  private createContainer(): void {
-    const gitMetadataMountArgs = this.resolveGitMetadataMountArgs();
-    const result = spawnSync(
-      this.dockerBin,
-      [
-        "run",
-        "-d",
-        "--name",
-        this.state.containerName,
-        "-p",
-        `${this.state.agentHostPort}:${this.state.agentContainerPort}`,
-        "-v",
-        `${this.getWorkspaceRootUnsafe()}:${this.state.mountPath}`,
-        ...gitMetadataMountArgs,
-        "-w",
-        this.state.mountPath,
-        this.state.image,
-        "sleep",
-        "infinity",
-      ],
-      {
-        encoding: "utf-8",
-        stdio: "pipe",
-      },
-    );
-    if (result.status !== 0) {
-      throw new Error(
-        result.stderr || result.stdout || "Failed to create Docker container",
-      );
+  private async createContainerAsync(): Promise<void> {
+    const gitMetadataMountArgs = await this.resolveGitMetadataMountArgsAsync();
+    const result = await this.runDockerCommandAsync([
+      "run",
+      "-d",
+      "--name",
+      this.state.containerName,
+      "-p",
+      `${this.state.agentHostPort}:${this.state.agentContainerPort}`,
+      "-v",
+      `${this.getWorkspaceRootUnsafe()}:${this.state.mountPath}`,
+      ...gitMetadataMountArgs,
+      "-w",
+      this.state.mountPath,
+      this.state.image,
+      "sleep",
+      "infinity",
+    ]);
+    if (result.exitCode !== 0) {
+      throw new Error(result.stderr || result.stdout || "Failed to create Docker container");
     }
   }
 
-  private removeContainer(): void {
-    spawnSync(
-      this.dockerBin,
-      ["rm", "-f", this.state.containerName],
-      { encoding: "utf-8", stdio: "pipe" },
-    );
+  private async removeContainerAsync(): Promise<void> {
+    await this.runDockerCommandAsync(["rm", "-f", this.state.containerName]);
   }
 
-  private resolveGitMetadataMountArgs(): string[] {
+  private async resolveGitMetadataMountArgsAsync(): Promise<string[]> {
     const mountRoots = new Set<string>();
     const workspaceGitFile = path.join(this.getWorkspaceRootUnsafe(), ".git");
-    if (existsSync(workspaceGitFile)) {
-      const rawGitFile = readFileSync(workspaceGitFile, "utf-8").trim();
+    try {
+      const rawGitFile = (await readFile(workspaceGitFile, "utf-8")).trim();
       const prefix = "gitdir:";
       if (rawGitFile.startsWith(prefix)) {
         const rawGitDir = rawGitFile.slice(prefix.length).trim();
@@ -541,11 +533,16 @@ class DockerEnvironment implements IEnvironment {
           mountRoots.add(path.dirname(worktreesRoot));
         }
       }
+    } catch {
+      // Ignore missing workspace git metadata mounts.
     }
 
     const projectGitRoot = path.join(this.projectRootPath, ".git");
-    if (existsSync(projectGitRoot)) {
+    try {
+      await access(projectGitRoot);
       mountRoots.add(projectGitRoot);
+    } catch {
+      // Ignore missing project git metadata mounts.
     }
 
     if (mountRoots.size === 0) {
@@ -558,29 +555,22 @@ class DockerEnvironment implements IEnvironment {
     ]);
   }
 
-  private verifyGitRepositoryAccessibleInContainer(): void {
+  private async verifyGitRepositoryAccessibleInContainerAsync(): Promise<void> {
     const commands: ReadonlyArray<readonly string[]> = [
       ["git", "rev-parse", "--show-toplevel"],
       ["git", "rev-parse", "--git-dir"],
     ];
 
     for (const commandArgs of commands) {
-      const result = spawnSync(
-        this.dockerBin,
-        [
-          "exec",
-          "-i",
-          "-w",
-          this.state.mountPath,
-          this.state.containerName,
-          ...commandArgs,
-        ],
-        {
-          encoding: "utf-8",
-          stdio: "pipe",
-        },
-      );
-      if (result.status === 0) {
+      const result = await this.runDockerCommandAsync([
+        "exec",
+        "-i",
+        "-w",
+        this.state.mountPath,
+        this.state.containerName,
+        ...commandArgs,
+      ]);
+      if (result.exitCode === 0) {
         continue;
       }
       const renderedCommand = commandArgs.join(" ");

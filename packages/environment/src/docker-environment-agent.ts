@@ -5,7 +5,7 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { EnvironmentAgentConnectionTarget } from "@beanbag/environment-agent";
-import { runCommand } from "./process.js";
+import { runCommandAsync } from "./process.js";
 
 const HOST = "127.0.0.1";
 const START_TIMEOUT_MS = 5_000;
@@ -45,7 +45,11 @@ interface CommandExecutor {
     exitCode: number | null;
     stdout: string;
     stderr: string;
-  };
+  } | Promise<{
+    exitCode: number | null;
+    stdout: string;
+    stderr: string;
+  }>;
 }
 
 function sanitizeSegment(value: string): string {
@@ -198,15 +202,15 @@ export function resolveDockerEnvironmentImage(args: {
   return DEFAULT_DOCKER_ENVIRONMENT_IMAGE;
 }
 
-function executeOrThrow(args: {
+async function executeOrThrow(args: {
   executor: CommandExecutor;
   command: string;
   commandArgs: string[];
   cwd: string;
   env: Record<string, string | undefined>;
   description: string;
-}): void {
-  const result = args.executor(args.command, args.commandArgs, {
+}): Promise<void> {
+  const result = await args.executor(args.command, args.commandArgs, {
     cwd: args.cwd,
     env: args.env,
     rawOutput: true,
@@ -243,7 +247,7 @@ function resolveDockerDaemonUrl(
   return parsed.toString().replace(/\/$/, "");
 }
 
-export function ensureDockerEnvironmentImageAvailable(
+export async function ensureDockerEnvironmentImageAvailable(
   args: {
     dockerBin: string;
     image: string;
@@ -254,9 +258,9 @@ export function ensureDockerEnvironmentImageAvailable(
     run?: CommandExecutor;
     resolveAssetsRoot?: () => string;
   },
-): void {
-  const executor = deps?.run ?? runCommand;
-  const inspectResult = executor(
+): Promise<void> {
+  const executor = deps?.run ?? runCommandAsync;
+  const inspectResult = await executor(
     args.dockerBin,
     ["image", "inspect", args.image],
     {
@@ -276,7 +280,7 @@ export function ensureDockerEnvironmentImageAvailable(
   }
 
   const assetsRoot = (deps?.resolveAssetsRoot ?? resolveDefaultDockerEnvironmentAssetsRoot)();
-  executeOrThrow({
+  await executeOrThrow({
     executor,
     command: args.dockerBin,
     commandArgs: [
@@ -333,7 +337,7 @@ export async function ensureManagedDockerEnvironmentAgent(
     removeRecord(stateIdentity);
   }
 
-  const executor = deps?.run ?? runCommand;
+  const executor = deps?.run ?? runCommandAsync;
   const waitForAgent = deps?.waitForAgent ?? waitForEnvironmentAgent;
   const artifactEntry = (deps?.resolveArtifactEntry ?? resolveDockerEnvironmentAgentArtifactEntry)();
   const authToken = (deps?.generateAuthToken ?? (() => randomBytes(24).toString("hex")))();
@@ -341,7 +345,7 @@ export async function ensureManagedDockerEnvironmentAgent(
   const installRoot = args.installRoot ?? DEFAULT_DOCKER_ENVIRONMENT_AGENT_INSTALL_ROOT;
   const dockerDaemonUrl = resolveDockerDaemonUrl(args.runtimeEnv);
 
-  executeOrThrow({
+  await executeOrThrow({
     executor,
     command: args.dockerBin,
     commandArgs: [
@@ -356,7 +360,7 @@ export async function ensureManagedDockerEnvironmentAgent(
     description: "create docker environment-agent install directory",
   });
 
-  executeOrThrow({
+  await executeOrThrow({
     executor,
     command: args.dockerBin,
     commandArgs: [
@@ -369,7 +373,7 @@ export async function ensureManagedDockerEnvironmentAgent(
     description: "copy environment-agent artifact into docker container",
   });
 
-  executeOrThrow({
+  await executeOrThrow({
     executor,
     command: args.dockerBin,
     commandArgs: [
@@ -448,7 +452,7 @@ export function __testOnly__resolveDockerDaemonUrl(
   return resolveDockerDaemonUrl(runtimeEnv);
 }
 
-export function disposeManagedDockerEnvironmentAgent(args: {
+export async function disposeManagedDockerEnvironmentAgent(args: {
   projectId: string;
   threadId: string;
   environmentId: string;
@@ -456,9 +460,9 @@ export function disposeManagedDockerEnvironmentAgent(args: {
   containerName: string;
   workspaceRootPath: string;
   runtimeEnv: Record<string, string | undefined>;
-}): void {
+}): Promise<void> {
   if (!args.runtimeEnv.BEANBAG_ENVIRONMENT_AGENT_BASE_URL?.trim()) {
-    runCommand(
+    await runCommandAsync(
       args.dockerBin,
       [
         "exec",

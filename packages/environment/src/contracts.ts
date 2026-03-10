@@ -69,6 +69,7 @@ export interface IEnvironment {
   isIsolatedWorkspace(): boolean;
   getAgentConnectionTarget(): EnvironmentAgentConnectionTarget;
   getCheckoutSnapshot(): EnvironmentCheckoutSnapshot;
+  getCheckoutSnapshotAsync?(): Promise<EnvironmentCheckoutSnapshot>;
   getWorkspaceRootUnsafe(): string;
   buildAgentInstructions?(): string | undefined;
   getWorkspaceStatus(args?: EnvironmentWorkspaceStatusOptions): EnvironmentWorkStatus;
@@ -95,7 +96,13 @@ export interface IEnvironment {
   supportsDemoteFromActiveWorkspace(): boolean;
   supportsSquashMergeIntoDefaultBranch(): boolean;
   promoteToActiveWorkspace(args: PromoteEnvironmentOptions): PromoteEnvironmentResult;
+  promoteToActiveWorkspaceAsync?(
+    args: PromoteEnvironmentOptions,
+  ): Promise<PromoteEnvironmentResult>;
   demoteFromActiveWorkspace(args: DemoteEnvironmentOptions): DemoteEnvironmentResult;
+  demoteFromActiveWorkspaceAsync?(
+    args: DemoteEnvironmentOptions,
+  ): Promise<DemoteEnvironmentResult>;
   squashMergeIntoDefaultBranch(
     args: EnvironmentSquashMergeOptions,
   ): Promise<EnvironmentSquashMergeResult>;

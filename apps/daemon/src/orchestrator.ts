@@ -115,12 +115,8 @@ import {
 import { InMemorySchedulerService } from "./scheduler-service.js";
 import { canTransitionThreadStatus } from "./thread-status-machine.js";
 import {
-  checkoutProjectSnapshot,
   detectProjectDefaultBranch,
   detectProjectDefaultBranchAsync,
-  discardProjectLocalChanges,
-  resolveProjectCheckoutSnapshot,
-  resolveProjectDefaultBranchCheckout,
 } from "./git-project.js";
 import {
   EnvironmentService,
@@ -1118,7 +1114,9 @@ export class Orchestrator implements ThreadOrchestrator {
     if (!environment) {
       throw invalidRequestError(this._restoreEnvironmentUnavailableMessage(threadId));
     }
-    const defaultBranch = detectProjectDefaultBranch(project.rootPath);
+    const defaultBranch =
+      detectProjectDefaultBranch(project.rootPath) ??
+      await detectProjectDefaultBranchAsync(project.rootPath);
     const result = await environment.commitWorkspace({
       defaultBranch,
       message: request?.message?.trim(),
@@ -1135,7 +1133,7 @@ export class Orchestrator implements ThreadOrchestrator {
 
     if (
       result.commitCreated &&
-      this._shouldAutoArchiveThread({
+      await this._shouldAutoArchiveThreadAsync({
         thread,
         projectRootPath: project.rootPath,
         environment,
@@ -1218,7 +1216,7 @@ export class Orchestrator implements ThreadOrchestrator {
 
     if (
       mergeResult.merged &&
-      this._shouldAutoArchiveThread({
+      await this._shouldAutoArchiveThreadAsync({
         thread,
         projectRootPath: project.rootPath,
         environment,
@@ -1840,6 +1838,13 @@ export class Orchestrator implements ThreadOrchestrator {
 
   getProjectWorkspaceStatus(projectId: string, rootPath: string): ThreadWorkStatus {
     return this.environmentService.getProjectWorkspaceStatus(projectId, rootPath);
+  }
+
+  async getProjectWorkspaceStatusAsync(
+    projectId: string,
+    rootPath: string,
+  ): Promise<ThreadWorkStatus> {
+    return this.environmentService.getProjectWorkspaceStatusAsync(projectId, rootPath);
   }
 
   getPrimaryCheckoutStatus(projectId: string): PrimaryCheckoutStatus {
@@ -3175,10 +3180,10 @@ export class Orchestrator implements ThreadOrchestrator {
       reason,
     });
     let sawSetupOutput = false;
-    const runEnvironmentCommand =
-      typeof environment.runAsync === "function"
-        ? environment.runAsync.bind(environment)
-        : async (...args: Parameters<IEnvironment["run"]>) => environment.run(...args);
+    if (typeof environment.runAsync !== "function") {
+      throw new Error("Environment setup scripts require environment.runAsync");
+    }
+    const runEnvironmentCommand = environment.runAsync.bind(environment);
     const result = await runEnvironmentCommand(
       "bash",
       ["-x", `./${ENV_SETUP_SCRIPT_NAME}`],
@@ -3901,22 +3906,29 @@ export class Orchestrator implements ThreadOrchestrator {
     });
   }
 
-  private _shouldAutoArchiveThread(args: {
+  private async _shouldAutoArchiveThreadAsync(args: {
     thread: Thread;
     projectRootPath: string;
     environment: IEnvironment;
     mergeBaseBranch?: string;
     requested?: boolean;
-  }): boolean {
+  }): Promise<boolean> {
     if (args.requested !== true) {
       return false;
     }
 
-    const defaultBranch = detectProjectDefaultBranch(args.projectRootPath);
-    const status = args.environment.getWorkspaceStatus({
-      defaultBranch,
-      mergeBaseBranch: args.mergeBaseBranch,
-    });
+    const defaultBranch =
+      detectProjectDefaultBranch(args.projectRootPath) ??
+      await detectProjectDefaultBranchAsync(args.projectRootPath);
+    const status = args.environment.getWorkspaceStatusAsync
+      ? await args.environment.getWorkspaceStatusAsync({
+          defaultBranch,
+          mergeBaseBranch: args.mergeBaseBranch,
+        })
+      : args.environment.getWorkspaceStatus({
+          defaultBranch,
+          mergeBaseBranch: args.mergeBaseBranch,
+        });
     if (!status.currentBranch || !status.defaultBranch) {
       return false;
     }
