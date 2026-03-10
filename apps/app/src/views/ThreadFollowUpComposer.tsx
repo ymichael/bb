@@ -22,6 +22,7 @@ import {
   countQueuedMessageAttachments,
   formatQueuedFollowUpPreview,
 } from "./threadQueuedMessages";
+import { ConversationStatusIndicator } from "@/components/messages/ConversationStatusIndicator";
 
 function QueuedFollowUpList({
   queuedMessages,
@@ -248,7 +249,13 @@ export function ThreadFollowUpComposer({
 }) {
   return (
     <div ref={composerRef}>
-      <PromptComposerShell statusLabel={provisioningStatusLabel}>
+      <PromptComposerShell
+        statusLabel={
+          provisioningStatusLabel ? (
+            <ConversationStatusIndicator label={provisioningStatusLabel} />
+          ) : undefined
+        }
+      >
         <ScrollToBottomButton
           visible={showScrollToBottom}
           onClick={onScrollToBottom}

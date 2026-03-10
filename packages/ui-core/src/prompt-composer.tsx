@@ -3,7 +3,7 @@ import { cx } from "./utils.js";
 
 export interface PromptComposerShellProps {
   children: ReactNode;
-  statusLabel?: string;
+  statusLabel?: ReactNode;
   className?: string;
 }
 
@@ -15,7 +15,11 @@ export function PromptComposerShell({
   return (
     <div className={cx("space-y-2", className)}>
       {statusLabel ? (
-        <div className="text-xs text-muted-foreground">{statusLabel}</div>
+        typeof statusLabel === "string" ? (
+          <div className="text-xs text-muted-foreground">{statusLabel}</div>
+        ) : (
+          statusLabel
+        )
       ) : null}
       {children}
     </div>
