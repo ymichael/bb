@@ -562,6 +562,10 @@ describe("buildThreadDetailRows", () => {
         opType: "thread-operation-intent",
         title: "Squash merge requested",
         detail: "Squash-merge operation requested",
+        threadOperation: {
+          action: "squash_merge",
+          phase: "requested",
+        },
       },
       {
         ...baseMessage("squash-prompt-1", 2),
@@ -574,6 +578,10 @@ describe("buildThreadDetailRows", () => {
         opType: "thread-operation-intent",
         title: "Squash merge queued",
         detail: "Squash-merge operation queued for deterministic execution",
+        threadOperation: {
+          action: "squash_merge",
+          phase: "queued",
+        },
       },
     ];
 
@@ -598,6 +606,10 @@ describe("buildThreadDetailRows", () => {
         opType: "thread-operation-intent",
         title: "Squash merge requested",
         detail: "Squash-merge operation requested",
+        threadOperation: {
+          action: "squash_merge",
+          phase: "requested",
+        },
       },
       {
         ...baseMessage("squash-running-1", 2),
@@ -605,6 +617,10 @@ describe("buildThreadDetailRows", () => {
         opType: "thread-operation-intent",
         title: "Squash merging changes",
         detail: "Running squash-merge operation",
+        threadOperation: {
+          action: "squash_merge",
+          phase: "running",
+        },
       },
       {
         ...baseMessage("squash-worktree-1", 3),
@@ -619,6 +635,10 @@ describe("buildThreadDetailRows", () => {
         opType: "thread-operation-intent",
         title: "Squash merge completed",
         detail: "Squash merged into main",
+        threadOperation: {
+          action: "squash_merge",
+          phase: "completed",
+        },
       },
     ];
 
@@ -641,6 +661,10 @@ describe("buildThreadDetailRows", () => {
         opType: "thread-operation-intent",
         title: "Committing changes",
         detail: "Running commit operation",
+        threadOperation: {
+          action: "commit",
+          phase: "running",
+        },
       },
       {
         ...baseMessage("commit-worktree-1", 2),
@@ -655,6 +679,10 @@ describe("buildThreadDetailRows", () => {
         opType: "thread-operation-intent",
         title: "Commit completed",
         detail: "Committed changes",
+        threadOperation: {
+          action: "commit",
+          phase: "completed",
+        },
       },
     ];
 
@@ -677,6 +705,10 @@ describe("buildThreadDetailRows", () => {
         opType: "thread-operation-intent",
         title: "Committing changes",
         detail: "Running commit operation",
+        threadOperation: {
+          action: "commit",
+          phase: "running",
+        },
       },
       {
         ...baseMessage("commit-completed-1", 2),
@@ -684,6 +716,10 @@ describe("buildThreadDetailRows", () => {
         opType: "thread-operation-intent",
         title: "Commit completed",
         detail: "Committed changes",
+        threadOperation: {
+          action: "commit",
+          phase: "completed",
+        },
       },
     ];
 

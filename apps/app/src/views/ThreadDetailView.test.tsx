@@ -220,22 +220,6 @@ vi.mock("@/components/layout/PageShell", () => ({
   ),
 }));
 
-vi.mock("@/components/shared/DetailCard", () => ({
-  DetailCard: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
-  DetailRow: ({
-    label,
-    children,
-  }: {
-    label: string;
-    children?: ReactNode;
-  }) => (
-    <div>
-      <span>{label}</span>
-      {children}
-    </div>
-  ),
-}));
-
 vi.mock("@/components/messages/ConversationEntry", () => ({
   ConversationEntry: ({ message }: { message: { id: string; text?: string; kind: string } }) => (
     <div>{message.text ?? message.kind}</div>
@@ -260,9 +244,24 @@ vi.mock("@/components/shared/ArchiveTimestampAction", () => ({
 
 vi.mock("@beanbag/ui-core", () => ({
   DEFAULT_SCROLL_STICK_THRESHOLD_PX: 32,
+  DetailCard: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
+  DetailRow: ({
+    label,
+    children,
+  }: {
+    label: string;
+    children?: ReactNode;
+  }) => (
+    <div>
+      <span>{label}</span>
+      {children}
+    </div>
+  ),
   ConversationEmptyState: ({ message }: { message: string }) => <div>{message}</div>,
   ConversationTimeline: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
   ExpandablePanel: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
+  StatusPill: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
+  getCollapsibleHeaderToneClass: () => "",
 }));
 
 vi.mock("react-resizable-panels", () => ({
