@@ -1,6 +1,8 @@
 import { type ComponentProps, type RefObject } from "react";
 import { CornerDownRight, Pencil, Trash2, ChevronDown } from "lucide-react";
 import {
+  type ReasoningLevel,
+  type SandboxMode,
   type ServiceTier,
   type ThreadQueuedMessage,
 } from "@beanbag/agent-core";
@@ -229,23 +231,19 @@ export function ThreadFollowUpComposer({
   attachmentError: string | null;
   supportsModelList: boolean;
   activeModel?: { model: string } | null;
-  selectedModel?: string;
+  selectedModel: string;
   modelOptions: ComponentProps<typeof PromptModelPicker>["options"];
   onSelectedModelChange: ComponentProps<typeof PromptModelPicker>["onChange"];
   serviceTier?: ServiceTier;
   onServiceTierChange: (value: ServiceTier | undefined) => void;
   supportsServiceTier: boolean;
   supportsReasoningLevels: boolean;
-  reasoningLevel?: "low" | "medium" | "high" | "xhigh";
-  reasoningOptions: readonly PromptOption<"low" | "medium" | "high" | "xhigh">[];
-  onReasoningLevelChange: (value: "low" | "medium" | "high" | "xhigh") => void;
-  sandboxMode?: "read-only" | "workspace-write" | "danger-full-access";
-  sandboxOptions: readonly PromptOption<
-    "read-only" | "workspace-write" | "danger-full-access"
-  >[];
-  onSandboxModeChange: (
-    value: "read-only" | "workspace-write" | "danger-full-access",
-  ) => void;
+  reasoningLevel: ReasoningLevel;
+  reasoningOptions: readonly PromptOption<ReasoningLevel>[];
+  onReasoningLevelChange: (value: ReasoningLevel) => void;
+  sandboxMode?: SandboxMode;
+  sandboxOptions: readonly PromptOption<SandboxMode>[];
+  onSandboxModeChange: (value: SandboxMode) => void;
   contextWindowUsage?: ComponentProps<typeof ThreadContextWindowIndicator>["usage"];
 }) {
   return (
