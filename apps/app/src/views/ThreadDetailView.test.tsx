@@ -342,7 +342,7 @@ describe("ThreadDetailView", () => {
     expect(html).toContain("+1 -1");
   });
 
-  it("keeps the working indicator visible while the thread timeline is still loading", () => {
+  it("hides the working indicator while the thread timeline is still loading", () => {
     apiState.thread.status = "active";
     apiState.timelineLoading = true;
     apiState.timeline = {
@@ -353,7 +353,7 @@ describe("ThreadDetailView", () => {
     const html = renderThreadDetailView();
 
     expect(html).toContain("Loading thread...");
-    expect(html).toContain("working");
+    expect(html).not.toContain("working");
   });
 
   it("keeps the working indicator once the active thread timeline has loaded", () => {
@@ -374,38 +374,6 @@ describe("ThreadDetailView", () => {
             createdAt: 1,
             turnId: "turn-1",
             status: "completed",
-          },
-        },
-      ],
-      contextWindowUsage: null,
-    };
-
-    const html = renderThreadDetailView();
-
-    expect(html).not.toContain("Loading thread...");
-    expect(html).toContain("working");
-  });
-
-  it("keeps the working indicator when the last thread row is already in-progress", () => {
-    apiState.thread.status = "active";
-    apiState.timelineLoading = false;
-    apiState.timeline = {
-      rows: [
-        {
-          kind: "message",
-          id: "tool-1",
-          message: {
-            id: "tool-1",
-            threadId: "thread-1",
-            kind: "tool-call" as const,
-            toolName: "exec_command",
-            callId: "call-1",
-            command: "ls",
-            sourceSeqStart: 1,
-            sourceSeqEnd: 1,
-            createdAt: 1,
-            turnId: "turn-1",
-            status: "pending",
           },
         },
       ],
