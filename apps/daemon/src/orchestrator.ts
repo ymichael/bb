@@ -308,6 +308,15 @@ function toReasoningLevel(
   return undefined;
 }
 
+function getEnvironmentCurrentBranch(environment: IEnvironment): string | undefined {
+  try {
+    const branchName = environment.getWorkspaceStatus().currentBranch?.trim();
+    return branchName && branchName.length > 0 ? branchName : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function toServiceTier(
   value: unknown,
 ): ThreadExecutionOptions["serviceTier"] | undefined {
@@ -1258,6 +1267,10 @@ export class Orchestrator implements ThreadOrchestrator {
    * Stop an active thread by suspending its live runtime.
    */
   stop(threadId: string): void {
+    const thread = this.threadRepo.getById(threadId);
+    const shouldAppendInterruptedEvent =
+      thread?.status === "active" || thread?.status === "provisioning";
+
     this._cancelIdleEnvironmentSuspend(threadId);
     const liveClient = this.liveEnvironmentAgentClientsByThreadId.get(threadId);
     if (liveClient) {
@@ -1273,6 +1286,11 @@ export class Orchestrator implements ThreadOrchestrator {
     this.lastNoisePruneSeqByThread.delete(threadId);
     this.lastNoisePruneAtByThread.delete(threadId);
     this._cleanupEnvironmentRuntime(threadId);
+    if (shouldAppendInterruptedEvent) {
+      this._appendEvent(threadId, "system/thread/interrupted", {
+        reason: "user",
+      });
+    }
     this.threadRepo.update(threadId, { status: "idle" });
     this._pruneHistoricalNoiseEvents(threadId, IDLE_NOISE_EVENT_KEEP_RECENT);
     this._broadcastThreadChanged(threadId, THREAD_STATUS_CHANGE_KINDS);
@@ -2628,10 +2646,12 @@ export class Orchestrator implements ThreadOrchestrator {
     const provisionedEnvironmentInfo = this.environmentRegistry.get(
       environmentRuntime.environment.kind,
     ).info;
+    const branchName = getEnvironmentCurrentBranch(environmentRuntime.environment);
     this._appendEvent(threadId, "system/provisioning/completed", {
       environmentId: environmentRuntime.environment.kind,
       environmentDisplayName: provisionedEnvironmentInfo.displayName,
       workspaceRoot: environmentRuntime.environment.getWorkspaceRootUnsafe(),
+      ...(branchName ? { branchName } : {}),
       reason: provisioningReason,
     });
     const hydratedThread = this.threadRepo.getById(threadId);
@@ -3115,6 +3135,7 @@ export class Orchestrator implements ThreadOrchestrator {
       status: event.status,
       scriptPath: event.scriptPath,
       ...(event.workspaceRoot ? { workspaceRoot: event.workspaceRoot } : {}),
+      ...(event.branchName ? { branchName: event.branchName } : {}),
       ...(event.timeoutMs !== undefined ? { timeoutMs: event.timeoutMs } : {}),
       ...(event.durationMs !== undefined ? { durationMs: event.durationMs } : {}),
       ...(event.detail ? { detail: event.detail } : {}),
@@ -3168,12 +3189,14 @@ export class Orchestrator implements ThreadOrchestrator {
 
     const startedAt = Date.now();
     const workspaceRoot = environment.getWorkspaceRootUnsafe();
+    const branchName = getEnvironmentCurrentBranch(environment);
     const thread = this.threadRepo.getById(threadId);
     this._appendEnvironmentProvisioningEvent(threadId, {
       type: "env-setup",
       status: "started",
       scriptPath: ENV_SETUP_SCRIPT_NAME,
       workspaceRoot,
+      ...(branchName ? { branchName } : {}),
       timeoutMs: ENV_SETUP_TIMEOUT_MS,
       reason,
     });
@@ -3200,6 +3223,7 @@ export class Orchestrator implements ThreadOrchestrator {
             status: "running",
             scriptPath: ENV_SETUP_SCRIPT_NAME,
             workspaceRoot,
+            ...(branchName ? { branchName } : {}),
             timeoutMs: ENV_SETUP_TIMEOUT_MS,
             detail: line,
             reason,
@@ -3213,6 +3237,7 @@ export class Orchestrator implements ThreadOrchestrator {
             status: "running",
             scriptPath: ENV_SETUP_SCRIPT_NAME,
             workspaceRoot,
+            ...(branchName ? { branchName } : {}),
             timeoutMs: ENV_SETUP_TIMEOUT_MS,
             detail: line,
             reason,
@@ -3227,6 +3252,7 @@ export class Orchestrator implements ThreadOrchestrator {
         status: "failed",
         scriptPath: ENV_SETUP_SCRIPT_NAME,
         workspaceRoot,
+        ...(branchName ? { branchName } : {}),
         timeoutMs: ENV_SETUP_TIMEOUT_MS,
         durationMs: Date.now() - startedAt,
         ...(sawSetupOutput ? {} : { detail }),
@@ -3239,6 +3265,7 @@ export class Orchestrator implements ThreadOrchestrator {
       status: "completed",
       scriptPath: ENV_SETUP_SCRIPT_NAME,
       workspaceRoot,
+      ...(branchName ? { branchName } : {}),
       timeoutMs: ENV_SETUP_TIMEOUT_MS,
       durationMs: Date.now() - startedAt,
       reason,
@@ -3248,6 +3275,7 @@ export class Orchestrator implements ThreadOrchestrator {
         environmentId: environment.kind,
         environmentDisplayName: this.environmentRegistry.get(environment.kind).info.displayName,
         workspaceRoot,
+        ...(branchName ? { branchName } : {}),
       });
     }
   }

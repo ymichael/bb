@@ -1,6 +1,9 @@
-import { ExpandablePanel, getCollapsibleHeaderToneClass } from "@beanbag/ui-core";
+import { ExpandablePanel } from "@beanbag/ui-core";
 import type { UIToolCallMessage } from "@beanbag/agent-core";
 import {
+  EventTitle,
+  formatSummaryDuration,
+  getEventHeaderToneClass,
   renderShimmeringSummary,
   useLatestInitialExpanded,
 } from "./shared";
@@ -9,11 +12,9 @@ import { TerminalOutputBlock } from "./TerminalOutputBlock";
 export function ToolCallRow({
   message,
   initialExpanded = false,
-  preferOngoingLabels = false,
 }: {
   message: UIToolCallMessage;
   initialExpanded?: boolean;
-  preferOngoingLabels?: boolean;
 }) {
   const { isExpanded, onToggle } = useLatestInitialExpanded(initialExpanded);
   const command = message.command ?? message.toolName;
@@ -23,13 +24,22 @@ export function ToolCallRow({
       ? "Failed"
       : message.status === "interrupted"
         ? "Declined"
-        : message.status === "pending" || preferOngoingLabels
+        : message.status === "pending"
           ? "Running"
           : "Ran";
-  const isRunning = actionLabel === "Running";
-  const summaryText = isExpanded ? `${actionLabel} command` : `${actionLabel} ${command}`;
-  const summaryContent = renderShimmeringSummary(summaryText, isRunning);
-  const headerToneClass = getCollapsibleHeaderToneClass(isExpanded);
+  const duration = formatSummaryDuration(message.durationMs);
+  const isRunning = message.status === "pending";
+  const tone = message.status === "error" ? "destructive" : "default";
+  const summaryContent = renderShimmeringSummary(
+    <EventTitle
+      prefix={actionLabel}
+      emphasis={command}
+      suffix={duration}
+      tone={tone}
+    />,
+    isRunning,
+  );
+  const headerToneClass = getEventHeaderToneClass(isExpanded, tone);
 
   return (
     <div className="group w-full" style={{ overflowAnchor: "none" }}>

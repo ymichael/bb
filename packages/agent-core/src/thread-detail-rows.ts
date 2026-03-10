@@ -24,6 +24,10 @@ export interface ThreadDetailToolGroupRow {
   summaryCount: number;
   sourceSeqStart: number;
   sourceSeqEnd: number;
+  startedAt: number;
+  createdAt: number;
+  durationMs?: number;
+  status: "pending" | "completed" | "error" | "interrupted";
   messages: CollapsibleTurnMessage[];
 }
 
@@ -125,9 +129,22 @@ function mergeProvisioningMetadata(
     environmentId: incoming.environmentId ?? existing.environmentId,
     environmentDisplayName: incoming.environmentDisplayName ?? existing.environmentDisplayName,
     workspaceRoot: incoming.workspaceRoot ?? existing.workspaceRoot,
+    branchName: incoming.branchName ?? existing.branchName,
     fallbackReason: incoming.fallbackReason ?? existing.fallbackReason,
     ...(setup ? { setup } : {}),
   };
+}
+
+function getMessageStartedAt(message: Pick<UIMessage, "createdAt" | "startedAt">): number {
+  return message.startedAt ?? message.createdAt;
+}
+
+function getGroupDurationMs(messages: readonly Pick<UIMessage, "createdAt" | "startedAt">[]): number | undefined {
+  if (messages.length === 0) return undefined;
+  const startedAt = Math.min(...messages.map((message) => getMessageStartedAt(message)));
+  const endedAt = Math.max(...messages.map((message) => message.createdAt));
+  const durationMs = endedAt - startedAt;
+  return durationMs > 0 ? durationMs : undefined;
 }
 
 function shouldNormalizeProvisioningLifecycleOperation(
@@ -167,6 +184,14 @@ function mergeProvisioningOperations(messages: UIMessage[]): UIMessage[] {
     const lastSetupUpdate = [...active]
       .reverse()
       .find((message) => message.opType === "provisioning-env-setup");
+    const mergedStatus =
+      active.some((message) => message.status === "error")
+        ? "error"
+        : hasCompleted
+          ? "completed"
+          : active.some((message) => message.status === "interrupted")
+            ? "interrupted"
+            : "pending";
     const details = active
       .map((message) => message.detail?.trim())
       .filter((value): value is string => Boolean(value));
@@ -177,6 +202,20 @@ function mergeProvisioningOperations(messages: UIMessage[]): UIMessage[] {
     );
     const environment = provisioning?.environmentDisplayName?.trim() ?? "environment";
     const title = (() => {
+      if (mergedStatus === "interrupted") {
+        if (!hasLifecycleUpdate && lastSetupUpdate) {
+          return "Environment setup interrupted";
+        }
+        return "Provisioning interrupted";
+      }
+      if (mergedStatus === "error") {
+        if (lastSetupUpdate) {
+          return lastSetupUpdate.title === "Environment setup failed"
+            ? "Environment setup failed"
+            : lastSetupUpdate.title;
+        }
+        return `Provisioning ${environment} failed`;
+      }
       if (!hasLifecycleUpdate && lastSetupUpdate) {
         switch (lastSetupUpdate.title) {
           case "Environment setup completed":
@@ -198,10 +237,12 @@ function mergeProvisioningOperations(messages: UIMessage[]): UIMessage[] {
       sourceSeqStart: Math.min(...active.map((message) => message.sourceSeqStart)),
       sourceSeqEnd: Math.max(...active.map((message) => message.sourceSeqEnd)),
       createdAt: Math.max(...active.map((message) => message.createdAt)),
+      startedAt: Math.min(...active.map((message) => getMessageStartedAt(message))),
       turnId: first.turnId ?? last.turnId,
       opType: "provisioning",
       title,
       detail: uniqueDetailLines.length > 0 ? uniqueDetailLines.join("\n") : undefined,
+      status: mergedStatus,
       ...(provisioning ? { provisioning } : {}),
     });
 
@@ -289,10 +330,12 @@ function mergePrimaryCheckoutOperations(messages: UIMessage[]): UIMessage[] {
       sourceSeqStart: Math.min(...active.map((message) => message.sourceSeqStart)),
       sourceSeqEnd: Math.max(...active.map((message) => message.sourceSeqEnd)),
       createdAt: Math.max(...active.map((message) => message.createdAt)),
+      startedAt: Math.min(...active.map((message) => getMessageStartedAt(message))),
       turnId: first.turnId ?? last.turnId,
       opType: "primary-checkout",
       title: last.title,
       detail: uniqueDetailLines.length > 0 ? uniqueDetailLines.join("\n") : undefined,
+      status: last.status,
       ...(last.primaryCheckout ? { primaryCheckout: last.primaryCheckout } : {}),
     });
 
@@ -383,10 +426,12 @@ function mergePrimaryCheckoutCompletedRoundTrips(messages: UIMessage[]): UIMessa
       sourceSeqStart: Math.min(promoted.sourceSeqStart, demoted.sourceSeqStart),
       sourceSeqEnd: Math.max(promoted.sourceSeqEnd, demoted.sourceSeqEnd),
       createdAt: Math.max(promoted.createdAt, demoted.createdAt),
+      startedAt: Math.min(getMessageStartedAt(promoted), getMessageStartedAt(demoted)),
       turnId: demoted.turnId ?? promoted.turnId,
       opType: "primary-checkout",
       title: "Promoted then demoted as primary checkout",
       detail: uniqueDetailLines.length > 0 ? uniqueDetailLines.join("\n") : undefined,
+      status: "completed",
     });
 
     index += 1;
@@ -541,6 +586,7 @@ function mergeThreadOperationIntentMessages(messages: UIMessage[]): UIMessage[] 
       sourceSeqStart: Math.min(...sequence.map((message) => message.sourceSeqStart)),
       sourceSeqEnd: Math.max(...sequence.map((message) => message.sourceSeqEnd)),
       createdAt: Math.max(...sequence.map((message) => message.createdAt)),
+      startedAt: Math.min(...sequence.map((message) => getMessageStartedAt(message))),
       turnId:
         lifecycleCandidate.turnId ??
         promptMessage?.turnId ??
@@ -548,6 +594,7 @@ function mergeThreadOperationIntentMessages(messages: UIMessage[]): UIMessage[] 
       opType: "thread-operation-intent",
       title: lifecycleCandidate.title,
       detail: detailSections.length > 0 ? detailSections.join("\n\n") : undefined,
+      status: lifecycleCandidate.status,
       ...(lifecycleCandidate.threadOperation
         ? { threadOperation: lifecycleCandidate.threadOperation }
         : {}),
@@ -744,6 +791,7 @@ function mergeConsecutiveToolActivityMessages(
       active.sourceSeqStart = Math.min(active.sourceSeqStart, message.sourceSeqStart);
       active.sourceSeqEnd = Math.max(active.sourceSeqEnd, message.sourceSeqEnd);
       active.createdAt = Math.max(active.createdAt, message.createdAt);
+      active.startedAt = Math.min(getMessageStartedAt(active), getMessageStartedAt(message));
       if (!active.turnId && message.turnId) {
         active.turnId = message.turnId;
       }
@@ -762,6 +810,7 @@ function mergeConsecutiveToolActivityMessages(
       active.sourceSeqStart = Math.min(active.sourceSeqStart, message.sourceSeqStart);
       active.sourceSeqEnd = Math.max(active.sourceSeqEnd, message.sourceSeqEnd);
       active.createdAt = Math.max(active.createdAt, message.createdAt);
+      active.startedAt = Math.min(getMessageStartedAt(active), getMessageStartedAt(message));
       if (!active.turnId && message.turnId) {
         active.turnId = message.turnId;
       }
@@ -812,6 +861,108 @@ function getSourceSeqRange(messages: CollapsibleTurnMessage[]): {
   return { sourceSeqStart, sourceSeqEnd };
 }
 
+function getCollapsibleTurnMessageStatus(
+  message: CollapsibleTurnMessage,
+): ThreadDetailToolGroupRow["status"] {
+  switch (message.kind) {
+    case "user":
+      return "completed";
+    case "assistant-reasoning":
+    case "assistant-text":
+      return "completed";
+    case "tool-exploring":
+    case "tool-call":
+    case "web-search":
+    case "file-edit":
+      return message.status;
+    case "operation":
+      return message.status ?? "completed";
+    case "error":
+      return "error";
+    case "debug/raw-event":
+      return "completed";
+    default:
+      return assertNever(message);
+  }
+}
+
+function mergeToolGroupStatus(
+  left: ThreadDetailToolGroupRow["status"],
+  right: ThreadDetailToolGroupRow["status"],
+): ThreadDetailToolGroupRow["status"] {
+  const priority = (status: ThreadDetailToolGroupRow["status"]): number => {
+    switch (status) {
+      case "completed":
+        return 0;
+      case "interrupted":
+        return 1;
+      case "pending":
+        return 2;
+      case "error":
+        return 3;
+      default:
+        return assertNever(status);
+    }
+  };
+
+  return priority(left) >= priority(right) ? left : right;
+}
+
+function getToolGroupStatus(messages: CollapsibleTurnMessage[]): ThreadDetailToolGroupRow["status"] {
+  return messages.reduce<ThreadDetailToolGroupRow["status"]>(
+    (status, message) => mergeToolGroupStatus(status, getCollapsibleTurnMessageStatus(message)),
+    "completed",
+  );
+}
+
+function enrichWorktreeSquashMergeMessages(messages: UIMessage[]): UIMessage[] {
+  return messages.map((message, index) => {
+    if (!isWorktreeSquashMergeOperation(message)) {
+      return message;
+    }
+
+    const previous = messages[index - 1];
+    if (
+      !previous ||
+      !isWorktreeCommitOperation(previous) ||
+      !previous.worktreeCommit ||
+      !message.worktreeSquashMerge
+    ) {
+      return message;
+    }
+
+    if (
+      message.worktreeSquashMerge?.status === "conflict" ||
+      message.worktreeSquashMerge?.status === "noop" ||
+      message.worktreeSquashMerge?.committed === false
+    ) {
+      return message;
+    }
+
+    const prepCommitMessage = previous.worktreeCommit.message?.trim();
+    const prepCommitSha = previous.worktreeCommit.commitSha?.trim();
+    if (!prepCommitMessage && !prepCommitSha) {
+      return message;
+    }
+
+    const detailLines = [
+      message.detail?.trim(),
+      prepCommitMessage ? `Commit: ${prepCommitMessage}` : undefined,
+      prepCommitSha ? `Hash: ${prepCommitSha}` : undefined,
+    ].filter((value): value is string => Boolean(value));
+
+    return {
+      ...message,
+      detail: detailLines.length > 0 ? detailLines.join("\n") : message.detail,
+      worktreeSquashMerge: {
+        ...message.worktreeSquashMerge,
+        ...(prepCommitMessage ? { prepCommitMessage } : {}),
+        ...(prepCommitSha ? { prepCommitSha } : {}),
+      },
+    };
+  });
+}
+
 export function buildThreadDetailRows(
   messages: UIMessage[],
   options?: BuildThreadDetailRowsOptions,
@@ -828,7 +979,10 @@ export function buildThreadDetailRows(
   const operationOutcomeMergedMessages = mergeThreadOperationOutcomeMessages(
     threadOperationMergedMessages,
   );
-  const mergedMessages = mergeConsecutiveToolActivityMessages(operationOutcomeMergedMessages);
+  const worktreeOutcomeEnrichedMessages = enrichWorktreeSquashMergeMessages(
+    operationOutcomeMergedMessages,
+  );
+  const mergedMessages = mergeConsecutiveToolActivityMessages(worktreeOutcomeEnrichedMessages);
   const lastAssistantIndexByTurn = new Map<string, number>();
 
   for (const [index, message] of mergedMessages.entries()) {
@@ -887,6 +1041,10 @@ export function buildThreadDetailRows(
         summaryCount: getToolGroupSummaryCount(collapseGroup.messages),
         sourceSeqStart,
         sourceSeqEnd,
+        startedAt: Math.min(...collapseGroup.messages.map((message) => getMessageStartedAt(message))),
+        createdAt: Math.max(...collapseGroup.messages.map((message) => message.createdAt)),
+        durationMs: getGroupDurationMs(collapseGroup.messages),
+        status: getToolGroupStatus(collapseGroup.messages),
         messages: mergedGroupMessages,
       });
     }

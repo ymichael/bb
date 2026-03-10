@@ -1,3 +1,5 @@
+import { useEffect, useReducer } from "react";
+
 export interface LatestInitialExpandedState {
   isExpanded: boolean;
   isAutoExpanded: boolean;
@@ -65,5 +67,27 @@ export function reduceLatestInitialExpandedState(
   return {
     ...nextState,
     prevInitialExpanded: nextInitialExpanded,
+  };
+}
+
+export function useLatestInitialExpanded(initialExpanded: boolean): {
+  isExpanded: boolean;
+  onToggle: () => void;
+} {
+  const [state, dispatch] = useReducer(
+    reduceLatestInitialExpandedState,
+    initialExpanded,
+    createLatestInitialExpandedState,
+  );
+
+  useEffect(() => {
+    dispatch({ type: "sync", initialExpanded });
+  }, [initialExpanded]);
+
+  return {
+    isExpanded: state.isExpanded,
+    onToggle: () => {
+      dispatch({ type: "toggle" });
+    },
   };
 }

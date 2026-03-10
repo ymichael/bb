@@ -1,60 +1,43 @@
+import { type ReactNode } from "react";
 import {
-  COLLAPSIBLE_HEADER_STATIC_TONE_CLASS,
-  COLLAPSIBLE_HEADER_TEXT_CLASS,
   ExpandablePanel,
   EventCodeBlock,
-  EventMetaItem,
-  EventMetaList,
-  StatusPill,
-  type StatusPillVariant,
-  getCollapsibleHeaderToneClass,
 } from "@beanbag/ui-core";
 import {
   assertNever,
   formatEnvironmentDisplayName,
   type UIOperationMessage,
-  type UIProvisioningSetupMetadata,
+  type UIProvisioningMetadata,
 } from "@beanbag/agent-core";
-import { OpenPathButton } from "@/components/shared/OpenPathButton";
-import { resolveWorkspaceAbsolutePath } from "@/lib/workspace-path";
-import { shouldShimmerOperationTitle } from "./operationOngoingState";
+import { cn } from "@/lib/utils";
 import {
   EVENT_DETAIL_MAX_HEIGHT_CLASS,
+  EventTitle,
+  formatCompactDuration,
+  getEventHeaderToneClass,
+  getStaticEventToneClass,
   renderShimmeringSummary,
   useLatestInitialExpanded,
 } from "./shared";
 import { TerminalOutputBlock } from "./TerminalOutputBlock";
 
+type ThreadOperationIntentPhase = NonNullable<UIOperationMessage["threadOperation"]>["phase"];
+type PrimaryCheckoutPhase = NonNullable<UIOperationMessage["primaryCheckout"]>["phase"];
+
 function splitNonEmptyLines(value: string | undefined): string[] {
   if (!value) return [];
-  return value.split("\n").map((line) => line.trim()).filter((line) => line.length > 0);
+  return value
+    .split(/\n|•/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
 }
 
-function isWorkspaceRootToken(part: string): boolean {
-  return part.startsWith("/") || part.startsWith("~/") || /^[A-Za-z]:[\\/]/.test(part);
-}
-
-function normalizeProvisioningEnvironmentLabel(environment: string | undefined): string | undefined {
-  const value = environment?.trim();
+function normalizeProvisioningEnvironmentLabel(
+  provisioning: UIProvisioningMetadata | undefined,
+): string | undefined {
+  const value = provisioning?.environmentDisplayName?.trim();
   if (!value) return undefined;
   return formatEnvironmentDisplayName({ id: value, displayName: value });
-}
-
-function formatTimeoutLabel(timeoutMs: number | undefined): string | undefined {
-  if (timeoutMs === undefined || timeoutMs < 0) return undefined;
-  return `${Math.round(timeoutMs / 1000)}s`;
-}
-
-function resolveProvisioningSetupScriptPath(
-  scriptPath: string | undefined,
-  workspaceRoot: string | undefined,
-): string | undefined {
-  const normalizedScriptPath = scriptPath?.trim();
-  if (!normalizedScriptPath) return undefined;
-  if (isWorkspaceRootToken(normalizedScriptPath)) return normalizedScriptPath;
-  const normalizedWorkspaceRoot = workspaceRoot?.trim();
-  if (!normalizedWorkspaceRoot) return undefined;
-  return resolveWorkspaceAbsolutePath(normalizedWorkspaceRoot, normalizedScriptPath);
 }
 
 function formatProvisioningSetupCommand(scriptPath: string | undefined): string | undefined {
@@ -71,32 +54,233 @@ function formatProvisioningSetupCommand(scriptPath: string | undefined): string 
   return `bash -x ./${value}`;
 }
 
-function formatDurationLabel(durationMs: number): string {
-  if (durationMs < 1_000) return `${durationMs}ms`;
-  const seconds = durationMs / 1_000;
-  if (seconds < 60) return `${seconds.toFixed(seconds < 10 ? 2 : 1)}s`;
-  const minutes = Math.floor(seconds / 60);
-  const remainingSeconds = Math.round(seconds % 60);
-  return `${minutes}m ${remainingSeconds}s`;
+function extractPromptSections(detailText: string | undefined): {
+  operationDetailText?: string;
+  promptText?: string;
+} {
+  const normalizedDetail = detailText?.trim();
+  if (!normalizedDetail) return {};
+  const promptLabel = "Prompt:\n";
+  const promptStart = normalizedDetail.indexOf(promptLabel);
+  if (promptStart === -1) {
+    return { operationDetailText: normalizedDetail };
+  }
+
+  const operationDetailText = normalizedDetail.slice(0, promptStart).trim();
+  const promptText = normalizedDetail.slice(promptStart + promptLabel.length).trim();
+  return {
+    ...(operationDetailText ? { operationDetailText } : {}),
+    ...(promptText ? { promptText } : {}),
+  };
 }
 
-function getProvisioningSetupStatus(
-  setup: UIProvisioningSetupMetadata | undefined,
-): "Failed" | "Completed" | "Running" | undefined {
-  if (!setup) {
-    return undefined;
+function extractMergeTargetBranch(message: UIOperationMessage): string | undefined {
+  const mergeBaseBranch = message.worktreeSquashMerge?.mergeBaseBranch?.trim();
+  if (mergeBaseBranch) return mergeBaseBranch;
+
+  const candidates = [message.worktreeSquashMerge?.message, message.detail];
+  for (const candidate of candidates) {
+    const match = candidate?.match(/\b(?:into|to)\s+[`'"]?([A-Za-z0-9._/-]+)[`'"]?/i);
+    if (match?.[1]) {
+      return match[1];
+    }
   }
-  switch (setup.status) {
-    case "failed":
-      return "Failed";
-    case "completed":
-      return "Completed";
-    case "started":
+
+  return undefined;
+}
+
+function isShimmeringThreadOperationIntentPhase(phase: ThreadOperationIntentPhase): boolean {
+  switch (phase) {
+    case "requested":
+    case "queued":
     case "running":
-      return "Running";
+      return true;
+    case "completed":
+    case "failed":
+    case "update":
+      return false;
     default:
-      return assertNever(setup.status);
+      return assertNever(phase);
   }
+}
+
+function isShimmeringPrimaryCheckoutPhase(phase: PrimaryCheckoutPhase): boolean {
+  switch (phase) {
+    case "started":
+      return true;
+    case "completed":
+    case "failed":
+    case "noop":
+    case "update":
+      return false;
+    default:
+      return assertNever(phase);
+  }
+}
+
+function isPendingOperation(message: UIOperationMessage): boolean {
+  if (message.status !== undefined) {
+    return message.status === "pending";
+  }
+  if (message.threadOperation) {
+    return isShimmeringThreadOperationIntentPhase(message.threadOperation.phase);
+  }
+  if (message.primaryCheckout) {
+    return isShimmeringPrimaryCheckoutPhase(message.primaryCheckout.phase);
+  }
+  return false;
+}
+
+function getOperationTone(message: UIOperationMessage): "default" | "destructive" {
+  return message.status === "error" ? "destructive" : "default";
+}
+
+function StaticOperationRow({
+  summaryContent,
+  tone = "default",
+  className,
+}: {
+  summaryContent: ReactNode;
+  tone?: "default" | "destructive";
+  className?: string;
+}) {
+  return (
+    <div className="group w-full" style={{ overflowAnchor: "none" }}>
+      <div className="mr-auto w-full">
+        <div className="rounded-md px-2 py-1 text-sm text-muted-foreground">
+          <div className={cn("py-0.5", getStaticEventToneClass(tone), className)}>
+            {summaryContent}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ExpandableOperationRow({
+  isExpanded,
+  onToggle,
+  summaryContent,
+  tone = "default",
+  summaryContentClassName = "min-w-0",
+  children,
+}: {
+  isExpanded: boolean;
+  onToggle: () => void;
+  summaryContent: ReactNode;
+  tone?: "default" | "destructive";
+  summaryContentClassName?: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="group w-full" style={{ overflowAnchor: "none" }}>
+      <div className="mr-auto w-full">
+        <ExpandablePanel
+          isExpanded={isExpanded}
+          summaryContent={summaryContent}
+          summaryContentClassName={summaryContentClassName}
+          headerToneClass={getEventHeaderToneClass(isExpanded, tone)}
+          onToggle={onToggle}
+        >
+          {children}
+        </ExpandablePanel>
+      </div>
+    </div>
+  );
+}
+
+function OperationDetailLines({ lines }: { lines: string[] }) {
+  return (
+    <div className="mt-0.5 space-y-0.5">
+      {lines.map((line, index) => (
+        <div key={`${line}:${index}`} className="font-mono ui-text-sm text-foreground/80">
+          {line}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function buildProvisioningSummary(
+  message: UIOperationMessage,
+  tone: "default" | "destructive",
+): ReactNode {
+  const environmentLabel = normalizeProvisioningEnvironmentLabel(message.provisioning);
+  const isPending = isPendingOperation(message);
+
+  const summaryContent = (() => {
+    switch (message.title) {
+      case "Environment setup completed":
+        return <EventTitle prefix="Environment setup" emphasis="completed" tone={tone} />;
+      case "Environment setup failed":
+        return <EventTitle prefix="Environment setup" emphasis="failed" tone={tone} />;
+      case "Environment setup interrupted":
+        return <EventTitle prefix="Environment setup" emphasis="interrupted" tone={tone} />;
+      case "Provisioning interrupted":
+        return <EventTitle prefix="Provisioning" emphasis="interrupted" tone={tone} />;
+      default:
+        if (message.title.startsWith("Provisioned ")) {
+          return (
+            <EventTitle
+              prefix="Provisioned"
+              emphasis={environmentLabel ?? message.title.slice("Provisioned ".length).trim()}
+              tone={tone}
+            />
+          );
+        }
+        if (message.title.startsWith("Provisioning ")) {
+          const label = environmentLabel ?? message.title.slice("Provisioning ".length).replace(/\.\.\.$/, "").trim();
+          return <EventTitle prefix="Provisioning" emphasis={label || "environment"} tone={tone} />;
+        }
+        if (message.title.startsWith("Provisioning ") && tone === "destructive") {
+          return <EventTitle prefix="Provisioning" emphasis="failed" tone={tone} />;
+        }
+        return <span>{message.title}</span>;
+    }
+  })();
+
+  return renderShimmeringSummary(summaryContent, isPending);
+}
+
+function buildProvisioningTranscript(message: UIOperationMessage): {
+  lines: string[];
+  outputText?: string;
+  outputCommand?: string;
+} {
+  const provisioning = message.provisioning;
+  const environmentLabel = normalizeProvisioningEnvironmentLabel(provisioning) ?? "environment";
+  const setup = provisioning?.setup;
+  const lines = [`provisioning ${environmentLabel}`];
+  const isWorktreeEnvironment = provisioning?.environmentId === "worktree";
+
+  if (isWorktreeEnvironment) {
+    lines.push("creating worktree");
+  }
+  if (isWorktreeEnvironment && provisioning?.branchName) {
+    lines.push(`creating branch ${provisioning.branchName}`);
+  }
+  if (setup?.scriptPath) {
+    lines.push(`running ${setup.scriptPath}`);
+  }
+  if (provisioning?.fallbackReason) {
+    lines.push(`fallback: ${provisioning.fallbackReason}`);
+  }
+  if (message.status !== "pending" && message.startedAt !== undefined && message.createdAt >= message.startedAt) {
+    lines.push(`provisioning took ${formatCompactDuration(message.createdAt - message.startedAt)}`);
+  }
+
+  return {
+    lines,
+    ...(setup?.output?.trim() ? { outputText: setup.output.trim() } : {}),
+    ...(setup?.scriptPath ? { outputCommand: formatProvisioningSetupCommand(setup.scriptPath) } : {}),
+  };
+}
+
+function buildGenericSummary(
+  title: ReactNode,
+  message: UIOperationMessage,
+): ReactNode {
+  return renderShimmeringSummary(title, isPendingOperation(message));
 }
 
 export function OperationRow({
@@ -107,170 +291,207 @@ export function OperationRow({
   initialExpanded?: boolean;
 }) {
   const { isExpanded, onToggle } = useLatestInitialExpanded(initialExpanded);
-  const headerToneClass = getCollapsibleHeaderToneClass(isExpanded);
-  const shimmeringTitle = renderShimmeringSummary(message.title, shouldShimmerOperationTitle(message));
+  const tone = getOperationTone(message);
 
   if (message.opType === "plan-updated") {
-    const detailLines = (message.detail ?? "").split("\n").map((line) => line.trim()).filter(Boolean);
+    const detailLines = splitNonEmptyLines(message.detail);
+    const summaryContent = buildGenericSummary(message.title, message);
     if (detailLines.length === 0) {
-      return (
-        <div className="group w-full" style={{ overflowAnchor: "none" }}><div className="mr-auto w-full"><div className="rounded-md px-2 py-1 text-sm text-muted-foreground"><div className={`py-0.5 ${COLLAPSIBLE_HEADER_STATIC_TONE_CLASS}`}>{message.title}</div></div></div></div>
-      );
+      return <StaticOperationRow summaryContent={summaryContent} tone={tone} />;
     }
     return (
-      <div className="group w-full" style={{ overflowAnchor: "none" }}>
-        <div className="mr-auto w-full">
-          <ExpandablePanel isExpanded={isExpanded} summaryContent={message.title} summaryContentClassName={isExpanded ? COLLAPSIBLE_HEADER_TEXT_CLASS : "min-w-0"} headerToneClass={headerToneClass} onToggle={onToggle}>
-            <div className="mt-0.5 space-y-0.5">{detailLines.map((line, index) => <div key={`${message.id}:${index}`} className="font-mono ui-text-sm text-foreground/80">{line}</div>)}</div>
-          </ExpandablePanel>
-        </div>
-      </div>
+      <ExpandableOperationRow
+        isExpanded={isExpanded}
+        onToggle={onToggle}
+        summaryContent={summaryContent}
+        tone={tone}
+      >
+        <OperationDetailLines lines={detailLines} />
+      </ExpandableOperationRow>
     );
   }
 
   if (message.opType === "provisioning") {
-    const additionalDetailsText = message.detail?.trim() || undefined;
-    const additionalDetailLines = splitNonEmptyLines(additionalDetailsText);
-    const provisioning = message.provisioning;
-    const setupMetadata = message.provisioning?.setup;
-    const hasStructuredProvisioningDetails = Boolean(
-      provisioning?.environmentDisplayName ||
-        provisioning?.workspaceRoot ||
-        provisioning?.fallbackReason ||
-        setupMetadata,
+    const summaryContent = buildProvisioningSummary(message, tone);
+    const { lines, outputText, outputCommand } = buildProvisioningTranscript(message);
+    const additionalDetailLines = splitNonEmptyLines(message.detail).filter(
+      (line) => !lines.includes(line),
     );
-    const hasDetails =
-      hasStructuredProvisioningDetails || Boolean(additionalDetailsText);
-    const titleKind = (() => {
-      if (message.title.startsWith("Provisioned ")) return "provisioned" as const;
-      if (message.title.startsWith("Provisioning ")) return "provisioning" as const;
-      switch (message.title) {
-        case "Environment setup completed":
-          return "setup-completed" as const;
-        case "Environment setup failed":
-          return "setup-failed" as const;
-        default:
-          return "setup-running" as const;
-      }
-    })();
-    const isCompleted =
-      titleKind === "provisioned" || titleKind === "setup-completed";
-    const environmentLabel =
-      titleKind === "provisioned"
-        ? message.title.slice("Provisioned ".length).trim()
-        : titleKind === "provisioning"
-          ? message.title.slice("Provisioning ".length).replace(/\.\.\.$/, "").trim()
-          : "";
-    const setupStatus = getProvisioningSetupStatus(setupMetadata);
-    const outputText = setupMetadata?.output?.trim() || undefined;
-    const timeoutLabel = formatTimeoutLabel(setupMetadata?.timeoutMs);
-    const setupTimedOut = Boolean(timeoutLabel && outputText && /\btimed out\b/i.test(outputText));
-    const workspacePath = provisioning?.workspaceRoot;
-    const setupScriptPath = resolveProvisioningSetupScriptPath(
-      setupMetadata?.scriptPath,
-      workspacePath,
-    );
-    const setupScriptLabel = setupMetadata?.scriptPath ?? setupScriptPath;
-    const setupCommand = formatProvisioningSetupCommand(setupMetadata?.scriptPath);
-    const setupDurationMs = setupMetadata?.durationMs;
-    const setupTimeLabel = setupDurationMs !== undefined
-      ? `${formatDurationLabel(setupDurationMs)}${setupTimedOut && timeoutLabel ? ` / timeout ${timeoutLabel}` : ""}`
-      : setupTimedOut && timeoutLabel
-        ? `timeout ${timeoutLabel}`
-        : undefined;
-    const environmentValue = normalizeProvisioningEnvironmentLabel(
-      provisioning?.environmentDisplayName || environmentLabel || undefined,
-    );
-    const setupStatusVariant: StatusPillVariant =
-      setupStatus === "Failed"
-        ? "destructive"
-        : setupStatus === "Completed"
-        ? "emphasis"
-        : "outline";
-    const collapsedSummaryContent = titleKind === "provisioned" && environmentLabel ? (
-      <span className="inline-flex min-w-0 items-center gap-1.5"><span className="shrink-0 text-muted-foreground/90">Provisioned</span><span className="truncate font-semibold text-foreground/95">{environmentLabel}</span></span>
-    ) : shimmeringTitle;
-    const expandedSummaryContent =
-      titleKind === "provisioned"
-        ? "Provisioned"
-        : titleKind === "provisioning"
-          ? renderShimmeringSummary("Provisioning", true)
-          : message.title;
+    const hasDetails = lines.length > 0 || additionalDetailLines.length > 0 || Boolean(outputText);
 
     if (!hasDetails) {
-      return <div className="group w-full" style={{ overflowAnchor: "none" }}><div className="mr-auto w-full"><div className="rounded-md px-2 py-1 text-sm text-muted-foreground"><div className={`py-0.5 ${COLLAPSIBLE_HEADER_STATIC_TONE_CLASS}`}>{collapsedSummaryContent}</div></div></div></div>;
+      return <StaticOperationRow summaryContent={summaryContent} tone={tone} />;
     }
 
     return (
-      <div className="group w-full" style={{ overflowAnchor: "none" }}>
-        <div className="mr-auto w-full">
-          <ExpandablePanel isExpanded={isExpanded} summaryContent={isExpanded ? expandedSummaryContent : collapsedSummaryContent} summaryContentClassName={isExpanded ? COLLAPSIBLE_HEADER_TEXT_CLASS : "min-w-0"} headerToneClass={headerToneClass} onToggle={onToggle}>
-            {hasStructuredProvisioningDetails ? (
-              <EventMetaList className="mt-0.5">
-                {environmentValue ? <EventMetaItem label="Environment"><span>{environmentValue}</span></EventMetaItem> : null}
-                {setupScriptLabel ? <EventMetaItem label="Setup script">{setupScriptPath ? <OpenPathButton path={setupScriptPath} target="file" title={setupScriptLabel}>{setupScriptLabel}</OpenPathButton> : <span className="block truncate text-xs text-muted-foreground/90" title={setupScriptLabel}>{setupScriptLabel}</span>}</EventMetaItem> : null}
-                {setupStatus ? <EventMetaItem label="Setup status"><StatusPill variant={setupStatusVariant}>{setupStatus}</StatusPill></EventMetaItem> : null}
-                {setupTimeLabel ? <EventMetaItem label="Setup time"><span className="font-mono ui-text-sm text-foreground/85">{setupTimeLabel}</span></EventMetaItem> : null}
-                {workspacePath ? <EventMetaItem label="Workspace"><OpenPathButton path={workspacePath} target="directory" title={workspacePath}>{workspacePath}</OpenPathButton></EventMetaItem> : null}
-                {outputText ? <EventMetaItem label="Output" align="start"><TerminalOutputBlock command={setupCommand} outputText={outputText} isExpanded={isExpanded} /></EventMetaItem> : null}
-                {provisioning?.fallbackReason ? <EventMetaItem label="Fallback reason" align="start"><EventCodeBlock maxHeightClassName={EVENT_DETAIL_MAX_HEIGHT_CLASS}>{provisioning.fallbackReason}</EventCodeBlock></EventMetaItem> : null}
-                {additionalDetailsText ? <EventMetaItem label="Additional details" align="start"><EventCodeBlock maxHeightClassName={EVENT_DETAIL_MAX_HEIGHT_CLASS}>{additionalDetailsText}</EventCodeBlock></EventMetaItem> : null}
-              </EventMetaList>
-            ) : (
-              <div className="mt-0.5 space-y-0.5">{additionalDetailLines.map((line, index) => <div key={`${message.id}:${index}`} className="font-mono ui-text-sm text-foreground/80">{line}</div>)}</div>
-            )}
-          </ExpandablePanel>
+      <ExpandableOperationRow
+        isExpanded={isExpanded}
+        onToggle={onToggle}
+        summaryContent={summaryContent}
+        tone={tone}
+      >
+        <div className="mt-0.5 space-y-2">
+          <OperationDetailLines lines={lines} />
+          {outputText ? (
+            <TerminalOutputBlock
+              command={outputCommand}
+              outputText={outputText}
+              isExpanded={isExpanded}
+            />
+          ) : null}
+          {additionalDetailLines.length > 0 ? (
+            <OperationDetailLines lines={additionalDetailLines} />
+          ) : null}
         </div>
-      </div>
+      </ExpandableOperationRow>
     );
   }
 
   if (message.opType === "thread-operation-intent") {
-    const detailText = message.detail?.trim();
-    if (!detailText) return <div className="group w-full" style={{ overflowAnchor: "none" }}><div className="mr-auto w-full rounded-md px-2 py-1 text-sm text-muted-foreground"><div className={`py-0.5 ${COLLAPSIBLE_HEADER_STATIC_TONE_CLASS}`}>{shimmeringTitle}</div></div></div>;
-    const promptLabel = "Prompt:\n";
-    const promptStart = detailText.indexOf(promptLabel);
-    if (promptStart === -1) return <div className="group w-full" style={{ overflowAnchor: "none" }}><div className="mr-auto w-full"><div className="rounded-md px-2 py-1 text-sm text-muted-foreground"><span className="font-medium text-foreground/80">{shimmeringTitle}</span><span className="ml-2 text-muted-foreground/80">{detailText}</span></div></div></div>;
-    const operationDetailText = detailText.slice(0, promptStart).trim();
-    const promptText = detailText.slice(promptStart + promptLabel.length).trim();
-    if (!promptText) return <div className="group w-full" style={{ overflowAnchor: "none" }}><div className="mr-auto w-full"><div className="rounded-md px-2 py-1 text-sm text-muted-foreground"><span className="font-medium text-foreground/80">{shimmeringTitle}</span>{operationDetailText ? <span className="ml-2 text-muted-foreground/80">{operationDetailText}</span> : null}</div></div></div>;
+    const { operationDetailText, promptText } = extractPromptSections(message.detail);
+    const summaryContent = buildGenericSummary(message.title, message);
+    if (!operationDetailText && !promptText) {
+      return <StaticOperationRow summaryContent={summaryContent} tone={tone} />;
+    }
+
     return (
-      <div className="group w-full" style={{ overflowAnchor: "none" }}>
-        <div className="mr-auto w-full">
-          <ExpandablePanel isExpanded={isExpanded} summaryContent={shimmeringTitle} summaryContentClassName="min-w-0" headerToneClass={headerToneClass} onToggle={onToggle}>
-            <EventCodeBlock className="mt-0.5" maxHeightClassName={EVENT_DETAIL_MAX_HEIGHT_CLASS}>{promptText}</EventCodeBlock>
-          </ExpandablePanel>
+      <ExpandableOperationRow
+        isExpanded={isExpanded}
+        onToggle={onToggle}
+        summaryContent={summaryContent}
+        tone={tone}
+      >
+        <div className="mt-0.5 space-y-2">
+          {operationDetailText ? (
+            <OperationDetailLines lines={splitNonEmptyLines(operationDetailText)} />
+          ) : null}
+          {promptText ? (
+            <EventCodeBlock maxHeightClassName={EVENT_DETAIL_MAX_HEIGHT_CLASS}>
+              {promptText}
+            </EventCodeBlock>
+          ) : null}
         </div>
-      </div>
+      </ExpandableOperationRow>
     );
   }
 
   if (message.opType === "worktree-commit") {
-    const detailLines = (message.detail ?? "").split("•").map((line) => line.trim()).filter(Boolean);
-    const commitHash = detailLines.find((line) => /^[0-9a-f]{7,40}$/i.test(line)) ?? detailLines[detailLines.length - 1];
-    const collapsedSummaryContent = message.title === "Committed changes" ? <span className="inline-flex min-w-0 items-center gap-1.5"><span className="shrink-0 text-muted-foreground/90">Committed</span><span className="truncate font-semibold text-foreground/95">changes</span></span> : message.title;
-    if (!commitHash) return <div className="group w-full" style={{ overflowAnchor: "none" }}><div className="mr-auto w-full"><div className="rounded-md px-2 py-1 text-sm text-muted-foreground"><div className={`py-0.5 ${COLLAPSIBLE_HEADER_STATIC_TONE_CLASS}`}>{collapsedSummaryContent}</div></div></div></div>;
-    return <div className="group w-full" style={{ overflowAnchor: "none" }}><div className="mr-auto w-full"><ExpandablePanel isExpanded={isExpanded} summaryContent={collapsedSummaryContent} summaryContentClassName="min-w-0" headerToneClass={headerToneClass} onToggle={onToggle}><div className="mt-0.5"><div className="font-mono ui-text-sm text-foreground/80">{commitHash}</div></div></ExpandablePanel></div></div>;
+    const detailLinesFromMessage = splitNonEmptyLines(message.detail);
+    const commitSha =
+      message.worktreeCommit?.commitSha?.trim() ??
+      detailLinesFromMessage.find((line) => /^[0-9a-f]{7,40}$/i.test(line));
+    const commitMessage =
+      message.worktreeCommit?.message?.trim() ??
+      detailLinesFromMessage.find((line) => line !== commitSha);
+    const summaryContent = message.title === "Committed changes"
+      ? <EventTitle prefix="Committed" emphasis="changes" tone={tone} />
+      : buildGenericSummary(message.title, message);
+    const detailLines = [commitMessage, commitSha].filter((value): value is string => Boolean(value));
+
+    if (detailLines.length === 0) {
+      return <StaticOperationRow summaryContent={summaryContent} tone={tone} />;
+    }
+
+    return (
+      <ExpandableOperationRow
+        isExpanded={isExpanded}
+        onToggle={onToggle}
+        summaryContent={summaryContent}
+        tone={tone}
+      >
+        <OperationDetailLines lines={detailLines} />
+      </ExpandableOperationRow>
+    );
   }
 
   if (message.opType === "worktree-squash-merge") {
-    const detailLines = (message.detail ?? "").split("•").map((line) => line.trim()).filter(Boolean);
-    const mergedBranchMatch = message.detail?.match(/\b(?:into|to)\s+[`'"]?([A-Za-z0-9._/-]+)[`'"]?/i);
-    const mergedBranch = mergedBranchMatch?.[1];
-    const collapsedSummaryContent = message.title === "Squash merged" && mergedBranch ? <span className="inline-flex min-w-0 items-center gap-1.5"><span className="shrink-0 text-muted-foreground/90">Squash merged into</span><em className="truncate font-semibold text-foreground/95">{mergedBranch}</em></span> : message.title;
-    if ((message.title === "Squash merged" && mergedBranch) || detailLines.length === 0) return <div className="group w-full" style={{ overflowAnchor: "none" }}><div className="mr-auto w-full"><div className="rounded-md px-2 py-1 text-sm text-muted-foreground"><div className={`py-0.5 ${COLLAPSIBLE_HEADER_STATIC_TONE_CLASS}`}>{collapsedSummaryContent}</div></div></div></div>;
-    return <div className="group w-full" style={{ overflowAnchor: "none" }}><div className="mr-auto w-full"><ExpandablePanel isExpanded={isExpanded} summaryContent={collapsedSummaryContent} summaryContentClassName="min-w-0" headerToneClass={headerToneClass} onToggle={onToggle}><div className="mt-0.5 space-y-0.5">{detailLines.map((line, index) => <div key={`${message.id}:${index}`} className="font-mono ui-text-sm text-foreground/80">{line}</div>)}</div></ExpandablePanel></div></div>;
+    const mergeTargetBranch = extractMergeTargetBranch(message);
+    const isConflict = message.worktreeSquashMerge?.status === "conflict" || message.status === "error";
+    const summaryContent = isConflict
+      ? buildGenericSummary(
+          <EventTitle prefix="Squash merge" emphasis="failed" tone={tone} />,
+          message,
+        )
+      : mergeTargetBranch
+        ? <EventTitle prefix="Squash merged into" emphasis={mergeTargetBranch} tone={tone} emphasisAs="em" />
+        : buildGenericSummary(message.title, message);
+    const detailLines = [
+      message.worktreeSquashMerge?.message,
+      ...(message.worktreeSquashMerge?.conflictFiles?.length
+        ? [`Conflicts: ${message.worktreeSquashMerge.conflictFiles.join(", ")}`]
+        : []),
+      message.worktreeSquashMerge?.prepCommitMessage
+        ? `Commit: ${message.worktreeSquashMerge.prepCommitMessage}`
+        : undefined,
+      message.worktreeSquashMerge?.prepCommitSha
+        ? `Hash: ${message.worktreeSquashMerge.prepCommitSha}`
+        : undefined,
+      ...splitNonEmptyLines(message.detail).filter((line) => line !== message.worktreeSquashMerge?.message),
+    ].filter((value): value is string => Boolean(value));
+
+    if (detailLines.length === 0) {
+      return <StaticOperationRow summaryContent={summaryContent} tone={tone} />;
+    }
+
+    return (
+      <ExpandableOperationRow
+        isExpanded={isExpanded}
+        onToggle={onToggle}
+        summaryContent={summaryContent}
+        tone={tone}
+      >
+        <OperationDetailLines lines={detailLines} />
+      </ExpandableOperationRow>
+    );
   }
 
   if (message.opType === "primary-checkout") {
-    const detailLines = (message.detail ?? "").split("•").map((line) => line.trim()).filter(Boolean);
-    const shouldUseSubtlePrimaryCheckoutTitle = message.title === "Promoted to primary checkout" || message.title === "Demoted from primary checkout" || message.title === "Promoted then demoted as primary checkout";
-    const primaryCheckoutTitleClassName = shouldUseSubtlePrimaryCheckoutTitle ? "text-muted-foreground/70" : undefined;
-    const primaryCheckoutSummaryContentClassName = primaryCheckoutTitleClassName ? `min-w-0 ${primaryCheckoutTitleClassName}` : "min-w-0";
-    const primaryCheckoutStaticTitleClassName = primaryCheckoutTitleClassName ? `py-0.5 ${COLLAPSIBLE_HEADER_STATIC_TONE_CLASS} ${primaryCheckoutTitleClassName}` : `py-0.5 ${COLLAPSIBLE_HEADER_STATIC_TONE_CLASS}`;
-    if (detailLines.length === 0) return <div className="group w-full" style={{ overflowAnchor: "none" }}><div className="mr-auto w-full"><div className="rounded-md px-2 py-1 text-sm text-muted-foreground"><div className={primaryCheckoutStaticTitleClassName}>{shimmeringTitle}</div></div></div></div>;
-    return <div className="group w-full" style={{ overflowAnchor: "none" }}><div className="mr-auto w-full"><ExpandablePanel isExpanded={isExpanded} summaryContent={shimmeringTitle} summaryContentClassName={primaryCheckoutSummaryContentClassName} headerToneClass={headerToneClass} onToggle={onToggle}><div className="mt-0.5 space-y-0.5">{detailLines.map((line, index) => <div key={`${message.id}:${index}`} className="font-mono ui-text-sm text-foreground/80">{line}</div>)}</div></ExpandablePanel></div></div>;
+    const detailLines = splitNonEmptyLines(message.detail);
+    const shouldUseSubtleTitle =
+      tone !== "destructive" &&
+      (message.title === "Promoted to primary checkout" ||
+        message.title === "Demoted from primary checkout" ||
+        message.title === "Promoted then demoted as primary checkout");
+    const summaryContent = buildGenericSummary(message.title, message);
+
+    if (detailLines.length === 0) {
+      return (
+        <StaticOperationRow
+          summaryContent={summaryContent}
+          tone={tone}
+          className={shouldUseSubtleTitle ? "text-muted-foreground/70" : undefined}
+        />
+      );
+    }
+
+    return (
+      <ExpandableOperationRow
+        isExpanded={isExpanded}
+        onToggle={onToggle}
+        summaryContent={summaryContent}
+        tone={tone}
+        summaryContentClassName={cn("min-w-0", shouldUseSubtleTitle ? "text-muted-foreground/70" : undefined)}
+      >
+        <OperationDetailLines lines={detailLines} />
+      </ExpandableOperationRow>
+    );
   }
 
-  return <div className="group w-full" style={{ overflowAnchor: "none" }}><div className="mr-auto w-full"><div className="rounded-md px-2 py-1 text-sm text-muted-foreground"><span className="font-medium text-foreground/80">{shimmeringTitle}</span>{message.detail ? <span className="ml-2 text-muted-foreground/80">{message.detail}</span> : null}</div></div></div>;
+  const detailLines = splitNonEmptyLines(message.detail);
+  const summaryContent = buildGenericSummary(message.title, message);
+
+  if (detailLines.length === 0) {
+    return <StaticOperationRow summaryContent={summaryContent} tone={tone} />;
+  }
+
+  return (
+    <ExpandableOperationRow
+      isExpanded={isExpanded}
+      onToggle={onToggle}
+      summaryContent={summaryContent}
+      tone={tone}
+    >
+      <OperationDetailLines lines={detailLines} />
+    </ExpandableOperationRow>
+  );
 }

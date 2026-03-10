@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ThreadGitDiffResponse, ThreadWorkStatus } from "@beanbag/agent-core";
+import type { Thread, ThreadGitDiffResponse, ThreadWorkStatus } from "@beanbag/agent-core";
 import {
   resolveThreadPlaceholder,
   resolveThreadGitDiffPlaceholder,
@@ -81,9 +81,10 @@ describe("resolveThreadWorkStatusPlaceholder", () => {
 
 describe("resolveThreadPlaceholder", () => {
   it("keeps previous data when the same thread query refreshes", () => {
-    const previousThread = {
+    const previousThread: Thread = {
       id: "thread-1",
       projectId: "project-1",
+      createdAt: 1,
       status: "idle",
       updatedAt: 1,
       lastReadAt: 1,
@@ -100,9 +101,10 @@ describe("resolveThreadPlaceholder", () => {
   });
 
   it("drops previous data when switching to a different thread", () => {
-    const previousThread = {
+    const previousThread: Thread = {
       id: "thread-1",
       projectId: "project-1",
+      createdAt: 1,
       status: "idle",
       updatedAt: 1,
       lastReadAt: 1,

@@ -2,6 +2,7 @@ import { type ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
+import type { ThreadTimelineResponse } from "@beanbag/agent-core";
 import { ThreadDetailView } from "./ThreadDetailView";
 
 const apiState = vi.hoisted(() => {
@@ -17,6 +18,7 @@ const apiState = vi.hoisted(() => {
     thread: {
       id: "thread-1",
       projectId: "project-1",
+      createdAt: 20,
       status: "idle",
       updatedAt: 20,
       lastReadAt: 20,
@@ -35,6 +37,7 @@ const apiState = vi.hoisted(() => {
     parentThread: {
       id: "thread-parent",
       projectId: "project-1",
+      createdAt: 10,
       status: "idle",
       updatedAt: 10,
       lastReadAt: 10,
@@ -60,7 +63,7 @@ const apiState = vi.hoisted(() => {
         },
       ],
       contextWindowUsage: null,
-    },
+    } as ThreadTimelineResponse,
     timelineLoading: false,
     workStatus: {
       state: "dirty_uncommitted",
@@ -334,12 +337,14 @@ describe("ThreadDetailView", () => {
     expect(html).toContain("Parent thread");
     expect(html).toContain('href="/projects/project-1/threads/thread-parent"');
     expect(html).toContain("Rendered message");
-    expect(html).toContain("Ask for follow-up changes|1|Local Env");
+    expect(html).toContain("Ask for follow-up changes|1|");
+    expect(html).toContain("Environment");
+    expect(html).toContain("Local Env");
     expect(html).toContain("1 file");
     expect(html).toContain("+1 -1");
   });
 
-  it("hides the working indicator while the thread timeline is still loading", () => {
+  it("keeps the working indicator visible while the thread timeline is still loading", () => {
     apiState.thread.status = "active";
     apiState.timelineLoading = true;
     apiState.timeline = {
@@ -350,7 +355,7 @@ describe("ThreadDetailView", () => {
     const html = renderThreadDetailView();
 
     expect(html).toContain("Loading thread...");
-    expect(html).not.toContain("working");
+    expect(html).toContain("working");
   });
 
   it("keeps the working indicator once the active thread timeline has loaded", () => {
@@ -383,7 +388,7 @@ describe("ThreadDetailView", () => {
     expect(html).toContain("working");
   });
 
-  it("hides the working indicator when the last thread row is already in-progress", () => {
+  it("keeps the working indicator when the last thread row is already in-progress", () => {
     apiState.thread.status = "active";
     apiState.timelineLoading = false;
     apiState.timeline = {
@@ -394,7 +399,7 @@ describe("ThreadDetailView", () => {
           message: {
             id: "tool-1",
             threadId: "thread-1",
-            kind: "tool-call",
+            kind: "tool-call" as const,
             toolName: "exec_command",
             callId: "call-1",
             command: "ls",
@@ -412,6 +417,6 @@ describe("ThreadDetailView", () => {
     const html = renderThreadDetailView();
 
     expect(html).not.toContain("Loading thread...");
-    expect(html).not.toContain("working");
+    expect(html).toContain("working");
   });
 });

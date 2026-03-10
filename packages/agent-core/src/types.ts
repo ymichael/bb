@@ -141,6 +141,7 @@ export type AppThreadEventType =
   | "client/thread/start"
   | "client/turn/start"
   | "system/error"
+  | "system/thread/interrupted"
   | "system/thread-title/updated"
   | "system/thread_operation"
   | "system/primary_checkout/updated"
@@ -221,6 +222,11 @@ export interface SystemThreadOperationEventData {
   demotedPrimaryCheckout?: boolean;
 }
 
+export interface SystemThreadInterruptedEventData {
+  reason: "user";
+  message?: string;
+}
+
 export type ThreadProvisioningReason =
   | "thread-created"
   | "boot-created-thread"
@@ -242,6 +248,7 @@ export interface SystemProvisioningEnvSetupEventData {
   status: "started" | "running" | "completed" | "failed";
   scriptPath: string;
   workspaceRoot?: string;
+  branchName?: string;
   timeoutMs?: number;
   durationMs?: number;
   detail?: string;
@@ -259,6 +266,7 @@ export interface SystemProvisioningCompletedEventData {
   environmentId: string;
   environmentDisplayName: string;
   workspaceRoot?: string;
+  branchName?: string;
   fallbackReason?: string;
   reason?: ThreadProvisioningReason;
 }
@@ -295,6 +303,7 @@ export type ThreadEventDataByType = CodexServerNotificationParamsByMethod & {
   "client/thread/start": ClientOutboundStartEventData;
   "client/turn/start": ClientOutboundStartEventData;
   "system/error": SystemErrorEventData;
+  "system/thread/interrupted": SystemThreadInterruptedEventData;
   "system/thread-title/updated": SystemThreadTitleUpdatedEventData;
   "system/thread_operation": SystemThreadOperationEventData;
   "system/primary_checkout/updated": SystemPrimaryCheckoutUpdatedEventData;

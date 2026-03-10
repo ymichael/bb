@@ -13,6 +13,7 @@ export interface UIMessageBase {
   sourceSeqStart: number;
   sourceSeqEnd: number;
   createdAt: number;
+  startedAt?: number;
   turnId?: string;
 }
 
@@ -73,6 +74,7 @@ export interface UIToolCallSummary {
   output?: string;
   exitCode?: number;
   duration?: string;
+  durationMs?: number;
   status: Extract<
     UIMessageStatus,
     "pending" | "completed" | "error" | "interrupted"
@@ -96,6 +98,7 @@ export interface UIToolCallMessage extends UIMessageBase {
   output?: string;
   exitCode?: number;
   duration?: string;
+  durationMs?: number;
   status: Extract<
     UIMessageStatus,
     "pending" | "completed" | "error" | "interrupted"
@@ -172,8 +175,26 @@ export interface UIProvisioningMetadata {
   environmentId?: string;
   environmentDisplayName?: string;
   workspaceRoot?: string;
+  branchName?: string;
   fallbackReason?: string;
   setup?: UIProvisioningSetupMetadata;
+}
+
+export interface UIWorktreeCommitMetadata {
+  status: "committed" | "noop";
+  message?: string;
+  commitSha?: string;
+  includeUnstaged?: boolean;
+}
+
+export interface UIWorktreeSquashMergeMetadata {
+  status: "merged" | "noop" | "conflict";
+  message?: string;
+  committed?: boolean;
+  mergeBaseBranch?: string;
+  conflictFiles?: string[];
+  prepCommitMessage?: string;
+  prepCommitSha?: string;
 }
 
 export interface UIOperationMessage extends UIMessageBase {
@@ -181,9 +202,15 @@ export interface UIOperationMessage extends UIMessageBase {
   opType: string;
   title: string;
   detail?: string;
+  status?: Extract<
+    UIMessageStatus,
+    "pending" | "completed" | "error" | "interrupted"
+  >;
   provisioning?: UIProvisioningMetadata;
   primaryCheckout?: UIPrimaryCheckoutMetadata;
   threadOperation?: UIThreadOperationIntentMetadata;
+  worktreeCommit?: UIWorktreeCommitMetadata;
+  worktreeSquashMerge?: UIWorktreeSquashMergeMetadata;
 }
 
 export interface UIErrorMessage extends UIMessageBase {

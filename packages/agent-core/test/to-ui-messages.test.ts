@@ -140,7 +140,9 @@ describe("toUIMessages replay coverage", () => {
     const events = loadFixture("thread-JQh4-pAyGlgHLACZ8AXY2-events.json");
     expect(events.length).toBeGreaterThan(500);
 
-    const projected = toUIMessages(events);
+    const projected = toUIMessages(events, {
+      threadStatus: "active",
+    });
     const projectedAgain = toUIMessages(events);
 
     expect(projected.length).toBeGreaterThan(0);
@@ -1206,7 +1208,9 @@ describe("toUIMessages replay coverage", () => {
       },
     ];
 
-    const projected = toUIMessages(events);
+    const projected = toUIMessages(events, {
+      threadStatus: "active",
+    });
     const op = projected.find(
       (message): message is Extract<UIMessage, { kind: "operation" }> =>
         message.kind === "operation",
@@ -1274,7 +1278,9 @@ describe("toUIMessages replay coverage", () => {
       },
     ];
 
-    const projected = toUIMessages(events);
+    const projected = toUIMessages(events, {
+      threadStatus: "active",
+    });
     const ops = projected.filter(
       (message): message is Extract<UIMessage, { kind: "operation" }> =>
         message.kind === "operation",
@@ -1301,7 +1307,9 @@ describe("toUIMessages replay coverage", () => {
       },
     ];
 
-    const projected = toUIMessages(events);
+    const projected = toUIMessages(events, {
+      threadStatus: "active",
+    });
     const op = projected.find(
       (message): message is Extract<UIMessage, { kind: "operation" }> =>
         message.kind === "operation",
@@ -1328,7 +1336,9 @@ describe("toUIMessages replay coverage", () => {
       },
     ];
 
-    const projected = toUIMessages(events);
+    const projected = toUIMessages(events, {
+      threadStatus: "active",
+    });
     const op = projected.find(
       (message): message is Extract<UIMessage, { kind: "operation" }> =>
         message.kind === "operation",
@@ -1368,7 +1378,9 @@ describe("toUIMessages replay coverage", () => {
       },
     ];
 
-    const projected = toUIMessages(events);
+    const projected = toUIMessages(events, {
+      threadStatus: "active",
+    });
     const ops = projected.filter(
       (message): message is Extract<UIMessage, { kind: "operation" }> =>
         message.kind === "operation",
@@ -1379,7 +1391,7 @@ describe("toUIMessages replay coverage", () => {
     expect(ops[0]?.detail).toBe("Server-assigned title");
   });
 
-  it("projects in-progress compaction items as operations", () => {
+  it("keeps in-progress compaction items pending for active threads", () => {
     const events: ThreadEvent[] = [
       {
         id: "evt-1",
@@ -1397,7 +1409,7 @@ describe("toUIMessages replay coverage", () => {
       },
     ];
 
-    const projected = toUIMessages(events);
+    const projected = toUIMessages(events, { threadStatus: "active" });
     const op = projected.find(
       (message): message is Extract<UIMessage, { kind: "operation" }> =>
         message.kind === "operation",
@@ -1406,6 +1418,7 @@ describe("toUIMessages replay coverage", () => {
     expect(op).toBeDefined();
     expect(op?.opType).toBe("compaction");
     expect(op?.title).toBe("Context compacting...");
+    expect(op?.status).toBe("pending");
   });
 
   it("coalesces compaction lifecycle events into a single completed operation", () => {
@@ -1479,7 +1492,9 @@ describe("toUIMessages replay coverage", () => {
       },
     ];
 
-    const projected = toUIMessages(events);
+    const projected = toUIMessages(events, {
+      threadStatus: "active",
+    });
     const op = projected.find(
       (message): message is Extract<UIMessage, { kind: "operation" }> =>
         message.kind === "operation",
@@ -1488,6 +1503,30 @@ describe("toUIMessages replay coverage", () => {
     expect(op).toBeDefined();
     expect(op?.opType).toBe("compaction");
     expect(op?.title).toBe("Context compacted");
+  });
+
+  it("projects thread interruption events as interrupted operations", () => {
+    const projected = toUIMessages([
+      {
+        id: "evt-1",
+        threadId: "thread-1",
+        seq: 1,
+        type: "system/thread/interrupted",
+        data: {
+          reason: "user",
+        },
+        createdAt: 1,
+      },
+    ]);
+    const op = projected.find(
+      (message): message is Extract<UIMessage, { kind: "operation" }> =>
+        message.kind === "operation",
+    );
+
+    expect(op).toBeDefined();
+    expect(op?.opType).toBe("thread-interrupted");
+    expect(op?.title).toBe("Stopped by user");
+    expect(op?.status).toBe("interrupted");
   });
 
   it("projects provisioning env setup events as operations", () => {
@@ -1534,7 +1573,9 @@ describe("toUIMessages replay coverage", () => {
       },
     ];
 
-    const projected = toUIMessages(events);
+    const projected = toUIMessages(events, {
+      threadStatus: "active",
+    });
     const ops = projected.filter(
       (message): message is Extract<UIMessage, { kind: "operation" }> =>
         message.kind === "operation",
@@ -1590,7 +1631,9 @@ describe("toUIMessages replay coverage", () => {
       },
     ];
 
-    const projected = toUIMessages(events);
+    const projected = toUIMessages(events, {
+      threadStatus: "active",
+    });
     const ops = projected.filter(
       (message): message is Extract<UIMessage, { kind: "operation" }> =>
         message.kind === "operation",
@@ -1642,7 +1685,9 @@ describe("toUIMessages replay coverage", () => {
       },
     ];
 
-    const projected = toUIMessages(events);
+    const projected = toUIMessages(events, {
+      threadStatus: "active",
+    });
     const ops = projected.filter(
       (message): message is Extract<UIMessage, { kind: "operation" }> =>
         message.kind === "operation",
@@ -2077,7 +2122,7 @@ describe("toUIMessages replay coverage", () => {
     expect(messageRows[1]?.message.kind).toBe("operation");
     if (messageRows[1]?.message.kind === "operation") {
       expect(messageRows[1].message.opType).toBe("provisioning");
-      expect(messageRows[1].message.title).toContain("Provisioning");
+      expect(messageRows[1].message.title).toBe("Environment setup failed");
     }
 
     expect(messageRows[2]?.message.kind).toBe("error");

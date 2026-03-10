@@ -3,12 +3,12 @@ import { PatchDiff } from "@pierre/diffs/react";
 import type { UIFileEditMessage } from "@beanbag/agent-core";
 import {
   CollapsibleHeader,
-  COLLAPSIBLE_HEADER_TEXT_CLASS,
   ExpandablePanel,
-  getCollapsibleHeaderToneClass,
 } from "@beanbag/ui-core";
 import { usePreferredTheme } from "@/hooks/useTheme";
 import {
+  EventTitle,
+  getEventHeaderToneClass,
   renderShimmeringSummary,
   useLatestInitialExpanded,
 } from "./shared";
@@ -166,11 +166,9 @@ const DIFF_VIEW_STYLE = {
 export function FileEditRow({
   message,
   initialExpanded = false,
-  preferOngoingLabels = false,
 }: {
   message: UIFileEditMessage;
   initialExpanded?: boolean;
-  preferOngoingLabels?: boolean;
 }) {
   const { isExpanded, onToggle } = useLatestInitialExpanded(initialExpanded);
   const preferredTheme = usePreferredTheme();
@@ -206,66 +204,67 @@ export function FileEditRow({
   const actionLabel = useMemo(() => {
     if (message.status === "error") return "Failed";
     if (message.status === "interrupted") return "Declined";
-    if (message.status === "pending" || preferOngoingLabels) return "Applying";
+    if (message.status === "pending") return "Applying";
     if (message.changes.length === 0) return "Edited";
     const actions = message.changes.map((change) => fileChangeAction(change));
     const first = actions[0];
     const hasMixed = actions.some((action) => action !== first);
     if (hasMixed || !first) return "Changed";
     return fileChangeActionLabel(first);
-  }, [message.changes, message.status, preferOngoingLabels]);
-  const isApplying = actionLabel === "Applying";
-  const title = isExpanded
-    ? isApplying
-      ? "Applying file changes"
-      : message.status === "error"
-        ? "Failed to apply file changes"
-        : message.status === "interrupted"
-          ? "Declined file changes"
-          : `${actionLabel} ${uniqueFileCount === 1 ? "file" : "files"}`
-    : `${actionLabel} ${collapsedFileLabel}`;
-  const collapsedSummaryContent = isApplying ? (
-    renderShimmeringSummary(title, true)
-  ) : isExpanded ? (
-    title
-  ) : (
-    <span className="inline-flex min-w-0 items-center gap-1.5">
-      <span className="shrink-0 text-muted-foreground/90">{actionLabel}</span>
-      <span className="truncate font-semibold text-foreground/95">{collapsedFileLabel}</span>
-      <span className="shrink-0 text-emerald-600">+{collapsedStats.added}</span>
-      <span className="shrink-0 text-destructive/80">-{collapsedStats.removed}</span>
-    </span>
+  }, [message.changes, message.status]);
+  const isApplying = message.status === "pending";
+  const tone = message.status === "error" ? "destructive" : "default";
+  const summaryLabel =
+    isExpanded && uniqueFileCount > 1
+      ? `${uniqueFileCount} files`
+      : isExpanded && uniqueFileCount === 1
+        ? collapsedFileLabelBase
+        : collapsedFileLabel;
+  const summaryContent = renderShimmeringSummary(
+    <EventTitle
+      prefix={actionLabel}
+      emphasis={summaryLabel}
+      suffix={
+        <>
+          <span className="text-emerald-600">+{collapsedStats.added}</span>{" "}
+          <span className="text-destructive/80">-{collapsedStats.removed}</span>
+        </>
+      }
+      tone={tone}
+    />,
+    isApplying,
   );
   const isAggregatedChanges = message.changes.length > 1;
-  const isAggregationActive = isAggregatedChanges && (message.status === "pending" || preferOngoingLabels);
   const changeKeys = useMemo(
     () => message.changes.map((change, index) => `${fileChangeIdentity(change)}:${index}`),
     [message.changes],
   );
-  const changeKeySignature = useMemo(() => changeKeys.join("|"), [changeKeys]);
   const lastChangeKey = changeKeys[changeKeys.length - 1];
-  const [expandedChangeKeys, setExpandedChangeKeys] = useState<Set<string>>(() => {
-    if (!isAggregationActive || !lastChangeKey) return new Set();
-    return new Set([lastChangeKey]);
-  });
+  const [changeExpansionOverrides, setChangeExpansionOverrides] = useState<Record<string, boolean>>(
+    {},
+  );
 
   useEffect(() => {
-    if (!isAggregatedChanges || !isAggregationActive || !lastChangeKey) {
-      setExpandedChangeKeys(new Set());
-      return;
-    }
-    setExpandedChangeKeys(new Set([lastChangeKey]));
-  }, [changeKeySignature, isAggregatedChanges, isAggregationActive, lastChangeKey]);
+    const validKeys = new Set(changeKeys);
+    setChangeExpansionOverrides((currentOverrides) => {
+      const nextOverrides = Object.fromEntries(
+        Object.entries(currentOverrides).filter(([key]) => validKeys.has(key)),
+      );
+      return Object.keys(nextOverrides).length === Object.keys(currentOverrides).length
+        ? currentOverrides
+        : nextOverrides;
+    });
+  }, [changeKeys]);
 
-  const headerToneClass = getCollapsibleHeaderToneClass(isExpanded);
+  const headerToneClass = getEventHeaderToneClass(isExpanded, tone);
 
   return (
     <div className="group w-full" style={{ overflowAnchor: "none" }}>
       <div className="mr-auto w-full">
         <ExpandablePanel
           isExpanded={isExpanded}
-          summaryContent={collapsedSummaryContent}
-          summaryContentClassName={isExpanded ? COLLAPSIBLE_HEADER_TEXT_CLASS : "min-w-0"}
+          summaryContent={summaryContent}
+          summaryContentClassName="min-w-0"
           headerToneClass={headerToneClass}
           onToggle={onToggle}
         >
@@ -275,8 +274,13 @@ export function FileEditRow({
               const fileName = fileNameFromPath(change.path);
               const patch = getRenderablePatch(change);
               const changeKey = changeKeys[index] ?? `${fileChangeIdentity(change)}:${index}`;
-              const isChangeExpanded = !isAggregatedChanges || expandedChangeKeys.has(changeKey);
-              const changeHeaderToneClass = getCollapsibleHeaderToneClass(isChangeExpanded);
+              const isChangeExpanded =
+                !isAggregatedChanges ||
+                changeExpansionOverrides[changeKey] ||
+                (changeExpansionOverrides[changeKey] === undefined &&
+                  isExpanded &&
+                  changeKey === lastChangeKey);
+              const changeHeaderToneClass = getEventHeaderToneClass(isChangeExpanded);
               const changeSummaryContent = (
                 <span className="inline-flex min-w-0 items-center gap-2 font-mono ui-text-sm text-foreground/90">
                   <span className="min-w-0 flex-1 truncate" title={change.path}>
@@ -299,11 +303,14 @@ export function FileEditRow({
                         <CollapsibleHeader
                           isExpanded={isChangeExpanded}
                           onToggle={() => {
-                            setExpandedChangeKeys((currentKeys) => {
-                              const nextKeys = new Set(currentKeys);
-                              if (nextKeys.has(changeKey)) nextKeys.delete(changeKey);
-                              else nextKeys.add(changeKey);
-                              return nextKeys;
+                            setChangeExpansionOverrides((currentOverrides) => {
+                              const currentValue =
+                                currentOverrides[changeKey] ??
+                                (isExpanded && changeKey === lastChangeKey);
+                              return {
+                                ...currentOverrides,
+                                [changeKey]: !currentValue,
+                              };
                             });
                           }}
                           toneClassName={changeHeaderToneClass}

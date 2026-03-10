@@ -1,10 +1,5 @@
 import { useMemo } from "react";
-import {
-  COLLAPSIBLE_HEADER_STATIC_TONE_CLASS,
-  COLLAPSIBLE_HEADER_TEXT_CLASS,
-  ExpandablePanel,
-  getCollapsibleHeaderToneClass,
-} from "@beanbag/ui-core";
+import { ExpandablePanel } from "@beanbag/ui-core";
 import {
   assertNever,
   type UIToolExploringMessage,
@@ -12,6 +7,9 @@ import {
 } from "@beanbag/agent-core";
 import {
   EVENT_DETAIL_MAX_HEIGHT_CLASS,
+  EventTitle,
+  getEventHeaderToneClass,
+  getStaticEventToneClass,
   renderShimmeringSummary,
   useLatestInitialExpanded,
   useStickyBottomAutoScroll,
@@ -126,7 +124,11 @@ function summarizeExploringCounts(calls: UIToolExploringMessage["calls"]): {
   };
 }
 
-function formatExploredSummary(counts: { filesRead: number; searches: number; lists: number }): string {
+function formatExploringCountsLabel(counts: {
+  filesRead: number;
+  searches: number;
+  lists: number;
+}): string {
   const parts: string[] = [];
   if (counts.filesRead > 0) {
     parts.push(`${counts.filesRead} file${counts.filesRead === 1 ? "" : "s"}`);
@@ -137,30 +139,15 @@ function formatExploredSummary(counts: { filesRead: number; searches: number; li
   if (counts.lists > 0) {
     parts.push(`${counts.lists} list${counts.lists === 1 ? "" : "s"}`);
   }
-  if (parts.length === 0) return "Explored";
-  return `Explored ${parts.join(", ")}`;
-}
-
-function formatExploringSummary(counts: { filesRead: number; searches: number; lists: number }): string {
-  const exploredSummary = formatExploredSummary(counts);
-  if (!exploredSummary.startsWith("Explored ")) return "Exploring...";
-  return `Exploring ${exploredSummary.slice("Explored ".length)}...`;
-}
-
-function formatExploredDetail(counts: { filesRead: number; searches: number; lists: number }): string {
-  const summary = formatExploredSummary(counts);
-  if (!summary.startsWith("Explored ")) return "";
-  return summary.slice("Explored ".length);
+  return parts.join(", ");
 }
 
 export function ToolExploringRow({
   message,
   initialExpanded = false,
-  preferOngoingLabels = false,
 }: {
   message: UIToolExploringMessage;
   initialExpanded?: boolean;
-  preferOngoingLabels?: boolean;
 }) {
   const { isExpanded, onToggle } = useLatestInitialExpanded(initialExpanded);
   const detailLines = useMemo(
@@ -174,32 +161,24 @@ export function ToolExploringRow({
     });
   const counts = useMemo(() => summarizeExploringCounts(message.calls), [message.calls]);
   const hasDetails = detailLines.length > 0;
-  const headerToneClass = getCollapsibleHeaderToneClass(isExpanded);
-  const actionLabel =
-    message.status === "pending" || preferOngoingLabels ? "Exploring" : "Explored";
-  const isExploring = actionLabel === "Exploring";
-  const exploringSummary = formatExploringSummary(counts);
-  const exploringSummaryContent = renderShimmeringSummary(exploringSummary, isExploring);
-  const exploredDetail = formatExploredDetail(counts);
-  const collapsedSummaryContent =
-    isExploring || !exploredDetail ? (
-      isExploring ? exploringSummaryContent : actionLabel
-    ) : (
-      <span className="inline-flex min-w-0 items-center gap-1.5">
-        <span className="shrink-0 text-muted-foreground/90">Explored</span>
-        <span className="truncate font-semibold text-foreground/95">
-          {exploredDetail}
-        </span>
-      </span>
-    );
+  const isExploring = message.status === "pending";
+  const summaryLabel = formatExploringCountsLabel(counts);
+  const summaryContent = renderShimmeringSummary(
+    <EventTitle
+      prefix={isExploring ? "Exploring" : "Explored"}
+      emphasis={summaryLabel || "workspace"}
+    />,
+    isExploring,
+  );
+  const headerToneClass = getEventHeaderToneClass(isExpanded);
 
   if (!hasDetails) {
     return (
       <div className="group w-full" style={{ overflowAnchor: "none" }}>
         <div className="mr-auto w-full">
           <div className="rounded-md px-2 py-1 text-sm text-muted-foreground">
-            <div className={`py-0.5 ${COLLAPSIBLE_HEADER_STATIC_TONE_CLASS}`}>
-              {collapsedSummaryContent}
+            <div className={`py-0.5 ${getStaticEventToneClass()}`}>
+              {summaryContent}
             </div>
           </div>
         </div>
@@ -212,10 +191,8 @@ export function ToolExploringRow({
       <div className="mr-auto w-full">
         <ExpandablePanel
           isExpanded={isExpanded}
-          summaryContent={
-            isExpanded ? (isExploring ? exploringSummaryContent : actionLabel) : collapsedSummaryContent
-          }
-          summaryContentClassName={isExpanded ? COLLAPSIBLE_HEADER_TEXT_CLASS : "min-w-0"}
+          summaryContent={summaryContent}
+          summaryContentClassName="min-w-0"
           headerToneClass={headerToneClass}
           onToggle={onToggle}
         >

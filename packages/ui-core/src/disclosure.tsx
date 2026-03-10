@@ -131,25 +131,26 @@ export function ExpandablePanel({
           summaryContent={summaryContent}
         />
       </div>
-      {isExpanded ? (
-        <div
-          className={cx(
-            "grid grid-rows-[1fr] opacity-100 transition-[grid-template-rows,opacity] duration-200 ease-out",
-            bodyClassName,
-          )}
-        >
-          <div className="overflow-hidden">
-            <div
-              className={cx(
-                "translate-y-0 px-2 pb-1 pt-0 transition-transform duration-200 ease-out will-change-transform",
-                contentClassName,
-              )}
-            >
-              {children}
-            </div>
+      <div
+        aria-hidden={!isExpanded}
+        className={cx(
+          "grid transition-[grid-template-rows,opacity] duration-200 ease-out",
+          isExpanded ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0",
+          bodyClassName,
+        )}
+      >
+        <div className="overflow-hidden">
+          <div
+            className={cx(
+              "px-2 pb-1 pt-0 transition-[transform,opacity] duration-200 ease-out will-change-transform",
+              isExpanded ? "translate-y-0 opacity-100" : "-translate-y-1 opacity-0",
+              contentClassName,
+            )}
+          >
+            {children}
           </div>
         </div>
-      ) : null}
+      </div>
     </div>
   );
 }

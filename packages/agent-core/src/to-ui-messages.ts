@@ -30,6 +30,8 @@ import type {
   UIThreadOperationIntentMetadata,
   UIThreadOperationIntentPhase,
   UIWebSearchMessage,
+  UIWorktreeCommitMetadata,
+  UIWorktreeSquashMergeMetadata,
   UIUserMessage,
 } from "./ui-message.js";
 
@@ -422,6 +424,60 @@ function threadOperationIntentTitle(metadata: UIThreadOperationIntentMetadata | 
       }
     default:
       return assertNever(metadata.action);
+  }
+}
+
+function threadOperationIntentStatus(
+  metadata: UIThreadOperationIntentMetadata | null,
+): UIOperationMessage["status"] {
+  if (!metadata) return undefined;
+  switch (metadata.phase) {
+    case "requested":
+    case "queued":
+    case "running":
+    case "update":
+      return "pending";
+    case "completed":
+      return "completed";
+    case "failed":
+      return "error";
+    default:
+      return assertNever(metadata.phase);
+  }
+}
+
+function primaryCheckoutStatus(
+  metadata: UIPrimaryCheckoutMetadata | null,
+): UIOperationMessage["status"] {
+  if (!metadata) return undefined;
+  switch (metadata.phase) {
+    case "started":
+    case "update":
+      return "pending";
+    case "completed":
+    case "noop":
+      return "completed";
+    case "failed":
+      return "error";
+    default:
+      return assertNever(metadata.phase);
+  }
+}
+
+function provisioningSetupOperationStatus(
+  status: UIProvisioningSetupStatus | undefined,
+): UIOperationMessage["status"] {
+  if (!status) return undefined;
+  switch (status) {
+    case "started":
+    case "running":
+      return "pending";
+    case "completed":
+      return "completed";
+    case "failed":
+      return "error";
+    default:
+      return assertNever(status);
   }
 }
 
@@ -820,12 +876,38 @@ function parseParsedIntentsFromRecord(
   return [];
 }
 
-function durationToString(value: unknown): string | undefined {
-  if (typeof value === "string" && value.length > 0) return value;
+function durationToMs(value: unknown): number | undefined {
   if (typeof value === "number" && Number.isFinite(value)) {
-    return `${Math.round(value)}ms`;
+    return Math.max(0, Math.round(value));
   }
-  return undefined;
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  if (trimmed.length === 0) return undefined;
+  const match = trimmed.match(/^(\d+(?:\.\d+)?)\s*(ms|s|m)$/i);
+  if (!match) return undefined;
+  const amount = Number.parseFloat(match[1] ?? "");
+  const unit = (match[2] ?? "").toLowerCase();
+  if (!Number.isFinite(amount)) return undefined;
+  switch (unit) {
+    case "ms":
+      return Math.max(0, Math.round(amount));
+    case "s":
+      return Math.max(0, Math.round(amount * 1_000));
+    case "m":
+      return Math.max(0, Math.round(amount * 60_000));
+    default:
+      return undefined;
+  }
+}
+
+function durationToString(durationMs: number | undefined): string | undefined {
+  if (durationMs === undefined) return undefined;
+  if (durationMs < 1_000) return `${Math.round(durationMs)}ms`;
+  const seconds = durationMs / 1_000;
+  if (seconds < 60) return `${Number.isInteger(seconds) ? seconds : seconds.toFixed(1)}s`;
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = Math.round(seconds % 60);
+  return `${minutes}m ${remainingSeconds}s`;
 }
 
 interface ExecCallPartial extends Partial<UIToolCallSummary> {
@@ -908,9 +990,15 @@ function parseExecLifecycleEvent(
         source: getFirstStringField(item, ["source"]),
         output: getFirstStringField(item, ["aggregatedOutput", "aggregated_output"]),
         exitCode,
-        duration: durationToString(
+        durationMs: durationToMs(
           getFirstStringField(item, ["duration"]) ??
             getFirstNumberField(item, ["durationMs"]),
+        ),
+        duration: durationToString(
+          durationToMs(
+            getFirstStringField(item, ["duration"]) ??
+              getFirstNumberField(item, ["durationMs"]),
+          ),
         ),
         status,
       },
@@ -945,9 +1033,15 @@ function parseExecLifecycleEvent(
           "aggregated_output",
         ]),
         exitCode,
-        duration: durationToString(
+        durationMs: durationToMs(
           getFirstStringField(payload, ["duration"]) ??
             getFirstNumberField(payload, ["duration_ms"]),
+        ),
+        duration: durationToString(
+          durationToMs(
+            getFirstStringField(payload, ["duration"]) ??
+              getFirstNumberField(payload, ["duration_ms"]),
+          ),
         ),
         status,
       },
@@ -1193,10 +1287,12 @@ function parseOperationMessage(
       sourceSeqStart: event.seq,
       sourceSeqEnd: event.seq,
       createdAt: event.createdAt,
+      startedAt: event.createdAt,
       turnId: getTurnId(event.data),
       opType: "plan-updated",
       title: "Plan updated",
       detail,
+      status: "completed",
     };
   }
 
@@ -1212,10 +1308,12 @@ function parseOperationMessage(
       sourceSeqStart: event.seq,
       sourceSeqEnd: event.seq,
       createdAt: event.createdAt,
+      startedAt: event.createdAt,
       turnId: getTurnId(event.data),
       opType: "mcp-progress",
       title: "MCP tool progress",
       detail: detail || undefined,
+      status: "pending",
     };
   }
 
@@ -1233,10 +1331,12 @@ function parseOperationMessage(
       sourceSeqStart: event.seq,
       sourceSeqEnd: event.seq,
       createdAt: event.createdAt,
+      startedAt: event.createdAt,
       turnId: getTurnId(event.data),
       opType: "deprecation",
       title: "Deprecation notice",
       detail: detail || undefined,
+      status: "completed",
     };
   }
 
@@ -1260,10 +1360,30 @@ function parseOperationMessage(
       sourceSeqStart: event.seq,
       sourceSeqEnd: event.seq,
       createdAt: event.createdAt,
+      startedAt: event.createdAt,
       turnId: getTurnId(event.data),
       opType: "warning",
       title: "Configuration warning",
       detail: detail || undefined,
+      status: "completed",
+    };
+  }
+
+  if (eventTypeMatches(eventType, "system/thread/interrupted")) {
+    const payload = toEventRecord(event.data);
+    return {
+      kind: "operation",
+      id: messageId(event.threadId, "op", `thread-interrupted:${event.seq}`),
+      threadId: event.threadId,
+      sourceSeqStart: event.seq,
+      sourceSeqEnd: event.seq,
+      createdAt: event.createdAt,
+      startedAt: event.createdAt,
+      turnId: getTurnId(event.data),
+      opType: "thread-interrupted",
+      title: "Stopped by user",
+      detail: getStringField(payload, "message") || undefined,
+      status: "interrupted",
     };
   }
 
@@ -1280,9 +1400,11 @@ function parseOperationMessage(
       sourceSeqStart: event.seq,
       sourceSeqEnd: event.seq,
       createdAt: event.createdAt,
+      startedAt: event.createdAt,
       turnId: getTurnId(event.data),
       opType: "provisioning-started",
       title: "Provisioning started",
+      status: "pending",
       provisioning:
         environmentId || environmentDisplayName
           ? {
@@ -1315,6 +1437,7 @@ function parseOperationMessage(
 
     const scriptPath = getStringField(payload, "scriptPath");
     const workspaceRoot = getStringField(payload, "workspaceRoot");
+    const branchName = getStringField(payload, "branchName");
     const timeoutMs = getNumberField(payload, "timeoutMs");
     const durationMs = getNumberField(payload, "durationMs");
     const output = getStringField(payload, "detail");
@@ -1326,13 +1449,16 @@ function parseOperationMessage(
       sourceSeqStart: event.seq,
       sourceSeqEnd: event.seq,
       createdAt: event.createdAt,
+      startedAt: event.createdAt,
       turnId: getTurnId(event.data),
       opType: "provisioning-env-setup",
       title,
+      status: provisioningSetupOperationStatus(status),
       ...(status
         ? {
             provisioning: {
               ...(workspaceRoot ? { workspaceRoot } : {}),
+              ...(branchName ? { branchName } : {}),
               setup: {
                 status,
                 ...(scriptPath ? { scriptPath } : {}),
@@ -1363,12 +1489,14 @@ function parseOperationMessage(
       sourceSeqStart: event.seq,
       sourceSeqEnd: event.seq,
       createdAt: event.createdAt,
+      startedAt: event.createdAt,
       turnId: getTurnId(event.data),
       opType: "thread-title-updated",
       title: "Title updated",
       detail: previousTitle
         ? `${previousTitle} → ${title}`
         : title,
+      status: "completed",
     };
   }
 
@@ -1387,10 +1515,12 @@ function parseOperationMessage(
       sourceSeqStart: event.seq,
       sourceSeqEnd: event.seq,
       createdAt: event.createdAt,
+      startedAt: event.createdAt,
       turnId: getTurnId(event.data),
       opType: "thread-title-updated",
       title: "Title updated",
       detail: previousTitle ? `${previousTitle} → ${title}` : title,
+      status: "completed",
     };
   }
 
@@ -1412,10 +1542,12 @@ function parseOperationMessage(
       sourceSeqStart: event.seq,
       sourceSeqEnd: event.seq,
       createdAt: event.createdAt,
+      startedAt: event.createdAt,
       turnId: getTurnId(event.data),
       opType: "primary-checkout",
       title,
       detail: detailParts.length > 0 ? detailParts.join(" • ") : undefined,
+      status: primaryCheckoutStatus(primaryCheckout),
       ...(primaryCheckout ? { primaryCheckout } : {}),
     };
   }
@@ -1438,10 +1570,12 @@ function parseOperationMessage(
       sourceSeqStart: event.seq,
       sourceSeqEnd: event.seq,
       createdAt: event.createdAt,
+      startedAt: event.createdAt,
       turnId: getTurnId(event.data),
       opType: "thread-operation-intent",
       title,
       detail: detailParts.length > 0 ? detailParts.join(" • ") : undefined,
+      status: threadOperationIntentStatus(threadOperation),
       ...(threadOperation ? { threadOperation } : {}),
     };
   }
@@ -1450,9 +1584,21 @@ function parseOperationMessage(
     const payload = toEventRecord(event.data);
     const status = getStringField(payload, "status");
     const title = status === "committed" ? "Committed changes" : "No commit created";
+    const commitMessage = getStringField(payload, "message");
+    const commitSha = getStringField(payload, "commitSha");
+    const includeUnstaged = payload?.includeUnstaged;
+    const worktreeCommit: UIWorktreeCommitMetadata | undefined =
+      status === "committed" || status === "noop"
+        ? {
+            status,
+            ...(commitMessage ? { message: commitMessage } : {}),
+            ...(commitSha ? { commitSha } : {}),
+            ...(typeof includeUnstaged === "boolean" ? { includeUnstaged } : {}),
+          }
+        : undefined;
     const detailParts = [
-      getStringField(payload, "message"),
-      getStringField(payload, "commitSha"),
+      commitMessage,
+      commitSha,
     ].filter((value): value is string => Boolean(value));
     return {
       kind: "operation",
@@ -1461,31 +1607,50 @@ function parseOperationMessage(
       sourceSeqStart: event.seq,
       sourceSeqEnd: event.seq,
       createdAt: event.createdAt,
+      startedAt: event.createdAt,
       turnId: getTurnId(event.data),
       opType: "worktree-commit",
       title,
       detail: detailParts.length > 0 ? detailParts.join(" • ") : undefined,
+      status: "completed",
+      ...(worktreeCommit ? { worktreeCommit } : {}),
     };
   }
 
   if (eventTypeMatches(eventType, "system/worktree/squash_merge")) {
     const payload = toEventRecord(event.data);
     const status = getStringField(payload, "status");
+    const squashMessage = getStringField(payload, "message");
+    const mergeBaseBranch = getStringField(payload, "mergeBaseBranch");
+    const committed = payload?.committed;
+    const conflictFiles = payload?.conflictFiles;
+    const normalizedConflictFiles = Array.isArray(conflictFiles)
+      ? conflictFiles
+          .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+          .slice(0, 8)
+      : [];
+    const worktreeSquashMerge: UIWorktreeSquashMergeMetadata | undefined =
+      status === "merged" || status === "noop" || status === "conflict"
+        ? {
+            status,
+            ...(squashMessage ? { message: squashMessage } : {}),
+            ...(typeof committed === "boolean" ? { committed } : {}),
+            ...(mergeBaseBranch ? { mergeBaseBranch } : {}),
+            ...(normalizedConflictFiles.length > 0
+              ? { conflictFiles: normalizedConflictFiles }
+              : {}),
+          }
+        : undefined;
     const title = status === "merged"
       ? "Squash merged"
       : status === "conflict"
         ? "Squash merge has conflicts"
         : "No squash merge performed";
     const detailParts = [
-      getStringField(payload, "message"),
-      ...((() => {
-        const conflictFiles = payload?.conflictFiles;
-        if (!Array.isArray(conflictFiles)) return [];
-        const normalized = conflictFiles
-          .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
-          .slice(0, 8);
-        return normalized.length > 0 ? [`Conflicts: ${normalized.join(", ")}`] : [];
-      })()),
+      squashMessage,
+      ...(normalizedConflictFiles.length > 0
+        ? [`Conflicts: ${normalizedConflictFiles.join(", ")}`]
+        : []),
     ].filter((value): value is string => Boolean(value));
     return {
       kind: "operation",
@@ -1494,10 +1659,13 @@ function parseOperationMessage(
       sourceSeqStart: event.seq,
       sourceSeqEnd: event.seq,
       createdAt: event.createdAt,
+      startedAt: event.createdAt,
       turnId: getTurnId(event.data),
       opType: "worktree-squash-merge",
       title,
       detail: detailParts.length > 0 ? detailParts.join(" • ") : undefined,
+      status: status === "conflict" ? "error" : "completed",
+      ...(worktreeSquashMerge ? { worktreeSquashMerge } : {}),
     };
   }
 
@@ -1516,10 +1684,12 @@ function parseOperationMessage(
       sourceSeqStart: event.seq,
       sourceSeqEnd: event.seq,
       createdAt: event.createdAt,
+      startedAt: event.createdAt,
       turnId: getTurnId(event.data),
       opType: "provisioning-fallback",
       title: "Provisioning fallback",
       detail: getStringField(payload, "detail") || undefined,
+      status: "pending",
       provisioning:
         fallbackEnvironmentId || fallbackEnvironmentLabel || reason
           ? {
@@ -1540,6 +1710,7 @@ function parseOperationMessage(
       displayName: getStringField(payload, "environmentDisplayName"),
     });
     const workspaceRoot = getStringField(payload, "workspaceRoot");
+    const branchName = getStringField(payload, "branchName");
     const fallbackReason = getStringField(payload, "fallbackReason");
     return {
       kind: "operation",
@@ -1548,15 +1719,18 @@ function parseOperationMessage(
       sourceSeqStart: event.seq,
       sourceSeqEnd: event.seq,
       createdAt: event.createdAt,
+      startedAt: event.createdAt,
       turnId: getTurnId(event.data),
       opType: "provisioning-completed",
       title: "Provisioning ready",
+      status: "completed",
       provisioning:
-        environmentId || environmentDisplayName || workspaceRoot || fallbackReason
+        environmentId || environmentDisplayName || workspaceRoot || branchName || fallbackReason
           ? {
               ...(environmentId ? { environmentId } : {}),
               ...(environmentDisplayName ? { environmentDisplayName } : {}),
               ...(workspaceRoot ? { workspaceRoot } : {}),
+              ...(branchName ? { branchName } : {}),
               ...(fallbackReason ? { fallbackReason } : {}),
             }
           : undefined,
@@ -1581,10 +1755,12 @@ function parseOperationMessage(
       sourceSeqStart: event.seq,
       sourceSeqEnd: event.seq,
       createdAt: event.createdAt,
+      startedAt: event.createdAt,
       turnId: getTurnId(event.data),
       opType: "provisioning-cleanup-failed",
       title: "Provisioning cleanup failed",
       detail: detailParts.length > 0 ? detailParts.join(" • ") : undefined,
+      status: "error",
     };
   }
 
@@ -1596,10 +1772,12 @@ function parseOperationMessage(
       sourceSeqStart: event.seq,
       sourceSeqEnd: event.seq,
       createdAt: event.createdAt,
+      startedAt: event.createdAt,
       turnId: getTurnId(event.data),
       opType: "compaction",
       title: "Context compacted",
       detail: extractText(event.data) || undefined,
+      status: "completed",
     };
   }
 
@@ -1744,6 +1922,7 @@ interface RunningExecCall extends UIToolCallSummary {
   sourceSeqStart: number;
   sourceSeqEnd: number;
   createdAt: number;
+  startedAt: number;
 }
 
 interface ToolActivityState {
@@ -1809,11 +1988,13 @@ function upsertRunningExecCall(
       output: incoming.output,
       exitCode: incoming.exitCode,
       duration: incoming.duration,
+      durationMs: incoming.durationMs,
       status: incoming.status ?? "pending",
       turnId: getTurnId(event.data),
       sourceSeqStart: event.seq,
       sourceSeqEnd: event.seq,
       createdAt: event.createdAt,
+      startedAt: event.createdAt,
     };
   }
 
@@ -1834,6 +2015,9 @@ function upsertRunningExecCall(
   }
   if (incoming.exitCode !== undefined) existing.exitCode = incoming.exitCode;
   if (incoming.duration && !existing.duration) existing.duration = incoming.duration;
+  if (incoming.durationMs !== undefined && existing.durationMs === undefined) {
+    existing.durationMs = incoming.durationMs;
+  }
   existing.status = mergeCallStatus(existing.status, incoming.status) ?? "pending";
   existing.sourceSeqEnd = Math.max(existing.sourceSeqEnd, event.seq);
   existing.createdAt = Math.max(existing.createdAt, event.createdAt);
@@ -1942,6 +2126,9 @@ function mergeCallSummary(
   }
   if (incoming.exitCode !== undefined) target.exitCode = incoming.exitCode;
   if (incoming.duration && !target.duration) target.duration = incoming.duration;
+  if (incoming.durationMs !== undefined && target.durationMs === undefined) {
+    target.durationMs = incoming.durationMs;
+  }
   target.status = mergeCallStatus(target.status, incoming.status) ?? target.status;
 }
 
@@ -1979,6 +2166,7 @@ function createToolCallMessage(
     sourceSeqStart: call.sourceSeqStart,
     sourceSeqEnd: call.sourceSeqEnd,
     createdAt: call.createdAt,
+    startedAt: call.startedAt,
     ...(call.turnId ? { turnId: call.turnId } : {}),
     toolName: "exec_command",
     callId: call.callId,
@@ -1989,6 +2177,7 @@ function createToolCallMessage(
     output: call.output,
     exitCode: call.exitCode,
     duration: call.duration,
+    durationMs: call.durationMs,
     status: call.status,
   };
 }
@@ -2007,6 +2196,7 @@ function createExploringMessage(
     sourceSeqStart: call.sourceSeqStart,
     sourceSeqEnd: call.sourceSeqEnd,
     createdAt: call.createdAt,
+    startedAt: call.startedAt,
     ...(call.turnId ? { turnId: call.turnId } : {}),
     status: call.status === "pending" ? "pending" : "completed",
     calls: [call],
@@ -2148,6 +2338,7 @@ function onExecEnd(
       active.output = merged.output ?? active.output;
       active.exitCode = merged.exitCode ?? active.exitCode;
       active.duration = merged.duration ?? active.duration;
+      active.durationMs = merged.durationMs ?? active.durationMs;
       state.toolActivity.finalizedExecCallIds.add(incoming.callId);
       flushActiveToolCell(state);
       return;
@@ -2179,6 +2370,7 @@ function onExecEnd(
       historyMatch.cell.output = merged.output ?? historyMatch.cell.output;
       historyMatch.cell.exitCode = merged.exitCode ?? historyMatch.cell.exitCode;
       historyMatch.cell.duration = merged.duration ?? historyMatch.cell.duration;
+      historyMatch.cell.durationMs = merged.durationMs ?? historyMatch.cell.durationMs;
     }
 
     state.toolActivity.finalizedExecCallIds.add(incoming.callId);
@@ -2226,6 +2418,7 @@ function onWebSearchBegin(
     sourceSeqStart: event.seq,
     sourceSeqEnd: event.seq,
     createdAt: event.createdAt,
+    startedAt: event.createdAt,
     ...(turnId ? { turnId } : {}),
     callId: payload.callId,
     query: payload.query,
@@ -2265,6 +2458,7 @@ function onWebSearchEnd(
     sourceSeqStart: event.seq,
     sourceSeqEnd: event.seq,
     createdAt: event.createdAt,
+    startedAt: event.createdAt,
     ...(turnId ? { turnId } : {}),
     callId: payload.callId,
     query: payload.query,
@@ -2318,6 +2512,7 @@ function upsertFileEdit(
       sourceSeqStart: event.seq,
       sourceSeqEnd: event.seq,
       createdAt: event.createdAt,
+      startedAt: event.createdAt,
       ...(turnId ? { turnId } : {}),
       callId: partial.callId,
       changes: partial.changes ?? [],
@@ -2375,6 +2570,7 @@ function onCompactionBegin(
   if (existing) {
     existing.sourceSeqEnd = Math.max(existing.sourceSeqEnd, event.seq);
     existing.createdAt = Math.max(existing.createdAt, event.createdAt);
+    existing.status = "pending";
     existing.title = "Context compacting...";
     existing.detail = payload.detail ?? existing.detail;
     return;
@@ -2388,10 +2584,12 @@ function onCompactionBegin(
     sourceSeqStart: event.seq,
     sourceSeqEnd: event.seq,
     createdAt: event.createdAt,
+    startedAt: event.createdAt,
     ...(turnId ? { turnId } : {}),
     opType: "compaction",
     title: "Context compacting...",
     detail: payload.detail,
+    status: "pending",
   };
   state.openCompactionsByKey.set(payload.key, message);
   state.messages.push(message);
@@ -2406,6 +2604,7 @@ function onCompactionEnd(
   if (existing) {
     existing.sourceSeqEnd = Math.max(existing.sourceSeqEnd, event.seq);
     existing.createdAt = Math.max(existing.createdAt, event.createdAt);
+    existing.status = "completed";
     existing.title = "Context compacted";
     existing.detail = payload.detail ?? existing.detail;
     state.openCompactionsByKey.delete(payload.key);
@@ -2425,12 +2624,52 @@ function onCompactionEnd(
     sourceSeqStart: event.seq,
     sourceSeqEnd: event.seq,
     createdAt: event.createdAt,
+    startedAt: event.createdAt,
     ...(turnId ? { turnId } : {}),
     opType: "compaction",
     title: "Context compacted",
     detail: payload.detail,
+    status: "completed",
   });
   state.finalizedCompactionKeys.add(payload.key);
+}
+
+function interruptOperationMessage(message: UIOperationMessage): void {
+  if (message.status !== "pending") return;
+  message.status = "interrupted";
+
+  switch (message.opType) {
+    case "thread-operation-intent":
+      switch (message.threadOperation?.action) {
+        case "commit":
+          message.title = "Commit interrupted";
+          return;
+        case "squash_merge":
+          message.title = "Squash merge interrupted";
+          return;
+        default:
+          message.title = "Thread operation interrupted";
+          return;
+      }
+    case "provisioning-started":
+    case "provisioning-fallback":
+      message.title = "Provisioning interrupted";
+      return;
+    case "provisioning-env-setup":
+      message.title = "Environment setup interrupted";
+      return;
+    case "primary-checkout":
+      message.title = "Primary checkout interrupted";
+      return;
+    case "mcp-progress":
+      message.title = "MCP tool progress interrupted";
+      return;
+    case "compaction":
+      message.title = "Context compaction interrupted";
+      return;
+    default:
+      return;
+  }
 }
 
 function finalizePendingMessages(
@@ -2514,6 +2753,11 @@ function finalizePendingMessages(
     }
   }
   state.openReasoningByTurn.clear();
+
+  for (const message of state.messages) {
+    if (message.kind !== "operation") continue;
+    interruptOperationMessage(message);
+  }
 
   flushActiveToolCell(state);
 }

@@ -4178,8 +4178,24 @@ describe("Orchestrator", () => {
 
   describe("stop()", () => {
     it("updates status to idle and broadcasts when no active process", () => {
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeThread({
+          id: "thread-1",
+          status: "active",
+        }),
+      );
+
       manager.stop("thread-1");
 
+      expect(eventRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          threadId: "thread-1",
+          type: "system/thread/interrupted",
+          data: {
+            reason: "user",
+          },
+        }),
+      );
       expect(threadRepo.update).toHaveBeenCalledWith("thread-1", {
         status: "idle",
       });
@@ -4187,6 +4203,23 @@ describe("Orchestrator", () => {
         "status-changed",
         "work-status-changed",
       ]);
+    });
+
+    it("does not append interruption events for threads that are already idle", () => {
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeThread({
+          id: "thread-1",
+          status: "idle",
+        }),
+      );
+
+      manager.stop("thread-1");
+
+      expect(eventRepo.create).not.toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "system/thread/interrupted",
+        }),
+      );
     });
 
     it("kills the process with SIGTERM when an active process exists", () => {
@@ -6632,7 +6665,7 @@ describe("Orchestrator", () => {
       expect(messageRows[1]?.message.kind).toBe("operation");
       if (messageRows[1]?.message.kind === "operation") {
         expect(messageRows[1].message.opType).toBe("provisioning");
-        expect(messageRows[1].message.title).toContain("Provisioning");
+        expect(messageRows[1].message.title).toBe("Environment setup failed");
       }
 
       expect(messageRows[2]?.message.kind).toBe("error");

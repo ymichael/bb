@@ -133,6 +133,8 @@ export type {
   UIProvisioningMetadata,
   UIProvisioningSetupMetadata,
   UIProvisioningSetupStatus,
+  UIWorktreeCommitMetadata,
+  UIWorktreeSquashMergeMetadata,
   UIOperationMessage,
   UIErrorMessage,
   UIDebugRawEventMessage,

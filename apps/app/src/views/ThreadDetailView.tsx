@@ -3,7 +3,6 @@ import {
   useEffect,
   useLayoutEffect,
   useMemo,
-  useReducer,
   useRef,
   useState,
 } from "react";
@@ -11,7 +10,6 @@ import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { Panel, PanelGroup } from "react-resizable-panels";
 import {
   useThread,
-  useThreads,
   useThreadWorkStatus,
   useThreadTimeline,
   useThreadGitDiff,
@@ -49,7 +47,6 @@ import {
   ConversationEmptyState,
   ConversationTimeline,
   ExpandablePanel,
-  getCollapsibleHeaderToneClass,
   StatusPill,
   type StatusPillVariant,
 } from "@beanbag/ui-core";
@@ -61,21 +58,13 @@ import {
 } from "@beanbag/agent-core";
 import { type ThreadDetailToolGroupRow } from "./threadDetailRows";
 import {
-  findLatestActivityMessageId,
-  findLatestActivityRowId,
-  isLastThreadRowShowingOngoingState,
-  shouldHighlightLatestActivity,
-} from "./threadDetailActivity";
-import {
-  createLatestInitialExpandedState,
-  reduceLatestInitialExpandedState,
+  useLatestInitialExpanded,
 } from "@/lib/latestInitialExpanded";
 import {
   promptDraftToInput,
 } from "@/lib/prompt-draft";
 import { HttpError } from "@/lib/api";
 import { getAutoArchivePreferences } from "@/lib/auto-archive-preferences";
-import { getEnvironmentIconInfo } from "@/lib/environment-icon";
 import { StatusPillCommitPopover } from "@/components/shared/StatusPillCommitPopover";
 import { ArchiveTimestampAction } from "@/components/shared/ArchiveTimestampAction";
 import {
@@ -111,6 +100,12 @@ import {
   extractThreadQueuedMessages,
   queuedInputToDraft,
 } from "./threadQueuedMessages";
+import {
+  EventTitle,
+  formatSummaryDuration,
+  getEventHeaderToneClass,
+  renderShimmeringSummary,
+} from "@/components/messages/rows/shared";
 
 const SCROLL_THRESHOLD = 40;
 const TIMELINE_PANEL_DEFAULT_SIZE_PERCENT = 50;
@@ -176,52 +171,52 @@ function findTimelineRowElement(
   return rows.find((row) => row.dataset.threadRowId === rowId) ?? null;
 }
 
-function useLatestInitialExpanded(initialExpanded: boolean): {
-  isExpanded: boolean;
-  onToggle: () => void;
-} {
-  const [state, dispatch] = useReducer(
-    reduceLatestInitialExpandedState,
-    initialExpanded,
-    createLatestInitialExpandedState,
-  );
-
-  useEffect(() => {
-    dispatch({ type: "sync", initialExpanded });
-  }, [initialExpanded]);
-
-  const onToggle = () => {
-    dispatch({ type: "toggle" });
-  };
-
-  return { isExpanded: state.isExpanded, onToggle };
-}
-
 function ToolGroupEntry({
   projectId,
   entry,
   messages,
   isLoadingMessages,
   onLoadMessages,
-  isLatestActivity,
+  initialExpanded,
 }: {
   projectId?: string;
   entry: ThreadDetailToolGroupRow;
   messages: ThreadDetailToolGroupRow["messages"];
   isLoadingMessages: boolean;
   onLoadMessages: () => void;
-  isLatestActivity: boolean;
+  initialExpanded: boolean;
 }) {
-  const { isExpanded, onToggle } = useLatestInitialExpanded(isLatestActivity);
-  const latestActivityMessageId = useMemo(
-    () => findLatestActivityMessageId(messages),
-    [messages],
-  );
+  const { isExpanded, onToggle } = useLatestInitialExpanded(initialExpanded);
   const count = entry.summaryCount;
-  const summaryContent = `${count} tools and changes`;
-  const headerToneClass = getCollapsibleHeaderToneClass(isExpanded);
+  const visibleDuration = formatSummaryDuration(entry.durationMs);
+  const isWorking = entry.status === "pending";
+  const summaryContent = renderShimmeringSummary(
+    visibleDuration ? (
+      <EventTitle
+        prefix={isWorking ? "Working for" : "Worked for"}
+        emphasis={visibleDuration}
+        suffix={count > 0 ? `${count} item${count === 1 ? "" : "s"}` : undefined}
+        suffixClassName="truncate"
+      />
+    ) : (
+      <EventTitle
+        prefix={isWorking ? "Working on" : "Worked on"}
+        emphasis={`${count} item${count === 1 ? "" : "s"}`}
+      />
+    ),
+    isWorking,
+  );
+  const headerToneClass = getEventHeaderToneClass(isExpanded);
+
+  useEffect(() => {
+    if (!isExpanded || isLoadingMessages || messages.length > 0) {
+      return;
+    }
+    onLoadMessages();
+  }, [isExpanded, isLoadingMessages, messages.length, onLoadMessages]);
+
   const handleToggle = () => {
-    if (!isExpanded) {
+    if (!isExpanded && messages.length === 0 && !isLoadingMessages) {
       onLoadMessages();
     }
     onToggle();
@@ -244,20 +239,14 @@ function ToolGroupEntry({
                 <span className="animate-shine">Loading details...</span>
               </div>
             ) : null}
-            {messages.map((message) => {
-              const isLatestMessage =
-                isLatestActivity &&
-                message.id === latestActivityMessageId;
-              return (
-                <ConversationEntry
-                  key={message.id}
-                  message={message}
-                  projectId={projectId}
-                  initialExpanded={isLatestMessage}
-                  preferOngoingLabels={isLatestMessage}
-                />
-              );
-            })}
+            {messages.map((message, messageIndex) => (
+              <ConversationEntry
+                key={message.id}
+                message={message}
+                projectId={projectId}
+                initialExpanded={isExpanded && messageIndex === messages.length - 1}
+              />
+            ))}
           </div>
         </ExpandablePanel>
       </div>
@@ -283,7 +272,7 @@ export function ThreadDetailView() {
     null,
   );
   const { data: thread, isLoading, error } = useThread(threadId ?? "", {
-    refetchOnMount: true,
+    refetchOnMount: "always",
   });
   const {
     data: threadWorkStatus,
@@ -291,32 +280,18 @@ export function ThreadDetailView() {
   } = useThreadWorkStatus(
     threadId ?? "",
     selectedMergeBaseBranch,
-    {
-      enabled:
-        Boolean(threadId) &&
-        Boolean(selectedMergeBaseBranch) &&
-        selectedMergeBaseBranch !== thread?.workStatus?.mergeBaseBranch,
-    },
   );
-  const resolvedThreadWorkStatus = selectedMergeBaseBranch
-    ? (threadWorkStatusError ? undefined : (threadWorkStatus ?? thread?.workStatus))
-    : thread?.workStatus;
-  const { data: threads } = useThreads(undefined, { enabled: false });
-  const parentThread = useMemo(
-    () =>
-      thread?.parentThreadId
-        ? threads?.find((candidate) => candidate.id === thread.parentThreadId)
-        : undefined,
-    [thread?.parentThreadId, threads],
-  );
+  const resolvedThreadWorkStatus =
+    threadWorkStatusError ? undefined : (threadWorkStatus ?? undefined);
+  const { data: parentThread } = useThread(thread?.parentThreadId ?? "");
   const { data: timeline, isLoading: timelineLoading } = useThreadTimeline(
     threadId ?? "",
-    { refetchOnMount: true },
+    { refetchOnMount: "always" },
   );
+  const threadToolGroupMessages = useThreadToolGroupMessages();
   const { data: defaultExecutionOptions } = useThreadDefaultExecutionOptions(
     threadId ?? "",
   );
-  const threadToolGroupMessages = useThreadToolGroupMessages();
   const tellThread = useTellThread();
   const enqueueThreadMessage = useEnqueueThreadMessage();
   const sendQueuedThreadMessage = useSendQueuedThreadMessage();
@@ -410,22 +385,9 @@ export function ThreadDetailView() {
 
   const threadDetailRows = useMemo(() => timeline?.rows ?? [], [timeline?.rows]);
   const contextWindowUsage = timeline?.contextWindowUsage ?? undefined;
-  const latestActivityRowId = useMemo(
-    () => findLatestActivityRowId(threadDetailRows),
-    [threadDetailRows],
-  );
-  const shouldHighlightLatest = useMemo(
-    () => shouldHighlightLatestActivity(threadDetailRows, latestActivityRowId),
-    [latestActivityRowId, threadDetailRows],
-  );
-  const isLastThreadRowShowingOngoingIndicator = useMemo(
-    () => isLastThreadRowShowingOngoingState(threadDetailRows, latestActivityRowId),
-    [latestActivityRowId, threadDetailRows],
-  );
 
   const isReasoningBlockActive = false;
   const isTimelineLoading = timelineLoading;
-  const isThreadTimelinePending = isTimelineLoading && threadDetailRows.length === 0;
   const isThreadPrimaryCheckoutActive = thread?.primaryCheckout?.isActive === true;
   const environmentInfo = useMemo(
     () =>
@@ -1254,19 +1216,10 @@ export function ThreadDetailView() {
   const showWorkspaceStatus =
     (Boolean(resolvedThreadWorkStatus) || Boolean(threadWorkStatusError)) &&
     !(thread.archivedAt !== undefined && environmentInfo?.capabilities.isolated_workspace !== true);
-  const environmentIconInfo = getEnvironmentIconInfo(environmentInfo);
-  const threadEnvironmentLabel =
-    thread.environmentId
-      ? (
-          formatEnvironmentDisplayName({
-            id: thread.environmentId,
-            displayName: environmentInfo?.displayName,
-          }) ?? thread.environmentId
-        )
-      : undefined;
   const showThreadMetadata = Boolean(
     parentThreadId ||
       thread.archivedAt !== undefined ||
+      thread.environmentId ||
       showPrimaryCheckoutMetadata ||
       showWorkspaceStatus,
   );
@@ -1308,30 +1261,21 @@ export function ThreadDetailView() {
     resolvedThreadWorkStatus?.defaultBranch;
 
   const handleSend = async () => {
-    const submittedDraft = {
-      text: promptDraft.text,
-      attachments: promptDraft.attachments,
-    };
-    const submittedInput = promptDraftToInput(submittedDraft);
-    if (submittedInput.length === 0) return;
-
-    // Clear optimistically so the composer does not lag behind a successful follow-up
-    // submission or resurrect the just-sent message after a route remount.
-    promptDraft.clear();
-    setAttachmentError(null);
+    if (promptInput.length === 0) return;
 
     if (thread.status === "active") {
       try {
         await enqueueThreadMessage.mutateAsync({
           id: thread.id,
-          input: submittedInput,
+          input: promptInput,
           model: activeModel?.model ?? selectedModel,
           ...(supportsServiceTier && serviceTier ? { serviceTier } : {}),
           ...(supportsReasoningLevels ? { reasoningLevel } : {}),
           sandboxMode,
         });
+        promptDraft.clear();
+        setAttachmentError(null);
       } catch (err) {
-        promptDraft.restoreIfEmpty(submittedDraft);
         window.alert(err instanceof Error ? err.message : "Failed to queue follow-up");
       }
       return;
@@ -1339,14 +1283,15 @@ export function ThreadDetailView() {
 
     try {
       await sendFollowUpInput({
-        input: submittedInput,
+        input: promptInput,
         model: activeModel?.model ?? selectedModel,
         ...(supportsServiceTier && serviceTier ? { serviceTier } : {}),
         ...(supportsReasoningLevels ? { reasoningLevel } : {}),
         sandboxMode,
       });
+      promptDraft.clear();
+      setAttachmentError(null);
     } catch (err) {
-      promptDraft.restoreIfEmpty(submittedDraft);
       window.alert(err instanceof Error ? err.message : "Failed to send follow-up");
     }
   };
@@ -1445,6 +1390,19 @@ export function ThreadDetailView() {
                 >
                   {parentThreadDisplayName}
                 </Link>
+              </DetailRow>
+            ) : null}
+            {thread.environmentId ? (
+              <DetailRow
+                label="Environment"
+                valueClassName="min-w-0 truncate"
+              >
+                <span>
+                  {formatEnvironmentDisplayName({
+                    id: thread.environmentId,
+                    displayName: environmentInfo?.displayName,
+                  }) ?? thread.environmentId}
+                </span>
               </DetailRow>
             ) : null}
             {showPrimaryCheckoutMetadata ? (
@@ -1586,7 +1544,7 @@ export function ThreadDetailView() {
         </section>
       ) : null}
       <ConversationTimeline>
-        {isThreadTimelinePending ? (
+        {isTimelineLoading && threadDetailRows.length === 0 ? (
           <ConversationEmptyState
             message="Loading thread..."
             spacing="compact"
@@ -1596,9 +1554,8 @@ export function ThreadDetailView() {
         ) : threadDetailRows.length === 0 ? (
           <ConversationEmptyState message="No events yet" />
         ) : (
-          threadDetailRows.map((entry) => {
-            const isLatestActivity =
-              shouldHighlightLatest && entry.id === latestActivityRowId;
+          threadDetailRows.map((entry, entryIndex) => {
+            const isLastRow = entryIndex === threadDetailRows.length - 1;
             return (
               <div key={`${threadId}:${entry.id}`} data-thread-row-id={entry.id}>
                 {entry.kind === "tool-group" ? (
@@ -1608,14 +1565,13 @@ export function ThreadDetailView() {
                     messages={toolGroupMessagesById[entry.id] ?? entry.messages}
                     isLoadingMessages={loadingToolGroupIds.has(entry.id)}
                     onLoadMessages={() => handleLoadToolGroupMessages(entry)}
-                    isLatestActivity={isLatestActivity}
+                    initialExpanded={isLastRow}
                   />
                 ) : (
                   <ConversationEntry
                     message={entry.message}
                     projectId={projectId}
-                    initialExpanded={isLatestActivity}
-                    preferOngoingLabels={isLatestActivity}
+                    initialExpanded={isLastRow}
                   />
                 )}
               </div>
@@ -1623,9 +1579,7 @@ export function ThreadDetailView() {
           })
         )}
       </ConversationTimeline>
-      {thread.status === "active" &&
-      !isThreadTimelinePending &&
-      !isLastThreadRowShowingOngoingIndicator ? (
+      {thread.status === "active" ? (
         <ConversationWorkingIndicator isThinking={isReasoningBlockActive} />
       ) : null}
     </>
@@ -1697,8 +1651,6 @@ export function ThreadDetailView() {
           sandboxMode={sandboxMode}
           sandboxOptions={sandboxOptions}
           onSandboxModeChange={setSandboxMode}
-          environmentLabel={threadEnvironmentLabel}
-          environmentIcon={environmentIconInfo?.icon}
           contextWindowUsage={contextWindowUsage}
         />
       }

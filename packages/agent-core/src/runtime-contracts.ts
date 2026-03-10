@@ -142,6 +142,7 @@ export type EnvironmentProvisioningEvent =
       status: "started" | "running" | "completed" | "failed";
       scriptPath: string;
       workspaceRoot?: string;
+      branchName?: string;
       timeoutMs?: number;
       durationMs?: number;
       detail?: string;

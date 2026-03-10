@@ -1,21 +1,24 @@
 import type { UIWebSearchMessage } from "@beanbag/agent-core";
 import { COLLAPSIBLE_HEADER_STATIC_TONE_CLASS } from "@beanbag/ui-core";
-import { renderShimmeringSummary } from "./shared";
+import {
+  EventTitle,
+  renderShimmeringSummary,
+} from "./shared";
 
 export function WebSearchRow({
   message,
-  preferOngoingLabels = false,
 }: {
   message: UIWebSearchMessage;
-  preferOngoingLabels?: boolean;
 }) {
-  const isSearching = message.status === "pending" || preferOngoingLabels;
-  const summary =
-    isSearching
-      ? "Searching the web"
-      : message.query
-        ? `Searched ${message.query}`
-        : "Searched the web";
+  const isSearching = message.status === "pending";
+  const summary = isSearching ? (
+    <EventTitle prefix="Searching" emphasis="the web" />
+  ) : (
+    <EventTitle
+      prefix="Searched"
+      emphasis={message.query ?? "the web"}
+    />
+  );
 
   return (
     <div className="group w-full" style={{ overflowAnchor: "none" }}>

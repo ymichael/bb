@@ -149,7 +149,8 @@ describe("ConversationEntry", () => {
     };
 
     const html = renderToStaticMarkup(<ConversationEntry message={message} />);
-    expect(html).toContain("Ran ls plans 2&gt;/dev/null || true");
+    expect(html).toContain(">Ran<");
+    expect(html).toContain("ls plans 2&gt;/dev/null || true");
     expect(html).toContain("min-w-0 truncate");
     expect(html).not.toContain("flex-1");
     expect(html).not.toContain("Ran command");
@@ -167,10 +168,11 @@ describe("ConversationEntry", () => {
     };
 
     const html = renderToStaticMarkup(<ConversationEntry message={message} />);
-    expect(html).toContain("Declined rm -rf /tmp/nope");
+    expect(html).toContain(">Declined<");
+    expect(html).toContain("rm -rf /tmp/nope");
   });
 
-  it("uses ongoing labels for latest tool activity presentation", () => {
+  it("keeps completed tool activity summaries stable when expanded", () => {
     const message: UIMessage = {
       ...baseMessage(),
       kind: "tool-call",
@@ -184,12 +186,11 @@ describe("ConversationEntry", () => {
       <ConversationEntry
         message={message}
         initialExpanded
-        preferOngoingLabels
       />,
     );
-    expect(html).toContain("Running command");
-    expect(html).not.toContain("Ran command");
-    expect(html).toContain("animate-shine");
+    expect(html).toContain("Ran");
+    expect(html).toContain("ls -la");
+    expect(html).not.toContain("animate-shine");
     expect(html).toContain("max-h-[320px]");
     expect(html).toContain("max-h-[220px] overflow-auto");
   });
@@ -310,7 +311,7 @@ describe("ConversationEntry", () => {
     expect(html).toContain(">Explored<");
     expect(html).toContain("2 files, 1 search");
     expect(html).toContain("font-semibold");
-    expect(html).not.toContain("Read README.md, package.json");
+    expect(html).toContain("aria-hidden=\"true\"");
   });
 
   it("includes list intent counts in exploring summary", () => {
@@ -406,9 +407,11 @@ describe("ConversationEntry", () => {
 
     const pendingHtml = renderToStaticMarkup(<ConversationEntry message={pending} />);
     const completedHtml = renderToStaticMarkup(<ConversationEntry message={completed} />);
-    expect(pendingHtml).toContain("Searching the web");
+    expect(pendingHtml).toContain(">Searching<");
+    expect(pendingHtml).toContain("the web");
     expect(pendingHtml).toContain("animate-shine");
-    expect(completedHtml).toContain("Searched react suspense");
+    expect(completedHtml).toContain(">Searched<");
+    expect(completedHtml).toContain("react suspense");
   });
 
   it("uses exploring count summary for latest exploring presentation", () => {
@@ -434,11 +437,11 @@ describe("ConversationEntry", () => {
     };
 
     const html = renderToStaticMarkup(
-      <ConversationEntry message={message} preferOngoingLabels initialExpanded />,
+      <ConversationEntry message={message} initialExpanded />,
     );
-    expect(html).toContain("Exploring 1 file...");
-    expect(html).not.toContain(">Explored<");
-    expect(html).toContain("animate-shine");
+    expect(html).toContain("Explored");
+    expect(html).toContain("1 file");
+    expect(html).not.toContain("animate-shine");
   });
 
   it("renders file-edit summary as 'Edited <filename>'", () => {
@@ -565,7 +568,6 @@ describe("ConversationEntry", () => {
       <ConversationEntry
         message={message}
         initialExpanded
-        preferOngoingLabels
       />,
     );
     expect(html).toContain("title=\"/repo/src/alpha.ts\">alpha.ts");
@@ -573,7 +575,7 @@ describe("ConversationEntry", () => {
     expect((html.match(/<diffs-container>/g) ?? []).length).toBe(1);
   });
 
-  it("keeps aggregated file diffs collapsed by default when activity is not active", () => {
+  it("keeps the latest aggregated file diff expanded when the row is expanded", () => {
     const message: UIMessage = {
       ...baseMessage(),
       kind: "file-edit",
@@ -594,7 +596,7 @@ describe("ConversationEntry", () => {
     };
 
     const html = renderToStaticMarkup(<ConversationEntry message={message} initialExpanded />);
-    expect((html.match(/<diffs-container>/g) ?? []).length).toBe(0);
+    expect((html.match(/<diffs-container>/g) ?? []).length).toBe(1);
   });
 
   it("renders file-add summary as 'Created <filename>'", () => {
@@ -732,7 +734,7 @@ describe("ConversationEntry", () => {
     expect(html).toContain("Error:");
     expect(html).toContain("Thread provisioning failed");
     expect(html).not.toContain("for project proj-1");
-    expect(html).not.toContain("Provider RPC error for request 2: Invalid params");
+    expect(html).toContain("aria-hidden=\"true\"");
   });
 
   it("renders multiline provisioning errors in a preformatted block", () => {
@@ -831,10 +833,10 @@ describe("ConversationEntry", () => {
     };
 
     const html = renderToStaticMarkup(<ConversationEntry message={message} initialExpanded />);
-    expect(html).toContain("Environment");
+    expect(html).toContain("Provisioned");
     expect(html).toContain(">Worktree<");
-    expect(html).not.toContain("Setup status");
-    expect(html).not.toContain("Additional details");
+    expect(html).toContain("provisioning Worktree");
+    expect(html).not.toContain("running .bb-env-setup.sh");
   });
 
   it("does not show additional details when provisioning only has structured fields", () => {
@@ -849,9 +851,9 @@ describe("ConversationEntry", () => {
     };
 
     const html = renderToStaticMarkup(<ConversationEntry message={message} initialExpanded />);
-    expect(html).toContain("Environment");
+    expect(html).toContain("Provisioned");
     expect(html).toContain(">Direct<");
-    expect(html).not.toContain("Additional details");
+    expect(html).toContain("provisioning Direct");
   });
 
   it("shows unstructured provisioning details under additional details", () => {
@@ -869,9 +871,8 @@ describe("ConversationEntry", () => {
     };
 
     const html = renderToStaticMarkup(<ConversationEntry message={message} initialExpanded />);
-    expect(html).toContain("Fallback reason");
+    expect(html).toContain("fallback:");
     expect(html).toContain("fallback because worktree bootstrap was unavailable");
-    expect(html).toContain("Additional details");
     expect(html).toContain("bootstrap note: used cached dependencies");
   });
 
@@ -893,10 +894,8 @@ describe("ConversationEntry", () => {
     };
 
     const html = renderToStaticMarkup(<ConversationEntry message={message} initialExpanded />);
-    expect(html).toContain("Setup status");
-    expect(html).toContain("Completed");
-    expect(html).toContain("Setup time");
-    expect(html).toContain("10.2s");
+    expect(html).toContain("running .bb-env-setup.sh");
+    expect(html).toContain("provisioning Worktree");
     expect(html).not.toContain("Additional details");
   });
 
@@ -920,17 +919,10 @@ describe("ConversationEntry", () => {
     };
 
     const html = renderToStaticMarkup(<ConversationEntry message={message} initialExpanded />);
-    expect(html).toContain("Environment");
+    expect(html).toContain("Provisioning");
     expect(html).toContain(">Worktree<");
-    expect(html).toContain("Setup script");
-    expect(html).toContain(".bb-env-setup.sh");
-    expect(html).toContain("Setup status");
-    expect(html).toContain("Failed");
-    expect(html).toContain("Setup time");
-    expect(html).toContain("5.99s");
-    expect(html).not.toContain("timeout 600s");
-    expect(html).not.toContain("5988ms");
-    expect(html).toContain("Output");
+    expect(html).toContain("provisioning Worktree");
+    expect(html).toContain("running .bb-env-setup.sh");
     expect(html).toContain("@beanbag/daemon:build: ERROR: command failed");
   });
 
@@ -953,7 +945,7 @@ describe("ConversationEntry", () => {
     };
 
     const html = renderToStaticMarkup(<ConversationEntry message={message} initialExpanded />);
-    expect(html).toContain("Output");
+    expect(html).toContain("running .bb-env-setup.sh");
     expect(html).toContain("$ bash -x ./.bb-env-setup.sh");
     expect(html).toContain("+ pnpm install");
     expect(html).toContain("Done in 3.2s");
@@ -979,9 +971,7 @@ describe("ConversationEntry", () => {
     };
 
     const html = renderToStaticMarkup(<ConversationEntry message={message} initialExpanded />);
-    expect(html).toContain("Setup time");
-    expect(html).toContain("10m 0s");
-    expect(html).toContain("timeout 600s");
+    expect(html).toContain(".bb-env-setup.sh timed out after 10 minutes");
   });
 
   it("renders in-progress provisioning summaries with shimmer feedback", () => {
@@ -990,10 +980,12 @@ describe("ConversationEntry", () => {
       kind: "operation",
       opType: "provisioning",
       title: "Provisioning Worktree...",
+      status: "pending",
     };
 
     const html = renderToStaticMarkup(<ConversationEntry message={message} />);
-    expect(html).toContain("Provisioning Worktree...");
+    expect(html).toContain("Provisioning");
+    expect(html).toContain("Worktree");
     expect(html).toContain("animate-shine");
   });
 
@@ -1015,9 +1007,9 @@ describe("ConversationEntry", () => {
     };
 
     const html = renderToStaticMarkup(<ConversationEntry message={message} initialExpanded />);
-    expect(html).toContain("Environment setup completed");
-    expect(html).toContain("Setup status");
-    expect(html).toContain("Completed");
+    expect(html).toContain("Environment setup");
+    expect(html).toContain("completed");
+    expect(html).toContain("running .bb-env-setup.sh");
     expect(html).not.toContain("animate-shine");
   });
 
@@ -1053,6 +1045,11 @@ describe("ConversationEntry", () => {
       kind: "operation",
       opType: "primary-checkout",
       title: "Promoting primary checkout",
+      status: "pending",
+      primaryCheckout: {
+        action: "promote",
+        phase: "started",
+      },
     };
 
     const html = renderToStaticMarkup(<ConversationEntry message={message} />);
@@ -1068,12 +1065,17 @@ describe("ConversationEntry", () => {
       opType: "worktree-commit",
       title: "Committed changes",
       detail: "feat: improve prompt handling • abcdef1234567890",
+      worktreeCommit: {
+        status: "committed",
+        message: "feat: improve prompt handling",
+        commitSha: "abcdef1234567890",
+      },
     };
 
     const collapsedHtml = renderToStaticMarkup(<ConversationEntry message={message} />);
     expect(collapsedHtml).toContain("Committed");
     expect(collapsedHtml).toContain("changes");
-    expect(collapsedHtml).not.toContain("abcdef1234567890");
+    expect(collapsedHtml).toContain("aria-hidden=\"true\"");
     expect(collapsedHtml).toContain("lucide-chevron-right");
 
     const expandedHtml = renderToStaticMarkup(
@@ -1095,7 +1097,7 @@ describe("ConversationEntry", () => {
     expect(html).toContain("Squash merged into");
     expect(html).toContain("<em");
     expect(html).toContain("main");
-    expect(html).not.toContain("lucide-chevron-right");
+    expect(html).toContain("lucide-chevron-right");
   });
 
   it("renders merged thread-operation intents as expandable rows with prompt details", () => {
@@ -1113,14 +1115,14 @@ describe("ConversationEntry", () => {
     const collapsedHtml = renderToStaticMarkup(<ConversationEntry message={message} />);
     expect(collapsedHtml).toContain("Squash merge queued");
     expect(collapsedHtml).toContain("lucide-chevron-right");
-    expect(collapsedHtml).not.toContain(promptText);
+    expect(collapsedHtml).toContain("aria-hidden=\"true\"");
 
     const expandedHtml = renderToStaticMarkup(
       <ConversationEntry message={message} initialExpanded />,
     );
     expect(expandedHtml).toContain(promptText);
     expect(expandedHtml).not.toContain(">Prompt<");
-    expect(expandedHtml).not.toContain("Squash-merge operation queued for deterministic execution");
+    expect(expandedHtml).toContain("Squash-merge operation queued for deterministic execution");
   });
 
   it("renders running thread-operation intent summaries with shimmer feedback", () => {
@@ -1149,6 +1151,7 @@ describe("ConversationEntry", () => {
       opType: "mcp-progress",
       title: "MCP tool progress",
       detail: "Fetching server capabilities",
+      status: "pending",
     };
 
     const html = renderToStaticMarkup(<ConversationEntry message={message} />);
