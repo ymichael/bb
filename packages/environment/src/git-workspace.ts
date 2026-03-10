@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import {
   existsSync,
   lstatSync,
+  readdirSync,
   readFileSync,
   statSync,
   watch,
@@ -26,6 +27,7 @@ import type {
 } from "./contracts.js";
 
 const MAX_DIFF_RESPONSE_CHARS = 220_000;
+const MAX_UNTRACKED_DIFF_FILES = 24;
 const COMMIT_SUMMARY_FIELD_SEPARATOR = "\u001f";
 const COMMITTED_DIFF_INDEX_DIR_PREFIX = "beanbag-committed-diff-check-";
 
@@ -52,7 +54,7 @@ const WORKSPACE_STATUS_WATCH_DEBOUNCE_MS = 75;
 function runGit(
   _environment: IEnvironment,
   _args: string[],
-  _options?: { rawOutput?: boolean },
+  _options?: { rawOutput?: boolean; okExitCodes?: readonly number[] },
 ): GitRunResult {
   throw new Error("Synchronous git execution is unsupported; use runGitAsync");
 }
@@ -60,7 +62,7 @@ function runGit(
 async function runGitAsync(
   environment: IEnvironment,
   args: string[],
-  options?: { rawOutput?: boolean },
+  options?: { rawOutput?: boolean; okExitCodes?: readonly number[] },
 ): Promise<GitRunResult> {
   if (!environment.runAsync) {
     throw new Error("Async git execution requires environment.runAsync");
@@ -68,8 +70,9 @@ async function runGitAsync(
   const result = await environment.runAsync("git", args, {
     ...(options?.rawOutput ? { rawOutput: true } : {}),
   });
+  const okExitCodes = options?.okExitCodes ?? [0];
   return {
-    ok: result.exitCode === 0,
+    ok: result.exitCode !== null && okExitCodes.includes(result.exitCode),
     stdout: result.stdout,
     stderr: result.stderr,
     code: result.exitCode,
@@ -893,6 +896,149 @@ function trimDiffForResponse(diff: string): EnvironmentWorkspaceDiffResult {
   };
 }
 
+function appendDiffSection(existingDiff: string, nextDiff: string): string {
+  if (nextDiff.length === 0) {
+    return existingDiff;
+  }
+  if (existingDiff.length === 0) {
+    return nextDiff;
+  }
+  return `${existingDiff}${existingDiff.endsWith("\n") ? "" : "\n"}${nextDiff}`;
+}
+
+function isUntrackedDirectory(
+  environment: IEnvironment,
+  relativePath: string,
+): boolean {
+  const absolutePath = resolve(environment.getWorkspaceRootUnsafe(), relativePath);
+  try {
+    return lstatSync(absolutePath).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+function countFilesInDirectoryUpTo(directoryPath: string, maxFiles: number): number {
+  if (maxFiles <= 0) {
+    return 0;
+  }
+
+  const stack = [directoryPath];
+  let fileCount = 0;
+
+  while (stack.length > 0) {
+    const currentPath = stack.pop();
+    if (!currentPath) {
+      continue;
+    }
+
+    try {
+      const entries = readdirSync(currentPath, { withFileTypes: true });
+      for (const entry of entries) {
+        const entryPath = join(currentPath, entry.name);
+        if (entry.isDirectory()) {
+          stack.push(entryPath);
+          continue;
+        }
+
+        fileCount += 1;
+        if (fileCount > maxFiles) {
+          return fileCount;
+        }
+      }
+    } catch {
+      return maxFiles + 1;
+    }
+  }
+
+  return fileCount;
+}
+
+async function resolveExpandableUntrackedPathsAsync(
+  environment: IEnvironment,
+): Promise<string[]> {
+  const untrackedEntries = Array.from(new Set(
+    (await resolveWorkspaceStatusLinesAsync(environment))
+      .filter((item) => item.status === "A?")
+      .map((item) => item.path),
+  ));
+  if (untrackedEntries.length === 0) {
+    return [];
+  }
+
+  const collectedPaths: string[] = [];
+  for (const path of untrackedEntries) {
+    if (collectedPaths.length >= MAX_UNTRACKED_DIFF_FILES) {
+      break;
+    }
+
+    if (!isUntrackedDirectory(environment, path)) {
+      collectedPaths.push(path);
+      continue;
+    }
+
+    const remainingBudget = MAX_UNTRACKED_DIFF_FILES - collectedPaths.length;
+    const absoluteDirectoryPath = resolve(environment.getWorkspaceRootUnsafe(), path);
+    if (countFilesInDirectoryUpTo(absoluteDirectoryPath, remainingBudget) > remainingBudget) {
+      continue;
+    }
+
+    const untrackedFilesResult = await runGitAsync(environment, [
+      "ls-files",
+      "--others",
+      "--exclude-standard",
+      "--",
+      path,
+    ]);
+    if (!untrackedFilesResult.ok || untrackedFilesResult.stdout.length === 0) {
+      continue;
+    }
+
+    const nestedPaths = untrackedFilesResult.stdout
+      .split("\n")
+      .map((entry) => entry.trim())
+      .filter((entry) => entry.length > 0)
+      .slice(0, remainingBudget);
+    collectedPaths.push(...nestedPaths);
+  }
+
+  return collectedPaths;
+}
+
+async function appendUntrackedWorkspaceDiffsAsync(
+  environment: IEnvironment,
+  diff: string,
+): Promise<string> {
+  const untrackedPaths = await resolveExpandableUntrackedPathsAsync(environment);
+  if (untrackedPaths.length === 0) {
+    return diff;
+  }
+
+  let combinedDiff = diff;
+  for (const path of untrackedPaths) {
+    if (combinedDiff.length >= MAX_DIFF_RESPONSE_CHARS) {
+      break;
+    }
+    const untrackedDiffResult = await runGitAsync(environment, [
+      "diff",
+      "--binary",
+      "--no-index",
+      "--",
+      "/dev/null",
+      path,
+    ], {
+      rawOutput: true,
+      okExitCodes: [0, 1],
+    });
+    if (!untrackedDiffResult.ok || untrackedDiffResult.stdout.length === 0) {
+      continue;
+    }
+    combinedDiff = appendDiffSection(combinedDiff, untrackedDiffResult.stdout);
+  }
+
+  return combinedDiff;
+}
+
 function normalizeResolvedCleanStatus(status: EnvironmentWorkStatus): EnvironmentWorkStatus {
   if (status.hasUncommittedChanges || status.hasCommittedUnmergedChanges) {
     return status;
@@ -1294,7 +1440,9 @@ export async function getGitWorkspaceDiffAsync(
         rawOutput: true,
       });
       if (diffResult.ok) {
-        return trimDiffForResponse(diffResult.stdout);
+        return trimDiffForResponse(
+          await appendUntrackedWorkspaceDiffsAsync(environment, diffResult.stdout),
+        );
       }
       const fallbackDiffResult = await runGitAsync(environment, ["diff", "--binary"], {
         rawOutput: true,
@@ -1304,7 +1452,9 @@ export async function getGitWorkspaceDiffAsync(
           fallbackDiffResult.stderr || diffResult.stderr || "Failed to compute working tree diff",
         );
       }
-      return trimDiffForResponse(fallbackDiffResult.stdout);
+      return trimDiffForResponse(
+        await appendUntrackedWorkspaceDiffsAsync(environment, fallbackDiffResult.stdout),
+      );
     }
     case "combined": {
       const baseRef = args.baseRef?.trim();
@@ -1321,7 +1471,9 @@ export async function getGitWorkspaceDiffAsync(
       if (!diffResult.ok) {
         throw new Error(diffResult.stderr || "Failed to compute worktree commit diff");
       }
-      return trimDiffForResponse(diffResult.stdout);
+      return trimDiffForResponse(
+        await appendUntrackedWorkspaceDiffsAsync(environment, diffResult.stdout),
+      );
     }
     case "commit": {
       const commitSha = args.commitSha.trim();

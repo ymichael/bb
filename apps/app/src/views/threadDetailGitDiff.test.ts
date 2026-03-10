@@ -20,6 +20,17 @@ const SAMPLE_DIFF = [
   "",
 ].join("\n");
 
+const NEW_FILE_DIFF = [
+  "diff --git a/src/new-file.ts b/src/new-file.ts",
+  "new file mode 100644",
+  "index 0000000..1111111",
+  "--- /dev/null",
+  "+++ b/src/new-file.ts",
+  "@@ -0,0 +1 @@",
+  "+export const value = 1;",
+  "",
+].join("\n");
+
 describe("threadDetailGitDiff", () => {
   it("splits multi-file diffs into patch chunks", () => {
     const diff = [
@@ -53,6 +64,15 @@ describe("threadDetailGitDiff", () => {
       additions: 1,
       deletions: 1,
     });
+  });
+
+  it("parses new-file diffs so untracked files can render in the diff panel", () => {
+    const [file] = parseGitDiffFiles(NEW_FILE_DIFF);
+    expect(file).toBeDefined();
+    if (!file) return;
+
+    expect(formatGitDiffFileLabel(file)).toBe("src/new-file.ts");
+    expect(getOpenableGitDiffPath(file)).toBe("src/new-file.ts");
   });
 
   it("builds a stable parse key from diff edges", () => {
