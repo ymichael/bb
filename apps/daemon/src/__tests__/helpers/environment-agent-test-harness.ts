@@ -283,6 +283,7 @@ export function createFakeEnvironmentAgentClient(
   const replayEvents: EnvironmentAgentEventEnvelope[] = [];
   let nextSequence = 1;
   let replayThreadId = "thread-1";
+  let initialized = false;
 
   const appendReplayEvent = (event: EnvironmentAgentEventEnvelope["event"]) => {
     const envelope: EnvironmentAgentEventEnvelope = {
@@ -356,17 +357,34 @@ export function createFakeEnvironmentAgentClient(
     handlers?.onClose?.(error instanceof Error ? error : new Error(String(error)));
   });
 
-  const ensureSpecs: Array<{
-    command: string;
-    args: string[];
-    launchCommand?: string;
-    launchArgs?: string[];
-  }> = [];
+  const existingEnsureSpecs = (
+    child as FakeChildProcess & {
+      __ensureSpecs?: Array<{
+        command: string;
+        args: string[];
+        launchCommand?: string;
+        launchArgs?: string[];
+      }>;
+    }
+  ).__ensureSpecs;
+  const ensureSpecs =
+    existingEnsureSpecs ??
+    ([] as Array<{
+      command: string;
+      args: string[];
+      launchCommand?: string;
+      launchArgs?: string[];
+    }>);
+  (child as FakeChildProcess & { __ensureSpecs?: typeof ensureSpecs }).__ensureSpecs = ensureSpecs;
 
-  let rpcId = 10_000;
+  let rpcId = 0;
   const sendRpcRequest = (method: string, params: unknown): Promise<unknown> => {
     const id = ++rpcId;
     return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        child.stdout.off("data", onData);
+        reject(new Error(`RPC timeout waiting for ${method}`));
+      }, 10_000);
       const onData = (chunk: string | Buffer) => {
         const value = typeof chunk === "string" ? chunk : chunk.toString("utf8");
         for (const line of value.split(/\r\n|\n|\r/g)) {
@@ -378,6 +396,7 @@ export function createFakeEnvironmentAgentClient(
               error?: unknown;
             };
             if (parsed.id !== id) continue;
+            clearTimeout(timeout);
             child.stdout.off("data", onData);
             if (parsed.error !== undefined) {
               reject(new Error(JSON.stringify(parsed.error)));
@@ -435,8 +454,9 @@ export function createFakeEnvironmentAgentClient(
       replayThreadId = command.threadId;
       const initialize =
         "initialize" in command ? command.initialize : undefined;
-      if (initialize) {
+      if (initialize && !initialized) {
         await sendRpcRequest(initialize.method, initialize.params);
+        initialized = true;
       }
       let method: string;
       switch (command.type) {
@@ -465,10 +485,31 @@ export function createFakeEnvironmentAgentClient(
           method = "workspace/diff";
           break;
       }
-      const result = await sendRpcRequest(
-        method,
-        "params" in command ? command.params ?? { threadId: command.threadId } : { threadId: command.threadId },
-      );
+      let result: unknown;
+      try {
+        result = await sendRpcRequest(
+          method,
+          "params" in command ? command.params ?? { threadId: command.threadId } : { threadId: command.threadId },
+        );
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        const normalizedMessage = message.includes("no rollout found") || message.includes("missing thread")
+          ? "missing provider thread"
+          : message;
+        return {
+          protocolVersion: 1,
+          commandId: envelope.meta.commandId,
+          idempotencyKey: envelope.meta.idempotencyKey,
+          state: "rejected",
+          acknowledgedAt: Date.now(),
+          latestSequence: 0,
+          message,
+          errorCode:
+            normalizedMessage === "missing provider thread"
+              ? "missing_provider_thread"
+              : "provider_rpc_error",
+        };
+      }
       return {
         protocolVersion: 1,
         commandId: envelope.meta.commandId,

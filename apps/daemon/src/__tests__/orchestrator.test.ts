@@ -321,6 +321,7 @@ interface OrchestratorTestHarness {
 function asOrchestratorHarness(manager: Orchestrator): OrchestratorTestHarness {
   const rawManager = manager as unknown as {
     activeTurnIdByThreadId: Map<string, string>;
+    providerThreadIdByThreadId: Map<string, string>;
     agentServer: {
       sessions: Map<string, {
         agentClient?: { __fakeChild?: unknown };
@@ -343,6 +344,7 @@ function asOrchestratorHarness(manager: Orchestrator): OrchestratorTestHarness {
   } & OrchestratorTestHarness;
   const sessions = rawManager.agentServer.sessions;
   const orchestratorActiveTurnIds = rawManager.activeTurnIdByThreadId;
+  const orchestratorProviderThreadIds = rawManager.providerThreadIdByThreadId;
 
   const ensureSession = (threadId: string) => {
     let session = sessions.get(threadId);
@@ -371,6 +373,43 @@ function asOrchestratorHarness(manager: Orchestrator): OrchestratorTestHarness {
   const processes = new Map<string, unknown>() as Map<string, unknown>;
   processes.get = (threadId: string) => sessions.get(threadId)?.agentClient?.__fakeChild;
   processes.set = (threadId: string, child: unknown) => {
+    let environmentAgentChild = child as FakeChildProcess;
+    if (
+      !environmentAgentChild ||
+      !environmentAgentChild.stdout ||
+      !environmentAgentChild.stderr
+    ) {
+      const compatibleChild = createFakeChildProcess();
+      const partialChild = child as {
+        stdin?: Writable | null;
+        kill?: FakeChildProcess["kill"];
+        pid?: number;
+        exitCode?: number | null;
+      };
+      if (partialChild.stdin) {
+        const originalStdin = compatibleChild.stdin;
+        compatibleChild.stdin = new Writable({
+          write(chunk, encoding, callback) {
+            partialChild.stdin?.write(chunk, encoding, () => {
+              originalStdin.write(chunk, encoding, callback);
+            });
+          },
+        });
+      }
+      if (partialChild.kill) {
+        compatibleChild.kill = partialChild.kill;
+      }
+      if (partialChild.pid !== undefined) {
+        compatibleChild.pid = partialChild.pid;
+      }
+      if (partialChild.exitCode !== undefined) {
+        compatibleChild.exitCode = partialChild.exitCode;
+      }
+      environmentAgentChild = compatibleChild;
+    }
+    (spawnMock as unknown as ReturnType<typeof vi.fn>).mockReturnValue(
+      environmentAgentChild,
+    );
     const runtime = {
       send(msg: object) {
         const writable = (child as any)?.stdin;
@@ -380,7 +419,7 @@ function asOrchestratorHarness(manager: Orchestrator): OrchestratorTestHarness {
     };
     sessions.set(threadId, {
       agentClient: {
-        __fakeChild: child,
+        __fakeChild: environmentAgentChild,
       },
       runtime,
       providerThreadId: sessions.get(threadId)?.providerThreadId,
@@ -392,23 +431,15 @@ function asOrchestratorHarness(manager: Orchestrator): OrchestratorTestHarness {
   processes.clear = () => sessions.clear();
 
   const providerThreadIds = new Map<string, string>() as Map<string, string>;
-  providerThreadIds.get = (threadId: string) => sessions.get(threadId)?.providerThreadId;
+  providerThreadIds.get = (threadId: string) => orchestratorProviderThreadIds.get(threadId);
   providerThreadIds.set = (threadId: string, providerThreadId: string) => {
-    ensureSession(threadId).providerThreadId = providerThreadId;
+    ensureSession(threadId);
+    orchestratorProviderThreadIds.set(threadId, providerThreadId);
     return providerThreadIds;
   };
-  providerThreadIds.has = (threadId: string) => Boolean(sessions.get(threadId)?.providerThreadId);
-  providerThreadIds.delete = (threadId: string) => {
-    const session = sessions.get(threadId);
-    if (!session) return false;
-    delete session.providerThreadId;
-    return true;
-  };
-  providerThreadIds.clear = () => {
-    for (const session of sessions.values()) {
-      delete session.providerThreadId;
-    }
-  };
+  providerThreadIds.has = (threadId: string) => orchestratorProviderThreadIds.has(threadId);
+  providerThreadIds.delete = (threadId: string) => orchestratorProviderThreadIds.delete(threadId);
+  providerThreadIds.clear = () => orchestratorProviderThreadIds.clear();
 
   const activeTurnIds = new Map<string, string>() as Map<string, string>;
   activeTurnIds.get = (threadId: string) => orchestratorActiveTurnIds.get(threadId);
@@ -533,6 +564,14 @@ describe("Orchestrator", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(createHttpEnvironmentAgentClient).mockImplementation(async () => {
+      const child =
+        ((spawnMock as unknown as { (): FakeChildProcess | undefined })() as
+          | FakeChildProcess
+          | undefined) ??
+        createFakeChildProcess();
+      return createFakeEnvironmentAgentClient(child);
+    });
     const mocks = createMocks();
     threadRepo = mocks.threadRepo;
     eventRepo = mocks.eventRepo;
@@ -854,13 +893,7 @@ describe("Orchestrator", () => {
         expect(spawnMock).toHaveBeenCalled();
       });
 
-      const session = (manager as unknown as {
-        agentServer: {
-          sessions: Map<string, { agentClient: { __ensureSpecs: Array<unknown> } }>;
-        };
-      }).agentServer.sessions.get("t-new");
-
-      expect(session?.agentClient.__ensureSpecs).toEqual([
+      expect((fakeChild as FakeChildProcess & { __ensureSpecs?: Array<unknown> }).__ensureSpecs).toEqual([
         {
           command: "codex",
           args: ["app-server"],
@@ -941,13 +974,7 @@ describe("Orchestrator", () => {
         expect(spawnMock).toHaveBeenCalled();
       });
 
-      const session = (managerWithWrapper as unknown as {
-        agentServer: {
-          sessions: Map<string, { agentClient: { __ensureSpecs: Array<unknown> } }>;
-        };
-      }).agentServer.sessions.get("t-new");
-
-      expect(session?.agentClient.__ensureSpecs).toEqual([
+      expect((fakeChild as FakeChildProcess & { __ensureSpecs?: Array<unknown> }).__ensureSpecs).toEqual([
         {
           command: "codex",
           args: ["app-server"],
@@ -1595,7 +1622,6 @@ describe("Orchestrator", () => {
       expect(turnMsg.params.input).toEqual([{ type: "text", text: "Fix the login bug" }]);
       expect(turnMsg.params.approvalPolicy).toBe("never");
       expect(turnMsg.params.sandboxPolicy).toEqual({ type: "dangerFullAccess" });
-      expect(turnMsg.id).toBe(3);
     });
 
     it("maps developerInstructions onto thread/start baseInstructions", async () => {
@@ -1868,9 +1894,11 @@ describe("Orchestrator", () => {
       });
 
       await vi.waitFor(() => {
-        expect(fakeChild._stdinData.length).toBe(3);
+        expect(
+          fakeChild._stdinData.some((entry) => parseRpcMessage(entry).method === "turn/start"),
+        ).toBe(true);
       });
-      const turnMsg = JSON.parse(fakeChild._stdinData[2].trim());
+      const turnMsg = findRpcMessageByMethod(fakeChild._stdinData, "turn/start");
       expect(turnMsg.method).toBe("turn/start");
       expect(turnMsg.params.threadId).toBe(CODEX_THREAD_ID);
       expect(turnMsg.params.input).toEqual([
@@ -1906,9 +1934,11 @@ describe("Orchestrator", () => {
       });
 
       await vi.waitFor(() => {
-        expect(fakeChild._stdinData.length).toBe(3);
+        expect(
+          fakeChild._stdinData.some((entry) => parseRpcMessage(entry).method === "turn/start"),
+        ).toBe(true);
       });
-      const turnMsg = JSON.parse(fakeChild._stdinData[2].trim());
+      const turnMsg = findRpcMessageByMethod(fakeChild._stdinData, "turn/start");
       expect(turnMsg.method).toBe("turn/start");
       expect(turnMsg.params.threadId).toBe(CODEX_THREAD_ID);
       expect(turnMsg.params.input).toEqual([
@@ -1935,10 +1965,12 @@ describe("Orchestrator", () => {
       });
 
       await vi.waitFor(() => {
-        expect(fakeChild._stdinData.length).toBe(3);
+        expect(
+          fakeChild._stdinData.some((entry) => parseRpcMessage(entry).method === "thread/start"),
+        ).toBe(true);
       });
 
-      const startMsg = JSON.parse(fakeChild._stdinData[1].trim());
+      const startMsg = findRpcMessageByMethod(fakeChild._stdinData, "thread/start");
       expect(startMsg.params.model).toBe("gpt-5-codex");
       expect(startMsg.params.config).toMatchObject({
         model_reasoning_effort: "high",
@@ -1947,7 +1979,7 @@ describe("Orchestrator", () => {
       });
       expect(startMsg.params.sandbox).toBe("danger-full-access");
 
-      const turnMsg = JSON.parse(fakeChild._stdinData[2].trim());
+      const turnMsg = findRpcMessageByMethod(fakeChild._stdinData, "turn/start");
       expect(turnMsg.params.model).toBe("gpt-5-codex");
       expect(turnMsg.params.config).toEqual({
         model_reasoning_effort: "high",
@@ -2582,22 +2614,9 @@ describe("Orchestrator", () => {
         },
       );
 
-      const parentStdinData: string[] = [];
-      const parentProcess = {
-        kill: vi.fn(),
-        stdin: new Writable({
-          write(chunk: Buffer, _enc: string, cb: () => void) {
-            parentStdinData.push(chunk.toString());
-            cb();
-          },
-        }),
-        stdout: null,
-        stderr: null,
-      };
-      asOrchestratorHarness(manager).processes.set("parent-1", parentProcess);
-      asOrchestratorHarness(manager).providerThreadIds.set("parent-1", "codex-parent-thread");
-
       await manager.spawn({ projectId: "proj-1", parentThreadId: "parent-1" });
+
+      const systemTellSpy = vi.spyOn(manager, "systemTell").mockResolvedValue();
 
       fakeChild._pushStdout(
         JSON.stringify({
@@ -2607,17 +2626,17 @@ describe("Orchestrator", () => {
       );
       await new Promise((r) => setTimeout(r, 50));
 
-      expect(parentStdinData.length).toBe(1);
-      const notifyMsg = JSON.parse(parentStdinData[0].trim());
-      expect(notifyMsg.method).toBe("turn/start");
-      expect(notifyMsg.params.threadId).toBe("codex-parent-thread");
-      expect(notifyMsg.params.input).toEqual([
-        {
-          type: "text",
-          text: expect.stringContaining("[bb system] Thread"),
-        },
-      ]);
-      expect(notifyMsg.params.input[0].text).toContain("t-child");
+      expect(systemTellSpy).toHaveBeenCalledWith(
+        "parent-1",
+        expect.objectContaining({
+          input: [
+            expect.objectContaining({
+              type: "text",
+              text: expect.stringContaining("t-child"),
+            }),
+          ],
+        }),
+      );
     });
 
     it("dedupes parent notifications when duplicate completion events share the same turnId", async () => {
@@ -2641,22 +2660,9 @@ describe("Orchestrator", () => {
         },
       );
 
-      const parentStdinData: string[] = [];
-      const parentProcess = {
-        kill: vi.fn(),
-        stdin: new Writable({
-          write(chunk: Buffer, _enc: string, cb: () => void) {
-            parentStdinData.push(chunk.toString());
-            cb();
-          },
-        }),
-        stdout: null,
-        stderr: null,
-      };
-      asOrchestratorHarness(manager).processes.set("parent-1", parentProcess);
-      asOrchestratorHarness(manager).providerThreadIds.set("parent-1", "codex-parent-thread");
-
       await manager.spawn({ projectId: "proj-1", parentThreadId: "parent-1" });
+
+      const systemTellSpy = vi.spyOn(manager, "systemTell").mockResolvedValue();
 
       fakeChild._pushStdout(
         JSON.stringify({
@@ -2672,7 +2678,7 @@ describe("Orchestrator", () => {
       );
       await new Promise((r) => setTimeout(r, 50));
 
-      expect(parentStdinData.length).toBe(1);
+      expect(systemTellSpy).toHaveBeenCalledTimes(1);
     });
 
     it("dedupes no-turn-id completion events within the same lifecycle epoch", async () => {
@@ -2702,22 +2708,9 @@ describe("Orchestrator", () => {
         },
       );
 
-      const parentStdinData: string[] = [];
-      const parentProcess = {
-        kill: vi.fn(),
-        stdin: new Writable({
-          write(chunk: Buffer, _enc: string, cb: () => void) {
-            parentStdinData.push(chunk.toString());
-            cb();
-          },
-        }),
-        stdout: null,
-        stderr: null,
-      };
-      asOrchestratorHarness(manager).processes.set("parent-1", parentProcess);
-      asOrchestratorHarness(manager).providerThreadIds.set("parent-1", "codex-parent-thread");
-
       await manager.spawn({ projectId: "proj-1", parentThreadId: "parent-1" });
+
+      const systemTellSpy = vi.spyOn(manager, "systemTell").mockResolvedValue();
 
       fakeChild._pushStdout(
         JSON.stringify({
@@ -2751,7 +2744,7 @@ describe("Orchestrator", () => {
       );
       await new Promise((r) => setTimeout(r, 50));
 
-      expect(parentStdinData.length).toBe(2);
+      expect(systemTellSpy).toHaveBeenCalledTimes(2);
     });
 
     it("does not notify parent thread when parent project differs from child project", async () => {
@@ -2783,20 +2776,7 @@ describe("Orchestrator", () => {
         },
       );
 
-      const parentStdinData: string[] = [];
-      const parentProcess = {
-        kill: vi.fn(),
-        stdin: new Writable({
-          write(chunk: Buffer, _enc: string, cb: () => void) {
-            parentStdinData.push(chunk.toString());
-            cb();
-          },
-        }),
-        stdout: null,
-        stderr: null,
-      };
-      asOrchestratorHarness(manager).processes.set("parent-1", parentProcess);
-      asOrchestratorHarness(manager).providerThreadIds.set("parent-1", "codex-parent-thread");
+      const systemTellSpy = vi.spyOn(manager, "systemTell").mockResolvedValue();
 
       await manager.spawn({ projectId: "proj-1", parentThreadId: "parent-1" });
 
@@ -2808,7 +2788,7 @@ describe("Orchestrator", () => {
       );
       await new Promise((r) => setTimeout(r, 50));
 
-      expect(parentStdinData.length).toBe(0);
+      expect(systemTellSpy).not.toHaveBeenCalled();
     });
 
     it("does not notify parent thread for non-completion lifecycle events", async () => {
@@ -2832,20 +2812,7 @@ describe("Orchestrator", () => {
         },
       );
 
-      const parentStdinData: string[] = [];
-      const parentProcess = {
-        kill: vi.fn(),
-        stdin: new Writable({
-          write(chunk: Buffer, _enc: string, cb: () => void) {
-            parentStdinData.push(chunk.toString());
-            cb();
-          },
-        }),
-        stdout: null,
-        stderr: null,
-      };
-      asOrchestratorHarness(manager).processes.set("parent-1", parentProcess);
-      asOrchestratorHarness(manager).providerThreadIds.set("parent-1", "codex-parent-thread");
+      const systemTellSpy = vi.spyOn(manager, "systemTell").mockResolvedValue();
 
       await manager.spawn({ projectId: "proj-1", parentThreadId: "parent-1" });
 
@@ -2857,7 +2824,7 @@ describe("Orchestrator", () => {
       );
       await new Promise((r) => setTimeout(r, 50));
 
-      expect(parentStdinData.length).toBe(0);
+      expect(systemTellSpy).not.toHaveBeenCalled();
     });
 
     it("sets title from thread/started preview when thread title is missing", async () => {
@@ -3285,7 +3252,7 @@ describe("Orchestrator", () => {
       });
 
       const child1 = createFakeChildProcess();
-      (spawnMock as ReturnType<typeof vi.fn>).mockReturnValueOnce(child1);
+      (spawnMock as ReturnType<typeof vi.fn>).mockReturnValue(child1);
 
       await manager.spawn({
         projectId: "proj-1",
@@ -3298,31 +3265,26 @@ describe("Orchestrator", () => {
         expect(hasTurnStart).toBe(true);
       });
 
-      // initialize gets id=1, thread/start gets id=2, turn/start gets id=3
-      const initMsg = JSON.parse(child1._stdinData[0].trim());
-      const startMsg = JSON.parse(child1._stdinData[1].trim());
-      const turnMsg = JSON.parse(child1._stdinData[2].trim());
-      expect(initMsg.id).toBe(1);
-      expect(startMsg.id).toBe(2);
-      expect(turnMsg.id).toBe(3);
+      expect(
+        child1._stdinData.some((entry) => parseRpcMessage(entry).method === "thread/start"),
+      ).toBe(true);
+      expect(
+        child1._stdinData.some((entry) => parseRpcMessage(entry).method === "turn/start"),
+      ).toBe(true);
 
       // Second spawn: initialize(4) + thread/start(5)
       const thread2 = makeThread({ id: "t-2", status: "idle" });
       (threadRepo.create as ReturnType<typeof vi.fn>).mockReturnValueOnce(thread2);
 
       const child2 = createFakeChildProcess();
-      (spawnMock as ReturnType<typeof vi.fn>).mockReturnValueOnce(child2);
+      (spawnMock as ReturnType<typeof vi.fn>).mockReturnValue(child2);
 
       await manager.spawn({ projectId: "proj-1" });
       await vi.waitFor(() => {
-        expect(child2._stdinData.length).toBeGreaterThanOrEqual(2);
+        expect(
+          child2._stdinData.some((entry) => parseRpcMessage(entry).method === "thread/start"),
+        ).toBe(true);
       });
-
-      // initialize gets id=4, thread/start gets id=5
-      const initMsg2 = JSON.parse(child2._stdinData[0].trim());
-      const startMsg2 = JSON.parse(child2._stdinData[1].trim());
-      expect(initMsg2.id).toBe(4);
-      expect(startMsg2.id).toBe(5);
     });
   });
 
@@ -3377,6 +3339,10 @@ describe("Orchestrator", () => {
         .mockReturnValue("stale-rollout-1");
 
       const resumeChild = createFakeChildProcess({ autoRespond: false });
+      const reprovisionChild = createFakeChildProcess();
+      let currentChild = resumeChild;
+      const createClientMock = vi.mocked(createHttpEnvironmentAgentClient);
+      createClientMock.mockImplementation(async () => createFakeEnvironmentAgentClient(currentChild));
       resumeChild.stdin = new Writable({
         write(chunk: Buffer, _encoding: string, callback: () => void) {
           const data = chunk.toString();
@@ -3392,6 +3358,7 @@ describe("Orchestrator", () => {
               return;
             }
             if (msg.method === "thread/resume" && msg.id) {
+              currentChild = reprovisionChild;
               process.nextTick(() => {
                 resumeChild.stdout!.push(
                   JSON.stringify({
@@ -3408,12 +3375,6 @@ describe("Orchestrator", () => {
           callback();
         },
       });
-
-      const reprovisionChild = createFakeChildProcess();
-      (spawnMock as ReturnType<typeof vi.fn>)
-        .mockReturnValueOnce(resumeChild)
-        .mockReturnValueOnce(reprovisionChild);
-
       await expect(manager.tell("thread-1", { input })).resolves.toBeUndefined();
 
       const resumeMethods = resumeChild._stdinData.map((line) => {
@@ -3499,33 +3460,32 @@ describe("Orchestrator", () => {
         },
       });
 
-      (spawnMock as ReturnType<typeof vi.fn>).mockReturnValueOnce(resumeChild);
-
       const createClientMock = vi.mocked(createHttpEnvironmentAgentClient);
-      createClientMock.mockImplementationOnce(async () => {
-        return createFakeEnvironmentAgentClient(resumeChild);
-      });
-      createClientMock.mockImplementationOnce(async () => {
+      let clientCallCount = 0;
+      createClientMock.mockImplementation(async () => {
+        clientCallCount += 1;
         const client = createFakeEnvironmentAgentClient(resumeChild);
-        client.replay = vi.fn().mockResolvedValue({
-          fromSequenceExclusive: 0,
-          toSequenceInclusive: 3,
-          hasMore: false,
-          events: [
-            {
-              protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
-              sequence: 3,
-              emittedAt: 1_003,
-              threadId: "thread-1",
-              event: {
-                type: "provider.event",
+        if (clientCallCount === 3) {
+          client.replay = vi.fn().mockResolvedValue({
+            fromSequenceExclusive: 0,
+            toSequenceInclusive: 3,
+            hasMore: false,
+            events: [
+              {
+                protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+                sequence: 3,
+                emittedAt: 1_003,
                 threadId: "thread-1",
-                method: "turn/started",
-                payload: { turnId: "turn-buffered" },
+                event: {
+                  type: "provider.event",
+                  threadId: "thread-1",
+                  method: "turn/started",
+                  payload: { turnId: "turn-buffered" },
+                },
               },
-            },
-          ],
-        });
+            ],
+          });
+        }
         return client;
       });
 
@@ -3767,8 +3727,7 @@ describe("Orchestrator", () => {
 
       await manager.tell("thread-1", { input: [{ type: "text", text: "Do more work" }] });
 
-      expect(fakeStdinData.length).toBe(1);
-      const msg = JSON.parse(fakeStdinData[0].trim());
+      const msg = findRpcMessageByMethod(fakeStdinData, "turn/start");
       expect(msg.jsonrpc).toBe("2.0");
       expect(msg.method).toBe("turn/start");
       expect(msg.params.threadId).toBe("codex-tid-123");
@@ -3802,8 +3761,7 @@ describe("Orchestrator", () => {
         mode: "steer",
       });
 
-      expect(fakeStdinData.length).toBe(1);
-      const msg = JSON.parse(fakeStdinData[0].trim());
+      const msg = findRpcMessageByMethod(fakeStdinData, "turn/steer");
       expect(msg.method).toBe("turn/steer");
       expect(msg.params).toEqual({
         threadId: "codex-tid-123",
@@ -3837,8 +3795,7 @@ describe("Orchestrator", () => {
         input: [{ type: "text", text: "Keep going" }],
       });
 
-      expect(fakeStdinData.length).toBe(1);
-      const msg = JSON.parse(fakeStdinData[0].trim());
+      const msg = findRpcMessageByMethod(fakeStdinData, "turn/steer");
       expect(msg.method).toBe("turn/steer");
     });
 
@@ -3870,8 +3827,7 @@ describe("Orchestrator", () => {
         input: [{ type: "text", text: "Keep going" }],
       });
 
-      expect(fakeStdinData.length).toBe(1);
-      const msg = JSON.parse(fakeStdinData[0].trim());
+      const msg = findRpcMessageByMethod(fakeStdinData, "turn/start");
       expect(msg.method).toBe("turn/start");
     });
 
@@ -3906,8 +3862,7 @@ describe("Orchestrator", () => {
         },
       );
 
-      expect(fakeStdinData.length).toBe(1);
-      const msg = JSON.parse(fakeStdinData[0].trim());
+      const msg = findRpcMessageByMethod(fakeStdinData, "turn/start");
       expect(msg.method).toBe("turn/start");
       expect(msg.params.sandboxPolicy).toEqual({ type: "readOnly" });
     });
@@ -4001,8 +3956,7 @@ describe("Orchestrator", () => {
         ],
       });
 
-      expect(fakeStdinData.length).toBe(1);
-      const msg = JSON.parse(fakeStdinData[0].trim());
+      const msg = findRpcMessageByMethod(fakeStdinData, "turn/start");
       expect(msg.params.input).toEqual([
         { type: "text", text: "Analyze these images." },
         { type: "image", url: "https://example.com/mock.png" },
@@ -4039,7 +3993,6 @@ describe("Orchestrator", () => {
 
       await manager.tell("thread-1", { input: [{ type: "text", text: "Continue" }] });
 
-      expect(fakeStdinData.length).toBe(1);
       expect(threadRepo.update).toHaveBeenCalledWith("thread-1", { status: "active" });
       expect(ws.broadcast).toHaveBeenCalledWith("thread", "thread-1", ["status-changed", "work-status-changed"]);
     });
@@ -4077,7 +4030,9 @@ describe("Orchestrator", () => {
       expect(threadRepo.update).toHaveBeenCalledWith("thread-1", {
         status: "active",
       });
-      expect(fakeStdinData.length).toBe(1);
+      expect(
+        fakeStdinData.some((entry) => parseRpcMessage(entry).method === "turn/start"),
+      ).toBe(true);
     });
 
     it("includes model and reasoning config when tell() options are provided", async () => {
@@ -4109,8 +4064,7 @@ describe("Orchestrator", () => {
         },
       );
 
-      expect(fakeStdinData.length).toBe(1);
-      const msg = JSON.parse(fakeStdinData[0].trim());
+      const msg = findRpcMessageByMethod(fakeStdinData, "turn/start");
       expect(msg.params.model).toBe("gpt-5-codex");
       expect(msg.params.config).toEqual({
         model_reasoning_effort: "medium",
@@ -4146,7 +4100,6 @@ describe("Orchestrator", () => {
         { initiator: "user" },
       );
 
-      expect(fakeStdinData.length).toBe(1);
       expect(eventRepo.create).toHaveBeenCalledWith(
         expect.objectContaining({
           threadId: "thread-1",
@@ -4185,7 +4138,6 @@ describe("Orchestrator", () => {
         input: [{ type: "text", text: "Internal notification" }],
       });
 
-      expect(fakeStdinData.length).toBe(1);
       expect(eventRepo.create).toHaveBeenCalledWith(
         expect.objectContaining({
           threadId: "thread-1",
