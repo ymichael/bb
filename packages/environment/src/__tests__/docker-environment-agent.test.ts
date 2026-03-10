@@ -108,10 +108,10 @@ describe("docker environment-agent helper", () => {
     ).toBe("http://docker-host.internal:3333/api/v1");
   });
 
-  it("builds the default local image when it is missing", () => {
+  it("builds the default local image when it is missing", async () => {
     const commands: Array<{ command: string; args: string[] }> = [];
 
-    ensureDockerEnvironmentImageAvailable(
+    await ensureDockerEnvironmentImageAvailable(
       {
         dockerBin: "docker",
         image: DEFAULT_DOCKER_ENVIRONMENT_IMAGE,
@@ -155,8 +155,8 @@ describe("docker environment-agent helper", () => {
     ]);
   });
 
-  it("fails fast when a custom docker image is missing", () => {
-    expect(() =>
+  it("fails fast when a custom docker image is missing", async () => {
+    await expect(
       ensureDockerEnvironmentImageAvailable(
         {
           dockerBin: "docker",
@@ -174,7 +174,7 @@ describe("docker environment-agent helper", () => {
           },
         },
       ),
-    ).toThrow(/custom\/environment:dev/);
+    ).rejects.toThrow(/custom\/environment:dev/);
   });
 
   it("installs and starts the environment-agent in the container", async () => {

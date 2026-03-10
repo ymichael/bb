@@ -288,6 +288,18 @@ vi.mock("@beanbag/environment-agent", async (importOriginal) => {
 const DEFAULT_BASE_INSTRUCTIONS =
   "You are a coding agent working on a project thread. Follow the instructions carefully and write clean, working code.";
 
+async function waitForProviderSessionStart(
+  fakeChild: Pick<FakeChildProcess, "_stdinData">,
+): Promise<void> {
+  await vi.waitFor(() => {
+    expect(
+      fakeChild._stdinData.some(
+        (entry) => parseRpcMessage(entry).method === "thread/start",
+      ),
+    ).toBe(true);
+  });
+}
+
 interface OrchestratorTestHarness {
   processes: Map<string, unknown>;
   providerThreadIds: Map<string, string>;
@@ -916,9 +928,7 @@ describe("Orchestrator", () => {
       );
 
       await manager.spawn({ projectId: "proj-1" });
-      await vi.waitFor(() => {
-        expect(spawnMock).toHaveBeenCalled();
-      });
+      await waitForProviderSessionStart(fakeChild);
 
       expect((fakeChild as FakeChildProcess & { __ensureSpecs?: Array<unknown> }).__ensureSpecs).toEqual([
         {
@@ -997,9 +1007,7 @@ describe("Orchestrator", () => {
       );
 
       await managerWithWrapper.spawn({ projectId: "proj-1", environmentId: "worktree" });
-      await vi.waitFor(() => {
-        expect(spawnMock).toHaveBeenCalled();
-      });
+      await waitForProviderSessionStart(fakeChild);
 
       expect((fakeChild as FakeChildProcess & { __ensureSpecs?: Array<unknown> }).__ensureSpecs).toEqual([
         {
@@ -2263,6 +2271,7 @@ describe("Orchestrator", () => {
       const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
       await manager.spawn({ projectId: "proj-1" });
+      await waitForProviderSessionStart(fakeChild);
 
       // Push a JSON-RPC error response on stdout (as if codex rejected a request)
       fakeChild._pushStdout(
@@ -2296,6 +2305,7 @@ describe("Orchestrator", () => {
       const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
       await manager.spawn({ projectId: "proj-1" });
+      await waitForProviderSessionStart(fakeChild);
 
       fakeChild._pushStderr(
         "2026-02-12T04:44:47.619501Z ERROR codex_core::auth: Failed to refresh token: 401 Unauthorized: {",
@@ -2342,6 +2352,7 @@ describe("Orchestrator", () => {
       const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
       await manager.spawn({ projectId: "proj-1" });
+      await waitForProviderSessionStart(fakeChild);
 
       fakeChild._pushStderr("panic: synthetic stderr failure");
       await new Promise((r) => setTimeout(r, 50));
@@ -2364,6 +2375,7 @@ describe("Orchestrator", () => {
       );
 
       await manager.spawn({ projectId: "proj-1" });
+      await waitForProviderSessionStart(fakeChild);
 
       // Simulate codex sending JSON-RPC notifications on stdout
       fakeChild._pushStdout(
@@ -2542,6 +2554,7 @@ describe("Orchestrator", () => {
       );
 
       await manager.spawn({ projectId: "proj-1" });
+      await waitForProviderSessionStart(fakeChild);
       (ws.broadcast as ReturnType<typeof vi.fn>).mockClear();
 
       fakeChild._pushStdout(
@@ -2564,6 +2577,7 @@ describe("Orchestrator", () => {
       );
 
       await manager.spawn({ projectId: "proj-1" });
+      await waitForProviderSessionStart(fakeChild);
       (threadRepo.update as ReturnType<typeof vi.fn>).mockClear();
 
       fakeChild._pushStdout(JSON.stringify({ method: "turn/completed", params: {} }));
@@ -2584,6 +2598,7 @@ describe("Orchestrator", () => {
       );
 
       await manager.spawn({ projectId: "proj-1" });
+      await waitForProviderSessionStart(fakeChild);
       (threadRepo.update as ReturnType<typeof vi.fn>).mockClear();
 
       fakeChild._pushStdout(JSON.stringify({ method: "turn/started", params: {} }));
@@ -2604,6 +2619,7 @@ describe("Orchestrator", () => {
       );
 
       await manager.spawn({ projectId: "proj-1" });
+      await waitForProviderSessionStart(fakeChild);
 
       fakeChild._pushStdout(
         JSON.stringify({ method: "turn/started", params: { turnId: "turn-77" } }),
@@ -2642,6 +2658,7 @@ describe("Orchestrator", () => {
       );
 
       await manager.spawn({ projectId: "proj-1", parentThreadId: "parent-1" });
+      await waitForProviderSessionStart(fakeChild);
 
       const systemTellSpy = vi.spyOn(manager, "systemTell").mockResolvedValue();
 
@@ -2688,6 +2705,7 @@ describe("Orchestrator", () => {
       );
 
       await manager.spawn({ projectId: "proj-1", parentThreadId: "parent-1" });
+      await waitForProviderSessionStart(fakeChild);
 
       const systemTellSpy = vi.spyOn(manager, "systemTell").mockResolvedValue();
 
@@ -2736,6 +2754,7 @@ describe("Orchestrator", () => {
       );
 
       await manager.spawn({ projectId: "proj-1", parentThreadId: "parent-1" });
+      await waitForProviderSessionStart(fakeChild);
 
       const systemTellSpy = vi.spyOn(manager, "systemTell").mockResolvedValue();
 
@@ -2871,6 +2890,7 @@ describe("Orchestrator", () => {
       );
 
       await manager.spawn({ projectId: "proj-1" });
+      await waitForProviderSessionStart(fakeChild);
       (threadRepo.update as ReturnType<typeof vi.fn>).mockClear();
 
       fakeChild._pushStdout(
@@ -2909,6 +2929,7 @@ describe("Orchestrator", () => {
       );
 
       await manager.spawn({ projectId: "proj-1" });
+      await waitForProviderSessionStart(fakeChild);
       (threadRepo.update as ReturnType<typeof vi.fn>).mockClear();
 
       fakeChild._pushStdout(
@@ -3052,6 +3073,7 @@ describe("Orchestrator", () => {
       );
 
       await manager.spawn({ projectId: "proj-1" });
+      await waitForProviderSessionStart(fakeChild);
       (threadRepo.update as ReturnType<typeof vi.fn>).mockClear();
 
       fakeChild._pushStdout(
@@ -3096,6 +3118,7 @@ describe("Orchestrator", () => {
       );
 
       await manager.spawn({ projectId: "proj-1" });
+      await waitForProviderSessionStart(fakeChild);
 
       // Push blank/whitespace lines
       fakeChild._pushStdout("");
@@ -3173,6 +3196,7 @@ describe("Orchestrator", () => {
       );
 
       await manager.spawn({ projectId: "proj-1" });
+      await waitForProviderSessionStart(fakeChild);
 
       fakeChild._pushStdout(JSON.stringify({ method: "turn/end" }));
 
