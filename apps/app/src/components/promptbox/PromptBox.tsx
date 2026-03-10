@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ChangeEvent, type FormEvent, type KeyboardEvent, type ReactNode } from "react"
-import { ArrowUp, AudioLines, ChevronLeft, ChevronRight, CornerDownLeft, Loader2, Maximize2, Mic, Minimize2, Paperclip, Square, X } from "lucide-react"
+import { ArrowUp, AudioLines, CornerDownLeft, Loader2, Maximize2, Mic, Minimize2, Paperclip, Square, X } from "lucide-react"
+import { ImageLightbox, getWrappedImageIndex } from "@/components/shared/ImageLightbox"
 import type { ProjectFileSuggestion } from "@beanbag/agent-core"
 import { Button } from "@/components/ui/button"
-import { Dialog, DialogClose, DialogContent, DialogTitle } from "@/components/ui/dialog"
 import { useAutoGrow } from "@/hooks/useAutoGrow"
 import { useVoiceInput } from "@/hooks/useVoiceInput"
 import { transcribeVoiceInput } from "@/lib/api"
@@ -265,11 +265,13 @@ export function PromptBox({
   const hasAttachments = attachments.length > 0
   const imageAttachments = attachments.filter(isImageAttachment)
   const nonImageAttachments = attachments.filter((attachment) => !isImageAttachment(attachment))
+  const attachmentImageItems = imageAttachments.map((attachment) => ({
+    alt: attachment.name,
+    src: toUserAttachmentImageSrc(attachment.path, attachmentProjectId),
+  }))
   const hasMultipleAttachmentImages = imageAttachments.length > 1
-  const currentAttachmentImageSrc =
-    expandedImageIndex !== null && imageAttachments[expandedImageIndex]
-      ? toUserAttachmentImageSrc(imageAttachments[expandedImageIndex].path, attachmentProjectId)
-      : null
+  const currentAttachmentImage =
+    expandedImageIndex !== null ? (attachmentImageItems[expandedImageIndex] ?? null) : null
   const hasSubmittableInput = trimmedValue.length > 0 || hasAttachments
   const hasMentionContext = activeMention !== null
   const showMentionMenu = hasMentionContext
@@ -480,6 +482,28 @@ export function PromptBox({
     },
     [emitAttachmentFiles],
   )
+
+  const showPreviousAttachmentImage = useCallback(() => {
+    setExpandedImageIndex((index) => {
+      if (index === null || attachmentImageItems.length <= 1) return index
+      return getWrappedImageIndex({
+        currentIndex: index,
+        direction: "previous",
+        itemCount: attachmentImageItems.length,
+      })
+    })
+  }, [attachmentImageItems.length])
+
+  const showNextAttachmentImage = useCallback(() => {
+    setExpandedImageIndex((index) => {
+      if (index === null || attachmentImageItems.length <= 1) return index
+      return getWrappedImageIndex({
+        currentIndex: index,
+        direction: "next",
+        itemCount: attachmentImageItems.length,
+      })
+    })
+  }, [attachmentImageItems.length])
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -735,62 +759,15 @@ export function PromptBox({
         </div>
       ) : null}
 
-      {currentAttachmentImageSrc ? (
-        <Dialog open={true} onOpenChange={(open) => !open && setExpandedImageIndex(null)}>
-          <DialogContent className="flex h-[90vh] w-[90vw] max-w-[90vw] items-center justify-center border-none bg-transparent p-0 shadow-none [&>button]:hidden">
-            <DialogTitle className="sr-only">Attached image preview</DialogTitle>
-            <img
-              src={currentAttachmentImageSrc}
-              alt="Attached image"
-              className="max-h-[82vh] max-w-[90vw] rounded bg-background/95 object-contain"
-            />
-
-            {hasMultipleAttachmentImages ? (
-              <>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="absolute left-2 top-1/2 size-9 -translate-y-1/2 rounded-full bg-black/45 text-white hover:bg-black/60 hover:text-white"
-                  onClick={() => {
-                    setExpandedImageIndex((index) => {
-                      if (index === null) return index
-                      return index === 0 ? imageAttachments.length - 1 : index - 1
-                    })
-                  }}
-                >
-                  <ChevronLeft className="size-5" />
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="absolute right-2 top-1/2 size-9 -translate-y-1/2 rounded-full bg-black/45 text-white hover:bg-black/60 hover:text-white"
-                  onClick={() => {
-                    setExpandedImageIndex((index) => {
-                      if (index === null) return index
-                      return index === imageAttachments.length - 1 ? 0 : index + 1
-                    })
-                  }}
-                >
-                  <ChevronRight className="size-5" />
-                </Button>
-              </>
-            ) : null}
-
-            <DialogClose asChild>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="absolute right-2 top-2 size-9 rounded-full bg-black/45 text-white hover:bg-black/60 hover:text-white"
-              >
-                <X className="size-5" />
-              </Button>
-            </DialogClose>
-          </DialogContent>
-        </Dialog>
-      ) : null}
+      <ImageLightbox
+        imageSrc={currentAttachmentImage?.src ?? null}
+        imageAlt={currentAttachmentImage?.alt ?? "Attached image"}
+        title="Attached image preview"
+        hasMultipleImages={hasMultipleAttachmentImages}
+        onPrevious={showPreviousAttachmentImage}
+        onNext={showNextAttachmentImage}
+        onClose={() => setExpandedImageIndex(null)}
+      />
 
       {attachmentError ? (
         <div className="mx-3 mb-1 mt-1 text-xs text-destructive">

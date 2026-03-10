@@ -1,10 +1,10 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { UIUserMessage } from "@beanbag/agent-core";
-import { Check, ChevronLeft, ChevronRight, Copy, X } from "lucide-react";
+import { Check, Copy } from "lucide-react";
 import { toast } from "sonner";
+import { ImageLightbox, getWrappedImageIndex } from "@/components/shared/ImageLightbox";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogClose, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { toUserAttachmentImageSrc } from "@/lib/user-attachment-images";
 
 export function UserMessageRow({
@@ -23,16 +23,25 @@ export function UserMessageRow({
   }
   const messageText = message.text.trim();
 
-  const imageSources = [
-    ...(message.attachments?.imageUrls ?? []),
-    ...(message.attachments?.localImagePaths ?? []),
-  ];
+  const imageSources = useMemo(
+    () => [
+      ...(message.attachments?.imageUrls ?? []),
+      ...(message.attachments?.localImagePaths ?? []),
+    ],
+    [message.attachments?.imageUrls, message.attachments?.localImagePaths],
+  );
 
-  const hasMultipleImages = imageSources.length > 1;
-  const currentImageSrc =
-    expandedImageIndex !== null && imageSources[expandedImageIndex]
-      ? toUserAttachmentImageSrc(imageSources[expandedImageIndex], projectId)
-      : null;
+  const imageItems = useMemo(
+    () =>
+      imageSources.map((source, index) => ({
+        alt: `Attached image ${index + 1}`,
+        src: toUserAttachmentImageSrc(source, projectId),
+      })),
+    [imageSources, projectId],
+  );
+  const hasMultipleImages = imageItems.length > 1;
+  const currentImage =
+    expandedImageIndex !== null ? (imageItems[expandedImageIndex] ?? null) : null;
 
   useEffect(() => {
     if (!copied) {
@@ -56,6 +65,28 @@ export function UserMessageRow({
       toast.error("Failed to copy message");
     }
   };
+
+  const showPreviousImage = useCallback(() => {
+    setExpandedImageIndex((index) => {
+      if (index === null || imageItems.length <= 1) return index;
+      return getWrappedImageIndex({
+        currentIndex: index,
+        direction: "previous",
+        itemCount: imageItems.length,
+      });
+    });
+  }, [imageItems.length]);
+
+  const showNextImage = useCallback(() => {
+    setExpandedImageIndex((index) => {
+      if (index === null || imageItems.length <= 1) return index;
+      return getWrappedImageIndex({
+        currentIndex: index,
+        direction: "next",
+        itemCount: imageItems.length,
+      });
+    });
+  }, [imageItems.length]);
 
   return (
     <>
@@ -122,62 +153,15 @@ export function UserMessageRow({
         </div>
       </div>
 
-      {currentImageSrc ? (
-        <Dialog open={true} onOpenChange={(open) => !open && setExpandedImageIndex(null)}>
-          <DialogContent className="flex h-[90vh] w-[90vw] max-w-[90vw] items-center justify-center border-none bg-transparent p-0 shadow-none [&>button]:hidden">
-            <DialogTitle className="sr-only">Attached image preview</DialogTitle>
-            <img
-              src={currentImageSrc}
-              alt="Attached image"
-              className="max-h-[82vh] max-w-[90vw] rounded bg-background/95 object-contain"
-            />
-
-            {hasMultipleImages ? (
-              <>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="absolute left-2 top-1/2 size-9 -translate-y-1/2 rounded-full bg-black/45 text-white hover:bg-black/60 hover:text-white"
-                  onClick={() => {
-                    setExpandedImageIndex((index) => {
-                      if (index === null) return index;
-                      return index === 0 ? imageSources.length - 1 : index - 1;
-                    });
-                  }}
-                >
-                  <ChevronLeft className="size-5" />
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="absolute right-2 top-1/2 size-9 -translate-y-1/2 rounded-full bg-black/45 text-white hover:bg-black/60 hover:text-white"
-                  onClick={() => {
-                    setExpandedImageIndex((index) => {
-                      if (index === null) return index;
-                      return index === imageSources.length - 1 ? 0 : index + 1;
-                    });
-                  }}
-                >
-                  <ChevronRight className="size-5" />
-                </Button>
-              </>
-            ) : null}
-
-            <DialogClose asChild>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="absolute right-2 top-2 size-9 rounded-full bg-black/45 text-white hover:bg-black/60 hover:text-white"
-              >
-                <X className="size-5" />
-              </Button>
-            </DialogClose>
-          </DialogContent>
-        </Dialog>
-      ) : null}
+      <ImageLightbox
+        imageSrc={currentImage?.src ?? null}
+        imageAlt={currentImage?.alt ?? "Attached image"}
+        title="Attached image preview"
+        hasMultipleImages={hasMultipleImages}
+        onPrevious={showPreviousImage}
+        onNext={showNextImage}
+        onClose={() => setExpandedImageIndex(null)}
+      />
     </>
   );
 }

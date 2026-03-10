@@ -1,9 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from "react"
-import { ChevronLeft, ChevronRight, X } from "lucide-react"
+import { useCallback, useMemo, useState } from "react"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
-import { Button } from "@/components/ui/button"
-import { Dialog, DialogClose, DialogContent, DialogTitle } from "@/components/ui/dialog"
+import { ImageLightbox, getWrappedImageIndex } from "@/components/shared/ImageLightbox"
 import { cn } from "@/lib/utils"
 
 interface ConversationMarkdownProps {
@@ -28,35 +26,30 @@ function extractMarkdownImageUrls(markdown: string): string[] {
 export function ConversationMarkdown({ content, className }: ConversationMarkdownProps) {
   const imageUrls = useMemo(() => extractMarkdownImageUrls(content), [content])
   const [expandedImageIndex, setExpandedImageIndex] = useState<number | null>(null)
+  const currentImageUrl =
+    expandedImageIndex !== null ? (imageUrls[expandedImageIndex] ?? null) : null
 
   const showPreviousImage = useCallback(() => {
     setExpandedImageIndex((currentIndex) => {
       if (currentIndex === null || imageUrls.length <= 1) return currentIndex
-      return currentIndex === 0 ? imageUrls.length - 1 : currentIndex - 1
+      return getWrappedImageIndex({
+        currentIndex,
+        direction: "previous",
+        itemCount: imageUrls.length,
+      })
     })
   }, [imageUrls.length])
 
   const showNextImage = useCallback(() => {
     setExpandedImageIndex((currentIndex) => {
       if (currentIndex === null || imageUrls.length <= 1) return currentIndex
-      return currentIndex === imageUrls.length - 1 ? 0 : currentIndex + 1
+      return getWrappedImageIndex({
+        currentIndex,
+        direction: "next",
+        itemCount: imageUrls.length,
+      })
     })
   }, [imageUrls.length])
-
-  useEffect(() => {
-    if (expandedImageIndex === null || imageUrls.length <= 1) return
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "ArrowLeft") {
-        event.preventDefault()
-        showPreviousImage()
-      } else if (event.key === "ArrowRight") {
-        event.preventDefault()
-        showNextImage()
-      }
-    }
-    window.addEventListener("keydown", handleKeyDown)
-    return () => window.removeEventListener("keydown", handleKeyDown)
-  }, [expandedImageIndex, imageUrls.length, showNextImage, showPreviousImage])
 
   return (
     <>
@@ -158,54 +151,15 @@ export function ConversationMarkdown({ content, className }: ConversationMarkdow
         </ReactMarkdown>
       </div>
 
-      {expandedImageIndex !== null && imageUrls[expandedImageIndex] ? (
-        <Dialog open={true} onOpenChange={(open) => !open && setExpandedImageIndex(null)}>
-          <DialogContent className="flex h-[90vh] w-[90vw] max-w-[90vw] items-center justify-center border-none bg-transparent p-0 shadow-none [&>button]:hidden">
-            <DialogTitle className="sr-only">Expanded image preview</DialogTitle>
-            <div className="relative flex items-center justify-center">
-              <img
-                src={imageUrls[expandedImageIndex]}
-                alt="Expanded image"
-                className="max-h-[82vh] max-w-[90vw] rounded bg-background/95 object-contain"
-              />
-            </div>
-
-            {imageUrls.length > 1 ? (
-              <>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="absolute left-2 top-1/2 size-9 -translate-y-1/2 rounded-full bg-black/45 text-white hover:bg-black/60 hover:text-white"
-                  onClick={showPreviousImage}
-                >
-                  <ChevronLeft className="size-5" />
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="absolute right-2 top-1/2 size-9 -translate-y-1/2 rounded-full bg-black/45 text-white hover:bg-black/60 hover:text-white"
-                  onClick={showNextImage}
-                >
-                  <ChevronRight className="size-5" />
-                </Button>
-              </>
-            ) : null}
-
-            <DialogClose asChild>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="absolute right-2 top-2 size-9 rounded-full bg-black/45 text-white hover:bg-black/60 hover:text-white"
-              >
-                <X className="size-5" />
-              </Button>
-            </DialogClose>
-          </DialogContent>
-        </Dialog>
-      ) : null}
+      <ImageLightbox
+        imageSrc={currentImageUrl}
+        imageAlt="Expanded image"
+        title="Expanded image preview"
+        hasMultipleImages={imageUrls.length > 1}
+        onPrevious={showPreviousImage}
+        onNext={showNextImage}
+        onClose={() => setExpandedImageIndex(null)}
+      />
     </>
   )
 }
