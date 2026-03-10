@@ -4,7 +4,7 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "dev": "vite",
+    "dev": "react-grab-codex && vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "clean": "rm -rf dist",
@@ -40,6 +40,7 @@
     "tailwind-merge": "^3.4.0"
   },
   "devDependencies": {
+    "@react-grab/codex": "^0.1.27",
     "@tailwindcss/vite": "^4.0.0",
     "@types/node": "^22.0.0",
     "@types/react": "^19.0.0",
@@ -48,6 +49,7 @@
     "@vitejs/plugin-react": "^4.3.0",
     "eslint": "^9.39.3",
     "eslint-plugin-react-hooks": "^7.0.1",
+    "react-grab": "^0.1.27",
     "tailwindcss": "^4.0.0",
     "typescript": "^5.7.0",
     "vite": "^7.3.1"
