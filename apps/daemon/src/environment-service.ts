@@ -563,10 +563,27 @@ export class EnvironmentService {
 
   stopAll(opts?: { preserveEnvironments?: boolean }): void {
     const disposeEnvironments = !(opts?.preserveEnvironments ?? false);
+    const runtimeThreadIds = new Set(this.environmentRuntimes.keys());
     for (const [threadId] of this.environmentRuntimes) {
       this.cleanupEnvironmentRuntime(threadId, {
         disposeEnvironment: disposeEnvironments,
       });
+    }
+    if (disposeEnvironments) {
+      const projects = this.projectRepo.list();
+      for (const project of projects) {
+        const threadIds =
+          typeof this.threadRepo.listProjectNonArchivedIdsWithEnvironmentRecord === "function"
+            ? this.threadRepo.listProjectNonArchivedIdsWithEnvironmentRecord(project.id)
+            : [];
+        for (const threadId of threadIds) {
+          if (runtimeThreadIds.has(threadId)) continue;
+          this.cleanupEnvironmentRuntime(threadId, {
+            destroyWorkspace: true,
+            disposeEnvironment: true,
+          });
+        }
+      }
     }
     this.environmentRuntimes.clear();
     this.stopAllPrimaryPromotionWatches();

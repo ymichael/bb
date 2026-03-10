@@ -61,13 +61,7 @@ async function main(): Promise<void> {
     );
 
     const shutdown = async () => {
-      try {
-        await runtime.drainPendingDaemonDelivery();
-      } catch (error) {
-        console.error(
-          error instanceof Error ? error.message : String(error),
-        );
-      }
+      await runtime.shutdown();
       await server.close();
       process.exit(0);
     };

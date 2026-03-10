@@ -53,9 +53,10 @@ export function registerEnvironmentAgentCommand(program: Command): void {
           },
           env: process.env,
         });
-        const { server } = await startEnvironmentAgentService(options);
+        const { runtime, server } = await startEnvironmentAgentService(options);
         console.error(`environment-agent http listening on ${server.baseUrl}`);
         const shutdown = async () => {
+          await runtime.shutdown();
           await server.close();
           process.exit(0);
         };

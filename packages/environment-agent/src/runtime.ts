@@ -72,6 +72,8 @@ export class EnvironmentAgentRuntime {
   private deliveryRetryAttemptCount = 0;
   private nextRetryAt: number | undefined;
   private lastDeliveryError: string | undefined;
+  private shuttingDown = false;
+  private shutdownPromise: Promise<void> | null = null;
 
   constructor(private readonly opts: EnvironmentAgentRuntimeOptions) {
     this.daemonConnection = opts.daemonConnection
@@ -86,6 +88,29 @@ export class EnvironmentAgentRuntime {
     });
 
     return this.ensureProviderRunning();
+  }
+
+  async shutdown(opts?: { timeoutMs?: number }): Promise<void> {
+    if (this.shutdownPromise) {
+      return this.shutdownPromise;
+    }
+
+    this.shuttingDown = true;
+    this.shutdownPromise = (async () => {
+      try {
+        await this.drainPendingDaemonDelivery(opts);
+      } catch {
+        // Best-effort flush during shutdown.
+      }
+      this.stopDeliveryTimers();
+      this.markDeliveryStopped(
+        "transport_error",
+        "Environment-agent shutdown in progress",
+      );
+      await this.stopProviderChild(opts?.timeoutMs ?? 1_000);
+    })();
+
+    return this.shutdownPromise;
   }
 
   appendEvent(event: EnvironmentAgentEvent): EnvironmentAgentEventEnvelope {
@@ -424,6 +449,9 @@ export class EnvironmentAgentRuntime {
       this.rejectPendingProviderRequests(
         new Error(`Provider runtime exited (code=${String(_code)}, signal=${String(_signal)})`),
       );
+      if (this.shuttingDown) {
+        return;
+      }
       this.opts.onStderrLine?.(
         `provider runtime exited (code=${String(_code)}, signal=${String(_signal)})`,
       );
@@ -655,6 +683,68 @@ export class EnvironmentAgentRuntime {
     }
     this.deliveryDebounceStartedAt = undefined;
     this.nextRetryAt = undefined;
+  }
+
+  private stopDeliveryTimers(): void {
+    if (this.deliveryRetryTimer) {
+      clearTimeout(this.deliveryRetryTimer);
+      this.deliveryRetryTimer = undefined;
+    }
+    if (this.deliveryFlushTimer) {
+      clearTimeout(this.deliveryFlushTimer);
+      this.deliveryFlushTimer = undefined;
+    }
+    this.deliveryDebounceStartedAt = undefined;
+    this.nextRetryAt = undefined;
+  }
+
+  private async stopProviderChild(timeoutMs: number): Promise<void> {
+    const child = this.providerChild;
+    if (!child) {
+      return;
+    }
+
+    this.providerChild = null;
+    this.providerInitializedPid = undefined;
+    this.rejectPendingProviderRequests(
+      new Error("Provider runtime stopped during environment-agent shutdown"),
+    );
+
+    child.stdin?.end();
+    if (child.exitCode !== null || child.killed) {
+      return;
+    }
+
+    await new Promise<void>((resolve) => {
+      let settled = false;
+
+      const finish = () => {
+        if (settled) return;
+        settled = true;
+        resolve();
+      };
+
+      const forceKillTimer = setTimeout(() => {
+        try {
+          child.kill("SIGKILL");
+        } catch {
+          // Ignore failed hard-kill attempts.
+        }
+      }, Math.max(100, timeoutMs));
+      forceKillTimer.unref?.();
+
+      child.once("exit", () => {
+        clearTimeout(forceKillTimer);
+        finish();
+      });
+
+      try {
+        child.kill("SIGTERM");
+      } catch {
+        clearTimeout(forceKillTimer);
+        finish();
+      }
+    });
   }
 
   private kickOffDaemonDelivery(): void {

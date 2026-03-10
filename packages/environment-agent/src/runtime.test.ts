@@ -611,6 +611,22 @@ describe("EnvironmentAgentRuntime", () => {
     });
   });
 
+  it("terminates the provider child during shutdown", async () => {
+    const runtime = new EnvironmentAgentRuntime({
+      threadId: "thread-1",
+      providerCommand: process.execPath,
+      providerArgs: ["-e", "setInterval(() => {}, 1000)"],
+    });
+
+    runtime.start();
+
+    await expect.poll(() => runtime.getProviderStatus().running).toBe(true);
+
+    await runtime.shutdown({ timeoutMs: 300 });
+
+    await expect.poll(() => runtime.getProviderStatus().running).toBe(false);
+  });
+
   it("caps debounced delivery with a max wait during sustained event bursts", async () => {
     const deliveredSequences: number[][] = [];
     const daemon = createServer((request, response) => {

@@ -193,8 +193,21 @@ function createService(args: {
       createdAt: 1000,
       updatedAt: 1000,
     })),
+    list: vi.fn(() => ([{
+      id: "proj-1",
+      name: "Project",
+      rootPath: "/project/root",
+      createdAt: 1000,
+      updatedAt: 1000,
+    }])),
     update: vi.fn(),
   } as unknown as ProjectRepository;
+
+  (
+    threadRepo as unknown as {
+      listProjectNonArchivedIdsWithEnvironmentRecord: ReturnType<typeof vi.fn>;
+    }
+  ).listProjectNonArchivedIdsWithEnvironmentRecord = vi.fn(() => ["thread-1"]);
 
   const runOptionalSetup = vi.fn<
     (
@@ -323,6 +336,29 @@ describe("EnvironmentService", () => {
     service.setEnvironmentRuntime("thread-1", runtimeEnvironment);
 
     service.cleanupEnvironmentRuntime("thread-1", { destroyWorkspace: true });
+    await new Promise<void>((resolve) => setImmediate(resolve));
+
+    expect(disposeSpy).toHaveBeenCalledTimes(1);
+    expect(threadRepo.update).toHaveBeenCalledWith(
+      "thread-1",
+      {
+        environmentRecord: null,
+        environmentAgentCursor: null,
+      },
+      { touchUpdatedAt: false },
+    );
+    expect(threadState.environmentRecord).toBeNull();
+    expect(threadState.environmentAgentCursor).toBeNull();
+  });
+
+  it("stopAll cleans up persisted environments even when no runtime is restored", async () => {
+    const disposeSpy = vi.fn();
+    const { service, threadRepo, threadState } = createService({
+      existsInitially: true,
+      disposeSpy,
+    });
+
+    service.stopAll();
     await new Promise<void>((resolve) => setImmediate(resolve));
 
     expect(disposeSpy).toHaveBeenCalledTimes(1);
