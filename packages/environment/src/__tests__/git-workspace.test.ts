@@ -171,7 +171,7 @@ describe("watchGitWorkspaceStatus", () => {
 describe("getGitWorkspaceStatus", () => {
   it("falls back to collapsed untracked status output when exhaustive porcelain overflows", async () => {
     const environment = createEnvironment(() => "");
-    const run = vi.fn((_command: string, args: string[]) => {
+    const run = vi.fn(async (_command: string, args: string[]) => {
       if (args[0] === "rev-parse" && args[1] === "--is-inside-work-tree") {
         return ok("true");
       }
