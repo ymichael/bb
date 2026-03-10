@@ -42,7 +42,9 @@ import * as api from "../lib/api";
 
 const THREAD_WORK_STATUS_QUERY_KEY = "threadWorkStatus";
 const THREAD_GIT_DIFF_QUERY_KEY = "threadGitDiff";
+const THREAD_QUERY_KEY = "thread";
 type ThreadScopedQueryKeyPrefix =
+  | typeof THREAD_QUERY_KEY
   | typeof THREAD_WORK_STATUS_QUERY_KEY
   | typeof THREAD_GIT_DIFF_QUERY_KEY;
 
@@ -96,6 +98,48 @@ export function resolveThreadGitDiffPlaceholder(
     nextThreadId,
     THREAD_GIT_DIFF_QUERY_KEY,
   );
+}
+
+export function resolveThreadPlaceholder(
+  previousData: Thread | undefined,
+  previousQueryKey: QueryKey | undefined,
+  nextThreadId: string,
+): Thread | undefined {
+  return resolveThreadScopedPlaceholder(
+    previousData,
+    previousQueryKey,
+    nextThreadId,
+    THREAD_QUERY_KEY,
+  );
+}
+
+function getCachedThreadListPlaceholder(
+  queryClient: QueryClient,
+  id: string,
+): Thread | undefined {
+  if (!id) {
+    return undefined;
+  }
+  const threadLists = queryClient.getQueriesData<Thread[]>({
+    queryKey: ["threads"],
+  });
+  let fallbackMatch: Thread | undefined;
+  for (const [queryKey, threads] of threadLists) {
+    const filters = Array.isArray(queryKey)
+      ? readThreadListFiltersFromQueryKey(queryKey)
+      : null;
+    if (filters === null) {
+      continue;
+    }
+    const match = threads?.find((thread) => thread.id === id);
+    if (match) {
+      if (filters?.includeWorkStatus) {
+        return match;
+      }
+      fallbackMatch ??= match;
+    }
+  }
+  return fallbackMatch;
 }
 
 function updateCachedThread(
@@ -332,17 +376,9 @@ export function useThread(
     enabled: (options?.enabled ?? true) && !!id,
     staleTime: 5_000,
     refetchOnMount: options?.refetchOnMount ?? true,
-    initialData: () => {
-      if (!id) return undefined;
-      const threadLists = queryClient.getQueriesData<Thread[]>({
-        queryKey: ["threads"],
-      });
-      for (const [, threads] of threadLists) {
-        const match = threads?.find((thread) => thread.id === id);
-        if (match) return match;
-      }
-      return undefined;
-    },
+    placeholderData: (previousData, previousQuery) =>
+      resolveThreadPlaceholder(previousData, previousQuery?.queryKey, id) ??
+      getCachedThreadListPlaceholder(queryClient, id),
   });
 }
 

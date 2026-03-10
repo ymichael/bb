@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ThreadGitDiffResponse, ThreadWorkStatus } from "@beanbag/agent-core";
 import {
+  resolveThreadPlaceholder,
   resolveThreadGitDiffPlaceholder,
   resolveThreadWorkStatusPlaceholder,
 } from "./useApi";
@@ -72,6 +73,46 @@ describe("resolveThreadWorkStatusPlaceholder", () => {
       resolveThreadWorkStatusPlaceholder(
         null,
         ["threadWorkStatus", "thread-1", null],
+        "thread-2",
+      ),
+    ).toBeUndefined();
+  });
+});
+
+describe("resolveThreadPlaceholder", () => {
+  it("keeps previous data when the same thread query refreshes", () => {
+    const previousThread = {
+      id: "thread-1",
+      projectId: "project-1",
+      status: "idle",
+      updatedAt: 1,
+      lastReadAt: 1,
+      builtInActions: [],
+    };
+
+    expect(
+      resolveThreadPlaceholder(
+        previousThread,
+        ["thread", "thread-1"],
+        "thread-1",
+      ),
+    ).toBe(previousThread);
+  });
+
+  it("drops previous data when switching to a different thread", () => {
+    const previousThread = {
+      id: "thread-1",
+      projectId: "project-1",
+      status: "idle",
+      updatedAt: 1,
+      lastReadAt: 1,
+      builtInActions: [],
+    };
+
+    expect(
+      resolveThreadPlaceholder(
+        previousThread,
+        ["thread", "thread-1"],
         "thread-2",
       ),
     ).toBeUndefined();
