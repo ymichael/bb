@@ -1483,13 +1483,17 @@ export class Orchestrator implements ThreadOrchestrator {
     return environment?.isIsolatedWorkspace() === true;
   }
 
-  updateThread(threadId: string, request: { title?: string }): Thread {
+  updateThread(
+    threadId: string,
+    request: { title?: string; mergeBaseBranchOverride?: string | null },
+  ): Thread {
     const thread = this.threadRepo.getById(threadId);
     if (!thread) {
       throw threadNotFoundError(threadId);
     }
 
     let didChange = false;
+    const changeKinds: ThreadChangeKind[] = [];
     const nextTitle = this._normalizeThreadTitle(request.title);
     if (nextTitle && nextTitle !== thread.title) {
       this.threadRepo.update(threadId, { title: nextTitle });
@@ -1518,6 +1522,21 @@ export class Orchestrator implements ThreadOrchestrator {
         });
       }
       didChange = true;
+      changeKinds.push("title-changed");
+    }
+    if (request.mergeBaseBranchOverride !== undefined) {
+      const nextMergeBaseBranchOverride =
+        request.mergeBaseBranchOverride?.trim() || null;
+      const currentMergeBaseBranchOverride = thread.mergeBaseBranchOverride ?? null;
+      if (nextMergeBaseBranchOverride !== currentMergeBaseBranchOverride) {
+        this.threadRepo.update(threadId, {
+          mergeBaseBranchOverride: nextMergeBaseBranchOverride,
+        }, {
+          touchUpdatedAt: false,
+        });
+        didChange = true;
+        changeKinds.push("metadata-changed", "work-status-changed");
+      }
     }
 
     const updated = this.threadRepo.getById(threadId);
@@ -1525,7 +1544,7 @@ export class Orchestrator implements ThreadOrchestrator {
       throw threadNotFoundError(threadId);
     }
     if (didChange) {
-      this._broadcastThreadChanged(threadId, ["title-changed"]);
+      this._broadcastThreadChanged(threadId, changeKinds);
     }
     return this._withPrimaryCheckoutState(updated);
   }

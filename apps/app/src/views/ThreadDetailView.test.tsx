@@ -416,9 +416,7 @@ describe("ThreadDetailView", () => {
     expect(html).toContain("Branch");
     expect(html).toContain("feature/thread-1");
     expect(html).toContain("Copy branch name");
-    expect(html).toContain("Merge base");
     expect(html).toContain("release/1.0");
-    expect(html).toContain("Git status");
     expect(html).toContain("Dirty");
     expect(html).toContain("2 files, +3 -1");
     expect(html).toContain("Changed files");

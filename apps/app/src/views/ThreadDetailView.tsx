@@ -1,4 +1,5 @@
 import {
+  type ComponentProps,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -51,7 +52,7 @@ import { usePromptDraftStorage } from "@/hooks/usePromptDraftStorage";
 import { usePromptFileMentions } from "@/hooks/usePromptFileMentions";
 import { usePreferredTheme } from "@/hooks/useTheme";
 import { PageShell } from "@/components/layout/PageShell";
-import { WorkspaceChangesList } from "@/components/shared/WorkspaceChangesList";
+import { ThreadGitStatusDetails } from "@/components/shared/ThreadGitStatusDetails";
 import { ThreadActionsMenu } from "@/components/thread/ThreadActionsMenu";
 import {
   ThreadGitActionDialog,
@@ -91,10 +92,6 @@ import {
   getThreadGitStatusDisplay,
 } from "@/lib/thread-work-status";
 import {
-  formatChangeSummary,
-  formatWorkspaceChangeSummary,
-} from "@/lib/workspace-change-summary";
-import {
   getThreadSecondaryPanel,
   getStoredThreadSecondaryPanel,
   setStoredThreadSecondaryPanel,
@@ -131,6 +128,7 @@ import {
   extractThreadQueuedMessages,
   queuedInputToDraft,
 } from "./threadQueuedMessages";
+import { cn } from "@/lib/utils";
 import {
   EventTitle,
   formatSummaryDuration,
@@ -309,9 +307,6 @@ export function ThreadDetailView() {
   const activeSecondaryPanel = searchSecondaryPanel ?? persistedSecondaryPanel;
   const isSecondaryPanelOpen = activeSecondaryPanel !== null;
   const isGitDiffPanelOpen = activeSecondaryPanel === "git-diff";
-  const [selectedMergeBaseBranch, setSelectedMergeBaseBranch] = useState<string | undefined>(
-    undefined,
-  );
   const [shouldLoadMergeBaseBranchOptions, setShouldLoadMergeBaseBranchOptions] = useState(false);
   const [isMergeBaseBranchPickerOpen, setIsMergeBaseBranchPickerOpen] = useState(false);
   const [selectedGitDiffCommitSha, setSelectedGitDiffCommitSha] = useState<string | null>(
@@ -325,7 +320,7 @@ export function ThreadDetailView() {
     error: threadWorkStatusError,
   } = useThreadWorkStatus(
     threadId ?? "",
-    selectedMergeBaseBranch,
+    thread?.mergeBaseBranchOverride,
   );
   const {
     data: mergeBaseBranchOptions,
@@ -503,7 +498,7 @@ export function ThreadDetailView() {
   } = useThreadGitDiff(threadId ?? "", {
     enabled: Boolean(threadId) && isGitDiffPanelOpen,
     selection: gitDiffSelection,
-    mergeBaseBranch: selectedMergeBaseBranch,
+    mergeBaseBranch: thread?.mergeBaseBranchOverride,
   });
   const parsedGitDiffFileEntries = useMemo(
     () =>
@@ -687,7 +682,6 @@ export function ThreadDetailView() {
   }, [threadId]);
 
   useEffect(() => {
-    setSelectedMergeBaseBranch(undefined);
     setShouldLoadMergeBaseBranchOptions(false);
     setIsMergeBaseBranchPickerOpen(false);
   }, [threadId]);
@@ -1484,44 +1478,19 @@ export function ThreadDetailView() {
       : isProvisioning
       ? "Provisioning..."
       : undefined;
-  const effectiveMergeBaseBranch =
-    selectedMergeBaseBranch ??
+  const threadMergeBaseBranch =
+    thread.mergeBaseBranchOverride ??
     resolvedThreadWorkStatus?.mergeBaseBranch ??
+    resolvedThreadWorkStatus?.mergeBaseBranches?.[0] ??
     resolvedThreadWorkStatus?.defaultBranch;
   const showBranchComparisonUi = Boolean(
-    effectiveMergeBaseBranch || resolvedThreadWorkStatus?.defaultBranch,
+    threadMergeBaseBranch || resolvedThreadWorkStatus?.defaultBranch,
   );
-  const promptBannerSummary = resolvedThreadWorkStatus
-    ? showBranchComparisonUi
-      ? formatChangeSummary({
-          changedFiles: resolvedThreadWorkStatus.changedFiles,
-          insertions: resolvedThreadWorkStatus.insertions,
-          deletions: resolvedThreadWorkStatus.deletions,
-        })
-      : formatWorkspaceChangeSummary(resolvedThreadWorkStatus)
-    : "";
-  const showPromptGitStatsBanner = Boolean(
-    resolvedThreadWorkStatus &&
-    (
-      showBranchComparisonUi
-        ? resolvedThreadWorkStatus.changedFiles > 0
-        : resolvedThreadWorkStatus.workspaceChangedFiles > 0
-    ),
-  );
-  const canExpandPromptChangeList = Boolean(
-    resolvedThreadWorkStatus &&
-    (resolvedThreadWorkStatus.files?.length ?? 0) > 0,
-  );
-  const promptBannerMergeBaseBranch = effectiveMergeBaseBranch;
   const threadEnvironmentType =
     threadEnvironmentLabel ??
     thread.environmentRecord?.kind ??
     undefined;
   const threadBranchName = resolvedThreadWorkStatus?.currentBranch;
-  const threadMergeBaseBranch = effectiveMergeBaseBranch;
-  const showThreadWorkspaceStatus =
-    (Boolean(resolvedThreadWorkStatus) || Boolean(threadWorkStatusError)) &&
-    !(thread.archivedAt !== undefined && environmentInfo?.capabilities.isolated_workspace !== true);
   const threadGitStatusDisplay = getThreadGitStatusDisplay(
     resolvedThreadWorkStatus,
     {
@@ -1534,26 +1503,34 @@ export function ThreadDetailView() {
     : resolvedThreadWorkStatus?.state === "untracked"
       ? "text-muted-foreground"
       : "text-foreground";
+  const showPromptGitStatsBanner = Boolean(
+    resolvedThreadWorkStatus &&
+    (
+      showBranchComparisonUi
+        ? (
+            resolvedThreadWorkStatus.changedFiles > 0 ||
+            resolvedThreadWorkStatus.aheadCount > 0 ||
+            resolvedThreadWorkStatus.behindCount > 0
+          )
+        : resolvedThreadWorkStatus.workspaceChangedFiles > 0
+    ),
+  );
+  const showThreadWorkspaceStatus =
+    (Boolean(resolvedThreadWorkStatus) || Boolean(threadWorkStatusError)) &&
+    !(thread.archivedAt !== undefined && environmentInfo?.capabilities.isolated_workspace !== true);
   const showThreadChangedFiles = Boolean(
     resolvedThreadWorkStatus &&
-      (
-        resolvedThreadWorkStatus.state === "dirty_uncommitted" ||
-        resolvedThreadWorkStatus.state === "dirty_and_committed_unmerged" ||
-        resolvedThreadWorkStatus.state === "committed_unmerged"
-      ) &&
       (resolvedThreadWorkStatus.files?.length ?? 0) > 0,
   );
-  const showThreadMergeBase =
-    Boolean(threadMergeBaseBranch) &&
-    threadMergeBaseBranch !== resolvedThreadWorkStatus?.defaultBranch;
-  const showThreadMetadata = Boolean(
+  const showThreadMetadataCard = Boolean(
     parentThreadId ||
       threadEnvironmentType ||
-      threadBranchName ||
-      showThreadMergeBase ||
-      showThreadWorkspaceStatus ||
-      showThreadChangedFiles ||
       thread.archivedAt !== undefined,
+  );
+  const showThreadGitStatusSection = Boolean(
+    showThreadWorkspaceStatus ||
+      threadBranchName ||
+      showThreadChangedFiles,
   );
   const threadTitle = getThreadDisplayTitle(thread);
   const threadActionsDisabled =
@@ -1577,6 +1554,44 @@ export function ThreadDetailView() {
       toast.error("Failed to copy branch name");
     }
   };
+  const handleMergeBaseBranchChange = useCallback((branch: string) => {
+    const normalizedBranch = branch.trim();
+    if (!normalizedBranch) {
+      return;
+    }
+
+    const defaultBranch = resolvedThreadWorkStatus?.defaultBranch;
+    const nextMergeBaseBranchOverride =
+      defaultBranch && normalizedBranch === defaultBranch
+        ? null
+        : normalizedBranch;
+    const currentMergeBaseBranchOverride = thread.mergeBaseBranchOverride ?? null;
+    if (nextMergeBaseBranchOverride === currentMergeBaseBranchOverride) {
+      return;
+    }
+
+    updateThread.mutate(
+      {
+        id: thread.id,
+        mergeBaseBranchOverride: nextMergeBaseBranchOverride,
+      },
+      {
+        onError: (error) => {
+          toast.error(
+            error instanceof Error
+              ? error.message
+              : "Failed to update merge base branch.",
+          );
+        },
+      },
+    );
+  }, [resolvedThreadWorkStatus?.defaultBranch, thread.id, thread.mergeBaseBranchOverride, updateThread]);
+  const handleMergeBaseBranchPickerOpenChange = useCallback((open: boolean) => {
+    if (open) {
+      setShouldLoadMergeBaseBranchOptions(true);
+    }
+    setIsMergeBaseBranchPickerOpen(open);
+  }, []);
   const handleTogglePrimaryCheckout = () => {
     const action = isPrimaryCheckoutActive
       ? demotePrimaryCheckout.mutateAsync({ id: thread.id })
@@ -1631,6 +1646,24 @@ export function ThreadDetailView() {
       },
     });
   };
+  const threadGitStatusDetailsProps: ComponentProps<typeof ThreadGitStatusDetails> = {
+    statusLabel: threadGitStatusDisplay.label,
+    statusSummary: threadGitStatusDisplay.summary,
+    statusLabelClassName: threadGitStatusLabelClass,
+    currentBranch: threadBranchName,
+    defaultBranch: resolvedThreadWorkStatus?.defaultBranch,
+    mergeBaseBranch: showBranchComparisonUi ? threadMergeBaseBranch : undefined,
+    mergeBaseBranchOptions:
+      mergeBaseBranchOptions ?? resolvedThreadWorkStatus?.mergeBaseBranches,
+    mergeBaseBranchOptionsLoading: isLoadingMergeBaseBranchOptions,
+    onMergeBaseBranchChange:
+      showBranchComparisonUi ? handleMergeBaseBranchChange : undefined,
+    onMergeBaseBranchPickerOpenChange:
+      showBranchComparisonUi ? handleMergeBaseBranchPickerOpenChange : undefined,
+    pending: updateThread.isPending,
+    changedFiles: resolvedThreadWorkStatus?.files,
+    threadId: thread.id,
+  };
   const renderThreadMetadataRows = () => (
     <>
       {parentThreadId ? (
@@ -1654,52 +1687,6 @@ export function ThreadDetailView() {
           {threadEnvironmentType}
         </DetailRow>
       ) : null}
-      {threadBranchName ? (
-        <DetailRow
-          label="Branch"
-          valueClassName="min-w-0 truncate"
-        >
-          <button
-            type="button"
-            className="inline-flex max-w-full items-center gap-1.5 rounded-md text-left text-foreground transition-colors hover:text-foreground/80"
-            onClick={() => {
-              void handleCopyThreadBranch();
-            }}
-            aria-label="Copy branch name"
-            title="Copy branch name"
-          >
-            <span className="truncate">{threadBranchName}</span>
-            <Copy className="size-3.5 shrink-0 text-muted-foreground" />
-          </button>
-        </DetailRow>
-      ) : null}
-      {showThreadMergeBase ? (
-        <DetailRow
-          label="Merge base"
-          valueClassName="min-w-0 truncate"
-        >
-          {threadMergeBaseBranch}
-        </DetailRow>
-      ) : null}
-      {showThreadWorkspaceStatus ? (
-        <DetailRow
-          label="Git status"
-          align="start"
-          valueClassName="min-w-0"
-        >
-          <div
-            className="flex min-w-0 items-baseline gap-2 whitespace-nowrap"
-            title={`${threadGitStatusDisplay.label} ${threadGitStatusDisplay.summary}`}
-          >
-            <span className={`shrink-0 font-medium ${threadGitStatusLabelClass}`}>
-              {threadGitStatusDisplay.label}
-            </span>
-            <span className="min-w-0 truncate text-muted-foreground">
-              {threadGitStatusDisplay.summary}
-            </span>
-          </div>
-        </DetailRow>
-      ) : null}
       {thread.archivedAt !== undefined ? (
         <DetailRow
           label="Archived"
@@ -1721,28 +1708,39 @@ export function ThreadDetailView() {
   const renderThreadMetadataCard = (className?: string) => (
     <DetailCard className={className}>
       {renderThreadMetadataRows()}
-      {showThreadChangedFiles ? (
-        <DetailRow
-          label="Changed files"
-          layout="vertical"
-          valueClassName="pt-0.5"
-        >
-          <WorkspaceChangesList
-            files={resolvedThreadWorkStatus?.files}
-            threadId={thread.id}
-            maxHeightClassName="max-h-48"
-          />
-        </DetailRow>
-      ) : null}
     </DetailCard>
   );
+  const renderThreadGitStatusSection = (className?: string) => (
+    <ThreadGitStatusDetails
+      {...threadGitStatusDetailsProps}
+      branchContent={
+        threadBranchName ? (
+          <button
+            type="button"
+            className="inline-flex max-w-full items-center gap-1.5 rounded-md text-left text-foreground transition-colors hover:text-foreground/80"
+            onClick={() => {
+              void handleCopyThreadBranch();
+            }}
+            aria-label="Copy branch name"
+            title="Copy branch name"
+          >
+            <span className="truncate">{threadBranchName}</span>
+            <Copy className="size-3.5 shrink-0 text-muted-foreground" />
+          </button>
+        ) : undefined
+      }
+      className={className}
+    />
+  );
   const renderThreadMetadataContent = (className?: string) => (
-    renderThreadMetadataCard(
-      [
-        "rounded-none border-0 bg-transparent px-0 py-0",
-        className,
-      ].filter(Boolean).join(" "),
-    )
+    <div className={cn("space-y-3", className)}>
+      {showThreadMetadataCard ? (
+        renderThreadMetadataCard("rounded-none border-0 bg-transparent px-0 py-0")
+      ) : null}
+      {showThreadGitStatusSection ? (
+        renderThreadGitStatusSection("rounded-none border-0 bg-transparent")
+      ) : null}
+    </div>
   );
   const threadActionsMenu = (
     <ThreadActionsMenu
@@ -2020,18 +2018,21 @@ export function ThreadDetailView() {
           onScrollToBottom={scrollToBottom}
           showPromptGitStatsBanner={showPromptGitStatsBanner}
           isGitDiffPanelOpen={isGitDiffPanelOpen}
-          canExpandPromptChangeList={canExpandPromptChangeList}
+          threadId={thread.id}
           isChangeListExpanded={isChangeListExpanded}
           onToggleChangeListExpanded={() => {
             setIsChangeListExpanded((prev) => !prev);
           }}
-          promptBannerSummary={promptBannerSummary}
-          showBranchComparisonUi={showBranchComparisonUi}
-          promptBannerMergeBaseBranch={promptBannerMergeBaseBranch}
-          resolvedThreadWorkStatus={resolvedThreadWorkStatus}
-          threadId={thread.id}
+          gitStatusDetailsProps={{
+            ...threadGitStatusDetailsProps,
+            branchContent: threadBranchName ? (
+              <span className="block truncate" title={threadBranchName}>
+                {threadBranchName}
+              </span>
+            ) : undefined,
+            onFileClick: handlePromptBannerFileClick,
+          }}
           onPromptGitStatsBannerClick={handlePromptGitStatsBannerClick}
-          onPromptBannerFileClick={handlePromptBannerFileClick}
           queuedMessages={queuedMessages}
           canSendFollowUp={canSendFollowUp}
           isFollowUpSubmitting={isFollowUpSubmitting}
@@ -2143,7 +2144,7 @@ export function ThreadDetailView() {
           <ThreadGitDiffPanel
             activePanel={activeSecondaryPanel}
             metadataContent={
-              showThreadMetadata ? (
+              showThreadMetadataCard || showThreadGitStatusSection ? (
                 renderThreadMetadataContent()
               ) : (
                 <div className="pt-1 text-sm text-muted-foreground">
@@ -2206,26 +2207,22 @@ export function ThreadDetailView() {
             : requestThreadSquashOperation.isPending
         }
         branchName={threadBranchName}
+        defaultBranch={resolvedThreadWorkStatus?.defaultBranch}
         gitStatusLabel={threadGitStatusDisplay.label}
         gitStatusSummary={threadGitStatusDisplay.summary}
         changedFiles={resolvedThreadWorkStatus?.files}
         threadId={thread.id}
         showMergeBaseDetails={showBranchComparisonUi}
-        mergeBaseBranch={effectiveMergeBaseBranch}
-        mergeBaseBranchOptions={mergeBaseBranchOptions}
+        mergeBaseBranch={threadMergeBaseBranch}
+        mergeBaseBranchOptions={
+          mergeBaseBranchOptions ?? resolvedThreadWorkStatus?.mergeBaseBranches
+        }
         mergeBaseBranchOptionsLoading={isLoadingMergeBaseBranchOptions}
         onMergeBaseBranchChange={
-          showBranchComparisonUi ? setSelectedMergeBaseBranch : undefined
+          showBranchComparisonUi ? handleMergeBaseBranchChange : undefined
         }
         onMergeBaseBranchPickerOpenChange={
-          showBranchComparisonUi
-            ? (open) => {
-                if (open) {
-                  setShouldLoadMergeBaseBranchOptions(true);
-                }
-                setIsMergeBaseBranchPickerOpen(open);
-              }
-            : undefined
+          showBranchComparisonUi ? handleMergeBaseBranchPickerOpenChange : undefined
         }
         onOpenChange={(open) => {
           if (!open) {

@@ -1,5 +1,5 @@
 import { type ComponentProps, type ComponentType, type RefObject } from "react";
-import { CornerDownRight, Pencil, Trash2, ChevronDown } from "lucide-react";
+import { CornerDownRight, Pencil, Trash2 } from "lucide-react";
 import {
   type ReasoningLevel,
   type SandboxMode,
@@ -15,10 +15,9 @@ import {
 } from "@/components/promptbox/PromptOptionPicker";
 import { Button } from "@/components/ui/button";
 import { ScrollToBottomButton } from "@/components/shared/ScrollToBottomButton";
-import { WorkspaceChangesList } from "@/components/shared/WorkspaceChangesList";
+import { ThreadGitStatusDetails } from "@/components/shared/ThreadGitStatusDetails";
 import { ThreadContextWindowIndicator } from "@/components/thread/ThreadContextWindowIndicator";
 import { PromptComposerShell } from "@beanbag/ui-core";
-import { cn } from "@/lib/utils";
 import {
   countQueuedMessageAttachments,
   formatQueuedFollowUpPreview,
@@ -138,16 +137,11 @@ export function ThreadFollowUpComposer({
   onScrollToBottom,
   showPromptGitStatsBanner,
   isGitDiffPanelOpen,
-  canExpandPromptChangeList,
+  threadId,
   isChangeListExpanded,
   onToggleChangeListExpanded,
-  promptBannerSummary,
-  showBranchComparisonUi,
-  promptBannerMergeBaseBranch,
-  resolvedThreadWorkStatus,
-  threadId,
+  gitStatusDetailsProps,
   onPromptGitStatsBannerClick,
-  onPromptBannerFileClick,
   queuedMessages,
   canSendFollowUp,
   isFollowUpSubmitting,
@@ -197,18 +191,11 @@ export function ThreadFollowUpComposer({
   onScrollToBottom: () => void;
   showPromptGitStatsBanner: boolean;
   isGitDiffPanelOpen: boolean;
-  canExpandPromptChangeList: boolean;
+  threadId: string;
   isChangeListExpanded: boolean;
   onToggleChangeListExpanded: () => void;
-  promptBannerSummary: string;
-  showBranchComparisonUi: boolean;
-  promptBannerMergeBaseBranch?: string;
-  resolvedThreadWorkStatus?: {
-    files?: ComponentProps<typeof WorkspaceChangesList>["files"];
-  } | null;
-  threadId: string;
+  gitStatusDetailsProps: ComponentProps<typeof ThreadGitStatusDetails>;
   onPromptGitStatsBannerClick: () => void;
-  onPromptBannerFileClick: (file: { path: string }) => void;
   queuedMessages: readonly ThreadQueuedMessage[];
   canSendFollowUp: boolean;
   isFollowUpSubmitting: boolean;
@@ -266,68 +253,20 @@ export function ThreadFollowUpComposer({
           onClick={onScrollToBottom}
         />
         {showPromptGitStatsBanner ? (
-          <div
-            className={cn(
-              "mb-2 rounded-md border border-border/60 bg-muted/40 px-3 py-1.5 text-xs text-muted-foreground",
-              !isGitDiffPanelOpen && "cursor-pointer transition-colors hover:bg-muted/55",
-            )}
-            onClick={onPromptGitStatsBannerClick}
-          >
-            <div className="flex items-center justify-between gap-3">
-              {canExpandPromptChangeList ? (
-                <button
-                  type="button"
-                  className="flex min-w-0 items-center gap-2 truncate text-left"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    onToggleChangeListExpanded();
-                  }}
-                >
-                  <span className="truncate">{promptBannerSummary}</span>
-                  <ChevronDown
-                    className={cn(
-                      "size-3.5 shrink-0 transition-transform duration-200",
-                      isChangeListExpanded && "rotate-180",
-                    )}
-                  />
-                </button>
-              ) : (
-                <span className="truncate">{promptBannerSummary}</span>
-              )}
-              {showBranchComparisonUi ? (
-                <span className="shrink-0 text-xs text-muted-foreground/90">
-                  {promptBannerMergeBaseBranch
-                    ? `Merge base: ${promptBannerMergeBaseBranch}`
-                    : "Merge base comparison"}
-                </span>
-              ) : (
-                <span className="shrink-0 text-xs text-muted-foreground/90">
-                  Includes all threads in this working directory
-                </span>
-              )}
-            </div>
-            {canExpandPromptChangeList && resolvedThreadWorkStatus ? (
-              <div
-                className={cn(
-                  "grid overflow-hidden transition-[grid-template-rows,opacity,margin,padding,border-color] duration-200 ease-out",
-                  isChangeListExpanded
-                    ? "mt-2 grid-rows-[1fr] border-t border-border/50 pt-1 opacity-100"
-                    : "grid-rows-[0fr] border-t border-transparent pt-0 opacity-0",
-                )}
-                onClick={(event) => {
-                  event.stopPropagation();
-                }}
-              >
-                <div className="overflow-hidden">
-                  <WorkspaceChangesList
-                    files={resolvedThreadWorkStatus.files ?? []}
-                    threadId={threadId}
-                    onFileClick={onPromptBannerFileClick}
-                  />
-                </div>
-              </div>
-            ) : null}
-          </div>
+          <ThreadGitStatusDetails
+            {...gitStatusDetailsProps}
+            collapsible
+            expanded={isChangeListExpanded}
+            onToggleExpanded={onToggleChangeListExpanded}
+            onSummaryClick={
+              isGitDiffPanelOpen ? undefined : onPromptGitStatsBannerClick
+            }
+            className={
+              isGitDiffPanelOpen
+                ? "mb-2 border-border/60 bg-muted/40"
+                : "mb-2 border-border/60 bg-muted/40 transition-colors hover:bg-muted/55"
+            }
+          />
         ) : null}
         <QueuedFollowUpList
           queuedMessages={queuedMessages}

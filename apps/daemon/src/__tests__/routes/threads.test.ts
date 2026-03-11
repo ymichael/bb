@@ -89,6 +89,7 @@ function mockOrchestrator(): LegacyThreadRouteMock {
     promoteThread: vi.fn(),
     demotePrimaryCheckout: vi.fn(),
     requestThreadOperation: vi.fn(),
+    updateThread: vi.fn(),
     markRead: vi.fn(),
     getRawById: vi.fn(),
     getById: vi.fn(),
@@ -916,6 +917,33 @@ describe("Thread routes", () => {
       const res = await app.request("/threads/thread-1/default-execution-options");
       expect(res.status).toBe(200);
       expect(await res.json()).toBeNull();
+    });
+  });
+
+  describe("PATCH /threads/:id", () => {
+    it("updates the persisted merge-base override", async () => {
+      (threadManager.getById as ReturnType<typeof vi.fn>).mockReturnValue(makeThread());
+      (threadManager.updateThread as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeThread({ mergeBaseBranchOverride: "release/1.0" }),
+      );
+
+      const res = await app.request("/threads/thread-1", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mergeBaseBranchOverride: "release/1.0",
+        }),
+      });
+
+      expect(res.status).toBe(200);
+      expect(await res.json()).toMatchObject({
+        id: "thread-1",
+        mergeBaseBranchOverride: "release/1.0",
+      });
+      expect(threadManager.updateThread).toHaveBeenCalledWith("thread-1", {
+        title: undefined,
+        mergeBaseBranchOverride: "release/1.0",
+      });
     });
   });
 

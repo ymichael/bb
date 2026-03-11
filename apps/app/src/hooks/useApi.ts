@@ -11,6 +11,7 @@ import type {
   Thread,
   CreateProjectRequest,
   UpdateProjectRequest,
+  UpdateThreadRequest,
   SpawnThreadRequest,
   TellThreadRequest,
   EnqueueThreadMessageRequest,
@@ -155,6 +156,28 @@ function updateCachedThread(
     if (!thread) return thread;
     return updater(thread);
   });
+}
+
+function updateCachedThreadLists(
+  queryClient: QueryClient,
+  threadId: string,
+  updater: (thread: Thread) => Thread,
+): void {
+  const cachedThreadLists = queryClient.getQueriesData<Thread[]>({
+    queryKey: ["threads"],
+  });
+  for (const [queryKey, list] of cachedThreadLists) {
+    if (!list) {
+      continue;
+    }
+    const nextList = list.map((thread) =>
+      thread.id === threadId ? updater(thread) : thread,
+    );
+    const didChange = nextList.some((thread, index) => thread !== list[index]);
+    if (didChange) {
+      queryClient.setQueryData<Thread[]>(queryKey, nextList);
+    }
+  }
 }
 
 function buildOptimisticUserMessageText(input: PromptInput[]): string {
@@ -814,11 +837,57 @@ export function useStopThread() {
 export function useUpdateThread() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, ...req }: { id: string } & { title?: string }) =>
+    mutationFn: ({ id, ...req }: { id: string } & UpdateThreadRequest) =>
       api.updateThread(id, req),
+    onMutate: async (variables) => {
+      await queryClient.cancelQueries({ queryKey: ["thread", variables.id] });
+
+      const previousThread = queryClient.getQueryData<Thread>(["thread", variables.id]);
+      const previousThreadLists = queryClient.getQueriesData<Thread[]>({
+        queryKey: ["threads"],
+      });
+      const optimisticUpdatedAt = Date.now();
+      const nextTitle = variables.title?.trim();
+      const shouldTouchUpdatedAt = variables.title !== undefined;
+      const nextMergeBaseBranchOverride =
+        variables.mergeBaseBranchOverride === undefined
+          ? undefined
+          : variables.mergeBaseBranchOverride?.trim() || undefined;
+
+      const applyOptimisticUpdate = (thread: Thread): Thread => ({
+        ...thread,
+        ...(nextTitle ? { title: nextTitle } : {}),
+        ...(variables.mergeBaseBranchOverride !== undefined
+          ? { mergeBaseBranchOverride: nextMergeBaseBranchOverride }
+          : {}),
+        ...(shouldTouchUpdatedAt
+          ? { updatedAt: Math.max(thread.updatedAt, optimisticUpdatedAt) }
+          : {}),
+      });
+
+      updateCachedThread(queryClient, variables.id, applyOptimisticUpdate);
+      updateCachedThreadLists(queryClient, variables.id, applyOptimisticUpdate);
+
+      return { previousThread, previousThreadLists };
+    },
+    onError: (_error, variables, context) => {
+      if (context?.previousThread) {
+        queryClient.setQueryData<Thread>(["thread", variables.id], context.previousThread);
+      }
+      for (const [queryKey, data] of context?.previousThreadLists ?? []) {
+        queryClient.setQueryData(queryKey, data);
+      }
+    },
     onSuccess: (thread) => {
       queryClient.setQueryData<Thread>(["thread", thread.id], thread);
+      updateCachedThreadLists(queryClient, thread.id, () => thread);
       queryClient.invalidateQueries({ queryKey: ["threads"] });
+      queryClient.invalidateQueries({
+        queryKey: [THREAD_WORK_STATUS_QUERY_KEY, thread.id],
+      });
+      queryClient.invalidateQueries({
+        queryKey: [THREAD_GIT_DIFF_QUERY_KEY, thread.id],
+      });
       queryClient.invalidateQueries({ queryKey: ["status"] });
     },
   });

@@ -65,6 +65,35 @@ describe("repository strict normalization", () => {
     });
   });
 
+  it("persists and clears per-thread merge-base overrides without touching updatedAt", () => {
+    const projectId = createProjectId();
+    const thread = threads.create({ projectId });
+
+    sqlite.exec(`UPDATE threads SET updated_at=${thread.updatedAt + 5000} WHERE id='${thread.id}'`);
+
+    const withOverride = threads.update(
+      thread.id,
+      { mergeBaseBranchOverride: "release/1.0" },
+      { touchUpdatedAt: false },
+    );
+    expect(withOverride).toMatchObject({
+      id: thread.id,
+      mergeBaseBranchOverride: "release/1.0",
+      updatedAt: thread.updatedAt + 5000,
+    });
+
+    const clearedOverride = threads.update(
+      thread.id,
+      { mergeBaseBranchOverride: null },
+      { touchUpdatedAt: false },
+    );
+    expect(clearedOverride).toMatchObject({
+      id: thread.id,
+      mergeBaseBranchOverride: undefined,
+      updatedAt: thread.updatedAt + 5000,
+    });
+  });
+
   it("persists and loads project primary checkout pointers without touching updatedAt", () => {
     const project = projects.create({
       name: "test-project",
