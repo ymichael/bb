@@ -152,6 +152,7 @@ function mockEnvironmentAgentSessionService(): EnvironmentAgentSessionService {
     recordHeartbeat: vi.fn(),
     applyEventBatch: vi.fn(),
     listCommands: vi.fn(),
+    waitForCommands: vi.fn(),
     recordCommandAck: vi.fn(),
     recordCommandResult: vi.fn(),
     closeSession: vi.fn(),
@@ -760,7 +761,7 @@ describe("Thread routes", () => {
       (threadManager.getById as ReturnType<typeof vi.fn>).mockReturnValue(
         makeThread(),
       );
-      (sessionService.listCommands as ReturnType<typeof vi.fn>).mockReturnValue({
+      (sessionService.waitForCommands as ReturnType<typeof vi.fn>).mockResolvedValue({
         protocol: "beanbag.env-agent.v1",
         type: "command_batch",
         messageId: "msg-1",
@@ -789,7 +790,7 @@ describe("Thread routes", () => {
       );
 
       const res = await app.request(
-        "/threads/thread-1/environment-agent/session/commands?sessionId=sess-1&afterCursor=1&limit=10",
+        "/threads/thread-1/environment-agent/session/commands?sessionId=sess-1&afterCursor=1&limit=10&waitMs=5000",
       );
 
       expect(res.status).toBe(200);
@@ -797,11 +798,13 @@ describe("Thread routes", () => {
         type: "command_batch",
         sessionId: "sess-1",
       });
-      expect(sessionService.listCommands).toHaveBeenCalledWith({
+      expect(sessionService.waitForCommands).toHaveBeenCalledWith({
         threadId: "thread-1",
         sessionId: "sess-1",
         afterCursor: 1,
         limit: 10,
+        waitMs: 5000,
+        signal: expect.any(AbortSignal),
       });
     });
   });

@@ -285,6 +285,129 @@ describe("EnvironmentAgentSessionSupervisor", () => {
     }
   });
 
+  it("aborts an in-flight command pull when runtime events arrive", async () => {
+    vi.useFakeTimers();
+    try {
+      const store = new InMemoryEnvironmentAgentSessionStore();
+      const runtime = new EnvironmentAgentRuntime({ threadId: "thread-1" });
+      const sessionRuntime = new EnvironmentAgentSessionRuntime({
+        store,
+        clock: () => 10_000,
+      });
+      const client = makeClientMock();
+      (client.openSession as ReturnType<typeof vi.fn>).mockResolvedValue({
+        protocol: "beanbag.env-agent.v1",
+        type: "session_welcome",
+        messageId: "msg-open",
+        sessionId: "sess-1",
+        sentAt: 2_000,
+        payload: {
+          leaseTtlMs: 30_000,
+          heartbeatIntervalMs: 10_000,
+          selectedTransport: "http-long-poll",
+          protocolVersion: 1,
+          channels: [],
+        },
+      });
+      (client.pushEvents as ReturnType<typeof vi.fn>).mockResolvedValue({
+        protocol: "beanbag.env-agent.v1",
+        type: "event_ack",
+        messageId: "msg-ack",
+        sessionId: "sess-1",
+        sentAt: 3_000,
+        payload: {
+          channels: [
+            {
+              channelId: "thread-1",
+              ackedThrough: { generation: 1, sequence: 1 },
+            },
+          ],
+        },
+      });
+      let pullAborted = false;
+      (client.pullCommands as ReturnType<typeof vi.fn>)
+        .mockImplementationOnce(
+          ({
+            signal,
+            waitMs,
+          }: {
+            signal: AbortSignal;
+            waitMs: number;
+          }) =>
+            new Promise((_, reject) => {
+              expect(waitMs).toBe(10_000);
+              signal.addEventListener(
+                "abort",
+                () => {
+                  pullAborted = true;
+                  const error = new Error("Operation aborted");
+                  error.name = "AbortError";
+                  reject(error);
+                },
+                { once: true },
+              );
+            }),
+        )
+        .mockResolvedValue({
+          protocol: "beanbag.env-agent.v1",
+          type: "command_batch",
+          messageId: "msg-cmd-empty",
+          sessionId: "sess-1",
+          sentAt: 3_500,
+          payload: { commands: [] },
+        });
+
+      const sync = new EnvironmentAgentSessionSync({ runtime: sessionRuntime, client });
+      const supervisor = new EnvironmentAgentSessionSupervisor({
+        threadId: "thread-1",
+        runtime,
+        sessionRuntime,
+        sessionSync: sync,
+        pollIntervalMs: 5,
+      });
+
+      const startPromise = supervisor.start();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(client.pullCommands).toHaveBeenCalledTimes(1);
+
+      runtime.appendEvent({
+        type: "provider.stderr",
+        threadId: "thread-1",
+        line: "stderr 1",
+      });
+
+      await startPromise;
+      await vi.advanceTimersByTimeAsync(10);
+
+      expect(pullAborted).toBe(true);
+      expect((client.pullCommands as ReturnType<typeof vi.fn>).mock.calls.length).toBeGreaterThanOrEqual(2);
+      expect(client.pushEvents).toHaveBeenCalledWith({
+        sessionId: "sess-1",
+        payload: {
+          batches: [
+            expect.objectContaining({
+              channelId: "thread-1",
+              events: [
+                expect.objectContaining({
+                  event: {
+                    type: "provider.stderr",
+                    threadId: "thread-1",
+                    line: "stderr 1",
+                  },
+                }),
+              ],
+            }),
+          ],
+        },
+      });
+
+      await supervisor.close();
+      await runtime.shutdown();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("self-suspends after observed work is fully drained", async () => {
     vi.useFakeTimers();
     try {

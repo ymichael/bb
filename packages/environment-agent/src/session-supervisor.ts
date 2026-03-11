@@ -3,7 +3,10 @@ import type { EnvironmentAgentCommandAck } from "./protocol.js";
 import { type EnvironmentAgentRuntime } from "./runtime.js";
 import { isEnvironmentAgentSessionInactiveError } from "./session-http-client.js";
 import type { EnvironmentAgentSessionRuntime } from "./session-runtime.js";
-import type { EnvironmentAgentSessionSync } from "./session-sync.js";
+import type {
+  EnvironmentAgentPulledCommand,
+  EnvironmentAgentSessionSync,
+} from "./session-sync.js";
 
 export interface EnvironmentAgentSessionSupervisorOptions {
   threadId: string;
@@ -21,6 +24,7 @@ export interface EnvironmentAgentSessionSupervisorOptions {
 
 const DEFAULT_POLL_INTERVAL_MS = 250;
 const DEFAULT_COMMAND_BATCH_LIMIT = 50;
+const DEFAULT_COMMAND_LONG_POLL_MS = 10_000;
 const DEFAULT_SELF_SUSPEND_DEBOUNCE_MS = 1_000;
 const DEFAULT_HEARTBEAT_INTERVAL_MS = 10_000;
 const MAX_ERROR_BACKOFF_MS = 30_000;
@@ -29,6 +33,10 @@ function normalizeHeartbeatIntervalMs(value: number): number {
   return Number.isFinite(value) && value > 0
     ? Math.floor(value)
     : DEFAULT_HEARTBEAT_INTERVAL_MS;
+}
+
+function isAbortError(error: unknown): error is Error {
+  return error instanceof Error && error.name === "AbortError";
 }
 
 function toCommandEnvelope(args: {
@@ -75,6 +83,7 @@ export class EnvironmentAgentSessionSupervisor {
   private consecutiveFailureCount = 0;
   private heartbeatIntervalMs = DEFAULT_HEARTBEAT_INTERVAL_MS;
   private nextHeartbeatAt = 0;
+  private commandPullController: AbortController | undefined;
   private readonly unsubscribeRuntimeEvents: () => void;
 
   constructor(private readonly options: EnvironmentAgentSessionSupervisorOptions) {
@@ -101,6 +110,7 @@ export class EnvironmentAgentSessionSupervisor {
         emittedAt: event.emittedAt,
       });
       this.cancelSelfSuspend();
+      this.cancelPendingCommandPull();
       this.scheduleImmediateCycle();
     });
   }
@@ -127,6 +137,7 @@ export class EnvironmentAgentSessionSupervisor {
       this.pollTimer = undefined;
     }
     this.cancelSelfSuspend();
+    this.cancelPendingCommandPull();
     const state = this.options.sessionRuntime.loadThreadState(this.options.threadId);
     if (state?.sessionId) {
       try {
@@ -231,11 +242,10 @@ export class EnvironmentAgentSessionSupervisor {
       }
       await this.options.sessionSync.flushPendingEvents(this.options.threadId);
       const state = this.options.sessionRuntime.loadThreadState(this.options.threadId);
-      const commands = await this.options.sessionSync.pullCommands({
-        threadId: this.options.threadId,
-        afterCursor: state?.lastDeliveredCommandCursor,
-        limit: this.commandBatchLimit,
-      });
+      const commands = await this.pullCommands(state?.lastDeliveredCommandCursor);
+      if (!this.running) {
+        return;
+      }
       for (const command of commands) {
         if (command.ackState === "duplicate") {
           continue;
@@ -266,6 +276,10 @@ export class EnvironmentAgentSessionSupervisor {
       if (commands.length === 0) {
         await this.options.sessionSync.flushPendingCommandResults(this.options.threadId);
       }
+      if (this.isHeartbeatDue()) {
+        await this.options.sessionSync.sendHeartbeat(this.options.threadId);
+        this.nextHeartbeatAt = Date.now() + this.heartbeatIntervalMs;
+      }
     } finally {
       this.cycleInFlight = false;
     }
@@ -287,6 +301,48 @@ export class EnvironmentAgentSessionSupervisor {
 
   private isHeartbeatDue(now: number = Date.now()): boolean {
     return now >= this.nextHeartbeatAt;
+  }
+
+  private cancelPendingCommandPull(): void {
+    if (!this.commandPullController || this.commandPullController.signal.aborted) {
+      return;
+    }
+    this.commandPullController.abort();
+  }
+
+  private getCommandPullWaitMs(now: number = Date.now()): number {
+    if (this.nextHeartbeatAt <= 0) {
+      return DEFAULT_COMMAND_LONG_POLL_MS;
+    }
+    return Math.max(
+      0,
+      Math.min(DEFAULT_COMMAND_LONG_POLL_MS, this.nextHeartbeatAt - now),
+    );
+  }
+
+  private async pullCommands(
+    afterCursor?: number,
+  ): Promise<EnvironmentAgentPulledCommand[]> {
+    const controller = new AbortController();
+    this.commandPullController = controller;
+    try {
+      return await this.options.sessionSync.pullCommands({
+        threadId: this.options.threadId,
+        ...(afterCursor !== undefined ? { afterCursor } : {}),
+        limit: this.commandBatchLimit,
+        waitMs: this.getCommandPullWaitMs(),
+        signal: controller.signal,
+      });
+    } catch (error) {
+      if (isAbortError(error)) {
+        return [];
+      }
+      throw error;
+    } finally {
+      if (this.commandPullController === controller) {
+        this.commandPullController = undefined;
+      }
+    }
   }
 
   private cancelSelfSuspend(): void {

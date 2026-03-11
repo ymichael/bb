@@ -30,6 +30,8 @@ import { EnvironmentAgentSessionManager } from "./environment-agent-session-mana
 export interface EnvironmentAgentSessionServiceOptions {
   leaseTtlMs?: number;
   heartbeatIntervalMs?: number;
+  commandLongPollTimeoutMs?: number;
+  commandLongPollIntervalMs?: number;
   preferredTransports?: readonly EnvironmentAgentSessionTransportKind[];
   commandDispatcher?: EnvironmentAgentCommandDispatcher;
   eventApplier?: EnvironmentAgentEventApplier;
@@ -37,6 +39,8 @@ export interface EnvironmentAgentSessionServiceOptions {
 
 const DEFAULT_LEASE_TTL_MS = 30_000;
 const DEFAULT_HEARTBEAT_INTERVAL_MS = 10_000;
+const DEFAULT_COMMAND_LONG_POLL_TIMEOUT_MS = 10_000;
+const DEFAULT_COMMAND_LONG_POLL_INTERVAL_MS = 100;
 const DEFAULT_PREFERRED_TRANSPORTS = [
   "websocket",
   "http-long-poll",
@@ -97,9 +101,51 @@ function inactiveEnvironmentAgentSessionError(sessionId: string): Error {
   return inactiveSessionError(`Environment-agent session ${sessionId} is not active`);
 }
 
+function normalizeCommandLongPollWaitMs(args: {
+  requestedWaitMs?: number;
+  maxWaitMs: number;
+}): number {
+  if (!Number.isFinite(args.requestedWaitMs)) {
+    return args.maxWaitMs;
+  }
+  return Math.max(
+    0,
+    Math.min(args.maxWaitMs, Math.floor(args.requestedWaitMs ?? args.maxWaitMs)),
+  );
+}
+
+function createAbortError(): Error {
+  const error = new Error("Operation aborted");
+  error.name = "AbortError";
+  return error;
+}
+
+async function delay(ms: number, signal?: AbortSignal): Promise<void> {
+  if (ms <= 0) {
+    return;
+  }
+  if (signal?.aborted) {
+    throw createAbortError();
+  }
+  await new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+    const onAbort = () => {
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", onAbort);
+      reject(createAbortError());
+    };
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
 export class EnvironmentAgentSessionService {
   private readonly leaseTtlMs: number;
   private readonly heartbeatIntervalMs: number;
+  private readonly commandLongPollTimeoutMs: number;
+  private readonly commandLongPollIntervalMs: number;
   private readonly preferredTransports: readonly EnvironmentAgentSessionTransportKind[];
   private readonly commandDispatcher?: EnvironmentAgentCommandDispatcher;
   private readonly eventApplier?: EnvironmentAgentEventApplier;
@@ -112,6 +158,10 @@ export class EnvironmentAgentSessionService {
     this.leaseTtlMs = options.leaseTtlMs ?? DEFAULT_LEASE_TTL_MS;
     this.heartbeatIntervalMs =
       options.heartbeatIntervalMs ?? DEFAULT_HEARTBEAT_INTERVAL_MS;
+    this.commandLongPollTimeoutMs =
+      options.commandLongPollTimeoutMs ?? DEFAULT_COMMAND_LONG_POLL_TIMEOUT_MS;
+    this.commandLongPollIntervalMs =
+      options.commandLongPollIntervalMs ?? DEFAULT_COMMAND_LONG_POLL_INTERVAL_MS;
     this.preferredTransports =
       options.preferredTransports ?? DEFAULT_PREFERRED_TRANSPORTS;
     this.commandDispatcher = options.commandDispatcher;
@@ -386,6 +436,37 @@ export class EnvironmentAgentSessionService {
           })),
       },
     };
+  }
+
+  async waitForCommands(args: {
+    threadId: string;
+    sessionId: string;
+    afterCursor?: number;
+    limit?: number;
+    waitMs?: number;
+    signal?: AbortSignal;
+  }): Promise<EnvironmentAgentSessionCommandBatchMessage> {
+    const waitMs = normalizeCommandLongPollWaitMs({
+      requestedWaitMs: args.waitMs,
+      maxWaitMs: this.commandLongPollTimeoutMs,
+    });
+    const deadline = Date.now() + waitMs;
+
+    while (true) {
+      const response = this.listCommands({
+        threadId: args.threadId,
+        sessionId: args.sessionId,
+        ...(args.afterCursor !== undefined ? { afterCursor: args.afterCursor } : {}),
+        ...(args.limit !== undefined ? { limit: args.limit } : {}),
+      });
+      if (response.payload.commands.length > 0 || Date.now() >= deadline) {
+        return response;
+      }
+      await delay(
+        Math.min(this.commandLongPollIntervalMs, Math.max(deadline - Date.now(), 0)),
+        args.signal,
+      );
+    }
   }
 
   recordCommandAck(args: {

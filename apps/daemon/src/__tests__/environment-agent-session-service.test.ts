@@ -751,4 +751,104 @@ describe("EnvironmentAgentSessionService", () => {
       },
     });
   });
+
+  it("waits for commands before returning from long-poll", async () => {
+    vi.useFakeTimers();
+    try {
+      const threadId = createThreadId();
+      const opened = service.openSession({
+        threadId,
+        now: 1_000,
+        payload: {
+          agentId: "agent-1",
+          agentInstanceId: "instance-1",
+          supportedProtocolVersions: [1],
+          supportedTransports: ["http-long-poll"],
+          channels: [
+            {
+              channelId: threadId,
+              generation: 1,
+            },
+          ],
+        },
+      });
+
+      const waitPromise = service.waitForCommands({
+        threadId,
+        sessionId: opened.session.id,
+        waitMs: 100,
+      });
+
+      setTimeout(() => {
+        commands.enqueue({
+          id: "cmd-2",
+          threadId,
+          sessionId: opened.session.id,
+          commandType: "thread.start",
+          payload: {
+            type: "thread.start",
+            threadId,
+            projectId: "project-1",
+            params: { prompt: "hello" },
+          },
+        });
+      }, 30);
+
+      await vi.advanceTimersByTimeAsync(100);
+
+      await expect(waitPromise).resolves.toMatchObject({
+        sessionId: opened.session.id,
+        payload: {
+          commands: [
+            expect.objectContaining({
+              commandId: "cmd-2",
+              commandCursor: 1,
+            }),
+          ],
+        },
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("returns an empty batch when the long-poll timeout expires", async () => {
+    vi.useFakeTimers();
+    try {
+      const threadId = createThreadId();
+      const opened = service.openSession({
+        threadId,
+        now: 1_000,
+        payload: {
+          agentId: "agent-1",
+          agentInstanceId: "instance-1",
+          supportedProtocolVersions: [1],
+          supportedTransports: ["http-long-poll"],
+          channels: [
+            {
+              channelId: threadId,
+              generation: 1,
+            },
+          ],
+        },
+      });
+
+      const waitPromise = service.waitForCommands({
+        threadId,
+        sessionId: opened.session.id,
+        waitMs: 75,
+      });
+
+      await vi.advanceTimersByTimeAsync(75);
+
+      await expect(waitPromise).resolves.toMatchObject({
+        sessionId: opened.session.id,
+        payload: {
+          commands: [],
+        },
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

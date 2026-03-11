@@ -125,6 +125,8 @@ export class EnvironmentAgentSessionHttpClient {
     sessionId: string;
     afterCursor?: number;
     limit?: number;
+    waitMs?: number;
+    signal?: AbortSignal;
   }): Promise<EnvironmentAgentSessionCommandBatchMessage> {
     const search = new URLSearchParams({ sessionId: args.sessionId });
     if (args.afterCursor !== undefined) {
@@ -133,9 +135,13 @@ export class EnvironmentAgentSessionHttpClient {
     if (args.limit !== undefined) {
       search.set("limit", String(args.limit));
     }
+    if (Number.isFinite(args.waitMs) && (args.waitMs ?? 0) >= 0) {
+      search.set("waitMs", String(Math.floor(args.waitMs ?? 0)));
+    }
     return this.getJson(
       `/threads/${this.threadId}/environment-agent/session/commands?${search.toString()}`,
       200,
+      { signal: args.signal },
     ) as Promise<EnvironmentAgentSessionCommandBatchMessage>;
   }
 
@@ -178,10 +184,15 @@ export class EnvironmentAgentSessionHttpClient {
     );
   }
 
-  private async getJson(path: string, expectedStatus: number): Promise<unknown> {
+  private async getJson(
+    path: string,
+    expectedStatus: number,
+    options?: { signal?: AbortSignal },
+  ): Promise<unknown> {
     const response = await this.fetchImpl(joinUrl(this.daemonUrl, path), {
       method: "GET",
       headers: this.defaultHeaders,
+      ...(options?.signal ? { signal: options.signal } : {}),
     });
     return this.requireJson(response, expectedStatus);
   }

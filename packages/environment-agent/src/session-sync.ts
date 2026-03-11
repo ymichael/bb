@@ -110,12 +110,16 @@ export class EnvironmentAgentSessionSync {
     threadId: string;
     afterCursor?: number;
     limit?: number;
+    waitMs?: number;
+    signal?: AbortSignal;
   }): Promise<EnvironmentAgentPulledCommand[]> {
     const state = this.requireSessionState(args.threadId);
     const batch = await this.options.client.pullCommands({
       sessionId: state.sessionId,
       ...(args.afterCursor !== undefined ? { afterCursor: args.afterCursor } : {}),
       ...(args.limit !== undefined ? { limit: args.limit } : {}),
+      ...(args.waitMs !== undefined ? { waitMs: args.waitMs } : {}),
+      ...(args.signal ? { signal: args.signal } : {}),
     });
 
     const pulled = batch.payload.commands

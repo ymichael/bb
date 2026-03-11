@@ -113,6 +113,7 @@ describe("EnvironmentAgentSessionHttpClient", () => {
       sessionId: "sess-1",
       afterCursor: 3,
       limit: 5,
+      waitMs: 5_000,
     })).resolves.toMatchObject({ type: "command_batch" });
 
     await expect(client.acknowledgeCommands("sess-1", {
@@ -143,7 +144,7 @@ describe("EnvironmentAgentSessionHttpClient", () => {
     );
     expect(fetchImpl).toHaveBeenNthCalledWith(
       4,
-      "http://127.0.0.1:3333/api/v1/threads/thread-1/environment-agent/session/commands?sessionId=sess-1&afterCursor=3&limit=5",
+      "http://127.0.0.1:3333/api/v1/threads/thread-1/environment-agent/session/commands?sessionId=sess-1&afterCursor=3&limit=5&waitMs=5000",
       expect.objectContaining({ method: "GET" }),
     );
   });

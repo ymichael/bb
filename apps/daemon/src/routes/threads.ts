@@ -104,7 +104,20 @@ const environmentAgentSessionCommandsQuerySchema = z.object({
       if (!Number.isFinite(parsed) || parsed <= 0) return undefined;
       return parsed;
     }),
+  waitMs: z
+    .string()
+    .optional()
+    .transform((value) => {
+      if (!value) return undefined;
+      const parsed = Number.parseInt(value, 10);
+      if (!Number.isFinite(parsed) || parsed < 0) return undefined;
+      return parsed;
+    }),
 });
+
+function isAbortError(error: unknown): error is Error {
+  return error instanceof Error && error.name === "AbortError";
+}
 
 const environmentAgentSessionEventItemSchema = z.object({
   sequence: z.number().int().nonnegative(),
@@ -458,16 +471,21 @@ export function createThreadRoutes(
             throw invalidRequestError("Environment-agent session command pull is unavailable");
           }
           const query = c.req.valid("query");
-          const response = environmentAgentSessionService.listCommands({
+          const response = await environmentAgentSessionService.waitForCommands({
             threadId,
             sessionId: query.sessionId,
             ...(query.afterCursor !== undefined
               ? { afterCursor: query.afterCursor }
               : {}),
             ...(query.limit !== undefined ? { limit: query.limit } : {}),
+            ...(query.waitMs !== undefined ? { waitMs: query.waitMs } : {}),
+            signal: c.req.raw.signal,
           });
           return c.json(response);
         } catch (err) {
+          if (isAbortError(err)) {
+            return new Response(null, { status: 499 });
+          }
           return sendRouteError(c, err);
         }
       },
