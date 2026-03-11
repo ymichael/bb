@@ -1589,10 +1589,8 @@ export function ThreadDetailView() {
   };
   const handleCommitThread = async ({
     includeUnstaged,
-    message,
   }: {
     includeUnstaged: boolean;
-    message?: string;
   }) => {
     if (!threadId) {
       return;
@@ -1603,7 +1601,6 @@ export function ThreadDetailView() {
       operation: "commit",
       options: {
         includeUnstaged,
-        ...(message ? { message } : {}),
         autoArchiveOnSuccess,
       },
     });
@@ -1611,12 +1608,10 @@ export function ThreadDetailView() {
   const handleSquashMergeThread = async ({
     commitIfNeeded,
     includeUnstaged,
-    commitMessage,
     mergeBaseBranch,
   }: {
     commitIfNeeded: boolean;
     includeUnstaged: boolean;
-    commitMessage?: string;
     mergeBaseBranch?: string;
   }) => {
     if (!threadId) {
@@ -1629,7 +1624,6 @@ export function ThreadDetailView() {
       options: {
         commitIfNeeded,
         includeUnstaged,
-        ...(commitMessage ? { commitMessage } : {}),
         ...(mergeBaseBranch ? { mergeBaseBranch } : {}),
         autoArchiveOnSuccess,
       },
@@ -2209,6 +2203,11 @@ export function ThreadDetailView() {
             ? requestThreadCommitOperation.isPending
             : requestThreadSquashOperation.isPending
         }
+        branchName={threadBranchName}
+        gitStatusLabel={threadGitStatusDisplay.label}
+        gitStatusSummary={threadGitStatusDisplay.summary}
+        changedFiles={resolvedThreadWorkStatus?.files}
+        threadId={thread.id}
         showMergeBaseDetails={showBranchComparisonUi}
         mergeBaseBranch={
           selectedMergeBaseBranch ??
