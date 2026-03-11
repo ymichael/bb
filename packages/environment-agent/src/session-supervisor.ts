@@ -22,7 +22,14 @@ export interface EnvironmentAgentSessionSupervisorOptions {
 const DEFAULT_POLL_INTERVAL_MS = 250;
 const DEFAULT_COMMAND_BATCH_LIMIT = 50;
 const DEFAULT_SELF_SUSPEND_DEBOUNCE_MS = 1_000;
+const DEFAULT_HEARTBEAT_INTERVAL_MS = 10_000;
 const MAX_ERROR_BACKOFF_MS = 30_000;
+
+function normalizeHeartbeatIntervalMs(value: number): number {
+  return Number.isFinite(value) && value > 0
+    ? Math.floor(value)
+    : DEFAULT_HEARTBEAT_INTERVAL_MS;
+}
 
 function toCommandEnvelope(args: {
   threadId: string;
@@ -66,6 +73,8 @@ export class EnvironmentAgentSessionSupervisor {
   private cycleInFlight = false;
   private selfSuspendInFlight = false;
   private consecutiveFailureCount = 0;
+  private heartbeatIntervalMs = DEFAULT_HEARTBEAT_INTERVAL_MS;
+  private nextHeartbeatAt = 0;
   private readonly unsubscribeRuntimeEvents: () => void;
 
   constructor(private readonly options: EnvironmentAgentSessionSupervisorOptions) {
@@ -137,7 +146,7 @@ export class EnvironmentAgentSessionSupervisor {
     if (state?.sessionId) {
       return;
     }
-    await this.options.sessionSync.openSession({
+    const welcome = await this.options.sessionSync.openSession({
       threadId: this.options.threadId,
       payload: {
         agentId: this.agentId,
@@ -153,6 +162,10 @@ export class EnvironmentAgentSessionSupervisor {
         ],
       },
     });
+    this.heartbeatIntervalMs = normalizeHeartbeatIntervalMs(
+      welcome.payload.heartbeatIntervalMs,
+    );
+    this.nextHeartbeatAt = Date.now() + this.heartbeatIntervalMs;
   }
 
   private scheduleNextCycle(): void {
@@ -212,7 +225,10 @@ export class EnvironmentAgentSessionSupervisor {
     this.cycleInFlight = true;
     try {
       await this.openSession();
-      await this.options.sessionSync.sendHeartbeat(this.options.threadId);
+      if (this.isHeartbeatDue()) {
+        await this.options.sessionSync.sendHeartbeat(this.options.threadId);
+        this.nextHeartbeatAt = Date.now() + this.heartbeatIntervalMs;
+      }
       await this.options.sessionSync.flushPendingEvents(this.options.threadId);
       const state = this.options.sessionRuntime.loadThreadState(this.options.threadId);
       const commands = await this.options.sessionSync.pullCommands({
@@ -264,7 +280,13 @@ export class EnvironmentAgentSessionSupervisor {
       return false;
     }
     this.options.sessionRuntime.clearSession(this.options.threadId);
+    this.heartbeatIntervalMs = DEFAULT_HEARTBEAT_INTERVAL_MS;
+    this.nextHeartbeatAt = 0;
     return true;
+  }
+
+  private isHeartbeatDue(now: number = Date.now()): boolean {
+    return now >= this.nextHeartbeatAt;
   }
 
   private cancelSelfSuspend(): void {
@@ -319,7 +341,7 @@ export class EnvironmentAgentSessionSupervisor {
     if (!runtimeSnapshot.hasObservedWork) {
       return false;
     }
-    if (runtimeSnapshot.turnState === "active") {
+    if (runtimeSnapshot.turnState !== "idle") {
       return false;
     }
     if (runtimeSnapshot.commandExecutionCount > 0) {

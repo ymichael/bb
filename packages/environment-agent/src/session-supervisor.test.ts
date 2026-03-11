@@ -155,7 +155,7 @@ describe("EnvironmentAgentSessionSupervisor", () => {
           sentAt: 2_000,
           payload: {
             leaseTtlMs: 30_000,
-            heartbeatIntervalMs: 10_000,
+            heartbeatIntervalMs: 5,
             selectedTransport: "http-long-poll",
             protocolVersion: 1,
             channels: [],
@@ -169,7 +169,7 @@ describe("EnvironmentAgentSessionSupervisor", () => {
           sentAt: 3_000,
           payload: {
             leaseTtlMs: 30_000,
-            heartbeatIntervalMs: 10_000,
+            heartbeatIntervalMs: 5,
             selectedTransport: "http-long-poll",
             protocolVersion: 1,
             channels: [],
@@ -214,6 +214,69 @@ describe("EnvironmentAgentSessionSupervisor", () => {
         sessionId: "sess-2",
       });
       expect(onError).toHaveBeenCalledTimes(1);
+
+      await supervisor.close();
+      await runtime.shutdown();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("uses the negotiated heartbeat interval instead of the poll interval", async () => {
+    vi.useFakeTimers();
+    try {
+      const store = new InMemoryEnvironmentAgentSessionStore();
+      const runtime = new EnvironmentAgentRuntime({ threadId: "thread-1" });
+      const sessionRuntime = new EnvironmentAgentSessionRuntime({
+        store,
+        clock: () => 10_000,
+      });
+      const client = makeClientMock();
+      (client.openSession as ReturnType<typeof vi.fn>).mockResolvedValue({
+        protocol: "beanbag.env-agent.v1",
+        type: "session_welcome",
+        messageId: "msg-open",
+        sessionId: "sess-1",
+        sentAt: 2_000,
+        payload: {
+          leaseTtlMs: 30_000,
+          heartbeatIntervalMs: 50,
+          selectedTransport: "http-long-poll",
+          protocolVersion: 1,
+          channels: [],
+        },
+      });
+      (client.heartbeat as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+      (client.pullCommands as ReturnType<typeof vi.fn>).mockResolvedValue({
+        protocol: "beanbag.env-agent.v1",
+        type: "command_batch",
+        messageId: "msg-cmd-empty",
+        sessionId: "sess-1",
+        sentAt: 3_500,
+        payload: { commands: [] },
+      });
+
+      const sync = new EnvironmentAgentSessionSync({ runtime: sessionRuntime, client });
+      const supervisor = new EnvironmentAgentSessionSupervisor({
+        threadId: "thread-1",
+        runtime,
+        sessionRuntime,
+        sessionSync: sync,
+        pollIntervalMs: 5,
+      });
+
+      await supervisor.start();
+
+      expect(client.heartbeat).not.toHaveBeenCalled();
+
+      await vi.advanceTimersByTimeAsync(45);
+      expect(client.heartbeat).not.toHaveBeenCalled();
+
+      await vi.advanceTimersByTimeAsync(10);
+      expect(client.heartbeat).toHaveBeenCalledTimes(1);
+
+      await vi.advanceTimersByTimeAsync(50);
+      expect(client.heartbeat).toHaveBeenCalledTimes(2);
 
       await supervisor.close();
       await runtime.shutdown();
@@ -297,6 +360,97 @@ describe("EnvironmentAgentSessionSupervisor", () => {
       await vi.advanceTimersByTimeAsync(100);
 
       expect(onQuiescent).toHaveBeenCalledTimes(1);
+
+      await supervisor.close();
+      await runtime.shutdown();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not self-suspend after non-turn commands without an explicit idle transition", async () => {
+    vi.useFakeTimers();
+    try {
+      const store = new InMemoryEnvironmentAgentSessionStore();
+      const runtime = new EnvironmentAgentRuntime({ threadId: "thread-1" });
+      const sessionRuntime = new EnvironmentAgentSessionRuntime({
+        store,
+        clock: () => 10_000,
+      });
+      const client = makeClientMock();
+      (client.openSession as ReturnType<typeof vi.fn>).mockResolvedValue({
+        protocol: "beanbag.env-agent.v1",
+        type: "session_welcome",
+        messageId: "msg-open",
+        sessionId: "sess-1",
+        sentAt: 2_000,
+        payload: {
+          leaseTtlMs: 30_000,
+          heartbeatIntervalMs: 10_000,
+          selectedTransport: "http-long-poll",
+          protocolVersion: 1,
+          channels: [],
+        },
+      });
+      (client.pullCommands as ReturnType<typeof vi.fn>)
+        .mockResolvedValueOnce({
+          protocol: "beanbag.env-agent.v1",
+          type: "command_batch",
+          messageId: "msg-cmd",
+          sessionId: "sess-1",
+          sentAt: 4_000,
+          payload: {
+            commands: [
+              {
+                channelId: "thread-1",
+                commandCursor: 1,
+                commandId: "cmd-1",
+                createdAt: 3_500,
+                command: {
+                  type: "workspace.status",
+                  threadId: "thread-1",
+                },
+              },
+            ],
+          },
+        })
+        .mockResolvedValue({
+          protocol: "beanbag.env-agent.v1",
+          type: "command_batch",
+          messageId: "msg-cmd-empty",
+          sessionId: "sess-1",
+          sentAt: 5_000,
+          payload: { commands: [] },
+        });
+      (client.acknowledgeCommands as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+      (client.sendCommandResult as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+
+      vi.spyOn(runtime, "executeCommand").mockResolvedValue({
+        protocolVersion: 1,
+        commandId: "cmd-1",
+        idempotencyKey: "cmd-1",
+        state: "accepted",
+        acknowledgedAt: 4_500,
+        latestSequence: 1,
+        result: { ok: true },
+      });
+
+      const onQuiescent = vi.fn(async () => undefined);
+      const sync = new EnvironmentAgentSessionSync({ runtime: sessionRuntime, client });
+      const supervisor = new EnvironmentAgentSessionSupervisor({
+        threadId: "thread-1",
+        runtime,
+        sessionRuntime,
+        sessionSync: sync,
+        pollIntervalMs: 5,
+        selfSuspendDebounceMs: 20,
+        onQuiescent,
+      });
+
+      await supervisor.start();
+      await vi.advanceTimersByTimeAsync(200);
+
+      expect(onQuiescent).not.toHaveBeenCalled();
 
       await supervisor.close();
       await runtime.shutdown();
