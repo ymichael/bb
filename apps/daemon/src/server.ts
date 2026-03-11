@@ -34,6 +34,7 @@ import { EnvironmentAgentCommandDispatcher } from "./environment-agent-command-d
 import { EnvironmentAgentEventApplier } from "./environment-agent-event-applier.js";
 import { EnvironmentAgentSessionManager } from "./environment-agent-session-manager.js";
 import { EnvironmentAgentSessionService } from "./environment-agent-session-service.js";
+import { resolveManagedArtifactSweepIntervalMs } from "./managed-artifact-reconciler.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -131,6 +132,16 @@ export function createServer(deps: ServerDeps) {
     environmentAgentSessionService.expireLeases();
   }, 5_000);
   environmentAgentLeaseSweepInterval.unref();
+  const managedArtifactSweepIntervalMs = resolveManagedArtifactSweepIntervalMs(daemonRuntimeEnv);
+  const managedArtifactSweepInterval = managedArtifactSweepIntervalMs > 0
+    ? setInterval(() => {
+      void threadManager.reconcileManagedArtifacts().catch((error: unknown) => {
+        const message = error instanceof Error ? error.message : String(error);
+        console.warn(`Managed artifact cleanup skipped: ${message}`);
+      });
+    }, managedArtifactSweepIntervalMs)
+    : undefined;
+  managedArtifactSweepInterval?.unref();
 
   // WebSocket handler
   app.get(
@@ -196,6 +207,9 @@ export function createServer(deps: ServerDeps) {
     restartRecommendationMonitor,
     close: () => {
       clearInterval(environmentAgentLeaseSweepInterval);
+      if (managedArtifactSweepInterval) {
+        clearInterval(managedArtifactSweepInterval);
+      }
       restartRecommendationMonitor.close();
     },
   };

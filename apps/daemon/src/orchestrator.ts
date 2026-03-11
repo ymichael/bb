@@ -116,6 +116,7 @@ import { InMemorySchedulerService } from "./scheduler-service.js";
 import { EnvironmentAgentCommandDispatcher } from "./environment-agent-command-dispatcher.js";
 import type { EnvironmentAgentSessionService } from "./environment-agent-session-service.js";
 import { EnvironmentAgentSessionCommandClient } from "./environment-agent-session-command-client.js";
+import { reconcileManagedArtifactStorage } from "./managed-artifact-reconciler.js";
 import { canTransitionThreadStatus } from "./thread-status-machine.js";
 import {
   detectProjectDefaultBranch,
@@ -426,6 +427,7 @@ function normalizeQueuedSandboxMode(
 
 export class Orchestrator implements ThreadOrchestrator {
   private environmentService: EnvironmentService;
+  private managedArtifactReconcileInFlight: Promise<void> | null = null;
   /** Threads explicitly titled by the caller should not be overwritten by event heuristics. */
   private lockedTitleThreadIds = new Set<string>();
   /** Ensure automatic title generation is attempted at most once per thread. */
@@ -613,6 +615,40 @@ export class Orchestrator implements ThreadOrchestrator {
         ? this.threadRepo.listNonArchivedActiveIdsWithEnvironmentRecord()
         : [];
     void activeThreadIdsWithPersistedEnvironments;
+  }
+
+  async reconcileManagedArtifacts(): Promise<void> {
+    if (this.managedArtifactReconcileInFlight) {
+      return this.managedArtifactReconcileInFlight;
+    }
+
+    const task = this._reconcileManagedArtifactsInternal().finally(() => {
+      if (this.managedArtifactReconcileInFlight === task) {
+        this.managedArtifactReconcileInFlight = null;
+      }
+    });
+    this.managedArtifactReconcileInFlight = task;
+    return task;
+  }
+
+  private async _reconcileManagedArtifactsInternal(): Promise<void> {
+    const threads = this.threadRepo.list({ includeArchived: true });
+    const projects = this.projectRepo.list();
+    const result = reconcileManagedArtifactStorage({
+      threads,
+      projects,
+      runtimeEnv: this.runtimeEnv,
+    });
+
+    if (
+      result.removedLogArtifacts > 0 ||
+      result.removedStateFiles > 0 ||
+      result.removedWorkspaceDirectories > 0
+    ) {
+      console.log(
+        `Managed artifact cleanup removed ${result.removedLogArtifacts} log sets, ${result.removedStateFiles} state files, ${result.removedWorkspaceDirectories} workspace directories.`,
+      );
+    }
   }
 
   private _rebuildPrimaryPromotionStateFromGit(): void {

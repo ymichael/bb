@@ -56,20 +56,21 @@ describe("Project routes", () => {
     projectId: string;
     file: File;
   }) => Promise<UploadedPromptAttachment>;
+  type DeleteThreadFn = (threadId: string) => Promise<void>;
 
   let projectRepo: ReturnType<typeof mockProjectRepo>;
   let findProjectFiles: ReturnType<typeof vi.fn>;
   let savePromptAttachment: ReturnType<typeof vi.fn>;
   let threadRepo: ReturnType<typeof mockThreadRepo>;
   let eventRepo: ReturnType<typeof mockEventRepo>;
-  let deleteThreadAsync: ReturnType<typeof vi.fn>;
+  let deleteThreadAsync: ReturnType<typeof vi.fn<DeleteThreadFn>>;
   let app: Hono;
 
   beforeEach(() => {
     projectRepo = mockProjectRepo();
     threadRepo = mockThreadRepo();
     eventRepo = mockEventRepo();
-    deleteThreadAsync = vi.fn().mockResolvedValue(undefined);
+    deleteThreadAsync = vi.fn<DeleteThreadFn>().mockResolvedValue(undefined);
     findProjectFiles = vi.fn<SearchProjectFilesFn>().mockResolvedValue([]);
     savePromptAttachment = vi.fn<StorePromptAttachmentFn>().mockResolvedValue({
       type: "localImage",

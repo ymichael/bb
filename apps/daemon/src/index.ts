@@ -219,6 +219,9 @@ async function main(): Promise<void> {
   console.log("Reconciling active threads with provider...");
   await threadManager.reconcileActiveThreadsOnBoot();
   console.log("Startup reconciliation complete.");
+  console.log("Reconciling managed storage artifacts...");
+  await threadManager.reconcileManagedArtifacts();
+  console.log("Managed artifact reconciliation complete.");
 
   process.on("SIGINT", () => shutdown("SIGINT"));
   process.on("SIGTERM", () => shutdown("SIGTERM"));
