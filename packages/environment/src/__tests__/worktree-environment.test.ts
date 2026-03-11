@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -222,6 +222,31 @@ describe("WorktreeEnvironment", () => {
       }),
     );
     expect(git(repoRoot, "show", "-s", "--format=%s", "main")).toContain("squash merge");
+  });
+
+  it("bypasses git hooks when creating the synthetic squash commit", async () => {
+    const { repoRoot, environment } = await createRepoWithThreadAheadOfMain();
+    const hooksDir = makeTempDir();
+    const hookPath = join(hooksDir, "pre-commit");
+    writeFileSync(hookPath, "#!/bin/sh\nexit 1\n", "utf8");
+    chmodSync(hookPath, 0o755);
+    git(repoRoot, "config", "core.hooksPath", hooksDir);
+
+    expect(() => git(repoRoot, "commit", "--allow-empty", "-m", "blocked by hook")).toThrow();
+
+    const result = await environment.squashMergeIntoDefaultBranch({
+      activeWorkspaceRoot: repoRoot,
+      defaultBranch: "main",
+    });
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        merged: true,
+        message: "Squash-merged into main",
+        committed: false,
+        commitSha: expect.any(String),
+      }),
+    );
   });
 
   it("reports committed branch work before the thread is merged", async () => {

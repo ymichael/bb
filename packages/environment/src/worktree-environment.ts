@@ -722,6 +722,7 @@ class WorktreeEnvironment implements IEnvironment {
       const finalMessage = message || defaultMessage;
       const commitResult = await runGitAtPathAsync(tempWorkspaceRoot, [
         "commit",
+        "--no-verify",
         "-m",
         finalMessage,
       ], this.env);
