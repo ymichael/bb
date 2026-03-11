@@ -599,6 +599,7 @@ export class Orchestrator implements ThreadOrchestrator {
   /**
    * Startup only reconstructs minimal daemon state:
    * - finalize archived environments that still claim persisted resources
+   * - re-arm idle environment suspension for persisted idle threads
    * - nudge environment-agent delivery for last-known-active threads with persisted environments
    */
   async reconcileActiveThreadsOnBoot(): Promise<void> {
@@ -608,6 +609,14 @@ export class Orchestrator implements ThreadOrchestrator {
         : [];
     for (const threadId of archivedThreadIds) {
       this._cleanupEnvironmentRuntime(threadId, { destroyWorkspace: true });
+    }
+
+    const idleThreadIdsWithPersistedEnvironments =
+      typeof this.threadRepo.listNonArchivedIdleIdsWithEnvironmentRecord === "function"
+        ? this.threadRepo.listNonArchivedIdleIdsWithEnvironmentRecord()
+        : [];
+    for (const threadId of idleThreadIdsWithPersistedEnvironments) {
+      this._resumeIdleEnvironmentSuspendOnBoot(threadId);
     }
 
     const activeThreadIdsWithPersistedEnvironments =
@@ -4675,15 +4684,46 @@ export class Orchestrator implements ThreadOrchestrator {
 
   private _scheduleIdleEnvironmentSuspend(threadId: string): void {
     this._cancelIdleEnvironmentSuspend(threadId);
-    const timeoutMs = this._resolveIdleEnvironmentSuspendTimeoutMs();
-    if (timeoutMs === 0) return;
+    this._scheduleIdleEnvironmentSuspendAfter(
+      threadId,
+      this._resolveIdleEnvironmentSuspendTimeoutMs(),
+    );
+  }
 
+  private _scheduleIdleEnvironmentSuspendAfter(threadId: string, timeoutMs: number): void {
+    if (timeoutMs === 0) return;
     const timer = setTimeout(() => {
       this.idleEnvironmentSuspendTimersByThreadId.delete(threadId);
       this._autoSuspendIdleThreadEnvironment(threadId);
     }, timeoutMs);
     timer.unref?.();
     this.idleEnvironmentSuspendTimersByThreadId.set(threadId, timer);
+  }
+
+  private _resumeIdleEnvironmentSuspendOnBoot(threadId: string): void {
+    const timeoutMs = this._resolveIdleEnvironmentSuspendTimeoutMs();
+    if (timeoutMs === 0) {
+      return;
+    }
+
+    const thread = this.threadRepo.getById(threadId);
+    if (
+      !thread ||
+      thread.archivedAt !== undefined ||
+      thread.status !== "idle" ||
+      !thread.environmentRecord
+    ) {
+      return;
+    }
+
+    const elapsedMs = Math.max(0, Date.now() - thread.updatedAt);
+    const remainingMs = Math.max(0, timeoutMs - elapsedMs);
+    if (remainingMs === 0) {
+      this._autoSuspendIdleThreadEnvironment(threadId);
+      return;
+    }
+
+    this._scheduleIdleEnvironmentSuspendAfter(threadId, remainingMs);
   }
 
   private _autoSuspendIdleThreadEnvironment(threadId: string): void {

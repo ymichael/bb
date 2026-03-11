@@ -334,6 +334,7 @@ describe("EnvironmentService", () => {
       destroySpy,
     });
     service.setEnvironmentRuntime("thread-1", runtimeEnvironment);
+    destroySpy.mockClear();
 
     await expect(service.destroyThreadEnvironment("thread-1")).rejects.toThrow(
       "cleanup failed",
@@ -392,6 +393,7 @@ describe("EnvironmentService", () => {
       destroySpy,
     });
     service.setEnvironmentRuntime("thread-1", runtimeEnvironment);
+    destroySpy.mockClear();
 
     service.destroyEnvironmentRuntime("thread-1");
     await new Promise<void>((resolve) => setImmediate(resolve));
@@ -421,6 +423,31 @@ describe("EnvironmentService", () => {
       destroySpy,
     });
     service.setEnvironmentRuntime("thread-1", runtimeEnvironment);
+    destroySpy.mockClear();
+
+    service.suspendEnvironmentRuntime("thread-1");
+    await new Promise<void>((resolve) => setImmediate(resolve));
+
+    expect(destroySpy).toHaveBeenCalledTimes(1);
+    expect(threadRepo.update).not.toHaveBeenCalledWith(
+      "thread-1",
+      {
+        environmentRecord: null,
+        environmentAgentCursor: null,
+      },
+      { touchUpdatedAt: false },
+    );
+    expect(removeEnvironmentAgentDefaultLogArtifacts).not.toHaveBeenCalled();
+    expect(threadState.environmentRecord).not.toBeNull();
+    expect(threadState.environmentAgentCursor).toBe(12);
+  });
+
+  it("suspends a persisted environment even when no runtime is restored", async () => {
+    const destroySpy = vi.fn();
+    const { service, threadRepo, threadState } = createService({
+      existsInitially: true,
+      destroySpy,
+    });
 
     service.suspendEnvironmentRuntime("thread-1");
     await new Promise<void>((resolve) => setImmediate(resolve));

@@ -453,6 +453,21 @@ export class ThreadRepository {
       .map((row) => row.id);
   }
 
+  listNonArchivedIdleIdsWithEnvironmentRecord(): string[] {
+    return this.db
+      .select({ id: threads.id })
+      .from(threads)
+      .where(
+        and(
+          isNull(threads.archivedAt),
+          eq(threads.status, "idle"),
+          sql`${threads.environmentRecord} is not null`,
+        ),
+      )
+      .all()
+      .map((row) => row.id);
+  }
+
   listProjectNonArchivedIdsWithEnvironmentRecord(projectId: string): string[] {
     return this.db
       .select({ id: threads.id })

@@ -116,6 +116,7 @@ export type {
 export {
   EnvironmentAgentSessionHttpClient,
   EnvironmentAgentSessionHttpClientError,
+  isEnvironmentAgentSessionInactiveError,
   createEnvironmentAgentSessionHttpClientFromConnection,
 } from "./session-http-client.js";
 

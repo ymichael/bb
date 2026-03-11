@@ -24,6 +24,7 @@ import {
 } from "@beanbag/environment-agent";
 import type { EnvironmentAgentCommandDispatcher } from "./environment-agent-command-dispatcher.js";
 import type { EnvironmentAgentEventApplier } from "./environment-agent-event-applier.js";
+import { inactiveSessionError, invalidRequestError } from "./domain-errors.js";
 import { EnvironmentAgentSessionManager } from "./environment-agent-session-manager.js";
 
 export interface EnvironmentAgentSessionServiceOptions {
@@ -90,6 +91,10 @@ function cursorForReply(args: {
     generation: args.batchGeneration,
     sequence: 0,
   };
+}
+
+function inactiveEnvironmentAgentSessionError(sessionId: string): Error {
+  return inactiveSessionError(`Environment-agent session ${sessionId} is not active`);
 }
 
 export class EnvironmentAgentSessionService {
@@ -199,17 +204,15 @@ export class EnvironmentAgentSessionService {
       now: args.now,
     });
     if (!heartbeat) {
-      throw new Error(`Unknown environment-agent session: ${args.sessionId}`);
+      throw inactiveEnvironmentAgentSessionError(args.sessionId);
     }
     if (heartbeat.threadId !== args.threadId) {
-      throw new Error(
+      throw invalidRequestError(
         `Environment-agent session ${args.sessionId} does not belong to thread ${args.threadId}`,
       );
     }
     if (heartbeat.status !== "active") {
-      throw new Error(
-        `Environment-agent session ${args.sessionId} is not active`,
-      );
+      throw inactiveEnvironmentAgentSessionError(args.sessionId);
     }
 
     return heartbeat;
@@ -416,15 +419,15 @@ export class EnvironmentAgentSessionService {
   ): EnvironmentAgentSessionRecord {
     const session = this.sessions.getSession(sessionId);
     if (!session) {
-      throw new Error(`Unknown environment-agent session: ${sessionId}`);
+      throw inactiveEnvironmentAgentSessionError(sessionId);
     }
     if (session.threadId !== threadId) {
-      throw new Error(
+      throw invalidRequestError(
         `Environment-agent session ${sessionId} does not belong to thread ${threadId}`,
       );
     }
     if (session.status !== "active") {
-      throw new Error(`Environment-agent session ${sessionId} is not active`);
+      throw inactiveEnvironmentAgentSessionError(sessionId);
     }
     return session;
   }

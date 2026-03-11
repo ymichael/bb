@@ -110,6 +110,16 @@ export class EnvironmentAgentSessionRuntime {
     });
   }
 
+  clearSession(
+    threadId: string,
+    now: number = this.clock(),
+  ): EnvironmentAgentSessionStateRecord {
+    return this.options.store.clearSession({
+      threadId,
+      now,
+    });
+  }
+
   bumpGeneration(
     threadId: string,
     now: number = this.clock(),

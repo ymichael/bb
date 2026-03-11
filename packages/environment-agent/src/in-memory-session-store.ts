@@ -3,6 +3,7 @@ import type {
   AckEnvironmentAgentOutboxThroughInput,
   AppendEnvironmentAgentOutboxEventInput,
   BindEnvironmentAgentSessionInput,
+  ClearEnvironmentAgentSessionInput,
   CompleteEnvironmentAgentCommandReceiptInput,
   EnvironmentAgentCommandReceiptRecord,
   EnvironmentAgentOutboxEventRecord,
@@ -120,6 +121,25 @@ export class InMemoryEnvironmentAgentSessionStore
       sessionId: input.sessionId,
       updatedAt: input.now ?? Date.now(),
     };
+    this.threadStates.set(input.threadId, updated);
+    return cloneSessionState(updated);
+  }
+
+  clearSession(input: ClearEnvironmentAgentSessionInput): EnvironmentAgentSessionStateRecord {
+    const existing = this.requireThreadState(input.threadId);
+    const updated = {
+      threadId: existing.threadId,
+      agentId: existing.agentId,
+      agentInstanceId: existing.agentInstanceId,
+      generation: existing.generation,
+      nextSequence: existing.nextSequence,
+      ...(existing.lastAcked ? { lastAcked: cloneCursor(existing.lastAcked)! } : {}),
+      ...(existing.lastDeliveredCommandCursor !== undefined
+        ? { lastDeliveredCommandCursor: existing.lastDeliveredCommandCursor }
+        : {}),
+      createdAt: existing.createdAt,
+      updatedAt: input.now ?? Date.now(),
+    } satisfies EnvironmentAgentSessionStateRecord;
     this.threadStates.set(input.threadId, updated);
     return cloneSessionState(updated);
   }

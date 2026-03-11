@@ -287,11 +287,45 @@ export class EnvironmentService {
 
   suspendEnvironmentRuntime(threadId: string): void {
     const runtime = this.detachEnvironmentRuntime(threadId);
-    if (!runtime) return;
+    if (runtime) {
+      const environmentId = runtime.environment.kind;
+      try {
+        void Promise.resolve(runtime.environment.suspend()).catch((error: unknown) =>
+          this.callbacks.onCleanupFailure(threadId, environmentId, error),
+        );
+      } catch (error) {
+        this.callbacks.onCleanupFailure(threadId, environmentId, error);
+      }
+      return;
+    }
 
-    const environmentId = runtime.environment.kind;
+    const thread = this.threadRepo.getById(threadId);
+    if (!thread?.environmentRecord) {
+      return;
+    }
+    const project = this.projectRepo.getById(thread.projectId);
+    if (!project) {
+      return;
+    }
+
+    let environment: IEnvironment | undefined;
     try {
-      void Promise.resolve(runtime.environment.suspend()).catch((error: unknown) =>
+      environment = this.restoreThreadEnvironment(thread, project.rootPath);
+    } catch (error) {
+      this.callbacks.onCleanupFailure(
+        threadId,
+        thread.environmentRecord.kind,
+        error,
+      );
+      return;
+    }
+    if (!environment) {
+      return;
+    }
+
+    const environmentId = environment.kind;
+    try {
+      void Promise.resolve(environment.suspend()).catch((error: unknown) =>
         this.callbacks.onCleanupFailure(threadId, environmentId, error),
       );
     } catch (error) {

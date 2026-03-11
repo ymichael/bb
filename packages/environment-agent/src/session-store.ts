@@ -121,6 +121,11 @@ export interface BindEnvironmentAgentSessionInput {
   now?: number;
 }
 
+export interface ClearEnvironmentAgentSessionInput {
+  threadId: string;
+  now?: number;
+}
+
 export interface SetEnvironmentAgentLastDeliveredCommandCursorInput {
   threadId: string;
   commandCursor: number;
@@ -133,6 +138,7 @@ export interface EnvironmentAgentSessionStore {
     input: InitializeEnvironmentAgentThreadStateInput,
   ): EnvironmentAgentSessionStateRecord;
   bindSession(input: BindEnvironmentAgentSessionInput): EnvironmentAgentSessionStateRecord;
+  clearSession(input: ClearEnvironmentAgentSessionInput): EnvironmentAgentSessionStateRecord;
   bumpGeneration(threadId: string, now?: number): EnvironmentAgentSessionStateRecord;
   appendOutboxEvent(
     input: AppendEnvironmentAgentOutboxEventInput,

@@ -20,10 +20,31 @@ export interface EnvironmentAgentSessionHttpClientOptions {
 }
 
 export class EnvironmentAgentSessionHttpClientError extends Error {
-  constructor(message: string) {
-    super(message);
+  readonly status?: number;
+  readonly code?: string;
+  readonly retryable: boolean;
+  readonly details?: unknown;
+
+  constructor(args: {
+    message: string;
+    status?: number;
+    code?: string;
+    retryable?: boolean;
+    details?: unknown;
+  }) {
+    super(args.message);
     this.name = "EnvironmentAgentSessionHttpClientError";
+    this.status = args.status;
+    this.code = args.code;
+    this.retryable = args.retryable ?? false;
+    this.details = args.details;
   }
+}
+
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
 }
 
 function joinUrl(baseUrl: string, path: string): string {
@@ -38,9 +59,10 @@ async function parseJsonResponse(response: Response): Promise<unknown> {
   try {
     return JSON.parse(text);
   } catch {
-    throw new EnvironmentAgentSessionHttpClientError(
-      `Invalid JSON response: ${response.status}`,
-    );
+    throw new EnvironmentAgentSessionHttpClientError({
+      message: `Invalid JSON response: ${response.status}`,
+      status: response.status,
+    });
   }
 }
 
@@ -206,11 +228,44 @@ export class EnvironmentAgentSessionHttpClient {
     expectedStatus: number,
   ): Promise<EnvironmentAgentSessionHttpClientError> {
     const body = await response.text();
-    const suffix = body.trim() ? `: ${body.trim()}` : "";
-    return new EnvironmentAgentSessionHttpClientError(
-      `Unexpected daemon response ${response.status} (expected ${expectedStatus})${suffix}`,
-    );
+    let parsedBody: unknown;
+    if (body.trim()) {
+      try {
+        parsedBody = JSON.parse(body);
+      } catch {
+        parsedBody = undefined;
+      }
+    }
+    const parsedRecord = asRecord(parsedBody);
+    const code =
+      typeof parsedRecord?.code === "string" ? parsedRecord.code : undefined;
+    const message =
+      typeof parsedRecord?.message === "string"
+        ? parsedRecord.message
+        : typeof parsedRecord?.error === "string"
+          ? parsedRecord.error
+          : body.trim() || undefined;
+    const retryable = parsedRecord?.retryable === true;
+    const details = parsedRecord?.details;
+    const suffix = message ? `: ${message}` : "";
+    return new EnvironmentAgentSessionHttpClientError({
+      message: `Unexpected daemon response ${response.status} (expected ${expectedStatus})${suffix}`,
+      status: response.status,
+      ...(code ? { code } : {}),
+      ...(retryable ? { retryable: true } : {}),
+      ...(details !== undefined ? { details } : {}),
+    });
   }
+}
+
+export function isEnvironmentAgentSessionInactiveError(
+  error: unknown,
+): error is EnvironmentAgentSessionHttpClientError {
+  return (
+    error instanceof EnvironmentAgentSessionHttpClientError &&
+    error.status === 409 &&
+    error.code === "inactive_session"
+  );
 }
 
 export function createEnvironmentAgentSessionHttpClientFromConnection(
@@ -221,9 +276,9 @@ export function createEnvironmentAgentSessionHttpClientFromConnection(
   },
 ): EnvironmentAgentSessionHttpClient {
   if (!config.daemonUrl || !config.threadId) {
-    throw new EnvironmentAgentSessionHttpClientError(
-      "Environment-agent daemon session connection requires daemonUrl and threadId",
-    );
+    throw new EnvironmentAgentSessionHttpClientError({
+      message: "Environment-agent daemon session connection requires daemonUrl and threadId",
+    });
   }
   return new EnvironmentAgentSessionHttpClient({
     daemonUrl: config.daemonUrl,

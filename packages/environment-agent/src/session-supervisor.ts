@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { EnvironmentAgentCommandAck } from "./protocol.js";
 import { type EnvironmentAgentRuntime } from "./runtime.js";
+import { isEnvironmentAgentSessionInactiveError } from "./session-http-client.js";
 import type { EnvironmentAgentSessionRuntime } from "./session-runtime.js";
 import type { EnvironmentAgentSessionSync } from "./session-sync.js";
 
@@ -18,6 +19,7 @@ export interface EnvironmentAgentSessionSupervisorOptions {
 
 const DEFAULT_POLL_INTERVAL_MS = 250;
 const DEFAULT_COMMAND_BATCH_LIMIT = 50;
+const MAX_ERROR_BACKOFF_MS = 30_000;
 
 function toCommandEnvelope(args: {
   threadId: string;
@@ -56,6 +58,7 @@ export class EnvironmentAgentSessionSupervisor {
   private pollTimer: ReturnType<typeof setTimeout> | undefined;
   private running = false;
   private cycleInFlight = false;
+  private consecutiveFailureCount = 0;
   private readonly unsubscribeRuntimeEvents: () => void;
 
   constructor(private readonly options: EnvironmentAgentSessionSupervisorOptions) {
@@ -143,10 +146,17 @@ export class EnvironmentAgentSessionSupervisor {
     if (!this.running || this.pollTimer) {
       return;
     }
+    const backoffMs =
+      this.consecutiveFailureCount > 0
+        ? Math.min(
+            this.pollIntervalMs * 2 ** Math.min(this.consecutiveFailureCount, 7),
+            MAX_ERROR_BACKOFF_MS,
+          )
+        : this.pollIntervalMs;
     this.pollTimer = setTimeout(() => {
       this.pollTimer = undefined;
       void this.runCycleSafely();
-    }, this.pollIntervalMs);
+    }, backoffMs);
   }
 
   private scheduleImmediateCycle(): void {
@@ -169,7 +179,12 @@ export class EnvironmentAgentSessionSupervisor {
     }
     try {
       await this.runCycle();
+      this.consecutiveFailureCount = 0;
     } catch (error) {
+      const recovered = this.handleSessionError(error);
+      this.consecutiveFailureCount = recovered
+        ? 0
+        : this.consecutiveFailureCount + 1;
       this.handleError(error);
     } finally {
       this.scheduleNextCycle();
@@ -228,5 +243,13 @@ export class EnvironmentAgentSessionSupervisor {
 
   private handleError(error: unknown): void {
     this.onError?.(error);
+  }
+
+  private handleSessionError(error: unknown): boolean {
+    if (!isEnvironmentAgentSessionInactiveError(error)) {
+      return false;
+    }
+    this.options.sessionRuntime.clearSession(this.options.threadId);
+    return true;
   }
 }

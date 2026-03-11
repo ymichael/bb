@@ -14,6 +14,7 @@ import { EnvironmentAgentCommandDispatcher } from "../environment-agent-command-
 import { EnvironmentAgentEventApplier } from "../environment-agent-event-applier.js";
 import { EnvironmentAgentSessionManager } from "../environment-agent-session-manager.js";
 import { EnvironmentAgentSessionService } from "../environment-agent-session-service.js";
+import { isDomainError } from "../domain-errors.js";
 
 interface SqliteClient {
   close(): void;
@@ -511,6 +512,50 @@ describe("EnvironmentAgentSessionService", () => {
     ).toThrow(
       `Environment-agent session ${opened.session.id} does not belong to thread ${otherThreadId}`,
     );
+  });
+
+  it("treats heartbeats for expired sessions as inactive-session domain errors", () => {
+    const threadId = createThreadId();
+    const opened = service.openSession({
+      threadId,
+      now: 1_000,
+      payload: {
+        agentId: "agent-1",
+        agentInstanceId: "instance-1",
+        supportedProtocolVersions: [1],
+        supportedTransports: ["websocket"],
+        channels: [
+          {
+            channelId: threadId,
+            generation: 1,
+          },
+        ],
+      },
+    });
+
+    service.expireLeases(60_000);
+
+    let captured: unknown;
+    try {
+      service.recordHeartbeat({
+        threadId,
+        sessionId: opened.session.id,
+        now: 61_000,
+        payload: {
+          agentObservedAt: 61_000,
+          outboxDepth: 0,
+          channels: [{ channelId: threadId }],
+        },
+      });
+    } catch (error) {
+      captured = error;
+    }
+
+    expect(isDomainError(captured)).toBe(true);
+    expect(captured).toMatchObject({
+      code: "inactive_session",
+      message: `Environment-agent session ${opened.session.id} is not active`,
+    });
   });
 
   it("lists deliverable commands as a command_batch protocol message", () => {
