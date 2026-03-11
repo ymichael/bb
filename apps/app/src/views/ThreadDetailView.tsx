@@ -281,7 +281,7 @@ function ToolGroupEntry({
                   key={message.id}
                   message={message}
                   projectId={projectId}
-                  initialExpanded={isExpanded && isLatestMessage}
+                  initialExpanded={initialExpanded && isLatestMessage}
                   preferOngoingLabels={preferOngoingLabels && isLatestMessage}
                 />
               );

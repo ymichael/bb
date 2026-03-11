@@ -244,8 +244,22 @@ vi.mock("@/components/ui/sidebar", () => ({
 }));
 
 vi.mock("@/components/messages/ConversationEntry", () => ({
-  ConversationEntry: ({ message }: { message: { id: string; text?: string; kind: string } }) => (
-    <div>{message.text ?? message.kind}</div>
+  ConversationEntry: ({
+    message,
+    initialExpanded = false,
+    preferOngoingLabels = false,
+  }: {
+    message: { id: string; text?: string; kind: string };
+    initialExpanded?: boolean;
+    preferOngoingLabels?: boolean;
+  }) => (
+    <div
+      data-message-id={message.id}
+      data-initial-expanded={initialExpanded ? "true" : "false"}
+      data-prefer-ongoing-labels={preferOngoingLabels ? "true" : "false"}
+    >
+      {message.text ?? message.kind}
+    </div>
   ),
 }));
 
@@ -568,6 +582,93 @@ describe("ThreadDetailView", () => {
 
     expect(html).not.toContain("Loading thread...");
     expect(html).not.toContain("working");
+  });
+
+  it("only auto-expands the latest child inside the latest tool-group row", () => {
+    apiState.thread.status = "active";
+    apiState.timelineLoading = false;
+    apiState.timeline = {
+      rows: [
+        {
+          kind: "tool-group",
+          id: "group-1",
+          turnId: "turn-1",
+          summaryCount: 1,
+          sourceSeqStart: 1,
+          sourceSeqEnd: 1,
+          startedAt: 1,
+          createdAt: 1,
+          status: "completed",
+          messages: [
+            {
+              id: "file-1",
+              threadId: "thread-1",
+              kind: "file-edit",
+              callId: "edit-1",
+              changes: [
+                {
+                  path: "/repo/src/alpha.ts",
+                  kind: "update",
+                  diff: "@@ -1 +1 @@\n-const alpha = 1;\n+const alpha = 2;",
+                },
+                {
+                  path: "/repo/src/beta.ts",
+                  kind: "update",
+                  diff: "@@ -1 +1 @@\n-const beta = 1;\n+const beta = 2;",
+                },
+              ],
+              sourceSeqStart: 1,
+              sourceSeqEnd: 1,
+              createdAt: 1,
+              turnId: "turn-1",
+              status: "completed",
+            },
+          ],
+        },
+        {
+          kind: "tool-group",
+          id: "group-2",
+          turnId: "turn-1",
+          summaryCount: 1,
+          sourceSeqStart: 2,
+          sourceSeqEnd: 2,
+          startedAt: 2,
+          createdAt: 2,
+          status: "completed",
+          messages: [
+            {
+              id: "file-2",
+              threadId: "thread-1",
+              kind: "file-edit",
+              callId: "edit-2",
+              changes: [
+                {
+                  path: "/repo/src/gamma.ts",
+                  kind: "update",
+                  diff: "@@ -1 +1 @@\n-const gamma = 1;\n+const gamma = 2;",
+                },
+                {
+                  path: "/repo/src/delta.ts",
+                  kind: "update",
+                  diff: "@@ -1 +1 @@\n-const delta = 1;\n+const delta = 2;",
+                },
+              ],
+              sourceSeqStart: 2,
+              sourceSeqEnd: 2,
+              createdAt: 2,
+              turnId: "turn-1",
+              status: "completed",
+            },
+          ],
+        },
+      ],
+      contextWindowUsage: null,
+    };
+
+    const html = renderThreadDetailView();
+
+    expect(html).toContain('data-message-id="file-1" data-initial-expanded="false"');
+    expect(html).toContain('data-message-id="file-2" data-initial-expanded="true"');
   });
 
   it("keeps the working indicator when the trailing latest activity row failed", () => {
