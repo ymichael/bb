@@ -2,7 +2,7 @@ import { type ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import type { ThreadTimelineResponse } from "@beanbag/agent-core";
+import type { ThreadTimelineResponse, ThreadWorkStatus } from "@beanbag/agent-core";
 import { ThreadDetailView } from "./ThreadDetailView";
 
 const apiState = vi.hoisted(() => {
@@ -72,6 +72,7 @@ const apiState = vi.hoisted(() => {
       deletions: 1,
       workspaceInsertions: 3,
       workspaceDeletions: 1,
+      currentBranch: "feature/thread-1",
       mergeBaseBranch: "main",
       mergeBaseBranches: ["main"],
       defaultBranch: "main",
@@ -81,7 +82,7 @@ const apiState = vi.hoisted(() => {
       files: [{ path: "src/example.ts", status: "modified" }],
       hasUncommittedChanges: true,
       hasCommittedUnmergedChanges: false,
-    },
+    } as ThreadWorkStatus,
     gitDiff: {
       mode: "worktree_commits",
       selection: { type: "combined" },
@@ -140,11 +141,13 @@ vi.mock("../hooks/useApi", () => ({
   useEnqueueThreadMessage: () => apiState.pendingMutation,
   useSendQueuedThreadMessage: () => apiState.pendingMutation,
   useDeleteQueuedThreadMessage: () => apiState.pendingMutation,
+  useArchiveThread: () => apiState.pendingMutation,
   useRequestThreadOperation: () => apiState.pendingMutation,
   usePromoteThread: () => apiState.pendingMutation,
   useDemotePrimaryCheckout: () => apiState.pendingMutation,
   useStopThread: () => apiState.pendingMutation,
   useMarkThreadRead: () => apiState.pendingMutation,
+  useMarkThreadUnread: () => apiState.pendingMutation,
   useSystemEnvironments: () => ({
     data: apiState.environments,
   }),
@@ -152,6 +155,7 @@ vi.mock("../hooks/useApi", () => ({
   useThreadDefaultExecutionOptions: () => ({
     data: {},
   }),
+  useUpdateThread: () => apiState.pendingMutation,
   useUploadPromptAttachment: () => apiState.pendingMutation,
 }));
 
@@ -228,6 +232,12 @@ vi.mock("@/components/layout/PageShell", () => ({
   ),
 }));
 
+vi.mock("@/components/ui/sidebar", () => ({
+  SidebarTrigger: ({ className }: { className?: string }) => (
+    <button className={className}>sidebar</button>
+  ),
+}));
+
 vi.mock("@/components/messages/ConversationEntry", () => ({
   ConversationEntry: ({ message }: { message: { id: string; text?: string; kind: string } }) => (
     <div>{message.text ?? message.kind}</div>
@@ -299,16 +309,35 @@ vi.mock("./ThreadFollowUpComposer", () => ({
   }) => <div>{`${promptPlaceholder}|${queuedMessages.length}|${environmentLabel ?? ""}`}</div>,
 }));
 
+vi.mock("@/components/thread/ThreadActionsMenu", () => ({
+  ThreadActionsMenu: () => <div>thread-actions</div>,
+}));
+
+vi.mock("@/components/thread/ThreadRenameDialog", () => ({
+  ThreadRenameDialog: () => null,
+}));
+
 vi.mock("./ThreadGitDiffPanel", () => ({
-  ThreadGitDiffPanel: ({ gitDiffStatsLabel }: { gitDiffStatsLabel: string }) => (
-    <div>{gitDiffStatsLabel}</div>
+  ThreadGitDiffPanel: ({
+    activePanel,
+    gitDiffStatsLabel,
+    metadataContent,
+  }: {
+    activePanel: "git-diff" | "thread-info" | null;
+    gitDiffStatsLabel: string;
+    metadataContent: ReactNode;
+  }) => (
+    <div>
+      {activePanel === "git-diff" ? gitDiffStatsLabel : null}
+      {activePanel === "thread-info" ? metadataContent : null}
+    </div>
   ),
 }));
 
 describe("ThreadDetailView", () => {
-  const renderThreadDetailView = () =>
+  const renderThreadDetailView = (initialEntry = "/projects/project-1/threads/thread-1") =>
     renderToStaticMarkup(
-      <MemoryRouter initialEntries={["/projects/project-1/threads/thread-1?secondaryPanel=git-diff"]}>
+      <MemoryRouter initialEntries={[initialEntry]}>
         <Routes>
           <Route
             path="/projects/:projectId/threads/:threadId"
@@ -318,7 +347,7 @@ describe("ThreadDetailView", () => {
       </MemoryRouter>,
     );
 
-  it("renders the thread view with extracted composer and git diff panel props", () => {
+  it("keeps thread metadata out of the main timeline when the secondary panel is closed", () => {
     apiState.thread.status = "idle";
     apiState.timelineLoading = false;
     apiState.timeline = {
@@ -344,12 +373,45 @@ describe("ThreadDetailView", () => {
 
     const html = renderThreadDetailView();
 
-    expect(html).toContain("Parent thread");
-    expect(html).toContain('href="/projects/project-1/threads/thread-parent"');
+    expect(html).not.toContain("Parent thread");
+    expect(html).not.toContain('href="/projects/project-1/threads/thread-parent"');
     expect(html).toContain("Rendered message");
     expect(html).toContain("Ask for follow-up changes|1|Local Env");
+  });
+
+  it("renders the diff panel view when the diff tab is active", () => {
+    apiState.thread.status = "idle";
+    apiState.timelineLoading = false;
+
+    const html = renderThreadDetailView(
+      "/projects/project-1/threads/thread-1?secondaryPanel=git-diff"
+    );
+
     expect(html).toContain("1 file");
     expect(html).toContain("+1 -1");
+  });
+
+  it("renders thread metadata in the info secondary panel tab", () => {
+    apiState.thread.status = "idle";
+    apiState.timelineLoading = false;
+    apiState.workStatus.currentBranch = "feature/thread-1";
+    apiState.workStatus.defaultBranch = undefined;
+    apiState.workStatus.mergeBaseBranch = "release/1.0";
+    apiState.workStatus.mergeBaseBranches = ["main", "release/1.0"];
+
+    const html = renderThreadDetailView(
+      "/projects/project-1/threads/thread-1?secondaryPanel=thread-info"
+    );
+
+    expect(html).toContain("Parent thread");
+    expect(html).toContain('href="/projects/project-1/threads/thread-parent"');
+    expect(html).toContain("Environment");
+    expect(html).toContain("Local Env");
+    expect(html).toContain("Branch");
+    expect(html).toContain("feature/thread-1");
+    expect(html).toContain("Copy branch name");
+    expect(html).toContain("Merge base");
+    expect(html).toContain("release/1.0");
   });
 
   it("hides the working indicator while the thread timeline is still loading", () => {

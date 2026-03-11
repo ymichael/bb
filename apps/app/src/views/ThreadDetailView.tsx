@@ -6,6 +6,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { Copy, PanelRight } from "lucide-react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import {
   type ImperativePanelHandle,
@@ -22,14 +23,17 @@ import {
   useEnqueueThreadMessage,
   useSendQueuedThreadMessage,
   useDeleteQueuedThreadMessage,
+  useArchiveThread,
   useRequestThreadOperation,
   usePromoteThread,
   useDemotePrimaryCheckout,
   useStopThread,
   useMarkThreadRead,
+  useMarkThreadUnread,
   useSystemEnvironments,
   useUnarchiveThread,
   useThreadDefaultExecutionOptions,
+  useUpdateThread,
   useUploadPromptAttachment,
 } from "../hooks/useApi";
 import {
@@ -37,6 +41,8 @@ import {
 } from "@/components/messages/ConversationEntry";
 import { ConversationWorkingIndicator } from "@/components/messages/ConversationWorkingIndicator";
 import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator";
+import { SidebarTrigger } from "@/components/ui/sidebar";
 import { useAutoScroll } from "@/hooks/useAutoScroll";
 import { useScrollToBottomIndicator } from "@/hooks/useScrollToBottomIndicator";
 import { usePromptModelReasoning } from "@/hooks/usePromptModelReasoning";
@@ -44,6 +50,11 @@ import { usePromptDraftStorage } from "@/hooks/usePromptDraftStorage";
 import { usePromptFileMentions } from "@/hooks/usePromptFileMentions";
 import { usePreferredTheme } from "@/hooks/useTheme";
 import { PageShell } from "@/components/layout/PageShell";
+import { ThreadActionsMenu } from "@/components/thread/ThreadActionsMenu";
+import {
+  ThreadRenameDialog,
+  type ThreadRenameDialogTarget,
+} from "@/components/thread/ThreadRenameDialog";
 import {
   DEFAULT_SCROLL_STICK_THRESHOLD_PX,
   DetailCard,
@@ -82,10 +93,18 @@ import {
   formatWorkspaceChangeSummary,
 } from "@/lib/workspace-change-summary";
 import {
-  isThreadGitDiffPanelOpen,
-  withThreadGitDiffPanelOpen,
+  getThreadSecondaryPanel,
+  getStoredThreadSecondaryPanel,
+  setStoredThreadSecondaryPanel,
+  withThreadSecondaryPanel,
+  type ThreadSecondaryPanel,
 } from "@/lib/thread-git-diff-panel";
 import { supportsPrimaryCheckoutMetadata } from "@/lib/thread-primary-checkout";
+import { getThreadDisplayTitle } from "@/lib/thread-title";
+import {
+  isArchiveForceRequiredError,
+  requiresArchiveConfirmation,
+} from "@/lib/thread-archive";
 import { ThreadFollowUpComposer } from "./ThreadFollowUpComposer";
 import {
   type GitDiffSelectionOption,
@@ -115,6 +134,7 @@ import {
   formatSummaryDuration,
   getEventHeaderToneClass,
 } from "@/components/messages/rows/shared";
+import { toast } from "sonner";
 
 const SCROLL_THRESHOLD = 40;
 const TIMELINE_PANEL_DEFAULT_SIZE_PERCENT = 50;
@@ -276,10 +296,15 @@ export function ThreadDetailView() {
   }>();
   const location = useLocation();
   const navigate = useNavigate();
-  const isGitDiffPanelOpen = useMemo(
-    () => isThreadGitDiffPanelOpen(location.search),
+  const searchSecondaryPanel = useMemo(
+    () => getThreadSecondaryPanel(location.search),
     [location.search],
   );
+  const [persistedSecondaryPanel, setPersistedSecondaryPanel] =
+    useState<ThreadSecondaryPanel | null>(() => getStoredThreadSecondaryPanel());
+  const activeSecondaryPanel = searchSecondaryPanel ?? persistedSecondaryPanel;
+  const isSecondaryPanelOpen = activeSecondaryPanel !== null;
+  const isGitDiffPanelOpen = activeSecondaryPanel === "git-diff";
   const [selectedMergeBaseBranch, setSelectedMergeBaseBranch] = useState<string | undefined>(
     undefined,
   );
@@ -311,6 +336,7 @@ export function ThreadDetailView() {
   const enqueueThreadMessage = useEnqueueThreadMessage();
   const sendQueuedThreadMessage = useSendQueuedThreadMessage();
   const deleteQueuedThreadMessage = useDeleteQueuedThreadMessage();
+  const archiveThread = useArchiveThread();
   const requestThreadCommitOperation = useRequestThreadOperation();
   const requestThreadSquashOperation = useRequestThreadOperation();
   const promoteThread = usePromoteThread();
@@ -318,6 +344,8 @@ export function ThreadDetailView() {
   const stopThread = useStopThread();
   const unarchiveThread = useUnarchiveThread();
   const markThreadRead = useMarkThreadRead();
+  const markThreadUnread = useMarkThreadUnread();
+  const updateThread = useUpdateThread();
   const uploadPromptAttachment = useUploadPromptAttachment();
   const promptDraft = usePromptDraftStorage({ projectId, threadId });
   const environmentCatalog = useSystemEnvironments();
@@ -329,6 +357,9 @@ export function ThreadDetailView() {
   >({});
   const [isChangeListExpanded, setIsChangeListExpanded] = useState(false);
   const [processingQueuedMessageId, setProcessingQueuedMessageId] = useState<string | null>(
+    null,
+  );
+  const [threadRenameTarget, setThreadRenameTarget] = useState<ThreadRenameDialogTarget | null>(
     null,
   );
   const [gitDiffDisplayMode, setGitDiffDisplayMode] = useState<"unified" | "split">(
@@ -400,6 +431,18 @@ export function ThreadDetailView() {
     [gitDiffDisplayMode, preferredTheme],
   );
 
+  useEffect(() => {
+    if (
+      searchSecondaryPanel === null ||
+      searchSecondaryPanel === persistedSecondaryPanel
+    ) {
+      return;
+    }
+
+    setPersistedSecondaryPanel(searchSecondaryPanel);
+    setStoredThreadSecondaryPanel(searchSecondaryPanel);
+  }, [persistedSecondaryPanel, searchSecondaryPanel]);
+
   const threadDetailRows = useMemo(() => timeline?.rows ?? [], [timeline?.rows]);
   const contextWindowUsage = timeline?.contextWindowUsage ?? undefined;
   const latestActivityRowId = useMemo(
@@ -463,16 +506,16 @@ export function ThreadDetailView() {
       return;
     }
 
-    if (isGitDiffPanelOpen) {
+    if (isSecondaryPanelOpen) {
       panel.expand(lastGitDiffPanelSizeRef.current);
       return;
     }
 
     panel.collapse();
-  }, [isGitDiffPanelOpen]);
+  }, [isSecondaryPanelOpen]);
 
   useLayoutEffect(() => {
-    if (!isGitDiffPanelOpen) {
+    if (!isSecondaryPanelOpen) {
       return;
     }
 
@@ -502,10 +545,10 @@ export function ThreadDetailView() {
     return () => {
       observer.disconnect();
     };
-  }, [isGitDiffPanelOpen]);
+  }, [isSecondaryPanelOpen]);
 
   useEffect(() => {
-    if (!isGitDiffPanelOpen) {
+    if (!isSecondaryPanelOpen) {
       setHasExplicitGitDiffDisplayMode(false);
       setGitDiffPanelWidth(null);
       lastGitDiffWideEnoughRef.current = null;
@@ -534,7 +577,7 @@ export function ThreadDetailView() {
   }, [
     gitDiffPanelWidth,
     hasExplicitGitDiffDisplayMode,
-    isGitDiffPanelOpen,
+    isSecondaryPanelOpen,
     isGitDiffPanelWideEnough,
   ]);
 
@@ -711,6 +754,86 @@ export function ThreadDetailView() {
       },
     });
   }, [markThreadRead, thread]);
+
+  const renameThread = useCallback(() => {
+    if (!thread || updateThread.isPending) return;
+    setThreadRenameTarget({
+      id: thread.id,
+      currentTitle: getThreadDisplayTitle(thread),
+    });
+  }, [thread, updateThread.isPending]);
+
+  const submitThreadRename = useCallback((currentThreadId: string, title: string) => {
+    updateThread.mutate(
+      {
+        id: currentThreadId,
+        title,
+      },
+      {
+        onSuccess: () => {
+          setThreadRenameTarget(null);
+        },
+      },
+    );
+  }, [updateThread]);
+
+  const toggleArchiveThread = useCallback(() => {
+    if (!thread) return;
+    if (thread.archivedAt !== undefined) {
+      unarchiveThread.mutate({ id: thread.id });
+      return;
+    }
+
+    const archiveWithForce = () => {
+      archiveThread.mutate(
+        { id: thread.id, force: true },
+        {
+          onSuccess: () => {
+            navigate(`/projects/${thread.projectId}`);
+          },
+          onError: (nextError) => {
+            toast.error(
+              nextError instanceof Error ? nextError.message : "Failed to archive thread.",
+            );
+          },
+        },
+      );
+    };
+
+    if (requiresArchiveConfirmation(thread.workStatus, environmentInfo)) {
+      const confirmed = window.confirm(
+        "This thread has uncommitted or unmerged work. Archive anyway?",
+      );
+      if (!confirmed) {
+        return;
+      }
+      archiveWithForce();
+      return;
+    }
+
+    archiveThread.mutate(
+      { id: thread.id },
+      {
+        onSuccess: () => {
+          navigate(`/projects/${thread.projectId}`);
+        },
+        onError: (nextError) => {
+          if (isArchiveForceRequiredError(nextError)) {
+            const confirmed = window.confirm(
+              "This thread has uncommitted or unmerged work. Archive anyway?",
+            );
+            if (confirmed) {
+              archiveWithForce();
+            }
+            return;
+          }
+          toast.error(
+            nextError instanceof Error ? nextError.message : "Failed to archive thread.",
+          );
+        },
+      },
+    );
+  }, [archiveThread, environmentInfo, navigate, thread, unarchiveThread]);
 
   const handleGitDiffDisplayModeChange = useCallback((nextMode: "unified" | "split") => {
     setHasExplicitGitDiffDisplayMode(true);
@@ -914,32 +1037,46 @@ export function ThreadDetailView() {
     }
     gitDiffFileRefs.current.delete(fileKey);
   }, []);
+  const setThreadSecondaryPanel = useCallback(
+    (panel: ThreadSecondaryPanel | null) => {
+      setPersistedSecondaryPanel(panel);
+      setStoredThreadSecondaryPanel(panel);
+      const nextSearch = withThreadSecondaryPanel(location.search, panel);
+      navigate(
+        {
+          pathname: location.pathname,
+          search: nextSearch.length > 0 ? `?${nextSearch}` : "",
+        },
+        { replace: true },
+      );
+    },
+    [location.pathname, location.search, navigate],
+  );
+  const openThreadSecondaryPanel = useCallback(
+    (panel: ThreadSecondaryPanel) => {
+      if (activeSecondaryPanel === panel) {
+        return;
+      }
+      setThreadSecondaryPanel(panel);
+    },
+    [activeSecondaryPanel, setThreadSecondaryPanel],
+  );
   const openThreadGitDiffPanel = useCallback(() => {
-    if (isGitDiffPanelOpen) {
+    openThreadSecondaryPanel("git-diff");
+  }, [openThreadSecondaryPanel]);
+  const toggleThreadSecondaryPanel = useCallback(() => {
+    if (isSecondaryPanelOpen) {
+      setThreadSecondaryPanel(null);
       return;
     }
-    const nextSearch = withThreadGitDiffPanelOpen(location.search, true);
-    navigate(
-      {
-        pathname: location.pathname,
-        search: nextSearch.length > 0 ? `?${nextSearch}` : "",
-      },
-      { replace: true },
-    );
-  }, [isGitDiffPanelOpen, location.pathname, location.search, navigate]);
-  const closeThreadGitDiffPanel = useCallback(() => {
-    if (!isGitDiffPanelOpen) {
+    openThreadSecondaryPanel("thread-info");
+  }, [isSecondaryPanelOpen, openThreadSecondaryPanel, setThreadSecondaryPanel]);
+  const closeThreadSecondaryPanel = useCallback(() => {
+    if (!isSecondaryPanelOpen) {
       return;
     }
-    const nextSearch = withThreadGitDiffPanelOpen(location.search, false);
-    navigate(
-      {
-        pathname: location.pathname,
-        search: nextSearch.length > 0 ? `?${nextSearch}` : "",
-      },
-      { replace: true },
-    );
-  }, [isGitDiffPanelOpen, location.pathname, location.search, navigate]);
+    setThreadSecondaryPanel(null);
+  }, [isSecondaryPanelOpen, setThreadSecondaryPanel]);
   const handlePromptGitStatsBannerClick = useCallback(() => {
     openThreadGitDiffPanel();
   }, [openThreadGitDiffPanel]);
@@ -1052,7 +1189,7 @@ export function ThreadDetailView() {
     return () => {
       window.cancelAnimationFrame(frameId);
     };
-  }, [syncTimelineScrollAnchor, threadDetailRows, isGitDiffPanelOpen]);
+  }, [syncTimelineScrollAnchor, threadDetailRows, isSecondaryPanelOpen]);
 
   useLayoutEffect(() => {
     const scrollContainer = containerElement;
@@ -1291,12 +1428,6 @@ export function ThreadDetailView() {
           }) ?? thread.environmentId
         )
       : undefined;
-  const showThreadMetadata = Boolean(
-    parentThreadId ||
-      thread.archivedAt !== undefined ||
-      showPrimaryCheckoutMetadata ||
-      showWorkspaceStatus,
-  );
   const provisioningStatusLabel =
     isCreated
       ? "Created..."
@@ -1333,6 +1464,259 @@ export function ThreadDetailView() {
     selectedMergeBaseBranch ??
     resolvedThreadWorkStatus?.mergeBaseBranch ??
     resolvedThreadWorkStatus?.defaultBranch;
+  const threadEnvironmentType =
+    threadEnvironmentLabel ??
+    thread.environmentRecord?.kind ??
+    undefined;
+  const threadBranchName = resolvedThreadWorkStatus?.currentBranch;
+  const threadMergeBaseBranch =
+    selectedMergeBaseBranch ??
+    resolvedThreadWorkStatus?.mergeBaseBranch ??
+    resolvedThreadWorkStatus?.mergeBaseBranches?.[0];
+  const showThreadMergeBase =
+    Boolean(threadMergeBaseBranch) &&
+    threadMergeBaseBranch !== resolvedThreadWorkStatus?.defaultBranch;
+  const showThreadMetadata = Boolean(
+    parentThreadId ||
+      threadEnvironmentType ||
+      threadBranchName ||
+      showThreadMergeBase ||
+      thread.archivedAt !== undefined ||
+      showPrimaryCheckoutMetadata ||
+      showWorkspaceStatus,
+  );
+  const threadTitle = getThreadDisplayTitle(thread);
+  const threadActionsDisabled =
+    archiveThread.isPending ||
+    unarchiveThread.isPending ||
+    markThreadRead.isPending ||
+    markThreadUnread.isPending ||
+    updateThread.isPending;
+  const handleCopyThreadBranch = async () => {
+    if (!threadBranchName) {
+      return;
+    }
+    if (typeof navigator === "undefined" || !navigator.clipboard?.writeText) {
+      toast.error("Failed to copy branch name");
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(threadBranchName);
+      toast.success("Branch name copied");
+    } catch {
+      toast.error("Failed to copy branch name");
+    }
+  };
+  const renderThreadMetadataRows = () => (
+    <>
+      {parentThreadId ? (
+        <DetailRow
+          label="Parent thread"
+          valueClassName="min-w-0 truncate"
+        >
+          <Link
+            to={`/projects/${projectId}/threads/${parentThreadId}`}
+            className="underline underline-offset-2"
+          >
+            {parentThreadDisplayName}
+          </Link>
+        </DetailRow>
+      ) : null}
+      {threadEnvironmentType ? (
+        <DetailRow
+          label="Environment"
+          valueClassName="min-w-0 truncate"
+        >
+          <span className="font-medium">{threadEnvironmentType}</span>
+        </DetailRow>
+      ) : null}
+      {threadBranchName ? (
+        <DetailRow
+          label="Branch"
+          valueClassName="min-w-0 truncate"
+        >
+          <button
+            type="button"
+            className="inline-flex max-w-full items-center gap-1.5 rounded-md text-left font-medium text-foreground transition-colors hover:text-foreground/80"
+            onClick={() => {
+              void handleCopyThreadBranch();
+            }}
+            aria-label="Copy branch name"
+            title="Copy branch name"
+          >
+            <span className="truncate">{threadBranchName}</span>
+            <Copy className="size-3.5 shrink-0 text-muted-foreground" />
+          </button>
+        </DetailRow>
+      ) : null}
+      {showThreadMergeBase ? (
+        <DetailRow
+          label="Merge base"
+          valueClassName="min-w-0 truncate"
+        >
+          <span className="font-medium">{threadMergeBaseBranch}</span>
+        </DetailRow>
+      ) : null}
+      {showPrimaryCheckoutMetadata ? (
+        <DetailRow
+          label="Primary checkout"
+          valueClassName="min-w-0"
+        >
+          <div className="flex min-w-0 items-center gap-2">
+            <StatusPill variant={primaryCheckoutStatusVariant}>
+              {primaryCheckoutStatusLabel}
+            </StatusPill>
+            <Button
+              type="button"
+              variant="link"
+              size="sm"
+              className="h-auto px-0 py-0 ui-text-xs underline"
+              disabled={
+                thread.archivedAt !== undefined ||
+                isPrimaryCheckoutMutationPending ||
+                (isPrimaryCheckoutActive
+                  ? demoteAction?.available === false
+                  : promoteAction?.available === false)
+              }
+              onClick={() => {
+                const action = isPrimaryCheckoutActive
+                  ? demotePrimaryCheckout.mutateAsync({ id: thread.id })
+                  : promoteThread.mutateAsync({ id: thread.id });
+                void action.catch((err) => {
+                  window.alert(
+                    err instanceof Error
+                      ? err.message
+                      : "Failed to update primary checkout state",
+                  );
+                });
+              }}
+            >
+              {primaryCheckoutActionLabel}
+            </Button>
+          </div>
+        </DetailRow>
+      ) : null}
+      {showWorkspaceStatus ? (
+        <DetailRow
+          label="Workspace status"
+          valueClassName="min-w-0"
+        >
+          <StatusPillCommitPopover
+            threadId={thread.id}
+            status={resolvedThreadWorkStatus}
+            label={threadWorkStatusLabel(resolvedThreadWorkStatus, {
+              cleanLabel:
+                showBranchComparisonUi
+                  ? threadWorktreeCleanLabel(resolvedThreadWorkStatus)
+                  : undefined,
+            })}
+            variant={threadWorkStatusVariant(resolvedThreadWorkStatus, {
+              isArchivedThread: thread.archivedAt !== undefined,
+            })}
+            cleanTitle={
+              showBranchComparisonUi
+                ? threadWorktreeCleanLabel(resolvedThreadWorkStatus)
+                : undefined
+            }
+            showMergeBaseDetails={showBranchComparisonUi}
+            mergeBaseBranch={
+              selectedMergeBaseBranch ?? resolvedThreadWorkStatus?.mergeBaseBranch
+            }
+            mergeBaseBranchOptions={resolvedThreadWorkStatus?.mergeBaseBranches}
+            onMergeBaseBranchChange={
+              showBranchComparisonUi
+                ? setSelectedMergeBaseBranch
+                : undefined
+            }
+            canCommit={Boolean(resolvedThreadWorkStatus?.hasUncommittedChanges)}
+            canSquashMerge={
+              squashMergeAction?.available === true &&
+              (
+                Boolean(resolvedThreadWorkStatus?.hasCommittedUnmergedChanges) ||
+                Boolean(resolvedThreadWorkStatus?.hasUncommittedChanges)
+              )
+            }
+            isCommitting={requestThreadCommitOperation.isPending}
+            isSquashMerging={requestThreadSquashOperation.isPending}
+            onCommit={async ({ includeUnstaged, message }) => {
+              if (!threadId) return;
+              const autoArchiveOnSuccess = getAutoArchivePreferences().autoArchiveThreadOnCommit;
+              await requestThreadCommitOperation.mutateAsync({
+                id: threadId,
+                operation: "commit",
+                options: {
+                  includeUnstaged,
+                  ...(message ? { message } : {}),
+                  autoArchiveOnSuccess,
+                },
+              });
+            }}
+            onSquashMerge={async ({
+              commitIfNeeded,
+              includeUnstaged,
+              commitMessage,
+              mergeBaseBranch,
+            }) => {
+              if (!threadId) return;
+              const autoArchiveOnSuccess = getAutoArchivePreferences().autoArchiveThreadOnCommit;
+              await requestThreadSquashOperation.mutateAsync({
+                id: threadId,
+                operation: "squash_merge",
+                options: {
+                  commitIfNeeded,
+                  includeUnstaged,
+                  ...(commitMessage ? { commitMessage } : {}),
+                  ...(mergeBaseBranch ? { mergeBaseBranch } : {}),
+                  autoArchiveOnSuccess,
+                },
+              });
+            }}
+          />
+        </DetailRow>
+      ) : null}
+      {thread.archivedAt !== undefined ? (
+        <DetailRow
+          label="Archived"
+          valueClassName="min-w-0 truncate"
+        >
+          <ArchiveTimestampAction
+            isPending={
+              unarchiveThread.isPending &&
+              unarchiveThread.variables?.id === thread.id
+            }
+            onUnarchive={() => {
+              unarchiveThread.mutate({ id: thread.id });
+            }}
+          />
+        </DetailRow>
+      ) : null}
+    </>
+  );
+  const renderThreadMetadataCard = (className?: string) => (
+    <DetailCard className={className}>
+      {renderThreadMetadataRows()}
+    </DetailCard>
+  );
+  const threadActionsMenu = (
+    <ThreadActionsMenu
+      triggerClassName="h-7 w-7 rounded-md p-0 text-muted-foreground"
+      disabled={threadActionsDisabled}
+      align="end"
+      isRead={(thread.lastReadAt ?? 0) >= thread.updatedAt}
+      onToggleRead={() => {
+        if ((thread.lastReadAt ?? 0) >= thread.updatedAt) {
+          markThreadUnread.mutate(thread.id);
+          return;
+        }
+        markThreadRead.mutate(thread.id);
+      }}
+      onRename={renameThread}
+      onToggleArchive={() => {
+        void toggleArchiveThread();
+      }}
+      isArchived={thread.archivedAt !== undefined}
+    />
+  );
 
   const handleSend = async () => {
     if (promptInput.length === 0) return;
@@ -1452,166 +1836,42 @@ export function ThreadDetailView() {
       });
   };
 
+  const timelineHeader = (
+    <header className="shrink-0 border-b border-border/80 bg-background/95 px-4 backdrop-blur-sm">
+      <div className="flex h-12 items-center gap-3">
+        <SidebarTrigger className="h-5 w-5 shrink-0 rounded-md p-0" />
+        <Separator orientation="vertical" className="h-4" />
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-semibold">{threadTitle}</p>
+        </div>
+        <div className="flex shrink-0 items-center gap-1">
+          {threadActionsMenu}
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className={
+              isSecondaryPanelOpen
+                ? "h-7 w-7 rounded-md p-0 bg-accent/35 text-foreground hover:bg-accent/45"
+                : "h-7 w-7 rounded-md p-0 text-muted-foreground hover:bg-accent/45 hover:text-foreground"
+            }
+            aria-label={isSecondaryPanelOpen ? "Hide secondary panel" : "Show secondary panel"}
+            title={isSecondaryPanelOpen ? "Hide secondary panel" : "Show secondary panel"}
+            onClick={toggleThreadSecondaryPanel}
+          >
+            <PanelRight className="size-3.5" />
+          </Button>
+        </div>
+      </div>
+    </header>
+  );
+
   const conversationMain = (
     <>
       {isTransientThreadLoadError ? (
         <div className="mb-2 rounded-md border border-border/80 bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
           Daemon temporarily unavailable. Showing cached thread state while reconnecting.
         </div>
-      ) : null}
-      {showThreadMetadata ? (
-        <section className="sticky top-0 z-10 shrink-0 bg-background pt-2">
-          <DetailCard>
-            {parentThreadId ? (
-              <DetailRow
-                label="Parent thread"
-                valueClassName="min-w-0 truncate"
-              >
-                <Link
-                  to={`/projects/${projectId}/threads/${parentThreadId}`}
-                  className="underline underline-offset-2"
-                >
-                  {parentThreadDisplayName}
-                </Link>
-              </DetailRow>
-            ) : null}
-            {showPrimaryCheckoutMetadata ? (
-              <DetailRow
-                label="Primary checkout"
-                valueClassName="min-w-0"
-              >
-                <div className="flex min-w-0 items-center gap-2">
-                  <StatusPill
-                    variant={primaryCheckoutStatusVariant}
-                  >
-                    {primaryCheckoutStatusLabel}
-                  </StatusPill>
-                  <Button
-                    type="button"
-                    variant="link"
-                    size="sm"
-                    className="h-auto px-0 py-0 ui-text-xs underline"
-                    disabled={
-                      thread.archivedAt !== undefined ||
-                      isPrimaryCheckoutMutationPending ||
-                      (isPrimaryCheckoutActive
-                        ? demoteAction?.available === false
-                        : promoteAction?.available === false)
-                    }
-                    onClick={() => {
-                      const action = isPrimaryCheckoutActive
-                        ? demotePrimaryCheckout.mutateAsync({ id: thread.id })
-                        : promoteThread.mutateAsync({ id: thread.id });
-                      void action.catch((err) => {
-                        window.alert(
-                          err instanceof Error
-                            ? err.message
-                            : "Failed to update primary checkout state",
-                        );
-                      });
-                    }}
-                  >
-                    {primaryCheckoutActionLabel}
-                  </Button>
-                </div>
-              </DetailRow>
-            ) : null}
-            {showWorkspaceStatus ? (
-              <DetailRow
-                label="Workspace status"
-                valueClassName="min-w-0"
-              >
-                <StatusPillCommitPopover
-                  threadId={thread.id}
-                  status={resolvedThreadWorkStatus}
-                  label={threadWorkStatusLabel(resolvedThreadWorkStatus, {
-                    cleanLabel:
-                      showBranchComparisonUi
-                        ? threadWorktreeCleanLabel(resolvedThreadWorkStatus)
-                        : undefined,
-                  })}
-                  variant={threadWorkStatusVariant(resolvedThreadWorkStatus, {
-                    isArchivedThread: thread.archivedAt !== undefined,
-                  })}
-                  cleanTitle={
-                    showBranchComparisonUi
-                      ? threadWorktreeCleanLabel(resolvedThreadWorkStatus)
-                      : undefined
-                  }
-                  showMergeBaseDetails={showBranchComparisonUi}
-                  mergeBaseBranch={
-                    selectedMergeBaseBranch ?? resolvedThreadWorkStatus?.mergeBaseBranch
-                  }
-                  mergeBaseBranchOptions={resolvedThreadWorkStatus?.mergeBaseBranches}
-                  onMergeBaseBranchChange={
-                    showBranchComparisonUi
-                      ? setSelectedMergeBaseBranch
-                      : undefined
-                  }
-                  canCommit={Boolean(resolvedThreadWorkStatus?.hasUncommittedChanges)}
-                  canSquashMerge={
-                    squashMergeAction?.available === true &&
-                    (
-                      Boolean(resolvedThreadWorkStatus?.hasCommittedUnmergedChanges) ||
-                      Boolean(resolvedThreadWorkStatus?.hasUncommittedChanges)
-                    )
-                  }
-                  isCommitting={requestThreadCommitOperation.isPending}
-                  isSquashMerging={requestThreadSquashOperation.isPending}
-                  onCommit={async ({ includeUnstaged, message }) => {
-                    if (!threadId) return;
-                    const autoArchiveOnSuccess = getAutoArchivePreferences().autoArchiveThreadOnCommit;
-                    await requestThreadCommitOperation.mutateAsync({
-                      id: threadId,
-                      operation: "commit",
-                      options: {
-                        includeUnstaged,
-                        ...(message ? { message } : {}),
-                        autoArchiveOnSuccess,
-                      },
-                    });
-                  }}
-                  onSquashMerge={async ({
-                    commitIfNeeded,
-                    includeUnstaged,
-                    commitMessage,
-                    mergeBaseBranch,
-                  }) => {
-                    if (!threadId) return;
-                    const autoArchiveOnSuccess = getAutoArchivePreferences().autoArchiveThreadOnCommit;
-                    await requestThreadSquashOperation.mutateAsync({
-                      id: threadId,
-                      operation: "squash_merge",
-                      options: {
-                        commitIfNeeded,
-                        includeUnstaged,
-                        ...(commitMessage ? { commitMessage } : {}),
-                        ...(mergeBaseBranch ? { mergeBaseBranch } : {}),
-                        autoArchiveOnSuccess,
-                      },
-                    });
-                  }}
-                />
-              </DetailRow>
-            ) : null}
-            {thread.archivedAt !== undefined ? (
-              <DetailRow
-                label="Archived"
-                valueClassName="min-w-0 truncate"
-              >
-                <ArchiveTimestampAction
-                  isPending={
-                    unarchiveThread.isPending &&
-                    unarchiveThread.variables?.id === thread.id
-                  }
-                  onUnarchive={() => {
-                    unarchiveThread.mutate({ id: thread.id });
-                  }}
-                />
-              </DetailRow>
-            ) : null}
-          </DetailCard>
-        </section>
       ) : null}
       <ConversationTimeline>
         {isThreadTimelinePending ? (
@@ -1785,57 +2045,85 @@ export function ThreadDetailView() {
     parsedGitDiffFileEntries.every(({ key }) => collapsedGitDiffFileKeys.has(key));
 
   return (
-    <div className="-mx-4 -mb-4 -mt-4 flex h-full min-h-0 min-w-0 flex-1 overflow-hidden md:-mx-5 md:-mb-5 md:-mt-5">
-      <PanelGroup direction="horizontal" className="h-full w-full min-w-0">
-        <Panel
-          id="thread-detail-timeline-panel"
-          defaultSize={
-            isGitDiffPanelOpen
-              ? TIMELINE_PANEL_DEFAULT_SIZE_PERCENT
-              : CLOSED_TIMELINE_PANEL_SIZE_PERCENT
+    <>
+      <div className="-mx-4 -mb-4 -mt-4 flex h-full min-h-0 min-w-0 flex-1 overflow-hidden md:-mx-5 md:-mb-5 md:-mt-5">
+        <PanelGroup direction="horizontal" className="h-full w-full min-w-0">
+          <Panel
+            id="thread-detail-timeline-panel"
+            defaultSize={
+              isSecondaryPanelOpen
+                ? TIMELINE_PANEL_DEFAULT_SIZE_PERCENT
+                : CLOSED_TIMELINE_PANEL_SIZE_PERCENT
+            }
+            minSize={30}
+            order={1}
+            className="min-w-0 overflow-hidden"
+          >
+            <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
+              {timelineHeader}
+              {conversationShell}
+            </div>
+          </Panel>
+          <ThreadGitDiffPanel
+            activePanel={activeSecondaryPanel}
+            metadataContent={
+              showThreadMetadata ? (
+                <div>
+                  {renderThreadMetadataCard("rounded-none border-0 bg-transparent px-0 py-0")}
+                </div>
+              ) : (
+                <div className="pt-1 text-sm text-muted-foreground">
+                  No thread details available.
+                </div>
+              )
+            }
+            onPanelChange={openThreadSecondaryPanel}
+            threadId={thread.id}
+            panelRef={gitDiffPanelRef}
+            resizablePanelRef={gitDiffResizablePanelRef}
+            isOpen={isSecondaryPanelOpen}
+            isResizing={isGitDiffPanelResizing}
+            onCollapse={closeThreadSecondaryPanel}
+            onClose={closeThreadSecondaryPanel}
+            onDragging={handleGitDiffPanelDragging}
+            onResize={handleGitDiffPanelResize}
+            gitDiffSelectValue={gitDiffSelectValue}
+            gitDiffSelectOptions={gitDiffSelectOptions}
+            onGitDiffSelectionChange={(value) => {
+              setSelectedGitDiffCommitSha(value === "combined" ? null : value);
+            }}
+            isGitDiffLoading={isGitDiffLoading}
+            gitDiffError={gitDiffError}
+            threadGitDiff={threadGitDiff}
+            currentGitDiff={currentGitDiff}
+            isPreparingGitDiff={isPreparingGitDiff}
+            isParsingGitDiffFiles={isParsingGitDiffFiles}
+            gitDiffStatsLabel={gitDiffStatsLabel}
+            hasParsedGitDiffFiles={hasParsedGitDiffFiles}
+            areAllGitDiffFilesCollapsed={areAllGitDiffFilesCollapsed}
+            onToggleAllFiles={toggleAllGitDiffFilesCollapsed}
+            gitDiffDisplayMode={gitDiffDisplayMode}
+            onGitDiffDisplayModeChange={handleGitDiffDisplayModeChange}
+            parsedGitDiffFileEntries={parsedGitDiffFileEntries}
+            collapsedGitDiffFileKeys={collapsedGitDiffFileKeys}
+            queuedGitDiffFileRenderKeys={queuedGitDiffFileRenderKeysRef.current}
+            loadingGitDiffFileKeys={loadingGitDiffFileKeys}
+            setGitDiffFileRef={setGitDiffFileRef}
+            onToggleGitDiffFileCollapsed={toggleGitDiffFileCollapsed}
+            gitDiffViewOptions={gitDiffViewOptions}
+          />
+        </PanelGroup>
+      </div>
+      <ThreadRenameDialog
+        target={threadRenameTarget}
+        pending={updateThread.isPending}
+        onOpenChange={(open) => {
+          if (!open) {
+            setThreadRenameTarget(null);
           }
-          minSize={30}
-          order={1}
-          className="min-w-0 overflow-hidden"
-        >
-          {conversationShell}
-        </Panel>
-        <ThreadGitDiffPanel
-          threadId={thread.id}
-          panelRef={gitDiffPanelRef}
-          resizablePanelRef={gitDiffResizablePanelRef}
-          isOpen={isGitDiffPanelOpen}
-          isResizing={isGitDiffPanelResizing}
-          onCollapse={closeThreadGitDiffPanel}
-          onClose={closeThreadGitDiffPanel}
-          onDragging={handleGitDiffPanelDragging}
-          onResize={handleGitDiffPanelResize}
-          gitDiffSelectValue={gitDiffSelectValue}
-          gitDiffSelectOptions={gitDiffSelectOptions}
-          onGitDiffSelectionChange={(value) => {
-            setSelectedGitDiffCommitSha(value === "combined" ? null : value);
-          }}
-          isGitDiffLoading={isGitDiffLoading}
-          gitDiffError={gitDiffError}
-          threadGitDiff={threadGitDiff}
-          currentGitDiff={currentGitDiff}
-          isPreparingGitDiff={isPreparingGitDiff}
-          isParsingGitDiffFiles={isParsingGitDiffFiles}
-          gitDiffStatsLabel={gitDiffStatsLabel}
-          hasParsedGitDiffFiles={hasParsedGitDiffFiles}
-          areAllGitDiffFilesCollapsed={areAllGitDiffFilesCollapsed}
-          onToggleAllFiles={toggleAllGitDiffFilesCollapsed}
-          gitDiffDisplayMode={gitDiffDisplayMode}
-          onGitDiffDisplayModeChange={handleGitDiffDisplayModeChange}
-          parsedGitDiffFileEntries={parsedGitDiffFileEntries}
-          collapsedGitDiffFileKeys={collapsedGitDiffFileKeys}
-          queuedGitDiffFileRenderKeys={queuedGitDiffFileRenderKeysRef.current}
-          loadingGitDiffFileKeys={loadingGitDiffFileKeys}
-          setGitDiffFileRef={setGitDiffFileRef}
-          onToggleGitDiffFileCollapsed={toggleGitDiffFileCollapsed}
-          gitDiffViewOptions={gitDiffViewOptions}
-        />
-      </PanelGroup>
-    </div>
+        }}
+        onRename={submitThreadRename}
+      />
+    </>
   );
 }

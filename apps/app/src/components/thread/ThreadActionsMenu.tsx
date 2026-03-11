@@ -39,7 +39,7 @@ export function ThreadActionsMenu({
           variant="ghost"
           size="icon"
           className={cn(
-            "data-[state=open]:bg-accent data-[state=open]:text-foreground",
+            "rounded-md p-0 text-muted-foreground hover:bg-accent/45 hover:text-foreground data-[state=open]:bg-accent/35 data-[state=open]:text-foreground",
             triggerClassName
           )}
           aria-label="Thread actions"
@@ -50,7 +50,7 @@ export function ThreadActionsMenu({
             event.stopPropagation()
           }}
         >
-          <MoreHorizontal className="size-4" />
+          <MoreHorizontal className="size-3.5" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align={align} className="w-44">

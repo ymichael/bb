@@ -1,4 +1,11 @@
-import { type CSSProperties, type Ref } from "react";
+import {
+  type CSSProperties,
+  type ReactNode,
+  type Ref,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import {
   Check,
   ChevronDown,
@@ -6,12 +13,14 @@ import {
   ChevronsDown,
   ChevronsUp,
   Columns2,
+  FileDiff as FileDiffIcon,
   GripVertical,
+  Info,
   Loader2,
   Rows2,
   X,
 } from "lucide-react";
-import { FileDiff } from "@pierre/diffs/react";
+import { FileDiff as DiffView } from "@pierre/diffs/react";
 import {
   type ImperativePanelHandle,
   Panel,
@@ -28,6 +37,7 @@ import {
 import { openThreadPathInEditor } from "@/lib/api";
 import { getPathCommandForTarget } from "@/lib/open-path-preferences";
 import { cn } from "@/lib/utils";
+import { type ThreadSecondaryPanel } from "@/lib/thread-git-diff-panel";
 import {
   formatGitDiffFileLabel,
   getOpenableGitDiffPath,
@@ -165,7 +175,151 @@ function GitDiffSelector({
   );
 }
 
+function useIsStuck(ref: { current: HTMLDivElement | null }) {
+  const [isStuck, setIsStuck] = useState(false);
+
+  useEffect(() => {
+    if (typeof IntersectionObserver === "undefined" || !ref.current) {
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        setIsStuck(!(entries[0]?.isIntersecting ?? true));
+      },
+      { threshold: 1 },
+    );
+
+    observer.observe(ref.current);
+    return () => {
+      observer.disconnect();
+    };
+  }, [ref]);
+
+  return isStuck;
+}
+
+function GitDiffFileCard({
+  fileKey,
+  fileDiff,
+  threadId,
+  isCollapsed,
+  isRendering,
+  setGitDiffFileRef,
+  onToggleGitDiffFileCollapsed,
+  gitDiffViewOptions,
+}: {
+  fileKey: string;
+  fileDiff: ParsedGitDiffFile;
+  threadId: string;
+  isCollapsed: boolean;
+  isRendering: boolean;
+  setGitDiffFileRef: (fileKey: string, element: HTMLDivElement | null) => void;
+  onToggleGitDiffFileCollapsed: (fileKey: string) => void;
+  gitDiffViewOptions: Record<string, string | boolean>;
+}) {
+  const sentinelRef = useRef<HTMLDivElement>(null);
+  const isHeaderStuck = useIsStuck(sentinelRef);
+  const fileDiffStats = summarizeGitDiffFile(fileDiff);
+  const fileDiffLabel = formatGitDiffFileLabel(fileDiff);
+  const openablePath = getOpenableGitDiffPath(fileDiff);
+  const canOpenFile = Boolean(openablePath);
+
+  return (
+    <div
+      ref={(element) => setGitDiffFileRef(fileKey, element)}
+      className="rounded-lg border border-border/70 bg-background shadow-sm"
+    >
+      <div ref={sentinelRef} className="h-0" />
+      <div
+        className={cn(
+          "sticky top-0 z-30 rounded-lg bg-background px-3 py-1.5 text-xs font-medium text-foreground",
+          !isCollapsed && "rounded-b-none",
+          isHeaderStuck && "rounded-t-none",
+        )}
+      >
+        <div className="flex w-full min-w-0 items-center justify-between gap-2">
+          <span className="flex min-w-0 items-center gap-1.5">
+            <button
+              type="button"
+              className="inline-flex size-5 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent/70 hover:text-foreground"
+              onClick={() => onToggleGitDiffFileCollapsed(fileKey)}
+              aria-label={`${isCollapsed ? "Expand" : "Collapse"} ${fileDiffLabel}`}
+              aria-expanded={!isCollapsed}
+            >
+              <ChevronRight
+                className={cn(
+                  "size-3.5 shrink-0 transition-transform duration-150",
+                  !isCollapsed && "rotate-90",
+                )}
+              />
+            </button>
+            {canOpenFile && openablePath ? (
+              <button
+                type="button"
+                className="block min-w-0 truncate text-left underline-offset-2 hover:underline"
+                title={fileDiffLabel}
+                onClick={() => {
+                  void openThreadPathInEditor(threadId, {
+                    relativePath: openablePath,
+                    target: "file",
+                    command: getPathCommandForTarget("file"),
+                  });
+                }}
+              >
+                {fileDiffLabel}
+              </button>
+            ) : (
+              <span
+                className="block min-w-0 truncate"
+                title={fileDiffLabel}
+              >
+                {fileDiffLabel}
+              </span>
+            )}
+          </span>
+          <span className="shrink-0 whitespace-nowrap text-xs text-muted-foreground">
+            +{fileDiffStats.additions} -{fileDiffStats.deletions}
+          </span>
+        </div>
+      </div>
+      {!isCollapsed ? (
+        <div className="overflow-hidden rounded-b-lg bg-background">
+          {isRendering ? (
+            <div className="space-y-1.5 px-3 py-3">
+              <Skeleton className="h-3 w-full rounded-sm" />
+              <Skeleton className="h-3 w-[96%] rounded-sm" />
+              <Skeleton className="h-3 w-[93%] rounded-sm" />
+              <Skeleton className="h-3 w-[90%] rounded-sm" />
+              <Skeleton className="h-3 w-[87%] rounded-sm" />
+              <Skeleton className="h-3 w-[84%] rounded-sm" />
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <div
+                className="w-full max-w-full"
+                style={GIT_DIFF_VIEW_STYLE}
+              >
+                <DiffView
+                  fileDiff={fileDiff}
+                  options={{
+                    ...gitDiffViewOptions,
+                    disableFileHeader: true,
+                  }}
+                />
+              </div>
+            </div>
+          )}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export function ThreadGitDiffPanel({
+  activePanel,
+  metadataContent,
+  onPanelChange,
   threadId,
   panelRef,
   resizablePanelRef,
@@ -198,6 +352,9 @@ export function ThreadGitDiffPanel({
   onToggleGitDiffFileCollapsed,
   gitDiffViewOptions,
 }: {
+  activePanel: ThreadSecondaryPanel | null;
+  metadataContent: ReactNode;
+  onPanelChange: (panel: ThreadSecondaryPanel) => void;
   threadId: string;
   panelRef: Ref<HTMLElement>;
   resizablePanelRef: Ref<ImperativePanelHandle>;
@@ -230,6 +387,7 @@ export function ThreadGitDiffPanel({
   onToggleGitDiffFileCollapsed: (fileKey: string) => void;
   gitDiffViewOptions: Record<string, string | boolean>;
 }) {
+  const isDiffPanelActive = activePanel === "git-diff";
   const hasCurrentGitDiff = currentGitDiff.trim().length > 0;
 
   return (
@@ -239,12 +397,12 @@ export function ThreadGitDiffPanel({
         disabled={!isOpen}
         onDragging={onDragging}
         className={cn(
-          "group relative shrink-0 cursor-col-resize overflow-hidden bg-transparent transition-[width,opacity,background-color]",
+          "group relative shrink-0 cursor-col-resize overflow-visible bg-transparent transition-[width,opacity,background-color] before:absolute before:inset-y-0 before:-left-1.5 before:-right-1.5 before:content-['']",
           GIT_DIFF_PANEL_TRANSITION_CLASS,
-          isOpen ? "w-3 opacity-100" : "pointer-events-none w-0 opacity-0",
+          isOpen ? "w-px opacity-100" : "pointer-events-none w-0 opacity-0",
           isResizing && "bg-accent/20",
         )}
-        aria-label="Resize thread and git diff panels"
+        aria-label="Resize thread and secondary panels"
       >
         <span
           className={cn(
@@ -284,242 +442,214 @@ export function ThreadGitDiffPanel({
           ref={panelRef}
           aria-hidden={!isOpen}
           className={cn(
-            "flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden border-l border-border/80 bg-card/55 shadow-[-10px_0_28px_-22px_rgba(0,0,0,0.42)] transition-[transform,opacity,background-color,box-shadow]",
+            "flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background transition-[transform,opacity,background-color]",
             GIT_DIFF_PANEL_TRANSITION_CLASS,
-            isOpen
-              ? "translate-x-0 opacity-100"
-              : "pointer-events-none translate-x-[8%] opacity-0 shadow-none",
+            isOpen ? "opacity-100" : "pointer-events-none translate-x-[8%] opacity-0",
           )}
         >
-          <div className="border-b border-border/80 bg-card/80 px-4 py-3 backdrop-blur-sm">
-            <div className="flex min-w-0 items-start gap-3">
-              <div className="min-w-0 flex-1">
-                <div className="flex min-w-0 items-center gap-2">
-                  <h2 className="truncate text-sm font-semibold text-foreground">
-                    Git diff
-                  </h2>
-                  {isParsingGitDiffFiles ? (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-muted/80 px-2 py-0.5 text-xs text-muted-foreground">
-                      <Loader2 className="size-3 animate-spin" />
-                      Parsing
-                    </span>
-                  ) : null}
-                </div>
-                <p
-                  className="mt-1 truncate text-xs text-muted-foreground"
-                  title={gitDiffStatsLabel}
+          <div className="bg-background">
+            <div className="flex h-12 min-w-0 items-center justify-between gap-3 px-4">
+              <div
+                className="inline-flex items-center gap-1"
+                role="tablist"
+                aria-label="Secondary panel views"
+              >
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className={cn(
+                    "h-7 w-7 rounded-md p-0",
+                    activePanel === "thread-info"
+                      ? "bg-accent/35 text-foreground hover:bg-accent/45"
+                      : "text-muted-foreground hover:bg-muted/45 hover:text-foreground",
+                  )}
+                  onClick={() => onPanelChange("thread-info")}
+                  aria-label="Show thread info panel"
+                  aria-pressed={activePanel === "thread-info"}
+                  title="Info"
                 >
-                  {gitDiffStatsLabel}
-                </p>
+                  <Info className="size-3.5" />
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className={cn(
+                    "h-7 w-7 rounded-md p-0",
+                    isDiffPanelActive
+                      ? "bg-accent/35 text-foreground hover:bg-accent/45"
+                      : "text-muted-foreground hover:bg-muted/45 hover:text-foreground",
+                  )}
+                  onClick={() => onPanelChange("git-diff")}
+                  aria-label="Show diff panel"
+                  aria-pressed={isDiffPanelActive}
+                  title="Diff"
+                >
+                  <FileDiffIcon className="size-3.5" />
+                </Button>
               </div>
               <Button
                 type="button"
                 variant="ghost"
                 size="icon"
-                className="h-8 w-8 shrink-0 rounded-md text-muted-foreground hover:bg-accent/70 hover:text-foreground"
+                className="h-7 w-7 shrink-0 rounded-md p-0 text-muted-foreground hover:bg-accent/45 hover:text-foreground"
                 onClick={onClose}
-                aria-label="Close git diff panel"
-                title="Close git diff panel"
+                aria-label="Close secondary panel"
+                title="Close secondary panel"
               >
-                <X className="size-4" />
+                <X className="size-3.5" />
               </Button>
             </div>
-            <div className="mt-3 flex min-w-0 items-center gap-2">
-              <div className="min-w-0 flex-1">
-                <GitDiffSelector
-                  value={gitDiffSelectValue}
-                  options={gitDiffSelectOptions}
-                  onChange={onGitDiffSelectionChange}
-                  disabled={isGitDiffLoading || threadGitDiff === undefined}
-                />
-              </div>
-              <div className="ml-auto flex min-w-0 shrink-0 items-center justify-end gap-1">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 w-7 rounded-md p-0 text-muted-foreground hover:bg-accent/70 hover:text-foreground"
-                  onClick={onToggleAllFiles}
-                  disabled={!hasParsedGitDiffFiles || isGitDiffLoading}
-                  aria-label={
-                    areAllGitDiffFilesCollapsed ? "Expand all files" : "Collapse all files"
-                  }
-                  title={
-                    areAllGitDiffFilesCollapsed ? "Expand all files" : "Collapse all files"
-                  }
-                >
-                  {areAllGitDiffFilesCollapsed ? (
-                    <ChevronsDown className="size-3.5" />
-                  ) : (
-                    <ChevronsUp className="size-3.5" />
-                  )}
-                </Button>
-                <div className="inline-flex items-center rounded-lg border border-border/70 bg-background/80 p-0.5 shadow-sm">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className={cn(
-                      "h-6 w-6 rounded-md p-0",
-                      gitDiffDisplayMode === "unified"
-                        ? "bg-accent/80 text-foreground"
-                        : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
-                    )}
-                    onClick={() => onGitDiffDisplayModeChange("unified")}
-                    aria-label="Stacked diff view"
-                    title="Stacked diff view"
+            {isDiffPanelActive ? (
+              <div className="px-4 pb-3">
+                <div className="flex min-w-0 items-center gap-3">
+                  <div className="min-w-0 flex-1">
+                    <GitDiffSelector
+                      value={gitDiffSelectValue}
+                      options={gitDiffSelectOptions}
+                      onChange={onGitDiffSelectionChange}
+                      disabled={isGitDiffLoading || threadGitDiff === undefined}
+                    />
+                  </div>
+                  <span
+                    className="min-w-0 shrink truncate text-xs text-muted-foreground"
+                    title={gitDiffStatsLabel}
                   >
-                    <Rows2 className="size-3.5" />
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className={cn(
-                      "h-6 w-6 rounded-md p-0",
-                      gitDiffDisplayMode === "split"
-                        ? "bg-accent/80 text-foreground"
-                        : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
-                    )}
-                    onClick={() => onGitDiffDisplayModeChange("split")}
-                    aria-label="Split diff view"
-                    title="Split diff view"
-                  >
-                    <Columns2 className="size-3.5" />
-                  </Button>
+                    {gitDiffStatsLabel}
+                  </span>
+                  {isParsingGitDiffFiles ? (
+                    <span className="inline-flex shrink-0 items-center gap-1 text-xs text-muted-foreground">
+                      <Loader2 className="size-3 animate-spin" />
+                      Parsing
+                    </span>
+                  ) : null}
+                  <div className="ml-auto flex min-w-0 shrink-0 items-center justify-end gap-1">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 w-7 rounded-md p-0 text-muted-foreground hover:bg-accent/70 hover:text-foreground"
+                      onClick={onToggleAllFiles}
+                      disabled={!hasParsedGitDiffFiles || isGitDiffLoading}
+                      aria-label={
+                        areAllGitDiffFilesCollapsed ? "Expand all files" : "Collapse all files"
+                      }
+                      title={
+                        areAllGitDiffFilesCollapsed ? "Expand all files" : "Collapse all files"
+                      }
+                    >
+                      {areAllGitDiffFilesCollapsed ? (
+                        <ChevronsDown className="size-3.5" />
+                      ) : (
+                        <ChevronsUp className="size-3.5" />
+                      )}
+                    </Button>
+                    <div className="inline-flex items-center rounded-lg border border-border/70 bg-background p-0.5 shadow-sm">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className={cn(
+                          "h-6 w-6 rounded-md p-0",
+                          gitDiffDisplayMode === "unified"
+                            ? "bg-accent/35 text-foreground hover:bg-accent/45"
+                            : "text-muted-foreground hover:bg-muted/45 hover:text-foreground",
+                        )}
+                        onClick={() => onGitDiffDisplayModeChange("unified")}
+                        aria-label="Stacked diff view"
+                        title="Stacked diff view"
+                      >
+                        <Rows2 className="size-3.5" />
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className={cn(
+                          "h-6 w-6 rounded-md p-0",
+                          gitDiffDisplayMode === "split"
+                            ? "bg-accent/35 text-foreground hover:bg-accent/45"
+                            : "text-muted-foreground hover:bg-muted/45 hover:text-foreground",
+                        )}
+                        onClick={() => onGitDiffDisplayModeChange("split")}
+                        aria-label="Split diff view"
+                        title="Split diff view"
+                      >
+                        <Columns2 className="size-3.5" />
+                      </Button>
+                    </div>
+                  </div>
                 </div>
               </div>
-            </div>
+            ) : null}
           </div>
-          <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-4 pb-3 pt-3">
-            {isPreparingGitDiff ? (
-              <GitDiffPanelSkeleton />
-            ) : gitDiffError ? (
-              <p className="rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2 text-xs text-destructive">
-                {gitDiffError instanceof Error
-                  ? gitDiffError.message
-                  : "Failed to load git diff"}
-              </p>
-            ) : threadGitDiff && hasCurrentGitDiff ? (
-              <>
-                {parsedGitDiffFileEntries.length > 0 ? (
-                  <div className="space-y-2 pt-2">
-                    {parsedGitDiffFileEntries.map(({ key, fileDiff }) => {
-                      const isCollapsed = collapsedGitDiffFileKeys.has(key);
-                      const hasQueuedFileRender = queuedGitDiffFileRenderKeys.has(key);
-                      const isRendering =
-                        !hasQueuedFileRender || loadingGitDiffFileKeys.has(key);
-                      const fileDiffStats = summarizeGitDiffFile(fileDiff);
-                      const fileDiffLabel = formatGitDiffFileLabel(fileDiff);
-                      const openablePath = getOpenableGitDiffPath(fileDiff);
-                      const canOpenFile = Boolean(openablePath);
+          <div
+            className={cn(
+              "min-h-0 flex-1 overflow-x-hidden overflow-y-auto bg-background px-3 pb-3",
+              isDiffPanelActive ? "pt-0" : "pt-1",
+            )}
+          >
+            {isDiffPanelActive ? (
+              isPreparingGitDiff ? (
+                <GitDiffPanelSkeleton />
+              ) : gitDiffError ? (
+                <p className="rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+                  {gitDiffError instanceof Error
+                    ? gitDiffError.message
+                    : "Failed to load git diff"}
+                </p>
+              ) : threadGitDiff && hasCurrentGitDiff ? (
+                <>
+                  {parsedGitDiffFileEntries.length > 0 ? (
+                    <div className="space-y-2">
+                      {parsedGitDiffFileEntries.map(({ key, fileDiff }) => {
+                        const isCollapsed = collapsedGitDiffFileKeys.has(key);
+                        const hasQueuedFileRender = queuedGitDiffFileRenderKeys.has(key);
+                        const isRendering =
+                          !hasQueuedFileRender || loadingGitDiffFileKeys.has(key);
 
-                      return (
-                        <div
-                          key={key}
-                          ref={(element) => setGitDiffFileRef(key, element)}
-                          className="rounded-lg border border-border/70 bg-background/70 shadow-sm"
-                        >
-                          <div className="sticky top-0 z-20 border-b border-border/70 bg-card/80 px-3 py-1.5 text-xs font-medium text-foreground backdrop-blur-sm">
-                            <div className="flex w-full min-w-0 items-center justify-between gap-2">
-                              <span className="flex min-w-0 items-center gap-1.5">
-                                <button
-                                  type="button"
-                                  className="inline-flex size-5 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent/70 hover:text-foreground"
-                                  onClick={() => onToggleGitDiffFileCollapsed(key)}
-                                  aria-label={`${isCollapsed ? "Expand" : "Collapse"} ${fileDiffLabel}`}
-                                  aria-expanded={!isCollapsed}
-                                >
-                                  <ChevronRight
-                                    className={cn(
-                                      "size-3.5 shrink-0 transition-transform duration-150",
-                                      !isCollapsed && "rotate-90",
-                                    )}
-                                  />
-                                </button>
-                                {canOpenFile && openablePath ? (
-                                  <button
-                                    type="button"
-                                    className="block min-w-0 truncate text-left underline-offset-2 hover:underline"
-                                    title={fileDiffLabel}
-                                    onClick={() => {
-                                      void openThreadPathInEditor(threadId, {
-                                        relativePath: openablePath,
-                                        target: "file",
-                                        command: getPathCommandForTarget("file"),
-                                      });
-                                    }}
-                                  >
-                                    {fileDiffLabel}
-                                  </button>
-                                ) : (
-                                  <span
-                                    className="block min-w-0 truncate"
-                                    title={fileDiffLabel}
-                                  >
-                                    {fileDiffLabel}
-                                  </span>
-                                )}
-                              </span>
-                              <span className="shrink-0 whitespace-nowrap text-xs text-muted-foreground">
-                                +{fileDiffStats.additions} -{fileDiffStats.deletions}
-                              </span>
-                            </div>
+                        return (
+                          <GitDiffFileCard
+                            key={key}
+                            fileKey={key}
+                            fileDiff={fileDiff}
+                            threadId={threadId}
+                            isCollapsed={isCollapsed}
+                            isRendering={isRendering}
+                            setGitDiffFileRef={setGitDiffFileRef}
+                            onToggleGitDiffFileCollapsed={onToggleGitDiffFileCollapsed}
+                            gitDiffViewOptions={gitDiffViewOptions}
+                          />
+                        );
+                      })}
+                      {isParsingGitDiffFiles ? (
+                        <div className="rounded-lg border border-border/70 bg-background/70 px-3 py-3 shadow-sm">
+                          <div className="space-y-1.5">
+                            <Skeleton className="h-3 w-52 max-w-full rounded-sm" />
+                            <Skeleton className="h-3 w-5/6 rounded-sm" />
                           </div>
-                          {!isCollapsed ? (
-                            isRendering ? (
-                              <div className="space-y-1.5 px-3 py-3">
-                                <Skeleton className="h-3 w-full rounded-sm" />
-                                <Skeleton className="h-3 w-[96%] rounded-sm" />
-                                <Skeleton className="h-3 w-[93%] rounded-sm" />
-                                <Skeleton className="h-3 w-[90%] rounded-sm" />
-                                <Skeleton className="h-3 w-[87%] rounded-sm" />
-                                <Skeleton className="h-3 w-[84%] rounded-sm" />
-                              </div>
-                            ) : (
-                              <div className="overflow-x-auto">
-                                <div
-                                  className="w-full max-w-full"
-                                  style={GIT_DIFF_VIEW_STYLE}
-                                >
-                                  <FileDiff
-                                    fileDiff={fileDiff}
-                                    options={{
-                                      ...gitDiffViewOptions,
-                                      disableFileHeader: true,
-                                    }}
-                                  />
-                                </div>
-                              </div>
-                            )
-                          ) : null}
                         </div>
-                      );
-                    })}
-                    {isParsingGitDiffFiles ? (
-                      <div className="rounded-lg border border-border/70 bg-background/70 px-3 py-3 shadow-sm">
-                        <div className="space-y-1.5">
-                          <Skeleton className="h-3 w-52 max-w-full rounded-sm" />
-                          <Skeleton className="h-3 w-5/6 rounded-sm" />
-                        </div>
-                      </div>
-                    ) : null}
-                  </div>
-                ) : (
-                  <pre className="overflow-auto whitespace-pre rounded-lg border border-border/70 bg-background/70 p-3 font-mono text-xs text-foreground shadow-sm">
-                    {threadGitDiff.diff}
-                  </pre>
-                )}
-                {threadGitDiff.truncated ? (
-                  <p className="pt-2 text-xs text-muted-foreground">
-                    Diff output was truncated for display.
-                  </p>
-                ) : null}
-              </>
+                      ) : null}
+                    </div>
+                  ) : (
+                    <pre className="overflow-auto whitespace-pre rounded-lg border border-border/70 bg-background/70 p-3 font-mono text-xs text-foreground shadow-sm">
+                      {threadGitDiff.diff}
+                    </pre>
+                  )}
+                  {threadGitDiff.truncated ? (
+                    <p className="pt-2 text-xs text-muted-foreground">
+                      Diff output was truncated for display.
+                    </p>
+                  ) : null}
+                </>
+              ) : (
+                <p className="rounded-lg border border-dashed border-border/70 bg-background/45 px-3 py-6 text-center text-sm text-muted-foreground">
+                  No diff to display.
+                </p>
+              )
             ) : (
-              <p className="rounded-lg border border-dashed border-border/70 bg-background/45 px-3 py-6 text-center text-sm text-muted-foreground">
-                No diff to display.
-              </p>
+              metadataContent
             )}
           </div>
         </aside>

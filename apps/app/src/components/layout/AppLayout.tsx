@@ -1,11 +1,10 @@
 import { Fragment, type ReactNode } from "react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { Link, useLocation, useNavigate } from "react-router-dom"
+import { Link, useLocation } from "react-router-dom"
 import {
   Archive,
   ChevronRight,
   MoreHorizontal,
-  PanelRight,
   PencilLine,
   Settings,
   X,
@@ -26,36 +25,15 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { AppSidebar } from "./AppSidebar"
 import {
-  useArchiveThread,
-  useMarkThreadRead,
-  useMarkThreadUnread,
   useProjects,
-  useSystemEnvironments,
   useThread,
   useThreads,
-  useUnarchiveThread,
-  useUpdateThread,
 } from "@/hooks/useApi"
-import { ThreadActionsMenu } from "@/components/thread/ThreadActionsMenu"
-import {
-  ThreadRenameDialog,
-  type ThreadRenameDialogTarget,
-} from "@/components/thread/ThreadRenameDialog"
 import { getThreadDisplayTitle } from "@/lib/thread-title"
-import { cn } from "@/lib/utils"
 import {
   formatThreadActivitySummaryForTitle,
   summarizeThreadActivity,
 } from "@/lib/thread-activity"
-import {
-  isThreadGitDiffPanelOpen,
-  withThreadGitDiffPanelOpen,
-} from "@/lib/thread-git-diff-panel"
-import {
-  isArchiveForceRequiredError,
-  requiresArchiveConfirmation,
-} from "@/lib/thread-archive"
-import { toast } from "sonner"
 
 const SIDEBAR_WIDTH_KEY = "beanbag.sidebar.width"
 const SIDEBAR_MIN_WIDTH = 240
@@ -80,7 +58,6 @@ interface AppHeaderProps {
     subtitle?: string
     breadcrumbs?: Array<{ label: string; to?: string }>
   }
-  titleEndSlot?: ReactNode
 }
 
 function AppHeader({
@@ -88,7 +65,6 @@ function AppHeader({
   projectMatch,
   projectName,
   meta,
-  titleEndSlot,
 }: AppHeaderProps) {
   const { isMobile, open, openMobile } = useSidebar()
   const isSidebarCollapsed = isMobile ? !openMobile : !open
@@ -155,7 +131,6 @@ function AppHeader({
             ) : null}
           </div>
         </div>
-        {titleEndSlot ? <div className="mr-2">{titleEndSlot}</div> : null}
         {isProjectMainView && projectMatch ? (
           <div className="mr-2 flex items-center gap-1">
             <Link
@@ -210,20 +185,8 @@ function AppHeader({
 
 export function AppLayout({ children }: { children: ReactNode }) {
   const location = useLocation()
-  const navigate = useNavigate()
   const { data: projects, isLoading: projectsLoading } = useProjects()
-  const { data: environments } = useSystemEnvironments()
-  const environmentById = useMemo(
-    () => new Map((environments ?? []).map((environment) => [environment.id, environment])),
-    [environments],
-  )
   const { data: threads } = useThreads()
-  const archiveThread = useArchiveThread()
-  const unarchiveThread = useUnarchiveThread()
-  const markThreadRead = useMarkThreadRead()
-  const markThreadUnread = useMarkThreadUnread()
-  const updateThread = useUpdateThread()
-  const showHeader = location.pathname !== "/"
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
     if (typeof window === "undefined") return SIDEBAR_DEFAULT_WIDTH
@@ -238,9 +201,6 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const startWidthRef = useRef(0)
   const liveWidthRef = useRef(sidebarWidth)
   const animationFrameRef = useRef<number | null>(null)
-  const [threadRenameTarget, setThreadRenameTarget] = useState<ThreadRenameDialogTarget | null>(
-    null
-  )
 
   const projectMatch = location.pathname.match(/^\/projects\/([^/]+)(?:\/|$)/)
   const projectThreadMatch = location.pathname.match(
@@ -249,6 +209,8 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const projectArchivedMatch = location.pathname.match(/^\/projects\/([^/]+)\/archived(?:\/|$)/)
   const projectSettingsMatch = location.pathname.match(/^\/projects\/([^/]+)\/settings(?:\/|$)/)
   const threadMatch = projectThreadMatch
+  const showHeader = location.pathname !== "/" && !threadMatch
+  const showFloatingSidebarTrigger = location.pathname === "/"
   const isProjectMainView = Boolean(
     projectMatch && !threadMatch && !projectSettingsMatch && !projectArchivedMatch
   )
@@ -262,10 +224,6 @@ export function AppLayout({ children }: { children: ReactNode }) {
     projectName ??
     (projectId ? (projectsLoading ? "Loading project…" : projectId) : undefined)
   const { data: thread } = useThread(threadId)
-  const threadEnvironmentInfo = useMemo(
-    () => (thread?.environmentId ? environmentById.get(thread.environmentId) : undefined),
-    [environmentById, thread?.environmentId],
-  )
   const threadDisplayTitle = thread
     ? getThreadDisplayTitle(thread)
     : threadId
@@ -286,149 +244,6 @@ export function AppLayout({ children }: { children: ReactNode }) {
     () => formatThreadActivitySummaryForTitle(summarizeThreadActivity(threads ?? [])),
     [threads]
   )
-  const renameThread = useCallback(() => {
-    if (!thread || updateThread.isPending) return
-    setThreadRenameTarget({
-      id: thread.id,
-      currentTitle: getThreadDisplayTitle(thread),
-    })
-  }, [thread, updateThread.isPending])
-
-  const submitThreadRename = useCallback(
-    (threadId: string, title: string) => {
-      updateThread.mutate(
-        {
-          id: threadId,
-          title,
-        },
-        {
-          onSuccess: () => {
-            setThreadRenameTarget(null)
-          },
-        }
-      )
-    },
-    [updateThread]
-  )
-
-  const toggleArchiveThread = useCallback(() => {
-    if (!thread) return
-    if (thread.archivedAt !== undefined) {
-      unarchiveThread.mutate({ id: thread.id })
-      return
-    }
-
-    const archiveWithForce = () => {
-      archiveThread.mutate({ id: thread.id, force: true }, {
-        onSuccess: () => {
-          navigate(`/projects/${thread.projectId}`)
-        },
-        onError: (error) => {
-          toast.error(
-            error instanceof Error ? error.message : "Failed to archive thread.",
-          )
-        },
-      })
-    }
-
-    if (requiresArchiveConfirmation(thread.workStatus, threadEnvironmentInfo)) {
-      const confirmed = window.confirm(
-        "This thread has uncommitted or unmerged work. Archive anyway?"
-      )
-      if (!confirmed) {
-        return
-      }
-      archiveWithForce()
-      return
-    }
-
-    archiveThread.mutate({ id: thread.id }, {
-      onSuccess: () => {
-        navigate(`/projects/${thread.projectId}`)
-      },
-      onError: (error) => {
-        if (isArchiveForceRequiredError(error)) {
-          const confirmed = window.confirm(
-            "This thread has uncommitted or unmerged work. Archive anyway?"
-          )
-          if (confirmed) {
-            archiveWithForce()
-          }
-          return
-        }
-        toast.error(
-          error instanceof Error ? error.message : "Failed to archive thread.",
-        )
-      },
-    })
-  }, [
-    archiveThread,
-    navigate,
-    thread,
-    threadEnvironmentInfo,
-    unarchiveThread,
-  ])
-
-  const gitDiffPanelOpen = threadMatch
-    ? isThreadGitDiffPanelOpen(location.search)
-    : false
-
-  const toggleGitDiffPanel = useCallback(() => {
-    if (!threadMatch) return
-    const nextSearch = withThreadGitDiffPanelOpen(location.search, !gitDiffPanelOpen)
-    navigate({
-      pathname: location.pathname,
-      search: nextSearch.length > 0 ? `?${nextSearch}` : "",
-    }, { replace: true })
-  }, [gitDiffPanelOpen, location.pathname, location.search, navigate, threadMatch])
-
-  const threadActionsMenu = thread ? (
-    <ThreadActionsMenu
-      triggerClassName="h-7 w-7 text-muted-foreground"
-      disabled={
-        archiveThread.isPending ||
-        unarchiveThread.isPending ||
-        markThreadRead.isPending ||
-        markThreadUnread.isPending ||
-        updateThread.isPending
-      }
-      align="end"
-      isRead={(thread.lastReadAt ?? 0) >= thread.updatedAt}
-      onToggleRead={() => {
-        if ((thread.lastReadAt ?? 0) >= thread.updatedAt) {
-          markThreadUnread.mutate(thread.id)
-          return
-        }
-        markThreadRead.mutate(thread.id)
-      }}
-      onRename={renameThread}
-      onToggleArchive={() => {
-        void toggleArchiveThread()
-      }}
-      isArchived={thread.archivedAt !== undefined}
-    />
-  ) : null
-
-  const threadTitleActions = threadMatch ? (
-    <div className="flex items-center gap-1">
-      {threadActionsMenu}
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon"
-        className={cn(
-          "h-7 w-7 text-muted-foreground",
-          gitDiffPanelOpen && "bg-accent/60 text-foreground hover:bg-accent/70"
-        )}
-        aria-label={gitDiffPanelOpen ? "Hide git diff panel" : "Show git diff panel"}
-        title={gitDiffPanelOpen ? "Hide git diff panel" : "Show git diff panel"}
-        onClick={toggleGitDiffPanel}
-      >
-        <PanelRight className="size-4" />
-      </Button>
-    </div>
-  ) : null
-
   const meta = threadMatch
     ? {
         title: thread ? getThreadDisplayTitle(thread) : "Thread",
@@ -588,7 +403,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
       />
       <SidebarInset>
         <div className="relative flex h-[100dvh] min-w-0 w-full flex-col">
-          {!showHeader ? (
+          {showFloatingSidebarTrigger ? (
             <div className="absolute left-3 top-3.5 z-20">
               <SidebarTrigger className="h-5 w-5 rounded-md p-0" />
             </div>
@@ -599,7 +414,6 @@ export function AppLayout({ children }: { children: ReactNode }) {
               projectMatch={projectMatch}
               projectName={projectLabel}
               meta={meta}
-              titleEndSlot={threadTitleActions}
             />
           ) : null}
           <main className="flex min-h-0 flex-1 flex-col p-4 md:p-5">
@@ -607,16 +421,6 @@ export function AppLayout({ children }: { children: ReactNode }) {
           </main>
         </div>
       </SidebarInset>
-      <ThreadRenameDialog
-        target={threadRenameTarget}
-        pending={updateThread.isPending}
-        onOpenChange={(open) => {
-          if (!open) {
-            setThreadRenameTarget(null)
-          }
-        }}
-        onRename={submitThreadRename}
-      />
     </SidebarProvider>
   )
 }
