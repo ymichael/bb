@@ -432,16 +432,15 @@ export function ThreadDetailView() {
   );
 
   useEffect(() => {
-    if (
-      searchSecondaryPanel === null ||
-      searchSecondaryPanel === persistedSecondaryPanel
-    ) {
+    if (searchSecondaryPanel === null) {
       return;
     }
 
-    setPersistedSecondaryPanel(searchSecondaryPanel);
+    setPersistedSecondaryPanel((currentPanel) =>
+      currentPanel === searchSecondaryPanel ? currentPanel : searchSecondaryPanel,
+    );
     setStoredThreadSecondaryPanel(searchSecondaryPanel);
-  }, [persistedSecondaryPanel, searchSecondaryPanel]);
+  }, [searchSecondaryPanel]);
 
   const threadDetailRows = useMemo(() => timeline?.rows ?? [], [timeline?.rows]);
   const contextWindowUsage = timeline?.contextWindowUsage ?? undefined;
