@@ -161,6 +161,8 @@ export async function startDaemonE2eHarness(
       environmentAgentSessionRepo,
       environmentAgentCursorRepo,
       environmentAgentCommandRepo,
+      dbPath,
+      daemonLogFilePath: join(tempDir, "daemon.log"),
       ...(opts?.port
         ? { daemonBaseUrl: `http://127.0.0.1:${opts.port}/api/v1` }
         : {}),

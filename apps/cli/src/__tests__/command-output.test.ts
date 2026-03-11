@@ -251,6 +251,77 @@ describe("CLI command output contracts", () => {
     expect(lines).toContain("Daemon shutdown requested.");
   });
 
+  it("bb daemon health prints storage and thread summary", async () => {
+    const healthGet = vi.fn(async () =>
+      new Response(
+        JSON.stringify({
+          generatedAt: 1_700_000_000_000,
+          uptime: 3661,
+          projectCount: 2,
+          runningThreads: 1,
+          threadCounts: {
+            total: 4,
+            archived: 1,
+            created: 0,
+            provisioning: 1,
+            provisioningFailed: 0,
+            active: 1,
+            idle: 2,
+          },
+          storage: {
+            totalBytes: 1536,
+            disk: {
+              path: "/Users/test/.beanbag",
+              availableBytes: 4096,
+              totalBytes: 8192,
+              usedBytes: 4096,
+            },
+            buckets: [
+              {
+                key: "worktrees",
+                label: "Worktrees",
+                bytes: 1024,
+                paths: ["/Users/test/.beanbag/worktrees"],
+              },
+            ],
+          },
+        }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      ));
+    createClientMock.mockReturnValue(asDaemonClient({
+      api: {
+        v1: {
+          system: {
+            health: {
+              $get: healthGet,
+            },
+          },
+        },
+      },
+    }));
+    unwrapMock.mockImplementation(async (responsePromise: Promise<unknown>) => {
+      const response = await responsePromise as Response;
+      return response.json();
+    });
+
+    await runCommand(["daemon", "health"], (program) =>
+      registerDaemonCommands(program, () => "http://daemon"),
+    );
+
+    expect(healthGet).toHaveBeenCalledTimes(1);
+    const lines = collectLogLines(vi.mocked(console.log));
+    expect(lines).toContain("Daemon Health");
+    expect(lines).toContain("Projects: 2");
+    expect(lines).toContain("Running threads: 1");
+    expect(lines).toContain("Managed storage: 1.50 KiB");
+    expect(lines).toContain("Storage buckets:");
+    expect(lines).toContain("- Worktrees: 1.00 KiB");
+    expect(lines).toContain("  /Users/test/.beanbag/worktrees");
+  });
+
   it("bb daemon restart exits when shutdown is blocked by active work", async () => {
     const shutdownPost = vi.fn(async () =>
       new Response(

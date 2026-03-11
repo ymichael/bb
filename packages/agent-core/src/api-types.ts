@@ -255,6 +255,54 @@ export interface SystemStatus {
   uptime: number;
 }
 
+export type SystemHealthStorageBucketKey =
+  | "database"
+  | "database_wal"
+  | "database_shm"
+  | "daemon_logs"
+  | "environment_agent_logs"
+  | "environment_agent_state"
+  | "worktrees"
+  | "attachments"
+  | "backups";
+
+export interface SystemHealthStorageBucket {
+  key: SystemHealthStorageBucketKey;
+  label: string;
+  bytes: number;
+  paths: string[];
+}
+
+export interface SystemHealthDiskSummary {
+  path: string;
+  availableBytes: number;
+  totalBytes: number;
+  usedBytes: number;
+}
+
+export interface SystemHealthThreadCounts {
+  total: number;
+  archived: number;
+  created: number;
+  provisioning: number;
+  provisioningFailed: number;
+  active: number;
+  idle: number;
+}
+
+export interface SystemHealthReport {
+  generatedAt: number;
+  uptime: number;
+  projectCount: number;
+  runningThreads: number;
+  threadCounts: SystemHealthThreadCounts;
+  storage: {
+    totalBytes: number;
+    disk?: SystemHealthDiskSummary;
+    buckets: SystemHealthStorageBucket[];
+  };
+}
+
 export type SystemRestartAction =
   | "noop";
 

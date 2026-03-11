@@ -4,6 +4,7 @@ import type {
   AvailableModel,
   OpenPathRequest,
   SystemEnvironmentInfo,
+  SystemHealthReport,
   SystemProviderInfo,
   Thread,
   ThreadOrchestrator,
@@ -77,6 +78,7 @@ describe("System routes", () => {
   let pickFolder: ReturnType<typeof vi.fn<() => Promise<string | null>>>;
   let listModels: ReturnType<typeof vi.fn<() => Promise<AvailableModel[]>>>;
   let getProviderInfo: ReturnType<typeof vi.fn<() => SystemProviderInfo>>;
+  let getHealthReport: ReturnType<typeof vi.fn<() => SystemHealthReport>>;
   let transcribeVoice: ReturnType<
     typeof vi.fn<
       (args: { file: File; prompt?: string }) => Promise<{ text: string }>
@@ -91,12 +93,14 @@ describe("System routes", () => {
     pickFolder = vi.fn();
     listModels = vi.fn();
     getProviderInfo = vi.fn();
+    getHealthReport = vi.fn();
     transcribeVoice = vi.fn().mockResolvedValue({ text: "transcribed prompt" });
     openPath = vi.fn();
     const routes = createSystemRoutes(threadManager, startTime, {
       pickFolder,
       listModels,
       getProviderInfo,
+      getHealthReport,
       transcribeVoice,
       openPath,
     });
@@ -145,6 +149,82 @@ describe("System routes", () => {
       expect(res.status).toBe(500);
       const body = await res.json();
       expect(body.error).toBe("DB connection lost");
+    });
+  });
+
+  describe("GET /system/health", () => {
+    it("returns the provided system health report", async () => {
+      getHealthReport.mockReturnValue({
+        generatedAt: 1_700_000_000_000,
+        uptime: 3600,
+        projectCount: 2,
+        runningThreads: 1,
+        threadCounts: {
+          total: 4,
+          archived: 1,
+          created: 0,
+          provisioning: 1,
+          provisioningFailed: 0,
+          active: 1,
+          idle: 2,
+        },
+        storage: {
+          totalBytes: 4096,
+          buckets: [
+            {
+              key: "worktrees",
+              label: "Worktrees",
+              bytes: 2048,
+              paths: ["/tmp/worktrees"],
+            },
+          ],
+        },
+      });
+
+      const res = await app.request("/system/health");
+
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({
+        generatedAt: 1_700_000_000_000,
+        uptime: 3600,
+        projectCount: 2,
+        runningThreads: 1,
+        threadCounts: {
+          total: 4,
+          archived: 1,
+          created: 0,
+          provisioning: 1,
+          provisioningFailed: 0,
+          active: 1,
+          idle: 2,
+        },
+        storage: {
+          totalBytes: 4096,
+          buckets: [
+            {
+              key: "worktrees",
+              label: "Worktrees",
+              bytes: 2048,
+              paths: ["/tmp/worktrees"],
+            },
+          ],
+        },
+      });
+    });
+
+    it("returns 500 when the health report fails", async () => {
+      getHealthReport.mockImplementation(() => {
+        throw new Error("health lookup failed");
+      });
+
+      const res = await app.request("/system/health");
+
+      expect(res.status).toBe(500);
+      expect(await res.json()).toEqual({
+        code: "internal_error",
+        error: "health lookup failed",
+        message: "health lookup failed",
+      });
     });
   });
 

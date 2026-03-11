@@ -35,6 +35,7 @@ import { EnvironmentAgentEventApplier } from "./environment-agent-event-applier.
 import { EnvironmentAgentSessionManager } from "./environment-agent-session-manager.js";
 import { EnvironmentAgentSessionService } from "./environment-agent-session-service.js";
 import { resolveManagedArtifactSweepIntervalMs } from "./managed-artifact-reconciler.js";
+import { createSystemHealthReporter } from "./system-health-report.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -48,6 +49,8 @@ export interface ServerDeps {
   environmentAgentCommandRepo: EnvironmentAgentCommandRepository;
   provider?: ProviderAdapter;
   daemonBaseUrl?: string;
+  dbPath: string;
+  daemonLogFilePath: string;
   requestShutdown?: (reason: string) => void;
   requestRestart?: (reason: string) => void;
 }
@@ -171,6 +174,15 @@ export function createServer(deps: ServerDeps) {
     requestShutdown: deps.requestShutdown,
     requestRestart: deps.requestRestart,
     shouldRestart: () => restartRecommendationMonitor.shouldRestart(),
+    getHealthReport: createSystemHealthReporter({
+      projectRepo: deps.projectRepo,
+      threadRepo: deps.threadRepo,
+      getRunningCount: () => threadManager.getRunningCount(),
+      startTime,
+      dbPath: deps.dbPath,
+      daemonLogFilePath: deps.daemonLogFilePath,
+      runtimeEnv: daemonRuntimeEnv,
+    }),
   });
 
   const appWithRoutes = app.route("/api/v1", apiRoutes);

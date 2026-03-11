@@ -204,6 +204,8 @@ async function main(): Promise<void> {
       environmentAgentCursorRepo,
       environmentAgentCommandRepo,
       daemonBaseUrl: `http://127.0.0.1:${port}/api/v1`,
+      dbPath,
+      daemonLogFilePath: logFilePath,
       requestShutdown: (reason) => {
         void shutdown(reason);
       },

@@ -10,6 +10,7 @@ import { createThreadRoutes } from "./threads.js";
 import { createSystemRoutes } from "./system.js";
 import type { WSManager } from "../ws.js";
 import type { EnvironmentAgentSessionService } from "../environment-agent-session-service.js";
+import type { SystemHealthReport } from "@beanbag/agent-core";
 
 export interface ApiRouteDeps {
   projectRepo: ProjectRepository;
@@ -22,6 +23,7 @@ export interface ApiRouteDeps {
   requestShutdown?: (reason: string) => void;
   requestRestart?: (reason: string) => void;
   shouldRestart?: () => boolean;
+  getHealthReport?: () => SystemHealthReport;
 }
 
 export function createApiRoutes(deps: ApiRouteDeps) {
@@ -62,6 +64,7 @@ export function createApiRoutes(deps: ApiRouteDeps) {
         requestShutdown: deps.requestShutdown,
         requestRestart: deps.requestRestart,
         shouldRestart: deps.shouldRestart,
+        getHealthReport: deps.getHealthReport,
       }),
     );
 }

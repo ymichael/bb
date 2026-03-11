@@ -9,6 +9,7 @@ import type {
   OpenPathEditor,
   OpenPathRequest,
   SystemEnvironmentInfo,
+  SystemHealthReport,
   SystemProviderInfo,
   Thread,
   SystemStatus,
@@ -36,6 +37,7 @@ type OpenPathFn = (args: OpenPathRequest) => void;
 type RequestShutdownFn = (reason: string) => void;
 type RequestRestartFn = (reason: string) => void;
 type ShouldRestartFn = () => boolean;
+type HealthReportFn = () => SystemHealthReport | Promise<SystemHealthReport>;
 
 export interface CreateSystemRoutesOptions {
   pickFolder?: PickFolderFn;
@@ -48,6 +50,7 @@ export interface CreateSystemRoutesOptions {
   requestShutdown?: RequestShutdownFn;
   requestRestart?: RequestRestartFn;
   shouldRestart?: ShouldRestartFn;
+  getHealthReport?: HealthReportFn;
 }
 
 const openPathSchema = z.object({
@@ -178,6 +181,7 @@ export function createSystemRoutes(
   const requestShutdown = opts.requestShutdown ?? (() => {});
   const requestRestart = opts.requestRestart ?? (() => {});
   const shouldRestart = opts.shouldRestart ?? (() => false);
+  const getHealthReport = opts.getHealthReport;
 
   return new Hono()
     .get("/status", async (c) => {
@@ -192,6 +196,39 @@ export function createSystemRoutes(
         };
 
         return c.json(status);
+      } catch (err) {
+        return sendRouteError(c, err);
+      }
+    })
+    .get("/health", async (c) => {
+      try {
+        if (getHealthReport) {
+          return c.json(await getHealthReport());
+        }
+
+        const threads = threadManager.list({ includeArchived: true });
+        const fallbackReport: SystemHealthReport = {
+          generatedAt: Date.now(),
+          uptime: Math.floor((Date.now() - startTime) / 1000),
+          projectCount: 0,
+          runningThreads: threadManager.getRunningCount(),
+          threadCounts: {
+            total: threads.length,
+            archived: threads.filter((thread) => thread.archivedAt !== undefined).length,
+            created: threads.filter((thread) => thread.status === "created").length,
+            provisioning: threads.filter((thread) => thread.status === "provisioning").length,
+            provisioningFailed: threads.filter(
+              (thread) => thread.status === "provisioning_failed",
+            ).length,
+            active: threads.filter((thread) => thread.status === "active").length,
+            idle: threads.filter((thread) => thread.status === "idle").length,
+          },
+          storage: {
+            totalBytes: 0,
+            buckets: [],
+          },
+        };
+        return c.json(fallbackReport);
       } catch (err) {
         return sendRouteError(c, err);
       }

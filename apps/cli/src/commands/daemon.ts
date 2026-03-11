@@ -1,5 +1,5 @@
 import { Command } from "commander";
-import type { Thread } from "@beanbag/agent-core";
+import type { SystemHealthReport, Thread } from "@beanbag/agent-core";
 import { createClient, unwrap } from "../client.js";
 
 interface ShutdownAcceptedResponse {
@@ -26,8 +26,74 @@ function formatBlockingThread(thread: {
   return `- ${thread.id} (${thread.status}, project ${thread.projectId})`;
 }
 
+function formatBytes(bytes: number): string {
+  const units = ["B", "KiB", "MiB", "GiB", "TiB"];
+  let value = bytes;
+  let unitIndex = 0;
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024;
+    unitIndex += 1;
+  }
+  const digits = unitIndex === 0 ? 0 : value >= 10 ? 1 : 2;
+  return `${value.toFixed(digits)} ${units[unitIndex]}`;
+}
+
+function formatUptime(seconds: number): string {
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const remainingSeconds = seconds % 60;
+  return `${hours}h ${minutes}m ${remainingSeconds}s`;
+}
+
+function printHealthReport(report: SystemHealthReport): void {
+  console.log("Daemon Health");
+  console.log(`Generated: ${new Date(report.generatedAt).toISOString()}`);
+  console.log(`Uptime: ${formatUptime(report.uptime)}`);
+  console.log(`Projects: ${report.projectCount}`);
+  console.log(`Running threads: ${report.runningThreads}`);
+  console.log(
+    "Threads: " +
+      `${report.threadCounts.total} total, ` +
+      `${report.threadCounts.archived} archived, ` +
+      `${report.threadCounts.active} active, ` +
+      `${report.threadCounts.idle} idle, ` +
+      `${report.threadCounts.provisioning} provisioning, ` +
+      `${report.threadCounts.created} created, ` +
+      `${report.threadCounts.provisioningFailed} provisioning_failed`,
+  );
+  console.log(`Managed storage: ${formatBytes(report.storage.totalBytes)}`);
+  if (report.storage.disk) {
+    console.log(
+      `Disk: ${formatBytes(report.storage.disk.availableBytes)} free / ${formatBytes(report.storage.disk.totalBytes)} total at ${report.storage.disk.path}`,
+    );
+  }
+  console.log("Storage buckets:");
+  for (const bucket of report.storage.buckets) {
+    console.log(`- ${bucket.label}: ${formatBytes(bucket.bytes)}`);
+    for (const path of bucket.paths) {
+      console.log(`  ${path}`);
+    }
+  }
+}
+
 export function registerDaemonCommands(program: Command, getUrl: () => string): void {
   const daemon = program.command("daemon").description("Manage daemon lifecycle");
+
+  daemon
+    .command("health")
+    .description("Show daemon health and managed storage usage")
+    .action(async () => {
+      const client = createClient(getUrl());
+      try {
+        const report = await unwrap<SystemHealthReport>(
+          client.api.v1.system.health.$get(),
+        );
+        printHealthReport(report);
+      } catch (err: unknown) {
+        console.error(`Error: ${(err as Error).message}`);
+        process.exit(1);
+      }
+    });
 
   daemon
     .command("restart")
