@@ -137,7 +137,7 @@ export function ThreadFollowUpComposer({
   showScrollToBottom,
   onScrollToBottom,
   showPromptGitStatsBanner,
-  isGitDiffPanelOpen,
+  isDiffPanelActive,
   canExpandPromptChangeList,
   isChangeListExpanded,
   onToggleChangeListExpanded,
@@ -196,7 +196,7 @@ export function ThreadFollowUpComposer({
   showScrollToBottom: boolean;
   onScrollToBottom: () => void;
   showPromptGitStatsBanner: boolean;
-  isGitDiffPanelOpen: boolean;
+  isDiffPanelActive: boolean;
   canExpandPromptChangeList: boolean;
   isChangeListExpanded: boolean;
   onToggleChangeListExpanded: () => void;
@@ -269,7 +269,7 @@ export function ThreadFollowUpComposer({
           <div
             className={cn(
               "mb-2 rounded-md border border-border/60 bg-muted/40 px-3 py-1.5 text-xs text-muted-foreground",
-              !isGitDiffPanelOpen && "cursor-pointer transition-colors hover:bg-muted/55",
+              !isDiffPanelActive && "cursor-pointer transition-colors hover:bg-muted/55",
             )}
             onClick={onPromptGitStatsBannerClick}
           >

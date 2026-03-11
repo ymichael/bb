@@ -66,7 +66,7 @@ describe("threadDetailGitDiff", () => {
     });
   });
 
-  it("parses new-file diffs so untracked files can render in the diff panel", () => {
+  it("parses new-file diffs so untracked files can render in the secondary panel diff view", () => {
     const [file] = parseGitDiffFiles(NEW_FILE_DIFF);
     expect(file).toBeDefined();
     if (!file) return;

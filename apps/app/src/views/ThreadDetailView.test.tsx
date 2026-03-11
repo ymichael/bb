@@ -323,8 +323,8 @@ vi.mock("@/components/thread/ThreadGitActionDialog", () => ({
   ThreadGitActionDialog: () => null,
 }));
 
-vi.mock("./ThreadGitDiffPanel", () => ({
-  ThreadGitDiffPanel: ({
+vi.mock("./ThreadSecondaryPanel", () => ({
+  ThreadSecondaryPanel: ({
     activePanel,
     gitDiffStatsLabel,
     metadataContent,
@@ -385,7 +385,7 @@ describe("ThreadDetailView", () => {
     expect(html).toContain("Ask for follow-up changes|1|Local Env");
   });
 
-  it("renders the diff panel view when the diff tab is active", () => {
+  it("renders the secondary panel diff view when the diff tab is active", () => {
     apiState.thread.status = "idle";
     apiState.timelineLoading = false;
 

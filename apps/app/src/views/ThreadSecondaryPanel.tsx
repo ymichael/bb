@@ -37,7 +37,9 @@ import {
 import { openThreadPathInEditor } from "@/lib/api";
 import { getPathCommandForTarget } from "@/lib/open-path-preferences";
 import { cn } from "@/lib/utils";
-import { type ThreadSecondaryPanel } from "@/lib/thread-git-diff-panel";
+import {
+  type ThreadSecondaryPanel as ThreadSecondaryPanelTab,
+} from "@/lib/thread-secondary-panel";
 import {
   formatGitDiffFileLabel,
   getOpenableGitDiffPath,
@@ -45,15 +47,15 @@ import {
   type ParsedGitDiffFile,
 } from "./threadDetailGitDiff";
 
-const GIT_DIFF_PANEL_MIN_SIZE_PERCENT = 24;
-const GIT_DIFF_PANEL_MAX_SIZE_PERCENT = 70;
-const GIT_DIFF_PANEL_DEFAULT_SIZE_PERCENT = 50;
-const GIT_DIFF_PANEL_SKELETON_FILE_COUNT = 3;
+const THREAD_SECONDARY_PANEL_MIN_SIZE_PERCENT = 24;
+const THREAD_SECONDARY_PANEL_MAX_SIZE_PERCENT = 70;
+const THREAD_SECONDARY_PANEL_DEFAULT_SIZE_PERCENT = 50;
+const GIT_DIFF_SKELETON_FILE_COUNT = 3;
 const GIT_DIFF_VIEW_STYLE = {
   "--diffs-font-size": "12px",
   "--diffs-line-height": "18px",
 } as CSSProperties;
-const GIT_DIFF_PANEL_TRANSITION_CLASS =
+const THREAD_SECONDARY_PANEL_TRANSITION_CLASS =
   "duration-[220ms] ease-[cubic-bezier(0.32,0.72,0,1)]";
 
 export interface GitDiffSelectionOption {
@@ -85,8 +87,8 @@ interface ThreadGitDiffData {
   truncated?: boolean;
 }
 
-function GitDiffPanelSkeleton({
-  count = GIT_DIFF_PANEL_SKELETON_FILE_COUNT,
+function ThreadDiffSkeleton({
+  count = GIT_DIFF_SKELETON_FILE_COUNT,
 }: {
   count?: number;
 }) {
@@ -316,7 +318,7 @@ function GitDiffFileCard({
   );
 }
 
-export function ThreadGitDiffPanel({
+export function ThreadSecondaryPanel({
   activePanel,
   metadataContent,
   onPanelChange,
@@ -352,9 +354,9 @@ export function ThreadGitDiffPanel({
   onToggleGitDiffFileCollapsed,
   gitDiffViewOptions,
 }: {
-  activePanel: ThreadSecondaryPanel | null;
+  activePanel: ThreadSecondaryPanelTab | null;
   metadataContent: ReactNode;
-  onPanelChange: (panel: ThreadSecondaryPanel) => void;
+  onPanelChange: (panel: ThreadSecondaryPanelTab) => void;
   threadId: string;
   panelRef: Ref<HTMLElement>;
   resizablePanelRef: Ref<ImperativePanelHandle>;
@@ -393,12 +395,12 @@ export function ThreadGitDiffPanel({
   return (
     <>
       <PanelResizeHandle
-        id="thread-detail-git-diff-handle"
+        id="thread-detail-secondary-panel-handle"
         disabled={!isOpen}
         onDragging={onDragging}
         className={cn(
           "group relative shrink-0 cursor-col-resize overflow-visible bg-transparent transition-[width,opacity,background-color] before:absolute before:inset-y-0 before:-left-1.5 before:-right-1.5 before:content-['']",
-          GIT_DIFF_PANEL_TRANSITION_CLASS,
+          THREAD_SECONDARY_PANEL_TRANSITION_CLASS,
           isOpen ? "w-px opacity-100" : "pointer-events-none w-0 opacity-0",
           isResizing && "bg-accent/20",
         )}
@@ -423,18 +425,18 @@ export function ThreadGitDiffPanel({
       </PanelResizeHandle>
       <Panel
         ref={resizablePanelRef}
-        id="thread-detail-git-diff-panel"
+        id="thread-detail-secondary-panel"
         collapsible
         collapsedSize={0}
-        defaultSize={isOpen ? GIT_DIFF_PANEL_DEFAULT_SIZE_PERCENT : 0}
-        minSize={GIT_DIFF_PANEL_MIN_SIZE_PERCENT}
-        maxSize={GIT_DIFF_PANEL_MAX_SIZE_PERCENT}
+        defaultSize={isOpen ? THREAD_SECONDARY_PANEL_DEFAULT_SIZE_PERCENT : 0}
+        minSize={THREAD_SECONDARY_PANEL_MIN_SIZE_PERCENT}
+        maxSize={THREAD_SECONDARY_PANEL_MAX_SIZE_PERCENT}
         onCollapse={onCollapse}
         onResize={onResize}
         order={2}
         className={cn(
           "min-w-0 overflow-hidden transition-[flex-grow,flex-basis,opacity]",
-          GIT_DIFF_PANEL_TRANSITION_CLASS,
+          THREAD_SECONDARY_PANEL_TRANSITION_CLASS,
           isOpen ? "opacity-100" : "opacity-0",
         )}
       >
@@ -443,7 +445,7 @@ export function ThreadGitDiffPanel({
           aria-hidden={!isOpen}
           className={cn(
             "flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background transition-[transform,opacity,background-color]",
-            GIT_DIFF_PANEL_TRANSITION_CLASS,
+            THREAD_SECONDARY_PANEL_TRANSITION_CLASS,
             isOpen ? "opacity-100" : "pointer-events-none translate-x-[8%] opacity-0",
           )}
         >
@@ -598,7 +600,7 @@ export function ThreadGitDiffPanel({
           >
             {isDiffPanelActive ? (
               isPreparingGitDiff ? (
-                <GitDiffPanelSkeleton />
+                <ThreadDiffSkeleton />
               ) : gitDiffError ? (
                 <p className="rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2 text-xs text-destructive">
                   {gitDiffError instanceof Error

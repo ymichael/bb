@@ -1,13 +1,13 @@
 const THREAD_SECONDARY_PANEL_QUERY_KEY = "secondaryPanel";
 const THREAD_SECONDARY_PANEL_STORAGE_KEY = "beanbag.thread.secondaryPanel";
-const THREAD_GIT_DIFF_PANEL_QUERY_VALUE = "git-diff";
+const THREAD_DIFF_PANEL_QUERY_VALUE = "git-diff";
 const THREAD_INFO_PANEL_QUERY_VALUE = "thread-info";
 
 export type ThreadSecondaryPanel = "git-diff" | "thread-info";
 
 function decodeThreadSecondaryPanel(value: string | null): ThreadSecondaryPanel | null {
   switch (value) {
-    case THREAD_GIT_DIFF_PANEL_QUERY_VALUE:
+    case THREAD_DIFF_PANEL_QUERY_VALUE:
       return "git-diff";
     case THREAD_INFO_PANEL_QUERY_VALUE:
       return "thread-info";
@@ -44,14 +44,6 @@ export function setStoredThreadSecondaryPanel(
   }
 
   window.localStorage.removeItem(THREAD_SECONDARY_PANEL_STORAGE_KEY);
-}
-
-export function isThreadGitDiffPanelOpen(search: string): boolean {
-  return getThreadSecondaryPanel(search) === "git-diff";
-}
-
-export function withThreadGitDiffPanelOpen(search: string, open: boolean): string {
-  return withThreadSecondaryPanel(search, open ? "git-diff" : null);
 }
 
 export function withThreadSecondaryPanel(

@@ -99,8 +99,8 @@ import {
   getStoredThreadSecondaryPanel,
   setStoredThreadSecondaryPanel,
   withThreadSecondaryPanel,
-  type ThreadSecondaryPanel,
-} from "@/lib/thread-git-diff-panel";
+  type ThreadSecondaryPanel as ThreadSecondaryPanelTab,
+} from "@/lib/thread-secondary-panel";
 import { supportsPrimaryCheckoutMetadata } from "@/lib/thread-primary-checkout";
 import { getThreadDisplayTitle } from "@/lib/thread-title";
 import {
@@ -110,8 +110,8 @@ import {
 import { ThreadFollowUpComposer } from "./ThreadFollowUpComposer";
 import {
   type GitDiffSelectionOption,
-  ThreadGitDiffPanel,
-} from "./ThreadGitDiffPanel";
+  ThreadSecondaryPanel,
+} from "./ThreadSecondaryPanel";
 import {
   findLatestActivityRowId,
   isLastThreadRowShowingOngoingState,
@@ -305,10 +305,10 @@ export function ThreadDetailView() {
     [location.search],
   );
   const [persistedSecondaryPanel, setPersistedSecondaryPanel] =
-    useState<ThreadSecondaryPanel | null>(() => getStoredThreadSecondaryPanel());
+    useState<ThreadSecondaryPanelTab | null>(() => getStoredThreadSecondaryPanel());
   const activeSecondaryPanel = searchSecondaryPanel ?? persistedSecondaryPanel;
   const isSecondaryPanelOpen = activeSecondaryPanel !== null;
-  const isGitDiffPanelOpen = activeSecondaryPanel === "git-diff";
+  const isDiffPanelActive = activeSecondaryPanel === "git-diff";
   const [selectedMergeBaseBranch, setSelectedMergeBaseBranch] = useState<string | undefined>(
     undefined,
   );
@@ -383,8 +383,8 @@ export function ThreadDetailView() {
     "unified",
   );
   const [hasExplicitGitDiffDisplayMode, setHasExplicitGitDiffDisplayMode] = useState(false);
-  const [isGitDiffPanelResizing, setIsGitDiffPanelResizing] = useState(false);
-  const [gitDiffPanelWidth, setGitDiffPanelWidth] = useState<number | null>(null);
+  const [isSecondaryPanelResizing, setIsSecondaryPanelResizing] = useState(false);
+  const [secondaryPanelWidth, setSecondaryPanelWidth] = useState<number | null>(null);
   const [collapsedGitDiffFileKeys, setCollapsedGitDiffFileKeys] = useState<Set<string>>(
     () => new Set(),
   );
@@ -397,10 +397,10 @@ export function ThreadDetailView() {
   const [pendingGitDiffScrollPath, setPendingGitDiffScrollPath] = useState<string | null>(
     null,
   );
-  const gitDiffPanelRef = useRef<HTMLElement | null>(null);
-  const gitDiffResizablePanelRef = useRef<ImperativePanelHandle | null>(null);
-  const lastGitDiffPanelSizeRef = useRef(TIMELINE_PANEL_DEFAULT_SIZE_PERCENT);
-  const lastGitDiffWideEnoughRef = useRef<boolean | null>(null);
+  const secondaryPanelRef = useRef<HTMLElement | null>(null);
+  const secondaryResizablePanelRef = useRef<ImperativePanelHandle | null>(null);
+  const lastSecondaryPanelSizeRef = useRef(TIMELINE_PANEL_DEFAULT_SIZE_PERCENT);
+  const lastDiffViewWideEnoughRef = useRef<boolean | null>(null);
   const gitDiffFileRenderTimersRef = useRef<Map<string, number>>(new Map());
   const queuedGitDiffFileRenderKeysRef = useRef<Set<string>>(new Set());
   const gitDiffFileRefs = useRef<Map<string, HTMLDivElement>>(new Map());
@@ -501,7 +501,7 @@ export function ThreadDetailView() {
     isLoading: isGitDiffLoading,
     error: gitDiffError,
   } = useThreadGitDiff(threadId ?? "", {
-    enabled: Boolean(threadId) && isGitDiffPanelOpen,
+    enabled: Boolean(threadId) && isDiffPanelActive,
     selection: gitDiffSelection,
     mergeBaseBranch: selectedMergeBaseBranch,
   });
@@ -513,17 +513,17 @@ export function ThreadDetailView() {
       })),
     [parsedGitDiffFiles],
   );
-  const isGitDiffPanelWideEnough =
-    gitDiffPanelWidth !== null && gitDiffPanelWidth >= GIT_DIFF_SPLIT_VIEW_MIN_WIDTH_PX;
+  const isDiffViewWideEnough =
+    secondaryPanelWidth !== null && secondaryPanelWidth >= GIT_DIFF_SPLIT_VIEW_MIN_WIDTH_PX;
 
   useLayoutEffect(() => {
-    const panel = gitDiffResizablePanelRef.current;
+    const panel = secondaryResizablePanelRef.current;
     if (!panel) {
       return;
     }
 
     if (isSecondaryPanelOpen) {
-      panel.expand(lastGitDiffPanelSizeRef.current);
+      panel.expand(lastSecondaryPanelSizeRef.current);
       return;
     }
 
@@ -535,14 +535,14 @@ export function ThreadDetailView() {
       return;
     }
 
-    const panelElement = gitDiffPanelRef.current;
+    const panelElement = secondaryPanelRef.current;
     if (!panelElement) {
       return;
     }
 
     const updateWidth = (nextWidth: number) => {
       const roundedWidth = Math.round(nextWidth);
-      setGitDiffPanelWidth((currentWidth) =>
+      setSecondaryPanelWidth((currentWidth) =>
         currentWidth === roundedWidth ? currentWidth : roundedWidth,
       );
     };
@@ -566,41 +566,41 @@ export function ThreadDetailView() {
   useEffect(() => {
     if (!isSecondaryPanelOpen) {
       setHasExplicitGitDiffDisplayMode(false);
-      setGitDiffPanelWidth(null);
-      lastGitDiffWideEnoughRef.current = null;
+      setSecondaryPanelWidth(null);
+      lastDiffViewWideEnoughRef.current = null;
       return;
     }
-    if (gitDiffPanelWidth === null) {
+    if (secondaryPanelWidth === null) {
       return;
     }
 
-    const previousWideEnough = lastGitDiffWideEnoughRef.current;
+    const previousWideEnough = lastDiffViewWideEnoughRef.current;
     const crossedBreakpoint =
       previousWideEnough !== null &&
-      previousWideEnough !== isGitDiffPanelWideEnough;
+      previousWideEnough !== isDiffViewWideEnough;
     if (crossedBreakpoint && hasExplicitGitDiffDisplayMode) {
       setHasExplicitGitDiffDisplayMode(false);
     }
 
     if (!hasExplicitGitDiffDisplayMode || crossedBreakpoint) {
-      const nextMode = isGitDiffPanelWideEnough ? "split" : "unified";
+      const nextMode = isDiffViewWideEnough ? "split" : "unified";
       setGitDiffDisplayMode((currentMode) =>
         currentMode === nextMode ? currentMode : nextMode,
       );
     }
 
-    lastGitDiffWideEnoughRef.current = isGitDiffPanelWideEnough;
+    lastDiffViewWideEnoughRef.current = isDiffViewWideEnough;
   }, [
-    gitDiffPanelWidth,
+    secondaryPanelWidth,
     hasExplicitGitDiffDisplayMode,
     isSecondaryPanelOpen,
-    isGitDiffPanelWideEnough,
+    isDiffViewWideEnough,
   ]);
 
   useEffect(() => {
     const gitDiff = threadGitDiff?.diff ?? "";
     const gitDiffKey = getGitDiffParseKey(gitDiff);
-    if (!isGitDiffPanelOpen || gitDiff.trim().length === 0) {
+    if (!isDiffPanelActive || gitDiff.trim().length === 0) {
       setParsedGitDiffFiles([]);
       setIsParsingGitDiffFiles(false);
       setLastParsedGitDiffKey("");
@@ -673,7 +673,7 @@ export function ThreadDetailView() {
         window.clearTimeout(timerId);
       }
     };
-  }, [isGitDiffPanelOpen, threadGitDiff?.diff]);
+  }, [isDiffPanelActive, threadGitDiff?.diff]);
 
   useEffect(() => {
     setLoadingToolGroupIds(new Set());
@@ -840,19 +840,19 @@ export function ThreadDetailView() {
     setGitDiffDisplayMode(nextMode);
   }, []);
 
-  const handleGitDiffPanelDragging = useCallback((isDragging: boolean) => {
-    setIsGitDiffPanelResizing(isDragging);
+  const handleSecondaryPanelDragging = useCallback((isDragging: boolean) => {
+    setIsSecondaryPanelResizing(isDragging);
     if (isDragging) {
       // Treat panel resizing as opting back into responsive split/stacked mode.
       setHasExplicitGitDiffDisplayMode(false);
     }
   }, []);
-  const handleGitDiffPanelResize = useCallback((size: number) => {
+  const handleSecondaryPanelResize = useCallback((size: number) => {
     if (size <= 0) {
       return;
     }
 
-    lastGitDiffPanelSizeRef.current = size;
+    lastSecondaryPanelSizeRef.current = size;
   }, []);
 
   const handleLoadToolGroupMessages = useCallback(
@@ -944,7 +944,7 @@ export function ThreadDetailView() {
   );
 
   useEffect(() => {
-    if (!isGitDiffPanelOpen || parsedGitDiffFileEntries.length === 0) {
+    if (!isDiffPanelActive || parsedGitDiffFileEntries.length === 0) {
       return;
     }
 
@@ -980,7 +980,7 @@ export function ThreadDetailView() {
     );
   }, [
     collapsedGitDiffFileKeys,
-    isGitDiffPanelOpen,
+    isDiffPanelActive,
     isParsingGitDiffFiles,
     parsedGitDiffFileEntries,
     scheduleGitDiffFileRender,
@@ -1038,7 +1038,7 @@ export function ThreadDetailView() {
     gitDiffFileRefs.current.delete(fileKey);
   }, []);
   const setThreadSecondaryPanel = useCallback(
-    (panel: ThreadSecondaryPanel | null) => {
+    (panel: ThreadSecondaryPanelTab | null) => {
       setPersistedSecondaryPanel(panel);
       setStoredThreadSecondaryPanel(panel);
       const nextSearch = withThreadSecondaryPanel(location.search, panel);
@@ -1053,7 +1053,7 @@ export function ThreadDetailView() {
     [location.pathname, location.search, navigate],
   );
   const openThreadSecondaryPanel = useCallback(
-    (panel: ThreadSecondaryPanel) => {
+    (panel: ThreadSecondaryPanelTab) => {
       if (activeSecondaryPanel === panel) {
         return;
       }
@@ -1061,7 +1061,7 @@ export function ThreadDetailView() {
     },
     [activeSecondaryPanel, setThreadSecondaryPanel],
   );
-  const openThreadGitDiffPanel = useCallback(() => {
+  const openThreadDiffPanel = useCallback(() => {
     openThreadSecondaryPanel("git-diff");
   }, [openThreadSecondaryPanel]);
   const toggleThreadSecondaryPanel = useCallback(() => {
@@ -1078,19 +1078,19 @@ export function ThreadDetailView() {
     setThreadSecondaryPanel(null);
   }, [isSecondaryPanelOpen, setThreadSecondaryPanel]);
   const handlePromptGitStatsBannerClick = useCallback(() => {
-    openThreadGitDiffPanel();
-  }, [openThreadGitDiffPanel]);
+    openThreadDiffPanel();
+  }, [openThreadDiffPanel]);
   const handlePromptBannerFileClick = useCallback(
     (file: { path: string }) => {
       setSelectedGitDiffCommitSha(null);
       setPendingGitDiffScrollPath(file.path);
-      openThreadGitDiffPanel();
+      openThreadDiffPanel();
     },
-    [openThreadGitDiffPanel],
+    [openThreadDiffPanel],
   );
 
   useEffect(() => {
-    if (!pendingGitDiffScrollPath || !isGitDiffPanelOpen) {
+    if (!pendingGitDiffScrollPath || !isDiffPanelActive) {
       return;
     }
 
@@ -1137,7 +1137,7 @@ export function ThreadDetailView() {
     collapsedGitDiffFileKeys,
     isGitDiffLoading,
     isParsingGitDiffFiles,
-    isGitDiffPanelOpen,
+    isDiffPanelActive,
     parsedGitDiffFileEntries,
     pendingGitDiffScrollPath,
     scheduleGitDiffFileRender,
@@ -2019,7 +2019,7 @@ export function ThreadDetailView() {
           showScrollToBottom={showScrollToBottom}
           onScrollToBottom={scrollToBottom}
           showPromptGitStatsBanner={showPromptGitStatsBanner}
-          isGitDiffPanelOpen={isGitDiffPanelOpen}
+          isDiffPanelActive={isDiffPanelActive}
           canExpandPromptChangeList={canExpandPromptChangeList}
           isChangeListExpanded={isChangeListExpanded}
           onToggleChangeListExpanded={() => {
@@ -2140,7 +2140,7 @@ export function ThreadDetailView() {
               {conversationShell}
             </div>
           </Panel>
-          <ThreadGitDiffPanel
+          <ThreadSecondaryPanel
             activePanel={activeSecondaryPanel}
             metadataContent={
               showThreadMetadata ? (
@@ -2153,14 +2153,14 @@ export function ThreadDetailView() {
             }
             onPanelChange={openThreadSecondaryPanel}
             threadId={thread.id}
-            panelRef={gitDiffPanelRef}
-            resizablePanelRef={gitDiffResizablePanelRef}
+            panelRef={secondaryPanelRef}
+            resizablePanelRef={secondaryResizablePanelRef}
             isOpen={isSecondaryPanelOpen}
-            isResizing={isGitDiffPanelResizing}
+            isResizing={isSecondaryPanelResizing}
             onCollapse={closeThreadSecondaryPanel}
             onClose={closeThreadSecondaryPanel}
-            onDragging={handleGitDiffPanelDragging}
-            onResize={handleGitDiffPanelResize}
+            onDragging={handleSecondaryPanelDragging}
+            onResize={handleSecondaryPanelResize}
             gitDiffSelectValue={gitDiffSelectValue}
             gitDiffSelectOptions={gitDiffSelectOptions}
             onGitDiffSelectionChange={(value) => {
