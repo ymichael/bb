@@ -14,6 +14,21 @@ export interface RecordEnvironmentAgentCommandAckResult {
   deliveredThrough?: number;
 }
 
+export class EnvironmentAgentSessionUnavailableError extends Error {
+  constructor(readonly threadId: string) {
+    super(
+      `Timed out waiting for active environment-agent session for thread ${threadId}`,
+    );
+    this.name = "EnvironmentAgentSessionUnavailableError";
+  }
+}
+
+export function isEnvironmentAgentSessionUnavailableError(
+  error: unknown,
+): error is EnvironmentAgentSessionUnavailableError {
+  return error instanceof EnvironmentAgentSessionUnavailableError;
+}
+
 export class EnvironmentAgentCommandDispatcher {
   constructor(
     private readonly sessions: EnvironmentAgentSessionRepository,
@@ -37,7 +52,7 @@ export class EnvironmentAgentCommandDispatcher {
       await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
     }
 
-    throw new Error(`Timed out waiting for active environment-agent session for thread ${args.threadId}`);
+    throw new EnvironmentAgentSessionUnavailableError(args.threadId);
   }
 
   hasActiveSession(threadId: string): boolean {
@@ -53,11 +68,20 @@ export class EnvironmentAgentCommandDispatcher {
     pollIntervalMs?: number;
     sentAt?: number;
   }): Promise<EnvironmentAgentCommandRecord> {
+    const existing = this.commands.getById(args.commandId);
+    if (existing) {
+      return this.resumeExistingCommand(args, existing);
+    }
+
     const session = await this.awaitActiveSession({
       threadId: args.threadId,
       timeoutMs: args.timeoutMs,
       pollIntervalMs: args.pollIntervalMs,
     });
+    const concurrentExisting = this.commands.getById(args.commandId);
+    if (concurrentExisting) {
+      return this.resumeExistingCommand(args, concurrentExisting);
+    }
     this.commands.enqueue({
       id: args.commandId,
       threadId: args.threadId,
@@ -96,6 +120,15 @@ export class EnvironmentAgentCommandDispatcher {
           break;
       }
       await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+    }
+
+    const command = this.commands.getById(args.commandId);
+    if (
+      command &&
+      (command.state === "queued" || command.state === "sent") &&
+      this.sessions.getActiveByThreadId(command.threadId) === undefined
+    ) {
+      throw new EnvironmentAgentSessionUnavailableError(command.threadId);
     }
 
     throw new Error(`Timed out waiting for environment-agent command ${args.commandId}`);
@@ -229,6 +262,59 @@ export class EnvironmentAgentCommandDispatcher {
         });
       default:
         return assertNever(args.payload.state);
+    }
+  }
+
+  private async resumeExistingCommand(
+    args: {
+      threadId: string;
+      commandId: string;
+      timeoutMs?: number;
+      pollIntervalMs?: number;
+      sentAt?: number;
+    },
+    command: EnvironmentAgentCommandRecord,
+  ): Promise<EnvironmentAgentCommandRecord> {
+    if (command.threadId !== args.threadId) {
+      throw new Error(
+        `Environment-agent command ${args.commandId} already belongs to thread ${command.threadId}`,
+      );
+    }
+
+    switch (command.state) {
+      case "completed":
+      case "failed":
+      case "cancelled":
+        return command;
+      case "queued":
+      case "sent": {
+        const session = await this.awaitActiveSession({
+          threadId: args.threadId,
+          timeoutMs: args.timeoutMs,
+          pollIntervalMs: args.pollIntervalMs,
+        });
+        if (command.sessionId !== session.id) {
+          this.rebindPendingCommandsForThread({
+            threadId: args.threadId,
+            sessionId: session.id,
+            now: args.sentAt,
+          });
+        }
+        return this.waitForTerminalState({
+          commandId: args.commandId,
+          timeoutMs: args.timeoutMs,
+          pollIntervalMs: args.pollIntervalMs,
+        });
+      }
+      case "received":
+      case "started":
+        return this.waitForTerminalState({
+          commandId: args.commandId,
+          timeoutMs: args.timeoutMs,
+          pollIntervalMs: args.pollIntervalMs,
+        });
+      default:
+        return assertNever(command.state);
     }
   }
 }

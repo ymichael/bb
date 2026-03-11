@@ -205,6 +205,81 @@ describe("EnvironmentAgentSessionCommandClient", () => {
     });
   });
 
+  it("recovers once when a queued command is stranded on a closed session", async () => {
+    const threadId = createThreadId();
+    sessions.create({
+      id: "sess-stale",
+      threadId,
+      agentId: "agent-1",
+      agentInstanceId: "instance-stale",
+      protocolVersion: 1,
+      transportKind: "http-long-poll",
+      leaseExpiresAt: 30_000,
+      now: 1_000,
+    });
+    const recoverSession = vi.fn(async () => {
+      sessions.create({
+        id: "sess-fresh",
+        threadId,
+        agentId: "agent-1",
+        agentInstanceId: "instance-fresh",
+        protocolVersion: 1,
+        transportKind: "http-long-poll",
+        leaseExpiresAt: 31_000,
+        now: 1_300,
+      });
+      setTimeout(() => {
+        commands.markStarted("cmd-recover", 1_350);
+        commands.markCompleted({
+          commandId: "cmd-recover",
+          result: { ok: true },
+          now: 1_400,
+        });
+      }, 10);
+    });
+    const client = new EnvironmentAgentSessionCommandClient({
+      threadId,
+      commandDispatcher: dispatcher,
+      commandTimeoutMs: 60,
+      pollIntervalMs: 10,
+      recoverSession,
+    });
+
+    void vi.waitFor(() => {
+      expect(commands.getById("cmd-recover")).toBeDefined();
+    }).then(() => {
+      sessions.markClosed({
+        sessionId: "sess-stale",
+        reason: "internal_error",
+        now: 1_200,
+      });
+    });
+
+    await expect(
+      client.sendCommand({
+        meta: {
+          protocolVersion: 1,
+          commandId: "cmd-recover",
+          idempotencyKey: "cmd-recover",
+          sentAt: 1_050,
+        },
+        command: {
+          type: "workspace.status",
+          threadId,
+        },
+      }),
+    ).resolves.toMatchObject({
+      state: "accepted",
+      result: { ok: true },
+    });
+
+    expect(recoverSession).toHaveBeenCalledTimes(1);
+    expect(commands.getById("cmd-recover")).toMatchObject({
+      sessionId: "sess-fresh",
+      state: "completed",
+    });
+  });
+
   it("queues provider.ensure and returns the reported provider status", async () => {
     const threadId = createThreadId();
     sessions.create({

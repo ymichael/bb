@@ -10,7 +10,10 @@ import type {
 import { ENVIRONMENT_AGENT_PROTOCOL_VERSION } from "@beanbag/environment-agent";
 import type { JsonLineTransport } from "@beanbag/environment-agent";
 import type { EnvironmentAgentCommandRecord } from "@beanbag/db";
-import { EnvironmentAgentCommandDispatcher } from "./environment-agent-command-dispatcher.js";
+import {
+  EnvironmentAgentCommandDispatcher,
+  isEnvironmentAgentSessionUnavailableError,
+} from "./environment-agent-command-dispatcher.js";
 
 const DEFAULT_COMMAND_TIMEOUT_MS = 30_000;
 const DEFAULT_POLL_INTERVAL_MS = 50;
@@ -32,6 +35,7 @@ export interface EnvironmentAgentSessionCommandClientOptions {
   commandDispatcher: EnvironmentAgentCommandDispatcher;
   commandTimeoutMs?: number;
   pollIntervalMs?: number;
+  recoverSession?: () => Promise<void>;
 }
 
 export class EnvironmentAgentSessionCommandClient implements EnvironmentAgentClient {
@@ -45,11 +49,13 @@ export class EnvironmentAgentSessionCommandClient implements EnvironmentAgentCli
 
   private readonly commandTimeoutMs: number;
   private readonly pollIntervalMs: number;
+  private readonly recoverSession?: () => Promise<void>;
   private closed = false;
 
   constructor(private readonly options: EnvironmentAgentSessionCommandClientOptions) {
     this.commandTimeoutMs = options.commandTimeoutMs ?? DEFAULT_COMMAND_TIMEOUT_MS;
     this.pollIntervalMs = options.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
+    this.recoverSession = options.recoverSession;
   }
 
   async sendCommand(
@@ -148,14 +154,38 @@ export class EnvironmentAgentSessionCommandClient implements EnvironmentAgentCli
     payload: unknown;
     sentAt?: number;
   }): Promise<EnvironmentAgentCommandRecord> {
-    return this.options.commandDispatcher.enqueueForActiveSession({
-      threadId: this.options.threadId,
-      commandId: args.commandId,
-      commandType: args.commandType,
-      payload: args.payload,
-      timeoutMs: this.commandTimeoutMs,
-      pollIntervalMs: this.pollIntervalMs,
-      sentAt: args.sentAt,
-    });
+    return this.enqueueCommandWithRecovery(args);
+  }
+
+  private async enqueueCommandWithRecovery(args: {
+    commandId: string;
+    commandType: string;
+    payload: unknown;
+    sentAt?: number;
+  }): Promise<EnvironmentAgentCommandRecord> {
+    let recovered = false;
+    while (true) {
+      try {
+        return await this.options.commandDispatcher.enqueueForActiveSession({
+          threadId: this.options.threadId,
+          commandId: args.commandId,
+          commandType: args.commandType,
+          payload: args.payload,
+          timeoutMs: this.commandTimeoutMs,
+          pollIntervalMs: this.pollIntervalMs,
+          sentAt: args.sentAt,
+        });
+      } catch (error) {
+        if (
+          recovered ||
+          !this.recoverSession ||
+          !isEnvironmentAgentSessionUnavailableError(error)
+        ) {
+          throw error;
+        }
+        recovered = true;
+        await this.recoverSession();
+      }
+    }
   }
 }

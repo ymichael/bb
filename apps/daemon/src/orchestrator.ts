@@ -2855,6 +2855,9 @@ export class Orchestrator implements ThreadOrchestrator {
     const client = new EnvironmentAgentSessionCommandClient({
       threadId: args.thread.id,
       commandDispatcher: this.environmentAgentCommandDispatcher,
+      recoverSession: async () => {
+        await this._ensureEnvironmentAgentAccess(args.thread.id);
+      },
     });
     try {
       return await args.action({
