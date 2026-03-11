@@ -297,6 +297,57 @@ describe("environment-agent repositories", () => {
     ]);
   });
 
+  it("requeues received commands when pending work is rebound to a replacement session", () => {
+    const threadId = createThreadId();
+    sessions.create({
+      id: "sess-old",
+      threadId,
+      agentId: "agent-cmd",
+      agentInstanceId: "instance-old",
+      protocolVersion: 1,
+      transportKind: "websocket",
+      leaseExpiresAt: 5_000,
+      now: 1_000,
+    });
+
+    commands.enqueue({
+      id: "cmd-received",
+      threadId,
+      commandType: "workspace.status",
+      payload: { type: "workspace.status", threadId },
+      sessionId: "sess-old",
+      now: 2_000,
+    });
+    commands.markReceived("cmd-received", 3_000);
+    sessions.create({
+      id: "sess-new",
+      threadId,
+      agentId: "agent-cmd",
+      agentInstanceId: "instance-new",
+      protocolVersion: 1,
+      transportKind: "websocket",
+      leaseExpiresAt: 6_000,
+      now: 3_500,
+    });
+
+    expect(
+      commands.rebindPendingForThread({
+        threadId,
+        sessionId: "sess-new",
+        now: 4_000,
+      }),
+    ).toBe(1);
+
+    expect(commands.getById("cmd-received")).toMatchObject({
+      sessionId: "sess-new",
+      state: "queued",
+      updatedAt: 4_000,
+    });
+    expect(commands.listDeliverableBySessionId("sess-new").map((command) => command.id)).toEqual([
+      "cmd-received",
+    ]);
+  });
+
   it("treats stale command transitions idempotently and rejects conflicting terminal transitions", () => {
     const threadId = createThreadId();
     const command = commands.enqueue({

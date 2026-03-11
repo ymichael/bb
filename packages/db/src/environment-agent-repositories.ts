@@ -784,24 +784,36 @@ export class EnvironmentAgentCommandRepository {
     now?: number;
   }): number {
     const now = args.now ?? Date.now();
-    const result = this.db
-      .update(environmentAgentCommands)
-      .set({
-        sessionId: args.sessionId,
-        updatedAt: now,
-      })
-      .where(
-        and(
-          eq(environmentAgentCommands.threadId, args.threadId),
-          inArray(environmentAgentCommands.state, ["queued", "sent"]),
-          or(
-            isNull(environmentAgentCommands.sessionId),
-            sql`${environmentAgentCommands.sessionId} <> ${args.sessionId}`,
+    return this.db.transaction((tx) => {
+      const pending = tx
+        .select()
+        .from(environmentAgentCommands)
+        .where(
+          and(
+            eq(environmentAgentCommands.threadId, args.threadId),
+            inArray(environmentAgentCommands.state, ["queued", "sent", "received"]),
+            or(
+              isNull(environmentAgentCommands.sessionId),
+              sql`${environmentAgentCommands.sessionId} <> ${args.sessionId}`,
+            ),
           ),
-        ),
-      )
-      .run();
-    return Number(result.changes ?? 0);
+        )
+        .all();
+
+      for (const command of pending) {
+        tx
+          .update(environmentAgentCommands)
+          .set({
+            sessionId: args.sessionId,
+            state: command.state === "received" ? "queued" : command.state,
+            updatedAt: now,
+          })
+          .where(eq(environmentAgentCommands.id, command.id))
+          .run();
+      }
+
+      return pending.length;
+    });
   }
 
   markSent(commandId: string, now?: number): EnvironmentAgentCommandRecord | undefined {

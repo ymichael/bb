@@ -9,7 +9,10 @@ import {
   ThreadRepository,
 } from "@beanbag/db";
 import { AgentServer, createCodexProviderAdapter } from "@beanbag/agent-server";
-import { EnvironmentAgentCommandDispatcher } from "../environment-agent-command-dispatcher.js";
+import {
+  EnvironmentAgentCommandDispatcher,
+  EnvironmentAgentSessionUnavailableError,
+} from "../environment-agent-command-dispatcher.js";
 import { EnvironmentAgentSessionCommandClient } from "../environment-agent-session-command-client.js";
 
 interface SqliteClient { close(): void; }
@@ -277,6 +280,157 @@ describe("EnvironmentAgentSessionCommandClient", () => {
     expect(commands.getById("cmd-recover")).toMatchObject({
       sessionId: "sess-fresh",
       state: "completed",
+    });
+  });
+
+  it("requeues received commands onto a replacement session during recovery", async () => {
+    const threadId = createThreadId();
+    sessions.create({
+      id: "sess-stale",
+      threadId,
+      agentId: "agent-1",
+      agentInstanceId: "instance-stale",
+      protocolVersion: 1,
+      transportKind: "http-long-poll",
+      leaseExpiresAt: 30_000,
+      now: 1_000,
+    });
+    const recoverSession = vi.fn(async () => {
+      sessions.create({
+        id: "sess-fresh",
+        threadId,
+        agentId: "agent-1",
+        agentInstanceId: "instance-fresh",
+        protocolVersion: 1,
+        transportKind: "http-long-poll",
+        leaseExpiresAt: 31_000,
+        now: 1_300,
+      });
+      dispatcher.rebindPendingCommandsForThread({
+        threadId,
+        sessionId: "sess-fresh",
+        now: 1_300,
+      });
+      setTimeout(() => {
+        commands.markStarted("cmd-receive-recover", 1_350);
+        commands.markCompleted({
+          commandId: "cmd-receive-recover",
+          result: { ok: true },
+          now: 1_400,
+        });
+      }, 10);
+    });
+    const client = new EnvironmentAgentSessionCommandClient({
+      threadId,
+      commandDispatcher: dispatcher,
+      commandTimeoutMs: 120,
+      pollIntervalMs: 10,
+      recoverSession,
+    });
+
+    void vi.waitFor(() => {
+      expect(commands.getById("cmd-receive-recover")).toBeDefined();
+    }).then(() => {
+      commands.markReceived("cmd-receive-recover", 1_150);
+      sessions.markClosed({
+        sessionId: "sess-stale",
+        reason: "internal_error",
+        now: 1_200,
+      });
+    });
+
+    await expect(
+      client.sendCommand({
+        meta: {
+          protocolVersion: 1,
+          commandId: "cmd-receive-recover",
+          idempotencyKey: "cmd-receive-recover",
+          sentAt: 1_050,
+        },
+        command: {
+          type: "workspace.status",
+          threadId,
+        },
+      }),
+    ).resolves.toMatchObject({
+      state: "accepted",
+      result: { ok: true },
+    });
+
+    expect(recoverSession).toHaveBeenCalledTimes(1);
+    expect(commands.getById("cmd-receive-recover")).toMatchObject({
+      sessionId: "sess-fresh",
+      state: "completed",
+    });
+  });
+
+  it("fails fast when a started command is stranded on a replaced session", async () => {
+    const threadId = createThreadId();
+    sessions.create({
+      id: "sess-stale",
+      threadId,
+      agentId: "agent-1",
+      agentInstanceId: "instance-stale",
+      protocolVersion: 1,
+      transportKind: "http-long-poll",
+      leaseExpiresAt: 30_000,
+      now: 1_000,
+    });
+    const recoverSession = vi.fn(async () => {
+      sessions.create({
+        id: "sess-fresh",
+        threadId,
+        agentId: "agent-1",
+        agentInstanceId: "instance-fresh",
+        protocolVersion: 1,
+        transportKind: "http-long-poll",
+        leaseExpiresAt: 31_000,
+        now: 1_300,
+      });
+      dispatcher.rebindPendingCommandsForThread({
+        threadId,
+        sessionId: "sess-fresh",
+        now: 1_300,
+      });
+    });
+    const client = new EnvironmentAgentSessionCommandClient({
+      threadId,
+      commandDispatcher: dispatcher,
+      commandTimeoutMs: 120,
+      pollIntervalMs: 10,
+      recoverSession,
+    });
+
+    void vi.waitFor(() => {
+      expect(commands.getById("cmd-started-stale")).toBeDefined();
+    }).then(() => {
+      commands.markStarted("cmd-started-stale", 1_150);
+      sessions.markClosed({
+        sessionId: "sess-stale",
+        reason: "internal_error",
+        now: 1_200,
+      });
+    });
+
+    await expect(
+      client.sendCommand({
+        meta: {
+          protocolVersion: 1,
+          commandId: "cmd-started-stale",
+          idempotencyKey: "cmd-started-stale",
+          sentAt: 1_050,
+        },
+        command: {
+          type: "workspace.status",
+          threadId,
+        },
+      }),
+    ).rejects.toBeInstanceOf(EnvironmentAgentSessionUnavailableError);
+
+    expect(recoverSession).toHaveBeenCalledTimes(1);
+    expect(commands.getById("cmd-started-stale")).toMatchObject({
+      sessionId: "sess-stale",
+      state: "started",
     });
   });
 

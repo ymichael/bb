@@ -119,15 +119,14 @@ export class EnvironmentAgentCommandDispatcher {
         default:
           break;
       }
+      if (this.isPendingCommandStranded(command)) {
+        throw new EnvironmentAgentSessionUnavailableError(command.threadId);
+      }
       await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
     }
 
     const command = this.commands.getById(args.commandId);
-    if (
-      command &&
-      (command.state === "queued" || command.state === "sent") &&
-      this.sessions.getActiveByThreadId(command.threadId) === undefined
-    ) {
+    if (command && this.isPendingCommandStranded(command)) {
       throw new EnvironmentAgentSessionUnavailableError(command.threadId);
     }
 
@@ -313,6 +312,27 @@ export class EnvironmentAgentCommandDispatcher {
           timeoutMs: args.timeoutMs,
           pollIntervalMs: args.pollIntervalMs,
         });
+      default:
+        return assertNever(command.state);
+    }
+  }
+
+  private isPendingCommandStranded(command: EnvironmentAgentCommandRecord): boolean {
+    switch (command.state) {
+      case "completed":
+      case "failed":
+      case "cancelled":
+        return false;
+      case "queued":
+      case "sent":
+      case "received":
+      case "started": {
+        const activeSession = this.sessions.getActiveByThreadId(command.threadId);
+        if (!activeSession) {
+          return true;
+        }
+        return command.sessionId !== undefined && command.sessionId !== activeSession.id;
+      }
       default:
         return assertNever(command.state);
     }
