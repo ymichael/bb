@@ -34,6 +34,7 @@ export interface EnvironmentAgentServiceOptions {
   };
   logging: {
     filePath: string;
+    verbose: boolean;
   };
   session: {
     pollIntervalMs: number;
@@ -43,6 +44,12 @@ export interface EnvironmentAgentServiceOptions {
 
 const BEANBAG_ENVIRONMENT_AGENT_AUTH_TOKEN = "BEANBAG_ENVIRONMENT_AGENT_AUTH_TOKEN";
 const BEANBAG_DAEMON_URL = "BEANBAG_DAEMON_URL";
+const BEANBAG_ENVIRONMENT_AGENT_VERBOSE_LOGS = "BEANBAG_ENVIRONMENT_AGENT_VERBOSE_LOGS";
+
+function isEnabledFlag(value: string | undefined): boolean {
+  const normalized = value?.trim().toLowerCase();
+  return normalized === "1" || normalized === "true" || normalized === "yes" || normalized === "on";
+}
 
 export function resolveEnvironmentAgentServiceOptions(args: {
   cli: EnvironmentAgentServiceCliOptions;
@@ -86,6 +93,7 @@ export function resolveEnvironmentAgentServiceOptions(args: {
     },
     logging: {
       filePath: resolveEnvironmentAgentLogFilePath(args.env),
+      verbose: isEnabledFlag(args.env[BEANBAG_ENVIRONMENT_AGENT_VERBOSE_LOGS]),
     },
     session: {
       pollIntervalMs: 250,
@@ -112,21 +120,27 @@ export async function startEnvironmentAgentService(
   const runtime = new EnvironmentAgentRuntime({
     ...options.runtime,
     onStdoutLine: (line) => {
-      logger.log("info", "provider stdout", { line });
+      if (options.logging.verbose) {
+        logger.log("info", "provider stdout", { line });
+      }
       options.runtime.onStdoutLine?.(line);
     },
     onStderrLine: (line) => {
-      logger.log("warn", "provider stderr", { line });
+      if (options.logging.verbose) {
+        logger.log("warn", "provider stderr", { line });
+      }
       options.runtime.onStderrLine?.(line);
     },
   });
-  runtime.subscribeToEvents((event) => {
-    logger.log("info", "environment-agent event", {
-      sequence: event.sequence,
-      type: event.event.type,
-      threadId: event.threadId,
+  if (options.logging.verbose) {
+    runtime.subscribeToEvents((event) => {
+      logger.log("info", "environment-agent event", {
+        sequence: event.sequence,
+        type: event.event.type,
+        threadId: event.threadId,
+      });
     });
-  });
+  }
   runtime.start();
 
   let sessionSupervisor: EnvironmentAgentSessionSupervisor | undefined;

@@ -54,6 +54,7 @@ describe("environment-agent service config", () => {
         filePath: expect.stringContaining(
           "/.beanbag/environment-agent-logs/project-1/docker-thread-1.log",
         ),
+        verbose: false,
       },
       session: {
         pollIntervalMs: 250,
@@ -84,6 +85,20 @@ describe("environment-agent service config", () => {
         },
       }),
     ).toThrow(/Invalid --http-port/);
+  });
+
+  it("enables verbose logging from env", () => {
+    const resolved = resolveEnvironmentAgentServiceOptions({
+      cli: {
+        httpPort: "4123",
+      },
+      env: {
+        BEANBAG_ENVIRONMENT_AGENT_AUTH_TOKEN: "secret-token",
+        BEANBAG_ENVIRONMENT_AGENT_VERBOSE_LOGS: "1",
+      },
+    });
+
+    expect(resolved.logging.verbose).toBe(true);
   });
 
   it("starts session supervision when daemon config is present", async () => {
@@ -167,6 +182,7 @@ describe("environment-agent service config", () => {
       },
       logging: {
         filePath: "/tmp/beanbag-environment-agent-service-test.log",
+        verbose: false,
       },
       session: {
         pollIntervalMs: 10_000,
