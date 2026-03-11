@@ -1418,8 +1418,11 @@ export function ThreadDetailView() {
     : "Promote";
   const isArchivedThread = thread.archivedAt !== undefined;
   const showPrimaryCheckoutAction = supportsPrimaryCheckout && !isArchivedThread;
+  const isPromoteBlockedByThreadStatus =
+    !isPrimaryCheckoutActive && thread.status !== "idle";
   const isPrimaryCheckoutActionDisabled =
     isPrimaryCheckoutMutationPending ||
+    isPromoteBlockedByThreadStatus ||
     (isPrimaryCheckoutActive
       ? demoteAction?.available === false
       : promoteAction?.available === false);

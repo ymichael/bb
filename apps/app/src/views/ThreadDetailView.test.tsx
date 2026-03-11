@@ -447,6 +447,21 @@ describe("ThreadDetailView", () => {
     apiState.environments[0].capabilities = {};
   });
 
+  it("disables promote while the thread is active", () => {
+    apiState.thread.status = "active";
+    apiState.thread.primaryCheckout = { isActive: false };
+    apiState.environments[0].capabilities = {
+      promote_primary_checkout: true,
+    };
+
+    const html = renderThreadDetailView();
+
+    expect(html).toMatch(/<button[^>]*disabled=""[^>]*>Promote<\/button>/);
+
+    apiState.thread.status = "idle";
+    apiState.environments[0].capabilities = {};
+  });
+
   it("hides the working indicator while the thread timeline is still loading", () => {
     apiState.thread.status = "active";
     apiState.timelineLoading = true;
