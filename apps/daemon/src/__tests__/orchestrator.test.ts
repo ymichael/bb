@@ -2323,12 +2323,12 @@ describe("Orchestrator", () => {
     });
   });
 
-  describe("getByIdAsync()", () => {
+  describe("getHydratedByIdAsync()", () => {
     it("delegates to threadRepo", async () => {
       const thread = makeThread({ status: "idle" });
       (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
 
-      await expect(manager.getByIdAsync("thread-1")).resolves.toBe(thread);
+      await expect(manager.getHydratedByIdAsync("thread-1")).resolves.toBe(thread);
       expect(threadRepo.getById).toHaveBeenCalledWith("thread-1");
       expect(ws.broadcast).not.toHaveBeenCalled();
     });
@@ -2338,7 +2338,7 @@ describe("Orchestrator", () => {
         undefined,
       );
 
-      await expect(manager.getByIdAsync("nonexistent")).resolves.toBeUndefined();
+      await expect(manager.getHydratedByIdAsync("nonexistent")).resolves.toBeUndefined();
     });
 
     it("includes prompt-derived title fallback when persisted title is missing", async () => {
@@ -2353,8 +2353,8 @@ describe("Orchestrator", () => {
         }),
       );
 
-      const result = await manager.getByIdAsync("thread-1");
-      const resultSecondRead = await manager.getByIdAsync("thread-1");
+      const result = await manager.getHydratedByIdAsync("thread-1");
+      const resultSecondRead = await manager.getHydratedByIdAsync("thread-1");
 
       expect(result?.title).toBeUndefined();
       expect(result?.titleFallback).toBe("Investigate flaky test reruns");
@@ -2369,7 +2369,7 @@ describe("Orchestrator", () => {
         makeEvent({ seq: 1, type: "turn/started", data: {} }),
         makeEvent({ seq: 2, type: "turn/completed", data: {} }),
       ]);
-      const result = await manager.getByIdAsync("thread-1");
+      const result = await manager.getHydratedByIdAsync("thread-1");
 
       expect(threadRepo.update).not.toHaveBeenCalled();
       expect(ws.broadcast).not.toHaveBeenCalled();
@@ -2383,7 +2383,7 @@ describe("Orchestrator", () => {
         makeEvent({ seq: 1, type: "turn/completed", data: {} }),
         makeEvent({ seq: 2, type: "turn/started", data: {} }),
       ]);
-      const result = await manager.getByIdAsync("thread-1");
+      const result = await manager.getHydratedByIdAsync("thread-1");
 
       expect(threadRepo.update).not.toHaveBeenCalled();
       expect(ws.broadcast).not.toHaveBeenCalled();
@@ -2431,7 +2431,7 @@ describe("Orchestrator", () => {
         }),
       });
 
-      const result = await manager.getByIdAsync("thread-1");
+      const result = await manager.getHydratedByIdAsync("thread-1");
 
       expect(result).toMatchObject({
         id: "thread-1",
@@ -3372,7 +3372,7 @@ describe("Orchestrator", () => {
         reconstructed: false,
       });
 
-      const hydrated = await manager.getByIdAsync("thread-2");
+      const hydrated = await manager.getHydratedByIdAsync("thread-2");
       const promoteAction = hydrated?.builtInActions?.find((action: { id: string }) => action.id === "promote");
 
       expect(promoteAction).toMatchObject({

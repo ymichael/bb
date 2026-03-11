@@ -225,10 +225,6 @@ type RouteEnvironmentAgentCapableOrchestrator = ThreadOrchestrator & {
   ) => Promise<EnvironmentAgentStatusSnapshot>;
 };
 
-type RouteLookupCapableOrchestrator = ThreadOrchestrator & {
-  getRawById?: (threadId: string) => Thread | undefined;
-};
-
 function validatePromptInputAttachments(input: PromptInput[]): void {
   let attachmentCount = 0;
   for (const chunk of input) {
@@ -256,29 +252,7 @@ async function getThreadForRouteLookup(
   threadManager: ThreadOrchestrator,
   threadId: string,
 ): Promise<Thread | undefined> {
-  return threadManager.getByIdAsync(threadId);
-}
-
-async function getThreadForFastRouteLookup(
-  threadManager: ThreadOrchestrator,
-  threadId: string,
-): Promise<Thread | undefined> {
-  return (
-    getThreadForLightweightRouteLookup(threadManager, threadId) ??
-    await getThreadForRouteLookup(threadManager, threadId)
-  );
-}
-
-function getThreadForLightweightRouteLookup(
-  threadManager: ThreadOrchestrator,
-  threadId: string,
-): Thread | undefined {
-  const lookupCapableThreadManager =
-    threadManager as RouteLookupCapableOrchestrator;
-  if (lookupCapableThreadManager.getRawById) {
-    return lookupCapableThreadManager.getRawById(threadId);
-  }
-  return undefined;
+  return threadManager.getRawById(threadId);
 }
 
 export function createThreadRoutes(
@@ -379,7 +353,7 @@ export function createThreadRoutes(
     })
     .get("/:id", async (c) => {
       try {
-        const thread = await getThreadForRouteLookup(threadManager, c.req.param("id"));
+        const thread = await threadManager.getHydratedByIdAsync(c.req.param("id"));
         if (!thread) {
           return sendRouteError(c, threadNotFoundError(c.req.param("id")));
         }
@@ -658,7 +632,7 @@ export function createThreadRoutes(
           if (
             demotePrimaryIfNeeded === true &&
             mode !== "steer" &&
-            thread.primaryCheckout?.isActive === true
+            threadManager.isPrimaryCheckoutActive(threadId)
           ) {
             await threadManager.demotePrimaryCheckout(threadId);
           }
@@ -686,9 +660,7 @@ export function createThreadRoutes(
           const threadId = c.req.param("id");
           const { input, model, serviceTier, reasoningLevel, sandboxMode } = c.req.valid("json");
           validatePromptInputAttachments(input);
-          const thread =
-            getThreadForLightweightRouteLookup(threadManager, threadId) ??
-            await getThreadForRouteLookup(threadManager, threadId);
+          const thread = await getThreadForRouteLookup(threadManager, threadId);
           if (!thread) {
             return sendRouteError(c, threadNotFoundError(threadId));
           }
@@ -843,7 +815,7 @@ export function createThreadRoutes(
     .get("/:id/work-status", zValidator("query", workStatusQuerySchema), async (c) => {
       try {
         const threadId = c.req.param("id");
-        const thread = await getThreadForFastRouteLookup(threadManager, threadId);
+        const thread = await getThreadForRouteLookup(threadManager, threadId);
         if (!thread) {
           return sendRouteError(c, threadNotFoundError(threadId));
         }
@@ -862,7 +834,7 @@ export function createThreadRoutes(
     .get("/:id/merge-base-branches", async (c) => {
       try {
         const threadId = c.req.param("id");
-        const thread = await getThreadForFastRouteLookup(threadManager, threadId);
+        const thread = await getThreadForRouteLookup(threadManager, threadId);
         if (!thread) {
           return sendRouteError(c, threadNotFoundError(threadId));
         }

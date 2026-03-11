@@ -193,7 +193,9 @@ export interface ThreadOrchestrator {
   promoteThread(threadId: string): Promise<PromoteThreadResponse>;
   demotePrimaryCheckout(threadId: string): Promise<DemotePrimaryResponse>;
   getPrimaryCheckoutStatus(projectId: string): PrimaryCheckoutStatus;
-  getByIdAsync(threadId: string): Promise<Thread | undefined>;
+  getRawById(threadId: string): Thread | undefined;
+  isPrimaryCheckoutActive(threadId: string): boolean;
+  getHydratedByIdAsync(threadId: string): Promise<Thread | undefined>;
   getWorkStatusAsync(
     threadId: string,
     mergeBaseBranch?: string,

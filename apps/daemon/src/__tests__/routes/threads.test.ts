@@ -14,7 +14,8 @@ import type { EnvironmentAgentSessionService } from "../../environment-agent-ses
 type LegacyThreadRouteMock = ThreadOrchestrator & {
   getRawById: ReturnType<typeof vi.fn>;
   getById: ReturnType<typeof vi.fn>;
-  getByIdAsync: ReturnType<typeof vi.fn>;
+  isPrimaryCheckoutActive: ReturnType<typeof vi.fn>;
+  getHydratedByIdAsync: ReturnType<typeof vi.fn>;
   getWorkStatus: ReturnType<typeof vi.fn>;
   getWorkStatusAsync: ReturnType<typeof vi.fn>;
   getMergeBaseBranchesAsync: ReturnType<typeof vi.fn>;
@@ -91,7 +92,8 @@ function mockOrchestrator(): LegacyThreadRouteMock {
     markRead: vi.fn(),
     getRawById: vi.fn(),
     getById: vi.fn(),
-    getByIdAsync: vi.fn(),
+    isPrimaryCheckoutActive: vi.fn(),
+    getHydratedByIdAsync: vi.fn(),
     getWorkStatus: vi.fn(),
     getWorkStatusAsync: vi.fn(),
     getMergeBaseBranchesAsync: vi.fn(),
@@ -115,10 +117,11 @@ function mockOrchestrator(): LegacyThreadRouteMock {
   orchestrator.getRawById.mockImplementation(
     (threadId: string) => (orchestrator.getById as unknown as (threadId: string) => Thread | undefined)(threadId),
   );
-  orchestrator.getByIdAsync.mockImplementation(
+  orchestrator.getHydratedByIdAsync.mockImplementation(
     async (threadId: string) =>
       (orchestrator.getById as unknown as (threadId: string) => Thread | undefined)(threadId),
   );
+  orchestrator.isPrimaryCheckoutActive.mockReturnValue(false);
   orchestrator.getWorkStatusAsync.mockImplementation(
     async (threadId: string, mergeBaseBranch?: string) =>
       (
@@ -850,7 +853,7 @@ describe("Thread routes", () => {
   describe("GET /threads/:id", () => {
     it("returns a thread by id", async () => {
       const thread = makeThread();
-      (threadManager.getByIdAsync as ReturnType<typeof vi.fn>).mockResolvedValue(
+      (threadManager.getHydratedByIdAsync as ReturnType<typeof vi.fn>).mockResolvedValue(
         thread,
       );
 
@@ -863,7 +866,7 @@ describe("Thread routes", () => {
     });
 
     it("returns 404 for nonexistent thread", async () => {
-      (threadManager.getByIdAsync as ReturnType<typeof vi.fn>).mockResolvedValue(
+      (threadManager.getHydratedByIdAsync as ReturnType<typeof vi.fn>).mockResolvedValue(
         undefined,
       );
 
@@ -1059,11 +1062,9 @@ describe("Thread routes", () => {
     });
 
     it("demotes active primary checkout before telling when requested", async () => {
-      const thread = makeThread({
-        status: "idle",
-        primaryCheckout: { isActive: true, promotedAt: 123 },
-      });
+      const thread = makeThread({ status: "idle" });
       (threadManager.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
+      (threadManager.isPrimaryCheckoutActive as ReturnType<typeof vi.fn>).mockReturnValue(true);
       (threadManager.demotePrimaryCheckout as ReturnType<typeof vi.fn>).mockResolvedValue({
         ok: true,
         demoted: true,
@@ -1081,6 +1082,7 @@ describe("Thread routes", () => {
       });
 
       expect(res.status).toBe(200);
+      expect(threadManager.isPrimaryCheckoutActive).toHaveBeenCalledWith("thread-1");
       expect(threadManager.demotePrimaryCheckout).toHaveBeenCalledWith("thread-1");
       expect(threadManager.tell).toHaveBeenCalledWith(
         "thread-1",
@@ -1094,11 +1096,9 @@ describe("Thread routes", () => {
     });
 
     it("does not demote when tell mode is steer", async () => {
-      const thread = makeThread({
-        status: "active",
-        primaryCheckout: { isActive: true, promotedAt: 123 },
-      });
+      const thread = makeThread({ status: "active" });
       (threadManager.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
+      (threadManager.isPrimaryCheckoutActive as ReturnType<typeof vi.fn>).mockReturnValue(true);
 
       const res = await app.request("/threads/thread-1/tell", {
         method: "POST",
@@ -1239,7 +1239,7 @@ describe("Thread routes", () => {
   });
 
   describe("queued follow-up routes", () => {
-    it("uses lightweight raw lookup when the orchestrator exposes it", async () => {
+    it("uses raw lookup before enqueueing a follow-up", async () => {
       const thread = makeThread({
         queuedMessages: [],
       });
@@ -1254,12 +1254,7 @@ describe("Thread routes", () => {
           },
         ],
       });
-      const getRawById = vi.fn().mockReturnValue(thread);
-      (
-        threadManager as unknown as {
-          getRawById?: ReturnType<typeof vi.fn>;
-        }
-      ).getRawById = getRawById;
+      const getRawById = threadManager.getRawById.mockReturnValue(thread);
       (threadManager.getById as ReturnType<typeof vi.fn>).mockImplementation(() => {
         throw new Error("Expected route to use raw thread lookup");
       });
@@ -1708,11 +1703,11 @@ describe("Thread routes", () => {
   });
 
   describe("GET /threads/:id/work-status", () => {
-    it("uses lightweight lookup before reading async work status", async () => {
+    it("uses raw lookup before reading async work status", async () => {
       const thread = makeThread();
       const workStatus = makeWorkStatus();
       threadManager.getRawById.mockReturnValue(thread);
-      threadManager.getByIdAsync.mockResolvedValue(thread);
+      threadManager.getHydratedByIdAsync.mockResolvedValue(thread);
       threadManager.getWorkStatusAsync.mockResolvedValue(workStatus);
 
       const res = await app.request("/threads/thread-1/work-status");
@@ -1720,7 +1715,7 @@ describe("Thread routes", () => {
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual(workStatus);
       expect(threadManager.getRawById).toHaveBeenCalledWith("thread-1");
-      expect(threadManager.getByIdAsync).not.toHaveBeenCalled();
+      expect(threadManager.getHydratedByIdAsync).not.toHaveBeenCalled();
       expect(threadManager.getWorkStatusAsync).toHaveBeenCalledWith("thread-1", undefined);
     });
   });
@@ -1729,7 +1724,7 @@ describe("Thread routes", () => {
     it("returns merge-base branch options without hydrating the thread", async () => {
       const thread = makeThread();
       threadManager.getRawById.mockReturnValue(thread);
-      threadManager.getByIdAsync.mockResolvedValue(thread);
+      threadManager.getHydratedByIdAsync.mockResolvedValue(thread);
       threadManager.getMergeBaseBranchesAsync.mockResolvedValue(["main", "release/1.0"]);
 
       const res = await app.request("/threads/thread-1/merge-base-branches");
@@ -1737,8 +1732,51 @@ describe("Thread routes", () => {
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual(["main", "release/1.0"]);
       expect(threadManager.getRawById).toHaveBeenCalledWith("thread-1");
-      expect(threadManager.getByIdAsync).not.toHaveBeenCalled();
+      expect(threadManager.getHydratedByIdAsync).not.toHaveBeenCalled();
       expect(threadManager.getMergeBaseBranchesAsync).toHaveBeenCalledWith("thread-1");
+    });
+  });
+
+  describe("route lookup guardrails", () => {
+    it("avoids hydrated lookup when archiving with async work-status checks", async () => {
+      const thread = makeThread({ environmentId: "worktree" });
+      threadManager.getRawById.mockReturnValue(thread);
+      threadManager.getHydratedByIdAsync.mockResolvedValue(thread);
+      (threadManager.requiresForceArchive as ReturnType<typeof vi.fn>).mockReturnValue(true);
+      threadManager.getWorkStatusAsync.mockResolvedValue({ state: "dirty_uncommitted" });
+
+      const res = await app.request("/threads/thread-1/archive", {
+        method: "POST",
+      });
+
+      expect(res.status).toBe(409);
+      expect(threadManager.getRawById).toHaveBeenCalledWith("thread-1");
+      expect(threadManager.getHydratedByIdAsync).not.toHaveBeenCalled();
+      expect(threadManager.getWorkStatusAsync).toHaveBeenCalledWith("thread-1");
+    });
+
+    it("avoids hydrated lookup when computing git diff", async () => {
+      const thread = makeThread({ status: "idle" });
+      threadManager.getRawById.mockReturnValue(thread);
+      threadManager.getHydratedByIdAsync.mockResolvedValue(thread);
+      threadManager.getGitDiffAsync.mockResolvedValue({
+        mode: "local_uncommitted",
+        commits: [],
+        selection: { type: "combined" },
+        diff: "diff --git a/file b/file",
+        truncated: false,
+      });
+
+      const res = await app.request("/threads/thread-1/git-diff");
+
+      expect(res.status).toBe(200);
+      expect(threadManager.getRawById).toHaveBeenCalledWith("thread-1");
+      expect(threadManager.getHydratedByIdAsync).not.toHaveBeenCalled();
+      expect(threadManager.getGitDiffAsync).toHaveBeenCalledWith(
+        "thread-1",
+        { type: "combined" },
+        undefined,
+      );
     });
   });
 

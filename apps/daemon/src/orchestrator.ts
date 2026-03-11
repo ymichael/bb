@@ -1840,8 +1840,8 @@ export class Orchestrator implements ThreadOrchestrator {
   /**
    * Get the thread record by id.
    */
-  async getByIdAsync(threadId: string): Promise<Thread | undefined> {
-    return measureAsync("orchestrator.getByIdAsync", async () => {
+  async getHydratedByIdAsync(threadId: string): Promise<Thread | undefined> {
+    return measureAsync("orchestrator.getHydratedByIdAsync", async () => {
       const thread = this.threadRepo.getById(threadId);
       if (!thread) return undefined;
       this._ensurePrimaryPromotionStateIsCurrent(thread.projectId);
