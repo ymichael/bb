@@ -29,3 +29,8 @@
 - Use a descriptive kebab-case filename in `plans/` that matches the feature or subsystem being planned.
 - Structure plan docs with these sections: `Goal`, `Scope`, `Implementation Steps`, `Validation`, and `Open Questions/Risks`.
 - Delete plan files from `plans/` once they are completed, obsolete, or superseded by a newer plan.
+
+## Build and Typecheck
+
+- Prefer `pnpm exec turbo run typecheck --filter=@beanbag/<pkg>` for package-scoped typechecks instead of `pnpm --filter @beanbag/<pkg> typecheck`; Turbo preserves upstream `^build` dependencies and package-script runs do not.
+- Do not "fix" workspace typecheck issues by pointing package `types` at `src/**` unless that source is also shipped in the packed artifact; keep package metadata valid for packed consumers.
