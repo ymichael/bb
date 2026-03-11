@@ -13,6 +13,7 @@ import {
 import { cn } from "@/lib/utils";
 import {
   EVENT_DETAIL_MAX_HEIGHT_CLASS,
+  ExpandableDetailScrollArea,
   EventTitle,
   formatCompactDuration,
   formatElapsedSince,
@@ -273,15 +274,21 @@ function ExpandableOperationRow({
   );
 }
 
-function OperationDetailLines({ lines }: { lines: string[] }) {
+function OperationDetailLines({
+  lines,
+  maxHeightClassName = EVENT_DETAIL_MAX_HEIGHT_CLASS,
+}: {
+  lines: string[];
+  maxHeightClassName?: string;
+}) {
   return (
-    <div className="mt-0.5 space-y-0.5">
+    <ExpandableDetailScrollArea className="mt-0.5 space-y-0.5" maxHeightClassName={maxHeightClassName}>
       {lines.map((line, index) => (
         <div key={`${line}:${index}`} className="font-mono ui-text-sm text-foreground/80">
           {line}
         </div>
       ))}
-    </div>
+    </ExpandableDetailScrollArea>
   );
 }
 

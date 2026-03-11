@@ -3,6 +3,7 @@ import {
   useRef,
   useState,
   type ReactNode,
+  type UIEvent,
 } from "react";
 import {
   DEFAULT_SCROLL_STICK_THRESHOLD_PX,
@@ -104,6 +105,30 @@ export function EventTitle({
         <span className={cn("shrink-0", suffixToneClass, suffixClassName)}>{suffix}</span>
       ) : null}
     </span>
+  );
+}
+
+export function ExpandableDetailScrollArea({
+  children,
+  className,
+  maxHeightClassName = EVENT_DETAIL_MAX_HEIGHT_CLASS,
+  onScroll,
+  scrollRef,
+}: {
+  children: ReactNode;
+  className?: string;
+  maxHeightClassName?: string;
+  onScroll?: (event: UIEvent<HTMLDivElement>) => void;
+  scrollRef?: React.Ref<HTMLDivElement>;
+}) {
+  return (
+    <div
+      ref={scrollRef}
+      onScroll={onScroll}
+      className={cn(maxHeightClassName, "overflow-auto", className)}
+    >
+      {children}
+    </div>
   );
 }
 

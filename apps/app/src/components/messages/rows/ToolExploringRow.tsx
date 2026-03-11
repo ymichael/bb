@@ -6,7 +6,7 @@ import {
   type UIToolParsedIntent,
 } from "@beanbag/agent-core";
 import {
-  EVENT_DETAIL_MAX_HEIGHT_CLASS,
+  ExpandableDetailScrollArea,
   EventTitle,
   getEventHeaderToneClass,
   getStaticEventToneClass,
@@ -203,10 +203,10 @@ export function ToolExploringRow({
           headerToneClass={headerToneClass}
           onToggle={onToggle}
         >
-          <div
-            ref={detailRef}
+          <ExpandableDetailScrollArea
+            scrollRef={detailRef}
             onScroll={handleDetailScroll}
-            className={`mt-0.5 ${EVENT_DETAIL_MAX_HEIGHT_CLASS} space-y-0.5 overflow-auto`}
+            className="mt-0.5 space-y-0.5"
           >
             {detailLines.map((line, index) => (
               <div
@@ -217,7 +217,7 @@ export function ToolExploringRow({
                 {line}
               </div>
             ))}
-          </div>
+          </ExpandableDetailScrollArea>
         </ExpandablePanel>
       </div>
     </div>

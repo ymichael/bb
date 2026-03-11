@@ -136,6 +136,20 @@ describe("ConversationEntry", () => {
     expect(html).toContain("<button");
   });
 
+  it("caps expanded reasoning details in a scroll container", () => {
+    const message: UIMessage = {
+      ...baseMessage(),
+      kind: "assistant-reasoning",
+      text: "**Identifying React presence**\nLooking for package hints.",
+      status: "completed",
+    };
+
+    const html = renderToStaticMarkup(
+      <ConversationEntry message={message} initialExpanded />,
+    );
+    expect(html).toContain("max-h-[320px] overflow-auto");
+  });
+
   it("renders collapsed tool-call summary as 'Ran <command>'", () => {
     const message: UIMessage = {
       ...baseMessage(),
@@ -452,7 +466,7 @@ describe("ConversationEntry", () => {
     };
 
     const html = renderToStaticMarkup(<ConversationEntry message={message} initialExpanded />);
-    expect(html).toContain("max-h-[220px] space-y-0.5 overflow-auto");
+    expect(html).toContain("max-h-[220px] overflow-auto mt-0.5 space-y-0.5");
   });
 
   it("renders web-search rows with pending/completed labels", () => {
@@ -1268,6 +1282,26 @@ describe("ConversationEntry", () => {
     );
     expect(html).toContain("[abcdef1] feat: improve prompt handling");
     expect(html).not.toContain("Squash-merged into main</div>");
+  });
+
+  it("caps squash merge detail expansions by default", () => {
+    const message: UIMessage = {
+      ...baseMessage(),
+      kind: "operation",
+      opType: "worktree-squash-merge",
+      title: "Squash merge failed",
+      status: "error",
+      detail: "conflict in src/a.ts\nconflict in src/b.ts\nconflict in src/c.ts",
+      worktreeSquashMerge: {
+        status: "conflict",
+        message: "Squash merge failed",
+      },
+    };
+
+    const html = renderToStaticMarkup(
+      <ConversationEntry message={message} initialExpanded />,
+    );
+    expect(html).toContain("max-h-[220px] overflow-auto mt-0.5 space-y-0.5");
   });
 
   it("renders merged thread-operation intents as expandable rows with prompt details", () => {

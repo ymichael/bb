@@ -6,6 +6,10 @@ import {
 } from "@beanbag/ui-core";
 import type { UIAssistantReasoningMessage } from "@beanbag/agent-core";
 import { ConversationMarkdown } from "../ConversationMarkdown";
+import {
+  EVENT_LARGE_DETAIL_MAX_HEIGHT_CLASS,
+  ExpandableDetailScrollArea,
+} from "./shared";
 
 function getReasoningTitle(reasoning: string): string {
   const match = reasoning.match(/^\*\*(.*?)\*\*/);
@@ -71,10 +75,15 @@ export function ReasoningRow({ message }: { message: UIAssistantReasoningMessage
           headerButtonClassName="italic"
           onToggle={() => setIsExpanded((prev) => !prev)}
         >
-          <ConversationMarkdown
-            content={message.text}
+          <ExpandableDetailScrollArea
             className="italic text-muted-foreground"
-          />
+            maxHeightClassName={EVENT_LARGE_DETAIL_MAX_HEIGHT_CLASS}
+          >
+            <ConversationMarkdown
+              content={message.text}
+              className="italic text-muted-foreground"
+            />
+          </ExpandableDetailScrollArea>
         </ExpandablePanel>
       </div>
     </div>
