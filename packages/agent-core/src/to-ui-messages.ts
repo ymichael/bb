@@ -21,6 +21,8 @@ import type {
   UIPrimaryCheckoutAction,
   UIPrimaryCheckoutMetadata,
   UIPrimaryCheckoutPhase,
+  UIProvisioningPhase,
+  UIProvisioningPhaseStatus,
   UIProvisioningSetupStatus,
   UIToolCallMessage,
   UIToolCallSummary,
@@ -481,6 +483,22 @@ function provisioningSetupOperationStatus(
   }
 }
 
+function provisioningProgressOperationStatus(
+  status: UIProvisioningPhaseStatus | undefined,
+): UIOperationMessage["status"] {
+  if (!status) return undefined;
+  switch (status) {
+    case "started":
+      return "pending";
+    case "completed":
+      return "completed";
+    case "failed":
+      return "error";
+    default:
+      return assertNever(status);
+  }
+}
+
 function userMessageSignature(value: {
   text: string;
   webImages: number;
@@ -780,6 +798,73 @@ function toProvisioningSetupStatus(
       return "failed";
     default:
       return undefined;
+  }
+}
+
+function toProvisioningPhase(value: unknown): UIProvisioningPhase | undefined {
+  if (typeof value !== "string") return undefined;
+  const token = normalizeToken(value);
+  switch (token) {
+    case "prepareenvironment":
+      return "prepare_environment";
+    case "startprovidersession":
+      return "start_provider_session";
+    default:
+      return undefined;
+  }
+}
+
+function toProvisioningPhaseStatus(
+  value: unknown,
+): UIProvisioningPhaseStatus | undefined {
+  if (typeof value !== "string") return undefined;
+  const token = normalizeToken(value);
+  switch (token) {
+    case "started":
+    case "running":
+    case "inprogress":
+      return "started";
+    case "completed":
+    case "complete":
+    case "success":
+      return "completed";
+    case "failed":
+    case "error":
+      return "failed";
+    default:
+      return undefined;
+  }
+}
+
+function provisioningProgressTitle(
+  phase: UIProvisioningPhase | undefined,
+  status: UIProvisioningPhaseStatus | undefined,
+): string {
+  switch (phase) {
+    case "prepare_environment":
+      switch (status) {
+        case "started":
+          return "Preparing environment";
+        case "completed":
+          return "Environment prepared";
+        case "failed":
+          return "Environment preparation failed";
+        default:
+          return "Provisioning progress";
+      }
+    case "start_provider_session":
+      switch (status) {
+        case "started":
+          return "Starting provider session";
+        case "completed":
+          return "Provider session started";
+        case "failed":
+          return "Provider session start failed";
+        default:
+          return "Provisioning progress";
+      }
+    default:
+      return "Provisioning progress";
   }
 }
 
@@ -1432,6 +1517,40 @@ function parseOperationMessage(
     };
   }
 
+  if (eventTypeMatches(eventType, "system/provisioning/progress")) {
+    const payload = toEventRecord(event.data);
+    const phase = toProvisioningPhase(getStringField(payload, "phase"));
+    const status = toProvisioningPhaseStatus(getStringField(payload, "status"));
+    const durationMs = getNumberField(payload, "durationMs");
+
+    return {
+      kind: "operation",
+      id: messageId(event.threadId, "op", `provisioning-progress:${event.seq}`),
+      threadId: event.threadId,
+      sourceSeqStart: event.seq,
+      sourceSeqEnd: event.seq,
+      createdAt: event.createdAt,
+      startedAt: event.createdAt,
+      turnId: getTurnId(event.data),
+      opType: "provisioning-progress",
+      title: provisioningProgressTitle(phase, status),
+      status: provisioningProgressOperationStatus(status),
+      ...(phase && status
+        ? {
+            provisioning: {
+              phases: {
+                [phase]: {
+                  status,
+                  startedAt: event.createdAt,
+                  ...(durationMs !== undefined ? { durationMs } : {}),
+                },
+              },
+            },
+          }
+        : {}),
+    };
+  }
+
   if (eventTypeMatches(eventType, "system/provisioning/env_setup")) {
     const payload = toEventRecord(event.data);
     const rawStatus = getStringField(payload, "status");
@@ -1478,6 +1597,7 @@ function parseOperationMessage(
               ...(branchName ? { branchName } : {}),
               setup: {
                 status,
+                startedAt: event.createdAt,
                 ...(scriptPath ? { scriptPath } : {}),
                 ...(timeoutMs !== undefined ? { timeoutMs } : {}),
                 ...(durationMs !== undefined ? { durationMs } : {}),
@@ -2678,6 +2798,9 @@ function interruptOperationMessage(message: UIOperationMessage): void {
     case "provisioning-fallback":
       message.title = "Provisioning interrupted";
       return;
+    case "provisioning-progress":
+      message.title = "Provisioning interrupted";
+      return;
     case "provisioning-env-setup":
       message.title = "Environment setup interrupted";
       return;
@@ -2706,6 +2829,18 @@ function finalizeOperationMessage(
       case "provisioning-started":
       case "provisioning-fallback":
         message.status = "error";
+        message.title = "Provisioning failed";
+        return;
+      case "provisioning-progress":
+        message.status = "error";
+        if (message.provisioning?.phases?.prepare_environment?.status === "started") {
+          message.title = "Environment preparation failed";
+          return;
+        }
+        if (message.provisioning?.phases?.start_provider_session?.status === "started") {
+          message.title = "Provider session start failed";
+          return;
+        }
         message.title = "Provisioning failed";
         return;
       case "provisioning-env-setup":

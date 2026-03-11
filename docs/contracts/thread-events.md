@@ -45,6 +45,7 @@ Notes:
 - `system/worktree/commit` -> `SystemWorktreeCommitEventData`
 - `system/worktree/squash_merge` -> `SystemWorktreeSquashMergeEventData`
 - `system/provisioning/started` -> `SystemProvisioningStartedEventData`
+- `system/provisioning/progress` -> `SystemProvisioningProgressEventData`
 - `system/provisioning/env_setup` -> `SystemProvisioningEnvSetupEventData`
 - `system/provisioning/fallback` -> `SystemProvisioningFallbackEventData`
 - `system/provisioning/completed` -> `SystemProvisioningCompletedEventData`

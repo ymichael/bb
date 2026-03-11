@@ -1326,6 +1326,67 @@ describe("Orchestrator", () => {
       });
     });
 
+    it("records provisioning phase progress when spawning a thread", async () => {
+      const project = { id: "proj-1", name: "Test", rootPath: "/test", createdAt: 1000, updatedAt: 1000 };
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(project);
+
+      const createdThread = makeThread({ id: "t-new", status: "idle" });
+      (threadRepo.create as ReturnType<typeof vi.fn>).mockReturnValue(createdThread);
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeThread({ id: "t-new", status: "active" }),
+      );
+
+      await manager.spawn({
+        projectId: "proj-1",
+        input: [{ type: "text", text: "Start work" }],
+      });
+
+      await vi.waitFor(() => {
+        expect(eventRepo.create).toHaveBeenCalledWith(
+          expect.objectContaining({
+            threadId: "t-new",
+            type: "system/provisioning/progress",
+            data: expect.objectContaining({
+              phase: "prepare_environment",
+              status: "started",
+            }),
+          }),
+        );
+        expect(eventRepo.create).toHaveBeenCalledWith(
+          expect.objectContaining({
+            threadId: "t-new",
+            type: "system/provisioning/progress",
+            data: expect.objectContaining({
+              phase: "prepare_environment",
+              status: "completed",
+              durationMs: expect.any(Number),
+            }),
+          }),
+        );
+        expect(eventRepo.create).toHaveBeenCalledWith(
+          expect.objectContaining({
+            threadId: "t-new",
+            type: "system/provisioning/progress",
+            data: expect.objectContaining({
+              phase: "start_provider_session",
+              status: "started",
+            }),
+          }),
+        );
+        expect(eventRepo.create).toHaveBeenCalledWith(
+          expect.objectContaining({
+            threadId: "t-new",
+            type: "system/provisioning/progress",
+            data: expect.objectContaining({
+              phase: "start_provider_session",
+              status: "failed",
+              durationMs: expect.any(Number),
+            }),
+          }),
+        );
+      });
+    });
+
 
 
 

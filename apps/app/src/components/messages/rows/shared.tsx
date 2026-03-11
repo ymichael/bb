@@ -1,6 +1,7 @@
 import {
   useEffect,
   useRef,
+  useState,
   type ReactNode,
 } from "react";
 import {
@@ -124,6 +125,29 @@ export function formatSummaryDuration(
     return undefined;
   }
   return formatCompactDuration(durationMs);
+}
+
+export function formatElapsedSince(startedAt: number, now: number = Date.now()): string {
+  return formatCompactDuration(Math.max(1_000, now - startedAt));
+}
+
+export function useLiveNow(enabled: boolean, intervalMs: number = 1_000): number {
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    if (!enabled) return;
+
+    setNow(Date.now());
+    const intervalId = window.setInterval(() => {
+      setNow(Date.now());
+    }, intervalMs);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [enabled, intervalMs]);
+
+  return now;
 }
 
 export { useLatestInitialExpanded };

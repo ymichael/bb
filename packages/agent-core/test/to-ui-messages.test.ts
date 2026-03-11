@@ -386,7 +386,7 @@ describe("toUIMessages replay coverage", () => {
 
     expect(messageRows[0].message.opType).toBe("provisioning");
     expect(messageRows[0].message.status).toBe("pending");
-    expect(messageRows[0].message.title).toBe("Provisioning Worktree...");
+    expect(messageRows[0].message.title).toBe("Provisioning environment");
   });
 
   it("finalizes streaming assistant and reasoning messages when thread is idle", () => {
@@ -1747,14 +1747,65 @@ describe("toUIMessages replay coverage", () => {
     expect(ops[0]?.provisioning?.workspaceRoot).toBe("/tmp/worktree");
     expect(ops[0]?.provisioning?.setup?.scriptPath).toBe(".bb-env-setup.sh");
     expect(ops[0]?.provisioning?.setup?.timeoutMs).toBe(600000);
+    expect(ops[0]?.provisioning?.setup?.startedAt).toBe(1);
     expect(ops[1]?.opType).toBe("provisioning-env-setup");
     expect(ops[1]?.title).toBe("Environment setup running");
     expect(ops[1]?.detail).toBeUndefined();
     expect(ops[1]?.provisioning?.setup?.output).toBe("pnpm install");
+    expect(ops[1]?.provisioning?.setup?.startedAt).toBe(2);
     expect(ops[2]?.opType).toBe("provisioning-env-setup");
     expect(ops[2]?.title).toBe("Environment setup completed");
     expect(ops[2]?.detail).toBeUndefined();
     expect(ops[2]?.provisioning?.setup?.durationMs).toBe(125);
+    expect(ops[2]?.provisioning?.setup?.startedAt).toBe(3);
+  });
+
+  it("projects provisioning progress events as operations", () => {
+    const events: ThreadEvent[] = [
+      {
+        id: "evt-1",
+        threadId: "thread-1",
+        seq: 1,
+        type: "system/provisioning/progress",
+        data: {
+          phase: "prepare_environment",
+          status: "completed",
+          durationMs: 1200,
+        },
+        createdAt: 1,
+      },
+      {
+        id: "evt-2",
+        threadId: "thread-1",
+        seq: 2,
+        type: "system/provisioning/progress",
+        data: {
+          phase: "start_provider_session",
+          status: "started",
+        },
+        createdAt: 2,
+      },
+    ];
+
+    const projected = toUIMessages(events, {
+      threadStatus: "provisioning",
+    });
+    const ops = projected.filter(
+      (message): message is Extract<UIMessage, { kind: "operation" }> =>
+        message.kind === "operation",
+    );
+
+    expect(ops).toHaveLength(2);
+    expect(ops[0]?.opType).toBe("provisioning-progress");
+    expect(ops[0]?.title).toBe("Environment prepared");
+    expect(ops[0]?.status).toBe("completed");
+    expect(ops[0]?.provisioning?.phases?.prepare_environment?.durationMs).toBe(1200);
+    expect(ops[0]?.provisioning?.phases?.prepare_environment?.startedAt).toBe(1);
+    expect(ops[1]?.opType).toBe("provisioning-progress");
+    expect(ops[1]?.title).toBe("Starting provider session");
+    expect(ops[1]?.status).toBe("pending");
+    expect(ops[1]?.provisioning?.phases?.start_provider_session?.status).toBe("started");
+    expect(ops[1]?.provisioning?.phases?.start_provider_session?.startedAt).toBe(2);
   });
 
   it("projects primary-checkout lifecycle events with stable metadata", () => {
@@ -2351,7 +2402,7 @@ describe("toUIMessages replay coverage", () => {
     expect(messageRows[1]?.message.kind).toBe("operation");
     if (messageRows[1]?.message.kind === "operation") {
       expect(messageRows[1].message.opType).toBe("provisioning");
-      expect(messageRows[1].message.title).toBe("Provisioning Direct failed");
+      expect(messageRows[1].message.title).toBe("Provisioning environment failed");
     }
 
     expect(messageRows[2]?.message.kind).toBe("error");
@@ -2695,7 +2746,7 @@ describe("toUIMessages replay coverage", () => {
     }
 
     expect(messageRows[1].message.opType).toBe("provisioning");
-    expect(messageRows[1].message.title).toBe("Provisioned Docker Sandbox");
+    expect(messageRows[1].message.title).toBe("Provisioned environment");
     expect(messageRows[1].message.provisioning?.environmentDisplayName).toBe(
       "Docker Sandbox",
     );

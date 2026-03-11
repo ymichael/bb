@@ -47,6 +47,7 @@ function provisioningOperation(
   seq: number,
   opType:
     | "provisioning-started"
+    | "provisioning-progress"
     | "provisioning-env-setup"
     | "provisioning-completed",
   title: string,
@@ -55,8 +56,21 @@ function provisioningOperation(
     environmentDisplayName?: string;
     workspaceRoot?: string;
     fallbackReason?: string;
+    phases?: {
+      prepare_environment?: {
+        status: "started" | "completed" | "failed";
+        startedAt?: number;
+        durationMs?: number;
+      };
+      start_provider_session?: {
+        status: "started" | "completed" | "failed";
+        startedAt?: number;
+        durationMs?: number;
+      };
+    };
     setup?: {
       status: "started" | "running" | "completed" | "failed";
+      startedAt?: number;
       scriptPath?: string;
       timeoutMs?: number;
       durationMs?: number;
@@ -73,7 +87,11 @@ function provisioningOperation(
     createdAt: seq,
     opType,
     title,
-    ...((options?.environmentDisplayName || options?.workspaceRoot || options?.fallbackReason || options?.setup)
+    ...((options?.environmentDisplayName ||
+    options?.workspaceRoot ||
+    options?.fallbackReason ||
+    options?.phases ||
+    options?.setup)
       ? {
           provisioning: {
             ...(options?.environmentDisplayName
@@ -81,6 +99,26 @@ function provisioningOperation(
               : {}),
             ...(options?.workspaceRoot ? { workspaceRoot: options.workspaceRoot } : {}),
             ...(options?.fallbackReason ? { fallbackReason: options.fallbackReason } : {}),
+            ...(options?.phases
+              ? {
+                  phases: {
+                    ...(options.phases.prepare_environment
+                      ? {
+                          prepare_environment: {
+                            ...options.phases.prepare_environment,
+                          },
+                        }
+                      : {}),
+                    ...(options.phases.start_provider_session
+                      ? {
+                          start_provider_session: {
+                            ...options.phases.start_provider_session,
+                          },
+                        }
+                      : {}),
+                  },
+                }
+              : {}),
             ...(options?.setup ? { setup: { ...options.setup } } : {}),
           },
         }
@@ -377,7 +415,7 @@ describe("buildThreadDetailRows provisioning operation collapsing", () => {
 
     expect(rows).toHaveLength(1);
     expect(rows[0]?.opType).toBe("provisioning");
-    expect(rows[0]?.title).toBe("Provisioned Worktree");
+    expect(rows[0]?.title).toBe("Provisioned environment");
     expect(rows[0]?.provisioning?.environmentDisplayName).toBe("Worktree");
     expect(rows[0]?.provisioning?.workspaceRoot).toBe("/tmp/worktree");
     expect(rows[0]?.provisioning?.setup?.scriptPath).toBe(".bb-env-setup.ts");
@@ -408,7 +446,7 @@ describe("buildThreadDetailRows provisioning operation collapsing", () => {
 
     expect(rows).toHaveLength(1);
     expect(rows[0]?.opType).toBe("provisioning");
-    expect(rows[0]?.title).toBe("Provisioned Direct");
+    expect(rows[0]?.title).toBe("Provisioned environment");
     expect(rows[0]?.provisioning?.environmentDisplayName).toBe("Direct");
     expect(rows[0]?.detail).toBeUndefined();
   });
@@ -464,7 +502,7 @@ describe("buildThreadDetailRows provisioning operation collapsing", () => {
 
     expect(startedRows[0]?.id).toBe("provisioning-1");
     expect(startedRows[0]?.opType).toBe("provisioning");
-    expect(startedRows[0]?.title).toBe("Provisioning Worktree...");
+    expect(startedRows[0]?.title).toBe("Provisioning environment");
     expect(mergedRows[0]?.id).toBe("provisioning-1");
   });
 
@@ -525,12 +563,61 @@ describe("buildThreadDetailRows provisioning operation collapsing", () => {
 
     expect(rows).toHaveLength(1);
     expect(rows[0]?.opType).toBe("provisioning");
-    expect(rows[0]?.title).toBe("Provisioning Worktree...");
+    expect(rows[0]?.title).toBe("Provisioning environment");
     expect(rows[0]?.provisioning?.environmentDisplayName).toBe("Worktree");
     expect(rows[0]?.provisioning?.workspaceRoot).toBe("/tmp/worktree");
     expect(rows[0]?.provisioning?.setup?.status).toBe("running");
     expect(rows[0]?.provisioning?.setup?.output).toBe("+ pnpm install\nDone in 3.2s");
     expect(rows[0]?.detail).toBeUndefined();
+  });
+
+  it("preserves provisioning phase timing when collapsing provisioning rows", () => {
+    const rows = getOperationRows([
+      provisioningOperation(
+        1,
+        "provisioning-started",
+        "Provisioning started",
+        undefined,
+        { environmentDisplayName: "Direct Workspace" },
+      ),
+      provisioningOperation(
+        2,
+        "provisioning-progress",
+        "Environment prepared",
+        undefined,
+        {
+          phases: {
+            prepare_environment: {
+              status: "completed",
+              startedAt: 2,
+              durationMs: 1200,
+            },
+          },
+        },
+      ),
+      provisioningOperation(
+        3,
+        "provisioning-progress",
+        "Starting provider session",
+        undefined,
+        {
+          phases: {
+            start_provider_session: {
+              status: "started",
+              startedAt: 3,
+            },
+          },
+        },
+      ),
+    ]);
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.opType).toBe("provisioning");
+    expect(rows[0]?.title).toBe("Provisioning environment");
+    expect(rows[0]?.provisioning?.phases?.prepare_environment?.durationMs).toBe(1200);
+    expect(rows[0]?.provisioning?.phases?.prepare_environment?.startedAt).toBe(2);
+    expect(rows[0]?.provisioning?.phases?.start_provider_session?.status).toBe("started");
+    expect(rows[0]?.provisioning?.phases?.start_provider_session?.startedAt).toBe(3);
   });
 
   it("collapses env-setup-only updates without looking stuck in provisioning", () => {

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { UIMessage } from "@beanbag/agent-core";
 import { ConversationEntry } from "./ConversationEntry";
@@ -922,7 +922,7 @@ describe("ConversationEntry", () => {
       ...baseMessage(),
       kind: "operation",
       opType: "provisioning",
-      title: "Provisioned Direct",
+      title: "Provisioned environment",
       provisioning: {
         environmentDisplayName: "Direct",
         workspaceRoot: "/Users/michael/Projects/bb",
@@ -931,7 +931,7 @@ describe("ConversationEntry", () => {
 
     const html = renderToStaticMarkup(<ConversationEntry message={message} />);
     expect(html).toContain("Provisioned");
-    expect(html).toContain("Direct");
+    expect(html).toContain("environment");
     expect(html).toContain("lucide-chevron-right");
   });
 
@@ -940,7 +940,7 @@ describe("ConversationEntry", () => {
       ...baseMessage(),
       kind: "operation",
       opType: "provisioning",
-      title: "Provisioned Worktree",
+      title: "Provisioned environment",
       provisioning: {
         environmentDisplayName: "Worktree",
         workspaceRoot: "/tmp/worktree",
@@ -949,8 +949,7 @@ describe("ConversationEntry", () => {
 
     const html = renderToStaticMarkup(<ConversationEntry message={message} initialExpanded />);
     expect(html).toContain("Provisioned");
-    expect(html).toContain(">Worktree<");
-    expect(html).toContain("provisioning Worktree");
+    expect(html).toContain("environment: Worktree");
     expect(html).not.toContain("running .bb-env-setup.sh");
   });
 
@@ -959,7 +958,7 @@ describe("ConversationEntry", () => {
       ...baseMessage(),
       kind: "operation",
       opType: "provisioning",
-      title: "Provisioned Direct",
+      title: "Provisioned environment",
       provisioning: {
         environmentDisplayName: "Direct",
       },
@@ -967,8 +966,7 @@ describe("ConversationEntry", () => {
 
     const html = renderToStaticMarkup(<ConversationEntry message={message} initialExpanded />);
     expect(html).toContain("Provisioned");
-    expect(html).toContain(">Direct<");
-    expect(html).toContain("provisioning Direct");
+    expect(html).toContain("environment: Direct");
   });
 
   it("shows unstructured provisioning details under additional details", () => {
@@ -976,7 +974,7 @@ describe("ConversationEntry", () => {
       ...baseMessage(),
       kind: "operation",
       opType: "provisioning",
-      title: "Provisioned Worktree",
+      title: "Provisioned environment",
       detail: "bootstrap note: used cached dependencies",
       provisioning: {
         environmentDisplayName: "Worktree",
@@ -996,7 +994,7 @@ describe("ConversationEntry", () => {
       ...baseMessage(),
       kind: "operation",
       opType: "provisioning",
-      title: "Provisioned Worktree",
+      title: "Provisioned environment",
       provisioning: {
         environmentDisplayName: "Worktree",
         workspaceRoot: "/tmp/worktree",
@@ -1010,7 +1008,7 @@ describe("ConversationEntry", () => {
 
     const html = renderToStaticMarkup(<ConversationEntry message={message} initialExpanded />);
     expect(html).toContain("running .bb-env-setup.sh");
-    expect(html).toContain("provisioning Worktree");
+    expect(html).toContain("environment: Worktree");
     expect(html).not.toContain("Additional details");
   });
 
@@ -1019,7 +1017,7 @@ describe("ConversationEntry", () => {
       ...baseMessage(),
       kind: "operation",
       opType: "provisioning",
-      title: "Provisioning Worktree...",
+      title: "Provisioning environment",
       provisioning: {
         environmentDisplayName: "Worktree",
         workspaceRoot: "/tmp/worktree",
@@ -1035,8 +1033,7 @@ describe("ConversationEntry", () => {
 
     const html = renderToStaticMarkup(<ConversationEntry message={message} initialExpanded />);
     expect(html).toContain("Provisioning");
-    expect(html).toContain(">Worktree<");
-    expect(html).toContain("provisioning Worktree");
+    expect(html).toContain("environment: Worktree");
     expect(html).toContain("running .bb-env-setup.sh");
     expect(html).toContain("@beanbag/daemon:build: ERROR: command failed");
   });
@@ -1046,7 +1043,7 @@ describe("ConversationEntry", () => {
       ...baseMessage(),
       kind: "operation",
       opType: "provisioning",
-      title: "Provisioning Worktree...",
+      title: "Provisioning environment",
       provisioning: {
         environmentDisplayName: "Worktree",
         workspaceRoot: "/tmp/worktree",
@@ -1071,7 +1068,7 @@ describe("ConversationEntry", () => {
       ...baseMessage(),
       kind: "operation",
       opType: "provisioning",
-      title: "Provisioning Worktree...",
+      title: "Provisioning environment",
       provisioning: {
         environmentDisplayName: "Worktree",
         workspaceRoot: "/tmp/worktree",
@@ -1094,26 +1091,47 @@ describe("ConversationEntry", () => {
       ...baseMessage(),
       kind: "operation",
       opType: "provisioning",
-      title: "Provisioning Worktree...",
+      title: "Provisioning environment",
       startedAt: 1,
       createdAt: 15_000,
       status: "pending",
       provisioning: {
         environmentDisplayName: "Worktree",
+        phases: {
+          prepare_environment: {
+            status: "completed",
+            durationMs: 1200,
+          },
+          start_provider_session: {
+            status: "started",
+            startedAt: 1000,
+          },
+        },
         setup: {
           status: "running",
+          startedAt: 11000,
           scriptPath: ".bb-env-setup.sh",
         },
       },
     };
 
-    const html = renderToStaticMarkup(
-      <ConversationEntry message={message} initialExpanded />,
-    );
-    expect(html).toContain("Provisioning");
-    expect(html).toContain("Worktree");
-    expect(html).toContain("animate-shine");
-    expect(html).not.toContain("provisioning took");
+    vi.useFakeTimers();
+    vi.setSystemTime(16_000);
+
+    try {
+      const html = renderToStaticMarkup(
+        <ConversationEntry message={message} initialExpanded />,
+      );
+      expect(html).toContain("Provisioning");
+      expect(html).toContain("Worktree");
+      expect(html).toContain("prepared environment in 1s");
+      expect(html).toContain("starting provider session (15s)");
+      expect(html).toContain("running .bb-env-setup.sh (5s)");
+      expect(html).toContain("animate-shine");
+      expect(html).not.toContain("provisioning took");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("renders setup-only provisioning summaries as completed when env setup finished", () => {

@@ -163,8 +163,24 @@ export type UIProvisioningSetupStatus =
   | "completed"
   | "failed";
 
+export type UIProvisioningPhase =
+  | "prepare_environment"
+  | "start_provider_session";
+
+export type UIProvisioningPhaseStatus =
+  | "started"
+  | "completed"
+  | "failed";
+
+export interface UIProvisioningPhaseMetadata {
+  status: UIProvisioningPhaseStatus;
+  startedAt?: number;
+  durationMs?: number;
+}
+
 export interface UIProvisioningSetupMetadata {
   status: UIProvisioningSetupStatus;
+  startedAt?: number;
   scriptPath?: string;
   timeoutMs?: number;
   durationMs?: number;
@@ -177,6 +193,7 @@ export interface UIProvisioningMetadata {
   workspaceRoot?: string;
   branchName?: string;
   fallbackReason?: string;
+  phases?: Partial<Record<UIProvisioningPhase, UIProvisioningPhaseMetadata>>;
   setup?: UIProvisioningSetupMetadata;
 }
 

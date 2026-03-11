@@ -510,7 +510,7 @@ describe("buildThreadDetailRows", () => {
     expect(rows[0].message.kind).toBe("operation");
     if (rows[0].message.kind !== "operation") return;
     expect(rows[0].message.opType).toBe("provisioning");
-    expect(rows[0].message.title).toBe("Provisioned Direct");
+    expect(rows[0].message.title).toBe("Provisioned environment");
     expect(rows[0].message.provisioning?.environmentDisplayName).toBe("Direct");
     expect(rows[0].message.provisioning?.workspaceRoot).toBe("/Users/michael/Projects/bb");
     expect(rows[0].message.provisioning?.setup?.scriptPath).toBe(".bb-env-setup.ts");

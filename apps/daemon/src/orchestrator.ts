@@ -62,6 +62,7 @@ import {
   type ThreadToolGroupMessagesResponse,
   type ThreadChangeKind,
   type ThreadProvisioningReason,
+  type ThreadProvisioningProgressPhase,
   type ThreadEnvironmentStartReason,
 } from "@beanbag/agent-core";
 import {
@@ -2566,13 +2567,26 @@ export class Orchestrator implements ThreadOrchestrator {
       environmentDisplayName: requestedEnvironmentInfo.displayName,
       reason: provisioningReason,
     });
+    this._appendProvisioningProgressEvent(threadId, "prepare_environment", "started");
 
-    const environmentRuntime = await this._spawnProcess(
-      threadId,
-      opts?.rootPathHint ?? project.rootPath,
-      requestedEnvironmentId,
-      provisioningReason,
-    );
+    const prepareEnvironmentStartedAt = Date.now();
+    let environmentRuntime: ActiveEnvironmentRuntime;
+    try {
+      environmentRuntime = await this._spawnProcess(
+        threadId,
+        opts?.rootPathHint ?? project.rootPath,
+        requestedEnvironmentId,
+        provisioningReason,
+      );
+      this._appendProvisioningProgressEvent(threadId, "prepare_environment", "completed", {
+        durationMs: Date.now() - prepareEnvironmentStartedAt,
+      });
+    } catch (error) {
+      this._appendProvisioningProgressEvent(threadId, "prepare_environment", "failed", {
+        durationMs: Date.now() - prepareEnvironmentStartedAt,
+      });
+      throw error;
+    }
     this.threadRepo.update(threadId, {
       environmentId: environmentRuntime.environment.kind,
       environmentRecord: {
@@ -2617,27 +2631,40 @@ export class Orchestrator implements ThreadOrchestrator {
         initiator: "agent",
       },
     );
-    const started = await this._withEnvironmentAgentTarget({
-      thread: hydratedThread ?? {
-        id: threadId,
-        projectId: req.projectId,
-        status: "provisioning",
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
-        environmentId: environmentRuntime.environment.kind,
-      } as Thread,
-      projectRootPath: project.rootPath,
-      target: environmentRuntime.agentConnectionTarget,
-      action: async ({ client, providerLaunch }) =>
-        this.agentServer.startThreadCommand({
-          client,
-          threadId,
+    this._appendProvisioningProgressEvent(threadId, "start_provider_session", "started");
+    const providerStartStartedAt = Date.now();
+    let started: { providerThreadId: string };
+    try {
+      started = await this._withEnvironmentAgentTarget({
+        thread: hydratedThread ?? {
+          id: threadId,
           projectId: req.projectId,
-          request: effectiveRequest,
-          context: providerContext,
-          providerLaunch,
-        }),
-    });
+          status: "provisioning",
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+          environmentId: environmentRuntime.environment.kind,
+        } as Thread,
+        projectRootPath: project.rootPath,
+        target: environmentRuntime.agentConnectionTarget,
+        action: async ({ client, providerLaunch }) =>
+          this.agentServer.startThreadCommand({
+            client,
+            threadId,
+            projectId: req.projectId,
+            request: effectiveRequest,
+            context: providerContext,
+            providerLaunch,
+          }),
+      });
+      this._appendProvisioningProgressEvent(threadId, "start_provider_session", "completed", {
+        durationMs: Date.now() - providerStartStartedAt,
+      });
+    } catch (error) {
+      this._appendProvisioningProgressEvent(threadId, "start_provider_session", "failed", {
+        durationMs: Date.now() - providerStartStartedAt,
+      });
+      throw error;
+    }
     const providerThreadId = started.providerThreadId;
     this.providerThreadIdByThreadId.set(threadId, providerThreadId);
     this._appendEvent(threadId, "system/provisioning/completed", {
@@ -2902,6 +2929,21 @@ export class Orchestrator implements ThreadOrchestrator {
       ...(event.durationMs !== undefined ? { durationMs: event.durationMs } : {}),
       ...(event.detail ? { detail: event.detail } : {}),
       ...(event.reason ? { reason: event.reason } : {}),
+    });
+  }
+
+  private _appendProvisioningProgressEvent(
+    threadId: string,
+    phase: ThreadProvisioningProgressPhase,
+    status: "started" | "completed" | "failed",
+    options?: {
+      durationMs?: number;
+    },
+  ): void {
+    this._appendEvent(threadId, "system/provisioning/progress", {
+      phase,
+      status,
+      ...(options?.durationMs !== undefined ? { durationMs: options.durationMs } : {}),
     });
   }
 

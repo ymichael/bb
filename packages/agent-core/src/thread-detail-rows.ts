@@ -3,6 +3,8 @@ import type {
   UIMessage,
   UIPrimaryCheckoutAction,
   UIPrimaryCheckoutPhase,
+  UIProvisioningPhase,
+  UIProvisioningPhaseMetadata,
   UIProvisioningMetadata,
   UIProvisioningSetupMetadata,
   UIThreadOperationIntentAction,
@@ -69,6 +71,7 @@ function isProvisioningOperation(
   // opType is open/external; unknown values are intentionally ignored.
   return (
     message.opType === "provisioning-started" ||
+    message.opType === "provisioning-progress" ||
     message.opType === "provisioning-env-setup" ||
     message.opType === "provisioning-fallback" ||
     message.opType === "provisioning-completed" ||
@@ -103,11 +106,64 @@ function mergeProvisioningSetup(
 
   return {
     status: incoming.status,
+    startedAt: existing.startedAt ?? incoming.startedAt,
     scriptPath: incoming.scriptPath ?? existing.scriptPath,
     timeoutMs: incoming.timeoutMs ?? existing.timeoutMs,
     durationMs: incoming.durationMs ?? existing.durationMs,
     output: appendProvisioningOutput(existing.output, incoming.output),
   };
+}
+
+function mergeProvisioningPhaseMetadata(
+  existing: UIProvisioningPhaseMetadata | undefined,
+  incoming: UIProvisioningPhaseMetadata | undefined,
+): UIProvisioningPhaseMetadata | undefined {
+  if (!incoming) {
+    return existing ? { ...existing } : undefined;
+  }
+  if (!existing) {
+    return { ...incoming };
+  }
+
+  return {
+    status: incoming.status,
+    startedAt: existing.startedAt ?? incoming.startedAt,
+    durationMs: incoming.durationMs ?? existing.durationMs,
+  };
+}
+
+function mergeProvisioningPhases(
+  existing:
+    | Partial<Record<UIProvisioningPhase, UIProvisioningPhaseMetadata>>
+    | undefined,
+  incoming:
+    | Partial<Record<UIProvisioningPhase, UIProvisioningPhaseMetadata>>
+    | undefined,
+):
+  | Partial<Record<UIProvisioningPhase, UIProvisioningPhaseMetadata>>
+  | undefined {
+  if (!incoming) {
+    return existing ? { ...existing } : undefined;
+  }
+  if (!existing) {
+    return Object.fromEntries(
+      Object.entries(incoming).map(([phase, metadata]) => [
+        phase,
+        metadata ? { ...metadata } : metadata,
+      ]),
+    ) as Partial<Record<UIProvisioningPhase, UIProvisioningPhaseMetadata>>;
+  }
+
+  const merged: Partial<Record<UIProvisioningPhase, UIProvisioningPhaseMetadata>> = {
+    ...existing,
+  };
+  const phases = Object.keys(incoming) as UIProvisioningPhase[];
+  for (const phase of phases) {
+    const metadata = incoming[phase];
+    if (!metadata) continue;
+    merged[phase] = mergeProvisioningPhaseMetadata(existing[phase], metadata);
+  }
+  return merged;
 }
 
 function mergeProvisioningMetadata(
@@ -120,17 +176,20 @@ function mergeProvisioningMetadata(
   if (!existing) {
     return {
       ...incoming,
+      ...(incoming.phases ? { phases: mergeProvisioningPhases(undefined, incoming.phases) } : {}),
       ...(incoming.setup ? { setup: { ...incoming.setup } } : {}),
     };
   }
 
   const setup = mergeProvisioningSetup(existing.setup, incoming.setup);
+  const phases = mergeProvisioningPhases(existing.phases, incoming.phases);
   return {
     environmentId: incoming.environmentId ?? existing.environmentId,
     environmentDisplayName: incoming.environmentDisplayName ?? existing.environmentDisplayName,
     workspaceRoot: incoming.workspaceRoot ?? existing.workspaceRoot,
     branchName: incoming.branchName ?? existing.branchName,
     fallbackReason: incoming.fallbackReason ?? existing.fallbackReason,
+    ...(phases ? { phases } : {}),
     ...(setup ? { setup } : {}),
   };
 }
@@ -152,6 +211,7 @@ function shouldNormalizeProvisioningLifecycleOperation(
 ): boolean {
   return (
     message.opType === "provisioning-started" ||
+    message.opType === "provisioning-progress" ||
     message.opType === "provisioning-env-setup" ||
     message.opType === "provisioning-completed"
   );
@@ -200,13 +260,12 @@ function mergeProvisioningOperations(messages: UIMessage[]): UIMessage[] {
       (acc, message) => mergeProvisioningMetadata(acc, message.provisioning),
       undefined,
     );
-    const environment = provisioning?.environmentDisplayName?.trim() ?? "environment";
     const title = (() => {
       if (mergedStatus === "interrupted") {
         if (!hasLifecycleUpdate && lastSetupUpdate) {
           return "Environment setup interrupted";
         }
-        return "Provisioning interrupted";
+        return "Provisioning environment interrupted";
       }
       if (mergedStatus === "error") {
         if (lastSetupUpdate) {
@@ -214,7 +273,7 @@ function mergeProvisioningOperations(messages: UIMessage[]): UIMessage[] {
             ? "Environment setup failed"
             : lastSetupUpdate.title;
         }
-        return `Provisioning ${environment} failed`;
+        return "Provisioning environment failed";
       }
       if (!hasLifecycleUpdate && lastSetupUpdate) {
         switch (lastSetupUpdate.title) {
@@ -227,7 +286,7 @@ function mergeProvisioningOperations(messages: UIMessage[]): UIMessage[] {
         }
       }
 
-      return hasCompleted ? `Provisioned ${environment}` : `Provisioning ${environment}...`;
+      return hasCompleted ? "Provisioned environment" : "Provisioning environment";
     })();
 
     merged.push({

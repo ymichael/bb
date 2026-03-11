@@ -188,7 +188,7 @@ describe("threadDetailActivity", () => {
           kind: "operation",
           turnId: "turn-1",
           opType: "provisioning",
-          title: "Provisioning Worktree...",
+          title: "Provisioning environment",
           detail: "Environment: Git Worktree Workspace",
         },
       },
@@ -215,7 +215,7 @@ describe("threadDetailActivity", () => {
         kind: "operation",
         turnId: "turn-1",
         opType: "provisioning",
-        title: "Provisioning Worktree...",
+        title: "Provisioning environment",
         detail: "Environment: Git Worktree Workspace",
       },
     ];

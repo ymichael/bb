@@ -11,6 +11,7 @@ function isProvisioningActivityOperation(
   switch (message.opType) {
     case "provisioning":
     case "provisioning-started":
+    case "provisioning-progress":
     case "provisioning-env-setup":
     case "provisioning-fallback":
     case "provisioning-completed":

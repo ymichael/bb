@@ -7,6 +7,7 @@ import {
   assertNever,
   formatEnvironmentDisplayName,
   type UIOperationMessage,
+  type UIProvisioningPhase,
   type UIProvisioningMetadata,
 } from "@beanbag/agent-core";
 import { cn } from "@/lib/utils";
@@ -14,8 +15,10 @@ import {
   EVENT_DETAIL_MAX_HEIGHT_CLASS,
   EventTitle,
   formatCompactDuration,
+  formatElapsedSince,
   getEventHeaderToneClass,
   getStaticEventToneClass,
+  useLiveNow,
   useLatestInitialExpanded,
 } from "./shared";
 import { TerminalOutputBlock } from "./TerminalOutputBlock";
@@ -51,6 +54,67 @@ function formatProvisioningSetupCommand(scriptPath: string | undefined): string 
     return `bash -x ${value}`;
   }
   return `bash -x ./${value}`;
+}
+
+function formatProvisioningRunningSuffix(
+  startedAt: number | undefined,
+  now: number | undefined,
+): string {
+  if (startedAt === undefined || now === undefined || now < startedAt) {
+    return "";
+  }
+  return ` (${formatElapsedSince(startedAt, now)})`;
+}
+
+function formatProvisioningPhaseLine(
+  phase: UIProvisioningPhase,
+  metadata: NonNullable<UIProvisioningMetadata["phases"]>[UIProvisioningPhase],
+  now?: number,
+): string | undefined {
+  if (!metadata) return undefined;
+  const durationText =
+    metadata.durationMs !== undefined
+      ? ` in ${formatCompactDuration(metadata.durationMs)}`
+      : "";
+
+  switch (phase) {
+    case "prepare_environment":
+      switch (metadata.status) {
+        case "started":
+          return `preparing environment${formatProvisioningRunningSuffix(metadata.startedAt, now)}`;
+        case "completed":
+          return `prepared environment${durationText}`;
+        case "failed":
+          return `environment preparation failed${durationText}`;
+        default:
+          return assertNever(metadata.status);
+      }
+    case "start_provider_session":
+      switch (metadata.status) {
+        case "started":
+          return `starting provider session${formatProvisioningRunningSuffix(metadata.startedAt, now)}`;
+        case "completed":
+          return `started provider session${durationText}`;
+        case "failed":
+          return `provider session start failed${durationText}`;
+        default:
+          return assertNever(metadata.status);
+      }
+    default:
+      return assertNever(phase);
+  }
+}
+
+function formatProvisioningSetupLine(
+  setup: UIProvisioningMetadata["setup"],
+  now?: number,
+): string | undefined {
+  const scriptPath = setup?.scriptPath?.trim();
+  if (!scriptPath) return undefined;
+  if (setup.status === "started" || setup.status === "running") {
+    return `running ${scriptPath}${formatProvisioningRunningSuffix(setup.startedAt, now)}`;
+  }
+  return `running ${scriptPath}`;
 }
 
 function extractPromptSections(detailText: string | undefined): {
@@ -224,7 +288,6 @@ function buildProvisioningSummary(
   message: UIOperationMessage,
   tone: "default" | "destructive",
 ): ReactNode {
-  const environmentLabel = normalizeProvisioningEnvironmentLabel(message.provisioning);
   const isPending = isPendingOperation(message);
   switch (message.title) {
     case "Environment setup completed":
@@ -237,46 +300,40 @@ function buildProvisioningSummary(
     case "Environment setup running":
     case "Environment setup...":
       return <EventTitle prefix="Environment setup" tone={tone} shimmerPrefix={isPending} />;
-    case "Provisioning interrupted":
-      return <EventTitle prefix="Provisioning" emphasis="interrupted" tone={tone} />;
     default:
-      if (message.title.startsWith("Provisioned ")) {
-        return (
-          <EventTitle
-            prefix="Provisioned"
-            emphasis={environmentLabel ?? message.title.slice("Provisioned ".length).trim()}
-            tone={tone}
-          />
-        );
+      switch (message.status) {
+        case "completed":
+          return <EventTitle prefix="Provisioned" detail="environment" tone={tone} />;
+        case "error":
+          return <EventTitle prefix="Provisioning" detail="environment" emphasis="failed" tone={tone} />;
+        case "interrupted":
+          return (
+            <EventTitle
+              prefix="Provisioning"
+              detail="environment"
+              emphasis="interrupted"
+              tone={tone}
+            />
+          );
+        case "pending":
+          return (
+            <EventTitle
+              prefix="Provisioning"
+              detail="environment"
+              tone={tone}
+              shimmerPrefix={isPending}
+            />
+          );
+        default:
+          return <span>{message.title}</span>;
       }
-      if (tone === "destructive" && /^Provisioning\s+.+\s+failed$/i.test(message.title)) {
-        return (
-          <EventTitle
-            prefix="Provisioning"
-            detail={environmentLabel}
-            emphasis="failed"
-            tone={tone}
-          />
-        );
-      }
-      if (message.title.startsWith("Provisioning ")) {
-        return (
-          <EventTitle
-            prefix="Provisioning"
-            emphasis={
-              environmentLabel ??
-              (message.title.slice("Provisioning ".length).replace(/\.\.\.$/, "").trim() || "environment")
-            }
-            tone={tone}
-            shimmerPrefix={isPending}
-          />
-        );
-      }
-      return <span>{message.title}</span>;
   }
 }
 
-function buildProvisioningTranscript(message: UIOperationMessage): {
+function buildProvisioningTranscript(
+  message: UIOperationMessage,
+  now?: number,
+): {
   lines: string[];
   outputText?: string;
   outputCommand?: string;
@@ -284,7 +341,19 @@ function buildProvisioningTranscript(message: UIOperationMessage): {
   const provisioning = message.provisioning;
   const environmentLabel = normalizeProvisioningEnvironmentLabel(provisioning) ?? "environment";
   const setup = provisioning?.setup;
-  const lines = [`provisioning ${environmentLabel}`];
+  const lines = [`environment: ${environmentLabel}`];
+  const provisioningPhases = provisioning?.phases;
+  const orderedPhases: UIProvisioningPhase[] = [
+    "prepare_environment",
+    "start_provider_session",
+  ];
+
+  for (const phase of orderedPhases) {
+    const line = formatProvisioningPhaseLine(phase, provisioningPhases?.[phase], now);
+    if (line) {
+      lines.push(line);
+    }
+  }
   const isWorktreeEnvironment = provisioning?.environmentId === "worktree";
 
   if (isWorktreeEnvironment) {
@@ -293,8 +362,9 @@ function buildProvisioningTranscript(message: UIOperationMessage): {
   if (isWorktreeEnvironment && provisioning?.branchName) {
     lines.push(`creating branch ${provisioning.branchName}`);
   }
-  if (setup?.scriptPath) {
-    lines.push(`running ${setup.scriptPath}`);
+  const setupLine = formatProvisioningSetupLine(setup, now);
+  if (setupLine) {
+    lines.push(setupLine);
   }
   if (provisioning?.fallbackReason) {
     lines.push(`fallback: ${provisioning.fallbackReason}`);
@@ -426,6 +496,7 @@ export function OperationRow({
 }) {
   const { isExpanded, onToggle } = useLatestInitialExpanded(initialExpanded);
   const tone = getOperationTone(message);
+  const liveNow = useLiveNow(isExpanded && message.opType === "provisioning" && message.status === "pending");
 
   if (message.opType === "plan-updated") {
     const detailLines = splitNonEmptyLines(message.detail);
@@ -447,7 +518,7 @@ export function OperationRow({
 
   if (message.opType === "provisioning") {
     const summaryContent = buildProvisioningSummary(message, tone);
-    const { lines, outputText, outputCommand } = buildProvisioningTranscript(message);
+    const { lines, outputText, outputCommand } = buildProvisioningTranscript(message, liveNow);
     const additionalDetailLines = splitNonEmptyLines(message.detail).filter(
       (line) => !lines.includes(line),
     );

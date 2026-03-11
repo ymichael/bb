@@ -38,15 +38,15 @@ function isShimmeringPrimaryCheckoutPhase(phase: PrimaryCheckoutPhase): boolean 
 }
 
 function shouldShimmerProvisioningOperation(message: UIOperationMessage): boolean {
-  if (message.title.startsWith("Provisioning ")) return true;
-  if (message.title.startsWith("Provisioned ")) return false;
-  if (
-    message.title === "Environment setup completed" ||
-    message.title === "Environment setup failed"
-  ) {
-    return false;
+  if (message.status !== "pending") return false;
+  switch (message.title) {
+    case "Environment setup completed":
+    case "Environment setup failed":
+    case "Environment setup interrupted":
+      return false;
+    default:
+      return true;
   }
-  return message.title.endsWith("...");
 }
 
 function shouldShimmerThreadOperationIntent(message: UIOperationMessage): boolean {

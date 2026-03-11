@@ -148,6 +148,7 @@ export type AppThreadEventType =
   | "system/worktree/commit"
   | "system/worktree/squash_merge"
   | "system/provisioning/started"
+  | "system/provisioning/progress"
   | "system/provisioning/env_setup"
   | "system/provisioning/fallback"
   | "system/provisioning/completed"
@@ -244,6 +245,21 @@ export interface SystemProvisioningStartedEventData {
   reason?: ThreadProvisioningReason;
 }
 
+export type ThreadProvisioningProgressPhase =
+  | "prepare_environment"
+  | "start_provider_session";
+
+export type ThreadProvisioningProgressStatus =
+  | "started"
+  | "completed"
+  | "failed";
+
+export interface SystemProvisioningProgressEventData {
+  phase: ThreadProvisioningProgressPhase;
+  status: ThreadProvisioningProgressStatus;
+  durationMs?: number;
+}
+
 export interface SystemProvisioningEnvSetupEventData {
   status: "started" | "running" | "completed" | "failed";
   scriptPath: string;
@@ -313,6 +329,7 @@ export type ThreadEventDataByType = CodexServerNotificationParamsByMethod & {
   "system/worktree/commit": SystemWorktreeCommitEventData;
   "system/worktree/squash_merge": SystemWorktreeSquashMergeEventData;
   "system/provisioning/started": SystemProvisioningStartedEventData;
+  "system/provisioning/progress": SystemProvisioningProgressEventData;
   "system/provisioning/env_setup": SystemProvisioningEnvSetupEventData;
   "system/provisioning/fallback": SystemProvisioningFallbackEventData;
   "system/provisioning/completed": SystemProvisioningCompletedEventData;
