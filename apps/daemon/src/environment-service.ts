@@ -261,7 +261,10 @@ export class EnvironmentService {
   }
 
   setEnvironmentRuntime(threadId: string, environment: IEnvironment): void {
-    this.suspendEnvironmentRuntime(threadId);
+    const existingRuntime = this.detachEnvironmentRuntime(threadId);
+    if (existingRuntime) {
+      this.suspendDetachedRuntime(threadId, existingRuntime);
+    }
     const agentConnectionTarget = environment.getAgentConnectionTarget();
     const stopWatchingWorkspaceStatus = environment.watchWorkspaceStatus(() => {
       if (!this.threadRepo.getById(threadId)) {
@@ -288,14 +291,7 @@ export class EnvironmentService {
   suspendEnvironmentRuntime(threadId: string): void {
     const runtime = this.detachEnvironmentRuntime(threadId);
     if (runtime) {
-      const environmentId = runtime.environment.kind;
-      try {
-        void Promise.resolve(runtime.environment.suspend()).catch((error: unknown) =>
-          this.callbacks.onCleanupFailure(threadId, environmentId, error),
-        );
-      } catch (error) {
-        this.callbacks.onCleanupFailure(threadId, environmentId, error);
-      }
+      this.suspendDetachedRuntime(threadId, runtime);
       return;
     }
 
@@ -326,6 +322,17 @@ export class EnvironmentService {
     const environmentId = environment.kind;
     try {
       void Promise.resolve(environment.suspend()).catch((error: unknown) =>
+        this.callbacks.onCleanupFailure(threadId, environmentId, error),
+      );
+    } catch (error) {
+      this.callbacks.onCleanupFailure(threadId, environmentId, error);
+    }
+  }
+
+  private suspendDetachedRuntime(threadId: string, runtime: ActiveEnvironmentRuntime): void {
+    const environmentId = runtime.environment.kind;
+    try {
+      void Promise.resolve(runtime.environment.suspend()).catch((error: unknown) =>
         this.callbacks.onCleanupFailure(threadId, environmentId, error),
       );
     } catch (error) {

@@ -431,6 +431,29 @@ describe("EnvironmentService", () => {
     expect(threadState.environmentRecord).not.toBeNull();
   });
 
+  it("does not suspend persisted state when installing a restored runtime", () => {
+    const persistedSuspendSpy = vi.fn();
+    const restoreImpl = vi.fn(() =>
+      createTestEnvironment({
+        existsInitially: true,
+        destroySpy: persistedSuspendSpy,
+      }),
+    );
+    const { service } = createService({
+      existsInitially: true,
+      restoreImpl,
+    });
+    const runtimeEnvironment = createTestEnvironment({
+      existsInitially: true,
+    });
+
+    service.setEnvironmentRuntime("thread-1", runtimeEnvironment);
+
+    expect(restoreImpl).not.toHaveBeenCalled();
+    expect(persistedSuspendSpy).not.toHaveBeenCalled();
+    expect(service.getEnvironmentRuntime("thread-1")?.environment).toBe(runtimeEnvironment);
+  });
+
   it("suspends a persisted environment even when no runtime is restored", async () => {
     const destroySpy = vi.fn();
     const { service, threadRepo, threadState } = createService({

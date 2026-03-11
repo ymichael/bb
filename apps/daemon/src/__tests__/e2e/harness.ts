@@ -5,6 +5,7 @@ import {
   mkdtempSync,
   rmSync,
 } from "node:fs";
+import { createServer as createNetServer } from "node:net";
 import { tmpdir } from "node:os";
 import { delimiter, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -41,6 +42,7 @@ const TSX_CLI_PATH = resolve(
   "dist",
   "cli.mjs",
 );
+const PROVISIONING_SETTLE_TIMEOUT_MS = 5_000;
 
 function prependPathEntry(
   pathValue: string | undefined,
@@ -72,6 +74,27 @@ function closeHttpServer(server: ReturnType<typeof serve>): Promise<void> {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolveSleep) => setTimeout(resolveSleep, ms));
+}
+
+async function allocatePort(host: string = "127.0.0.1"): Promise<number> {
+  return new Promise<number>((resolvePort, rejectPort) => {
+    const server = createNetServer();
+    server.once("error", rejectPort);
+    server.listen(0, host, () => {
+      const address = server.address();
+      if (!address || typeof address === "string") {
+        server.close(() => rejectPort(new Error("Failed to allocate daemon e2e port")));
+        return;
+      }
+      server.close((error) => {
+        if (error) {
+          rejectPort(error);
+          return;
+        }
+        resolvePort(address.port);
+      });
+    });
+  });
 }
 
 export interface StartDaemonE2eHarnessOptions {
@@ -107,6 +130,7 @@ function listPendingProvisioningTasks(
 export async function startDaemonE2eHarness(
   opts?: StartDaemonE2eHarnessOptions,
 ): Promise<DaemonE2eHarness> {
+  const daemonPort = opts?.port ?? await allocatePort();
   const tempDir = opts?.tempDir ?? mkdtempSync(join(tmpdir(), "beanbag-daemon-e2e-"));
   const projectRoot = join(tempDir, "project");
   mkdirSync(projectRoot, { recursive: true });
@@ -173,9 +197,7 @@ export async function startDaemonE2eHarness(
         environmentAgentCommandRepo,
         dbPath,
         daemonLogFilePath: join(tempDir, "daemon.log"),
-        ...(opts?.port
-          ? { daemonBaseUrl: `http://127.0.0.1:${opts.port}/api/v1` }
-          : {}),
+        daemonBaseUrl: `http://127.0.0.1:${daemonPort}/api/v1`,
         provider: createCodexProviderAdapter({
           processCommand: workspaceFakeCodexPath ? "node" : fakeCodexCommand,
           processArgs: workspaceFakeCodexPath
@@ -186,12 +208,12 @@ export async function startDaemonE2eHarness(
 
     await threadManager.reconcileActiveThreadsOnBoot();
 
-    const port = await new Promise<number>((resolvePort) => {
+    const listeningPort = await new Promise<number>((resolvePort) => {
       httpServer = serve(
         {
           fetch: app.fetch,
           hostname: "127.0.0.1",
-          port: opts?.port ?? 0,
+          port: daemonPort,
         },
         (info) => resolvePort(info.port),
       );
@@ -220,7 +242,7 @@ export async function startDaemonE2eHarness(
         threadManager.stopAll();
         await Promise.race([
           Promise.allSettled(pendingProvisioningTasks),
-          sleep(1_000),
+          sleep(PROVISIONING_SETTLE_TIMEOUT_MS),
         ]);
         // Child "exit" callbacks and command results can still land on following ticks.
         await sleep(200);
@@ -242,15 +264,15 @@ export async function startDaemonE2eHarness(
       threadManager.stopAll({ preserveEnvironments: true });
       await Promise.race([
         Promise.allSettled(pendingProvisioningTasks),
-        sleep(1_000),
+        sleep(PROVISIONING_SETTLE_TIMEOUT_MS),
       ]);
       await sleep(200);
       await closeDaemon();
     };
 
     return {
-      baseUrl: `http://127.0.0.1:${port}`,
-      wsUrl: `ws://127.0.0.1:${port}/ws`,
+      baseUrl: `http://127.0.0.1:${listeningPort}`,
+      wsUrl: `ws://127.0.0.1:${listeningPort}/ws`,
       tempDir,
       dbPath,
       projectRoot,
