@@ -1616,19 +1616,19 @@ export class Orchestrator implements ThreadOrchestrator {
     if (!environment) {
       throw invalidRequestError(this._restoreEnvironmentUnavailableMessage(threadId));
     }
-    if (environment.isIsolatedWorkspace()) {
-      const defaultBranch =
-        detectProjectDefaultBranch(project.rootPath) ??
-        await detectProjectDefaultBranchAsync(project.rootPath);
-      const status = environment.getWorkspaceStatusAsync
-        ? await environment.getWorkspaceStatusAsync({
-            defaultBranch,
-            mergeBaseBranch,
-          })
-        : environment.getWorkspaceStatus({
-            defaultBranch,
-            mergeBaseBranch,
-          });
+    const defaultBranch =
+      detectProjectDefaultBranch(project.rootPath) ??
+      await detectProjectDefaultBranchAsync(project.rootPath);
+    const status = environment.getWorkspaceStatusAsync
+      ? await environment.getWorkspaceStatusAsync({
+          defaultBranch,
+          mergeBaseBranch,
+        })
+      : environment.getWorkspaceStatus({
+          defaultBranch,
+          mergeBaseBranch,
+        });
+    if (status.baseRef) {
       const commits = environment.listWorkspaceCommitsSinceRefAsync
         ? await environment.listWorkspaceCommitsSinceRefAsync({
             baseRef: status.baseRef,

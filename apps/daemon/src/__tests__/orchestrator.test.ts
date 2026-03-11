@@ -2634,6 +2634,80 @@ describe("Orchestrator", () => {
       });
     });
 
+    it("returns merge-base diffs for direct workspaces on non-default branches", async () => {
+      const thread = makeThread({
+        id: "thread-1",
+        projectId: "proj-1",
+        status: "idle",
+        environmentId: "local",
+      });
+      const getWorkspaceDiffAsync = vi.fn().mockResolvedValue({
+        diff: "diff --git a/file b/file",
+        truncated: false,
+      });
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue({
+        id: "proj-1",
+        name: "Project",
+        rootPath: "/tmp/proj-1",
+        createdAt: 1000,
+        updatedAt: 1000,
+      });
+      asOrchestratorHarness(manager).environmentRuntimes.set("thread-1", {
+        environment: makeRuntimeEnvironment({
+          kind: "local",
+          rootPath: "/tmp/proj-1",
+          overrides: {
+            getWorkspaceStatus() {
+              throw new Error(
+                "Synchronous workspace status is unsupported; use getWorkspaceStatusAsync",
+              );
+            },
+            async getWorkspaceStatusAsync() {
+              return makeWorkspaceStatus({
+                state: "committed_unmerged",
+                hasCommittedUnmergedChanges: true,
+                hasUncommittedChanges: false,
+                aheadCount: 1,
+                baseRef: "origin/main",
+                mergeBaseBranch: "main",
+              });
+            },
+            async listWorkspaceCommitsSinceRefAsync() {
+              return [
+                {
+                  sha: "abc123",
+                  shortSha: "abc123",
+                  subject: "feature commit",
+                },
+              ];
+            },
+            getWorkspaceDiffAsync,
+          },
+        }),
+      });
+
+      await expect(manager.getGitDiffAsync("thread-1")).resolves.toMatchObject({
+        mode: "worktree_commits",
+        selection: { type: "combined" },
+        commits: [
+          {
+            sha: "abc123",
+            shortSha: "abc123",
+            subject: "feature commit",
+          },
+        ],
+        diff: "diff --git a/file b/file",
+        truncated: false,
+        mergeBaseBranch: "main",
+        mergeBaseRef: "origin/main",
+      });
+      expect(getWorkspaceDiffAsync).toHaveBeenCalledWith({
+        type: "combined",
+        baseRef: "origin/main",
+      });
+    });
+
     it("suppresses combined diffs for squash-resolved clean worktrees", async () => {
       const thread = makeThread({
         id: "thread-1",
@@ -2657,6 +2731,8 @@ describe("Orchestrator", () => {
               hasCommittedUnmergedChanges: false,
               hasUncommittedChanges: false,
               aheadCount: 1,
+              baseRef: "origin/main",
+              mergeBaseBranch: "main",
             });
           },
           listWorkspaceCommitsSinceRef() {
