@@ -1385,7 +1385,7 @@ export class Orchestrator implements ThreadOrchestrator {
   /**
    * Archive a thread and destroy any persisted environment state.
    */
-  private _prepareThreadForManagedCleanup(threadId: string, projectId: string): void {
+  private _finalizeManagedThreadCleanup(threadId: string, projectId: string): void {
     this._cancelIdleEnvironmentSuspend(threadId);
     this.queuedOperationsByThreadId.delete(threadId);
     this.operationDispatchInFlight.delete(threadId);
@@ -1431,11 +1431,11 @@ export class Orchestrator implements ThreadOrchestrator {
   async archive(threadId: string): Promise<void> {
     const thread = this.threadRepo.getById(threadId);
     if (!thread) return;
-    this._prepareThreadForManagedCleanup(threadId, thread.projectId);
     await this.environmentService.destroyThreadEnvironment(threadId);
 
     const refreshedThread = this.threadRepo.getById(threadId);
     if (!refreshedThread) return;
+    this._finalizeManagedThreadCleanup(threadId, refreshedThread.projectId);
     this.threadRepo.update(threadId, {
       status: "idle",
       archivedAt: refreshedThread.archivedAt ?? Date.now(),
@@ -1451,8 +1451,8 @@ export class Orchestrator implements ThreadOrchestrator {
     const thread = this.threadRepo.getById(threadId);
     if (!thread) return;
 
-    this._prepareThreadForManagedCleanup(threadId, thread.projectId);
     await this.environmentService.destroyThreadEnvironment(threadId);
+    this._finalizeManagedThreadCleanup(threadId, thread.projectId);
     this.environmentService.removeManagedThreadLogs(thread);
     this.eventRepo.deleteByThreadId(threadId);
     this.threadRepo.delete(threadId);

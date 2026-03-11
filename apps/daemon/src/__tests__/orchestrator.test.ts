@@ -2110,6 +2110,53 @@ describe("Orchestrator", () => {
         ["status-changed", "work-status-changed", "archived-changed"],
       ]);
     });
+
+    it("preserves thread runtime state when environment cleanup fails", async () => {
+      const cleanup = vi.fn(() => {
+        throw new Error("cleanup failed");
+      });
+      const thread = makeThread({
+        id: "thread-1",
+        status: "active",
+        projectId: "proj-1",
+        environmentId: "worktree",
+      });
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
+
+      const harness = asOrchestratorHarness(manager);
+      harness.environmentRuntimes.set("thread-1", {
+        environment: makeRuntimeEnvironment({
+          rootPath: "/tmp/worktree",
+          cleanup,
+        }),
+      });
+      harness.providerThreadIds.set("thread-1", "provider-thread-1");
+      harness.primaryPromotionByProjectId.set("proj-1", {
+        projectId: "proj-1",
+        threadId: "thread-1",
+      });
+      (manager as unknown as {
+        queuedOperationsByThreadId: Map<string, unknown[]>;
+      }).queuedOperationsByThreadId.set("thread-1", [{ operation: "commit" }]);
+
+      await expect(manager.archive("thread-1")).rejects.toThrow("cleanup failed");
+
+      expect(harness.environmentRuntimes.has("thread-1")).toBe(true);
+      expect(harness.providerThreadIds.get("thread-1")).toBe("provider-thread-1");
+      expect(harness.primaryPromotionByProjectId.get("proj-1")).toEqual({
+        projectId: "proj-1",
+        threadId: "thread-1",
+      });
+      expect(
+        (manager as unknown as {
+          queuedOperationsByThreadId: Map<string, unknown[]>;
+        }).queuedOperationsByThreadId.has("thread-1"),
+      ).toBe(true);
+      expect(threadRepo.update).not.toHaveBeenCalledWith("thread-1", {
+        status: "idle",
+        archivedAt: expect.any(Number),
+      });
+    });
   });
 
   describe("unarchive()", () => {
@@ -2679,6 +2726,38 @@ describe("Orchestrator", () => {
       expect(eventRepo.deleteByThreadId).toHaveBeenCalledWith("thread-1");
       expect(threadRepo.delete).toHaveBeenCalledWith("thread-1");
       expect(ws.broadcast).toHaveBeenCalledWith("thread", "thread-1", [
+        "thread-deleted",
+      ]);
+    });
+
+    it("preserves thread state when managed cleanup fails before deletion", async () => {
+      const cleanup = vi.fn(() => {
+        throw new Error("cleanup failed");
+      });
+      const thread = makeThread({
+        id: "thread-1",
+        status: "active",
+        projectId: "proj-1",
+        environmentId: "worktree",
+      });
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
+
+      const harness = asOrchestratorHarness(manager);
+      harness.environmentRuntimes.set("thread-1", {
+        environment: makeRuntimeEnvironment({
+          rootPath: "/tmp/worktree",
+          cleanup,
+        }),
+      });
+      harness.providerThreadIds.set("thread-1", "provider-thread-1");
+
+      await expect(manager.deleteThread("thread-1")).rejects.toThrow("cleanup failed");
+
+      expect(harness.environmentRuntimes.has("thread-1")).toBe(true);
+      expect(harness.providerThreadIds.get("thread-1")).toBe("provider-thread-1");
+      expect(eventRepo.deleteByThreadId).not.toHaveBeenCalled();
+      expect(threadRepo.delete).not.toHaveBeenCalled();
+      expect(ws.broadcast).not.toHaveBeenCalledWith("thread", "thread-1", [
         "thread-deleted",
       ]);
     });

@@ -229,6 +229,7 @@ function createService(args: {
       reason: ThreadEnvironmentStartReason,
     ) => Promise<void>
   >().mockResolvedValue(undefined);
+  const onCleanupFailure = vi.fn();
 
   const service = new EnvironmentService(
     threadRepo,
@@ -243,7 +244,7 @@ function createService(args: {
       }),
       onProvisioningEvent: vi.fn(),
       onThreadChanged: vi.fn(),
-      onCleanupFailure: vi.fn(),
+      onCleanupFailure,
       onPrimaryCheckoutDemoted: vi.fn(),
       runOptionalSetup,
       spawnProviderProcess: vi.fn(
@@ -254,7 +255,7 @@ function createService(args: {
     },
   );
 
-  return { service, runOptionalSetup, threadRepo, threadState };
+  return { service, runOptionalSetup, threadRepo, threadState, onCleanupFailure };
 }
 
 describe("EnvironmentService", () => {
@@ -317,6 +318,44 @@ describe("EnvironmentService", () => {
     expect(removeEnvironmentAgentDefaultLogArtifacts).not.toHaveBeenCalled();
     expect(threadState.environmentRecord).toBeNull();
     expect(threadState.environmentAgentCursor).toBeNull();
+  });
+
+  it("preserves runtime and persisted state when runtime destruction fails", async () => {
+    const destroyError = new Error("cleanup failed");
+    const destroySpy = vi.fn(() => {
+      throw destroyError;
+    });
+    const { service, threadRepo, threadState, onCleanupFailure } = createService({
+      existsInitially: true,
+      destroySpy,
+    });
+    const runtimeEnvironment = createTestEnvironment({
+      existsInitially: true,
+      destroySpy,
+    });
+    service.setEnvironmentRuntime("thread-1", runtimeEnvironment);
+
+    await expect(service.destroyThreadEnvironment("thread-1")).rejects.toThrow(
+      "cleanup failed",
+    );
+
+    expect(destroySpy).toHaveBeenCalledTimes(1);
+    expect(onCleanupFailure).toHaveBeenCalledWith(
+      "thread-1",
+      "worktree",
+      destroyError,
+    );
+    expect(service.getEnvironmentRuntime("thread-1")).toBeDefined();
+    expect(threadRepo.update).not.toHaveBeenCalledWith(
+      "thread-1",
+      {
+        environmentRecord: null,
+        environmentAgentCursor: null,
+      },
+      { touchUpdatedAt: false },
+    );
+    expect(threadState.environmentRecord).not.toBeNull();
+    expect(threadState.environmentAgentCursor).toBe(12);
   });
 
   it("clears stale persisted environment state when the archived workspace is already gone", async () => {

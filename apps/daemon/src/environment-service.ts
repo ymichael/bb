@@ -300,7 +300,7 @@ export class EnvironmentService {
   }
 
   async destroyThreadEnvironment(threadId: string): Promise<void> {
-    const runtime = this.detachEnvironmentRuntime(threadId);
+    const runtime = this.environmentRuntimes.get(threadId);
 
     this.workspaceCleanupInFlightThreadIds.add(threadId);
     const refresh = () => {
@@ -328,6 +328,7 @@ export class EnvironmentService {
       const environmentId = runtime.environment.kind;
       try {
         await Promise.resolve(runtime.environment.destroy());
+        this.detachEnvironmentRuntime(threadId);
         this.clearPersistedEnvironmentState(threadId);
       } catch (error) {
         reportFailure(environmentId, error);
