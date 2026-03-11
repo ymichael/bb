@@ -443,7 +443,7 @@ describe("toUIMessages replay coverage", () => {
     ).toBe(false);
   });
 
-  it("keeps assistant and reasoning deltas streaming while thread is active", () => {
+  it("keeps assistant text buffered while reasoning continues streaming on active threads", () => {
     const events: ThreadEvent[] = [
       {
         id: "evt-1",
@@ -483,10 +483,121 @@ describe("toUIMessages replay coverage", () => {
         message.kind === "assistant-reasoning",
     );
 
-    expect(assistant).toBeDefined();
-    expect(assistant?.status).toBe("streaming");
+    expect(assistant).toBeUndefined();
     expect(reasoning).toBeDefined();
     expect(reasoning?.status).toBe("streaming");
+  });
+
+  it("renders completed assistant text immediately even while the thread is active", () => {
+    const events: ThreadEvent[] = [
+      {
+        id: "evt-1",
+        threadId: "thread-1",
+        seq: 1,
+        type: "item/completed",
+        data: {
+          threadId: "thread-1",
+          turnId: "turn-1",
+          item: {
+            type: "agentMessage",
+            id: "msg-1",
+            text: "Final answer",
+          },
+        },
+        createdAt: 1,
+      },
+    ];
+
+    const projected = toUIMessages(events, { threadStatus: "active" });
+
+    const assistant = projected.find(
+      (message): message is Extract<UIMessage, { kind: "assistant-text" }> =>
+        message.kind === "assistant-text",
+    );
+
+    expect(assistant?.text).toBe("Final answer");
+    expect(assistant?.status).toBe("completed");
+  });
+
+  it("flushes buffered assistant text when the turn completes even if thread status is still active", () => {
+    const events: ThreadEvent[] = [
+      {
+        id: "evt-1",
+        threadId: "thread-1",
+        seq: 1,
+        type: "item/agentMessage/delta",
+        data: {
+          threadId: "thread-1",
+          turnId: "turn-1",
+          itemId: "msg-1",
+          delta: "Partial reply",
+        },
+        createdAt: 1,
+      },
+      {
+        id: "evt-2",
+        threadId: "thread-1",
+        seq: 2,
+        type: "turn/completed",
+        data: {
+          threadId: "thread-1",
+          turnId: "turn-1",
+        },
+        createdAt: 2,
+      },
+    ];
+
+    const projected = toUIMessages(events, { threadStatus: "active" });
+    const assistant = projected.find(
+      (message): message is Extract<UIMessage, { kind: "assistant-text" }> =>
+        message.kind === "assistant-text",
+    );
+
+    expect(assistant?.text).toBe("Partial reply");
+    expect(assistant?.status).toBe("completed");
+  });
+
+  it("flushes buffered assistant text before interruption markers on idle threads", () => {
+    const events: ThreadEvent[] = [
+      {
+        id: "evt-1",
+        threadId: "thread-1",
+        seq: 1,
+        type: "item/agentMessage/delta",
+        data: {
+          threadId: "thread-1",
+          turnId: "turn-1",
+          itemId: "msg-1",
+          delta: "Partial reply",
+        },
+        createdAt: 1,
+      },
+      {
+        id: "evt-2",
+        threadId: "thread-1",
+        seq: 2,
+        type: "system/thread/interrupted",
+        data: {
+          threadId: "thread-1",
+          turnId: "turn-1",
+          message: "Stopped by user",
+        },
+        createdAt: 2,
+      },
+    ];
+
+    const projected = toUIMessages(events, { threadStatus: "idle" });
+
+    expect(projected[0]?.kind).toBe("assistant-text");
+    if (projected[0]?.kind === "assistant-text") {
+      expect(projected[0].text).toBe("Partial reply");
+      expect(projected[0].status).toBe("completed");
+    }
+    expect(projected[1]?.kind).toBe("operation");
+    if (projected[1]?.kind === "operation") {
+      expect(projected[1].opType).toBe("thread-interrupted");
+      expect(projected[1].status).toBe("interrupted");
+    }
   });
 
   it("ignores trailing assistant deltas that arrive after completion", () => {

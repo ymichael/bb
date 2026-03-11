@@ -2720,11 +2720,45 @@ function finalizeOperationMessage(
   interruptOperationMessage(message);
 }
 
+function isTerminalAssistantFlushEvent(eventType: string): boolean {
+  return (
+    eventTypeMatches(eventType, "system/thread/interrupted") ||
+    eventTypeMatches(eventType, "turn/completed") ||
+    eventTypeMatches(eventType, "turn/end")
+  );
+}
+
+function flushBufferedAssistantMessages(state: ProjectionState): void {
+  if (state.openAssistantByTurn.size === 0) {
+    return;
+  }
+
+  const pendingAssistants = Array.from(state.openAssistantByTurn.entries()).sort(
+    (left, right) =>
+      left[1].sourceSeqStart - right[1].sourceSeqStart ||
+      left[1].sourceSeqEnd - right[1].sourceSeqEnd ||
+      left[1].createdAt - right[1].createdAt,
+  );
+
+  flushToolActivityBeforeNonToolMessage(state);
+  for (const [turnKey, assistant] of pendingAssistants) {
+    if (assistant.status === "streaming") {
+      assistant.status = "completed";
+    }
+    state.messages.push(assistant);
+    state.finalizedAssistantTurnKeys.add(turnKey);
+  }
+  state.openAssistantByTurn.clear();
+}
+
 function finalizePendingMessages(
   state: ProjectionState,
   options: ToUIMessagesOptions | undefined,
 ): void {
-  if (shouldPreservePendingMessages(options?.threadStatus)) {
+  const shouldPreservePending = shouldPreservePendingMessages(options?.threadStatus);
+  const shouldFinalizeBufferedAssistants =
+    options?.threadStatus !== undefined && !shouldPreservePending;
+  if (shouldPreservePending) {
     flushActiveToolCell(state);
     return;
   }
@@ -2787,12 +2821,9 @@ function finalizePendingMessages(
     }
   }
 
-  for (const assistant of state.openAssistantByTurn.values()) {
-    if (assistant.status === "streaming") {
-      assistant.status = "completed";
-    }
+  if (shouldFinalizeBufferedAssistants) {
+    flushBufferedAssistantMessages(state);
   }
-  state.openAssistantByTurn.clear();
 
   for (const reasoning of state.openReasoningByTurn.values()) {
     if (reasoning.status === "streaming") {
@@ -2834,6 +2865,10 @@ export function toUIMessages(
     const event = originalEvent;
 
     const eventTurnId = getTurnId(event.data);
+
+    if (state.openAssistantByTurn.size > 0 && isTerminalAssistantFlushEvent(eventType)) {
+      flushBufferedAssistantMessages(state);
+    }
 
     const userFromClientThreadStart = parseUserFromClientStart(
       event,
@@ -2927,6 +2962,9 @@ export function toUIMessages(
       }
 
       let existing = state.openAssistantByTurn.get(turnKey);
+      if (existing?.status === "completed") {
+        continue;
+      }
       if (!existing) {
         existing = {
           kind: "assistant-text",
@@ -2940,8 +2978,6 @@ export function toUIMessages(
           status: "streaming",
         };
         state.openAssistantByTurn.set(turnKey, existing);
-        flushToolActivityBeforeNonToolMessage(state);
-        state.messages.push(existing);
       } else {
         existing.sourceSeqEnd = event.seq;
         existing.createdAt = event.createdAt;
@@ -2965,6 +3001,8 @@ export function toUIMessages(
         existing.text = assistantFinal;
         existing.status = "completed";
         state.openAssistantByTurn.delete(turnKey);
+        flushToolActivityBeforeNonToolMessage(state);
+        state.messages.push(existing);
         state.finalizedAssistantTurnKeys.add(turnKey);
       } else {
         flushToolActivityBeforeNonToolMessage(state);

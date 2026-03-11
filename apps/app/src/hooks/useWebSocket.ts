@@ -87,6 +87,12 @@ function shouldBypassTimelineEventThrottle(
   }
 }
 
+export function shouldFlushThreadChangesImmediately(
+  changes: readonly ThreadChangeKind[],
+): boolean {
+  return toThreadChangeFlags(changes).statusChanged;
+}
+
 export function useWebSocket(): void {
   const queryClient = useQueryClient();
 
@@ -230,7 +236,11 @@ export function useWebSocket(): void {
             shouldInvalidateAllThreadWorkStatus = globalFlags.workStatusChanged;
             shouldInvalidateAllThreadTimeline = globalFlags.timelineChanged;
           }
-          scheduleInvalidations();
+          if (shouldFlushThreadChangesImmediately(message.changes)) {
+            flushInvalidations();
+          } else {
+            scheduleInvalidations();
+          }
           break;
         case "system":
           queryClient.invalidateQueries({ queryKey: ["systemRestartPolicy"] });
