@@ -9,9 +9,14 @@ import {
   GripVertical,
   Loader2,
   Rows2,
+  X,
 } from "lucide-react";
 import { FileDiff } from "@pierre/diffs/react";
-import { Panel, PanelResizeHandle } from "react-resizable-panels";
+import {
+  type ImperativePanelHandle,
+  Panel,
+  PanelResizeHandle,
+} from "react-resizable-panels";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -38,6 +43,8 @@ const GIT_DIFF_VIEW_STYLE = {
   "--diffs-font-size": "12px",
   "--diffs-line-height": "18px",
 } as CSSProperties;
+const GIT_DIFF_PANEL_TRANSITION_CLASS =
+  "duration-[220ms] ease-[cubic-bezier(0.32,0.72,0,1)]";
 
 export interface GitDiffSelectionOption {
   value: string;
@@ -78,9 +85,9 @@ function GitDiffPanelSkeleton({
       {Array.from({ length: count }).map((_, index) => (
         <div
           key={`git-diff-skeleton-${index}`}
-          className="rounded-md border border-border/70 bg-muted/35"
+          className="rounded-lg border border-border/70 bg-background/70 shadow-sm"
         >
-          <div className="border-b border-border/60 bg-background px-2.5 py-1">
+          <div className="border-b border-border/70 bg-card/70 px-3 py-1.5">
             <div className="flex items-center justify-between gap-2">
               <div className="flex min-w-0 flex-1 items-center gap-1.5">
                 <Skeleton className="size-4 shrink-0 rounded-sm" />
@@ -124,7 +131,7 @@ function GitDiffSelector({
           size="sm"
           disabled={disabled}
           className={cn(
-            "h-8 w-full min-w-0 justify-between gap-2 px-2 text-xs font-normal",
+            "h-8 w-full min-w-0 justify-between gap-2 rounded-lg border-border/70 bg-background/80 px-2.5 text-xs font-normal shadow-sm hover:bg-muted/55",
             disabled && "opacity-60",
           )}
         >
@@ -161,7 +168,11 @@ function GitDiffSelector({
 export function ThreadGitDiffPanel({
   threadId,
   panelRef,
+  resizablePanelRef,
+  isOpen,
   isResizing,
+  onCollapse,
+  onClose,
   onDragging,
   gitDiffSelectValue,
   gitDiffSelectOptions,
@@ -188,7 +199,11 @@ export function ThreadGitDiffPanel({
 }: {
   threadId: string;
   panelRef: Ref<HTMLElement>;
+  resizablePanelRef: Ref<ImperativePanelHandle>;
+  isOpen: boolean;
   isResizing: boolean;
+  onCollapse: () => void;
+  onClose: () => void;
   onDragging: (isDragging: boolean) => void;
   gitDiffSelectValue: string;
   gitDiffSelectOptions: readonly GitDiffSelectionOption[];
@@ -218,19 +233,23 @@ export function ThreadGitDiffPanel({
   return (
     <>
       <PanelResizeHandle
+        id="thread-detail-git-diff-handle"
+        disabled={!isOpen}
         onDragging={onDragging}
         className={cn(
-          "group relative w-3 shrink-0 cursor-col-resize bg-transparent transition-colors",
-          isResizing && "bg-accent/25",
+          "group relative shrink-0 cursor-col-resize overflow-hidden bg-transparent transition-[width,opacity,background-color]",
+          GIT_DIFF_PANEL_TRANSITION_CLASS,
+          isOpen ? "w-3 opacity-100" : "pointer-events-none w-0 opacity-0",
+          isResizing && "bg-accent/20",
         )}
         aria-label="Resize thread and git diff panels"
       >
         <span
           className={cn(
-            "pointer-events-none absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-border/80 transition-colors",
+            "pointer-events-none absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-border/70 transition-colors",
             isResizing
-              ? "bg-accent-foreground/55"
-              : "group-hover:bg-accent-foreground/40",
+              ? "bg-accent-foreground/50"
+              : "group-hover:bg-accent-foreground/35",
           )}
         />
         <span
@@ -243,15 +262,67 @@ export function ThreadGitDiffPanel({
         </span>
       </PanelResizeHandle>
       <Panel
+        ref={resizablePanelRef}
+        id="thread-detail-git-diff-panel"
+        collapsible
+        collapsedSize={0}
         defaultSize={GIT_DIFF_PANEL_DEFAULT_SIZE_PERCENT}
         minSize={GIT_DIFF_PANEL_MIN_SIZE_PERCENT}
         maxSize={GIT_DIFF_PANEL_MAX_SIZE_PERCENT}
-        className="min-w-0 bg-background"
+        onCollapse={onCollapse}
+        order={2}
+        className={cn(
+          "min-w-0 overflow-hidden transition-[flex-grow,flex-basis,opacity]",
+          GIT_DIFF_PANEL_TRANSITION_CLASS,
+          isOpen ? "opacity-100" : "opacity-0",
+        )}
       >
-        <aside ref={panelRef} className="flex h-full min-h-0 min-w-0 flex-1 flex-col">
-          <div className="px-3 py-2">
-            <div className="flex min-w-0 items-center gap-1.5">
-              <div className="min-w-0 max-w-[48%] flex-1">
+        <aside
+          ref={panelRef}
+          aria-hidden={!isOpen}
+          className={cn(
+            "flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden border-l border-border/80 bg-card/55 shadow-[-10px_0_28px_-22px_rgba(0,0,0,0.42)] transition-[transform,opacity,background-color,box-shadow]",
+            GIT_DIFF_PANEL_TRANSITION_CLASS,
+            isOpen
+              ? "translate-x-0 opacity-100"
+              : "pointer-events-none translate-x-[8%] opacity-0 shadow-none",
+          )}
+        >
+          <div className="border-b border-border/80 bg-card/80 px-4 py-3 backdrop-blur-sm">
+            <div className="flex min-w-0 items-start gap-3">
+              <div className="min-w-0 flex-1">
+                <div className="flex min-w-0 items-center gap-2">
+                  <h2 className="truncate text-sm font-semibold text-foreground">
+                    Git diff
+                  </h2>
+                  {isParsingGitDiffFiles ? (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-muted/80 px-2 py-0.5 text-xs text-muted-foreground">
+                      <Loader2 className="size-3 animate-spin" />
+                      Parsing
+                    </span>
+                  ) : null}
+                </div>
+                <p
+                  className="mt-1 truncate text-xs text-muted-foreground"
+                  title={gitDiffStatsLabel}
+                >
+                  {gitDiffStatsLabel}
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 shrink-0 rounded-md text-muted-foreground hover:bg-accent/70 hover:text-foreground"
+                onClick={onClose}
+                aria-label="Close git diff panel"
+                title="Close git diff panel"
+              >
+                <X className="size-4" />
+              </Button>
+            </div>
+            <div className="mt-3 flex min-w-0 items-center gap-2">
+              <div className="min-w-0 flex-1">
                 <GitDiffSelector
                   value={gitDiffSelectValue}
                   options={gitDiffSelectOptions}
@@ -260,23 +331,11 @@ export function ThreadGitDiffPanel({
                 />
               </div>
               <div className="ml-auto flex min-w-0 shrink-0 items-center justify-end gap-1">
-                {isParsingGitDiffFiles ? (
-                  <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-                    <Loader2 className="size-3 animate-spin" />
-                    Parsing...
-                  </span>
-                ) : null}
-                <span
-                  className="max-w-[110px] truncate whitespace-nowrap text-xs text-muted-foreground"
-                  title={gitDiffStatsLabel}
-                >
-                  {gitDiffStatsLabel}
-                </span>
                 <Button
                   type="button"
                   variant="ghost"
                   size="sm"
-                  className="h-6 w-6 p-0 text-muted-foreground"
+                  className="h-7 w-7 rounded-md p-0 text-muted-foreground hover:bg-accent/70 hover:text-foreground"
                   onClick={onToggleAllFiles}
                   disabled={!hasParsedGitDiffFiles || isGitDiffLoading}
                   aria-label={
@@ -292,16 +351,16 @@ export function ThreadGitDiffPanel({
                     <ChevronsUp className="size-3.5" />
                   )}
                 </Button>
-                <div className="inline-flex items-center rounded-md border border-border/70 p-0.5">
+                <div className="inline-flex items-center rounded-lg border border-border/70 bg-background/80 p-0.5 shadow-sm">
                   <Button
                     type="button"
                     variant="ghost"
                     size="sm"
                     className={cn(
-                      "h-6 w-6 p-0",
+                      "h-6 w-6 rounded-md p-0",
                       gitDiffDisplayMode === "unified"
-                        ? "bg-accent text-foreground"
-                        : "text-muted-foreground",
+                        ? "bg-accent/80 text-foreground"
+                        : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
                     )}
                     onClick={() => onGitDiffDisplayModeChange("unified")}
                     aria-label="Stacked diff view"
@@ -314,10 +373,10 @@ export function ThreadGitDiffPanel({
                     variant="ghost"
                     size="sm"
                     className={cn(
-                      "h-6 w-6 p-0",
+                      "h-6 w-6 rounded-md p-0",
                       gitDiffDisplayMode === "split"
-                        ? "bg-accent text-foreground"
-                        : "text-muted-foreground",
+                        ? "bg-accent/80 text-foreground"
+                        : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
                     )}
                     onClick={() => onGitDiffDisplayModeChange("split")}
                     aria-label="Split diff view"
@@ -329,11 +388,11 @@ export function ThreadGitDiffPanel({
               </div>
             </div>
           </div>
-          <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-3 pb-2 pt-0">
+          <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-4 pb-3 pt-3">
             {isPreparingGitDiff ? (
               <GitDiffPanelSkeleton />
             ) : gitDiffError ? (
-              <p className="py-2 text-xs text-destructive">
+              <p className="rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2 text-xs text-destructive">
                 {gitDiffError instanceof Error
                   ? gitDiffError.message
                   : "Failed to load git diff"}
@@ -356,14 +415,14 @@ export function ThreadGitDiffPanel({
                         <div
                           key={key}
                           ref={(element) => setGitDiffFileRef(key, element)}
-                          className="rounded-md border border-border/70 bg-muted/35"
+                          className="rounded-lg border border-border/70 bg-background/70 shadow-sm"
                         >
-                          <div className="sticky top-0 z-20 border-b border-border/60 bg-background px-2.5 py-1 text-xs font-medium text-foreground">
+                          <div className="sticky top-0 z-20 border-b border-border/70 bg-card/80 px-3 py-1.5 text-xs font-medium text-foreground backdrop-blur-sm">
                             <div className="flex w-full min-w-0 items-center justify-between gap-2">
                               <span className="flex min-w-0 items-center gap-1.5">
                                 <button
                                   type="button"
-                                  className="inline-flex size-5 shrink-0 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-accent/70 hover:text-foreground"
+                                  className="inline-flex size-5 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent/70 hover:text-foreground"
                                   onClick={() => onToggleGitDiffFileCollapsed(key)}
                                   aria-label={`${isCollapsed ? "Expand" : "Collapse"} ${fileDiffLabel}`}
                                   aria-expanded={!isCollapsed}
@@ -406,7 +465,7 @@ export function ThreadGitDiffPanel({
                           </div>
                           {!isCollapsed ? (
                             isRendering ? (
-                              <div className="space-y-1.5 px-2.5 py-2">
+                              <div className="space-y-1.5 px-3 py-3">
                                 <Skeleton className="h-3 w-full rounded-sm" />
                                 <Skeleton className="h-3 w-[96%] rounded-sm" />
                                 <Skeleton className="h-3 w-[93%] rounded-sm" />
@@ -435,7 +494,7 @@ export function ThreadGitDiffPanel({
                       );
                     })}
                     {isParsingGitDiffFiles ? (
-                      <div className="rounded-md border border-border/70 bg-muted/35 px-2.5 py-2">
+                      <div className="rounded-lg border border-border/70 bg-background/70 px-3 py-3 shadow-sm">
                         <div className="space-y-1.5">
                           <Skeleton className="h-3 w-52 max-w-full rounded-sm" />
                           <Skeleton className="h-3 w-5/6 rounded-sm" />
@@ -444,7 +503,7 @@ export function ThreadGitDiffPanel({
                     ) : null}
                   </div>
                 ) : (
-                  <pre className="overflow-auto whitespace-pre rounded-md border border-border/70 bg-muted/35 p-2 font-mono text-xs text-foreground">
+                  <pre className="overflow-auto whitespace-pre rounded-lg border border-border/70 bg-background/70 p-3 font-mono text-xs text-foreground shadow-sm">
                     {threadGitDiff.diff}
                   </pre>
                 )}
@@ -455,7 +514,9 @@ export function ThreadGitDiffPanel({
                 ) : null}
               </>
             ) : (
-              <p className="py-2 text-xs text-muted-foreground">No diff to display.</p>
+              <p className="rounded-lg border border-dashed border-border/70 bg-background/45 px-3 py-6 text-center text-sm text-muted-foreground">
+                No diff to display.
+              </p>
             )}
           </div>
         </aside>

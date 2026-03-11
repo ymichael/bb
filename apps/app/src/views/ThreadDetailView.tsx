@@ -7,7 +7,11 @@ import {
   useState,
 } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
-import { Panel, PanelGroup } from "react-resizable-panels";
+import {
+  type ImperativePanelHandle,
+  Panel,
+  PanelGroup,
+} from "react-resizable-panels";
 import {
   useThread,
   useThreadWorkStatus,
@@ -345,6 +349,7 @@ export function ThreadDetailView() {
     null,
   );
   const gitDiffPanelRef = useRef<HTMLElement | null>(null);
+  const gitDiffResizablePanelRef = useRef<ImperativePanelHandle | null>(null);
   const lastGitDiffWideEnoughRef = useRef<boolean | null>(null);
   const gitDiffFileRenderTimersRef = useRef<Map<string, number>>(new Map());
   const queuedGitDiffFileRenderKeysRef = useRef<Set<string>>(new Set());
@@ -449,6 +454,20 @@ export function ThreadDetailView() {
   );
   const isGitDiffPanelWideEnough =
     gitDiffPanelWidth !== null && gitDiffPanelWidth >= GIT_DIFF_SPLIT_VIEW_MIN_WIDTH_PX;
+
+  useLayoutEffect(() => {
+    const panel = gitDiffResizablePanelRef.current;
+    if (!panel) {
+      return;
+    }
+
+    if (isGitDiffPanelOpen) {
+      panel.expand();
+      return;
+    }
+
+    panel.collapse();
+  }, [isGitDiffPanelOpen]);
 
   useLayoutEffect(() => {
     if (!isGitDiffPanelOpen) {
@@ -891,6 +910,19 @@ export function ThreadDetailView() {
       return;
     }
     const nextSearch = withThreadGitDiffPanelOpen(location.search, true);
+    navigate(
+      {
+        pathname: location.pathname,
+        search: nextSearch.length > 0 ? `?${nextSearch}` : "",
+      },
+      { replace: true },
+    );
+  }, [isGitDiffPanelOpen, location.pathname, location.search, navigate]);
+  const closeThreadGitDiffPanel = useCallback(() => {
+    if (!isGitDiffPanelOpen) {
+      return;
+    }
+    const nextSearch = withThreadGitDiffPanelOpen(location.search, false);
     navigate(
       {
         pathname: location.pathname,
@@ -1749,44 +1781,48 @@ export function ThreadDetailView() {
     <div className="-mx-4 -mb-4 -mt-4 flex h-full min-h-0 min-w-0 flex-1 overflow-hidden md:-mx-5 md:-mb-5 md:-mt-5">
       <PanelGroup direction="horizontal" className="h-full w-full min-w-0">
         <Panel
+          id="thread-detail-timeline-panel"
           defaultSize={TIMELINE_PANEL_DEFAULT_SIZE_PERCENT}
           minSize={30}
+          order={1}
           className="min-w-0 overflow-hidden"
         >
           {conversationShell}
         </Panel>
-        {isGitDiffPanelOpen ? (
-          <ThreadGitDiffPanel
-            threadId={thread.id}
-            panelRef={gitDiffPanelRef}
-            isResizing={isGitDiffPanelResizing}
-            onDragging={handleGitDiffPanelDragging}
-            gitDiffSelectValue={gitDiffSelectValue}
-            gitDiffSelectOptions={gitDiffSelectOptions}
-            onGitDiffSelectionChange={(value) => {
-              setSelectedGitDiffCommitSha(value === "combined" ? null : value);
-            }}
-            isGitDiffLoading={isGitDiffLoading}
-            gitDiffError={gitDiffError}
-            threadGitDiff={threadGitDiff}
-            currentGitDiff={currentGitDiff}
-            isPreparingGitDiff={isPreparingGitDiff}
-            isParsingGitDiffFiles={isParsingGitDiffFiles}
-            gitDiffStatsLabel={gitDiffStatsLabel}
-            hasParsedGitDiffFiles={hasParsedGitDiffFiles}
-            areAllGitDiffFilesCollapsed={areAllGitDiffFilesCollapsed}
-            onToggleAllFiles={toggleAllGitDiffFilesCollapsed}
-            gitDiffDisplayMode={gitDiffDisplayMode}
-            onGitDiffDisplayModeChange={handleGitDiffDisplayModeChange}
-            parsedGitDiffFileEntries={parsedGitDiffFileEntries}
-            collapsedGitDiffFileKeys={collapsedGitDiffFileKeys}
-            queuedGitDiffFileRenderKeys={queuedGitDiffFileRenderKeysRef.current}
-            loadingGitDiffFileKeys={loadingGitDiffFileKeys}
-            setGitDiffFileRef={setGitDiffFileRef}
-            onToggleGitDiffFileCollapsed={toggleGitDiffFileCollapsed}
-            gitDiffViewOptions={gitDiffViewOptions}
-          />
-        ) : null}
+        <ThreadGitDiffPanel
+          threadId={thread.id}
+          panelRef={gitDiffPanelRef}
+          resizablePanelRef={gitDiffResizablePanelRef}
+          isOpen={isGitDiffPanelOpen}
+          isResizing={isGitDiffPanelResizing}
+          onCollapse={closeThreadGitDiffPanel}
+          onClose={closeThreadGitDiffPanel}
+          onDragging={handleGitDiffPanelDragging}
+          gitDiffSelectValue={gitDiffSelectValue}
+          gitDiffSelectOptions={gitDiffSelectOptions}
+          onGitDiffSelectionChange={(value) => {
+            setSelectedGitDiffCommitSha(value === "combined" ? null : value);
+          }}
+          isGitDiffLoading={isGitDiffLoading}
+          gitDiffError={gitDiffError}
+          threadGitDiff={threadGitDiff}
+          currentGitDiff={currentGitDiff}
+          isPreparingGitDiff={isPreparingGitDiff}
+          isParsingGitDiffFiles={isParsingGitDiffFiles}
+          gitDiffStatsLabel={gitDiffStatsLabel}
+          hasParsedGitDiffFiles={hasParsedGitDiffFiles}
+          areAllGitDiffFilesCollapsed={areAllGitDiffFilesCollapsed}
+          onToggleAllFiles={toggleAllGitDiffFilesCollapsed}
+          gitDiffDisplayMode={gitDiffDisplayMode}
+          onGitDiffDisplayModeChange={handleGitDiffDisplayModeChange}
+          parsedGitDiffFileEntries={parsedGitDiffFileEntries}
+          collapsedGitDiffFileKeys={collapsedGitDiffFileKeys}
+          queuedGitDiffFileRenderKeys={queuedGitDiffFileRenderKeysRef.current}
+          loadingGitDiffFileKeys={loadingGitDiffFileKeys}
+          setGitDiffFileRef={setGitDiffFileRef}
+          onToggleGitDiffFileCollapsed={toggleGitDiffFileCollapsed}
+          gitDiffViewOptions={gitDiffViewOptions}
+        />
       </PanelGroup>
     </div>
   );
