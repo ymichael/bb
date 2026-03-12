@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect } from "react";
+import { type ReactNode } from "react";
 import { type ThreadDetailRow, type UIMessage } from "@beanbag/agent-core";
 import {
   ConversationEmptyState,
@@ -54,13 +54,6 @@ function ToolGroupEntry({
     />
   );
   const headerToneClass = getEventHeaderToneClass(isExpanded);
-
-  useEffect(() => {
-    if (!isExpanded || isLoadingMessages || messages.length > 0) {
-      return;
-    }
-    onLoadMessages();
-  }, [isExpanded, isLoadingMessages, messages.length, onLoadMessages]);
 
   const handleToggle = () => {
     if (!isExpanded && messages.length === 0 && !isLoadingMessages) {
