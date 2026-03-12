@@ -47,6 +47,8 @@ export interface EnvironmentAgentSessionRecord {
   agentInstanceId: string;
   protocolVersion: number;
   transportKind: EnvironmentAgentSessionTransportKind;
+  controlBaseUrl?: string;
+  controlAuthToken?: string;
   status: EnvironmentAgentSessionStatus;
   leaseExpiresAt: number;
   lastHeartbeatAt?: number;
@@ -103,6 +105,8 @@ export interface CreateEnvironmentAgentSessionInput {
   agentInstanceId: string;
   protocolVersion: number;
   transportKind: EnvironmentAgentSessionTransportKind;
+  controlBaseUrl?: string;
+  controlAuthToken?: string;
   leaseExpiresAt: number;
   now?: number;
 }
@@ -217,6 +221,8 @@ function rowToEnvironmentAgentSessionRecord(
     agentInstanceId: row.agentInstanceId,
     protocolVersion: row.protocolVersion,
     transportKind: normalizeEnvironmentAgentSessionTransportKind(row.transportKind),
+    ...(row.controlBaseUrl !== null ? { controlBaseUrl: row.controlBaseUrl } : {}),
+    ...(row.controlAuthToken !== null ? { controlAuthToken: row.controlAuthToken } : {}),
     status: normalizeEnvironmentAgentSessionStatus(row.status),
     leaseExpiresAt: row.leaseExpiresAt,
     ...(row.lastHeartbeatAt !== null ? { lastHeartbeatAt: row.lastHeartbeatAt } : {}),
@@ -420,6 +426,8 @@ export class EnvironmentAgentSessionRepository {
       agentInstanceId: args.agentInstanceId,
       protocolVersion: args.protocolVersion,
       transportKind: args.transportKind,
+      controlBaseUrl: args.controlBaseUrl ?? null,
+      controlAuthToken: args.controlAuthToken ?? null,
       status: "active",
       leaseExpiresAt: args.leaseExpiresAt,
       lastHeartbeatAt: null,
@@ -640,6 +648,8 @@ export class EnvironmentAgentSessionRepository {
         agentInstanceId: args.nextSession.agentInstanceId,
         protocolVersion: args.nextSession.protocolVersion,
         transportKind: args.nextSession.transportKind,
+        controlBaseUrl: args.nextSession.controlBaseUrl ?? null,
+        controlAuthToken: args.nextSession.controlAuthToken ?? null,
         status: "active",
         leaseExpiresAt: args.nextSession.leaseExpiresAt,
         lastHeartbeatAt: null,

@@ -264,6 +264,8 @@ describe("docker environment-agent helper", () => {
           "-e",
           "BEANBAG_ENVIRONMENT_AGENT_AUTH_TOKEN=auth-token",
           "-e",
+          "BEANBAG_ENVIRONMENT_AGENT_CONTROL_BASE_URL=http://127.0.0.1:4311",
+          "-e",
           `BEANBAG_ROOT=${beanbagRoot}`,
           "-e",
           "BEANBAG_DAEMON_URL=http://host.docker.internal:9000",

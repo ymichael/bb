@@ -11,6 +11,8 @@ export interface OpenEnvironmentAgentSessionInput {
   agentInstanceId: string;
   protocolVersion: number;
   transportKind: EnvironmentAgentSessionTransportKind;
+  controlBaseUrl?: string;
+  controlAuthToken?: string;
   leaseTtlMs: number;
   now?: number;
 }
@@ -58,6 +60,8 @@ export class EnvironmentAgentSessionManager {
         agentInstanceId: args.agentInstanceId,
         protocolVersion: args.protocolVersion,
         transportKind: args.transportKind,
+        controlBaseUrl: args.controlBaseUrl,
+        controlAuthToken: args.controlAuthToken,
         leaseExpiresAt: now + args.leaseTtlMs,
       },
     });

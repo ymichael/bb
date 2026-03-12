@@ -218,6 +218,20 @@
       "when": 1773532800000,
       "tag": "0030_thread_status_error",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "6",
+      "when": 1773619200000,
+      "tag": "0031_environment_agent_session_control_endpoint",
+      "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "6",
+      "when": 1773619260000,
+      "tag": "0032_environment_agent_session_control_auth_token",
+      "breakpoints": true
     }
   ]
 }

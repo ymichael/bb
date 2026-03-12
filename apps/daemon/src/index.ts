@@ -251,7 +251,6 @@ async function main(): Promise<void> {
 
   await listening;
   await recoverManagedEnvironmentAgentSessionsOnBoot({
-    runtimeEnv: process.env,
     sessionRepo: environmentAgentSessionRepo,
   });
   console.log("Reconciling startup environment state...");

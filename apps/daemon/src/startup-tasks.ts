@@ -1,6 +1,3 @@
-import { readdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
-import { resolveBeanbagPath } from "@beanbag/agent-core/storage-paths";
 import type { EnvironmentAgentSessionRepository } from "@beanbag/db";
 import type { Orchestrator } from "./orchestrator.js";
 
@@ -28,75 +25,14 @@ export function scheduleManagedArtifactReconciliation(
   task.unref();
 }
 
-interface ManagedEnvironmentAgentStateRecord {
-  version: 1;
-  baseUrl: string;
-  authToken: string;
-  threadId: string;
-  projectId: string;
-  environmentId: string;
-}
-
-function isManagedEnvironmentAgentStateRecord(
-  value: unknown,
-): value is ManagedEnvironmentAgentStateRecord {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return false;
-  }
-  const record = value as Record<string, unknown>;
-  return record.version === 1 &&
-    typeof record.baseUrl === "string" &&
-    typeof record.authToken === "string" &&
-    typeof record.threadId === "string" &&
-    typeof record.projectId === "string" &&
-    typeof record.environmentId === "string";
-}
-
-function listManagedEnvironmentAgentStateRecords(
-  runtimeEnv: NodeJS.ProcessEnv,
-): ManagedEnvironmentAgentStateRecord[] {
-  const root = resolveBeanbagPath(runtimeEnv, "environment-agents");
-  let projectDirs: string[] = [];
-  try {
-    projectDirs = readdirSync(root, { withFileTypes: true })
-      .filter((entry) => entry.isDirectory())
-      .map((entry) => join(root, entry.name));
-  } catch {
-    return [];
-  }
-
-  const records: ManagedEnvironmentAgentStateRecord[] = [];
-  for (const projectDir of projectDirs) {
-    let entries: string[] = [];
-    try {
-      entries = readdirSync(projectDir, { withFileTypes: true })
-        .filter((entry) => entry.isFile() && entry.name.endsWith(".json"))
-        .map((entry) => join(projectDir, entry.name));
-    } catch {
-      continue;
-    }
-    for (const filePath of entries) {
-      try {
-        const parsed = JSON.parse(readFileSync(filePath, "utf8")) as unknown;
-        if (isManagedEnvironmentAgentStateRecord(parsed)) {
-          records.push(parsed);
-        }
-      } catch {
-        continue;
-      }
-    }
-  }
-  return records;
-}
-
 async function requestEnvironmentAgentSessionSync(
-  record: ManagedEnvironmentAgentStateRecord,
+  record: { controlBaseUrl: string; controlAuthToken: string },
 ): Promise<boolean> {
   try {
-    const response = await fetch(new URL("/control/session-sync", record.baseUrl), {
+    const response = await fetch(new URL("/control/session-sync", record.controlBaseUrl), {
       method: "POST",
       headers: {
-        authorization: `Bearer ${record.authToken}`,
+        authorization: `Bearer ${record.controlAuthToken}`,
         "content-type": "application/json",
       },
       body: "{}",
@@ -108,7 +44,6 @@ async function requestEnvironmentAgentSessionSync(
 }
 
 export async function recoverManagedEnvironmentAgentSessionsOnBoot(args: {
-  runtimeEnv: NodeJS.ProcessEnv;
   sessionRepo: Pick<EnvironmentAgentSessionRepository, "listActive">;
   logger?: StartupTaskLogger;
 }): Promise<{
@@ -126,16 +61,17 @@ export async function recoverManagedEnvironmentAgentSessionsOnBoot(args: {
     };
   }
 
-  const stateRecords = listManagedEnvironmentAgentStateRecords(args.runtimeEnv);
-  const recordsByThreadId = new Map(
-    stateRecords.map((record) => [record.threadId, record] as const),
-  );
-
   let pokedCount = 0;
   let unreachableCount = 0;
   for (const session of activeSessions) {
-    const record = recordsByThreadId.get(session.threadId);
-    if (record && await requestEnvironmentAgentSessionSync(record)) {
+    if (!session.controlBaseUrl || !session.controlAuthToken) {
+      unreachableCount += 1;
+      continue;
+    }
+    if (await requestEnvironmentAgentSessionSync({
+      controlBaseUrl: session.controlBaseUrl,
+      controlAuthToken: session.controlAuthToken,
+    })) {
       pokedCount += 1;
       continue;
     }

@@ -35,6 +35,12 @@ export interface EnvironmentAgentServiceOptions {
   logging: {
     filePath: string;
   };
+  control: {
+    endpoint?: {
+      baseUrl: string;
+      authToken: string;
+    };
+  };
   session: {
     pollIntervalMs: number;
     commandBatchLimit: number;
@@ -43,6 +49,8 @@ export interface EnvironmentAgentServiceOptions {
 
 const BEANBAG_ENVIRONMENT_AGENT_AUTH_TOKEN = "BEANBAG_ENVIRONMENT_AGENT_AUTH_TOKEN";
 const BEANBAG_DAEMON_URL = "BEANBAG_DAEMON_URL";
+const BEANBAG_ENVIRONMENT_AGENT_CONTROL_BASE_URL =
+  "BEANBAG_ENVIRONMENT_AGENT_CONTROL_BASE_URL";
 const BEANBAG_ENVIRONMENT_AGENT_SESSION_POLL_INTERVAL_MS =
   "BEANBAG_ENVIRONMENT_AGENT_SESSION_POLL_INTERVAL_MS";
 
@@ -101,6 +109,14 @@ export function resolveEnvironmentAgentServiceOptions(args: {
     },
     logging: {
       filePath: resolveEnvironmentAgentLogFilePath(args.env),
+    },
+    control: {
+      endpoint: args.env[BEANBAG_ENVIRONMENT_AGENT_CONTROL_BASE_URL]?.trim()
+        ? {
+            baseUrl: args.env[BEANBAG_ENVIRONMENT_AGENT_CONTROL_BASE_URL]!.trim(),
+            authToken,
+          }
+        : undefined,
     },
     session: {
       pollIntervalMs:
@@ -191,6 +207,7 @@ export async function startEnvironmentAgentService(
         runtime,
         sessionRuntime,
         sessionSync,
+        controlEndpoint: options.control.endpoint,
         pollIntervalMs: options.session.pollIntervalMs,
         commandBatchLimit: options.session.commandBatchLimit,
         onError: (error) => {

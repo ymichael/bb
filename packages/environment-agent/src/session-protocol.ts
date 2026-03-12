@@ -35,11 +35,17 @@ export interface EnvironmentAgentSessionChannelBootstrap {
   lastDaemonAcked?: EnvironmentAgentSessionCursor;
 }
 
+export interface EnvironmentAgentSessionControlEndpoint {
+  baseUrl: string;
+  authToken: string;
+}
+
 export interface EnvironmentAgentSessionOpenPayload {
   agentId: string;
   agentInstanceId: string;
   supportedProtocolVersions: number[];
   supportedTransports: EnvironmentAgentSessionTransportKind[];
+  controlEndpoint?: EnvironmentAgentSessionControlEndpoint;
   channels: EnvironmentAgentSessionChannelBootstrap[];
 }
 

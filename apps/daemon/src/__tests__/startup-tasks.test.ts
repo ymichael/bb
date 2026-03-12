@@ -1,6 +1,3 @@
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   recoverManagedEnvironmentAgentSessionsOnBoot,
@@ -59,26 +56,6 @@ describe("startup tasks", () => {
   });
 
   it("pokes reachable env-agents and leaves unreachable sessions for heartbeat timeout handling", async () => {
-    const beanbagRoot = mkdtempSync(join(tmpdir(), "bb-startup-tasks-"));
-    const stateDir = join(beanbagRoot, "environment-agents", "proj-1");
-    mkdirSync(stateDir, { recursive: true });
-    writeFileSync(join(stateDir, "worktree-thread-1.json"), JSON.stringify({
-      version: 1,
-      baseUrl: "http://127.0.0.1:4310",
-      authToken: "token-1",
-      threadId: "thread-1",
-      projectId: "proj-1",
-      environmentId: "worktree",
-    }));
-    writeFileSync(join(stateDir, "worktree-thread-2.json"), JSON.stringify({
-      version: 1,
-      baseUrl: "http://127.0.0.1:4311",
-      authToken: "token-2",
-      threadId: "thread-2",
-      projectId: "proj-1",
-      environmentId: "worktree",
-    }));
-
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
       const url = String(input);
       if (url.startsWith("http://127.0.0.1:4310/")) {
@@ -92,13 +69,22 @@ describe("startup tasks", () => {
 
     const sessionRepo = {
       listActive: vi.fn().mockReturnValue([
-        { id: "sess-1", threadId: "thread-1" },
-        { id: "sess-2", threadId: "thread-2" },
+        {
+          id: "sess-1",
+          threadId: "thread-1",
+          controlBaseUrl: "http://127.0.0.1:4310",
+          controlAuthToken: "token-1",
+        },
+        {
+          id: "sess-2",
+          threadId: "thread-2",
+          controlBaseUrl: "http://127.0.0.1:4311",
+          controlAuthToken: "token-2",
+        },
       ]),
     };
 
     const result = await recoverManagedEnvironmentAgentSessionsOnBoot({
-      runtimeEnv: { BEANBAG_ROOT: beanbagRoot } as NodeJS.ProcessEnv,
       sessionRepo,
       logger: {
         log: vi.fn(),
@@ -111,7 +97,5 @@ describe("startup tasks", () => {
       pokedCount: 1,
       unreachableCount: 1,
     });
-
-    rmSync(beanbagRoot, { recursive: true, force: true });
   });
 });

@@ -104,6 +104,8 @@ export const environmentAgentSessions = sqliteTable(
     agentInstanceId: text("agent_instance_id").notNull(),
     protocolVersion: integer("protocol_version").notNull(),
     transportKind: text("transport_kind").notNull(),
+    controlBaseUrl: text("control_base_url"),
+    controlAuthToken: text("control_auth_token"),
     status: text("status").notNull(),
     leaseExpiresAt: integer("lease_expires_at").notNull(),
     lastHeartbeatAt: integer("last_heartbeat_at"),

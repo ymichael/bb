@@ -56,6 +56,9 @@ describe("environment-agent service config", () => {
           "/tmp/beanbag-root/environment-agent-logs/project-1/docker-thread-1.log",
         ),
       },
+      control: {
+        endpoint: undefined,
+      },
       session: {
         pollIntervalMs: 250,
         commandBatchLimit: 50,
@@ -168,6 +171,9 @@ describe("environment-agent service config", () => {
       },
       logging: {
         filePath: "/tmp/beanbag-environment-agent-service-test.log",
+      },
+      control: {
+        endpoint: undefined,
       },
       session: {
         pollIntervalMs: 10_000,

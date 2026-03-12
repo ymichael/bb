@@ -207,6 +207,8 @@ export class EnvironmentAgentSessionService {
       agentInstanceId: args.payload.agentInstanceId,
       protocolVersion: ENVIRONMENT_AGENT_SESSION_PROTOCOL_VERSION,
       transportKind,
+      controlBaseUrl: args.payload.controlEndpoint?.baseUrl,
+      controlAuthToken: args.payload.controlEndpoint?.authToken,
       leaseTtlMs: this.leaseTtlMs,
       now,
     });

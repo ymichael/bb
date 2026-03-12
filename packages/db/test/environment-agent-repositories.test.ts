@@ -60,6 +60,8 @@ describe("environment-agent repositories", () => {
       agentInstanceId: "instance-1",
       protocolVersion: 1,
       transportKind: "websocket",
+      controlBaseUrl: "http://127.0.0.1:4310",
+      controlAuthToken: "token-1",
       leaseExpiresAt: 5_000,
       now: 1_000,
     });
@@ -68,6 +70,8 @@ describe("environment-agent repositories", () => {
       id: "sess-1",
       status: "active",
       transportKind: "websocket",
+      controlBaseUrl: "http://127.0.0.1:4310",
+      controlAuthToken: "token-1",
     });
 
     const touched = sessions.touchHeartbeat({
@@ -91,6 +95,8 @@ describe("environment-agent repositories", () => {
         agentInstanceId: "instance-2",
         protocolVersion: 1,
         transportKind: "http-long-poll",
+        controlBaseUrl: "http://127.0.0.1:4311",
+        controlAuthToken: "token-2",
         leaseExpiresAt: 15_000,
       },
     });
@@ -105,6 +111,8 @@ describe("environment-agent repositories", () => {
       id: "sess-2",
       status: "active",
       transportKind: "http-long-poll",
+      controlBaseUrl: "http://127.0.0.1:4311",
+      controlAuthToken: "token-2",
     });
     expect(sessions.getActiveByThreadId(threadId, 3_000)).toMatchObject({
       id: "sess-2",

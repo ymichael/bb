@@ -68,6 +68,10 @@ const environmentAgentSessionOpenBodySchema = z.object({
   supportedTransports: z
     .array(z.enum(["websocket", "http-long-poll"]))
     .min(1),
+  controlEndpoint: z.object({
+    baseUrl: z.string().url(),
+    authToken: z.string().min(1),
+  }).optional(),
   channels: z.array(environmentAgentSessionChannelBootstrapSchema).min(1),
 });
 

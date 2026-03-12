@@ -7,12 +7,14 @@ import type {
   EnvironmentAgentPulledCommand,
   EnvironmentAgentSessionSync,
 } from "./session-sync.js";
+import type { EnvironmentAgentSessionControlEndpoint } from "./session-protocol.js";
 
 export interface EnvironmentAgentSessionSupervisorOptions {
   threadId: string;
   runtime: EnvironmentAgentRuntime;
   sessionRuntime: EnvironmentAgentSessionRuntime;
   sessionSync: EnvironmentAgentSessionSync;
+  controlEndpoint?: EnvironmentAgentSessionControlEndpoint;
   agentId?: string;
   agentInstanceId?: string;
   pollIntervalMs?: number;
@@ -172,6 +174,9 @@ export class EnvironmentAgentSessionSupervisor {
         agentInstanceId: this.agentInstanceId,
         supportedProtocolVersions: [1],
         supportedTransports: ["http-long-poll"],
+        ...(this.options.controlEndpoint
+          ? { controlEndpoint: this.options.controlEndpoint }
+          : {}),
         channels: [
           {
             channelId: this.options.threadId,

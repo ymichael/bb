@@ -352,6 +352,7 @@ export async function ensureManagedHostEnvironmentAgent(args: {
     const port = await (deps.allocatePort ?? allocatePort)();
     const authToken =
       (deps.generateAuthToken ?? (() => randomBytes(24).toString("hex")))();
+    const baseUrl = `http://${HOST}:${port}`;
     const { command, args: commandArgs } =
       (deps.resolveLaunchCommand ?? resolveManagedHostEnvironmentAgentLaunchCommand)();
     const child = (deps.spawnProcess ?? spawn)(
@@ -372,6 +373,7 @@ export async function ensureManagedHostEnvironmentAgent(args: {
           BB_PROJECT_ID: args.projectId,
           BB_ENVIRONMENT_ID: args.environmentId,
           BEANBAG_ENVIRONMENT_AGENT_AUTH_TOKEN: authToken,
+          BEANBAG_ENVIRONMENT_AGENT_CONTROL_BASE_URL: baseUrl,
         },
         detached: true,
         stdio: "ignore",
@@ -379,7 +381,6 @@ export async function ensureManagedHostEnvironmentAgent(args: {
     );
     child.unref?.();
 
-    const baseUrl = `http://${HOST}:${port}`;
     await (deps.waitForAgent ?? waitForEnvironmentAgent)(baseUrl, authToken);
     writeRecord(stateRecordIdentity, {
       version: STATE_VERSION,
