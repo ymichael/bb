@@ -3098,45 +3098,74 @@ export class Orchestrator implements ThreadOrchestrator {
       throw threadNotFoundError(threadId);
     }
 
+    let resolved: {
+      thread: Thread;
+      projectRootPath: string;
+      target: EnvironmentAgentConnectionTarget;
+      resetReplayCursor: boolean;
+    };
+
     const runtime = this.environmentService.getEnvironmentRuntime(threadId);
     if (runtime?.agentConnectionTarget) {
       if (this.environmentAgentCommandDispatcher?.hasActiveSession(threadId)) {
-        return {
+        resolved = {
           thread,
           projectRootPath: "",
           target: runtime.agentConnectionTarget,
           resetReplayCursor: false,
         };
+      } else {
+        await this.environmentService.suspendEnvironmentRuntimeAndWait(threadId);
+        const project = this.projectRepo.getById(thread.projectId);
+        if (!project) {
+          throw projectNotFoundError(thread.projectId);
+        }
+        const ensured = await this.environmentService.ensureThreadEnvironmentRuntime(
+          thread,
+          project.rootPath,
+          "resume-existing-provider-session",
+        );
+        resolved = {
+          thread,
+          projectRootPath: project.rootPath,
+          target: ensured.runtime.agentConnectionTarget,
+          resetReplayCursor: ensured.resetReplayCursor,
+        };
       }
-      await this.environmentService.suspendEnvironmentRuntimeAndWait(threadId);
+    } else {
+      const runtimeEnvTarget = this._resolveEnvironmentAgentConnectionTargetFromRuntimeEnv();
+      if (runtimeEnvTarget) {
+        resolved = {
+          thread,
+          projectRootPath: "",
+          target: runtimeEnvTarget,
+          resetReplayCursor: false,
+        };
+      } else {
+        const project = this.projectRepo.getById(thread.projectId);
+        if (!project) {
+          throw projectNotFoundError(thread.projectId);
+        }
+
+        const ensured = await this.environmentService.ensureThreadEnvironmentRuntime(
+          thread,
+          project.rootPath,
+          "resume-existing-provider-session",
+        );
+        resolved = {
+          thread,
+          projectRootPath: project.rootPath,
+          target: ensured.runtime.agentConnectionTarget,
+          resetReplayCursor: ensured.resetReplayCursor,
+        };
+      }
     }
 
-    const runtimeEnvTarget = this._resolveEnvironmentAgentConnectionTargetFromRuntimeEnv();
-    if (runtimeEnvTarget) {
-      return {
-        thread,
-        projectRootPath: "",
-        target: runtimeEnvTarget,
-        resetReplayCursor: false,
-      };
+    if (this.environmentAgentCommandDispatcher) {
+      await this.environmentAgentCommandDispatcher.awaitActiveSession({ threadId });
     }
 
-    const project = this.projectRepo.getById(thread.projectId);
-    if (!project) {
-      throw projectNotFoundError(thread.projectId);
-    }
-
-    const ensured = await this.environmentService.ensureThreadEnvironmentRuntime(
-      thread,
-      project.rootPath,
-      "resume-existing-provider-session",
-    );
-    return {
-      thread,
-      projectRootPath: project.rootPath,
-      target: ensured.runtime.agentConnectionTarget,
-      resetReplayCursor: ensured.resetReplayCursor,
-    };
+    return resolved;
   }
 
   private async _withEnvironmentAgentAccess<T>(
@@ -3508,17 +3537,11 @@ export class Orchestrator implements ThreadOrchestrator {
     }
 
     try {
-      const { runtime: environmentRuntime, resetReplayCursor } =
-        await this.environmentService.ensureThreadEnvironmentRuntime(
-          thread,
-          project.rootPath,
-          "resume-existing-provider-session",
-        );
-      void resetReplayCursor;
+      const access = await this._ensureEnvironmentAgentAccess(threadId);
       const resumed = await this._withEnvironmentAgentTarget({
-        thread,
-        projectRootPath: project.rootPath,
-        target: environmentRuntime.agentConnectionTarget,
+        thread: access.thread,
+        projectRootPath: access.projectRootPath,
+        target: access.target,
         action: async ({ client, providerLaunch }) =>
           this.agentServer.resumeThreadCommand({
             client,
