@@ -4,13 +4,13 @@ Status: draft
 
 This document specifies the proposed canonical protocol between the Beanbag daemon and environment-agent.
 
-It is intended to supersede the current split between live `/stream` ingestion and `/deliver` acknowledgement by defining one session-based model for liveness, command delivery, event delivery, replay, acknowledgement, and reconnect.
+It is intended to supersede the current split between live `/stream` ingestion and `/deliver` acknowledgement by defining one session-based model for liveness, command delivery, event delivery, replay, acknowledgement, reconnect, and restart-time nudging of surviving agents.
 
 ## Goals
 
 - fast: low-latency command and event propagation over a live connection when available
-- reliable: durable acknowledgement semantics with idempotent retry behavior
-- resilient: survives daemon restart, daemon outage, and environment-agent reconnects
+- reliable: daemon-side durable acknowledgement semantics with idempotent retry behavior
+- resilient: surviving agents can reconnect after daemon restart or outage, but daemon correctness does not depend on agent-local durability
 - scalable: supports many concurrent agents without daemon-side polling of every agent
 - adaptable: message semantics stay stable across WebSocket, HTTP long-poll, SSE+POST, or future transports
 
@@ -29,7 +29,7 @@ It is intended to supersede the current split between live `/stream` ingestion a
 - **Channel**: an independently ordered logical stream carried inside a session. In v1, a channel is expected to map to a thread.
 - **Generation**: a monotonically changing identifier for a channel stream after agent-side restart/reset.
 - **Cursor**: the daemon's last durably applied position for a channel stream, expressed as `(generation, sequence)`.
-- **Outbox**: the agent's durable store of outbound messages/events not yet acknowledged by the daemon.
+- **Outbox**: the agent's local store of outbound messages/events not yet acknowledged by the daemon. In the current model this is best-effort, not crash-durable.
 
 ## Core Invariants
 
@@ -37,7 +37,7 @@ It is intended to supersede the current split between live `/stream` ingestion a
 2. Both sides must apply messages **idempotently** using stable ids.
 3. Ordering is guaranteed **per channel** only.
 4. The daemon advances a channel cursor only after it has **durably applied** the corresponding events.
-5. The agent removes outbound events from its durable outbox only after receiving a daemon ack that covers them.
+5. The agent removes outbound events from its local outbox only after receiving a daemon ack that covers them. If the agent crashes first, those uncommitted events may be lost.
 6. A new agent instance must not reuse an old channel stream without changing its **generation**.
 7. Session liveness is determined by **lease state**, not inferred from one-off request success.
 
@@ -53,6 +53,7 @@ Each session is associated with:
 - `agentInstanceId`: unique id for the current agent process instance
 - `sessionId`: server-issued id for the current session lease
 - `protocolVersion`: negotiated version
+- `controlEndpoint`: optional daemon-reachable control URL and auth token used for restart nudges
 - `capabilities`: negotiated transport/protocol features
 
 ### Channel Identity
@@ -106,6 +107,10 @@ Sent by agent when no valid resumable session is known.
     "agentInstanceId": "agentinst_01",
     "supportedProtocolVersions": [1],
     "supportedTransports": ["websocket", "http-long-poll"],
+    "controlEndpoint": {
+      "baseUrl": "http://127.0.0.1:4310",
+      "authToken": "secret-token"
+    },
     "channels": [
       {
         "channelId": "thread-1",
@@ -119,6 +124,8 @@ Sent by agent when no valid resumable session is known.
   }
 }
 ```
+
+`controlEndpoint` is optional restart metadata. When present, the daemon may use it to send `/control/session-sync` nudges after restart so a surviving agent resets reconnect backoff and checks in quickly.
 
 ### `session_resume`
 
