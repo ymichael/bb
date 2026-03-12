@@ -180,6 +180,7 @@ export interface CreateCodexProviderAdapterOptions {
   displayName?: string;
   processCommand?: string;
   processArgs?: string[];
+  launchEnv?: Record<string, string>;
   capabilities?: Partial<ProviderCapabilities>;
   listModels?: () => Promise<AvailableModel[]>;
 }
@@ -209,7 +210,18 @@ export function createCodexProviderAdapter(
     processCommand: opts?.processCommand ?? "codex",
     processArgs: opts?.processArgs ?? ["app-server"],
     async resolveLaunchConfiguration(): Promise<ProviderLaunchConfiguration | undefined> {
-      return resolveCodexProviderLaunchConfiguration();
+      const launchConfig = await resolveCodexProviderLaunchConfiguration();
+      if (!opts?.launchEnv || Object.keys(opts.launchEnv).length === 0) {
+        return launchConfig;
+      }
+
+      return {
+        ...(launchConfig ?? {}),
+        env: {
+          ...(launchConfig?.env ?? {}),
+          ...opts.launchEnv,
+        },
+      };
     },
     clientInfo: {
       name: "beanbag",

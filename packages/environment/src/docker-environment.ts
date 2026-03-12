@@ -253,6 +253,7 @@ class DockerEnvironment implements IEnvironment {
       projectId: this.projectId,
       threadId: this.threadId,
       environmentId: this.kind,
+      workspaceRootPath: this.getWorkspaceRootUnsafe(),
       runtimeEnv: this.runtimeEnv,
     });
     if (!managedTarget && !this.runtimeEnv.BEANBAG_ENVIRONMENT_AGENT_BASE_URL?.trim()) {

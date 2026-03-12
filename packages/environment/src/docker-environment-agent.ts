@@ -1,4 +1,4 @@
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { request as httpRequest } from "node:http";
 import { homedir } from "node:os";
@@ -61,7 +61,14 @@ function sanitizeSegment(value: string): string {
   return normalized.length > 0 ? normalized : "environment";
 }
 
-function resolveStateFilePath(args: {
+function hashWorkspaceRoot(workspaceRootPath: string): string {
+  return createHash("sha1")
+    .update(workspaceRootPath)
+    .digest("hex")
+    .slice(0, 12);
+}
+
+function resolveLegacyStateFilePath(args: {
   projectId: string;
   threadId: string;
   environmentId: string;
@@ -75,37 +82,74 @@ function resolveStateFilePath(args: {
   );
 }
 
+function resolveStateFilePath(args: {
+  projectId: string;
+  threadId: string;
+  environmentId: string;
+  workspaceRootPath: string;
+}): string {
+  return join(
+    homedir(),
+    ".beanbag",
+    "environment-agents",
+    sanitizeSegment(args.projectId),
+    `${sanitizeSegment(args.environmentId)}-${sanitizeSegment(args.threadId)}-${hashWorkspaceRoot(args.workspaceRootPath)}.json`,
+  );
+}
+
+function resolveStateFilePathCandidates(args: {
+  projectId: string;
+  threadId: string;
+  environmentId: string;
+  workspaceRootPath?: string;
+}): string[] {
+  const candidates: string[] = [];
+  if (args.workspaceRootPath) {
+    candidates.push(resolveStateFilePath({
+      projectId: args.projectId,
+      threadId: args.threadId,
+      environmentId: args.environmentId,
+      workspaceRootPath: args.workspaceRootPath,
+    }));
+  }
+  candidates.push(resolveLegacyStateFilePath(args));
+  return Array.from(new Set(candidates));
+}
+
 function readRecord(args: {
   projectId: string;
   threadId: string;
   environmentId: string;
+  workspaceRootPath?: string;
 }): ManagedDockerEnvironmentAgentRecord | undefined {
-  const stateFilePath = resolveStateFilePath(args);
-  if (!existsSync(stateFilePath)) {
-    return undefined;
-  }
-
-  try {
-    const parsed = JSON.parse(readFileSync(stateFilePath, "utf8")) as Partial<ManagedDockerEnvironmentAgentRecord>;
-    if (
-      parsed.version !== STATE_VERSION ||
-      typeof parsed.baseUrl !== "string" ||
-      typeof parsed.authToken !== "string" ||
-      typeof parsed.threadId !== "string" ||
-      typeof parsed.projectId !== "string" ||
-      typeof parsed.environmentId !== "string" ||
-      typeof parsed.workspaceRoot !== "string" ||
-      typeof parsed.containerName !== "string" ||
-      typeof parsed.hostPort !== "number" ||
-      typeof parsed.containerPort !== "number" ||
-      typeof parsed.installRoot !== "string"
-    ) {
-      return undefined;
+  for (const stateFilePath of resolveStateFilePathCandidates(args)) {
+    if (!existsSync(stateFilePath)) {
+      continue;
     }
-    return parsed as ManagedDockerEnvironmentAgentRecord;
-  } catch {
-    return undefined;
+
+    try {
+      const parsed = JSON.parse(readFileSync(stateFilePath, "utf8")) as Partial<ManagedDockerEnvironmentAgentRecord>;
+      if (
+        parsed.version !== STATE_VERSION ||
+        typeof parsed.baseUrl !== "string" ||
+        typeof parsed.authToken !== "string" ||
+        typeof parsed.threadId !== "string" ||
+        typeof parsed.projectId !== "string" ||
+        typeof parsed.environmentId !== "string" ||
+        typeof parsed.workspaceRoot !== "string" ||
+        typeof parsed.containerName !== "string" ||
+        typeof parsed.hostPort !== "number" ||
+        typeof parsed.containerPort !== "number" ||
+        typeof parsed.installRoot !== "string"
+      ) {
+        continue;
+      }
+      return parsed as ManagedDockerEnvironmentAgentRecord;
+    } catch {
+      continue;
+    }
   }
+  return undefined;
 }
 
 function writeRecord(
@@ -113,20 +157,28 @@ function writeRecord(
     projectId: string;
     threadId: string;
     environmentId: string;
+    workspaceRootPath: string;
   },
   record: ManagedDockerEnvironmentAgentRecord,
 ): void {
   const stateFilePath = resolveStateFilePath(args);
   mkdirSync(dirname(stateFilePath), { recursive: true });
   writeFileSync(stateFilePath, JSON.stringify(record, null, 2), "utf8");
+  const legacyStateFilePath = resolveLegacyStateFilePath(args);
+  if (legacyStateFilePath !== stateFilePath) {
+    rmSync(legacyStateFilePath, { force: true });
+  }
 }
 
 function removeRecord(args: {
   projectId: string;
   threadId: string;
   environmentId: string;
+  workspaceRootPath?: string;
 }): void {
-  rmSync(resolveStateFilePath(args), { force: true });
+  for (const stateFilePath of resolveStateFilePathCandidates(args)) {
+    rmSync(stateFilePath, { force: true });
+  }
 }
 
 function pingEnvironmentAgent(
@@ -170,7 +222,7 @@ async function waitForEnvironmentAgent(baseUrl: string, authToken: string): Prom
     if (await pingEnvironmentAgent(baseUrl, authToken, HEALTH_TIMEOUT_MS)) {
       return;
     }
-    await new Promise((resolvePromise) => setTimeout(resolvePromise, 100));
+    await new Promise((resolvePromise) => setTimeout(resolvePromise, 25));
   }
   throw new Error(`Timed out waiting for docker environment-agent at ${baseUrl}`);
 }
@@ -323,6 +375,7 @@ export async function ensureManagedDockerEnvironmentAgent(
     projectId: args.projectId,
     threadId: args.threadId,
     environmentId: args.environmentId,
+    workspaceRootPath: args.workspaceRootPath,
   };
   const existing = readRecord(stateIdentity);
   if (existing) {
@@ -425,6 +478,7 @@ export function resolveManagedDockerEnvironmentAgentTarget(args: {
   projectId: string;
   threadId: string;
   environmentId: string;
+  workspaceRootPath: string;
   runtimeEnv: Record<string, string | undefined>;
   providerLaunch?: {
     command: string;
@@ -479,4 +533,13 @@ export async function disposeManagedDockerEnvironmentAgent(args: {
     );
   }
   removeRecord(args);
+}
+
+export function __testOnly__resolveManagedDockerEnvironmentAgentStateFilePath(args: {
+  projectId: string;
+  threadId: string;
+  environmentId: string;
+  workspaceRootPath: string;
+}): string {
+  return resolveStateFilePath(args);
 }

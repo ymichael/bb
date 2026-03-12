@@ -1,9 +1,12 @@
 import { execFileSync, spawn } from "node:child_process";
 import {
+  appendFileSync,
   existsSync,
+  readdirSync,
   mkdirSync,
   mkdtempSync,
   rmSync,
+  statSync,
 } from "node:fs";
 import { createServer as createNetServer } from "node:net";
 import { tmpdir } from "node:os";
@@ -43,6 +46,13 @@ const TSX_CLI_PATH = resolve(
   "cli.mjs",
 );
 const PROVISIONING_SETTLE_TIMEOUT_MS = 5_000;
+const TEST_GIT_ENV: NodeJS.ProcessEnv = {
+  ...process.env,
+  GIT_AUTHOR_NAME: "Beanbag Test",
+  GIT_AUTHOR_EMAIL: "beanbag-test@example.com",
+  GIT_COMMITTER_NAME: "Beanbag Test",
+  GIT_COMMITTER_EMAIL: "beanbag-test@example.com",
+};
 
 function prependPathEntry(
   pathValue: string | undefined,
@@ -114,6 +124,7 @@ export interface DaemonE2eHarness {
   projectRoot: string;
   getEnvironmentAgentAuthorization: (threadId: string) => string | undefined;
   getEnvironmentAgentCursor: (threadId: string) => number;
+  emitFakeCodexControlEvent: () => void;
   shutdownForRestart: () => Promise<void>;
   cleanup: () => Promise<void>;
 }
@@ -127,6 +138,17 @@ function listPendingProvisioningTasks(
   return Array.from(rawThreadManager.provisioningTasks?.values() ?? []);
 }
 
+function stopThreadManagerAndWait(
+  threadManager: unknown,
+  opts?: { preserveEnvironments?: boolean },
+): Promise<void> {
+  const rawThreadManager = threadManager as {
+    stopAll?: (options?: { preserveEnvironments?: boolean }) => void;
+  };
+  rawThreadManager.stopAll?.(opts);
+  return Promise.resolve();
+}
+
 export async function startDaemonE2eHarness(
   opts?: StartDaemonE2eHarnessOptions,
 ): Promise<DaemonE2eHarness> {
@@ -137,18 +159,12 @@ export async function startDaemonE2eHarness(
   if (opts?.initGitRepo && !existsSync(join(projectRoot, ".git"))) {
     execFileSync("git", ["init", "-b", "main"], {
       cwd: projectRoot,
-      stdio: "pipe",
-    });
-    execFileSync("git", ["config", "user.name", "Beanbag Test"], {
-      cwd: projectRoot,
-      stdio: "pipe",
-    });
-    execFileSync("git", ["config", "user.email", "beanbag-test@example.com"], {
-      cwd: projectRoot,
+      env: TEST_GIT_ENV,
       stdio: "pipe",
     });
     execFileSync("git", ["commit", "--allow-empty", "-m", "init"], {
       cwd: projectRoot,
+      env: TEST_GIT_ENV,
       stdio: "pipe",
     });
   }
@@ -156,21 +172,26 @@ export async function startDaemonE2eHarness(
   const dbPath = join(tempDir, "beanbag.db");
   const fakeCodexBinDir = createFakeCodexBinDir(tempDir, opts?.fakeCodex);
   const fakeCodexCommand = join(fakeCodexBinDir, "codex");
+  const fakeCodexControlFilePath = join(tempDir, "fake-codex-control", "events.log");
   const workspaceFakeCodexPath = opts?.useWorkspaceFakeCodex
     ? createFakeCodexScriptFile(projectRoot, opts.fakeCodex)
     : undefined;
   if (workspaceFakeCodexPath && opts?.initGitRepo) {
     execFileSync("git", ["add", ".beanbag-test/fake-codex.cjs"], {
       cwd: projectRoot,
+      env: TEST_GIT_ENV,
       stdio: "pipe",
     });
     execFileSync("git", ["commit", "-m", "add fake codex"], {
       cwd: projectRoot,
+      env: TEST_GIT_ENV,
       stdio: "pipe",
     });
   }
-  const previousPath = process.env.PATH;
-  process.env.PATH = prependPathEntry(previousPath, fakeCodexBinDir);
+  const daemonRuntimeEnv: NodeJS.ProcessEnv = {
+    ...process.env,
+    PATH: prependPathEntry(process.env.PATH, fakeCodexBinDir),
+  };
 
   const db = createConnection(dbPath);
   const sqliteClient = (db as { $client?: { close?: () => void } }).$client;
@@ -195,6 +216,7 @@ export async function startDaemonE2eHarness(
         environmentAgentSessionRepo,
         environmentAgentCursorRepo,
         environmentAgentCommandRepo,
+        runtimeEnv: daemonRuntimeEnv,
         dbPath,
         daemonLogFilePath: join(tempDir, "daemon.log"),
         daemonBaseUrl: `http://127.0.0.1:${daemonPort}/api/v1`,
@@ -203,6 +225,9 @@ export async function startDaemonE2eHarness(
           processArgs: workspaceFakeCodexPath
             ? ["/workspace/.beanbag-test/fake-codex.cjs", "app-server"]
             : ["app-server"],
+          launchEnv: {
+            BEANBAG_FAKE_CODEX_CONTROL_FILE: fakeCodexControlFilePath,
+          },
         }),
       });
 
@@ -232,20 +257,17 @@ export async function startDaemonE2eHarness(
         await closeHttpServer(httpServer);
       }
       sqliteClient?.close?.();
-      process.env.PATH = previousPath;
     };
 
     const cleanup = async (): Promise<void> => {
       if (!stopped) {
         stopped = true;
         const pendingProvisioningTasks = listPendingProvisioningTasks(threadManager);
-        threadManager.stopAll();
+        stopThreadManagerAndWait(threadManager);
         await Promise.race([
           Promise.allSettled(pendingProvisioningTasks),
           sleep(PROVISIONING_SETTLE_TIMEOUT_MS),
         ]);
-        // Child "exit" callbacks and command results can still land on following ticks.
-        await sleep(200);
       }
       await closeDaemon();
       if (!opts?.preserveTempDirOnCleanup) {
@@ -261,12 +283,13 @@ export async function startDaemonE2eHarness(
       };
       const pendingProvisioningTasks = listPendingProvisioningTasks(threadManager);
       rawThreadManager.agentServer?.stopAllSessions?.("Beanbag daemon restart");
-      threadManager.stopAll({ preserveEnvironments: true });
+      stopThreadManagerAndWait(threadManager, {
+        preserveEnvironments: true,
+      });
       await Promise.race([
         Promise.allSettled(pendingProvisioningTasks),
         sleep(PROVISIONING_SETTLE_TIMEOUT_MS),
       ]);
-      await sleep(200);
       await closeDaemon();
     };
 
@@ -284,6 +307,9 @@ export async function startDaemonE2eHarness(
         )._resolveEnvironmentAgentAuthorization(threadId),
       getEnvironmentAgentCursor: (threadId: string) =>
         environmentAgentCursorRepo.getByThreadId(threadId)?.sequence ?? 0,
+      emitFakeCodexControlEvent: () => {
+        appendFileSync(fakeCodexControlFilePath, "emit-next-event\n", "utf8");
+      },
       shutdownForRestart,
       cleanup,
     };
@@ -292,7 +318,6 @@ export async function startDaemonE2eHarness(
       await closeHttpServer(httpServer);
     }
     sqliteClient?.close?.();
-    process.env.PATH = previousPath;
     rmSync(tempDir, { recursive: true, force: true });
     throw err;
   }
@@ -303,18 +328,46 @@ interface CliLaunchTarget {
   args: string[];
 }
 
+function latestModifiedAtMs(rootPath: string): number {
+  const stat = statSync(rootPath);
+  if (!stat.isDirectory()) {
+    return stat.mtimeMs;
+  }
+
+  let latest = stat.mtimeMs;
+  for (const entry of readdirSync(rootPath)) {
+    latest = Math.max(latest, latestModifiedAtMs(join(rootPath, entry)));
+  }
+  return latest;
+}
+
+function isCurrentCliDistAvailable(): boolean {
+  if (!existsSync(CLI_DIST_PATH)) {
+    return false;
+  }
+
+  const cliRoot = resolve(WORKSPACE_ROOT, "apps", "cli");
+  const distModifiedAtMs = statSync(CLI_DIST_PATH).mtimeMs;
+  const sourceLatestMs = Math.max(
+    latestModifiedAtMs(resolve(cliRoot, "src")),
+    latestModifiedAtMs(resolve(cliRoot, "package.json")),
+    latestModifiedAtMs(resolve(cliRoot, "tsconfig.json")),
+  );
+  return distModifiedAtMs >= sourceLatestMs;
+}
+
 function resolveCliLaunchTarget(): CliLaunchTarget {
+  if (isCurrentCliDistAvailable()) {
+    return {
+      command: process.execPath,
+      args: [CLI_DIST_PATH],
+    };
+  }
+
   if (existsSync(TSX_CLI_PATH) && existsSync(CLI_SOURCE_PATH)) {
     return {
       command: process.execPath,
       args: [TSX_CLI_PATH, CLI_SOURCE_PATH],
-    };
-  }
-
-  if (existsSync(CLI_DIST_PATH)) {
-    return {
-      command: process.execPath,
-      args: [CLI_DIST_PATH],
     };
   }
 

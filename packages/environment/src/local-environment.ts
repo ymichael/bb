@@ -92,6 +92,7 @@ class LocalEnvironment implements IEnvironment {
       projectId: this.projectId,
       threadId: this.threadId,
       environmentId: this.kind,
+      workspaceRootPath: this.rootPath,
       runtimeEnv: this.env,
     });
   }
@@ -117,6 +118,7 @@ class LocalEnvironment implements IEnvironment {
       projectId: this.projectId,
       threadId: this.threadId,
       environmentId: this.kind,
+      workspaceRootPath: this.rootPath,
       runtimeEnv: this.env,
     });
     if (!managedTarget && !this.env.BEANBAG_ENVIRONMENT_AGENT_BASE_URL?.trim()) {

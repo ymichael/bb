@@ -138,6 +138,22 @@ import { measureAsync, measureSync } from "./perf.js";
 
 export type PromptExecutionOptions = ProviderExecutionOptions;
 
+const BEANBAG_ENVIRONMENT_AGENT_COMMAND_POLL_INTERVAL_MS =
+  "BEANBAG_ENVIRONMENT_AGENT_COMMAND_POLL_INTERVAL_MS";
+
+function parsePositiveIntegerEnv(
+  rawValue: string | undefined,
+): number | undefined {
+  if (!rawValue) {
+    return undefined;
+  }
+  const parsed = Number.parseInt(rawValue, 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return undefined;
+  }
+  return parsed;
+}
+
 interface TellContext {
   initiator: ThreadTurnInitiator;
 }
@@ -529,6 +545,7 @@ export class Orchestrator implements ThreadOrchestrator {
   private operationIdCounter = 0;
   private threadShellPath: string | undefined;
   private environmentCatalog: SystemEnvironmentInfo[];
+  private environmentAgentCommandPollIntervalMs: number | undefined;
 
   constructor(
     private threadRepo: ThreadRepository,
@@ -546,6 +563,9 @@ export class Orchestrator implements ThreadOrchestrator {
     private environmentAgentSessionService?: EnvironmentAgentSessionService,
   ) {
     this.threadShellPath = resolveThreadShellPath(this.runtimeEnv.PATH);
+    this.environmentAgentCommandPollIntervalMs = parsePositiveIntegerEnv(
+      this.runtimeEnv[BEANBAG_ENVIRONMENT_AGENT_COMMAND_POLL_INTERVAL_MS],
+    );
     this.environmentCatalog =
       environmentCatalog ??
       this.environmentRegistry.list();
@@ -2719,6 +2739,31 @@ export class Orchestrator implements ThreadOrchestrator {
     this.queuedProviderBroadcastsByThread.clear();
   }
 
+  async stopAllAndWait(opts?: { preserveEnvironments?: boolean }): Promise<void> {
+    await this.environmentService.stopAllAndWait({
+      preserveEnvironments: opts?.preserveEnvironments,
+    });
+    this.autoTitleAttemptedThreadIds.clear();
+    this.titleFallbackByThreadId.clear();
+    this.provisioningTasks.clear();
+    this.eventSeqCounters.clear();
+    this.lastNotifiedCompletionTurnIds.clear();
+    this.turnLifecycleEpochs.clear();
+    this.activeTurnIdByThreadId.clear();
+    this.providerThreadIdByThreadId.clear();
+    this.lastNotifiedCompletionEpochs.clear();
+    this.queueDispatchInFlight.clear();
+    this.queuedOperationsByThreadId.clear();
+    this.operationDispatchInFlight.clear();
+    this.projectOperationTransitionsInFlight.clear();
+    for (const queued of this.queuedProviderBroadcastsByThread.values()) {
+      if (queued.timer !== null) {
+        clearTimeout(queued.timer);
+      }
+    }
+    this.queuedProviderBroadcastsByThread.clear();
+  }
+
   private _scheduleProvisioning(
     threadId: string,
     req: SpawnThreadRequest,
@@ -2736,6 +2781,9 @@ export class Orchestrator implements ThreadOrchestrator {
 
         void this._provisionThread(threadId, req, opts)
           .catch((err) => {
+            if (this.provisioningTasks.get(threadId) !== task) {
+              return;
+            }
             this._cleanupThreadRuntime(threadId);
             this._setThreadStatus(threadId, "provisioning_failed", true, {
               force: true,
@@ -3030,6 +3078,9 @@ export class Orchestrator implements ThreadOrchestrator {
     const client = new EnvironmentAgentSessionCommandClient({
       threadId: args.thread.id,
       commandDispatcher: this.environmentAgentCommandDispatcher,
+      ...(this.environmentAgentCommandPollIntervalMs !== undefined
+        ? { pollIntervalMs: this.environmentAgentCommandPollIntervalMs }
+        : {}),
       recoverSession: async () => {
         await this._ensureEnvironmentAgentAccess(args.thread.id);
       },

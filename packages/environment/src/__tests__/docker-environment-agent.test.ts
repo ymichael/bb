@@ -12,6 +12,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  __testOnly__resolveManagedDockerEnvironmentAgentStateFilePath,
   __testOnly__resolveDockerDaemonUrl,
   DEFAULT_DOCKER_ENVIRONMENT_IMAGE,
   ensureDockerEnvironmentImageAvailable,
@@ -263,6 +264,7 @@ describe("docker environment-agent helper", () => {
         projectId: "project-1",
         threadId: "thread-1",
         environmentId: "docker",
+        workspaceRootPath: workspaceRoot,
         runtimeEnv: {},
       }),
     ).toEqual({
@@ -297,13 +299,12 @@ describe("docker environment-agent helper", () => {
     }
     cleanupPaths.push(join(homedir(), ".beanbag", "environment-agents", "project-existing"));
 
-    const stateFile = join(
-      homedir(),
-      ".beanbag",
-      "environment-agents",
-      "project-existing",
-      "docker-thread-existing.json",
-    );
+    const stateFile = __testOnly__resolveManagedDockerEnvironmentAgentStateFilePath({
+      projectId: "project-existing",
+      threadId: "thread-existing",
+      environmentId: "docker",
+      workspaceRootPath: workspaceRoot,
+    });
     mkdirSync(dirname(stateFile), { recursive: true });
     writeFileSync(
       stateFile,
@@ -353,6 +354,7 @@ describe("docker environment-agent helper", () => {
           projectId: "project-existing",
           threadId: "thread-existing",
           environmentId: "docker",
+          workspaceRootPath: workspaceRoot,
           runtimeEnv: {},
         }),
       ).toEqual({

@@ -786,6 +786,54 @@ export class EnvironmentService {
     this.restoreFailuresByThreadId.clear();
   }
 
+  async stopAllAndWait(opts?: { preserveEnvironments?: boolean }): Promise<void> {
+    const preserveEnvironments = opts?.preserveEnvironments ?? false;
+    const runtimeThreadIds = new Set(this.environmentRuntimes.keys());
+    const teardownTasks: Promise<void>[] = [];
+    for (const [threadId] of this.environmentRuntimes) {
+      if (preserveEnvironments) {
+        teardownTasks.push(this.suspendEnvironmentRuntimeAndWait(threadId));
+      } else {
+        teardownTasks.push(this.destroyThreadEnvironment(threadId));
+      }
+    }
+    if (!preserveEnvironments) {
+      const projects = this.projectRepo.list();
+      if (!Array.isArray(projects) || projects.length === 0) {
+        await Promise.allSettled(teardownTasks);
+        this.environmentRuntimes.clear();
+        this.stopAllPrimaryPromotionWatches();
+        this.primaryPromotionByProjectId.clear();
+        this.primaryPromotionValidatedAtByProjectId.clear();
+        this.workspaceCleanupInFlightThreadIds.clear();
+        this.restoreFailuresByThreadId.clear();
+        return;
+      }
+      for (const project of projects) {
+        const threadIds =
+          typeof this.threadRepo.listProjectNonArchivedIdsWithEnvironmentRecord === "function"
+            ? this.threadRepo.listProjectNonArchivedIdsWithEnvironmentRecord(project.id)
+            : [];
+        for (const threadId of threadIds) {
+          if (runtimeThreadIds.has(threadId)) continue;
+          teardownTasks.push(
+            this.destroyPersistedEnvironment(threadId).catch((error: unknown) => {
+              const environmentId = this.threadRepo.getById(threadId)?.environmentId ?? "unknown";
+              this.callbacks.onCleanupFailure(threadId, environmentId, error);
+            }),
+          );
+        }
+      }
+    }
+    await Promise.allSettled(teardownTasks);
+    this.environmentRuntimes.clear();
+    this.stopAllPrimaryPromotionWatches();
+    this.primaryPromotionByProjectId.clear();
+    this.primaryPromotionValidatedAtByProjectId.clear();
+    this.workspaceCleanupInFlightThreadIds.clear();
+    this.restoreFailuresByThreadId.clear();
+  }
+
   stopPrimaryPromotionWatches(): void {
     this.stopAllPrimaryPromotionWatches();
   }

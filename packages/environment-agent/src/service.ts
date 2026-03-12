@@ -45,6 +45,23 @@ export interface EnvironmentAgentServiceOptions {
 
 const BEANBAG_ENVIRONMENT_AGENT_AUTH_TOKEN = "BEANBAG_ENVIRONMENT_AGENT_AUTH_TOKEN";
 const BEANBAG_DAEMON_URL = "BEANBAG_DAEMON_URL";
+const BEANBAG_ENVIRONMENT_AGENT_SESSION_POLL_INTERVAL_MS =
+  "BEANBAG_ENVIRONMENT_AGENT_SESSION_POLL_INTERVAL_MS";
+const BEANBAG_ENVIRONMENT_AGENT_SELF_SUSPEND_DEBOUNCE_MS =
+  "BEANBAG_ENVIRONMENT_AGENT_SELF_SUSPEND_DEBOUNCE_MS";
+
+function parsePositiveIntegerEnv(
+  rawValue: string | undefined,
+): number | undefined {
+  if (!rawValue) {
+    return undefined;
+  }
+  const parsed = Number.parseInt(rawValue, 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return undefined;
+  }
+  return parsed;
+}
 
 export function resolveEnvironmentAgentServiceOptions(args: {
   cli: EnvironmentAgentServiceCliOptions;
@@ -90,10 +107,16 @@ export function resolveEnvironmentAgentServiceOptions(args: {
       filePath: resolveEnvironmentAgentLogFilePath(args.env),
     },
     session: {
-      pollIntervalMs: 250,
+      pollIntervalMs:
+        parsePositiveIntegerEnv(
+          args.env[BEANBAG_ENVIRONMENT_AGENT_SESSION_POLL_INTERVAL_MS],
+        ) ?? 250,
       commandBatchLimit: 50,
       enableSelfSuspend: true,
-      selfSuspendDebounceMs: 1_000,
+      selfSuspendDebounceMs:
+        parsePositiveIntegerEnv(
+          args.env[BEANBAG_ENVIRONMENT_AGENT_SELF_SUSPEND_DEBOUNCE_MS],
+        ) ?? 1_000,
     },
   };
 }

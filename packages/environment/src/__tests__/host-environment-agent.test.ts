@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  __testOnly__resolveManagedHostEnvironmentAgentStateFilePath,
   resolveManagedHostEnvironmentAgentLaunchCommand,
   resolveManagedHostEnvironmentAgentTarget,
 } from "../host-environment-agent.js";
@@ -54,7 +55,12 @@ describe("resolveManagedHostEnvironmentAgentTarget", () => {
     cleanupPaths.push(stateDir);
     mkdirSync(stateDir, { recursive: true });
     writeFileSync(
-      join(stateDir, "worktree-thread-1.json"),
+      __testOnly__resolveManagedHostEnvironmentAgentStateFilePath({
+        projectId,
+        threadId: "thread-1",
+        environmentId: "worktree",
+        workspaceRootPath: workspaceRoot,
+      }),
       JSON.stringify({
         version: 1,
         pid: 4321,
@@ -74,6 +80,7 @@ describe("resolveManagedHostEnvironmentAgentTarget", () => {
         projectId,
         threadId: "thread-1",
         environmentId: "worktree",
+        workspaceRootPath: workspaceRoot,
         runtimeEnv: {},
       }),
     ).toEqual({

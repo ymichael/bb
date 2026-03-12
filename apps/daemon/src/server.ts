@@ -48,6 +48,7 @@ export interface ServerDeps {
   environmentAgentCursorRepo: EnvironmentAgentCursorRepository;
   environmentAgentCommandRepo: EnvironmentAgentCommandRepository;
   provider?: ProviderAdapter;
+  runtimeEnv?: NodeJS.ProcessEnv;
   daemonBaseUrl?: string;
   dbPath: string;
   daemonLogFilePath: string;
@@ -95,7 +96,7 @@ export function createServer(deps: ServerDeps) {
     deps.environmentAgentCommandRepo,
   );
   const daemonRuntimeEnv = {
-    ...process.env,
+    ...(deps.runtimeEnv ?? process.env),
     ...(deps.daemonBaseUrl
       ? { BEANBAG_DAEMON_URL: deps.daemonBaseUrl }
       : {}),

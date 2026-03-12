@@ -1,16 +1,26 @@
 import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
+export type FakeCodexScenario =
+  | "turn-complete"
+  | "turn-complete-no-start"
+  | "turn-complete-no-item"
+  | "turn-start-only"
+  | "manual"
+  | "start-then-manual-complete";
+
 export interface FakeCodexOptions {
   defaultTurnDelayMs?: number;
   defaultDuplicateTurnCompletion?: boolean;
   defaultItemCompletedText?: string;
+  defaultScenario?: FakeCodexScenario;
 }
 
 const DEFAULT_FAKE_CODEX_OPTIONS: Required<FakeCodexOptions> = {
   defaultTurnDelayMs: 20,
   defaultDuplicateTurnCompletion: false,
   defaultItemCompletedText: "Fake agent output",
+  defaultScenario: "turn-complete",
 };
 
 export function createFakeCodexBinDir(
@@ -51,9 +61,12 @@ function buildFakeCodexScript(settings: Required<FakeCodexOptions>): string {
   const fallbackDelay = String(settings.defaultTurnDelayMs);
   const fallbackDuplicate = settings.defaultDuplicateTurnCompletion ? "1" : "0";
   const fallbackText = JSON.stringify(settings.defaultItemCompletedText);
+  const fallbackScenario = JSON.stringify(settings.defaultScenario);
 
   return `#!/usr/bin/env node
 const { createInterface } = require("node:readline");
+const { mkdirSync, readFileSync, statSync, watch, writeFileSync } = require("node:fs");
+const { dirname } = require("node:path");
 
 if (process.argv[2] !== "app-server") {
   process.stderr.write("fake codex only supports 'app-server'\\n");
@@ -63,6 +76,7 @@ if (process.argv[2] !== "app-server") {
 const defaultTurnDelayRaw = ${JSON.stringify(fallbackDelay)};
 const defaultDuplicateRaw = ${JSON.stringify(fallbackDuplicate)};
 const defaultItemText = ${fallbackText};
+const defaultScenarioRaw = ${fallbackScenario};
 
 const parsedDelay = Number.parseInt(
   process.env.BEANBAG_FAKE_CODEX_TURN_DELAY_MS || defaultTurnDelayRaw,
@@ -72,14 +86,18 @@ const turnDelayMs = Number.isFinite(parsedDelay) ? parsedDelay : 0;
 const duplicateTurnCompletion = (
   process.env.BEANBAG_FAKE_CODEX_DUPLICATE_COMPLETION || defaultDuplicateRaw
 ) === "1";
-const scenarioRaw = String(process.env.BEANBAG_FAKE_CODEX_SCENARIO || "turn-complete")
+const scenarioRaw = String(process.env.BEANBAG_FAKE_CODEX_SCENARIO || defaultScenarioRaw)
   .trim()
   .toLowerCase();
 // Open external test control: unknown scenario values intentionally use turn-complete behavior.
 const scenario = scenarioRaw.length > 0 ? scenarioRaw : "turn-complete";
+const controlFilePath = String(process.env.BEANBAG_FAKE_CODEX_CONTROL_FILE || "").trim();
 
 let nextThreadCounter = 1;
 let nextTurnCounter = 1;
+let controlFileOffset = 0;
+const queuedLifecycleSteps = [];
+let controlWatcher = null;
 
 function asObject(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
@@ -146,8 +164,76 @@ function resolveCompletionText(input) {
   return process.env.BEANBAG_FAKE_CODEX_ITEM_TEXT || defaultItemText;
 }
 
+function queueLifecycleStep(step) {
+  queuedLifecycleSteps.push(step);
+}
+
+function flushNextLifecycleStep() {
+  const step = queuedLifecycleSteps.shift();
+  if (typeof step === "function") {
+    step();
+  }
+}
+
+function readControlCommands() {
+  if (!controlFilePath) return;
+
+  let content = "";
+  try {
+    content = readFileSync(controlFilePath, "utf8");
+  } catch {
+    return;
+  }
+
+  if (content.length < controlFileOffset) {
+    controlFileOffset = 0;
+  }
+  if (content.length === controlFileOffset) {
+    return;
+  }
+
+  const appended = content.slice(controlFileOffset);
+  controlFileOffset = content.length;
+  for (const rawLine of appended.split(/\\r?\\n/)) {
+    const command = rawLine.trim().toLowerCase();
+    if (!command) continue;
+    if (command === "emit-next-event") {
+      flushNextLifecycleStep();
+    }
+  }
+}
+
+function initializeControlWatcher() {
+  if (!controlFilePath) return;
+
+  mkdirSync(dirname(controlFilePath), { recursive: true });
+  writeFileSync(controlFilePath, "", { encoding: "utf8", flag: "a" });
+  controlFileOffset = statSync(controlFilePath).size;
+  controlWatcher = watch(controlFilePath, { persistent: false }, () => {
+    readControlCommands();
+  });
+  controlWatcher.on("error", () => {});
+}
+
 function scheduleTurnLifecycle(threadId, input, turnId) {
   if (scenario === "manual") {
+    queueLifecycleStep(() => {
+      notify("turn/started", { threadId, turnId });
+    });
+    queueLifecycleStep(() => {
+      notify("item/completed", {
+        threadId,
+        turnId,
+        item: {
+          type: "agentMessage",
+          text: resolveCompletionText(input),
+        },
+      });
+      notify("turn/completed", { threadId, turnId });
+      if (duplicateTurnCompletion) {
+        notify("turn/completed", { threadId, turnId });
+      }
+    });
     return;
   }
 
@@ -167,6 +253,17 @@ function scheduleTurnLifecycle(threadId, input, turnId) {
       notify("turn/started", turnStartedPayload);
     }
   }, turnDelayMs);
+
+  if (scenario === "start-then-manual-complete") {
+    queueLifecycleStep(() => {
+      notify("item/completed", itemCompletedPayload);
+      notify("turn/completed", turnCompletedPayload);
+      if (duplicateTurnCompletion) {
+        notify("turn/completed", turnCompletedPayload);
+      }
+    });
+    return;
+  }
 
   setTimeout(() => {
     if (scenario !== "turn-complete-no-item") {
@@ -188,6 +285,7 @@ const rl = createInterface({
   input: process.stdin,
   crlfDelay: Infinity,
 });
+initializeControlWatcher();
 
 rl.on("line", (line) => {
   const trimmed = line.trim();
@@ -252,6 +350,7 @@ rl.on("line", (line) => {
 });
 
 rl.on("close", () => {
+  controlWatcher?.close?.();
   process.exit(0);
 });
 `;

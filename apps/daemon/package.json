@@ -18,7 +18,9 @@
     "clean": "rm -rf dist",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:e2e": "vitest run --dir src/__tests__/e2e --fileParallelism=false --maxWorkers=1"
+    "test:e2e": "vitest run --config vitest.e2e.fast.config.ts",
+    "test:e2e:docker": "vitest run --config vitest.e2e.config.ts src/__tests__/e2e/docker-thread-roundtrip.test.ts",
+    "test:e2e:all": "vitest run --config vitest.e2e.config.ts --dir src/__tests__/e2e"
   },
   "dependencies": {
     "@beanbag/agent-core": "workspace:*",
