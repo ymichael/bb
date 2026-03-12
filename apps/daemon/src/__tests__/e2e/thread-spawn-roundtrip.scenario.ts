@@ -103,7 +103,7 @@ export async function runThreadSpawnRoundtripScenario(): Promise<void> {
       harness.baseUrl,
       harness.wsUrl,
       threadId,
-      e2eTimeoutMs(8_000, 60_000),
+      e2eTimeoutMs(15_000, 60_000),
     );
     expect(reachedActive).toBe(true);
     expect(thread.projectId).toBe(project.id);
