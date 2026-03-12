@@ -9,6 +9,7 @@ import {
   type UIOperationMessage,
   type UIProvisioningPhase,
   type UIProvisioningMetadata,
+  type UIProvisioningTranscriptEntry,
 } from "@beanbag/agent-core";
 import { cn } from "@/lib/utils";
 import {
@@ -143,6 +144,42 @@ function formatProvisioningBranchLine(provisioning: UIOperationMessage["provisio
     return `checked out branch ${branchName}`;
   }
   return `checked out commit ${shortSha}`;
+}
+
+function formatProvisioningTranscriptEntry(
+  entry: UIProvisioningTranscriptEntry,
+  provisioning: UIOperationMessage["provisioning"],
+  now?: number,
+): string | undefined {
+  switch (entry.kind) {
+    case "environment": {
+      const environmentDisplayName =
+        entry.environmentDisplayName ?? provisioning?.environmentDisplayName;
+      const label =
+        (environmentDisplayName
+          ? formatEnvironmentDisplayName({
+              id: environmentDisplayName,
+              displayName: environmentDisplayName,
+            })
+          : undefined) ?? "environment";
+      return `environment: ${label}`;
+    }
+    case "worktree":
+      return "creating worktree";
+    case "branch":
+      return formatProvisioningBranchLine({
+        ...provisioning,
+        branchName: entry.branchName,
+      });
+    case "setup":
+      return formatProvisioningSetupLine(entry.setup, now);
+    case "phase":
+      return formatProvisioningPhaseLine(entry.phase, entry.metadata, now);
+    case "fallback":
+      return `fallback: ${entry.reason}`;
+    default:
+      return assertNever(entry);
+  }
 }
 
 function extractPromptSections(detailText: string | undefined): {
@@ -375,34 +412,42 @@ function buildProvisioningTranscript(
   const provisioning = message.provisioning;
   const environmentLabel = normalizeProvisioningEnvironmentLabel(provisioning) ?? "environment";
   const setup = provisioning?.setup;
-  const lines = [`environment: ${environmentLabel}`];
-  const provisioningPhases = provisioning?.phases;
-  const orderedPhases: UIProvisioningPhase[] = ["start_provider_session"];
+  const transcriptLines = provisioning?.transcript
+    ?.map((entry) => formatProvisioningTranscriptEntry(entry, provisioning, now))
+    .filter((line): line is string => Boolean(line));
+  const lines =
+    transcriptLines && transcriptLines.length > 0
+      ? transcriptLines
+      : (() => {
+          const fallbackLines = [`environment: ${environmentLabel}`];
+          const provisioningPhases = provisioning?.phases;
+          const orderedPhases: UIProvisioningPhase[] = ["start_provider_session"];
+          const isWorktreeEnvironment = provisioning?.environmentId === "worktree";
 
-  for (const phase of orderedPhases) {
-    const line = formatProvisioningPhaseLine(phase, provisioningPhases?.[phase], now);
-    if (line) {
-      lines.push(line);
-    }
-  }
-  const isWorktreeEnvironment = provisioning?.environmentId === "worktree";
-
-  if (isWorktreeEnvironment) {
-    lines.push("creating worktree");
-  }
-  const branchLine = isWorktreeEnvironment
-    ? formatProvisioningBranchLine(provisioning)
-    : undefined;
-  if (branchLine) {
-    lines.push(branchLine);
-  }
-  const setupLine = formatProvisioningSetupLine(setup, now);
-  if (setupLine) {
-    lines.push(setupLine);
-  }
-  if (provisioning?.fallbackReason) {
-    lines.push(`fallback: ${provisioning.fallbackReason}`);
-  }
+          if (isWorktreeEnvironment) {
+            fallbackLines.push("creating worktree");
+          }
+          const branchLine = isWorktreeEnvironment
+            ? formatProvisioningBranchLine(provisioning)
+            : undefined;
+          if (branchLine) {
+            fallbackLines.push(branchLine);
+          }
+          const setupLine = formatProvisioningSetupLine(setup, now);
+          if (setupLine) {
+            fallbackLines.push(setupLine);
+          }
+          for (const phase of orderedPhases) {
+            const line = formatProvisioningPhaseLine(phase, provisioningPhases?.[phase], now);
+            if (line) {
+              fallbackLines.push(line);
+            }
+          }
+          if (provisioning?.fallbackReason) {
+            fallbackLines.push(`fallback: ${provisioning.fallbackReason}`);
+          }
+          return fallbackLines;
+        })();
   if (message.status !== "pending" && message.startedAt !== undefined && message.createdAt >= message.startedAt) {
     lines.push(`provisioning took ${formatCompactDuration(message.createdAt - message.startedAt)}`);
   }

@@ -1202,6 +1202,40 @@ describe("ConversationEntry", () => {
     }
   });
 
+  it("renders provider session progress after setup details in provisioning transcripts", () => {
+    const message: UIMessage = {
+      ...baseMessage(),
+      kind: "operation",
+      opType: "provisioning",
+      title: "Provisioning environment",
+      status: "completed",
+      provisioning: {
+        environmentId: "worktree",
+        environmentDisplayName: "Worktree",
+        branchName: "feature/test",
+        setup: {
+          status: "completed",
+          scriptPath: ".bb-env-setup.sh",
+          durationMs: 5_000,
+        },
+        phases: {
+          start_provider_session: {
+            status: "completed",
+            durationMs: 2_000,
+          },
+        },
+      },
+    };
+
+    const html = renderToStaticMarkup(<ConversationEntry message={message} initialExpanded />);
+    expect(html).toContain("creating worktree");
+    expect(html).toContain("ran .bb-env-setup.sh in 5s");
+    expect(html).toContain("started provider session in 2s");
+    expect(html.indexOf("ran .bb-env-setup.sh in 5s")).toBeLessThan(
+      html.indexOf("started provider session in 2s"),
+    );
+  });
+
   it("renders setup-only provisioning summaries as completed when env setup finished", () => {
     const message: UIMessage = {
       ...baseMessage(),

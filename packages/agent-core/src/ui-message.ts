@@ -187,6 +187,51 @@ export interface UIProvisioningSetupMetadata {
   output?: string;
 }
 
+export interface UIProvisioningTranscriptEnvironmentEntry {
+  kind: "environment";
+  sourceSeq: number;
+  environmentId?: string;
+  environmentDisplayName?: string;
+}
+
+export interface UIProvisioningTranscriptWorktreeEntry {
+  kind: "worktree";
+  sourceSeq: number;
+}
+
+export interface UIProvisioningTranscriptBranchEntry {
+  kind: "branch";
+  sourceSeq: number;
+  branchName: string;
+}
+
+export interface UIProvisioningTranscriptSetupEntry {
+  kind: "setup";
+  sourceSeq: number;
+  setup: UIProvisioningSetupMetadata;
+}
+
+export interface UIProvisioningTranscriptPhaseEntry {
+  kind: "phase";
+  sourceSeq: number;
+  phase: UIProvisioningPhase;
+  metadata: UIProvisioningPhaseMetadata;
+}
+
+export interface UIProvisioningTranscriptFallbackEntry {
+  kind: "fallback";
+  sourceSeq: number;
+  reason: string;
+}
+
+export type UIProvisioningTranscriptEntry =
+  | UIProvisioningTranscriptEnvironmentEntry
+  | UIProvisioningTranscriptWorktreeEntry
+  | UIProvisioningTranscriptBranchEntry
+  | UIProvisioningTranscriptSetupEntry
+  | UIProvisioningTranscriptPhaseEntry
+  | UIProvisioningTranscriptFallbackEntry;
+
 export interface UIProvisioningMetadata {
   environmentId?: string;
   environmentDisplayName?: string;
@@ -196,6 +241,7 @@ export interface UIProvisioningMetadata {
   fallbackReason?: string;
   phases?: Partial<Record<UIProvisioningPhase, UIProvisioningPhaseMetadata>>;
   setup?: UIProvisioningSetupMetadata;
+  transcript?: UIProvisioningTranscriptEntry[];
 }
 
 export interface UIWorktreeCommitMetadata {

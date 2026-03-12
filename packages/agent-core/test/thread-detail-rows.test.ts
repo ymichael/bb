@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildThreadDetailRows, type ThreadDetailRow } from "../src/thread-detail-rows.js";
-import type { UIMessage } from "../src/ui-message.js";
+import type { UIMessage, UIProvisioningTranscriptEntry } from "../src/ui-message.js";
 
 function primaryCheckoutOperation(
   seq: number,
@@ -55,6 +55,7 @@ function provisioningOperation(
   options?: {
     environmentDisplayName?: string;
     workspaceRoot?: string;
+    branchName?: string;
     fallbackReason?: string;
     phases?: {
       prepare_environment?: {
@@ -76,6 +77,7 @@ function provisioningOperation(
       durationMs?: number;
       output?: string;
     };
+    transcript?: UIProvisioningTranscriptEntry[];
   },
 ): Extract<UIMessage, { kind: "operation" }> {
   return {
@@ -98,6 +100,7 @@ function provisioningOperation(
               ? { environmentDisplayName: options.environmentDisplayName }
               : {}),
             ...(options?.workspaceRoot ? { workspaceRoot: options.workspaceRoot } : {}),
+            ...(options?.branchName ? { branchName: options.branchName } : {}),
             ...(options?.fallbackReason ? { fallbackReason: options.fallbackReason } : {}),
             ...(options?.phases
               ? {
@@ -120,6 +123,9 @@ function provisioningOperation(
                 }
               : {}),
             ...(options?.setup ? { setup: { ...options.setup } } : {}),
+            ...(options?.transcript
+              ? { transcript: options.transcript.map((entry) => structuredClone(entry)) }
+              : {}),
           },
         }
       : {}),
@@ -721,6 +727,112 @@ describe("buildThreadDetailRows provisioning operation collapsing", () => {
     expect(rows[0]?.provisioning?.phases?.prepare_environment?.startedAt).toBe(2);
     expect(rows[0]?.provisioning?.phases?.start_provider_session?.status).toBe("started");
     expect(rows[0]?.provisioning?.phases?.start_provider_session?.startedAt).toBe(3);
+  });
+
+  it("preserves ordered provisioning transcript items when collapsing rows", () => {
+    const rows = getOperationRows([
+      provisioningOperation(
+        1,
+        "provisioning-started",
+        "Provisioning started",
+        undefined,
+        {
+          environmentDisplayName: "Worktree",
+          transcript: [
+            {
+              kind: "environment",
+              sourceSeq: 1,
+              environmentDisplayName: "Worktree",
+            },
+            {
+              kind: "worktree",
+              sourceSeq: 1,
+            },
+          ],
+        },
+      ),
+      provisioningOperation(
+        2,
+        "provisioning-env-setup",
+        "Environment setup started",
+        undefined,
+        {
+          workspaceRoot: "/tmp/worktree",
+          branchName: "feature/test",
+          setup: {
+            status: "started",
+            startedAt: 2,
+            scriptPath: ".bb-env-setup.sh",
+          },
+          transcript: [
+            {
+              kind: "branch",
+              sourceSeq: 2,
+              branchName: "feature/test",
+            },
+            {
+              kind: "setup",
+              sourceSeq: 2,
+              setup: {
+                status: "started",
+                startedAt: 2,
+                scriptPath: ".bb-env-setup.sh",
+              },
+            },
+          ],
+        },
+      ),
+      provisioningOperation(
+        3,
+        "provisioning-progress",
+        "Provider session started",
+        undefined,
+        {
+          phases: {
+            start_provider_session: {
+              status: "completed",
+              startedAt: 3,
+              durationMs: 2000,
+            },
+          },
+          transcript: [
+            {
+              kind: "phase",
+              sourceSeq: 3,
+              phase: "start_provider_session",
+              metadata: {
+                status: "completed",
+                startedAt: 3,
+                durationMs: 2000,
+              },
+            },
+          ],
+        },
+      ),
+    ]);
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.opType).toBe("provisioning");
+    expect(rows[0]?.provisioning?.transcript?.map((entry) => entry.kind)).toEqual([
+      "environment",
+      "worktree",
+      "branch",
+      "setup",
+      "phase",
+    ]);
+    expect(rows[0]?.provisioning?.transcript?.[3]).toMatchObject({
+      kind: "setup",
+      sourceSeq: 2,
+      setup: {
+        status: "started",
+        scriptPath: ".bb-env-setup.sh",
+      },
+    });
+    expect(rows[0]?.provisioning?.transcript?.[4]).toMatchObject({
+      kind: "phase",
+      sourceSeq: 3,
+      phase: "start_provider_session",
+    });
   });
 
   it("collapses env-setup-only updates without looking stuck in provisioning", () => {

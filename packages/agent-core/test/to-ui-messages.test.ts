@@ -1801,11 +1801,34 @@ describe("toUIMessages replay coverage", () => {
     expect(ops[0]?.status).toBe("completed");
     expect(ops[0]?.provisioning?.phases?.prepare_environment?.durationMs).toBe(1200);
     expect(ops[0]?.provisioning?.phases?.prepare_environment?.startedAt).toBe(1);
+    expect(ops[0]?.provisioning?.transcript).toEqual([
+      {
+        kind: "phase",
+        sourceSeq: 1,
+        phase: "prepare_environment",
+        metadata: {
+          status: "completed",
+          startedAt: 1,
+          durationMs: 1200,
+        },
+      },
+    ]);
     expect(ops[1]?.opType).toBe("provisioning-progress");
     expect(ops[1]?.title).toBe("Starting provider session");
     expect(ops[1]?.status).toBe("pending");
     expect(ops[1]?.provisioning?.phases?.start_provider_session?.status).toBe("started");
     expect(ops[1]?.provisioning?.phases?.start_provider_session?.startedAt).toBe(2);
+    expect(ops[1]?.provisioning?.transcript).toEqual([
+      {
+        kind: "phase",
+        sourceSeq: 2,
+        phase: "start_provider_session",
+        metadata: {
+          status: "started",
+          startedAt: 2,
+        },
+      },
+    ]);
   });
 
   it("projects primary-checkout lifecycle events with stable metadata", () => {

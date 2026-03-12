@@ -7,6 +7,7 @@ import type {
   UIProvisioningPhaseMetadata,
   UIProvisioningMetadata,
   UIProvisioningSetupMetadata,
+  UIProvisioningTranscriptEntry,
   UIThreadOperationIntentAction,
   UIThreadOperationIntentPhase,
 } from "./ui-message.js";
@@ -166,6 +167,163 @@ function mergeProvisioningPhases(
   return merged;
 }
 
+function provisioningTranscriptEntrySortRank(entry: UIProvisioningTranscriptEntry): number {
+  switch (entry.kind) {
+    case "environment":
+      return 0;
+    case "worktree":
+      return 1;
+    case "branch":
+      return 2;
+    case "setup":
+      return 3;
+    case "phase":
+      return 4;
+    case "fallback":
+      return 5;
+    default:
+      return assertNever(entry);
+  }
+}
+
+function provisioningTranscriptEntryKey(entry: UIProvisioningTranscriptEntry): string {
+  switch (entry.kind) {
+    case "environment":
+    case "worktree":
+    case "branch":
+    case "setup":
+    case "fallback":
+      return entry.kind;
+    case "phase":
+      return `phase:${entry.phase}`;
+    default:
+      return assertNever(entry);
+  }
+}
+
+function mergeProvisioningTranscriptEntry(
+  existing: UIProvisioningTranscriptEntry | undefined,
+  incoming: UIProvisioningTranscriptEntry,
+): UIProvisioningTranscriptEntry {
+  if (!existing) {
+    switch (incoming.kind) {
+      case "environment":
+        return { ...incoming };
+      case "worktree":
+        return { ...incoming };
+      case "branch":
+        return { ...incoming };
+      case "setup":
+        return { ...incoming, setup: { ...incoming.setup } };
+      case "phase":
+        return { ...incoming, metadata: { ...incoming.metadata } };
+      case "fallback":
+        return { ...incoming };
+      default:
+        return assertNever(incoming);
+    }
+  }
+
+  switch (incoming.kind) {
+    case "environment":
+      if (existing.kind !== "environment") return { ...incoming };
+      return {
+        kind: "environment",
+        sourceSeq: Math.min(existing.sourceSeq, incoming.sourceSeq),
+        environmentId: incoming.environmentId ?? existing.environmentId,
+        environmentDisplayName:
+          incoming.environmentDisplayName ?? existing.environmentDisplayName,
+      };
+    case "worktree":
+      return {
+        kind: "worktree",
+        sourceSeq:
+          existing.kind === "worktree"
+            ? Math.min(existing.sourceSeq, incoming.sourceSeq)
+            : incoming.sourceSeq,
+      };
+    case "branch":
+      return {
+        kind: "branch",
+        sourceSeq:
+          existing.kind === "branch"
+            ? Math.min(existing.sourceSeq, incoming.sourceSeq)
+            : incoming.sourceSeq,
+        branchName: incoming.branchName,
+      };
+    case "setup":
+      return {
+        kind: "setup",
+        sourceSeq:
+          existing.kind === "setup"
+            ? Math.min(existing.sourceSeq, incoming.sourceSeq)
+            : incoming.sourceSeq,
+        setup:
+          existing.kind === "setup"
+            ? mergeProvisioningSetup(existing.setup, incoming.setup) ?? { ...incoming.setup }
+            : { ...incoming.setup },
+      };
+    case "phase":
+      return {
+        kind: "phase",
+        phase: incoming.phase,
+        sourceSeq:
+          existing.kind === "phase" && existing.phase === incoming.phase
+            ? Math.min(existing.sourceSeq, incoming.sourceSeq)
+            : incoming.sourceSeq,
+        metadata:
+          existing.kind === "phase" && existing.phase === incoming.phase
+            ? mergeProvisioningPhaseMetadata(existing.metadata, incoming.metadata) ??
+              { ...incoming.metadata }
+            : { ...incoming.metadata },
+      };
+    case "fallback":
+      return {
+        kind: "fallback",
+        sourceSeq:
+          existing.kind === "fallback"
+            ? Math.min(existing.sourceSeq, incoming.sourceSeq)
+            : incoming.sourceSeq,
+        reason: incoming.reason,
+      };
+    default:
+      return assertNever(incoming);
+  }
+}
+
+function mergeProvisioningTranscript(
+  existing: UIProvisioningTranscriptEntry[] | undefined,
+  incoming: UIProvisioningTranscriptEntry[] | undefined,
+): UIProvisioningTranscriptEntry[] | undefined {
+  if (!incoming) {
+    return existing?.map((entry) => mergeProvisioningTranscriptEntry(undefined, entry));
+  }
+  if (!existing) {
+    return incoming
+      .map((entry) => mergeProvisioningTranscriptEntry(undefined, entry))
+      .sort(
+        (left, right) =>
+          left.sourceSeq - right.sourceSeq ||
+          provisioningTranscriptEntrySortRank(left) -
+            provisioningTranscriptEntrySortRank(right),
+      );
+  }
+
+  const merged = new Map<string, UIProvisioningTranscriptEntry>();
+  for (const entry of existing) {
+    merged.set(provisioningTranscriptEntryKey(entry), mergeProvisioningTranscriptEntry(undefined, entry));
+  }
+  for (const entry of incoming) {
+    const key = provisioningTranscriptEntryKey(entry);
+    merged.set(key, mergeProvisioningTranscriptEntry(merged.get(key), entry));
+  }
+  return [...merged.values()].sort(
+    (left, right) =>
+      left.sourceSeq - right.sourceSeq ||
+      provisioningTranscriptEntrySortRank(left) - provisioningTranscriptEntrySortRank(right),
+  );
+}
+
 function mergeProvisioningMetadata(
   existing: UIProvisioningMetadata | undefined,
   incoming: UIProvisioningMetadata | undefined,
@@ -178,11 +336,15 @@ function mergeProvisioningMetadata(
       ...incoming,
       ...(incoming.phases ? { phases: mergeProvisioningPhases(undefined, incoming.phases) } : {}),
       ...(incoming.setup ? { setup: { ...incoming.setup } } : {}),
+      ...(incoming.transcript
+        ? { transcript: mergeProvisioningTranscript(undefined, incoming.transcript) }
+        : {}),
     };
   }
 
   const setup = mergeProvisioningSetup(existing.setup, incoming.setup);
   const phases = mergeProvisioningPhases(existing.phases, incoming.phases);
+  const transcript = mergeProvisioningTranscript(existing.transcript, incoming.transcript);
   return {
     environmentId: incoming.environmentId ?? existing.environmentId,
     environmentDisplayName: incoming.environmentDisplayName ?? existing.environmentDisplayName,
@@ -192,6 +354,7 @@ function mergeProvisioningMetadata(
     fallbackReason: incoming.fallbackReason ?? existing.fallbackReason,
     ...(phases ? { phases } : {}),
     ...(setup ? { setup } : {}),
+    ...(transcript ? { transcript } : {}),
   };
 }
 
