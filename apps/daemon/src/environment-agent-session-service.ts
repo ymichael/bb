@@ -3,7 +3,6 @@ import type {
   EnvironmentAgentCursorPosition,
   EnvironmentAgentCursorRepository,
   EnvironmentAgentSessionRecord,
-  EnvironmentAgentSessionTransportKind,
 } from "@beanbag/db";
 import {
   ENVIRONMENT_AGENT_SESSION_PROTOCOL,
@@ -17,7 +16,6 @@ import {
   type EnvironmentAgentSessionHeartbeatPayload,
   type EnvironmentAgentSessionOpenPayload,
   type EnvironmentAgentSessionReplayRequestMessage,
-  type EnvironmentAgentSessionTransportKind as ClientEnvironmentAgentSessionTransportKind,
   type EnvironmentAgentSessionWelcomeMessage,
   type EnvironmentAgentStatusSnapshot,
 } from "@beanbag/environment-agent";
@@ -33,7 +31,6 @@ export interface EnvironmentAgentSessionServiceOptions {
   commandLongPollTimeoutMs?: number;
   commandLongPollIntervalMs?: number;
   clock?: () => number;
-  preferredTransports?: readonly EnvironmentAgentSessionTransportKind[];
   commandDispatcher?: EnvironmentAgentCommandDispatcher;
   eventApplier?: EnvironmentAgentEventApplier;
   onSessionInvalidated?: (session: EnvironmentAgentSessionRecord) => void;
@@ -43,21 +40,11 @@ const DEFAULT_LEASE_TTL_MS = 30_000;
 const DEFAULT_HEARTBEAT_INTERVAL_MS = 10_000;
 const DEFAULT_COMMAND_LONG_POLL_TIMEOUT_MS = 10_000;
 const DEFAULT_COMMAND_LONG_POLL_INTERVAL_MS = 100;
-const DEFAULT_PREFERRED_TRANSPORTS = [
-  "websocket",
-  "http-long-poll",
-] as const satisfies readonly EnvironmentAgentSessionTransportKind[];
 
-function chooseSessionTransport(args: {
-  supportedTransports: ClientEnvironmentAgentSessionTransportKind[];
-  preferredTransports: readonly EnvironmentAgentSessionTransportKind[];
-}): EnvironmentAgentSessionTransportKind {
-  for (const preferred of args.preferredTransports) {
-    if (args.supportedTransports.includes(preferred)) {
-      return preferred;
-    }
-  }
-  throw new Error("No compatible environment-agent session transport");
+function supportsEnvironmentAgentLongPollTransport(
+  supportedTransports: EnvironmentAgentSessionOpenPayload["supportedTransports"],
+): boolean {
+  return supportedTransports.includes("http-long-poll");
 }
 
 function cursorForReply(args: {
@@ -135,7 +122,6 @@ export class EnvironmentAgentSessionService {
   private readonly heartbeatIntervalMs: number;
   private readonly commandLongPollTimeoutMs: number;
   private readonly commandLongPollIntervalMs: number;
-  private readonly preferredTransports: readonly EnvironmentAgentSessionTransportKind[];
   private readonly commandDispatcher?: EnvironmentAgentCommandDispatcher;
   private readonly eventApplier?: EnvironmentAgentEventApplier;
   private readonly onSessionInvalidated?: (
@@ -155,8 +141,6 @@ export class EnvironmentAgentSessionService {
       options.commandLongPollTimeoutMs ?? DEFAULT_COMMAND_LONG_POLL_TIMEOUT_MS;
     this.commandLongPollIntervalMs =
       options.commandLongPollIntervalMs ?? DEFAULT_COMMAND_LONG_POLL_INTERVAL_MS;
-    this.preferredTransports =
-      options.preferredTransports ?? DEFAULT_PREFERRED_TRANSPORTS;
     this.commandDispatcher = options.commandDispatcher;
     this.eventApplier = options.eventApplier;
     this.onSessionInvalidated = options.onSessionInvalidated;
@@ -197,10 +181,10 @@ export class EnvironmentAgentSessionService {
       throw new Error("Multi-channel environment-agent sessions are not supported yet");
     }
 
-    const transportKind = chooseSessionTransport({
-      supportedTransports: args.payload.supportedTransports,
-      preferredTransports: this.preferredTransports,
-    });
+    if (!supportsEnvironmentAgentLongPollTransport(args.payload.supportedTransports)) {
+      throw new Error("No compatible environment-agent session transport");
+    }
+    const transportKind = "http-long-poll";
     const opened = this.sessions.openSession({
       threadId: args.threadId,
       agentId: args.payload.agentId,

@@ -393,7 +393,6 @@ These should live in shared protocol/store types, not as loose strings in reposi
 
 ### Session transport kind
 
-- `websocket`
 - `http-long-poll`
 
 ### Session status

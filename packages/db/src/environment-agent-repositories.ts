@@ -17,9 +17,7 @@ import {
   environmentAgentSessions,
 } from "./schema.js";
 
-export type EnvironmentAgentSessionTransportKind =
-  | "websocket"
-  | "http-long-poll";
+export type EnvironmentAgentSessionTransportKind = "http-long-poll";
 
 export type EnvironmentAgentSessionStatus =
   | "active"
@@ -133,7 +131,7 @@ const PENDING_ENVIRONMENT_AGENT_COMMAND_STATES: readonly EnvironmentAgentCommand
 function isEnvironmentAgentSessionTransportKind(
   value: string,
 ): value is EnvironmentAgentSessionTransportKind {
-  return value === "websocket" || value === "http-long-poll";
+  return value === "http-long-poll";
 }
 
 function normalizeEnvironmentAgentSessionTransportKind(

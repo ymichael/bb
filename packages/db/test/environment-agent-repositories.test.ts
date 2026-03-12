@@ -59,7 +59,7 @@ describe("environment-agent repositories", () => {
       agentId: "agent-1",
       agentInstanceId: "instance-1",
       protocolVersion: 1,
-      transportKind: "websocket",
+      transportKind: "http-long-poll",
       controlBaseUrl: "http://127.0.0.1:4310",
       controlAuthToken: "token-1",
       leaseExpiresAt: 5_000,
@@ -69,7 +69,7 @@ describe("environment-agent repositories", () => {
     expect(sessions.getActiveByThreadId(threadId, 1_000)).toMatchObject({
       id: "sess-1",
       status: "active",
-      transportKind: "websocket",
+      transportKind: "http-long-poll",
       controlBaseUrl: "http://127.0.0.1:4310",
       controlAuthToken: "token-1",
     });
@@ -128,7 +128,7 @@ describe("environment-agent repositories", () => {
       agentId: "agent-expire",
       agentInstanceId: "instance-expire",
       protocolVersion: 1,
-      transportKind: "websocket",
+      transportKind: "http-long-poll",
       leaseExpiresAt: 5_000,
       now: 1_000,
     });
@@ -163,7 +163,7 @@ describe("environment-agent repositories", () => {
       agentId: "agent-1",
       agentInstanceId: "instance-1",
       protocolVersion: 1,
-      transportKind: "websocket",
+      transportKind: "http-long-poll",
       leaseExpiresAt: 10_000,
       now: 1_000,
     });
@@ -204,7 +204,7 @@ describe("environment-agent repositories", () => {
       agentId: "agent-invalid",
       agentInstanceId: "instance-invalid",
       protocolVersion: 1,
-      transportKind: "websocket",
+      transportKind: "http-long-poll",
       leaseExpiresAt: 5_000,
       now: 1_000,
     });
@@ -297,7 +297,7 @@ describe("environment-agent repositories", () => {
       agentId: "agent-cmd",
       agentInstanceId: "instance-cmd",
       protocolVersion: 1,
-      transportKind: "websocket",
+      transportKind: "http-long-poll",
       leaseExpiresAt: 5_000,
       now: 1_000,
     });
@@ -355,7 +355,7 @@ describe("environment-agent repositories", () => {
       agentId: "agent-cmd",
       agentInstanceId: "instance-old",
       protocolVersion: 1,
-      transportKind: "websocket",
+      transportKind: "http-long-poll",
       leaseExpiresAt: 5_000,
       now: 1_000,
     });
@@ -375,7 +375,7 @@ describe("environment-agent repositories", () => {
       agentId: "agent-cmd",
       agentInstanceId: "instance-new",
       protocolVersion: 1,
-      transportKind: "websocket",
+      transportKind: "http-long-poll",
       leaseExpiresAt: 6_000,
       now: 3_500,
     });

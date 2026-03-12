@@ -78,7 +78,7 @@ We should not make protocol semantics depend on WebSocket-only concepts.
 Provider lifecycle and user-visible thread changes should still come from normal events because:
 
 - the daemon already projects thread state from events
-- UI/websocket updates already key off event persistence and derived thread changes
+- UI realtime updates already key off event persistence and derived thread changes
 - this keeps one canonical domain history
 
 However, some command outcomes are not naturally represented as provider events, for example:
@@ -242,8 +242,6 @@ This is the key table that prevents duplicate execution after reconnect or redel
   - CRUD for `session_state`, `event_outbox`, `command_receipts`
 - `src/session-runtime.ts`
   - owns reconnect, heartbeat, outbox flush, replay, and command dedupe/execution
-- `src/transports/websocket.ts`
-  - protocol envelope transport over WebSocket
 - `src/transports/http-long-poll.ts`
   - protocol envelope transport over long-poll HTTP
 - `src/session-service.ts`

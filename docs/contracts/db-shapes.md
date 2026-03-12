@@ -121,7 +121,7 @@ Ownership: `EnvironmentAgentSessionRepository`.
 
 Closed-internal invariants:
 
-- valid `transport_kind`: `websocket`, `http-long-poll`
+- valid `transport_kind`: `http-long-poll`
 - `control_base_url` and `control_auth_token` are persisted restart hints for daemon nudges, not thread truth
 - valid `status`: `active`, `expired`, `closed`, `replaced`
 - valid `close_reason` when present:

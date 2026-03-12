@@ -458,7 +458,7 @@ describe("Thread routes", () => {
           payload: {
             leaseTtlMs: 30_000,
             heartbeatIntervalMs: 10_000,
-            selectedTransport: "websocket",
+            selectedTransport: "http-long-poll",
             protocolVersion: 1,
             channels: [
               {
@@ -487,7 +487,7 @@ describe("Thread routes", () => {
           agentId: "agent-1",
           agentInstanceId: "instance-1",
           supportedProtocolVersions: [1],
-          supportedTransports: ["websocket"],
+          supportedTransports: ["http-long-poll"],
           channels: [
             {
               channelId: "thread-1",
@@ -508,7 +508,7 @@ describe("Thread routes", () => {
           agentId: "agent-1",
           agentInstanceId: "instance-1",
           supportedProtocolVersions: [1],
-          supportedTransports: ["websocket"],
+          supportedTransports: ["http-long-poll"],
           channels: [
             {
               channelId: "thread-1",

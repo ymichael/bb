@@ -106,7 +106,7 @@ Sent by agent when no valid resumable session is known.
     "agentId": "agent_thread_local_proj1_thread1",
     "agentInstanceId": "agentinst_01",
     "supportedProtocolVersions": [1],
-    "supportedTransports": ["websocket", "http-long-poll"],
+    "supportedTransports": ["http-long-poll"],
     "controlEndpoint": {
       "baseUrl": "http://127.0.0.1:4310",
       "authToken": "secret-token"
@@ -169,7 +169,7 @@ Sent by daemon in response to `session_open` or `session_resume`.
   "payload": {
     "leaseTtlMs": 30000,
     "heartbeatIntervalMs": 10000,
-    "selectedTransport": "websocket",
+    "selectedTransport": "http-long-poll",
     "protocolVersion": 1,
     "channels": [
       {

@@ -55,7 +55,7 @@ describe("EnvironmentAgentSessionManager", () => {
       agentId: "agent-1",
       agentInstanceId: "instance-1",
       protocolVersion: 1,
-      transportKind: "websocket",
+      transportKind: "http-long-poll",
       leaseTtlMs: 30_000,
       now: 1_000,
     });
@@ -63,7 +63,7 @@ describe("EnvironmentAgentSessionManager", () => {
       threadId,
       status: "active",
       leaseExpiresAt: 31_000,
-      transportKind: "websocket",
+      transportKind: "http-long-poll",
     });
 
     const second = manager.openSession({
@@ -95,7 +95,7 @@ describe("EnvironmentAgentSessionManager", () => {
       agentId: "agent-heartbeat",
       agentInstanceId: "instance-heartbeat",
       protocolVersion: 1,
-      transportKind: "websocket",
+      transportKind: "http-long-poll",
       leaseTtlMs: 10_000,
       now: 1_000,
     });
@@ -121,7 +121,7 @@ describe("EnvironmentAgentSessionManager", () => {
       agentId: "agent-overdue",
       agentInstanceId: "instance-overdue",
       protocolVersion: 1,
-      transportKind: "websocket",
+      transportKind: "http-long-poll",
       leaseTtlMs: 1_000,
       now: 1_000,
     });

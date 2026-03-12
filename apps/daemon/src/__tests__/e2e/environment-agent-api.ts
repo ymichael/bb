@@ -166,7 +166,7 @@ async function openThreadSubscription(
     };
     const handleOpenError = (event: Event) => {
       socket.removeEventListener("open", handleOpen);
-      rejectOpen(new Error(`Failed to connect websocket for thread ${threadId}`));
+      rejectOpen(new Error(`Failed to open session stream for thread ${threadId}`));
     };
 
     socket.addEventListener("open", handleOpen, { once: true });

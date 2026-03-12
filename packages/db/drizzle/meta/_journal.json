@@ -232,6 +232,13 @@
       "when": 1773619260000,
       "tag": "0032_environment_agent_session_control_auth_token",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "6",
+      "when": 1773705600000,
+      "tag": "0033_environment_agent_session_transport_cleanup",
+      "breakpoints": true
     }
   ]
 }
