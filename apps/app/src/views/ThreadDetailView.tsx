@@ -240,12 +240,14 @@ export function ThreadDetailView() {
   } = useThreadWorkStatus(threadId ?? "", selectedMergeBaseBranch);
   const resolvedThreadWorkStatus =
     threadWorkStatusError ? undefined : (threadWorkStatus ?? undefined);
+  const isReasoningBlockActive = false;
+  const isTimelineLoading = timelineLoading;
+  const isThreadTimelinePending = isTimelineLoading && threadDetailRows.length === 0;
   const {
     bottomSentinelRef,
     captureTimelineScrollPosition,
     handleLoadToolGroupMessages,
     handleTimelineScroll,
-    isStickingToBottom,
     loadingToolGroupIds,
     promptComposerRef,
     scrollToBottom,
@@ -259,11 +261,6 @@ export function ThreadDetailView() {
     loadToolGroupMessages: threadToolGroupMessages.mutateAsync,
   });
   captureTimelineScrollPositionRef.current = captureTimelineScrollPosition;
-
-
-  const isReasoningBlockActive = false;
-  const isTimelineLoading = timelineLoading;
-  const isThreadTimelinePending = isTimelineLoading && threadDetailRows.length === 0;
   const isThreadPrimaryCheckoutActive = thread?.primaryCheckout?.isActive === true;
   const environmentInfo = useMemo(
     () =>
@@ -1232,7 +1229,6 @@ export function ThreadDetailView() {
               bottomSentinelRef={bottomSentinelRef}
               footer={composerFooter}
               header={timelineHeader}
-              isStickingToBottom={isStickingToBottom}
               isReasoningBlockActive={isReasoningBlockActive}
               isThreadTimelinePending={isThreadTimelinePending}
               isTransientThreadLoadError={isTransientThreadLoadError}

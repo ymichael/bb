@@ -73,7 +73,6 @@ describe("ThreadTimelinePane", () => {
     const html = renderToStaticMarkup(
       <ThreadTimelinePane
         {...baseProps}
-        isStickingToBottom
         threadDetailRows={[
           {
             id: "row-1",
@@ -88,30 +87,21 @@ describe("ThreadTimelinePane", () => {
     expect(html).toContain("Working...");
   });
 
-  it("only enables deferred row rendering when not pinned to bottom", () => {
+  it("does not use deferred row rendering heuristics", () => {
     const row = {
       id: "row-1",
       kind: "message",
       message: { id: "msg-1", kind: "assistant-text", text: "hello" },
     } as never;
 
-    const pinnedHtml = renderToStaticMarkup(
+    const html = renderToStaticMarkup(
       <ThreadTimelinePane
         {...baseProps}
-        isStickingToBottom
-        threadDetailRows={[row]}
-      />,
-    );
-    const historyHtml = renderToStaticMarkup(
-      <ThreadTimelinePane
-        {...baseProps}
-        isStickingToBottom={false}
         threadDetailRows={[row]}
       />,
     );
 
-    expect(pinnedHtml).not.toContain("content-visibility:auto");
-    expect(historyHtml).toContain("content-visibility:auto");
-    expect(historyHtml).toContain("contain-intrinsic-size:160px");
+    expect(html).not.toContain("content-visibility:auto");
+    expect(html).not.toContain("contain-intrinsic-size:160px");
   });
 });

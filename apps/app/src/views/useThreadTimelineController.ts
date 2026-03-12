@@ -142,6 +142,7 @@ export function useThreadTimelineController({
     width: number;
     height: number;
   } | null>(null);
+  const postJumpTimeoutRef = useRef<number | null>(null);
 
   const syncScrollState = useCallback((container: HTMLDivElement) => {
     const sticking = isNearBottom(container);
@@ -226,11 +227,33 @@ export function useThreadTimelineController({
   }, [containerElement, syncScrollState]);
 
   const scrollToBottom = useCallback(() => {
+    const container = containerElement;
     modeRef.current = "pinned_bottom";
     setIsStickingToBottom(true);
     setShowScrollToBottom(false);
+    if (container) {
+      const sentinel = bottomSentinelRef.current;
+      if (sentinel) {
+        scrollBottomSentinelIntoView(container, sentinel);
+      } else {
+        container.scrollTop = container.scrollHeight;
+      }
+    }
     scheduleReconcile("request_jump_to_bottom");
-  }, [scheduleReconcile]);
+
+    if (typeof window !== "undefined") {
+      window.requestAnimationFrame(() => {
+        scheduleReconcile("request_jump_to_bottom_next_frame");
+      });
+      if (postJumpTimeoutRef.current !== null) {
+        window.clearTimeout(postJumpTimeoutRef.current);
+      }
+      postJumpTimeoutRef.current = window.setTimeout(() => {
+        postJumpTimeoutRef.current = null;
+        scheduleReconcile("request_jump_to_bottom_timeout");
+      }, 180);
+    }
+  }, [containerElement, scheduleReconcile]);
 
   const handleLoadToolGroupMessages = useCallback(
     (entry: ThreadDetailToolGroupRow) => {
@@ -374,6 +397,10 @@ export function useThreadTimelineController({
       if (scheduledFrameRef.current !== null && typeof window !== "undefined") {
         window.cancelAnimationFrame(scheduledFrameRef.current);
         scheduledFrameRef.current = null;
+      }
+      if (postJumpTimeoutRef.current !== null && typeof window !== "undefined") {
+        window.clearTimeout(postJumpTimeoutRef.current);
+        postJumpTimeoutRef.current = null;
       }
     };
   }, []);

@@ -102,7 +102,6 @@ interface ThreadTimelinePaneProps {
   bottomSentinelRef: RefObject<HTMLDivElement | null>;
   footer: ReactNode;
   header: ReactNode;
-  isStickingToBottom: boolean;
   isReasoningBlockActive: boolean;
   isThreadTimelinePending: boolean;
   isTransientThreadLoadError: boolean;
@@ -123,7 +122,6 @@ export function ThreadTimelinePane({
   bottomSentinelRef,
   footer,
   header,
-  isStickingToBottom,
   isReasoningBlockActive,
   isThreadTimelinePending,
   isTransientThreadLoadError,
@@ -175,14 +173,6 @@ export function ThreadTimelinePane({
                 <div
                   key={`${threadId}:${entry.id}`}
                   data-thread-row-id={entry.id}
-                  style={
-                    isStickingToBottom
-                      ? undefined
-                      : {
-                          contentVisibility: "auto",
-                          containIntrinsicSize: "160px",
-                        }
-                  }
                 >
                   {entry.kind === "tool-group" ? (
                     <ToolGroupEntry
