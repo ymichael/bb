@@ -1,14 +1,14 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ChangeEvent, type FormEvent, type KeyboardEvent, type ReactNode } from "react"
 import { ArrowUp, AudioLines, CornerDownLeft, Loader2, Maximize2, Mic, Minimize2, Paperclip, Square, X } from "lucide-react"
-import { ImageLightbox, getWrappedImageIndex } from "@/components/shared/ImageLightbox"
 import type { ProjectFileSuggestion } from "@beanbag/agent-core"
 import { Button } from "@/components/ui/button"
 import { useAutoGrow } from "@/hooks/useAutoGrow"
 import { useVoiceInput } from "@/hooks/useVoiceInput"
 import { transcribeVoiceInput } from "@/lib/api"
 import type { PromptDraftAttachment } from "@/lib/prompt-draft"
-import { toUserAttachmentImageSrc } from "@/lib/user-attachment-images"
 import { cn } from "@/lib/utils"
+import { PromptAttachmentPreview } from "./PromptAttachmentPreview"
+import { PromptMentionMenu } from "./PromptMentionMenu"
 import { findActiveFileMention, insertFileMention, type ActiveFileMention } from "./file-mention"
 
 const PROMPTBOX_MIN_HEIGHT = 68
@@ -90,13 +90,6 @@ function summarizeVoiceErrorMessage(input: string): string {
   }
 
   return normalized || "Voice input failed."
-}
-
-function isImageAttachment(attachment: PromptDraftAttachment): boolean {
-  return (
-    attachment.type === "localImage" ||
-    attachment.mimeType?.toLowerCase().startsWith("image/") === true
-  )
 }
 
 export function PromptBox({
@@ -263,15 +256,6 @@ export function PromptBox({
 
   const trimmedValue = value.trim()
   const hasAttachments = attachments.length > 0
-  const imageAttachments = attachments.filter(isImageAttachment)
-  const nonImageAttachments = attachments.filter((attachment) => !isImageAttachment(attachment))
-  const attachmentImageItems = imageAttachments.map((attachment) => ({
-    alt: attachment.name,
-    src: toUserAttachmentImageSrc(attachment.path, attachmentProjectId),
-  }))
-  const hasMultipleAttachmentImages = imageAttachments.length > 1
-  const currentAttachmentImage =
-    expandedImageIndex !== null ? (attachmentImageItems[expandedImageIndex] ?? null) : null
   const hasSubmittableInput = trimmedValue.length > 0 || hasAttachments
   const hasMentionContext = activeMention !== null
   const showMentionMenu = hasMentionContext
@@ -291,13 +275,6 @@ export function PromptBox({
   useEffect(() => {
     mentionItemRefs.current = mentionItemRefs.current.slice(0, mentionSuggestions.length)
   }, [mentionSuggestions.length])
-
-  useEffect(() => {
-    if (expandedImageIndex === null) return
-    if (expandedImageIndex >= imageAttachments.length) {
-      setExpandedImageIndex(null)
-    }
-  }, [expandedImageIndex, imageAttachments.length])
 
   useEffect(() => {
     if (!showMentionMenu || mentionSuggestions.length === 0) return
@@ -483,28 +460,6 @@ export function PromptBox({
     [emitAttachmentFiles],
   )
 
-  const showPreviousAttachmentImage = useCallback(() => {
-    setExpandedImageIndex((index) => {
-      if (index === null || attachmentImageItems.length <= 1) return index
-      return getWrappedImageIndex({
-        currentIndex: index,
-        direction: "previous",
-        itemCount: attachmentImageItems.length,
-      })
-    })
-  }, [attachmentImageItems.length])
-
-  const showNextAttachmentImage = useCallback(() => {
-    setExpandedImageIndex((index) => {
-      if (index === null || attachmentImageItems.length <= 1) return index
-      return getWrappedImageIndex({
-        currentIndex: index,
-        direction: "next",
-        itemCount: attachmentImageItems.length,
-      })
-    })
-  }, [attachmentImageItems.length])
-
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     submitPrompt()
@@ -649,124 +604,23 @@ export function PromptBox({
       />
 
       {showMentionMenu ? (
-        <div className="mx-3 mb-1 mt-1 overflow-hidden rounded-md border border-border/70 bg-popover text-popover-foreground shadow-sm">
-          <div className="max-h-48 overflow-y-auto p-1">
-            {showQueryHint ? (
-              <div className="rounded px-2 py-1.5 text-xs text-muted-foreground">
-                Type to search project files
-              </div>
-            ) : mentionLoading ? (
-              <div className="flex items-center gap-2 rounded px-2 py-1.5 text-xs text-muted-foreground">
-                <Loader2 className="size-3.5 animate-spin" />
-                <span>Searching files...</span>
-              </div>
-            ) : mentionError ? (
-              <div className="rounded px-2 py-1.5 text-xs text-destructive">
-                Couldn&apos;t load files for this project
-              </div>
-            ) : mentionSuggestions.length > 0 ? (
-              mentionSuggestions.map((item, index) => {
-                const isSelected = index === selectedMentionIndex
-                return (
-                  <button
-                    key={`${item.path}-${index}`}
-                    ref={(element) => {
-                      mentionItemRefs.current[index] = element
-                    }}
-                    type="button"
-                    onMouseDown={(event) => {
-                      event.preventDefault()
-                      applyMention(item)
-                    }}
-                    className={cn(
-                      "w-full truncate rounded px-2 py-1.5 text-left text-xs",
-                      isSelected
-                        ? "bg-accent text-accent-foreground"
-                        : "hover:bg-accent/70"
-                    )}
-                    title={item.path}
-                  >
-                    {item.path}
-                  </button>
-                )
-              })
-            ) : (
-              <div className="rounded px-2 py-1.5 text-xs text-muted-foreground">
-                No matching files
-              </div>
-            )}
-          </div>
-        </div>
+        <PromptMentionMenu
+          showQueryHint={showQueryHint}
+          mentionLoading={mentionLoading}
+          mentionError={mentionError}
+          mentionSuggestions={mentionSuggestions}
+          selectedMentionIndex={selectedMentionIndex}
+          mentionItemRefs={mentionItemRefs}
+          onApplyMention={applyMention}
+        />
       ) : null}
 
-      {attachments.length > 0 ? (
-        <div className="mx-3 mb-1 mt-1">
-          {imageAttachments.length > 0 ? (
-            <div className="mb-1.5 flex flex-wrap gap-2">
-              {imageAttachments.map((attachment, index) => (
-                <div key={`${attachment.path}-${index}`} className="relative">
-                  <button
-                    type="button"
-                    className="cursor-zoom-in overflow-hidden rounded-md border border-border/70 bg-muted/20"
-                    onClick={() => setExpandedImageIndex(index)}
-                    title={attachment.name}
-                  >
-                    <img
-                      src={toUserAttachmentImageSrc(attachment.path, attachmentProjectId)}
-                      alt={attachment.name}
-                      className="h-16 w-24 object-cover"
-                      loading="lazy"
-                    />
-                  </button>
-                  {onRemoveAttachment ? (
-                    <button
-                      type="button"
-                      onClick={() => onRemoveAttachment(attachment.path)}
-                      className="absolute right-1 top-1 z-10 rounded-full bg-black/55 p-0.5 text-white transition-colors hover:bg-black/70"
-                      title={`Remove ${attachment.name}`}
-                      aria-label={`Remove ${attachment.name}`}
-                    >
-                      <X className="size-3" />
-                    </button>
-                  ) : null}
-                </div>
-              ))}
-            </div>
-          ) : null}
-
-          {nonImageAttachments.length > 0 ? (
-            <div className="flex flex-wrap gap-1.5">
-              {nonImageAttachments.map((attachment) => (
-                <span
-                  key={attachment.path}
-                  className="inline-flex max-w-full items-center gap-1 rounded-full border border-border/70 bg-muted/40 px-2 py-0.5 text-xs text-muted-foreground"
-                >
-                  <span className="truncate">{attachment.name}</span>
-                  {onRemoveAttachment ? (
-                    <button
-                      type="button"
-                      onClick={() => onRemoveAttachment(attachment.path)}
-                      className="rounded p-0.5 hover:bg-background/70"
-                      title={`Remove ${attachment.name}`}
-                    >
-                      <X className="size-3" />
-                    </button>
-                  ) : null}
-                </span>
-              ))}
-            </div>
-          ) : null}
-        </div>
-      ) : null}
-
-      <ImageLightbox
-        imageSrc={currentAttachmentImage?.src ?? null}
-        imageAlt={currentAttachmentImage?.alt ?? "Attached image"}
-        title="Attached image preview"
-        hasMultipleImages={hasMultipleAttachmentImages}
-        onPrevious={showPreviousAttachmentImage}
-        onNext={showNextAttachmentImage}
-        onClose={() => setExpandedImageIndex(null)}
+      <PromptAttachmentPreview
+        attachments={attachments}
+        attachmentProjectId={attachmentProjectId}
+        expandedImageIndex={expandedImageIndex}
+        onExpandedImageIndexChange={setExpandedImageIndex}
+        onRemoveAttachment={onRemoveAttachment}
       />
 
       {attachmentError ? (
