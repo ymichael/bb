@@ -4866,6 +4866,13 @@ export class Orchestrator implements ThreadOrchestrator {
     }
   }
 
+  private _hasQueuedWork(thread: Thread): boolean {
+    if (Array.isArray(thread.queuedMessages) && thread.queuedMessages.length > 0) {
+      return true;
+    }
+    return (this.queuedOperationsByThreadId.get(thread.id)?.length ?? 0) > 0;
+  }
+
   private _setThreadStatus(
     threadId: string,
     nextStatus: Thread["status"],
@@ -4895,7 +4902,9 @@ export class Orchestrator implements ThreadOrchestrator {
     }
     if (thread.status === "active" && nextStatus === "idle") {
       this._pruneHistoricalNoiseEvents(threadId);
-      this._cleanupThreadRuntime(threadId);
+      if (!this._hasQueuedWork(thread)) {
+        this._cleanupThreadRuntime(threadId);
+      }
     }
 
     if (opts?.touchUpdatedAt !== undefined) {

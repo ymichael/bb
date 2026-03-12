@@ -1904,6 +1904,126 @@ describe("Orchestrator", () => {
         vi.useRealTimers();
       }
     });
+
+    it("keeps managed environments alive when threads become idle with queued follow-up messages", async () => {
+      vi.useFakeTimers();
+      try {
+        const thread = makeThread({
+          id: "thread-1",
+          status: "active",
+          environmentId: "worktree",
+          queuedMessages: [{
+            id: "msg-1",
+            input: [{ type: "text", text: "keep going" }],
+            reasoningLevel: "medium",
+            sandboxMode: "danger-full-access",
+            createdAt: 1,
+          }],
+          environmentRecord: {
+            kind: "worktree",
+            state: {},
+          },
+        });
+        (threadRepo.getById as ReturnType<typeof vi.fn>).mockImplementation(
+          (threadId: string) => (threadId === "thread-1" ? thread : undefined),
+        );
+        (threadRepo.update as ReturnType<typeof vi.fn>).mockImplementation(
+          (_threadId: string, updates: Partial<Thread>) => {
+            Object.assign(thread, updates);
+            return thread;
+          },
+        );
+
+        const cleanup = vi.fn();
+        const stopWatchingWorkspaceStatus = vi.fn();
+        asOrchestratorHarness(manager).environmentRuntimes.set("thread-1", {
+          environment: makeRuntimeEnvironment({
+            rootPath: "/tmp/worktree",
+            cleanup,
+          }),
+          agentConnectionTarget: {
+            transport: "http",
+            baseUrl: "http://127.0.0.1:4312",
+          },
+          stopWatchingWorkspaceStatus,
+        });
+
+        (manager as unknown as {
+          _setThreadStatus: (threadId: string, status: Thread["status"]) => boolean;
+        })._setThreadStatus("thread-1", "idle");
+
+        await vi.runAllTimersAsync();
+
+        expect(cleanup).not.toHaveBeenCalled();
+        expect(stopWatchingWorkspaceStatus).not.toHaveBeenCalled();
+        expect(asOrchestratorHarness(manager).environmentRuntimes.has("thread-1")).toBe(true);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("keeps managed environments alive when threads become idle with queued operations", async () => {
+      vi.useFakeTimers();
+      try {
+        const thread = makeThread({
+          id: "thread-1",
+          status: "active",
+          environmentId: "worktree",
+          environmentRecord: {
+            kind: "worktree",
+            state: {},
+          },
+        });
+        (threadRepo.getById as ReturnType<typeof vi.fn>).mockImplementation(
+          (threadId: string) => (threadId === "thread-1" ? thread : undefined),
+        );
+        (threadRepo.update as ReturnType<typeof vi.fn>).mockImplementation(
+          (_threadId: string, updates: Partial<Thread>) => {
+            Object.assign(thread, updates);
+            return thread;
+          },
+        );
+
+        const cleanup = vi.fn();
+        const stopWatchingWorkspaceStatus = vi.fn();
+        asOrchestratorHarness(manager).environmentRuntimes.set("thread-1", {
+          environment: makeRuntimeEnvironment({
+            rootPath: "/tmp/worktree",
+            cleanup,
+          }),
+          agentConnectionTarget: {
+            transport: "http",
+            baseUrl: "http://127.0.0.1:4312",
+          },
+          stopWatchingWorkspaceStatus,
+        });
+        (asOrchestratorHarness(manager) as unknown as {
+          queuedOperationsByThreadId: Map<string, Array<{
+            operationId: string;
+            request: { operation: "commit"; options?: undefined };
+            requestedAt: number;
+            demotedPrimaryCheckout: boolean;
+          }>>;
+        }).queuedOperationsByThreadId.set("thread-1", [{
+          operationId: "op-1",
+          request: { operation: "commit" },
+          requestedAt: 1,
+          demotedPrimaryCheckout: false,
+        }]);
+
+        (manager as unknown as {
+          _setThreadStatus: (threadId: string, status: Thread["status"]) => boolean;
+        })._setThreadStatus("thread-1", "idle");
+
+        await vi.runAllTimersAsync();
+
+        expect(cleanup).not.toHaveBeenCalled();
+        expect(stopWatchingWorkspaceStatus).not.toHaveBeenCalled();
+        expect(asOrchestratorHarness(manager).environmentRuntimes.has("thread-1")).toBe(true);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
   });
 
   describe("archive()", () => {
