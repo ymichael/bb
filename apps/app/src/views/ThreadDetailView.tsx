@@ -51,6 +51,7 @@ import {
   formatEnvironmentDisplayName,
   type PromptInput,
   type ServiceTier,
+  type ThreadDetailRow,
 } from "@beanbag/agent-core";
 import { promptDraftToInput } from "@/lib/prompt-draft";
 import { HttpError } from "@/lib/api";
@@ -83,6 +84,78 @@ const THREAD_HEADER_ACTION_BUTTON_CLASS =
   "h-7 rounded-md border-border/70 bg-background/70 px-2 text-xs font-medium text-foreground/85 shadow-none hover:bg-muted/45 hover:text-foreground";
 const TIMELINE_PANEL_DEFAULT_SIZE_PERCENT = 50;
 const CLOSED_TIMELINE_PANEL_SIZE_PERCENT = 100;
+
+interface PendingSubmittedFollowUp {
+  signature: string;
+  submittedAt: number;
+}
+
+function buildFollowUpText(input: PromptInput[]): string {
+  return input
+    .filter((entry): entry is Extract<PromptInput, { type: "text" }> => entry.type === "text")
+    .map((entry) => entry.text.trim())
+    .filter((entry) => entry.length > 0)
+    .join("\n\n");
+}
+
+function buildFollowUpAttachmentsSignature(input: PromptInput[]) {
+  let webImages = 0;
+  let localImages = 0;
+  let localFiles = 0;
+  const imageUrls: string[] = [];
+  const localImagePaths: string[] = [];
+  const localFilePaths: string[] = [];
+
+  for (const entry of input) {
+    switch (entry.type) {
+      case "text":
+        break;
+      case "image":
+        webImages += 1;
+        imageUrls.push(entry.url);
+        break;
+      case "localImage":
+        localImages += 1;
+        localImagePaths.push(entry.path);
+        break;
+      case "localFile":
+        localFiles += 1;
+        localFilePaths.push(entry.path);
+        break;
+    }
+  }
+
+  if (webImages === 0 && localImages === 0 && localFiles === 0) {
+    return null;
+  }
+
+  return {
+    webImages,
+    localImages,
+    localFiles,
+    ...(imageUrls.length > 0 ? { imageUrls } : {}),
+    ...(localImagePaths.length > 0 ? { localImagePaths } : {}),
+    ...(localFilePaths.length > 0 ? { localFilePaths } : {}),
+  };
+}
+
+function buildFollowUpSignatureFromInput(input: PromptInput[]): string {
+  return JSON.stringify({
+    text: buildFollowUpText(input),
+    attachments: buildFollowUpAttachmentsSignature(input),
+  });
+}
+
+function buildFollowUpSignatureFromRow(row: ThreadDetailRow): string | null {
+  if (row.kind !== "message" || row.message.kind !== "user") {
+    return null;
+  }
+
+  return JSON.stringify({
+    text: row.message.text,
+    attachments: row.message.attachments ?? null,
+  });
+}
 
 export function ThreadDetailView() {
   const { projectId, threadId } = useParams<{
@@ -122,6 +195,8 @@ export function ThreadDetailView() {
   const environmentCatalog = useSystemEnvironments();
   const fileMentions = usePromptFileMentions(projectId);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
+  const [pendingSubmittedFollowUp, setPendingSubmittedFollowUp] =
+    useState<PendingSubmittedFollowUp | null>(null);
   const [isChangeListExpanded, setIsChangeListExpanded] = useState(false);
   const [processingQueuedMessageId, setProcessingQueuedMessageId] = useState<string | null>(
     null,
@@ -276,6 +351,31 @@ export function ThreadDetailView() {
     mergeBaseStateThreadIdRef.current = thread?.id;
     setSelectedMergeBaseBranch(thread?.mergeBaseBranch);
   }, [setSelectedMergeBaseBranch, thread?.id, thread?.mergeBaseBranch]);
+
+  useEffect(() => {
+    setPendingSubmittedFollowUp(null);
+  }, [threadId]);
+
+  useEffect(() => {
+    if (!pendingSubmittedFollowUp) {
+      return;
+    }
+
+    const acknowledged = threadDetailRows.some((row) => {
+      const rowSignature = buildFollowUpSignatureFromRow(row);
+      if (rowSignature !== pendingSubmittedFollowUp.signature) {
+        return false;
+      }
+      return row.kind === "message" && row.message.createdAt + 2_000 >= pendingSubmittedFollowUp.submittedAt;
+    });
+
+    if (!acknowledged) {
+      return;
+    }
+
+    promptDraft.clear();
+    setPendingSubmittedFollowUp(null);
+  }, [pendingSubmittedFollowUp, promptDraft, threadDetailRows]);
 
   useEffect(() => {
     if (!thread) return;
@@ -529,6 +629,7 @@ export function ThreadDetailView() {
     deleteQueuedThreadMessage.isPending;
   const isFollowUpSubmitting =
     tellThread.isPending ||
+    pendingSubmittedFollowUp !== null ||
     demotePrimaryCheckout.isPending ||
     enqueueThreadMessage.isPending;
   const canSendFollowUp = !isCreated && !isProvisioning;
@@ -947,14 +1048,11 @@ export function ThreadDetailView() {
       return;
     }
 
-    const submittedDraft = {
-      text: promptDraft.text,
-      attachments: promptDraft.attachments,
-    };
-
-    // Match project-start behavior: clear immediately, then restore only if the
-    // request fails and the user has not started a new draft in the meantime.
-    promptDraft.clear();
+    const submittedAt = Date.now();
+    setPendingSubmittedFollowUp({
+      signature: buildFollowUpSignatureFromInput(promptInput),
+      submittedAt,
+    });
     setAttachmentError(null);
 
     try {
@@ -962,11 +1060,11 @@ export function ThreadDetailView() {
         input: promptInput,
         model: activeModel?.model ?? selectedModel,
         ...(supportsServiceTier && serviceTier ? { serviceTier } : {}),
-        ...(supportsReasoningLevels ? { reasoningLevel } : {}),
-        sandboxMode,
+          ...(supportsReasoningLevels ? { reasoningLevel } : {}),
+          sandboxMode,
       });
     } catch (err) {
-      promptDraft.restoreIfEmpty(submittedDraft);
+      setPendingSubmittedFollowUp(null);
       window.alert(err instanceof Error ? err.message : "Failed to send follow-up");
     }
   };

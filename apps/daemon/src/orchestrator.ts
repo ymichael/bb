@@ -89,11 +89,14 @@ import type {
 } from "@beanbag/environment-agent";
 import { ENVIRONMENT_AGENT_PROTOCOL_VERSION } from "@beanbag/environment-agent";
 import type {
+  DbConnection,
   ThreadRepository,
   EventRepository,
   ProjectRepository,
   EnvironmentAgentSessionRepository,
 } from "@beanbag/db";
+
+type DbExecutor = Pick<DbConnection, "select" | "insert" | "update" | "delete">;
 import {
   AgentServer,
   type AgentServerNotification,
@@ -1027,8 +1030,6 @@ export class Orchestrator implements ThreadOrchestrator {
         initiator: context.initiator,
       },
     );
-
-    this._setThreadStatus(threadId, "active");
     try {
       const acceptedProviderThreadId =
         await this._sendTurnCommandWithStaleProviderRetry({
@@ -1040,15 +1041,25 @@ export class Orchestrator implements ThreadOrchestrator {
           options,
           mode: tellMode === "steer" ? "steer" : tellMode === "auto" ? "auto" : "start",
         });
-      this._persistOutboundStartEvent(
-        threadId,
-        "client/turn/start",
-        this._buildTurnStartParams(acceptedProviderThreadId, providerInput, options),
-        requestedInput,
-        {
+      const turnParams = this._buildTurnStartParams(
+        acceptedProviderThreadId,
+        providerInput,
+        options,
+      );
+      const statusChanged = this._activateThreadAndPersistOutboundStartEvent(threadId, {
+        type: "client/turn/start",
+        params: turnParams,
+        input: requestedInput,
+        meta: {
           source: "tell",
           initiator: context.initiator,
         },
+      });
+      this._broadcastThreadChanged(
+        threadId,
+        statusChanged
+          ? [...THREAD_STATUS_CHANGE_KINDS, "events-appended"]
+          : ["events-appended"],
       );
     } catch (error) {
       if (this.agentServer.isMissingProviderThreadError(error)) {
@@ -1071,6 +1082,34 @@ export class Orchestrator implements ThreadOrchestrator {
       }
       this._rethrowAgentServerError(threadId, error);
     }
+  }
+
+  private _activateThreadAndPersistOutboundStartEvent(
+    threadId: string,
+    args: {
+      type: "client/thread/start" | "client/turn/start";
+      params: Record<string, unknown>;
+      input: PromptInput[] | undefined;
+      meta: { source: "spawn" | "tell"; initiator: ThreadTurnInitiator };
+    },
+  ): boolean {
+    return this.threadRepo.withTransaction((connection) => {
+      const statusChanged = this._setThreadStatus(threadId, "active", false, {
+        connection,
+      });
+      this._persistOutboundStartEvent(
+        threadId,
+        args.type,
+        args.params,
+        args.input,
+        args.meta,
+        {
+          broadcastChanges: false,
+          connection,
+        },
+      );
+      return statusChanged;
+    });
   }
 
   private async _sendQueuedFollowUpMessage(
@@ -3131,7 +3170,6 @@ export class Orchestrator implements ThreadOrchestrator {
     );
 
     if (requestedInput.length > 0) {
-      this._setThreadStatus(threadId, "active");
       providerThreadId = await this._sendTurnCommandWithStaleProviderRetry({
         threadId,
         projectId: req.projectId,
@@ -3148,15 +3186,20 @@ export class Orchestrator implements ThreadOrchestrator {
         this._sendThreadNameSet(threadId, providerThreadId, hydratedThreadAfterStart.title);
       }
       const turnStartParams = this._buildTurnStartParams(providerThreadId, providerInput, req);
-      this._persistOutboundStartEvent(
-        threadId,
-        "client/turn/start",
-        turnStartParams,
-        requestedInput,
-        {
+      const statusChanged = this._activateThreadAndPersistOutboundStartEvent(threadId, {
+        type: "client/turn/start",
+        params: turnStartParams,
+        input: requestedInput,
+        meta: {
           source: "spawn",
           initiator: "agent",
         },
+      });
+      this._broadcastThreadChanged(
+        threadId,
+        statusChanged
+          ? [...THREAD_STATUS_CHANGE_KINDS, "events-appended"]
+          : ["events-appended"],
       );
       return;
     }
@@ -4139,15 +4182,28 @@ export class Orchestrator implements ThreadOrchestrator {
     threadId: string,
     type: ThreadEventType,
     data: ThreadEventData,
-    opts?: { broadcastChanges?: readonly ThreadChangeKind[] | false },
+    opts?: {
+      broadcastChanges?: readonly ThreadChangeKind[] | false;
+      connection?: DbExecutor;
+    },
   ): ThreadEvent {
-    const seq = this._nextEventSeq(threadId);
-    const created = this.eventRepo.create({
-      threadId,
-      seq,
-      type,
-      data,
-    });
+    const seq = this._nextEventSeq(threadId, opts?.connection);
+    const created = opts?.connection
+      ? this.eventRepo.create(
+          {
+            threadId,
+            seq,
+            type,
+            data,
+          },
+          { connection: opts.connection },
+        )
+      : this.eventRepo.create({
+          threadId,
+          seq,
+          type,
+          data,
+        });
     this.timelineByThread.delete(threadId);
     this._cacheProvisioningStateFromEvent(threadId, type, data);
     const broadcastChanges = opts?.broadcastChanges ?? ["events-appended"];
@@ -4752,9 +4808,10 @@ export class Orchestrator implements ThreadOrchestrator {
     }
   }
 
-  private _nextEventSeq(threadId: string): number {
+  private _nextEventSeq(threadId: string, connection?: DbExecutor): number {
     const current =
-      this.eventSeqCounters.get(threadId) ?? this.eventRepo.getLatestSeq(threadId);
+      this.eventSeqCounters.get(threadId) ??
+      this.eventRepo.getLatestSeq(threadId, { connection });
     const next = current + 1;
     this.eventSeqCounters.set(threadId, next);
     return next;
@@ -4766,6 +4823,10 @@ export class Orchestrator implements ThreadOrchestrator {
     params: Record<string, unknown>,
     input: PromptInput[] | undefined,
     meta: { source: "spawn" | "tell"; initiator: ThreadTurnInitiator },
+    opts?: {
+      broadcastChanges?: readonly ThreadChangeKind[] | false;
+      connection?: DbExecutor;
+    },
   ): ThreadEvent {
     if (type === "client/thread/start" && !this.titleFallbackByThreadId.has(threadId)) {
       const fallback = this._derivePromptFallbackTitle(input);
@@ -4775,7 +4836,7 @@ export class Orchestrator implements ThreadOrchestrator {
     }
 
     const eventData = this._buildOutboundStartEventData(type, params, input, meta);
-    return this._appendEvent(threadId, type, eventData);
+    return this._appendEvent(threadId, type, eventData, opts);
   }
 
   private _buildOutboundStartEventData(
@@ -5119,17 +5180,28 @@ export class Orchestrator implements ThreadOrchestrator {
     threadId: string,
     nextStatus: Thread["status"],
     shouldBroadcast = true,
-    opts?: { force?: boolean; touchUpdatedAt?: boolean },
+    opts?: { force?: boolean; touchUpdatedAt?: boolean; connection?: DbExecutor },
   ): boolean {
     const thread = this.threadRepo.getById(threadId);
     if (!thread) {
       if (!opts?.force) return false;
       if (opts?.touchUpdatedAt !== undefined) {
-        this.threadRepo.update(threadId, { status: nextStatus }, {
-          touchUpdatedAt: opts.touchUpdatedAt,
-        });
+        if (opts.connection) {
+          this.threadRepo.update(threadId, { status: nextStatus }, {
+            touchUpdatedAt: opts.touchUpdatedAt,
+            connection: opts.connection,
+          });
+        } else {
+          this.threadRepo.update(threadId, { status: nextStatus }, {
+            touchUpdatedAt: opts.touchUpdatedAt,
+          });
+        }
       } else {
-        this.threadRepo.update(threadId, { status: nextStatus });
+        if (opts?.connection) {
+          this.threadRepo.update(threadId, { status: nextStatus }, { connection: opts.connection });
+        } else {
+          this.threadRepo.update(threadId, { status: nextStatus });
+        }
       }
       if (shouldBroadcast) {
         this._broadcastThreadChanged(threadId, THREAD_STATUS_CHANGE_KINDS);
@@ -5150,11 +5222,22 @@ export class Orchestrator implements ThreadOrchestrator {
     }
 
     if (opts?.touchUpdatedAt !== undefined) {
-      this.threadRepo.update(threadId, { status: nextStatus }, {
-        touchUpdatedAt: opts.touchUpdatedAt,
-      });
+      if (opts.connection) {
+        this.threadRepo.update(threadId, { status: nextStatus }, {
+          touchUpdatedAt: opts.touchUpdatedAt,
+          connection: opts.connection,
+        });
+      } else {
+        this.threadRepo.update(threadId, { status: nextStatus }, {
+          touchUpdatedAt: opts.touchUpdatedAt,
+        });
+      }
     } else {
-      this.threadRepo.update(threadId, { status: nextStatus });
+      if (opts?.connection) {
+        this.threadRepo.update(threadId, { status: nextStatus }, { connection: opts.connection });
+      } else {
+        this.threadRepo.update(threadId, { status: nextStatus });
+      }
     }
     if (shouldBroadcast) {
       this._broadcastThreadChanged(threadId, THREAD_STATUS_CHANGE_KINDS);

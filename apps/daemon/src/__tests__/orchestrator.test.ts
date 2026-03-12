@@ -479,6 +479,7 @@ function createMocks() {
     getById: vi.fn(),
     list: vi.fn(),
     listManagedArtifactRetentionRecords: vi.fn(() => []),
+    withTransaction: vi.fn((fn: (tx: unknown) => unknown) => fn({})),
     update: vi.fn(),
     markRead: vi.fn(),
     delete: vi.fn(),
@@ -1902,6 +1903,73 @@ describe("Orchestrator", () => {
           input,
         }),
         { reason: "tell-after-provisioning-failure" },
+      );
+    });
+
+    it("broadcasts follow-up activation only after persisting the outbound turn start event", async () => {
+      const thread = makeThread({
+        id: "thread-1",
+        status: "idle",
+      });
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockImplementation(
+        (threadId: string) => (threadId === "thread-1" ? thread : undefined),
+      );
+      (threadRepo.update as ReturnType<typeof vi.fn>).mockImplementation(
+        (_threadId: string, updates: Partial<Thread>) => {
+          Object.assign(thread, updates);
+          return thread;
+        },
+      );
+      (eventRepo.getLatestSeq as ReturnType<typeof vi.fn>).mockReturnValue(0);
+      (eventRepo.create as ReturnType<typeof vi.fn>).mockImplementation(
+        (event: Omit<ThreadEvent, "id" | "createdAt">) => ({
+          ...event,
+          id: "evt-1",
+          createdAt: 1_100,
+        }),
+      );
+      vi
+        .spyOn(
+          manager as unknown as {
+            _ensureProviderSession: (threadId: string) => Promise<string>;
+          },
+          "_ensureProviderSession",
+        )
+        .mockResolvedValue("provider-thread-1");
+      vi
+        .spyOn(
+          manager as unknown as {
+            _sendTurnCommandWithStaleProviderRetry: (args: unknown) => Promise<string>;
+          },
+          "_sendTurnCommandWithStaleProviderRetry",
+        )
+        .mockResolvedValue("provider-thread-1");
+
+      await expect(
+        manager.tell("thread-1", {
+          input: [{ type: "text", text: "hello" }],
+        }),
+      ).resolves.toBeUndefined();
+
+      expect(thread.status).toBe("active");
+      expect(eventRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          threadId: "thread-1",
+          type: "client/turn/start",
+        }),
+        expect.objectContaining({
+          connection: expect.any(Object),
+        }),
+      );
+      expect(ws.broadcast).toHaveBeenCalledWith("thread", "thread-1", [
+        "status-changed",
+        "work-status-changed",
+        "events-appended",
+      ]);
+      expect(
+        (eventRepo.create as ReturnType<typeof vi.fn>).mock.invocationCallOrder[0],
+      ).toBeLessThan(
+        (ws.broadcast as ReturnType<typeof vi.fn>).mock.invocationCallOrder[0],
       );
     });
 

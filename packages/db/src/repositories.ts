@@ -37,6 +37,8 @@ import {
   toRecord,
 } from "@beanbag/agent-core";
 import type { DbConnection } from "./connection.js";
+
+type DbExecutor = Pick<DbConnection, "select" | "insert" | "update" | "delete">;
 import {
   projects,
   threads,
@@ -363,6 +365,10 @@ export class ProjectRepository {
 export class ThreadRepository {
   constructor(private db: DbConnection) {}
 
+  withTransaction<T>(fn: (tx: DbExecutor) => T): T {
+    return this.db.transaction((tx) => fn(tx as DbExecutor));
+  }
+
   create(data: {
     projectId: string;
     title?: string;
@@ -537,9 +543,11 @@ export class ThreadRepository {
     },
     opts?: {
       touchUpdatedAt?: boolean;
+      connection?: DbExecutor;
     },
   ): Thread | undefined {
-    const existing = this.db
+    const db = opts?.connection ?? this.db;
+    const existing = db
       .select()
       .from(threads)
       .where(eq(threads.id, id))
@@ -564,8 +572,16 @@ export class ThreadRepository {
     if (data.archivedAt !== undefined) updates.archivedAt = data.archivedAt;
     if (data.lastReadAt !== undefined) updates.lastReadAt = data.lastReadAt;
 
-    this.db.update(threads).set(updates).where(eq(threads.id, id)).run();
-    return this.getById(id);
+    db.update(threads).set(updates).where(eq(threads.id, id)).run();
+    if (db === this.db) {
+      return this.getById(id);
+    }
+    const updated = db
+      .select()
+      .from(threads)
+      .where(eq(threads.id, id))
+      .get();
+    return updated ? this.rowToThread(updated, this.listQueuedMessages(id)) : undefined;
   }
 
   delete(id: string): void {
@@ -778,7 +794,8 @@ export class EventRepository {
     seq: number;
     type: ThreadEventType;
     data: ThreadEventData;
-  }): ThreadEvent {
+  }, opts?: { connection?: DbExecutor }): ThreadEvent {
+    const db = opts?.connection ?? this.db;
     const now = Date.now();
     const lookupFields = deriveEventLookupFields(data.type, data.data);
     const row = {
@@ -794,7 +811,7 @@ export class EventRepository {
       data: JSON.stringify(data.data),
       createdAt: now,
     };
-    this.db.insert(events).values(row).run();
+    db.insert(events).values(row).run();
     return {
       id: row.id,
       threadId: row.threadId,
@@ -1057,8 +1074,9 @@ export class EventRepository {
     this.db.delete(events).where(eq(events.threadId, threadId)).run();
   }
 
-  getLatestSeq(threadId: string): number {
-    const row = this.db
+  getLatestSeq(threadId: string, opts?: { connection?: DbExecutor }): number {
+    const db = opts?.connection ?? this.db;
+    const row = db
       .select({ maxSeq: sql<number>`MAX(${events.seq})` })
       .from(events)
       .where(eq(events.threadId, threadId))

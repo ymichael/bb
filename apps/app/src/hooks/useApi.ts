@@ -682,12 +682,8 @@ export function useTellThread() {
       }),
     onMutate: async (variables) => {
       await queryClient.cancelQueries({ queryKey: ["thread", variables.id] });
-      await queryClient.cancelQueries({ queryKey: ["threadTimeline", variables.id] });
 
       const previousThread = queryClient.getQueryData<Thread>(["thread", variables.id]);
-      const previousTimelines = queryClient.getQueriesData<ThreadTimelineResponse>({
-        queryKey: ["threadTimeline", variables.id],
-      });
       const optimisticCreatedAt = Date.now();
 
       updateCachedThread(queryClient, variables.id, (thread) => ({
@@ -695,29 +691,14 @@ export function useTellThread() {
         status: "active",
         updatedAt: Math.max(thread.updatedAt, optimisticCreatedAt),
       }));
-      for (const [queryKey, timeline] of previousTimelines) {
-        queryClient.setQueryData<ThreadTimelineResponse | undefined>(
-          queryKey,
-          appendOptimisticUserRowToTimeline(
-            timeline ?? undefined,
-            variables.id,
-            variables.input,
-            optimisticCreatedAt,
-          ),
-        );
-      }
 
       return {
         previousThread,
-        previousTimelines,
       };
     },
     onError: (_error, variables, context) => {
       if (context?.previousThread) {
         queryClient.setQueryData<Thread>(["thread", variables.id], context.previousThread);
-      }
-      for (const [queryKey, data] of context?.previousTimelines ?? []) {
-        queryClient.setQueryData(queryKey, data);
       }
     },
     onSuccess: (_data, variables) => {
