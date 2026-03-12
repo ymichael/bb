@@ -1893,23 +1893,43 @@ describe("Orchestrator", () => {
     });
 
 
-    it("does not destroy workspace environment on stop", () => {
-      const cleanup = vi.fn();
+    it("suspends managed environments on stop without destroying the workspace", () => {
+      const suspendEnvironmentRuntime = vi.spyOn(
+        (asOrchestratorHarness(manager) as unknown as {
+          environmentService: {
+            suspendEnvironmentRuntime: (threadId: string) => void;
+            destroyEnvironmentRuntime: (threadId: string) => void;
+          };
+        }).environmentService,
+        "suspendEnvironmentRuntime",
+      );
+      const destroyEnvironmentRuntime = vi.spyOn(
+        (asOrchestratorHarness(manager) as unknown as {
+          environmentService: {
+            suspendEnvironmentRuntime: (threadId: string) => void;
+            destroyEnvironmentRuntime: (threadId: string) => void;
+          };
+        }).environmentService,
+        "destroyEnvironmentRuntime",
+      );
+      const stopWatchingWorkspaceStatus = vi.fn();
       asOrchestratorHarness(manager).environmentRuntimes.set("thread-1", {
-        adapter: {
-          info: {
-            id: "worktree",
-            displayName: "Git Worktree Workspace",
-            description: "",
-          },
-          prepare: vi.fn(),
+        environment: makeRuntimeEnvironment({
+          rootPath: "/tmp/worktree",
+          cleanup: vi.fn(),
+        }),
+        agentConnectionTarget: {
+          transport: "http",
+          baseUrl: "http://127.0.0.1:4312",
         },
-        session: { cwd: "/tmp/worktree", cleanup },
+        stopWatchingWorkspaceStatus,
       });
 
       manager.stop("thread-1");
 
-      expect(cleanup).not.toHaveBeenCalled();
+      expect(suspendEnvironmentRuntime).toHaveBeenCalledWith("thread-1");
+      expect(destroyEnvironmentRuntime).not.toHaveBeenCalled();
+      expect(stopWatchingWorkspaceStatus).toHaveBeenCalledTimes(1);
     });
 
     it("suspends managed environments when threads become idle", async () => {

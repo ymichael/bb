@@ -1544,14 +1544,7 @@ export class Orchestrator implements ThreadOrchestrator {
     const shouldAppendInterruptedEvent =
       thread?.status === "active" || thread?.status === "provisioning";
 
-    this.providerThreadIdByThreadId.delete(threadId);
-    this.lastNotifiedCompletionTurnIds.delete(threadId);
-    this.turnLifecycleEpochs.delete(threadId);
-    this.activeTurnIdByThreadId.delete(threadId);
-    this.lastNotifiedCompletionEpochs.delete(threadId);
-    this.lastNoisePruneSeqByThread.delete(threadId);
-    this.lastNoisePruneAtByThread.delete(threadId);
-    this._cleanupEnvironmentRuntime(threadId);
+    this._cleanupThreadRuntime(threadId);
     if (shouldAppendInterruptedEvent) {
       this._appendEvent(threadId, "system/thread/interrupted" as never, {
         reason: "user",

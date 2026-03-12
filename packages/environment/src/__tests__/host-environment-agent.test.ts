@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   __testOnly__resolveManagedHostEnvironmentAgentStateFilePath,
+  disposeManagedHostEnvironmentAgent,
   ensureManagedHostEnvironmentAgent,
   resolveManagedHostEnvironmentAgentLaunchCommand,
   resolveManagedHostEnvironmentAgentTarget,
@@ -220,5 +221,62 @@ describe("resolveManagedHostEnvironmentAgentTarget", () => {
       environmentId: "worktree",
       workspaceRoot,
     });
+  });
+
+  it("removes the managed agent record and escalates to SIGKILL when SIGTERM does not exit promptly", async () => {
+    const beanbagRoot = makeTempDir();
+    const projectId = `project-${Date.now()}`;
+    const workspaceRoot = makeTempDir();
+    const runtimeEnv = { BEANBAG_ROOT: beanbagRoot };
+    const statePath = __testOnly__resolveManagedHostEnvironmentAgentStateFilePath({
+      projectId,
+      threadId: "thread-1",
+      environmentId: "local",
+      workspaceRootPath: workspaceRoot,
+      runtimeEnv,
+    });
+    cleanupPaths.push(join(beanbagRoot, "environment-agents", projectId));
+    mkdirSync(dirname(statePath), { recursive: true });
+    writeFileSync(
+      statePath,
+      JSON.stringify({
+        version: 1,
+        pid: 4321,
+        port: 4123,
+        baseUrl: "http://127.0.0.1:4123",
+        authToken: "auth-token",
+        threadId: "thread-1",
+        projectId,
+        environmentId: "local",
+        workspaceRoot,
+      }),
+      "utf8",
+    );
+
+    const killProcess = vi.fn((_pid: number, _signal?: string | number) => true);
+    let now = 0;
+    vi.spyOn(Date, "now").mockImplementation(() => now);
+    const isProcessAlive = vi.fn<(pid: number) => boolean>(() => killProcess.mock.calls.length < 2);
+
+    await disposeManagedHostEnvironmentAgent(
+      {
+        projectId,
+        threadId: "thread-1",
+        environmentId: "local",
+        workspaceRootPath: workspaceRoot,
+        runtimeEnv,
+      },
+      {
+        isProcessAlive,
+        killProcess,
+        sleepMs: async (ms: number) => {
+          now += ms;
+        },
+      },
+    );
+
+    expect(killProcess).toHaveBeenNthCalledWith(1, 4321, "SIGTERM");
+    expect(killProcess).toHaveBeenNthCalledWith(2, 4321, "SIGKILL");
+    expect(existsSync(statePath)).toBe(false);
   });
 });
