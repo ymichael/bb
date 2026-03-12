@@ -269,6 +269,30 @@ export class EnvironmentAgentSessionService {
     return closed;
   }
 
+  retireActiveSessionForThread(args: {
+    threadId: string;
+    reason: "daemon_shutdown" | "migration" | "internal_error";
+    now?: number;
+  }): EnvironmentAgentSessionRecord | undefined {
+    const now = args.now ?? this.clock();
+    const active = this.sessions.getActiveSessionByThreadId(args.threadId, now);
+    if (!active) {
+      return undefined;
+    }
+
+    const closed = this.sessions.closeSession({
+      sessionId: active.id,
+      reason: args.reason,
+      now,
+    });
+    if (!closed) {
+      return undefined;
+    }
+
+    this.commandDispatcher?.invalidateCommandsForSession(closed, now);
+    return closed;
+  }
+
   expireLeases(now?: number): EnvironmentAgentSessionRecord[] {
     const expired = this.sessions.expireLeases(now);
     for (const session of expired) {

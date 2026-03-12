@@ -3142,6 +3142,10 @@ export class Orchestrator implements ThreadOrchestrator {
     this.lastNoisePruneAtByThread.delete(threadId);
     this.queuedOperationsByThreadId.delete(threadId);
     this.operationDispatchInFlight.delete(threadId);
+    this.environmentAgentSessionService?.retireActiveSessionForThread({
+      threadId,
+      reason: "migration",
+    });
     this.environmentService.suspendEnvironmentRuntime(threadId);
   }
 

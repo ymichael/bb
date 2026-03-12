@@ -663,6 +663,39 @@ describe("EnvironmentAgentSessionService", () => {
     );
   });
 
+  it("retires the active session without triggering invalidation callbacks", () => {
+    const threadId = createThreadId();
+    const opened = service.openSession({
+      threadId,
+      now: 1_000,
+      payload: {
+        agentId: "agent-1",
+        agentInstanceId: "instance-1",
+        supportedProtocolVersions: [1],
+        channels: [
+          {
+            channelId: threadId,
+            generation: 1,
+          },
+        ],
+      },
+    });
+
+    const retired = service.retireActiveSessionForThread({
+      threadId,
+      reason: "migration",
+      now: 2_000,
+    });
+
+    expect(retired).toMatchObject({
+      id: opened.session.id,
+      status: "closed",
+      closeReason: "migration",
+      closedAt: 2_000,
+    });
+    expect(onSessionInvalidated).not.toHaveBeenCalled();
+  });
+
   it("invalidates replaced sessions when a newer session opens", () => {
     const threadId = createThreadId();
     const first = service.openSession({

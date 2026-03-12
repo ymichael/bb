@@ -350,9 +350,9 @@ Expected result:
 - the thread returns to `idle`
 - the immediate follow-up before restart does not fail with `agent_shutdown`
 - after restart, the session count increases by exactly one for the fresh follow-up session
-- the previously idle session is closed rather than left active
-- exactly one session row is active for the thread after the follow-up completes
+- the previously idle session is closed or expires rather than remaining the live worker for the new follow-up
 - the daemon does not leave multiple live sessions competing for the same idle thread
+- by the time the follow-up settles back to `idle`, there may be zero active session rows because Beanbag intentionally retires the worker again; check for duplicate active rows during the run, not after final idle
 
 Missing-worker restart check:
 
