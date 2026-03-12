@@ -12,8 +12,8 @@ At a high level:
 2. The daemon persists projects, threads, events, queued follow-ups, and environment-agent session state via `@beanbag/db`.
 3. Each thread runs inside a selected environment (`local`, `worktree`, or `docker`).
 4. Each active environment runs a per-thread `environment-agent` process beside the provider runtime.
-5. The daemon queues commands for the environment-agent; the environment-agent opens a lease-based session back to the daemon and pulls commands.
-6. The environment-agent executes commands against the provider runtime, then pushes event batches and command results back to the daemon.
+5. The daemon queues commands for the environment-agent; the environment-agent opens a session back to the daemon and pulls commands.
+6. The environment-agent executes commands against the provider runtime, then pushes session messages and command results back to the daemon.
 7. The daemon ingests those events, updates persisted thread state, and broadcasts targeted WebSocket invalidations.
 8. The app refreshes affected React Query data; the CLI can read the same daemon-backed state directly.
 
@@ -67,7 +67,7 @@ Important daemon subsystems:
 
 - `Orchestrator`: thread lifecycle, provisioning, follow-ups, archive/unarchive, git operations, timeline projection
 - `EnvironmentService`: environment startup, restore, suspend, destroy, primary-checkout handling
-- `EnvironmentAgentSessionService`: lease/session lifecycle, command long-polling, event acknowledgement, replay coordination
+- `EnvironmentAgentSessionService`: session lifecycle, command long-polling, heartbeat handling, and message ingestion
 - `EnvironmentAgentCommandDispatcher`: persists and dispatches daemon-to-agent commands
 - `EnvironmentAgentEventApplier`: applies replayed/pushed environment-agent events into daemon thread state
 - restart recommendation + system health reporting
@@ -96,7 +96,7 @@ SQLite persistence layer for:
 - queued follow-up messages
 - environment records persisted on threads
 - environment-agent sessions
-- environment-agent replay cursors
+- environment-agent event cursors
 - environment-agent command queue and command results
 
 A thread row is created immediately when spawning a thread; provisioning is asynchronous afterward.
@@ -114,7 +114,7 @@ Built-in environments:
 Environment responsibilities include:
 
 - preparing and restoring the workspace
-- starting or reconnecting to the per-thread environment-agent
+- starting the per-thread environment-agent
 - exposing workspace/git status and diffs
 - suspending or destroying resources when threads go idle or archived
 - supporting environment-specific capabilities such as isolated workspaces and primary-checkout promotion/demotion
@@ -180,7 +180,7 @@ Transition rules are centralized in the daemon status machine.
 3. Daemon schedules provisioning asynchronously and moves the thread to `provisioning`.
 4. The selected environment prepares or restores the workspace.
 5. The environment starts the per-thread environment-agent.
-6. The environment-agent opens a lease-based session back to the daemon.
+6. The environment-agent opens a session back to the daemon.
 7. The daemon queues provider bootstrap commands (`provider.ensure`, `thread.start`, and optionally `turn.start`).
 8. The environment-agent pulls those commands, executes them, and pushes resulting events back.
 9. The daemon persists events, updates derived thread state, and broadcasts thread invalidations.
@@ -230,43 +230,32 @@ For each active thread, the environment-agent opens a single logical channel key
 The daemon records:
 
 - active session row
-- lease expiry / heartbeat state
-- per-thread replay cursor (`generation`, `sequence`)
+- heartbeat / last-seen state
+- per-thread event cursor (`generation`, `sequence`)
 - queued commands with command cursors and result state
 
-Sessions are lease-based:
+Sessions are heartbeat-driven:
 
-- the daemon grants a lease TTL and heartbeat interval when the session opens
-- the environment-agent renews the lease with heartbeats
-- lease expiry invalidates the session
+- the daemon records a heartbeat interval and liveness timeout when the session opens
+- the environment-agent keeps the session alive with heartbeats
+- heartbeat timeout invalidates the session
 - a newer session for the same thread replaces the previous one
 
 ### Command flow
 
 1. The daemon persists a command in `environment_agent_commands`.
 2. The environment-agent long-polls `GET /threads/:id/environment-agent/session/commands`.
-3. The daemon returns commands after the last delivered cursor.
-4. The environment-agent acknowledges receipt.
-5. The environment-agent executes the command against the local provider runtime.
-6. The environment-agent posts command lifecycle updates (`started`, `completed`, `failed`).
-7. The daemon records the final result and unblocks higher-level orchestration logic.
+3. The daemon returns commands after the last acknowledged cursor.
+4. The environment-agent executes the command against the local provider runtime.
+5. The environment-agent posts command lifecycle updates (`started`, `completed`, `failed`) through `POST /threads/:id/environment-agent/session/messages`.
+6. The daemon records the final result and unblocks higher-level orchestration logic.
 
 ### Event flow
 
 1. The environment-agent observes provider/runtime events and assigns per-channel sequence numbers.
-2. It pushes contiguous event batches to `POST /threads/:id/environment-agent/session/events`.
-3. The daemon applies unseen events in order and advances the persisted replay cursor.
-4. The daemon replies with either:
-   - an event acknowledgement for the accepted cursor, or
-   - a replay request if the daemon detects that it needs a different sequence window
-
-### Replay and recovery
-
-Replay is cursor-based.
-
-- The daemon persists the highest applied cursor per thread.
-- On reconnect, the daemon tells the environment-agent where to resume applying from.
-- If the environment-agent restarted and lost its in-memory event buffer, the daemon can reset its cursor expectations and rebuild state from newly emitted events plus already persisted daemon events.
+2. It pushes contiguous event batches through `POST /threads/:id/environment-agent/session/messages`.
+3. The daemon applies unseen events in order and advances the persisted event cursor.
+4. The daemon replies with the accepted cursor so the environment-agent can drop any buffered in-memory events up to that point.
 
 ## Environment-Agent HTTP Surface
 
