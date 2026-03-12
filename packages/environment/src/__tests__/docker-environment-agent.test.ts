@@ -11,7 +11,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
-  __testOnly__resolveManagedDockerEnvironmentAgentStateFilePath,
+  __testOnly__getManagedDockerEnvironmentAgentRecord,
   __testOnly__resolveDockerDaemonUrl,
   DEFAULT_DOCKER_ENVIRONMENT_IMAGE,
   ensureDockerEnvironmentImageAvailable,
@@ -22,7 +22,6 @@ import {
 } from "../docker-environment-agent.js";
 
 const tempDirs: string[] = [];
-const cleanupPaths: string[] = [];
 const originalBeanbagRoot = process.env.BEANBAG_ROOT;
 
 function makeTempDir(prefix: string): string {
@@ -47,9 +46,6 @@ function createDeferred() {
 afterEach(() => {
   process.env.BEANBAG_ROOT = originalBeanbagRoot;
   vi.restoreAllMocks();
-  for (const path of cleanupPaths.splice(0)) {
-    rmSync(path, { recursive: true, force: true });
-  }
   for (const dir of tempDirs.splice(0)) {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -278,9 +274,6 @@ describe("docker environment-agent helper", () => {
         ],
       },
     ]);
-
-    const stateDir = join(beanbagRoot, "environment-agents", "project-1");
-    cleanupPaths.push(stateDir);
   });
 
   it("coalesces concurrent docker managed agent startup for the same thread", async () => {
@@ -292,14 +285,6 @@ describe("docker environment-agent helper", () => {
     const artifactEntry = join(artifactRoot, "dist", "environment-agent.bundle.mjs");
     mkdirSync(dirname(artifactEntry), { recursive: true });
     writeFileSync(artifactEntry, "console.log('agent')\n", "utf8");
-
-    const statePath = __testOnly__resolveManagedDockerEnvironmentAgentStateFilePath({
-      projectId: "project-lock",
-      threadId: "thread-lock",
-      environmentId: "docker",
-      workspaceRootPath: workspaceRoot,
-    });
-    cleanupPaths.push(join(beanbagRoot, "environment-agents", "project-lock"));
 
     const waitGate = createDeferred();
     const ensureArgs = {
@@ -341,7 +326,12 @@ describe("docker environment-agent helper", () => {
     await Promise.all([first, second]);
 
     expect(commands).toHaveLength(3);
-    expect(JSON.parse(readFileSync(statePath, "utf8"))).toMatchObject({
+    expect(__testOnly__getManagedDockerEnvironmentAgentRecord({
+      projectId: "project-lock",
+      threadId: "thread-lock",
+      environmentId: "docker",
+      workspaceRootPath: workspaceRoot,
+    })).toMatchObject({
       baseUrl: "http://127.0.0.1:4311",
       authToken: "auth-token",
       threadId: "thread-lock",
@@ -358,36 +348,6 @@ describe("docker environment-agent helper", () => {
     const beanbagRoot = makeTempDir("bb-docker-agent-existing-root-");
     process.env.BEANBAG_ROOT = beanbagRoot;
     const workspaceRoot = makeTempDir("bb-docker-agent-existing-workspace-");
-    cleanupPaths.push(join(beanbagRoot, "environment-agents", "project-existing"));
-
-    const stateFile = __testOnly__resolveManagedDockerEnvironmentAgentStateFilePath({
-      projectId: "project-existing",
-      threadId: "thread-existing",
-      environmentId: "docker",
-      workspaceRootPath: workspaceRoot,
-    });
-    mkdirSync(dirname(stateFile), { recursive: true });
-    writeFileSync(
-      stateFile,
-      JSON.stringify(
-        {
-          version: 1,
-          baseUrl: "http://127.0.0.1:4311",
-          authToken: "existing-auth-token",
-          threadId: "thread-existing",
-          projectId: "project-existing",
-          environmentId: "docker",
-          workspaceRoot,
-          containerName: "beanbag-thread-thread-existing",
-          hostPort: 4311,
-          containerPort: 4310,
-          installRoot: "/opt/beanbag/environment-agent",
-        },
-        null,
-        2,
-      ),
-      "utf8",
-    );
 
     const artifactRoot = makeTempDir("bb-docker-agent-existing-artifact-");
     const artifactEntry = join(artifactRoot, "dist", "environment-agent.bundle.mjs");
@@ -412,10 +372,26 @@ describe("docker environment-agent helper", () => {
     }, {
       run,
       waitForAgent: async () => {},
+      generateAuthToken: () => "existing-auth-token",
+      resolveArtifactEntry: () => artifactEntry,
+    });
+
+    await ensureManagedDockerEnvironmentAgent({
+      workspaceRootPath: workspaceRoot,
+      threadId: "thread-existing",
+      projectId: "project-existing",
+      environmentId: "docker",
+      runtimeEnv: { BEANBAG_ROOT: beanbagRoot },
+      dockerBin: "docker",
+      containerName: "beanbag-thread-thread-existing",
+      hostPort: 4311,
+    }, {
+      run,
+      waitForAgent: async () => {},
       generateAuthToken: () => "new-auth-token",
       resolveArtifactEntry: () => artifactEntry,
     });
 
-    expect(run).toHaveBeenCalledTimes(3);
+    expect(run).toHaveBeenCalledTimes(6);
   });
 });

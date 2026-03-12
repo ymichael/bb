@@ -67,7 +67,6 @@ describe("system health report", () => {
     writeBytes(daemonLogPath, "daemon");
     writeBytes(`${daemonLogPath}.1`, "archive");
     writeBytes(resolve(beanbagRoot, "environment-agent-logs", "proj-1", "worktree-thread-1.log"), "envlog");
-    writeBytes(resolve(beanbagRoot, "environment-agents", "proj-1", "worktree-thread-1.json"), "{}");
     writeBytes(resolve(beanbagRoot, "worktrees", "proj-1", "thread-1", "README.md"), "workspace");
     writeBytes(resolve(beanbagRoot, "attachments", "proj-1", "image.png"), "img");
     writeBytes(resolve(beanbagRoot, "backups", "daily.sql"), "backup");
@@ -113,7 +112,7 @@ describe("system health report", () => {
       idle: 1,
     });
 
-    expect(report.storage.totalBytes).toBe(49);
+    expect(report.storage.totalBytes).toBe(47);
     expect(report.storage.buckets).toEqual([
       {
         key: "database",
@@ -144,12 +143,6 @@ describe("system health report", () => {
         label: "Environment Agent Logs",
         bytes: 6,
         paths: [resolve(beanbagRoot, "environment-agent-logs")],
-      },
-      {
-        key: "environment_agent_state",
-        label: "Environment Agent State",
-        bytes: 2,
-        paths: [resolve(beanbagRoot, "environment-agents")],
       },
       {
         key: "worktrees",

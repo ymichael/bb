@@ -1,16 +1,15 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
-  __testOnly__resolveManagedHostEnvironmentAgentStateFilePath,
+  __testOnly__getManagedHostEnvironmentAgentRecord,
   ensureManagedHostEnvironmentAgent,
   resolveManagedHostEnvironmentAgentLaunchCommand,
 } from "../host-environment-agent.js";
 
 const tempDirs: string[] = [];
-const cleanupPaths: string[] = [];
 const originalBeanbagRoot = process.env.BEANBAG_ROOT;
 
 function makeTempDir(): string {
@@ -35,9 +34,6 @@ function createDeferred() {
 afterEach(() => {
   process.env.BEANBAG_ROOT = originalBeanbagRoot;
   vi.restoreAllMocks();
-  for (const path of cleanupPaths.splice(0)) {
-    rmSync(path, { recursive: true, force: true });
-  }
   for (const dir of tempDirs.splice(0)) {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -64,13 +60,6 @@ describe("host environment-agent helper", () => {
     process.env.BEANBAG_ROOT = beanbagRoot;
     const projectId = `project-${Date.now()}`;
     const workspaceRoot = makeTempDir();
-    const statePath = __testOnly__resolveManagedHostEnvironmentAgentStateFilePath({
-      projectId,
-      threadId: "thread-1",
-      environmentId: "worktree",
-      workspaceRootPath: workspaceRoot,
-    });
-    cleanupPaths.push(join(beanbagRoot, "environment-agents", projectId));
 
     const waitGate = createDeferred();
     const spawnProcess = vi.fn(() => ({
@@ -109,7 +98,12 @@ describe("host environment-agent helper", () => {
     waitGate.resolve();
     await Promise.all([first, second]);
 
-    expect(JSON.parse(readFileSync(statePath, "utf8"))).toMatchObject({
+    expect(__testOnly__getManagedHostEnvironmentAgentRecord({
+      projectId,
+      threadId: "thread-1",
+      environmentId: "worktree",
+      workspaceRootPath: workspaceRoot,
+    })).toMatchObject({
       pid: 4321,
       port: 4123,
       authToken: "auth-token",

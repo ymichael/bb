@@ -262,7 +262,6 @@ export type SystemHealthStorageBucketKey =
   | "database_shm"
   | "daemon_logs"
   | "environment_agent_logs"
-  | "environment_agent_state"
   | "worktrees"
   | "attachments"
   | "backups";

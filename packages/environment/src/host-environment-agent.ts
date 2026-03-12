@@ -1,21 +1,17 @@
 import { spawn } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { createServer } from "node:net";
 import { request as httpRequest } from "node:http";
 import { fileURLToPath } from "node:url";
-import { dirname, join } from "node:path";
 import type { EnvironmentAgentConnectionTarget } from "@beanbag/environment-agent";
-import { resolveBeanbagPath } from "@beanbag/agent-core/storage-paths";
 import { resolveDockerEnvironmentAgentArtifactEntry } from "./docker-environment-agent.js";
 
 const HOST = "127.0.0.1";
 const START_TIMEOUT_MS = 5_000;
 const HEALTH_TIMEOUT_MS = 500;
-const STATE_VERSION = 1 as const;
 
 interface ManagedHostEnvironmentAgentRecord {
-  version: typeof STATE_VERSION;
   pid: number;
   port: number;
   baseUrl: string;
@@ -47,6 +43,7 @@ interface EnsureManagedHostEnvironmentAgentDeps {
 }
 
 const hostEnvironmentAgentLocks = new Map<string, Promise<void>>();
+const managedHostEnvironmentAgents = new Map<string, ManagedHostEnvironmentAgentRecord>();
 
 function managedHostEnvironmentAgentIdentityKey(
   args: ManagedHostEnvironmentAgentIdentity,
@@ -78,136 +75,6 @@ async function withManagedHostEnvironmentAgentLock(
   });
   hostEnvironmentAgentLocks.set(key, inFlight);
   await inFlight;
-}
-
-function sanitizeSegment(value: string): string {
-  const normalized = value
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9._-]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-  return normalized.length > 0 ? normalized : "environment";
-}
-
-function hashWorkspaceRoot(workspaceRootPath: string): string {
-  return createHash("sha1")
-    .update(workspaceRootPath)
-    .digest("hex")
-    .slice(0, 12);
-}
-
-function resolveLegacyStateFilePath(args: {
-  projectId: string;
-  threadId: string;
-  environmentId: string;
-  runtimeEnv?: Record<string, string | undefined>;
-}): string {
-  return join(
-    resolveBeanbagPath(args.runtimeEnv, "environment-agents"),
-    sanitizeSegment(args.projectId),
-    `${sanitizeSegment(args.environmentId)}-${sanitizeSegment(args.threadId)}.json`,
-  );
-}
-
-function resolveStateFilePath(args: {
-  projectId: string;
-  threadId: string;
-  environmentId: string;
-  workspaceRootPath: string;
-  runtimeEnv?: Record<string, string | undefined>;
-}): string {
-  return join(
-    resolveBeanbagPath(args.runtimeEnv, "environment-agents"),
-    sanitizeSegment(args.projectId),
-    `${sanitizeSegment(args.environmentId)}-${sanitizeSegment(args.threadId)}-${hashWorkspaceRoot(args.workspaceRootPath)}.json`,
-  );
-}
-
-function resolveStateFilePathCandidates(args: {
-  projectId: string;
-  threadId: string;
-  environmentId: string;
-  workspaceRootPath?: string;
-  runtimeEnv?: Record<string, string | undefined>;
-}): string[] {
-  const candidates: string[] = [];
-  if (args.workspaceRootPath) {
-    candidates.push(resolveStateFilePath({
-      projectId: args.projectId,
-      threadId: args.threadId,
-      environmentId: args.environmentId,
-      workspaceRootPath: args.workspaceRootPath,
-      runtimeEnv: args.runtimeEnv,
-    }));
-  }
-  candidates.push(resolveLegacyStateFilePath(args));
-  return Array.from(new Set(candidates));
-}
-
-function readRecord(args: {
-  projectId: string;
-  threadId: string;
-  environmentId: string;
-  workspaceRootPath?: string;
-  runtimeEnv?: Record<string, string | undefined>;
-}): ManagedHostEnvironmentAgentRecord | undefined {
-  for (const stateFilePath of resolveStateFilePathCandidates(args)) {
-    if (!existsSync(stateFilePath)) {
-      continue;
-    }
-
-    try {
-      const parsed = JSON.parse(readFileSync(stateFilePath, "utf8")) as Partial<ManagedHostEnvironmentAgentRecord>;
-      if (
-        parsed.version !== STATE_VERSION ||
-        typeof parsed.pid !== "number" ||
-        typeof parsed.port !== "number" ||
-        typeof parsed.baseUrl !== "string" ||
-        typeof parsed.authToken !== "string" ||
-        typeof parsed.threadId !== "string" ||
-        typeof parsed.projectId !== "string" ||
-        typeof parsed.environmentId !== "string" ||
-        typeof parsed.workspaceRoot !== "string"
-      ) {
-        continue;
-      }
-      return parsed as ManagedHostEnvironmentAgentRecord;
-    } catch {
-      continue;
-    }
-  }
-  return undefined;
-}
-
-function writeRecord(
-  args: {
-    projectId: string;
-    threadId: string;
-    environmentId: string;
-    workspaceRootPath: string;
-    runtimeEnv?: Record<string, string | undefined>;
-  },
-  record: ManagedHostEnvironmentAgentRecord,
-): void {
-  const stateFilePath = resolveStateFilePath(args);
-  mkdirSync(dirname(stateFilePath), { recursive: true });
-  writeFileSync(stateFilePath, JSON.stringify(record, null, 2), "utf8");
-  const legacyStateFilePath = resolveLegacyStateFilePath(args);
-  if (legacyStateFilePath !== stateFilePath) {
-    rmSync(legacyStateFilePath, { force: true });
-  }
-}
-
-function removeRecord(args: {
-  projectId: string;
-  threadId: string;
-  environmentId: string;
-  workspaceRootPath?: string;
-  runtimeEnv?: Record<string, string | undefined>;
-}): void {
-  for (const stateFilePath of resolveStateFilePathCandidates(args)) {
-    rmSync(stateFilePath, { force: true });
-  }
 }
 
 function toManagedHostEnvironmentAgentTarget(args: {
@@ -351,8 +218,8 @@ export async function ensureManagedHostEnvironmentAgent(args: {
 
   let managedTarget: EnvironmentAgentConnectionTarget | undefined;
   await withManagedHostEnvironmentAgentLock(stateIdentity, async () => {
-    const stateRecordIdentity = { ...stateIdentity, runtimeEnv: args.runtimeEnv };
-    const existing = readRecord(stateRecordIdentity);
+    const identityKey = managedHostEnvironmentAgentIdentityKey(stateIdentity);
+    const existing = managedHostEnvironmentAgents.get(identityKey);
     if (existing) {
       if (checkProcessAlive(existing.pid)) {
         try {
@@ -361,7 +228,7 @@ export async function ensureManagedHostEnvironmentAgent(args: {
           // Best-effort cleanup of stale managed agents.
         }
       }
-      removeRecord(stateRecordIdentity);
+      managedHostEnvironmentAgents.delete(identityKey);
     }
 
     const port = await (deps.allocatePort ?? allocatePort)();
@@ -397,8 +264,7 @@ export async function ensureManagedHostEnvironmentAgent(args: {
     child.unref?.();
 
     await (deps.waitForAgent ?? waitForEnvironmentAgent)(baseUrl, authToken);
-    writeRecord(stateRecordIdentity, {
-      version: STATE_VERSION,
+    const record = {
       pid: child.pid!,
       port,
       baseUrl,
@@ -407,31 +273,13 @@ export async function ensureManagedHostEnvironmentAgent(args: {
       projectId: args.projectId,
       environmentId: args.environmentId,
       workspaceRoot: args.workspaceRootPath,
-    });
+    };
+    managedHostEnvironmentAgents.set(identityKey, record);
     managedTarget = toManagedHostEnvironmentAgentTarget({
-      record: {
-        version: STATE_VERSION,
-        pid: child.pid!,
-        port,
-        baseUrl,
-        authToken,
-        threadId: args.threadId,
-        projectId: args.projectId,
-        environmentId: args.environmentId,
-        workspaceRoot: args.workspaceRootPath,
-      },
+      record,
     });
   });
-  return managedTarget ?? (() => {
-    const record = readRecord({
-      projectId: args.projectId,
-      threadId: args.threadId,
-      environmentId: args.environmentId,
-      workspaceRootPath: args.workspaceRootPath,
-      runtimeEnv: args.runtimeEnv,
-    });
-    return record ? toManagedHostEnvironmentAgentTarget({ record }) : undefined;
-  })();
+  return managedTarget;
 }
 
 export async function disposeManagedHostEnvironmentAgent(args: {
@@ -452,8 +300,8 @@ export async function disposeManagedHostEnvironmentAgent(args: {
   };
 
   await withManagedHostEnvironmentAgentLock(stateIdentity, async () => {
-    const stateRecordIdentity = { ...stateIdentity, runtimeEnv: args.runtimeEnv };
-    const existing = readRecord(stateRecordIdentity);
+    const identityKey = managedHostEnvironmentAgentIdentityKey(stateIdentity);
+    const existing = managedHostEnvironmentAgents.get(identityKey);
     if (existing && isProcessAlive(existing.pid)) {
       try {
         process.kill(existing.pid, "SIGTERM");
@@ -461,16 +309,15 @@ export async function disposeManagedHostEnvironmentAgent(args: {
         // Best-effort cleanup for already-exited processes.
       }
     }
-    removeRecord(stateRecordIdentity);
+    managedHostEnvironmentAgents.delete(identityKey);
   });
 }
 
-export function __testOnly__resolveManagedHostEnvironmentAgentStateFilePath(args: {
+export function __testOnly__getManagedHostEnvironmentAgentRecord(args: {
   projectId: string;
   threadId: string;
   environmentId: string;
   workspaceRootPath: string;
-  runtimeEnv?: Record<string, string | undefined>;
-}): string {
-  return resolveStateFilePath(args);
+}): ManagedHostEnvironmentAgentRecord | undefined {
+  return managedHostEnvironmentAgents.get(managedHostEnvironmentAgentIdentityKey(args));
 }

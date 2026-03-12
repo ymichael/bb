@@ -16,7 +16,6 @@ import {
   resolveDefaultEnvironmentAgentLogFilePath,
 } from "@beanbag/environment-agent";
 import {
-  resolveManagedEnvironmentAgentStateFilePaths,
   resolveManagedWorktreeRootForProject,
 } from "./managed-storage-paths.js";
 
@@ -132,7 +131,6 @@ function scanFilesRecursively(rootPath: string): string[] {
 
 export interface ManagedArtifactReconcilerResult {
   removedLogArtifacts: number;
-  removedStateFiles: number;
   removedWorkspaceDirectories: number;
 }
 
@@ -174,7 +172,6 @@ export function reconcileManagedArtifactStorage(
   const projectById = new Map(args.projects.map((project) => [project.id, project]));
 
   const keptLogPaths = new Set<string>();
-  const keptStatePaths = new Set<string>();
   const activeThreadIdsByProjectId = new Map<string, Set<string>>();
   const worktreeRootsByProjectId = new Map<string, string>();
   const globalWorktreeRoots = new Set<string>();
@@ -200,17 +197,6 @@ export function reconcileManagedArtifactStorage(
           environmentId,
           runtimeEnv: args.runtimeEnv,
         }));
-      }
-      if (thread.archivedAt === undefined) {
-        const project = projectById.get(thread.projectId);
-        const statePaths = resolveManagedEnvironmentAgentStateFilePaths({
-          thread,
-          project,
-          runtimeEnv: args.runtimeEnv,
-        });
-        for (const statePath of statePaths) {
-          keptStatePaths.add(statePath);
-        }
       }
     }
 
@@ -239,15 +225,6 @@ export function reconcileManagedArtifactStorage(
     removedLogArtifacts += 1;
   }
   removeEmptyDirectories(environmentAgentLogsRoot);
-
-  let removedStateFiles = 0;
-  const environmentAgentStateRoot = resolveBeanbagPath(args.runtimeEnv, "environment-agents");
-  for (const filePath of scanFilesRecursively(environmentAgentStateRoot)) {
-    if (keptStatePaths.has(filePath)) continue;
-    rmSync(filePath, { force: true });
-    removedStateFiles += 1;
-  }
-  removeEmptyDirectories(environmentAgentStateRoot);
 
   let removedWorkspaceDirectories = 0;
   for (const project of args.projects) {
@@ -279,7 +256,6 @@ export function reconcileManagedArtifactStorage(
 
   return {
     removedLogArtifacts,
-    removedStateFiles,
     removedWorkspaceDirectories,
   };
 }

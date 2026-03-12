@@ -693,11 +693,10 @@ export class Orchestrator implements ThreadOrchestrator {
 
     if (
       result.removedLogArtifacts > 0 ||
-      result.removedStateFiles > 0 ||
       result.removedWorkspaceDirectories > 0
     ) {
       console.log(
-        `Managed artifact cleanup removed ${result.removedLogArtifacts} log sets, ${result.removedStateFiles} state files, ${result.removedWorkspaceDirectories} workspace directories.`,
+        `Managed artifact cleanup removed ${result.removedLogArtifacts} log sets and ${result.removedWorkspaceDirectories} workspace directories.`,
       );
     }
   }
