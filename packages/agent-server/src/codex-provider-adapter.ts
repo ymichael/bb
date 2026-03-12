@@ -250,11 +250,13 @@ export function createCodexProviderAdapter(
       providerThreadId: string,
       context: ProviderThreadContext,
       options?: ProviderExecutionOptions,
+      resumePath?: string,
     ): Record<string, unknown> {
       return withExecutionOptions(
         withThreadEnvironmentPolicy(
           {
             threadId: providerThreadId,
+            ...(resumePath ? { path: resumePath } : {}),
             approvalPolicy: DEFAULT_APPROVAL_POLICY,
             sandbox: resolveSandboxMode(options?.sandboxMode),
           },

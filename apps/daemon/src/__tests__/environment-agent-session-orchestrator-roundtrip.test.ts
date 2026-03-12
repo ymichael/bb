@@ -636,6 +636,11 @@ describe("environment-agent session orchestrator roundtrip", () => {
       threadId,
       providerThreadId: "provider-thread-1",
     });
+    await vi.waitFor(() => {
+      expect(events.listByThread(threadId).map((event) => event.type)).toContain(
+        "client/turn/start",
+      );
+    });
 
     await applyProviderEvent({
       threadId,
@@ -1040,7 +1045,7 @@ describe("environment-agent session orchestrator roundtrip", () => {
     expect(threads.getById(threadId)?.status).toBe("idle");
   });
 
-  it("rolls idle threads back out of active and retries through resume after a stale turn.start failure", async () => {
+  it("recovers a stale turn.start within the same tell and only persists the accepted turn", async () => {
     const threadId = createThread("idle");
     installRuntime(threadId);
     const sessionId = openSession(threadId);
@@ -1052,7 +1057,10 @@ describe("environment-agent session orchestrator roundtrip", () => {
         providerId: "codex",
         method: "thread/started",
         payload: {
-          thread: { id: "provider-thread-1" },
+          thread: {
+            id: "provider-thread-1",
+            path: "/tmp/codex-rollout-1.jsonl",
+          },
         },
       }),
     });
@@ -1077,6 +1085,15 @@ describe("environment-agent session orchestrator roundtrip", () => {
       sessionId,
       afterCursor: providerEnsureForResume.commandCursor,
       result: { threadId: "provider-thread-1" },
+    });
+    expect(resume.command).toMatchObject({
+      type: "thread.resume",
+      threadId,
+      providerThreadId: "provider-thread-1",
+      params: expect.objectContaining({
+        threadId: "provider-thread-1",
+        path: "/tmp/codex-rollout-1.jsonl",
+      }),
     });
     await vi.waitFor(() => {
       expect(commands.listPendingByThreadId(threadId)).toHaveLength(1);
@@ -1104,64 +1121,59 @@ describe("environment-agent session orchestrator roundtrip", () => {
       providerThreadId: "provider-thread-1",
     });
 
-    await expect(tellPromise).rejects.toThrow("thread not found: provider-thread-1");
-    expect(threads.getById(threadId)?.status).toBe("idle");
-    expect(
-      events.listByThread(threadId).find((event) => event.type === "system/error")?.data,
-    ).toMatchObject({
-      code: "missing_provider_thread",
-      message: "Failed to start turn",
-      detail: "thread not found: provider-thread-1",
-    });
-
-    const retryTell = orchestrator.tell(threadId, {
-      input: [{ type: "text", text: "Retry after stale id cleanup" }],
-    });
-
     await vi.waitFor(() => {
       expect(commands.listPendingByThreadId(threadId)).toHaveLength(1);
     });
-    const retryEnsureForResume = completeCommand({
+    const providerEnsureForRestart = completeCommand({
       threadId,
       sessionId,
+      afterCursor: failedTurnStart.commandCursor,
       result: { running: true, launched: true, pid: 123 },
     });
-    expect(retryEnsureForResume.command).toMatchObject({
+    expect(providerEnsureForRestart.command).toMatchObject({
       type: "provider.ensure",
     });
 
     await vi.waitFor(() => {
       expect(commands.listPendingByThreadId(threadId)).toHaveLength(1);
     });
-    const retryResume = completeCommand({
+    const restartedThread = completeCommand({
       threadId,
       sessionId,
-      afterCursor: retryEnsureForResume.commandCursor,
-      result: { threadId: "provider-thread-1" },
+      afterCursor: providerEnsureForRestart.commandCursor,
+      result: { threadId: "provider-thread-2" },
     });
-    expect(retryResume.command).toMatchObject({
-      type: "thread.resume",
+    expect(restartedThread.command).toMatchObject({
+      type: "thread.start",
       threadId,
-      providerThreadId: "provider-thread-1",
     });
 
     await vi.waitFor(() => {
       expect(commands.listPendingByThreadId(threadId)).toHaveLength(1);
     });
-    const retryEnsureForTurn = completeCommand({
+    const providerEnsureForRetryTurn = completeCommand({
       threadId,
       sessionId,
-      afterCursor: retryResume.commandCursor,
+      afterCursor: restartedThread.commandCursor,
       result: { running: true, launched: true, pid: 123 },
     });
+    expect(providerEnsureForRetryTurn.command).toMatchObject({
+      type: "provider.ensure",
+    });
+
     await vi.waitFor(() => {
       expect(commands.listPendingByThreadId(threadId)).toHaveLength(1);
     });
-    completeCommand({
+    const retriedTurnStart = completeCommand({
       threadId,
       sessionId,
-      afterCursor: retryEnsureForTurn.commandCursor,
+      afterCursor: providerEnsureForRetryTurn.commandCursor,
       result: { ok: true },
+    });
+    expect(retriedTurnStart.command).toMatchObject({
+      type: "turn.start",
+      threadId,
+      providerThreadId: "provider-thread-2",
     });
     await applyProviderEvent({
       threadId,
@@ -1177,9 +1189,23 @@ describe("environment-agent session orchestrator roundtrip", () => {
       method: "turn/completed",
       payload: { turnId: "turn-2" },
     });
-    await retryTell;
+    await tellPromise;
 
     expect(threads.getById(threadId)?.status).toBe("idle");
+    expect(events.listByThread(threadId).map((event) => event.type)).not.toContain(
+      "system/error",
+    );
+    const clientTurnStarts = events.listByThread(threadId)
+      .filter((event) => event.type === "client/turn/start");
+    expect(clientTurnStarts).toHaveLength(1);
+    expect(clientTurnStarts[0]?.data).toMatchObject({
+      input: [{ type: "text", text: "Retry stale turn start" }],
+      request: {
+        params: expect.objectContaining({
+          threadId: "provider-thread-2",
+        }),
+      },
+    });
   });
 
   it("rejects steer without an active turn before appending client turn start events", async () => {

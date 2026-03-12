@@ -108,6 +108,7 @@ export interface ProviderAdapter {
     providerThreadId: string,
     context: ProviderThreadContext,
     options?: ProviderExecutionOptions,
+    resumePath?: string,
   ): Record<string, unknown>;
   createTurnStartParams(
     providerThreadId: string,

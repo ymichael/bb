@@ -204,8 +204,16 @@ describe("codex provider adapter", () => {
       },
     });
 
-    expect(adapter.createThreadResumeParams("provider-thread-1", context)).toMatchObject({
+    expect(
+      adapter.createThreadResumeParams(
+        "provider-thread-1",
+        context,
+        undefined,
+        "/tmp/codex-rollout-1.jsonl",
+      ),
+    ).toMatchObject({
       threadId: "provider-thread-1",
+      path: "/tmp/codex-rollout-1.jsonl",
       approvalPolicy: "never",
       sandbox: "danger-full-access",
       config: {

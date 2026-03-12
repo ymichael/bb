@@ -977,29 +977,32 @@ export class Orchestrator implements ThreadOrchestrator {
     }
 
     this._setThreadStatus(threadId, "active");
-
-    const turnParams = this._buildTurnStartParams(providerThreadId, providerInput, options);
-    this._persistOutboundStartEvent(threadId, "client/turn/start", turnParams, requestedInput, {
-      source: "tell",
-      initiator: context.initiator,
-    });
     try {
-      await this._withEnvironmentAgentAccess(threadId, async ({ client, providerLaunch }) => {
-        await this.agentServer.sendTurnCommand({
-          client,
+      const acceptedProviderThreadId =
+        await this._sendTurnCommandWithStaleProviderRetry({
           threadId,
+          projectId: thread.projectId,
           providerThreadId,
           activeTurnId,
           input: providerInput,
           options,
           mode: tellMode === "steer" ? "steer" : tellMode === "auto" ? "auto" : "start",
-          context: this._buildProviderThreadContext({
-            threadId,
-            projectId: thread.projectId,
-          }),
-          providerLaunch,
         });
-      });
+      const turnParams = this._buildTurnStartParams(
+        acceptedProviderThreadId,
+        providerInput,
+        options,
+      );
+      this._persistOutboundStartEvent(
+        threadId,
+        "client/turn/start",
+        turnParams,
+        requestedInput,
+        {
+          source: "tell",
+          initiator: context.initiator,
+        },
+      );
     } catch (error) {
       if (this.agentServer.isMissingProviderThreadError(error)) {
         this.handleEnvironmentAgentSessionInvalidated(threadId);
@@ -2970,7 +2973,7 @@ export class Orchestrator implements ThreadOrchestrator {
       });
       throw error;
     }
-    const providerThreadId = started.providerThreadId;
+    let providerThreadId = started.providerThreadId;
     this.providerThreadIdByThreadId.set(threadId, providerThreadId);
     this._appendEvent(threadId, "system/provisioning/completed", {
       environmentId: environmentRuntime.environment.kind,
@@ -2998,6 +3001,21 @@ export class Orchestrator implements ThreadOrchestrator {
 
     if (requestedInput.length > 0) {
       this._setThreadStatus(threadId, "active");
+      providerThreadId = await this._sendTurnCommandWithStaleProviderRetry({
+        threadId,
+        projectId: req.projectId,
+        providerThreadId,
+        input: providerInput,
+        options: req,
+        mode: "start",
+      });
+      if (
+        providerThreadId !== started.providerThreadId &&
+        hydratedThreadAfterStart?.title &&
+        this.lockedTitleThreadIds.has(threadId)
+      ) {
+        this._sendThreadNameSet(threadId, providerThreadId, hydratedThreadAfterStart.title);
+      }
       const turnStartParams = this._buildTurnStartParams(providerThreadId, providerInput, req);
       this._persistOutboundStartEvent(
         threadId,
@@ -3009,32 +3027,6 @@ export class Orchestrator implements ThreadOrchestrator {
           initiator: "agent",
         },
       );
-      await this._withEnvironmentAgentTarget({
-        thread:
-          this.threadRepo.getById(threadId) ??
-          ({
-            id: threadId,
-            projectId: req.projectId,
-            status: "active",
-            createdAt: Date.now(),
-            updatedAt: Date.now(),
-            environmentId: environmentRuntime.environment.kind,
-          } as Thread),
-        projectRootPath: project.rootPath,
-        target: environmentRuntime.agentConnectionTarget,
-        action: async ({ client, providerLaunch }) => {
-        await this.agentServer.sendTurnCommand({
-          client,
-          threadId,
-          providerThreadId,
-          input: providerInput,
-          options: req,
-          mode: "start",
-          context: providerContext,
-          providerLaunch,
-        });
-        },
-      });
       return;
     }
 
@@ -3487,6 +3479,26 @@ export class Orchestrator implements ThreadOrchestrator {
     return undefined;
   }
 
+  private _resolvePersistedProviderThreadResumePath(
+    threadId: string,
+  ): string | undefined {
+    const startedEvent = this.eventRepo.getLatestByType(threadId, "thread/started");
+    if (!startedEvent) return undefined;
+    const payload = toRecord(unwrapProviderEventPayload(startedEvent.data) ?? startedEvent.data);
+    return getStringField(toRecord(payload?.thread), "path") ?? undefined;
+  }
+
+  private _resolvePersistedThreadStartBaseInstructions(
+    threadId: string,
+  ): string | undefined {
+    const startEvent = this.eventRepo.getLatestByType(threadId, "client/thread/start");
+    if (!startEvent) return undefined;
+    const startData = toRecord(startEvent.data);
+    const request = toRecord(startData?.request);
+    const params = toRecord(request?.params);
+    return getStringField(params, "baseInstructions") ?? undefined;
+  }
+
   private _resolvePersistedActiveTurnId(threadId: string): string | undefined {
     const thread = this.threadRepo.getById(threadId);
     if (thread && thread.status !== "active") {
@@ -3542,6 +3554,7 @@ export class Orchestrator implements ThreadOrchestrator {
     }
 
     const persistedThreadId = this._resolvePersistedProviderThreadId(threadId);
+    const resumePath = this._resolvePersistedProviderThreadResumePath(threadId);
     if (!persistedThreadId) {
       throw inactiveSessionError(this.agentServer.getInactiveSessionMessage(threadId));
     }
@@ -3576,6 +3589,7 @@ export class Orchestrator implements ThreadOrchestrator {
               projectId: thread.projectId,
             }),
             options,
+            resumePath,
             providerLaunch,
           }),
       });
@@ -3616,6 +3630,121 @@ export class Orchestrator implements ThreadOrchestrator {
       if (reprovisionedThreadId) return reprovisionedThreadId;
 
       throw err;
+    }
+  }
+
+  private async _restartProviderThreadAfterMissingTurnStart(
+    threadId: string,
+    options?: PromptExecutionOptions,
+  ): Promise<string> {
+    const thread = this.threadRepo.getById(threadId);
+    if (!thread) {
+      throw threadNotFoundError(threadId);
+    }
+    if (thread.archivedAt !== undefined) {
+      throw threadArchivedError(threadId);
+    }
+
+    const project = this.projectRepo.getById(thread.projectId);
+    if (!project) {
+      throw projectNotFoundError(thread.projectId);
+    }
+
+    const defaultOptions = this.getDefaultExecutionOptions(threadId);
+    const runtimeEnvironment =
+      this.environmentService.getEnvironmentRuntime(threadId)?.environment;
+    const developerInstructions =
+      this._resolvePersistedThreadStartBaseInstructions(threadId) ??
+      this._buildDeveloperInstructions({
+        projectInstructions: project.projectInstructions,
+        environment: runtimeEnvironment,
+      });
+    const request: SpawnThreadRequest = {
+      projectId: thread.projectId,
+      ...(developerInstructions ? { developerInstructions } : {}),
+      ...(options?.model ?? defaultOptions?.model
+        ? { model: options?.model ?? defaultOptions?.model }
+        : {}),
+      ...(options?.serviceTier ?? defaultOptions?.serviceTier
+        ? { serviceTier: options?.serviceTier ?? defaultOptions?.serviceTier }
+        : {}),
+      ...(options?.reasoningLevel ?? defaultOptions?.reasoningLevel
+        ? {
+            reasoningLevel:
+              options?.reasoningLevel ?? defaultOptions?.reasoningLevel,
+          }
+        : {}),
+      ...(options?.sandboxMode ?? defaultOptions?.sandboxMode
+        ? { sandboxMode: options?.sandboxMode ?? defaultOptions?.sandboxMode }
+        : {}),
+      environmentId: thread.environmentId,
+    };
+    const providerContext = this._buildProviderThreadContext({
+      threadId,
+      projectId: thread.projectId,
+    });
+    const access = await this._ensureEnvironmentAgentAccess(threadId);
+    const started = await this._withEnvironmentAgentTarget({
+      thread: access.thread,
+      projectRootPath: access.projectRootPath,
+      target: access.target,
+      action: async ({ client, providerLaunch }) =>
+        this.agentServer.startThreadCommand({
+          client,
+          threadId,
+          projectId: thread.projectId,
+          request,
+          context: providerContext,
+          providerLaunch,
+        }),
+    });
+    this.providerThreadIdByThreadId.set(threadId, started.providerThreadId);
+    return started.providerThreadId;
+  }
+
+  private async _sendTurnCommandWithStaleProviderRetry(args: {
+    threadId: string;
+    projectId: string;
+    providerThreadId: string;
+    activeTurnId?: string;
+    input: PromptInput[];
+    options?: PromptExecutionOptions;
+    mode: "auto" | "steer" | "start";
+  }): Promise<string> {
+    const sendTurn = async (providerThreadId: string): Promise<void> => {
+      await this._withEnvironmentAgentAccess(args.threadId, async ({ client, providerLaunch }) => {
+        await this.agentServer.sendTurnCommand({
+          client,
+          threadId: args.threadId,
+          providerThreadId,
+          activeTurnId: args.activeTurnId,
+          input: args.input,
+          options: args.options,
+          mode: args.mode,
+          context: this._buildProviderThreadContext({
+            threadId: args.threadId,
+            projectId: args.projectId,
+          }),
+          providerLaunch,
+        });
+      });
+    };
+
+    try {
+      await sendTurn(args.providerThreadId);
+      return args.providerThreadId;
+    } catch (error) {
+      if (!this.agentServer.isMissingProviderThreadError(error) || args.activeTurnId) {
+        throw error;
+      }
+      this.handleEnvironmentAgentSessionInvalidated(args.threadId);
+      const recoveredProviderThreadId =
+        await this._restartProviderThreadAfterMissingTurnStart(
+          args.threadId,
+          args.options,
+        );
+      await sendTurn(recoveredProviderThreadId);
+      return recoveredProviderThreadId;
     }
   }
 

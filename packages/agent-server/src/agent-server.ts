@@ -255,6 +255,7 @@ export class AgentServer {
     providerThreadId: string;
     context: ProviderThreadContext;
     options?: ProviderExecutionOptions;
+    resumePath?: string;
     providerLaunch?: EnvironmentAgentProviderLaunchWrapper;
   }): Promise<{ providerThreadId: string }> {
     await this.ensureProviderRunningForCommand(
@@ -271,6 +272,7 @@ export class AgentServer {
         args.providerThreadId,
         args.context,
         args.options,
+        args.resumePath,
       ),
       initialize: this.buildInitializeRequest(),
     });
