@@ -84,12 +84,17 @@ export function registerDaemonCommands(program: Command, getUrl: () => string): 
   daemon
     .command("health")
     .description("Show daemon health and managed storage usage")
-    .action(async () => {
+    .option("--json", "Print machine-readable JSON output")
+    .action(async (opts: { json?: boolean }) => {
       const client = createClient(getUrl());
       try {
         const report = await unwrap<SystemHealthReport>(
           client.api.v1.system.health.$get(),
         );
+        if (opts.json) {
+          console.log(JSON.stringify(report, null, 2));
+          return;
+        }
         printHealthReport(report);
       } catch (err: unknown) {
         console.error(`Error: ${(err as Error).message}`);

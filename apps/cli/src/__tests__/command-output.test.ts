@@ -436,7 +436,7 @@ describe("CLI command output contracts", () => {
           headers: { "Content-Type": "application/json" },
         },
       ));
-    createClientMock.mockReturnValue(asDaemonClient({
+    vi.mocked(createClient).mockReturnValue(asDaemonClient({
       api: {
         v1: {
           system: {
@@ -458,5 +458,232 @@ describe("CLI command output contracts", () => {
     expect(errorLines).toContain("Daemon shutdown blocked by active thread work");
     expect(errorLines).toContain("Blocking threads:");
     expect(errorLines).toContain("- thread-1 (active, project proj-1)");
+  });
+});
+
+describe("CLI JSON output contracts", () => {
+  const createClientMock = vi.mocked(createClient);
+  const unwrapMock = vi.mocked(unwrap);
+
+  beforeEach(() => {
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(process, "exit").mockImplementation((code?: string | number | null) => {
+      throw new Error(`process.exit:${code ?? 0}`);
+    });
+
+    createClientMock.mockReset();
+    unwrapMock.mockReset();
+    unwrapMock.mockImplementation(async (responsePromise: Promise<unknown>) => {
+      return responsePromise;
+    });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("bb daemon health --json prints the raw report", async () => {
+    const report = {
+      generatedAt: 1_700_000_000_000,
+      uptime: 3661,
+      projectCount: 2,
+      runningThreads: 1,
+      threadCounts: {
+        total: 4,
+        archived: 1,
+        created: 0,
+        provisioning: 1,
+        provisioned: 0,
+        provisioningFailed: 0,
+        error: 0,
+        active: 1,
+        idle: 2,
+      },
+      storage: {
+        totalBytes: 1536,
+        buckets: [],
+      },
+    };
+    const healthGet = vi.fn(async () =>
+      new Response(JSON.stringify(report), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }));
+    createClientMock.mockReturnValue(asDaemonClient({
+      api: {
+        v1: {
+          system: {
+            health: {
+              $get: healthGet,
+            },
+          },
+        },
+      },
+    }));
+    unwrapMock.mockImplementation(async (responsePromise: Promise<unknown>) => {
+      const response = await responsePromise as Response;
+      return response.json();
+    });
+
+    await runCommand(["daemon", "health", "--json"], (program) =>
+      registerDaemonCommands(program, () => "http://daemon"),
+    );
+
+    expect(JSON.parse(String(vi.mocked(console.log).mock.calls[0]?.[0]))).toEqual(
+      report,
+    );
+  });
+
+  it("bb thread show --json prints the raw thread", async () => {
+    const thread: Thread = {
+      id: "thread-json-show",
+      projectId: "proj-1",
+      status: "idle",
+      createdAt: 1,
+      updatedAt: 2,
+    };
+    const get = vi.fn(async () => thread);
+    createClientMock.mockReturnValue(asDaemonClient({
+      api: {
+        v1: {
+          threads: {
+            ":id": {
+              $get: get,
+            },
+          },
+        },
+      },
+    }));
+
+    await runCommand(["thread", "show", "thread-json-show", "--json"], (program) =>
+      registerThreadCommands(program, () => "http://daemon"),
+    );
+
+    expect(JSON.parse(String(vi.mocked(console.log).mock.calls[0]?.[0]))).toEqual(
+      thread,
+    );
+  });
+
+  it("bb thread status --json prints thread and filtered recent events", async () => {
+    const thread: Thread = {
+      id: "thread-json-status",
+      projectId: "proj-1",
+      status: "active",
+      createdAt: 1,
+      updatedAt: 2,
+    };
+    const events = [
+      {
+        id: "evt-1",
+        threadId: "thread-json-status",
+        type: "turn.started",
+        data: { ok: true },
+        createdAt: 10,
+        sequence: 1,
+      },
+      {
+        id: "evt-2",
+        threadId: "thread-json-status",
+        type: "system.error",
+        data: { code: "provider_unavailable" },
+        createdAt: 20,
+        sequence: 2,
+      },
+    ];
+    const get = vi.fn(async () => thread);
+    const getEvents = vi.fn(async () => events);
+    createClientMock.mockReturnValue(asDaemonClient({
+      api: {
+        v1: {
+          threads: {
+            ":id": {
+              $get: get,
+              events: {
+                $get: getEvents,
+              },
+            },
+          },
+        },
+      },
+    }));
+
+    await runCommand(
+      ["thread", "status", "thread-json-status", "--recent-events", "5", "--json"],
+      (program) => registerThreadCommands(program, () => "http://daemon"),
+    );
+
+    expect(JSON.parse(String(vi.mocked(console.log).mock.calls[0]?.[0]))).toEqual(
+      {
+        thread,
+        recentEvents: {
+          requestedCount: 5,
+          eventMode: "summary",
+          includeLowSignal: false,
+          events: [events[1]],
+        },
+      },
+    );
+  });
+
+  it("bb thread log --json prints raw events", async () => {
+    const events = [
+      {
+        id: "evt-1",
+        threadId: "thread-json-log",
+        type: "system.error",
+        data: { code: "provider_unavailable" },
+        createdAt: 20,
+        sequence: 2,
+      },
+    ];
+    const getEvents = vi.fn(async () => events);
+    createClientMock.mockReturnValue(asDaemonClient({
+      api: {
+        v1: {
+          threads: {
+            ":id": {
+              events: {
+                $get: getEvents,
+              },
+            },
+          },
+        },
+      },
+    }));
+
+    await runCommand(["thread", "log", "thread-json-log", "--json"], (program) =>
+      registerThreadCommands(program, () => "http://daemon"),
+    );
+
+    expect(JSON.parse(String(vi.mocked(console.log).mock.calls[0]?.[0]))).toEqual(
+      events,
+    );
+  });
+
+  it("bb thread output --json prints the raw output payload", async () => {
+    const getOutput = vi.fn(async () => ({ output: "FINAL" }));
+    createClientMock.mockReturnValue(asDaemonClient({
+      api: {
+        v1: {
+          threads: {
+            ":id": {
+              output: {
+                $get: getOutput,
+              },
+            },
+          },
+        },
+      },
+    }));
+
+    await runCommand(
+      ["thread", "output", "thread-json-output", "--json"],
+      (program) => registerThreadCommands(program, () => "http://daemon"),
+    );
+
+    expect(JSON.parse(String(vi.mocked(console.log).mock.calls[0]?.[0]))).toEqual({
+      output: "FINAL",
+    });
   });
 });

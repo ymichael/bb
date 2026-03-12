@@ -182,6 +182,7 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
   thread
     .command("status [id]")
     .description("Show thread status (defaults to BB_THREAD_ID)")
+    .option("--json", "Print machine-readable JSON output")
     .option("--recent-events <count>", "Include last N thread events")
     .option(
       "--event-mode <mode>",
@@ -199,6 +200,7 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
           recentEvents?: string;
           eventMode?: string;
           includeLowSignal?: boolean;
+          json?: boolean;
         },
       ) => {
         const client = createClient(getUrl());
@@ -221,11 +223,17 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
                     query: {},
                   }),
                 );
-          printThreadStatus(thread, events, {
+          const includeLowSignal = Boolean(opts.includeLowSignal);
+          const statusPayload = buildThreadStatusPayload(thread, events, {
             recentEvents,
             eventMode,
-            includeLowSignal: Boolean(opts.includeLowSignal),
+            includeLowSignal,
           });
+          if (opts.json) {
+            console.log(JSON.stringify(statusPayload, null, 2));
+            return;
+          }
+          printThreadStatus(statusPayload);
         } catch (err: unknown) {
           console.error(`Error: ${(err as Error).message}`);
           process.exit(1);
@@ -236,13 +244,18 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
   thread
     .command("show [id]")
     .description("Show thread details (defaults to BB_THREAD_ID)")
-    .action(async (id: string | undefined) => {
+    .option("--json", "Print machine-readable JSON output")
+    .action(async (id: string | undefined, opts: { json?: boolean }) => {
       const client = createClient(getUrl());
       try {
         const threadId = requireThreadId(id);
         const thread = await unwrap<Thread>(
           client.api.v1.threads[":id"].$get({ param: { id: threadId } }),
         );
+        if (opts.json) {
+          console.log(JSON.stringify(thread, null, 2));
+          return;
+        }
         printThread(thread);
       } catch (err: unknown) {
         console.error(`Error: ${(err as Error).message}`);
@@ -501,7 +514,8 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
   thread
     .command("log [id]")
     .description("Show thread event log (defaults to BB_THREAD_ID)")
-    .action(async (id: string | undefined) => {
+    .option("--json", "Print machine-readable JSON output")
+    .action(async (id: string | undefined, opts: { json?: boolean }) => {
       const client = createClient(getUrl());
       try {
         const threadId = requireThreadId(id);
@@ -511,6 +525,10 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
             query: {},
           }),
         );
+        if (opts.json) {
+          console.log(JSON.stringify(events, null, 2));
+          return;
+        }
         for (const event of events) {
           printEvent(event);
         }
@@ -523,13 +541,18 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
   thread
     .command("output [id]")
     .description("Get the final output of a thread (defaults to BB_THREAD_ID)")
-    .action(async (id: string | undefined) => {
+    .option("--json", "Print machine-readable JSON output")
+    .action(async (id: string | undefined, opts: { json?: boolean }) => {
       const client = createClient(getUrl());
       try {
         const threadId = requireThreadId(id);
         const result = await unwrap<{ output: string }>(
           client.api.v1.threads[":id"].output.$get({ param: { id: threadId } }),
         );
+        if (opts.json) {
+          console.log(JSON.stringify(result, null, 2));
+          return;
+        }
         console.log(result.output);
       } catch (err: unknown) {
         console.error(`Error: ${(err as Error).message}`);
@@ -621,7 +644,17 @@ function printEvent(event: ThreadEvent): void {
   console.log(`time=${time} type=${event.type} data=${data}`);
 }
 
-function printThreadStatus(
+interface ThreadStatusPayload {
+  thread: Thread;
+  recentEvents?: {
+    requestedCount: number;
+    eventMode: ThreadStatusEventMode;
+    includeLowSignal: boolean;
+    events: ThreadEvent[];
+  };
+}
+
+function buildThreadStatusPayload(
   thread: Thread,
   events: ThreadEvent[],
   opts?: {
@@ -629,7 +662,31 @@ function printThreadStatus(
     eventMode: ThreadStatusEventMode;
     includeLowSignal: boolean;
   },
-): void {
+): ThreadStatusPayload {
+  const recentEventCount = opts?.recentEvents;
+  if (recentEventCount === undefined) {
+    return { thread };
+  }
+
+  const eventMode = opts?.eventMode ?? "summary";
+  const includeLowSignal = opts?.includeLowSignal ?? false;
+  const filteredEvents = includeLowSignal
+    ? events
+    : events.filter((event) => !isLowSignalThreadStatusEventType(event.type));
+
+  return {
+    thread,
+    recentEvents: {
+      requestedCount: recentEventCount,
+      eventMode,
+      includeLowSignal,
+      events: filteredEvents.slice(-recentEventCount),
+    },
+  };
+}
+
+function printThreadStatus(payload: ThreadStatusPayload): void {
+  const { thread } = payload;
   console.log(`Thread ${thread.id}`);
   console.log(`Status ${statusText(thread.status)}`);
   console.log(`Project ${thread.projectId}`);
@@ -638,28 +695,21 @@ function printThreadStatus(
   }
   console.log(`Updated ${new Date(thread.updatedAt).toLocaleString()}`);
 
-  const recentEventCount = opts?.recentEvents;
-  if (recentEventCount === undefined) return;
-  const eventMode = opts?.eventMode ?? "summary";
-
-  const includeLowSignal = opts?.includeLowSignal ?? false;
-  const filteredEvents = includeLowSignal
-    ? events
-    : events.filter((event) => !isLowSignalThreadStatusEventType(event.type));
-  const recentEvents = filteredEvents.slice(-recentEventCount);
+  const recentEvents = payload.recentEvents;
+  if (recentEvents === undefined) return;
 
   console.log("");
   console.log("Recent events:");
-  if (recentEvents.length === 0) return;
+  if (recentEvents.events.length === 0) return;
 
-  if (eventMode === "raw") {
-    for (const event of recentEvents) {
+  if (recentEvents.eventMode === "raw") {
+    for (const event of recentEvents.events) {
       printEvent(event);
     }
     return;
   }
 
-  for (const event of recentEvents) {
+  for (const event of recentEvents.events) {
     const at = new Date(event.createdAt).toLocaleTimeString();
     console.log(`- ${at} ${event.type}`);
   }
