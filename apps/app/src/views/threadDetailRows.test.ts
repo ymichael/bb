@@ -518,6 +518,42 @@ describe("buildThreadDetailRows", () => {
     expect(rows[0].message.detail).toBeUndefined();
   });
 
+  it("merges consecutive reconnect retry errors into a single row", () => {
+    const messages: UIMessage[] = [
+      {
+        ...baseMessage("error-1", 1),
+        kind: "error",
+        turnId: "turn-1",
+        rawType: "error",
+        message: "Reconnecting... 2/5",
+      },
+      {
+        ...baseMessage("error-2", 2),
+        kind: "error",
+        turnId: "turn-1",
+        rawType: "error",
+        message: "Reconnecting... 3/5",
+      },
+      {
+        ...baseMessage("error-3", 3),
+        kind: "error",
+        turnId: "turn-1",
+        rawType: "error",
+        message: "Reconnecting... 4/5",
+      },
+    ];
+
+    const rows = buildThreadDetailRows(messages);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.kind).toBe("message");
+    if (rows[0]?.kind !== "message") return;
+    expect(rows[0].message.kind).toBe("error");
+    if (rows[0].message.kind !== "error") return;
+    expect(rows[0].message.message).toBe("Reconnecting... 4/5");
+    expect(rows[0].message.sourceSeqStart).toBe(1);
+    expect(rows[0].message.sourceSeqEnd).toBe(3);
+  });
+
   it("keeps streamed provisioning output on the merged provisioning row", () => {
     const messages: UIMessage[] = [
       {

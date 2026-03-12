@@ -365,6 +365,109 @@ describe("buildThreadDetailRows primary-checkout operation collapsing", () => {
   });
 });
 
+describe("buildThreadDetailRows reconnect error collapsing", () => {
+  it("collapses consecutive reconnect retry errors into the latest row", () => {
+    const rows = buildThreadDetailRows([
+      {
+        kind: "error",
+        id: "error-1",
+        threadId: "thread-1",
+        sourceSeqStart: 10,
+        sourceSeqEnd: 10,
+        createdAt: 10,
+        turnId: "turn-1",
+        rawType: "error",
+        message: "Reconnecting... 2/5",
+      },
+      {
+        kind: "error",
+        id: "error-2",
+        threadId: "thread-1",
+        sourceSeqStart: 11,
+        sourceSeqEnd: 11,
+        createdAt: 11,
+        turnId: "turn-1",
+        rawType: "error",
+        message: "Reconnecting... 3/5",
+      },
+      {
+        kind: "error",
+        id: "error-3",
+        threadId: "thread-1",
+        sourceSeqStart: 12,
+        sourceSeqEnd: 12,
+        createdAt: 12,
+        turnId: "turn-1",
+        rawType: "error",
+        message: "Reconnecting... 4/5",
+      },
+    ]);
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.kind).toBe("message");
+    if (rows[0]?.kind !== "message") return;
+    expect(rows[0].message.kind).toBe("error");
+    if (rows[0].message.kind !== "error") return;
+    expect(rows[0].message.message).toBe("Reconnecting... 4/5");
+    expect(rows[0].message.sourceSeqStart).toBe(10);
+    expect(rows[0].message.sourceSeqEnd).toBe(12);
+    expect(rows[0].message.createdAt).toBe(12);
+    expect(rows[0].message.startedAt).toBe(10);
+  });
+
+  it("does not collapse reconnect errors across breaks or retry budgets", () => {
+    const rows = buildThreadDetailRows([
+      {
+        kind: "error",
+        id: "error-1",
+        threadId: "thread-1",
+        sourceSeqStart: 10,
+        sourceSeqEnd: 10,
+        createdAt: 10,
+        turnId: "turn-1",
+        rawType: "error",
+        message: "Reconnecting... 2/5",
+      },
+      {
+        kind: "tool-call",
+        id: "tool-1",
+        threadId: "thread-1",
+        sourceSeqStart: 11,
+        sourceSeqEnd: 11,
+        createdAt: 11,
+        turnId: "turn-1",
+        toolName: "exec_command",
+        callId: "call-1",
+        status: "completed",
+      },
+      {
+        kind: "error",
+        id: "error-2",
+        threadId: "thread-1",
+        sourceSeqStart: 12,
+        sourceSeqEnd: 12,
+        createdAt: 12,
+        turnId: "turn-1",
+        rawType: "error",
+        message: "Reconnecting... 3/4",
+      },
+      {
+        kind: "error",
+        id: "error-3",
+        threadId: "thread-1",
+        sourceSeqStart: 13,
+        sourceSeqEnd: 13,
+        createdAt: 13,
+        turnId: "turn-1",
+        rawType: "error",
+        message: "Reconnecting... 4/5",
+      },
+    ]);
+
+    expect(rows).toHaveLength(4);
+  });
+});
+
 describe("buildThreadDetailRows provisioning operation collapsing", () => {
   it("collapses provisioning start/env setup/completed updates into one operation row", () => {
     const rows = getOperationRows([

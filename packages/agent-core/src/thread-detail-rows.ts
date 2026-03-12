@@ -797,6 +797,91 @@ function mergeFileEditStatus(
   return statusPriority(left) >= statusPriority(right) ? left : right;
 }
 
+function parseReconnectAttempt(
+  message: Extract<UIMessage, { kind: "error" }>,
+): { attempt: number; total: number } | null {
+  const match = message.message.trim().match(/^Reconnecting\.\.\.\s+(\d+)\/(\d+)$/);
+  if (!match) return null;
+
+  const attempt = Number.parseInt(match[1] ?? "", 10);
+  const total = Number.parseInt(match[2] ?? "", 10);
+  if (!Number.isFinite(attempt) || !Number.isFinite(total)) {
+    return null;
+  }
+  if (attempt <= 0 || total <= 0 || attempt > total) {
+    return null;
+  }
+
+  return { attempt, total };
+}
+
+function mergeConsecutiveReconnectErrors(messages: UIMessage[]): UIMessage[] {
+  const merged: UIMessage[] = [];
+  let active: Extract<UIMessage, { kind: "error" }> | null = null;
+  let activeReconnect: { attempt: number; total: number } | null = null;
+
+  const flush = () => {
+    if (!active) return;
+    merged.push(active);
+    active = null;
+    activeReconnect = null;
+  };
+
+  for (const message of messages) {
+    if (message.kind !== "error") {
+      flush();
+      merged.push(message);
+      continue;
+    }
+
+    const reconnect = parseReconnectAttempt(message);
+    if (!reconnect) {
+      flush();
+      merged.push(message);
+      continue;
+    }
+
+    if (!active || !activeReconnect) {
+      active = { ...message };
+      activeReconnect = reconnect;
+      continue;
+    }
+
+    const isSameTurn = (active.turnId ?? null) === (message.turnId ?? null);
+    const isSameThread = active.threadId === message.threadId;
+    const isSameRawType = active.rawType === message.rawType;
+    const isSameRetryBudget = activeReconnect.total === reconnect.total;
+    const isNextAttempt = reconnect.attempt === activeReconnect.attempt + 1;
+
+    if (
+      isSameTurn &&
+      isSameThread &&
+      isSameRawType &&
+      isSameRetryBudget &&
+      isNextAttempt
+    ) {
+      active = {
+        ...message,
+        id: `${active.id}:reconnect:${message.id}`,
+        sourceSeqStart: Math.min(active.sourceSeqStart, message.sourceSeqStart),
+        sourceSeqEnd: Math.max(active.sourceSeqEnd, message.sourceSeqEnd),
+        createdAt: Math.max(active.createdAt, message.createdAt),
+        startedAt: Math.min(getMessageStartedAt(active), getMessageStartedAt(message)),
+        turnId: active.turnId ?? message.turnId,
+      };
+      activeReconnect = reconnect;
+      continue;
+    }
+
+    flush();
+    active = { ...message };
+    activeReconnect = reconnect;
+  }
+
+  flush();
+  return merged;
+}
+
 function mergeConsecutiveToolActivityMessages(
   messages: CollapsibleTurnMessage[],
 ): CollapsibleTurnMessage[] {
@@ -1042,7 +1127,10 @@ export function buildThreadDetailRows(
   const worktreeOutcomeEnrichedMessages = enrichWorktreeSquashMergeMessages(
     operationOutcomeMergedMessages,
   );
-  const mergedMessages = mergeConsecutiveToolActivityMessages(worktreeOutcomeEnrichedMessages);
+  const reconnectMergedMessages = mergeConsecutiveReconnectErrors(
+    worktreeOutcomeEnrichedMessages,
+  );
+  const mergedMessages = mergeConsecutiveToolActivityMessages(reconnectMergedMessages);
   const lastAssistantIndexByTurn = new Map<string, number>();
 
   for (const [index, message] of mergedMessages.entries()) {
