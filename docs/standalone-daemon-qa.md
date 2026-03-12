@@ -90,8 +90,9 @@ Required matrix:
 - `local` follow-up
 - `local` steer
 - `local` stop then follow-up
-- `local` restart recovery
-- `local` follow-up after restart recovery
+- `local` restart while active -> surviving env-agent reconnect
+- `local` restart while active -> missing env-agent becomes \`error\`
+- `local` follow-up after restart failure
 
 Spawn:
 
@@ -156,8 +157,9 @@ Required matrix:
 - `worktree` start thread
 - `worktree` follow-up
 - `worktree` stop then follow-up
-- `worktree` restart recovery
-- `worktree` follow-up after restart recovery
+- `worktree` restart while active -> surviving env-agent reconnect
+- `worktree` restart while active -> missing env-agent becomes \`error\`
+- `worktree` follow-up after restart failure
 - `worktree` promote/demote
 
 Spawn a worktree thread:
@@ -205,12 +207,14 @@ Required matrix:
 
 - blocked restart while local thread is active
 - forced restart while local thread is active
-- local thread reconciles to `idle` after relaunch
-- local thread accepts a follow-up after relaunch
+- local thread stays `active` if the env-agent checks back in
+- local thread becomes `error` if the env-agent does not check back in
+- local thread accepts a follow-up after restart failure
 - blocked restart while worktree thread is active
 - forced restart while worktree thread is active
-- worktree thread reconciles to `idle` after relaunch
-- worktree thread accepts a follow-up after relaunch
+- worktree thread stays `active` if the env-agent checks back in
+- worktree thread becomes `error` if the env-agent does not check back in
+- worktree thread accepts a follow-up after restart failure
 
 For both environments, start a thread and wait until `thread status --recent-events ... --event-mode raw`
 shows a real `turn/started` event, then in another shell:
@@ -234,8 +238,10 @@ Expected:
 
 - CLI reports shutdown requested
 - daemon exits cleanly
-- after relaunching the daemon on the same `BEANBAG_ROOT`, the interrupted thread reconciles back to `idle`
-- `thread tell <thread-id> 'Reply with exactly ... and finish.'` succeeds after relaunch
+- after relaunching the daemon on the same `BEANBAG_ROOT`, the daemon nudges the previously active env-agent
+- if the same env-agent checks back in and flushes its buffered state, the thread continues normally
+- if the env-agent does not check back in before the liveness deadline, the daemon marks the thread `error`
+- `thread tell <thread-id> 'Reply with exactly ... and finish.'` succeeds after the thread reaches either a healthy resumed state or `error`
 
 Relaunch:
 
@@ -292,16 +298,12 @@ node apps/cli/dist/index.js daemon health
   - The thread has no active turn yet.
   - Wait for an actual provider `turn/started` event, not just a transient thread status of `active`.
 
-- Restart appears to work, but thread never returns to `idle` after relaunch:
-  - This is a real recovery bug candidate.
-  - Check whether the thread log shows reconnect without a final completion event.
+- Restart appears to work, but the thread stays `active` without reconnect progress or a transition to `error`:
+  - This is a real liveness/recovery bug candidate.
+  - Check whether the thread log shows daemon restart, missing env-agent check-ins, or a stuck reconnect path.
 
 - `thread tell` after `thread stop` fails with missing session state:
   - This is a real recovery bug candidate.
-  - Capture `thread show`, `thread log`, and daemon logs before retrying.
-
-- `thread tell` after `thread stop` fails with `Missing managed environment-agent target`:
-  - This is a real environment re-prepare bug candidate.
   - Capture `thread show`, `thread log`, and daemon logs before retrying.
 
 ## QA Checklist
@@ -314,11 +316,9 @@ Use this as the minimum direct-binary pass with the real provider:
 - local follow-up
 - local steer after confirmed `turn/started`
 - local stop then follow-up
-- local env-agent state file appears while active and is removed after the thread returns to `idle`
-- local env-agent process exits after the thread returns to `idle`
 - local blocked restart
-- local forced restart and recovery to `idle`
-- local follow-up after restart
+- local forced restart with surviving env-agent reconnect or thread `error`
+- local follow-up after restart failure
 - worktree start
 - worktree follow-up
 - worktree stop then follow-up
@@ -326,8 +326,8 @@ Use this as the minimum direct-binary pass with the real provider:
 - worktree archive removes the managed worktree and clears env-agent state
 - archived thread is visibly marked as archived in thread inspection output
 - worktree blocked restart
-- worktree forced restart and recovery to `idle`
-- worktree follow-up after restart
+- worktree forced restart with surviving env-agent reconnect or thread `error`
+- worktree follow-up after restart failure
 
 ## Cleanup
 
