@@ -10,6 +10,8 @@ import { resolveDockerEnvironmentAgentArtifactEntry } from "./docker-environment
 const HOST = "127.0.0.1";
 const START_TIMEOUT_MS = 5_000;
 const HEALTH_TIMEOUT_MS = 500;
+const STOP_TIMEOUT_MS = 1_000;
+const STOP_POLL_INTERVAL_MS = 25;
 
 interface ManagedHostEnvironmentAgentRecord {
   pid?: number;
@@ -34,6 +36,12 @@ interface EnsureManagedHostEnvironmentAgentDeps {
   generateAuthToken?: () => string;
   isProcessAlive?: (pid: number) => boolean;
   killProcess?: (pid: number, signal?: NodeJS.Signals | number) => boolean;
+  sleepMs?: (ms: number) => Promise<void>;
+  pingAgent?: (
+    baseUrl: string,
+    authToken: string,
+    timeoutMs: number,
+  ) => Promise<boolean>;
   resolveLaunchCommand?: () => {
     command: string;
     args: string[];
@@ -41,7 +49,6 @@ interface EnsureManagedHostEnvironmentAgentDeps {
   spawnProcess?: typeof spawn;
   waitForAgent?: (baseUrl: string, authToken: string) => Promise<void>;
   requestShutdown?: (baseUrl: string, authToken: string) => Promise<void>;
-  pingAgent?: (baseUrl: string, authToken: string, timeoutMs: number) => Promise<boolean>;
 }
 
 const hostEnvironmentAgentLocks = new Map<string, Promise<void>>();
@@ -99,6 +106,53 @@ function isProcessAlive(pid: number): boolean {
     return true;
   } catch {
     return false;
+  }
+}
+
+async function defaultSleepMs(ms: number): Promise<void> {
+  await new Promise((resolvePromise) => setTimeout(resolvePromise, ms));
+}
+
+async function terminateProcess(args: {
+  pid: number;
+  isProcessAlive: (pid: number) => boolean;
+  killProcess: (pid: number, signal?: NodeJS.Signals | number) => boolean;
+  sleepMs: (ms: number) => Promise<void>;
+}): Promise<void> {
+  if (!args.isProcessAlive(args.pid)) {
+    return;
+  }
+
+  try {
+    args.killProcess(args.pid, "SIGTERM");
+  } catch {
+    return;
+  }
+
+  const deadline = Date.now() + STOP_TIMEOUT_MS;
+  while (Date.now() < deadline) {
+    if (!args.isProcessAlive(args.pid)) {
+      return;
+    }
+    await args.sleepMs(STOP_POLL_INTERVAL_MS);
+  }
+
+  if (!args.isProcessAlive(args.pid)) {
+    return;
+  }
+
+  try {
+    args.killProcess(args.pid, "SIGKILL");
+  } catch {
+    return;
+  }
+
+  const forceKillDeadline = Date.now() + STOP_TIMEOUT_MS;
+  while (Date.now() < forceKillDeadline) {
+    if (!args.isProcessAlive(args.pid)) {
+      return;
+    }
+    await args.sleepMs(STOP_POLL_INTERVAL_MS);
   }
 }
 
@@ -257,6 +311,7 @@ export async function ensureManagedHostEnvironmentAgent(args: {
   const killProcess =
     deps.killProcess ??
     ((pid: number, signal?: NodeJS.Signals | number) => process.kill(pid, signal));
+  const sleepMs = deps.sleepMs ?? defaultSleepMs;
 
   let managedTarget: EnvironmentAgentConnectionTarget | undefined;
   await withManagedHostEnvironmentAgentLock(stateIdentity, async () => {
@@ -274,12 +329,13 @@ export async function ensureManagedHostEnvironmentAgent(args: {
         managedTarget = toManagedHostEnvironmentAgentTarget({ record: existing });
         return;
       }
-      if (existing.pid) {
-        try {
-          killProcess(existing.pid, "SIGTERM");
-        } catch {
-          // Best-effort cleanup of stale managed agents.
-        }
+      if (existing.pid && checkProcessAlive(existing.pid)) {
+        await terminateProcess({
+          pid: existing.pid,
+          isProcessAlive: checkProcessAlive,
+          killProcess,
+          sleepMs,
+        });
       }
       managedHostEnvironmentAgents.delete(identityKey);
     }
@@ -367,7 +423,7 @@ export async function disposeManagedHostEnvironmentAgent(args: {
   environmentId: string;
   workspaceRootPath: string;
   runtimeEnv: Record<string, string | undefined>;
-}): Promise<void> {
+}, deps: Pick<EnsureManagedHostEnvironmentAgentDeps, "isProcessAlive" | "killProcess" | "sleepMs"> = {}): Promise<void> {
   if (args.runtimeEnv.BEANBAG_ENVIRONMENT_AGENT_BASE_URL?.trim()) {
     return;
   }
@@ -382,12 +438,18 @@ export async function disposeManagedHostEnvironmentAgent(args: {
     const identityKey = managedHostEnvironmentAgentIdentityKey(stateIdentity);
     const existing = managedHostEnvironmentAgents.get(identityKey);
     if (existing) {
-      if (existing.pid && isProcessAlive(existing.pid)) {
-        try {
-          process.kill(existing.pid, "SIGTERM");
-        } catch {
-          // Best-effort cleanup for already-exited processes.
-        }
+      const checkProcessAlive = deps.isProcessAlive ?? isProcessAlive;
+      const killProcess =
+        deps.killProcess ??
+        ((pid: number, signal?: NodeJS.Signals | number) => process.kill(pid, signal));
+      const sleepMs = deps.sleepMs ?? defaultSleepMs;
+      if (existing.pid && checkProcessAlive(existing.pid)) {
+        await terminateProcess({
+          pid: existing.pid,
+          isProcessAlive: checkProcessAlive,
+          killProcess,
+          sleepMs,
+        });
       } else {
         try {
           await requestEnvironmentAgentShutdown(

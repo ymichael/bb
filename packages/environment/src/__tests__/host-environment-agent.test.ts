@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   __testOnly__getManagedHostEnvironmentAgentRecord,
+  disposeManagedHostEnvironmentAgent,
   ensureManagedHostEnvironmentAgent,
   resolveManagedHostEnvironmentAgentLaunchCommand,
 } from "../host-environment-agent.js";
@@ -213,5 +214,69 @@ describe("host environment-agent helper", () => {
 
     expect(second).toEqual(first);
     expect(killProcess).not.toHaveBeenCalled();
+  });
+
+  it("removes the managed agent record and escalates to SIGKILL when SIGTERM does not exit promptly", async () => {
+    const beanbagRoot = makeTempDir();
+    process.env.BEANBAG_ROOT = beanbagRoot;
+    const projectId = `project-${Date.now()}`;
+    const workspaceRoot = makeTempDir();
+    const runtimeEnv = { BEANBAG_ROOT: beanbagRoot };
+
+    await ensureManagedHostEnvironmentAgent(
+      {
+        workspaceRootPath: workspaceRoot,
+        threadId: "thread-1",
+        projectId,
+        environmentId: "local",
+        runtimeEnv,
+      },
+      {
+        allocatePort: async () => 4123,
+        generateAuthToken: () => "auth-token",
+        resolveLaunchCommand: () => ({
+          command: process.execPath,
+          args: ["agent.mjs"],
+        }),
+        spawnProcess: vi.fn(() => ({
+          pid: 4321,
+          unref: vi.fn(),
+        })) as unknown as typeof import("node:child_process").spawn,
+        waitForAgent: async () => {},
+      },
+    );
+
+    const killProcess = vi.fn((_pid: number, _signal?: string | number) => true);
+    let now = 0;
+    vi.spyOn(Date, "now").mockImplementation(() => now);
+    const isProcessAlive = vi.fn<(pid: number) => boolean>(
+      () => killProcess.mock.calls.length < 2,
+    );
+
+    await disposeManagedHostEnvironmentAgent(
+      {
+        projectId,
+        threadId: "thread-1",
+        environmentId: "local",
+        workspaceRootPath: workspaceRoot,
+        runtimeEnv,
+      },
+      {
+        isProcessAlive,
+        killProcess,
+        sleepMs: async (ms: number) => {
+          now += ms;
+        },
+      },
+    );
+
+    expect(killProcess).toHaveBeenNthCalledWith(1, 4321, "SIGTERM");
+    expect(killProcess).toHaveBeenNthCalledWith(2, 4321, "SIGKILL");
+    expect(__testOnly__getManagedHostEnvironmentAgentRecord({
+      projectId,
+      threadId: "thread-1",
+      environmentId: "local",
+      workspaceRootPath: workspaceRoot,
+    })).toBeUndefined();
   });
 });
