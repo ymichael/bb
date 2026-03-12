@@ -19,7 +19,7 @@ Use this folder to:
 
 Use the standalone daemon CLI QA guide:
 
-- [`../docs/standalone-daemon-qa.md`](../docs/standalone-daemon-qa.md)
+- [`./daemon/standalone-daemon-qa.md`](./daemon/standalone-daemon-qa.md)
 
 This is currently the primary full QA pass for validating:
 

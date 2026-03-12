@@ -47,7 +47,7 @@ Make daemon/env-agent QA fast, reliable, trustworthy, and maintainable after the
    - failure bundles should include relevant CLI/API output, daemon logs, scenario metadata, and timestamps; SQLite snapshots should be optional for deeper debugging rather than required for the common path
 
 6. Add a checked-in QA harness for the standalone daemon matrix.
-   - encode the scenarios from `docs/standalone-daemon-qa.md`
+   - encode the scenarios from `qa/daemon/standalone-daemon-qa.md`
    - verify API output, durable invariants, and daemon logs together
    - support both local and worktree flows
    - support hard worker-loss simulation, not only graceful shutdown
