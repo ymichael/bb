@@ -1,5 +1,5 @@
 import { memo } from "react";
-import type { UIMessage } from "@beanbag/agent-core";
+import { assertNever, type UIMessage } from "@beanbag/agent-core";
 import { AssistantMessageRow } from "./rows/AssistantMessageRow";
 import { DebugEventRow } from "./rows/DebugEventRow";
 import { ErrorRow } from "./rows/ErrorRow";
@@ -24,67 +24,50 @@ function ConversationEntryComponent({
   initialExpanded = false,
   preferOngoingLabels = false,
 }: ConversationEntryProps) {
-  if (message.kind === "user") {
-    return <UserMessageRow message={message} projectId={projectId} />;
+  switch (message.kind) {
+    case "user":
+      return <UserMessageRow message={message} projectId={projectId} />;
+    case "assistant-reasoning":
+      return <ReasoningRow message={message} />;
+    case "assistant-text":
+      return <AssistantMessageRow message={message} />;
+    case "tool-exploring":
+      return (
+        <ToolExploringRow
+          message={message}
+          initialExpanded={initialExpanded}
+          preferOngoingLabels={preferOngoingLabels}
+        />
+      );
+    case "tool-call":
+      return (
+        <ToolCallRow
+          message={message}
+          initialExpanded={initialExpanded}
+          preferOngoingLabels={preferOngoingLabels}
+        />
+      );
+    case "web-search":
+      return (
+        <WebSearchRow message={message} preferOngoingLabels={preferOngoingLabels} />
+      );
+    case "file-edit":
+      return (
+        <FileEditRow
+          message={message}
+          initialExpanded={initialExpanded}
+          preferOngoingLabels={preferOngoingLabels}
+        />
+      );
+    case "operation":
+      return <OperationRow message={message} initialExpanded={initialExpanded} />;
+    case "error":
+      return <ErrorRow message={message} initialExpanded={initialExpanded} />;
+    case "debug/raw-event":
+      return <DebugEventRow message={message} />;
+    default:
+      return assertNever(message, "Unhandled conversation entry message kind");
   }
-
-  if (message.kind === "assistant-reasoning") {
-    return <ReasoningRow message={message} />;
-  }
-
-  if (message.kind === "assistant-text") {
-    return <AssistantMessageRow message={message} />;
-  }
-
-  if (message.kind === "tool-exploring") {
-    return (
-      <ToolExploringRow
-        message={message}
-        initialExpanded={initialExpanded}
-        preferOngoingLabels={preferOngoingLabels}
-      />
-    );
-  }
-
-  if (message.kind === "tool-call") {
-    return (
-      <ToolCallRow
-        message={message}
-        initialExpanded={initialExpanded}
-        preferOngoingLabels={preferOngoingLabels}
-      />
-    );
-  }
-
-  if (message.kind === "web-search") {
-    return (
-      <WebSearchRow message={message} preferOngoingLabels={preferOngoingLabels} />
-    );
-  }
-
-  if (message.kind === "file-edit") {
-    return (
-      <FileEditRow
-        message={message}
-        initialExpanded={initialExpanded}
-        preferOngoingLabels={preferOngoingLabels}
-      />
-    );
-  }
-
-  if (message.kind === "operation") {
-    return <OperationRow message={message} initialExpanded={initialExpanded} />;
-  }
-
-  if (message.kind === "error") {
-    return <ErrorRow message={message} initialExpanded={initialExpanded} />;
-  }
-
-  if (message.kind === "debug/raw-event") {
-    return <DebugEventRow message={message} />;
-  }
-
-  return null;
 }
 
 export const ConversationEntry = memo(ConversationEntryComponent);
