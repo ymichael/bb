@@ -57,7 +57,6 @@ interface EnvironmentServiceCallbacks {
 
 interface EnsureThreadEnvironmentRuntimeResult {
   runtime: ActiveEnvironmentRuntime;
-  resetReplayCursor: boolean;
 }
 
 function isUnavailableCleanupTargetError(error: unknown): boolean {
@@ -190,7 +189,6 @@ export class EnvironmentService {
     if (existingRuntime) {
       return {
         runtime: existingRuntime,
-        resetReplayCursor: false,
       };
     }
 
@@ -220,7 +218,6 @@ export class EnvironmentService {
       if (existingRuntime) {
         return {
           runtime: existingRuntime,
-          resetReplayCursor: false,
         };
       }
 
@@ -246,7 +243,6 @@ export class EnvironmentService {
       }
       return {
         runtime,
-        resetReplayCursor: false,
       };
     });
 
@@ -266,7 +262,6 @@ export class EnvironmentService {
           existingRuntime,
           reason,
         ),
-        resetReplayCursor: false,
       };
     }
 
@@ -279,7 +274,6 @@ export class EnvironmentService {
             runtimeDuringEnsure,
             reason,
           ),
-          resetReplayCursor: false,
         };
       }
 
@@ -290,14 +284,6 @@ export class EnvironmentService {
           environmentId,
           this.callbacks.createContext(thread.id, projectRootPath),
         );
-
-      let hadAgentTarget = false;
-      try {
-        environment.getAgentConnectionTarget();
-        hadAgentTarget = true;
-      } catch {
-        hadAgentTarget = false;
-      }
 
       try {
         await this.prepareEnvironment(thread.id, environment, reason);
@@ -317,7 +303,6 @@ export class EnvironmentService {
       }
       return {
         runtime,
-        resetReplayCursor: thread.status === "idle" && !hadAgentTarget,
       };
     });
   }

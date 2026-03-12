@@ -407,7 +407,6 @@ describe("Orchestrator environment-agent delivery and replay", () => {
       hasActiveSession = true;
       return {
         runtime: activeRuntime,
-        resetReplayCursor: false,
       };
     });
 
@@ -542,7 +541,6 @@ describe("Orchestrator environment-agent delivery and replay", () => {
     };
     environmentService.ensureThreadEnvironmentRuntime = vi.fn(async () => ({
       runtime: activeRuntime,
-      resetReplayCursor: false,
     }));
 
     const resumeThreadCommand = vi.fn(
