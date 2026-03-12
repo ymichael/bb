@@ -14,6 +14,7 @@ import type {
 import type { WSManager } from "../ws.js";
 import type { LlmCompletionService } from "@beanbag/agent-server";
 import type { IEnvironment } from "@beanbag/environment";
+import { providerTimeoutError } from "../domain-errors.js";
 import { Orchestrator } from "../orchestrator.js";
 
 function makeThread(overrides: Partial<Thread> = {}): Thread {
@@ -714,6 +715,196 @@ describe("Orchestrator environment-agent delivery and replay", () => {
         }
       ).providerThreadIdByThreadId.get("thread-1"),
     ).toBe("provider-thread-1");
+  });
+
+  it("retries one timed out provider resume before succeeding", async () => {
+    const thread = makeThread({
+      status: "idle",
+      environmentId: "worktree",
+    });
+    (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
+    (
+      eventRepo as unknown as {
+        getLatestProviderThreadId: ReturnType<typeof vi.fn>;
+      }
+    ).getLatestProviderThreadId = vi.fn().mockReturnValue("provider-thread-1");
+    (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue({
+      id: "proj-1",
+      name: "Project",
+      rootPath: "/test",
+      createdAt: 1_000,
+      updatedAt: 1_000,
+    });
+
+    const dispatcher = {
+      hasActiveSession: vi.fn(() => true),
+      awaitActiveSession: vi.fn().mockResolvedValue({ id: "sess-1" }),
+      enqueueForActiveSession: vi.fn(),
+    } as unknown as EnvironmentAgentCommandDispatcher;
+
+    const retryManager = new Orchestrator(
+      threadRepo,
+      eventRepo,
+      projectRepo,
+      ws,
+      createMockLlmCompletionService(),
+      undefined,
+      createTestRuntimeEnv({
+        BEANBAG_ENVIRONMENT_AGENT_BASE_URL: undefined,
+        BEANBAG_ENVIRONMENT_AGENT_AUTH_TOKEN: undefined,
+      }),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      dispatcher,
+      sessionService as never,
+    );
+
+    const environmentService = (
+      retryManager as unknown as {
+        environmentService: Pick<
+          EnvironmentService,
+          "ensureThreadEnvironmentRuntime"
+        >;
+      }
+    ).environmentService;
+    const runtimeEnvironment = makeRuntimeEnvironment({
+      rootPath: "/test",
+      authorization: "Bearer test-token",
+    });
+    environmentService.ensureThreadEnvironmentRuntime = vi.fn(async () => ({
+      runtime: {
+        environment: runtimeEnvironment,
+        agentConnectionTarget: runtimeEnvironment.getAgentConnectionTarget(),
+      },
+    }));
+
+    const resumeThreadCommand = vi
+      .fn()
+      .mockRejectedValueOnce(providerTimeoutError("Timed out waiting for provider response"))
+      .mockResolvedValueOnce({ providerThreadId: "provider-thread-1" });
+    (
+      retryManager as unknown as {
+        agentServer: { resumeThreadCommand: typeof resumeThreadCommand };
+      }
+    ).agentServer.resumeThreadCommand = resumeThreadCommand;
+
+    const providerThreadId = await (
+      retryManager as unknown as {
+        _ensureProviderSession: (threadId: string) => Promise<string>;
+      }
+    )._ensureProviderSession("thread-1");
+
+    expect(providerThreadId).toBe("provider-thread-1");
+    expect(resumeThreadCommand).toHaveBeenCalledTimes(2);
+    expect(environmentService.ensureThreadEnvironmentRuntime).toHaveBeenCalledTimes(2);
+  });
+
+  it("reprovisions after a second timed out provider resume", async () => {
+    const thread = makeThread({
+      status: "idle",
+      environmentId: "worktree",
+    });
+    (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
+    (
+      eventRepo as unknown as {
+        getLatestProviderThreadId: ReturnType<typeof vi.fn>;
+      }
+    ).getLatestProviderThreadId = vi.fn().mockReturnValue("provider-thread-1");
+    (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue({
+      id: "proj-1",
+      name: "Project",
+      rootPath: "/test",
+      createdAt: 1_000,
+      updatedAt: 1_000,
+    });
+
+    const dispatcher = {
+      hasActiveSession: vi.fn(() => true),
+      awaitActiveSession: vi.fn().mockResolvedValue({ id: "sess-1" }),
+      enqueueForActiveSession: vi.fn(),
+    } as unknown as EnvironmentAgentCommandDispatcher;
+
+    const retryManager = new Orchestrator(
+      threadRepo,
+      eventRepo,
+      projectRepo,
+      ws,
+      createMockLlmCompletionService(),
+      undefined,
+      createTestRuntimeEnv({
+        BEANBAG_ENVIRONMENT_AGENT_BASE_URL: undefined,
+        BEANBAG_ENVIRONMENT_AGENT_AUTH_TOKEN: undefined,
+      }),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      dispatcher,
+      sessionService as never,
+    );
+
+    const environmentService = (
+      retryManager as unknown as {
+        environmentService: Pick<
+          EnvironmentService,
+          "ensureThreadEnvironmentRuntime"
+        >;
+      }
+    ).environmentService;
+    const runtimeEnvironment = makeRuntimeEnvironment({
+      rootPath: "/test",
+      authorization: "Bearer test-token",
+    });
+    environmentService.ensureThreadEnvironmentRuntime = vi.fn(async () => ({
+      runtime: {
+        environment: runtimeEnvironment,
+        agentConnectionTarget: runtimeEnvironment.getAgentConnectionTarget(),
+      },
+    }));
+
+    const resumeThreadCommand = vi
+      .fn()
+      .mockRejectedValue(providerTimeoutError("Timed out waiting for provider response"));
+    (
+      retryManager as unknown as {
+        agentServer: { resumeThreadCommand: typeof resumeThreadCommand };
+      }
+    ).agentServer.resumeThreadCommand = resumeThreadCommand;
+
+    const provisionThread = vi.fn(async (threadId: string) => {
+      (
+        retryManager as unknown as {
+          providerThreadIdByThreadId: Map<string, string>;
+        }
+      ).providerThreadIdByThreadId.set(threadId, "provider-thread-2");
+    });
+    (
+      retryManager as unknown as {
+        _provisionThread: typeof provisionThread;
+      }
+    )._provisionThread = provisionThread;
+
+    const providerThreadId = await (
+      retryManager as unknown as {
+        _ensureProviderSession: (threadId: string) => Promise<string>;
+      }
+    )._ensureProviderSession("thread-1");
+
+    expect(providerThreadId).toBe("provider-thread-2");
+    expect(resumeThreadCommand).toHaveBeenCalledTimes(2);
+    expect(provisionThread).toHaveBeenCalledWith(
+      "thread-1",
+      expect.objectContaining({
+        projectId: "proj-1",
+        environmentId: "worktree",
+      }),
+      expect.objectContaining({
+        rootPathHint: "/test",
+        reason: "resume-missing-provider-thread",
+      }),
+    );
   });
 
   it("reads environment-agent status from the session service", async () => {

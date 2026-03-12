@@ -228,7 +228,10 @@ describe("environment-agent session orchestrator roundtrip", () => {
       commandDispatcher,
       eventApplier,
       onSessionInvalidated: (session) => {
-        threadManager.handleEnvironmentAgentSessionInvalidated(session.threadId);
+        threadManager.handleEnvironmentAgentSessionInvalidated(
+          session.threadId,
+          session.closeReason,
+        );
       },
     });
     threadManager = new Orchestrator(
@@ -778,15 +781,18 @@ describe("environment-agent session orchestrator roundtrip", () => {
 
     await tellPromise;
     expect(threads.getById(threadId)?.status).toBe("idle");
-    const eventTypes = events.listByThread(threadId).map((event) => event.type);
-    expect(eventTypes).toEqual(
-      expect.arrayContaining([
-        "client/turn/requested",
-        "client/turn/start",
-        "turn/started",
-        "turn/completed",
-      ]),
-    );
+    let eventTypes: string[] = [];
+    await vi.waitFor(() => {
+      eventTypes = events.listByThread(threadId).map((event) => event.type);
+      expect(eventTypes).toEqual(
+        expect.arrayContaining([
+          "client/turn/requested",
+          "client/turn/start",
+          "turn/started",
+          "turn/completed",
+        ]),
+      );
+    });
     expect(eventTypes.indexOf("client/turn/requested")).toBeGreaterThanOrEqual(0);
     expect(eventTypes.indexOf("turn/started")).toBeGreaterThanOrEqual(0);
     expect(eventTypes.indexOf("client/turn/requested")).toBeLessThan(
@@ -900,9 +906,11 @@ describe("environment-agent session orchestrator roundtrip", () => {
       generation: 1,
       sequence: 2,
     });
-    expect(events.listByThread(threadId).map((event) => event.type)).toEqual(
-      expect.arrayContaining(["client/turn/start", "turn/started", "turn/completed"]),
-    );
+    await vi.waitFor(() => {
+      expect(events.listByThread(threadId).map((event) => event.type)).toEqual(
+        expect.arrayContaining(["client/turn/start", "turn/started", "turn/completed"]),
+      );
+    });
   });
 
   it("revalidates the provider thread after an env-agent session closes and reopens", async () => {
@@ -1210,9 +1218,12 @@ describe("environment-agent session orchestrator roundtrip", () => {
     expect(events.listByThread(threadId).map((event) => event.type)).not.toContain(
       "system/error",
     );
-    const clientTurnStarts = events.listByThread(threadId)
-      .filter((event) => event.type === "client/turn/start");
-    expect(clientTurnStarts).toHaveLength(1);
+    let clientTurnStarts: ReturnType<typeof events.listByThread> = [];
+    await vi.waitFor(() => {
+      clientTurnStarts = events.listByThread(threadId)
+        .filter((event) => event.type === "client/turn/start");
+      expect(clientTurnStarts).toHaveLength(1);
+    });
     expect(clientTurnStarts[0]?.data).toMatchObject({
       input: [{ type: "text", text: "Retry stale turn start" }],
       request: {

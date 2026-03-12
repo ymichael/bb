@@ -91,6 +91,7 @@ import type {
 import { ENVIRONMENT_AGENT_PROTOCOL_VERSION } from "@beanbag/environment-agent";
 import type {
   DbConnection,
+  EnvironmentAgentSessionCloseReason,
   ThreadRepository,
   EventRepository,
   ProjectRepository,
@@ -1696,7 +1697,14 @@ export class Orchestrator implements ThreadOrchestrator {
     this._scheduleQueuedFollowUpDispatch(threadId);
   }
 
-  handleEnvironmentAgentSessionInvalidated(threadId: string): void {
+  handleEnvironmentAgentSessionInvalidated(
+    threadId: string,
+    closeReason?: EnvironmentAgentSessionCloseReason,
+  ): void {
+    if (closeReason === "newer_session") {
+      return;
+    }
+
     this._clearEnvironmentAgentRuntimeState(threadId);
 
     const thread = this.threadRepo.getById(threadId);
@@ -3804,62 +3812,71 @@ export class Orchestrator implements ThreadOrchestrator {
       throw projectNotFoundError(thread.projectId);
     }
 
-    try {
-      const resumed = await this._withEnvironmentAgentAccess(
-        threadId,
-        async ({ client, thread: latestThread, providerLaunch }) =>
-          this.agentServer.resumeThreadCommand({
-            client,
-            threadId,
-            projectId: latestThread.projectId,
-            providerThreadId: persistedThreadId,
-            context: this._buildProviderThreadContext({
+    let lastResumeError: unknown;
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        const resumed = await this._withEnvironmentAgentAccess(
+          threadId,
+          async ({ client, thread: latestThread, providerLaunch }) =>
+            this.agentServer.resumeThreadCommand({
+              client,
               threadId,
               projectId: latestThread.projectId,
+              providerThreadId: persistedThreadId,
+              context: this._buildProviderThreadContext({
+                threadId,
+                projectId: latestThread.projectId,
+              }),
+              options,
+              resumePath,
+              providerLaunch,
             }),
-            options,
-            resumePath,
-            providerLaunch,
-          }),
-      );
-      this.providerThreadIdByThreadId.set(threadId, resumed.providerThreadId);
-      return resumed.providerThreadId;
-    } catch (err) {
-      this._cleanupThreadRuntime(threadId);
-      const resumeTimedOut =
-        (isDomainError(err) && err.code === "provider_timeout") ||
-        (err instanceof AgentServerSessionError && err.code === "provider_timeout");
-      if (!this.agentServer.isMissingProviderThreadError(err) && !resumeTimedOut) {
-        this._rethrowAgentServerError(threadId, err);
-        throw err;
+        );
+        this.providerThreadIdByThreadId.set(threadId, resumed.providerThreadId);
+        return resumed.providerThreadId;
+      } catch (err) {
+        lastResumeError = err;
+        this._cleanupThreadRuntime(threadId);
+        const resumeTimedOut =
+          (isDomainError(err) && err.code === "provider_timeout") ||
+          (err instanceof AgentServerSessionError && err.code === "provider_timeout");
+        if (!this.agentServer.isMissingProviderThreadError(err) && !resumeTimedOut) {
+          this._rethrowAgentServerError(threadId, err);
+          throw err;
+        }
+        if (resumeTimedOut && attempt === 0) {
+          continue;
+        }
+        break;
       }
-
-      // Resume can fail when provider-side rollout state has been evicted.
-      // Timeout here is also treated as a stale/irrecoverable resume attempt,
-      // because this catch block only wraps thread/resume for an existing rollout.
-      // Fall back to fresh provisioning so the pending tell can continue.
-      await this._provisionThread(
-        threadId,
-        {
-          projectId: thread.projectId,
-          model: options?.model,
-          serviceTier: options?.serviceTier,
-          reasoningLevel: options?.reasoningLevel,
-          sandboxMode: options?.sandboxMode,
-          environmentId: thread.environmentId,
-        },
-        {
-          rootPathHint: project.rootPath,
-          reason: "resume-missing-provider-thread",
-        },
-      );
-      const reprovisionedThreadId =
-        this.providerThreadIdByThreadId.get(threadId) ??
-        this._resolvePersistedProviderThreadId(threadId);
-      if (reprovisionedThreadId) return reprovisionedThreadId;
-
-      throw err;
     }
+
+    // Resume can fail when provider-side rollout state has been evicted.
+    // Allow one timeout-only retry in case the env-agent handoff was transient,
+    // then fall back to fresh provisioning so the pending tell can continue.
+    await this._provisionThread(
+      threadId,
+      {
+        projectId: thread.projectId,
+        model: options?.model,
+        serviceTier: options?.serviceTier,
+        reasoningLevel: options?.reasoningLevel,
+        sandboxMode: options?.sandboxMode,
+        environmentId: thread.environmentId,
+      },
+      {
+        rootPathHint: project.rootPath,
+        reason: "resume-missing-provider-thread",
+      },
+    );
+    const reprovisionedThreadId =
+      this.providerThreadIdByThreadId.get(threadId) ??
+      this._resolvePersistedProviderThreadId(threadId);
+    if (reprovisionedThreadId) return reprovisionedThreadId;
+    if (lastResumeError !== undefined) {
+      throw lastResumeError;
+    }
+    throw inactiveSessionError(this.agentServer.getInactiveSessionMessage(threadId));
   }
 
   private async _restartProviderThreadAfterMissingTurnStart(
