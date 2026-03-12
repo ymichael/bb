@@ -15,6 +15,7 @@ export default defineConfig({
       "src/__tests__/e2e/thread-provisioning-responsiveness.test.ts",
       "src/__tests__/e2e/thread-spawn-roundtrip.test.ts",
       "src/__tests__/e2e/thread-worktree-followup-roundtrip.test.ts",
+      "src/__tests__/e2e/standalone-daemon-cli-roundtrip.test.ts",
     ],
   },
 });
