@@ -50,6 +50,7 @@ export async function createEnvironmentAgentHttpServer(args: {
   port?: number;
   bearerToken?: string;
   onSessionSyncRequested?: () => void;
+  onShutdownRequested?: () => void | Promise<void>;
 }): Promise<EnvironmentAgentHttpServer> {
   const server = createServer(async (request, response) => {
     try {
@@ -71,6 +72,16 @@ export async function createEnvironmentAgentHttpServer(args: {
         writeJson(response, 202, {
           ok: true,
           status: args.runtime.getStatusSnapshot(),
+        });
+        return;
+      }
+
+      if (method === "POST" && url.pathname === "/control/shutdown") {
+        writeJson(response, 202, {
+          ok: true,
+        });
+        queueMicrotask(() => {
+          void args.onShutdownRequested?.();
         });
         return;
       }

@@ -172,6 +172,7 @@ export async function startEnvironmentAgentService(
     onSessionSyncRequested: () => {
       sessionSupervisor?.poke();
     },
+    onShutdownRequested: () => close(),
   });
   logger.log("info", "environment-agent http listening", {
     baseUrl: server.baseUrl,
