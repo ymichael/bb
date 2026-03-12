@@ -15,7 +15,6 @@ import {
 } from "@beanbag/environment";
 import {
   removeEnvironmentAgentDefaultLogArtifacts,
-  type EnvironmentAgentClient,
   type EnvironmentAgentConnectionTarget,
 } from "@beanbag/environment-agent";
 import type { ProjectRepository, ThreadRepository } from "@beanbag/db";
@@ -28,14 +27,6 @@ export interface ActiveEnvironmentRuntime {
   environment: IEnvironment;
   agentConnectionTarget: EnvironmentAgentConnectionTarget;
   stopWatchingWorkspaceStatus?: () => void;
-}
-
-export interface EnvironmentAgentControlConnection {
-  client: EnvironmentAgentClient;
-  providerLaunch?: {
-    command: string;
-    args: string[];
-  };
 }
 
 export interface PrimaryPromotionState {
@@ -62,11 +53,6 @@ interface EnvironmentServiceCallbacks {
     environment: IEnvironment,
     reason: ThreadEnvironmentStartReason,
   ) => Promise<void>;
-  spawnProviderProcess: (args: {
-    threadId: string;
-    projectId?: string;
-    agentConnectionTarget: EnvironmentAgentConnectionTarget;
-  }) => EnvironmentAgentControlConnection | Promise<EnvironmentAgentControlConnection>;
 }
 
 function isUnavailableCleanupTargetError(error: unknown): boolean {

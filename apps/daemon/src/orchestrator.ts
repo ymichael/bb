@@ -132,7 +132,6 @@ import {
 import {
   EnvironmentService,
   type ActiveEnvironmentRuntime,
-  type EnvironmentAgentControlConnection,
   type PrimaryPromotionState,
 } from "./environment-service.js";
 import { measureAsync, measureSync } from "./perf.js";
@@ -594,13 +593,6 @@ export class Orchestrator implements ThreadOrchestrator {
         },
         runOptionalSetup: (threadId, environment, reason) =>
           this._runOptionalEnvironmentSetup(threadId, environment, reason),
-        spawnProviderProcess: ({ threadId, projectId, agentConnectionTarget }) => {
-          return this._connectEnvironmentAgentSession({
-            threadId,
-            projectId,
-            agentConnectionTarget,
-          });
-        },
       },
     );
     this.primaryPromotionByProjectId = this.environmentService.primaryPromotionByProjectId;
@@ -3399,30 +3391,6 @@ export class Orchestrator implements ThreadOrchestrator {
       environmentKind,
       reason,
     );
-  }
-
-  private async _connectEnvironmentAgentSession(args: {
-    threadId: string;
-    projectId?: string;
-    agentConnectionTarget: EnvironmentAgentConnectionTarget;
-  }): Promise<EnvironmentAgentControlConnection> {
-    if (!this.environmentAgentCommandDispatcher) {
-      throw inactiveSessionError(args.threadId);
-    }
-    return {
-      client: new EnvironmentAgentSessionCommandClient({
-        threadId: args.threadId,
-        commandDispatcher: this.environmentAgentCommandDispatcher,
-      }),
-      ...(args.agentConnectionTarget.providerLaunch
-        ? {
-            providerLaunch: {
-              command: args.agentConnectionTarget.providerLaunch.command,
-              args: [...args.agentConnectionTarget.providerLaunch.args],
-            },
-          }
-        : {}),
-    };
   }
 
   private _resolveEnvironmentAgentConnectionTargetFromRuntimeEnv():

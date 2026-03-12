@@ -246,11 +246,6 @@ function createService(args: {
       onCleanupFailure,
       onPrimaryCheckoutDemoted: vi.fn(),
       runOptionalSetup,
-      spawnProviderProcess: vi.fn(
-        () => ({
-          client: {} as never,
-        }),
-      ),
     },
   );
 
@@ -653,11 +648,6 @@ describe("EnvironmentService", () => {
         onCleanupFailure: vi.fn(),
         onPrimaryCheckoutDemoted: vi.fn(),
         runOptionalSetup: vi.fn().mockResolvedValue(undefined),
-        spawnProviderProcess: vi.fn(
-          () => ({
-            client: {} as never,
-          }),
-        ),
       },
     );
 
@@ -780,11 +770,6 @@ describe("EnvironmentService", () => {
         onCleanupFailure: vi.fn(),
         onPrimaryCheckoutDemoted: vi.fn(),
         runOptionalSetup: vi.fn().mockResolvedValue(undefined),
-        spawnProviderProcess: vi.fn(
-          () => ({
-            client: {} as never,
-          }),
-        ),
       },
     );
 
