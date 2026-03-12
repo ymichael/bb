@@ -1929,6 +1929,10 @@ describe("Orchestrator", () => {
           createdAt: 1_100,
         }),
       );
+      let resolveEnsureProviderSession: ((value: string) => void) | undefined;
+      const ensureProviderSessionPromise = new Promise<string>((resolve) => {
+        resolveEnsureProviderSession = resolve;
+      });
       vi
         .spyOn(
           manager as unknown as {
@@ -1936,11 +1940,7 @@ describe("Orchestrator", () => {
           },
           "_ensureProviderSession",
         )
-        .mockResolvedValue("provider-thread-1");
-      let resolveSend: ((value: string) => void) | undefined;
-      const sendPromise = new Promise<string>((resolve) => {
-        resolveSend = resolve;
-      });
+        .mockReturnValue(ensureProviderSessionPromise);
       vi
         .spyOn(
           manager as unknown as {
@@ -1948,7 +1948,7 @@ describe("Orchestrator", () => {
           },
           "_sendTurnCommandWithStaleProviderRetry",
         )
-        .mockReturnValue(sendPromise);
+        .mockResolvedValue("provider-thread-1");
 
       await expect(
         manager.tell("thread-1", {
@@ -1984,15 +1984,18 @@ describe("Orchestrator", () => {
         expect.anything(),
       );
 
-      resolveSend?.("provider-thread-1");
+      resolveEnsureProviderSession?.("provider-thread-1");
+      await Promise.resolve();
       await Promise.resolve();
 
-      expect(eventRepo.create).toHaveBeenCalledWith(
+      const createdEvents = (eventRepo.create as ReturnType<typeof vi.fn>).mock.calls.map(
+        (call) => call[0],
+      );
+      expect(createdEvents[1]).toEqual(
         expect.objectContaining({
           threadId: "thread-1",
           type: "client/turn/start",
         }),
-        expect.anything(),
       );
     });
 
@@ -2000,17 +2003,34 @@ describe("Orchestrator", () => {
 
 
 
-    it("throws if thread has no active process", async () => {
+    it("accepts the follow-up and records an error when no session can be resumed", async () => {
       (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
         makeThread(),
       );
-      // processes map is empty by default, so no active process
-
       await expect(
         manager.tell("thread-1", { input: [{ type: "text", text: "hello" }] }),
-      ).rejects.toThrow(
-        "Thread thread-1 has no codex session",
+      ).resolves.toBeUndefined();
+
+      await Promise.resolve();
+
+      const createdEvents = (eventRepo.create as ReturnType<typeof vi.fn>).mock.calls.map(
+        (call) => call[0],
       );
+      expect(createdEvents).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            threadId: "thread-1",
+            type: "client/turn/requested",
+          }),
+          expect.objectContaining({
+            threadId: "thread-1",
+            type: "system/error",
+          }),
+        ]),
+      );
+      expect(ws.broadcast).toHaveBeenCalledWith("thread", "thread-1", [
+        "events-appended",
+      ]);
     });
 
 

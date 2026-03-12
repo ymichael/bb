@@ -1024,23 +1024,7 @@ export class Orchestrator implements ThreadOrchestrator {
     if (tellMode === "steer" && !activeTurnId) {
       throw noActiveTurnError(threadId);
     }
-    const providerThreadId = await this._ensureProviderSession(threadId, options);
-
-    const project = this.projectRepo.getById(thread.projectId);
-    if (project) {
-      this._maybeAutogenerateThreadTitle(
-        threadId,
-        project.rootPath,
-        providerThreadId,
-        requestedInput,
-      );
-    }
-
-    const requestedTurnParams = this._buildTurnStartParams(
-      providerThreadId,
-      providerInput,
-      options,
-    );
+    const requestedTurnParams = this._buildTurnRequestedParams(providerInput, options);
     const statusChanged = this._activateThreadAndPersistOutboundStartEvent(threadId, {
       type: "client/turn/requested",
       params: requestedTurnParams,
@@ -1059,6 +1043,18 @@ export class Orchestrator implements ThreadOrchestrator {
 
     const dispatchTurn = async () => {
       try {
+        const providerThreadId = await this._ensureProviderSession(threadId, options);
+
+        const project = this.projectRepo.getById(thread.projectId);
+        if (project) {
+          this._maybeAutogenerateThreadTitle(
+            threadId,
+            project.rootPath,
+            providerThreadId,
+            requestedInput,
+          );
+        }
+
         const acceptedProviderThreadId =
           await this._sendTurnCommandWithStaleProviderRetry({
           threadId,
@@ -1090,14 +1086,25 @@ export class Orchestrator implements ThreadOrchestrator {
           this.handleEnvironmentAgentSessionInvalidated(threadId);
         }
         if (
-          this._shouldRollbackTellFailure(
-            threadId,
-            statusBeforeSend,
-            activeTurnId,
-            lifecycleEpochBeforeSend,
-          )
+          statusBeforeSend !== "active" &&
+          !activeTurnId &&
+          (this.turnLifecycleEpochs.get(threadId) ?? 0) === lifecycleEpochBeforeSend &&
+          this._resolvePersistedActiveTurnId(threadId) === undefined
         ) {
-          this._setThreadStatus(threadId, statusBeforeSend);
+          const statusChanged = this._setThreadStatus(threadId, "error", false);
+          this._appendEvent(
+            threadId,
+            "system/error",
+            this._createTellFailureEventData(error),
+            { broadcastChanges: false },
+          );
+          this._broadcastThreadChanged(
+            threadId,
+            statusChanged
+              ? [...THREAD_STATUS_CHANGE_KINDS, "events-appended"]
+              : ["events-appended"],
+          );
+        } else {
           this._appendEvent(
             threadId,
             "system/error",
@@ -4012,6 +4019,23 @@ export class Orchestrator implements ThreadOrchestrator {
     input: PromptInput[],
     options?: ProviderExecutionOptions,
   ): Record<string, unknown> {
+    return {
+      threadId: providerThreadId,
+      ...this._buildTurnRequestParams(input, options),
+    };
+  }
+
+  private _buildTurnRequestedParams(
+    input: PromptInput[],
+    options?: ProviderExecutionOptions,
+  ): Record<string, unknown> {
+    return this._buildTurnRequestParams(input, options);
+  }
+
+  private _buildTurnRequestParams(
+    input: PromptInput[],
+    options?: ProviderExecutionOptions,
+  ): Record<string, unknown> {
     const sandboxMode = options?.sandboxMode ?? "danger-full-access";
     const sandboxPolicy =
       sandboxMode === "read-only"
@@ -4026,7 +4050,6 @@ export class Orchestrator implements ThreadOrchestrator {
             }
           : { type: "dangerFullAccess" };
     return {
-      threadId: providerThreadId,
       input,
       approvalPolicy: "never",
       sandboxPolicy,
