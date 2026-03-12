@@ -18,14 +18,11 @@ export interface EnvironmentAgentSessionSupervisorOptions {
   pollIntervalMs?: number;
   commandBatchLimit?: number;
   onError?: (error: unknown) => void;
-  onQuiescent?: () => void | Promise<void>;
-  selfSuspendDebounceMs?: number;
 }
 
 const DEFAULT_POLL_INTERVAL_MS = 250;
 const DEFAULT_COMMAND_BATCH_LIMIT = 50;
 const DEFAULT_COMMAND_LONG_POLL_MS = 10_000;
-const DEFAULT_SELF_SUSPEND_DEBOUNCE_MS = 1_000;
 const DEFAULT_HEARTBEAT_INTERVAL_MS = 10_000;
 const MAX_ERROR_BACKOFF_MS = 30_000;
 
@@ -73,13 +70,9 @@ export class EnvironmentAgentSessionSupervisor {
   private readonly pollIntervalMs: number;
   private readonly commandBatchLimit: number;
   private readonly onError?: (error: unknown) => void;
-  private readonly onQuiescent?: () => void | Promise<void>;
-  private readonly selfSuspendDebounceMs: number;
   private pollTimer: ReturnType<typeof setTimeout> | undefined;
-  private selfSuspendTimer: ReturnType<typeof setTimeout> | undefined;
   private running = false;
   private cycleInFlight = false;
-  private selfSuspendInFlight = false;
   private consecutiveFailureCount = 0;
   private heartbeatIntervalMs = DEFAULT_HEARTBEAT_INTERVAL_MS;
   private nextHeartbeatAt = 0;
@@ -92,9 +85,6 @@ export class EnvironmentAgentSessionSupervisor {
     this.pollIntervalMs = options.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
     this.commandBatchLimit = options.commandBatchLimit ?? DEFAULT_COMMAND_BATCH_LIMIT;
     this.onError = options.onError;
-    this.onQuiescent = options.onQuiescent;
-    this.selfSuspendDebounceMs =
-      options.selfSuspendDebounceMs ?? DEFAULT_SELF_SUSPEND_DEBOUNCE_MS;
 
     this.options.sessionRuntime.initializeThread({
       threadId: options.threadId,
@@ -109,7 +99,6 @@ export class EnvironmentAgentSessionSupervisor {
         event: event.event,
         emittedAt: event.emittedAt,
       });
-      this.cancelSelfSuspend();
       this.cancelPendingCommandPull();
       this.scheduleImmediateCycle();
     });
@@ -127,7 +116,6 @@ export class EnvironmentAgentSessionSupervisor {
       this.handleError(error);
     }
     this.publishRuntimeDeliveryState();
-    this.refreshSelfSuspendState();
     this.scheduleNextCycle();
   }
 
@@ -136,7 +124,6 @@ export class EnvironmentAgentSessionSupervisor {
       return;
     }
     this.consecutiveFailureCount = 0;
-    this.cancelSelfSuspend();
     this.cancelPendingCommandPull();
     this.publishRuntimeDeliveryState();
     this.scheduleImmediateCycle();
@@ -148,7 +135,6 @@ export class EnvironmentAgentSessionSupervisor {
       clearTimeout(this.pollTimer);
       this.pollTimer = undefined;
     }
-    this.cancelSelfSuspend();
     this.cancelPendingCommandPull();
     while (this.cycleInFlight) {
       await new Promise((resolve) => setTimeout(resolve, 10));
@@ -249,7 +235,6 @@ export class EnvironmentAgentSessionSupervisor {
       this.publishRuntimeDeliveryState(error);
       this.handleError(error);
     } finally {
-      this.refreshSelfSuspendState();
       this.scheduleNextCycle();
     }
   }
@@ -417,78 +402,5 @@ export class EnvironmentAgentSessionSupervisor {
     throw new Error(
       `Environment-agent replay did not converge for thread ${this.options.threadId}`,
     );
-  }
-
-  private cancelSelfSuspend(): void {
-    if (!this.selfSuspendTimer) {
-      return;
-    }
-    clearTimeout(this.selfSuspendTimer);
-    this.selfSuspendTimer = undefined;
-  }
-
-  private refreshSelfSuspendState(): void {
-    if (!this.onQuiescent) {
-      return;
-    }
-    if (!this.isQuiescentForSelfSuspend()) {
-      this.cancelSelfSuspend();
-      return;
-    }
-    if (this.selfSuspendTimer || this.selfSuspendInFlight) {
-      return;
-    }
-    this.selfSuspendTimer = setTimeout(() => {
-      this.selfSuspendTimer = undefined;
-      void this.triggerSelfSuspendIfStillQuiescent();
-    }, this.selfSuspendDebounceMs);
-    this.selfSuspendTimer.unref?.();
-  }
-
-  private async triggerSelfSuspendIfStillQuiescent(): Promise<void> {
-    if (!this.isQuiescentForSelfSuspend() || !this.onQuiescent) {
-      this.refreshSelfSuspendState();
-      return;
-    }
-    this.selfSuspendInFlight = true;
-    try {
-      await this.onQuiescent();
-    } catch (error) {
-      this.handleError(error);
-    } finally {
-      this.selfSuspendInFlight = false;
-    }
-  }
-
-  private isQuiescentForSelfSuspend(): boolean {
-    if (!this.running || this.cycleInFlight || this.selfSuspendInFlight) {
-      return false;
-    }
-    const runtimeSnapshot = this.options.runtime.getQuiescenceSnapshot();
-    const drainSnapshot = this.options.sessionRuntime.getDrainSnapshot(
-      this.options.threadId,
-    );
-    if (!runtimeSnapshot.hasObservedWork) {
-      return false;
-    }
-    if (runtimeSnapshot.turnState !== "idle") {
-      return false;
-    }
-    if (runtimeSnapshot.commandExecutionCount > 0) {
-      return false;
-    }
-    if (runtimeSnapshot.pendingProviderRequestCount > 0) {
-      return false;
-    }
-    if (drainSnapshot.pendingEventCount > 0) {
-      return false;
-    }
-    if (drainSnapshot.pendingCommandAckCount > 0) {
-      return false;
-    }
-    if (drainSnapshot.pendingCommandResultCount > 0) {
-      return false;
-    }
-    return true;
   }
 }

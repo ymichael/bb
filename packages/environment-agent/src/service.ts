@@ -38,8 +38,6 @@ export interface EnvironmentAgentServiceOptions {
   session: {
     pollIntervalMs: number;
     commandBatchLimit: number;
-    enableSelfSuspend: boolean;
-    selfSuspendDebounceMs: number;
   };
 }
 
@@ -47,8 +45,6 @@ const BEANBAG_ENVIRONMENT_AGENT_AUTH_TOKEN = "BEANBAG_ENVIRONMENT_AGENT_AUTH_TOK
 const BEANBAG_DAEMON_URL = "BEANBAG_DAEMON_URL";
 const BEANBAG_ENVIRONMENT_AGENT_SESSION_POLL_INTERVAL_MS =
   "BEANBAG_ENVIRONMENT_AGENT_SESSION_POLL_INTERVAL_MS";
-const BEANBAG_ENVIRONMENT_AGENT_SELF_SUSPEND_DEBOUNCE_MS =
-  "BEANBAG_ENVIRONMENT_AGENT_SELF_SUSPEND_DEBOUNCE_MS";
 
 function parsePositiveIntegerEnv(
   rawValue: string | undefined,
@@ -106,17 +102,12 @@ export function resolveEnvironmentAgentServiceOptions(args: {
     logging: {
       filePath: resolveEnvironmentAgentLogFilePath(args.env),
     },
-      session: {
-        pollIntervalMs:
-          parsePositiveIntegerEnv(
-            args.env[BEANBAG_ENVIRONMENT_AGENT_SESSION_POLL_INTERVAL_MS],
-          ) ?? 250,
-      commandBatchLimit: 50,
-      enableSelfSuspend: false,
-      selfSuspendDebounceMs:
+    session: {
+      pollIntervalMs:
         parsePositiveIntegerEnv(
-          args.env[BEANBAG_ENVIRONMENT_AGENT_SELF_SUSPEND_DEBOUNCE_MS],
-        ) ?? 1_000,
+          args.env[BEANBAG_ENVIRONMENT_AGENT_SESSION_POLL_INTERVAL_MS],
+        ) ?? 250,
+      commandBatchLimit: 50,
     },
   };
 }
@@ -207,12 +198,6 @@ export async function startEnvironmentAgentService(
             error: error instanceof Error ? error.message : String(error),
           });
         },
-        ...(options.session.enableSelfSuspend
-          ? {
-              onQuiescent: close,
-              selfSuspendDebounceMs: options.session.selfSuspendDebounceMs,
-            }
-          : {}),
       });
       await sessionSupervisor.start();
     }
