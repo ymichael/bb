@@ -146,6 +146,48 @@ describe("environment-agent repositories", () => {
     });
   });
 
+  it("closes all active sessions for daemon restart recovery", () => {
+    const firstThreadId = createThreadId();
+    const secondThreadId = createThreadId();
+    sessions.create({
+      id: "sess-active-1",
+      threadId: firstThreadId,
+      agentId: "agent-1",
+      agentInstanceId: "instance-1",
+      protocolVersion: 1,
+      transportKind: "websocket",
+      leaseExpiresAt: 10_000,
+      now: 1_000,
+    });
+    sessions.create({
+      id: "sess-active-2",
+      threadId: secondThreadId,
+      agentId: "agent-2",
+      agentInstanceId: "instance-2",
+      protocolVersion: 1,
+      transportKind: "http-long-poll",
+      leaseExpiresAt: 10_000,
+      now: 1_000,
+    });
+
+    const closedCount = sessions.closeAllActive({
+      reason: "daemon_shutdown",
+      now: 2_000,
+    });
+
+    expect(closedCount).toBe(2);
+    expect(sessions.getById("sess-active-1")).toMatchObject({
+      status: "closed",
+      closeReason: "daemon_shutdown",
+      closedAt: 2_000,
+    });
+    expect(sessions.getById("sess-active-2")).toMatchObject({
+      status: "closed",
+      closeReason: "daemon_shutdown",
+      closedAt: 2_000,
+    });
+  });
+
   it("throws for invalid persisted session transport/status values", () => {
     const threadId = createThreadId();
     sessions.create({

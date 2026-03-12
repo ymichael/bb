@@ -220,6 +220,7 @@ export function decodeThreadEventData(
     candidates
       .map((candidate) => {
         return (
+          getStringField(candidate, "providerThreadId") ??
           getStringField(candidate, "threadId") ??
           getStringField(candidate, "thread_id") ??
           getStringField(candidate, "conversationId") ??

@@ -477,6 +477,24 @@ export class EnvironmentAgentSessionRepository {
       .map(rowToEnvironmentAgentSessionRecord);
   }
 
+  closeAllActive(args: {
+    reason: Exclude<EnvironmentAgentSessionCloseReason, "lease_expired" | "newer_session">;
+    now?: number;
+  }): number {
+    const now = args.now ?? Date.now();
+    const result = this.db
+      .update(environmentAgentSessions)
+      .set({
+        status: "closed",
+        closedAt: now,
+        closeReason: args.reason,
+        updatedAt: now,
+      })
+      .where(eq(environmentAgentSessions.status, "active"))
+      .run();
+    return Number(result.changes ?? 0);
+  }
+
   touchHeartbeat(args: {
     sessionId: string;
     leaseExpiresAt: number;

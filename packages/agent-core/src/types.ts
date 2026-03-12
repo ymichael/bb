@@ -281,6 +281,7 @@ export interface SystemProvisioningFallbackEventData {
 export interface SystemProvisioningCompletedEventData {
   environmentId: string;
   environmentDisplayName: string;
+  providerThreadId?: string;
   workspaceRoot?: string;
   branchName?: string;
   headSha?: string;

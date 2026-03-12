@@ -486,4 +486,45 @@ describe("Orchestrator environment-agent delivery and replay", () => {
     });
     expect(sessionService.getThreadStatus).toHaveBeenCalledWith("thread-1");
   });
+
+  it("recovers persisted provider thread ids from provisioning-completed events", () => {
+    const thread = makeThread({
+      id: "thread-1",
+      status: "idle",
+      environmentId: "local",
+    });
+    (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
+    (
+      eventRepo as unknown as {
+        getLatestProviderThreadId: ReturnType<typeof vi.fn>;
+        listByThread: ReturnType<typeof vi.fn>;
+      }
+    ).getLatestProviderThreadId = vi.fn().mockReturnValue(undefined);
+    (
+      eventRepo as unknown as {
+        listByThread: ReturnType<typeof vi.fn>;
+      }
+    ).listByThread = vi.fn().mockReturnValue([
+      {
+        id: "evt-1",
+        threadId: "thread-1",
+        seq: 1,
+        type: "system/provisioning/completed",
+        data: {
+          environmentId: "local",
+          environmentDisplayName: "Direct Workspace",
+          providerThreadId: "provider-thread-1",
+        },
+        createdAt: 1_000,
+      },
+    ]);
+
+    const providerThreadId = (
+      manager as unknown as {
+        _resolvePersistedProviderThreadId: (threadId: string) => string | undefined;
+      }
+    )._resolvePersistedProviderThreadId("thread-1");
+
+    expect(providerThreadId).toBe("provider-thread-1");
+  });
 });

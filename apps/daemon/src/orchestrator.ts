@@ -2975,6 +2975,7 @@ export class Orchestrator implements ThreadOrchestrator {
     this._appendEvent(threadId, "system/provisioning/completed", {
       environmentId: environmentRuntime.environment.kind,
       environmentDisplayName: provisionedEnvironmentInfo.displayName,
+      providerThreadId,
       workspaceRoot: environmentRuntime.environment.getWorkspaceRootUnsafe(),
       ...(branchName ? { branchName } : {}),
       ...(headSha ? { headSha } : {}),
