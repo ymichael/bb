@@ -1615,20 +1615,37 @@ export class Orchestrator implements ThreadOrchestrator {
   async archive(threadId: string): Promise<void> {
     const thread = this.threadRepo.getById(threadId);
     if (!thread) return;
-    await this.environmentService.destroyThreadEnvironment(threadId);
+    const previousStatus = thread.status;
+    const previousArchivedAt = thread.archivedAt;
+    const archivedAt = previousArchivedAt ?? Date.now();
 
-    const refreshedThread = this.threadRepo.getById(threadId);
-    if (!refreshedThread) return;
-    this._finalizeManagedThreadCleanup(threadId, refreshedThread.projectId);
     this.threadRepo.update(threadId, {
       status: "idle",
-      archivedAt: refreshedThread.archivedAt ?? Date.now(),
+      archivedAt,
     });
-    this._pruneHistoricalNoiseEvents(threadId, ARCHIVED_NOISE_EVENT_KEEP_RECENT);
     this._broadcastThreadChanged(threadId, [
       ...THREAD_STATUS_CHANGE_KINDS,
       "archived-changed",
     ]);
+
+    try {
+      await this.environmentService.destroyThreadEnvironment(threadId);
+    } catch (error) {
+      this.threadRepo.update(threadId, {
+        status: previousStatus,
+        archivedAt: previousArchivedAt ?? null,
+      });
+      this._broadcastThreadChanged(threadId, [
+        ...THREAD_STATUS_CHANGE_KINDS,
+        "archived-changed",
+      ]);
+      throw error;
+    }
+
+    const refreshedThread = this.threadRepo.getById(threadId);
+    if (!refreshedThread) return;
+    this._finalizeManagedThreadCleanup(threadId, refreshedThread.projectId);
+    this._pruneHistoricalNoiseEvents(threadId, ARCHIVED_NOISE_EVENT_KEEP_RECENT);
   }
 
   async deleteThread(threadId: string): Promise<void> {

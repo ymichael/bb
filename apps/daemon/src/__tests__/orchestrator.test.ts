@@ -2178,32 +2178,25 @@ describe("Orchestrator", () => {
       const archivePromise = manager.archive("thread-1");
 
       expect(resolveCleanup).toBeTypeOf("function");
+      expect((ws.broadcast as ReturnType<typeof vi.fn>).mock.calls.at(0)).toEqual([
+        "thread",
+        "thread-1",
+        ["status-changed", "work-status-changed", "archived-changed"],
+      ]);
       expect(ws.broadcast).not.toHaveBeenCalledWith("thread", "thread-1", [
-        "status-changed",
         "work-status-changed",
-        "archived-changed",
       ]);
 
       resolveCleanup?.();
       await archivePromise;
 
       expect(ws.broadcast).toHaveBeenCalledWith("thread", "thread-1", [
-        "status-changed",
         "work-status-changed",
-        "archived-changed",
-      ]);
-      expect(ws.broadcast).toHaveBeenCalledWith("thread", "thread-1", [
-        "work-status-changed",
-      ]);
-      expect((ws.broadcast as ReturnType<typeof vi.fn>).mock.calls.at(-2)).toEqual([
-        "thread",
-        "thread-1",
-        ["work-status-changed"],
       ]);
       expect((ws.broadcast as ReturnType<typeof vi.fn>).mock.calls.at(-1)).toEqual([
         "thread",
         "thread-1",
-        ["status-changed", "work-status-changed", "archived-changed"],
+        ["work-status-changed"],
       ]);
     });
 
@@ -2248,10 +2241,19 @@ describe("Orchestrator", () => {
           queuedOperationsByThreadId: Map<string, unknown[]>;
         }).queuedOperationsByThreadId.has("thread-1"),
       ).toBe(true);
-      expect(threadRepo.update).not.toHaveBeenCalledWith("thread-1", {
+      expect(threadRepo.update).toHaveBeenNthCalledWith(1, "thread-1", {
         status: "idle",
         archivedAt: expect.any(Number),
       });
+      expect(threadRepo.update).toHaveBeenNthCalledWith(2, "thread-1", {
+        status: "active",
+        archivedAt: null,
+      });
+      expect((ws.broadcast as ReturnType<typeof vi.fn>).mock.calls).toContainEqual([
+        "thread",
+        "thread-1",
+        ["status-changed", "work-status-changed", "archived-changed"],
+      ]);
     });
   });
 
