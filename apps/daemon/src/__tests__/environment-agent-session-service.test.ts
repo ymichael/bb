@@ -106,7 +106,6 @@ describe("EnvironmentAgentSessionService", () => {
       threadId,
       agentId: "agent-1",
       agentInstanceId: "instance-1",
-      transportKind: "http-long-poll",
       leaseExpiresAt: 47_000,
     });
     expect(opened.welcome).toMatchObject({

@@ -9,7 +9,6 @@ export {
   EventRepository,
 } from "./repositories.js";
 export type {
-  EnvironmentAgentSessionTransportKind,
   EnvironmentAgentSessionStatus,
   EnvironmentAgentSessionCloseReason,
   EnvironmentAgentCursorPosition,

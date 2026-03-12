@@ -114,7 +114,6 @@ Recommended columns:
 - `agent_id` (not null)
 - `agent_instance_id` (not null)
 - `protocol_version` (not null)
-- `transport_kind` (not null)
 - `status` (`active` | `expired` | `closed` | `replaced`)
 - `lease_expires_at` (not null)
 - `last_heartbeat_at` (nullable)

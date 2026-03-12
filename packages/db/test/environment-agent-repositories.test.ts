@@ -59,7 +59,6 @@ describe("environment-agent repositories", () => {
       agentId: "agent-1",
       agentInstanceId: "instance-1",
       protocolVersion: 1,
-      transportKind: "http-long-poll",
       controlBaseUrl: "http://127.0.0.1:4310",
       controlAuthToken: "token-1",
       leaseExpiresAt: 5_000,
@@ -69,7 +68,6 @@ describe("environment-agent repositories", () => {
     expect(sessions.getActiveByThreadId(threadId, 1_000)).toMatchObject({
       id: "sess-1",
       status: "active",
-      transportKind: "http-long-poll",
       controlBaseUrl: "http://127.0.0.1:4310",
       controlAuthToken: "token-1",
     });
@@ -94,7 +92,6 @@ describe("environment-agent repositories", () => {
         agentId: "agent-1",
         agentInstanceId: "instance-2",
         protocolVersion: 1,
-        transportKind: "http-long-poll",
         controlBaseUrl: "http://127.0.0.1:4311",
         controlAuthToken: "token-2",
         leaseExpiresAt: 15_000,
@@ -110,7 +107,6 @@ describe("environment-agent repositories", () => {
     expect(replaced.active).toMatchObject({
       id: "sess-2",
       status: "active",
-      transportKind: "http-long-poll",
       controlBaseUrl: "http://127.0.0.1:4311",
       controlAuthToken: "token-2",
     });
@@ -128,7 +124,6 @@ describe("environment-agent repositories", () => {
       agentId: "agent-expire",
       agentInstanceId: "instance-expire",
       protocolVersion: 1,
-      transportKind: "http-long-poll",
       leaseExpiresAt: 5_000,
       now: 1_000,
     });
@@ -163,7 +158,6 @@ describe("environment-agent repositories", () => {
       agentId: "agent-1",
       agentInstanceId: "instance-1",
       protocolVersion: 1,
-      transportKind: "http-long-poll",
       leaseExpiresAt: 10_000,
       now: 1_000,
     });
@@ -173,7 +167,6 @@ describe("environment-agent repositories", () => {
       agentId: "agent-2",
       agentInstanceId: "instance-2",
       protocolVersion: 1,
-      transportKind: "http-long-poll",
       leaseExpiresAt: 10_000,
       now: 1_000,
     });
@@ -204,17 +197,14 @@ describe("environment-agent repositories", () => {
       agentId: "agent-invalid",
       agentInstanceId: "instance-invalid",
       protocolVersion: 1,
-      transportKind: "http-long-poll",
       leaseExpiresAt: 5_000,
       now: 1_000,
     });
 
-    sqlite.exec(
-      "UPDATE environment_agent_sessions SET transport_kind='udp', status='broken' WHERE id='sess-invalid'",
-    );
+    sqlite.exec("UPDATE environment_agent_sessions SET status='broken' WHERE id='sess-invalid'");
 
     expect(() => sessions.getById("sess-invalid")).toThrow(
-      "Invalid persisted environment-agent session transport: udp",
+      "Invalid persisted environment-agent session status: broken",
     );
   });
 
@@ -297,7 +287,6 @@ describe("environment-agent repositories", () => {
       agentId: "agent-cmd",
       agentInstanceId: "instance-cmd",
       protocolVersion: 1,
-      transportKind: "http-long-poll",
       leaseExpiresAt: 5_000,
       now: 1_000,
     });
@@ -355,7 +344,6 @@ describe("environment-agent repositories", () => {
       agentId: "agent-cmd",
       agentInstanceId: "instance-old",
       protocolVersion: 1,
-      transportKind: "http-long-poll",
       leaseExpiresAt: 5_000,
       now: 1_000,
     });
@@ -375,7 +363,6 @@ describe("environment-agent repositories", () => {
       agentId: "agent-cmd",
       agentInstanceId: "instance-new",
       protocolVersion: 1,
-      transportKind: "http-long-poll",
       leaseExpiresAt: 6_000,
       now: 3_500,
     });

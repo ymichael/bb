@@ -28,7 +28,6 @@ export {
 } from "./protocol.js";
 
 export type {
-  EnvironmentAgentSessionTransportKind,
   EnvironmentAgentSessionCloseReason,
   EnvironmentAgentSessionCursor,
   EnvironmentAgentSessionCursorExclusive,

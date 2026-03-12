@@ -17,8 +17,6 @@ import {
   environmentAgentSessions,
 } from "./schema.js";
 
-export type EnvironmentAgentSessionTransportKind = "http-long-poll";
-
 export type EnvironmentAgentSessionStatus =
   | "active"
   | "expired"
@@ -44,7 +42,6 @@ export interface EnvironmentAgentSessionRecord {
   agentId: string;
   agentInstanceId: string;
   protocolVersion: number;
-  transportKind: EnvironmentAgentSessionTransportKind;
   controlBaseUrl?: string;
   controlAuthToken?: string;
   status: EnvironmentAgentSessionStatus;
@@ -102,7 +99,6 @@ export interface CreateEnvironmentAgentSessionInput {
   agentId: string;
   agentInstanceId: string;
   protocolVersion: number;
-  transportKind: EnvironmentAgentSessionTransportKind;
   controlBaseUrl?: string;
   controlAuthToken?: string;
   leaseExpiresAt: number;
@@ -127,19 +123,6 @@ const PENDING_ENVIRONMENT_AGENT_COMMAND_STATES: readonly EnvironmentAgentCommand
   "received",
   "started",
 ];
-
-function isEnvironmentAgentSessionTransportKind(
-  value: string,
-): value is EnvironmentAgentSessionTransportKind {
-  return value === "http-long-poll";
-}
-
-function normalizeEnvironmentAgentSessionTransportKind(
-  value: string,
-): EnvironmentAgentSessionTransportKind {
-  if (isEnvironmentAgentSessionTransportKind(value)) return value;
-  throw new Error(`Invalid persisted environment-agent session transport: ${value}`);
-}
 
 function isEnvironmentAgentSessionStatus(
   value: string,
@@ -218,7 +201,6 @@ function rowToEnvironmentAgentSessionRecord(
     agentId: row.agentId,
     agentInstanceId: row.agentInstanceId,
     protocolVersion: row.protocolVersion,
-    transportKind: normalizeEnvironmentAgentSessionTransportKind(row.transportKind),
     ...(row.controlBaseUrl !== null ? { controlBaseUrl: row.controlBaseUrl } : {}),
     ...(row.controlAuthToken !== null ? { controlAuthToken: row.controlAuthToken } : {}),
     status: normalizeEnvironmentAgentSessionStatus(row.status),
@@ -423,7 +405,6 @@ export class EnvironmentAgentSessionRepository {
       agentId: args.agentId,
       agentInstanceId: args.agentInstanceId,
       protocolVersion: args.protocolVersion,
-      transportKind: args.transportKind,
       controlBaseUrl: args.controlBaseUrl ?? null,
       controlAuthToken: args.controlAuthToken ?? null,
       status: "active",
@@ -645,7 +626,6 @@ export class EnvironmentAgentSessionRepository {
         agentId: args.nextSession.agentId,
         agentInstanceId: args.nextSession.agentInstanceId,
         protocolVersion: args.nextSession.protocolVersion,
-        transportKind: args.nextSession.transportKind,
         controlBaseUrl: args.nextSession.controlBaseUrl ?? null,
         controlAuthToken: args.nextSession.controlAuthToken ?? null,
         status: "active",

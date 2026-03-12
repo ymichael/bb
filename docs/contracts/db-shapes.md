@@ -100,7 +100,6 @@ Ownership: `EventRepository`.
 - `agent_id` (not null)
 - `agent_instance_id` (not null)
 - `protocol_version` (not null)
-- `transport_kind` (not null)
 - `control_base_url` (nullable)
 - `control_auth_token` (nullable)
 - `status` (not null)
@@ -121,7 +120,6 @@ Ownership: `EnvironmentAgentSessionRepository`.
 
 Closed-internal invariants:
 
-- valid `transport_kind`: `http-long-poll`
 - `control_base_url` and `control_auth_token` are persisted restart hints for daemon nudges, not thread truth
 - valid `status`: `active`, `expired`, `closed`, `replaced`
 - valid `close_reason` when present:

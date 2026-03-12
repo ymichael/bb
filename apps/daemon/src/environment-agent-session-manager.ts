@@ -2,7 +2,6 @@ import type {
   EnvironmentAgentSessionCloseReason,
   EnvironmentAgentSessionRecord,
   EnvironmentAgentSessionRepository,
-  EnvironmentAgentSessionTransportKind,
 } from "@beanbag/db";
 
 export interface OpenEnvironmentAgentSessionInput {
@@ -10,7 +9,6 @@ export interface OpenEnvironmentAgentSessionInput {
   agentId: string;
   agentInstanceId: string;
   protocolVersion: number;
-  transportKind: EnvironmentAgentSessionTransportKind;
   controlBaseUrl?: string;
   controlAuthToken?: string;
   leaseTtlMs: number;
@@ -59,7 +57,6 @@ export class EnvironmentAgentSessionManager {
         agentId: args.agentId,
         agentInstanceId: args.agentInstanceId,
         protocolVersion: args.protocolVersion,
-        transportKind: args.transportKind,
         controlBaseUrl: args.controlBaseUrl,
         controlAuthToken: args.controlAuthToken,
         leaseExpiresAt: now + args.leaseTtlMs,

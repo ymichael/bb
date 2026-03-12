@@ -175,13 +175,11 @@ export class EnvironmentAgentSessionService {
       throw new Error("Multi-channel environment-agent sessions are not supported yet");
     }
 
-    const transportKind = "http-long-poll";
     const opened = this.sessions.openSession({
       threadId: args.threadId,
       agentId: args.payload.agentId,
       agentInstanceId: args.payload.agentInstanceId,
       protocolVersion: ENVIRONMENT_AGENT_SESSION_PROTOCOL_VERSION,
-      transportKind,
       controlBaseUrl: args.payload.controlEndpoint?.baseUrl,
       controlAuthToken: args.payload.controlEndpoint?.authToken,
       leaseTtlMs: this.leaseTtlMs,

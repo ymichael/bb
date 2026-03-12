@@ -75,7 +75,6 @@ describe("EnvironmentAgentSessionCommandClient", () => {
       agentId: "agent-1",
       agentInstanceId: `${args.sessionId}-instance`,
       protocolVersion: 1,
-      transportKind: "http-long-poll",
       leaseExpiresAt: 30_000,
       now: 1_000,
     });
@@ -113,7 +112,6 @@ describe("EnvironmentAgentSessionCommandClient", () => {
       agentId: "agent-1",
       agentInstanceId: "instance-1",
       protocolVersion: 1,
-      transportKind: "http-long-poll",
       leaseExpiresAt: 30_000,
       now: 1_000,
     });
@@ -169,7 +167,6 @@ describe("EnvironmentAgentSessionCommandClient", () => {
       agentId: "agent-1",
       agentInstanceId: "instance-2",
       protocolVersion: 1,
-      transportKind: "http-long-poll",
       leaseExpiresAt: 30_000,
       now: 1_000,
     });
@@ -217,7 +214,6 @@ describe("EnvironmentAgentSessionCommandClient", () => {
       agentId: "agent-1",
       agentInstanceId: "instance-stale",
       protocolVersion: 1,
-      transportKind: "http-long-poll",
       leaseExpiresAt: 30_000,
       now: 1_000,
     });
@@ -278,7 +274,6 @@ describe("EnvironmentAgentSessionCommandClient", () => {
       agentId: "agent-1",
       agentInstanceId: "instance-provider-1",
       protocolVersion: 1,
-      transportKind: "http-long-poll",
       leaseExpiresAt: 30_000,
       now: 1_000,
     });

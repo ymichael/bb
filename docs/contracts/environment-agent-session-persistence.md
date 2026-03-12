@@ -84,7 +84,6 @@ Recommended columns:
 - `agent_id` text not null
 - `agent_instance_id` text not null
 - `protocol_version` integer not null
-- `transport_kind` text not null
 - `status` text not null
 - `lease_expires_at` integer not null
 - `last_heartbeat_at` integer
@@ -326,7 +325,7 @@ Key invariants:
 
 Suggested methods:
 
-- `create(args: { id: string; threadId: string; agentId: string; agentInstanceId: string; protocolVersion: number; transportKind: SessionTransportKind; leaseExpiresAt: number; now?: number }): EnvironmentAgentSessionRecord`
+- `create(args: { id: string; threadId: string; agentId: string; agentInstanceId: string; protocolVersion: number; leaseExpiresAt: number; now?: number }): EnvironmentAgentSessionRecord`
 - `getById(id: string): EnvironmentAgentSessionRecord | undefined`
 - `getActiveByThreadId(threadId: string): EnvironmentAgentSessionRecord | undefined`
 - `listExpiringBefore(timestamp: number): EnvironmentAgentSessionRecord[]`

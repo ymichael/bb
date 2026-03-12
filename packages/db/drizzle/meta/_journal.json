@@ -239,6 +239,13 @@
       "when": 1773705600000,
       "tag": "0033_environment_agent_session_transport_cleanup",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "6",
+      "when": 1773792000000,
+      "tag": "0034_drop_environment_agent_session_transport_kind",
+      "breakpoints": true
     }
   ]
 }

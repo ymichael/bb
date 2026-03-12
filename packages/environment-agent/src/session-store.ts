@@ -2,7 +2,6 @@ import type { EnvironmentAgentCommand } from "./protocol.js";
 import type {
   EnvironmentAgentSessionCloseReason,
   EnvironmentAgentSessionCursor,
-  EnvironmentAgentSessionTransportKind,
 } from "./session-protocol.js";
 
 export type EnvironmentAgentSessionStoreCommandReceiptState =
@@ -62,7 +61,6 @@ export interface EnvironmentAgentPersistedSessionRecord {
   agentId: string;
   agentInstanceId: string;
   protocolVersion: number;
-  transportKind: EnvironmentAgentSessionTransportKind;
   status: EnvironmentAgentSessionStoreSessionStatus;
   leaseExpiresAt: number;
   lastHeartbeatAt?: number;
