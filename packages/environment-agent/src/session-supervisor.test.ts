@@ -37,7 +37,6 @@ describe("EnvironmentAgentSessionSupervisor", () => {
       payload: {
         leaseTtlMs: 30_000,
         heartbeatIntervalMs: 10_000,
-        selectedTransport: "http-long-poll",
         protocolVersion: 1,
         channels: [],
       },
@@ -156,7 +155,6 @@ describe("EnvironmentAgentSessionSupervisor", () => {
           payload: {
             leaseTtlMs: 30_000,
             heartbeatIntervalMs: 5,
-            selectedTransport: "http-long-poll",
             protocolVersion: 1,
             channels: [],
           },
@@ -170,7 +168,6 @@ describe("EnvironmentAgentSessionSupervisor", () => {
           payload: {
             leaseTtlMs: 30_000,
             heartbeatIntervalMs: 5,
-            selectedTransport: "http-long-poll",
             protocolVersion: 1,
             channels: [],
           },
@@ -241,7 +238,6 @@ describe("EnvironmentAgentSessionSupervisor", () => {
         payload: {
           leaseTtlMs: 30_000,
           heartbeatIntervalMs: 50,
-          selectedTransport: "http-long-poll",
           protocolVersion: 1,
           channels: [],
         },
@@ -304,7 +300,6 @@ describe("EnvironmentAgentSessionSupervisor", () => {
         payload: {
           leaseTtlMs: 30_000,
           heartbeatIntervalMs: 5,
-          selectedTransport: "http-long-poll",
           protocolVersion: 1,
           channels: [],
         },
@@ -378,7 +373,6 @@ describe("EnvironmentAgentSessionSupervisor", () => {
         payload: {
           leaseTtlMs: 30_000,
           heartbeatIntervalMs: 10_000,
-          selectedTransport: "http-long-poll",
           protocolVersion: 1,
           channels: [],
         },
@@ -499,7 +493,6 @@ describe("EnvironmentAgentSessionSupervisor", () => {
       payload: {
         leaseTtlMs: 30_000,
         heartbeatIntervalMs: 10_000,
-        selectedTransport: "http-long-poll",
         protocolVersion: 1,
         channels: [
           {
@@ -639,7 +632,6 @@ describe("EnvironmentAgentSessionSupervisor", () => {
       payload: {
         leaseTtlMs: 30_000,
         heartbeatIntervalMs: 10_000,
-        selectedTransport: "http-long-poll",
         protocolVersion: 1,
         channels: [
           {

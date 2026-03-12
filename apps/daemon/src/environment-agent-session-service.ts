@@ -41,12 +41,6 @@ const DEFAULT_HEARTBEAT_INTERVAL_MS = 10_000;
 const DEFAULT_COMMAND_LONG_POLL_TIMEOUT_MS = 10_000;
 const DEFAULT_COMMAND_LONG_POLL_INTERVAL_MS = 100;
 
-function supportsEnvironmentAgentLongPollTransport(
-  supportedTransports: EnvironmentAgentSessionOpenPayload["supportedTransports"],
-): boolean {
-  return supportedTransports.includes("http-long-poll");
-}
-
 function cursorForReply(args: {
   threadId: string;
   batchGeneration: number;
@@ -181,9 +175,6 @@ export class EnvironmentAgentSessionService {
       throw new Error("Multi-channel environment-agent sessions are not supported yet");
     }
 
-    if (!supportsEnvironmentAgentLongPollTransport(args.payload.supportedTransports)) {
-      throw new Error("No compatible environment-agent session transport");
-    }
     const transportKind = "http-long-poll";
     const opened = this.sessions.openSession({
       threadId: args.threadId,
@@ -219,7 +210,6 @@ export class EnvironmentAgentSessionService {
         payload: {
           leaseTtlMs: this.leaseTtlMs,
           heartbeatIntervalMs: this.heartbeatIntervalMs,
-          selectedTransport: transportKind,
           protocolVersion: ENVIRONMENT_AGENT_SESSION_PROTOCOL_VERSION,
           channels: [
             {

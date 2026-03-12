@@ -52,7 +52,6 @@ describe("session-protocol", () => {
         agentId: "agent-1",
         agentInstanceId: "inst-1",
         supportedProtocolVersions: [1],
-        supportedTransports: ["http-long-poll"],
         channels: [],
       },
     };

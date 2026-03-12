@@ -65,9 +65,6 @@ const environmentAgentSessionOpenBodySchema = z.object({
   agentId: z.string().min(1),
   agentInstanceId: z.string().min(1),
   supportedProtocolVersions: z.array(z.number().int()).min(1),
-  supportedTransports: z
-    .array(z.literal("http-long-poll"))
-    .min(1),
   controlEndpoint: z.object({
     baseUrl: z.string().url(),
     authToken: z.string().min(1),

@@ -47,7 +47,6 @@ function makeOpenPayload(threadId: string): EnvironmentAgentSessionOpenPayload {
     agentId: `agent:${threadId}`,
     agentInstanceId: `instance:${threadId}`,
     supportedProtocolVersions: [1],
-    supportedTransports: ["http-long-poll"],
     channels: [
       {
         channelId: threadId,

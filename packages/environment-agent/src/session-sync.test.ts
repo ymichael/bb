@@ -41,7 +41,6 @@ describe("EnvironmentAgentSessionSync", () => {
       payload: {
         leaseTtlMs: 30_000,
         heartbeatIntervalMs: 10_000,
-        selectedTransport: "http-long-poll",
         protocolVersion: 1,
         channels: [],
       },
@@ -92,7 +91,6 @@ describe("EnvironmentAgentSessionSync", () => {
         agentId: "agent-1",
         agentInstanceId: "instance-1",
         supportedProtocolVersions: [1],
-        supportedTransports: ["http-long-poll"],
         channels: [{ channelId: "thread-1", generation: 1 }],
       },
     });
@@ -230,7 +228,6 @@ describe("EnvironmentAgentSessionSync", () => {
       payload: {
         leaseTtlMs: 30_000,
         heartbeatIntervalMs: 10_000,
-        selectedTransport: "http-long-poll",
         protocolVersion: 1,
         channels: [
           {
@@ -252,7 +249,6 @@ describe("EnvironmentAgentSessionSync", () => {
         agentId: "agent-1",
         agentInstanceId: "instance-1",
         supportedProtocolVersions: [1],
-        supportedTransports: ["http-long-poll"],
         channels: [{ channelId: "thread-1", generation: 1 }],
       },
     })).resolves.toMatchObject({ sessionId: "sess-1" });

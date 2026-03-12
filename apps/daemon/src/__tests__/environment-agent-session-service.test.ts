@@ -89,7 +89,6 @@ describe("EnvironmentAgentSessionService", () => {
         agentId: "agent-1",
         agentInstanceId: "instance-1",
         supportedProtocolVersions: [1],
-        supportedTransports: ["http-long-poll"],
         channels: [
           {
             channelId: threadId,
@@ -118,7 +117,6 @@ describe("EnvironmentAgentSessionService", () => {
       payload: {
         leaseTtlMs: 45_000,
         heartbeatIntervalMs: 15_000,
-        selectedTransport: "http-long-poll",
         protocolVersion: 1,
         channels: [
           {
@@ -144,7 +142,6 @@ describe("EnvironmentAgentSessionService", () => {
         agentId: "agent-1",
         agentInstanceId: "instance-1",
         supportedProtocolVersions: [1],
-        supportedTransports: ["http-long-poll"],
         channels: [
           {
             channelId: threadId,
@@ -154,7 +151,6 @@ describe("EnvironmentAgentSessionService", () => {
       },
     });
 
-    expect(opened.welcome.payload.selectedTransport).toBe("http-long-poll");
     expect(opened.welcome.payload.channels).toEqual([
       {
         channelId: threadId,
@@ -178,7 +174,6 @@ describe("EnvironmentAgentSessionService", () => {
         agentId: "agent-1",
         agentInstanceId: "instance-1",
         supportedProtocolVersions: [1],
-        supportedTransports: ["http-long-poll"],
         channels: [
           {
             channelId: threadId,
@@ -255,7 +250,6 @@ describe("EnvironmentAgentSessionService", () => {
         agentId: "agent-1",
         agentInstanceId: "instance-1",
         supportedProtocolVersions: [1],
-        supportedTransports: ["http-long-poll"],
         channels: [
           {
             channelId: threadId,
@@ -272,7 +266,6 @@ describe("EnvironmentAgentSessionService", () => {
         agentId: "agent-1",
         agentInstanceId: "instance-2",
         supportedProtocolVersions: [1],
-        supportedTransports: ["http-long-poll"],
         channels: [
           {
             channelId: threadId,
@@ -294,7 +287,6 @@ describe("EnvironmentAgentSessionService", () => {
           agentId: "agent-1",
           agentInstanceId: "instance-3",
           supportedProtocolVersions: [99],
-          supportedTransports: ["http-long-poll"],
           channels: [
             {
               channelId: threadId,
@@ -312,7 +304,6 @@ describe("EnvironmentAgentSessionService", () => {
           agentId: "agent-1",
           agentInstanceId: "instance-4",
           supportedProtocolVersions: [1],
-          supportedTransports: ["http-long-poll"],
           channels: [
             {
               channelId: "other-thread",
@@ -335,7 +326,6 @@ describe("EnvironmentAgentSessionService", () => {
         agentId: "agent-1",
         agentInstanceId: "instance-1",
         supportedProtocolVersions: [1],
-        supportedTransports: ["http-long-poll"],
         channels: [
           {
             channelId: threadId,
@@ -364,7 +354,6 @@ describe("EnvironmentAgentSessionService", () => {
         agentId: "agent-1",
         agentInstanceId: "instance-2",
         supportedProtocolVersions: [1],
-        supportedTransports: ["http-long-poll"],
         channels: [
           {
             channelId: threadId,
@@ -391,7 +380,6 @@ describe("EnvironmentAgentSessionService", () => {
         agentId: "agent-1",
         agentInstanceId: "instance-1",
         supportedProtocolVersions: [1],
-        supportedTransports: ["http-long-poll"],
         channels: [
           {
             channelId: threadId,
@@ -435,7 +423,6 @@ describe("EnvironmentAgentSessionService", () => {
         agentId: "agent-1",
         agentInstanceId: "instance-2",
         supportedProtocolVersions: [1],
-        supportedTransports: ["http-long-poll"],
         channels: [
           {
             channelId: threadId,
@@ -469,7 +456,6 @@ describe("EnvironmentAgentSessionService", () => {
         agentId: "agent-1",
         agentInstanceId: "instance-1",
         supportedProtocolVersions: [1],
-        supportedTransports: ["http-long-poll"],
         channels: [
           {
             channelId: threadId,
@@ -567,7 +553,6 @@ describe("EnvironmentAgentSessionService", () => {
         agentId: "agent-1",
         agentInstanceId: "instance-1",
         supportedProtocolVersions: [1],
-        supportedTransports: ["http-long-poll"],
         channels: [
           {
             channelId: threadId,
@@ -602,7 +587,6 @@ describe("EnvironmentAgentSessionService", () => {
         agentId: "agent-1",
         agentInstanceId: "instance-1",
         supportedProtocolVersions: [1],
-        supportedTransports: ["http-long-poll"],
         channels: [
           {
             channelId: threadId,
@@ -646,7 +630,6 @@ describe("EnvironmentAgentSessionService", () => {
         agentId: "agent-1",
         agentInstanceId: "instance-1",
         supportedProtocolVersions: [1],
-        supportedTransports: ["http-long-poll"],
         channels: [
           {
             channelId: threadId,
@@ -687,7 +670,6 @@ describe("EnvironmentAgentSessionService", () => {
         agentId: "agent-1",
         agentInstanceId: "instance-1",
         supportedProtocolVersions: [1],
-        supportedTransports: ["http-long-poll"],
         channels: [
           {
             channelId: threadId,
@@ -704,7 +686,6 @@ describe("EnvironmentAgentSessionService", () => {
         agentId: "agent-1",
         agentInstanceId: "instance-2",
         supportedProtocolVersions: [1],
-        supportedTransports: ["http-long-poll"],
         channels: [
           {
             channelId: threadId,
@@ -737,7 +718,6 @@ describe("EnvironmentAgentSessionService", () => {
         agentId: "agent-1",
         agentInstanceId: "instance-1",
         supportedProtocolVersions: [1],
-        supportedTransports: ["http-long-poll"],
         channels: [
           {
             channelId: threadId,
@@ -798,7 +778,6 @@ describe("EnvironmentAgentSessionService", () => {
         agentId: "agent-1",
         agentInstanceId: "instance-1",
         supportedProtocolVersions: [1],
-        supportedTransports: ["http-long-poll"],
         channels: [
           {
             channelId: threadId,
@@ -853,7 +832,6 @@ describe("EnvironmentAgentSessionService", () => {
         agentId: "agent-1",
         agentInstanceId: "instance-1",
         supportedProtocolVersions: [1],
-        supportedTransports: ["http-long-poll"],
         channels: [
           {
             channelId: threadId,
@@ -898,7 +876,6 @@ describe("EnvironmentAgentSessionService", () => {
         agentId: "agent-1",
         agentInstanceId: "instance-1",
         supportedProtocolVersions: [1],
-        supportedTransports: ["http-long-poll"],
         channels: [
           {
             channelId: threadId,
@@ -944,7 +921,6 @@ describe("EnvironmentAgentSessionService", () => {
         agentId: "agent-1",
         agentInstanceId: "instance-1",
         supportedProtocolVersions: [1],
-        supportedTransports: ["http-long-poll"],
         channels: [
           {
             channelId: threadId,
@@ -1007,7 +983,6 @@ describe("EnvironmentAgentSessionService", () => {
           agentId: "agent-1",
           agentInstanceId: "instance-1",
           supportedProtocolVersions: [1],
-          supportedTransports: ["http-long-poll"],
           channels: [
             {
               channelId: threadId,
@@ -1067,7 +1042,6 @@ describe("EnvironmentAgentSessionService", () => {
           agentId: "agent-1",
           agentInstanceId: "instance-1",
           supportedProtocolVersions: [1],
-          supportedTransports: ["http-long-poll"],
           channels: [
             {
               channelId: threadId,

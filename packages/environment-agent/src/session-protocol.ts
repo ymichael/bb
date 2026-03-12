@@ -42,7 +42,6 @@ export interface EnvironmentAgentSessionOpenPayload {
   agentId: string;
   agentInstanceId: string;
   supportedProtocolVersions: number[];
-  supportedTransports: EnvironmentAgentSessionTransportKind[];
   controlEndpoint?: EnvironmentAgentSessionControlEndpoint;
   channels: EnvironmentAgentSessionChannelBootstrap[];
 }
@@ -63,7 +62,6 @@ export interface EnvironmentAgentSessionWelcomeChannel {
 export interface EnvironmentAgentSessionWelcomePayload {
   leaseTtlMs: number;
   heartbeatIntervalMs: number;
-  selectedTransport: EnvironmentAgentSessionTransportKind;
   protocolVersion: typeof ENVIRONMENT_AGENT_SESSION_PROTOCOL_VERSION;
   channels: EnvironmentAgentSessionWelcomeChannel[];
 }

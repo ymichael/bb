@@ -104,7 +104,6 @@ describe("environment-agent service config", () => {
             payload: {
               leaseTtlMs: 30_000,
               heartbeatIntervalMs: 10_000,
-              selectedTransport: "http-long-poll",
               protocolVersion: 1,
               channels: [],
             },

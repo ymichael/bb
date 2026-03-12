@@ -173,7 +173,6 @@ export class EnvironmentAgentSessionSupervisor {
         agentId: this.agentId,
         agentInstanceId: this.agentInstanceId,
         supportedProtocolVersions: [1],
-        supportedTransports: ["http-long-poll"],
         ...(this.options.controlEndpoint
           ? { controlEndpoint: this.options.controlEndpoint }
           : {}),
