@@ -18,7 +18,13 @@
       "dependsOn": ["^build"]
     },
     "test": {
-      "dependsOn": ["^build"]
+      "dependsOn": ["build", "^build"]
+    },
+    "test:integration": {
+      "dependsOn": ["build", "^build"]
+    },
+    "test:e2e": {
+      "dependsOn": ["build", "^build"]
     }
   }
 }

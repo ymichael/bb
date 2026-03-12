@@ -10,6 +10,7 @@ export default defineConfig({
     name: "@beanbag/daemon:e2e:fast",
     globalSetup: ["./src/__tests__/e2e/global-setup.ts"],
     include: [
+      "src/__tests__/e2e/thread-archive-unarchive-roundtrip.test.ts",
       "src/__tests__/e2e/environment-agent-restart-roundtrip.test.ts",
       "src/__tests__/e2e/thread-provisioning-responsiveness.test.ts",
       "src/__tests__/e2e/thread-spawn-roundtrip.test.ts",

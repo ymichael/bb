@@ -17,7 +17,8 @@
     "dev": "node scripts/dev-supervisor.mjs",
     "clean": "rm -rf dist",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
+    "test": "pnpm test:unit && pnpm test:e2e",
+    "test:unit": "vitest run",
     "test:e2e": "vitest run --config vitest.e2e.fast.config.ts",
     "test:e2e:docker": "vitest run --config vitest.e2e.config.ts src/__tests__/e2e/docker-thread-roundtrip.test.ts",
     "test:e2e:all": "vitest run --config vitest.e2e.config.ts --dir src/__tests__/e2e"
