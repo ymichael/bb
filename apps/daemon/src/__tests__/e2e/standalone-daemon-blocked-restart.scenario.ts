@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 import { expect } from "vitest";
 import { createProject, listThreadEvents, waitForThreadCondition } from "./environment-agent-api.js";
 import { createFakeCodexBinDir } from "./fake-codex.js";
-import { runCliCommand } from "./harness.js";
+import { runCliCommand, withFakeE2eEnvironmentAgentTimingEnv } from "./harness.js";
 
 type EnvironmentId = "local" | "worktree";
 
@@ -215,13 +215,13 @@ async function runBlockedRestartScenario(environmentId: EnvironmentId): Promise<
   });
   const port = await allocatePort();
   const baseUrl = `http://127.0.0.1:${port}`;
-  const daemonEnv: NodeJS.ProcessEnv = {
+  const daemonEnv = withFakeE2eEnvironmentAgentTimingEnv({
     ...process.env,
     PATH: prependPathEntry(process.env.PATH, fakeCodexBinDir),
     BEANBAG_ROOT: beanbagRoot,
     BEANBAG_FAKE_CODEX_CONTROL_FILE: fakeCodexControlFilePath,
     BEANBAG_FAKE_CODEX_SCENARIO: "start-then-manual-complete",
-  };
+  });
 
   const daemon = startStandaloneDaemon({
     port,

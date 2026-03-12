@@ -20,6 +20,7 @@ import {
   scheduleManagedEnvironmentAgentSessionRecoveryOnBoot,
   scheduleManagedArtifactReconciliation,
 } from "./startup-tasks.js";
+import { resolveEnvironmentAgentStartupRecoveryRequestTimeoutMs } from "./environment-agent-timing.js";
 
 // ---------------------------------------------------------------------------
 // CLI argument parsing
@@ -252,6 +253,7 @@ async function main(): Promise<void> {
   await listening;
   scheduleManagedEnvironmentAgentSessionRecoveryOnBoot({
     sessionRepo: environmentAgentSessionRepo,
+    requestTimeoutMs: resolveEnvironmentAgentStartupRecoveryRequestTimeoutMs(process.env),
   });
   console.log("Reconciling startup environment state...");
   await threadManager.reconcileActiveThreadsOnBoot();

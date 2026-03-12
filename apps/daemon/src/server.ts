@@ -36,6 +36,10 @@ import { EnvironmentAgentSessionManager } from "./environment-agent-session-mana
 import { EnvironmentAgentSessionService } from "./environment-agent-session-service.js";
 import { resolveManagedArtifactSweepIntervalMs } from "./managed-artifact-reconciler.js";
 import { createSystemHealthReporter } from "./system-health-report.js";
+import {
+  resolveEnvironmentAgentSessionTimingOptions,
+  type EnvironmentAgentSessionTimingOptions,
+} from "./environment-agent-timing.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -52,6 +56,7 @@ export interface ServerDeps {
   daemonBaseUrl?: string;
   dbPath: string;
   daemonLogFilePath: string;
+  environmentAgentSessionOptions?: EnvironmentAgentSessionTimingOptions;
   requestShutdown?: (reason: string) => void;
   requestRestart?: (reason: string) => void;
 }
@@ -101,6 +106,10 @@ export function createServer(deps: ServerDeps) {
       ? { BEANBAG_DAEMON_URL: deps.daemonBaseUrl }
       : {}),
   };
+  const environmentAgentSessionOptions = {
+    ...resolveEnvironmentAgentSessionTimingOptions(daemonRuntimeEnv),
+    ...(deps.environmentAgentSessionOptions ?? {}),
+  };
   let threadManager: Orchestrator;
   const environmentAgentEventApplier = new EnvironmentAgentEventApplier(
     deps.environmentAgentCursorRepo,
@@ -113,6 +122,7 @@ export function createServer(deps: ServerDeps) {
     environmentAgentSessionManager,
     deps.environmentAgentCursorRepo,
     {
+      ...environmentAgentSessionOptions,
       commandDispatcher: environmentAgentCommandDispatcher,
       eventApplier: environmentAgentEventApplier,
       onSessionInvalidated: (session) => {
@@ -139,9 +149,11 @@ export function createServer(deps: ServerDeps) {
     environmentAgentSessionService,
     deps.environmentAgentSessionRepo,
   );
+  const environmentAgentLeaseSweepIntervalMs =
+    environmentAgentSessionOptions.leaseSweepIntervalMs ?? 5_000;
   const environmentAgentLeaseSweepInterval = setInterval(() => {
     environmentAgentSessionService.expireLeases();
-  }, 5_000);
+  }, environmentAgentLeaseSweepIntervalMs);
   environmentAgentLeaseSweepInterval.unref();
   const managedArtifactSweepIntervalMs = resolveManagedArtifactSweepIntervalMs(daemonRuntimeEnv);
   const managedArtifactSweepInterval = managedArtifactSweepIntervalMs > 0

@@ -13,7 +13,11 @@ import {
   waitForThreadStatus,
 } from "./environment-agent-api.js";
 import { createFakeCodexBinDir } from "./fake-codex.js";
-import { runCliCommand, type CliRunResult } from "./harness.js";
+import {
+  runCliCommand,
+  type CliRunResult,
+  withFakeE2eEnvironmentAgentTimingEnv,
+} from "./harness.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -305,13 +309,13 @@ async function runEnvironmentBattery(
   const port = await allocatePort();
   const baseUrl = `http://127.0.0.1:${port}`;
   const wsUrl = `ws://127.0.0.1:${port}/ws`;
-  const daemonEnv: NodeJS.ProcessEnv = {
+  const daemonEnv = withFakeE2eEnvironmentAgentTimingEnv({
     ...process.env,
     PATH: prependPathEntry(process.env.PATH, fakeCodexBinDir),
     BEANBAG_ROOT: beanbagRoot,
     BEANBAG_FAKE_CODEX_CONTROL_FILE: fakeCodexControlFilePath,
     BEANBAG_FAKE_CODEX_SCENARIO: "start-then-manual-complete",
-  };
+  });
 
   let daemon = startStandaloneDaemon({
     port,

@@ -50,6 +50,37 @@ const TSX_CLI_PATH = resolve(
   "cli.mjs",
 );
 const PROVISIONING_SETTLE_TIMEOUT_MS = 5_000;
+export const FAKE_E2E_ENVIRONMENT_AGENT_SESSION_OPTIONS = {
+  leaseTtlMs: 2_000,
+  heartbeatIntervalMs: 500,
+  commandLongPollTimeoutMs: 1_000,
+  commandLongPollIntervalMs: 50,
+  leaseSweepIntervalMs: 250,
+} as const;
+
+export function withFakeE2eEnvironmentAgentTimingEnv(
+  env: NodeJS.ProcessEnv,
+): NodeJS.ProcessEnv {
+  return {
+    ...env,
+    BEANBAG_ENV_AGENT_LEASE_TTL_MS: String(
+      FAKE_E2E_ENVIRONMENT_AGENT_SESSION_OPTIONS.leaseTtlMs,
+    ),
+    BEANBAG_ENV_AGENT_HEARTBEAT_INTERVAL_MS: String(
+      FAKE_E2E_ENVIRONMENT_AGENT_SESSION_OPTIONS.heartbeatIntervalMs,
+    ),
+    BEANBAG_ENV_AGENT_COMMAND_LONG_POLL_TIMEOUT_MS: String(
+      FAKE_E2E_ENVIRONMENT_AGENT_SESSION_OPTIONS.commandLongPollTimeoutMs,
+    ),
+    BEANBAG_ENV_AGENT_COMMAND_LONG_POLL_INTERVAL_MS: String(
+      FAKE_E2E_ENVIRONMENT_AGENT_SESSION_OPTIONS.commandLongPollIntervalMs,
+    ),
+    BEANBAG_ENV_AGENT_LEASE_SWEEP_INTERVAL_MS: String(
+      FAKE_E2E_ENVIRONMENT_AGENT_SESSION_OPTIONS.leaseSweepIntervalMs,
+    ),
+    BEANBAG_ENV_AGENT_STARTUP_RECOVERY_REQUEST_TIMEOUT_MS: "250",
+  };
+}
 const TEST_GIT_ENV: NodeJS.ProcessEnv = {
   ...process.env,
   GIT_AUTHOR_NAME: "Beanbag Test",
@@ -115,6 +146,13 @@ export interface StartDaemonE2eHarnessOptions {
   providerMode?: E2eProviderMode;
   fakeCodex?: FakeCodexOptions;
   useWorkspaceFakeCodex?: boolean;
+  environmentAgentSessionOptions?: {
+    leaseTtlMs?: number;
+    heartbeatIntervalMs?: number;
+    commandLongPollTimeoutMs?: number;
+    commandLongPollIntervalMs?: number;
+    leaseSweepIntervalMs?: number;
+  };
   initGitRepo?: boolean;
   tempDir?: string;
   preserveTempDirOnCleanup?: boolean;
@@ -173,6 +211,12 @@ export async function startDaemonE2eHarness(
   opts?: StartDaemonE2eHarnessOptions,
 ): Promise<DaemonE2eHarness> {
   const providerMode = opts?.providerMode ?? resolveE2eProviderMode();
+  const environmentAgentSessionOptions = {
+    ...(providerMode === "fake"
+      ? FAKE_E2E_ENVIRONMENT_AGENT_SESSION_OPTIONS
+      : {}),
+    ...(opts?.environmentAgentSessionOptions ?? {}),
+  };
   const daemonPort = opts?.port ?? await allocatePort();
   const tempDir = opts?.tempDir ?? mkdtempSync(join(tmpdir(), "beanbag-daemon-e2e-"));
   const projectRoot = join(tempDir, "project");
@@ -241,6 +285,7 @@ export async function startDaemonE2eHarness(
         environmentAgentSessionRepo,
         environmentAgentCursorRepo,
         environmentAgentCommandRepo,
+        environmentAgentSessionOptions,
         runtimeEnv: daemonRuntimeEnv,
         dbPath,
         daemonLogFilePath: join(tempDir, "daemon.log"),
