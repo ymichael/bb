@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { formatEnvironmentDisplayName } from "@beanbag/agent-core";
 import type {
   AvailableModel,
@@ -54,12 +54,46 @@ interface PromptModelReasoningStorageKeys {
 interface UsePromptModelReasoningOptions {
   scope?: "new-thread" | "thread";
   projectId?: string | null;
+  resetKey?: string | number | null;
   initialModel?: string;
   initialServiceTier?: ServiceTier;
   initialReasoningLevel?: ReasoningLevel;
   initialSandboxMode?: SandboxMode;
   initialEnvironmentId?: string;
 }
+
+interface PromptModelReasoningState {
+  selectedModel: string;
+  serviceTier: ServiceTier | undefined;
+  reasoningLevel: ReasoningLevel;
+  sandboxMode: SandboxMode;
+  environmentId: string;
+  touched: {
+    selectedModel: boolean;
+    serviceTier: boolean;
+    reasoningLevel: boolean;
+    sandboxMode: boolean;
+    environmentId: boolean;
+  };
+}
+
+type PromptModelReasoningField = Exclude<keyof PromptModelReasoningState, "touched">;
+
+type PromptModelReasoningAction =
+  | {
+      type: "replace";
+      state: PromptModelReasoningState;
+    }
+  | {
+      type: "sync-untouched";
+      state: Omit<PromptModelReasoningState, "touched">;
+    }
+  | {
+      type: "set-field";
+      field: PromptModelReasoningField;
+      value: PromptModelReasoningState[PromptModelReasoningField];
+      touched?: boolean;
+    };
 
 function isReasoningLevel(value: unknown): value is ReasoningLevel {
   return value === "low" || value === "medium" || value === "high" || value === "xhigh";
@@ -119,6 +153,104 @@ function getStoredEnvironmentId(storageKeys: PromptModelReasoningStorageKeys): s
   return readStoredString(storageKeys.environment) ?? "";
 }
 
+function createPromptModelReasoningState(
+  state: Omit<PromptModelReasoningState, "touched">,
+): PromptModelReasoningState {
+  return {
+    ...state,
+    touched: {
+      selectedModel: false,
+      serviceTier: false,
+      reasoningLevel: false,
+      sandboxMode: false,
+      environmentId: false,
+    },
+  };
+}
+
+function getStoredPromptModelReasoningState(
+  storageKeys: PromptModelReasoningStorageKeys,
+): PromptModelReasoningState {
+  return createPromptModelReasoningState({
+    selectedModel: getStoredModel(storageKeys),
+    serviceTier: getStoredServiceTier(storageKeys),
+    reasoningLevel: getStoredReasoningLevel(storageKeys),
+    sandboxMode: getStoredSandboxMode(storageKeys),
+    environmentId: getStoredEnvironmentId(storageKeys),
+  });
+}
+
+function getInitialThreadPromptModelReasoningState(
+  options?: UsePromptModelReasoningOptions,
+): PromptModelReasoningState {
+  return createPromptModelReasoningState({
+    selectedModel: options?.initialModel ?? "",
+    serviceTier: options?.initialServiceTier,
+    reasoningLevel: options?.initialReasoningLevel ?? "medium",
+    sandboxMode: options?.initialSandboxMode ?? "danger-full-access",
+    environmentId: options?.initialEnvironmentId ?? "",
+  });
+}
+
+function promptModelReasoningReducer(
+  state: PromptModelReasoningState,
+  action: PromptModelReasoningAction,
+): PromptModelReasoningState {
+  switch (action.type) {
+    case "replace":
+      return action.state;
+    case "sync-untouched": {
+      let changed = false;
+      const nextState = { ...state };
+      if (
+        !state.touched.selectedModel &&
+        state.selectedModel !== action.state.selectedModel
+      ) {
+        nextState.selectedModel = action.state.selectedModel;
+        changed = true;
+      }
+      if (!state.touched.serviceTier && state.serviceTier !== action.state.serviceTier) {
+        nextState.serviceTier = action.state.serviceTier;
+        changed = true;
+      }
+      if (
+        !state.touched.reasoningLevel &&
+        state.reasoningLevel !== action.state.reasoningLevel
+      ) {
+        nextState.reasoningLevel = action.state.reasoningLevel;
+        changed = true;
+      }
+      if (!state.touched.sandboxMode && state.sandboxMode !== action.state.sandboxMode) {
+        nextState.sandboxMode = action.state.sandboxMode;
+        changed = true;
+      }
+      if (!state.touched.environmentId && state.environmentId !== action.state.environmentId) {
+        nextState.environmentId = action.state.environmentId;
+        changed = true;
+      }
+
+      return changed ? nextState : state;
+    }
+    case "set-field": {
+      const nextTouched = action.touched ?? true;
+      if (state[action.field] === action.value && state.touched[action.field] === nextTouched) {
+        return state;
+      }
+      return {
+        ...state,
+        [action.field]: action.value,
+        touched:
+          state.touched[action.field] === nextTouched
+            ? state.touched
+            : {
+                ...state.touched,
+                [action.field]: nextTouched,
+              },
+      };
+    }
+  }
+}
+
 function toEnvironmentOptions(
   environments: readonly SystemEnvironmentInfo[] | undefined,
 ): PromptOption<string>[] {
@@ -165,34 +297,22 @@ export function usePromptModelReasoning(options?: UsePromptModelReasoningOptions
   const supportsServiceTier =
     providerInfoQuery.data?.capabilities.supportsServiceTier ?? false;
 
-  const [selectedModel, setSelectedModel] = useState<string>(() =>
+  const [state, dispatch] = useReducer(promptModelReasoningReducer, undefined, () =>
     scope === "new-thread"
-      ? getStoredModel(storageKeys)
-      : (options?.initialModel ?? ""),
-  );
-  const [serviceTier, setServiceTier] = useState<ServiceTier | undefined>(() =>
-    scope === "new-thread"
-      ? getStoredServiceTier(storageKeys)
-      : options?.initialServiceTier,
-  );
-  const [reasoningLevel, setReasoningLevel] = useState<ReasoningLevel>(() =>
-    scope === "new-thread"
-      ? getStoredReasoningLevel(storageKeys)
-      : (options?.initialReasoningLevel ?? "medium"),
-  );
-  const [sandboxMode, setSandboxMode] = useState<SandboxMode>(() =>
-    scope === "new-thread"
-      ? getStoredSandboxMode(storageKeys)
-      : (options?.initialSandboxMode ?? "danger-full-access"),
-  );
-  const [environmentId, setEnvironmentId] = useState<string>(() =>
-    scope === "new-thread"
-      ? getStoredEnvironmentId(storageKeys)
-      : (options?.initialEnvironmentId ?? ""),
+      ? getStoredPromptModelReasoningState(storageKeys)
+      : getInitialThreadPromptModelReasoningState(options),
   );
   const [hydratedStorageKey, setHydratedStorageKey] = useState<string | null>(() =>
     scope === "new-thread" ? storageKeys.model : null,
   );
+  const threadResetKeyRef = useRef<string | number | null | undefined>(options?.resetKey);
+  const {
+    selectedModel,
+    serviceTier,
+    reasoningLevel,
+    sandboxMode,
+    environmentId,
+  } = state;
 
   const availableModels = useMemo(
     () =>
@@ -256,33 +376,58 @@ export function usePromptModelReasoning(options?: UsePromptModelReasoningOptions
 
     const fallbackModel =
       availableModels.find((model) => model.isDefault)?.model ?? availableModels[0].model;
-    setSelectedModel(fallbackModel);
+    dispatch({
+      type: "set-field",
+      field: "selectedModel",
+      value: fallbackModel,
+      touched: false,
+    });
   }, [availableModels, selectedModel]);
 
   useEffect(() => {
     if (supportsServiceTier) return;
     if (serviceTier !== undefined) {
-      setServiceTier(undefined);
+      dispatch({
+        type: "set-field",
+        field: "serviceTier",
+        value: undefined,
+        touched: false,
+      });
     }
   }, [serviceTier, supportsServiceTier]);
 
   useEffect(() => {
     if (!supportsReasoningLevels && reasoningLevel !== "medium") {
-      setReasoningLevel("medium");
+      dispatch({
+        type: "set-field",
+        field: "reasoningLevel",
+        value: "medium",
+        touched: false,
+      });
       return;
     }
     if (reasoningOptions.length === 0) {
       return;
     }
     if (!reasoningOptions.some((option) => option.value === reasoningLevel)) {
-      setReasoningLevel(activeModel?.defaultReasoningEffort ?? reasoningOptions[0].value);
+      dispatch({
+        type: "set-field",
+        field: "reasoningLevel",
+        value: activeModel?.defaultReasoningEffort ?? reasoningOptions[0].value,
+        touched: false,
+      });
     }
   }, [activeModel, reasoningLevel, reasoningOptions, supportsReasoningLevels]);
 
   useEffect(() => {
     if (environmentOptions.length === 0) return;
     if (environmentOptions.some((option) => option.value === environmentId)) return;
-    setEnvironmentId(environmentOptions[0].value);
+    dispatch({
+      type: "set-field",
+      field: "environmentId",
+      value: environmentOptions[0].value,
+      touched: false,
+    });
   }, [environmentId, environmentOptions]);
 
   useEffect(() => {
@@ -291,93 +436,116 @@ export function usePromptModelReasoning(options?: UsePromptModelReasoningOptions
       return;
     }
 
-    setSelectedModel(getStoredModel(storageKeys));
-    setServiceTier(getStoredServiceTier(storageKeys));
-    setReasoningLevel(getStoredReasoningLevel(storageKeys));
-    setSandboxMode(getStoredSandboxMode(storageKeys));
-    setEnvironmentId(getStoredEnvironmentId(storageKeys));
+    dispatch({
+      type: "replace",
+      state: getStoredPromptModelReasoningState(storageKeys),
+    });
     setHydratedStorageKey(storageKeys.model);
   }, [scope, storageKeys]);
 
   useEffect(() => {
     if (scope !== "thread") return;
-    if (options?.initialModel !== undefined) {
-      setSelectedModel(options.initialModel);
-    }
-  }, [options?.initialModel, scope]);
-
-  useEffect(() => {
-    if (scope !== "thread") return;
-    setServiceTier(options?.initialServiceTier);
-  }, [options?.initialServiceTier, scope]);
-
-  useEffect(() => {
-    if (scope !== "thread") return;
-    if (options?.initialReasoningLevel !== undefined) {
-      setReasoningLevel(options.initialReasoningLevel);
-    }
-  }, [options?.initialReasoningLevel, scope]);
-
-  useEffect(() => {
-    if (scope !== "thread") return;
-    if (options?.initialSandboxMode !== undefined) {
-      setSandboxMode(options.initialSandboxMode);
-    }
-  }, [options?.initialSandboxMode, scope]);
-
-  useEffect(() => {
-    if (scope !== "thread") return;
-    if (options?.initialEnvironmentId !== undefined) {
-      setEnvironmentId(options.initialEnvironmentId);
-    }
-  }, [options?.initialEnvironmentId, scope]);
-
-  useEffect(() => {
-    if (scope !== "new-thread") return;
-    if (hydratedStorageKey !== storageKeys.model) return;
-    if (typeof window === "undefined") return;
-    if (!selectedModel) {
-      window.localStorage.removeItem(storageKeys.model);
+    const nextState = getInitialThreadPromptModelReasoningState(options);
+    if (threadResetKeyRef.current !== options?.resetKey) {
+      threadResetKeyRef.current = options?.resetKey;
+      dispatch({
+        type: "replace",
+        state: nextState,
+      });
       return;
     }
-    window.localStorage.setItem(storageKeys.model, selectedModel);
-  }, [hydratedStorageKey, scope, selectedModel, storageKeys.model]);
+    dispatch({
+      type: "sync-untouched",
+      state: {
+        selectedModel: nextState.selectedModel,
+        serviceTier: nextState.serviceTier,
+        reasoningLevel: nextState.reasoningLevel,
+        sandboxMode: nextState.sandboxMode,
+        environmentId: nextState.environmentId,
+      },
+    });
+  }, [
+    options,
+    options?.initialEnvironmentId,
+    options?.initialModel,
+    options?.initialReasoningLevel,
+    options?.initialSandboxMode,
+    options?.initialServiceTier,
+    options?.resetKey,
+    scope,
+  ]);
 
   useEffect(() => {
     if (scope !== "new-thread") return;
     if (hydratedStorageKey !== storageKeys.model) return;
     if (typeof window === "undefined") return;
+    if (selectedModel) {
+      window.localStorage.setItem(storageKeys.model, selectedModel);
+    } else {
+      window.localStorage.removeItem(storageKeys.model);
+    }
     if (serviceTier) {
       window.localStorage.setItem(storageKeys.serviceTier, serviceTier);
-      return;
+    } else {
+      window.localStorage.removeItem(storageKeys.serviceTier);
     }
-    window.localStorage.removeItem(storageKeys.serviceTier);
-  }, [hydratedStorageKey, scope, serviceTier, storageKeys.model, storageKeys.serviceTier]);
-
-  useEffect(() => {
-    if (scope !== "new-thread") return;
-    if (hydratedStorageKey !== storageKeys.model) return;
-    if (typeof window === "undefined") return;
     window.localStorage.setItem(storageKeys.reasoning, reasoningLevel);
-  }, [hydratedStorageKey, reasoningLevel, scope, storageKeys.model, storageKeys.reasoning]);
-
-  useEffect(() => {
-    if (scope !== "new-thread") return;
-    if (hydratedStorageKey !== storageKeys.model) return;
-    if (typeof window === "undefined") return;
     window.localStorage.setItem(storageKeys.sandbox, sandboxMode);
-  }, [hydratedStorageKey, sandboxMode, scope, storageKeys.model, storageKeys.sandbox]);
-
-  useEffect(() => {
-    if (scope !== "new-thread") return;
-    if (hydratedStorageKey !== storageKeys.model) return;
-    if (typeof window === "undefined") return;
     if (environmentId) {
       window.localStorage.setItem(storageKeys.environment, environmentId);
-      return;
+    } else {
+      window.localStorage.removeItem(storageKeys.environment);
     }
-    window.localStorage.removeItem(storageKeys.environment);
-  }, [environmentId, hydratedStorageKey, scope, storageKeys.environment, storageKeys.model]);
+  }, [
+    environmentId,
+    hydratedStorageKey,
+    reasoningLevel,
+    sandboxMode,
+    scope,
+    selectedModel,
+    serviceTier,
+    storageKeys.environment,
+    storageKeys.model,
+    storageKeys.reasoning,
+    storageKeys.sandbox,
+    storageKeys.serviceTier,
+  ]);
+
+  const setSelectedModel = useCallback((value: string) => {
+    dispatch({
+      type: "set-field",
+      field: "selectedModel",
+      value,
+    });
+  }, []);
+  const setServiceTier = useCallback((value: ServiceTier | undefined) => {
+    dispatch({
+      type: "set-field",
+      field: "serviceTier",
+      value,
+    });
+  }, []);
+  const setReasoningLevel = useCallback((value: ReasoningLevel) => {
+    dispatch({
+      type: "set-field",
+      field: "reasoningLevel",
+      value,
+    });
+  }, []);
+  const setSandboxMode = useCallback((value: SandboxMode) => {
+    dispatch({
+      type: "set-field",
+      field: "sandboxMode",
+      value,
+    });
+  }, []);
+  const setEnvironmentId = useCallback((value: string) => {
+    dispatch({
+      type: "set-field",
+      field: "environmentId",
+      value,
+    });
+  }, []);
 
   return {
     selectedModel,

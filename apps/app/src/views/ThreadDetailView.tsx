@@ -162,6 +162,7 @@ export function ThreadDetailView() {
     supportsServiceTier,
   } = usePromptModelReasoning({
     scope: "thread",
+    resetKey: threadId,
     initialModel: defaultExecutionOptions?.model,
     initialServiceTier: defaultExecutionOptions?.serviceTier,
     initialReasoningLevel: defaultExecutionOptions?.reasoningLevel,
