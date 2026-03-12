@@ -2,28 +2,32 @@
 
 ## Overview
 
-Beanbag is split into a React app, a daemon, environment implementations, an environment-agent control plane, and a provider adapter/runtime.
+Beanbag is a local-first coding-agent workspace built as a pnpm/Turbo monorepo.
+The main runtime is centered around a local daemon that persists state in SQLite,
+coordinates per-thread environments, and serves both the web UI and CLI.
 
 At a high level:
 
-1. The app submits commands to the daemon over HTTP.
-2. The daemon creates and manages threads, events, environments, and provider sessions.
+1. The React app and `bb` CLI talk to the daemon over HTTP.
+2. The daemon persists projects, threads, events, queued follow-ups, and environment-agent session state via `@beanbag/db`.
 3. Each thread runs inside a selected environment (`local`, `worktree`, or `docker`).
-4. Each active environment exposes an `environment-agent` HTTP control API.
-5. The daemon talks to the environment-agent, and the environment-agent talks to the provider runtime.
-6. Provider events flow back through the environment-agent and are ingested by the daemon.
-7. The app refreshes data through React Query, primarily driven by daemon WebSocket invalidation messages.
+4. Each active environment runs a per-thread `environment-agent` process beside the provider runtime.
+5. The daemon queues commands for the environment-agent; the environment-agent opens a lease-based session back to the daemon and pulls commands.
+6. The environment-agent executes commands against the provider runtime, then pushes event batches and command results back to the daemon.
+7. The daemon ingests those events, updates persisted thread state, and broadcasts targeted WebSocket invalidations.
+8. The app refreshes affected React Query data; the CLI can read the same daemon-backed state directly.
 
 ## Main Components
 
 ### `apps/app`
 
-- React app using React Query for server state.
-- Uses daemon HTTP APIs for reads/writes.
-- Opens a WebSocket to the daemon.
-- On thread/system change messages, invalidates specific query keys rather than maintaining a parallel client-side event model.
+- React 19 + Vite frontend.
+- Uses React Query for server state.
+- Talks only to the daemon HTTP API for reads/writes.
+- Opens a WebSocket to the daemon for invalidation messages.
+- Keeps a single canonical thread-detail rendering path built around timeline rows and UI message projection.
 
-Primary query families invalidated from WebSocket messages:
+Primary query families invalidated from WebSocket messages include:
 
 - `threads`
 - `thread`
@@ -34,283 +38,312 @@ Primary query families invalidated from WebSocket messages:
 
 Notes:
 
-- The app does **not** use interval polling for live thread updates.
-- Some React Query fetches can still happen on mount, focus, or reconnect depending on query options/defaults.
-- Git diff payloads are fetched on demand over HTTP; they are not pushed over the WebSocket.
+- The app does not use interval polling for live thread updates.
+- React Query may still refetch on mount, focus, or reconnect depending on query settings.
+- Heavy payloads like git diffs, tool-group message expansions, and health data are fetched on demand over HTTP.
+
+### `apps/cli`
+
+- `bb` CLI for daemon and thread operations.
+- Uses the same daemon APIs as the app instead of bypassing persistence.
+- Also provides context-aware commands inside agent shells through environment variables such as:
+  - `BB_PROJECT_ID`
+  - `BB_THREAD_ID`
+  - `BB_ENVIRONMENT_ID`
+  - `BB_DAEMON_URL`
 
 ### `apps/daemon`
 
 The daemon is the system coordinator. It:
 
 - owns the HTTP and WebSocket API
-- persists threads/events/projects via `@beanbag/db`
-- provisions and restores thread environments
-- connects to per-thread environment-agent instances
-- translates daemon-level operations into environment-agent commands
-- ingests provider-originated events and persists/broadcasts them
+- persists projects, threads, events, queued follow-ups, and environment-agent session metadata
+- provisions, restores, suspends, archives, and deletes thread environments
+- manages provider sessions through per-thread environment-agents
+- normalizes provider-originated notifications into Beanbag thread events
+- broadcasts targeted invalidation messages to app clients
 
-Key daemon responsibilities:
+Important daemon subsystems:
 
-- create thread records
-- track thread status (`created`, `provisioning`, `active`, `idle`, `provisioning_failed`)
-- maintain provider thread ids / active turn ids
-- replay or resume sessions after restart/suspend
-- fan out WebSocket invalidations to the app
+- `Orchestrator`: thread lifecycle, provisioning, follow-ups, archive/unarchive, git operations, timeline projection
+- `EnvironmentService`: environment startup, restore, suspend, destroy, primary-checkout handling
+- `EnvironmentAgentSessionService`: lease/session lifecycle, command long-polling, event acknowledgement, replay coordination
+- `EnvironmentAgentCommandDispatcher`: persists and dispatches daemon-to-agent commands
+- `EnvironmentAgentEventApplier`: applies replayed/pushed environment-agent events into daemon thread state
+- restart recommendation + system health reporting
+- managed artifact reconciliation for logs, worktrees, attachments, and related on-disk state
+
+### `packages/agent-core`
+
+Shared contracts/types package for:
+
+- API request/response types
+- realtime message schemas
+- thread and project domain types
+- provider-event normalization helpers
+- timeline/UI message projection helpers
+- shared guards and decoders
+
+This package is the main contract boundary between the app, daemon, CLI, and environment-agent packages.
 
 ### `packages/db`
 
-Persistence layer for:
+SQLite persistence layer for:
 
 - projects
 - threads
 - events
 - queued follow-up messages
-- persisted environment records
-- environment-agent replay cursor
+- environment records persisted on threads
+- environment-agent sessions
+- environment-agent replay cursors
+- environment-agent command queue and command results
 
-A new thread row is created immediately when spawning a thread; provisioning happens asynchronously afterward.
+A thread row is created immediately when spawning a thread; provisioning is asynchronous afterward.
 
 ### `packages/environment`
 
 Environment implementations define where thread work runs.
 
-Current built-in environments:
+Built-in environments:
 
 - `local`
 - `worktree`
 - `docker`
 
-Each environment is responsible for:
+Environment responsibilities include:
 
-- preparing/restoring its workspace
-- exposing an environment-agent connection target
-- suspending/destroying resources when idle/archived
-- reporting workspace status / diffs / commit metadata
+- preparing and restoring the workspace
+- starting or reconnecting to the per-thread environment-agent
+- exposing workspace/git status and diffs
+- suspending or destroying resources when threads go idle or archived
+- supporting environment-specific capabilities such as isolated workspaces and primary-checkout promotion/demotion
 
 ### `packages/environment-agent`
 
-The environment-agent is a per-environment control plane process with an HTTP API.
+The environment-agent is a per-thread sidecar process that sits between the daemon and the provider runtime.
 
 It is responsible for:
 
 - starting and supervising the provider runtime
-- translating daemon commands into provider JSON-RPC
-- capturing provider stdout/stderr/events
-- assigning sequence numbers to emitted events
-- exposing live event streaming and replay
-- attempting batched delivery of buffered events back to the daemon
+- maintaining a local in-memory event stream from provider/runtime activity
+- opening an authenticated session back to the daemon
+- pulling queued daemon commands over the session transport
+- pushing event batches, heartbeats, and command acknowledgements/results back to the daemon
+- self-suspending when the thread is quiescent
 
-Important nuance:
+Important nuances:
 
-- Event buffering inside the environment-agent is **in memory**, not durable on disk.
-- The environment-agent is generally **long-lived per thread environment**, not one-shot per turn.
+- Event/session state inside the environment-agent is in memory, not durably journaled on disk.
+- The environment-agent exposes only a minimal authenticated local HTTP surface today (`POST /control/status`) for inspection; the main control flow now goes through daemon-hosted session endpoints.
+- The current shipped agent session client uses HTTP long-polling, though the session protocol is transport-aware and can negotiate websocket support.
 
 ### `packages/agent-server`
 
-The daemon-side adapter layer that knows how to:
+Provider adapter/runtime layer. It currently provides:
 
-- build provider launch specs
-- initialize the provider
-- send `thread.start`, `thread.resume`, `turn.start`, `turn.steer`, and rename commands
-- normalize provider notifications into Beanbag thread events
+- provider registry and adapter selection
+- Codex-specific thread/turn command building
+- provider runtime supervision helpers
+- model catalog access
+- title generation and commit-message generation helpers
+- notification normalization into Beanbag thread events
 
-Provider selection is currently daemon-global. The built-in registry currently supports only:
+Current built-in provider registry:
 
 - `codex`
 
+### `packages/ui-core`
+
+Shared React UI primitives used by the app for:
+
+- layout shells
+- cards and detail rows
+- timeline/prompt affordances
+- shared presentation primitives
+
 ## Thread Lifecycle
+
+Persisted thread statuses are:
+
+- `created`
+- `provisioning`
+- `provisioning_failed`
+- `idle`
+- `active`
+
+Transition rules are centralized in the daemon status machine.
 
 ### New thread
 
-1. App sends `POST /threads`.
-2. Daemon creates a thread row in the DB with status `created`.
-3. Daemon schedules provisioning asynchronously.
-4. Daemon provisions the selected environment.
-5. Environment starts/restores the environment-agent.
-6. Daemon opens a live environment-agent subscription.
-7. Daemon asks the environment-agent to ensure the provider is running.
-8. Daemon sends `thread.start`.
-9. If an initial prompt was included, daemon then sends `turn.start`.
-10. Provider events are ingested, persisted, and broadcast as thread changes.
-11. Thread eventually transitions to `idle` when the turn completes.
+1. App or CLI sends `POST /threads`.
+2. Daemon creates the thread row immediately with status `created`.
+3. Daemon schedules provisioning asynchronously and moves the thread to `provisioning`.
+4. The selected environment prepares or restores the workspace.
+5. The environment starts the per-thread environment-agent.
+6. The environment-agent opens a lease-based session back to the daemon.
+7. The daemon queues provider bootstrap commands (`provider.ensure`, `thread.start`, and optionally `turn.start`).
+8. The environment-agent pulls those commands, executes them, and pushes resulting events back.
+9. The daemon persists events, updates derived thread state, and broadcasts thread invalidations.
+10. The thread settles back to `idle` when the active turn completes.
 
 ### Follow-up on an existing thread
 
-1. App sends `POST /threads/:id/tell`.
-2. Daemon validates thread state.
-3. Daemon tries to locate an in-memory provider session.
-4. If none exists, daemon restores the environment runtime and tries `thread.resume` using the persisted provider thread id.
-5. If resume succeeds, daemon sends either:
-   - `turn.steer` when there is an active turn and steering is allowed, or
-   - `turn.start` otherwise.
+1. App or CLI sends `POST /threads/:id/tell`.
+2. Daemon validates thread state and execution options.
+3. If the thread is already active and steering is allowed, the daemon can send `turn.steer`.
+4. Otherwise it sends `turn.start`.
+5. If no live provider session is available, the daemon restores the environment and resumes the provider thread first.
+6. If the thread is active but cannot accept the message immediately, Beanbag can queue a follow-up for later dispatch.
 
-### Reprovision fallback when resume fails
+### Queued follow-ups and thread operations
 
-A special fallback exists when `thread.resume` fails because the provider no longer recognizes the persisted provider thread id.
+The daemon also supports per-thread queues for:
 
-This happens only on the resume path:
+- follow-up prompts
+- git-backed thread operations such as `commit` and `squash_merge`
 
-- no in-memory provider session is available
+Those queues are persisted in SQLite so dispatch decisions survive daemon restarts.
+
+### Resume fallback when the provider thread is gone
+
+A special reprovision fallback exists when:
+
+- there is no usable in-memory/live provider session
 - a persisted provider thread id exists
-- `thread.resume` returns `missing_provider_thread`
+- `thread.resume` fails because the provider no longer recognizes that thread/session
 
 When that happens, the daemon:
 
-1. reprovisions the thread environment with reason `resume-missing-provider-thread`
+1. reprovisions the thread environment
 2. starts a fresh provider thread session
-3. continues the pending follow-up from that fresh session
+3. continues the pending follow-up from that new session
 
-Known concrete trigger recognized by the current code:
+This is the path used for errors equivalent to “missing provider thread” rather than generic timeouts or transport failures.
 
-- provider reports something equivalent to `no rollout found for thread id ...`
+## Environment-Agent Session Protocol
 
-Practical examples:
+The main daemon ↔ environment-agent control plane is now daemon-hosted and session-based.
 
-- daemon restart followed by resume of an old provider session
-- idle suspend / environment-agent restart followed by resume
-- provider-side rollout/session eviction
+### Session shape
 
-Timeouts or provider-unavailable errors do **not** take this reprovision path.
+For each active thread, the environment-agent opens a single logical channel keyed by the thread id.
+The daemon records:
 
-## Environment-Agent Control Plane
+- active session row
+- lease expiry / heartbeat state
+- per-thread replay cursor (`generation`, `sequence`)
+- queued commands with command cursors and result state
 
-The daemon talks to the environment-agent over HTTP.
+Sessions are lease-based:
 
-Important endpoints exposed by the environment-agent:
+- the daemon grants a lease TTL and heartbeat interval when the session opens
+- the environment-agent renews the lease with heartbeats
+- lease expiry invalidates the session
+- a newer session for the same thread replaces the previous one
 
-- `GET /stream` — live event stream
-- `POST /control/command` — execute commands (`thread.start`, `thread.resume`, `turn.start`, `turn.steer`, etc.)
-- `POST /control/provider/ensure` — ensure provider runtime is up
-- `POST /control/replay` — replay buffered events after a sequence cursor
-- `POST /control/status` — inspect runtime state
-- `POST /control/delivery/retry` — nudge daemon delivery retry
+### Command flow
 
-The environment-agent itself is protected by a bearer token. That same token is also used when the environment-agent delivers events back to the daemon.
+1. The daemon persists a command in `environment_agent_commands`.
+2. The environment-agent long-polls `GET /threads/:id/environment-agent/session/commands`.
+3. The daemon returns commands after the last delivered cursor.
+4. The environment-agent acknowledges receipt.
+5. The environment-agent executes the command against the local provider runtime.
+6. The environment-agent posts command lifecycle updates (`started`, `completed`, `failed`).
+7. The daemon records the final result and unblocks higher-level orchestration logic.
 
-## Event Flow
+### Event flow
 
-There are **two** daemon-facing event paths from the environment-agent:
+1. The environment-agent observes provider/runtime events and assigns per-channel sequence numbers.
+2. It pushes contiguous event batches to `POST /threads/:id/environment-agent/session/events`.
+3. The daemon applies unseen events in order and advances the persisted replay cursor.
+4. The daemon replies with either:
+   - an event acknowledgement for the accepted cursor, or
+   - a replay request if the daemon detects that it needs a different sequence window
 
-### 1. Live stream path
+### Replay and recovery
 
-- Daemon subscribes to `GET /stream`
-- Environment-agent emits sequenced events live
-- Daemon ingests contiguous unseen events and advances its replay cursor
+Replay is cursor-based.
 
-### 2. Delivery path
+- The daemon persists the highest applied cursor per thread.
+- On reconnect, the daemon tells the environment-agent where to resume applying from.
+- If the environment-agent restarted and lost its in-memory event buffer, the daemon can reset its cursor expectations and rebuild state from newly emitted events plus already persisted daemon events.
 
-- Environment-agent batches pending events and POSTs them to:
-  - `POST /threads/:id/environment-agent/deliver`
-- Delivery is in-order and cursor-based
-- Daemon acknowledges the highest accepted sequence
+## Environment-Agent HTTP Surface
 
-### Replay path
+The environment-agent still exposes an authenticated local HTTP server, but it is intentionally small.
 
-- Daemon can request replay from a stored cursor
-- Used after reconnect/restart to close gaps
+Current endpoint:
 
-## Delivery, Retry, and Buffering Semantics
+- `POST /control/status` — inspect runtime/session status from the environment sidecar
 
-Environment-agent delivery is event-driven, with timer-based batching/retry:
+The old direct command/stream/replay endpoints are no longer the primary architecture path.
+Daemon control traffic now goes through daemon-hosted session endpoints under `/api/v1/threads/:id/environment-agent/session/*`.
 
-- bursty events are debounced into batched delivery
-- failed delivery is retried with backoff
-- after the automatic retry budget is exhausted, delivery becomes `stalled`
-- daemon can later nudge retry explicitly
+## Workspace, Git, and Primary Checkout Semantics
 
-Important caveats:
+Workspace and git data are daemon-driven.
 
-- This is **not durable queueing**; buffered environment-agent events live in memory.
-- If the environment-agent exits before the daemon ingests buffered events, only events already streamed/ingested are guaranteed to survive.
+The daemon can ask environments for:
 
-## Environment Lifetime
+- work status
+- merge-base branch candidates
+- git diffs
+- commit/squash-merge execution
+- open-path resolution inside the thread workspace
 
-The environment-agent usually stays alive after a turn completes.
+Important behavior:
 
-After a thread becomes `idle`, the daemon may auto-suspend the environment after a timeout (default: 5 minutes).
+- workspace status is used for thread badges, archive safety checks, and project-level summaries
+- full git diffs are fetched on demand, not streamed over WebSocket
+- worktree-capable environments can promote a thread to the project's primary checkout and later demote it back to an isolated checkout
+- archive may require `force=true` if Beanbag detects uncommitted or unmerged work that could be lost
 
-On suspend:
-
-- the live daemon subscription is closed
-- environment runtime is detached/suspended
-- environment-agent receives shutdown / SIGTERM
-- environment-agent attempts a best-effort flush of pending daemon delivery before exit
-
-## Workspace Status and Git Data Flow
-
-Workspace status updates are daemon-side and watch-driven:
-
-- environments with host filesystem access install filesystem watches over git metadata paths
-- when those files change, Beanbag recomputes workspace status
-- if the computed status changed, daemon broadcasts `work-status-changed`
-- app invalidates/refetches the `threadWorkStatus` query
-
-Important nuance:
-
-- This watcher flow is for **workspace status**, not full diff payload streaming.
-- Full git diffs are still requested over HTTP by the app when needed.
-
-## Polling vs Event-Driven Behavior
+## Realtime Behavior
 
 ### App side
 
-- No interval polling for live thread updates.
-- Live freshness is driven by daemon WebSocket invalidation.
-- React Query may still refetch on mount/focus/reconnect depending on configuration.
+- WebSocket messages are invalidations, not a full replicated event stream.
+- Clients subscribe by entity (`thread` or `system`) and optionally by id.
+- The app responds by invalidating specific React Query keys.
 
 ### Daemon side
 
-For domain data flow, the daemon is primarily **event/watch driven**, not polling driven.
+The daemon emits targeted change kinds such as thread status/work-status changes and system restart-policy changes.
+This keeps the websocket layer narrow while leaving authoritative state in HTTP + SQLite-backed reads.
 
-Event/watch-driven examples:
+## Persistence and Recovery
 
-- environment-agent live event stream
-- environment-agent push delivery + replay
-- WebSocket broadcasts to the app
-- filesystem watches for workspace status
-- filesystem watches for restart recommendation files
+Beanbag is designed so the daemon remains the durable system of record.
 
-However, there are a few timer-based mechanisms that are **not** periodic data polling but are still worth knowing about:
+Durable state lives in SQLite and includes:
 
-- short startup health-check loops while waiting for an environment-agent to come up
-- delivery debounce timers
-- delivery retry backoff timers
-- idle environment suspend timers
-- queued broadcast debounce timers
+- projects and threads
+- thread events
+- queued follow-ups
+- persisted environment records
+- environment-agent sessions, cursors, and queued commands
 
-So the most accurate statement is:
+Non-durable state includes:
 
-> Beanbag does not rely on steady-state polling loops for thread/project/event/workspace data synchronization. It is primarily event-driven, with timer-based debouncing, retries, and startup health checks.
+- in-memory provider child processes
+- in-memory environment-agent event buffers
+- active long-poll requests and timers
+- daemon-side in-memory caches such as timeline projections
 
-## Test Coverage Snapshot
+On boot, the daemon reconciles persisted thread state, restores environments as needed, rebinds to active sessions when possible, and resumes pending work.
 
-Current coverage is strongest in daemon and control-plane layers.
+## System Services
 
-Notable tests:
+Additional daemon-level services now include:
 
-- `apps/daemon/src/__tests__/e2e/thread-spawn-roundtrip.test.ts`
-  - CLI -> HTTP -> daemon -> provider roundtrip
-- `apps/daemon/src/__tests__/e2e/docker-thread-roundtrip.test.ts`
-  - daemon -> docker environment -> in-container environment-agent -> provider
-- `apps/daemon/src/__tests__/e2e/environment-agent-delivery-roundtrip.test.ts`
-  - authenticated delivery path
-- `apps/daemon/src/__tests__/e2e/environment-agent-replay-roundtrip.test.ts`
-  - replay path
-- `apps/daemon/src/__tests__/e2e/environment-agent-restart-roundtrip.test.ts`
-  - daemon restart recovery
-- `apps/daemon/src/__tests__/orchestrator.test.ts`
-  - resume-missing-provider-thread reprovision fallback
-- `packages/agent-server/src/__tests__/environment-agent-session.test.ts`
-  - daemon <-> environment-agent command protocol
+- system health reporting for database/log/worktree/attachment storage
+- restart recommendation monitoring surfaced to the UI
+- managed artifact cleanup for archived thread resources
+- background reconciliation of active/provisioning threads after startup
 
-Known gap:
+## Summary
 
-- There is no single browser-level test that spans React app UI + daemon WebSocket invalidation + environment-agent + provider end-to-end.
+The current architecture is organized around one durable coordinator (the daemon), one durable store (SQLite), and one per-thread execution sidecar (the environment-agent).
 
-## Current Limitations / Important Caveats
-
-- Provider selection is currently global and effectively `codex`-only.
-- Environment-agent buffered events are not durable.
-- Git diff contents are on-demand, not live-pushed.
-- App freshness is mostly event-driven, but React Query focus/remount behavior still exists.
-
+The most important change from earlier versions is that the environment-agent control plane is now session-based and daemon-hosted: commands, acknowledgements, heartbeats, event batches, replay cursors, and lease state all flow through daemon endpoints and are partially persisted in the database instead of relying on a direct daemon subscription to agent-owned stream endpoints.
