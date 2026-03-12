@@ -56,7 +56,7 @@ Important fields:
 Important invariants:
 
 - at most one active session per thread
-- lease expiry is a state transition, not silent deletion
+- heartbeat timeout is a state transition, not silent deletion
 - replacement marks the older session `replaced`
 
 ### `environment_agent_cursors`
@@ -119,7 +119,7 @@ Important invariants:
 
 ## Liveness
 
-Liveness is daemon-owned and lease-based.
+Liveness is daemon-owned and heartbeat-based.
 
 - the daemon persists heartbeat timestamps
 - the agent retries failed heartbeats with backoff

@@ -47,7 +47,7 @@ describe("EnvironmentAgentSessionManager", () => {
     return threads.create({ projectId: project.id }).id;
   }
 
-  it("opens sessions with computed lease expiry and replaces active sessions", () => {
+  it("opens sessions with computed liveness deadlines and replaces active sessions", () => {
     const threadId = createThreadId();
 
     const first = manager.openSession({
@@ -84,7 +84,7 @@ describe("EnvironmentAgentSessionManager", () => {
     });
   });
 
-  it("records heartbeats by extending the active lease", () => {
+  it("records heartbeats by extending the active liveness deadline", () => {
     const threadId = createThreadId();
     const opened = manager.openSession({
       threadId,

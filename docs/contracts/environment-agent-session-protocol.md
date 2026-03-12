@@ -373,23 +373,23 @@ A session is considered active when all of the following are true:
 
 - it has been accepted by the daemon
 - it has not been explicitly closed or replaced
-- its lease has not expired
+- its heartbeat deadline has not passed
 
-The daemon extends the lease when it receives timely heartbeats or other valid session traffic.
+The daemon extends the stored liveness deadline when it receives timely heartbeats or other valid session traffic.
 
 Suggested v1 defaults:
 
-- `leaseTtlMs`: 30_000
+- `livenessTimeoutMs`: 30_000
 - `heartbeatIntervalMs`: 10_000
-- daemon may expire a session after missing enough heartbeats to pass lease expiry
+- daemon may expire a session after missing enough heartbeats to pass the liveness deadline
 
 Important distinctions:
 
-- **active**: lease valid
+- **active**: heartbeat deadline still valid
 - **connected**: transport currently open
 - **healthy**: delivery is progressing normally
 
-A brief transport blip does not immediately make the session inactive if the lease is still valid.
+A brief transport blip does not immediately make the session inactive if the heartbeat deadline is still valid.
 
 ## Durable State Requirements
 
