@@ -50,6 +50,16 @@ still work, not just which case fails first.
 
 ### 1. Prepare a disposable project
 
+Fast setup wrapper:
+
+```bash
+node scripts/qa/start-standalone-daemon-qa.mjs
+```
+
+That creates a disposable repo + Beanbag root, starts the standalone daemon, creates a project, and prints the resulting `daemonUrl`, `projectId`, paths, and daemon PID as JSON.
+
+Manual setup:
+
 ```bash
 tmp_root=$(mktemp -d /tmp/beanbag-qa-XXXXXX)
 project_root="$tmp_root/project"

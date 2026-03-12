@@ -98,6 +98,35 @@ describe("CLI command output contracts", () => {
       projects,
     );
   });
+
+  it("bb project create --json prints the created project", async () => {
+    const created = {
+      id: "proj-created",
+      name: "Alpha",
+      rootPath: "/tmp/alpha",
+      createdAt: 1,
+      updatedAt: 2,
+    };
+    const post = vi.fn(async () => created);
+    createClientMock.mockReturnValue(asDaemonClient({
+      api: {
+        v1: {
+          projects: {
+            $post: post,
+          },
+        },
+      },
+    }));
+
+    await runCommand(
+      ["project", "create", "--name", "Alpha", "--root", "/tmp/alpha", "--json"],
+      (program) => registerProjectCommands(program, () => "http://daemon"),
+    );
+
+    expect(JSON.parse(String(vi.mocked(console.log).mock.calls[0]?.[0]))).toEqual(
+      created,
+    );
+  });
   it("bb status prints project/thread context", async () => {
     process.env.BB_PROJECT_ID = "proj-1";
     process.env.BB_THREAD_ID = "thread-1";
@@ -141,6 +170,35 @@ describe("CLI command output contracts", () => {
         input: [{ type: "text", text: "hello" }],
       },
     });
+  });
+
+  it("bb thread spawn --json prints the raw thread", async () => {
+    process.env.BB_PROJECT_ID = "proj-1";
+    const thread: Thread = {
+      id: "thread-json-spawn",
+      projectId: "proj-1",
+      status: "created",
+      createdAt: 1,
+      updatedAt: 1,
+    };
+    const post = vi.fn(async () => thread);
+    createClientMock.mockReturnValue(asDaemonClient({
+      api: {
+        v1: {
+          threads: {
+            $post: post,
+          },
+        },
+      },
+    }));
+
+    await runCommand(["thread", "spawn", "--json"], (program) =>
+      registerThreadCommands(program, () => "http://daemon"),
+    );
+
+    expect(JSON.parse(String(vi.mocked(console.log).mock.calls[0]?.[0]))).toEqual(
+      thread,
+    );
   });
 
   it("bb thread spawn with --parent-thread forwards parent thread id", async () => {
@@ -633,6 +691,33 @@ describe("CLI JSON output contracts", () => {
     expect(JSON.parse(String(vi.mocked(console.log).mock.calls[0]?.[0]))).toEqual(
       payload,
     );
+  });
+
+  it("bb thread tell --json prints the raw response plus thread id", async () => {
+    const post = vi.fn(async () => ({ ok: true }));
+    createClientMock.mockReturnValue(asDaemonClient({
+      api: {
+        v1: {
+          threads: {
+            ":id": {
+              tell: {
+                $post: post,
+              },
+            },
+          },
+        },
+      },
+    }));
+
+    await runCommand(
+      ["thread", "tell", "thread-json-tell", "hello", "--json"],
+      (program) => registerThreadCommands(program, () => "http://daemon"),
+    );
+
+    expect(JSON.parse(String(vi.mocked(console.log).mock.calls[0]?.[0]))).toEqual({
+      threadId: "thread-json-tell",
+      ok: true,
+    });
   });
 
   it("bb thread wait --status succeeds when the thread is already at the requested status", async () => {

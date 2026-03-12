@@ -36,7 +36,8 @@ export function registerProjectCommands(program: Command, getUrl: () => string):
     .description("Create a project")
     .requiredOption("--name <name>", "Project name")
     .requiredOption("--root <path>", "Project root path")
-    .action(async (opts: { name: string; root: string }) => {
+    .option("--json", "Print machine-readable JSON output")
+    .action(async (opts: { name: string; root: string; json?: boolean }) => {
       const client = createClient(getUrl());
       try {
         const created = await unwrap<Project>(
@@ -47,6 +48,10 @@ export function registerProjectCommands(program: Command, getUrl: () => string):
             },
           }),
         );
+        if (opts.json) {
+          console.log(JSON.stringify(created, null, 2));
+          return;
+        }
         console.log(`Project created: ${created.id}`);
         printProject(created);
       } catch (err: unknown) {

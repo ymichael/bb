@@ -169,9 +169,9 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
     threadId: string,
     message: string,
     mode?: "steer",
-  ): Promise<void> => {
+  ): Promise<{ ok: boolean }> => {
     const client = createClient(getUrl());
-    await unwrap<{ ok: boolean }>(
+    return unwrap<{ ok: boolean }>(
       client.api.v1.threads[":id"].tell.$post({
         param: { id: threadId },
         json: {
@@ -279,6 +279,7 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
     .command("spawn")
     .description("Spawn a new thread for a project")
     .option("--prompt <prompt>", "Initial prompt for the thread")
+    .option("--json", "Print machine-readable JSON output")
     .option("--project <id>", "Project ID (defaults to BB_PROJECT_ID)")
     .option(
       "--environment <id>",
@@ -294,6 +295,7 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
     )
     .action(async (opts: {
       prompt?: string;
+      json?: boolean;
       project?: string;
       environment?: string;
       parentThread?: string;
@@ -326,6 +328,10 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
             },
           }),
         );
+        if (opts.json) {
+          console.log(JSON.stringify(thread, null, 2));
+          return;
+        }
         console.log(`Thread spawned: ${thread.id}`);
         if (
           thread.parentThreadId &&
@@ -518,9 +524,14 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
   thread
     .command("tell <id> <message>")
     .description("Send a follow-up message to a thread")
-    .action(async (id: string, message: string) => {
+    .option("--json", "Print machine-readable JSON output")
+    .action(async (id: string, message: string, opts: { json?: boolean }) => {
       try {
-        await postThreadMessage(id, message);
+        const response = await postThreadMessage(id, message);
+        if (opts.json) {
+          console.log(JSON.stringify({ threadId: id, ...response }, null, 2));
+          return;
+        }
         console.log(`Thread ${id} updated`);
       } catch (err: unknown) {
         console.error(`Error: ${(err as Error).message}`);
