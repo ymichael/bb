@@ -241,9 +241,11 @@ export function ThreadDetailView() {
   const resolvedThreadWorkStatus =
     threadWorkStatusError ? undefined : (threadWorkStatus ?? undefined);
   const {
+    bottomSentinelRef,
     captureTimelineScrollPosition,
     handleLoadToolGroupMessages,
     handleTimelineScroll,
+    isStickingToBottom,
     loadingToolGroupIds,
     promptComposerRef,
     scrollToBottom,
@@ -1227,8 +1229,10 @@ export function ThreadDetailView() {
             className="min-w-0 overflow-hidden"
           >
             <ThreadTimelinePane
+              bottomSentinelRef={bottomSentinelRef}
               footer={composerFooter}
               header={timelineHeader}
+              isStickingToBottom={isStickingToBottom}
               isReasoningBlockActive={isReasoningBlockActive}
               isThreadTimelinePending={isThreadTimelinePending}
               isTransientThreadLoadError={isTransientThreadLoadError}

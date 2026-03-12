@@ -1,4 +1,4 @@
-import { type ReactNode } from "react";
+import { type ReactNode, type RefObject } from "react";
 import { type ThreadDetailRow, type UIMessage } from "@beanbag/agent-core";
 import {
   ConversationEmptyState,
@@ -99,8 +99,10 @@ function ToolGroupEntry({
 }
 
 interface ThreadTimelinePaneProps {
+  bottomSentinelRef: RefObject<HTMLDivElement | null>;
   footer: ReactNode;
   header: ReactNode;
+  isStickingToBottom: boolean;
   isReasoningBlockActive: boolean;
   isThreadTimelinePending: boolean;
   isTransientThreadLoadError: boolean;
@@ -118,8 +120,10 @@ interface ThreadTimelinePaneProps {
 }
 
 export function ThreadTimelinePane({
+  bottomSentinelRef,
   footer,
   header,
+  isStickingToBottom,
   isReasoningBlockActive,
   isThreadTimelinePending,
   isTransientThreadLoadError,
@@ -171,10 +175,14 @@ export function ThreadTimelinePane({
                 <div
                   key={`${threadId}:${entry.id}`}
                   data-thread-row-id={entry.id}
-                  style={{
-                    contentVisibility: "auto",
-                    containIntrinsicSize: "160px",
-                  }}
+                  style={
+                    isStickingToBottom
+                      ? undefined
+                      : {
+                          contentVisibility: "auto",
+                          containIntrinsicSize: "160px",
+                        }
+                  }
                 >
                   {entry.kind === "tool-group" ? (
                     <ToolGroupEntry
@@ -202,6 +210,12 @@ export function ThreadTimelinePane({
         {showOngoingIndicator ? (
           <ConversationWorkingIndicator isThinking={isReasoningBlockActive} />
         ) : null}
+        <div
+          ref={bottomSentinelRef}
+          aria-hidden="true"
+          data-thread-bottom-sentinel="true"
+          className="h-px w-full shrink-0"
+        />
       </PageShell>
     </div>
   );

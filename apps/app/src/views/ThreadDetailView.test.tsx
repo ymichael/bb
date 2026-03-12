@@ -210,26 +210,6 @@ vi.mock("@/hooks/useTheme", () => ({
   usePreferredTheme: () => "light",
 }));
 
-vi.mock("@/hooks/useAutoScroll", () => ({
-  useAutoScroll: () => ({
-    containerRef: { current: null },
-    containerElement: null,
-    setContainerRef: vi.fn(),
-    handleScroll: vi.fn(),
-    scrollToBottom: vi.fn(),
-    isStickingToBottom: true,
-    showScrollToBottom: false,
-  }),
-}));
-
-vi.mock("@/hooks/useScrollToBottomIndicator", () => ({
-  useScrollToBottomIndicator: () => ({
-    showScrollToBottom: false,
-    handleScroll: vi.fn(),
-    scrollToBottom: vi.fn(),
-  }),
-}));
-
 vi.mock("@/components/layout/PageShell", () => ({
   PageShell: ({ children, footer }: { children?: ReactNode; footer?: ReactNode }) => (
     <div>
