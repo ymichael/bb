@@ -162,6 +162,11 @@ export class EnvironmentAgentSessionService {
     this.onSessionInvalidated = options.onSessionInvalidated;
   }
 
+  private invalidateSession(session: EnvironmentAgentSessionRecord): void {
+    this.commandDispatcher?.invalidateCommandsForSession(session, this.clock());
+    this.onSessionInvalidated?.(session);
+  }
+
   openSession(args: {
     threadId: string;
     payload: EnvironmentAgentSessionOpenPayload;
@@ -211,7 +216,7 @@ export class EnvironmentAgentSessionService {
       now,
     });
     if (opened.replaced) {
-      this.onSessionInvalidated?.(opened.replaced);
+      this.invalidateSession(opened.replaced);
     }
 
     let cursor = this.cursors.getByThreadId(args.threadId);
@@ -293,14 +298,14 @@ export class EnvironmentAgentSessionService {
     if (!closed) {
       throw new Error(`Unknown environment-agent session: ${args.sessionId}`);
     }
-    this.onSessionInvalidated?.(closed);
+    this.invalidateSession(closed);
     return closed;
   }
 
   expireLeases(now?: number): EnvironmentAgentSessionRecord[] {
     const expired = this.sessions.expireLeases(now);
     for (const session of expired) {
-      this.onSessionInvalidated?.(session);
+      this.invalidateSession(session);
     }
     return expired;
   }

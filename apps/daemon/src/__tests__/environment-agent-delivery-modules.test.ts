@@ -440,4 +440,57 @@ describe("environment-agent delivery modules", () => {
       }),
     ).toBeUndefined();
   });
+
+  it("fails only started commands when a session is invalidated", () => {
+    const threadId = createThreadId();
+    const sessionId = createActiveSession(threadId, "sess-invalidated");
+    const dispatcher = new EnvironmentAgentCommandDispatcher(sessions, commands, {
+      clock: () => TEST_LEASE_NOW,
+    });
+
+    commands.enqueue({
+      id: "cmd-received",
+      threadId,
+      sessionId,
+      commandType: "workspace.status",
+      payload: { type: "workspace.status", threadId },
+      now: 2_000,
+    });
+    commands.markReceived("cmd-received", 2_100);
+
+    commands.enqueue({
+      id: "cmd-started",
+      threadId,
+      sessionId,
+      commandType: "thread.resume",
+      payload: { type: "thread.resume", threadId, providerThreadId: "provider-1" },
+      now: 2_200,
+    });
+    commands.markStarted("cmd-started", 2_300);
+
+    const result = dispatcher.invalidateCommandsForSession({
+      id: sessionId,
+      threadId,
+      status: "replaced",
+      closeReason: "newer_session",
+    }, 2_400);
+
+    expect(result.failedStartedCommands).toEqual([
+      expect.objectContaining({
+        id: "cmd-started",
+        state: "failed",
+        errorCode: "provider_unavailable",
+      }),
+    ]);
+    expect(commands.getById("cmd-received")).toMatchObject({
+      sessionId,
+      state: "received",
+    });
+    expect(commands.getById("cmd-started")).toMatchObject({
+      sessionId,
+      state: "failed",
+      errorMessage:
+        `Environment-agent session ${sessionId} closed (newer_session) while command execution was in progress`,
+    });
+  });
 });

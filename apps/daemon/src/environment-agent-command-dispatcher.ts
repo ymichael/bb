@@ -2,6 +2,7 @@ import { assertNever } from "@beanbag/agent-core";
 import type {
   EnvironmentAgentCommandRecord,
   EnvironmentAgentCommandRepository,
+  EnvironmentAgentSessionRecord,
   EnvironmentAgentSessionRepository,
 } from "@beanbag/db";
 import type {
@@ -12,6 +13,10 @@ import type {
 export interface RecordEnvironmentAgentCommandAckResult {
   commands: EnvironmentAgentCommandRecord[];
   deliveredThrough?: number;
+}
+
+export interface InvalidateEnvironmentAgentSessionCommandsResult {
+  failedStartedCommands: EnvironmentAgentCommandRecord[];
 }
 
 export class EnvironmentAgentSessionUnavailableError extends Error {
@@ -167,6 +172,32 @@ export class EnvironmentAgentCommandDispatcher {
     now?: number;
   }): number {
     return this.commands.rebindPendingForThread(args);
+  }
+
+  invalidateCommandsForSession(
+    session: Pick<
+      EnvironmentAgentSessionRecord,
+      "id" | "threadId" | "status" | "closeReason"
+    >,
+    now: number = Date.now(),
+  ): InvalidateEnvironmentAgentSessionCommandsResult {
+    const failedStartedCommands = this.commands
+      .listPendingByThreadId(session.threadId)
+      .filter(
+        (command) =>
+          command.sessionId === session.id && command.state === "started",
+      )
+      .flatMap((command) => {
+        const failed = this.commands.markFailed({
+          commandId: command.id,
+          errorCode: "provider_unavailable",
+          errorMessage: this.buildInvalidatedSessionCommandMessage(session),
+          now,
+        });
+        return failed ? [failed] : [];
+      });
+
+    return { failedStartedCommands };
   }
 
   recordDeliveryAck(args: {
@@ -346,5 +377,12 @@ export class EnvironmentAgentCommandDispatcher {
       default:
         return assertNever(command.state);
     }
+  }
+
+  private buildInvalidatedSessionCommandMessage(
+    session: Pick<EnvironmentAgentSessionRecord, "id" | "closeReason">,
+  ): string {
+    const reason = session.closeReason ?? "internal_error";
+    return `Environment-agent session ${session.id} closed (${reason}) while command execution was in progress`;
   }
 }

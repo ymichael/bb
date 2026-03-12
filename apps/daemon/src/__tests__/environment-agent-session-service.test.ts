@@ -380,7 +380,7 @@ describe("EnvironmentAgentSessionService", () => {
     });
   });
 
-  it("accepts terminal results from a replaced session for commands it already started", () => {
+  it("requeues received commands and fails started commands when a newer session replaces them", () => {
     const threadId = createThreadId();
     const first = service.openSession({
       threadId,
@@ -400,7 +400,7 @@ describe("EnvironmentAgentSessionService", () => {
     });
 
     commands.enqueue({
-      id: "cmd-started",
+      id: "cmd-received",
       threadId,
       sessionId: first.session.id,
       commandType: "workspace.status",
@@ -410,7 +410,21 @@ describe("EnvironmentAgentSessionService", () => {
       },
       now: 1_100,
     });
-    commands.markStarted("cmd-started", 1_150);
+    commands.markReceived("cmd-received", 1_150);
+
+    commands.enqueue({
+      id: "cmd-started",
+      threadId,
+      sessionId: first.session.id,
+      commandType: "thread.resume",
+      payload: {
+        type: "thread.resume",
+        threadId,
+        providerThreadId: "provider-thread-1",
+      },
+      now: 1_200,
+    });
+    commands.markStarted("cmd-started", 1_250);
 
     const second = service.openSession({
       threadId,
@@ -430,22 +444,16 @@ describe("EnvironmentAgentSessionService", () => {
     });
 
     expect(second.replaced?.id).toBe(first.session.id);
-    service.recordCommandResult({
-      threadId,
-      sessionId: first.session.id,
-      payload: {
-        channelId: threadId,
-        commandId: "cmd-started",
-        state: "completed",
-        result: { ok: true },
-      },
-      now: 2_100,
+    expect(commands.getById("cmd-received")).toMatchObject({
+      sessionId: second.session.id,
+      state: "queued",
     });
-
     expect(commands.getById("cmd-started")).toMatchObject({
       sessionId: first.session.id,
-      state: "completed",
-      result: { ok: true },
+      state: "failed",
+      errorCode: "provider_unavailable",
+      errorMessage:
+        `Environment-agent session ${first.session.id} closed (newer_session) while command execution was in progress`,
     });
   });
 
@@ -580,6 +588,50 @@ describe("EnvironmentAgentSessionService", () => {
         closeReason: "lease_expired",
       }),
     );
+  });
+
+  it("fails started commands when a lease expires", () => {
+    const threadId = createThreadId();
+    const opened = service.openSession({
+      threadId,
+      now: 1_000,
+      payload: {
+        agentId: "agent-1",
+        agentInstanceId: "instance-1",
+        supportedProtocolVersions: [1],
+        supportedTransports: ["websocket"],
+        channels: [
+          {
+            channelId: threadId,
+            generation: 1,
+          },
+        ],
+      },
+    });
+
+    commands.enqueue({
+      id: "cmd-started",
+      threadId,
+      sessionId: opened.session.id,
+      commandType: "thread.resume",
+      payload: {
+        type: "thread.resume",
+        threadId,
+        providerThreadId: "provider-thread-1",
+      },
+      now: 1_100,
+    });
+    commands.markStarted("cmd-started", 1_150);
+
+    service.expireLeases(60_000);
+
+    expect(commands.getById("cmd-started")).toMatchObject({
+      sessionId: opened.session.id,
+      state: "failed",
+      errorCode: "provider_unavailable",
+      errorMessage:
+        `Environment-agent session ${opened.session.id} closed (lease_expired) while command execution was in progress`,
+    });
   });
 
   it("closes active sessions explicitly", () => {
