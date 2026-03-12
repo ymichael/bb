@@ -3,10 +3,20 @@ import {
   DEFAULT_SCROLL_STICK_THRESHOLD_PX,
 } from "@beanbag/ui-core";
 
+function shouldShowScrollToBottom(el: HTMLDivElement): boolean {
+  const maxScrollOffset = el.scrollHeight - el.clientHeight
+  if (maxScrollOffset <= DEFAULT_SCROLL_STICK_THRESHOLD_PX) {
+    return false
+  }
+  const distanceFromBottom = maxScrollOffset - el.scrollTop
+  return distanceFromBottom > DEFAULT_SCROLL_STICK_THRESHOLD_PX
+}
+
 export function useAutoScroll(dep: unknown, resetDep?: unknown) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const [containerElement, setContainerElement] = useState<HTMLDivElement | null>(null)
   const [isStickingToBottom, setIsStickingToBottom] = useState(true)
+  const [showScrollToBottom, setShowScrollToBottom] = useState(false)
   const stickRef = useRef(true)
 
   const setContainerRef = useCallback((element: HTMLDivElement | null) => {
@@ -28,6 +38,7 @@ export function useAutoScroll(dep: unknown, resetDep?: unknown) {
     // Use an immediate jump so follow-up renders can't outrun a smooth animation.
     setStickyState(true)
     el.scrollTop = el.scrollHeight
+    setShowScrollToBottom(false)
   }, [setStickyState])
 
   const scrollToBottomIfSticking = useCallback(() => {
@@ -40,11 +51,16 @@ export function useAutoScroll(dep: unknown, resetDep?: unknown) {
     const el = containerRef.current
     if (!el) return
     const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight
-    setStickyState(distanceFromBottom <= DEFAULT_SCROLL_STICK_THRESHOLD_PX)
+    const nextStickyState = distanceFromBottom <= DEFAULT_SCROLL_STICK_THRESHOLD_PX
+    setStickyState(nextStickyState)
+    setShowScrollToBottom(shouldShowScrollToBottom(el))
   }, [setStickyState])
 
   useEffect(() => {
     scrollToBottomIfSticking()
+    if (containerElement) {
+      setShowScrollToBottom(shouldShowScrollToBottom(containerElement))
+    }
   }, [containerElement, dep, scrollToBottomIfSticking])
 
   useEffect(() => {
@@ -57,6 +73,7 @@ export function useAutoScroll(dep: unknown, resetDep?: unknown) {
       frameId = window.requestAnimationFrame(() => {
         frameId = null
         scrollToBottomIfSticking()
+        setShowScrollToBottom(shouldShowScrollToBottom(el))
       })
     }
 
@@ -117,5 +134,6 @@ export function useAutoScroll(dep: unknown, resetDep?: unknown) {
     handleScroll,
     scrollToBottom,
     isStickingToBottom,
+    showScrollToBottom,
   }
 }

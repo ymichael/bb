@@ -8,7 +8,6 @@ import {
 import { type ThreadDetailRow, type UIMessage } from "@beanbag/agent-core";
 import { DEFAULT_SCROLL_STICK_THRESHOLD_PX } from "@beanbag/ui-core";
 import { useAutoScroll } from "@/hooks/useAutoScroll";
-import { useScrollToBottomIndicator } from "@/hooks/useScrollToBottomIndicator";
 import { type ThreadDetailToolGroupRow } from "./threadDetailRows";
 
 const SCROLL_THRESHOLD = 40;
@@ -88,25 +87,17 @@ export function useThreadTimelineController({
     Record<string, UIMessage[]>
   >({});
   const {
-    containerRef,
     containerElement,
     setContainerRef,
-    handleScroll: baseHandleScroll,
-    scrollToBottom: baseScrollToBottom,
+    handleScroll,
+    scrollToBottom,
     isStickingToBottom,
+    showScrollToBottom,
   } = useAutoScroll(threadDetailRows, threadId);
   const promptComposerRef = useRef<HTMLDivElement>(null);
   const promptComposerHeightRef = useRef<number | null>(null);
   const timelineScrollAnchorRef = useRef<TimelineScrollAnchor | null>(null);
   const timelineContainerWidthRef = useRef<number | null>(null);
-  const { showScrollToBottom, handleScroll, scrollToBottom } =
-    useScrollToBottomIndicator({
-      containerRef,
-      containerElement,
-      onBaseScroll: baseHandleScroll,
-      onBaseScrollToBottom: baseScrollToBottom,
-      resetDep: threadId,
-    });
 
   const captureTimelineScrollPosition = useCallback(() => {
     const scrollContainer = containerElement;
