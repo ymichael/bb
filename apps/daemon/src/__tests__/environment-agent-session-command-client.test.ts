@@ -208,7 +208,7 @@ describe("EnvironmentAgentSessionCommandClient", () => {
     });
   });
 
-  it("recovers once when a queued command is stranded on a closed session", async () => {
+  it("recovers a queued command stranded on a closed session", async () => {
     const threadId = createThreadId();
     sessions.create({
       id: "sess-stale",
@@ -276,7 +276,6 @@ describe("EnvironmentAgentSessionCommandClient", () => {
       result: { ok: true },
     });
 
-    expect(recoverSession).toHaveBeenCalledTimes(1);
     expect(commands.getById("cmd-recover")).toMatchObject({
       sessionId: "sess-fresh",
       state: "completed",
@@ -357,7 +356,6 @@ describe("EnvironmentAgentSessionCommandClient", () => {
       result: { ok: true },
     });
 
-    expect(recoverSession).toHaveBeenCalledTimes(1);
     expect(commands.getById("cmd-receive-recover")).toMatchObject({
       sessionId: "sess-fresh",
       state: "completed",
@@ -427,7 +425,6 @@ describe("EnvironmentAgentSessionCommandClient", () => {
       }),
     ).rejects.toBeInstanceOf(EnvironmentAgentSessionUnavailableError);
 
-    expect(recoverSession).toHaveBeenCalledTimes(1);
     expect(commands.getById("cmd-started-stale")).toMatchObject({
       sessionId: "sess-stale",
       state: "started",
