@@ -12,6 +12,7 @@ import type {
 } from "./protocol.js";
 import type {
   EnvironmentAgentSessionCommandAckState,
+  EnvironmentAgentSessionCursor,
   EnvironmentAgentSessionEventBatchChannel,
 } from "./session-protocol.js";
 
@@ -203,6 +204,18 @@ export class EnvironmentAgentSessionRuntime {
     });
   }
 
+  alignEventCursor(
+    threadId: string,
+    cursor: EnvironmentAgentSessionCursor,
+    now: number = this.clock(),
+  ): EnvironmentAgentSessionStateRecord {
+    return this.options.store.reconcileEventCursor({
+      threadId,
+      cursor,
+      now,
+    });
+  }
+
   receiveCommand(
     input: RecordEnvironmentAgentCommandReceivedInput,
   ): ReceiveEnvironmentAgentSessionCommandResult {
@@ -282,6 +295,18 @@ export class EnvironmentAgentSessionRuntime {
     return this.options.store.setLastDeliveredCommandCursor({
       ...args,
       now: args.now ?? this.clock(),
+    });
+  }
+
+  alignLastDeliveredCommandCursor(
+    threadId: string,
+    commandCursor: number,
+    now: number = this.clock(),
+  ): EnvironmentAgentSessionStateRecord {
+    return this.options.store.alignLastDeliveredCommandCursor({
+      threadId,
+      commandCursor,
+      now,
     });
   }
 }

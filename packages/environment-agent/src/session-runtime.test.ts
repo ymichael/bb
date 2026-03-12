@@ -140,6 +140,71 @@ describe("EnvironmentAgentSessionRuntime", () => {
     });
   });
 
+  it("realigns persisted event and command cursors to the daemon view", () => {
+    runtime.initializeThread({
+      threadId: "thread-1",
+      agentId: "agent-1",
+      agentInstanceId: "instance-1",
+      generation: 1,
+    });
+    runtime.recordEvent({
+      threadId: "thread-1",
+      eventId: "evt-1",
+      event: {
+        type: "environment.ready",
+        threadId: "thread-1",
+      },
+      emittedAt: 11_000,
+    });
+    runtime.recordEvent({
+      threadId: "thread-1",
+      eventId: "evt-2",
+      event: {
+        type: "provider.stderr",
+        threadId: "thread-1",
+        line: "hello",
+      },
+      emittedAt: 12_000,
+    });
+    runtime.acknowledgeEvents({
+      threadId: "thread-1",
+      generation: 1,
+      sequence: 2,
+      ackedAt: 13_000,
+    });
+    runtime.setLastDeliveredCommandCursor({
+      threadId: "thread-1",
+      commandCursor: 5,
+      now: 14_000,
+    });
+
+    runtime.alignEventCursor(
+      "thread-1",
+      {
+        generation: 1,
+        sequence: 0,
+      },
+      15_000,
+    );
+    runtime.alignLastDeliveredCommandCursor("thread-1", 1, 16_000);
+
+    expect(runtime.getPendingEventBatch({ threadId: "thread-1" })).toEqual({
+      channelId: "thread-1",
+      generation: 1,
+      events: [
+        expect.objectContaining({ eventId: "evt-1", sequence: 1 }),
+        expect.objectContaining({ eventId: "evt-2", sequence: 2 }),
+      ],
+    });
+    expect(runtime.loadThreadState("thread-1")).toMatchObject({
+      lastAcked: {
+        generation: 1,
+        sequence: 0,
+      },
+      lastDeliveredCommandCursor: 1,
+    });
+  });
+
   it("dedupes received commands and proxies receipt transitions", () => {
     const first = runtime.receiveCommand({
       commandId: "cmd-1",

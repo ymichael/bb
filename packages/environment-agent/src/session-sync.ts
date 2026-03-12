@@ -42,6 +42,26 @@ export class EnvironmentAgentSessionSync {
       sessionId: welcome.sessionId,
       now: welcome.sentAt,
     });
+    const channel = welcome.payload.channels.find(
+      (candidate) => candidate.channelId === args.threadId,
+    );
+    if (channel) {
+      this.options.runtime.alignEventCursor(
+        args.threadId,
+        {
+          generation: channel.applyFrom.generation,
+          sequence: channel.applyFrom.sequenceExclusive,
+        },
+        welcome.sentAt,
+      );
+      if (channel.deliverCommandsAfter !== undefined) {
+        this.options.runtime.alignLastDeliveredCommandCursor(
+          args.threadId,
+          channel.deliverCommandsAfter,
+          welcome.sentAt,
+        );
+      }
+    }
     return welcome;
   }
 

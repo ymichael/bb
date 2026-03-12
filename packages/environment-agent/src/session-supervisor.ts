@@ -240,7 +240,7 @@ export class EnvironmentAgentSessionSupervisor {
         await this.options.sessionSync.sendHeartbeat(this.options.threadId);
         this.nextHeartbeatAt = Date.now() + this.heartbeatIntervalMs;
       }
-      await this.options.sessionSync.flushPendingEvents(this.options.threadId);
+      await this.flushPendingEventsWithReplay();
       const state = this.options.sessionRuntime.loadThreadState(this.options.threadId);
       const commands = await this.pullCommands(state?.lastDeliveredCommandCursor);
       if (!this.running) {
@@ -343,6 +343,28 @@ export class EnvironmentAgentSessionSupervisor {
         this.commandPullController = undefined;
       }
     }
+  }
+
+  private async flushPendingEventsWithReplay(): Promise<void> {
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      const flushResult = await this.options.sessionSync.flushPendingEvents(
+        this.options.threadId,
+      );
+      if (flushResult.acknowledged || !flushResult.replayRequested) {
+        return;
+      }
+      this.options.sessionRuntime.alignEventCursor(
+        this.options.threadId,
+        {
+          generation: flushResult.replayRequested.payload.generation,
+          sequence: flushResult.replayRequested.payload.afterSequence,
+        },
+        flushResult.replayRequested.sentAt,
+      );
+    }
+    throw new Error(
+      `Environment-agent replay did not converge for thread ${this.options.threadId}`,
+    );
   }
 
   private cancelSelfSuspend(): void {

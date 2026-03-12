@@ -188,4 +188,87 @@ describe("EnvironmentAgentSessionSync", () => {
     });
     expect(runtime.getPendingEventBatch({ threadId: "thread-1" })).toBeDefined();
   });
+
+  it("applies daemon-requested replay and command cursors from session welcome", async () => {
+    const store = new InMemoryEnvironmentAgentSessionStore();
+    const runtime = new EnvironmentAgentSessionRuntime({ store, clock: () => 10_000 });
+    runtime.initializeThread({
+      threadId: "thread-1",
+      agentId: "agent-1",
+      agentInstanceId: "instance-1",
+      generation: 1,
+      now: 1_000,
+    });
+    runtime.recordEvent({
+      threadId: "thread-1",
+      eventId: "evt-1",
+      event: {
+        type: "environment.ready",
+        threadId: "thread-1",
+      },
+      emittedAt: 2_000,
+    });
+    runtime.acknowledgeEvents({
+      threadId: "thread-1",
+      generation: 1,
+      sequence: 1,
+      ackedAt: 2_500,
+    });
+    runtime.setLastDeliveredCommandCursor({
+      threadId: "thread-1",
+      commandCursor: 5,
+      now: 2_600,
+    });
+
+    const client = makeClientMock();
+    (client.openSession as ReturnType<typeof vi.fn>).mockResolvedValue({
+      protocol: "beanbag.env-agent.v1",
+      type: "session_welcome",
+      messageId: "msg-open",
+      sessionId: "sess-1",
+      sentAt: 3_000,
+      payload: {
+        leaseTtlMs: 30_000,
+        heartbeatIntervalMs: 10_000,
+        selectedTransport: "http-long-poll",
+        protocolVersion: 1,
+        channels: [
+          {
+            channelId: "thread-1",
+            applyFrom: {
+              generation: 1,
+              sequenceExclusive: 0,
+            },
+            deliverCommandsAfter: 1,
+          },
+        ],
+      },
+    });
+
+    const sync = new EnvironmentAgentSessionSync({ runtime, client });
+    await expect(sync.openSession({
+      threadId: "thread-1",
+      payload: {
+        agentId: "agent-1",
+        agentInstanceId: "instance-1",
+        supportedProtocolVersions: [1],
+        supportedTransports: ["http-long-poll"],
+        channels: [{ channelId: "thread-1", generation: 1 }],
+      },
+    })).resolves.toMatchObject({ sessionId: "sess-1" });
+
+    expect(runtime.getPendingEventBatch({ threadId: "thread-1" })).toEqual({
+      channelId: "thread-1",
+      generation: 1,
+      events: [expect.objectContaining({ eventId: "evt-1", sequence: 1 })],
+    });
+    expect(runtime.loadThreadState("thread-1")).toMatchObject({
+      sessionId: "sess-1",
+      lastAcked: {
+        generation: 1,
+        sequence: 0,
+      },
+      lastDeliveredCommandCursor: 1,
+    });
+  });
 });

@@ -132,6 +132,12 @@ export interface SetEnvironmentAgentLastDeliveredCommandCursorInput {
   now?: number;
 }
 
+export interface ReconcileEnvironmentAgentEventCursorInput {
+  threadId: string;
+  cursor: EnvironmentAgentSessionCursor;
+  now?: number;
+}
+
 export interface EnvironmentAgentSessionStore {
   loadSessionState(threadId: string): EnvironmentAgentSessionStateRecord | undefined;
   initializeThreadState(
@@ -148,6 +154,9 @@ export interface EnvironmentAgentSessionStore {
     limit?: number;
   }): EnvironmentAgentOutboxEventRecord[];
   ackOutboxThrough(input: AckEnvironmentAgentOutboxThroughInput): number;
+  reconcileEventCursor(
+    input: ReconcileEnvironmentAgentEventCursorInput,
+  ): EnvironmentAgentSessionStateRecord;
   recordCommandReceived(
     input: RecordEnvironmentAgentCommandReceivedInput,
   ): EnvironmentAgentCommandReceiptRecord;
@@ -174,6 +183,9 @@ export interface EnvironmentAgentSessionStore {
     input: FailEnvironmentAgentCommandReceiptInput,
   ): EnvironmentAgentCommandReceiptRecord | undefined;
   setLastDeliveredCommandCursor(
+    input: SetEnvironmentAgentLastDeliveredCommandCursorInput,
+  ): EnvironmentAgentSessionStateRecord;
+  alignLastDeliveredCommandCursor(
     input: SetEnvironmentAgentLastDeliveredCommandCursorInput,
   ): EnvironmentAgentSessionStateRecord;
 }

@@ -408,6 +408,146 @@ describe("EnvironmentAgentSessionSupervisor", () => {
     }
   });
 
+  it("replays buffered events when the daemon requests an older cursor", async () => {
+    const store = new InMemoryEnvironmentAgentSessionStore();
+    const runtime = new EnvironmentAgentRuntime({ threadId: "thread-1" });
+    const sessionRuntime = new EnvironmentAgentSessionRuntime({
+      store,
+      clock: () => 10_000,
+    });
+    const client = makeClientMock();
+    (client.openSession as ReturnType<typeof vi.fn>).mockResolvedValue({
+      protocol: "beanbag.env-agent.v1",
+      type: "session_welcome",
+      messageId: "msg-open",
+      sessionId: "sess-1",
+      sentAt: 2_000,
+      payload: {
+        leaseTtlMs: 30_000,
+        heartbeatIntervalMs: 10_000,
+        selectedTransport: "http-long-poll",
+        protocolVersion: 1,
+        channels: [
+          {
+            channelId: "thread-1",
+            applyFrom: {
+              generation: 1,
+              sequenceExclusive: 1,
+            },
+            deliverCommandsAfter: 0,
+          },
+        ],
+      },
+    });
+    (client.pushEvents as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce({
+        protocol: "beanbag.env-agent.v1",
+        type: "replay_request",
+        messageId: "msg-replay",
+        sessionId: "sess-1",
+        sentAt: 3_000,
+        payload: {
+          channelId: "thread-1",
+          generation: 1,
+          afterSequence: 0,
+        },
+      })
+      .mockResolvedValueOnce({
+        protocol: "beanbag.env-agent.v1",
+        type: "event_ack",
+        messageId: "msg-ack",
+        sessionId: "sess-1",
+        sentAt: 3_500,
+        payload: {
+          channels: [
+            {
+              channelId: "thread-1",
+              ackedThrough: { generation: 1, sequence: 2 },
+            },
+          ],
+        },
+      });
+    (client.pullCommands as ReturnType<typeof vi.fn>).mockResolvedValue({
+      protocol: "beanbag.env-agent.v1",
+      type: "command_batch",
+      messageId: "msg-cmd-empty",
+      sessionId: "sess-1",
+      sentAt: 4_000,
+      payload: { commands: [] },
+    });
+    (client.closeSession as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+
+    const sync = new EnvironmentAgentSessionSync({ runtime: sessionRuntime, client });
+    const supervisor = new EnvironmentAgentSessionSupervisor({
+      threadId: "thread-1",
+      runtime,
+      sessionRuntime,
+      sessionSync: sync,
+      pollIntervalMs: 1_000,
+    });
+
+    sessionRuntime.recordEvent({
+      threadId: "thread-1",
+      eventId: "evt-1",
+      event: {
+        type: "environment.ready",
+        threadId: "thread-1",
+      },
+      emittedAt: 2_100,
+    });
+    sessionRuntime.acknowledgeEvents({
+      threadId: "thread-1",
+      generation: 1,
+      sequence: 1,
+      ackedAt: 2_200,
+    });
+    sessionRuntime.recordEvent({
+      threadId: "thread-1",
+      eventId: "evt-2",
+      event: {
+        type: "provider.stderr",
+        threadId: "thread-1",
+        line: "stderr 1",
+      },
+      emittedAt: 2_300,
+    });
+
+    await supervisor.start();
+
+    expect(client.pushEvents).toHaveBeenCalledTimes(2);
+    expect((client.pushEvents as ReturnType<typeof vi.fn>).mock.calls[0]?.[0]).toMatchObject({
+      sessionId: "sess-1",
+      payload: {
+        batches: [
+          {
+            channelId: "thread-1",
+            generation: 1,
+            events: [expect.objectContaining({ eventId: "evt-2", sequence: 2 })],
+          },
+        ],
+      },
+    });
+    expect((client.pushEvents as ReturnType<typeof vi.fn>).mock.calls[1]?.[0]).toMatchObject({
+      sessionId: "sess-1",
+      payload: {
+        batches: [
+          {
+            channelId: "thread-1",
+            generation: 1,
+            events: [
+              expect.objectContaining({ eventId: "evt-1", sequence: 1 }),
+              expect.objectContaining({ eventId: "evt-2", sequence: 2 }),
+            ],
+          },
+        ],
+      },
+    });
+    expect(sessionRuntime.getPendingEventBatch({ threadId: "thread-1" })).toBeUndefined();
+
+    await supervisor.close();
+    await runtime.shutdown();
+  });
+
   it("self-suspends after observed work is fully drained", async () => {
     vi.useFakeTimers();
     try {

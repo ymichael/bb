@@ -12,6 +12,7 @@ import type {
   EnvironmentAgentSessionStoreCommandReceiptState,
   FailEnvironmentAgentCommandReceiptInput,
   InitializeEnvironmentAgentThreadStateInput,
+  ReconcileEnvironmentAgentEventCursorInput,
   RecordEnvironmentAgentCommandReceivedInput,
   SetEnvironmentAgentLastDeliveredCommandCursorInput,
 } from "./session-store.js";
@@ -222,6 +223,35 @@ export class InMemoryEnvironmentAgentSessionStore
     return ackedCount;
   }
 
+  reconcileEventCursor(
+    input: ReconcileEnvironmentAgentEventCursorInput,
+  ): EnvironmentAgentSessionStateRecord {
+    const state = this.requireThreadState(input.threadId);
+    const now = input.now ?? Date.now();
+    const nextOutbox = (this.outboxByThread.get(input.threadId) ?? []).map((record) => {
+      const recordCursor = {
+        generation: record.generation,
+        sequence: record.sequence,
+      } satisfies EnvironmentAgentSessionCursor;
+      if (compareCursors(recordCursor, input.cursor) <= 0) {
+        return record.ackedAt !== undefined ? record : { ...record, ackedAt: now };
+      }
+      if (record.ackedAt === undefined) {
+        return record;
+      }
+      const { ackedAt: _ackedAt, ...pendingRecord } = record;
+      return pendingRecord;
+    });
+    this.outboxByThread.set(input.threadId, nextOutbox);
+    const updated = {
+      ...state,
+      lastAcked: cloneCursor(input.cursor)!,
+      updatedAt: now,
+    };
+    this.threadStates.set(input.threadId, updated);
+    return cloneSessionState(updated);
+  }
+
   recordCommandReceived(
     input: RecordEnvironmentAgentCommandReceivedInput,
   ): EnvironmentAgentCommandReceiptRecord {
@@ -327,6 +357,22 @@ export class InMemoryEnvironmentAgentSessionStore
     const updated = {
       ...state,
       lastDeliveredCommandCursor: nextCursor,
+      updatedAt: input.now ?? Date.now(),
+    };
+    this.threadStates.set(input.threadId, updated);
+    return cloneSessionState(updated);
+  }
+
+  alignLastDeliveredCommandCursor(
+    input: SetEnvironmentAgentLastDeliveredCommandCursorInput,
+  ): EnvironmentAgentSessionStateRecord {
+    const state = this.requireThreadState(input.threadId);
+    const commandCursor = Number.isFinite(input.commandCursor)
+      ? Math.max(0, Math.floor(input.commandCursor))
+      : 0;
+    const updated = {
+      ...state,
+      lastDeliveredCommandCursor: commandCursor,
       updatedAt: input.now ?? Date.now(),
     };
     this.threadStates.set(input.threadId, updated);
