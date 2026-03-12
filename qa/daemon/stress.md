@@ -21,6 +21,16 @@ Exercise the parts of daemon/env-agent behavior most likely to regress under res
 Use the full setup instructions in:
 - [`./standalone-daemon-qa.md`](./standalone-daemon-qa.md)
 
+## Automation entrypoint
+
+For the checked-in deterministic harness:
+
+```bash
+pnpm qa:daemon:stress
+```
+
+This tier is intentionally small and high-value; keep real-provider restart/liveness confirmation in the manual pass when timing sensitivity matters.
+
 ## Required scenarios
 
 ### Restart and liveness

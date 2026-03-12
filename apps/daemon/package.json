@@ -20,6 +20,9 @@
     "test": "pnpm test:unit && pnpm test:e2e",
     "test:unit": "vitest run",
     "test:e2e": "vitest run --config vitest.e2e.fast.config.ts",
+    "test:e2e:qa:smoke": "vitest run --config vitest.e2e.fast.config.ts src/__tests__/e2e/standalone-daemon-cli-roundtrip.test.ts src/__tests__/e2e/thread-immediate-followups-roundtrip.test.ts src/__tests__/e2e/thread-worktree-followup-roundtrip.test.ts",
+    "test:e2e:qa:stress": "vitest run --config vitest.e2e.fast.config.ts src/__tests__/e2e/environment-agent-restart-roundtrip.test.ts src/__tests__/e2e/thread-archive-unarchive-roundtrip.test.ts src/__tests__/e2e/thread-provisioning-responsiveness.test.ts",
+    "test:e2e:qa:regression": "vitest run --config vitest.e2e.fast.config.ts src/__tests__/e2e/thread-immediate-followups-roundtrip.test.ts src/__tests__/e2e/thread-archive-unarchive-roundtrip.test.ts src/__tests__/e2e/environment-agent-restart-roundtrip.test.ts",
     "test:e2e:real": "BEANBAG_E2E_PROVIDER_MODE=real vitest run --config vitest.e2e.fast.config.ts",
     "test:e2e:docker": "vitest run --config vitest.e2e.config.ts src/__tests__/e2e/docker-thread-roundtrip.test.ts",
     "test:e2e:all": "vitest run --config vitest.e2e.config.ts --dir src/__tests__/e2e"

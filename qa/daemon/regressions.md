@@ -15,6 +15,16 @@ Add one entry per regression with:
 - expected outcome
 - invariants protected by the regression
 
+## Automation entrypoint
+
+For the checked-in regression seed suite:
+
+```bash
+pnpm qa:daemon:regression
+```
+
+Add new regression cases here and expand that automated suite when stable repro coverage is available.
+
 ## Current seed regression areas
 
 Add entries here as fixes land for issues such as:

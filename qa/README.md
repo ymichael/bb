@@ -69,11 +69,22 @@ Current daemon QA docs:
 - `qa/daemon/smoke.md`
 - `qa/daemon/stress.md`
 - `qa/daemon/regressions.md`
+- `qa/artifacts/README.md`
+
+## Automation entrypoints
+
+For checked-in daemon/env-agent automation tiers:
+
+- `pnpm qa:daemon:smoke`
+- `pnpm qa:daemon:stress`
+- `pnpm qa:daemon:regression`
+
+These currently run the fake-provider-backed e2e harness so they stay deterministic and CI-friendly.
+Use the manual standalone daemon guide for real-provider validation.
 
 Likely future additions:
 
 - `qa/app/`
 - `qa/regressions/`
-- `qa/artifacts/README.md`
 
 The daemon/env-agent QA roadmap has been completed; keep this folder updated directly as the source of truth for future QA changes.

@@ -21,6 +21,16 @@ Confirm the most important daemon/env-agent flows still work end-to-end against 
 Use the full setup instructions in:
 - [`./standalone-daemon-qa.md`](./standalone-daemon-qa.md)
 
+## Automation entrypoint
+
+For the checked-in deterministic harness:
+
+```bash
+pnpm qa:daemon:smoke
+```
+
+This is the fake-provider automation tier. Use the standalone manual guide for real-provider confirmation.
+
 ## Required scenarios
 
 ### Local flow
