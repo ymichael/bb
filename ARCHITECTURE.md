@@ -129,14 +129,13 @@ It is responsible for:
 - maintaining a local in-memory event stream from provider/runtime activity
 - opening an authenticated session back to the daemon
 - pulling queued daemon commands over the session transport
-- pushing event batches, heartbeats, and command acknowledgements/results back to the daemon
-- self-suspending when the thread is quiescent
+- pushing session messages, heartbeats, and command results back to the daemon
 
 Important nuances:
 
 - Event/session state inside the environment-agent is in memory, not durably journaled on disk.
-- The environment-agent exposes only a minimal authenticated local HTTP surface today (`POST /control/status`) for inspection; the main control flow now goes through daemon-hosted session endpoints.
-- The current shipped agent session client uses HTTP long-polling, though the session protocol is transport-aware and can negotiate websocket support.
+- The environment-agent exposes only a minimal authenticated local HTTP surface today (`POST /control/status`) for inspection and startup poke handling; the main control flow goes through daemon-hosted session endpoints.
+- The current shipped agent session client uses a fixed HTTP session transport: `POST /session/open`, `GET /session/commands`, and `POST /session/messages`.
 
 ### `packages/agent-server`
 
@@ -331,7 +330,7 @@ Non-durable state includes:
 - active long-poll requests and timers
 - daemon-side in-memory caches such as timeline projections
 
-On boot, the daemon reconciles persisted thread state, restores environments as needed, rebinds to active sessions when possible, and resumes pending work.
+On boot, the daemon restores the environment metadata it needs, pokes previously active env-agents, and then relies on normal session heartbeats/timeouts to determine whether those workers survived the restart.
 
 ## System Services
 
