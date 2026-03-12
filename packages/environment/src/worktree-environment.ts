@@ -257,6 +257,7 @@ class WorktreeEnvironment implements IEnvironment {
   private readonly rootPath: string;
   private readonly env: Record<string, string | undefined>;
   private readonly services: CreateEnvironmentContext["services"];
+  private readonly reconnectTarget: CreateEnvironmentContext["managedEnvironmentAgentReconnectTarget"];
   private readonly manageEnvironmentAgent: boolean;
   private preparePromise: Promise<void> | null = null;
   private managedAgentTarget?: EnvironmentAgentConnectionTarget;
@@ -267,6 +268,7 @@ class WorktreeEnvironment implements IEnvironment {
     private readonly projectRoot: string,
     private readonly state: WorktreeEnvironmentState,
     runtimeEnv: Record<string, string | undefined>,
+    reconnectTarget?: CreateEnvironmentContext["managedEnvironmentAgentReconnectTarget"],
     services?: CreateEnvironmentContext["services"],
     manageEnvironmentAgent = true,
   ) {
@@ -274,6 +276,7 @@ class WorktreeEnvironment implements IEnvironment {
     this.threadId = threadId;
     this.rootPath = state.workspaceRoot;
     this.env = { ...runtimeEnv };
+    this.reconnectTarget = reconnectTarget;
     this.services = services;
     this.manageEnvironmentAgent = manageEnvironmentAgent;
   }
@@ -291,6 +294,7 @@ class WorktreeEnvironment implements IEnvironment {
           projectId: this.projectId,
           environmentId: this.kind,
           runtimeEnv: this.env,
+          reconnectTarget: this.reconnectTarget,
         });
         if (managedAgentTarget) {
           this.managedAgentTarget = managedAgentTarget;
@@ -354,6 +358,7 @@ class WorktreeEnvironment implements IEnvironment {
         projectId: this.projectId,
         environmentId: this.kind,
         runtimeEnv: this.env,
+        reconnectTarget: this.reconnectTarget,
       });
       if (managedAgentTarget) {
         this.managedAgentTarget = managedAgentTarget;
@@ -888,6 +893,7 @@ export function createWorktreeEnvironmentDefinition(
           branchName,
         },
         context.runtimeEnv,
+        context.managedEnvironmentAgentReconnectTarget,
         context.services,
         manageEnvironmentAgent,
       );
@@ -902,6 +908,7 @@ export function createWorktreeEnvironmentDefinition(
         context.projectRootPath,
         state,
         context.runtimeEnv,
+        context.managedEnvironmentAgentReconnectTarget,
         context.services,
         manageEnvironmentAgent,
       );

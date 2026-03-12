@@ -63,6 +63,7 @@ class LocalEnvironment implements IEnvironment {
   private readonly rootPath: string;
   private readonly env: Record<string, string | undefined>;
   private readonly services: CreateEnvironmentContext["services"];
+  private readonly reconnectTarget: CreateEnvironmentContext["managedEnvironmentAgentReconnectTarget"];
   private managedAgentTarget?: EnvironmentAgentConnectionTarget;
 
   constructor(context: CreateEnvironmentContext) {
@@ -71,6 +72,7 @@ class LocalEnvironment implements IEnvironment {
     this.rootPath = context.projectRootPath;
     this.env = { ...context.runtimeEnv };
     this.services = context.services;
+    this.reconnectTarget = context.managedEnvironmentAgentReconnectTarget;
   }
 
   serialize(): LocalEnvironmentState {
@@ -84,6 +86,7 @@ class LocalEnvironment implements IEnvironment {
       projectId: this.projectId,
       environmentId: this.kind,
       runtimeEnv: this.env,
+      reconnectTarget: this.reconnectTarget,
     });
     if (managedAgentTarget) {
       this.managedAgentTarget = managedAgentTarget;

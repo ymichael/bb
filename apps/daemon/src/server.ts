@@ -134,6 +134,7 @@ export function createServer(deps: ServerDeps) {
     scheduler,
     environmentAgentCommandDispatcher,
     environmentAgentSessionService,
+    deps.environmentAgentSessionRepo,
   );
   const environmentAgentLeaseSweepInterval = setInterval(() => {
     environmentAgentSessionService.expireLeases();

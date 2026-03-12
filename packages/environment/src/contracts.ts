@@ -25,6 +25,10 @@ export interface CreateEnvironmentContext {
   threadId: string;
   projectRootPath: string;
   runtimeEnv: Record<string, string | undefined>;
+  managedEnvironmentAgentReconnectTarget?: {
+    baseUrl: string;
+    authToken?: string;
+  };
   services?: EnvironmentServices;
 }
 

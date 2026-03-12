@@ -812,6 +812,70 @@ describe("Thread routes", () => {
         reason: "agent_shutdown",
       });
     });
+
+    it("rejects malformed event batches at the route boundary", async () => {
+      const sessionService = mockEnvironmentAgentSessionService();
+      (threadManager.getById as ReturnType<typeof vi.fn>).mockReturnValue(makeThread());
+      app = new Hono().route(
+        "/threads",
+        createThreadRoutes(threadManager, {
+          environmentAgentSessionService: sessionService,
+        }),
+      );
+
+      const res = await app.request(
+        "/threads/thread-1/environment-agent/session/messages",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            protocol: "beanbag.env-agent.v1",
+            messageId: "msg-events",
+            sentAt: 1_000,
+            sessionId: "sess-1",
+            type: "event_batch",
+            payload: {},
+          }),
+        },
+      );
+
+      expect(res.status).toBe(400);
+      expect(sessionService.applyEventBatch).not.toHaveBeenCalled();
+    });
+
+    it("rejects failed command results without error details", async () => {
+      const sessionService = mockEnvironmentAgentSessionService();
+      (threadManager.getById as ReturnType<typeof vi.fn>).mockReturnValue(makeThread());
+      app = new Hono().route(
+        "/threads",
+        createThreadRoutes(threadManager, {
+          environmentAgentSessionService: sessionService,
+        }),
+      );
+
+      const res = await app.request(
+        "/threads/thread-1/environment-agent/session/messages",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            protocol: "beanbag.env-agent.v1",
+            messageId: "msg-result",
+            sentAt: 1_000,
+            sessionId: "sess-1",
+            type: "command_result",
+            payload: {
+              commandId: "cmd-1",
+              channelId: "thread-1",
+              state: "failed",
+            },
+          }),
+        },
+      );
+
+      expect(res.status).toBe(400);
+      expect(sessionService.recordCommandResult).not.toHaveBeenCalled();
+    });
   });
 
   describe("GET /threads/:id/environment-agent/session/commands", () => {

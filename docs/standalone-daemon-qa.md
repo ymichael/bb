@@ -29,6 +29,15 @@ pnpm exec turbo run build --filter=@beanbag/daemon --filter=@beanbag/cli
 
 Confirm Codex is available in `PATH` and can be used by the daemon.
 
+Optional but strongly recommended during restart/liveness QA:
+
+- keep `sqlite3` available so you can inspect `threads`, `events`, and `environment_agent_sessions`
+- keep one shell tailing the daemon log:
+
+```bash
+tail -f "$beanbag_root/logs/daemon.log"
+```
+
 ## Standalone Daemon QA
 
 This path validates the standalone daemon process directly, with its own Beanbag root.
@@ -82,6 +91,25 @@ node apps/cli/dist/index.js project list
 node apps/cli/dist/index.js project files --project <project-id> alpha
 ```
 
+Record the project id once and reuse it in every command below. Avoid copying `project_1` from examples or old logs.
+
+### 3a. DB inspection helpers
+
+Keep these handy during the pass:
+
+```bash
+sqlite3 "$beanbag_root/beanbag.db" \
+  "select id,status,updated_at from threads order by updated_at desc;"
+
+sqlite3 "$beanbag_root/beanbag.db" \
+  "select thread_id,status,control_base_url,lease_expires_at,last_heartbeat_at from environment_agent_sessions order by created_at desc;"
+
+sqlite3 "$beanbag_root/beanbag.db" \
+  "select thread_id,type,substr(json_data,1,160) from events order by seq desc limit 20;"
+```
+
+Use them to confirm the daemon’s persisted view, not just CLI rendering.
+
 ### 4. Validate direct/local flows
 
 Required matrix:
@@ -93,6 +121,7 @@ Required matrix:
 - `local` restart while active -> surviving env-agent reconnect
 - `local` restart while active -> missing env-agent becomes \`error\`
 - `local` follow-up after restart failure
+- `local` restart while idle -> follow-up reuses surviving env-agent instead of spawning a duplicate
 
 Spawn:
 
@@ -149,6 +178,8 @@ Expected result:
 - thread eventually reaches `idle`
 - `thread output` contains the exact requested token
 - `thread log` shows the expected `turn/started` and `turn/completed` events
+- `thread show` and raw `thread status` agree on the terminal state
+- the thread row in SQLite matches the CLI status
 
 ### 5. Validate worktree flows
 
@@ -161,6 +192,7 @@ Required matrix:
 - `worktree` restart while active -> missing env-agent becomes \`error\`
 - `worktree` follow-up after restart failure
 - `worktree` promote/demote
+- `worktree` restart while idle -> follow-up reuses surviving env-agent instead of spawning a duplicate
 
 Spawn a worktree thread:
 
@@ -199,6 +231,11 @@ node apps/cli/dist/index.js thread demote <thread-id>
 node apps/cli/dist/index.js thread promote-status --project <project-id>
 ```
 
+Extra worktree checks:
+
+- confirm the worktree path still exists before restart cases begin
+- after promote/demote, confirm `thread promote-status` matches the underlying git checkout state
+
 ### 6. Validate standalone restart behavior
 
 Only do this on the standalone daemon you started for testing.
@@ -210,11 +247,17 @@ Required matrix:
 - local thread stays `active` if the env-agent checks back in
 - local thread becomes `error` if the env-agent does not check back in
 - local thread accepts a follow-up after restart failure
+- local idle thread follow-up after restart does not create a duplicate env-agent if the old one is still alive
 - blocked restart while worktree thread is active
 - forced restart while worktree thread is active
 - worktree thread stays `active` if the env-agent checks back in
 - worktree thread becomes `error` if the env-agent does not check back in
 - worktree thread accepts a follow-up after restart failure
+- worktree idle thread follow-up after restart does not create a duplicate env-agent if the old one is still alive
+- local restart while idle -> persisted session endpoint remains stable across the first follow-up
+- worktree restart while idle -> persisted session endpoint remains stable across the first follow-up
+- active-thread restart failure emits `system/error` with `provider_unavailable`
+- follow-up after restart failure clears `error` back to a healthy terminal state
 
 For both environments, start a thread and wait until `thread status --recent-events ... --event-mode raw`
 shows a real `turn/started` event, then in another shell:
@@ -257,6 +300,104 @@ node apps/cli/dist/index.js thread show <thread-id>
 node apps/cli/dist/index.js thread log <thread-id>
 ```
 
+Daemon-log expectations after relaunch:
+
+- surviving-worker case:
+  - startup log reports at least one env-agent was poked
+  - the original session eventually resumes traffic
+- missing-worker case:
+  - startup log reports at least one session is awaiting heartbeat timeout handling
+  - later, the thread transitions to `error` without needing any manual cleanup
+
+Additional idle-thread reuse check for both `local` and `worktree`:
+
+1. Start a thread and let it complete to `idle`.
+2. Record the last active env-agent control endpoint from the Beanbag DB:
+
+```bash
+sqlite3 "$beanbag_root/beanbag.db" \
+  "select control_base_url from environment_agent_sessions where thread_id='<thread-id>' order by created_at desc limit 1;"
+```
+
+Also record the current session count and active-session row:
+
+```bash
+sqlite3 "$beanbag_root/beanbag.db" \
+  "select count(*) from environment_agent_sessions where thread_id='<thread-id>';"
+
+sqlite3 "$beanbag_root/beanbag.db" \
+  "select id,status,control_base_url from environment_agent_sessions where thread_id='<thread-id>' order by created_at;"
+```
+
+3. Force-restart the daemon and relaunch it on the same `BEANBAG_ROOT` while leaving that env-agent process alive.
+4. Send a follow-up to the now-idle thread.
+5. Verify the daemon reused the surviving env-agent instead of spawning another one:
+
+```bash
+sqlite3 "$beanbag_root/beanbag.db" \
+  "select count(*) from environment_agent_sessions where thread_id='<thread-id>';"
+```
+
+Expected result:
+
+- the follow-up succeeds
+- the thread returns to `idle`
+- the session count for that thread does not increase just because of the restart
+- the original `control_base_url` remains the active session endpoint after the follow-up
+- there is no extra `replaced` session row created solely because the daemon restarted while the thread was idle
+
+Missing-worker restart check:
+
+1. Start a long-running turn, wait for a real `turn/started`, then record its `control_base_url`.
+2. Force-restart the daemon.
+3. Kill the env-agent process or otherwise make that `control_base_url` unreachable before relaunching the daemon.
+4. Relaunch the daemon on the same `BEANBAG_ROOT`.
+5. Wait through the liveness deadline, then verify:
+
+```bash
+node apps/cli/dist/index.js thread show <thread-id>
+node apps/cli/dist/index.js thread log <thread-id>
+sqlite3 "$beanbag_root/beanbag.db" \
+  "select status from threads where id='<thread-id>';"
+```
+
+Expected result:
+
+- the thread becomes `error`
+- the log contains `system/error`
+- the latest error event includes `provider_unavailable`
+- the thread does not silently become `idle`
+
+Follow-up-after-error check:
+
+1. After the thread reaches `error`, immediately run:
+
+```bash
+node apps/cli/dist/index.js thread tell <thread-id> \
+  'Reply with exactly AFTER-ERROR and finish.'
+```
+
+2. Poll both CLI and SQLite until the thread settles.
+
+Expected result:
+
+- the follow-up is accepted without manual repair
+- the thread may briefly still read as `error`, but it must converge to a healthy terminal state
+- final CLI status and SQLite thread status agree
+- `thread output` contains the requested token
+
+Recommended explicit provisioning-interruption check:
+
+1. Spawn a fresh thread.
+2. Restart the daemon while the thread is still `provisioning` or `provisioned` and before the first real `turn/started`.
+3. Relaunch the daemon and observe the result.
+
+Expected result:
+
+- no duplicate env-agent is created during retry/recovery
+- the thread either continues into `active` or lands in `provisioning_failed`
+- it must not jump directly to `idle` without a real successful turn
+
 ## Main Daemon QA
 
 Use this when the user already has the main daemon running and wants direct QA against it.
@@ -286,6 +427,13 @@ Use this when the user already has the main daemon running and wants direct QA a
 node apps/cli/dist/index.js thread show <thread-id>
 node apps/cli/dist/index.js thread log <thread-id>
 node apps/cli/dist/index.js daemon health
+```
+
+When a result looks suspicious, also inspect:
+
+```bash
+sqlite3 "$beanbag_root/beanbag.db" \
+  "select id,status,control_base_url from environment_agent_sessions where thread_id='<thread-id>' order by created_at;"
 ```
 
 ## Interpreting Failures

@@ -113,4 +113,51 @@ describe("host environment-agent helper", () => {
       workspaceRoot,
     });
   });
+
+  it("adopts a healthy reconnect target instead of spawning a duplicate agent", async () => {
+    const beanbagRoot = makeTempDir();
+    process.env.BEANBAG_ROOT = beanbagRoot;
+    const projectId = `project-${Date.now()}`;
+    const workspaceRoot = makeTempDir();
+    const spawnProcess = vi.fn();
+
+    const target = await ensureManagedHostEnvironmentAgent(
+      {
+        workspaceRootPath: workspaceRoot,
+        threadId: "thread-1",
+        projectId,
+        environmentId: "local",
+        runtimeEnv: { BEANBAG_ROOT: beanbagRoot },
+        reconnectTarget: {
+          baseUrl: "http://127.0.0.1:4310",
+          authToken: "reconnect-token",
+        },
+      },
+      {
+        spawnProcess: spawnProcess as unknown as typeof import("node:child_process").spawn,
+        pingAgent: async () => true,
+        waitForAgent: async () => {
+          throw new Error("should not launch a new agent");
+        },
+      },
+    );
+
+    expect(spawnProcess).not.toHaveBeenCalled();
+    expect(target).toMatchObject({
+      baseUrl: "http://127.0.0.1:4310",
+      headers: {
+        authorization: "Bearer reconnect-token",
+      },
+    });
+    expect(__testOnly__getManagedHostEnvironmentAgentRecord({
+      projectId,
+      threadId: "thread-1",
+      environmentId: "local",
+      workspaceRootPath: workspaceRoot,
+    })).toMatchObject({
+      baseUrl: "http://127.0.0.1:4310",
+      authToken: "reconnect-token",
+      pid: undefined,
+    });
+  });
 });

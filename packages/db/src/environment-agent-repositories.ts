@@ -447,6 +447,16 @@ export class EnvironmentAgentSessionRepository {
     return row ? rowToEnvironmentAgentSessionRecord(row) : undefined;
   }
 
+  getLatestByThreadId(threadId: string): EnvironmentAgentSessionRecord | undefined {
+    const row = this.db
+      .select()
+      .from(environmentAgentSessions)
+      .where(eq(environmentAgentSessions.threadId, threadId))
+      .orderBy(desc(environmentAgentSessions.updatedAt))
+      .get();
+    return row ? rowToEnvironmentAgentSessionRecord(row) : undefined;
+  }
+
   listActive(now: number = Date.now()): EnvironmentAgentSessionRecord[] {
     return this.db
       .select()

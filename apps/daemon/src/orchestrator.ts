@@ -92,6 +92,7 @@ import type {
   ThreadRepository,
   EventRepository,
   ProjectRepository,
+  EnvironmentAgentSessionRepository,
 } from "@beanbag/db";
 import {
   AgentServer,
@@ -563,6 +564,7 @@ export class Orchestrator implements ThreadOrchestrator {
     private scheduler: SchedulerService = new InMemorySchedulerService(),
     private environmentAgentCommandDispatcher?: EnvironmentAgentCommandDispatcher,
     private environmentAgentSessionService?: EnvironmentAgentSessionService,
+    private environmentAgentSessionRepo?: EnvironmentAgentSessionRepository,
   ) {
     this.threadShellPath = resolveThreadShellPath(this.runtimeEnv.PATH);
     this.environmentAgentCommandPollIntervalMs = parsePositiveIntegerEnv(
@@ -3322,6 +3324,16 @@ export class Orchestrator implements ThreadOrchestrator {
       threadId,
       projectRootPath,
       runtimeEnv: this.runtimeEnv,
+      managedEnvironmentAgentReconnectTarget: (() => {
+        const session = this.environmentAgentSessionRepo?.getLatestByThreadId(threadId);
+        if (!session?.controlBaseUrl) {
+          return undefined;
+        }
+        return {
+          baseUrl: session.controlBaseUrl,
+          ...(session.controlAuthToken ? { authToken: session.controlAuthToken } : {}),
+        };
+      })(),
       services: {
         llmCompletion: async ({ cwd, includeUnstaged }: LlmCommitMessageGenerationArgs) => {
           const generated = await this.llmCompletionService.generateCommitMessage({

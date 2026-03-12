@@ -27,7 +27,7 @@ import type {
   EnvironmentAgentStatusSnapshot,
 } from "@beanbag/environment-agent";
 import {
-  isEnvironmentAgentSessionClientMessage,
+  ENVIRONMENT_AGENT_SESSION_PROTOCOL,
 } from "@beanbag/environment-agent";
 import { invalidRequestError, threadNotFoundError } from "../domain-errors.js";
 import { sendRouteError } from "./error-response.js";
@@ -111,15 +111,87 @@ function isAbortError(error: unknown): error is Error {
   return error instanceof Error && error.name === "AbortError";
 }
 
-const environmentAgentSessionMessageBodySchema =
-  z.custom<EnvironmentAgentSessionClientMessage>((value) => {
-    return (
-      isEnvironmentAgentSessionClientMessage(value) &&
-      value.type !== "session_open"
-    );
-  }, {
-    message: "Invalid environment-agent session message",
-  });
+const environmentAgentSessionMessageBaseSchema = z.object({
+  protocol: z.literal(ENVIRONMENT_AGENT_SESSION_PROTOCOL),
+  messageId: z.string().min(1),
+  sentAt: z.number().finite(),
+  sessionId: z.string().min(1),
+});
+
+const environmentAgentSessionMessageBodySchema = z.discriminatedUnion("type", [
+  environmentAgentSessionMessageBaseSchema.extend({
+    type: z.literal("heartbeat"),
+    payload: z.object({
+      agentObservedAt: z.number().int().nonnegative(),
+      outboxDepth: z.number().int().nonnegative(),
+      channels: z.array(z.object({
+        channelId: z.string().min(1),
+        lastSent: environmentAgentSessionCursorSchema.optional(),
+        lastAcked: environmentAgentSessionCursorSchema.optional(),
+      })),
+    }),
+  }),
+  environmentAgentSessionMessageBaseSchema.extend({
+    type: z.literal("event_batch"),
+    payload: z.object({
+      batches: z.array(z.object({
+        channelId: z.string().min(1),
+        generation: z.number().int().min(0),
+        events: z.array(z.object({
+          sequence: z.number().int().min(0),
+          eventId: z.string().min(1),
+          emittedAt: z.number().int().nonnegative(),
+          event: z.custom<EnvironmentAgentEventEnvelope | Record<string, unknown>>((value) =>
+            Boolean(value) && typeof value === "object" && !Array.isArray(value)),
+        })).min(1),
+      })).min(1),
+    }),
+  }),
+  environmentAgentSessionMessageBaseSchema.extend({
+    type: z.literal("command_ack"),
+    payload: z.object({
+      commands: z.array(z.object({
+        commandId: z.string().min(1),
+        channelId: z.string().min(1),
+        state: z.enum(["received", "duplicate"]),
+      })).min(1),
+    }),
+  }),
+  environmentAgentSessionMessageBaseSchema.extend({
+    type: z.literal("command_result"),
+    payload: z.object({
+      commandId: z.string().min(1),
+      channelId: z.string().min(1),
+      state: z.enum(["started", "completed", "failed"]),
+      result: z.unknown().optional(),
+      errorCode: z.string().min(1).optional(),
+      errorMessage: z.string().min(1).optional(),
+    }).superRefine((payload, ctx) => {
+      if (payload.state === "failed") {
+        if (!payload.errorCode) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "Failed command results must include errorCode",
+            path: ["errorCode"],
+          });
+        }
+        if (!payload.errorMessage) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "Failed command results must include errorMessage",
+            path: ["errorMessage"],
+          });
+        }
+      }
+    }),
+  }),
+  environmentAgentSessionMessageBaseSchema.extend({
+    type: z.literal("session_close"),
+    payload: z.object({
+      reason: z.enum(["agent_shutdown", "daemon_shutdown", "migration", "internal_error"]),
+    }),
+  }),
+]);
 
 const workStatusQuerySchema = z.object({
   mergeBaseBranch: z.string().trim().min(1).optional(),

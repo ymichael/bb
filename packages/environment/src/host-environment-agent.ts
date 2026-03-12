@@ -12,7 +12,7 @@ const START_TIMEOUT_MS = 5_000;
 const HEALTH_TIMEOUT_MS = 500;
 
 interface ManagedHostEnvironmentAgentRecord {
-  pid: number;
+  pid?: number;
   port: number;
   baseUrl: string;
   authToken: string;
@@ -40,6 +40,8 @@ interface EnsureManagedHostEnvironmentAgentDeps {
   };
   spawnProcess?: typeof spawn;
   waitForAgent?: (baseUrl: string, authToken: string) => Promise<void>;
+  requestShutdown?: (baseUrl: string, authToken: string) => Promise<void>;
+  pingAgent?: (baseUrl: string, authToken: string, timeoutMs: number) => Promise<boolean>;
 }
 
 const hostEnvironmentAgentLocks = new Map<string, Promise<void>>();
@@ -135,6 +137,42 @@ function pingEnvironmentAgent(
   });
 }
 
+function requestEnvironmentAgentShutdown(
+  baseUrl: string,
+  authToken: string,
+): Promise<void> {
+  return new Promise((resolvePromise, reject) => {
+    const url = new URL("/control/shutdown", baseUrl);
+    const req = httpRequest(
+      {
+        method: "POST",
+        hostname: url.hostname,
+        port: url.port,
+        path: url.pathname,
+        timeout: HEALTH_TIMEOUT_MS,
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${authToken}`,
+        },
+      },
+      (response) => {
+        response.resume();
+        if (response.statusCode === 202 || response.statusCode === 204) {
+          resolvePromise();
+          return;
+        }
+        reject(new Error(`Unexpected shutdown response: ${response.statusCode ?? "unknown"}`));
+      },
+    );
+    req.on("timeout", () => {
+      req.destroy();
+      reject(new Error("Timed out requesting environment-agent shutdown"));
+    });
+    req.on("error", reject);
+    req.end("{}");
+  });
+}
+
 async function allocatePort(): Promise<number> {
   return new Promise<number>((resolvePromise, reject) => {
     const server = createServer();
@@ -200,6 +238,10 @@ export async function ensureManagedHostEnvironmentAgent(args: {
   projectId: string;
   environmentId: string;
   runtimeEnv: Record<string, string | undefined>;
+  reconnectTarget?: {
+    baseUrl: string;
+    authToken?: string;
+  };
 }, deps: EnsureManagedHostEnvironmentAgentDeps = {}): Promise<EnvironmentAgentConnectionTarget | undefined> {
   if (args.runtimeEnv.BEANBAG_ENVIRONMENT_AGENT_BASE_URL?.trim()) {
     return undefined;
@@ -221,7 +263,7 @@ export async function ensureManagedHostEnvironmentAgent(args: {
     const identityKey = managedHostEnvironmentAgentIdentityKey(stateIdentity);
     const existing = managedHostEnvironmentAgents.get(identityKey);
     if (existing) {
-      if (checkProcessAlive(existing.pid)) {
+      if (existing.pid && checkProcessAlive(existing.pid)) {
         try {
           killProcess(existing.pid, "SIGTERM");
         } catch {
@@ -229,6 +271,32 @@ export async function ensureManagedHostEnvironmentAgent(args: {
         }
       }
       managedHostEnvironmentAgents.delete(identityKey);
+    }
+
+    const reconnectBaseUrl = args.reconnectTarget?.baseUrl?.trim();
+    const reconnectAuthToken = args.reconnectTarget?.authToken?.trim() ?? "";
+    if (reconnectBaseUrl) {
+      const healthy = await (deps.pingAgent ?? pingEnvironmentAgent)(
+        reconnectBaseUrl,
+        reconnectAuthToken,
+        HEALTH_TIMEOUT_MS,
+      );
+      if (healthy) {
+        const reconnectUrl = new URL(reconnectBaseUrl);
+        const record = {
+          pid: undefined,
+          port: reconnectUrl.port ? Number.parseInt(reconnectUrl.port, 10) : 80,
+          baseUrl: reconnectBaseUrl.replace(/\/+$/, ""),
+          authToken: reconnectAuthToken,
+          threadId: args.threadId,
+          projectId: args.projectId,
+          environmentId: args.environmentId,
+          workspaceRoot: args.workspaceRootPath,
+        };
+        managedHostEnvironmentAgents.set(identityKey, record);
+        managedTarget = toManagedHostEnvironmentAgentTarget({ record });
+        return;
+      }
     }
 
     const port = await (deps.allocatePort ?? allocatePort)();
@@ -302,11 +370,22 @@ export async function disposeManagedHostEnvironmentAgent(args: {
   await withManagedHostEnvironmentAgentLock(stateIdentity, async () => {
     const identityKey = managedHostEnvironmentAgentIdentityKey(stateIdentity);
     const existing = managedHostEnvironmentAgents.get(identityKey);
-    if (existing && isProcessAlive(existing.pid)) {
-      try {
-        process.kill(existing.pid, "SIGTERM");
-      } catch {
-        // Best-effort cleanup for already-exited processes.
+    if (existing) {
+      if (existing.pid && isProcessAlive(existing.pid)) {
+        try {
+          process.kill(existing.pid, "SIGTERM");
+        } catch {
+          // Best-effort cleanup for already-exited processes.
+        }
+      } else {
+        try {
+          await requestEnvironmentAgentShutdown(
+            existing.baseUrl,
+            existing.authToken,
+          );
+        } catch {
+          // Best-effort cleanup for already-exited or unreachable adopted agents.
+        }
       }
     }
     managedHostEnvironmentAgents.delete(identityKey);
