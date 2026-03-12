@@ -9,8 +9,11 @@ import { type ThreadDetailRow, type UIMessage } from "@beanbag/agent-core";
 import { DEFAULT_SCROLL_STICK_THRESHOLD_PX } from "@beanbag/ui-core";
 import { useAutoScroll } from "@/hooks/useAutoScroll";
 import { type ThreadDetailToolGroupRow } from "./threadDetailRows";
-
-const SCROLL_THRESHOLD = 40;
+import {
+  calculateComposerResizeScrollTop,
+  shouldRestoreScrollAnchorForWidthChange,
+  TIMELINE_SCROLL_PRESERVE_THRESHOLD_PX,
+} from "./threadTimelineScroll";
 const TIMELINE_ROW_SELECTOR = "[data-thread-row-id]";
 
 interface TimelineScrollAnchor {
@@ -186,7 +189,13 @@ export function useThreadTimelineController({
       const previousWidth = timelineContainerWidthRef.current;
       timelineContainerWidthRef.current = nextWidth;
 
-      if (previousWidth === null || Math.abs(nextWidth - previousWidth) < 0.5) {
+      if (
+        !shouldRestoreScrollAnchorForWidthChange({
+          anchorExists: timelineScrollAnchorRef.current !== null,
+          previousWidth,
+          nextWidth,
+        })
+      ) {
         return;
       }
 
@@ -240,17 +249,14 @@ export function useThreadTimelineController({
       if (previousHeight === null) return;
       const heightDelta = nextHeight - previousHeight;
       if (Math.abs(heightDelta) < 0.5) return;
-      if (isStickingToBottom) {
-        scrollContainer.scrollTop = scrollContainer.scrollHeight;
-        return;
-      }
-      const maxScrollOffset = scrollContainer.scrollHeight - scrollContainer.clientHeight;
-      const distanceFromBottom = maxScrollOffset - scrollContainer.scrollTop;
-      if (distanceFromBottom <= SCROLL_THRESHOLD) {
-        scrollContainer.scrollTop = scrollContainer.scrollHeight;
-        return;
-      }
-      scrollContainer.scrollTop += heightDelta;
+      scrollContainer.scrollTop = calculateComposerResizeScrollTop({
+        clientHeight: scrollContainer.clientHeight,
+        currentScrollTop: scrollContainer.scrollTop,
+        heightDelta,
+        isStickingToBottom,
+        scrollHeight: scrollContainer.scrollHeight,
+        threshold: TIMELINE_SCROLL_PRESERVE_THRESHOLD_PX,
+      });
     });
 
     observer.observe(promptComposer);
