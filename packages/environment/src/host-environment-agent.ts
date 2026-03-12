@@ -434,27 +434,6 @@ export async function ensureManagedHostEnvironmentAgent(args: {
   })();
 }
 
-export function resolveManagedHostEnvironmentAgentTarget(args: {
-  projectId: string;
-  threadId: string;
-  environmentId: string;
-  workspaceRootPath: string;
-  runtimeEnv: Record<string, string | undefined>;
-  providerLaunch?: EnvironmentAgentConnectionTarget["providerLaunch"];
-}): EnvironmentAgentConnectionTarget | undefined {
-  const record = readRecord(args);
-  if (!record) {
-    return undefined;
-  }
-  if (!isProcessAlive(record.pid)) {
-    removeRecord(args);
-    return undefined;
-  }
-  return {
-    ...toManagedHostEnvironmentAgentTarget({ record, providerLaunch: args.providerLaunch }),
-  };
-}
-
 export async function disposeManagedHostEnvironmentAgent(args: {
   projectId: string;
   threadId: string;

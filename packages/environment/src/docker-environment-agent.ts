@@ -540,28 +540,6 @@ export async function ensureManagedDockerEnvironmentAgent(
   })();
 }
 
-export function resolveManagedDockerEnvironmentAgentTarget(args: {
-  projectId: string;
-  threadId: string;
-  environmentId: string;
-  workspaceRootPath: string;
-  runtimeEnv: Record<string, string | undefined>;
-  providerLaunch?: {
-    command: string;
-    args: string[];
-  };
-}): EnvironmentAgentConnectionTarget | undefined {
-  const record = readRecord(args);
-  if (!record) {
-    return undefined;
-  }
-
-  return toManagedDockerEnvironmentAgentTarget({
-    record,
-    providerLaunch: args.providerLaunch,
-  });
-}
-
 export function __testOnly__resolveDockerDaemonUrl(
   runtimeEnv: Record<string, string | undefined>,
 ): string | undefined {

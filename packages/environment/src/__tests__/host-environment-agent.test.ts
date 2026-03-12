@@ -7,7 +7,6 @@ import {
   __testOnly__resolveManagedHostEnvironmentAgentStateFilePath,
   ensureManagedHostEnvironmentAgent,
   resolveManagedHostEnvironmentAgentLaunchCommand,
-  resolveManagedHostEnvironmentAgentTarget,
 } from "../host-environment-agent.js";
 
 const tempDirs: string[] = [];
@@ -44,7 +43,7 @@ afterEach(() => {
   }
 });
 
-describe("resolveManagedHostEnvironmentAgentTarget", () => {
+describe("host environment-agent helper", () => {
   it("launches the standalone environment-agent artifact directly", () => {
     const artifactEntry = fileURLToPath(
       new URL("../../../environment-agent/dist/environment-agent.bundle.mjs", import.meta.url),
@@ -57,107 +56,6 @@ describe("resolveManagedHostEnvironmentAgentTarget", () => {
     expect(resolveManagedHostEnvironmentAgentLaunchCommand()).toEqual({
       command: process.execPath,
       args: [artifactEntry],
-    });
-  });
-
-  it("returns an http target when a managed agent record exists", () => {
-    vi.spyOn(process, "kill").mockImplementation((_pid: number, _signal?: string | number) => {
-      return true;
-    });
-
-    const beanbagRoot = makeTempDir();
-    process.env.BEANBAG_ROOT = beanbagRoot;
-    const projectId = `project-${Date.now()}`;
-    const workspaceRoot = makeTempDir();
-    const stateDir = join(beanbagRoot, "environment-agents", projectId);
-    cleanupPaths.push(stateDir);
-    mkdirSync(stateDir, { recursive: true });
-    writeFileSync(
-      __testOnly__resolveManagedHostEnvironmentAgentStateFilePath({
-        projectId,
-        threadId: "thread-1",
-        environmentId: "worktree",
-        workspaceRootPath: workspaceRoot,
-      }),
-      JSON.stringify({
-        version: 1,
-        pid: 4321,
-        port: 4123,
-        baseUrl: "http://127.0.0.1:4123",
-        authToken: "auth-token",
-        threadId: "thread-1",
-        projectId: "project-1",
-        environmentId: "worktree",
-        workspaceRoot,
-      }),
-      "utf8",
-    );
-
-    expect(
-      resolveManagedHostEnvironmentAgentTarget({
-        projectId,
-        threadId: "thread-1",
-        environmentId: "worktree",
-        workspaceRootPath: workspaceRoot,
-        runtimeEnv: { BEANBAG_ROOT: beanbagRoot },
-      }),
-    ).toEqual({
-      transport: "http",
-      baseUrl: "http://127.0.0.1:4123",
-      headers: {
-        authorization: "Bearer auth-token",
-      },
-    });
-  });
-
-  it("finds a managed agent record when only runtimeEnv overrides the beanbag root", () => {
-    vi.spyOn(process, "kill").mockImplementation((_pid: number, _signal?: string | number) => {
-      return true;
-    });
-
-    const beanbagRoot = makeTempDir();
-    const projectId = `project-${Date.now()}`;
-    const workspaceRoot = makeTempDir();
-    const runtimeEnv = { BEANBAG_ROOT: beanbagRoot };
-    const stateDir = join(beanbagRoot, "environment-agents", projectId);
-    cleanupPaths.push(stateDir);
-    mkdirSync(stateDir, { recursive: true });
-    writeFileSync(
-      __testOnly__resolveManagedHostEnvironmentAgentStateFilePath({
-        projectId,
-        threadId: "thread-1",
-        environmentId: "worktree",
-        workspaceRootPath: workspaceRoot,
-        runtimeEnv,
-      }),
-      JSON.stringify({
-        version: 1,
-        pid: 4321,
-        port: 4123,
-        baseUrl: "http://127.0.0.1:4123",
-        authToken: "auth-token",
-        threadId: "thread-1",
-        projectId,
-        environmentId: "worktree",
-        workspaceRoot,
-      }),
-      "utf8",
-    );
-
-    expect(
-      resolveManagedHostEnvironmentAgentTarget({
-        projectId,
-        threadId: "thread-1",
-        environmentId: "worktree",
-        workspaceRootPath: workspaceRoot,
-        runtimeEnv,
-      }),
-    ).toEqual({
-      transport: "http",
-      baseUrl: "http://127.0.0.1:4123",
-      headers: {
-        authorization: "Bearer auth-token",
-      },
     });
   });
 
