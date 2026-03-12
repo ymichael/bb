@@ -15,6 +15,7 @@ import {
 } from "@beanbag/db";
 import { createServer } from "./server.js";
 import { installConsoleFileLogger } from "./file-logger.js";
+import { closeHttpServer } from "./http-server-close.js";
 import { scheduleManagedArtifactReconciliation } from "./startup-tasks.js";
 
 // ---------------------------------------------------------------------------
@@ -58,19 +59,6 @@ Options:
   }
 
   return { port, dbPath, logFilePath };
-}
-
-function closeHttpServer(server: ReturnType<typeof serve> | undefined): Promise<void> {
-  if (!server) return Promise.resolve();
-  return new Promise((resolveClose) => {
-    try {
-      server.close(() => {
-        resolveClose();
-      });
-    } catch {
-      resolveClose();
-    }
-  });
 }
 
 function relaunchCurrentProcess(): boolean {
