@@ -95,7 +95,7 @@ export interface ThreadExecutionOptions {
   reasoningLevel?: ReasoningLevel;
   sandboxMode?: SandboxMode;
   approvalPolicy?: string;
-  source?: "client/thread/start" | "client/turn/start";
+  source?: "client/thread/start" | "client/turn/requested" | "client/turn/start";
   seq?: number;
 }
 

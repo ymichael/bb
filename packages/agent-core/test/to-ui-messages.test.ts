@@ -2522,7 +2522,7 @@ describe("toUIMessages replay coverage", () => {
         id: "evt-1",
         threadId: "thread-1",
         seq: 1,
-        type: "client/turn/start",
+        type: "client/turn/requested",
         data: {
           direction: "outbound",
           source: "tell",
@@ -2549,6 +2549,81 @@ describe("toUIMessages replay coverage", () => {
           message.text.includes("Follow up fix for lag"),
       ),
     ).toBe(true);
+  });
+
+  it("keeps append-only tell request/start pairs as a single rendered user message", () => {
+    const events: ThreadEvent[] = [
+      {
+        id: "evt-1",
+        threadId: "thread-1",
+        seq: 1,
+        type: "client/turn/requested",
+        data: {
+          direction: "outbound",
+          source: "tell",
+          initiator: "agent",
+          input: [{ type: "text", text: "Please keep going until the roadmap is done" }],
+          request: {
+            method: "turn/start",
+            params: {},
+          },
+          execution: {},
+        },
+        createdAt: 1,
+      },
+      {
+        id: "evt-2",
+        threadId: "thread-1",
+        seq: 2,
+        type: "turn/started",
+        data: { turnId: "turn-1" },
+        createdAt: 2,
+      },
+      {
+        id: "evt-3",
+        threadId: "thread-1",
+        seq: 3,
+        type: "item/completed",
+        data: {
+          turnId: "turn-1",
+          item: {
+            id: "item-user-1",
+            type: "user_message",
+            content: [{ type: "text", text: "Please keep going until the roadmap is done" }],
+          },
+        },
+        createdAt: 3,
+      },
+      {
+        id: "evt-4",
+        threadId: "thread-1",
+        seq: 4,
+        type: "client/turn/start",
+        data: {
+          direction: "outbound",
+          source: "tell",
+          initiator: "agent",
+          input: [{ type: "text", text: "Please keep going until the roadmap is done" }],
+          request: {
+            method: "turn/start",
+            params: {},
+          },
+          execution: {},
+        },
+        createdAt: 4,
+      },
+    ];
+
+    const projected = toUIMessages(events, {
+      threadStatus: "active",
+    });
+    const userMessages = projected.filter(
+      (message): message is Extract<UIMessage, { kind: "user" }> =>
+        message.kind === "user",
+    );
+
+    expect(userMessages).toHaveLength(1);
+    expect(userMessages[0]?.text).toBe("Please keep going until the roadmap is done");
   });
 
   it("keeps the client thread input and suppresses a matching later user item event", () => {

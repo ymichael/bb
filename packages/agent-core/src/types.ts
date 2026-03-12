@@ -141,6 +141,7 @@ export interface ThreadProvisioningState {
 
 export type AppThreadEventType =
   | "client/thread/start"
+  | "client/turn/requested"
   | "client/turn/start"
   | "system/error"
   | "system/thread/interrupted"
@@ -325,6 +326,7 @@ export interface TurnLifecycleEventData {
 
 export type ThreadEventDataByType = CodexServerNotificationParamsByMethod & {
   "client/thread/start": ClientOutboundStartEventData;
+  "client/turn/requested": ClientOutboundStartEventData;
   "client/turn/start": ClientOutboundStartEventData;
   "system/error": SystemErrorEventData;
   "system/thread/interrupted": SystemThreadInterruptedEventData;

@@ -619,6 +619,7 @@ function parseUserFromClientStart(
   if (
     !eventTypeMatchesAny(eventType, [
       "client/thread/start",
+      "client/turn/requested",
       "client/turn/start",
     ])
   ) {
@@ -3111,10 +3112,19 @@ export function toUIMessages(
   const orderedEvents = areEventsOrdered ? events : [...events].sort((a, b) => a.seq - b.seq);
   const pendingClientStartUserSignatureCounts = new Map<string, number>();
   const pendingClientThreadStartUserSignatureCounts = new Map<string, number>();
+  const pendingClientRequestedUserSignatureCounts = new Map<string, number>();
+  const pendingProviderUserSignatureCounts = new Map<string, number>();
 
   for (const originalEvent of orderedEvents) {
     const eventType = getEventType(originalEvent);
     const event = originalEvent;
+
+    if (eventTypeMatchesAny(eventType, ["turn/completed", "turn/end"])) {
+      pendingClientStartUserSignatureCounts.clear();
+      pendingClientThreadStartUserSignatureCounts.clear();
+      pendingClientRequestedUserSignatureCounts.clear();
+      pendingProviderUserSignatureCounts.clear();
+    }
 
     const eventTurnId = getTurnId(event.data);
 
@@ -3137,13 +3147,31 @@ export function toUIMessages(
       const startPayload = toEventRecord(event.data);
       const startSource = getStringField(startPayload, "source");
       const isClientThreadStart = eventTypeMatches(eventType, "client/thread/start");
+      const isClientTurnRequested = eventTypeMatches(eventType, "client/turn/requested");
       const isClientTurnStart = eventTypeMatches(eventType, "client/turn/start");
       const pendingThreadStartCount =
         pendingClientThreadStartUserSignatureCounts.get(signature) ?? 0;
       if (isClientTurnStart && startSource === "spawn" && pendingThreadStartCount > 0) {
         continue;
       }
-
+      const pendingRequestedCount =
+        pendingClientRequestedUserSignatureCounts.get(signature) ?? 0;
+      if (isClientTurnStart && pendingRequestedCount > 0) {
+        continue;
+      }
+      const pendingProviderCount =
+        pendingProviderUserSignatureCounts.get(signature) ?? 0;
+      if (isClientTurnStart && pendingProviderCount > 0) {
+        if (pendingProviderCount === 1) {
+          pendingProviderUserSignatureCounts.delete(signature);
+        } else {
+          pendingProviderUserSignatureCounts.set(
+            signature,
+            pendingProviderCount - 1,
+          );
+        }
+        continue;
+      }
       const key = `${userFromClientThreadStart.id}:${userFromClientThreadStart.text}`;
       if (!state.seenUserKeys.has(key)) {
         state.seenUserKeys.add(key);
@@ -3155,6 +3183,12 @@ export function toUIMessages(
           pendingClientThreadStartUserSignatureCounts.set(
             signature,
             pendingThreadStartCount + 1,
+          );
+        }
+        if (isClientTurnRequested) {
+          pendingClientRequestedUserSignatureCounts.set(
+            signature,
+            pendingRequestedCount + 1,
           );
         }
         flushToolActivityBeforeNonToolMessage(state);
@@ -3199,6 +3233,10 @@ export function toUIMessages(
       const key = `${userMessage.turnId ?? userMessage.id}:${userMessage.text}`;
       if (!state.seenUserKeys.has(key)) {
         state.seenUserKeys.add(key);
+        pendingProviderUserSignatureCounts.set(
+          signature,
+          (pendingProviderUserSignatureCounts.get(signature) ?? 0) + 1,
+        );
         flushToolActivityBeforeNonToolMessage(state);
         state.messages.push(userMessage);
       }

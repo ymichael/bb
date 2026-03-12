@@ -1017,6 +1017,17 @@ export class Orchestrator implements ThreadOrchestrator {
       );
     }
 
+    this._persistOutboundStartEvent(
+      threadId,
+      "client/turn/requested",
+      this._buildTurnStartParams(providerThreadId, providerInput, options),
+      requestedInput,
+      {
+        source: "tell",
+        initiator: context.initiator,
+      },
+    );
+
     this._setThreadStatus(threadId, "active");
     try {
       const acceptedProviderThreadId =
@@ -1029,15 +1040,10 @@ export class Orchestrator implements ThreadOrchestrator {
           options,
           mode: tellMode === "steer" ? "steer" : tellMode === "auto" ? "auto" : "start",
         });
-      const turnParams = this._buildTurnStartParams(
-        acceptedProviderThreadId,
-        providerInput,
-        options,
-      );
       this._persistOutboundStartEvent(
         threadId,
         "client/turn/start",
-        turnParams,
+        this._buildTurnStartParams(acceptedProviderThreadId, providerInput, options),
         requestedInput,
         {
           source: "tell",
@@ -1591,7 +1597,7 @@ export class Orchestrator implements ThreadOrchestrator {
       thread?.status === "provisioning" ||
       thread?.status === "provisioned";
 
-    this._cleanupThreadRuntime(threadId);
+    this._cleanupThreadRuntime(threadId, { retireActiveSession: true });
     if (shouldAppendInterruptedEvent) {
       this._appendEvent(threadId, "system/thread/interrupted" as never, {
         reason: "user",
@@ -2920,7 +2926,7 @@ export class Orchestrator implements ThreadOrchestrator {
             if (this.provisioningTasks.get(threadId) !== task) {
               return;
             }
-            this._cleanupThreadRuntime(threadId);
+            this._cleanupThreadRuntime(threadId, { retireActiveSession: true });
             this._setThreadStatus(threadId, "provisioning_failed", true, {
               force: true,
             });
@@ -3158,7 +3164,10 @@ export class Orchestrator implements ThreadOrchestrator {
     this._setThreadStatus(threadId, "idle");
   }
 
-  private _cleanupThreadRuntime(threadId: string): void {
+  private _cleanupThreadRuntime(
+    threadId: string,
+    opts?: { retireActiveSession?: boolean },
+  ): void {
     this.eventSeqCounters.delete(threadId);
     this.lastNotifiedCompletionTurnIds.delete(threadId);
     this.turnLifecycleEpochs.delete(threadId);
@@ -3169,10 +3178,12 @@ export class Orchestrator implements ThreadOrchestrator {
     this.lastNoisePruneAtByThread.delete(threadId);
     this.queuedOperationsByThreadId.delete(threadId);
     this.operationDispatchInFlight.delete(threadId);
-    this.environmentAgentSessionService?.retireActiveSessionForThread({
-      threadId,
-      reason: "migration",
-    });
+    if (opts?.retireActiveSession) {
+      this.environmentAgentSessionService?.retireActiveSessionForThread({
+        threadId,
+        reason: "migration",
+      });
+    }
     this.environmentService.suspendEnvironmentRuntime(threadId);
   }
 
@@ -4751,7 +4762,7 @@ export class Orchestrator implements ThreadOrchestrator {
 
   private _persistOutboundStartEvent(
     threadId: string,
-    type: "client/thread/start" | "client/turn/start",
+    type: "client/thread/start" | "client/turn/requested" | "client/turn/start",
     params: Record<string, unknown>,
     input: PromptInput[] | undefined,
     meta: { source: "spawn" | "tell"; initiator: ThreadTurnInitiator },
@@ -4768,7 +4779,7 @@ export class Orchestrator implements ThreadOrchestrator {
   }
 
   private _buildOutboundStartEventData(
-    type: "client/thread/start" | "client/turn/start",
+    type: "client/thread/start" | "client/turn/requested" | "client/turn/start",
     params: Record<string, unknown>,
     input: PromptInput[] | undefined,
     meta: { source: "spawn" | "tell"; initiator: ThreadTurnInitiator },
@@ -4791,7 +4802,7 @@ export class Orchestrator implements ThreadOrchestrator {
   private _amendOutboundStartEvent(
     threadId: string,
     eventId: string | undefined,
-    type: "client/thread/start" | "client/turn/start",
+    type: "client/thread/start" | "client/turn/requested" | "client/turn/start",
     params: Record<string, unknown>,
     input: PromptInput[] | undefined,
     meta: { source: "spawn" | "tell"; initiator: ThreadTurnInitiator },
@@ -4852,7 +4863,7 @@ export class Orchestrator implements ThreadOrchestrator {
   }
 
   private _extractExecutionOptionsFromParams(
-    type: "client/thread/start" | "client/turn/start",
+    type: "client/thread/start" | "client/turn/requested" | "client/turn/start",
     params: Record<string, unknown>,
   ): ThreadExecutionOptions {
     const model = getStringField(params, "model");
@@ -4866,6 +4877,7 @@ export class Orchestrator implements ThreadOrchestrator {
       case "client/thread/start":
         sandboxMode = toSandboxMode(params.sandbox);
         break;
+      case "client/turn/requested":
       case "client/turn/start":
         sandboxMode = toSandboxModeFromPolicy(toRecord(params.sandboxPolicy));
         break;

@@ -778,8 +778,19 @@ describe("environment-agent session orchestrator roundtrip", () => {
 
     await tellPromise;
     expect(threads.getById(threadId)?.status).toBe("idle");
-    expect(events.listByThread(threadId).map((event) => event.type)).toEqual(
-      expect.arrayContaining(["client/turn/start", "turn/started", "turn/completed"]),
+    const eventTypes = events.listByThread(threadId).map((event) => event.type);
+    expect(eventTypes).toEqual(
+      expect.arrayContaining([
+        "client/turn/requested",
+        "client/turn/start",
+        "turn/started",
+        "turn/completed",
+      ]),
+    );
+    expect(eventTypes.indexOf("client/turn/requested")).toBeGreaterThanOrEqual(0);
+    expect(eventTypes.indexOf("turn/started")).toBeGreaterThanOrEqual(0);
+    expect(eventTypes.indexOf("client/turn/requested")).toBeLessThan(
+      eventTypes.indexOf("turn/started"),
     );
   });
 
