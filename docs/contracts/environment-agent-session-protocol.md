@@ -1,6 +1,6 @@
 # Environment-Agent Session Protocol
 
-Status: draft
+Status: current
 
 This document specifies the current canonical protocol between the Beanbag daemon and environment-agent.
 
@@ -537,25 +537,15 @@ The daemon and agent negotiate:
 
 Unknown required protocol versions must fail fast.
 
-## Migration Notes
+## Current Implementation Notes
 
-This protocol is intended to replace the current model where:
+The current HTTP implementation uses:
 
-- live `/stream` acts as a low-latency path
-- `/deliver` acts as the acknowledged path
-- replay is partially backed by in-memory agent state
-- active/inactive is partly inferred from ad hoc transport behavior
+- `POST /threads/:id/environment-agent/session/open`
+  - agent opens or reopens a leased session
+- `POST /threads/:id/environment-agent/session/messages`
+  - agent sends `heartbeat`, `event_batch`, `command_ack`, `command_result`, and `session_close`
+- `GET /threads/:id/environment-agent/session/commands`
+  - agent long-polls for daemon `command_batch` responses
 
-Migration should proceed by:
-
-1. implementing the new protocol behind a feature flag or negotiated version
-2. moving one environment kind onto it first
-3. proving replay/restart/duplicate-command behavior in tests
-4. removing legacy transport semantics once the new session model is stable
-
-## Open Design Decisions
-
-- Whether a session carries exactly one thread channel in v1 or may multiplex multiple channels
-- Whether command completion should be represented canonically by `command_result`, normal events, or both
-- Whether generation is best represented as an integer counter, ULID, or daemon-issued token
-- Whether HTTP fallback should be long-poll, SSE+POST, or a single sync-style POST loop in v1
+This is the intentional v1 transport boundary for the current codebase.
