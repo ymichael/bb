@@ -228,7 +228,7 @@ export class EnvironmentAgentCommandDispatcher {
     now?: number;
   }): EnvironmentAgentCommandRecord | undefined {
     const session = this.sessions.getById(args.sessionId);
-    if (!session || session.status !== "active") {
+    if (!session) {
       return undefined;
     }
     if (args.payload.channelId !== session.threadId) {
@@ -329,11 +329,11 @@ export class EnvironmentAgentCommandDispatcher {
       case "completed":
       case "failed":
       case "cancelled":
+      case "started":
         return false;
       case "queued":
       case "sent":
-      case "received":
-      case "started": {
+      case "received": {
         const activeSession = this.sessions.getActiveByThreadId(
           command.threadId,
           this.clock(),

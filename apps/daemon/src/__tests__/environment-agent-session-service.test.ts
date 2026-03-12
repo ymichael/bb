@@ -380,6 +380,75 @@ describe("EnvironmentAgentSessionService", () => {
     });
   });
 
+  it("accepts terminal results from a replaced session for commands it already started", () => {
+    const threadId = createThreadId();
+    const first = service.openSession({
+      threadId,
+      now: 1_000,
+      payload: {
+        agentId: "agent-1",
+        agentInstanceId: "instance-1",
+        supportedProtocolVersions: [1],
+        supportedTransports: ["websocket"],
+        channels: [
+          {
+            channelId: threadId,
+            generation: 1,
+          },
+        ],
+      },
+    });
+
+    commands.enqueue({
+      id: "cmd-started",
+      threadId,
+      sessionId: first.session.id,
+      commandType: "workspace.status",
+      payload: {
+        type: "workspace.status",
+        threadId,
+      },
+      now: 1_100,
+    });
+    commands.markStarted("cmd-started", 1_150);
+
+    const second = service.openSession({
+      threadId,
+      now: 2_000,
+      payload: {
+        agentId: "agent-1",
+        agentInstanceId: "instance-2",
+        supportedProtocolVersions: [1],
+        supportedTransports: ["websocket"],
+        channels: [
+          {
+            channelId: threadId,
+            generation: 1,
+          },
+        ],
+      },
+    });
+
+    expect(second.replaced?.id).toBe(first.session.id);
+    service.recordCommandResult({
+      threadId,
+      sessionId: first.session.id,
+      payload: {
+        channelId: threadId,
+        commandId: "cmd-started",
+        state: "completed",
+        result: { ok: true },
+      },
+      now: 2_100,
+    });
+
+    expect(commands.getById("cmd-started")).toMatchObject({
+      sessionId: first.session.id,
+      state: "completed",
+      result: { ok: true },
+    });
+  });
+
   it("applies event batches and requests replay when the daemon detects a gap", async () => {
     const threadId = createThreadId();
     const opened = service.openSession({

@@ -501,7 +501,7 @@ export class EnvironmentAgentSessionService {
       throw new Error("Environment-agent session command dispatch is unavailable");
     }
 
-    const session = this.requireActiveSession(args.threadId, args.sessionId);
+    const session = this.requireSession(args.threadId, args.sessionId);
     this.commandDispatcher.recordCommandResult({
       sessionId: session.id,
       payload: args.payload,
@@ -509,10 +509,9 @@ export class EnvironmentAgentSessionService {
     });
   }
 
-  private requireActiveSession(
+  private requireSession(
     threadId: string,
     sessionId: string,
-    now: number = this.clock(),
   ): EnvironmentAgentSessionRecord {
     const session = this.sessions.getSession(sessionId);
     if (!session) {
@@ -523,6 +522,15 @@ export class EnvironmentAgentSessionService {
         `Environment-agent session ${sessionId} does not belong to thread ${threadId}`,
       );
     }
+    return session;
+  }
+
+  private requireActiveSession(
+    threadId: string,
+    sessionId: string,
+    now: number = this.clock(),
+  ): EnvironmentAgentSessionRecord {
+    const session = this.requireSession(threadId, sessionId);
     if (!isSessionLeaseActive(session, now)) {
       throw inactiveEnvironmentAgentSessionError(sessionId);
     }

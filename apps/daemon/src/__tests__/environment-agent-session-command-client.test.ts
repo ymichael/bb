@@ -9,10 +9,7 @@ import {
   ThreadRepository,
 } from "@beanbag/db";
 import { AgentServer, createCodexProviderAdapter } from "@beanbag/agent-server";
-import {
-  EnvironmentAgentCommandDispatcher,
-  EnvironmentAgentSessionUnavailableError,
-} from "../environment-agent-command-dispatcher.js";
+import { EnvironmentAgentCommandDispatcher } from "../environment-agent-command-dispatcher.js";
 import { EnvironmentAgentSessionCommandClient } from "../environment-agent-session-command-client.js";
 
 interface SqliteClient { close(): void; }
@@ -366,7 +363,7 @@ describe("EnvironmentAgentSessionCommandClient", () => {
     });
   });
 
-  it("fails fast when a started command is stranded on a replaced session", async () => {
+  it("keeps waiting when a started command is attached to a replaced session", async () => {
     const threadId = createThreadId();
     sessions.create({
       id: "sess-stale",
@@ -378,7 +375,17 @@ describe("EnvironmentAgentSessionCommandClient", () => {
       leaseExpiresAt: 30_000,
       now: 1_000,
     });
-    const recoverSession = vi.fn(async () => {
+    const client = new EnvironmentAgentSessionCommandClient({
+      threadId,
+      commandDispatcher: dispatcher,
+      commandTimeoutMs: 120,
+      pollIntervalMs: 10,
+    });
+
+    void vi.waitFor(() => {
+      expect(commands.getById("cmd-started-stale")).toBeDefined();
+    }).then(() => {
+      commands.markStarted("cmd-started-stale", 1_150);
       sessions.create({
         id: "sess-fresh",
         threadId,
@@ -387,31 +394,20 @@ describe("EnvironmentAgentSessionCommandClient", () => {
         protocolVersion: 1,
         transportKind: "http-long-poll",
         leaseExpiresAt: 31_000,
-        now: 1_300,
+        now: 1_175,
       });
-      dispatcher.rebindPendingCommandsForThread({
-        threadId,
-        sessionId: "sess-fresh",
-        now: 1_300,
-      });
-    });
-    const client = new EnvironmentAgentSessionCommandClient({
-      threadId,
-      commandDispatcher: dispatcher,
-      commandTimeoutMs: 120,
-      pollIntervalMs: 10,
-      recoverSession,
-    });
-
-    void vi.waitFor(() => {
-      expect(commands.getById("cmd-started-stale")).toBeDefined();
-    }).then(() => {
-      commands.markStarted("cmd-started-stale", 1_150);
       sessions.markClosed({
         sessionId: "sess-stale",
         reason: "internal_error",
         now: 1_200,
       });
+      setTimeout(() => {
+        commands.markCompleted({
+          commandId: "cmd-started-stale",
+          result: { ok: true },
+          now: 1_400,
+        });
+      }, 10);
     });
 
     await expect(
@@ -427,11 +423,14 @@ describe("EnvironmentAgentSessionCommandClient", () => {
           threadId,
         },
       }),
-    ).rejects.toBeInstanceOf(EnvironmentAgentSessionUnavailableError);
+    ).resolves.toMatchObject({
+      state: "accepted",
+      result: { ok: true },
+    });
 
     expect(commands.getById("cmd-started-stale")).toMatchObject({
       sessionId: "sess-stale",
-      state: "started",
+      state: "completed",
     });
   });
 
