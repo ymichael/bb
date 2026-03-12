@@ -64,7 +64,7 @@ describe("environment-agent repositories", () => {
       now: 1_000,
     });
 
-    expect(sessions.getActiveByThreadId(threadId)).toMatchObject({
+    expect(sessions.getActiveByThreadId(threadId, 1_000)).toMatchObject({
       id: "sess-1",
       status: "active",
       transportKind: "websocket",
@@ -106,7 +106,7 @@ describe("environment-agent repositories", () => {
       status: "active",
       transportKind: "http-long-poll",
     });
-    expect(sessions.getActiveByThreadId(threadId)).toMatchObject({
+    expect(sessions.getActiveByThreadId(threadId, 3_000)).toMatchObject({
       id: "sess-2",
       status: "active",
     });
