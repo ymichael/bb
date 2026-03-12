@@ -72,7 +72,6 @@ import { ThreadComposerPane } from "./ThreadComposerPane";
 import { ThreadSecondaryPanel } from "./ThreadSecondaryPanel";
 import {
   findLatestActivityRowId,
-  isLastThreadRowShowingOngoingState,
 } from "./threadDetailActivity";
 import { extractThreadQueuedMessages, queuedInputToDraft } from "./threadQueuedMessages";
 import { useGitDiffPanel } from "./useGitDiffPanel";
@@ -175,10 +174,6 @@ export function ThreadDetailView() {
   const latestActivityRowId = useMemo(
     () => findLatestActivityRowId(threadDetailRows),
     [threadDetailRows],
-  );
-  const isLastThreadRowShowingOngoingIndicator = useMemo(
-    () => isLastThreadRowShowingOngoingState(threadDetailRows, latestActivityRowId),
-    [latestActivityRowId, threadDetailRows],
   );
   const {
     activeSecondaryPanel,
@@ -1212,8 +1207,7 @@ export function ThreadDetailView() {
               scrollRef={setContainerRef}
               showOngoingIndicator={
                 thread.status === "active" &&
-                !isThreadTimelinePending &&
-                !isLastThreadRowShowingOngoingIndicator
+                !isThreadTimelinePending
               }
               threadDetailRows={threadDetailRows}
               threadId={thread.id}

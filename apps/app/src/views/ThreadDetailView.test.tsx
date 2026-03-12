@@ -521,7 +521,7 @@ describe("ThreadDetailView", () => {
     expect(html).toContain("working");
   });
 
-  it("hides the working indicator when the last thread row is already in-progress", () => {
+  it("keeps the working indicator when the last thread row is already in-progress", () => {
     apiState.thread.status = "active";
     apiState.timelineLoading = false;
     apiState.timeline = {
@@ -550,10 +550,10 @@ describe("ThreadDetailView", () => {
     const html = renderThreadDetailView();
 
     expect(html).not.toContain("Loading thread...");
-    expect(html).not.toContain("working");
+    expect(html).toContain("working");
   });
 
-  it("hides the working indicator when the trailing latest activity row borrows ongoing labels", () => {
+  it("keeps the working indicator when the trailing latest activity row borrows ongoing labels", () => {
     apiState.thread.status = "active";
     apiState.timelineLoading = false;
     apiState.timeline = {
@@ -582,7 +582,7 @@ describe("ThreadDetailView", () => {
     const html = renderThreadDetailView();
 
     expect(html).not.toContain("Loading thread...");
-    expect(html).not.toContain("working");
+    expect(html).toContain("working");
   });
 
   it("only auto-expands the latest child inside the latest tool-group row", () => {
