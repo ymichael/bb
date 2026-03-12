@@ -484,7 +484,7 @@ export function createThreadRoutes(
           return c.json(response);
         } catch (err) {
           if (isAbortError(err)) {
-            return new Response(null, { status: 499 });
+            return c.body(null, 204);
           }
           return sendRouteError(c, err);
         }

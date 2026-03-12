@@ -807,6 +807,28 @@ describe("Thread routes", () => {
         signal: expect.any(AbortSignal),
       });
     });
+
+    it("returns no content when the command long-poll is aborted", async () => {
+      const sessionService = mockEnvironmentAgentSessionService();
+      (threadManager.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeThread(),
+      );
+      (sessionService.waitForCommands as ReturnType<typeof vi.fn>).mockRejectedValue(
+        Object.assign(new Error("Operation aborted"), { name: "AbortError" }),
+      );
+      app = new Hono().route(
+        "/threads",
+        createThreadRoutes(threadManager, {
+          environmentAgentSessionService: sessionService,
+        }),
+      );
+
+      const res = await app.request(
+        "/threads/thread-1/environment-agent/session/commands?sessionId=sess-1",
+      );
+
+      expect(res.status).toBe(204);
+    });
   });
 
   describe("GET /threads", () => {

@@ -9,6 +9,9 @@ import {
 import {
   resolveDefaultEnvironmentAgentLogFilePath,
 } from "@beanbag/environment-agent";
+import {
+  resolveManagedEnvironmentAgentStateFilePaths,
+} from "../managed-storage-paths.js";
 
 const originalHome = process.env.HOME;
 const cleanupPaths: string[] = [];
@@ -141,10 +144,25 @@ describe("managed artifact reconciler", () => {
       archivedAt: Date.now() - 1_000,
     });
 
+    const liveStatePaths = resolveManagedEnvironmentAgentStateFilePaths({
+      thread: liveThread,
+      project,
+      runtimeEnv: process.env,
+    });
+    const archivedStatePaths = resolveManagedEnvironmentAgentStateFilePaths({
+      thread: archivedThread,
+      project,
+      runtimeEnv: process.env,
+    });
     const stateRoot = resolve(homeDir, ".beanbag", "environment-agents", "proj-1");
-    writeTextFile(join(stateRoot, "worktree-live-thread.json"), "{}");
-    writeTextFile(join(stateRoot, "worktree-archived-thread.json"), "{}");
-    writeTextFile(join(stateRoot, "worktree-orphan-thread.json"), "{}");
+    for (const statePath of liveStatePaths) {
+      writeTextFile(statePath, "{}");
+    }
+    for (const statePath of archivedStatePaths) {
+      writeTextFile(statePath, "{}");
+    }
+    const orphanStatePath = join(stateRoot, "worktree-orphan-thread.json");
+    writeTextFile(orphanStatePath, "{}");
 
     const worktreeRoot = resolve(homeDir, ".beanbag", "worktrees", "proj-1");
     mkdirSync(join(worktreeRoot, "live-thread"), { recursive: true });
@@ -162,11 +180,15 @@ describe("managed artifact reconciler", () => {
       archivedLogRetentionMs: 7 * 24 * 60 * 60 * 1000,
     });
 
-    expect(result.removedStateFiles).toBe(2);
+    expect(result.removedStateFiles).toBe(archivedStatePaths.length + 1);
     expect(result.removedWorkspaceDirectories).toBe(3);
-    expect(existsSync(join(stateRoot, "worktree-live-thread.json"))).toBe(true);
-    expect(existsSync(join(stateRoot, "worktree-archived-thread.json"))).toBe(false);
-    expect(existsSync(join(stateRoot, "worktree-orphan-thread.json"))).toBe(false);
+    for (const statePath of liveStatePaths) {
+      expect(existsSync(statePath)).toBe(true);
+    }
+    for (const statePath of archivedStatePaths) {
+      expect(existsSync(statePath)).toBe(false);
+    }
+    expect(existsSync(orphanStatePath)).toBe(false);
     expect(existsSync(join(worktreeRoot, "live-thread"))).toBe(true);
     expect(existsSync(join(worktreeRoot, "archived-thread"))).toBe(false);
     expect(existsSync(join(worktreeRoot, "orphan-thread"))).toBe(false);

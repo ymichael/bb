@@ -14,7 +14,7 @@ import {
 } from "@beanbag/environment-agent";
 import {
   DEFAULT_WORKTREE_ROOT,
-  resolveManagedEnvironmentAgentStateFilePath,
+  resolveManagedEnvironmentAgentStateFilePaths,
   resolveManagedWorktreeRootForProject,
 } from "./managed-storage-paths.js";
 
@@ -199,8 +199,13 @@ export function reconcileManagedArtifactStorage(
         }));
       }
       if (thread.archivedAt === undefined) {
-        const statePath = resolveManagedEnvironmentAgentStateFilePath(thread);
-        if (statePath) {
+        const project = projectById.get(thread.projectId);
+        const statePaths = resolveManagedEnvironmentAgentStateFilePaths({
+          thread,
+          project,
+          runtimeEnv: args.runtimeEnv,
+        });
+        for (const statePath of statePaths) {
           keptStatePaths.add(statePath);
         }
       }

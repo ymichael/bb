@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import type { Project, Thread } from "@beanbag/agent-core";
@@ -69,4 +70,73 @@ export function resolveManagedEnvironmentAgentStateFilePath(
     sanitizeSegment(identity.projectId),
     `${sanitizeSegment(environmentId)}-${sanitizeSegment(identity.id)}.json`,
   );
+}
+
+function hashWorkspaceRoot(workspaceRootPath: string): string {
+  return createHash("sha1")
+    .update(workspaceRootPath)
+    .digest("hex")
+    .slice(0, 12);
+}
+
+function resolveManagedEnvironmentAgentHashedStateFilePath(args: {
+  projectId: string;
+  threadId: string;
+  environmentId: string;
+  workspaceRootPath: string;
+}): string {
+  return join(
+    homedir(),
+    ".beanbag",
+    "environment-agents",
+    sanitizeSegment(args.projectId),
+    `${sanitizeSegment(args.environmentId)}-${sanitizeSegment(args.threadId)}-${hashWorkspaceRoot(args.workspaceRootPath)}.json`,
+  );
+}
+
+export function resolveManagedEnvironmentAgentStateFilePaths(args: {
+  thread: Pick<Thread, "id" | "projectId" | "environmentId">;
+  project?: Pick<Project, "id" | "rootPath">;
+  runtimeEnv: NodeJS.ProcessEnv;
+}): string[] {
+  const legacyPath = resolveManagedEnvironmentAgentStateFilePath(args.thread);
+  if (!legacyPath) {
+    return [];
+  }
+
+  const environmentId = args.thread.environmentId?.trim();
+  if (!environmentId || !args.project) {
+    return [legacyPath];
+  }
+
+  let workspaceRootPath: string | undefined;
+  switch (environmentId) {
+    case "local":
+      workspaceRootPath = args.project.rootPath;
+      break;
+    case "worktree":
+    case "docker":
+      workspaceRootPath = resolve(
+        resolveManagedWorktreeRootForProject(args.project, args.runtimeEnv).worktreeRoot,
+        args.thread.id,
+      );
+      break;
+    default:
+      // Unknown environment ids may manage their own state layout. Keep the legacy path only.
+      break;
+  }
+
+  if (!workspaceRootPath) {
+    return [legacyPath];
+  }
+
+  return [
+    resolveManagedEnvironmentAgentHashedStateFilePath({
+      projectId: args.thread.projectId,
+      threadId: args.thread.id,
+      environmentId,
+      workspaceRootPath,
+    }),
+    legacyPath,
+  ];
 }
