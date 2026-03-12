@@ -1078,6 +1078,8 @@ describe("Orchestrator", () => {
               type: "system/provisioning/env_setup",
               data: expect.objectContaining({
                 status: "started",
+                branchName: "bb/thread-1",
+                headSha: "abc123",
                 reason: "thread-created",
               }),
             }),
@@ -1107,6 +1109,8 @@ describe("Orchestrator", () => {
               type: "system/provisioning/env_setup",
               data: expect.objectContaining({
                 status: "completed",
+                branchName: "bb/thread-1",
+                headSha: "abc123",
                 reason: "thread-created",
               }),
             }),

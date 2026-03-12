@@ -3269,6 +3269,9 @@ export class Orchestrator implements ThreadOrchestrator {
       ...("branchName" in event && event.branchName
         ? { branchName: event.branchName }
         : {}),
+      ...("headSha" in event && event.headSha
+        ? { headSha: event.headSha }
+        : {}),
       ...(event.timeoutMs !== undefined ? { timeoutMs: event.timeoutMs } : {}),
       ...(event.durationMs !== undefined ? { durationMs: event.durationMs } : {}),
       ...(event.detail ? { detail: event.detail } : {}),
