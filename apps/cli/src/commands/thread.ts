@@ -398,13 +398,13 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
 
   thread
     .command("sessions [id]")
-    .description("Show environment-agent sessions for a thread (defaults to BB_THREAD_ID)")
+    .description("Show env-daemon sessions for a thread (defaults to BB_THREAD_ID)")
     .option("--json", "Print machine-readable JSON output")
     .action(async (id: string | undefined, opts: { json?: boolean }) => {
       try {
         const threadId = requireThreadId(id);
         const response = await unwrap<ThreadSessionsPayload>(
-          fetch(buildThreadRouteUrl(getUrl(), threadId, "environment-agent/sessions")),
+          fetch(buildThreadRouteUrl(getUrl(), threadId, "env-daemon/sessions")),
         );
         if (opts.json) {
           console.log(JSON.stringify(response, null, 2));

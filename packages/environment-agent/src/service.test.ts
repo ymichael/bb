@@ -93,7 +93,7 @@ describe("environment-agent service config", () => {
   it("starts session supervision when daemon config is present", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
       const url = String(input);
-      if (url.includes("/environment-agent/session/open")) {
+      if (url.includes("/env-daemon/session/open")) {
         return new Response(
           JSON.stringify({
             protocol: "beanbag.env-agent.v1",
@@ -111,7 +111,7 @@ describe("environment-agent service config", () => {
           { status: 201, headers: { "content-type": "application/json" } },
         );
       }
-      if (url.includes("/environment-agent/session/commands")) {
+      if (url.includes("/env-daemon/session/commands")) {
         return new Response(
           JSON.stringify({
             protocol: "beanbag.env-agent.v1",
@@ -124,7 +124,7 @@ describe("environment-agent service config", () => {
           { status: 200, headers: { "content-type": "application/json" } },
         );
       }
-      if (url.includes("/environment-agent/session/messages")) {
+      if (url.includes("/env-daemon/session/messages")) {
         const body = JSON.parse(String(init?.body ?? "{}")) as { type?: string };
         if (body.type === "event_batch") {
           return new Response(
@@ -183,7 +183,7 @@ describe("environment-agent service config", () => {
 
     expect(started.sessionSupervisor).toBeDefined();
     expect(fetchSpy.mock.calls).toContainEqual([
-      "http://127.0.0.1:9000/api/v1/threads/thread-1/environment-agent/session/open",
+      "http://127.0.0.1:9000/api/v1/threads/thread-1/env-daemon/session/open",
       expect.objectContaining({ method: "POST" }),
     ]);
 

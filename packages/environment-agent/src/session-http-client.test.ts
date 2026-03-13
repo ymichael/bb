@@ -141,15 +141,15 @@ describe("EnvironmentAgentSessionHttpClient", () => {
     expect(requests).toEqual(
       expect.arrayContaining([
         {
-          url: "http://127.0.0.1:3333/api/v1/threads/thread-1/environment-agent/session/open",
+          url: "http://127.0.0.1:3333/api/v1/threads/thread-1/env-daemon/session/open",
           method: "POST",
         },
         {
-          url: "http://127.0.0.1:3333/api/v1/threads/thread-1/environment-agent/session/commands?sessionId=sess-1&afterCursor=3&limit=5&waitMs=5000",
+          url: "http://127.0.0.1:3333/api/v1/threads/thread-1/env-daemon/session/commands?sessionId=sess-1&afterCursor=3&limit=5&waitMs=5000",
           method: "GET",
         },
         {
-          url: "http://127.0.0.1:3333/api/v1/threads/thread-1/environment-agent/session/messages",
+          url: "http://127.0.0.1:3333/api/v1/threads/thread-1/env-daemon/session/messages",
           method: "POST",
         },
       ]),
