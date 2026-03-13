@@ -1,6 +1,7 @@
 import {
   type ThreadWorkStatus,
   type EnvironmentProvisioningEvent,
+  type PersistedEnvironmentRecord,
   type PrimaryCheckoutStatus,
   type SystemEnvironmentInfo,
   type Thread,
@@ -146,6 +147,26 @@ export class EnvironmentService {
       .map((attachment) => attachment.threadId);
   }
 
+  private resolveAttachedPersistedEnvironmentRecord(
+    threadId: string,
+  ): PersistedEnvironmentRecord | undefined {
+    const attachedEnvironment = this.resolveAttachedEnvironment(threadId);
+    if (!attachedEnvironment || !this.threadEnvironmentAttachmentRepo) {
+      return undefined;
+    }
+    const siblingAttachments = this.threadEnvironmentAttachmentRepo.listByEnvironmentId(
+      attachedEnvironment.environmentId,
+    );
+    for (const attachment of siblingAttachments) {
+      if (attachment.threadId === threadId) continue;
+      const siblingThread = this.threadRepo.getById(attachment.threadId);
+      if (siblingThread?.environmentRecord) {
+        return siblingThread.environmentRecord;
+      }
+    }
+    return undefined;
+  }
+
   listEnvironments(): SystemEnvironmentInfo[] {
     return this.environmentRegistry.list().map((environment: SystemEnvironmentInfo) => ({
       ...environment,
@@ -167,7 +188,8 @@ export class EnvironmentService {
       this.restoreFailuresByThreadId.delete(thread.id);
       return runtime.environment;
     }
-    const environmentRecord = thread.environmentRecord;
+    const environmentRecord =
+      thread.environmentRecord ?? this.resolveAttachedPersistedEnvironmentRecord(thread.id);
     if (!environmentRecord) {
       this.restoreFailuresByThreadId.delete(thread.id);
       return undefined;
@@ -315,7 +337,12 @@ export class EnvironmentService {
         };
       }
 
-      const environmentId = thread.environmentRecord?.kind ?? thread.environmentId ?? "local";
+      const attachedEnvironmentRecord = this.resolveAttachedPersistedEnvironmentRecord(thread.id);
+      const environmentId =
+        thread.environmentRecord?.kind ??
+        attachedEnvironmentRecord?.kind ??
+        thread.environmentId ??
+        "local";
       const environment =
         this.restoreThreadEnvironment(thread, projectRootPath) ??
         this.environmentRegistry.create(
