@@ -1202,6 +1202,7 @@ describe("Thread routes", () => {
           path: "/tmp/project",
         },
       });
+      expect(body[0].attachedEnvironmentId).toBe("env-1");
       expect(body[1].attachedEnvironment).toBeUndefined();
     });
 
@@ -1243,6 +1244,7 @@ describe("Thread routes", () => {
 
       expect(res.status).toBe(200);
       const body = await res.json();
+      expect(body.attachedEnvironmentId).toBe("env-1");
       expect(body.attachedEnvironment).toMatchObject({
         id: "env-1",
         managed: false,

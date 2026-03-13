@@ -348,6 +348,7 @@ export function createThreadRoutes(
     }
     return {
       ...thread,
+      attachedEnvironmentId: attachment.environmentId,
       attachedEnvironment,
     };
   };
@@ -379,6 +380,7 @@ export function createThreadRoutes(
       return attachedEnvironment
         ? {
           ...thread,
+          attachedEnvironmentId: attachment.environmentId,
           attachedEnvironment,
         }
         : thread;

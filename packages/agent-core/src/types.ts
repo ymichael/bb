@@ -106,6 +106,7 @@ export interface Thread {
   queuedMessages?: ThreadQueuedMessage[];
   pendingOperation?: ThreadPendingOperation;
   environmentId?: string;
+  attachedEnvironmentId?: string;
   environmentRecord?: PersistedEnvironmentRecord;
   attachedEnvironment?: EnvironmentRecord;
   builtInActions?: ThreadBuiltInAction[];
