@@ -398,7 +398,7 @@ export function ProjectList({
         key={thread.id}
         className={cn(
           "group/thread-row relative flex h-8 w-full items-center gap-2 rounded-md pr-0 text-sm transition-colors",
-          isManagedChild ? "pl-2 text-sidebar-foreground/70" : "pl-2",
+          isManagedChild ? "pl-6 text-sidebar-foreground/60" : "pl-2",
           isThreadActive
             ? "bg-sidebar-border/80 text-sidebar-foreground"
             : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
@@ -411,15 +411,7 @@ export function ProjectList({
           title={`Open ${threadTitle}`}
           className="absolute inset-0 rounded-md outline-none ring-sidebar-ring focus-visible:ring-2"
         />
-        {isManagedChild ? (
-          <span
-            aria-hidden
-            className="relative inline-flex h-4 w-5 shrink-0 items-center justify-center text-sidebar-foreground/35"
-          >
-            <span className="absolute left-2 top-[-14px] h-[22px] w-px bg-sidebar-border/70" />
-            <span className="absolute left-2 top-1/2 h-px w-3 -translate-y-1/2 bg-sidebar-border/70" />
-          </span>
-        ) : isManager && hasManagedChildren ? (
+        {isManager && hasManagedChildren ? (
           <button
             type="button"
             aria-expanded={!isManagerCollapsed}
@@ -724,15 +716,12 @@ export function ProjectList({
                             })}
                             {!collapsedManagerIds.has(thread.id) &&
                             (managedThreadsByManagerId.get(thread.id)?.length ?? 0) > 0 ? (
-                              <div className="relative ml-3 pl-3">
-                                <div className="absolute inset-y-1 left-2 w-px bg-sidebar-border/70" />
-                                <div className="space-y-1">
-                                  {(managedThreadsByManagerId.get(thread.id) ?? []).map((childThread) =>
-                                    renderThreadRow(project.id, childThread, {
-                                      isManagedChild: true,
-                                    })
-                                  )}
-                                </div>
+                              <div className="space-y-1">
+                                {(managedThreadsByManagerId.get(thread.id) ?? []).map((childThread) =>
+                                  renderThreadRow(project.id, childThread, {
+                                    isManagedChild: true,
+                                  })
+                                )}
                               </div>
                             ) : null}
                           </div>

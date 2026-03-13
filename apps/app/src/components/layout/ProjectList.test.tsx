@@ -128,7 +128,6 @@ describe("ProjectList", () => {
     expect(html.indexOf("Manager")).toBeLessThan(html.indexOf("Other thread"))
     expect(html).toContain("Managed child")
     expect(html).toContain("Collapse managed threads")
-    expect(html).toContain("relative ml-3 pl-3")
-    expect(html).toContain("left-2 w-px bg-sidebar-border/70")
+    expect(html).toContain("pl-6")
   })
 })
