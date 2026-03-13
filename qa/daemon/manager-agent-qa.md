@@ -36,9 +36,10 @@ Additional manager-specific coverage:
 pnpm exec turbo run build --filter=@beanbag/daemon --filter=@beanbag/cli
 ```
 
-- Use a disposable repo and disposable Beanbag root.
+- Use a disposable repo, disposable Beanbag root, and disposable `HOME`.
 - Use a real standalone daemon, not the app-integrated daemon.
 - Keep the daemon log open in another shell while running the pass.
+- Copy the current Codex auth/config into the disposable `HOME` before starting the daemon. This avoids shared host state while preserving provider auth.
 
 ## Setup
 
@@ -48,7 +49,11 @@ Create a disposable repo:
 tmp_root=$(mktemp -d /tmp/bb-manager-qa-XXXXXX)
 project_root="$tmp_root/repo"
 beanbag_root="$tmp_root/beanbag-root"
-mkdir -p "$project_root/src" "$beanbag_root"
+tmp_home="$tmp_root/home"
+mkdir -p "$project_root/src" "$beanbag_root" "$tmp_home/.codex"
+cp ~/.codex/auth.json "$tmp_home/.codex/auth.json"
+[ -f ~/.codex/config.toml ] && cp ~/.codex/config.toml "$tmp_home/.codex/config.toml"
+[ -f ~/.codex/config.json ] && cp ~/.codex/config.json "$tmp_home/.codex/config.json"
 cat > "$project_root/package.json" <<'EOF'
 {
   "name": "bb-manager-qa",
@@ -83,6 +88,7 @@ git -C "$project_root" commit -m init
 Start the standalone daemon:
 
 ```bash
+HOME="$tmp_home" \
 BEANBAG_ROOT="$beanbag_root" \
 node apps/daemon/dist/index.js --port 4311
 ```
@@ -96,17 +102,17 @@ export BB_DAEMON_URL=http://127.0.0.1:4311
 Create the project:
 
 ```bash
-node apps/cli/dist/index.js project create --name qa-manager --root "$project_root"
+node apps/cli/dist/index.js project create --name qa-manager --root "$project_root" --json
 ```
 
-Record the returned `<project-id>`.
+Record the returned `<project-id>` from the JSON response.
 
 ## Happy Path Matrix
 
 ### 1. Hire the manager
 
 ```bash
-node apps/cli/dist/index.js manager hire <project-id>
+node apps/cli/dist/index.js manager hire <project-id> --json
 node apps/cli/dist/index.js manager show <project-id>
 ```
 

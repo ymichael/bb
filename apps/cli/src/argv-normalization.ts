@@ -1,10 +1,12 @@
+type CommandOptionSpec = {
+  positionalCount: number;
+  optionsWithValues: Set<string>;
+  flagOptions: Set<string>;
+};
+
 const THREAD_COMMAND_OPTION_SPECS: Record<
   string,
-  {
-    positionalCount: number;
-    optionsWithValues: Set<string>;
-    flagOptions: Set<string>;
-  }
+  CommandOptionSpec
 > = {
   wait: {
     positionalCount: 1,
@@ -92,20 +94,62 @@ const THREAD_COMMAND_OPTION_SPECS: Record<
   },
 };
 
-function normalizeThreadSubcommandArgs(args: string[]): string[] {
+const MANAGER_COMMAND_OPTION_SPECS: Record<string, CommandOptionSpec> = {
+  hire: {
+    positionalCount: 1,
+    optionsWithValues: new Set(),
+    flagOptions: new Set(["--json"]),
+  },
+  show: {
+    positionalCount: 1,
+    optionsWithValues: new Set(),
+    flagOptions: new Set(["--json"]),
+  },
+  status: {
+    positionalCount: 1,
+    optionsWithValues: new Set(),
+    flagOptions: new Set(["--json"]),
+  },
+  threads: {
+    positionalCount: 1,
+    optionsWithValues: new Set(),
+    flagOptions: new Set(["--json"]),
+  },
+  send: {
+    positionalCount: 2,
+    optionsWithValues: new Set(),
+    flagOptions: new Set(["--json"]),
+  },
+  log: {
+    positionalCount: 1,
+    optionsWithValues: new Set(),
+    flagOptions: new Set(["--json"]),
+  },
+  delete: {
+    positionalCount: 1,
+    optionsWithValues: new Set(),
+    flagOptions: new Set(["--yes"]),
+  },
+};
+
+function normalizeSubcommandArgs(
+  args: string[],
+  groupName: string,
+  specs: Record<string, CommandOptionSpec>,
+): string[] {
   if (args.length < 2) {
     return args;
   }
 
   const [group, subcommand, ...rest] = args;
-  if (group !== "thread") {
+  if (group !== groupName) {
     return args;
   }
   if (rest.includes("--")) {
     return args;
   }
 
-  const spec = THREAD_COMMAND_OPTION_SPECS[subcommand];
+  const spec = specs[subcommand];
   if (!spec) {
     return args;
   }
@@ -155,6 +199,15 @@ export function normalizeCliArgv(argv: string[]): string[] {
   if (args.length === 0) {
     return argv;
   }
-  const normalizedArgs = normalizeThreadSubcommandArgs(args);
+  const threadNormalized = normalizeSubcommandArgs(
+    args,
+    "thread",
+    THREAD_COMMAND_OPTION_SPECS,
+  );
+  const normalizedArgs = normalizeSubcommandArgs(
+    threadNormalized,
+    "manager",
+    MANAGER_COMMAND_OPTION_SPECS,
+  );
   return [nodePath, scriptPath, ...normalizedArgs];
 }

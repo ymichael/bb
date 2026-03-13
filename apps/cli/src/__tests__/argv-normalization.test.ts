@@ -75,4 +75,47 @@ describe("normalizeCliArgv", () => {
       normalizeCliArgv(["node", "bb", "thread", "show", "-thread-1", "--json"]),
     ).toEqual(["node", "bb", "thread", "show", "--json", "--", "-thread-1"]);
   });
+
+  it("moves manager send flags ahead of dash-prefixed manager ids", () => {
+    expect(
+      normalizeCliArgv(["node", "bb", "manager", "send", "-manager-1", "hello", "--json"]),
+    ).toEqual([
+      "node",
+      "bb",
+      "manager",
+      "send",
+      "--json",
+      "--",
+      "-manager-1",
+      "hello",
+    ]);
+  });
+
+  it("moves manager delete flags ahead of dash-prefixed manager ids", () => {
+    expect(
+      normalizeCliArgv(["node", "bb", "manager", "delete", "--yes", "-manager-1"]),
+    ).toEqual([
+      "node",
+      "bb",
+      "manager",
+      "delete",
+      "--yes",
+      "--",
+      "-manager-1",
+    ]);
+  });
+
+  it("moves manager hire flags ahead of dash-prefixed project ids", () => {
+    expect(
+      normalizeCliArgv(["node", "bb", "manager", "hire", "-project-1", "--json"]),
+    ).toEqual([
+      "node",
+      "bb",
+      "manager",
+      "hire",
+      "--json",
+      "--",
+      "-project-1",
+    ]);
+  });
 });
