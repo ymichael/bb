@@ -336,6 +336,32 @@ describe("Project routes", () => {
       });
       expect(existsSync(join(beanbagRoot, "workspace", "thread-manager-1"))).toBe(true);
     });
+
+    it("rolls back the pointer and workspace when bootstrap fails", async () => {
+      const project = makeProject({ id: "proj-1" });
+      const managerThread = makeThread({
+        id: "thread-manager-rollback",
+        projectId: project.id,
+        type: "manager",
+      });
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(project);
+      threadManager.spawn.mockResolvedValue(managerThread);
+      threadManager.systemTell.mockRejectedValue(new Error("welcome failed"));
+
+      const res = await app.request("/projects/proj-1/manager", { method: "POST" });
+
+      expect(res.status).toBe(500);
+      expect(projectRepo.update).toHaveBeenNthCalledWith(1, "proj-1", {
+        primaryManagerThreadId: "thread-manager-rollback",
+      });
+      expect(projectRepo.update).toHaveBeenNthCalledWith(2, "proj-1", {
+        primaryManagerThreadId: null,
+      });
+      expect(deleteThreadAsync).toHaveBeenCalledWith("thread-manager-rollback");
+      expect(
+        existsSync(join(beanbagRoot, "workspace", "thread-manager-rollback")),
+      ).toBe(false);
+    });
   });
 
   describe("DELETE /projects/:id", () => {

@@ -269,6 +269,11 @@ export function createProjectRoutes(
             input: [{ type: "text", text: MANAGER_WELCOME_MESSAGE }],
           });
         } catch (error) {
+          projectRepo.update(projectId, { primaryManagerThreadId: null });
+          rmSync(resolveBeanbagPath(runtimeEnv, "workspace", managerThread.id), {
+            recursive: true,
+            force: true,
+          });
           if (deps.deleteThreadAsync) {
             await deps.deleteThreadAsync(managerThread.id);
           } else if (deps.threadManager.deleteThread) {

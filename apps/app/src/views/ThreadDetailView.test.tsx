@@ -498,10 +498,22 @@ describe("ThreadDetailView", () => {
 
     expect(html).toContain("plan.md");
     expect(html).toContain("Manager deliverable");
+    expect(html).toContain("manager");
 
     apiState.thread.type = "standard";
     apiState.thread.parentThreadId = "thread-parent";
     apiState.thread.title = "Child thread";
+  });
+
+  it("shows a managed badge for manager-owned standard threads", () => {
+    apiState.thread.type = "standard";
+    apiState.thread.parentThreadId = "thread-parent";
+    apiState.thread.title = "Child thread";
+    apiState.timelineLoading = false;
+
+    const html = renderThreadDetailView();
+
+    expect(html).toContain("managed");
   });
 
   it("disables promote while the thread is active", () => {
