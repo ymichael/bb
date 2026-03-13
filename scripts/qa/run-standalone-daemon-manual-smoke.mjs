@@ -11,6 +11,7 @@ const workspaceRoot = resolve(__dirname, "..", "..");
 const daemonEntry = resolve(workspaceRoot, "apps", "daemon", "dist", "index.js");
 const cliEntry = resolve(workspaceRoot, "apps", "cli", "dist", "index.js");
 const startHelperEntry = resolve(workspaceRoot, "scripts", "qa", "start-standalone-daemon-qa.mjs");
+const stopHelperEntry = resolve(workspaceRoot, "scripts", "qa", "stop-standalone-daemon-qa.mjs");
 
 function assertBuiltArtifactsExist() {
   const missing = [daemonEntry, cliEntry].filter((path) => !existsSync(path));
@@ -114,6 +115,33 @@ async function main() {
   const metadata = JSON.parse(runNodeScript(startHelperEntry));
   let currentDaemonPid = metadata.daemonPid;
   let failed = false;
+  let shuttingDown = false;
+
+  const stopStandalone = () => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    runNodeScript(stopHelperEntry, [
+      "--pid",
+      String(currentDaemonPid),
+      "--tmp-root",
+      metadata.tmpRoot,
+      "--beanbag-root",
+      metadata.beanbagRoot,
+    ]);
+  };
+
+  const handleSignal = (signal) => {
+    try {
+      stopStandalone();
+    } finally {
+      process.removeAllListeners("SIGINT");
+      process.removeAllListeners("SIGTERM");
+      process.exit(signal === "SIGINT" ? 130 : 143);
+    }
+  };
+
+  process.on("SIGINT", () => handleSignal("SIGINT"));
+  process.on("SIGTERM", () => handleSignal("SIGTERM"));
 
   const logStep = (message) => {
     console.log(`\n[manual-smoke] ${message}`);
@@ -257,11 +285,7 @@ async function main() {
     process.exitCode = 1;
   } finally {
     if (currentDaemonPid) {
-      try {
-        process.kill(currentDaemonPid, "SIGINT");
-      } catch {
-        // Daemon already exited.
-      }
+      stopStandalone();
     }
     if (failed) {
       return;

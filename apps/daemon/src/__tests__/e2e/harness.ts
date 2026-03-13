@@ -9,7 +9,6 @@ import {
   statSync,
 } from "node:fs";
 import { createServer as createNetServer } from "node:net";
-import { tmpdir } from "node:os";
 import { delimiter, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { serve } from "@hono/node-server";
@@ -35,6 +34,7 @@ import {
   createFakeCodexScriptFile,
   type FakeCodexOptions,
 } from "./fake-codex.js";
+import { beanbagTestTmpPrefix } from "./temp-root.js";
 import {
   resolveE2eProviderMode,
   type E2eProviderMode,
@@ -224,7 +224,7 @@ export async function startDaemonE2eHarness(
     ...(opts?.environmentAgentSessionOptions ?? {}),
   };
   const daemonPort = opts?.port ?? await allocatePort();
-  const tempDir = opts?.tempDir ?? mkdtempSync(join(tmpdir(), "beanbag-daemon-e2e-"));
+  const tempDir = opts?.tempDir ?? mkdtempSync(beanbagTestTmpPrefix("beanbag-daemon-e2e-"));
   const projectRoot = join(tempDir, "project");
   mkdirSync(projectRoot, { recursive: true });
   if (opts?.initGitRepo && !existsSync(join(projectRoot, ".git"))) {
