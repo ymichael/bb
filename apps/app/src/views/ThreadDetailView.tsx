@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Check, ChevronDown, ChevronRight, Copy, PanelRight } from "lucide-react";
+import { ArrowUpRight, Check, ChevronDown, ChevronRight, Copy, PanelRight } from "lucide-react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { Panel, PanelGroup } from "react-resizable-panels";
 import {
@@ -981,19 +981,7 @@ export function ThreadDetailView() {
           valueClassName="min-w-0"
         >
           <DropdownMenu>
-            <div className="flex min-w-0 items-center gap-1">
-              {parentThreadId ? (
-                <Link
-                  to={`/projects/${projectId}/threads/${parentThreadId}`}
-                  className="min-w-0 truncate text-xs text-foreground underline underline-offset-2"
-                >
-                  {selectedManagerOption?.label ?? "Manager"}
-                </Link>
-              ) : (
-                <span className="min-w-0 truncate text-xs text-foreground">
-                  {selectedManagerOption?.label ?? "None"}
-                </span>
-              )}
+            <div className="group/manager-picker flex min-w-0 items-center gap-1">
               <DropdownMenuTrigger asChild>
                 <Button
                   type="button"
@@ -1003,11 +991,24 @@ export function ThreadDetailView() {
                     updateThread.isPending ||
                     (managerSelectorOptions.length <= 1 && managerSelectorValue === "none")
                   }
-                  className="h-7 w-7 shrink-0 border-none bg-transparent p-0 text-muted-foreground shadow-none hover:bg-transparent hover:text-foreground"
+                  className="h-8 w-fit max-w-full min-w-0 items-center gap-1 border-none bg-transparent px-0 text-xs leading-tight text-foreground shadow-none hover:bg-transparent hover:text-foreground"
                 >
-                  <ChevronDown className="size-3.5" />
+                  <span className="truncate">
+                    {selectedManagerOption?.label ?? "None"}
+                  </span>
+                  <ChevronDown className="size-3.5 text-muted-foreground" />
                 </Button>
               </DropdownMenuTrigger>
+              {parentThreadId ? (
+                <Link
+                  to={`/projects/${projectId}/threads/${parentThreadId}`}
+                  className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-opacity hover:bg-accent/45 hover:text-foreground group-hover/manager-picker:opacity-100 focus-visible:opacity-100"
+                  aria-label="Open manager thread"
+                  title="Open manager thread"
+                >
+                  <ArrowUpRight className="size-3.5" />
+                </Link>
+              ) : null}
             </div>
             <DropdownMenuContent align="start" className="min-w-40 max-w-72">
               {managerSelectorOptions.map((option) => (
