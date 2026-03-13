@@ -724,6 +724,9 @@ export function ThreadDetailView() {
     thread.id,
   ]);
   const managerSelectorValue = parentThreadId ?? "none";
+  const selectedManagerOption = managerSelectorOptions.find(
+    (option) => option.value === managerSelectorValue,
+  );
   const isPrimaryCheckoutActive = thread.primaryCheckout?.isActive === true;
   const isPrimaryCheckoutMutationPending = promoteThread.isPending || demotePrimaryCheckout.isPending;
   const primaryCheckoutActionLabel = isPrimaryCheckoutActive
@@ -978,24 +981,34 @@ export function ThreadDetailView() {
           valueClassName="min-w-0"
         >
           <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                disabled={
-                  updateThread.isPending ||
-                  (managerSelectorOptions.length <= 1 && managerSelectorValue === "none")
-                }
-                className="h-8 w-fit max-w-full min-w-0 items-center gap-1 border-none bg-transparent px-0 text-xs leading-tight text-foreground shadow-none hover:bg-transparent hover:text-foreground"
-              >
-                <span className="truncate">
-                  {managerSelectorOptions.find((option) => option.value === managerSelectorValue)
-                    ?.label ?? "None"}
+            <div className="flex min-w-0 items-center gap-1">
+              {parentThreadId ? (
+                <Link
+                  to={`/projects/${projectId}/threads/${parentThreadId}`}
+                  className="min-w-0 truncate text-xs text-foreground underline underline-offset-2"
+                >
+                  {selectedManagerOption?.label ?? "Manager"}
+                </Link>
+              ) : (
+                <span className="min-w-0 truncate text-xs text-foreground">
+                  {selectedManagerOption?.label ?? "None"}
                 </span>
-                <ChevronDown className="size-3.5 text-muted-foreground" />
-              </Button>
-            </DropdownMenuTrigger>
+              )}
+              <DropdownMenuTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  disabled={
+                    updateThread.isPending ||
+                    (managerSelectorOptions.length <= 1 && managerSelectorValue === "none")
+                  }
+                  className="h-7 w-7 shrink-0 border-none bg-transparent p-0 text-muted-foreground shadow-none hover:bg-transparent hover:text-foreground"
+                >
+                  <ChevronDown className="size-3.5" />
+                </Button>
+              </DropdownMenuTrigger>
+            </div>
             <DropdownMenuContent align="start" className="min-w-40 max-w-72">
               {managerSelectorOptions.map((option) => (
                 <DropdownMenuItem
