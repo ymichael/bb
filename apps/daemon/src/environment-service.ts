@@ -28,6 +28,7 @@ import {
   resolveProjectCheckoutSnapshotAsync,
   resolveProjectDefaultBranchCheckoutAsync,
 } from "./git-project.js";
+import { derivePersistedEnvironmentRecordFromDescriptor } from "./env-factory.js";
 
 export interface ActiveEnvironmentRuntime {
   ownerThreadId: string;
@@ -128,7 +129,7 @@ export class EnvironmentService {
     const environmentRecord = this.environmentRepo?.getById(attachment.environmentId);
     return {
       environmentId: attachment.environmentId,
-      preserveWorkspace: siblingAttachments.length > 0,
+      preserveWorkspace: siblingAttachments.length > 0 || !(environmentRecord?.managed ?? false),
       managed: environmentRecord?.managed ?? false,
     };
   }
@@ -153,6 +154,18 @@ export class EnvironmentService {
     const attachedEnvironment = this.resolveAttachedEnvironment(threadId);
     if (!attachedEnvironment || !this.threadEnvironmentAttachmentRepo) {
       return undefined;
+    }
+    const attachedEnvironmentRecord = this.environmentRepo?.getById(attachedEnvironment.environmentId);
+    if (attachedEnvironmentRecord) {
+      const derivedRecord = derivePersistedEnvironmentRecordFromDescriptor({
+        descriptor: attachedEnvironmentRecord.descriptor,
+        projectRootPath:
+          this.projectRepo.getById(attachedEnvironmentRecord.projectId)?.rootPath ??
+          attachedEnvironmentRecord.descriptor.path,
+      });
+      if (derivedRecord) {
+        return derivedRecord;
+      }
     }
     const siblingAttachments = this.threadEnvironmentAttachmentRepo.listByEnvironmentId(
       attachedEnvironment.environmentId,

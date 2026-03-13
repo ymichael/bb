@@ -1,5 +1,7 @@
+import { execFileSync } from "node:child_process";
 import { resolve } from "node:path";
 import type { IEnvironment } from "@beanbag/environment";
+import type { EnvironmentDescriptor, PersistedEnvironmentRecord } from "@beanbag/agent-core";
 import type {
   EnvironmentRepository,
   ThreadEnvironmentAttachmentRepository,
@@ -67,4 +69,43 @@ export class EnvironmentFactory {
     });
 
   }
+}
+
+function readGitBranchName(path: string): string | undefined {
+  try {
+    const output = execFileSync("git", ["-C", path, "branch", "--show-current"], {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+    return output.length > 0 ? output : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export function derivePersistedEnvironmentRecordFromDescriptor(args: {
+  descriptor: EnvironmentDescriptor;
+  projectRootPath: string;
+}): PersistedEnvironmentRecord | undefined {
+  const workspaceRoot = resolve(args.descriptor.path);
+  const projectRoot = resolve(args.projectRootPath);
+  if (workspaceRoot === projectRoot) {
+    return {
+      kind: "local",
+      state: {},
+    };
+  }
+
+  const branchName = readGitBranchName(workspaceRoot);
+  if (!branchName) {
+    return undefined;
+  }
+
+  return {
+    kind: "worktree",
+    state: {
+      workspaceRoot,
+      branchName,
+    },
+  };
 }
