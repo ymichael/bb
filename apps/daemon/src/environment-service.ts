@@ -611,14 +611,36 @@ export class EnvironmentService {
 
   private clearPersistedEnvironmentState(threadId: string): void {
     const attachment = this.threadEnvironmentAttachmentRepo?.getByThreadId(threadId);
-    this.threadRepo.update(
-      threadId,
-      {
-        environmentId: null,
-      },
-      { touchUpdatedAt: false },
-    );
-    this.threadEnvironmentAttachmentRepo?.deleteByThreadId(threadId);
+    const thread = this.threadRepo.getById(threadId);
+    const projectRootPath = thread
+      ? this.projectRepo.getById(thread.projectId)?.rootPath
+      : undefined;
+    const attachedEnvironmentRecord = attachment
+      ? this.environmentRepo?.getById(attachment.environmentId)
+      : undefined;
+    const fallbackEnvironmentId = (() => {
+      if (!attachment || !attachedEnvironmentRecord?.managed) {
+        return null;
+      }
+      const runtimeKind = attachedEnvironmentRecord.runtimeState?.kind?.trim();
+      if (runtimeKind && this.environmentRegistry.has(runtimeKind)) {
+        return runtimeKind;
+      }
+      if (!projectRootPath) {
+        return null;
+      }
+      const derivedRecord = derivePersistedEnvironmentRecordFromDescriptor({
+        descriptor: attachedEnvironmentRecord.descriptor,
+        projectRootPath,
+      });
+      if (derivedRecord?.kind && this.environmentRegistry.has(derivedRecord.kind)) {
+        return derivedRecord.kind;
+      }
+      return null;
+    })();
+    this.threadEnvironmentAttachmentRepo?.deleteByThreadId(threadId, {
+      nextThreadEnvironmentId: fallbackEnvironmentId,
+    });
     if (attachment) {
       const remainingAttachments = this.threadEnvironmentAttachmentRepo?.listByEnvironmentId(
         attachment.environmentId,

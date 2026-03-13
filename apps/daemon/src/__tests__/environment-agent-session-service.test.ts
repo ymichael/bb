@@ -5,6 +5,7 @@ import {
   migrate,
   EnvironmentAgentCommandRepository,
   EnvironmentAgentCursorRepository,
+  EnvironmentRepository,
   type EnvironmentAgentSessionRecord,
   EnvironmentAgentSessionRepository,
   ProjectRepository,
@@ -32,6 +33,7 @@ describe("EnvironmentAgentSessionService", () => {
   let sqlite: SqliteClient;
   let projects: ProjectRepository;
   let threads: ThreadRepository;
+  let environments: EnvironmentRepository;
   let sessions: EnvironmentAgentSessionRepository;
   let cursors: EnvironmentAgentCursorRepository;
   let commands: EnvironmentAgentCommandRepository;
@@ -44,6 +46,7 @@ describe("EnvironmentAgentSessionService", () => {
     sqlite = sqliteClient(db);
     projects = new ProjectRepository(db);
     threads = new ThreadRepository(db);
+    environments = new EnvironmentRepository(db);
     sessions = new EnvironmentAgentSessionRepository(db);
     cursors = new EnvironmentAgentCursorRepository(db);
     commands = new EnvironmentAgentCommandRepository(db);
@@ -157,6 +160,67 @@ describe("EnvironmentAgentSessionService", () => {
           sequenceExclusive: 0,
         },
       },
+    ]);
+  });
+
+  it("lists only thread-owned history plus the active shared environment session", () => {
+    const threadId = createThreadId();
+    const siblingThreadId = createThreadId();
+    const projectId = threads.getById(threadId)?.projectId;
+    if (!projectId) {
+      throw new Error("Missing project for thread");
+    }
+    const sharedEnvironment = environments.create({
+      projectId,
+      descriptor: {
+        type: "path",
+        path: "/tmp/daemon-session-service-project/.worktrees/env-shared",
+      },
+      managed: true,
+    });
+    const sharedService = new EnvironmentAgentSessionService(
+      new EnvironmentAgentSessionManager(sessions),
+      cursors,
+      {
+        clock: () => TEST_LEASE_NOW,
+        resolveEnvironmentId: (candidateThreadId) =>
+          candidateThreadId === threadId || candidateThreadId === siblingThreadId
+            ? sharedEnvironment.id
+            : undefined,
+      },
+    );
+
+    const ownedSession = sharedService.openSession({
+      threadId,
+      now: 1_000,
+      payload: {
+        agentId: "agent-1",
+        agentInstanceId: "instance-1",
+        supportedProtocolVersions: [1],
+        channels: [{ channelId: threadId, generation: 1 }],
+      },
+    }).session;
+    sharedService.closeSession({
+      threadId,
+      sessionId: ownedSession.id,
+      reason: "agent_shutdown",
+      now: 2_000,
+    });
+
+    const siblingSession = sharedService.openSession({
+      threadId: siblingThreadId,
+      now: 3_000,
+      payload: {
+        agentId: "agent-2",
+        agentInstanceId: "instance-2",
+        supportedProtocolVersions: [1],
+        channels: [{ channelId: siblingThreadId, generation: 1 }],
+      },
+    }).session;
+
+    expect(sharedService.listSessions(threadId)).toMatchObject([
+      { id: siblingSession.id, threadId: siblingThreadId, status: "active" },
+      { id: ownedSession.id, threadId, status: "closed" },
     ]);
   });
 

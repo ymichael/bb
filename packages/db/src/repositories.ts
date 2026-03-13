@@ -648,21 +648,26 @@ export class ThreadEnvironmentAttachmentRepository {
       .map((row) => this.rowToAttachment(row));
   }
 
-  deleteByThreadId(threadId: string, opts?: { connection?: DbExecutor }): void {
+  deleteByThreadId(
+    threadId: string,
+    opts?: { connection?: DbExecutor; nextThreadEnvironmentId?: string | null },
+  ): void {
     const db = opts?.connection ?? this.db;
     const now = Date.now();
     db
       .delete(threadEnvironmentAttachments)
       .where(eq(threadEnvironmentAttachments.threadId, threadId))
       .run();
-    db
-      .update(threads)
-      .set({
-        environmentId: null,
-        updatedAt: now,
-      })
-      .where(eq(threads.id, threadId))
-      .run();
+    if (Object.hasOwn(opts ?? {}, "nextThreadEnvironmentId")) {
+      db
+        .update(threads)
+        .set({
+          environmentId: opts?.nextThreadEnvironmentId ?? null,
+          updatedAt: now,
+        })
+        .where(eq(threads.id, threadId))
+        .run();
+    }
   }
 
   private rowToAttachment(

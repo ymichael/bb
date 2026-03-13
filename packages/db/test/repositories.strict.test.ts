@@ -275,6 +275,31 @@ describe("repository strict normalization", () => {
     expect(updated.updatedAt).toBeGreaterThanOrEqual(initial.updatedAt);
   });
 
+  it("can preserve a fallback thread environment id when removing an attachment", () => {
+    const projectId = createProjectId();
+    const environment = environments.create({
+      projectId,
+      descriptor: {
+        type: "path",
+        path: "/tmp/test-project/.worktrees/thread-1",
+      },
+      managed: true,
+    });
+    const thread = threads.create({ projectId });
+
+    attachments.attachThread({
+      threadId: thread.id,
+      environmentId: environment.id,
+    });
+
+    attachments.deleteByThreadId(thread.id, {
+      nextThreadEnvironmentId: "worktree",
+    });
+
+    expect(attachments.getByThreadId(thread.id)).toBeUndefined();
+    expect(threads.getById(thread.id)?.environmentId).toBe("worktree");
+  });
+
   it("lists only non-archived active threads with persisted environments", () => {
     const projectId = createProjectId();
     const active = threads.create({

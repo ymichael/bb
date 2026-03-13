@@ -365,7 +365,16 @@ export class EnvironmentAgentSessionService {
   listSessions(threadId: string): EnvironmentAgentSessionRecord[] {
     const environmentId = this.getResolvedEnvironmentId(threadId);
     if (environmentId) {
-      return this.sessions.listSessionsByEnvironmentId(environmentId);
+      const sessions = this.sessions.listSessionsByEnvironmentId(environmentId);
+      const visibleSessions = sessions.filter((session) => session.threadId === threadId);
+      const activeSharedSession = sessions.find((session) => session.status === "active");
+      if (
+        activeSharedSession &&
+        !visibleSessions.some((session) => session.id === activeSharedSession.id)
+      ) {
+        visibleSessions.unshift(activeSharedSession);
+      }
+      return visibleSessions;
     }
     return this.sessions.listSessionsByThreadId(threadId);
   }
@@ -396,7 +405,8 @@ export class EnvironmentAgentSessionService {
     payload: EnvironmentAgentSessionEventBatchPayload;
     now?: number;
   }): Promise<EnvironmentAgentSessionEventAckMessage> {
-    if (!this.eventApplier) {
+    const eventApplier = this.eventApplier;
+    if (!eventApplier) {
       throw new Error("Environment-agent session event apply is unavailable");
     }
 
@@ -410,7 +420,7 @@ export class EnvironmentAgentSessionService {
           );
         }
         const daemonCursor = this.cursors.getByThreadId(batch.channelId);
-        const result = await this.eventApplier.applyChannelBatch({
+        const result = await eventApplier.applyChannelBatch({
           threadId: batch.channelId,
           batch,
           now,

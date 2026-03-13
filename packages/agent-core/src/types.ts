@@ -264,6 +264,7 @@ export type ThreadProvisioningReason =
   | "thread-created"
   | "boot-created-thread"
   | "tell-after-provisioning-failure"
+  | "tell-after-missing-environment-attachment"
   | "resume-missing-provider-thread";
 
 export type ThreadEnvironmentStartReason =

@@ -1164,6 +1164,33 @@ export class Orchestrator implements ThreadOrchestrator {
     ) {
       throw threadProvisioningError(threadId);
     }
+    const attachedEnvironmentId = this.threadEnvironmentAttachmentRepo
+      ?.getByThreadId(threadId)
+      ?.environmentId;
+    const requestedEnvironmentId = thread.environmentId?.trim();
+    if (
+      !attachedEnvironmentId &&
+      requestedEnvironmentId &&
+      requestedEnvironmentId !== "local" &&
+      this.environmentRegistry.has(requestedEnvironmentId)
+    ) {
+      this._scheduleProvisioning(
+        threadId,
+        {
+          projectId: thread.projectId,
+          input: requestedInput,
+          model: options?.model,
+          serviceTier: options?.serviceTier,
+          reasoningLevel: options?.reasoningLevel,
+          sandboxMode: options?.sandboxMode,
+          environmentId: requestedEnvironmentId,
+        },
+        {
+          reason: "tell-after-missing-environment-attachment",
+        },
+      );
+      return;
+    }
     if (thread.status === "provisioning_failed") {
       this._scheduleProvisioning(
         threadId,
@@ -4049,11 +4076,6 @@ export class Orchestrator implements ThreadOrchestrator {
     if (!thread) {
       throw threadNotFoundError(threadId);
     }
-    if (!persistedThreadId) {
-      throw inactiveSessionError(
-        this._getAgentServerForThread(thread).getInactiveSessionMessage(threadId),
-      );
-    }
     if (thread.archivedAt !== undefined) {
       throw threadArchivedError(threadId);
     }
@@ -4061,6 +4083,11 @@ export class Orchestrator implements ThreadOrchestrator {
     const project = this.projectRepo.getById(thread.projectId);
     if (!project) {
       throw projectNotFoundError(thread.projectId);
+    }
+    if (!persistedThreadId) {
+      throw inactiveSessionError(
+        this._getAgentServerForThread(thread).getInactiveSessionMessage(threadId),
+      );
     }
 
     let lastResumeError: unknown;
