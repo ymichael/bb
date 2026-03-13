@@ -68,9 +68,11 @@ Fast setup wrapper:
 node scripts/qa/start-standalone-daemon-qa.mjs
 ```
 
-That creates a disposable repo + Beanbag root, starts the standalone daemon, creates a project, and prints the resulting `daemonUrl`, `projectId`, paths, daemon PID, exact Node runtime details, and a ready-to-run `relaunchCommand` as JSON.
+That creates a disposable repo + Beanbag root, starts the standalone daemon, creates a project, and prints the resulting `daemonUrl`, `projectId`, paths, daemon PID, exact Node runtime details, a ready-to-run `relaunchCommand`, and a `cleanupCommand` as JSON.
 
 Keep the reported `nodePath`, `nodeVersion`, and `nodeAbi` with your QA notes. If you later relaunch the daemon under a different Node ABI, native modules such as `better-sqlite3` can fail before Beanbag finishes booting.
+
+When you finish the pass, run the reported `cleanupCommand` to stop the detached daemon and remove the disposable temp root.
 
 Manual setup:
 

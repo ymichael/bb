@@ -1,12 +1,12 @@
 import { execFileSync, spawn } from "node:child_process";
 import { appendFileSync, existsSync, mkdtempSync, mkdirSync, readdirSync, rmSync, statSync } from "node:fs";
 import { createServer as createNetServer } from "node:net";
-import { tmpdir } from "node:os";
 import { delimiter, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect } from "vitest";
 import { createProject, listThreadEvents, waitForThreadCondition } from "./environment-agent-api.js";
 import { createFakeCodexBinDir } from "./fake-codex.js";
+import { beanbagTestTmpPrefix } from "./temp-root.js";
 import { runCliCommand, withFakeE2eEnvironmentAgentTimingEnv } from "./harness.js";
 
 type EnvironmentId = "local" | "worktree";
@@ -190,7 +190,9 @@ async function waitForTurnStarted(baseUrl: string, threadId: string): Promise<vo
 }
 
 async function runBlockedRestartScenario(environmentId: EnvironmentId): Promise<void> {
-  const tempDir = mkdtempSync(join(tmpdir(), `beanbag-standalone-blocked-${environmentId}-`));
+  const tempDir = mkdtempSync(
+    beanbagTestTmpPrefix(`beanbag-standalone-blocked-${environmentId}-`),
+  );
   const beanbagRoot = join(tempDir, "beanbag-root");
   const projectRoot = join(tempDir, "project");
   mkdirSync(beanbagRoot, { recursive: true });

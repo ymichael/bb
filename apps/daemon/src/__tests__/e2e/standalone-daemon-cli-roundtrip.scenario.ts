@@ -1,7 +1,6 @@
 import { execFileSync, spawn } from "node:child_process";
 import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, statSync } from "node:fs";
 import { createServer as createNetServer } from "node:net";
-import { tmpdir } from "node:os";
 import { delimiter, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect } from "vitest";
@@ -13,6 +12,7 @@ import {
   waitForThreadStatus,
 } from "./environment-agent-api.js";
 import { createFakeCodexBinDir } from "./fake-codex.js";
+import { beanbagTestTmpPrefix } from "./temp-root.js";
 import {
   runCliCommand,
   type CliRunResult,
@@ -283,7 +283,9 @@ async function expectCliSuccess(resultPromise: Promise<CliRunResult>): Promise<C
 async function runEnvironmentBattery(
   environmentId: EnvironmentId,
 ): Promise<void> {
-  const tempDir = mkdtempSync(join(tmpdir(), `beanbag-standalone-daemon-${environmentId}-`));
+  const tempDir = mkdtempSync(
+    beanbagTestTmpPrefix(`beanbag-standalone-daemon-${environmentId}-`),
+  );
   const beanbagRoot = join(tempDir, "beanbag-root");
   const projectRoot = join(tempDir, "project");
   mkdirSync(beanbagRoot, { recursive: true });

@@ -134,6 +134,16 @@ async function main() {
 
   await waitForHealth(daemonUrl);
   const project = await createProject(daemonUrl, projectName, projectRoot);
+  const cleanupCommand = [
+    `"${process.execPath}"`,
+    `"${resolve(workspaceRoot, "scripts", "qa", "stop-standalone-daemon-qa.mjs")}"`,
+    "--pid",
+    String(daemonChild.pid),
+    "--tmp-root",
+    `"${tmpRoot}"`,
+    "--beanbag-root",
+    `"${beanbagRoot}"`,
+  ].join(" ");
 
   console.log(JSON.stringify({
     tmpRoot,
@@ -148,6 +158,7 @@ async function main() {
     daemonLogPath: join(beanbagRoot, "logs", "daemon.log"),
     projectId: project.id,
     relaunchCommand,
+    cleanupCommand,
   }, null, 2));
 }
 
