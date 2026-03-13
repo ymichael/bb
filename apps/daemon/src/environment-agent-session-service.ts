@@ -49,7 +49,6 @@ const DEFAULT_COMMAND_LONG_POLL_TIMEOUT_MS = 10_000;
 const DEFAULT_COMMAND_LONG_POLL_INTERVAL_MS = 100;
 
 function cursorForReply(args: {
-  threadId: string;
   batchGeneration: number;
   acknowledgedCursor?: EnvironmentAgentCursorPosition;
   daemonCursor?: EnvironmentAgentCursorPosition;
@@ -162,6 +161,22 @@ export class EnvironmentAgentSessionService {
     return this.resolveEnvironmentId?.(threadId);
   }
 
+  private listAllowedChannelIds(threadId: string): string[] {
+    const environmentId = this.getResolvedEnvironmentId(threadId);
+    if (!environmentId) {
+      return [threadId];
+    }
+    const attachedThreadIds = this.listAttachedThreadIds?.(environmentId) ?? [];
+    if (attachedThreadIds.length === 0) {
+      return [threadId];
+    }
+    return attachedThreadIds;
+  }
+
+  private isAllowedChannelId(threadId: string, channelId: string): boolean {
+    return this.listAllowedChannelIds(threadId).includes(channelId);
+  }
+
   private getActiveSessionForThread(
     threadId: string,
     now: number = this.clock(),
@@ -204,10 +219,6 @@ export class EnvironmentAgentSessionService {
         `Missing environment-agent channel bootstrap for thread ${args.threadId}`,
       );
     }
-    if (args.payload.channels.length !== 1) {
-      throw new Error("Multi-channel environment-agent sessions are not supported yet");
-    }
-
     const environmentId = this.getResolvedEnvironmentId(args.threadId);
     const opened = this.sessions.openSession({
       threadId: args.threadId,
@@ -224,13 +235,9 @@ export class EnvironmentAgentSessionService {
       this.invalidateSession(opened.replaced);
     }
 
-    let cursor = this.cursors.getByThreadId(args.threadId);
-    if (cursor && channel.lastDaemonAcked === undefined) {
-      // A fresh environment-agent process has no local delivery state, so the
-      // daemon cursor must be reset to accept the restarted event stream.
-      this.cursors.deleteByThreadId(args.threadId);
-      cursor = undefined;
-    }
+    const bootstrapByChannelId = new Map(
+      args.payload.channels.map((bootstrap) => [bootstrap.channelId, bootstrap] as const),
+    );
     return {
       ...(opened.replaced ? { replaced: opened.replaced } : {}),
       session: opened.active,
@@ -244,15 +251,23 @@ export class EnvironmentAgentSessionService {
           leaseTtlMs: this.leaseTtlMs,
           heartbeatIntervalMs: this.heartbeatIntervalMs,
           protocolVersion: ENVIRONMENT_AGENT_SESSION_PROTOCOL_VERSION,
-          channels: [
-            {
-              channelId: args.threadId,
+          channels: this.listAllowedChannelIds(args.threadId).map((channelId) => {
+            const bootstrap = bootstrapByChannelId.get(channelId);
+            let cursor = this.cursors.getByThreadId(channelId);
+            if (cursor && bootstrap?.lastDaemonAcked === undefined) {
+              // A fresh environment-agent process has no local delivery state, so the
+              // daemon cursor must be reset to accept the restarted event stream.
+              this.cursors.deleteByThreadId(channelId);
+              cursor = undefined;
+            }
+            return {
+              channelId,
               applyFrom: {
-                generation: cursor?.generation ?? channel.generation,
+                generation: cursor?.generation ?? bootstrap?.generation ?? 1,
                 sequenceExclusive: cursor?.sequence ?? 0,
               },
-            },
-          ],
+            };
+          }),
         },
       },
     };
@@ -387,70 +402,45 @@ export class EnvironmentAgentSessionService {
 
     const session = this.requireActiveSession(args.threadId, args.sessionId);
     const now = args.now ?? this.clock();
-    const daemonCursor = this.cursors.getByThreadId(args.threadId);
-    if (args.payload.batches.length !== 1) {
-      throw new Error("Multi-channel environment-agent event batches are not supported yet");
-    }
-
-    const batch = args.payload.batches[0]!;
-    return this.eventApplier.applyChannelBatch({
-      threadId: args.threadId,
-      batch,
-      now,
-    }).then((result) => {
-      if (result.blockedReason === "gap") {
-        const ackedThrough = cursorForReply({
-          threadId: args.threadId,
-          batchGeneration: batch.generation,
-          acknowledgedCursor: result.acknowledgedCursor,
-          daemonCursor: daemonCursor
-            ? { generation: daemonCursor.generation, sequence: daemonCursor.sequence }
-            : undefined,
+    return Promise.all(
+      args.payload.batches.map(async (batch) => {
+        if (!this.isAllowedChannelId(args.threadId, batch.channelId)) {
+          throw new Error(
+            `Environment-agent batch channel mismatch for thread ${batch.channelId}`,
+          );
+        }
+        const daemonCursor = this.cursors.getByThreadId(batch.channelId);
+        const result = await this.eventApplier.applyChannelBatch({
+          threadId: batch.channelId,
+          batch,
+          now,
         });
+        if (result.blockedReason === "invalid_channel") {
+          throw new Error(
+            `Environment-agent batch channel mismatch for thread ${batch.channelId}`,
+          );
+        }
         return {
-          protocol: ENVIRONMENT_AGENT_SESSION_PROTOCOL,
-          type: "event_ack",
-          messageId: randomUUID(),
-          sessionId: session.id,
-          sentAt: now,
-          payload: {
-            channels: [
-              {
-                channelId: args.threadId,
-                ackedThrough,
-              },
-            ],
-          },
+          channelId: batch.channelId,
+          ackedThrough: cursorForReply({
+            batchGeneration: batch.generation,
+            acknowledgedCursor: result.acknowledgedCursor,
+            daemonCursor: daemonCursor
+              ? { generation: daemonCursor.generation, sequence: daemonCursor.sequence }
+              : undefined,
+          }),
         };
-      }
-
-      if (result.blockedReason === "invalid_channel") {
-        throw new Error(`Environment-agent batch channel mismatch for thread ${args.threadId}`);
-      }
-
-      return {
-        protocol: ENVIRONMENT_AGENT_SESSION_PROTOCOL,
-        type: "event_ack",
-        messageId: randomUUID(),
-        sessionId: session.id,
-        sentAt: now,
-        payload: {
-          channels: [
-            {
-              channelId: args.threadId,
-              ackedThrough: cursorForReply({
-                threadId: args.threadId,
-                batchGeneration: batch.generation,
-                acknowledgedCursor: result.acknowledgedCursor,
-                daemonCursor: daemonCursor
-                  ? { generation: daemonCursor.generation, sequence: daemonCursor.sequence }
-                  : undefined,
-              }),
-            },
-          ],
-        },
-      };
-    });
+      }),
+    ).then((channels) => ({
+      protocol: ENVIRONMENT_AGENT_SESSION_PROTOCOL,
+      type: "event_ack",
+      messageId: randomUUID(),
+      sessionId: session.id,
+      sentAt: now,
+      payload: {
+        channels,
+      },
+    }));
   }
 
   listCommands(args: {
