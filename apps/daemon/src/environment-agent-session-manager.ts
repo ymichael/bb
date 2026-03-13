@@ -67,7 +67,7 @@ export class EnvironmentAgentSessionManager {
     const now = args.now ?? Date.now();
     if (args.environmentId) {
       const existing = this.sessions.getActiveByEnvironmentId(args.environmentId, now);
-      if (existing && existing.threadId !== args.threadId) {
+      if (existing && existing.agentInstanceId === args.agentInstanceId) {
         return { active: existing };
       }
     }

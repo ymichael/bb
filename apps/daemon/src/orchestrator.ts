@@ -3870,8 +3870,8 @@ export class Orchestrator implements ThreadOrchestrator {
       },
       managedEnvironmentAgentReconnectTarget: (() => {
         const session = attachedEnvironmentId
-          ? this.environmentAgentSessionRepo?.getLatestByEnvironmentId(attachedEnvironmentId)
-          : this.environmentAgentSessionRepo?.getLatestByThreadId(threadId);
+          ? this.environmentAgentSessionRepo?.getActiveByEnvironmentId(attachedEnvironmentId)
+          : this.environmentAgentSessionRepo?.getActiveByThreadId(threadId);
         if (!session?.controlBaseUrl) {
           return undefined;
         }

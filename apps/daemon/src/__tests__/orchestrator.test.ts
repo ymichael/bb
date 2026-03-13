@@ -759,6 +759,81 @@ describe("Orchestrator", () => {
         includeUnstaged: true,
       });
     });
+
+    it("does not reconnect to an expired shared environment-agent session target", () => {
+      const thread = makeThread({
+        id: "thread-2",
+        projectId: "proj-1",
+        status: "idle",
+      });
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockImplementation((threadId: string) =>
+        threadId === thread.id ? thread : undefined,
+      );
+      const attachmentRepo = {
+        getByThreadId: vi.fn((threadId: string) =>
+          threadId === thread.id
+            ? { threadId, environmentId: "env-1", createdAt: 1_000, updatedAt: 1_000 }
+            : undefined,
+        ),
+      };
+      const sessionRepo = {
+        getActiveByEnvironmentId: vi.fn(() => undefined),
+        getActiveByThreadId: vi.fn(() => undefined),
+        getLatestByEnvironmentId: vi.fn(() => ({
+          id: "session-1",
+          threadId: "thread-1",
+          environmentId: "env-1",
+          agentId: "environment-agent:thread-1",
+          agentInstanceId: "instance-1",
+          protocolVersion: 1,
+          controlBaseUrl: "http://127.0.0.1:4315",
+          controlAuthToken: "token-1",
+          status: "expired",
+          leaseExpiresAt: Date.now() - 1,
+          closeReason: "lease_expired",
+          createdAt: 1,
+          updatedAt: 2,
+        })),
+        getLatestByThreadId: vi.fn(() => undefined),
+      };
+
+      manager = new Orchestrator(
+        threadRepo,
+        eventRepo,
+        projectRepo,
+        ws,
+        llmCompletionService,
+        undefined,
+        createTestRuntimeEnv(),
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        sessionRepo as never,
+        undefined,
+        attachmentRepo as never,
+      );
+
+      const context = (
+        manager as unknown as {
+          _createEnvironmentContext: (
+            threadId: string,
+            projectRootPath: string,
+          ) => {
+            managedEnvironmentAgentReconnectTarget?: {
+              baseUrl: string;
+              authToken?: string;
+            };
+          };
+        }
+      )._createEnvironmentContext(thread.id, "/tmp/proj-1");
+
+      expect(context.managedEnvironmentAgentReconnectTarget).toBeUndefined();
+      expect(sessionRepo.getActiveByEnvironmentId).toHaveBeenCalledWith("env-1");
+      expect(sessionRepo.getLatestByEnvironmentId).not.toHaveBeenCalled();
+    });
   });
 
   describe("boot status healing", () => {

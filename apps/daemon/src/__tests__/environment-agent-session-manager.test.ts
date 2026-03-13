@@ -178,7 +178,7 @@ describe("EnvironmentAgentSessionManager", () => {
     });
   });
 
-  it("reuses active sessions across sibling threads sharing one environment", () => {
+  it("replaces the active shared session when a new env-daemon instance opens it", () => {
     const project = createProject();
     const firstThreadId = createThreadId(project.id);
     const secondThreadId = createThreadId(project.id);
@@ -205,13 +205,53 @@ describe("EnvironmentAgentSessionManager", () => {
       now: 2_000,
     });
 
-    expect(second.replaced).toBeUndefined();
-    expect(manager.getActiveSessionByEnvironmentId(environmentId, 2_500)).toMatchObject({
+    expect(second.replaced).toMatchObject({
       id: first.active.id,
+      status: "replaced",
+      closeReason: "newer_session",
       threadId: firstThreadId,
+    });
+    expect(manager.getActiveSessionByEnvironmentId(environmentId, 2_500)).toMatchObject({
+      id: second.active.id,
+      threadId: secondThreadId,
       environmentId,
       status: "active",
     });
+    expect(second.active).toMatchObject({
+      threadId: secondThreadId,
+      environmentId,
+      status: "active",
+    });
+  });
+
+  it("reuses the existing shared session when the same env-daemon instance reopens it", () => {
+    const project = createProject();
+    const firstThreadId = createThreadId(project.id);
+    const secondThreadId = createThreadId(project.id);
+    const environmentId = attachThreadToEnvironment(firstThreadId);
+    attachments.attachThread({ threadId: secondThreadId, environmentId });
+
+    const first = manager.openSession({
+      threadId: firstThreadId,
+      environmentId,
+      agentId: "agent-shared",
+      agentInstanceId: "instance-1",
+      protocolVersion: 1,
+      leaseTtlMs: 10_000,
+      now: 1_000,
+    });
+
+    const second = manager.openSession({
+      threadId: secondThreadId,
+      environmentId,
+      agentId: "agent-shared",
+      agentInstanceId: "instance-1",
+      protocolVersion: 1,
+      leaseTtlMs: 10_000,
+      now: 2_000,
+    });
+
+    expect(second.replaced).toBeUndefined();
     expect(second.active).toMatchObject({
       id: first.active.id,
       threadId: firstThreadId,
