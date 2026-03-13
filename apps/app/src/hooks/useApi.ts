@@ -998,11 +998,13 @@ export function useDeleteThread() {
     onMutate: async (args) => {
       await queryClient.cancelQueries({ queryKey: ["thread", args.id] });
       await queryClient.cancelQueries({ queryKey: ["threads"] });
+      await queryClient.cancelQueries({ queryKey: ["projects"] });
 
       const previousThread = queryClient.getQueryData<Thread>(["thread", args.id]);
       const previousThreadLists = queryClient.getQueriesData<Thread[]>({
         queryKey: ["threads"],
       });
+      const previousProjects = queryClient.getQueryData<Project[]>(["projects"]);
 
       queryClient.removeQueries({ queryKey: ["thread", args.id] });
       queryClient.removeQueries({ queryKey: ["threadTimeline", args.id] });
@@ -1018,7 +1020,7 @@ export function useDeleteThread() {
         );
       }
 
-      return { previousThread, previousThreadLists };
+      return { previousThread, previousThreadLists, previousProjects };
     },
     onError: (_error, args, context) => {
       if (!context) return;
@@ -1027,6 +1029,7 @@ export function useDeleteThread() {
       for (const [queryKey, data] of context.previousThreadLists) {
         queryClient.setQueryData(queryKey, data);
       }
+      queryClient.setQueryData(["projects"], context.previousProjects);
     },
     onSettled: (_data, _error, args) => {
       queryClient.removeQueries({ queryKey: ["thread", args.id] });
@@ -1034,6 +1037,7 @@ export function useDeleteThread() {
       queryClient.removeQueries({ queryKey: ["threadWorkStatus", args.id] });
       queryClient.removeQueries({ queryKey: ["threadGitDiff", args.id] });
       queryClient.removeQueries({ queryKey: ["threadMergeBaseBranches", args.id] });
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
       queryClient.invalidateQueries({ queryKey: ["threads"] });
       queryClient.invalidateQueries({ queryKey: ["status"] });
     },
