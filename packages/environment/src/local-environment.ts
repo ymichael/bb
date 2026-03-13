@@ -164,6 +164,14 @@ class LocalEnvironment implements IEnvironment {
     return this.rootPath;
   }
 
+  isPrimaryWorkspace(projectRootPath: string): boolean {
+    return this.rootPath === projectRootPath;
+  }
+
+  isContainerBacked(): boolean {
+    return false;
+  }
+
   buildAgentInstructions(): string | undefined {
     return undefined;
   }

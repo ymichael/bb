@@ -427,6 +427,14 @@ class WorktreeEnvironment implements IEnvironment {
     return this.rootPath;
   }
 
+  isPrimaryWorkspace(projectRootPath: string): boolean {
+    return resolve(this.rootPath) === resolve(projectRootPath);
+  }
+
+  isContainerBacked(): boolean {
+    return false;
+  }
+
   buildAgentInstructions(): string | undefined {
     return WORKTREE_AGENT_INSTRUCTIONS;
   }

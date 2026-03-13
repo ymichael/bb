@@ -75,6 +75,8 @@ export interface IEnvironment {
   getCheckoutSnapshot(): EnvironmentCheckoutSnapshot;
   getCheckoutSnapshotAsync?(): Promise<EnvironmentCheckoutSnapshot>;
   getWorkspaceRootUnsafe(): string;
+  isPrimaryWorkspace?(projectRootPath: string): boolean;
+  isContainerBacked?(): boolean;
   buildAgentInstructions?(): string | undefined;
   getWorkspaceStatus(args?: EnvironmentWorkspaceStatusOptions): EnvironmentWorkStatus;
   getWorkspaceStatusAsync?(

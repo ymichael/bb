@@ -282,6 +282,16 @@ class DockerEnvironment implements IEnvironment {
     return this.inner.getWorkspaceRootUnsafe();
   }
 
+  isPrimaryWorkspace(projectRootPath: string): boolean {
+    return this.inner.isPrimaryWorkspace
+      ? this.inner.isPrimaryWorkspace(projectRootPath)
+      : path.resolve(this.getWorkspaceRootUnsafe()) === path.resolve(projectRootPath);
+  }
+
+  isContainerBacked(): boolean {
+    return true;
+  }
+
   buildAgentInstructions(): string | undefined {
     const base = this.inner.buildAgentInstructions?.();
     const dockerNote = renderTemplate("dockerAgentNote", {});

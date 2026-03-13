@@ -13,14 +13,16 @@ export class EnvironmentFactory {
 
   isPrimaryWorkspace(args: {
     projectRootPath: string;
-    environment: Pick<IEnvironment, "getWorkspaceRootUnsafe">;
+    environment: Pick<IEnvironment, "getWorkspaceRootUnsafe" | "isPrimaryWorkspace">;
   }): boolean {
-    return resolve(args.environment.getWorkspaceRootUnsafe()) === resolve(args.projectRootPath);
+    return args.environment.isPrimaryWorkspace
+      ? args.environment.isPrimaryWorkspace(args.projectRootPath)
+      : resolve(args.environment.getWorkspaceRootUnsafe()) === resolve(args.projectRootPath);
   }
 
   shouldRunSetupScript(args: {
     projectRootPath: string;
-    environment: Pick<IEnvironment, "getWorkspaceRootUnsafe">;
+    environment: Pick<IEnvironment, "getWorkspaceRootUnsafe" | "isPrimaryWorkspace">;
   }): boolean {
     return !this.isPrimaryWorkspace(args);
   }
@@ -29,7 +31,7 @@ export class EnvironmentFactory {
     threadId: string;
     projectId: string;
     projectRootPath: string;
-    environment: Pick<IEnvironment, "getWorkspaceRootUnsafe">;
+    environment: Pick<IEnvironment, "getWorkspaceRootUnsafe" | "isPrimaryWorkspace">;
   }): void {
     if (!this.environmentRepo || !this.threadEnvironmentAttachmentRepo) {
       return;
