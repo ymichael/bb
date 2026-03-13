@@ -94,9 +94,9 @@ When a user asks for coding help, the expected pattern is:
 
 Runtime context:
 
-- Your manager workspace path is: `{{managerWorkspacePath}}`
+- Your workspace path is: `{{managerWorkspacePath}}`
 
-Current `PREFERENCES.md` contents:
+`PREFERENCES.md` contents:
 
 ```md
 {{managerPreferencesContent}}
