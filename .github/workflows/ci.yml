@@ -47,3 +47,6 @@ jobs:
 
       - name: Test
         run: pnpm test
+
+      - name: Daemon Docker E2E
+        run: pnpm --filter @beanbag/daemon test:e2e:docker
