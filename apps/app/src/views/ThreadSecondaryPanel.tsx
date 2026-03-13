@@ -324,6 +324,7 @@ export function ThreadSecondaryPanel({
   metadataContent,
   managerWorkspaceContent,
   showManagerWorkspaceTab = false,
+  showGitDiffTab = true,
   onPanelChange,
   threadId,
   panelRef,
@@ -361,6 +362,7 @@ export function ThreadSecondaryPanel({
   metadataContent: ReactNode;
   managerWorkspaceContent?: ReactNode;
   showManagerWorkspaceTab?: boolean;
+  showGitDiffTab?: boolean;
   onPanelChange: (panel: ThreadSecondaryPanelTab) => void;
   threadId: string;
   panelRef: Ref<HTMLElement>;
@@ -479,23 +481,25 @@ export function ThreadSecondaryPanel({
                 >
                   <Info className="size-3.5" />
                 </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className={cn(
-                    "h-7 w-7 rounded-md p-0",
-                    isDiffPanelActive
-                      ? "bg-accent/35 text-foreground hover:bg-accent/45"
-                      : "text-muted-foreground hover:bg-muted/45 hover:text-foreground",
-                  )}
-                  onClick={() => onPanelChange("git-diff")}
-                  aria-label="Show diff panel"
-                  aria-pressed={isDiffPanelActive}
-                  title="Diff"
-                >
-                  <FileDiffIcon className="size-3.5" />
-                </Button>
+                {showGitDiffTab !== false ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className={cn(
+                      "h-7 w-7 rounded-md p-0",
+                      isDiffPanelActive
+                        ? "bg-accent/35 text-foreground hover:bg-accent/45"
+                        : "text-muted-foreground hover:bg-muted/45 hover:text-foreground",
+                    )}
+                    onClick={() => onPanelChange("git-diff")}
+                    aria-label="Show diff panel"
+                    aria-pressed={isDiffPanelActive}
+                    title="Diff"
+                  >
+                    <FileDiffIcon className="size-3.5" />
+                  </Button>
+                ) : null}
                 {showManagerWorkspaceTab ? (
                   <Button
                     type="button"

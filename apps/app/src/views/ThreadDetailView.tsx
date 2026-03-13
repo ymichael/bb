@@ -669,6 +669,7 @@ export function ThreadDetailView() {
   const project = projects?.find((candidate) => candidate.id === projectId);
   const primaryManagerThreadId = project?.primaryManagerThreadId;
   const isManagerThread = thread.type === "manager";
+  const canUseGitUi = !isManagerThread;
   const parentThreadId = thread.parentThreadId;
   const canAssignToManager =
     thread.type === "standard" &&
@@ -691,7 +692,7 @@ export function ThreadDetailView() {
     ? "Promoting..."
     : "Promote";
   const isArchivedThread = thread.archivedAt !== undefined;
-  const showPrimaryCheckoutAction = supportsPrimaryCheckout && !isArchivedThread;
+  const showPrimaryCheckoutAction = canUseGitUi && supportsPrimaryCheckout && !isArchivedThread;
   const isPromoteBlockedByThreadStatus =
     !isPrimaryCheckoutActive && thread.status !== "idle";
   const isPrimaryCheckoutActionDisabled =
@@ -707,7 +708,7 @@ export function ThreadDetailView() {
     target: ThreadGitActionDialogTarget;
     label: string;
   } | null = (() => {
-    if (!resolvedThreadWorkStatus || isArchivedThread) {
+    if (!canUseGitUi || !resolvedThreadWorkStatus || isArchivedThread) {
       return null;
     }
 
@@ -774,7 +775,7 @@ export function ThreadDetailView() {
         })
       : formatWorkspaceChangeSummary(resolvedThreadWorkStatus)
     : "";
-  const showPromptGitStatsBanner = Boolean(
+  const showPromptGitStatsBanner = canUseGitUi && Boolean(
     resolvedThreadWorkStatus &&
     (
       showBranchComparisonUi
@@ -783,6 +784,7 @@ export function ThreadDetailView() {
     ),
   );
   const canExpandPromptChangeList = Boolean(
+    canUseGitUi &&
     resolvedThreadWorkStatus &&
     (resolvedThreadWorkStatus.files?.length ?? 0) > 0,
   );
@@ -794,6 +796,7 @@ export function ThreadDetailView() {
   const threadBranchName = resolvedThreadWorkStatus?.currentBranch;
   const threadMergeBaseBranch = effectiveMergeBaseBranch;
   const showThreadWorkspaceStatus =
+    canUseGitUi &&
     (Boolean(resolvedThreadWorkStatus) || Boolean(threadWorkStatusError)) &&
     !(thread.archivedAt !== undefined && environmentInfo?.capabilities.isolated_workspace !== true);
   const threadGitStatusDisplay = getThreadGitStatusDisplay(
@@ -808,7 +811,7 @@ export function ThreadDetailView() {
     : resolvedThreadWorkStatus?.state === "untracked"
       ? "text-muted-foreground"
       : "text-foreground";
-  const showThreadChangedFiles = Boolean(
+  const showThreadChangedFiles = canUseGitUi && Boolean(
     resolvedThreadWorkStatus &&
       (
         resolvedThreadWorkStatus.state === "dirty_uncommitted" ||
@@ -1295,6 +1298,11 @@ export function ThreadDetailView() {
       });
   };
 
+  const effectiveSecondaryPanel =
+    !canUseGitUi && activeSecondaryPanel === "git-diff"
+      ? "thread-info"
+      : activeSecondaryPanel;
+
   const timelineHeader = (
     <header className="shrink-0 border-b border-border/80 bg-background/95 px-4 backdrop-blur-sm">
       <div className="flex h-12 items-center gap-3">
@@ -1367,7 +1375,7 @@ export function ThreadDetailView() {
       showScrollToBottom={showScrollToBottom}
       onScrollToBottom={scrollToBottom}
       showPromptGitStatsBanner={showPromptGitStatsBanner}
-      isDiffPanelActive={isDiffPanelActive}
+      isDiffPanelActive={canUseGitUi && isDiffPanelActive}
       canExpandPromptChangeList={canExpandPromptChangeList}
       isChangeListExpanded={isChangeListExpanded}
       onToggleChangeListExpanded={() => {
@@ -1386,8 +1394,12 @@ export function ThreadDetailView() {
       }
       resolvedThreadWorkStatus={resolvedThreadWorkStatus}
       threadId={thread.id}
-      onPromptGitStatsBannerClick={handlePromptGitStatsBannerClick}
-      onPromptBannerFileClick={handlePromptBannerFileClick}
+      onPromptGitStatsBannerClick={
+        canUseGitUi ? handlePromptGitStatsBannerClick : () => {}
+      }
+      onPromptBannerFileClick={
+        canUseGitUi ? handlePromptBannerFileClick : () => {}
+      }
       queuedMessages={queuedMessages}
       canSendFollowUp={canSendFollowUp}
       isFollowUpSubmitting={isFollowUpSubmitting}
@@ -1472,7 +1484,7 @@ export function ThreadDetailView() {
             />
           </Panel>
           <ThreadSecondaryPanel
-            activePanel={activeSecondaryPanel}
+            activePanel={effectiveSecondaryPanel}
             metadataContent={
               showThreadMetadata ? (
                 renderThreadMetadataContent()
@@ -1484,6 +1496,7 @@ export function ThreadDetailView() {
             }
             managerWorkspaceContent={managerWorkspaceContent}
             showManagerWorkspaceTab={thread.type === "manager"}
+            showGitDiffTab={canUseGitUi}
             onPanelChange={openThreadSecondaryPanel}
             threadId={thread.id}
             panelRef={secondaryPanelRef}
@@ -1497,19 +1510,19 @@ export function ThreadDetailView() {
             gitDiffSelectValue={gitDiffSelectValue}
             gitDiffSelectOptions={gitDiffSelectOptions}
             onGitDiffSelectionChange={onGitDiffSelectionChange}
-            isGitDiffLoading={isGitDiffLoading}
-            gitDiffError={gitDiffError}
-            threadGitDiff={threadGitDiff}
-            currentGitDiff={currentGitDiff}
-            isPreparingGitDiff={isPreparingGitDiff}
-            isParsingGitDiffFiles={isParsingGitDiffFiles}
-            gitDiffStatsLabel={gitDiffStatsLabel}
-            hasParsedGitDiffFiles={hasParsedGitDiffFiles}
-            areAllGitDiffFilesCollapsed={areAllGitDiffFilesCollapsed}
+            isGitDiffLoading={canUseGitUi ? isGitDiffLoading : false}
+            gitDiffError={canUseGitUi ? gitDiffError : undefined}
+            threadGitDiff={canUseGitUi ? threadGitDiff : undefined}
+            currentGitDiff={canUseGitUi ? currentGitDiff : ""}
+            isPreparingGitDiff={canUseGitUi ? isPreparingGitDiff : false}
+            isParsingGitDiffFiles={canUseGitUi ? isParsingGitDiffFiles : false}
+            gitDiffStatsLabel={canUseGitUi ? gitDiffStatsLabel : ""}
+            hasParsedGitDiffFiles={canUseGitUi ? hasParsedGitDiffFiles : false}
+            areAllGitDiffFilesCollapsed={canUseGitUi ? areAllGitDiffFilesCollapsed : true}
             onToggleAllFiles={toggleAllGitDiffFilesCollapsed}
             gitDiffDisplayMode={gitDiffDisplayMode}
             onGitDiffDisplayModeChange={handleGitDiffDisplayModeChange}
-            parsedGitDiffFileEntries={parsedGitDiffFileEntries}
+            parsedGitDiffFileEntries={canUseGitUi ? parsedGitDiffFileEntries : []}
             collapsedGitDiffFileKeys={collapsedGitDiffFileKeys}
             queuedGitDiffFileRenderKeys={queuedGitDiffFileRenderKeys}
             loadingGitDiffFileKeys={loadingGitDiffFileKeys}
@@ -1554,37 +1567,39 @@ export function ThreadDetailView() {
           );
         }}
       />
-      <ThreadGitActionDialog
-        target={threadGitActionTarget}
-        pending={
-          threadGitActionTarget?.kind === "commit"
-            ? requestThreadCommitOperation.isPending
-            : requestThreadSquashOperation.isPending
-        }
-        branchName={threadBranchName}
-        gitStatusLabel={threadGitStatusDisplay.label}
-        gitStatusSummary={threadGitStatusDisplay.summary}
-        changedFiles={resolvedThreadWorkStatus?.files}
-        threadId={thread.id}
-        showMergeBaseDetails={showBranchComparisonUi}
-        mergeBaseBranch={effectiveMergeBaseBranch}
-        mergeBaseBranchOptions={mergeBaseBranchOptions}
-        mergeBaseBranchOptionsLoading={isLoadingMergeBaseBranchOptions}
-        onMergeBaseBranchChange={
-          showBranchComparisonUi ? handleThreadMergeBaseBranchChange : undefined
-        }
-        onMergeBaseBranchPickerOpenChange={
-          showBranchComparisonUi ? onMergeBaseBranchPickerOpenChange : undefined
-        }
-        onOpenChange={(open) => {
-          if (!open) {
-            setThreadGitActionTarget(null);
-            onMergeBaseBranchPickerOpenChange(false);
+      {canUseGitUi ? (
+        <ThreadGitActionDialog
+          target={threadGitActionTarget}
+          pending={
+            threadGitActionTarget?.kind === "commit"
+              ? requestThreadCommitOperation.isPending
+              : requestThreadSquashOperation.isPending
           }
-        }}
-        onCommit={handleCommitThread}
-        onSquashMerge={handleSquashMergeThread}
-      />
+          branchName={threadBranchName}
+          gitStatusLabel={threadGitStatusDisplay.label}
+          gitStatusSummary={threadGitStatusDisplay.summary}
+          changedFiles={resolvedThreadWorkStatus?.files}
+          threadId={thread.id}
+          showMergeBaseDetails={showBranchComparisonUi}
+          mergeBaseBranch={effectiveMergeBaseBranch}
+          mergeBaseBranchOptions={mergeBaseBranchOptions}
+          mergeBaseBranchOptionsLoading={isLoadingMergeBaseBranchOptions}
+          onMergeBaseBranchChange={
+            showBranchComparisonUi ? handleThreadMergeBaseBranchChange : undefined
+          }
+          onMergeBaseBranchPickerOpenChange={
+            showBranchComparisonUi ? onMergeBaseBranchPickerOpenChange : undefined
+          }
+          onOpenChange={(open) => {
+            if (!open) {
+              setThreadGitActionTarget(null);
+              onMergeBaseBranchPickerOpenChange(false);
+            }
+          }}
+          onCommit={handleCommitThread}
+          onSquashMerge={handleSquashMergeThread}
+        />
+      ) : null}
     </>
   );
 }

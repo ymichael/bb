@@ -366,13 +366,16 @@ vi.mock("./ThreadSecondaryPanel", () => ({
     gitDiffStatsLabel,
     metadataContent,
     managerWorkspaceContent,
+    showGitDiffTab,
   }: {
     activePanel: "git-diff" | "thread-info" | "manager-workspace" | null;
     gitDiffStatsLabel: string;
     metadataContent: ReactNode;
     managerWorkspaceContent?: ReactNode;
+    showGitDiffTab?: boolean;
   }) => (
     <div>
+      <div>{showGitDiffTab === false ? "git-tab-hidden" : "git-tab-visible"}</div>
       {activePanel === "git-diff" ? gitDiffStatsLabel : null}
       {activePanel === "thread-info" ? metadataContent : null}
       {activePanel === "manager-workspace" ? managerWorkspaceContent : null}
@@ -503,6 +506,27 @@ describe("ThreadDetailView", () => {
     expect(html).toContain("plan.md");
     expect(html).toContain("Manager deliverable");
     expect(html).toContain("manager");
+
+    apiState.thread.type = "standard";
+    apiState.thread.parentThreadId = "thread-parent";
+    apiState.thread.title = "Child thread";
+  });
+
+  it("hides git-specific UI for manager threads", () => {
+    apiState.thread.type = "manager";
+    apiState.thread.title = "Manager";
+    Reflect.deleteProperty(apiState.thread, "parentThreadId");
+    apiState.timelineLoading = false;
+
+    const html = renderThreadDetailView(
+      "/projects/project-1/threads/thread-1?secondaryPanel=git-diff"
+    );
+
+    expect(html).not.toContain("Commit");
+    expect(html).not.toContain("Squash merge");
+    expect(html).toContain("git-tab-hidden");
+    expect(html).not.toContain("2 files changed");
+    expect(html).toContain("Type");
 
     apiState.thread.type = "standard";
     apiState.thread.parentThreadId = "thread-parent";
