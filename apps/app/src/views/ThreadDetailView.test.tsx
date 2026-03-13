@@ -153,6 +153,7 @@ vi.mock("../hooks/useApi", () => ({
   useStopThread: () => apiState.pendingMutation,
   useMarkThreadRead: () => apiState.pendingMutation,
   useMarkThreadUnread: () => apiState.pendingMutation,
+  useDeleteThread: () => apiState.pendingMutation,
   useSystemEnvironments: () => ({
     data: apiState.environments,
   }),
@@ -313,6 +314,10 @@ vi.mock("@/components/thread/ThreadActionsMenu", () => ({
 
 vi.mock("@/components/thread/ThreadRenameDialog", () => ({
   ThreadRenameDialog: () => null,
+}));
+
+vi.mock("@/components/thread/ThreadDeleteDialog", () => ({
+  ThreadDeleteDialog: () => null,
 }));
 
 vi.mock("@/components/thread/ThreadGitActionDialog", () => ({

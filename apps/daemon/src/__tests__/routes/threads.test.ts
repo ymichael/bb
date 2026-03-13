@@ -83,6 +83,7 @@ function mockOrchestrator(): LegacyThreadRouteMock {
     enqueueFollowUp: vi.fn(),
     removeQueuedFollowUp: vi.fn(),
     sendQueuedFollowUp: vi.fn(),
+    deleteThread: vi.fn(),
     stop: vi.fn(),
     archive: vi.fn(),
     unarchive: vi.fn(),
@@ -398,6 +399,20 @@ describe("Thread routes", () => {
         title: undefined,
         mergeBaseBranch: null,
       });
+    });
+  });
+
+  describe("DELETE /threads/:id", () => {
+    it("deletes the thread", async () => {
+      threadManager.getById.mockReturnValue(makeThread());
+
+      const res = await app.request("/threads/thread-1", {
+        method: "DELETE",
+      });
+
+      expect(res.status).toBe(200);
+      expect(threadManager.deleteThread).toHaveBeenCalledWith("thread-1");
+      await expect(res.json()).resolves.toMatchObject({ ok: true });
     });
   });
 

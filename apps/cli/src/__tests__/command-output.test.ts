@@ -2,6 +2,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Command } from "commander";
 import type { Thread } from "@beanbag/agent-core";
 
+const readlineState = vi.hoisted(() => ({
+  question: vi.fn(),
+  close: vi.fn(),
+}));
+
 vi.mock("../client.js", () => {
   return {
     createClient: vi.fn(),
@@ -10,6 +15,13 @@ vi.mock("../client.js", () => {
     }),
   };
 });
+
+vi.mock("node:readline/promises", () => ({
+  createInterface: vi.fn(() => ({
+    question: readlineState.question,
+    close: readlineState.close,
+  })),
+}));
 
 import { createClient, unwrap } from "../client.js";
 import { registerDaemonCommands } from "../commands/daemon.js";
@@ -58,6 +70,16 @@ describe("CLI command output contracts", () => {
     unwrapMock.mockImplementation(async (responsePromise: Promise<unknown>) => {
       return responsePromise;
     });
+    Object.defineProperty(process.stdin, "isTTY", {
+      value: true,
+      configurable: true,
+    });
+    Object.defineProperty(process.stdout, "isTTY", {
+      value: true,
+      configurable: true,
+    });
+    readlineState.question.mockReset();
+    readlineState.close.mockReset();
 
     delete process.env.BB_PROJECT_ID;
     delete process.env.BB_THREAD_ID;
@@ -363,6 +385,114 @@ describe("CLI command output contracts", () => {
     });
     expect(collectLogLines(vi.mocked(console.log))).toContain(
       "Thread thread-unarchive-1 unarchived",
+    );
+  });
+
+  it("bb thread delete prompts before deleting", async () => {
+    const thread: Thread = {
+      id: "thread-delete-1",
+      projectId: "proj-1",
+      status: "idle",
+      title: "Delete me",
+      createdAt: 1,
+      updatedAt: 1,
+    };
+    const get = vi.fn(async () => thread);
+    createClientMock.mockReturnValue(asDaemonClient({
+      api: {
+        v1: {
+          threads: {
+            ":id": {
+              $get: get,
+            },
+          },
+        },
+      },
+    }));
+    readlineState.question.mockResolvedValue("yes");
+
+    await runCommand(["thread", "delete", "thread-delete-1"], (program) =>
+      registerThreadCommands(program, () => "http://daemon"),
+    );
+
+    expect(get).toHaveBeenCalledWith({
+      param: { id: "thread-delete-1" },
+    });
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      new URL("http://daemon/api/v1/threads/thread-delete-1"),
+      { method: "DELETE" },
+    );
+    expect(readlineState.question).toHaveBeenCalled();
+    expect(collectLogLines(vi.mocked(console.log))).toContain(
+      "Thread thread-delete-1 deleted",
+    );
+  });
+
+  it("bb thread delete cancels when confirmation is declined", async () => {
+    const thread: Thread = {
+      id: "thread-delete-2",
+      projectId: "proj-1",
+      status: "idle",
+      createdAt: 1,
+      updatedAt: 1,
+    };
+    const get = vi.fn(async () => thread);
+    createClientMock.mockReturnValue(asDaemonClient({
+      api: {
+        v1: {
+          threads: {
+            ":id": {
+              $get: get,
+            },
+          },
+        },
+      },
+    }));
+    readlineState.question.mockResolvedValue("no");
+
+    await runCommand(["thread", "delete", "thread-delete-2"], (program) =>
+      registerThreadCommands(program, () => "http://daemon"),
+    );
+
+    expect(globalThis.fetch).not.toHaveBeenCalledWith(
+      new URL("http://daemon/api/v1/threads/thread-delete-2"),
+      { method: "DELETE" },
+    );
+    expect(collectLogLines(vi.mocked(console.log))).toContain(
+      "Thread thread-delete-2 deletion cancelled",
+    );
+  });
+
+  it("bb thread delete --yes skips confirmation", async () => {
+    process.env.BB_THREAD_ID = "thread-delete-3";
+    const thread: Thread = {
+      id: "thread-delete-3",
+      projectId: "proj-1",
+      status: "idle",
+      createdAt: 1,
+      updatedAt: 1,
+    };
+    const get = vi.fn(async () => thread);
+    createClientMock.mockReturnValue(asDaemonClient({
+      api: {
+        v1: {
+          threads: {
+            ":id": {
+              $get: get,
+            },
+          },
+        },
+      },
+    }));
+
+    await runCommand(["thread", "delete", "--yes"], (program) =>
+      registerThreadCommands(program, () => "http://daemon"),
+    );
+
+    expect(readlineState.question).not.toHaveBeenCalled();
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      new URL("http://daemon/api/v1/threads/thread-delete-3"),
+      { method: "DELETE" },
     );
   });
 

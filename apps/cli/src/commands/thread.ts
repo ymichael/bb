@@ -1,4 +1,5 @@
 import { Command } from "commander";
+import { createInterface } from "node:readline/promises";
 import {
   type Thread,
   type ThreadEvent,
@@ -156,11 +157,36 @@ function printThreadOperationResult(result: ThreadOperationResponse): void {
   console.log(`${result.message} [${flags.join(", ")}]`);
 }
 
+async function confirmDestructiveAction(message: string): Promise<boolean> {
+  if (!process.stdin.isTTY || !process.stdout.isTTY) {
+    throw new Error(
+      "Refusing destructive action without an interactive terminal. Re-run with --yes to confirm.",
+    );
+  }
+
+  const readline = createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+
+  try {
+    const answer = await readline.question(`${message} [y/N] `);
+    const normalized = answer.trim().toLowerCase();
+    return normalized === "y" || normalized === "yes";
+  } finally {
+    readline.close();
+  }
+}
+
 function buildThreadRouteUrl(baseUrl: string, threadId: string, suffix: string): URL {
   return new URL(
     `/api/v1/threads/${encodeURIComponent(threadId)}/${suffix}`,
     baseUrl,
   );
+}
+
+function buildThreadUrl(baseUrl: string, threadId: string): URL {
+  return new URL(`/api/v1/threads/${encodeURIComponent(threadId)}`, baseUrl);
 }
 
 export function registerThreadCommands(program: Command, getUrl: () => string): void {
@@ -515,6 +541,38 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
           }),
         );
         console.log(`Thread ${threadId} unarchived`);
+      } catch (err: unknown) {
+        console.error(`Error: ${(err as Error).message}`);
+        process.exit(1);
+      }
+    });
+
+  thread
+    .command("delete [id]")
+    .description("Delete a thread permanently (defaults to BB_THREAD_ID)")
+    .option("--yes", "Skip the confirmation prompt")
+    .action(async (id: string | undefined, opts: { yes?: boolean }) => {
+      const client = createClient(getUrl());
+      try {
+        const threadId = requireThreadId(id);
+        const thread = await unwrap<Thread>(
+          client.api.v1.threads[":id"].$get({ param: { id: threadId } }),
+        );
+
+        if (!opts.yes) {
+          const confirmed = await confirmDestructiveAction(
+            `Delete thread "${thread.title ?? thread.titleFallback ?? thread.id}" permanently? This cannot be undone.`,
+          );
+          if (!confirmed) {
+            console.log(`Thread ${threadId} deletion cancelled`);
+            return;
+          }
+        }
+
+        await unwrap<{ ok: boolean }>(
+          fetch(buildThreadUrl(getUrl(), threadId), { method: "DELETE" }),
+        );
+        console.log(`Thread ${threadId} deleted`);
       } catch (err: unknown) {
         console.error(`Error: ${(err as Error).message}`);
         process.exit(1);

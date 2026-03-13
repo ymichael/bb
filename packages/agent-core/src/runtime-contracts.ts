@@ -176,6 +176,7 @@ export interface ThreadOrchestrator {
     queuedMessageId: string,
     request?: SendQueuedThreadMessageRequest,
   ): Promise<SendQueuedThreadMessageResponse>;
+  deleteThread(threadId: string): Promise<void>;
   systemTell(
     threadId: string,
     request: TellThreadRequest,

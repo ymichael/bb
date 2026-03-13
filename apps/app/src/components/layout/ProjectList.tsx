@@ -14,6 +14,7 @@ import {
 } from "lucide-react"
 import {
   useArchiveThread,
+  useDeleteThread,
   useDeleteProject,
   useMarkThreadRead,
   useMarkThreadUnread,
@@ -57,6 +58,7 @@ import {
   ThreadRenameDialog,
   type ThreadRenameDialogTarget,
 } from "@/components/thread/ThreadRenameDialog"
+import { ThreadDeleteDialog } from "@/components/thread/ThreadDeleteDialog"
 import {
   isArchiveForceRequiredError,
   requiresArchiveConfirmation,
@@ -99,6 +101,7 @@ export function ProjectList({
   const markThreadUnread = useMarkThreadUnread()
   const updateThread = useUpdateThread()
   const unarchiveThread = useUnarchiveThread()
+  const deleteThread = useDeleteThread()
   const updateProject = useUpdateProject()
   const deleteProject = useDeleteProject()
   const location = useLocation()
@@ -123,6 +126,7 @@ export function ProjectList({
   const [threadRenameTarget, setThreadRenameTarget] = useState<ThreadRenameDialogTarget | null>(
     null
   )
+  const [threadDeleteTarget, setThreadDeleteTarget] = useState<Thread | null>(null)
 
   const selectedThreadId = location.pathname.match(
     /^\/projects\/[^/]+\/threads\/([^/]+)/
@@ -284,6 +288,30 @@ export function ProjectList({
       {
         onSuccess: () => {
           setThreadRenameTarget(null)
+        },
+      }
+    )
+  }
+
+  const requestDeleteThread = (thread: Thread) => {
+    if (deleteThread.isPending) return
+    setThreadDeleteTarget(thread)
+  }
+
+  const confirmDeleteThread = (thread: Thread) => {
+    deleteThread.mutate(
+      { id: thread.id },
+      {
+        onSuccess: () => {
+          setThreadDeleteTarget(null)
+          if (selectedThreadId === thread.id) {
+            navigate(`/projects/${thread.projectId}`, { replace: true })
+          }
+        },
+        onError: (error) => {
+          toast.error(
+            error instanceof Error ? error.message : "Failed to delete thread.",
+          )
         },
       }
     )
@@ -545,6 +573,7 @@ export function ProjectList({
                                       disabled={
                                         archiveThread.isPending ||
                                         unarchiveThread.isPending ||
+                                        deleteThread.isPending ||
                                         updateThread.isPending ||
                                         markThreadRead.isPending ||
                                         markThreadUnread.isPending
@@ -566,6 +595,9 @@ export function ProjectList({
                                           return
                                         }
                                         void requestArchiveThread(thread)
+                                      }}
+                                      onDelete={() => {
+                                        requestDeleteThread(thread)
                                       }}
                                       isArchived={thread.archivedAt !== undefined}
                                     />
@@ -654,6 +686,16 @@ export function ProjectList({
           }
         }}
         onRename={submitThreadRename}
+      />
+      <ThreadDeleteDialog
+        target={threadDeleteTarget}
+        pending={deleteThread.isPending}
+        onOpenChange={(open) => {
+          if (!open) {
+            setThreadDeleteTarget(null)
+          }
+        }}
+        onDelete={confirmDeleteThread}
       />
     </SidebarGroup>
   )

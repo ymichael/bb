@@ -468,6 +468,10 @@ export async function unarchiveThread(id: string): Promise<void> {
   return request<void>("POST", `/threads/${id}/unarchive`);
 }
 
+export async function deleteThread(id: string): Promise<void> {
+  return request<void>("DELETE", `/threads/${id}`);
+}
+
 export async function markThreadRead(id: string): Promise<Thread> {
   return request<Thread>("POST", `/threads/${id}/read`);
 }

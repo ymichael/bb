@@ -18,6 +18,7 @@ import {
   useStopThread,
   useMarkThreadRead,
   useMarkThreadUnread,
+  useDeleteThread,
   useSystemEnvironments,
   useUnarchiveThread,
   useThreadDefaultExecutionOptions,
@@ -46,11 +47,13 @@ import {
   ThreadRenameDialog,
   type ThreadRenameDialogTarget,
 } from "@/components/thread/ThreadRenameDialog";
+import { ThreadDeleteDialog } from "@/components/thread/ThreadDeleteDialog";
 import { DetailCard, DetailRow, StatusPill } from "@beanbag/ui-core";
 import {
   formatEnvironmentDisplayName,
   type PromptInput,
   type ServiceTier,
+  type Thread,
 } from "@beanbag/agent-core";
 import { promptDraftToInput } from "@/lib/prompt-draft";
 import { HttpError } from "@/lib/api";
@@ -124,6 +127,7 @@ export function ThreadDetailView() {
   const unarchiveThread = useUnarchiveThread();
   const markThreadRead = useMarkThreadRead();
   const markThreadUnread = useMarkThreadUnread();
+  const deleteThread = useDeleteThread();
   const updateThread = useUpdateThread();
   const uploadPromptAttachment = useUploadPromptAttachment();
   const promptDraft = usePromptDraftStorage({ projectId, threadId });
@@ -139,6 +143,7 @@ export function ThreadDetailView() {
   const [threadRenameTarget, setThreadRenameTarget] = useState<ThreadRenameDialogTarget | null>(
     null,
   );
+  const [threadDeleteTarget, setThreadDeleteTarget] = useState<Thread | null>(null);
   const [threadGitActionTarget, setThreadGitActionTarget] =
     useState<ThreadGitActionDialogTarget | null>(null);
   const markedReadKeysRef = useRef<Set<string>>(new Set());
@@ -745,6 +750,7 @@ export function ThreadDetailView() {
     unarchiveThread.isPending ||
     markThreadRead.isPending ||
     markThreadUnread.isPending ||
+    deleteThread.isPending ||
     updateThread.isPending;
   const handleCopyThreadBranch = async () => {
     if (!threadBranchName) {
@@ -956,6 +962,9 @@ export function ThreadDetailView() {
       onRename={renameThread}
       onToggleArchive={() => {
         void toggleArchiveThread();
+      }}
+      onDelete={() => {
+        setThreadDeleteTarget(thread);
       }}
       isArchived={thread.archivedAt !== undefined}
     />
@@ -1303,6 +1312,31 @@ export function ThreadDetailView() {
           }
         }}
         onRename={submitThreadRename}
+      />
+      <ThreadDeleteDialog
+        target={threadDeleteTarget}
+        pending={deleteThread.isPending}
+        onOpenChange={(open) => {
+          if (!open) {
+            setThreadDeleteTarget(null);
+          }
+        }}
+        onDelete={(target) => {
+          deleteThread.mutate(
+            { id: target.id },
+            {
+              onSuccess: () => {
+                setThreadDeleteTarget(null);
+                navigate(`/projects/${target.projectId}`, { replace: true });
+              },
+              onError: (error) => {
+                toast.error(
+                  error instanceof Error ? error.message : "Failed to delete thread.",
+                );
+              },
+            },
+          );
+        }}
       />
       <ThreadGitActionDialog
         target={threadGitActionTarget}

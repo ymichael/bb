@@ -12,6 +12,7 @@ interface ThreadActionsMenuProps {
   onToggleRead: () => void
   onRename: () => void
   onToggleArchive: () => void
+  onDelete?: () => void
   isRead: boolean
   isArchived: boolean
   onOpenChange?: (open: boolean) => void
@@ -24,6 +25,7 @@ export function ThreadActionsMenu({
   onToggleRead,
   onRename,
   onToggleArchive,
+  onDelete,
   isRead,
   isArchived,
   onOpenChange,
@@ -83,6 +85,19 @@ export function ThreadActionsMenu({
         >
           {isArchived ? "Unarchive" : "Archive"}
         </DropdownMenuItem>
+        {onDelete ? (
+          <DropdownMenuItem
+            disabled={disabled}
+            className="text-destructive focus:text-destructive"
+            onSelect={() => {
+              window.setTimeout(() => {
+                onDelete()
+              }, 0)
+            }}
+          >
+            Delete thread
+          </DropdownMenuItem>
+        ) : null}
       </DropdownMenuContent>
     </DropdownMenu>
   )

@@ -717,6 +717,19 @@ export function createThreadRoutes(
         return sendRouteError(c, err);
       }
     })
+    .delete("/:id", async (c) => {
+      try {
+        const threadId = c.req.param("id");
+        const thread = await getThreadForRouteLookup(threadManager, threadId);
+        if (!thread) {
+          return sendRouteError(c, threadNotFoundError(threadId));
+        }
+        await threadManager.deleteThread(threadId);
+        return c.json({ ok: true });
+      } catch (err) {
+        return sendRouteError(c, err);
+      }
+    })
     .post("/:id/stop", async (c) => {
       try {
         const threadId = c.req.param("id");

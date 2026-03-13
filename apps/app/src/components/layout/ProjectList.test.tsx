@@ -30,6 +30,7 @@ vi.mock("@/hooks/useApi", () => {
       isLoading: false,
     }),
     useArchiveThread: () => pendingMutation,
+    useDeleteThread: () => pendingMutation,
     useDeleteProject: () => pendingMutation,
     useMarkThreadRead: () => pendingMutation,
     useMarkThreadUnread: () => pendingMutation,
@@ -50,6 +51,10 @@ vi.mock("@/components/thread/ThreadActionsMenu", () => ({
 
 vi.mock("@/components/thread/ThreadRenameDialog", () => ({
   ThreadRenameDialog: () => null,
+}))
+
+vi.mock("@/components/thread/ThreadDeleteDialog", () => ({
+  ThreadDeleteDialog: () => null,
 }))
 
 vi.mock("@/components/ui/dialog", () => ({
