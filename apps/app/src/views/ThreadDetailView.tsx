@@ -832,9 +832,9 @@ export function ThreadDetailView() {
   );
   const showThreadMetadata = Boolean(
     parentThreadId ||
-      threadEnvironmentType ||
-      threadBranchName ||
-      showThreadMergeBase ||
+      (!isManagerThread && threadEnvironmentType) ||
+      (!isManagerThread && threadBranchName) ||
+      (!isManagerThread && showThreadMergeBase) ||
       showThreadWorkspaceStatus ||
       showThreadChangedFiles ||
       thread.archivedAt !== undefined,
@@ -983,7 +983,7 @@ export function ThreadDetailView() {
           </Button>
         </DetailRow>
       ) : null}
-      {threadEnvironmentType ? (
+      {!isManagerThread && threadEnvironmentType ? (
         <DetailRow
           label="Environment"
           valueClassName="min-w-0 truncate"
@@ -991,7 +991,7 @@ export function ThreadDetailView() {
           {threadEnvironmentType}
         </DetailRow>
       ) : null}
-      {threadBranchName ? (
+      {!isManagerThread && threadBranchName ? (
         <DetailRow
           label="Branch"
           valueClassName="min-w-0 truncate"
@@ -1010,7 +1010,7 @@ export function ThreadDetailView() {
           </button>
         </DetailRow>
       ) : null}
-      {showThreadMergeBase ? (
+      {!isManagerThread && showThreadMergeBase ? (
         <DetailRow
           label="Merge base"
           valueClassName="min-w-0 truncate"
