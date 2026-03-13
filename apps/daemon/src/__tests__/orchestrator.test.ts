@@ -578,6 +578,98 @@ describe("Orchestrator", () => {
   });
 
   describe("environment services", () => {
+    it("routes shared environment provider events to the matching attached thread", () => {
+      const ownerThread = makeThread({
+        id: "thread-1",
+        projectId: "proj-1",
+        status: "idle",
+      });
+      const siblingThread = makeThread({
+        id: "thread-2",
+        projectId: "proj-1",
+        status: "idle",
+      });
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockImplementation((threadId: string) => {
+        if (threadId === ownerThread.id) return ownerThread;
+        if (threadId === siblingThread.id) return siblingThread;
+        return undefined;
+      });
+
+      const attachmentRepo = {
+        getByThreadId: vi.fn((threadId: string) =>
+          threadId === ownerThread.id || threadId === siblingThread.id
+            ? { threadId, environmentId: "env-1", attachedAt: 1_000 }
+            : undefined,
+        ),
+        listByEnvironmentId: vi.fn(() => [
+          { threadId: ownerThread.id, environmentId: "env-1", attachedAt: 1_000 },
+          { threadId: siblingThread.id, environmentId: "env-1", attachedAt: 1_001 },
+        ]),
+      };
+
+      manager = new Orchestrator(
+        threadRepo,
+        eventRepo,
+        projectRepo,
+        ws,
+        llmCompletionService,
+        undefined,
+        createTestRuntimeEnv(),
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        attachmentRepo as never,
+      );
+
+      (
+        manager as unknown as {
+          providerThreadIdByThreadId: Map<string, string>;
+        }
+      ).providerThreadIdByThreadId.set(ownerThread.id, "provider-thread-owner");
+      (
+        manager as unknown as {
+          providerThreadIdByThreadId: Map<string, string>;
+        }
+      ).providerThreadIdByThreadId.set(siblingThread.id, "provider-thread-sibling");
+
+      (
+        manager as unknown as {
+          _handleAgentServerNotification: (threadId: string, event: unknown) => void;
+        }
+      )._handleAgentServerNotification(ownerThread.id, {
+        method: "item/completed",
+        normalizedMethod: "item/completed",
+        eventType: "item/completed",
+        eventData: {
+          __bb_provider_event: {
+            schema: "beanbag/provider-event-envelope",
+            version: 1,
+            providerId: "codex",
+            method: "item/completed",
+            observedAt: 1_234,
+          },
+          payload: {
+            threadId: "provider-thread-sibling",
+            item: { type: "agentMessage", text: "hello" },
+          },
+        },
+        shouldPersist: true,
+        shouldBroadcast: false,
+      });
+
+      expect(eventRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          threadId: siblingThread.id,
+          type: "item/completed",
+        }),
+      );
+    });
+
     it("ignores active session invalidation during newer-session handoff", () => {
       (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
         makeThread({

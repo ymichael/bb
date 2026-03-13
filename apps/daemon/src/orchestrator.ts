@@ -134,6 +134,7 @@ import {
 } from "./env-factory.js";
 import {
   EnvironmentAgentCommandDispatcher,
+  isEnvironmentAgentSessionUnavailableError,
 } from "./environment-agent-command-dispatcher.js";
 import type { EnvironmentAgentSessionService } from "./environment-agent-session-service.js";
 import { EnvironmentAgentSessionCommandClient } from "./environment-agent-session-command-client.js";
@@ -157,6 +158,8 @@ export type PromptExecutionOptions = ProviderExecutionOptions;
 
 const BEANBAG_ENVIRONMENT_AGENT_COMMAND_POLL_INTERVAL_MS =
   "BEANBAG_ENVIRONMENT_AGENT_COMMAND_POLL_INTERVAL_MS";
+const ENVIRONMENT_AGENT_SESSION_RECOVERY_WAIT_MS = 1_000;
+const ENVIRONMENT_AGENT_SESSION_RECOVERY_RETRY_WAIT_MS = 5_000;
 
 function parsePositiveIntegerEnv(
   rawValue: string | undefined,
@@ -1899,7 +1902,9 @@ export class Orchestrator implements ThreadOrchestrator {
       thread?.status === "provisioning" ||
       thread?.status === "provisioned";
 
-    this._cleanupThreadRuntime(threadId, { retireActiveSession: true });
+    this._cleanupThreadRuntime(threadId, {
+      retireActiveSession: true,
+    });
     if (shouldAppendInterruptedEvent) {
       this._appendEvent(threadId, "system/thread/interrupted" as never, {
         reason: "user",
@@ -2031,6 +2036,7 @@ export class Orchestrator implements ThreadOrchestrator {
       ...THREAD_STATUS_CHANGE_KINDS,
       "archived-changed",
     ]);
+    this._cleanupThreadRuntime(threadId, { retireActiveSession: true });
 
     try {
       await this.environmentService.destroyThreadEnvironment(threadId);
@@ -2056,6 +2062,9 @@ export class Orchestrator implements ThreadOrchestrator {
     const thread = this.threadRepo.getById(threadId);
     if (!thread) return;
 
+    await this._cleanupThreadRuntimeAndWait(threadId, {
+      retireActiveSession: true,
+    });
     await this.environmentService.destroyThreadEnvironment(threadId);
     this._finalizeManagedThreadCleanup(threadId, thread.projectId);
     this.environmentService.removeManagedThreadLogs(thread);
@@ -3574,6 +3583,19 @@ export class Orchestrator implements ThreadOrchestrator {
     threadId: string,
     opts?: { retireActiveSession?: boolean },
   ): void {
+    this._clearThreadRuntimeState(threadId);
+    if (opts?.retireActiveSession) {
+      this.environmentAgentSessionService?.retireActiveSessionForThread({
+        threadId,
+        reason: "migration",
+      });
+    }
+    if (!this.environmentService.hasSharedAttachedEnvironment(threadId)) {
+      this.environmentService.suspendEnvironmentRuntime(threadId);
+    }
+  }
+
+  private _clearThreadRuntimeState(threadId: string): void {
     this.eventSeqCounters.delete(threadId);
     this.lastNotifiedCompletionTurnIds.delete(threadId);
     this.turnLifecycleEpochs.delete(threadId);
@@ -3585,6 +3607,13 @@ export class Orchestrator implements ThreadOrchestrator {
     this.queuedOperationsByThreadId.delete(threadId);
     this.operationDispatchInFlight.delete(threadId);
     this.runningOperationByThreadId.delete(threadId);
+  }
+
+  private async _cleanupThreadRuntimeAndWait(
+    threadId: string,
+    opts?: { retireActiveSession?: boolean },
+  ): Promise<void> {
+    this._clearThreadRuntimeState(threadId);
     if (opts?.retireActiveSession) {
       this.environmentAgentSessionService?.retireActiveSessionForThread({
         threadId,
@@ -3592,7 +3621,7 @@ export class Orchestrator implements ThreadOrchestrator {
       });
     }
     if (!this.environmentService.hasSharedAttachedEnvironment(threadId)) {
-      this.environmentService.suspendEnvironmentRuntime(threadId);
+      await this.environmentService.suspendEnvironmentRuntimeAndWait(threadId);
     }
   }
 
@@ -3666,15 +3695,11 @@ export class Orchestrator implements ThreadOrchestrator {
       throw projectNotFoundError(thread.projectId);
     }
 
-    const ensured = await this.environmentService.ensureThreadEnvironmentRuntime(
+    const ensured = await this._ensureEnvironmentAgentRuntimeWithActiveSession(
       thread,
       project.rootPath,
       "resume-existing-provider-session",
     );
-
-    if (this.environmentAgentCommandDispatcher) {
-      await this.environmentAgentCommandDispatcher.awaitActiveSession({ threadId });
-    }
 
     return {
       thread,
@@ -3705,6 +3730,47 @@ export class Orchestrator implements ThreadOrchestrator {
           providerLaunch,
         }),
     });
+  }
+
+  private async _ensureEnvironmentAgentRuntimeWithActiveSession(
+    thread: Thread,
+    projectRootPath: string,
+    reason: ThreadEnvironmentStartReason,
+  ): Promise<{
+    runtime: ActiveEnvironmentRuntime;
+  }> {
+    let ensured = await this.environmentService.ensureThreadEnvironmentRuntime(
+      thread,
+      projectRootPath,
+      reason,
+    );
+    if (!this.environmentAgentCommandDispatcher) {
+      return ensured;
+    }
+
+    try {
+      await this.environmentAgentCommandDispatcher.awaitActiveSession({
+        threadId: thread.id,
+        timeoutMs: ENVIRONMENT_AGENT_SESSION_RECOVERY_WAIT_MS,
+      });
+      return ensured;
+    } catch (error) {
+      if (!isEnvironmentAgentSessionUnavailableError(error)) {
+        throw error;
+      }
+    }
+
+    await this.environmentService.suspendEnvironmentRuntimeAndWait(thread.id);
+    ensured = await this.environmentService.ensureThreadEnvironmentRuntime(
+      thread,
+      projectRootPath,
+      reason,
+    );
+    await this.environmentAgentCommandDispatcher.awaitActiveSession({
+      threadId: thread.id,
+      timeoutMs: ENVIRONMENT_AGENT_SESSION_RECOVERY_RETRY_WAIT_MS,
+    });
+    return ensured;
   }
 
   private _setEnvironmentRuntime(
@@ -4509,6 +4575,7 @@ export class Orchestrator implements ThreadOrchestrator {
     threadId: string,
     event: AgentServerNotification,
   ): void {
+    const resolvedThreadId = this._resolveNotificationThreadId(threadId, event);
     const changes: ThreadChangeKind[] = [];
     let persistedEvent: ThreadEvent | undefined;
 
@@ -4516,33 +4583,73 @@ export class Orchestrator implements ThreadOrchestrator {
       if (event.shouldBroadcast) {
         changes.push("events-appended");
       }
-      persistedEvent = this._appendEvent(threadId, event.eventType, event.eventData, {
+      persistedEvent = this._appendEvent(resolvedThreadId, event.eventType, event.eventData, {
         broadcastChanges: false,
       });
       this._maybePruneActiveThreadNoise(
-        threadId,
+        resolvedThreadId,
         event.normalizedMethod,
         persistedEvent.seq,
       );
     }
 
-    const titleChanged = this._syncTitleFromEvent(threadId, event);
+    const titleChanged = this._syncTitleFromEvent(resolvedThreadId, event);
     if (event.shouldBroadcast && titleChanged) {
       changes.push("title-changed");
     }
 
-    const statusChanged = this._syncStatusFromEvent(threadId, event);
+    const statusChanged = this._syncStatusFromEvent(resolvedThreadId, event);
     if (event.shouldBroadcast && statusChanged) {
       changes.push(...THREAD_STATUS_CHANGE_KINDS);
     }
 
-    this._syncActiveTurnFromEvent(threadId, event);
+    this._syncActiveTurnFromEvent(resolvedThreadId, event);
     if (persistedEvent) {
-      this._maybeNotifyParentOnChildTurnCompletion(threadId, persistedEvent);
+      this._maybeNotifyParentOnChildTurnCompletion(resolvedThreadId, persistedEvent);
     }
     if (changes.length > 0) {
-      this._enqueueProviderThreadChanged(threadId, changes);
+      this._enqueueProviderThreadChanged(resolvedThreadId, changes);
     }
+  }
+
+  private _resolveNotificationThreadId(
+    threadId: string,
+    event: AgentServerNotification,
+  ): string {
+    const providerThreadId = extractProviderThreadIdFromPersistedEventData(
+      event.eventData,
+    );
+    if (!providerThreadId) {
+      return threadId;
+    }
+
+    const currentProviderThreadId =
+      this.providerThreadIdByThreadId.get(threadId) ??
+      this._resolvePersistedProviderThreadId(threadId);
+    if (currentProviderThreadId === providerThreadId) {
+      return threadId;
+    }
+
+    const attachedEnvironmentId = this.threadEnvironmentAttachmentRepo
+      ?.getByThreadId(threadId)
+      ?.environmentId;
+    if (!attachedEnvironmentId || !this.threadEnvironmentAttachmentRepo) {
+      return threadId;
+    }
+
+    for (const attachment of this.threadEnvironmentAttachmentRepo.listByEnvironmentId(
+      attachedEnvironmentId,
+    )) {
+      const candidateThreadId = attachment.threadId;
+      const candidateProviderThreadId =
+        this.providerThreadIdByThreadId.get(candidateThreadId) ??
+        this._resolvePersistedProviderThreadId(candidateThreadId);
+      if (candidateProviderThreadId === providerThreadId) {
+        return candidateThreadId;
+      }
+    }
+
+    return threadId;
   }
 
   private _flushQueuedProviderThreadChanged(threadId: string): void {

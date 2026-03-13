@@ -454,6 +454,7 @@ describe("Orchestrator environment-agent delivery and replay", () => {
     );
     expect(dispatcher.awaitActiveSession).toHaveBeenCalledWith({
       threadId: "thread-1",
+      timeoutMs: 1_000,
     });
     expect(resumeThreadCommand).toHaveBeenCalled();
   });
@@ -583,6 +584,89 @@ describe("Orchestrator environment-agent delivery and replay", () => {
     expect(environmentService.ensureThreadEnvironmentRuntime).toHaveBeenCalledTimes(2);
     expect(dispatcher.awaitActiveSession).toHaveBeenCalledTimes(2);
     expect(resumeThreadCommand).toHaveBeenCalledTimes(1);
+  });
+
+  it("recycles the runtime when env-daemon access cannot find a fresh session", async () => {
+    const thread = makeThread({
+      status: "idle",
+      environmentId: "local",
+    });
+    (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
+    (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue({
+      id: "proj-1",
+      name: "Project",
+      rootPath: "/test",
+      createdAt: 1_000,
+      updatedAt: 1_000,
+    });
+
+    const dispatcher = {
+      awaitActiveSession: vi
+        .fn()
+        .mockRejectedValueOnce(
+          new EnvironmentAgentSessionUnavailableError("thread-1"),
+        )
+        .mockResolvedValueOnce({ id: "sess-2" }),
+    } as unknown as EnvironmentAgentCommandDispatcher;
+
+    const manager = new Orchestrator(
+      threadRepo,
+      eventRepo,
+      projectRepo,
+      ws,
+      createMockLlmCompletionService(),
+      undefined,
+      createTestRuntimeEnv({
+        BEANBAG_ENVIRONMENT_AGENT_BASE_URL: undefined,
+        BEANBAG_ENVIRONMENT_AGENT_AUTH_TOKEN: undefined,
+      }),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      dispatcher,
+      sessionService as never,
+    );
+
+    const environmentService = (
+      manager as unknown as {
+        environmentService: Pick<
+          EnvironmentService,
+          "ensureThreadEnvironmentRuntime" | "suspendEnvironmentRuntimeAndWait"
+        >;
+      }
+    ).environmentService;
+
+    const runtimeEnvironment = makeRuntimeEnvironment({
+      rootPath: "/test",
+      authorization: "Bearer test-token",
+    });
+    const activeRuntime = {
+      ownerThreadId: "thread-1",
+      environment: runtimeEnvironment,
+      agentConnectionTarget: runtimeEnvironment.getAgentConnectionTarget(),
+    };
+    environmentService.ensureThreadEnvironmentRuntime = vi.fn(async () => ({
+      runtime: activeRuntime,
+    }));
+    environmentService.suspendEnvironmentRuntimeAndWait = vi.fn(async () => undefined);
+
+    const access = await (
+      manager as unknown as {
+        _ensureEnvironmentAgentAccess: (threadId: string) => Promise<{
+          thread: Thread;
+          projectRootPath: string;
+          target: { baseUrl: string; transport: "http" };
+        }>;
+      }
+    )._ensureEnvironmentAgentAccess("thread-1");
+
+    expect(access.projectRootPath).toBe("/test");
+    expect(environmentService.ensureThreadEnvironmentRuntime).toHaveBeenCalledTimes(2);
+    expect(environmentService.suspendEnvironmentRuntimeAndWait).toHaveBeenCalledWith(
+      "thread-1",
+    );
+    expect(dispatcher.awaitActiveSession).toHaveBeenCalledTimes(2);
   });
 
   it("revalidates persisted provider thread ids when hot daemon state disagrees", async () => {
