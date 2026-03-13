@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "prepare": "git config core.hooksPath .githooks",
-    "dev": "turbo run dev --ui tui",
+    "dev": "turbo run dev --ui tui --concurrency 12",
     "build": "turbo run build",
     "precommit:build": "pnpm build",
     "clean": "turbo run clean",
