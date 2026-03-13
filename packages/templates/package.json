@@ -1,0 +1,32 @@
+{
+  "name": "@beanbag/templates",
+  "version": "0.0.1",
+  "type": "module",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": ["dist"],
+  "scripts": {
+    "build": "node ./scripts/generate-templates.mjs && esbuild src/index.ts --bundle --platform=node --target=node20 --format=esm --outfile=dist/index.js --sourcemap && tsc --project tsconfig.json --emitDeclarationOnly --declaration --declarationMap --outDir dist",
+    "dev": "node ./scripts/generate-templates.mjs && esbuild src/index.ts --bundle --platform=node --target=node20 --format=esm --outfile=dist/index.js --sourcemap --watch",
+    "clean": "rm -rf dist tsconfig.tsbuildinfo",
+    "typecheck": "node ./scripts/generate-templates.mjs && tsc --noEmit",
+    "test": "node ./scripts/generate-templates.mjs && vitest run --config vitest.config.ts"
+  },
+  "dependencies": {
+    "gray-matter": "^4.0.3",
+    "handlebars": "^4.7.8"
+  },
+  "devDependencies": {
+    "@beanbag/tsconfig": "workspace:*",
+    "@types/node": "^22.0.0",
+    "esbuild": "^0.25.0",
+    "typescript": "^5.7.0",
+    "vitest": "^4.0.0"
+  }
+}

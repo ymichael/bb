@@ -15,6 +15,7 @@ export const workspaceTestAliases = {
     "packages/environment-agent/src/index.ts",
   ),
   "@beanbag/agent-server": path.resolve(repoRoot, "packages/agent-server/src/index.ts"),
+  "@beanbag/templates": path.resolve(repoRoot, "packages/templates/src/index.ts"),
   "@beanbag/db": path.resolve(repoRoot, "packages/db/src/index.ts"),
   "@beanbag/daemon": path.resolve(repoRoot, "apps/daemon/src/index.ts"),
   "@beanbag/cli": path.resolve(repoRoot, "apps/cli/src/index.ts"),
