@@ -981,34 +981,38 @@ export function ThreadDetailView() {
           valueClassName="min-w-0"
         >
           <DropdownMenu>
-            <div className="group/manager-picker flex min-w-0 items-center gap-1">
-              {parentThreadId ? (
-                <Link
-                  to={`/projects/${projectId}/threads/${parentThreadId}`}
-                  className="min-w-0 truncate text-xs text-foreground no-underline transition-[text-decoration-color] duration-150 hover:underline hover:underline-offset-2 group-hover/manager-picker:underline group-hover/manager-picker:underline-offset-2"
-                >
-                  {selectedManagerOption?.label ?? "Manager"}
-                </Link>
-              ) : (
-                <span className="min-w-0 truncate text-xs text-foreground">
-                  {selectedManagerOption?.label ?? "None"}
-                </span>
-              )}
-              <DropdownMenuTrigger asChild>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  disabled={
-                    updateThread.isPending ||
-                    (managerSelectorOptions.length <= 1 && managerSelectorValue === "none")
-                  }
-                  className="h-7 w-7 shrink-0 border-none bg-transparent p-0 text-muted-foreground shadow-none hover:bg-transparent hover:text-foreground"
-                >
-                  <ChevronDown className="size-3.5" />
-                </Button>
-              </DropdownMenuTrigger>
-            </div>
+            <DropdownMenuTrigger asChild>
+              <div
+                role="button"
+                tabIndex={
+                  updateThread.isPending ||
+                  (managerSelectorOptions.length <= 1 && managerSelectorValue === "none")
+                    ? -1
+                    : 0
+                }
+                className="group/manager-picker inline-flex h-8 w-fit max-w-full min-w-0 items-center gap-1 rounded-md px-0 text-xs leading-tight text-foreground outline-none ring-sidebar-ring transition-colors hover:text-foreground focus-visible:ring-2"
+              >
+                {parentThreadId ? (
+                  <Link
+                    to={`/projects/${projectId}/threads/${parentThreadId}`}
+                    className="min-w-0 truncate text-xs text-foreground no-underline transition-[text-decoration-color] duration-150 hover:underline hover:underline-offset-2 group-hover/manager-picker:underline group-hover/manager-picker:underline-offset-2"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                    }}
+                    onPointerDown={(event) => {
+                      event.stopPropagation();
+                    }}
+                  >
+                    {selectedManagerOption?.label ?? "Manager"}
+                  </Link>
+                ) : (
+                  <span className="min-w-0 truncate text-xs text-foreground">
+                    {selectedManagerOption?.label ?? "None"}
+                  </span>
+                )}
+                <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" />
+              </div>
+            </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="min-w-40 max-w-72">
               {managerSelectorOptions.map((option) => (
                 <DropdownMenuItem
