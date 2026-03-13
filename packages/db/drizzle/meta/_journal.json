@@ -281,6 +281,13 @@
       "when": 1773471600000,
       "tag": "0039_environment_agent_session_environment",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "6",
+      "when": 1773475200000,
+      "tag": "0040_backfill_thread_environment_ids_from_attachments",
+      "breakpoints": true
     }
   ]
 }
