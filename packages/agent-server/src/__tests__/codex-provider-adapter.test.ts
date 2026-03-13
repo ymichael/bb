@@ -191,6 +191,7 @@ describe("codex provider adapter", () => {
     const context = {
       projectId: "proj-1",
       threadId: "thread-1",
+      daemonUrl: "http://127.0.0.1:3333/api/v1",
     };
 
     expect(
@@ -203,6 +204,7 @@ describe("codex provider adapter", () => {
       config: {
         "shell_environment_policy.set.BB_PROJECT_ID": "proj-1",
         "shell_environment_policy.set.BB_THREAD_ID": "thread-1",
+        "shell_environment_policy.set.BB_DAEMON_URL": "http://127.0.0.1:3333/api/v1",
       },
     });
 
@@ -220,6 +222,7 @@ describe("codex provider adapter", () => {
       config: {
         "shell_environment_policy.set.BB_PROJECT_ID": "proj-1",
         "shell_environment_policy.set.BB_THREAD_ID": "thread-1",
+        "shell_environment_policy.set.BB_DAEMON_URL": "http://127.0.0.1:3333/api/v1",
       },
     });
 
@@ -239,6 +242,7 @@ describe("codex provider adapter", () => {
     const context = {
       projectId: "proj-1",
       threadId: "thread-1",
+      daemonUrl: "http://127.0.0.1:3333/api/v1",
       path: "/bb/bin:/usr/bin",
     };
 
@@ -252,6 +256,7 @@ describe("codex provider adapter", () => {
       config: {
         "shell_environment_policy.set.BB_PROJECT_ID": "proj-1",
         "shell_environment_policy.set.BB_THREAD_ID": "thread-1",
+        "shell_environment_policy.set.BB_DAEMON_URL": "http://127.0.0.1:3333/api/v1",
         "shell_environment_policy.set.PATH": "/bb/bin:/usr/bin",
       },
     });
@@ -347,6 +352,7 @@ describe("codex provider adapter", () => {
       {
         projectId: "proj-1",
         threadId: "thread-1",
+        daemonUrl: "http://127.0.0.1:3333/api/v1",
       },
     );
 
@@ -355,6 +361,7 @@ describe("codex provider adapter", () => {
         model_reasoning_effort: "high",
         "shell_environment_policy.set.BB_PROJECT_ID": "proj-1",
         "shell_environment_policy.set.BB_THREAD_ID": "thread-1",
+        "shell_environment_policy.set.BB_DAEMON_URL": "http://127.0.0.1:3333/api/v1",
       },
     });
   });

@@ -272,6 +272,12 @@ function resolveBbBinDir(pathValue: string | undefined): string | undefined {
   return undefined;
 }
 
+function resolveCliDaemonUrl(rawUrl: string | undefined): string | undefined {
+  const trimmed = rawUrl?.trim();
+  if (!trimmed) return undefined;
+  return trimmed.replace(/\/api\/v1\/?$/u, "");
+}
+
 function isExecutable(path: string): boolean {
   try {
     accessSync(path, constants.X_OK);
@@ -4277,6 +4283,9 @@ export class Orchestrator implements ThreadOrchestrator {
     return {
       projectId: args.projectId,
       threadId: args.threadId,
+      ...(resolveCliDaemonUrl(this.runtimeEnv.BEANBAG_DAEMON_URL)
+        ? { daemonUrl: resolveCliDaemonUrl(this.runtimeEnv.BEANBAG_DAEMON_URL) }
+        : {}),
       ...(this.threadShellPath ? { path: this.threadShellPath } : {}),
     };
   }
@@ -4309,6 +4318,9 @@ export class Orchestrator implements ThreadOrchestrator {
                 : {}),
               "shell_environment_policy.set.BB_PROJECT_ID": context.projectId,
               "shell_environment_policy.set.BB_THREAD_ID": context.threadId,
+              ...(context.daemonUrl
+                ? { "shell_environment_policy.set.BB_DAEMON_URL": context.daemonUrl }
+                : {}),
               "shell_environment_policy.set.PATH": context.path,
             },
           }

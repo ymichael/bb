@@ -45,6 +45,7 @@ export interface ProviderExecutionOptions {
 export interface ProviderThreadContext {
   projectId: string;
   threadId: string;
+  daemonUrl?: string;
   path?: string;
 }
 
