@@ -533,6 +533,21 @@ describe("ThreadDetailView", () => {
     apiState.thread.title = "Child thread";
   });
 
+  it("falls back to thread info when manager workspace is requested for a standard thread", () => {
+    apiState.thread.type = "standard";
+    apiState.thread.parentThreadId = "thread-parent";
+    apiState.thread.title = "Child thread";
+    apiState.timelineLoading = false;
+
+    const html = renderThreadDetailView(
+      "/projects/project-1/threads/thread-1?secondaryPanel=manager-workspace"
+    );
+
+    expect(html).not.toContain("No manager workspace available.");
+    expect(html).toContain("Type");
+    expect(html).toContain("Managed thread");
+  });
+
   it("hides environment metadata in the info panel for manager threads", () => {
     apiState.thread.type = "manager";
     apiState.thread.title = "Manager";

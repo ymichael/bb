@@ -1301,7 +1301,9 @@ export function ThreadDetailView() {
   const effectiveSecondaryPanel =
     !canUseGitUi && activeSecondaryPanel === "git-diff"
       ? "thread-info"
-      : activeSecondaryPanel;
+      : !isManagerThread && activeSecondaryPanel === "manager-workspace"
+        ? "thread-info"
+        : activeSecondaryPanel;
 
   const timelineHeader = (
     <header className="shrink-0 border-b border-border/80 bg-background/95 px-4 backdrop-blur-sm">
