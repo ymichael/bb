@@ -81,7 +81,7 @@ export function ThreadActionsMenu({
             }, 0)
           }}
         >
-          Rename thread
+          Rename
         </DropdownMenuItem>
         <DropdownMenuItem
           disabled={disabled}
