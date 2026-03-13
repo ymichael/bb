@@ -306,6 +306,36 @@ describe("Project routes", () => {
       expect(threadManager.spawn).not.toHaveBeenCalled();
     });
 
+    it("recreates the primary manager when the stored manager is archived", async () => {
+      const archivedManager = makeThread({
+        id: "thread-manager-archived",
+        projectId: "proj-1",
+        type: "manager",
+        archivedAt: 123,
+      });
+      const replacementManager = makeThread({
+        id: "thread-manager-2",
+        projectId: "proj-1",
+        type: "manager",
+      });
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeProject({ id: "proj-1", primaryManagerThreadId: archivedManager.id }),
+      );
+      threadManager.getRawById
+        .mockReturnValueOnce(archivedManager)
+        .mockReturnValueOnce(replacementManager);
+      threadManager.spawn.mockResolvedValue(replacementManager);
+
+      const res = await app.request("/projects/proj-1/manager", { method: "POST" });
+
+      expect(res.status).toBe(201);
+      expect(projectRepo.update).toHaveBeenCalledWith("proj-1", {
+        primaryManagerThreadId: null,
+      });
+      expect(threadManager.spawn).toHaveBeenCalled();
+      expect(await res.json()).toMatchObject({ id: replacementManager.id, type: "manager" });
+    });
+
     it("creates a primary manager, bootstraps workspace, and stores the pointer", async () => {
       const project = makeProject({ id: "proj-1" });
       const managerThread = makeThread({

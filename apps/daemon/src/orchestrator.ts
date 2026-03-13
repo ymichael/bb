@@ -896,6 +896,9 @@ export class Orchestrator implements ThreadOrchestrator {
     if (parentThread.type !== "manager") {
       throw invalidRequestError("Parent thread must be a manager thread");
     }
+    if (parentThread.archivedAt !== undefined) {
+      throw invalidRequestError("Parent thread cannot be archived");
+    }
   }
 
   private _stopAllPrimaryPromotionWatches(): void {
@@ -1973,6 +1976,12 @@ export class Orchestrator implements ThreadOrchestrator {
     const activePromotion = this.primaryPromotionByProjectId.get(projectId);
     if (activePromotion?.threadId === threadId) {
       this._clearPrimaryPromotionState(projectId);
+    }
+
+    for (const project of this.projectRepo.list()) {
+      if (project.primaryManagerThreadId === threadId) {
+        this.projectRepo.update(project.id, { primaryManagerThreadId: null });
+      }
     }
   }
 

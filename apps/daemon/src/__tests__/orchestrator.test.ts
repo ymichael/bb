@@ -503,7 +503,7 @@ function createMocks() {
   const projectRepo = {
     create: vi.fn(),
     getById: vi.fn(),
-    list: vi.fn(),
+    list: vi.fn(() => []),
     update: vi.fn(
       (projectId: string, data: Parameters<ProjectRepository["update"]>[1]) => {
         const existing = projectRepo.getById(projectId);
@@ -2000,6 +2000,22 @@ describe("Orchestrator", () => {
       ).toThrow("Parent thread must be a manager thread");
     });
 
+    it("rejects assigning an archived manager parent on update", () => {
+      const thread = makeThread({ id: "thread-1", type: "standard" });
+      const parentThread = makeThread({
+        id: "thread-manager-1",
+        type: "manager",
+        archivedAt: 123,
+      });
+      (threadRepo.getById as ReturnType<typeof vi.fn>)
+        .mockReturnValueOnce(thread)
+        .mockReturnValueOnce(parentThread);
+
+      expect(() =>
+        manager.updateThread("thread-1", { parentThreadId: "thread-manager-1" }),
+      ).toThrow("Parent thread cannot be archived");
+    });
+
     it("rejects assigning a parent to a manager thread", () => {
       const thread = makeThread({ id: "thread-manager-1", type: "manager" });
       (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
@@ -3275,6 +3291,41 @@ describe("Orchestrator", () => {
       expect(ws.broadcast).toHaveBeenCalledWith("thread", "thread-1", [
         "thread-deleted",
       ]);
+    });
+
+    it("clears any project primary manager pointer when deleting that manager thread", async () => {
+      const thread = makeThread({
+        id: "thread-manager-1",
+        type: "manager",
+        status: "idle",
+        projectId: "proj-1",
+        environmentId: "local",
+      });
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
+      (projectRepo.list as ReturnType<typeof vi.fn>).mockReturnValue([
+        {
+          id: "proj-1",
+          name: "Project 1",
+          rootPath: "/tmp/proj-1",
+          primaryManagerThreadId: "thread-manager-1",
+          createdAt: 1,
+          updatedAt: 1,
+        },
+        {
+          id: "proj-2",
+          name: "Project 2",
+          rootPath: "/tmp/proj-2",
+          primaryManagerThreadId: "other-thread",
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      ]);
+
+      await manager.deleteThread("thread-manager-1");
+
+      expect(projectRepo.update).toHaveBeenCalledWith("proj-1", {
+        primaryManagerThreadId: null,
+      });
     });
 
     it("preserves thread state when managed cleanup fails before deletion", async () => {

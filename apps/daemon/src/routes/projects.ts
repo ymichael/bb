@@ -248,7 +248,7 @@ export function createProjectRoutes(
         const existingManagerId = project.primaryManagerThreadId;
         if (existingManagerId) {
           const existingManager = deps.threadManager.getRawById(existingManagerId);
-          if (existingManager) {
+          if (existingManager && existingManager.archivedAt === undefined) {
             return c.json(existingManager);
           }
           projectRepo.update(projectId, { primaryManagerThreadId: null });
