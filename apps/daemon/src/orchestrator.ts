@@ -929,7 +929,9 @@ export class Orchestrator implements ThreadOrchestrator {
 
     // Create thread record in DB
     const explicitTitle = this._normalizeThreadTitle(req.title);
-    const environmentId = this._resolveRequestedEnvironmentId(req.environmentId);
+    const requestedEnvironmentId =
+      req.environmentId ?? (req.parentThreadId ? "worktree" : undefined);
+    const environmentId = this._resolveRequestedEnvironmentId(requestedEnvironmentId);
     const providerId = this._resolveSpawnProviderId(req);
     const thread = this.threadRepo.create({
       projectId: req.projectId,

@@ -1519,6 +1519,42 @@ describe("Orchestrator", () => {
       });
     });
 
+    it("defaults manager-managed spawned threads to the worktree environment", async () => {
+      const project = {
+        id: "proj-1",
+        name: "Test",
+        rootPath: "/test",
+        createdAt: 1000,
+        updatedAt: 1000,
+      };
+      const managerThread = makeThread({
+        id: "manager-1",
+        projectId: "proj-1",
+        type: "manager",
+        environmentId: "local",
+      });
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(project);
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockImplementation((id: string) =>
+        id === "manager-1" ? managerThread : makeThread({ id, projectId: "proj-1", status: "active" }),
+      );
+
+      const createdThread = makeThread({ id: "t-new", status: "idle", parentThreadId: "manager-1" });
+      (threadRepo.create as ReturnType<typeof vi.fn>).mockReturnValue(createdThread);
+
+      await manager.spawn({
+        projectId: "proj-1",
+        parentThreadId: "manager-1",
+      });
+
+      expect(threadRepo.create).toHaveBeenCalledWith({
+        projectId: "proj-1",
+        providerId: "codex",
+        environmentId: "worktree",
+        parentThreadId: "manager-1",
+        type: "standard",
+      });
+    });
+
     it("returns prompt-derived title fallback when spawned without an explicit title", async () => {
       const project = { id: "proj-1", name: "Test", rootPath: "/test", createdAt: 1000, updatedAt: 1000 };
       (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(project);
