@@ -899,6 +899,25 @@ export class Orchestrator implements ThreadOrchestrator {
     return this._resolveRequestedEnvironmentId(args.environmentId);
   }
 
+  private _resolveSpawnAttachedEnvironmentId(args: {
+    projectId: string;
+    environmentId?: string;
+    attachedEnvironmentId?: string;
+  }): string | undefined {
+    if (args.attachedEnvironmentId) {
+      return args.attachedEnvironmentId;
+    }
+    const requestedEnvironmentId = args.environmentId?.trim();
+    if (!requestedEnvironmentId || !this.environmentRepo) {
+      return undefined;
+    }
+    const environment = this.environmentRepo.getById(requestedEnvironmentId);
+    if (!environment || environment.projectId !== args.projectId) {
+      return undefined;
+    }
+    return environment.id;
+  }
+
   private _stopAllPrimaryPromotionWatches(): void {
     this.environmentService.stopPrimaryPromotionWatches();
   }
@@ -927,10 +946,15 @@ export class Orchestrator implements ThreadOrchestrator {
 
     // Create thread record in DB
     const explicitTitle = this._normalizeThreadTitle(req.title);
-    const environmentId = this._resolveRequestedRuntimeEnvironmentId({
+    const attachedEnvironmentId = this._resolveSpawnAttachedEnvironmentId({
       projectId: req.projectId,
       environmentId: req.environmentId,
       attachedEnvironmentId: req.attachedEnvironmentId,
+    });
+    const environmentId = this._resolveRequestedRuntimeEnvironmentId({
+      projectId: req.projectId,
+      environmentId: req.environmentId,
+      attachedEnvironmentId,
     });
     const providerId = this._resolveSpawnProviderId(req);
     const thread = this.threadRepo.create({
@@ -943,17 +967,17 @@ export class Orchestrator implements ThreadOrchestrator {
     if (explicitTitle) {
       this.lockedTitleThreadIds.add(thread.id);
     }
-    if (req.attachedEnvironmentId && this.threadEnvironmentAttachmentRepo) {
+    if (attachedEnvironmentId && this.threadEnvironmentAttachmentRepo) {
       this.threadEnvironmentAttachmentRepo.attachThread({
         threadId: thread.id,
-        environmentId: req.attachedEnvironmentId,
+        environmentId: attachedEnvironmentId,
       });
     }
 
     this._broadcastThreadChanged(thread.id, ["thread-created"]);
     this._scheduleProvisioning(
       thread.id,
-      { ...req, environmentId },
+      { ...req, environmentId, ...(attachedEnvironmentId ? { attachedEnvironmentId } : {}) },
       {
         rootPathHint: project.rootPath,
         reason: "thread-created",
