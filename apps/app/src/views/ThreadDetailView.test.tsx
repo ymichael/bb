@@ -455,8 +455,6 @@ describe("ThreadDetailView", () => {
     expect(html).toContain("Type");
     expect(html).toContain("Managed thread");
     expect(html).toContain("Manager");
-    expect(html).toContain("<select");
-    expect(html).toContain(">None<");
     expect(html).toContain(">Parent thread<");
     expect(html).toContain("Environment");
     expect(html).toContain("Local Env");

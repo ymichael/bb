@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ChevronDown, ChevronRight, Copy, PanelRight } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, Copy, PanelRight } from "lucide-react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { Panel, PanelGroup } from "react-resizable-panels";
 import {
@@ -29,6 +29,12 @@ import {
   useUploadPromptAttachment,
 } from "../hooks/useApi";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Separator } from "@/components/ui/separator";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { usePromptModelReasoning } from "@/hooks/usePromptModelReasoning";
@@ -971,27 +977,47 @@ export function ThreadDetailView() {
           label="Manager"
           valueClassName="min-w-0"
         >
-          <select
-            className="h-8 min-w-0 max-w-full rounded-md border border-border/70 bg-background px-2 text-xs text-foreground outline-none ring-sidebar-ring transition-colors focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-60"
-            value={managerSelectorValue}
-            disabled={
-              updateThread.isPending ||
-              (managerSelectorOptions.length <= 1 && managerSelectorValue === "none")
-            }
-            onChange={(event) => {
-              const nextValue = event.target.value;
-              updateThread.mutate({
-                id: thread.id,
-                parentThreadId: nextValue === "none" ? null : nextValue,
-              });
-            }}
-          >
-            {managerSelectorOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                disabled={
+                  updateThread.isPending ||
+                  (managerSelectorOptions.length <= 1 && managerSelectorValue === "none")
+                }
+                className="h-8 w-fit max-w-full min-w-0 items-center gap-1 border-none bg-transparent px-1 text-xs leading-tight text-muted-foreground/75 shadow-none hover:bg-transparent hover:text-foreground"
+              >
+                <span className="truncate">
+                  {managerSelectorOptions.find((option) => option.value === managerSelectorValue)
+                    ?.label ?? "None"}
+                </span>
+                <ChevronDown className="size-3.5 text-muted-foreground" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="min-w-40 max-w-72">
+              {managerSelectorOptions.map((option) => (
+                <DropdownMenuItem
+                  key={option.value}
+                  onSelect={() => {
+                    updateThread.mutate({
+                      id: thread.id,
+                      parentThreadId: option.value === "none" ? null : option.value,
+                    });
+                  }}
+                  className="flex items-center justify-between gap-3"
+                >
+                  <span className="truncate" title={option.label}>
+                    {option.label}
+                  </span>
+                  <Check
+                    className={managerSelectorValue === option.value ? "size-4 opacity-100" : "size-4 opacity-0"}
+                  />
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </DetailRow>
       ) : null}
       {!isManagerThread && threadEnvironmentType ? (
