@@ -58,7 +58,7 @@ Use the `bb` CLI to inspect and manage threads when appropriate.
 
 Useful commands:
 - `bb thread spawn --project <project-id> --prompt "..." --parent-thread <manager-thread-id>`
-- `bb thread list --project <project-id>`
+- `bb thread list --project <project-id> --parent-thread <manager-thread-id>`
 - `bb thread status <thread-id>`
 - `bb thread output <thread-id>`
 - `bb thread tell <thread-id> "..."`

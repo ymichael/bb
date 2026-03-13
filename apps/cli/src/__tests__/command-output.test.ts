@@ -212,6 +212,190 @@ describe("CLI command output contracts", () => {
 
     expect(collectLogLines(vi.mocked(console.log))).toContain("No manager hired");
   });
+
+  it("bb manager status includes managed child threads", async () => {
+    const managerThread: Thread = {
+      id: "thread-manager-1",
+      projectId: "project-123",
+      providerId: "codex",
+      title: "Manager",
+      type: "manager",
+      status: "idle",
+      createdAt: 1,
+      updatedAt: 2,
+    };
+    const managedThread: Thread = {
+      id: "thread-worker-1",
+      projectId: "project-123",
+      providerId: "codex",
+      title: "Worker",
+      type: "standard",
+      status: "active",
+      parentThreadId: "thread-manager-1",
+      createdAt: 3,
+      updatedAt: 4,
+    };
+    const get = vi.fn(async ({ param }: { param: { id: string } }) => {
+      expect(param.id).toBe("thread-manager-1");
+      return managerThread;
+    });
+    const list = vi.fn(async ({ query }: { query: { parentThreadId?: string } }) => {
+      expect(query.parentThreadId).toBe("thread-manager-1");
+      return [managedThread];
+    });
+    createClientMock.mockReturnValue(asDaemonClient({
+      api: {
+        v1: {
+          threads: {
+            $get: list,
+            ":id": {
+              $get: get,
+            },
+          },
+        },
+      },
+    }));
+
+    await runCommand(["manager", "status", "thread-manager-1"], (program) =>
+      registerManagerCommands(program, () => "http://daemon"),
+    );
+
+    const lines = collectLogLines(vi.mocked(console.log));
+    expect(lines).toContain("Managed threads:");
+    expect(lines.some((line) => line.includes("thread-worker-1"))).toBe(true);
+  });
+
+  it("bb manager send posts a tell message", async () => {
+    const managerThread: Thread = {
+      id: "thread-manager-1",
+      projectId: "project-123",
+      providerId: "codex",
+      type: "manager",
+      status: "idle",
+      createdAt: 1,
+      updatedAt: 2,
+    };
+    const get = vi.fn(async () => managerThread);
+    const post = vi.fn(async () => ({ ok: true }));
+    createClientMock.mockReturnValue(asDaemonClient({
+      api: {
+        v1: {
+          threads: {
+            ":id": {
+              $get: get,
+              tell: {
+                $post: post,
+              },
+            },
+          },
+        },
+      },
+    }));
+
+    await runCommand(
+      ["manager", "send", "thread-manager-1", "hello manager"],
+      (program) => registerManagerCommands(program, () => "http://daemon"),
+    );
+
+    expect(post).toHaveBeenCalledWith({
+      param: { id: "thread-manager-1" },
+      json: {
+        input: [{ type: "text", text: "hello manager" }],
+      },
+    });
+    expect(collectLogLines(vi.mocked(console.log))).toContain(
+      "Manager thread-manager-1 updated",
+    );
+  });
+
+  it("bb manager delete deletes the manager thread", async () => {
+    const managerThread: Thread = {
+      id: "thread-manager-1",
+      projectId: "project-123",
+      providerId: "codex",
+      title: "Manager",
+      type: "manager",
+      status: "idle",
+      createdAt: 1,
+      updatedAt: 2,
+    };
+    const get = vi.fn(async () => managerThread);
+    createClientMock.mockReturnValue(asDaemonClient({
+      api: {
+        v1: {
+          threads: {
+            ":id": {
+              $get: get,
+            },
+          },
+        },
+      },
+    }));
+
+    await runCommand(
+      ["manager", "delete", "thread-manager-1", "--yes"],
+      (program) => registerManagerCommands(program, () => "http://daemon"),
+    );
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      new URL("/api/v1/threads/thread-manager-1", "http://daemon"),
+      { method: "DELETE" },
+    );
+    expect(collectLogLines(vi.mocked(console.log))).toContain(
+      "Manager thread-manager-1 deleted",
+    );
+  });
+
+  it("bb manager log prints events", async () => {
+    const managerThread: Thread = {
+      id: "thread-manager-1",
+      projectId: "project-123",
+      providerId: "codex",
+      type: "manager",
+      status: "idle",
+      createdAt: 1,
+      updatedAt: 2,
+    };
+    const get = vi.fn(async () => managerThread);
+    const eventsGet = vi.fn(async () => [
+      {
+        seq: 1,
+        threadId: "thread-manager-1",
+        type: "system/manager/user_message",
+        data: { text: "hello" },
+        createdAt: 3,
+      },
+    ]);
+    createClientMock.mockReturnValue(asDaemonClient({
+      api: {
+        v1: {
+          threads: {
+            ":id": {
+              $get: get,
+              events: {
+                $get: eventsGet,
+              },
+            },
+          },
+        },
+      },
+    }));
+
+    await runCommand(["manager", "log", "thread-manager-1"], (program) =>
+      registerManagerCommands(program, () => "http://daemon"),
+    );
+
+    expect(eventsGet).toHaveBeenCalledWith({
+      param: { id: "thread-manager-1" },
+      query: {},
+    });
+    expect(
+      collectLogLines(vi.mocked(console.log)).some((line) =>
+        line.includes("system/manager/user_message"),
+      ),
+    ).toBe(true);
+  });
+
   it("bb status prints project/thread context", async () => {
     process.env.BB_PROJECT_ID = "proj-1";
     process.env.BB_THREAD_ID = "thread-1";
@@ -255,6 +439,31 @@ describe("CLI command output contracts", () => {
       json: {
         projectId: "proj-1",
         input: [{ type: "text", text: "hello" }],
+      },
+    });
+  });
+
+  it("bb thread list supports parent-thread filtering", async () => {
+    const list = vi.fn(async () => []);
+    createClientMock.mockReturnValue(asDaemonClient({
+      api: {
+        v1: {
+          threads: {
+            $get: list,
+          },
+        },
+      },
+    }));
+
+    await runCommand(
+      ["thread", "list", "--project", "proj-1", "--parent-thread", "thread-manager-1"],
+      (program) => registerThreadCommands(program, () => "http://daemon"),
+    );
+
+    expect(list).toHaveBeenCalledWith({
+      query: {
+        projectId: "proj-1",
+        parentThreadId: "thread-manager-1",
       },
     });
   });

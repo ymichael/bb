@@ -376,13 +376,18 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
     .command("list")
     .description("List threads")
     .option("--project <id>", "Filter by project ID (defaults to BB_PROJECT_ID)")
-    .action(async (opts: { project?: string }) => {
+    .option("--parent-thread <id>", "Filter by managing parent thread ID")
+    .action(async (opts: { project?: string; parentThread?: string }) => {
       const client = createClient(getUrl());
       try {
         const projectId = resolveProjectId(opts.project);
+        const parentThreadId = resolveThreadId(opts.parentThread);
         const threads = await unwrap<Thread[]>(
           client.api.v1.threads.$get({
-            query: { projectId },
+            query: {
+              ...(projectId ? { projectId } : {}),
+              ...(parentThreadId ? { parentThreadId } : {}),
+            },
           }),
         );
         if (threads.length === 0) {
