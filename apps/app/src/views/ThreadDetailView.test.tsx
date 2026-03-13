@@ -341,7 +341,11 @@ vi.mock("./ThreadFollowUpComposer", () => ({
 }));
 
 vi.mock("@/components/thread/ThreadActionsMenu", () => ({
-  ThreadActionsMenu: () => <div>thread-actions</div>,
+  ThreadActionsMenu: ({
+    debugToggleLabel,
+  }: {
+    debugToggleLabel?: string;
+  }) => <div>{debugToggleLabel ?? "thread-actions"}</div>,
 }));
 
 vi.mock("@/components/thread/ThreadRenameDialog", () => ({
@@ -503,6 +507,32 @@ describe("ThreadDetailView", () => {
     apiState.thread.type = "standard";
     apiState.thread.parentThreadId = "thread-parent";
     apiState.thread.title = "Child thread";
+  });
+
+  it("shows the debug timeline toggle label for manager threads", () => {
+    apiState.thread.type = "manager";
+    apiState.thread.title = "Manager";
+    Reflect.deleteProperty(apiState.thread, "parentThreadId");
+    apiState.timelineLoading = false;
+
+    const html = renderThreadDetailView();
+
+    expect(html).toContain("Show all events");
+
+    apiState.thread.type = "standard";
+    apiState.thread.parentThreadId = "thread-parent";
+    apiState.thread.title = "Child thread";
+  });
+
+  it("does not show the debug timeline toggle label for standard threads", () => {
+    apiState.thread.type = "standard";
+    apiState.thread.parentThreadId = "thread-parent";
+    apiState.thread.title = "Child thread";
+    apiState.timelineLoading = false;
+
+    const html = renderThreadDetailView();
+
+    expect(html).not.toContain("Show all events");
   });
 
   it("shows a managed badge for manager-owned standard threads", () => {

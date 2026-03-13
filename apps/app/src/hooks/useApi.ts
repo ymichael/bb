@@ -588,11 +588,27 @@ export function useThreadMergeBaseBranches(
 
 export function useThreadTimeline(
   id: string,
-  options?: { enabled?: boolean; limit?: number; refetchOnMount?: boolean | "always" },
+  options?: {
+    enabled?: boolean;
+    limit?: number;
+    refetchOnMount?: boolean | "always";
+    includeManagerDebugView?: boolean;
+  },
 ) {
   return useQuery<ThreadTimelineResponse>({
-    queryKey: ["threadTimeline", id, options?.limit ?? null],
-    queryFn: () => api.getThreadTimeline(id, options?.limit, false),
+    queryKey: [
+      "threadTimeline",
+      id,
+      options?.limit ?? null,
+      options?.includeManagerDebugView ?? false,
+    ],
+    queryFn: () =>
+      api.getThreadTimeline(
+        id,
+        options?.limit,
+        false,
+        options?.includeManagerDebugView ?? false,
+      ),
     enabled: (options?.enabled ?? true) && !!id,
     refetchOnMount: options?.refetchOnMount ?? true,
     placeholderData: (previousData, previousQuery) =>

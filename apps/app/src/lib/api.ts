@@ -555,10 +555,12 @@ export async function getThreadTimeline(
   id: string,
   limit?: number,
   includeToolGroupMessages: boolean = false,
+  includeManagerDebugView: boolean = false,
 ): Promise<ThreadTimelineResponse> {
   const params = new URLSearchParams();
   if (limit !== undefined) params.set("limit", String(limit));
   if (includeToolGroupMessages) params.set("includeToolGroupMessages", "true");
+  if (includeManagerDebugView) params.set("includeManagerDebugView", "true");
   const qs = params.toString();
   return request<ThreadTimelineResponse>(
     "GET",

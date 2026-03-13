@@ -98,6 +98,9 @@ interface PendingSubmittedFollowUp {
   signature: string;
   submittedAt: number;
 }
+
+const MANAGER_DEBUG_VIEW_STORAGE_KEY_PREFIX = "thread-manager-debug-view:";
+
 export function ThreadDetailView() {
   const { projectId, threadId } = useParams<{
     projectId: string;
@@ -108,11 +111,15 @@ export function ThreadDetailView() {
   const { data: thread, isLoading, error } = useThread(threadId ?? "", {
     refetchOnMount: "always",
   });
+  const [showManagerDebugView, setShowManagerDebugView] = useState(false);
   const { data: projects } = useProjects();
   const { data: parentThread } = useThread(thread?.parentThreadId ?? "");
   const { data: timeline, isLoading: timelineLoading } = useThreadTimeline(
     threadId ?? "",
-    { refetchOnMount: "always" },
+    {
+      refetchOnMount: "always",
+      includeManagerDebugView: showManagerDebugView,
+    },
   );
   const { data: defaultExecutionOptions } = useThreadDefaultExecutionOptions(
     threadId ?? "",
@@ -172,6 +179,38 @@ export function ThreadDetailView() {
         attachments: promptDraft.attachments,
       }),
     [promptDraft.attachments, promptDraft.text],
+  );
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!threadId || thread?.type !== "manager") {
+      setShowManagerDebugView(false);
+      return;
+    }
+    const rawValue = window.localStorage.getItem(
+      `${MANAGER_DEBUG_VIEW_STORAGE_KEY_PREFIX}${threadId}`,
+    );
+    setShowManagerDebugView(rawValue === "true");
+  }, [thread?.type, threadId]);
+
+  const handleManagerDebugViewChange = useCallback(
+    (checked: boolean) => {
+      setShowManagerDebugView(checked);
+      if (typeof window === "undefined" || !threadId || thread?.type !== "manager") {
+        return;
+      }
+      if (checked) {
+        window.localStorage.setItem(
+          `${MANAGER_DEBUG_VIEW_STORAGE_KEY_PREFIX}${threadId}`,
+          "true",
+        );
+        return;
+      }
+      window.localStorage.removeItem(
+        `${MANAGER_DEBUG_VIEW_STORAGE_KEY_PREFIX}${threadId}`,
+      );
+    },
+    [thread?.type, threadId],
   );
   const {
     data: managerWorkspaceFile,
@@ -1128,6 +1167,11 @@ export function ThreadDetailView() {
       onDelete={() => {
         setThreadDeleteTarget(thread);
       }}
+      debugToggleLabel={isManagerThread ? "Show all events" : undefined}
+      debugToggleChecked={isManagerThread ? showManagerDebugView : undefined}
+      onDebugToggleCheckedChange={
+        isManagerThread ? handleManagerDebugViewChange : undefined
+      }
       isArchived={thread.archivedAt !== undefined}
     />
   );

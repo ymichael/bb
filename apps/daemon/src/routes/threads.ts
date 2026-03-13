@@ -223,6 +223,10 @@ const timelineQuerySchema = z.object({
     .enum(["true", "false"])
     .optional()
     .transform((value) => value === "true"),
+  includeManagerDebugView: z
+    .enum(["true", "false"])
+    .optional()
+    .transform((value) => value === "true"),
 });
 
 const toolGroupMessagesQuerySchema = z.object({
@@ -983,11 +987,12 @@ export function createThreadRoutes(
           if (!thread) {
             return sendRouteError(c, threadNotFoundError(c.req.param("id")));
           }
-          const { limit, includeToolGroupMessages } = c.req.valid("query");
+          const { limit, includeToolGroupMessages, includeManagerDebugView } = c.req.valid("query");
           const timeline = threadManager.getTimeline(
             c.req.param("id"),
             limit,
             includeToolGroupMessages,
+            includeManagerDebugView,
           );
           return c.json(timeline);
         } catch (err) {

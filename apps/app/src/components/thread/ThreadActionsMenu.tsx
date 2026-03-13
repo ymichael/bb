@@ -1,6 +1,7 @@
 import { MoreHorizontal } from "lucide-react"
 import {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
@@ -13,6 +14,9 @@ interface ThreadActionsMenuProps {
   onRename: () => void
   onToggleArchive: () => void
   onDelete?: () => void
+  debugToggleLabel?: string
+  debugToggleChecked?: boolean
+  onDebugToggleCheckedChange?: (checked: boolean) => void
   isRead: boolean
   isArchived: boolean
   onOpenChange?: (open: boolean) => void
@@ -26,6 +30,9 @@ export function ThreadActionsMenu({
   onRename,
   onToggleArchive,
   onDelete,
+  debugToggleLabel,
+  debugToggleChecked,
+  onDebugToggleCheckedChange,
   isRead,
   isArchived,
   onOpenChange,
@@ -97,6 +104,20 @@ export function ThreadActionsMenu({
           >
             Delete thread
           </DropdownMenuItem>
+        ) : null}
+        {debugToggleLabel && onDebugToggleCheckedChange ? (
+          <DropdownMenuCheckboxItem
+            disabled={disabled}
+            checked={debugToggleChecked}
+            onCheckedChange={(checked) => {
+              onDebugToggleCheckedChange(checked === true)
+            }}
+            onSelect={(event) => {
+              event.preventDefault()
+            }}
+          >
+            {debugToggleLabel}
+          </DropdownMenuCheckboxItem>
         ) : null}
       </DropdownMenuContent>
     </DropdownMenu>

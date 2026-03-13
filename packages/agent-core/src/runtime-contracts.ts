@@ -257,6 +257,7 @@ export interface ThreadOrchestrator {
     threadId: string,
     limit?: number,
     includeToolGroupMessages?: boolean,
+    includeManagerDebugView?: boolean,
   ): ThreadTimelineResponse;
   getToolGroupMessages(
     threadId: string,

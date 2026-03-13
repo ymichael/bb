@@ -5663,5 +5663,66 @@ describe("Orchestrator", () => {
         expect(messageRows[0].message.text).toBe("Visible manager update");
       }
     });
+
+    it("shows the regular projected timeline for manager threads in debug view", () => {
+      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+        makeThread({ id: "thread-1", type: "manager", status: "idle" }),
+      );
+      (eventRepo.getLatestSeq as ReturnType<typeof vi.fn>).mockReturnValue(3);
+      (eventRepo.listByThread as ReturnType<typeof vi.fn>).mockReturnValue([
+        makeEvent({
+          seq: 1,
+          type: "client/turn/start",
+          data: {
+            direction: "outbound",
+            source: "tell",
+            initiator: "system",
+            input: [{ type: "text", text: "[bb system] Welcome!" }],
+            request: {
+              method: "turn/start",
+              params: {},
+            },
+            execution: {},
+          },
+        }),
+        makeEvent({
+          seq: 2,
+          type: "item/completed",
+          data: {
+            threadId: "thread-1",
+            turnId: "turn-1",
+            item: {
+              type: "agentMessage",
+              id: "assistant-1",
+              text: "internal manager chatter",
+            },
+          },
+        }),
+        makeEvent({
+          seq: 3,
+          type: "system/manager/user_message",
+          data: {
+            text: "Visible manager update",
+            turnId: "turn-1",
+          },
+        }),
+      ]);
+
+      const timeline = manager.getTimeline("thread-1", undefined, false, true);
+      const messageRows = timeline.rows.filter(
+        (row): row is Extract<(typeof timeline.rows)[number], { kind: "message" }> =>
+          row.kind === "message",
+      );
+
+      expect(messageRows).toHaveLength(2);
+      expect(messageRows[0]?.message.kind).toBe("assistant-text");
+      if (messageRows[0]?.message.kind === "assistant-text") {
+        expect(messageRows[0].message.text).toBe("internal manager chatter");
+      }
+      expect(messageRows[1]?.message.kind).toBe("assistant-text");
+      if (messageRows[1]?.message.kind === "assistant-text") {
+        expect(messageRows[1].message.text).toBe("Visible manager update");
+      }
+    });
   });
 });

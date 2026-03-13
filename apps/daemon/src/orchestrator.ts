@@ -2292,11 +2292,12 @@ export class Orchestrator implements ThreadOrchestrator {
     threadId: string,
     limit?: number,
     includeToolGroupMessages: boolean = false,
+    includeManagerDebugView: boolean = false,
   ): ThreadTimelineResponse {
     return measureSync("orchestrator.getTimeline", () => {
       const thread = this.threadRepo.getById(threadId);
       const latestSeq = this.eventRepo.getLatestSeq(threadId);
-      const requestKey = `${limit ?? "all"}:${includeToolGroupMessages ? "with-tool-messages" : "summary-only"}`;
+      const requestKey = `${limit ?? "all"}:${includeToolGroupMessages ? "with-tool-messages" : "summary-only"}:${includeManagerDebugView ? "manager-debug" : "manager-default"}`;
       const existingCache = this.timelineByThread.get(threadId);
       if (
         existingCache &&
@@ -2318,11 +2319,13 @@ export class Orchestrator implements ThreadOrchestrator {
         includeDebugRawEvents: false,
         includeOptionalOperations: false,
         threadStatus: thread?.status,
-        threadType: thread?.type,
+        threadType:
+          includeManagerDebugView && thread?.type === "manager" ? "standard" : thread?.type,
       });
       const visibleMessages = uiMessages.filter(
         (entry) => {
           if (entry.kind === "assistant-reasoning") return false;
+          if (includeManagerDebugView) return true;
           if (thread?.type !== "manager") return true;
           return (
             entry.kind === "user" ||
@@ -2364,6 +2367,7 @@ export class Orchestrator implements ThreadOrchestrator {
       threadId,
       ...(limit !== undefined ? { limit } : {}),
       includeToolGroupMessages,
+      includeManagerDebugView,
     });
   }
 
