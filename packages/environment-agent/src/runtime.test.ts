@@ -326,4 +326,50 @@ describe("EnvironmentAgentRuntime", () => {
       message: "provider exploded",
     });
   });
+
+  it("resolves provider server requests through the callback", async () => {
+    const requests: Array<{ requestId: string | number; method: string; params?: unknown }> = [];
+    const stdout: string[] = [];
+    const runtime = new EnvironmentAgentRuntime({
+      threadId: "thread-1",
+      providerCommand: "node",
+      providerArgs: [
+        "-e",
+        [
+          "console.log(JSON.stringify({ id: 61, method: 'item/tool/call', params: { tool: 'echo', arguments: { text: 'hi' } } }));",
+          "process.stdin.setEncoding('utf8');",
+          "let buffer='';",
+          "process.stdin.on('data',chunk=>{",
+          "buffer+=chunk;",
+          "const parts=buffer.split(/\\r\\n|\\n|\\r/g);",
+          "buffer=parts.pop() ?? '';",
+          "for (const line of parts) { if (line.trim()) console.log(line); }",
+          "});",
+          "setTimeout(() => process.exit(0), 100);",
+        ].join(""),
+      ],
+      onProviderRequest: async (request) => {
+        requests.push(request);
+        return {
+          success: true,
+          contentItems: [{ type: "inputText", text: "ok" }],
+        };
+      },
+    });
+    const unsubscribe = runtime.subscribeToProviderStdout((line) => {
+      stdout.push(line);
+    });
+    cleanup.push(unsubscribe);
+
+    runtime.start();
+
+    await expect.poll(() => requests).toContainEqual({
+      requestId: 61,
+      method: "item/tool/call",
+      params: { tool: "echo", arguments: { text: "hi" } },
+    });
+    await expect.poll(() =>
+      stdout.some((line) => line.includes('"id":61') && line.includes('"result"')),
+    ).toBe(true);
+  });
 });

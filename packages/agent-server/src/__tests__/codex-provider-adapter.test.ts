@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   createProviderEventEnvelope,
   type AvailableModel,
+  type ProviderDynamicTool,
   type ThreadEvent,
 } from "@beanbag/agent-core";
 
@@ -61,6 +62,7 @@ describe("codex provider adapter", () => {
         version: "0.0.1",
       },
       capabilities: {
+        experimentalApi: true,
         optOutNotificationMethods: expect.arrayContaining([
           "codex/event/item_started",
           "codex/event/item_completed",
@@ -378,5 +380,99 @@ describe("codex provider adapter", () => {
       ].join("\n\n"),
     });
     expect(params).not.toHaveProperty("developerInstructions");
+  });
+
+  it("advertises Codex custom tool capabilities", () => {
+    const adapter = createCodexProviderAdapter();
+
+    expect(adapter.capabilities.supportsDynamicTools).toBe(true);
+    expect(adapter.capabilities.supportsToolCallRequests).toBe(true);
+  });
+
+  it("adds dynamic tools to thread/start params", () => {
+    const adapter = createCodexProviderAdapter();
+    const tools: ProviderDynamicTool[] = [
+      {
+        name: "lookup_ticket",
+        description: "Look up a ticket",
+        inputSchema: {
+          type: "object",
+          properties: {
+            id: { type: "string" },
+          },
+          required: ["id"],
+          additionalProperties: false,
+        },
+      },
+    ];
+
+    const params = adapter.createThreadStartParams(
+      {
+        projectId: "proj-1",
+      },
+      {
+        projectId: "proj-1",
+        threadId: "thread-1",
+      },
+      tools,
+    );
+
+    expect(params).toMatchObject({
+      dynamicTools: [
+        {
+          name: "lookup_ticket",
+          description: "Look up a ticket",
+          inputSchema: {
+            type: "object",
+            properties: {
+              id: { type: "string" },
+            },
+            required: ["id"],
+            additionalProperties: false,
+          },
+        },
+      ],
+    });
+  });
+
+  it("decodes and encodes Codex tool calls", () => {
+    const adapter = createCodexProviderAdapter();
+
+    expect(
+      adapter.decodeToolCallRequest?.(61, "item/tool/call", {
+        threadId: "thr_123",
+        turnId: "turn_123",
+        callId: "call_123",
+        tool: "lookup_ticket",
+        arguments: { id: "ABC-123" },
+      }),
+    ).toEqual({
+      requestId: 61,
+      threadId: "thr_123",
+      turnId: "turn_123",
+      callId: "call_123",
+      tool: "lookup_ticket",
+      arguments: { id: "ABC-123" },
+    });
+
+    expect(
+      adapter.encodeToolCallResponse?.({
+        success: true,
+        contentItems: [
+          {
+            type: "inputText",
+            text: "Ticket ABC-123 is open.",
+          },
+        ],
+      }),
+    ).toEqual({
+      success: true,
+      contentItems: [
+        {
+          type: "inputText",
+          text: "Ticket ABC-123 is open.",
+        },
+      ],
+    });
   });
 });

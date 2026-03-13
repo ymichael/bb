@@ -146,6 +146,18 @@ export async function startEnvironmentAgentService(
 
   const runtime = new EnvironmentAgentRuntime({
     ...options.runtime,
+    onProviderRequest: async (request) => {
+      if (!sessionSupervisor || !options.runtime.threadId) {
+        throw new Error("Environment-agent session supervisor is unavailable");
+      }
+      const response = await sessionSupervisor.forwardProviderRequest(request);
+      if (!response.ok) {
+        throw new Error(
+          response.errorMessage ?? "Environment-agent provider request failed",
+        );
+      }
+      return response.result;
+    },
     onStdoutLine: (line) => {
       logger.log("info", "provider stdout", { line });
       options.runtime.onStdoutLine?.(line);

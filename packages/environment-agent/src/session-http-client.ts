@@ -9,6 +9,8 @@ import type {
   EnvironmentAgentSessionEventBatchPayload,
   EnvironmentAgentSessionHeartbeatPayload,
   EnvironmentAgentSessionOpenPayload,
+  EnvironmentAgentSessionProviderRequestPayload,
+  EnvironmentAgentSessionProviderResponseMessage,
   EnvironmentAgentSessionWelcomeMessage,
 } from "./session-protocol.js";
 import { ENVIRONMENT_AGENT_SESSION_PROTOCOL } from "./session-protocol.js";
@@ -168,6 +170,18 @@ export class EnvironmentAgentSessionHttpClient {
       sessionId,
       payload,
     });
+  }
+
+  sendProviderRequest(args: {
+    sessionId: string;
+    payload: EnvironmentAgentSessionProviderRequestPayload;
+  }): Promise<EnvironmentAgentSessionProviderResponseMessage> {
+    return this.postClientMessage({
+      type: "provider_request",
+      sessionId: args.sessionId,
+      payload: args.payload,
+      responseStatus: 200,
+    }) as Promise<EnvironmentAgentSessionProviderResponseMessage>;
   }
 
   async closeSession(

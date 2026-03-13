@@ -9,6 +9,21 @@ interface JsonRpcRequest {
   params?: Record<string, unknown>;
 }
 
+interface JsonRpcSuccessResponse {
+  jsonrpc: "2.0";
+  id: JsonRpcId;
+  result: unknown;
+}
+
+interface JsonRpcErrorResponse {
+  jsonrpc: "2.0";
+  id: JsonRpcId;
+  error: {
+    code: number;
+    message: string;
+  };
+}
+
 interface PendingRequest {
   resolve: (value: unknown) => void;
   reject: (reason: Error) => void;
@@ -51,10 +66,19 @@ export interface ProviderRuntimeNotification {
   params: unknown;
 }
 
+export interface ProviderRuntimeServerRequest {
+  id: JsonRpcId;
+  method: string;
+  params: unknown;
+}
+
 export interface ProviderRuntimeOptions {
   threadId: string;
   transport: JsonLineTransport;
   onNotification: (msg: ProviderRuntimeNotification) => void;
+  onServerRequest?: (
+    request: ProviderRuntimeServerRequest,
+  ) => Promise<unknown> | unknown;
   onUnmatchedRpcError?: (id: JsonRpcId, message: string) => void;
   onStderrLine?: (line: string) => void;
   onClosed?: (reason?: Error) => void;
@@ -87,6 +111,12 @@ type DecodedProviderRuntimeMessage =
       kind: "notification";
       method: string;
       params: unknown;
+    }
+  | {
+      kind: "request";
+      id: JsonRpcId;
+      method: string;
+      params: unknown;
     };
 
 function decodeProviderRuntimeMessage(
@@ -115,6 +145,15 @@ function decodeProviderRuntimeMessage(
   }
 
   if (method) {
+    if (id !== undefined) {
+      return {
+        kind: "request",
+        id,
+        method,
+        params: record.params,
+      };
+    }
+
     return {
       kind: "notification",
       method,
@@ -268,10 +307,58 @@ export class ProviderRuntime {
       return;
     }
 
+    if (msg.kind === "request") {
+      void this._handleServerRequest(msg);
+      return;
+    }
+
     this.opts.onNotification({
       method: msg.method,
       params: msg.params,
     });
+  }
+
+  private async _handleServerRequest(
+    request: ProviderRuntimeServerRequest,
+  ): Promise<void> {
+    const response = await this._resolveServerRequest(request);
+    try {
+      this.opts.transport.send(JSON.stringify(response));
+    } catch {
+      // Best-effort only; the close/error path will surface transport failure.
+    }
+  }
+
+  private async _resolveServerRequest(
+    request: ProviderRuntimeServerRequest,
+  ): Promise<JsonRpcSuccessResponse | JsonRpcErrorResponse> {
+    if (!this.opts.onServerRequest) {
+      return {
+        jsonrpc: "2.0",
+        id: request.id,
+        error: {
+          code: -32601,
+          message: `Unhandled provider request method ${request.method}`,
+        },
+      };
+    }
+
+    try {
+      return {
+        jsonrpc: "2.0",
+        id: request.id,
+        result: await this.opts.onServerRequest(request),
+      };
+    } catch (error) {
+      return {
+        jsonrpc: "2.0",
+        id: request.id,
+        error: {
+          code: -32000,
+          message: error instanceof Error ? error.message : String(error),
+        },
+      };
+    }
   }
 
   private _setupTransport(): void {

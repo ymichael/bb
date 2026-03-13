@@ -159,6 +159,7 @@ function mockEnvironmentAgentSessionService(): EnvironmentAgentSessionService {
     waitForCommands: vi.fn(),
     recordCommandAck: vi.fn(),
     recordCommandResult: vi.fn(),
+    handleProviderRequest: vi.fn(),
     closeSession: vi.fn(),
   } as unknown as EnvironmentAgentSessionService;
 }
@@ -837,6 +838,83 @@ describe("Thread routes", () => {
           state: "failed",
           errorCode: "provider_error",
           errorMessage: "runtime down",
+        },
+      });
+    });
+
+    it("forwards provider requests and returns provider responses", async () => {
+      const sessionService = mockEnvironmentAgentSessionService();
+      (threadManager.getById as ReturnType<typeof vi.fn>).mockReturnValue(makeThread());
+      (sessionService.handleProviderRequest as ReturnType<typeof vi.fn>).mockResolvedValue({
+        protocol: "beanbag.env-agent.v1",
+        type: "provider_response",
+        messageId: "msg-provider-response",
+        sessionId: "sess-1",
+        sentAt: 1_100,
+        payload: {
+          requestId: 61,
+          ok: true,
+          result: {
+            success: true,
+            contentItems: [{ type: "inputText", text: "from-tool" }],
+          },
+        },
+      });
+      app = new Hono().route(
+        "/threads",
+        createThreadRoutes(threadManager, {
+          environmentAgentSessionService: sessionService,
+        }),
+      );
+
+      const res = await app.request(
+        "/threads/thread-1/environment-agent/session/messages",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            protocol: "beanbag.env-agent.v1",
+            messageId: "msg-provider-request",
+            sentAt: 1_000,
+            sessionId: "sess-1",
+            type: "provider_request",
+            payload: {
+              requestId: 61,
+              method: "item/tool/call",
+              params: {
+                toolCallId: "tool-call-1",
+                tool: "echo_test_tool",
+                arguments: {
+                  message: "from-tool",
+                },
+              },
+            },
+          }),
+        },
+      );
+
+      expect(res.status).toBe(200);
+      expect(await res.json()).toMatchObject({
+        type: "provider_response",
+        sessionId: "sess-1",
+        payload: {
+          requestId: 61,
+          ok: true,
+        },
+      });
+      expect(sessionService.handleProviderRequest).toHaveBeenCalledWith({
+        threadId: "thread-1",
+        sessionId: "sess-1",
+        payload: {
+          requestId: 61,
+          method: "item/tool/call",
+          params: {
+            toolCallId: "tool-call-1",
+            tool: "echo_test_tool",
+            arguments: {
+              message: "from-tool",
+            },
+          },
         },
       });
     });

@@ -443,6 +443,117 @@ describe("EnvironmentAgentSessionService", () => {
     });
   });
 
+  it("handles provider requests through the configured handler", async () => {
+    const threadId = createThreadId();
+    const serviceWithProviderRequests = new EnvironmentAgentSessionService(
+      new EnvironmentAgentSessionManager(sessions),
+      cursors,
+      {
+        leaseTtlMs: 45_000,
+        heartbeatIntervalMs: 15_000,
+        clock: () => TEST_LEASE_NOW,
+        providerRequestHandler: vi.fn(async ({ threadId: requestThreadId, request }) => ({
+          result: {
+            threadId: requestThreadId,
+            requestId: request.requestId,
+            echoedMethod: request.method,
+          },
+        })),
+      },
+    );
+    const opened = serviceWithProviderRequests.openSession({
+      threadId,
+      now: 1_000,
+      payload: {
+        agentId: "agent-1",
+        agentInstanceId: "instance-1",
+        supportedProtocolVersions: [1],
+        channels: [
+          {
+            channelId: threadId,
+            generation: 1,
+          },
+        ],
+      },
+    });
+
+    const response = await serviceWithProviderRequests.handleProviderRequest({
+      threadId,
+      sessionId: opened.session.id,
+      now: 2_000,
+      payload: {
+        requestId: 61,
+        method: "item/tool/call",
+        params: { tool: "echo_test_tool" },
+      },
+    });
+
+    expect(response).toMatchObject({
+      type: "provider_response",
+      sessionId: opened.session.id,
+      payload: {
+        requestId: 61,
+        ok: true,
+        result: {
+          threadId,
+          requestId: 61,
+          echoedMethod: "item/tool/call",
+        },
+      },
+    });
+  });
+
+  it("wraps thrown provider request errors into provider responses", async () => {
+    const threadId = createThreadId();
+    const serviceWithProviderRequests = new EnvironmentAgentSessionService(
+      new EnvironmentAgentSessionManager(sessions),
+      cursors,
+      {
+        leaseTtlMs: 45_000,
+        heartbeatIntervalMs: 15_000,
+        clock: () => TEST_LEASE_NOW,
+        providerRequestHandler: vi.fn(async () => {
+          throw new Error("tool host unavailable");
+        }),
+      },
+    );
+    const opened = serviceWithProviderRequests.openSession({
+      threadId,
+      now: 1_000,
+      payload: {
+        agentId: "agent-1",
+        agentInstanceId: "instance-1",
+        supportedProtocolVersions: [1],
+        channels: [
+          {
+            channelId: threadId,
+            generation: 1,
+          },
+        ],
+      },
+    });
+
+    const response = await serviceWithProviderRequests.handleProviderRequest({
+      threadId,
+      sessionId: opened.session.id,
+      now: 2_000,
+      payload: {
+        requestId: "req-1",
+        method: "item/tool/call",
+      },
+    });
+
+    expect(response).toMatchObject({
+      type: "provider_response",
+      sessionId: opened.session.id,
+      payload: {
+        requestId: "req-1",
+        ok: false,
+        errorMessage: "tool host unavailable",
+      },
+    });
+  });
+
   it("applies event batches and resets the agent cursor when the daemon detects a gap", async () => {
     const threadId = createThreadId();
     const opened = service.openSession({

@@ -15,10 +15,12 @@ import type {
   EventRepository,
 } from "@beanbag/db";
 import {
+  AgentServer,
   createCodexLlmCompletionService,
   createProviderAdapter,
   listAvailableProviderInfos,
   type ProviderAdapter,
+  type ProviderToolHost,
 } from "@beanbag/agent-server";
 import {
   createDefaultEnvironmentRegistry,
@@ -57,6 +59,7 @@ export interface ServerDeps {
   dbPath: string;
   daemonLogFilePath: string;
   environmentAgentSessionOptions?: EnvironmentAgentSessionTimingOptions;
+  providerToolHost?: ProviderToolHost;
   requestShutdown?: (reason: string) => void;
   requestRestart?: (reason: string) => void;
 }
@@ -88,6 +91,19 @@ export function createServer(deps: ServerDeps) {
   // Create managers
   const wsManager = new WSManager();
   const provider = deps.provider ?? createProviderAdapter();
+  let threadManager: Orchestrator;
+  const configuredAgentServer = new AgentServer({
+    provider,
+    providerCatalog: listAvailableProviderInfos(),
+    ...(deps.providerToolHost
+      ? { dynamicTools: deps.providerToolHost.listTools() }
+      : {}),
+    ...(deps.providerToolHost ? { toolHost: deps.providerToolHost } : {}),
+    onNotification: (threadId, event) => {
+      threadManager.handleAgentServerNotification(threadId, event);
+    },
+    logger: console,
+  });
   const providerCatalog = listAvailableProviderInfos();
   const environmentRegistry = createDefaultEnvironmentRegistry();
   const environmentCatalog = listAvailableEnvironmentInfos(environmentRegistry);
@@ -110,7 +126,6 @@ export function createServer(deps: ServerDeps) {
     ...resolveEnvironmentAgentSessionTimingOptions(daemonRuntimeEnv),
     ...(deps.environmentAgentSessionOptions ?? {}),
   };
-  let threadManager: Orchestrator;
   const environmentAgentEventApplier = new EnvironmentAgentEventApplier(
     deps.environmentAgentCursorRepo,
     {
@@ -125,6 +140,16 @@ export function createServer(deps: ServerDeps) {
       ...environmentAgentSessionOptions,
       commandDispatcher: environmentAgentCommandDispatcher,
       eventApplier: environmentAgentEventApplier,
+      providerRequestHandler: ({ threadId, request }) =>
+        threadManager.handleEnvironmentAgentProviderRequest({
+          threadId,
+          requestId: request.requestId,
+          method: request.method,
+          ...(request.params !== undefined ? { params: request.params } : {}),
+        }).then((result) => ({ result }))
+        .catch((error: unknown) => ({
+          errorMessage: error instanceof Error ? error.message : String(error),
+        })),
       onSessionInvalidated: (session) => {
         threadManager.handleEnvironmentAgentSessionInvalidated(
           session.threadId,
@@ -139,7 +164,7 @@ export function createServer(deps: ServerDeps) {
     deps.projectRepo,
     wsManager,
     llmCompletionService,
-    provider,
+    configuredAgentServer,
     daemonRuntimeEnv,
     environmentRegistry,
     providerCatalog,

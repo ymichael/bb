@@ -49,3 +49,5 @@ export {
   ProviderRuntimeRpcError,
   ProviderRuntimeTimeoutError,
 } from "./provider-runtime.js";
+export type { ProviderToolDefinition } from "./provider-tool-host.js";
+export { ProviderToolHost } from "./provider-tool-host.js";

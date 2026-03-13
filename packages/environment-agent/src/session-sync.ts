@@ -6,6 +6,7 @@ import type { EnvironmentAgentSessionRuntime } from "./session-runtime.js";
 import type {
   EnvironmentAgentSessionCommandAckItem,
   EnvironmentAgentSessionOpenPayload,
+  EnvironmentAgentSessionProviderResponsePayload,
   EnvironmentAgentSessionWelcomeMessage,
 } from "./session-protocol.js";
 import { compareEnvironmentAgentSessionCursors } from "./session-protocol.js";
@@ -188,6 +189,24 @@ export class EnvironmentAgentSessionSync {
   ): Promise<void> {
     const state = this.requireSessionState(threadId);
     await this.options.client.closeSession(state.sessionId, reason);
+  }
+
+  async forwardProviderRequest(args: {
+    threadId: string;
+    requestId: string | number;
+    method: string;
+    params?: unknown;
+  }): Promise<EnvironmentAgentSessionProviderResponsePayload> {
+    const state = this.requireSessionState(args.threadId);
+    const response = await this.options.client.sendProviderRequest({
+      sessionId: state.sessionId,
+      payload: {
+        requestId: args.requestId,
+        method: args.method,
+        ...(args.params !== undefined ? { params: args.params } : {}),
+      },
+    });
+    return response.payload;
   }
 
   async flushPendingCommandResults(threadId: string): Promise<EnvironmentAgentCommandReceiptRecord[]> {

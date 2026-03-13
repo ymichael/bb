@@ -23,7 +23,10 @@ import {
   createConnection,
   migrate,
 } from "@beanbag/db";
-import { createCodexProviderAdapter } from "@beanbag/agent-server";
+import {
+  createCodexProviderAdapter,
+  type ProviderToolHost,
+} from "@beanbag/agent-server";
 import { createServer } from "../../server.js";
 import {
   createFakeCodexBinDir,
@@ -144,6 +147,7 @@ async function allocatePort(host: string = "127.0.0.1"): Promise<number> {
 
 export interface StartDaemonE2eHarnessOptions {
   providerMode?: E2eProviderMode;
+  providerToolHost?: ProviderToolHost;
   fakeCodex?: FakeCodexOptions;
   useWorkspaceFakeCodex?: boolean;
   environmentAgentSessionOptions?: {
@@ -286,6 +290,7 @@ export async function startDaemonE2eHarness(
         environmentAgentCursorRepo,
         environmentAgentCommandRepo,
         environmentAgentSessionOptions,
+        ...(opts?.providerToolHost ? { providerToolHost: opts.providerToolHost } : {}),
         runtimeEnv: daemonRuntimeEnv,
         dbPath,
         daemonLogFilePath: join(tempDir, "daemon.log"),

@@ -15,6 +15,8 @@ import {
   type EnvironmentAgentSessionEventBatchPayload,
   type EnvironmentAgentSessionHeartbeatPayload,
   type EnvironmentAgentSessionOpenPayload,
+  type EnvironmentAgentSessionProviderRequestPayload,
+  type EnvironmentAgentSessionProviderResponseMessage,
   type EnvironmentAgentSessionWelcomeMessage,
   type EnvironmentAgentStatusSnapshot,
 } from "@beanbag/environment-agent";
@@ -32,6 +34,10 @@ export interface EnvironmentAgentSessionServiceOptions {
   clock?: () => number;
   commandDispatcher?: EnvironmentAgentCommandDispatcher;
   eventApplier?: EnvironmentAgentEventApplier;
+  providerRequestHandler?: (args: {
+    threadId: string;
+    request: EnvironmentAgentSessionProviderRequestPayload;
+  }) => Promise<{ result: unknown } | { errorCode?: string; errorMessage: string }>;
   onSessionInvalidated?: (session: EnvironmentAgentSessionRecord) => void;
 }
 
@@ -117,6 +123,12 @@ export class EnvironmentAgentSessionService {
   private readonly commandLongPollIntervalMs: number;
   private readonly commandDispatcher?: EnvironmentAgentCommandDispatcher;
   private readonly eventApplier?: EnvironmentAgentEventApplier;
+  private readonly providerRequestHandler?: (
+    args: {
+      threadId: string;
+      request: EnvironmentAgentSessionProviderRequestPayload;
+    },
+  ) => Promise<{ result: unknown } | { errorCode?: string; errorMessage: string }>;
   private readonly onSessionInvalidated?: (
     session: EnvironmentAgentSessionRecord,
   ) => void;
@@ -136,6 +148,7 @@ export class EnvironmentAgentSessionService {
       options.commandLongPollIntervalMs ?? DEFAULT_COMMAND_LONG_POLL_INTERVAL_MS;
     this.commandDispatcher = options.commandDispatcher;
     this.eventApplier = options.eventApplier;
+    this.providerRequestHandler = options.providerRequestHandler;
     this.onSessionInvalidated = options.onSessionInvalidated;
   }
 
@@ -510,6 +523,59 @@ export class EnvironmentAgentSessionService {
       payload: args.payload,
       now: args.now,
     });
+  }
+
+  async handleProviderRequest(args: {
+    threadId: string;
+    sessionId: string;
+    payload: EnvironmentAgentSessionProviderRequestPayload;
+    now?: number;
+  }): Promise<EnvironmentAgentSessionProviderResponseMessage> {
+    if (!this.providerRequestHandler) {
+      throw new Error("Environment-agent provider request handling is unavailable");
+    }
+
+    const session = this.requireActiveSession(args.threadId, args.sessionId, args.now);
+    const now = args.now ?? this.clock();
+
+    try {
+      const response = await this.providerRequestHandler({
+        threadId: args.threadId,
+        request: args.payload,
+      });
+      return {
+        protocol: ENVIRONMENT_AGENT_SESSION_PROTOCOL,
+        type: "provider_response",
+        messageId: randomUUID(),
+        sessionId: session.id,
+        sentAt: now,
+        payload: "result" in response
+          ? {
+              requestId: args.payload.requestId,
+              ok: true,
+              result: response.result,
+            }
+          : {
+              requestId: args.payload.requestId,
+              ok: false,
+              ...(response.errorCode ? { errorCode: response.errorCode } : {}),
+              errorMessage: response.errorMessage,
+            },
+      };
+    } catch (error) {
+      return {
+        protocol: ENVIRONMENT_AGENT_SESSION_PROTOCOL,
+        type: "provider_response",
+        messageId: randomUUID(),
+        sessionId: session.id,
+        sentAt: now,
+        payload: {
+          requestId: args.payload.requestId,
+          ok: false,
+          errorMessage: error instanceof Error ? error.message : String(error),
+        },
+      };
+    }
   }
 
   private requireSession(

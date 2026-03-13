@@ -1,8 +1,11 @@
 import type {
   AvailableModel,
+  ProviderDynamicTool,
   ProviderLaunchConfiguration,
   ProviderCapabilities,
   PromptInput,
+  ProviderToolCallRequest,
+  ProviderToolCallResponse,
   SandboxMode,
   SpawnThreadRequest,
   Thread,
@@ -41,6 +44,10 @@ const DEFAULT_WORKSPACE_WRITE_POLICY = {
 
 function normalizeProviderEventType(type: string): string {
   return type.toLowerCase().replaceAll(".", "/");
+}
+
+function cloneJsonValue<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T;
 }
 
 function normalizeTitle(value: unknown): string | undefined {
@@ -126,6 +133,73 @@ function resolveSandboxMode(sandboxMode?: SandboxMode): SandboxMode {
   return sandboxMode ?? DEFAULT_SANDBOX_MODE;
 }
 
+function toCodexDynamicTools(
+  dynamicTools?: ProviderDynamicTool[],
+): Array<Record<string, unknown>> | undefined {
+  if (!dynamicTools || dynamicTools.length === 0) return undefined;
+  return dynamicTools.map((tool) => ({
+    name: tool.name,
+    description: tool.description,
+    inputSchema: cloneJsonValue(tool.inputSchema),
+  }));
+}
+
+function decodeCodexToolCallRequest(
+  requestId: string | number,
+  method: string,
+  params: unknown,
+): ProviderToolCallRequest | null {
+  if (normalizeProviderEventType(method) !== "item/tool/call") {
+    return null;
+  }
+
+  const record = toRecord(params);
+  if (!record) return null;
+
+  const threadId =
+    typeof record.threadId === "string" ? record.threadId : undefined;
+  const turnId = typeof record.turnId === "string" ? record.turnId : undefined;
+  const callId = typeof record.callId === "string" ? record.callId : undefined;
+  const tool = typeof record.tool === "string" ? record.tool : undefined;
+
+  if (!threadId || !turnId || !callId || !tool) {
+    return null;
+  }
+
+  return {
+    requestId,
+    threadId,
+    turnId,
+    callId,
+    tool,
+    arguments: record.arguments,
+  };
+}
+
+function encodeCodexToolCallResponse(
+  response: ProviderToolCallResponse,
+): Record<string, unknown> {
+  return {
+    contentItems: response.contentItems.map((item) => {
+      switch (item.type) {
+        case "inputText":
+          return {
+            type: "inputText",
+            text: item.text,
+          };
+        case "inputImage":
+          return {
+            type: "inputImage",
+            imageUrl: item.imageUrl,
+          };
+        default:
+          return assertNever(item);
+      }
+    }),
+    success: response.success,
+  };
+}
+
 function toTurnSandboxPolicy(sandboxMode?: SandboxMode): Record<string, unknown> {
   const resolved = resolveSandboxMode(sandboxMode);
   switch (resolved) {
@@ -179,6 +253,8 @@ export function createCodexProviderAdapter(
     supportsReasoningLevels: true,
     supportsServiceTier: true,
     supportsMultimodalInput: true,
+    supportsDynamicTools: true,
+    supportsToolCallRequests: true,
     ...(opts?.capabilities ?? {}),
   };
   const supportsSteer = capabilities.supportsSteer;
@@ -218,6 +294,7 @@ export function createCodexProviderAdapter(
       return {
         clientInfo,
         capabilities: {
+          experimentalApi: true,
           // Codex app-server emits both legacy codex/event/* and v2 item/* lifecycle
           // notifications; suppress duplicate legacy item lifecycle events at source.
           optOutNotificationMethods: [...LEGACY_DUPLICATE_NOTIFICATION_METHODS],
@@ -232,9 +309,10 @@ export function createCodexProviderAdapter(
     createThreadStartParams(
       req: SpawnThreadRequest,
       context: ProviderThreadContext,
+      dynamicTools?: ProviderDynamicTool[],
     ): Record<string, unknown> {
       const baseInstructions = resolveBaseInstructions(req.developerInstructions);
-      return withExecutionOptions(
+      const params = withExecutionOptions(
         withThreadEnvironmentPolicy(
           {
             approvalPolicy: DEFAULT_APPROVAL_POLICY,
@@ -245,6 +323,14 @@ export function createCodexProviderAdapter(
         ),
         req,
       );
+      const codexDynamicTools = toCodexDynamicTools(dynamicTools);
+      if (!codexDynamicTools) {
+        return params;
+      }
+      return {
+        ...params,
+        dynamicTools: codexDynamicTools,
+      };
     },
     createThreadResumeParams(
       providerThreadId: string,
@@ -357,6 +443,14 @@ export function createCodexProviderAdapter(
     },
     inactiveSessionErrorMessage(threadId: string): string {
       return `Thread ${threadId} has no codex session`;
+    },
+    decodeToolCallRequest(requestId, method, params): ProviderToolCallRequest | null {
+      return decodeCodexToolCallRequest(requestId, method, params);
+    },
+    encodeToolCallResponse(
+      response: ProviderToolCallResponse,
+    ): Record<string, unknown> {
+      return encodeCodexToolCallResponse(response);
     },
   };
 }

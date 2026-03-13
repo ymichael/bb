@@ -351,6 +351,8 @@ export interface ProviderCapabilities {
   supportsReasoningLevels: boolean;
   supportsServiceTier: boolean;
   supportsMultimodalInput: boolean;
+  supportsDynamicTools?: boolean;
+  supportsToolCallRequests?: boolean;
 }
 
 export interface SystemProviderInfo {

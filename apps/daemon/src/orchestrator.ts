@@ -2966,6 +2966,36 @@ export class Orchestrator implements ThreadOrchestrator {
     });
   }
 
+  async handleEnvironmentAgentProviderRequest(args: {
+    threadId: string;
+    requestId: string | number;
+    method: string;
+    params?: unknown;
+  }): Promise<unknown> {
+    const thread = this.threadRepo.getById(args.threadId);
+    if (!thread) {
+      throw threadNotFoundError(args.threadId);
+    }
+
+    return this.agentServer.handleProviderRequest({
+      threadId: args.threadId,
+      context: this._buildProviderThreadContext({
+        threadId: args.threadId,
+        projectId: thread.projectId,
+      }),
+      requestId: args.requestId,
+      method: args.method,
+      ...(args.params !== undefined ? { params: args.params } : {}),
+    });
+  }
+
+  handleAgentServerNotification(
+    threadId: string,
+    event: AgentServerNotification,
+  ): void {
+    this._handleAgentServerNotification(threadId, event);
+  }
+
   /**
    * Stop all active processes. Called during graceful shutdown.
    */

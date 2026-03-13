@@ -36,6 +36,11 @@ export interface EnvironmentAgentRuntimeOptions {
   providerArgs?: string[];
   providerLaunchCommand?: string;
   providerLaunchArgs?: string[];
+  onProviderRequest?: (request: {
+    requestId: string | number;
+    method: string;
+    params?: unknown;
+  }) => Promise<unknown> | unknown;
   onStdoutLine?: (line: string) => void;
   onStderrLine?: (line: string) => void;
 }
@@ -56,7 +61,7 @@ export class EnvironmentAgentRuntime {
   private providerInitializedPid: number | undefined;
   private providerChild: ChildProcess | null = null;
   private readonly pendingProviderRequests = new Map<
-    number,
+    string | number,
     {
       resolve: (value: unknown) => void;
       reject: (reason: Error) => void;
@@ -420,7 +425,7 @@ export class EnvironmentAgentRuntime {
         onLine: (line) => {
           this.opts.onStdoutLine?.(line);
           this.emitProviderStdoutLine(line);
-          if (this.tryResolveProviderRequest(line)) {
+          if (this.tryHandleProviderRpcMessage(line)) {
             return;
           }
           this.appendEvent(this.toProviderEvent(line));
@@ -747,7 +752,7 @@ export class EnvironmentAgentRuntime {
     });
   }
 
-  private tryResolveProviderRequest(line: string): boolean {
+  private tryHandleProviderRpcMessage(line: string): boolean {
     let parsed: unknown;
     try {
       parsed = JSON.parse(line);
@@ -758,9 +763,20 @@ export class EnvironmentAgentRuntime {
       return false;
     }
     const record = parsed as Record<string, unknown>;
-    const id = typeof record.id === "number" ? record.id : undefined;
+    const id =
+      typeof record.id === "number" || typeof record.id === "string"
+        ? record.id
+        : undefined;
     if (id === undefined) {
       return false;
+    }
+    if (typeof record.method === "string") {
+      void this.handleProviderServerRequest({
+        requestId: id,
+        method: record.method,
+        params: record.params,
+      });
+      return true;
     }
     const pending = this.pendingProviderRequests.get(id);
     if (!pending) {
@@ -783,6 +799,61 @@ export class EnvironmentAgentRuntime {
     }
     pending.resolve(record.result);
     return true;
+  }
+
+  private async handleProviderServerRequest(args: {
+    requestId: string | number;
+    method: string;
+    params?: unknown;
+  }): Promise<void> {
+    const child = this.providerChild;
+    const stdin = child?.stdin;
+    if (!stdin || child.killed || child.exitCode !== null) {
+      return;
+    }
+
+    if (!this.opts.onProviderRequest) {
+      stdin.write(
+        `${JSON.stringify({
+          jsonrpc: "2.0",
+          id: args.requestId,
+          error: {
+            code: -32601,
+            message: `Unhandled provider request method ${args.method}`,
+          },
+        })}\n`,
+      );
+      return;
+    }
+
+    try {
+      const result = await this.opts.onProviderRequest(args);
+      stdin.write(
+        `${JSON.stringify({
+          jsonrpc: "2.0",
+          id: args.requestId,
+          result,
+        })}\n`,
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.appendEvent({
+        type: "provider.rpc_error",
+        threadId: this.resolveThreadId(),
+        requestId: args.requestId,
+        message,
+      });
+      stdin.write(
+        `${JSON.stringify({
+          jsonrpc: "2.0",
+          id: args.requestId,
+          error: {
+            code: -32000,
+            message,
+          },
+        })}\n`,
+      );
+    }
   }
 
   private rejectPendingProviderRequests(error: Error): void {

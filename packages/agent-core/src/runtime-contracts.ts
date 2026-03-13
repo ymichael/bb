@@ -47,6 +47,36 @@ export interface ProviderThreadContext {
   path?: string;
 }
 
+export interface ProviderDynamicTool {
+  name: string;
+  description: string;
+  inputSchema: unknown;
+}
+
+export interface ProviderToolCallRequest {
+  requestId: string | number;
+  threadId: string;
+  turnId: string;
+  callId: string;
+  tool: string;
+  arguments: unknown;
+}
+
+export type ProviderToolCallOutputItem =
+  | {
+      type: "inputText";
+      text: string;
+    }
+  | {
+      type: "inputImage";
+      imageUrl: string;
+    };
+
+export interface ProviderToolCallResponse {
+  contentItems: ProviderToolCallOutputItem[];
+  success: boolean;
+}
+
 export interface ProviderTitleGeneratorArgs {
   input: PromptInput[];
   cwd: string;
@@ -103,6 +133,7 @@ export interface ProviderAdapter {
   createThreadStartParams(
     req: SpawnThreadRequest,
     context: ProviderThreadContext,
+    dynamicTools?: ProviderDynamicTool[],
   ): Record<string, unknown>;
   createThreadResumeParams(
     providerThreadId: string,
@@ -135,6 +166,14 @@ export interface ProviderAdapter {
   listModels(): Promise<AvailableModel[]>;
   deriveThreadTitle(input?: PromptInput[]): string | undefined;
   inactiveSessionErrorMessage(threadId: string): string;
+  decodeToolCallRequest?(
+    requestId: string | number,
+    method: string,
+    params: unknown,
+  ): ProviderToolCallRequest | null;
+  encodeToolCallResponse?(
+    response: ProviderToolCallResponse,
+  ): Record<string, unknown>;
 }
 
 export type EnvironmentProvisioningEvent =

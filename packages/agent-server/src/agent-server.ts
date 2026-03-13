@@ -17,6 +17,7 @@ import {
   type AvailableModel,
   type PromptInput,
   type ProviderExecutionOptions,
+  type ProviderDynamicTool,
   type ProviderThreadContext,
   type SpawnThreadRequest,
   type SystemProviderInfo,
@@ -27,6 +28,7 @@ import {
 } from "@beanbag/agent-core";
 import type { ProviderAdapter } from "./provider-adapter.js";
 import type { ProviderRuntimeNotification } from "./provider-runtime.js";
+import type { ProviderToolHost } from "./provider-tool-host.js";
 
 const MODEL_LIST_CACHE_TTL_MS = 60_000;
 
@@ -65,6 +67,8 @@ export interface AgentServerNotification {
 export interface AgentServerOptions {
   provider: ProviderAdapter;
   providerCatalog?: SystemProviderInfo[];
+  dynamicTools?: ProviderDynamicTool[];
+  toolHost?: ProviderToolHost;
   onNotification?: (threadId: string, event: AgentServerNotification) => void;
   onProviderStderrLine?: (threadId: string, line: string) => void;
   logger?: Pick<Console, "warn" | "error">;
@@ -235,7 +239,11 @@ export class AgentServer {
       type: "thread.start",
       threadId: args.threadId,
       projectId: args.projectId,
-      params: this.opts.provider.createThreadStartParams(args.request, args.context),
+      params: this.opts.provider.createThreadStartParams(
+        args.request,
+        args.context,
+        this.opts.dynamicTools,
+      ),
       initialize: this.buildInitializeRequest(),
     });
     const providerThreadId = this.opts.provider.extractThreadIdFromResult(ack.result);
@@ -395,6 +403,51 @@ export class AgentServer {
       ),
       initialize: this.buildInitializeRequest(),
     });
+  }
+
+  async handleProviderRequest(args: {
+    threadId: string;
+    context: ProviderThreadContext;
+    requestId: string | number;
+    method: string;
+    params?: unknown;
+  }): Promise<unknown> {
+    if (!this.opts.provider.decodeToolCallRequest) {
+      throw new AgentServerSessionError(
+        "unsupported_operation",
+        `${this.opts.provider.displayName} does not support provider tool calls`,
+      );
+    }
+    if (!this.opts.provider.encodeToolCallResponse) {
+      throw new AgentServerSessionError(
+        "unsupported_operation",
+        `${this.opts.provider.displayName} does not support provider tool call responses`,
+      );
+    }
+    if (!this.opts.toolHost) {
+      throw new AgentServerSessionError(
+        "unsupported_operation",
+        "No provider tool host is configured",
+      );
+    }
+
+    const call = this.opts.provider.decodeToolCallRequest(
+      args.requestId,
+      args.method,
+      args.params,
+    );
+    if (!call) {
+      throw new AgentServerSessionError(
+        "unsupported_operation",
+        `Unhandled provider request method ${args.method}`,
+      );
+    }
+
+    const response = await this.opts.toolHost.execute({
+      call,
+      context: args.context,
+    });
+    return this.opts.provider.encodeToolCallResponse(response);
   }
 
   async ingestReplayedEnvironmentAgentEvents(args: {

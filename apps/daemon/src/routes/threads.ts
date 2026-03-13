@@ -24,6 +24,7 @@ import type {
   EnvironmentAgentSessionEventBatchPayload,
   EnvironmentAgentSessionHeartbeatPayload,
   EnvironmentAgentSessionOpenPayload,
+  EnvironmentAgentSessionProviderRequestPayload,
   EnvironmentAgentStatusSnapshot,
 } from "@beanbag/environment-agent";
 import {
@@ -184,6 +185,14 @@ const environmentAgentSessionMessageBodySchema = z.discriminatedUnion("type", [
           });
         }
       }
+    }),
+  }),
+  environmentAgentSessionMessageBaseSchema.extend({
+    type: z.literal("provider_request"),
+    payload: z.object({
+      requestId: z.union([z.string().min(1), z.number()]),
+      method: z.string().min(1),
+      params: z.unknown().optional(),
     }),
   }),
   environmentAgentSessionMessageBaseSchema.extend({
@@ -569,6 +578,14 @@ export function createThreadRoutes(
                 payload: body.payload as EnvironmentAgentSessionCommandResultPayload,
               });
               return c.body(null, 204);
+            case "provider_request": {
+              const response = await environmentAgentSessionService.handleProviderRequest({
+                threadId,
+                sessionId: body.sessionId,
+                payload: body.payload as EnvironmentAgentSessionProviderRequestPayload,
+              });
+              return c.json(response);
+            }
             case "session_close":
               environmentAgentSessionService.closeSession({
                 threadId,

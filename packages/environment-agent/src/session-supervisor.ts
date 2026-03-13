@@ -8,6 +8,7 @@ import type {
   EnvironmentAgentSessionSync,
 } from "./session-sync.js";
 import type { EnvironmentAgentSessionControlEndpoint } from "./session-protocol.js";
+import type { EnvironmentAgentSessionProviderResponsePayload } from "./session-protocol.js";
 
 export interface EnvironmentAgentSessionSupervisorOptions {
   threadId: string;
@@ -170,6 +171,20 @@ export class EnvironmentAgentSessionSupervisor {
         this.handleError(error);
       }
     }
+  }
+
+  async forwardProviderRequest(args: {
+    requestId: string | number;
+    method: string;
+    params?: unknown;
+  }): Promise<EnvironmentAgentSessionProviderResponsePayload> {
+    await this.openSession();
+    return this.options.sessionSync.forwardProviderRequest({
+      threadId: this.options.threadId,
+      requestId: args.requestId,
+      method: args.method,
+      ...(args.params !== undefined ? { params: args.params } : {}),
+    });
   }
 
   private async openSession(): Promise<void> {

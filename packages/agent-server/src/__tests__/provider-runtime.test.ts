@@ -72,4 +72,79 @@ describe("ProviderRuntime", () => {
       }),
     );
   });
+
+  it("responds to server requests with handler results", async () => {
+    const transport = createTransport();
+    const onServerRequest = vi.fn(async () => ({
+      success: true,
+      contentItems: [{ type: "inputText", text: "ok" }],
+    }));
+
+    new ProviderRuntime({
+      threadId: "thread-1",
+      transport,
+      onNotification: vi.fn(),
+      onServerRequest,
+    });
+
+    transport.emitLine(
+      JSON.stringify({
+        jsonrpc: "2.0",
+        id: 61,
+        method: "item/tool/call",
+        params: { tool: "echo" },
+      }),
+    );
+
+    await vi.waitFor(() => {
+      expect(onServerRequest).toHaveBeenCalledWith({
+        kind: "request",
+        id: 61,
+        method: "item/tool/call",
+        params: { tool: "echo" },
+      });
+      expect(transport.send).toHaveBeenCalledWith(
+        JSON.stringify({
+          jsonrpc: "2.0",
+          id: 61,
+          result: {
+            success: true,
+            contentItems: [{ type: "inputText", text: "ok" }],
+          },
+        }),
+      );
+    });
+  });
+
+  it("returns json-rpc errors for unhandled server requests", async () => {
+    const transport = createTransport();
+
+    new ProviderRuntime({
+      threadId: "thread-1",
+      transport,
+      onNotification: vi.fn(),
+    });
+
+    transport.emitLine(
+      JSON.stringify({
+        jsonrpc: "2.0",
+        id: 62,
+        method: "item/tool/call",
+        params: { tool: "echo" },
+      }),
+    );
+
+    await vi.waitFor(() => {
+      expect(transport.send).toHaveBeenCalledWith(
+        JSON.stringify({
+          jsonrpc: "2.0",
+          id: 62,
+          error: {
+            code: -32601,
+            message: "Unhandled provider request method item/tool/call",
+          },
+        }),
+      );
+    });
+  });
 });

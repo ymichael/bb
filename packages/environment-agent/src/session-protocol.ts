@@ -144,6 +144,20 @@ export interface EnvironmentAgentSessionCommandResultPayload {
   errorMessage?: string;
 }
 
+export interface EnvironmentAgentSessionProviderRequestPayload {
+  requestId: string | number;
+  method: string;
+  params?: unknown;
+}
+
+export interface EnvironmentAgentSessionProviderResponsePayload {
+  requestId: string | number;
+  ok: boolean;
+  result?: unknown;
+  errorCode?: string;
+  errorMessage?: string;
+}
+
 export interface EnvironmentAgentSessionClosePayload {
   reason: EnvironmentAgentSessionCloseReason;
 }
@@ -213,6 +227,18 @@ export interface EnvironmentAgentSessionCommandResultMessage
   payload: EnvironmentAgentSessionCommandResultPayload;
 }
 
+export interface EnvironmentAgentSessionProviderRequestMessage
+  extends EnvironmentAgentSessionBoundMessageBase {
+  type: "provider_request";
+  payload: EnvironmentAgentSessionProviderRequestPayload;
+}
+
+export interface EnvironmentAgentSessionProviderResponseMessage
+  extends EnvironmentAgentSessionBoundMessageBase {
+  type: "provider_response";
+  payload: EnvironmentAgentSessionProviderResponsePayload;
+}
+
 export interface EnvironmentAgentSessionCloseMessage
   extends EnvironmentAgentSessionBoundMessageBase {
   type: "session_close";
@@ -231,12 +257,14 @@ export type EnvironmentAgentSessionClientMessage =
   | EnvironmentAgentSessionEventBatchMessage
   | EnvironmentAgentSessionCommandAckMessage
   | EnvironmentAgentSessionCommandResultMessage
+  | EnvironmentAgentSessionProviderRequestMessage
   | EnvironmentAgentSessionCloseMessage;
 
 export type EnvironmentAgentSessionServerMessage =
   | EnvironmentAgentSessionWelcomeMessage
   | EnvironmentAgentSessionEventAckMessage
   | EnvironmentAgentSessionCommandBatchMessage
+  | EnvironmentAgentSessionProviderResponseMessage
   | EnvironmentAgentSessionSessionControlMessage;
 
 export type EnvironmentAgentSessionSessionControlMessage =
@@ -312,6 +340,7 @@ export function isEnvironmentAgentSessionMessage(
     case "command_batch":
     case "command_ack":
     case "command_result":
+    case "provider_request":
     case "session_close":
     case "session_replaced":
       return typeof value.sessionId === "string" && value.sessionId.length > 0;
@@ -330,6 +359,7 @@ export function isEnvironmentAgentSessionClientMessage(
     case "event_batch":
     case "command_ack":
     case "command_result":
+    case "provider_request":
     case "session_close":
       return true;
     case "session_welcome":
@@ -350,6 +380,7 @@ export function isEnvironmentAgentSessionServerMessage(
     case "session_welcome":
     case "event_ack":
     case "command_batch":
+    case "provider_response":
     case "session_close":
     case "session_replaced":
       return true;
