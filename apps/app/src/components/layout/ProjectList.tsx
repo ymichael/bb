@@ -707,7 +707,10 @@ export function ProjectList({
                     ) : projectThreads.length > 0 ? (
                       <div className="space-y-1 group-data-[collapsible=icon]:hidden">
                         {managerThreads.map((thread) => (
-                          <div key={thread.id} className="space-y-1">
+                          <div
+                            key={thread.id}
+                            className="space-y-1 rounded-lg border border-sidebar-border/60 bg-sidebar-accent/5"
+                          >
                             {renderThreadRow(project.id, thread, {
                               isManager: true,
                               hasManagedChildren:

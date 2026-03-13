@@ -129,5 +129,6 @@ describe("ProjectList", () => {
     expect(html).toContain("Managed child")
     expect(html).toContain("Collapse managed threads")
     expect(html).toContain("pl-6")
+    expect(html).toContain("rounded-lg border border-sidebar-border/60 bg-sidebar-accent/5")
   })
 })
