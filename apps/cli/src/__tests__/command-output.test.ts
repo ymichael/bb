@@ -24,6 +24,7 @@ vi.mock("node:readline/promises", () => ({
 }));
 
 import { createClient, unwrap } from "../client.js";
+import { registerManagerCommands } from "../commands/manager.js";
 import { registerDaemonCommands } from "../commands/daemon.js";
 import { registerProjectCommands } from "../commands/project.js";
 import { registerStatusCommand } from "../commands/status.js";
@@ -148,6 +149,68 @@ describe("CLI command output contracts", () => {
     expect(JSON.parse(String(vi.mocked(console.log).mock.calls[0]?.[0]))).toEqual(
       created,
     );
+  });
+
+  it("bb manager hire posts to the project manager route", async () => {
+    const post = vi.fn(async () => ({
+      id: "thread-manager-1",
+      projectId: "project-123",
+      title: "Manager",
+      type: "manager",
+      status: "active",
+      createdAt: 1,
+      updatedAt: 2,
+    }));
+    createClientMock.mockReturnValue(asDaemonClient({
+      api: {
+        v1: {
+          projects: {
+            ":id": {
+              manager: {
+                $post: post,
+              },
+            },
+          },
+        },
+      },
+    }));
+
+    await runCommand(["manager", "hire", "project-123"], (program) =>
+      registerManagerCommands(program, () => "http://daemon"),
+    );
+
+    expect(post).toHaveBeenCalledWith({
+      param: { id: "project-123" },
+    });
+    expect(collectLogLines(vi.mocked(console.log))).toContain("Manager ready: thread-manager-1");
+  });
+
+  it("bb manager show reports when no manager is hired", async () => {
+    const get = vi.fn(async () => [
+      {
+        id: "project-123",
+        name: "Repo",
+        rootPath: "/tmp/repo",
+        createdAt: 1,
+        updatedAt: 2,
+        primaryManagerThreadId: null,
+      },
+    ]);
+    createClientMock.mockReturnValue(asDaemonClient({
+      api: {
+        v1: {
+          projects: {
+            $get: get,
+          },
+        },
+      },
+    }));
+
+    await runCommand(["manager", "show", "project-123"], (program) =>
+      registerManagerCommands(program, () => "http://daemon"),
+    );
+
+    expect(collectLogLines(vi.mocked(console.log))).toContain("No manager hired");
   });
   it("bb status prints project/thread context", async () => {
     process.env.BB_PROJECT_ID = "proj-1";
