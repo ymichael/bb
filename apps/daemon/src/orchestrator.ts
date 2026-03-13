@@ -95,7 +95,9 @@ import { ENVIRONMENT_AGENT_PROTOCOL_VERSION } from "@beanbag/environment-agent";
 import type {
   DbConnection,
   EnvironmentAgentSessionCloseReason,
+  EnvironmentRepository,
   ThreadRepository,
+  ThreadEnvironmentAttachmentRepository,
   EventRepository,
   ProjectRepository,
   EnvironmentAgentSessionRepository,
@@ -586,6 +588,8 @@ export class Orchestrator implements ThreadOrchestrator {
     private environmentAgentCommandDispatcher?: EnvironmentAgentCommandDispatcher,
     private environmentAgentSessionService?: EnvironmentAgentSessionService,
     private environmentAgentSessionRepo?: EnvironmentAgentSessionRepository,
+    private environmentRepo?: EnvironmentRepository,
+    private threadEnvironmentAttachmentRepo?: ThreadEnvironmentAttachmentRepository,
   ) {
     this.threadShellPath = resolveThreadShellPath(this.runtimeEnv.PATH);
     this.environmentAgentCommandPollIntervalMs = parsePositiveIntegerEnv(
@@ -3277,6 +3281,19 @@ export class Orchestrator implements ThreadOrchestrator {
         state: environmentRuntime.environment.serialize(),
       },
     });
+    try {
+      this._syncFirstClassEnvironmentAttachment({
+        threadId,
+        projectId: project.id,
+        projectRootPath: project.rootPath,
+        environment: environmentRuntime.environment,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.warn(
+        `[thread ${threadId}] failed to sync first-class environment attachment: ${message}`,
+      );
+    }
     const provisionedEnvironmentInfo = this.environmentRegistry.get(
       environmentRuntime.environment.kind,
     ).info;
@@ -3784,6 +3801,47 @@ export class Orchestrator implements ThreadOrchestrator {
       environmentKind,
       reason,
     );
+  }
+
+  private _syncFirstClassEnvironmentAttachment(args: {
+    threadId: string;
+    projectId: string;
+    projectRootPath: string;
+    environment: IEnvironment;
+  }): void {
+    if (!this.environmentRepo || !this.threadEnvironmentAttachmentRepo) {
+      return;
+    }
+
+    const descriptor = {
+      type: "path" as const,
+      path: args.environment.getWorkspaceRootUnsafe(),
+    };
+    const normalizedWorkspaceRoot = resolve(descriptor.path);
+    const normalizedProjectRoot = resolve(args.projectRootPath);
+    const managed = normalizedWorkspaceRoot !== normalizedProjectRoot;
+    const existingEnvironment = this.environmentRepo.findByProjectDescriptor({
+      projectId: args.projectId,
+      descriptor,
+    });
+    const environmentRecord = existingEnvironment
+      ? this.environmentRepo.update(existingEnvironment.id, {
+        managed,
+      })
+      : this.environmentRepo.create({
+        projectId: args.projectId,
+        descriptor,
+        managed,
+      });
+
+    if (!environmentRecord) {
+      throw new Error(`Failed to persist first-class environment for ${descriptor.path}`);
+    }
+
+    this.threadEnvironmentAttachmentRepo.attachThread({
+      threadId: args.threadId,
+      environmentId: environmentRecord.id,
+    });
   }
 
   private _resolveEnvironmentAgentConnectionTargetFromRuntimeEnv():

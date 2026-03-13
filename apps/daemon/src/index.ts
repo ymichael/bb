@@ -9,7 +9,9 @@ import {
   EnvironmentAgentCommandRepository,
   EnvironmentAgentCursorRepository,
   EnvironmentAgentSessionRepository,
+  EnvironmentRepository,
   ProjectRepository,
+  ThreadEnvironmentAttachmentRepository,
   ThreadRepository,
   EventRepository,
 } from "@beanbag/db";
@@ -114,6 +116,8 @@ async function main(): Promise<void> {
 
   // Create repositories
   const projectRepo = new ProjectRepository(db);
+  const environmentRepo = new EnvironmentRepository(db);
+  const threadEnvironmentAttachmentRepo = new ThreadEnvironmentAttachmentRepository(db);
   const threadRepo = new ThreadRepository(db);
   const eventRepo = new EventRepository(db);
   const environmentAgentSessionRepo = new EnvironmentAgentSessionRepository(db);
@@ -191,6 +195,8 @@ async function main(): Promise<void> {
   const { app, injectWebSocket, wsManager, threadManager, restartRecommendationMonitor, close } =
     createServer({
       projectRepo,
+      environmentRepo,
+      threadEnvironmentAttachmentRepo,
       threadRepo,
       eventRepo,
       environmentAgentSessionRepo,

@@ -6,8 +6,12 @@ export * from "./schema.js";
 export {
   ProjectRepository,
   EnvironmentRepository,
+  ThreadEnvironmentAttachmentRepository,
   ThreadRepository,
   EventRepository,
+} from "./repositories.js";
+export type {
+  ThreadEnvironmentAttachmentRecord,
 } from "./repositories.js";
 export type {
   EnvironmentAgentSessionStatus,

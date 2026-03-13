@@ -267,6 +267,13 @@
       "when": 1773460800000,
       "tag": "0037_environments",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "6",
+      "when": 1773464400000,
+      "tag": "0038_thread_environment_attachments",
+      "breakpoints": true
     }
   ]
 }

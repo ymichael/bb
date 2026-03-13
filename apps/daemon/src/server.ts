@@ -10,7 +10,9 @@ import type {
   EnvironmentAgentCommandRepository,
   EnvironmentAgentCursorRepository,
   EnvironmentAgentSessionRepository,
+  EnvironmentRepository,
   ProjectRepository,
+  ThreadEnvironmentAttachmentRepository,
   ThreadRepository,
   EventRepository,
 } from "@beanbag/db";
@@ -48,6 +50,8 @@ const __dirname = dirname(__filename);
 
 export interface ServerDeps {
   projectRepo: ProjectRepository;
+  environmentRepo?: EnvironmentRepository;
+  threadEnvironmentAttachmentRepo?: ThreadEnvironmentAttachmentRepository;
   threadRepo: ThreadRepository;
   eventRepo: EventRepository;
   environmentAgentSessionRepo: EnvironmentAgentSessionRepository;
@@ -173,6 +177,8 @@ export function createServer(deps: ServerDeps) {
     environmentAgentCommandDispatcher,
     environmentAgentSessionService,
     deps.environmentAgentSessionRepo,
+    deps.environmentRepo,
+    deps.threadEnvironmentAttachmentRepo,
   );
   const environmentAgentLeaseSweepIntervalMs =
     environmentAgentSessionOptions.leaseSweepIntervalMs ?? 5_000;

@@ -5,6 +5,7 @@ import { migrate } from "../src/migrate.js";
 import {
   EnvironmentRepository,
   ProjectRepository,
+  ThreadEnvironmentAttachmentRepository,
   ThreadRepository,
 } from "../src/repositories.js";
 
@@ -21,6 +22,7 @@ describe("repository strict normalization", () => {
   let db: DbConnection;
   let projects: ProjectRepository;
   let environments: EnvironmentRepository;
+  let attachments: ThreadEnvironmentAttachmentRepository;
   let threads: ThreadRepository;
   let sqlite: SqliteClient;
 
@@ -30,6 +32,7 @@ describe("repository strict normalization", () => {
     sqlite = sqliteClient(db);
     projects = new ProjectRepository(db);
     environments = new EnvironmentRepository(db);
+    attachments = new ThreadEnvironmentAttachmentRepository(db);
     threads = new ThreadRepository(db);
   });
 
@@ -142,6 +145,26 @@ describe("repository strict normalization", () => {
     expect(environments.list({ projectId })).toEqual([kept]);
   });
 
+  it("finds first-class environments by project and descriptor", () => {
+    const projectId = createProjectId();
+    const descriptor = {
+      type: "path" as const,
+      path: "/tmp/test-project",
+    };
+    const environment = environments.create({
+      projectId,
+      descriptor,
+      managed: false,
+    });
+
+    expect(
+      environments.findByProjectDescriptor({
+        projectId,
+        descriptor,
+      }),
+    ).toEqual(environment);
+  });
+
   it("updates first-class environment descriptors and managed state", () => {
     const projectId = createProjectId();
     const environment = environments.create({
@@ -190,6 +213,66 @@ describe("repository strict normalization", () => {
     expect(() => environments.getById(environment.id)).toThrow(
       "Invalid persisted environment descriptor type: container_path",
     );
+  });
+
+  it("attaches threads to first-class environments", () => {
+    const projectId = createProjectId();
+    const environment = environments.create({
+      projectId,
+      descriptor: {
+        type: "path",
+        path: "/tmp/test-project",
+      },
+      managed: false,
+    });
+    const thread = threads.create({ projectId });
+
+    const attached = attachments.attachThread({
+      threadId: thread.id,
+      environmentId: environment.id,
+    });
+
+    expect(attached).toMatchObject({
+      threadId: thread.id,
+      environmentId: environment.id,
+    });
+    expect(attachments.getByThreadId(thread.id)).toEqual(attached);
+    expect(attachments.listByEnvironmentId(environment.id)).toEqual([attached]);
+  });
+
+  it("updates thread environment attachments in place", () => {
+    const projectId = createProjectId();
+    const first = environments.create({
+      projectId,
+      descriptor: {
+        type: "path",
+        path: "/tmp/test-project",
+      },
+      managed: false,
+    });
+    const second = environments.create({
+      projectId,
+      descriptor: {
+        type: "path",
+        path: "/tmp/test-project/.worktrees/thread-1",
+      },
+      managed: true,
+    });
+    const thread = threads.create({ projectId });
+
+    const initial = attachments.attachThread({
+      threadId: thread.id,
+      environmentId: first.id,
+    });
+    const updated = attachments.attachThread({
+      threadId: thread.id,
+      environmentId: second.id,
+    });
+
+    expect(updated.threadId).toBe(thread.id);
+    expect(updated.environmentId).toBe(second.id);
+    expect(updated.createdAt).toBe(initial.createdAt);
+    expect(updated.updatedAt).toBeGreaterThanOrEqual(initial.updatedAt);
   });
 
   it("lists only non-archived active threads with persisted environments", () => {

@@ -48,6 +48,7 @@ import {
   projects,
   environments,
   threads,
+  threadEnvironmentAttachments,
   queuedThreadMessages,
   events,
 } from "./schema.js";
@@ -99,6 +100,13 @@ export interface ManagedArtifactThreadRetentionRecord {
   projectId: string;
   environmentId?: string;
   archivedAt?: number;
+}
+
+export interface ThreadEnvironmentAttachmentRecord {
+  threadId: string;
+  environmentId: string;
+  createdAt: number;
+  updatedAt: number;
 }
 
 interface SqlitePragmaClient {
@@ -434,6 +442,23 @@ export class EnvironmentRepository {
     return row ? this.rowToEnvironment(row) : undefined;
   }
 
+  findByProjectDescriptor(args: {
+    projectId: string;
+    descriptor: EnvironmentDescriptor;
+  }): EnvironmentRecord | undefined {
+    const row = this.db
+      .select()
+      .from(environments)
+      .where(
+        and(
+          eq(environments.projectId, args.projectId),
+          eq(environments.descriptor, JSON.stringify(args.descriptor)),
+        ),
+      )
+      .get();
+    return row ? this.rowToEnvironment(row) : undefined;
+  }
+
   list(filters?: {
     projectId?: string;
   }): EnvironmentRecord[] {
@@ -504,6 +529,97 @@ export class EnvironmentRepository {
       projectId: row.projectId,
       descriptor: parseEnvironmentDescriptor(row.descriptor),
       managed: row.managed,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
+    };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// ThreadEnvironmentAttachmentRepository
+// ---------------------------------------------------------------------------
+
+export class ThreadEnvironmentAttachmentRepository {
+  constructor(private db: DbConnection) {}
+
+  attachThread(data: {
+    threadId: string;
+    environmentId: string;
+  }, opts?: {
+    connection?: DbExecutor;
+  }): ThreadEnvironmentAttachmentRecord {
+    const db = opts?.connection ?? this.db;
+    const existing = db
+      .select()
+      .from(threadEnvironmentAttachments)
+      .where(eq(threadEnvironmentAttachments.threadId, data.threadId))
+      .get();
+    const now = Date.now();
+
+    if (existing) {
+      db
+        .update(threadEnvironmentAttachments)
+        .set({
+          environmentId: data.environmentId,
+          updatedAt: now,
+        })
+        .where(eq(threadEnvironmentAttachments.threadId, data.threadId))
+        .run();
+    } else {
+      db
+        .insert(threadEnvironmentAttachments)
+        .values({
+          threadId: data.threadId,
+          environmentId: data.environmentId,
+          createdAt: now,
+          updatedAt: now,
+        })
+        .run();
+    }
+
+    const row = db
+      .select()
+      .from(threadEnvironmentAttachments)
+      .where(eq(threadEnvironmentAttachments.threadId, data.threadId))
+      .get();
+    if (!row) {
+      throw new Error(`Failed to attach thread ${data.threadId} to environment ${data.environmentId}`);
+    }
+    return this.rowToAttachment(row);
+  }
+
+  getByThreadId(threadId: string): ThreadEnvironmentAttachmentRecord | undefined {
+    const row = this.db
+      .select()
+      .from(threadEnvironmentAttachments)
+      .where(eq(threadEnvironmentAttachments.threadId, threadId))
+      .get();
+    return row ? this.rowToAttachment(row) : undefined;
+  }
+
+  listByEnvironmentId(environmentId: string): ThreadEnvironmentAttachmentRecord[] {
+    return this.db
+      .select()
+      .from(threadEnvironmentAttachments)
+      .where(eq(threadEnvironmentAttachments.environmentId, environmentId))
+      .all()
+      .map((row) => this.rowToAttachment(row));
+  }
+
+  deleteByThreadId(threadId: string, opts?: { connection?: DbExecutor }): void {
+    const db = opts?.connection ?? this.db;
+    db
+      .delete(threadEnvironmentAttachments)
+      .where(eq(threadEnvironmentAttachments.threadId, threadId))
+      .run();
+  }
+
+  private rowToAttachment(
+    row: typeof threadEnvironmentAttachments.$inferSelect,
+  ): ThreadEnvironmentAttachmentRecord {
+    return {
+      threadId: row.threadId,
+      environmentId: row.environmentId,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
     };

@@ -64,6 +64,23 @@ export const threads = sqliteTable(
   ]
 );
 
+export const threadEnvironmentAttachments = sqliteTable(
+  "thread_environment_attachments",
+  {
+    threadId: text("thread_id")
+      .primaryKey()
+      .references(() => threads.id, { onDelete: "cascade" }),
+    environmentId: text("environment_id")
+      .notNull()
+      .references(() => environments.id, { onDelete: "cascade" }),
+    createdAt: integer("created_at").notNull(),
+    updatedAt: integer("updated_at").notNull(),
+  },
+  (table) => [
+    index("thread_environment_attachments_environment_idx").on(table.environmentId),
+  ],
+);
+
 export const queuedThreadMessages = sqliteTable(
   "queued_thread_messages",
   {
