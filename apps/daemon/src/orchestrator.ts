@@ -655,6 +655,8 @@ export class Orchestrator implements ThreadOrchestrator {
             reason,
           ),
       },
+      this.environmentRepo,
+      this.threadEnvironmentAttachmentRepo,
     );
     this.primaryPromotionByProjectId = this.environmentService.primaryPromotionByProjectId;
     this.primaryPromotionValidatedAtByProjectId =

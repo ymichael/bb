@@ -17,7 +17,12 @@ import {
   removeEnvironmentAgentDefaultLogArtifacts,
   type EnvironmentAgentConnectionTarget,
 } from "@beanbag/environment-agent";
-import type { ProjectRepository, ThreadRepository } from "@beanbag/db";
+import type {
+  EnvironmentRepository,
+  ProjectRepository,
+  ThreadEnvironmentAttachmentRepository,
+  ThreadRepository,
+} from "@beanbag/db";
 import {
   resolveProjectCheckoutSnapshotAsync,
   resolveProjectDefaultBranchCheckoutAsync,
@@ -99,7 +104,32 @@ export class EnvironmentService {
     private readonly projectRepo: ProjectRepository,
     private readonly environmentRegistry: EnvironmentRegistry,
     private readonly callbacks: EnvironmentServiceCallbacks,
+    private readonly environmentRepo?: EnvironmentRepository,
+    private readonly threadEnvironmentAttachmentRepo?: ThreadEnvironmentAttachmentRepository,
   ) {}
+
+  private resolveAttachedEnvironment(threadId: string): {
+    environmentId: string;
+    preserveWorkspace: boolean;
+    managed: boolean;
+  } | undefined {
+    if (!this.threadEnvironmentAttachmentRepo) {
+      return undefined;
+    }
+    const attachment = this.threadEnvironmentAttachmentRepo.getByThreadId(threadId);
+    if (!attachment) {
+      return undefined;
+    }
+    const siblingAttachments = this.threadEnvironmentAttachmentRepo
+      .listByEnvironmentId(attachment.environmentId)
+      .filter((record) => record.threadId !== threadId);
+    const environmentRecord = this.environmentRepo?.getById(attachment.environmentId);
+    return {
+      environmentId: attachment.environmentId,
+      preserveWorkspace: siblingAttachments.length > 0,
+      managed: environmentRecord?.managed ?? false,
+    };
+  }
 
   listEnvironments(): SystemEnvironmentInfo[] {
     return this.environmentRegistry.list().map((environment: SystemEnvironmentInfo) => ({
@@ -419,6 +449,7 @@ export class EnvironmentService {
 
   async destroyThreadEnvironment(threadId: string): Promise<void> {
     const runtime = this.environmentRuntimes.get(threadId);
+    const attachedEnvironment = this.resolveAttachedEnvironment(threadId);
 
     this.workspaceCleanupInFlightThreadIds.add(threadId);
     const refresh = () => {
@@ -445,9 +476,15 @@ export class EnvironmentService {
 
       const environmentId = runtime.environment.kind;
       try {
-        await Promise.resolve(runtime.environment.destroy());
-        this.detachEnvironmentRuntime(threadId);
-        this.clearPersistedEnvironmentState(threadId);
+        if (attachedEnvironment?.preserveWorkspace) {
+          await Promise.resolve(runtime.environment.suspend());
+          this.detachEnvironmentRuntime(threadId);
+          this.clearPersistedEnvironmentState(threadId);
+        } else {
+          await Promise.resolve(runtime.environment.destroy());
+          this.detachEnvironmentRuntime(threadId);
+          this.clearPersistedEnvironmentState(threadId);
+        }
       } catch (error) {
         reportFailure(environmentId, error);
         throw error;
@@ -466,6 +503,11 @@ export class EnvironmentService {
   async destroyPersistedEnvironment(threadId: string): Promise<void> {
     const thread = this.threadRepo.getById(threadId);
     if (!thread) return;
+    const attachedEnvironment = this.resolveAttachedEnvironment(threadId);
+    if (attachedEnvironment?.preserveWorkspace) {
+      this.clearPersistedEnvironmentState(threadId);
+      return;
+    }
     const project = this.projectRepo.getById(thread.projectId);
     if (!project) return;
     let environment: IEnvironment | undefined;
@@ -486,6 +528,7 @@ export class EnvironmentService {
   }
 
   private clearPersistedEnvironmentState(threadId: string): void {
+    const attachment = this.threadEnvironmentAttachmentRepo?.getByThreadId(threadId);
     this.threadRepo.update(
       threadId,
       {
@@ -493,6 +536,15 @@ export class EnvironmentService {
       },
       { touchUpdatedAt: false },
     );
+    this.threadEnvironmentAttachmentRepo?.deleteByThreadId(threadId);
+    if (attachment) {
+      const remainingAttachments = this.threadEnvironmentAttachmentRepo?.listByEnvironmentId(
+        attachment.environmentId,
+      ) ?? [];
+      if (remainingAttachments.length === 0 && this.environmentRepo?.getById(attachment.environmentId)?.managed) {
+        this.environmentRepo.delete(attachment.environmentId);
+      }
+    }
     this.restoreFailuresByThreadId.delete(threadId);
   }
 
