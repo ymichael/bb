@@ -173,7 +173,7 @@ export function ThreadTimelinePane({
                 <div
                   key={`${threadId}:${entry.id}`}
                   data-thread-row-id={entry.id}
-                  className="pt-2 first:pt-0"
+                  className="pt-2"
                 >
                   {entry.kind === "tool-group" ? (
                     <ToolGroupEntry
