@@ -30,4 +30,3 @@ if [ ! -f package.json ]; then
 fi
 
 run_step "pnpm install" pnpm install
-run_step "pnpm build" pnpm build
