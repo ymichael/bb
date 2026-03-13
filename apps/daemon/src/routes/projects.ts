@@ -260,14 +260,12 @@ export function createProjectRoutes(
           title: MANAGER_THREAD_TITLE,
           environmentId: "local",
           developerInstructions: DEFAULT_MANAGER_DEVELOPER_INSTRUCTIONS,
+          input: [{ type: "text", text: MANAGER_WELCOME_MESSAGE }],
         });
 
         try {
           ensureManagerWorkspace(runtimeEnv, managerThread.id);
           projectRepo.update(projectId, { primaryManagerThreadId: managerThread.id });
-          await deps.threadManager.systemTell(managerThread.id, {
-            input: [{ type: "text", text: MANAGER_WELCOME_MESSAGE }],
-          });
         } catch (error) {
           projectRepo.update(projectId, { primaryManagerThreadId: null });
           rmSync(resolveBeanbagPath(runtimeEnv, "workspace", managerThread.id), {

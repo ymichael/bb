@@ -326,18 +326,17 @@ describe("Project routes", () => {
           type: "manager",
           title: "Manager",
           environmentId: "local",
+          input: [{ type: "text", text: "[bb system] Welcome!" }],
         }),
       );
       expect(projectRepo.update).toHaveBeenCalledWith("proj-1", {
         primaryManagerThreadId: "thread-manager-1",
       });
-      expect(threadManager.systemTell).toHaveBeenCalledWith("thread-manager-1", {
-        input: [{ type: "text", text: "[bb system] Welcome!" }],
-      });
+      expect(threadManager.systemTell).not.toHaveBeenCalled();
       expect(existsSync(join(beanbagRoot, "workspace", "thread-manager-1"))).toBe(true);
     });
 
-    it("rolls back the pointer and workspace when bootstrap fails", async () => {
+    it("rolls back the pointer and workspace when workspace bootstrap fails", async () => {
       const project = makeProject({ id: "proj-1" });
       const managerThread = makeThread({
         id: "thread-manager-rollback",
@@ -346,15 +345,12 @@ describe("Project routes", () => {
       });
       (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(project);
       threadManager.spawn.mockResolvedValue(managerThread);
-      threadManager.systemTell.mockRejectedValue(new Error("welcome failed"));
+      writeFileSync(join(beanbagRoot, "workspace"), "occupied");
 
       const res = await app.request("/projects/proj-1/manager", { method: "POST" });
 
       expect(res.status).toBe(500);
       expect(projectRepo.update).toHaveBeenNthCalledWith(1, "proj-1", {
-        primaryManagerThreadId: "thread-manager-rollback",
-      });
-      expect(projectRepo.update).toHaveBeenNthCalledWith(2, "proj-1", {
         primaryManagerThreadId: null,
       });
       expect(deleteThreadAsync).toHaveBeenCalledWith("thread-manager-rollback");
