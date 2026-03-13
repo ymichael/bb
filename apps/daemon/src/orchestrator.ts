@@ -3,6 +3,7 @@ import {
   constants,
   existsSync,
   mkdirSync,
+  readFileSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -148,7 +149,11 @@ import {
   type ActiveEnvironmentRuntime,
   type PrimaryPromotionState,
 } from "./environment-service.js";
-import { MANAGER_WORKSPACE_PATH_PLACEHOLDER } from "./manager-thread.js";
+import {
+  MANAGER_PREFERENCES_CONTENT_PLACEHOLDER,
+  MANAGER_WORKSPACE_PATH_PLACEHOLDER,
+  resolveManagerWorkspacePath,
+} from "./manager-thread.js";
 import { measureAsync, measureSync } from "./perf.js";
 
 export type PromptExecutionOptions = ProviderExecutionOptions;
@@ -952,13 +957,24 @@ export class Orchestrator implements ThreadOrchestrator {
 
     const provisioningRequest =
       threadType === "manager" &&
-      req.developerInstructions?.includes(MANAGER_WORKSPACE_PATH_PLACEHOLDER)
+      req.developerInstructions &&
+      (req.developerInstructions.includes(MANAGER_WORKSPACE_PATH_PLACEHOLDER) ||
+        req.developerInstructions.includes(MANAGER_PREFERENCES_CONTENT_PLACEHOLDER))
         ? {
             ...req,
-            developerInstructions: req.developerInstructions.replaceAll(
-              MANAGER_WORKSPACE_PATH_PLACEHOLDER,
-              resolveBeanbagPath(this.runtimeEnv, "workspace", thread.id),
-            ),
+            developerInstructions: (() => {
+              const workspacePath = resolveManagerWorkspacePath(this.runtimeEnv, thread.id);
+              const preferencesPath = join(workspacePath, "PREFERENCES.md");
+              const preferencesContent = existsSync(preferencesPath)
+                ? readFileSync(preferencesPath, "utf8")
+                : "(does not exist)";
+              return req.developerInstructions
+                .replaceAll(MANAGER_WORKSPACE_PATH_PLACEHOLDER, workspacePath)
+                .replaceAll(
+                  MANAGER_PREFERENCES_CONTENT_PLACEHOLDER,
+                  preferencesContent,
+                );
+            })(),
           }
         : req;
 

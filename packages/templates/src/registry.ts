@@ -29,6 +29,7 @@ export interface TemplateVariables {
   };
   dockerAgentNote: Record<string, never>;
   managerAgentInstructions: {
+    managerPreferencesContent: string;
     managerWorkspacePath: string;
   };
   openaiResponsesDefaultInstructions: Record<string, never>;
