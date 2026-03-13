@@ -22,6 +22,8 @@ import {
   useSystemEnvironments,
   useUnarchiveThread,
   useThreadDefaultExecutionOptions,
+  useThreadManagerWorkspaceFile,
+  useThreadManagerWorkspaceFiles,
   useProjects,
   useUpdateThread,
   useUploadPromptAttachment,
@@ -115,6 +117,11 @@ export function ThreadDetailView() {
   const { data: defaultExecutionOptions } = useThreadDefaultExecutionOptions(
     threadId ?? "",
   );
+  const {
+    data: managerWorkspaceFiles,
+  } = useThreadManagerWorkspaceFiles(threadId ?? "", {
+    enabled: thread?.type === "manager",
+  });
   const threadToolGroupMessages = useThreadToolGroupMessages();
   const tellThread = useTellThread();
   const enqueueThreadMessage = useEnqueueThreadMessage();
@@ -148,6 +155,9 @@ export function ThreadDetailView() {
   const [threadDeleteTarget, setThreadDeleteTarget] = useState<Thread | null>(null);
   const [threadGitActionTarget, setThreadGitActionTarget] =
     useState<ThreadGitActionDialogTarget | null>(null);
+  const [selectedManagerWorkspacePath, setSelectedManagerWorkspacePath] = useState<string | null>(
+    null,
+  );
   const markedReadKeysRef = useRef<Set<string>>(new Set());
   const captureTimelineScrollPositionRef = useRef<() => void>(() => {});
   const mergeBaseStateThreadIdRef = useRef<string | undefined>(undefined);
@@ -160,6 +170,13 @@ export function ThreadDetailView() {
       }),
     [promptDraft.attachments, promptDraft.text],
   );
+  const {
+    data: managerWorkspaceFile,
+    isLoading: isManagerWorkspaceFileLoading,
+    error: managerWorkspaceFileError,
+  } = useThreadManagerWorkspaceFile(threadId ?? "", selectedManagerWorkspacePath, {
+    enabled: thread?.type === "manager" && selectedManagerWorkspacePath !== null,
+  });
   const {
     selectedModel,
     setSelectedModel,
@@ -296,6 +313,23 @@ export function ThreadDetailView() {
   useEffect(() => {
     setPendingSubmittedFollowUp(null);
   }, [threadId]);
+
+  useEffect(() => {
+    if (thread?.type !== "manager") {
+      setSelectedManagerWorkspacePath(null);
+      return;
+    }
+    const files = managerWorkspaceFiles?.files ?? [];
+    if (files.length === 0) {
+      setSelectedManagerWorkspacePath(null);
+      return;
+    }
+    setSelectedManagerWorkspacePath((currentPath) =>
+      currentPath && files.some((file) => file.path === currentPath)
+        ? currentPath
+        : files[0]?.path ?? null,
+    );
+  }, [managerWorkspaceFiles?.files, thread?.type]);
 
   useEffect(() => {
     if (!pendingSubmittedFollowUp) {
@@ -1010,6 +1044,67 @@ export function ThreadDetailView() {
       ].filter(Boolean).join(" "),
     )
   );
+  const managerWorkspaceContent = thread.type === "manager" ? (
+    <div className="grid min-h-0 gap-3 md:grid-cols-[220px_minmax(0,1fr)]">
+      <div className="min-h-0 rounded-lg border border-border/70 bg-background/45">
+        <div className="border-b border-border/70 px-3 py-2 text-xs font-medium text-muted-foreground">
+          Workspace files
+        </div>
+        <div className="max-h-[50vh] overflow-y-auto p-2">
+          {(managerWorkspaceFiles?.files?.length ?? 0) > 0 ? (
+            <div className="space-y-1">
+              {managerWorkspaceFiles?.files.map((file) => (
+                <Button
+                  key={file.path}
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className={
+                    selectedManagerWorkspacePath === file.path
+                      ? "h-auto w-full justify-start rounded-md bg-accent/35 px-2 py-1.5 text-left text-xs"
+                      : "h-auto w-full justify-start rounded-md px-2 py-1.5 text-left text-xs text-muted-foreground"
+                  }
+                  onClick={() => {
+                    setSelectedManagerWorkspacePath(file.path);
+                  }}
+                >
+                  {file.path}
+                </Button>
+              ))}
+            </div>
+          ) : (
+            <p className="px-1 py-2 text-xs text-muted-foreground">
+              No files yet.
+            </p>
+          )}
+        </div>
+      </div>
+      <div className="min-h-0 rounded-lg border border-border/70 bg-background/45">
+        <div className="border-b border-border/70 px-3 py-2 text-xs font-medium text-muted-foreground">
+          {selectedManagerWorkspacePath ?? "Select a file"}
+        </div>
+        <div className="max-h-[50vh] overflow-auto p-3">
+          {isManagerWorkspaceFileLoading ? (
+            <p className="text-xs text-muted-foreground">Loading file…</p>
+          ) : managerWorkspaceFileError ? (
+            <p className="text-xs text-destructive">
+              {managerWorkspaceFileError instanceof Error
+                ? managerWorkspaceFileError.message
+                : "Failed to load workspace file"}
+            </p>
+          ) : managerWorkspaceFile ? (
+            <pre className="whitespace-pre-wrap break-words font-mono text-xs text-foreground">
+              {managerWorkspaceFile.content}
+            </pre>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              Select a manager workspace file to view it.
+            </p>
+          )}
+        </div>
+      </div>
+    </div>
+  ) : undefined;
   const threadActionsMenu = (
     <ThreadActionsMenu
       triggerClassName="h-7 w-7 rounded-md p-0 text-muted-foreground"
@@ -1332,6 +1427,8 @@ export function ThreadDetailView() {
                 </div>
               )
             }
+            managerWorkspaceContent={managerWorkspaceContent}
+            showManagerWorkspaceTab={thread.type === "manager"}
             onPanelChange={openThreadSecondaryPanel}
             threadId={thread.id}
             panelRef={secondaryPanelRef}

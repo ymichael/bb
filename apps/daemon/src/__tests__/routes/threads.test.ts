@@ -1,3 +1,4 @@
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { Hono } from "hono";
 import type {
@@ -10,6 +11,7 @@ import { ENVIRONMENT_AGENT_PROTOCOL_VERSION } from "@beanbag/environment-agent";
 import { createThreadRoutes } from "../../routes/threads.js";
 import { inactiveSessionError, threadArchivedError } from "../../domain-errors.js";
 import type { EnvironmentAgentSessionService } from "../../environment-agent-session-service.js";
+import { resolveManagerWorkspacePath } from "../../manager-thread.js";
 
 type LegacyThreadRouteMock = ThreadOrchestrator & {
   updateThread: ReturnType<typeof vi.fn>;
@@ -1227,6 +1229,27 @@ describe("Thread routes", () => {
       const res = await app.request("/threads/thread-1/default-execution-options");
       expect(res.status).toBe(200);
       expect(await res.json()).toBeNull();
+    });
+  });
+
+  describe("GET /threads/:id/manager-workspace/files", () => {
+    it("lists manager workspace files for manager threads", async () => {
+      const workspacePath = resolveManagerWorkspacePath(process.env, "thread-1");
+      mkdirSync(workspacePath, { recursive: true });
+      writeFileSync(`${workspacePath}/plan.md`, "# Plan");
+      threadManager.getRawById.mockReturnValue(
+        makeThread({ id: "thread-1", type: "manager" }),
+      );
+
+      try {
+        const res = await app.request("/threads/thread-1/manager-workspace/files");
+        expect(res.status).toBe(200);
+        expect(await res.json()).toEqual({
+          files: [{ path: "plan.md", size: 6 }],
+        });
+      } finally {
+        rmSync(workspacePath, { recursive: true, force: true });
+      }
     });
   });
 

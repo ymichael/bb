@@ -409,6 +409,31 @@ export async function getThread(id: string): Promise<Thread> {
   return request<Thread>("GET", `/threads/${id}`);
 }
 
+export interface ManagerWorkspaceFileEntry {
+  path: string;
+  size: number;
+}
+
+export async function listThreadManagerWorkspaceFiles(
+  id: string,
+): Promise<{ files: ManagerWorkspaceFileEntry[] }> {
+  return request<{ files: ManagerWorkspaceFileEntry[] }>(
+    "GET",
+    `/threads/${id}/manager-workspace/files`,
+  );
+}
+
+export async function getThreadManagerWorkspaceFile(
+  id: string,
+  path: string,
+): Promise<{ path: string; content: string }> {
+  const params = new URLSearchParams({ path });
+  return request<{ path: string; content: string }>(
+    "GET",
+    `/threads/${id}/manager-workspace/file?${params.toString()}`,
+  );
+}
+
 export async function updateThread(
   id: string,
   req: UpdateThreadRequest,

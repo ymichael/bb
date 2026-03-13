@@ -2,8 +2,9 @@ const THREAD_SECONDARY_PANEL_QUERY_KEY = "secondaryPanel";
 const THREAD_SECONDARY_PANEL_STORAGE_KEY = "beanbag.thread.secondaryPanel";
 const THREAD_DIFF_PANEL_QUERY_VALUE = "git-diff";
 const THREAD_INFO_PANEL_QUERY_VALUE = "thread-info";
+const THREAD_MANAGER_WORKSPACE_PANEL_QUERY_VALUE = "manager-workspace";
 
-export type ThreadSecondaryPanel = "git-diff" | "thread-info";
+export type ThreadSecondaryPanel = "git-diff" | "thread-info" | "manager-workspace";
 
 function decodeThreadSecondaryPanel(value: string | null): ThreadSecondaryPanel | null {
   switch (value) {
@@ -11,6 +12,8 @@ function decodeThreadSecondaryPanel(value: string | null): ThreadSecondaryPanel 
       return "git-diff";
     case THREAD_INFO_PANEL_QUERY_VALUE:
       return "thread-info";
+    case THREAD_MANAGER_WORKSPACE_PANEL_QUERY_VALUE:
+      return "manager-workspace";
     default:
       return null;
   }

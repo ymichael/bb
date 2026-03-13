@@ -95,6 +95,15 @@ const apiState = vi.hoisted(() => {
       hasCommittedUnmergedChanges: false,
     } as ThreadWorkStatus,
     mergeBaseBranchOptions: ["main"],
+    managerWorkspaceFiles: {
+      files: [
+        { path: "plan.md", size: 24 },
+      ],
+    },
+    managerWorkspaceFile: {
+      path: "plan.md",
+      content: "# Plan\nManager deliverable",
+    },
     gitDiff: {
       mode: "worktree_commits",
       selection: { type: "combined" },
@@ -175,6 +184,14 @@ vi.mock("../hooks/useApi", () => ({
   useUnarchiveThread: () => apiState.pendingMutation,
   useThreadDefaultExecutionOptions: () => ({
     data: {},
+  }),
+  useThreadManagerWorkspaceFiles: () => ({
+    data: apiState.managerWorkspaceFiles,
+  }),
+  useThreadManagerWorkspaceFile: () => ({
+    data: apiState.managerWorkspaceFile,
+    isLoading: false,
+    error: null,
   }),
   useUpdateThread: () => apiState.pendingMutation,
   useUploadPromptAttachment: () => apiState.pendingMutation,
@@ -344,14 +361,17 @@ vi.mock("./ThreadSecondaryPanel", () => ({
     activePanel,
     gitDiffStatsLabel,
     metadataContent,
+    managerWorkspaceContent,
   }: {
-    activePanel: "git-diff" | "thread-info" | null;
+    activePanel: "git-diff" | "thread-info" | "manager-workspace" | null;
     gitDiffStatsLabel: string;
     metadataContent: ReactNode;
+    managerWorkspaceContent?: ReactNode;
   }) => (
     <div>
       {activePanel === "git-diff" ? gitDiffStatsLabel : null}
       {activePanel === "thread-info" ? metadataContent : null}
+      {activePanel === "manager-workspace" ? managerWorkspaceContent : null}
     </div>
   ),
 }));
@@ -464,6 +484,24 @@ describe("ThreadDetailView", () => {
 
     apiState.thread.primaryCheckout = { isActive: false };
     apiState.environments[0].capabilities = {};
+  });
+
+  it("renders the manager workspace tab for manager threads", () => {
+    apiState.thread.type = "manager";
+    apiState.thread.title = "Manager";
+    Reflect.deleteProperty(apiState.thread, "parentThreadId");
+    apiState.timelineLoading = false;
+
+    const html = renderThreadDetailView(
+      "/projects/project-1/threads/thread-1?secondaryPanel=manager-workspace"
+    );
+
+    expect(html).toContain("plan.md");
+    expect(html).toContain("Manager deliverable");
+
+    apiState.thread.type = "standard";
+    apiState.thread.parentThreadId = "thread-parent";
+    apiState.thread.title = "Child thread";
   });
 
   it("disables promote while the thread is active", () => {

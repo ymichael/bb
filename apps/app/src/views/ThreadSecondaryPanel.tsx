@@ -14,6 +14,7 @@ import {
   ChevronsUp,
   Columns2,
   FileDiff as FileDiffIcon,
+  FolderOpen,
   GripVertical,
   Info,
   Loader2,
@@ -321,6 +322,8 @@ function GitDiffFileCard({
 export function ThreadSecondaryPanel({
   activePanel,
   metadataContent,
+  managerWorkspaceContent,
+  showManagerWorkspaceTab = false,
   onPanelChange,
   threadId,
   panelRef,
@@ -356,6 +359,8 @@ export function ThreadSecondaryPanel({
 }: {
   activePanel: ThreadSecondaryPanelTab | null;
   metadataContent: ReactNode;
+  managerWorkspaceContent?: ReactNode;
+  showManagerWorkspaceTab?: boolean;
   onPanelChange: (panel: ThreadSecondaryPanelTab) => void;
   threadId: string;
   panelRef: Ref<HTMLElement>;
@@ -390,6 +395,7 @@ export function ThreadSecondaryPanel({
   gitDiffViewOptions: Record<string, string | boolean>;
 }) {
   const isDiffPanelActive = activePanel === "git-diff";
+  const isManagerWorkspacePanelActive = activePanel === "manager-workspace";
   const hasCurrentGitDiff = currentGitDiff.trim().length > 0;
 
   return (
@@ -490,6 +496,25 @@ export function ThreadSecondaryPanel({
                 >
                   <FileDiffIcon className="size-3.5" />
                 </Button>
+                {showManagerWorkspaceTab ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className={cn(
+                      "h-7 w-7 rounded-md p-0",
+                      isManagerWorkspacePanelActive
+                        ? "bg-accent/35 text-foreground hover:bg-accent/45"
+                        : "text-muted-foreground hover:bg-muted/45 hover:text-foreground",
+                    )}
+                    onClick={() => onPanelChange("manager-workspace")}
+                    aria-label="Show manager workspace panel"
+                    aria-pressed={isManagerWorkspacePanelActive}
+                    title="Workspace"
+                  >
+                    <FolderOpen className="size-3.5" />
+                  </Button>
+                ) : null}
               </div>
               <Button
                 type="button"
@@ -654,6 +679,12 @@ export function ThreadSecondaryPanel({
               ) : (
                 <p className="rounded-lg border border-dashed border-border/70 bg-background/45 px-3 py-6 text-center text-sm text-muted-foreground">
                   No diff to display.
+                </p>
+              )
+            ) : isManagerWorkspacePanelActive ? (
+              managerWorkspaceContent ?? (
+                <p className="rounded-lg border border-dashed border-border/70 bg-background/45 px-3 py-6 text-center text-sm text-muted-foreground">
+                  No manager workspace available.
                 </p>
               )
             ) : (

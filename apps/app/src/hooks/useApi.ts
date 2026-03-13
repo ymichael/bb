@@ -534,6 +534,31 @@ export function useThreadDefaultExecutionOptions(
   });
 }
 
+export function useThreadManagerWorkspaceFiles(
+  id: string,
+  options?: { enabled?: boolean },
+) {
+  return useQuery<{ files: api.ManagerWorkspaceFileEntry[] }>({
+    queryKey: ["threadManagerWorkspaceFiles", id],
+    queryFn: () => api.listThreadManagerWorkspaceFiles(id),
+    enabled: (options?.enabled ?? true) && !!id,
+    refetchOnWindowFocus: false,
+  });
+}
+
+export function useThreadManagerWorkspaceFile(
+  id: string,
+  path: string | null,
+  options?: { enabled?: boolean },
+) {
+  return useQuery<{ path: string; content: string }>({
+    queryKey: ["threadManagerWorkspaceFile", id, path],
+    queryFn: () => api.getThreadManagerWorkspaceFile(id, path ?? ""),
+    enabled: (options?.enabled ?? true) && !!id && !!path,
+    refetchOnWindowFocus: false,
+  });
+}
+
 export function useThreadWorkStatus(
   id: string,
   mergeBaseBranch?: string,
