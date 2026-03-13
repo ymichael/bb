@@ -802,7 +802,7 @@ export class ThreadRepository {
         and(
           isNull(threads.archivedAt),
           eq(threads.status, "active"),
-          sql`${threads.environmentRecord} is not null`,
+          sql`${threads.environmentId} is not null`,
         ),
       )
       .all()
@@ -835,7 +835,7 @@ export class ThreadRepository {
         and(
           eq(threads.projectId, projectId),
           isNull(threads.archivedAt),
-          sql`${threads.environmentRecord} is not null`,
+          sql`${threads.environmentId} is not null`,
         ),
       )
       .all()
