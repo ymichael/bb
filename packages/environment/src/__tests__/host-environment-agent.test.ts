@@ -216,6 +216,58 @@ describe("host environment-agent helper", () => {
     expect(killProcess).not.toHaveBeenCalled();
   });
 
+  it("reuses the same managed agent across threads on one environment", async () => {
+    const beanbagRoot = makeTempDir();
+    process.env.BEANBAG_ROOT = beanbagRoot;
+    const projectId = `project-${Date.now()}`;
+    const workspaceRoot = makeTempDir();
+    const spawnProcess = vi.fn(() => ({
+      pid: 4321,
+      unref: vi.fn(),
+    })) as unknown as typeof import("node:child_process").spawn;
+
+    const first = await ensureManagedHostEnvironmentAgent(
+      {
+        workspaceRootPath: workspaceRoot,
+        threadId: "thread-1",
+        projectId,
+        environmentId: "env-1",
+        runtimeEnv: { BEANBAG_ROOT: beanbagRoot },
+      },
+      {
+        allocatePort: async () => 4312,
+        generateAuthToken: () => "auth-token",
+        resolveLaunchCommand: () => ({
+          command: process.execPath,
+          args: ["agent.mjs"],
+        }),
+        spawnProcess,
+        waitForAgent: async () => {},
+        isProcessAlive: () => true,
+      },
+    );
+
+    const second = await ensureManagedHostEnvironmentAgent(
+      {
+        workspaceRootPath: workspaceRoot,
+        threadId: "thread-2",
+        projectId,
+        environmentId: "env-1",
+        runtimeEnv: { BEANBAG_ROOT: beanbagRoot },
+      },
+      {
+        spawnProcess,
+        waitForAgent: async () => {
+          throw new Error("should not relaunch");
+        },
+        isProcessAlive: () => true,
+      },
+    );
+
+    expect(second).toEqual(first);
+    expect(spawnProcess).toHaveBeenCalledTimes(1);
+  });
+
   it("removes the managed agent record and escalates to SIGKILL when SIGTERM does not exit promptly", async () => {
     const beanbagRoot = makeTempDir();
     process.env.BEANBAG_ROOT = beanbagRoot;

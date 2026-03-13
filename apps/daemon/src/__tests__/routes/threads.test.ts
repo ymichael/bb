@@ -172,22 +172,19 @@ function mockEnvironmentAgentSessionService(): EnvironmentAgentSessionService {
 
 describe("Thread routes", () => {
   let threadManager: ReturnType<typeof mockOrchestrator>;
-  let environmentRepo: Pick<EnvironmentRepository, "getById">;
-  let threadEnvironmentAttachmentRepo: Pick<
-    ThreadEnvironmentAttachmentRepository,
-    "getByThreadId" | "listByThreadIds"
-  >;
+  let environmentRepo: EnvironmentRepository;
+  let threadEnvironmentAttachmentRepo: ThreadEnvironmentAttachmentRepository;
   let app: Hono;
 
   beforeEach(() => {
     threadManager = mockOrchestrator();
     environmentRepo = {
       getById: vi.fn(),
-    };
+    } as unknown as EnvironmentRepository;
     threadEnvironmentAttachmentRepo = {
       getByThreadId: vi.fn(),
       listByThreadIds: vi.fn(() => []),
-    };
+    } as unknown as ThreadEnvironmentAttachmentRepository;
     const routes = createThreadRoutes(threadManager, {
       environmentRepo,
       threadEnvironmentAttachmentRepo,
@@ -305,8 +302,8 @@ describe("Thread routes", () => {
       });
     });
 
-    it("forwards attached environment id when provided", async () => {
-      const thread = makeThread({ id: "new-thread", attachedEnvironmentId: "env-1" });
+    it("forwards environment id when pointing at a first-class environment", async () => {
+      const thread = makeThread({ id: "new-thread", environmentId: "env-1" });
       (threadManager.spawn as ReturnType<typeof vi.fn>).mockResolvedValue(thread);
 
       const res = await app.request("/threads", {
@@ -314,14 +311,14 @@ describe("Thread routes", () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           projectId: "proj-1",
-          attachedEnvironmentId: "env-1",
+          environmentId: "env-1",
         }),
       });
 
       expect(res.status).toBe(201);
       expect(threadManager.spawn).toHaveBeenCalledWith({
         projectId: "proj-1",
-        attachedEnvironmentId: "env-1",
+        environmentId: "env-1",
       });
     });
 

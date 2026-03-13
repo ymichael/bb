@@ -22,14 +22,14 @@ function makeEnvironment(
 }
 
 describe("Environment routes", () => {
-  let environmentRepo: Pick<EnvironmentRepository, "getById" | "list">;
+  let environmentRepo: EnvironmentRepository;
   let app: Hono;
 
   beforeEach(() => {
     environmentRepo = {
       getById: vi.fn(),
       list: vi.fn(() => []),
-    };
+    } as unknown as EnvironmentRepository;
     app = new Hono().route("/environments", createEnvironmentRoutes(environmentRepo));
   });
 

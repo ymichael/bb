@@ -621,13 +621,6 @@ describe("Orchestrator", () => {
           projectId: "proj-1",
           status: "idle",
           environmentId: "worktree",
-          environmentRecord: {
-            kind: "worktree",
-            state: {
-              workspaceRoot: "/tmp/worktrees/proj-1/thread-1",
-              branchName: "bb/thread-1",
-            },
-          },
         }),
       );
       (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue({
@@ -668,14 +661,14 @@ describe("Orchestrator", () => {
         initialThreads.map((thread) => [thread.id, { ...thread }]),
       );
       const archivedIdsWithEnvironmentRecord = initialThreads
-        .filter((thread) => thread.archivedAt !== undefined && thread.environmentRecord)
+        .filter((thread) => thread.archivedAt !== undefined && thread.environmentId)
         .map((thread) => thread.id);
       const nonArchivedActiveIdsWithEnvironmentRecord = initialThreads
         .filter(
           (thread) =>
             thread.archivedAt === undefined &&
             thread.status === "active" &&
-            thread.environmentRecord,
+            thread.environmentId,
         )
         .map((thread) => thread.id);
       const nonArchivedProvisioningIds = initialThreads
@@ -788,13 +781,7 @@ describe("Orchestrator", () => {
           id: "boot-archived-with-environment",
           status: "idle",
           archivedAt: 123,
-          environmentRecord: {
-            kind: "worktree",
-            state: {
-              workspaceRoot: "/tmp/worktree",
-              branchName: "bb/thread-1",
-            },
-          },
+          environmentId: "worktree",
         }),
         makeThread({
           id: "boot-archived-no-environment",
@@ -826,13 +813,7 @@ describe("Orchestrator", () => {
           id: "boot-active-with-environment",
           projectId: "proj-1",
           status: "active",
-          environmentRecord: {
-            kind: "worktree",
-            state: {
-              workspaceRoot: "/tmp/worktree",
-              branchName: "bb/thread-1",
-            },
-          },
+          environmentId: "worktree",
         }),
         makeThread({
           id: "boot-idle-without-environment",
@@ -931,12 +912,7 @@ describe("Orchestrator", () => {
           makeThread({
             id: "boot-provisioned",
             status: "provisioned",
-            environmentRecord: {
-              kind: "local",
-              state: {
-                workspaceRoot: "/tmp/project",
-              },
-            },
+            environmentId: "local",
           }),
         ],
         {
@@ -2157,10 +2133,6 @@ describe("Orchestrator", () => {
           id: "thread-1",
           status: "active",
           environmentId: "worktree",
-          environmentRecord: {
-            kind: "worktree",
-            state: {},
-          },
         });
         (threadRepo.getById as ReturnType<typeof vi.fn>).mockImplementation(
           (threadId: string) => (threadId === "thread-1" ? thread : undefined),
@@ -2214,10 +2186,6 @@ describe("Orchestrator", () => {
             sandboxMode: "danger-full-access",
             createdAt: 1,
           }],
-          environmentRecord: {
-            kind: "worktree",
-            state: {},
-          },
         });
         (threadRepo.getById as ReturnType<typeof vi.fn>).mockImplementation(
           (threadId: string) => (threadId === "thread-1" ? thread : undefined),
@@ -2264,10 +2232,6 @@ describe("Orchestrator", () => {
           id: "thread-1",
           status: "active",
           environmentId: "worktree",
-          environmentRecord: {
-            kind: "worktree",
-            state: {},
-          },
         });
         (threadRepo.getById as ReturnType<typeof vi.fn>).mockImplementation(
           (threadId: string) => (threadId === "thread-1" ? thread : undefined),
@@ -2888,13 +2852,7 @@ describe("Orchestrator", () => {
 
       (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue({
         ...thread,
-        environmentRecord: {
-          kind: "worktree",
-          state: {
-            workspaceRoot: envSetupWorkspaceRoot,
-            branchName: "bb/thread-1",
-          },
-        },
+        environmentId: "worktree",
       });
       const resolvedResult = await managerWithCustomEnvironment.getWorkStatusAsync("thread-1");
       expect(resolvedResult).toStrictEqual(mockedStatus);
@@ -2910,13 +2868,6 @@ describe("Orchestrator", () => {
         projectId: "proj-1",
         status: "idle",
         environmentId: "worktree",
-        environmentRecord: {
-          kind: "worktree",
-          state: {
-            workspaceRoot,
-            branchName: "bb/thread-1",
-          },
-        },
       });
       (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
       (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue({

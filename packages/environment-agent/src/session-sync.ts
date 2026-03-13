@@ -1,6 +1,7 @@
 import type { EnvironmentAgentCommand } from "./protocol.js";
 import type {
   EnvironmentAgentCommandReceiptRecord,
+  EnvironmentAgentSessionStateRecord,
 } from "./session-store.js";
 import type { EnvironmentAgentSessionRuntime } from "./session-runtime.js";
 import type {
@@ -199,8 +200,14 @@ export class EnvironmentAgentSessionSync {
     });
 
     const pulled = batch.payload.commands
-      .filter((command) => args.threadIds.includes(command.channelId))
       .map((command) => {
+        this.ensureChannelState({
+          threadId: command.channelId,
+          sessionId: state.sessionId,
+          agentId: state.agentId,
+          agentInstanceId: state.agentInstanceId,
+          now: batch.sentAt,
+        });
         const received = this.options.runtime.receiveCommand({
           commandId: command.commandId,
           threadId: command.channelId,
@@ -238,6 +245,38 @@ export class EnvironmentAgentSessionSync {
     }
 
     return pulled;
+  }
+
+  private ensureChannelState(args: {
+    threadId: string;
+    sessionId: string;
+    agentId: string;
+    agentInstanceId: string;
+    now: number;
+  }): void {
+    const existing = this.options.runtime.loadThreadState(args.threadId);
+    if (!existing) {
+      this.options.runtime.initializeThread({
+        threadId: args.threadId,
+        agentId: args.agentId,
+        agentInstanceId: args.agentInstanceId,
+        generation: 1,
+        now: args.now,
+      });
+      this.options.runtime.bindSession({
+        threadId: args.threadId,
+        sessionId: args.sessionId,
+        now: args.now,
+      });
+      return;
+    }
+    if (!existing.sessionId) {
+      this.options.runtime.bindSession({
+        threadId: args.threadId,
+        sessionId: args.sessionId,
+        now: args.now,
+      });
+    }
   }
 
   async closeSession(
@@ -305,19 +344,15 @@ export class EnvironmentAgentSessionSync {
     return sent;
   }
 
-  private requireSessionState(threadId: string): {
-    threadId: string;
+  private requireSessionState(
+    threadId: string,
+  ): EnvironmentAgentSessionStateRecord & {
     sessionId: string;
-    lastAcked?: { generation: number; sequence: number };
   } {
     const state = this.options.runtime.loadThreadState(threadId);
     if (!state?.sessionId) {
       throw new Error(`Missing bound session for thread ${threadId}`);
     }
-    return {
-      threadId: state.threadId,
-      sessionId: state.sessionId,
-      ...(state.lastAcked ? { lastAcked: state.lastAcked } : {}),
-    };
+    return state as EnvironmentAgentSessionStateRecord & { sessionId: string };
   }
 }

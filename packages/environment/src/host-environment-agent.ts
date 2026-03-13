@@ -59,7 +59,6 @@ function managedHostEnvironmentAgentIdentityKey(
 ): string {
   return [
     args.projectId,
-    args.threadId,
     args.environmentId,
     args.workspaceRootPath,
   ].join("\0");

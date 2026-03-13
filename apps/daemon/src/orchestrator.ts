@@ -3591,7 +3591,9 @@ export class Orchestrator implements ThreadOrchestrator {
         reason: "migration",
       });
     }
-    this.environmentService.suspendEnvironmentRuntime(threadId);
+    if (!this.environmentService.hasSharedAttachedEnvironment(threadId)) {
+      this.environmentService.suspendEnvironmentRuntime(threadId);
+    }
   }
 
   private async _withEnvironmentAgentClient<T>(

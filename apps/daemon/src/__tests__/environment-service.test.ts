@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type {
+  EnvironmentRecord,
   SystemEnvironmentInfo,
   Thread,
   ThreadWorkStatus,
@@ -11,7 +12,12 @@ import {
   type IEnvironment,
 } from "@beanbag/environment";
 import { removeEnvironmentAgentDefaultLogArtifacts } from "@beanbag/environment-agent";
-import type { ProjectRepository, ThreadRepository } from "@beanbag/db";
+import type {
+  EnvironmentRepository,
+  ProjectRepository,
+  ThreadEnvironmentAttachmentRepository,
+  ThreadRepository,
+} from "@beanbag/db";
 import { EnvironmentService } from "../environment-service.js";
 import { resolveProjectCheckoutSnapshotAsync } from "../git-project.js";
 
@@ -179,14 +185,41 @@ function createService(args: {
     projectId: "proj-1",
     providerId: "codex",
     status: "idle",
-    environmentId: "worktree",
-    environmentRecord: {
-      kind: "worktree",
-      state: {},
-    },
+    environmentId: "env-1",
     createdAt: 1000,
     updatedAt: 1000,
   };
+  const environmentState = new Map<string, EnvironmentRecord>([[
+    "env-1",
+    {
+      id: "env-1",
+      projectId: "proj-1",
+      descriptor: {
+        type: "path",
+        path: "/project/root/.worktrees/thread-1",
+      },
+      managed: true,
+      runtimeState: {
+        kind: "worktree",
+        state: {},
+      },
+      createdAt: 1000,
+      updatedAt: 1000,
+    },
+  ]]);
+  let attachmentState:
+    | {
+      threadId: string;
+      environmentId: string;
+      createdAt: number;
+      updatedAt: number;
+    }
+    | undefined = {
+      threadId: "thread-1",
+      environmentId: "env-1",
+      createdAt: 1000,
+      updatedAt: 1000,
+    };
   const threadRepo = {
     getById: vi.fn((_threadId: string) => threadState),
     update: vi.fn((_threadId: string, data: Parameters<ThreadRepository["update"]>[1]) => {
@@ -219,6 +252,35 @@ function createService(args: {
     }
   ).listProjectNonArchivedIdsWithEnvironmentRecord = vi.fn(() => ["thread-1"]);
 
+  const environmentRepo = {
+    getById: vi.fn((environmentId: string) => environmentState.get(environmentId)),
+    delete: vi.fn((environmentId: string) => {
+      environmentState.delete(environmentId);
+    }),
+  } as unknown as EnvironmentRepository;
+
+  const threadEnvironmentAttachmentRepo = {
+    getByThreadId: vi.fn((threadId: string) =>
+      attachmentState?.threadId === threadId ? attachmentState : undefined
+    ),
+    listByEnvironmentId: vi.fn((environmentId: string) =>
+      attachmentState?.environmentId === environmentId ? [attachmentState] : []
+    ),
+    deleteByThreadId: vi.fn(
+      (
+        threadId: string,
+        opts?: { nextThreadEnvironmentId?: string | null },
+      ) => {
+        if (attachmentState?.threadId === threadId) {
+          attachmentState = undefined;
+        }
+        if (Object.hasOwn(opts ?? {}, "nextThreadEnvironmentId")) {
+          threadState.environmentId = opts?.nextThreadEnvironmentId ?? undefined;
+        }
+      },
+    ),
+  } as unknown as ThreadEnvironmentAttachmentRepository;
+
   const runOptionalSetup = vi.fn<
     (
       threadId: string,
@@ -246,9 +308,19 @@ function createService(args: {
       onPrimaryCheckoutDemoted: vi.fn(),
       runOptionalSetup,
     },
+    environmentRepo,
+    threadEnvironmentAttachmentRepo,
   );
 
-  return { service, runOptionalSetup, threadRepo, threadState, onCleanupFailure };
+  return {
+    service,
+    runOptionalSetup,
+    threadRepo,
+    threadState,
+    onCleanupFailure,
+    environmentRepo,
+    threadEnvironmentAttachmentRepo,
+  };
 }
 
 function createDeferred() {
@@ -306,7 +378,7 @@ describe("EnvironmentService", () => {
 
   it("destroys restored environments during persisted cleanup even when no runtime is active", async () => {
     const destroySpy = vi.fn();
-    const { service, threadRepo, threadState } = createService({
+    const { service, threadEnvironmentAttachmentRepo, threadState, environmentRepo } = createService({
       existsInitially: true,
       destroySpy,
     });
@@ -314,15 +386,13 @@ describe("EnvironmentService", () => {
     await service.destroyPersistedEnvironment("thread-1");
 
     expect(destroySpy).toHaveBeenCalledTimes(1);
-    expect(threadRepo.update).toHaveBeenCalledWith(
+    expect(threadEnvironmentAttachmentRepo.deleteByThreadId).toHaveBeenCalledWith(
       "thread-1",
-      {
-        environmentRecord: null,
-      },
-      { touchUpdatedAt: false },
+      { nextThreadEnvironmentId: "worktree" },
     );
     expect(removeEnvironmentAgentDefaultLogArtifacts).not.toHaveBeenCalled();
-    expect(threadState.environmentRecord).toBeNull();
+    expect(threadState.environmentId).toBe("worktree");
+    expect(environmentRepo.getById("env-1")).toBeUndefined();
   });
 
   it("preserves runtime and persisted state when runtime destruction fails", async () => {
@@ -352,18 +422,12 @@ describe("EnvironmentService", () => {
       destroyError,
     );
     expect(service.getEnvironmentRuntime("thread-1")).toBeDefined();
-    expect(threadRepo.update).not.toHaveBeenCalledWith(
-      "thread-1",
-      {
-        environmentRecord: null,
-      },
-      { touchUpdatedAt: false },
-    );
-    expect(threadState.environmentRecord).not.toBeNull();
+    expect(threadRepo.update).not.toHaveBeenCalled();
+    expect(threadState.environmentId).toBe("env-1");
   });
 
   it("clears stale persisted environment state when the archived workspace is already gone", async () => {
-    const { service, threadRepo, threadState } = createService({
+    const { service, threadEnvironmentAttachmentRepo, threadState } = createService({
       existsInitially: true,
       restoreImpl: () => {
         throw new Error("Worktree workspace is unavailable: /tmp/missing-thread-1");
@@ -372,20 +436,17 @@ describe("EnvironmentService", () => {
 
     await expect(service.destroyPersistedEnvironment("thread-1")).resolves.toBeUndefined();
 
-    expect(threadRepo.update).toHaveBeenCalledWith(
+    expect(threadEnvironmentAttachmentRepo.deleteByThreadId).toHaveBeenCalledWith(
       "thread-1",
-      {
-        environmentRecord: null,
-      },
-      { touchUpdatedAt: false },
+      { nextThreadEnvironmentId: "worktree" },
     );
     expect(removeEnvironmentAgentDefaultLogArtifacts).not.toHaveBeenCalled();
-    expect(threadState.environmentRecord).toBeNull();
+    expect(threadState.environmentId).toBe("worktree");
   });
 
   it("clears persisted environment state after destroying an active runtime", async () => {
     const destroySpy = vi.fn();
-    const { service, threadRepo, threadState } = createService({
+    const { service, threadEnvironmentAttachmentRepo, threadState } = createService({
       existsInitially: true,
       destroySpy,
     });
@@ -400,15 +461,12 @@ describe("EnvironmentService", () => {
     await new Promise<void>((resolve) => setImmediate(resolve));
 
     expect(destroySpy).toHaveBeenCalledTimes(1);
-    expect(threadRepo.update).toHaveBeenCalledWith(
+    expect(threadEnvironmentAttachmentRepo.deleteByThreadId).toHaveBeenCalledWith(
       "thread-1",
-      {
-        environmentRecord: null,
-      },
-      { touchUpdatedAt: false },
+      { nextThreadEnvironmentId: "worktree" },
     );
     expect(removeEnvironmentAgentDefaultLogArtifacts).not.toHaveBeenCalled();
-    expect(threadState.environmentRecord).toBeNull();
+    expect(threadState.environmentId).toBe("worktree");
   });
 
   it("suspends an active runtime without clearing persisted environment state", async () => {
@@ -428,15 +486,9 @@ describe("EnvironmentService", () => {
     await new Promise<void>((resolve) => setImmediate(resolve));
 
     expect(destroySpy).toHaveBeenCalledTimes(1);
-    expect(threadRepo.update).not.toHaveBeenCalledWith(
-      "thread-1",
-      {
-        environmentRecord: null,
-      },
-      { touchUpdatedAt: false },
-    );
+    expect(threadRepo.update).not.toHaveBeenCalled();
     expect(removeEnvironmentAgentDefaultLogArtifacts).not.toHaveBeenCalled();
-    expect(threadState.environmentRecord).not.toBeNull();
+    expect(threadState.environmentId).toBe("env-1");
   });
 
   it("can await active runtime suspension before reusing the environment", async () => {
@@ -624,15 +676,9 @@ describe("EnvironmentService", () => {
     await new Promise<void>((resolve) => setImmediate(resolve));
 
     expect(destroySpy).toHaveBeenCalledTimes(1);
-    expect(threadRepo.update).not.toHaveBeenCalledWith(
-      "thread-1",
-      {
-        environmentRecord: null,
-      },
-      { touchUpdatedAt: false },
-    );
+    expect(threadRepo.update).not.toHaveBeenCalled();
     expect(removeEnvironmentAgentDefaultLogArtifacts).not.toHaveBeenCalled();
-    expect(threadState.environmentRecord).not.toBeNull();
+    expect(threadState.environmentId).toBe("env-1");
   });
 
   it("removes managed thread logs only when explicitly requested", () => {
@@ -655,7 +701,7 @@ describe("EnvironmentService", () => {
 
   it("stopAll cleans up persisted environments even when no runtime is restored", async () => {
     const destroySpy = vi.fn();
-    const { service, threadRepo, threadState } = createService({
+    const { service, threadEnvironmentAttachmentRepo, threadState } = createService({
       existsInitially: true,
       destroySpy,
     });
@@ -664,14 +710,11 @@ describe("EnvironmentService", () => {
     await new Promise<void>((resolve) => setImmediate(resolve));
 
     expect(destroySpy).toHaveBeenCalledTimes(1);
-    expect(threadRepo.update).toHaveBeenCalledWith(
+    expect(threadEnvironmentAttachmentRepo.deleteByThreadId).toHaveBeenCalledWith(
       "thread-1",
-      {
-        environmentRecord: null,
-      },
-      { touchUpdatedAt: false },
+      { nextThreadEnvironmentId: "worktree" },
     );
-    expect(threadState.environmentRecord).toBeNull();
+    expect(threadState.environmentId).toBe("worktree");
   });
 
   it("rebuilds primary promotion state through per-project environment candidates", async () => {
@@ -732,10 +775,7 @@ describe("EnvironmentService", () => {
         id: "thread-1",
         projectId: "proj-1",
         status: "idle",
-        environmentRecord: {
-          kind: "worktree",
-          state: {},
-        },
+        environmentId: "worktree",
         createdAt: 1000,
         updatedAt: 1000,
       })),
@@ -854,10 +894,7 @@ describe("EnvironmentService", () => {
         id: "thread-1",
         projectId: "proj-1",
         status: "idle",
-        environmentRecord: {
-          kind: "worktree",
-          state: {},
-        },
+        environmentId: "worktree",
         createdAt: 1000,
         updatedAt: 1000,
       })),

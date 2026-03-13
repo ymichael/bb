@@ -276,4 +276,80 @@ describe("EnvironmentAgentSessionSync", () => {
       },
     });
   });
+
+  it("initializes a newly attached shared channel from pulled commands", async () => {
+    const store = new InMemoryEnvironmentAgentSessionStore();
+    const runtime = new EnvironmentAgentSessionRuntime({
+      store,
+      clock: () => 10_000,
+    });
+    runtime.initializeThread({
+      threadId: "thread-1",
+      agentId: "agent-1",
+      agentInstanceId: "instance-1",
+      generation: 1,
+      now: 1_000,
+    });
+    runtime.bindSession({
+      threadId: "thread-1",
+      sessionId: "sess-1",
+      now: 1_500,
+    });
+
+    const client = makeClientMock();
+    (client.pullCommands as ReturnType<typeof vi.fn>).mockResolvedValue({
+      protocol: "beanbag.env-agent.v1",
+      type: "command_batch",
+      messageId: "msg-cmd",
+      sessionId: "sess-1",
+      sentAt: 2_000,
+      payload: {
+        commands: [
+          {
+            channelId: "thread-2",
+            commandCursor: 1,
+            commandId: "cmd-2",
+            createdAt: 1_900,
+            command: {
+              type: "provider.ensure",
+              threadId: "thread-2",
+              provider: "codex",
+            },
+          },
+        ],
+      },
+    });
+    (client.acknowledgeCommands as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+
+    const sync = new EnvironmentAgentSessionSync({ runtime, client });
+    await expect(sync.pullCommands({ threadIds: ["thread-1"] })).resolves.toEqual([
+      {
+        threadId: "thread-2",
+        commandId: "cmd-2",
+        commandCursor: 1,
+        command: {
+          type: "provider.ensure",
+          threadId: "thread-2",
+          provider: "codex",
+        },
+        ackState: "received",
+      },
+    ]);
+
+    expect(runtime.loadThreadState("thread-2")).toMatchObject({
+      threadId: "thread-2",
+      agentId: "agent-1",
+      agentInstanceId: "instance-1",
+      sessionId: "sess-1",
+    });
+    expect(client.acknowledgeCommands).toHaveBeenCalledWith("sess-1", {
+      commands: [
+        {
+          commandId: "cmd-2",
+          channelId: "thread-2",
+          state: "received",
+        },
+      ],
+    });
+  });
 });

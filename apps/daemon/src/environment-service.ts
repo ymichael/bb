@@ -148,6 +148,10 @@ export class EnvironmentService {
       .map((attachment) => attachment.threadId);
   }
 
+  hasSharedAttachedEnvironment(threadId: string): boolean {
+    return this.getThreadIdsForRuntimeScope(threadId).length > 1;
+  }
+
   private resolveAttachedPersistedEnvironmentRecord(
     threadId: string,
   ): PersistedEnvironmentRecord | undefined {
