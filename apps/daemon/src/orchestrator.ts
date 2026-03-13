@@ -3658,11 +3658,19 @@ export class Orchestrator implements ThreadOrchestrator {
     projectRootPath: string,
   ): CreateEnvironmentContext {
     const thread = this.threadRepo.getById(threadId);
+    const attachedEnvironmentId = this.threadEnvironmentAttachmentRepo
+      ?.getByThreadId(threadId)
+      ?.environmentId;
     return {
       projectId: thread?.projectId ?? "",
       threadId,
       projectRootPath,
-      runtimeEnv: this.runtimeEnv,
+      runtimeEnv: {
+        ...this.runtimeEnv,
+        ...(attachedEnvironmentId
+          ? { BEANBAG_ENVIRONMENT_RECORD_ID: attachedEnvironmentId }
+          : {}),
+      },
       managedEnvironmentAgentReconnectTarget: (() => {
         const session = this.environmentAgentSessionRepo?.getLatestByThreadId(threadId);
         if (!session?.controlBaseUrl) {
