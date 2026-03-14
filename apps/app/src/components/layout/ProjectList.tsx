@@ -429,7 +429,7 @@ export function ProjectList({
             className="relative z-10 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-md text-sidebar-foreground/60 outline-none ring-sidebar-ring transition-colors hover:text-sidebar-foreground focus-visible:ring-2"
           >
             <ChevronRight
-              className={cn("size-3 transition-transform", !isManagerCollapsed && "rotate-90")}
+              className={cn("size-4 transition-transform", !isManagerCollapsed && "rotate-90")}
             />
           </button>
         ) : (
