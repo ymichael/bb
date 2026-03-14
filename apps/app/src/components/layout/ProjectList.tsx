@@ -709,7 +709,7 @@ export function ProjectList({
                         {managerThreads.map((thread) => (
                           <div
                             key={thread.id}
-                            className="space-y-1 rounded-lg border border-sidebar-border/60 bg-sidebar-accent/5"
+                            className="space-y-1"
                           >
                             {renderThreadRow(project.id, thread, {
                               isManager: true,
