@@ -445,7 +445,17 @@ export function ProjectList({
             ) : null}
           </span>
         )}
-        <span className="min-w-0 flex-1 truncate">{threadTitle}</span>
+        <span className="min-w-0 flex-1 truncate">
+          {isManagedChild ? (
+            <span
+              aria-hidden="true"
+              className="mr-1 text-sidebar-foreground/45"
+            >
+              └
+            </span>
+          ) : null}
+          {threadTitle}
+        </span>
         <span className="flex h-7 shrink-0 items-center justify-end gap-1 pl-1">
           {thread.primaryCheckout?.isActive ? (
             <StatusPill variant="emphasis">active</StatusPill>
