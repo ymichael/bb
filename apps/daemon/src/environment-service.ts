@@ -152,6 +152,16 @@ export class EnvironmentService {
       .map((attachment) => attachment.threadId);
   }
 
+  private getThreadIdsForRuntimeScopeKey(scopeKey: string, fallbackThreadId: string): string[] {
+    if (scopeKey.startsWith("thread:") || !this.threadEnvironmentAttachmentRepo) {
+      return [fallbackThreadId];
+    }
+    const attachedThreadIds = this.threadEnvironmentAttachmentRepo
+      .listByEnvironmentId(scopeKey)
+      .map((attachment) => attachment.threadId);
+    return attachedThreadIds.length > 0 ? attachedThreadIds : [fallbackThreadId];
+  }
+
   hasSharedAttachedEnvironment(threadId: string): boolean {
     return this.getThreadIdsForRuntimeScope(threadId).length > 1;
   }
@@ -431,7 +441,7 @@ export class EnvironmentService {
       void this.suspendDetachedRuntime(threadId, existingRuntime);
     }
     const stopWatchingWorkspaceStatus = environment.watchWorkspaceStatus(() => {
-      for (const scopedThreadId of this.getThreadIdsForRuntimeScope(threadId)) {
+      for (const scopedThreadId of this.getThreadIdsForRuntimeScopeKey(scopeKey, threadId)) {
         if (!this.threadRepo.getById(scopedThreadId)) {
           continue;
         }

@@ -67,7 +67,11 @@ function makeWorkspaceStatus(): ThreadWorkStatus {
   };
 }
 
-function createTestEnvironment(args: { existsInitially: boolean; destroySpy?: () => void }): IEnvironment {
+function createTestEnvironment(args: {
+  existsInitially: boolean;
+  destroySpy?: () => void;
+  watchWorkspaceStatusImpl?: (callback: () => void) => () => void;
+}): IEnvironment {
   let exists = args.existsInitially;
 
   return {
@@ -113,8 +117,8 @@ function createTestEnvironment(args: { existsInitially: boolean; destroySpy?: ()
     getWorkspaceStatus() {
       return makeWorkspaceStatus();
     },
-    watchWorkspaceStatus() {
-      return () => {};
+    watchWorkspaceStatus(callback) {
+      return args.watchWorkspaceStatusImpl?.(callback) ?? (() => {});
     },
     async commitWorkspace() {
       return {
@@ -163,6 +167,7 @@ function createService(args: {
   restoreImpl?: (state: unknown, context: CreateEnvironmentContext) => IEnvironment;
   managed?: boolean;
   siblingThreadIds?: string[];
+  watchWorkspaceStatusImpl?: (callback: () => void) => () => void;
 }) {
   const environment = createTestEnvironment(args);
   const environmentRegistry = new EnvironmentRegistry().register({
@@ -300,6 +305,7 @@ function createService(args: {
     ) => Promise<void>
   >().mockResolvedValue(undefined);
   const onCleanupFailure = vi.fn();
+  const onThreadChanged = vi.fn();
 
   const service = new EnvironmentService(
     threadRepo,
@@ -313,7 +319,7 @@ function createService(args: {
         runtimeEnv: {},
       }),
       onProvisioningEvent: vi.fn(),
-      onThreadChanged: vi.fn(),
+      onThreadChanged,
       onCleanupFailure,
       onPrimaryCheckoutDemoted: vi.fn(),
       runOptionalSetup,
@@ -328,6 +334,7 @@ function createService(args: {
     threadRepo,
     threadState,
     onCleanupFailure,
+    onThreadChanged,
     environmentRepo,
     threadEnvironmentAttachmentRepo,
   };
@@ -772,6 +779,31 @@ describe("EnvironmentService", () => {
     await service.stopAllAndWait();
 
     expect(destroySpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps shared workspace watcher fanout after the original owner detaches", async () => {
+    let emitWorkspaceStatusChange: (() => void) | undefined;
+    const { service, threadEnvironmentAttachmentRepo, onThreadChanged } = createService({
+      existsInitially: true,
+      siblingThreadIds: ["thread-2"],
+    });
+
+    service.setEnvironmentRuntime(
+      "thread-1",
+      createTestEnvironment({
+        existsInitially: true,
+        watchWorkspaceStatusImpl(callback) {
+          emitWorkspaceStatusChange = callback;
+          return () => {};
+        },
+      }),
+    );
+    threadEnvironmentAttachmentRepo.deleteByThreadId("thread-1", { nextThreadEnvironmentId: null });
+
+    emitWorkspaceStatusChange?.();
+
+    expect(onThreadChanged).toHaveBeenCalledWith("thread-2", ["work-status-changed"]);
+    expect(onThreadChanged).not.toHaveBeenCalledWith("thread-1", ["work-status-changed"]);
   });
 
   it("rebuilds primary promotion state through per-project environment candidates", async () => {
