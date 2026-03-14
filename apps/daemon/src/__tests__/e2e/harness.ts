@@ -304,7 +304,8 @@ export async function startDaemonE2eHarness(
             : createCodexProviderAdapter(),
       });
 
-    await threadManager.reconcileActiveThreadsOnBoot();
+    await threadManager.cleanupArchivedEnvironmentsOnBoot();
+    await threadManager.failInterruptedProvisioningOnBoot();
 
     const listeningPort = await new Promise<number>((resolvePort) => {
       httpServer = serve(

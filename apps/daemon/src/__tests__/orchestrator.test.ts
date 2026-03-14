@@ -983,7 +983,7 @@ describe("Orchestrator", () => {
         .spyOn(asOrchestratorHarness(bootManager), "_cleanupEnvironmentRuntime")
         .mockImplementation(() => undefined);
 
-      await bootManager.reconcileActiveThreadsOnBoot();
+      await bootManager.cleanupArchivedEnvironmentsOnBoot();
 
       expect(bootThreadRepo.listArchivedIdsWithEnvironmentRecord).toHaveBeenCalledTimes(1);
       expect(cleanupEnvironmentRuntimeSpy).toHaveBeenCalledTimes(1);
@@ -1040,7 +1040,7 @@ describe("Orchestrator", () => {
         updatedAt: 1,
       });
 
-      await bootManager.reconcileActiveThreadsOnBoot();
+      await bootManager.cleanupArchivedEnvironmentsOnBoot();
 
       expect(createHttpEnvironmentAgentClient).not.toHaveBeenCalled();
     });
@@ -1054,7 +1054,7 @@ describe("Orchestrator", () => {
         makeThread({ id: "boot-active", status: "active" }),
       ]);
 
-      await bootManager.reconcileActiveThreadsOnBoot();
+      await bootManager.cleanupArchivedEnvironmentsOnBoot();
 
       expect(bootProjectRepo.list).not.toHaveBeenCalled();
       expect(bootThreadRepo.list).not.toHaveBeenCalled();
@@ -1070,7 +1070,7 @@ describe("Orchestrator", () => {
         makeThread({ id: "boot-provisioning", status: "provisioning" }),
       ]);
 
-      await bootManager.reconcileActiveThreadsOnBoot();
+      await bootManager.failInterruptedProvisioningOnBoot();
 
       expect(threadState.get("boot-provisioning")?.status).toBe("provisioning_failed");
       expect(bootThreadRepo.listNonArchivedIdsByStatuses).toHaveBeenCalledWith([
@@ -1110,7 +1110,7 @@ describe("Orchestrator", () => {
         },
       );
 
-      await bootManager.reconcileActiveThreadsOnBoot();
+      await bootManager.failInterruptedProvisioningOnBoot();
 
       expect(threadState.get("boot-provisioned")?.status).toBe("provisioning_failed");
       expect(sessionService.retireActiveSessionForThread).toHaveBeenCalledWith({

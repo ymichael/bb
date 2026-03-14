@@ -226,9 +226,8 @@ async function main(): Promise<void> {
     void shutdown("unhandledRejection", { exitCode: 1 });
   });
 
-  console.log("Reconciling startup environment state...");
-  await threadManager.reconcileActiveThreadsOnBoot();
-  console.log("Startup reconciliation complete.");
+  await threadManager.cleanupArchivedEnvironmentsOnBoot();
+  await threadManager.failInterruptedProvisioningOnBoot();
 
   let listeningResolve: (() => void) | undefined;
   const listening = new Promise<void>((resolvePromise) => {

@@ -726,7 +726,7 @@ export class Orchestrator implements ThreadOrchestrator {
    * - finalize archived environments that still claim persisted resources
    * - leave non-archived environments to reconnect or restart lazily on demand
    */
-  async reconcileActiveThreadsOnBoot(): Promise<void> {
+  async cleanupArchivedEnvironmentsOnBoot(): Promise<void> {
     const archivedThreadIds =
       typeof this.threadRepo.listArchivedIdsWithEnvironmentRecord === "function"
         ? this.threadRepo.listArchivedIdsWithEnvironmentRecord()
@@ -734,7 +734,9 @@ export class Orchestrator implements ThreadOrchestrator {
     for (const threadId of archivedThreadIds) {
       this._cleanupEnvironmentRuntime(threadId, { destroyWorkspace: true });
     }
+  }
 
+  async failInterruptedProvisioningOnBoot(): Promise<void> {
     const interruptedProvisioningThreadIds =
       typeof this.threadRepo.listNonArchivedIdsByStatuses === "function"
         ? this.threadRepo.listNonArchivedIdsByStatuses(["provisioning", "provisioned"])

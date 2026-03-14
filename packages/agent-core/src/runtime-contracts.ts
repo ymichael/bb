@@ -286,7 +286,8 @@ export interface ThreadOrchestrator {
   getProviderInfo(): SystemProviderInfo;
   listProviders(): SystemProviderInfo[];
   listEnvironments(): SystemEnvironmentInfo[];
-  reconcileActiveThreadsOnBoot(): Promise<void>;
+  cleanupArchivedEnvironmentsOnBoot(): Promise<void>;
+  failInterruptedProvisioningOnBoot(): Promise<void>;
   detachAll(): void;
 }
 
