@@ -358,6 +358,123 @@ Then force restart:
 node apps/cli/dist/index.js daemon restart --force
 ```
 
+### 7. Validate shared environment / multi-thread behavior
+
+This is the canonical manual pass for the new first-class environment model. Do not skip it after
+changes to environment attachments, env-daemon session ownership, shared runtime reuse, restart
+recovery, or thread archive/delete behavior.
+
+Required matrix:
+
+- spawn a managed worktree thread and capture its first-class `environmentId`
+- spawn a second thread attached to that same `environmentId`
+- confirm both threads report the same attached environment
+- confirm `thread sessions` on both threads shows the same active env-daemon session
+- run follow-ups on both threads at the same time
+- archive one thread while the sibling remains attached
+- confirm the archived thread rejects `tell`
+- confirm the sibling still accepts follow-ups on the same shared environment
+- restart the daemon while the shared environment exists
+- confirm a sibling follow-up after restart reuses or recreates the env-daemon cleanly and returns to `idle`
+
+Suggested flow:
+
+1. Spawn the first worktree thread and wait for `idle`:
+
+```bash
+node apps/cli/dist/index.js thread spawn \
+  --project <project-id> \
+  --environment worktree \
+  --prompt 'Reply with exactly SHARED-ONE and finish.'
+```
+
+2. Inspect the thread and record its attached environment id:
+
+```bash
+node apps/cli/dist/index.js thread show <thread-1>
+node apps/cli/dist/index.js thread sessions <thread-1>
+```
+
+Use the attached environment id from `thread show` as `<environment-id>`.
+
+3. Spawn a second thread directly into that environment:
+
+```bash
+node apps/cli/dist/index.js thread spawn \
+  --project <project-id> \
+  --environment <environment-id> \
+  --prompt 'Reply with exactly SHARED-TWO and finish.'
+```
+
+4. Confirm both threads point at the same environment and same active env-daemon session:
+
+```bash
+node apps/cli/dist/index.js thread show <thread-1>
+node apps/cli/dist/index.js thread show <thread-2>
+node apps/cli/dist/index.js thread sessions <thread-1>
+node apps/cli/dist/index.js thread sessions <thread-2>
+```
+
+Expected:
+
+- both `thread show` outputs reference the same attached environment id
+- both `thread sessions` outputs include the same active session id
+
+5. Run follow-ups on both threads without waiting between them:
+
+```bash
+node apps/cli/dist/index.js thread tell <thread-1> \
+  'Reply with exactly SHARED-FOLLOWUP-ONE and finish.'
+node apps/cli/dist/index.js thread tell <thread-2> \
+  'Reply with exactly SHARED-FOLLOWUP-TWO and finish.'
+```
+
+Wait for both to return to `idle`, then verify:
+
+```bash
+node apps/cli/dist/index.js thread output <thread-1>
+node apps/cli/dist/index.js thread output <thread-2>
+```
+
+6. Archive the first thread and confirm the sibling survives:
+
+```bash
+node apps/cli/dist/index.js thread archive <thread-1>
+node apps/cli/dist/index.js thread tell <thread-1> \
+  'Reply with exactly SHOULD-NOT-RUN and finish.'
+node apps/cli/dist/index.js thread tell <thread-2> \
+  'Reply with exactly SHARED-SIBLING-SURVIVES and finish.'
+```
+
+Expected:
+
+- archived `thread-1` rejects `tell` with `HTTP 409`
+- `thread-2` still reaches `idle`
+- `thread-2` still shows the same attached environment id
+
+7. Restart the daemon and verify shared-thread recovery:
+
+```bash
+node apps/cli/dist/index.js daemon restart --force
+```
+
+Relaunch the standalone daemon using the same Node binary and `BEANBAG_ROOT`, wait for health,
+then run:
+
+```bash
+node apps/cli/dist/index.js thread tell <thread-2> \
+  'Reply with exactly SHARED-POST-RESTART and finish.'
+node apps/cli/dist/index.js thread wait <thread-2> --status idle --timeout 180
+node apps/cli/dist/index.js thread output <thread-2>
+```
+
+Expected:
+
+- the follow-up succeeds after restart
+- `thread-2` returns to `idle`
+- output contains `SHARED-POST-RESTART`
+- `thread show <thread-2>` still references the same attached environment id unless the environment was intentionally reprovisioned
+
 Expected:
 
 - CLI reports shutdown requested
