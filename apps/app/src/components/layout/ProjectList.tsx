@@ -4,6 +4,7 @@ import {
   AlertTriangle,
   ChevronRight,
   CircleDashed,
+  CornerDownRight,
   Folder,
   FolderOpen,
   MoreHorizontal,
@@ -435,12 +436,10 @@ export function ProjectList({
         ) : (
           <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center text-sidebar-foreground/60">
             {isManagedChild ? (
-              <span
+              <CornerDownRight
                 aria-hidden="true"
-                className="text-sidebar-foreground/45"
-              >
-                └
-              </span>
+                className="size-3 text-sidebar-foreground/45"
+              />
             ) : threadIsBusy ? (
               <CircleDashed className="size-3.5 animate-spin" />
             ) : showUnreadBadge ? (
