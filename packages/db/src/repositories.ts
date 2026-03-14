@@ -886,7 +886,6 @@ export class ThreadRepository {
       title?: string;
       mergeBaseBranch?: string | null;
       environmentId?: string | null;
-      environmentRecord?: PersistedEnvironmentRecord | null;
       parentThreadId?: string | null;
       archivedAt?: number | null;
       lastReadAt?: number;
@@ -915,11 +914,6 @@ export class ThreadRepository {
       updates.mergeBaseBranch = data.mergeBaseBranch;
     }
     if (data.environmentId !== undefined) updates.environmentId = data.environmentId;
-    if (data.environmentRecord !== undefined) {
-      updates.environmentRecord = data.environmentRecord
-        ? JSON.stringify(data.environmentRecord)
-        : null;
-    }
     if (data.parentThreadId !== undefined) updates.parentThreadId = data.parentThreadId;
     if (data.archivedAt !== undefined) updates.archivedAt = data.archivedAt;
     if (data.lastReadAt !== undefined) updates.lastReadAt = data.lastReadAt;
