@@ -84,6 +84,24 @@ interface ProjectListProps {
 const COLLAPSED_PROJECTS_STORAGE_KEY = "beanbag.sidebar.collapsedProjects"
 const COLLAPSED_MANAGERS_STORAGE_KEY = "beanbag.sidebar.collapsedManagers"
 
+function ManagedThreadBranchGlyph() {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 12 12"
+      className="size-3 shrink-0 text-sidebar-foreground/45"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M2.5 2.5v4c0 .9.7 1.6 1.6 1.6h4.4" />
+      <path d="m6.8 5.9 1.9 2.2-1.9 2.2" />
+    </svg>
+  )
+}
+
 export function ProjectList({
   onNewProject,
   onProjectSelect,
@@ -435,12 +453,7 @@ export function ProjectList({
         ) : (
           <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center text-sidebar-foreground/60">
             {isManagedChild ? (
-              <span
-                aria-hidden="true"
-                className="text-sidebar-foreground/45"
-              >
-                └
-              </span>
+              <ManagedThreadBranchGlyph />
             ) : threadIsBusy ? (
               <CircleDashed className="size-3.5 animate-spin" />
             ) : showUnreadBadge ? (
