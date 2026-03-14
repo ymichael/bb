@@ -993,7 +993,7 @@ export function ThreadDetailView() {
                 type="button"
                 variant="ghost"
                 size="icon"
-                className="size-3.5 shrink-0 rounded-full p-0 text-muted-foreground hover:bg-transparent hover:text-foreground [&_svg]:size-2"
+                className="size-3.5 shrink-0 rounded-full p-0 text-muted-foreground hover:bg-transparent hover:text-foreground [&_svg]:size-2.5"
                 disabled={updateThread.isPending}
                 onClick={() => {
                   updateThread.mutate({
