@@ -89,7 +89,7 @@ function ManagedThreadBranchGlyph() {
   return (
     <ChevronDown
       aria-hidden="true"
-      className="size-3 shrink-0 rotate-45 text-sidebar-foreground/45"
+      className="size-4 shrink-0 rotate-45 text-sidebar-foreground/45"
     />
   )
 }
