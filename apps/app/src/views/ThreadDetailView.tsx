@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Check, ChevronDown, ChevronRight, Copy, PanelRight } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, Copy, PanelRight, X } from "lucide-react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { Panel, PanelGroup } from "react-resizable-panels";
 import {
@@ -980,61 +980,73 @@ export function ThreadDetailView() {
           label="Manager"
           valueClassName="min-w-0"
         >
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <div
-                role="button"
-                tabIndex={
-                  updateThread.isPending ||
-                  (managerSelectorOptions.length <= 1 && managerSelectorValue === "none")
-                    ? -1
-                    : 0
-                }
-                className="group/manager-picker inline-flex h-8 w-fit max-w-full min-w-0 items-center gap-1 rounded-md px-0 text-xs leading-tight text-foreground outline-none ring-sidebar-ring transition-colors hover:text-foreground focus-visible:ring-2"
+          {parentThreadId ? (
+            <div className="inline-flex h-7 max-w-full min-w-0 items-center gap-1 rounded-full border border-border/70 bg-muted/40 px-2 text-xs text-foreground">
+              <Link
+                to={`/projects/${projectId}/threads/${parentThreadId}`}
+                className="min-w-0 truncate text-xs text-foreground no-underline transition-[text-decoration-color] duration-150 hover:underline hover:underline-offset-2"
               >
-                {parentThreadId ? (
-                  <Link
-                    to={`/projects/${projectId}/threads/${parentThreadId}`}
-                    className="min-w-0 truncate text-xs text-foreground no-underline transition-[text-decoration-color] duration-150 hover:underline hover:underline-offset-2 group-hover/manager-picker:underline group-hover/manager-picker:underline-offset-2"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                    }}
-                    onPointerDown={(event) => {
-                      event.stopPropagation();
-                    }}
-                  >
-                    {selectedManagerOption?.label ?? "Manager"}
-                  </Link>
-                ) : (
+                {selectedManagerOption?.label ?? "Manager"}
+              </Link>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="size-4 shrink-0 rounded-full text-muted-foreground hover:bg-transparent hover:text-foreground"
+                disabled={updateThread.isPending}
+                onClick={() => {
+                  updateThread.mutate({
+                    id: thread.id,
+                    parentThreadId: null,
+                  });
+                }}
+                aria-label="Unassign manager"
+              >
+                <X className="size-3" />
+              </Button>
+            </div>
+          ) : (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <div
+                  role="button"
+                  tabIndex={
+                    updateThread.isPending ||
+                    (managerSelectorOptions.length <= 1 && managerSelectorValue === "none")
+                      ? -1
+                      : 0
+                  }
+                  className="inline-flex h-8 w-fit max-w-full min-w-0 items-center gap-1 rounded-md px-0 text-xs leading-tight text-foreground outline-none ring-sidebar-ring transition-colors hover:text-foreground focus-visible:ring-2"
+                >
                   <span className="min-w-0 truncate text-xs text-foreground">
                     {selectedManagerOption?.label ?? "None"}
                   </span>
-                )}
-                <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" />
-              </div>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="min-w-40 max-w-72">
-              {managerSelectorOptions.map((option) => (
-                <DropdownMenuItem
-                  key={option.value}
-                  onSelect={() => {
-                    updateThread.mutate({
-                      id: thread.id,
-                      parentThreadId: option.value === "none" ? null : option.value,
-                    });
-                  }}
-                  className="flex items-center justify-between gap-3"
-                >
-                  <span className="truncate" title={option.label}>
-                    {option.label}
-                  </span>
-                  <Check
-                    className={managerSelectorValue === option.value ? "size-4 opacity-100" : "size-4 opacity-0"}
-                  />
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
+                  <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" />
+                </div>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="min-w-40 max-w-72">
+                {managerSelectorOptions.map((option) => (
+                  <DropdownMenuItem
+                    key={option.value}
+                    onSelect={() => {
+                      updateThread.mutate({
+                        id: thread.id,
+                        parentThreadId: option.value === "none" ? null : option.value,
+                      });
+                    }}
+                    className="flex items-center justify-between gap-3"
+                  >
+                    <span className="truncate" title={option.label}>
+                      {option.label}
+                    </span>
+                    <Check
+                      className={managerSelectorValue === option.value ? "size-4 opacity-100" : "size-4 opacity-0"}
+                    />
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
         </DetailRow>
       ) : null}
       {!isManagerThread && threadEnvironmentType ? (

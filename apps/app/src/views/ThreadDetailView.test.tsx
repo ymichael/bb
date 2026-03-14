@@ -457,6 +457,7 @@ describe("ThreadDetailView", () => {
     expect(html).toContain("Manager");
     expect(html).toContain(">Parent thread<");
     expect(html).toContain('href="/projects/project-1/threads/thread-parent"');
+    expect(html).toContain("Unassign manager");
     expect(html).toContain("Environment");
     expect(html).toContain("Local Env");
     expect(html).toContain("Branch");
