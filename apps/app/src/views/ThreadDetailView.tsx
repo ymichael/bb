@@ -601,6 +601,47 @@ export function ThreadDetailView() {
     ],
   );
 
+  const isManagerThread = thread?.type === "manager";
+  const parentThreadId = thread?.parentThreadId;
+  const parentThreadDisplayName =
+    parentThread?.title && parentThread.title.trim().length > 0
+      ? parentThread.title
+      : parentThreadId;
+  const managerSelectorOptions = useMemo(() => {
+    if (!thread || isManagerThread) {
+      return [];
+    }
+
+    const options: Array<{ value: string; label: string }> = [{ value: "none", label: "None" }];
+    const seen = new Set<string>(["none"]);
+    const addOption = (value: string | undefined, label: string) => {
+      if (!value || value === thread.id || seen.has(value)) {
+        return;
+      }
+      seen.add(value);
+      options.push({ value, label });
+    };
+
+    addOption(parentThreadId, parentThreadDisplayName ?? "Manager");
+    addOption(
+      primaryManagerThreadId ?? undefined,
+      primaryManagerThread?.title?.trim() ? primaryManagerThread.title : "Manager",
+    );
+
+    return options;
+  }, [
+    isManagerThread,
+    parentThreadDisplayName,
+    parentThreadId,
+    primaryManagerThread,
+    primaryManagerThreadId,
+    thread,
+  ]);
+  const managerSelectorValue = parentThreadId ?? "none";
+  const selectedManagerOption = managerSelectorOptions.find(
+    (option) => option.value === managerSelectorValue,
+  );
+
   const handleAttachFiles = useCallback(async (files: File[]) => {
     if (!projectId || files.length === 0) return;
 
@@ -679,9 +720,7 @@ export function ThreadDetailView() {
       : thread.status === "idle"
       ? "Ask for follow-up changes"
       : "Send a message to this thread...";
-  const isManagerThread = thread.type === "manager";
   const canUseGitUi = !isManagerThread;
-  const parentThreadId = thread.parentThreadId;
   const canAssignToManager =
     thread.type === "standard" &&
     !thread.parentThreadId &&
@@ -689,44 +728,6 @@ export function ThreadDetailView() {
     primaryManagerThreadId !== thread.id;
   const canTakeOverThread =
     thread.type === "standard" && Boolean(thread.parentThreadId);
-  const parentThreadDisplayName =
-    parentThread?.title && parentThread.title.trim().length > 0
-      ? parentThread.title
-      : parentThreadId;
-  const managerSelectorOptions = useMemo(() => {
-    if (isManagerThread) {
-      return [];
-    }
-
-    const options: Array<{ value: string; label: string }> = [{ value: "none", label: "None" }];
-    const seen = new Set<string>(["none"]);
-    const addOption = (value: string | undefined, label: string) => {
-      if (!value || value === thread.id || seen.has(value)) {
-        return;
-      }
-      seen.add(value);
-      options.push({ value, label });
-    };
-
-    addOption(parentThreadId, parentThreadDisplayName ?? "Manager");
-    addOption(
-      primaryManagerThreadId ?? undefined,
-      primaryManagerThread?.title?.trim() ? primaryManagerThread.title : "Manager",
-    );
-
-    return options;
-  }, [
-    isManagerThread,
-    parentThreadDisplayName,
-    parentThreadId,
-    primaryManagerThread,
-    primaryManagerThreadId,
-    thread.id,
-  ]);
-  const managerSelectorValue = parentThreadId ?? "none";
-  const selectedManagerOption = managerSelectorOptions.find(
-    (option) => option.value === managerSelectorValue,
-  );
   const isPrimaryCheckoutActive = thread.primaryCheckout?.isActive === true;
   const isPrimaryCheckoutMutationPending = promoteThread.isPending || demotePrimaryCheckout.isPending;
   const primaryCheckoutActionLabel = isPrimaryCheckoutActive
