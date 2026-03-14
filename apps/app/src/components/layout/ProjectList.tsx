@@ -434,7 +434,14 @@ export function ProjectList({
           </button>
         ) : (
           <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center text-sidebar-foreground/60">
-            {threadIsBusy ? (
+            {isManagedChild ? (
+              <span
+                aria-hidden="true"
+                className="text-sidebar-foreground/45"
+              >
+                └
+              </span>
+            ) : threadIsBusy ? (
               <CircleDashed className="size-3.5 animate-spin" />
             ) : showUnreadBadge ? (
               <span
@@ -445,17 +452,7 @@ export function ProjectList({
             ) : null}
           </span>
         )}
-        <span className="min-w-0 flex-1 truncate">
-          {isManagedChild ? (
-            <span
-              aria-hidden="true"
-              className="mr-1 text-sidebar-foreground/45"
-            >
-              └
-            </span>
-          ) : null}
-          {threadTitle}
-        </span>
+        <span className="min-w-0 flex-1 truncate">{threadTitle}</span>
         <span className="flex h-7 shrink-0 items-center justify-end gap-1 pl-1">
           {thread.primaryCheckout?.isActive ? (
             <StatusPill variant="emphasis">active</StatusPill>
