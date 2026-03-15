@@ -218,7 +218,7 @@ export async function runQueuedFollowUpWorkerLossScenario(
       harness.baseUrl,
       project.id,
       `Reply with exactly QUEUE-BASE-${environmentKind.toUpperCase()} and finish.`,
-      environmentKind,
+      { environmentKind },
     );
 
     await waitForThreadStatus(
@@ -337,7 +337,7 @@ export async function runArchiveAfterWorkerLossRecoveryScenario(): Promise<void>
       harness.baseUrl,
       project.id,
       "Reply with exactly ARCHIVE-ERROR-BASE and finish.",
-      "worktree",
+      { environmentKind: "worktree" },
     );
 
     await waitForThreadStatus(
@@ -519,7 +519,7 @@ export async function runStaleOldSessionNoiseScenario(): Promise<void> {
       harness.baseUrl,
       project.id,
       "Reply with exactly STALE-BASE and finish.",
-      "local",
+      { environmentKind: "local" },
     );
 
     await waitForThreadStatus(

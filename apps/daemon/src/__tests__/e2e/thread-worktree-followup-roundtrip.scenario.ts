@@ -125,8 +125,6 @@ export async function runThreadWorktreeFollowupRoundtripScenario(): Promise<void
       "Reply with exactly WORKTREE-INITIAL and finish. Do not run commands or add extra text.",
     );
 
-    expect(thread.environmentId).toBeTruthy();
-
     const initialRoundTrip = await waitForIdleAfterTurnProgress(
       harness.baseUrl,
       harness.wsUrl,
@@ -138,6 +136,7 @@ export async function runThreadWorktreeFollowupRoundtripScenario(): Promise<void
       e2eTimeoutMs(20_000, 90_000),
     );
     expect(initialRoundTrip.thread.status).toBe("idle");
+    expect(initialRoundTrip.thread.environmentId).toBeTruthy();
 
     await tellThread(
       harness.baseUrl,

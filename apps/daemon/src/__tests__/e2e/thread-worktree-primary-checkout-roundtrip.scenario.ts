@@ -55,7 +55,7 @@ export async function runThreadWorktreePrimaryCheckoutRoundtripScenario(): Promi
       harness.baseUrl,
       project.id,
       "Reply with exactly WORKTREE-PROMOTE and finish. Do not run commands or add extra text.",
-      "worktree",
+      { environmentKind: "worktree" },
     );
 
     await waitForThreadStatus(

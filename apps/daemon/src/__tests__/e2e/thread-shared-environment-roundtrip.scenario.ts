@@ -159,7 +159,7 @@ export async function runThreadSharedEnvironmentRoundtripScenario(): Promise<voi
       harness.baseUrl,
       project.id,
       "Reply with exactly SHARED-INITIAL-ONE and finish. Do not run commands or add extra text.",
-      "worktree",
+      { environmentKind: "worktree" },
     );
 
     const firstInitialRoundTrip = await waitForIdleAfterTurnProgress({
@@ -182,7 +182,7 @@ export async function runThreadSharedEnvironmentRoundtripScenario(): Promise<voi
       harness.baseUrl,
       project.id,
       "Reply with exactly SHARED-INITIAL-TWO and finish. Do not run commands or add extra text.",
-      attachedEnvironmentId,
+      { environmentId: attachedEnvironmentId },
     );
 
     const secondInitialRoundTrip = await waitForIdleAfterTurnProgress({

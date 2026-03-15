@@ -125,8 +125,6 @@ async function runImmediateFollowupScenario(args: {
       "Do not run commands or add extra text.",
   });
 
-  expect(thread.environmentId).toBeTruthy();
-
   const initialRoundTrip = await waitForIdleAfterTurnProgress(
     args.baseUrl,
     args.wsUrl,

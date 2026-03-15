@@ -203,7 +203,7 @@ async function runMissingWorkerRestartRecoveryScenario(args: {
       harness.baseUrl,
       project.id,
       `Reply with exactly RESTART-${args.environmentKind.toUpperCase()} and finish.`,
-      args.environmentKind,
+      { environmentKind: args.environmentKind },
     );
 
     await waitForThreadStatus(
@@ -319,7 +319,7 @@ async function runIdleRestartFreshSessionScenario(args: {
       harness.baseUrl,
       project.id,
       `Reply with exactly IDLE-${args.environmentKind.toUpperCase()} and finish.`,
-      args.environmentKind,
+      { environmentKind: args.environmentKind },
     );
 
     await waitForThreadStatus(
