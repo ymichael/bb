@@ -32,14 +32,6 @@ Confirmed or likely-to-manifest defects that can cause incorrect behavior, data 
 - `packages/db/src/schema.ts:116-118`
 - `events.thread_id` has no cascade. `ThreadRepository.delete()` (`repositories.ts:939-944`) only cleans up `queuedThreadMessages`. Events, which can be numerous, become permanent orphans.
 
-**8. Unsafe `method as ThreadEventType` cast erases type safety for all provider events**
-- `packages/agent-server/src/agent-server.ts:82`
-- Any arbitrary provider method string is cast to `ThreadEventType`. Unrecognized methods bypass exhaustive match checks downstream, causing incorrect event handling or silent data loss.
-
-**9. `SpawnThreadRequest.type` not validated by Zod schema — clients can spawn manager threads unchecked**
-- `packages/agent-core/src/schemas.ts:26-39` vs `packages/agent-core/src/api-types.ts:49`
-- The `type` field exists on the TypeScript interface but is absent from the Zod schema. Any value passes validation, including `"manager"`.
-
 **11. Cursor `advanceIfNext` TOCTOU — concurrent callers can produce lost updates**
 - `packages/db/src/environment-agent-repositories.ts:827-857`
 - Reads current cursor, evaluates `canAdvanceCursorTo`, then writes — all without a transaction. Two callers can both pass the check and both write, with the second overwriting the first.
@@ -51,18 +43,6 @@ Confirmed or likely-to-manifest defects that can cause incorrect behavior, data 
 **13. Session `touchHeartbeat`/`markExpired`/`markClosed` read-then-write without transactions**
 - `packages/db/src/environment-agent-repositories.ts:561-644`
 - Same TOCTOU pattern. Concurrent calls to `markClosed` can both see `status === "active"` and both proceed.
-
-**14. `child.pid!` non-null assertion after spawn can corrupt record**
-- `packages/environment/src/host-environment-agent.ts:401`
-- If spawn fails to launch (command not found), `child.pid` is `undefined`. The `!` assertion stores `undefined` as a number, causing unpredictable behavior in subsequent `isProcessAlive` calls.
-
-**15. `withExecutionOptions` silently drops `sandboxMode` when `reasoningLevel` is set**
-- `packages/agent-server/src/codex-provider-adapter.ts:63-84`
-- Early `return` on line 79 when `reasoningLevel` is truthy means `sandboxMode` is never checked. Per-turn sandbox overrides are lost when combined with reasoning level.
-
-**16. Provisioning tasks not cancelled on `stopAll` — continue running against cleared state**
-- `apps/daemon/src/orchestrator.ts:3481-3487,3533-3578`
-- `stopAll` calls `provisioningTasks.clear()` without awaiting or cancelling in-flight promises. Provisioning callbacks continue executing against stale/cleared state.
 
 **18. Docker agent process not tracked by PID — cleanup uses fragile `pkill -f` pattern**
 - `packages/environment/src/docker-environment-agent.ts:329-362`
@@ -83,14 +63,6 @@ Confirmed or likely-to-manifest defects that can cause incorrect behavior, data 
 **22. Worktree `destroy()` ignores `git worktree remove` failure**
 - `packages/environment/src/worktree-environment.ts:380-388`
 - Return value of `git worktree remove --force` is not checked. If it fails, the subsequent `rm -rf` deletes the workspace but leaves stale git metadata in `.git/worktrees/`.
-
-**23. Supervisor event subscription leak if `start()` throws**
-- `packages/environment-agent/src/session-supervisor.ts:105,117-130`
-- Constructor subscribes to runtime events. If `start()` throws during `openSession()` and the caller abandons the supervisor without calling `close()`, the subscription is never cleaned up.
-
-**24. `thread wait --event` polls ALL events every cycle — O(n) growth**
-- `apps/cli/src/commands/thread.ts:253-269`
-- No `afterSeq` parameter passed. Each poll fetches the full event log, which grows over the thread's lifetime.
 
 **25. Follow-up ack uses 2-second clock-skew heuristic**
 - `apps/app/src/views/ThreadDetailView.tsx:398-417`
@@ -121,26 +93,6 @@ Design flaws, code smells, and maintainability concerns that don't cause immedia
 - `apps/app/src/components/layout/ProjectList.tsx:381-530`
 - Returns JSX but called as `renderThreadRow(...)`, not `<ThreadRow />`. Prevents efficient React reconciliation and forces all rows to re-render on any `ProjectList` state change.
 
-### Duplication
-
-**Q5. `checkoutSnapshotsMatch` defined identically in two files**
-- `apps/daemon/src/orchestrator.ts:261-274` (dead — never called)
-- `apps/daemon/src/environment-service.ts:77-90` (used)
-
-**Q6. `confirmDestructiveAction` duplicated across CLI commands**
-- `apps/cli/src/commands/thread.ts:160-179`
-- `apps/cli/src/commands/manager.ts:196-213`
-
-**Q7. `buildThreadUrl` duplicated across CLI commands**
-- `apps/cli/src/commands/thread.ts:188-189`
-- `apps/cli/src/commands/manager.ts:262-264`
-
-### Type Safety
-
-**Q12. `Thread.attachedEnvironment` type field never populated**
-- `packages/agent-core/src/types.ts:115`
-- `rowToThread()` does not populate `attachedEnvironment`. API consumers always receive `undefined`. Either remove the field or eagerly load it.
-
 ### Performance
 
 **Q14. `markThreadRead` mutation in useEffect deps causes unnecessary re-runs**
@@ -150,10 +102,6 @@ Design flaws, code smells, and maintainability concerns that don't cause immedia
 **Q16. Complex correlated subquery with `json_extract` in event pruning**
 - `packages/db/src/repositories.ts:1299-1336`
 - DELETE with correlated EXISTS subquery doing JSON parsing in SQLite. Slow under load, holds write lock.
-
-**Q17. `_resolvePersistedProviderThreadId` fallback scans all events**
-- `apps/daemon/src/orchestrator.ts:4308-4323`
-- If indexed lookup fails, iterates all events in reverse. O(n) on long-lived threads.
 
 **Q18. `getProjectById` fetches all projects then filters client-side**
 - `apps/cli/src/commands/manager.ts:215-227`
@@ -174,22 +122,12 @@ Design flaws, code smells, and maintainability concerns that don't cause immedia
 - `packages/db/src/environment-agent-repositories.ts:513-526`
 - Query filters on both but no matching index exists.
 
-### Dead Code
-
-**Q24. `shouldRenderThreadStartInput` returns `true` for all valid statuses**
-- `packages/agent-core/src/to-ui-messages.ts:503-519`
-- Exists only as a type-safety guardrail, never returns `false`.
-
 ### Misc Smells
 
 **Q28. Inconsistent API calling patterns in CLI — raw `fetch` vs typed client**
 - `apps/cli/src/commands/manager.ts:186` — `delete` uses raw `fetch`
 - `apps/cli/src/commands/thread.ts:575-583` — `archive` uses raw `fetch`
 - Other commands in the same files use the typed Hono client
-
-**Q29. Pervasive `(err as Error).message` in CLI without type checking**
-- `apps/cli/src/commands/thread.ts`, `apps/cli/src/commands/manager.ts` (30+ instances)
-- Non-Error throws produce "Error: undefined" with no diagnostic value. Not a runtime bug per se, but degrades error reporting.
 
 **Q30. `window.prompt` / `window.confirm` for project rename/delete**
 - `apps/app/src/components/layout/ProjectList.tsx:228-243,272-291`
@@ -198,14 +136,6 @@ Design flaws, code smells, and maintainability concerns that don't cause immedia
 **Q31. No down-migrations or rollback SQL**
 - `packages/db/drizzle/*.sql`
 - Several migrations are destructive (column/table drops). No way to roll back schema.
-
-**Q32. `handleAttachFiles` breaks on first error — no partial-upload feedback**
-- `apps/app/src/views/ThreadDetailView.tsx:650-666`
-- If 5 files dropped and 2nd fails, files 3-5 are silently never uploaded.
-
-**Q33. No SIGTERM handler in environment-agent runtime**
-- `packages/environment-agent/src/runtime.ts`
-- If the process receives SIGTERM, it exits without calling `shutdown()`. Pending provider requests leak and the provider child gets orphaned.
 
 **Q34. Inconsistent identity key between host/docker agent maps**
 - `packages/environment/src/host-environment-agent.ts:60-65` — excludes `threadId`
@@ -227,27 +157,17 @@ Legend:
 | --- | --- | --- | --- | --- |
 | 1 | likely | `_tell` has no per-thread lock and can run concurrently; rollback gate uses stale epoch checks (`apps/daemon/src/orchestrator.ts:1324-1510`). | confirmed — no per-thread lock/in-flight set for `_tell`; two concurrent calls capture same epoch, both activate, both satisfy rollback epoch-equality guard; `awaitProviderStart=false` fires detached promise with no interleaving protection. | TBD |
 | 2 | confirmed | lock helper returns after awaiting existing promise and does not run second action (`host-environment-agent.ts:67-86`, `docker-environment-agent.ts:70-89`). | confirmed — both `withManagedHostEnvironmentAgentLock` and `withManagedDockerEnvironmentAgentLock` await existing promise then `return` without executing second caller's action. | TBD |
-| 3 | confirmed | runtime appends to `events[]` and never reads/trims it (`environment-agent/src/runtime.ts:58,123`). | confirmed — `events[]` is append-only via `push()` at line 123; array is never read back, spliced, or capped; events dispatched to subscribers immediately but array grows unbounded. | TBD |
 | 4 | confirmed | `allocatePort()` bind-close-return pattern in both host/docker env paths (`docker-environment.ts:594-613`, `host-environment-agent.ts:229-248`). | confirmed — both `allocatePort` functions bind to port 0, read assigned port, close server, then return; TOCTOU window between close and actual bind. | TBD |
 | 5 | confirmed | `threads.project_id` FK has no `onDelete` clause (`packages/db/src/schema.ts:47-49`). | confirmed — `.references(() => projects.id)` with no `onDelete` option; Drizzle defaults to no action. | TBD |
 | 6 | confirmed | `events.thread_id` FK has no cascade; thread delete only clears queued messages then deletes thread (`schema.ts:116-118`, `repositories.ts:939-944`). | confirmed — no `onDelete: "cascade"` on `events.threadId`; `ThreadRepository.delete()` only cleans up `queuedThreadMessages`. | TBD |
-| 7 | confirmed | code still writes `environmentRecord`; migration `0042` drops column (`repositories.ts:918-922`, `drizzle/0042_drop_thread_environment_record.sql`). | confirmed — migration 0042 drops `environment_record`; column absent from schema; `ThreadRepository.update()` still conditionally writes it into `updates` object passed to `db.update().set()`. | TBD |
-| 8 | likely | `method as ThreadEventType` is unsafe cast (`agent-server.ts:81-82`), but downstream data-loss impact is not directly proven. | denied — cast exists but no exhaustive switch/match on `eventType` downstream; value flows to `_appendEvent` as a DB label and `_cacheProvisioningStateFromEvent` which uses `===` guards; unknown methods stored as-is without incorrect branching. | TBD |
-| 9 | denied | `type` is absent from Zod schema, but route uses `c.req.valid("json")`; unknown keys are stripped before `spawn()` call (`routes/threads.ts:438-457`). | denied — Zod strips unknown keys silently (no validation error), and route handler never forwards `type` to `spawn()` anyway; sending `type: "manager"` gets 201 success but field is silently dropped, not unchecked pass-through. | TBD |
-| 10 | confirmed | migrations disable FKs and re-enable, with no `foreign_key_check` (`packages/db/src/migrate.ts:31-37`). | confirmed — `PRAGMA foreign_keys = OFF` before migration, restored in `finally`, but no `PRAGMA foreign_key_check` ever called afterward. | TBD |
 | 11 | confirmed | `advanceIfNext` does read-check-write without transaction (`environment-agent-repositories.ts:827-857`). | confirmed — `getByThreadId` at line 834, `canAdvanceCursorTo` at line 846, `upsert` at line 855 — all outside any transaction; no compare-and-swap at DB level. | TBD |
 | 12 | confirmed | cursor `upsert` does get-then-insert/update without transaction (`environment-agent-repositories.ts:798-825`). | confirmed — plain `getByThreadId()` then conditional INSERT or UPDATE with no transaction or `ON CONFLICT` clause; concurrent "no row" reads both attempt INSERT causing PK violation. | TBD |
 | 13 | confirmed | session heartbeat/close/expire methods do read-then-write without transaction (`environment-agent-repositories.ts:561-644`). | confirmed — all three methods do `getById` then conditional `UPDATE` without transaction; `replaceActiveForThread` (line 652) correctly uses `db.transaction()`, showing the pattern is known but inconsistently applied. | TBD |
-| 14 | likely | non-null assertion `child.pid!` exists (`host-environment-agent.ts:401-403`), but persistent corruption scenario is not fully demonstrated. | likely — `child.pid!` assertion exists but mitigated by `waitForEnvironmentAgent` timeout-throw in default path; downstream guards check `if (existing.pid && ...)`; latent type-safety issue but not practically reachable without custom deps injection. | TBD |
-| 15 | denied | sandbox is set before `withExecutionOptions`; `reasoningLevel` early return does not drop sandbox fields in current callsites (`codex-provider-adapter.ts:317-369`). | denied — `sandboxMode` is resolved into base params (`sandbox:` / `sandboxPolicy:`) before `withExecutionOptions` is called; early return spreads input params preserving sandbox fields. | TBD |
-| 16 | likely | `stopAll` clears `provisioningTasks` without awaiting tasks (`orchestrator.ts:3487,3533-3578`); in-flight callbacks are partially guarded but still continue running. | denied — provisioning callbacks check `provisioningTasks.get(threadId) !== task` at every entry point (lines 3543/3550/3570); `clear()` causes identity mismatch so in-flight callbacks bail early without operating on cleared state. | TBD |
 | 18 | confirmed | docker agent launched detached with no PID tracking and disposed via `pkill -f` (`docker-environment-agent.ts:329-362,393-421`). | confirmed — `docker exec -d` returns no PID; cleanup at line 411 uses `pkill -f 'environment-agent.bundle.mjs'` which would kill all matching processes in the container indiscriminately. | TBD |
 | 19 | confirmed | managed host agent map is in-memory only; detached child + `unref` means restart loses handles (`host-environment-agent.ts:55,394-399`). | confirmed — plain in-memory `Map` with no persistence; spawn uses `detached: true` + `child.unref()`; restart means empty map with no rediscovery of running children. | TBD |
 | 20 | confirmed | dispose path keeps record if shutdown fails but ping succeeds (`host-environment-agent.ts:455-476`). | confirmed — when `requestShutdown` throws and ping succeeds, code `return`s early skipping `managedHostEnvironmentAgents.delete()`; agent process never forcibly killed, runs indefinitely. | TBD |
 | 21 | likely | `suspend()` removes agent only; container removal only in `destroy()` (`docker-environment.ts:227-245`). Could be intentional lifecycle split. | confirmed — `suspend()` (lines 227-238) only disposes managed agent + calls `inner.suspend()`; `destroy()` is sole caller of `removeContainerAsync()`; crash after suspend orphans container. | TBD |
 | 22 | confirmed | `destroy()` ignores `runGitAtPathAsync` result then force-removes workspace (`worktree-environment.ts:380-388`). | confirmed — `runGitAtPathAsync` resolves with `{ ok: boolean }` and never throws; return value discarded in `destroy()`; `rm -rf` runs unconditionally leaving stale `.git/worktrees/` entry on failure. | TBD |
-| 23 | denied | constructor subscribes once, but `start()` catches its own errors and does not throw (`session-supervisor.ts:105-130`). Leak claim is not shown as written. | denied — `start()` catches all errors via try/catch + `handleError` then continues to `scheduleNextCycle()`; never throws to caller, so the leak scenario is unreachable. | TBD |
-| 24 | confirmed | wait loop fetches full event list each poll with no cursor/`afterSeq` (`apps/cli/src/commands/thread.ts:253-269`). | confirmed — poll calls `events.$get` with `query: {}`; no `afterSeq` or cursor parameter; every cycle fetches complete event log from beginning. | TBD |
 | 25 | likely | 2s timestamp heuristic is real (`ThreadDetailView.tsx:398-417`), but specific false-ack behavior is plausible rather than proven here. | confirmed — exact heuristic `row.message.createdAt + 2_000 >= pendingSubmittedFollowUp.submittedAt` at line 408; >2s lag means `promptDraft.clear()` never called; reverse skew clears wrong draft. | TBD |
 
 ### Part 2 Validation (Code Quality)
@@ -258,80 +178,22 @@ Legend:
 | Q2 | confirmed | `ThreadDetailView.tsx` is 1686 lines with dense state/hook usage. | confirmed — 1686 lines; 8 `useState`, but 30+ custom hook invocations (`useThread`, `useThreadTimeline`, `usePromptDraftStorage`, etc.); God Component pattern confirmed. | TBD |
 | Q3 | confirmed | `ThreadSecondaryPanel` prop list is very large (`ThreadSecondaryPanel.tsx:322-397`). | confirmed — 38 props destructured (lines 322-359); many git-diff-specific props could be grouped into sub-component or object prop. | TBD |
 | Q4 | confirmed | `renderThreadRow` returns JSX but is called as plain function (`ProjectList.tsx:381-530,726,736,744`). | confirmed — defined as plain function, called as `renderThreadRow(...)` at lines 726/736/744; React cannot track identity or bail out via `memo`. | TBD |
-| Q5 | confirmed | duplicate `checkoutSnapshotsMatch`; orchestrator copy appears unused (`orchestrator.ts:261`, `environment-service.ts:77`). | confirmed — byte-for-byte identical implementations; `environment-service.ts` copy called at lines 815/881; orchestrator copy has zero call sites (dead). | TBD |
-| Q6 | confirmed | `confirmDestructiveAction` duplicated (`thread.ts:160-179`, `manager.ts:196-213`). | confirmed — identical function with same signature, TTY check, error message, and readline `[y/N]` prompt logic; only minor whitespace differs. | TBD |
-| Q7 | confirmed | `buildThreadUrl` duplicated (`thread.ts:188-189`, `manager.ts:262-264`). | confirmed — identical `buildThreadUrl` function with same signature and body in both files. | TBD |
-| Q12 | denied | `rowToThread` omits it, but API route hydrates `attachedEnvironment` in responses (`routes/threads.ts:395-433`). Not “always undefined.” | denied — `hydrateThread`/`hydrateThreads` helpers in routes (lines 387-436) look up attachment via repo and inject `attachedEnvironment` before API response; populated at API layer, not DB layer. | TBD |
 | Q14 | likely | effect depends on mutation object (`ThreadDetailView.tsx:419-432`); potential extra reruns depends on hook identity stability. | confirmed — `markThreadRead` in useEffect deps array; React Query mutations are referentially unstable; `markedReadKeysRef` guard prevents duplicate calls but effect body still re-runs. | TBD |
 | Q16 | confirmed | correlated `EXISTS` + many `json_extract` operations in delete pruning query (`repositories.ts:1299-1336`). | confirmed — DELETE with correlated EXISTS + up to 9 `json_extract()` per outer row, 6 per inner row; unindexed JSON parsing holds write lock. | TBD |
-| Q17 | denied | fallback scan exists (`orchestrator.ts:4315-4323`) but normal repo has indexed helper (`repositories.ts:1468`), so hot-path impact claim is overstated. | denied — `getLatestProviderThreadId` (line 1468) is indexed production path; fallback scan only reached if method absent (stub/fake repo); hot-path impact overstated. | TBD |
 | Q18 | confirmed | `getProjectById` lists all projects then filters (`apps/cli/src/commands/manager.ts:215-227`). | confirmed — calls `client.api.v1.projects.$get()` (list) then `.find()` by ID; contrast `getThreadById` directly below which correctly uses `threads[“:id”].$get()`. | TBD |
 | Q19 | confirmed | no unique index on `(project_id, descriptor)` in schema (`packages/db/src/schema.ts:24-41`). | confirmed — only non-unique index on `(project_id, updated_at)`; no unique constraint on `(project_id, descriptor)`. | TBD |
 | Q20 | confirmed | listed fields are not FK-constrained in schema (`packages/db/src/schema.ts:54-57`, `projects` table fields). | confirmed — all four fields (`environmentId`, `parentThreadId`, `primaryCheckoutThreadId`, `primaryManagerThreadId`) are plain `text()` with no `.references()` calls. | TBD |
 | Q21 | confirmed | active-session queries filter status + lease expiry without composite index (`environment-agent-repositories.ts:513-526`; schema indexes differ). | confirmed — `listActive` queries `WHERE status = 'active' AND leaseExpiresAt > now`; only separate indexes exist, no composite `(status, leaseExpiresAt)`. | TBD |
-| Q24 | confirmed | for all known statuses, helper returns `true`; only undefined returns false (`to-ui-messages.ts:503-519`). | denied — returns `false` when `threadStatus` is `undefined`/falsy (line 506); for all typed status values returns `true`; `default` branch uses `assertNever` as exhaustiveness check. Claim “never returns false” is incorrect. | TBD |
 | Q28 | confirmed | mixed raw `fetch` and typed client in same command files (`manager.ts:186`, `thread.ts:575-583`). | confirmed — `delete` (manager.ts:186) and `archive` (thread.ts:575-583) use raw `fetch`; other commands in same files use typed Hono client via `createClient`. | TBD |
-| Q29 | confirmed | `(err as Error).message` pattern is pervasive (27 hits currently across `thread.ts` + `manager.ts`). | confirmed — 32 occurrences total: 20 in `thread.ts`, 7+ in `manager.ts`; no `instanceof Error` guard; non-Error throws produce “Error: undefined”. | fixed — extracted getErrorMessage helper, replaced 32 casts. |
 | Q30 | confirmed | `window.prompt`/`window.confirm` used for project rename/delete (`ProjectList.tsx:228-243,272-291`). | confirmed — `window.prompt` (line 231), `window.alert` (line 236), and `window.confirm` (line 274) all used for project operations; blocking native dialogs. | TBD |
 | Q31 | confirmed | drizzle SQL folder contains forward migrations only; no rollback/down migration scripts present. | confirmed — only forward SQL files; 7+ destructive DROP operations (e.g., `0010_remove_task_model.sql`, `0042_drop_thread_environment_record.sql`) with no rollback scripts. | TBD |
-| Q32 | confirmed | file attach loop breaks on first error (`ThreadDetailView.tsx:650-666`). | confirmed — loop catches error, sets message, calls `break` at lines 661-663; files after failure silently skipped with no partial-upload indication. | fixed — accumulate failed filenames, show aggregated error. |
-| Q33 | denied | environment-agent binary already handles SIGTERM/SIGINT and calls shutdown (`packages/environment-agent/src/bin/environment-agent.ts:67-72`). | denied — binary entry point (lines 70-72) registers SIGTERM handler calling `close()` → `shutdown()` → `stopProviderChild()` which rejects pending requests and sends SIGTERM/SIGKILL to provider child. | TBD |
 | Q34 | confirmed | identity key differs: host excludes `threadId`, docker includes it (`host-environment-agent.ts:60-65`, `docker-environment-agent.ts:63-67`). | confirmed — host key: `[projectId, environmentId, workspaceRootPath]`; docker key: `[projectId, threadId, environmentId, workspaceRootPath]`; two threads sharing docker env get separate agent records. | TBD |
 
 ---
 
 ## Part 4: Tech Debt & Migration Debt
 
-Parallel internal contracts, half-finished ownership migrations, historical compatibility carried in steady-state code, and disproportionately large files.
-
-### Parallel Internal Contracts
-
-**D2. Error parsing stack — 4 independent implementations**
-- `apps/daemon/src/voice-transcription.ts:49` (`extractErrorMessage` + `ERROR_KEYS`)
-- `packages/agent-server/src/openai-responses-model.ts:114` (inline key list)
-- `apps/app/src/lib/api.ts:94` (`normalizeErrorText` + `LEGACY_ERROR_KEYS`)
-- `apps/cli/src/client.ts:28` (simpler `normalizeErrorText` variant)
-- All four implement the same recursive extract-from-unknown pattern with minor differences in key lists, truncation limits, and HTML filtering. The `api.ts` variant acknowledges drift by naming its keys `LEGACY_ERROR_KEYS`.
-- Classification: `closed_internal`. Should be a single shared utility.
-
-**D3. `EnvironmentCapability` type defined in two packages**
-- `packages/agent-core/src/types.ts:44`
-- `packages/environment/src/contracts.ts:7`
-- Identical union + Record type. Neither imports from the other.
-- Classification: `closed_internal`. One package should own the canonical type.
-
-**D4. `Thread` type name collision**
-- `packages/agent-core/src/types.ts:100` — internal runtime Thread
-- `packages/agent-core/src/generated/codex-app-server/schema/v2/Thread.ts:8` — generated wire-protocol Thread
-- Completely different shapes in the same package. Confusing for developers.
-- Classification: `open_external`. Consider renaming the generated type (e.g. `ApiThread`).
-
-### Ownership Migrations (Stopped Halfway)
-
-**D5. CLI `normalizeThreadEventType` — local copy never removed**
-- `apps/cli/src/commands/thread.ts:58` — local reimplementation
-- `packages/agent-core/src/thread-event-normalization.ts:327` — canonical version, exported
-- The package owns the function and exports it; the CLI never switched to importing it.
-
-**D7. Legacy `codex/event/*` dual-format bridge — spans 4 packages**
-- `packages/agent-server/src/codex-provider-adapter.ts:33-36,300-302` — suppresses duplicate legacy notifications
-- `packages/db/src/repositories.ts:87-90` — hard-coded legacy event types in pruning
-- `packages/agent-core/test/to-ui-messages.test.ts` — tests for legacy event projection
-- `apps/app/src/lib/thread-context-window-usage.test.ts:175-181` — still processes old `codex/event/token_count`
-- The canonicalize plan (`plans/canonicalize-internal-contracts-and-remove-legacy-bridges.md`, step 4) targets this but has not been executed.
-
-**D8. Backward-compatible `error` alias in daemon API responses**
-- `apps/daemon/src/routes/error-response.ts:13-14`
-- `ApiErrorBody` includes `error: string` as a "backward-compatible alias for existing clients/tests."
-- CLI test (`apps/cli/src/__tests__/client.test.ts:56`) explicitly tests "falls back to legacy error fields."
-- The canonicalize plan (step 1) questions whether this is still needed.
-
-### Historical Compatibility
-
-**D9. Legacy raw provider payload DB rows**
-- `packages/agent-core/src/thread-event-normalization.ts` — `decodeProviderEventEnvelope` handles both old format (`{ thread: { id: ... } }`) and new envelope format
-- `packages/db/test/event-repository.envelope.test.ts:100` — explicit compat test
-- Classification: `open_external`. Old persisted data must remain readable. All new writes use the envelope format. Read-only tolerance, not active production.
+Disproportionately large files that concentrate risk and impede maintainability.
 
 ### Disproportionately Large Files
 
@@ -346,52 +208,7 @@ Parallel internal contracts, half-finished ownership migrations, historical comp
 | `apps/app/src/hooks/useApi.ts` | 1,170 | 6% of app | All API hooks in one file. |
 | `apps/cli/src/commands/thread.ts` | 1,080 | 48% of CLI | All thread subcommands in one file. |
 | `packages/db/src/environment-agent-repositories.ts` | 1,062 | 36% of db | Large but cohesive. |
-| `packages/environment-agent/src/runtime.ts` | 998 | 20% of env-agent | Contains the unbounded `events[]` leak. |
-
-### Unfinished Plan Work
-
-**`plans/canonicalize-internal-contracts-and-remove-legacy-bridges.md`**
-All 7 steps identified but none executed:
-1. Standardize daemon error responses (the `error` alias)
-2. Tighten client HTTP error handling
-3. Remove prompt-composer fallbacks
-4. Finish event history cutover (remove `codex/event/*` dual-format)
-5. Make row collapsing metadata-driven
-6. Reduce duplicate UI primitive imports
-7. Shrink oversized coordination surfaces
-
-**`plans/environment-abstraction-leaks-plan.md`**
-- Steps 1-3: Done
-- Steps 4-6: In progress
-- Steps 7-9: Not started
-
-### Recommended Priority
-
-1. **Error parsing consolidation (D2)** — 4 copies of the same utility. Extract to shared package.
-2. **Legacy event format cutover (D7)** — spans 4 packages. The canonicalize plan already describes the work.
-3. **Orchestrator decomposition (Q1)** — 6,317 lines, 43% of daemon. Prerequisite for making concurrency bugs (Part 1 items 1, 16) tractable.
-4. **`EnvironmentCapability` dedup (D3)** — trivial, one package should own the type.
-5. **CLI `normalizeThreadEventType` (D5)** — trivial, replace local function with import.
-
-### Validation Pass (Added Tech-Debt Items, 2026-03-14)
-
-Legend:
-- `confirmed`: claim is supported by current code/docs.
-- `likely`: concern is plausible, but full impact/history is not provable from static inspection.
-- `denied`: claim is not supported as written.
-
-| Item | Verdict | Evidence (quick) | Second opinion | Third opinion |
-| --- | --- | --- | --- | --- |
-| D2 | confirmed | similar recursive error extractors exist in daemon/app/cli/agent-server (`voice-transcription.ts`, `api.ts`, `client.ts`, `openai-responses-model.ts`). | confirmed — all four define `normalizeErrorText` (identical body) + recursive extract-from-unknown with variations: different key lists, truncation limits; `api.ts` names its keys `LEGACY_ERROR_KEYS` acknowledging drift. | TBD |
-| D3 | confirmed | `EnvironmentCapability`/`EnvironmentCapabilities` are duplicated in `agent-core` and `environment` packages. | confirmed — identical 5-member `EnvironmentCapability` union + `Record` type in both packages; `contracts.ts` imports other types from `agent-core` but not these. | fixed — environment re-exports from agent-core. |
-| D4 | confirmed | both `packages/agent-core/src/types.ts` and generated `.../schema/v2/Thread.ts` export `Thread` with different shapes. | confirmed — internal `interface Thread` (runtime: `projectId`, `status`, `environmentId`) vs generated `type Thread` (wire: `preview`, `modelProvider`, `cwd`, `turns`); completely different shapes, same name, same package. | TBD |
-| D5 | confirmed | CLI has local `normalizeThreadEventType` while agent-core exports canonical helper (`thread.ts:58`, `thread-event-normalization.ts:327`). | confirmed — CLI local copy has identical body (`type.toLowerCase().replaceAll(“.”, “/”)`); canonical version exported from agent-core; local copy never removed. | fixed — deleted local copy, imported from agent-core. |
-| D6 | confirmed | orchestrator accesses repo maintenance methods via ad-hoc cast (`orchestrator.ts:6034-6064`) while method exists on concrete repository (`packages/db/src/repositories.ts`). | confirmed — method on concrete class only (repositories.ts:1256); absent from any interface; orchestrator uses inline `as` cast at lines 6034-6041 and 6051-6057. | TBD |
-| D7 | confirmed | legacy `codex/event/*` handling/suppression still appears across adapter, db pruning constants, and tests (`codex-provider-adapter.ts`, `repositories.ts`, tests cited). | confirmed — adapter defines `LEGACY_DUPLICATE_NOTIFICATION_METHODS` with `codex/event/item_started` + `item_completed`; repositories.ts hard-codes 4 `codex/event/*` types in pruning list; test processes `codex/event/token_count`. | TBD |
-| D8 | confirmed | daemon error response keeps compatibility alias `error` (`apps/daemon/src/routes/error-response.ts:13-14`); CLI test covers legacy fallback (`apps/cli/src/__tests__/client.test.ts:56-66`). | confirmed — `ApiErrorBody` has `error: string` with “Backward-compatible alias” comment; `createBody` mirrors value; CLI test titled “falls back to legacy error fields” tests body with only `{“error”:”...”}`. | fixed — removed error alias from API responses and all consumers. |
-| D9 | confirmed | compatibility test for legacy raw provider payload rows exists (`packages/db/test/event-repository.envelope.test.ts:100-115`). | likely — compat test exists but `decodeProviderEventEnvelope` only handles new envelope format; legacy handling is implicit via `unwrapProviderEventPayload` falling back to raw payload, not explicit dual-format decode. | TBD |
-| UP1 | likely | “All 7 steps identified but none executed” is not explicitly tracked in the canonicalize plan file; plan text alone does not prove execution status. | confirmed — plan file lists exactly 7 numbered steps (lines 21-61) with no checkboxes, completion markers, or progress indicators; purely design/planning document. | TBD |
-| UP2 | confirmed | environment abstraction plan explicitly labels steps as Done/In progress/Next (`plans/environment-abstraction-leaks-plan.md`). | confirmed — plan file explicitly labels steps 1-3 as "Done", steps 4-6 as "In progress", steps 7-9 as "Next" (= not started); matches claim exactly. | TBD |
+| `packages/environment-agent/src/runtime.ts` | 998 | 20% of env-agent | Large but cohesive. |
 
 ---
 
@@ -408,13 +225,6 @@ These can each be done in a single focused PR with minimal review burden.
 | **2** (lock starvation) | 6 | `host-environment-agent.ts`, `docker-environment-agent.ts` | Remove early `return` after lock await; fall through to re-execute action. |
 | **20** (zombie agent) | 5 | `host-environment-agent.ts` | Remove `stillReachable` early-return; always delete record from map regardless of ping result. |
 | **22** (worktree destroy) | 5 | `worktree-environment.ts` | Check `ok` flag from `runGitAtPathAsync` before running `rm -rf`; log `stderr` on failure. |
-| **24** (event polling) | 10 | `thread.ts` (CLI) | Add `afterSeq` cursor variable; server already supports the parameter. Convert O(n) to O(1) per poll. |
-| Q5+Q6+Q7 (dedup) | 15 net | `orchestrator.ts`, `thread.ts`, `manager.ts`, new `helpers.ts` | Delete dead orchestrator copy of `checkoutSnapshotsMatch`. Extract `confirmDestructiveAction` + `buildThreadUrl` into shared CLI helpers module. |
-| Q29 (err cast) | 30 | `thread.ts`, `manager.ts` | Extract `getErrorMessage(err: unknown)` helper; mechanical find-replace of 27 `(err as Error).message` instances. |
-| Q32 (file attach break) | 10 | `ThreadDetailView.tsx` | Remove `break`; accumulate per-file errors; show aggregated message listing failed filenames. |
-| D3+D4+D5 (type dedup) | 15 | `types.ts`, `contracts.ts`, `thread.ts` (CLI), index files | D3: delete duplicate `EnvironmentCapability` from agent-core, re-export from environment. D5: delete local `normalizeThreadEventType` from CLI, import canonical. D4: add `WireThread` alias for generated type. |
-| D5 (CLI normalize) | 2 | `thread.ts` | Delete local function, add import from `@beanbag/agent-core`. |
-| D8 (error alias) | 25 | `error-response.ts`, `client.ts`, `session-http-client.ts`, 4 test files | Delete `error` field from `ApiErrorBody`. Remove `value.error` from legacy candidates in CLI + env-agent client. Update test assertions from `body.error` to `body.message`. |
 
 ### Small but Notable — S, Medium Risk
 
@@ -438,9 +248,6 @@ These can each be done in a single focused PR with minimal review burden.
 | Q28 (fetch vs client) | 15 | `thread.ts`, `manager.ts` | Low — typed client already supports both endpoints. | Replace 3 raw `fetch` calls with `client.api.v1.threads[":id"].$delete()` and `...archive.$post()`. Each call site already has `client` in scope. |
 | Q30 (window.prompt) | 130 | `ProjectList.tsx`, 2 new dialog files | Low — app already has `ThreadRenameDialog`/`ThreadDeleteDialog` built on same Radix Dialog. | Create `ProjectRenameDialog` and `ProjectDeleteDialog` mirroring thread counterparts; wire via `useState` open/close pattern. |
 | Q31 (down migrations) | 600 | `packages/db/drizzle/` | Medium-high — only practical for 28 additive migrations; 17 destructive migrations are point-of-no-return. | Write down-migration SQL for additive-only migrations. Document destructive ones as irreversible. Drizzle has no native down-migration support for SQLite. |
-| D2 (error parsing) | 30 net | `unknown-helpers.ts`, 4 consumer files | Low-medium — behavioral decisions needed on truncation limits (180 vs 220 vs none). | Add `extractErrorMessage(value, { maxLength? })` to agent-core's `unknown-helpers.ts`; update 4 call sites to import shared utility. |
-| D7 (legacy events) | 140 | 7 files across 4 packages | Low — legacy types already suppressed at ingestion; no new data enters in old format. | Remove `codex/event/*` strings from pruning constants; one-time `DELETE WHERE type LIKE 'codex/event/%'` migration; remove 6 legacy test cases. |
-| UP2 (env plan 4-9) | 400-600 | 10 files across 3 packages + new fake env | Medium — `workspaceRoot` threads through provisioning pipeline across 3 packages; `"worktree"` cleanup touches artifact GC. | Steps 4-6: strip `workspaceRoot` from ~8 orchestrator event emissions, 2 event-data types, `to-ui-messages.ts` pipeline. Step 7: UI audit (mostly done). Step 8: replace `"worktree"` string guards with capability checks. Step 9: build minimal `IEnvironment` fake for integration tests. |
 
 ### Large / XL Effort
 
@@ -453,8 +260,8 @@ These can each be done in a single focused PR with minimal review burden.
 
 | Size | Count | Total ~Lines |
 |------|-------|-------------|
-| S (low risk) | 10 | ~123 |
+| S (low risk) | 3 | ~16 |
 | S (medium risk) | 6 | ~171 |
-| M | 10 | ~1595 |
+| M | 7 | ~925 |
 | XL | 2 | ~5186 |
-| **Total** | **28** | **~7075** |
+| **Total** | **18** | **~6298** |
