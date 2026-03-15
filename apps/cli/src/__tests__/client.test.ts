@@ -53,8 +53,8 @@ describe("unwrap()", () => {
     );
   });
 
-  it("falls back to legacy error fields when canonical message is absent", async () => {
-    const response = new Response('{"error":"Thread not found"}', {
+  it("falls back to legacy detail field when canonical message is absent", async () => {
+    const response = new Response('{"detail":"Thread not found"}', {
       status: 404,
       statusText: "Not Found",
       headers: { "Content-Type": "application/json" },

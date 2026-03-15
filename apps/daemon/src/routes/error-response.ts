@@ -10,8 +10,6 @@ interface ApiErrorBody {
   message: string;
   retryable?: boolean;
   details?: unknown;
-  // Backward-compatible alias for existing clients/tests.
-  error: string;
 }
 
 type ApiErrorStatus = 400 | 404 | 409 | 422 | 500 | 502 | 503 | 504;
@@ -54,7 +52,6 @@ function createBody(
     message,
     ...(opts?.retryable ? { retryable: true } : {}),
     ...(opts?.details !== undefined ? { details: opts.details } : {}),
-    error: message,
   };
 }
 

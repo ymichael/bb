@@ -59,7 +59,7 @@ function extractLegacyErrorMessage(value: unknown): string | null {
   if (!isRecord(value)) {
     return null;
   }
-  const legacyCandidates = [value.error, value.detail];
+  const legacyCandidates = [value.detail];
   for (const candidate of legacyCandidates) {
     const message = extractLegacyErrorMessage(candidate);
     if (message) {

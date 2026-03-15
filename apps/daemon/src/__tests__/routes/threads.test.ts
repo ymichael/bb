@@ -395,7 +395,6 @@ describe("Thread routes", () => {
       expect(res.status).toBe(400);
       expect(await res.json()).toEqual({
         code: "invalid_request",
-        error: "Attachment path must be absolute",
         message: "Attachment path must be absolute",
       });
       expect(threadManager.spawn).not.toHaveBeenCalled();
@@ -414,7 +413,7 @@ describe("Thread routes", () => {
 
       expect(res.status).toBe(500);
       const body = await res.json();
-      expect(body.error).toBe("Project not found");
+      expect(body.message).toBe("Project not found");
     });
 
   });
@@ -1299,7 +1298,7 @@ describe("Thread routes", () => {
 
       expect(res.status).toBe(404);
       const body = await res.json();
-      expect(body.error).toBe("Thread nonexistent not found");
+      expect(body.message).toBe("Thread nonexistent not found");
       expect(body.code).toBe("thread_not_found");
     });
   });
@@ -1608,7 +1607,7 @@ describe("Thread routes", () => {
 
       expect(res.status).toBe(409);
       const body = await res.json();
-      expect(body.error).toBe("Thread thread-1 has no active process");
+      expect(body.message).toBe("Thread thread-1 has no active process");
       expect(body.code).toBe("inactive_session");
     });
 
@@ -1631,7 +1630,7 @@ describe("Thread routes", () => {
 
       expect(res.status).toBe(409);
       const body = await res.json();
-      expect(body.error).toBe("Thread thread-1 has no codex session");
+      expect(body.message).toBe("Thread thread-1 has no codex session");
       expect(body.code).toBe("inactive_session");
     });
 
@@ -1654,7 +1653,7 @@ describe("Thread routes", () => {
 
       expect(res.status).toBe(409);
       const body = await res.json();
-      expect(body.error).toBe("Thread thread-1 is archived");
+      expect(body.message).toBe("Thread thread-1 is archived");
       expect(body.code).toBe("thread_archived");
     });
 
@@ -1685,7 +1684,6 @@ describe("Thread routes", () => {
       expect(res.status).toBe(400);
       expect(await res.json()).toEqual({
         code: "invalid_request",
-        error: "Attachment path must be absolute",
         message: "Attachment path must be absolute",
       });
       expect(threadManager.tell).not.toHaveBeenCalled();

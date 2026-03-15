@@ -150,7 +150,7 @@ describe("System routes", () => {
 
       expect(res.status).toBe(500);
       const body = await res.json();
-      expect(body.error).toBe("DB connection lost");
+      expect(body.message).toBe("DB connection lost");
     });
   });
 
@@ -228,7 +228,6 @@ describe("System routes", () => {
       expect(res.status).toBe(500);
       expect(await res.json()).toEqual({
         code: "internal_error",
-        error: "health lookup failed",
         message: "health lookup failed",
       });
     });
@@ -262,7 +261,7 @@ describe("System routes", () => {
 
       expect(res.status).toBe(500);
       const body = await res.json();
-      expect(body.error).toBe("picker unavailable");
+      expect(body.message).toBe("picker unavailable");
     });
   });
 
@@ -298,7 +297,6 @@ describe("System routes", () => {
       expect(await res.json()).toEqual({
         code: "invalid_request",
         message: "Expected multipart file field named 'file'",
-        error: "Expected multipart file field named 'file'",
       });
       expect(transcribeVoice).not.toHaveBeenCalled();
     });
@@ -315,7 +313,7 @@ describe("System routes", () => {
 
       expect(res.status).toBe(500);
       const body = await res.json();
-      expect(body.error).toBe("transcription failed");
+      expect(body.message).toBe("transcription failed");
     });
 
     it("returns 400 when transcription returns invalid_request", async () => {
@@ -334,7 +332,6 @@ describe("System routes", () => {
       expect(await res.json()).toEqual({
         code: "invalid_request",
         message: "Voice transcription is not configured.",
-        error: "Voice transcription is not configured.",
       });
     });
   });
@@ -401,7 +398,7 @@ describe("System routes", () => {
 
       expect(res.status).toBe(500);
       const body = await res.json();
-      expect(body.error).toBe("codex unavailable");
+      expect(body.message).toBe("codex unavailable");
     });
 
     it("uses thread manager provider listing by default", async () => {

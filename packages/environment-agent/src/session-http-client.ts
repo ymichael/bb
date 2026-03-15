@@ -293,9 +293,7 @@ export class EnvironmentAgentSessionHttpClient {
     const message =
       typeof parsedRecord?.message === "string"
         ? parsedRecord.message
-        : typeof parsedRecord?.error === "string"
-          ? parsedRecord.error
-          : body.trim() || undefined;
+        : body.trim() || undefined;
     const retryable = parsedRecord?.retryable === true;
     const details = parsedRecord?.details;
     const suffix = message ? `: ${message}` : "";

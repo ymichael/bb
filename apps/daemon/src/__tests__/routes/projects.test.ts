@@ -191,7 +191,6 @@ describe("Project routes", () => {
       const body = await res.json();
       expect(body.code).toBe("internal_error");
       expect(body.message).toBe("Unique constraint violated");
-      expect(body.error).toBe("Unique constraint violated");
     });
   });
 
@@ -233,7 +232,6 @@ describe("Project routes", () => {
       const body = await res.json();
       expect(body.code).toBe("internal_error");
       expect(body.message).toBe("DB error");
-      expect(body.error).toBe("DB error");
     });
   });
 
@@ -276,7 +274,6 @@ describe("Project routes", () => {
       const body = await res.json();
       expect(body.code).toBe("project_not_found");
       expect(body.message).toBe("Project unknown not found");
-      expect(body.error).toBe("Project unknown not found");
     });
 
     it("returns 400 when body has no updatable fields", async () => {
@@ -435,7 +432,6 @@ describe("Project routes", () => {
       expect(await res.json()).toEqual({
         code: "project_not_found",
         message: "Project missing not found",
-        error: "Project missing not found",
       });
       expect(projectRepo.delete).not.toHaveBeenCalled();
     });
@@ -484,7 +480,6 @@ describe("Project routes", () => {
       const body = await res.json();
       expect(body.code).toBe("project_not_found");
       expect(body.message).toBe("Project unknown not found");
-      expect(body.error).toBe("Project unknown not found");
       expect(findProjectFiles).not.toHaveBeenCalled();
     });
 
@@ -500,7 +495,6 @@ describe("Project routes", () => {
       const body = await res.json();
       expect(body.code).toBe("internal_error");
       expect(body.message).toBe("Search failed");
-      expect(body.error).toBe("Search failed");
     });
   });
 
@@ -545,7 +539,6 @@ describe("Project routes", () => {
       expect(await res.json()).toEqual({
         code: "project_not_found",
         message: "Project missing not found",
-        error: "Project missing not found",
       });
       expect(savePromptAttachment).not.toHaveBeenCalled();
     });
@@ -565,7 +558,6 @@ describe("Project routes", () => {
       expect(await res.json()).toEqual({
         code: "invalid_request",
         message: "Expected multipart file field named 'file'",
-        error: "Expected multipart file field named 'file'",
       });
       expect(savePromptAttachment).not.toHaveBeenCalled();
     });
@@ -589,7 +581,6 @@ describe("Project routes", () => {
       expect(await res.json()).toEqual({
         code: "invalid_request",
         message: "Attachment too large",
-        error: "Attachment too large",
       });
     });
   });
@@ -633,7 +624,6 @@ describe("Project routes", () => {
       expect(await res.json()).toEqual({
         code: "invalid_request",
         message: "Attachment path is outside project scope",
-        error: "Attachment path is outside project scope",
       });
     });
   });

@@ -35,7 +35,7 @@ describe("sendRouteError", () => {
 
       expect(response.status).toBe(expectedStatus);
       expect(body.code).toBe(code);
-      expect(body.error).toBe(`${code} message`);
+      expect(body.message).toBe(`${code} message`);
     }
   });
 
@@ -46,6 +46,6 @@ describe("sendRouteError", () => {
 
     expect(response.status).toBe(500);
     expect(body.code).toBe("internal_error");
-    expect(body.error).toBe("boom");
+    expect(body.message).toBe("boom");
   });
 });
