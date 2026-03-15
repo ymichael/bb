@@ -8,7 +8,6 @@ const __dirname = dirname(__filename);
 
 type SqliteClient = {
   pragma: (sql: string) => Array<Record<string, unknown>> | unknown;
-  exec: (sql: string) => unknown;
 };
 
 function getSqliteClient(db: DbConnection): SqliteClient | null {
@@ -31,7 +30,6 @@ export function migrate(db: DbConnection): void {
   sqlite?.pragma?.("foreign_keys = OFF");
   try {
     drizzleMigrate(db, { migrationsFolder });
-    repairCriticalSchema(sqlite);
   } finally {
     sqlite?.pragma?.("foreign_keys = ON");
   }
@@ -45,43 +43,5 @@ export function migrate(db: DbConnection): void {
         violations.slice(0, 10),
       );
     }
-  }
-}
-
-function repairCriticalSchema(sqlite: SqliteClient | null): void {
-  if (!sqlite) return;
-
-  ensureColumn(sqlite, "threads", "provider_id", [
-    "ALTER TABLE `threads` ADD COLUMN `provider_id` text NOT NULL DEFAULT 'codex'",
-  ]);
-  ensureColumn(sqlite, "threads", "type", [
-    "ALTER TABLE `threads` ADD COLUMN `type` text NOT NULL DEFAULT 'standard'",
-  ]);
-  ensureColumn(sqlite, "projects", "primary_manager_thread_id", [
-    "ALTER TABLE `projects` ADD COLUMN `primary_manager_thread_id` text",
-    "CREATE INDEX IF NOT EXISTS `projects_primary_manager_thread_idx` ON `projects` (`primary_manager_thread_id`)",
-  ]);
-  ensureColumn(sqlite, "environment_agent_sessions", "environment_id", [
-    "ALTER TABLE `environment_agent_sessions` ADD COLUMN `environment_id` text REFERENCES `environments`(`id`) ON DELETE cascade",
-    "CREATE INDEX IF NOT EXISTS `environment_agent_sessions_environment_status_idx` ON `environment_agent_sessions` (`environment_id`,`status`)",
-  ]);
-}
-
-function ensureColumn(
-  sqlite: SqliteClient,
-  tableName: "threads" | "projects" | "environment_agent_sessions",
-  columnName: string,
-  repairSql: string[],
-): void {
-  const columnRows = sqlite.pragma(`table_info(\`${tableName}\`)`);
-  const columns = Array.isArray(columnRows) ? columnRows : [];
-  const hasColumn = columns.some((row) => {
-    const name = row?.name;
-    return typeof name === "string" && name === columnName;
-  });
-  if (hasColumn) return;
-
-  for (const statement of repairSql) {
-    sqlite.exec(statement);
   }
 }
