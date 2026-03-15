@@ -1051,9 +1051,6 @@ function parseParsedIntentsFromRecord(
   const legacyCamel = parseParsedIntentArray(record.commandActions, "command");
   if (legacyCamel.length > 0) return legacyCamel;
 
-  const legacySnake = parseParsedIntentArray(record.command_actions, "command");
-  if (legacySnake.length > 0) return legacySnake;
-
   return [];
 }
 
