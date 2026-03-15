@@ -305,7 +305,11 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
         }
 
         const projectId = requireProjectId(opts.project);
-        const environmentId = resolveEnvironmentId(opts.environment);
+        const environmentValue = resolveEnvironmentId(opts.environment);
+        const KNOWN_ENVIRONMENT_KINDS = ["worktree", "local", "docker"];
+        const isKind = environmentValue && KNOWN_ENVIRONMENT_KINDS.includes(environmentValue);
+        const environmentId = isKind ? undefined : environmentValue;
+        const environmentKind = isKind ? environmentValue : undefined;
         const parentThreadId =
           opts.parentThread ??
           (opts.contextParentThread === false
@@ -319,6 +323,7 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
                 ? [{ type: "text", text: opts.prompt }]
                 : undefined,
               ...(environmentId ? { environmentId } : {}),
+              ...(environmentKind ? { environmentKind } : {}),
               ...(parentThreadId ? { parentThreadId } : {}),
             },
           }),

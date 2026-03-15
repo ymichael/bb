@@ -874,23 +874,24 @@ export class Orchestrator implements ThreadOrchestrator {
   private _resolveEnvironmentSelection(args: {
     projectId: string;
     environmentId?: string;
+    environmentKind?: string;
   }): {
     attachedEnvironmentId?: string;
     runtimeEnvironmentId: string;
   } {
-    const attachedEnvironmentId = this._resolveSpawnAttachedEnvironmentId(args);
-    if (attachedEnvironmentId) {
+    // environmentId is a first-class environment UUID
+    if (args.environmentId) {
       if (!this.environmentRepo || !this.threadEnvironmentAttachmentRepo) {
         throw new Error("First-class environment attachments are unavailable");
       }
-      const attachedEnvironment = this.environmentRepo.getById(attachedEnvironmentId);
+      const attachedEnvironment = this.environmentRepo.getById(args.environmentId);
       if (!attachedEnvironment || attachedEnvironment.projectId !== args.projectId) {
-        throw new Error(`Environment not found: ${attachedEnvironmentId}`);
+        throw new Error(`Environment not found: ${args.environmentId}`);
       }
       const requestedRuntimeKind = attachedEnvironment.requestedRuntimeKind?.trim();
       if (requestedRuntimeKind) {
         return {
-          attachedEnvironmentId,
+          attachedEnvironmentId: args.environmentId,
           runtimeEnvironmentId: this._resolveRequestedEnvironmentId(requestedRuntimeKind),
         };
       }
@@ -902,13 +903,13 @@ export class Orchestrator implements ThreadOrchestrator {
         });
         if (derivedRecord?.kind) {
           return {
-            attachedEnvironmentId,
+            attachedEnvironmentId: args.environmentId,
             runtimeEnvironmentId: this._resolveRequestedEnvironmentId(derivedRecord.kind),
           };
         }
       }
       return {
-        attachedEnvironmentId,
+        attachedEnvironmentId: args.environmentId,
         runtimeEnvironmentId:
           project && attachedEnvironment.descriptor.path === project.rootPath
             ? "local"
@@ -916,24 +917,10 @@ export class Orchestrator implements ThreadOrchestrator {
       };
     }
 
+    // environmentKind is a kind string ("worktree", "local", "docker")
     return {
-      runtimeEnvironmentId: this._resolveRequestedEnvironmentId(args.environmentId),
+      runtimeEnvironmentId: this._resolveRequestedEnvironmentId(args.environmentKind),
     };
-  }
-
-  private _resolveSpawnAttachedEnvironmentId(args: {
-    projectId: string;
-    environmentId?: string;
-  }): string | undefined {
-    const requestedEnvironmentId = args.environmentId?.trim();
-    if (!requestedEnvironmentId || !this.environmentRepo) {
-      return undefined;
-    }
-    const environment = this.environmentRepo.getById(requestedEnvironmentId);
-    if (!environment || environment.projectId !== args.projectId) {
-      return undefined;
-    }
-    return environment.id;
   }
 
   private _resolveThreadEnvironmentReference(threadId: string): string | undefined {
@@ -1011,7 +998,8 @@ export class Orchestrator implements ThreadOrchestrator {
     const explicitTitle = this._normalizeThreadTitle(req.title);
     const { attachedEnvironmentId, runtimeEnvironmentId } = this._resolveEnvironmentSelection({
       projectId: req.projectId,
-      environmentId: req.environmentId ?? (req.parentThreadId ? "worktree" : undefined),
+      environmentId: req.environmentId,
+      environmentKind: req.environmentKind ?? (req.parentThreadId ? "worktree" : undefined),
     });
     const providerId = this._resolveSpawnProviderId(req);
     const thread = this.threadRepo.create({
@@ -1019,7 +1007,7 @@ export class Orchestrator implements ThreadOrchestrator {
       providerId,
       type: threadType,
       ...(explicitTitle ? { title: explicitTitle } : {}),
-      environmentId: runtimeEnvironmentId,
+      ...(attachedEnvironmentId ? { environmentId: attachedEnvironmentId } : {}),
       ...(req.parentThreadId ? { parentThreadId: req.parentThreadId } : {}),
     });
     if (explicitTitle) {
@@ -1059,7 +1047,7 @@ export class Orchestrator implements ThreadOrchestrator {
     this._broadcastThreadChanged(persistedThread.id, ["thread-created"]);
     this._scheduleProvisioning(
       persistedThread.id,
-      { ...provisioningRequest, environmentId: runtimeEnvironmentId },
+      { ...provisioningRequest, environmentKind: runtimeEnvironmentId },
       {
         rootPathHint: project.rootPath,
         reason: "thread-created",
@@ -1350,7 +1338,7 @@ export class Orchestrator implements ThreadOrchestrator {
           serviceTier: options?.serviceTier,
           reasoningLevel: options?.reasoningLevel,
           sandboxMode: options?.sandboxMode,
-          environmentId: requestedEnvironmentId,
+          environmentKind: requestedEnvironmentId,
         },
         {
           reason: "tell-after-missing-environment-attachment",
@@ -3468,6 +3456,7 @@ export class Orchestrator implements ThreadOrchestrator {
       this._resolveEnvironmentSelection({
       projectId: req.projectId,
       environmentId: req.environmentId ?? thread?.environmentId,
+      environmentKind: req.environmentKind,
       });
     if (!attachedEnvironmentId) {
       attachedEnvironmentId = this.envFactory.reserveThreadEnvironment({
@@ -3477,9 +3466,8 @@ export class Orchestrator implements ThreadOrchestrator {
         requestedEnvironmentId,
       });
     }
-    const requestedEnvironmentReference = attachedEnvironmentId ?? requestedEnvironmentId;
-    if (thread && thread.environmentId !== requestedEnvironmentReference) {
-      this.threadRepo.update(threadId, { environmentId: requestedEnvironmentReference });
+    if (attachedEnvironmentId && thread && thread.environmentId !== attachedEnvironmentId) {
+      this.threadRepo.update(threadId, { environmentId: attachedEnvironmentId });
     }
     // Reusing a shared attached environment must preserve the live env-daemon runtime.
     if (!(attachedEnvironmentId && this.environmentService.hasSharedAttachedEnvironment(threadId))) {
@@ -3539,9 +3527,11 @@ export class Orchestrator implements ThreadOrchestrator {
         `[thread ${threadId}] failed to sync first-class environment attachment: ${message}`,
       );
     }
-    this.threadRepo.update(threadId, {
-      environmentId: attachedEnvironmentIdAfterProvision ?? environmentRuntime.environment.kind,
-    });
+    if (attachedEnvironmentIdAfterProvision) {
+      this.threadRepo.update(threadId, {
+        environmentId: attachedEnvironmentIdAfterProvision,
+      });
+    }
     const provisionedEnvironmentInfo = this.environmentRegistry.get(
       environmentRuntime.environment.kind,
     ).info;

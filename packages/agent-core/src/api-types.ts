@@ -54,6 +54,7 @@ export interface SpawnThreadRequest {
   reasoningLevel?: ReasoningLevel;
   sandboxMode?: SandboxMode;
   environmentId?: string;
+  environmentKind?: string;
   developerInstructions?: string;
   parentThreadId?: string;
   /**

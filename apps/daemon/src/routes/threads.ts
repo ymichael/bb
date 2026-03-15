@@ -450,6 +450,7 @@ export function createThreadRoutes(
           ...(body.reasoningLevel ? { reasoningLevel: body.reasoningLevel } : {}),
           ...(body.sandboxMode ? { sandboxMode: body.sandboxMode } : {}),
           ...(body.environmentId ? { environmentId: body.environmentId } : {}),
+          ...(body.environmentKind ? { environmentKind: body.environmentKind } : {}),
           ...(body.parentThreadId ? { parentThreadId: body.parentThreadId } : {}),
           ...(body.developerInstructions !== undefined
             ? { developerInstructions: body.developerInstructions }
