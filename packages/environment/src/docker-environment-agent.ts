@@ -59,9 +59,10 @@ const managedDockerEnvironmentAgents = new Map<string, ManagedDockerEnvironmentA
 function managedDockerEnvironmentAgentIdentityKey(
   args: ManagedDockerEnvironmentAgentIdentity,
 ): string {
+  // Intentionally excludes threadId — multiple threads can share one
+  // docker environment and its agent process, matching the host pattern.
   return [
     args.projectId,
-    args.threadId,
     args.environmentId,
     args.workspaceRootPath,
   ].join("\0");
