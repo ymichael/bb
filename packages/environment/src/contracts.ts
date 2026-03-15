@@ -1,17 +1,12 @@
 import type { ChildProcess, SpawnOptions } from "node:child_process";
 import type {
+  EnvironmentCapabilities,
+  EnvironmentCapability,
   PersistedEnvironmentRecord,
 } from "@beanbag/agent-core";
 import type { EnvironmentAgentConnectionTarget } from "@beanbag/environment-agent";
 
-export type EnvironmentCapability =
-  | "host_filesystem"
-  | "isolated_workspace"
-  | "promote_primary_checkout"
-  | "demote_primary_checkout"
-  | "squash_merge";
-
-export type EnvironmentCapabilities = Record<EnvironmentCapability, boolean>;
+export type { EnvironmentCapability, EnvironmentCapabilities };
 
 export interface EnvironmentInfo {
   id: string;

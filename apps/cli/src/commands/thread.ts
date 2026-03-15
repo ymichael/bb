@@ -4,6 +4,7 @@ import {
   type ThreadEvent,
   type ThreadOperationResponse,
   type ThreadStatus,
+  normalizeThreadEventType,
 } from "@beanbag/agent-core";
 import { assertNever } from "../assert-never.js";
 import { createClient, unwrap } from "../client.js";
@@ -54,10 +55,6 @@ const DEFAULT_THREAD_WAIT_TIMEOUT_SECONDS = 30;
 const DEFAULT_THREAD_WAIT_POLL_INTERVAL_MS = 250;
 
 class ThreadWaitTimeoutError extends Error {}
-
-function normalizeThreadEventType(type: string): string {
-  return type.toLowerCase().replaceAll(".", "/");
-}
 
 function isLowSignalThreadStatusEventType(type: string): boolean {
   const normalized = normalizeThreadEventType(type);
