@@ -958,8 +958,8 @@ export class ThreadRepository {
       sandboxMode: data.sandboxMode,
       createdAt: Date.now(),
     };
-    this.db.insert(queuedThreadMessages).values(row).run();
-    return this.rowToQueuedMessage({ seq: 0, ...row });
+    const inserted = this.db.insert(queuedThreadMessages).values(row).returning({ seq: queuedThreadMessages.seq }).get();
+    return this.rowToQueuedMessage({ seq: inserted.seq, ...row });
   }
 
   listQueuedMessages(threadId: string): ThreadQueuedMessage[] {
