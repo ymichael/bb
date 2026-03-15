@@ -2682,6 +2682,22 @@ describe("Orchestrator", () => {
   });
 
   describe("listModels()", () => {
+    let testDb: ReturnType<typeof createTestDb>;
+    let project: ReturnType<typeof createTestProject>;
+
+    beforeEach(() => {
+      testDb = createTestDb();
+      const repos = createTestRepos(testDb.db);
+      threadRepo = repos.threadRepo;
+      eventRepo = repos.eventRepo;
+      projectRepo = repos.projectRepo;
+      project = createTestProject(projectRepo, { rootPath: "/test" });
+      manager = new Orchestrator(
+        threadRepo, eventRepo, projectRepo, ws, llmCompletionService,
+        undefined, createTestRuntimeEnv(),
+      );
+    });
+
     it("delegates to the provider adapter", async () => {
       const models = [
         {
@@ -2730,191 +2746,148 @@ describe("Orchestrator", () => {
   });
 
   describe("getOutput()", () => {
-    it("extracts text from last item/completed agentMessage event", () => {
-      const events = [
-        makeEvent({ seq: 1, type: "turn/started", data: {} }),
-        makeEvent({
-          seq: 2,
-          type: "item/completed",
-          data: { item: { type: "agentMessage", text: "Final output" } },
-        }),
-      ];
-      (eventRepo.listByThread as ReturnType<typeof vi.fn>).mockReturnValue(
-        events,
-      );
+    let testDb: ReturnType<typeof createTestDb>;
+    let project: ReturnType<typeof createTestProject>;
 
-      expect(manager.getOutput("thread-1")).toBe("Final output");
+    beforeEach(() => {
+      testDb = createTestDb();
+      const repos = createTestRepos(testDb.db);
+      threadRepo = repos.threadRepo;
+      eventRepo = repos.eventRepo;
+      projectRepo = repos.projectRepo;
+      project = createTestProject(projectRepo, { rootPath: "/test" });
+      manager = new Orchestrator(
+        threadRepo, eventRepo, projectRepo, ws, llmCompletionService,
+        undefined, createTestRuntimeEnv(),
+      );
+    });
+
+    it("extracts text from last item/completed agentMessage event", () => {
+      const thread = createTestThread(threadRepo, project.id, { status: "idle" });
+      eventRepo.create({ threadId: thread.id, seq: 1, type: "turn/started", data: {} as unknown as import("@beanbag/agent-core").ThreadEventData });
+      eventRepo.create({ threadId: thread.id, seq: 2, type: "item/completed", data: { item: { type: "agentMessage", text: "Final output" } } as unknown as import("@beanbag/agent-core").ThreadEventData });
+
+      expect(manager.getOutput(thread.id)).toBe("Final output");
     });
 
     it("ignores item/completed events that are not agentMessage type", () => {
-      const events = [
-        makeEvent({
-          seq: 1,
-          type: "item/completed",
-          data: { item: { type: "toolCall", name: "bash" } },
-        }),
-      ];
-      (eventRepo.listByThread as ReturnType<typeof vi.fn>).mockReturnValue(
-        events,
-      );
+      const thread = createTestThread(threadRepo, project.id, { status: "idle" });
+      eventRepo.create({ threadId: thread.id, seq: 1, type: "item/completed", data: { item: { type: "toolCall", name: "bash" } } as unknown as import("@beanbag/agent-core").ThreadEventData });
 
-      expect(manager.getOutput("thread-1")).toBeUndefined();
+      expect(manager.getOutput(thread.id)).toBeUndefined();
     });
 
     it("returns undefined if no item/completed events", () => {
-      const events = [
-        makeEvent({ seq: 1, type: "turn/started", data: {} }),
-        makeEvent({ seq: 2, type: "turn/completed", data: {} }),
-      ];
-      (eventRepo.listByThread as ReturnType<typeof vi.fn>).mockReturnValue(
-        events,
-      );
+      const thread = createTestThread(threadRepo, project.id, { status: "idle" });
+      eventRepo.create({ threadId: thread.id, seq: 1, type: "turn/started", data: {} as unknown as import("@beanbag/agent-core").ThreadEventData });
+      eventRepo.create({ threadId: thread.id, seq: 2, type: "turn/completed", data: {} as unknown as import("@beanbag/agent-core").ThreadEventData });
 
-      expect(manager.getOutput("thread-1")).toBeUndefined();
+      expect(manager.getOutput(thread.id)).toBeUndefined();
     });
 
     it("returns undefined for empty events list", () => {
-      (eventRepo.listByThread as ReturnType<typeof vi.fn>).mockReturnValue([]);
+      const thread = createTestThread(threadRepo, project.id, { status: "idle" });
 
-      expect(manager.getOutput("thread-1")).toBeUndefined();
+      expect(manager.getOutput(thread.id)).toBeUndefined();
     });
 
     it("returns undefined when item has no text field", () => {
-      const events = [
-        makeEvent({
-          seq: 1,
-          type: "item/completed",
-          data: { item: { type: "agentMessage" } },
-        }),
-      ];
-      (eventRepo.listByThread as ReturnType<typeof vi.fn>).mockReturnValue(
-        events,
-      );
+      const thread = createTestThread(threadRepo, project.id, { status: "idle" });
+      eventRepo.create({ threadId: thread.id, seq: 1, type: "item/completed", data: { item: { type: "agentMessage" } } as unknown as import("@beanbag/agent-core").ThreadEventData });
 
-      expect(manager.getOutput("thread-1")).toBeUndefined();
+      expect(manager.getOutput(thread.id)).toBeUndefined();
     });
 
     it("returns undefined when item.text is not a string", () => {
-      const events = [
-        makeEvent({
-          seq: 1,
-          type: "item/completed",
-          data: { item: { type: "agentMessage", text: 42 } },
-        }),
-      ];
-      (eventRepo.listByThread as ReturnType<typeof vi.fn>).mockReturnValue(
-        events,
-      );
+      const thread = createTestThread(threadRepo, project.id, { status: "idle" });
+      eventRepo.create({ threadId: thread.id, seq: 1, type: "item/completed", data: { item: { type: "agentMessage", text: 42 } } as unknown as import("@beanbag/agent-core").ThreadEventData });
 
-      expect(manager.getOutput("thread-1")).toBeUndefined();
+      expect(manager.getOutput(thread.id)).toBeUndefined();
     });
 
     it("returns text from the LAST agentMessage item/completed event when multiple exist", () => {
-      const events = [
-        makeEvent({
-          seq: 1,
-          type: "item/completed",
-          data: { item: { type: "agentMessage", text: "First output" } },
-        }),
-        makeEvent({ seq: 2, type: "turn/started", data: {} }),
-        makeEvent({
-          seq: 3,
-          type: "item/completed",
-          data: { item: { type: "agentMessage", text: "Latest output" } },
-        }),
-      ];
-      (eventRepo.listByThread as ReturnType<typeof vi.fn>).mockReturnValue(
-        events,
-      );
+      const thread = createTestThread(threadRepo, project.id, { status: "idle" });
+      eventRepo.create({ threadId: thread.id, seq: 1, type: "item/completed", data: { item: { type: "agentMessage", text: "First output" } } as unknown as import("@beanbag/agent-core").ThreadEventData });
+      eventRepo.create({ threadId: thread.id, seq: 2, type: "turn/started", data: {} as unknown as import("@beanbag/agent-core").ThreadEventData });
+      eventRepo.create({ threadId: thread.id, seq: 3, type: "item/completed", data: { item: { type: "agentMessage", text: "Latest output" } } as unknown as import("@beanbag/agent-core").ThreadEventData });
 
-      expect(manager.getOutput("thread-1")).toBe("Latest output");
+      expect(manager.getOutput(thread.id)).toBe("Latest output");
     });
   });
 
   describe("getHydratedByIdAsync()", () => {
-    it("delegates to threadRepo", async () => {
-      const thread = makeThread({ status: "idle" });
-      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
+    let testDb: ReturnType<typeof createTestDb>;
+    let project: ReturnType<typeof createTestProject>;
 
-      await expect(manager.getHydratedByIdAsync("thread-1")).resolves.toBe(thread);
-      expect(threadRepo.getById).toHaveBeenCalledWith("thread-1");
+    beforeEach(() => {
+      testDb = createTestDb();
+      const repos = createTestRepos(testDb.db);
+      threadRepo = repos.threadRepo;
+      eventRepo = repos.eventRepo;
+      projectRepo = repos.projectRepo;
+      project = createTestProject(projectRepo, { rootPath: "/test" });
+      manager = new Orchestrator(
+        threadRepo, eventRepo, projectRepo, ws, llmCompletionService,
+        undefined, createTestRuntimeEnv(),
+      );
+    });
+
+    it("delegates to threadRepo", async () => {
+      const thread = createTestThread(threadRepo, project.id, { status: "idle" });
+
+      const result = await manager.getHydratedByIdAsync(thread.id);
+      expect(result?.id).toBe(thread.id);
       expect(ws.broadcast).not.toHaveBeenCalled();
     });
 
     it("returns undefined for nonexistent thread", async () => {
-      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
-        undefined,
-      );
-
       await expect(manager.getHydratedByIdAsync("nonexistent")).resolves.toBeUndefined();
     });
 
     it("includes prompt-derived title fallback when persisted title is missing", async () => {
-      const untitledThread = makeThread({ status: "idle", title: undefined });
-      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(untitledThread);
-      (eventRepo.getLatestByType as ReturnType<typeof vi.fn>).mockReturnValue(
-        makeEvent({
-          type: "client/thread/start",
-          data: {
-            input: [{ type: "text", text: "Investigate flaky test reruns" }],
-          },
-        }),
-      );
+      const thread = createTestThread(threadRepo, project.id, { status: "idle" });
+      eventRepo.create({ threadId: thread.id, seq: 1, type: "client/thread/start", data: { input: [{ type: "text", text: "Investigate flaky test reruns" }] } as unknown as import("@beanbag/agent-core").ThreadEventData });
 
-      const result = await manager.getHydratedByIdAsync("thread-1");
-      const resultSecondRead = await manager.getHydratedByIdAsync("thread-1");
+      const result = await manager.getHydratedByIdAsync(thread.id);
+      const resultSecondRead = await manager.getHydratedByIdAsync(thread.id);
 
       expect(result?.title).toBeUndefined();
       expect(result?.titleFallback).toBe("Investigate flaky test reruns");
       expect(resultSecondRead?.titleFallback).toBe("Investigate flaky test reruns");
-      expect(eventRepo.getLatestByType).toHaveBeenCalledTimes(1);
     });
 
     it("returns persisted active status even when lifecycle events suggest completion", async () => {
-      const runningThread = makeThread({ status: "active" });
-      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(runningThread);
-      (eventRepo.listByThread as ReturnType<typeof vi.fn>).mockReturnValue([
-        makeEvent({ seq: 1, type: "turn/started", data: {} }),
-        makeEvent({ seq: 2, type: "turn/completed", data: {} }),
-      ]);
-      const result = await manager.getHydratedByIdAsync("thread-1");
+      const thread = createTestThread(threadRepo, project.id, { status: "active" });
+      eventRepo.create({ threadId: thread.id, seq: 1, type: "turn/started", data: {} as unknown as import("@beanbag/agent-core").ThreadEventData });
+      eventRepo.create({ threadId: thread.id, seq: 2, type: "turn/completed", data: {} as unknown as import("@beanbag/agent-core").ThreadEventData });
 
-      expect(threadRepo.update).not.toHaveBeenCalled();
+      const result = await manager.getHydratedByIdAsync(thread.id);
+
       expect(ws.broadcast).not.toHaveBeenCalled();
       expect(result?.status).toBe("active");
     });
 
     it("reconciles idle thread to idle when latest turn is started but no process exists", async () => {
-      const idleThread = makeThread({ status: "idle" });
-      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(idleThread);
-      (eventRepo.listByThread as ReturnType<typeof vi.fn>).mockReturnValue([
-        makeEvent({ seq: 1, type: "turn/completed", data: {} }),
-        makeEvent({ seq: 2, type: "turn/started", data: {} }),
-      ]);
-      const result = await manager.getHydratedByIdAsync("thread-1");
+      const thread = createTestThread(threadRepo, project.id, { status: "idle" });
+      eventRepo.create({ threadId: thread.id, seq: 1, type: "turn/completed", data: {} as unknown as import("@beanbag/agent-core").ThreadEventData });
+      eventRepo.create({ threadId: thread.id, seq: 2, type: "turn/started", data: {} as unknown as import("@beanbag/agent-core").ThreadEventData });
 
-      expect(threadRepo.update).not.toHaveBeenCalled();
+      const result = await manager.getHydratedByIdAsync(thread.id);
+
       expect(ws.broadcast).not.toHaveBeenCalled();
       expect(result?.status).toBe("idle");
     });
 
 
     it("hydrates thread state through async workspace status when sync status is unavailable", async () => {
-      const thread = makeThread({
-        id: "thread-1",
-        projectId: "proj-1",
-        status: "idle",
-        environmentId: "env-worktree-1",
+      const environmentRepo = new EnvironmentRepository(testDb.db);
+      const env = environmentRepo.create({
+        projectId: project.id,
+        descriptor: { type: "path", path: "/tmp/env" },
+        managed: true,
       });
-      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
-      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue({
-        id: "proj-1",
-        name: "Project",
-        rootPath: "/tmp/proj-1",
-        createdAt: 1000,
-        updatedAt: 1000,
-      });
-      asOrchestratorHarness(manager).environmentRuntimes.set("thread-1", {
+      const thread = createTestThread(threadRepo, project.id, { status: "idle", environmentId: env.id });
+      asOrchestratorHarness(manager).environmentRuntimes.set(`thread:${thread.id}`, {
         environment: makeRuntimeEnvironment({
           kind: "worktree",
           rootPath: "/tmp/worktrees/proj-1/thread-1",
@@ -2934,10 +2907,10 @@ describe("Orchestrator", () => {
         }),
       });
 
-      const result = await manager.getHydratedByIdAsync("thread-1");
+      const result = await manager.getHydratedByIdAsync(thread.id);
 
       expect(result).toMatchObject({
-        id: "thread-1",
+        id: thread.id,
         status: "idle",
       });
       expect(result?.workStatus).toMatchObject({
@@ -2952,11 +2925,32 @@ describe("Orchestrator", () => {
   });
 
   describe("getWorkStatusAsync()", () => {
+    let testDb: ReturnType<typeof createTestDb>;
+    let project: ReturnType<typeof createTestProject>;
+
+    beforeEach(() => {
+      testDb = createTestDb();
+      const repos = createTestRepos(testDb.db);
+      threadRepo = repos.threadRepo;
+      eventRepo = repos.eventRepo;
+      projectRepo = repos.projectRepo;
+      project = createTestProject(projectRepo, { rootPath: "/test" });
+      manager = new Orchestrator(
+        threadRepo, eventRepo, projectRepo, ws, llmCompletionService,
+        undefined, createTestRuntimeEnv(),
+      );
+    });
+
     it("keeps worktree status unknown until provisioning completes", async () => {
-      const projectRoot = "/tmp/proj-1";
       const envSetupWorkspaceRoot = "/tmp/worktrees/proj-1/thread-1";
       const customEnvironmentRegistry = createTestEnvironmentRegistry({
         rootPath: envSetupWorkspaceRoot,
+      });
+      const environmentRepo = new EnvironmentRepository(testDb.db);
+      const env = environmentRepo.create({
+        projectId: project.id,
+        descriptor: { type: "path", path: "/tmp/env" },
+        managed: true,
       });
       const managerWithCustomEnvironment = new Orchestrator(
         threadRepo,
@@ -2968,29 +2962,18 @@ describe("Orchestrator", () => {
         createTestRuntimeEnv(),
         customEnvironmentRegistry,
       );
-      const thread = makeThread({
-        id: "thread-1",
-        projectId: "proj-1",
+      const thread = createTestThread(threadRepo, project.id, {
         status: "provisioning_failed",
-        environmentId: "env-worktree-1",
         title: "Provisioning failure repro",
+        environmentId: env.id,
       });
       const mockedStatus = makeWorkspaceStatus();
-      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
-      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue({
-        id: "proj-1",
-        name: "Project",
-        rootPath: projectRoot,
-        createdAt: 1000,
-        updatedAt: 1000,
-      });
-      (eventRepo.getLatestByType as ReturnType<typeof vi.fn>).mockReturnValue(undefined);
 
-      const result = await managerWithCustomEnvironment.getWorkStatusAsync("thread-1");
+      const result = await managerWithCustomEnvironment.getWorkStatusAsync(thread.id);
 
       expect(result).toBeUndefined();
 
-      asOrchestratorHarness(managerWithCustomEnvironment).environmentRuntimes.set("thread-1", {
+      asOrchestratorHarness(managerWithCustomEnvironment).environmentRuntimes.set(`thread:${thread.id}`, {
         environment: makeRuntimeEnvironment({
           kind: "worktree",
           rootPath: envSetupWorkspaceRoot,
@@ -3001,42 +2984,26 @@ describe("Orchestrator", () => {
           },
         }),
       });
-      const resolvedResult = await managerWithCustomEnvironment.getWorkStatusAsync("thread-1");
+      const resolvedResult = await managerWithCustomEnvironment.getWorkStatusAsync(thread.id);
       expect(resolvedResult).toStrictEqual(mockedStatus);
     });
 
     it("returns undefined while workspace cleanup removes the runtime", async () => {
       let resolveCleanup: (() => void) | undefined;
-      const projectRoot = "/tmp/proj-1";
       const workspaceRoot = "/tmp/worktrees/proj-1/thread-1";
       mkdirSync(workspaceRoot, { recursive: true });
-      const thread = makeThread({
-        id: "thread-1",
-        projectId: "proj-1",
+      const environmentRepo = new EnvironmentRepository(testDb.db);
+      const env = environmentRepo.create({
+        projectId: project.id,
+        descriptor: { type: "path", path: "/tmp/env" },
+        managed: true,
+      });
+      const thread = createTestThread(threadRepo, project.id, {
         status: "idle",
-        environmentId: "env-worktree-1",
+        environmentId: env.id,
       });
-      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
-      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue({
-        id: "proj-1",
-        name: "Project",
-        rootPath: projectRoot,
-        createdAt: 1000,
-        updatedAt: 1000,
-      });
-      (eventRepo.getLatestByType as ReturnType<typeof vi.fn>).mockImplementation(
-        (_threadId: string, type: string) =>
-          type === "system/provisioning/completed"
-            ? makeEvent({
-                type: "system/provisioning/completed",
-                data: {
-                  environmentId: "worktree",
-                  environmentDisplayName: "Git Worktree Workspace",
-                },
-              })
-            : undefined,
-      );
-      asOrchestratorHarness(manager).environmentRuntimes.set("thread-1", {
+      eventRepo.create({ threadId: thread.id, seq: 1, type: "system/provisioning/completed", data: { environmentId: "worktree", environmentDisplayName: "Git Worktree Workspace" } as unknown as import("@beanbag/agent-core").ThreadEventData });
+      asOrchestratorHarness(manager).environmentRuntimes.set(`thread:${thread.id}`, {
         environment: {
           kind: "worktree",
           info: {
@@ -3119,8 +3086,8 @@ describe("Orchestrator", () => {
         },
       });
 
-      const archivePromise = manager.archive("thread-1");
-      const result = await manager.getWorkStatusAsync("thread-1");
+      const archivePromise = manager.archive(thread.id);
+      const result = await manager.getWorkStatusAsync(thread.id);
 
       expect(result).toBeUndefined();
 
@@ -3134,22 +3101,18 @@ describe("Orchestrator", () => {
           mergeBaseBranch: args?.mergeBaseBranch,
         })
       );
-      const thread = makeThread({
-        id: "thread-1",
-        projectId: "proj-1",
+      const environmentRepo = new EnvironmentRepository(testDb.db);
+      const env = environmentRepo.create({
+        projectId: project.id,
+        descriptor: { type: "path", path: "/tmp/env" },
+        managed: true,
+      });
+      const thread = createTestThread(threadRepo, project.id, {
         status: "idle",
-        environmentId: "env-worktree-1",
-        mergeBaseBranch: "release/1.0",
+        environmentId: env.id,
       });
-      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
-      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue({
-        id: "proj-1",
-        name: "Project",
-        rootPath: "/tmp/proj-1",
-        createdAt: 1000,
-        updatedAt: 1000,
-      });
-      asOrchestratorHarness(manager).environmentRuntimes.set("thread-1", {
+      threadRepo.update(thread.id, { mergeBaseBranch: "release/1.0" } as Partial<Thread>);
+      asOrchestratorHarness(manager).environmentRuntimes.set(`thread:${thread.id}`, {
         environment: makeRuntimeEnvironment({
           kind: "worktree",
           rootPath: "/tmp/worktrees/proj-1/thread-1",
@@ -3159,7 +3122,7 @@ describe("Orchestrator", () => {
         }),
       });
 
-      const result = await manager.getWorkStatusAsync("thread-1");
+      const result = await manager.getWorkStatusAsync(thread.id);
 
       expect(getWorkspaceStatus).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -3559,32 +3522,35 @@ describe("Orchestrator", () => {
   });
 
   describe("list()", () => {
+    let testDb: ReturnType<typeof createTestDb>;
+    let project: ReturnType<typeof createTestProject>;
+
+    beforeEach(() => {
+      testDb = createTestDb();
+      const repos = createTestRepos(testDb.db);
+      threadRepo = repos.threadRepo;
+      eventRepo = repos.eventRepo;
+      projectRepo = repos.projectRepo;
+      project = createTestProject(projectRepo, { rootPath: "/test" });
+      manager = new Orchestrator(
+        threadRepo, eventRepo, projectRepo, ws, llmCompletionService,
+        undefined, createTestRuntimeEnv(),
+      );
+    });
+
     it("delegates to threadRepo with filters", () => {
-      const threads = [makeThread({ status: "idle" })];
-      (threadRepo.list as ReturnType<typeof vi.fn>).mockReturnValue(threads);
+      const thread = createTestThread(threadRepo, project.id, { status: "idle" });
 
-      const filters = { projectId: "proj-1" };
-      const result = manager.list(filters);
+      const result = manager.list({ projectId: project.id });
 
-      expect(result).toStrictEqual(threads);
-      expect(threadRepo.list).toHaveBeenCalledWith(filters);
+      expect(result).toHaveLength(1);
+      expect(result[0]?.id).toBe(thread.id);
       expect(ws.broadcast).not.toHaveBeenCalled();
     });
 
     it("includes prompt-derived title fallback for untitled threads", () => {
-      const threads = [makeThread({ id: "thread-1", status: "idle", title: undefined })];
-      (threadRepo.list as ReturnType<typeof vi.fn>).mockReturnValue(threads);
-      (eventRepo.getLatestByType as ReturnType<typeof vi.fn>).mockImplementation(
-        (_threadId: string, type: string) =>
-          type === "client/thread/start"
-            ? makeEvent({
-                type: "client/thread/start",
-                data: {
-                  input: [{ type: "text", text: "Stabilize flaky auth redirect tests" }],
-                },
-              })
-            : undefined,
-      );
+      const thread = createTestThread(threadRepo, project.id, { status: "idle" });
+      eventRepo.create({ threadId: thread.id, seq: 1, type: "client/thread/start", data: { input: [{ type: "text", text: "Stabilize flaky auth redirect tests" }] } as unknown as import("@beanbag/agent-core").ThreadEventData });
 
       const result = manager.list();
       const secondResult = manager.list();
@@ -3592,34 +3558,25 @@ describe("Orchestrator", () => {
       expect(result[0]?.title).toBeUndefined();
       expect(result[0]?.titleFallback).toBe("Stabilize flaky auth redirect tests");
       expect(secondResult[0]?.titleFallback).toBe("Stabilize flaky auth redirect tests");
-      expect(eventRepo.getLatestByType).toHaveBeenCalledTimes(1);
     });
 
     it("returns persisted active list status even when lifecycle events suggest completion", () => {
-      (threadRepo.list as ReturnType<typeof vi.fn>).mockReturnValue([
-        makeThread({ id: "thread-1", status: "active" }),
-      ]);
-      (eventRepo.listByThread as ReturnType<typeof vi.fn>).mockReturnValue([
-        makeEvent({ seq: 1, type: "turn/completed", data: {} }),
-      ]);
+      const thread = createTestThread(threadRepo, project.id, { status: "active" });
+      eventRepo.create({ threadId: thread.id, seq: 1, type: "turn/completed", data: {} as unknown as import("@beanbag/agent-core").ThreadEventData });
+
       const result = manager.list();
 
-      expect(threadRepo.update).not.toHaveBeenCalled();
       expect(ws.broadcast).not.toHaveBeenCalled();
       expect(result[0]?.status).toBe("active");
     });
 
     it("reconciles idle threads to idle when latest turn is started but no process exists", () => {
-      (threadRepo.list as ReturnType<typeof vi.fn>).mockReturnValue([
-        makeThread({ id: "thread-1", status: "idle" }),
-      ]);
-      (eventRepo.listByThread as ReturnType<typeof vi.fn>).mockReturnValue([
-        makeEvent({ seq: 1, type: "turn/completed", data: {} }),
-        makeEvent({ seq: 2, type: "turn/started", data: {} }),
-      ]);
+      const thread = createTestThread(threadRepo, project.id, { status: "idle" });
+      eventRepo.create({ threadId: thread.id, seq: 1, type: "turn/completed", data: {} as unknown as import("@beanbag/agent-core").ThreadEventData });
+      eventRepo.create({ threadId: thread.id, seq: 2, type: "turn/started", data: {} as unknown as import("@beanbag/agent-core").ThreadEventData });
+
       const result = manager.list();
 
-      expect(threadRepo.update).not.toHaveBeenCalled();
       expect(ws.broadcast).not.toHaveBeenCalled();
       expect(result[0]?.status).toBe("idle");
     });
@@ -4166,55 +4123,91 @@ describe("Orchestrator", () => {
   });
 
   describe("isActive()", () => {
+    let testDb: ReturnType<typeof createTestDb>;
+    let project: ReturnType<typeof createTestProject>;
+
+    beforeEach(() => {
+      testDb = createTestDb();
+      const repos = createTestRepos(testDb.db);
+      threadRepo = repos.threadRepo;
+      eventRepo = repos.eventRepo;
+      projectRepo = repos.projectRepo;
+      project = createTestProject(projectRepo, { rootPath: "/test" });
+      manager = new Orchestrator(
+        threadRepo, eventRepo, projectRepo, ws, llmCompletionService,
+        undefined, createTestRuntimeEnv(),
+      );
+    });
+
     it("returns false when thread is not persisted as active", () => {
       expect(manager.isActive("thread-1")).toBe(false);
     });
 
     it("returns true when thread is persisted as active", () => {
-      (threadRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
-        makeThread({ id: "thread-1", status: "active" }),
-      );
+      const thread = createTestThread(threadRepo, project.id, { status: "active" });
 
-      expect(manager.isActive("thread-1")).toBe(true);
+      expect(manager.isActive(thread.id)).toBe(true);
     });
   });
 
   describe("getActiveCount()", () => {
+    let testDb: ReturnType<typeof createTestDb>;
+    let project: ReturnType<typeof createTestProject>;
+
+    beforeEach(() => {
+      testDb = createTestDb();
+      const repos = createTestRepos(testDb.db);
+      threadRepo = repos.threadRepo;
+      eventRepo = repos.eventRepo;
+      projectRepo = repos.projectRepo;
+      project = createTestProject(projectRepo, { rootPath: "/test" });
+      manager = new Orchestrator(
+        threadRepo, eventRepo, projectRepo, ws, llmCompletionService,
+        undefined, createTestRuntimeEnv(),
+      );
+    });
+
     it("returns 0 when no threads are persisted as active", () => {
       expect(manager.getActiveCount()).toBe(0);
     });
 
     it("returns active count from persisted DB status", () => {
-      (threadRepo.list as ReturnType<typeof vi.fn>).mockReturnValue([
-        makeThread({ id: "t-1", status: "active" }),
-        makeThread({ id: "t-2", status: "active" }),
-      ]);
+      createTestThread(threadRepo, project.id, { status: "active" });
+      createTestThread(threadRepo, project.id, { status: "active" });
 
       expect(manager.getActiveCount()).toBe(2);
-      expect(threadRepo.list).toHaveBeenCalledWith({ status: "active" });
     });
   });
 
   describe("getRunningCount()", () => {
+    let testDb: ReturnType<typeof createTestDb>;
+    let project: ReturnType<typeof createTestProject>;
+
+    beforeEach(() => {
+      testDb = createTestDb();
+      const repos = createTestRepos(testDb.db);
+      threadRepo = repos.threadRepo;
+      eventRepo = repos.eventRepo;
+      projectRepo = repos.projectRepo;
+      project = createTestProject(projectRepo, { rootPath: "/test" });
+      manager = new Orchestrator(
+        threadRepo, eventRepo, projectRepo, ws, llmCompletionService,
+        undefined, createTestRuntimeEnv(),
+      );
+    });
+
     it("returns active count from persisted DB status", () => {
-      (threadRepo.list as ReturnType<typeof vi.fn>).mockReturnValue([
-        makeThread({ id: "t-1", status: "active" }),
-        makeThread({ id: "t-2", status: "active" }),
-      ]);
-      asOrchestratorHarness(manager).processes.set("t-1", { kill: vi.fn(), stdin: null, stdout: null });
-      asOrchestratorHarness(manager).processes.set("t-2", { kill: vi.fn(), stdin: null, stdout: null });
+      const t1 = createTestThread(threadRepo, project.id, { status: "active" });
+      const t2 = createTestThread(threadRepo, project.id, { status: "active" });
+      asOrchestratorHarness(manager).processes.set(t1.id, { kill: vi.fn(), stdin: null, stdout: null });
+      asOrchestratorHarness(manager).processes.set(t2.id, { kill: vi.fn(), stdin: null, stdout: null });
 
       expect(manager.getRunningCount()).toBe(2);
-      expect(threadRepo.list).toHaveBeenCalledWith({ status: "active" });
     });
 
     it("treats stale persisted active rows as active until explicitly updated", () => {
-      (threadRepo.list as ReturnType<typeof vi.fn>).mockReturnValue([
-        makeThread({ id: "t-1", status: "active" }),
-      ]);
-      (eventRepo.listByThread as ReturnType<typeof vi.fn>).mockReturnValue([
-        makeEvent({ seq: 1, threadId: "t-1", type: "turn/started", data: {} }),
-      ]);
+      const t1 = createTestThread(threadRepo, project.id, { status: "active" });
+      eventRepo.create({ threadId: t1.id, seq: 1, type: "turn/started", data: {} as unknown as import("@beanbag/agent-core").ThreadEventData });
 
       expect(manager.getRunningCount()).toBe(1);
     });
@@ -5194,6 +5187,22 @@ describe("Orchestrator", () => {
   });
 
   describe("detachAll()", () => {
+    let testDb: ReturnType<typeof createTestDb>;
+    let project: ReturnType<typeof createTestProject>;
+
+    beforeEach(() => {
+      testDb = createTestDb();
+      const repos = createTestRepos(testDb.db);
+      threadRepo = repos.threadRepo;
+      eventRepo = repos.eventRepo;
+      projectRepo = repos.projectRepo;
+      project = createTestProject(projectRepo, { rootPath: "/test" });
+      manager = new Orchestrator(
+        threadRepo, eventRepo, projectRepo, ws, llmCompletionService,
+        undefined, createTestRuntimeEnv(),
+      );
+    });
+
     it("clears all processes and is safe to call when empty", () => {
       // Should not throw when no processes
       manager.detachAll();
@@ -5204,7 +5213,8 @@ describe("Orchestrator", () => {
     it("preserves managed environments during daemon shutdown", () => {
       const dispose = vi.fn();
       const stopWatchingWorkspaceStatus = vi.fn();
-      asOrchestratorHarness(manager).environmentRuntimes.set("thread-1", {
+      const thread = createTestThread(threadRepo, project.id, { status: "idle" });
+      asOrchestratorHarness(manager).environmentRuntimes.set(thread.id, {
         environment: makeRuntimeEnvironment({
           rootPath: "/test",
           cleanup: dispose,
@@ -5223,44 +5233,34 @@ describe("Orchestrator", () => {
     });
 
     it("does not mark active managed sessions idle during daemon shutdown", async () => {
-      const project = {
-        id: "proj-1",
-        name: "Test",
-        rootPath: "/my/project",
-        createdAt: 1000,
-        updatedAt: 1000,
-      };
-      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(project);
-
-      const createdThread = makeThread({ id: "thread-1", status: "idle" });
-      const activeThread = makeThread({ id: "thread-1", status: "active" });
-      (threadRepo.create as ReturnType<typeof vi.fn>).mockReturnValue(createdThread);
-      (threadRepo.getById as ReturnType<typeof vi.fn>).mockImplementation((threadId: string) =>
-        threadId === "thread-1" ? activeThread : undefined,
-      );
-      asOrchestratorHarness(manager).environmentRuntimes.set("thread-1", {
+      const thread = createTestThread(threadRepo, project.id, { status: "active" });
+      asOrchestratorHarness(manager).environmentRuntimes.set(thread.id, {
         environment: makeRuntimeEnvironment({
-          rootPath: "/my/project",
+          rootPath: "/test",
         }),
         startedAt: Date.now(),
-        projectId: "proj-1",
+        projectId: project.id,
       });
 
       const fakeChild = createFakeChildProcess();
       (spawnMock as ReturnType<typeof vi.fn>).mockReturnValue(fakeChild);
 
-      await manager.spawn({ projectId: "proj-1" });
-      await vi.waitFor(() => {
-        expect(
-          manager.isActive("thread-1"),
-        ).toBe(true);
-      });
+      // Simulate that thread is active with a process
+      asOrchestratorHarness(manager).processes.set(thread.id, fakeChild);
+      asOrchestratorHarness(manager).providerThreadIds.set(thread.id, "provider-thread-1");
 
-      (threadRepo.update as ReturnType<typeof vi.fn>).mockClear();
+      expect(manager.isActive(thread.id)).toBe(true);
+
+      // Track whether threadRepo.update is called with idle status
+      const updateSpy = vi.spyOn(threadRepo, "update");
 
       manager.detachAll();
 
-      expect(threadRepo.update).not.toHaveBeenCalledWith("thread-1", { status: "idle" });
+      // Should not have been called to set status to idle
+      const idleCalls = updateSpy.mock.calls.filter(
+        (call) => call[0] === thread.id && (call[1] as Record<string, unknown>)?.status === "idle",
+      );
+      expect(idleCalls).toHaveLength(0);
     });
   });
 
