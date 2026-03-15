@@ -651,6 +651,7 @@ export function ThreadDetailView() {
     if (!projectId || files.length === 0) return;
 
     setAttachmentError(null);
+    const failedFiles: string[] = [];
     for (const file of files) {
       try {
         const uploaded = await uploadPromptAttachment.mutateAsync({
@@ -658,10 +659,12 @@ export function ThreadDetailView() {
           file,
         });
         promptDraft.addAttachment(uploaded);
-      } catch (err) {
-        setAttachmentError(err instanceof Error ? err.message : "Attachment upload failed");
-        break;
+      } catch {
+        failedFiles.push(file.name);
       }
+    }
+    if (failedFiles.length > 0) {
+      setAttachmentError(`Failed to attach: ${failedFiles.join(", ")}`);
     }
   }, [projectId, promptDraft, uploadPromptAttachment]);
 
