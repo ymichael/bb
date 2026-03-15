@@ -199,14 +199,11 @@ async function getProjectById(
   client: ReturnType<typeof createClient>,
   projectId: string,
 ): Promise<Project> {
-  const projects = await unwrap<Project[]>(
-    client.api.v1.projects.$get(),
+  return unwrap<Project>(
+    client.api.v1.projects[":id"].$get({
+      param: { id: projectId },
+    }),
   );
-  const project = projects.find((candidate) => candidate.id === projectId);
-  if (!project) {
-    throw new Error(`Project ${projectId} not found`);
-  }
-  return project;
 }
 
 async function getThreadById(

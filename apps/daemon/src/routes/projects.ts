@@ -217,6 +217,18 @@ export function createProjectRoutes(
         return sendRouteError(c, err);
       }
     })
+    .get("/:id", async (c) => {
+      try {
+        const projectId = c.req.param("id");
+        const project = projectRepo.getById(projectId);
+        if (!project) {
+          return sendRouteError(c, projectNotFoundError(projectId));
+        }
+        return c.json(withProjectPathStatus(project));
+      } catch (err) {
+        return sendRouteError(c, err);
+      }
+    })
     .patch("/:id", zValidator("json", updateProjectSchema), async (c) => {
       try {
         const projectId = c.req.param("id");
