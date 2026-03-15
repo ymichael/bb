@@ -224,10 +224,6 @@ async function checkoutSnapshotAsync(
   }
 }
 
-function resolveDefaultBranch(repoRoot: string): string | undefined {
-  return undefined;
-}
-
 async function resolveDefaultBranchAsync(
   repoRoot: string,
   env: Record<string, string | undefined>,
