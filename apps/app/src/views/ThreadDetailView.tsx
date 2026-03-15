@@ -156,8 +156,6 @@ export function ThreadDetailView() {
   const stopThread = useStopThread();
   const unarchiveThread = useUnarchiveThread();
   const markThreadRead = useMarkThreadRead();
-  const markThreadReadRef = useRef(markThreadRead);
-  markThreadReadRef.current = markThreadRead;
   const markThreadUnread = useMarkThreadUnread();
   const deleteThread = useDeleteThread();
   const updateThread = useUpdateThread();
@@ -426,12 +424,12 @@ export function ThreadDetailView() {
     if (markedReadKeysRef.current.has(marker)) return;
 
     markedReadKeysRef.current.add(marker);
-    markThreadReadRef.current.mutate(thread.id, {
+    markThreadRead.mutate(thread.id, {
       onError: () => {
         markedReadKeysRef.current.delete(marker);
       },
     });
-  }, [thread]);
+  }, [markThreadRead, thread]);
 
   const renameThread = useCallback(() => {
     if (!thread || updateThread.isPending) return;
