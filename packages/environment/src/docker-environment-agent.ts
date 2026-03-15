@@ -75,7 +75,6 @@ async function withManagedDockerEnvironmentAgentLock(
   const existing = dockerEnvironmentAgentLocks.get(key);
   if (existing) {
     await existing;
-    return;
   }
 
   let inFlight: Promise<void>;

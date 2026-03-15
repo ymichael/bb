@@ -72,7 +72,6 @@ async function withManagedHostEnvironmentAgentLock(
   const existing = hostEnvironmentAgentLocks.get(key);
   if (existing) {
     await existing;
-    return;
   }
 
   let inFlight: Promise<void>;

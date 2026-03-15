@@ -276,7 +276,7 @@ describe("docker environment-agent helper", () => {
     ]);
   });
 
-  it("coalesces concurrent docker managed agent startup for the same thread", async () => {
+  it("serializes concurrent docker managed agent startup for the same thread", async () => {
     const commands: Array<{ command: string; args: string[] }> = [];
     const beanbagRoot = makeTempDir("bb-docker-agent-lock-root-");
     process.env.BEANBAG_ROOT = beanbagRoot;
@@ -325,7 +325,10 @@ describe("docker environment-agent helper", () => {
     waitGate.resolve();
     await Promise.all([first, second]);
 
-    expect(commands).toHaveLength(3);
+    // Both callers execute their action sequentially (the second waits
+    // for the first). The docker ensure action always replaces, so both
+    // callers spawn — 3 commands each = 6 total.
+    expect(commands).toHaveLength(6);
     expect(__testOnly__getManagedDockerEnvironmentAgentRecord({
       projectId: "project-lock",
       threadId: "thread-lock",
