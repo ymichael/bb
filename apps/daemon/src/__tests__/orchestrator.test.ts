@@ -68,6 +68,8 @@ import {
   createTestRepos,
   createTestProject,
   createTestThread,
+  createMockLlmCompletionService,
+  createTestRuntimeEnv,
 } from "./test-factories.js";
 
 function makeWorkspaceStatus(
@@ -477,115 +479,13 @@ function asOrchestratorHarness(manager: Orchestrator): OrchestratorTestHarness {
   return rawManager as OrchestratorTestHarness;
 }
 
-function makeThread(overrides: Partial<Thread> = {}): Thread {
-  return {
-    id: "thread-1",
-    projectId: "proj-1",
-    providerId: "codex",
-    type: "standard",
-    status: "active",
-    createdAt: 1000,
-    updatedAt: 1000,
-    ...overrides,
-  };
-}
 
-type ThreadEventOverrides = Partial<Omit<ThreadEvent, "type" | "data">> & {
-  type?: string;
-  data?: unknown;
-};
-
-function makeEvent(overrides: ThreadEventOverrides = {}): ThreadEvent {
-  return {
-    id: "evt-1",
-    threadId: "thread-1",
-    seq: 1,
-    type: "item/completed",
-    data: {},
-    createdAt: 1000,
-    ...overrides,
-  } as ThreadEvent;
-}
-
-function createMocks() {
-  const threadRepo = {
-    create: vi.fn(),
-    getById: vi.fn(),
-    list: vi.fn(),
-    listManagedArtifactRetentionRecords: vi.fn(() => []),
-    listArchivedIdsWithEnvironmentRecord: vi.fn(() => []),
-    listNonArchivedIdsByStatuses: vi.fn(() => []),
-    listProjectNonArchivedIdsWithEnvironmentRecord: vi.fn(() => []),
-    withTransaction: vi.fn((fn: (tx: unknown) => unknown) => fn({})),
-    update: vi.fn(),
-    markRead: vi.fn(),
-    delete: vi.fn(),
-    enqueueQueuedMessage: vi.fn(),
-    getQueuedMessage: vi.fn(),
-    deleteQueuedMessage: vi.fn(),
-  } as unknown as ThreadRepository;
-
-  const eventRepo = {
-    create: vi.fn(),
-    updateData: vi.fn(),
-    listByThread: vi.fn(),
-    getLatestSeq: vi.fn(),
-    getLatestByType: vi.fn(),
-    getLatestExecutionOptions: vi.fn(),
-    getLatestProviderThreadId: vi.fn(),
-    getLatestTurnLifecycle: vi.fn(),
-    deleteByThreadId: vi.fn(),
-  } as unknown as EventRepository;
-
-  const projectRepo = {
-    create: vi.fn(),
-    getById: vi.fn(),
-    list: vi.fn(() => []),
-    update: vi.fn(
-      (projectId: string, data: Parameters<ProjectRepository["update"]>[1]) => {
-        const existing = projectRepo.getById(projectId);
-        return existing ? { ...existing, ...data } : undefined;
-      },
-    ),
-    delete: vi.fn(),
-  } as unknown as ProjectRepository;
-
-  const ws = {
-    broadcast: vi.fn(),
-    handleConnection: vi.fn(),
-    close: vi.fn(),
-  } as unknown as WSManager;
-
-  return { threadRepo, eventRepo, projectRepo, ws };
-}
-
-function createMockLlmCompletionService(
-  overrides?: Partial<LlmCompletionService>,
-): LlmCompletionService {
-  return {
-    displayName: "Mock LLM",
-    generateThreadTitle: vi.fn().mockResolvedValue(undefined),
-    generateCommitMessage: vi.fn().mockResolvedValue(undefined),
-    ...overrides,
-  };
-}
-
-function createTestRuntimeEnv(
-  overrides: NodeJS.ProcessEnv = {},
-): NodeJS.ProcessEnv {
-  return {
-    ...process.env,
-    BEANBAG_ENVIRONMENT_AGENT_BASE_URL: "http://127.0.0.1:4312",
-    BEANBAG_ENVIRONMENT_AGENT_AUTH_TOKEN: "test-token",
-    ...overrides,
-  };
-}
 
 describe("Orchestrator", () => {
-  let threadRepo: ReturnType<typeof createMocks>["threadRepo"];
-  let eventRepo: ReturnType<typeof createMocks>["eventRepo"];
-  let projectRepo: ReturnType<typeof createMocks>["projectRepo"];
-  let ws: ReturnType<typeof createMocks>["ws"];
+  let threadRepo: ThreadRepository;
+  let eventRepo: EventRepository;
+  let projectRepo: ProjectRepository;
+  let ws: WSManager;
   let llmCompletionService: LlmCompletionService;
   let manager: Orchestrator;
 
@@ -596,21 +496,12 @@ describe("Orchestrator", () => {
         gitProject.detectProjectDefaultBranch(repoRoot) ?? "main"
       ));
     vi.clearAllMocks();
-    const mocks = createMocks();
-    threadRepo = mocks.threadRepo;
-    eventRepo = mocks.eventRepo;
-    projectRepo = mocks.projectRepo;
-    ws = mocks.ws;
+    ws = {
+      broadcast: vi.fn(),
+      handleConnection: vi.fn(),
+      close: vi.fn(),
+    } as unknown as WSManager;
     llmCompletionService = createMockLlmCompletionService();
-    manager = new Orchestrator(
-      threadRepo,
-      eventRepo,
-      projectRepo,
-      ws,
-      llmCompletionService,
-      undefined,
-      createTestRuntimeEnv(),
-    );
   });
 
   afterEach(async () => {
