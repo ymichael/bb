@@ -242,6 +242,7 @@ function createService(args: {
       Object.assign(threadState, data);
       return threadState;
     }),
+    listProjectNonArchivedIdsWithEnvironmentRecord: vi.fn(() => []),
   } as unknown as ThreadRepository;
 
   const projectRepo = {

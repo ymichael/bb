@@ -728,9 +728,7 @@ export class Orchestrator implements ThreadOrchestrator {
    */
   async cleanupArchivedEnvironmentsOnBoot(): Promise<void> {
     const archivedThreadIds =
-      typeof this.threadRepo.listArchivedIdsWithEnvironmentRecord === "function"
-        ? this.threadRepo.listArchivedIdsWithEnvironmentRecord()
-        : [];
+      this.threadRepo.listArchivedIdsWithEnvironmentRecord();
     for (const threadId of archivedThreadIds) {
       this._cleanupEnvironmentRuntime(threadId, { destroyWorkspace: true });
     }
@@ -738,9 +736,7 @@ export class Orchestrator implements ThreadOrchestrator {
 
   async failInterruptedProvisioningOnBoot(): Promise<void> {
     const interruptedProvisioningThreadIds =
-      typeof this.threadRepo.listNonArchivedIdsByStatuses === "function"
-        ? this.threadRepo.listNonArchivedIdsByStatuses(["provisioning", "provisioned"])
-        : [];
+      this.threadRepo.listNonArchivedIdsByStatuses(["provisioning", "provisioned"]);
     for (const threadId of interruptedProvisioningThreadIds) {
       const thread = this.threadRepo.getById(threadId);
       if (!thread || thread.archivedAt !== undefined) {
@@ -4289,10 +4285,7 @@ export class Orchestrator implements ThreadOrchestrator {
   }
 
   private _resolvePersistedProviderThreadId(threadId: string): string | undefined {
-    const indexedLookup =
-      typeof this.eventRepo.getLatestProviderThreadId === "function"
-        ? this.eventRepo.getLatestProviderThreadId(threadId)
-        : undefined;
+    const indexedLookup = this.eventRepo.getLatestProviderThreadId(threadId);
     if (indexedLookup) return indexedLookup;
 
     const events = this.eventRepo.listByThread(threadId) ?? [];
@@ -4335,10 +4328,7 @@ export class Orchestrator implements ThreadOrchestrator {
       return undefined;
     }
 
-    const latestLifecycle =
-      typeof this.eventRepo.getLatestTurnLifecycle === "function"
-        ? this.eventRepo.getLatestTurnLifecycle(threadId)
-        : undefined;
+    const latestLifecycle = this.eventRepo.getLatestTurnLifecycle(threadId);
     if (latestLifecycle) {
       const state = toTurnLifecycleState(latestLifecycle.normType);
       if (state === "active") {
@@ -6278,10 +6268,7 @@ export class Orchestrator implements ThreadOrchestrator {
     if (!thread) {
       return undefined;
     }
-    const latestLifecycle =
-      typeof this.eventRepo.getLatestTurnLifecycle === "function"
-        ? this.eventRepo.getLatestTurnLifecycle(threadId)
-        : undefined;
+    const latestLifecycle = this.eventRepo.getLatestTurnLifecycle(threadId);
     if (latestLifecycle) {
       const state = toTurnLifecycleState(latestLifecycle.normType);
       if (state) return state;

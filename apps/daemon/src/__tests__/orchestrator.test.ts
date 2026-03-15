@@ -504,6 +504,9 @@ function createMocks() {
     getById: vi.fn(),
     list: vi.fn(),
     listManagedArtifactRetentionRecords: vi.fn(() => []),
+    listArchivedIdsWithEnvironmentRecord: vi.fn(() => []),
+    listNonArchivedIdsByStatuses: vi.fn(() => []),
+    listProjectNonArchivedIdsWithEnvironmentRecord: vi.fn(() => []),
     withTransaction: vi.fn((fn: (tx: unknown) => unknown) => fn({})),
     update: vi.fn(),
     markRead: vi.fn(),
@@ -520,6 +523,8 @@ function createMocks() {
     getLatestSeq: vi.fn(),
     getLatestByType: vi.fn(),
     getLatestExecutionOptions: vi.fn(),
+    getLatestProviderThreadId: vi.fn(),
+    getLatestTurnLifecycle: vi.fn(),
     deleteByThreadId: vi.fn(),
   } as unknown as EventRepository;
 

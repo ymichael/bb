@@ -1059,9 +1059,7 @@ export class EnvironmentService {
     }
     for (const project of projects) {
       const threadIds =
-        typeof this.threadRepo.listProjectNonArchivedIdsWithEnvironmentRecord === "function"
-          ? this.threadRepo.listProjectNonArchivedIdsWithEnvironmentRecord(project.id)
-          : [];
+        this.threadRepo.listProjectNonArchivedIdsWithEnvironmentRecord(project.id);
       for (const threadId of threadIds) {
         if (runtimeThreadIds.has(threadId)) continue;
         teardownTasks.push(
