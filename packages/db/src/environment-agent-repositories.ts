@@ -563,39 +563,49 @@ export class EnvironmentAgentSessionRepository {
     leaseExpiresAt: number;
     heartbeatAt: number;
   }): EnvironmentAgentSessionRecord | undefined {
-    const existing = this.getById(args.sessionId);
-    if (!existing) return undefined;
-    if (!isEnvironmentAgentSessionLeaseActive(existing, args.heartbeatAt)) {
-      return existing;
-    }
-    this.db
-      .update(environmentAgentSessions)
-      .set({
-        leaseExpiresAt: args.leaseExpiresAt,
-        lastHeartbeatAt: args.heartbeatAt,
-        updatedAt: args.heartbeatAt,
-      })
-      .where(eq(environmentAgentSessions.id, args.sessionId))
-      .run();
-    return this.getById(args.sessionId);
+    return this.db.transaction((tx) => {
+      const row = tx.select().from(environmentAgentSessions)
+        .where(eq(environmentAgentSessions.id, args.sessionId)).get();
+      if (!row) return undefined;
+      const existing = rowToEnvironmentAgentSessionRecord(row);
+      if (!isEnvironmentAgentSessionLeaseActive(existing, args.heartbeatAt)) {
+        return existing;
+      }
+      tx.update(environmentAgentSessions)
+        .set({
+          leaseExpiresAt: args.leaseExpiresAt,
+          lastHeartbeatAt: args.heartbeatAt,
+          updatedAt: args.heartbeatAt,
+        })
+        .where(eq(environmentAgentSessions.id, args.sessionId))
+        .run();
+      const updated = tx.select().from(environmentAgentSessions)
+        .where(eq(environmentAgentSessions.id, args.sessionId)).get();
+      return updated ? rowToEnvironmentAgentSessionRecord(updated) : undefined;
+    });
   }
 
   markExpired(sessionId: string, now: number = Date.now()): EnvironmentAgentSessionRecord | undefined {
-    const existing = this.getById(sessionId);
-    if (!existing) return undefined;
-    if (existing.status === "expired") return existing;
-    if (existing.status !== "active") return existing;
-    this.db
-      .update(environmentAgentSessions)
-      .set({
-        status: "expired",
-        closedAt: now,
-        closeReason: "lease_expired",
-        updatedAt: now,
-      })
-      .where(eq(environmentAgentSessions.id, sessionId))
-      .run();
-    return this.getById(sessionId);
+    return this.db.transaction((tx) => {
+      const row = tx.select().from(environmentAgentSessions)
+        .where(eq(environmentAgentSessions.id, sessionId)).get();
+      if (!row) return undefined;
+      const existing = rowToEnvironmentAgentSessionRecord(row);
+      if (existing.status === "expired") return existing;
+      if (existing.status !== "active") return existing;
+      tx.update(environmentAgentSessions)
+        .set({
+          status: "expired",
+          closedAt: now,
+          closeReason: "lease_expired",
+          updatedAt: now,
+        })
+        .where(eq(environmentAgentSessions.id, sessionId))
+        .run();
+      const updated = tx.select().from(environmentAgentSessions)
+        .where(eq(environmentAgentSessions.id, sessionId)).get();
+      return updated ? rowToEnvironmentAgentSessionRecord(updated) : undefined;
+    });
   }
 
   markClosed(args: {
@@ -603,44 +613,54 @@ export class EnvironmentAgentSessionRepository {
     reason: Exclude<EnvironmentAgentSessionCloseReason, "lease_expired" | "newer_session">;
     now?: number;
   }): EnvironmentAgentSessionRecord | undefined {
-    const existing = this.getById(args.sessionId);
-    if (!existing) return undefined;
-    if (existing.status === "closed") return existing;
-    if (existing.status === "replaced") return existing;
-    const now = args.now ?? Date.now();
-    this.db
-      .update(environmentAgentSessions)
-      .set({
-        status: "closed",
-        closedAt: now,
-        closeReason: args.reason,
-        updatedAt: now,
-      })
-      .where(eq(environmentAgentSessions.id, args.sessionId))
-      .run();
-    return this.getById(args.sessionId);
+    return this.db.transaction((tx) => {
+      const row = tx.select().from(environmentAgentSessions)
+        .where(eq(environmentAgentSessions.id, args.sessionId)).get();
+      if (!row) return undefined;
+      const existing = rowToEnvironmentAgentSessionRecord(row);
+      if (existing.status === "closed") return existing;
+      if (existing.status === "replaced") return existing;
+      const now = args.now ?? Date.now();
+      tx.update(environmentAgentSessions)
+        .set({
+          status: "closed",
+          closedAt: now,
+          closeReason: args.reason,
+          updatedAt: now,
+        })
+        .where(eq(environmentAgentSessions.id, args.sessionId))
+        .run();
+      const updated = tx.select().from(environmentAgentSessions)
+        .where(eq(environmentAgentSessions.id, args.sessionId)).get();
+      return updated ? rowToEnvironmentAgentSessionRecord(updated) : undefined;
+    });
   }
 
   markReplaced(args: {
     sessionId: string;
     now?: number;
   }): EnvironmentAgentSessionRecord | undefined {
-    const existing = this.getById(args.sessionId);
-    if (!existing) return undefined;
-    if (existing.status === "replaced") return existing;
-    if (existing.status === "closed") return existing;
-    const now = args.now ?? Date.now();
-    this.db
-      .update(environmentAgentSessions)
-      .set({
-        status: "replaced",
-        closedAt: now,
-        closeReason: "newer_session",
-        updatedAt: now,
-      })
-      .where(eq(environmentAgentSessions.id, args.sessionId))
-      .run();
-    return this.getById(args.sessionId);
+    return this.db.transaction((tx) => {
+      const row = tx.select().from(environmentAgentSessions)
+        .where(eq(environmentAgentSessions.id, args.sessionId)).get();
+      if (!row) return undefined;
+      const existing = rowToEnvironmentAgentSessionRecord(row);
+      if (existing.status === "replaced") return existing;
+      if (existing.status === "closed") return existing;
+      const now = args.now ?? Date.now();
+      tx.update(environmentAgentSessions)
+        .set({
+          status: "replaced",
+          closedAt: now,
+          closeReason: "newer_session",
+          updatedAt: now,
+        })
+        .where(eq(environmentAgentSessions.id, args.sessionId))
+        .run();
+      const updated = tx.select().from(environmentAgentSessions)
+        .where(eq(environmentAgentSessions.id, args.sessionId)).get();
+      return updated ? rowToEnvironmentAgentSessionRecord(updated) : undefined;
+    });
   }
 
   replaceActiveForThread(args: {
@@ -800,28 +820,32 @@ export class EnvironmentAgentCursorRepository {
     cursor: EnvironmentAgentCursorPosition,
     now: number = Date.now(),
   ): EnvironmentAgentCursorRecord {
-    const existing = this.getByThreadId(threadId);
-    if (!existing) {
-      const row = {
-        threadId,
-        generation: cursor.generation,
-        sequence: cursor.sequence,
-        updatedAt: now,
-      } satisfies typeof environmentAgentCursors.$inferInsert;
-      this.db.insert(environmentAgentCursors).values(row).run();
-      return rowToEnvironmentAgentCursorRecord(row);
-    }
+    return this.db.transaction((tx) => {
+      const existing = tx.select().from(environmentAgentCursors)
+        .where(eq(environmentAgentCursors.threadId, threadId)).get();
+      if (!existing) {
+        const row = {
+          threadId,
+          generation: cursor.generation,
+          sequence: cursor.sequence,
+          updatedAt: now,
+        } satisfies typeof environmentAgentCursors.$inferInsert;
+        tx.insert(environmentAgentCursors).values(row).run();
+        return rowToEnvironmentAgentCursorRecord(row);
+      }
 
-    this.db
-      .update(environmentAgentCursors)
-      .set({
-        generation: cursor.generation,
-        sequence: cursor.sequence,
-        updatedAt: now,
-      })
-      .where(eq(environmentAgentCursors.threadId, threadId))
-      .run();
-    return this.getByThreadId(threadId)!;
+      tx.update(environmentAgentCursors)
+        .set({
+          generation: cursor.generation,
+          sequence: cursor.sequence,
+          updatedAt: now,
+        })
+        .where(eq(environmentAgentCursors.threadId, threadId))
+        .run();
+      const updated = tx.select().from(environmentAgentCursors)
+        .where(eq(environmentAgentCursors.threadId, threadId)).get();
+      return rowToEnvironmentAgentCursorRecord(updated!);
+    });
   }
 
   advanceIfNext(args: {
@@ -830,30 +854,34 @@ export class EnvironmentAgentCursorRepository {
     next: EnvironmentAgentCursorPosition;
     now?: number;
   }): EnvironmentAgentCursorAdvanceResult {
-    const now = args.now ?? Date.now();
-    const current = this.getByThreadId(args.threadId);
-    const currentPosition = current
-      ? { generation: current.generation, sequence: current.sequence }
-      : undefined;
+    return this.db.transaction((tx) => {
+      const now = args.now ?? Date.now();
+      const currentRow = tx.select().from(environmentAgentCursors)
+        .where(eq(environmentAgentCursors.threadId, args.threadId)).get();
+      const current = currentRow ? rowToEnvironmentAgentCursorRecord(currentRow) : undefined;
+      const currentPosition = current
+        ? { generation: current.generation, sequence: current.sequence }
+        : undefined;
 
-    if (args.expectedCurrent && !sameCursor(currentPosition, args.expectedCurrent)) {
+      if (args.expectedCurrent && !sameCursor(currentPosition, args.expectedCurrent)) {
+        return {
+          advanced: false,
+          ...(current ? { cursor: current } : {}),
+        };
+      }
+
+      if (!canAdvanceCursorTo(currentPosition, args.next)) {
+        return {
+          advanced: false,
+          cursor: current ?? this.upsert(args.threadId, args.next, now),
+        };
+      }
+
       return {
-        advanced: false,
-        ...(current ? { cursor: current } : {}),
+        advanced: true,
+        cursor: this.upsert(args.threadId, args.next, now),
       };
-    }
-
-    if (!canAdvanceCursorTo(currentPosition, args.next)) {
-      return {
-        advanced: false,
-        cursor: current ?? this.upsert(args.threadId, args.next, now),
-      };
-    }
-
-    return {
-      advanced: true,
-      cursor: this.upsert(args.threadId, args.next, now),
-    };
+    });
   }
 }
 
