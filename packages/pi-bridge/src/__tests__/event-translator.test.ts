@@ -56,6 +56,84 @@ describe("event-translator", () => {
     });
   });
 
+  it("emits token usage on agent_end when session stats are available", () => {
+    const { notifications } = translatePiEvent(
+      {
+        type: "agent_end",
+        messages: [
+          {
+            role: "assistant",
+            content: [{ type: "text", text: "Hello world" }],
+            usage: {
+              input: 100,
+              output: 20,
+              cacheRead: 10,
+              cacheWrite: 5,
+              totalTokens: 135,
+            },
+          },
+        ],
+      },
+      "thread-1",
+      "turn-1",
+      counterState,
+      {
+        sessionStats: {
+          sessionFile: "/tmp/test.jsonl",
+          sessionId: "session-1",
+          userMessages: 1,
+          assistantMessages: 1,
+          toolCalls: 0,
+          toolResults: 0,
+          totalMessages: 2,
+          tokens: {
+            input: 300,
+            output: 90,
+            cacheRead: 25,
+            cacheWrite: 15,
+            total: 430,
+          },
+          cost: 0.42,
+        },
+        contextUsage: {
+          tokens: 430,
+          contextWindow: 200000,
+          percent: 0.215,
+        },
+      },
+    );
+
+    expect(notifications).toHaveLength(3);
+    expect(notifications[1]).toMatchObject({
+      method: "thread/tokenUsage/updated",
+      params: {
+        threadId: "thread-1",
+        turnId: "turn-1",
+        tokenUsage: {
+          total: {
+            totalTokens: 430,
+            inputTokens: 300,
+            cachedInputTokens: 40,
+            outputTokens: 90,
+            reasoningOutputTokens: 0,
+          },
+          last: {
+            totalTokens: 135,
+            inputTokens: 100,
+            cachedInputTokens: 15,
+            outputTokens: 20,
+            reasoningOutputTokens: 0,
+          },
+          modelContextWindow: 200000,
+        },
+      },
+    });
+    expect(notifications[2]).toMatchObject({
+      method: "turn/completed",
+      params: { threadId: "thread-1", turnId: "turn-1" },
+    });
+  });
+
   it("emits delta for message_update text_delta", () => {
     const { notifications } = translatePiEvent(
       {

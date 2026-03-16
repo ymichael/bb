@@ -106,6 +106,18 @@ export function translateSdkMessage(
     case "result": {
       const resultMessage = message as SDKResultMessage;
       if (turnId) {
+        const tokenUsage = extractTokenUsage(resultMessage);
+        if (tokenUsage) {
+          notifications.push({
+            jsonrpc: "2.0",
+            method: "thread/tokenUsage/updated",
+            params: {
+              threadId,
+              turnId,
+              tokenUsage,
+            },
+          });
+        }
         notifications.push({
           jsonrpc: "2.0",
           method: "turn/completed",
@@ -127,6 +139,91 @@ export function translateSdkMessage(
   }
 
   return { notifications, turnId };
+}
+
+function extractTokenUsage(
+  message: SDKResultMessage,
+): Record<string, unknown> | undefined {
+  const total = toTokenUsageBreakdown(message.usage);
+  const modelContextWindow = extractModelContextWindow(message.modelUsage);
+
+  if (!total && modelContextWindow === null) {
+    return undefined;
+  }
+
+  const emptyBreakdown = createEmptyTokenUsageBreakdown();
+
+  return {
+    total: total ?? emptyBreakdown,
+    last: total ?? emptyBreakdown,
+    modelContextWindow,
+  };
+}
+
+function toTokenUsageBreakdown(
+  usage: {
+    input_tokens?: number;
+    output_tokens?: number;
+    cache_read_input_tokens?: number;
+    cache_creation_input_tokens?: number;
+  } | undefined,
+): Record<string, unknown> | undefined {
+  if (!usage) return undefined;
+
+  const inputTokens = toNonNegativeNumber(usage.input_tokens);
+  const outputTokens = toNonNegativeNumber(usage.output_tokens);
+  const cacheReadTokens = toNonNegativeNumber(usage.cache_read_input_tokens);
+  const cacheCreationTokens = toNonNegativeNumber(usage.cache_creation_input_tokens);
+  const cachedInputTokens = cacheReadTokens + cacheCreationTokens;
+  const totalTokens =
+    inputTokens + outputTokens + cachedInputTokens;
+
+  return {
+    totalTokens,
+    inputTokens,
+    cachedInputTokens,
+    outputTokens,
+    reasoningOutputTokens: 0,
+  };
+}
+
+function createEmptyTokenUsageBreakdown(): Record<string, unknown> {
+  return {
+    totalTokens: 0,
+    inputTokens: 0,
+    cachedInputTokens: 0,
+    outputTokens: 0,
+    reasoningOutputTokens: 0,
+  };
+}
+
+function extractModelContextWindow(
+  modelUsage: Record<string, { contextWindow: number }> | undefined,
+): number | null {
+  if (!modelUsage) return null;
+
+  let largestContextWindow: number | null = null;
+  for (const usage of Object.values(modelUsage)) {
+    const contextWindow = toPositiveNumber(usage.contextWindow);
+    if (contextWindow === null) continue;
+    if (largestContextWindow === null || contextWindow > largestContextWindow) {
+      largestContextWindow = contextWindow;
+    }
+  }
+
+  return largestContextWindow;
+}
+
+function toNonNegativeNumber(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0
+    ? value
+    : 0;
+}
+
+function toPositiveNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) && value > 0
+    ? value
+    : null;
 }
 
 function extractAssistantText(

@@ -9,7 +9,7 @@ Small, self-contained changes — each item should be completable in a single se
 ## Items
 
 ### 1. Context & token usage reporting for Claude Code and Pi (critical)
-**Status:** Not started
+**Status:** Implemented in code; manual QA pending
 **Priority:** Critical
 
 Both bridges discard token/context usage data that their SDKs already provide. The entire downstream pipeline (`thread/tokenUsage/updated` → orchestrator → timeline API → `ThreadContextWindowIndicator` UI) already works for Codex.
@@ -32,6 +32,7 @@ Both bridges discard token/context usage data that their SDKs already provide. T
 
 **Validation:**
 - Unit tests: verify bridges emit `thread/tokenUsage/updated` with correct shape
+  - Completed for both `claude-code-bridge` and `pi-bridge`
 - Manual QA: run a thread with each provider and confirm the context window indicator appears in the UI
 
 ---

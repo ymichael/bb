@@ -1,3 +1,5 @@
+import type { ContextUsage, SessionStats } from "@mariozechner/pi-coding-agent";
+
 export interface JsonRpcNotification {
   jsonrpc: "2.0";
   method: string;
@@ -22,6 +24,7 @@ export function translatePiEvent(
   threadId: string,
   currentTurnId: string | undefined,
   counterState: TurnCounterState,
+  tokenUsageSnapshot?: PiTokenUsageSnapshot,
 ): { notifications: JsonRpcNotification[]; turnId: string | undefined } {
   const notifications: JsonRpcNotification[] = [];
   let turnId = currentTurnId;
@@ -59,6 +62,18 @@ export function translatePiEvent(
         }
       }
       if (turnId) {
+        const tokenUsage = extractPiTokenUsage(lastAssistant, tokenUsageSnapshot);
+        if (tokenUsage) {
+          notifications.push({
+            jsonrpc: "2.0",
+            method: "thread/tokenUsage/updated",
+            params: {
+              threadId,
+              turnId,
+              tokenUsage,
+            },
+          });
+        }
         notifications.push({
           jsonrpc: "2.0",
           method: "turn/completed",
@@ -132,6 +147,103 @@ export function translatePiEvent(
   }
 
   return { notifications, turnId };
+}
+
+export interface PiTokenUsageSnapshot {
+  sessionStats?: SessionStats;
+  contextUsage?: ContextUsage;
+}
+
+function extractPiTokenUsage(
+  lastAssistant: Record<string, unknown> | undefined,
+  snapshot: PiTokenUsageSnapshot | undefined,
+): Record<string, unknown> | undefined {
+  const total = toSessionStatsBreakdown(snapshot?.sessionStats);
+  const last = toAssistantUsageBreakdown(lastAssistant);
+  const modelContextWindow = toModelContextWindow(snapshot?.contextUsage);
+
+  if (!total && !last && modelContextWindow === null) {
+    return undefined;
+  }
+
+  const emptyBreakdown = createEmptyTokenUsageBreakdown();
+
+  return {
+    total: total ?? emptyBreakdown,
+    last: last ?? emptyBreakdown,
+    modelContextWindow,
+  };
+}
+
+function toSessionStatsBreakdown(
+  sessionStats: SessionStats | undefined,
+): Record<string, unknown> | undefined {
+  const tokens = sessionStats?.tokens;
+  if (!tokens) return undefined;
+
+  return {
+    totalTokens: toNonNegativeNumber(tokens.total),
+    inputTokens: toNonNegativeNumber(tokens.input),
+    cachedInputTokens:
+      toNonNegativeNumber(tokens.cacheRead) + toNonNegativeNumber(tokens.cacheWrite),
+    outputTokens: toNonNegativeNumber(tokens.output),
+    reasoningOutputTokens: 0,
+  };
+}
+
+function toAssistantUsageBreakdown(
+  lastAssistant: Record<string, unknown> | undefined,
+): Record<string, unknown> | undefined {
+  const usage = lastAssistant?.usage;
+  if (!usage || typeof usage !== "object") return undefined;
+
+  const typedUsage = usage as {
+    input?: unknown;
+    output?: unknown;
+    cacheRead?: unknown;
+    cacheWrite?: unknown;
+    totalTokens?: unknown;
+  };
+
+  const inputTokens = toNonNegativeNumber(typedUsage.input);
+  const outputTokens = toNonNegativeNumber(typedUsage.output);
+  const cachedInputTokens =
+    toNonNegativeNumber(typedUsage.cacheRead) + toNonNegativeNumber(typedUsage.cacheWrite);
+  const totalTokens = toNonNegativeNumber(typedUsage.totalTokens);
+
+  return {
+    totalTokens:
+      totalTokens > 0 ? totalTokens : inputTokens + outputTokens + cachedInputTokens,
+    inputTokens,
+    cachedInputTokens,
+    outputTokens,
+    reasoningOutputTokens: 0,
+  };
+}
+
+function toModelContextWindow(contextUsage: ContextUsage | undefined): number | null {
+  const contextWindow = contextUsage?.contextWindow;
+  return typeof contextWindow === "number" &&
+    Number.isFinite(contextWindow) &&
+    contextWindow > 0
+    ? contextWindow
+    : null;
+}
+
+function createEmptyTokenUsageBreakdown(): Record<string, unknown> {
+  return {
+    totalTokens: 0,
+    inputTokens: 0,
+    cachedInputTokens: 0,
+    outputTokens: 0,
+    reasoningOutputTokens: 0,
+  };
+}
+
+function toNonNegativeNumber(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0
+    ? value
+    : 0;
 }
 
 // Well-known tool name sets for semantic translation

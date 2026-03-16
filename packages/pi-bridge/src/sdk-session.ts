@@ -4,7 +4,9 @@ import {
   SettingsManager,
   type AgentSession,
   type AgentSessionEvent,
+  type ContextUsage,
   type CreateAgentSessionOptions,
+  type SessionStats,
   type ToolDefinition,
 } from "@mariozechner/pi-coding-agent";
 import { getModel } from "@mariozechner/pi-ai";
@@ -38,6 +40,14 @@ export class PiSdkSession {
 
   getIsProcessing(): boolean {
     return this.isProcessing;
+  }
+
+  getSessionStats(): SessionStats | undefined {
+    return this.session?.getSessionStats();
+  }
+
+  getContextUsage(): ContextUsage | undefined {
+    return this.session?.getContextUsage();
   }
 
   async start(): Promise<void> {

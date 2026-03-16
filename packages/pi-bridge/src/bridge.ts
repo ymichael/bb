@@ -10,6 +10,7 @@ import {
   translatePiEvent,
   createTurnCounterState,
   type JsonRpcNotification,
+  type PiTokenUsageSnapshot,
   type TurnCounterState,
 } from "./event-translator.js";
 import {
@@ -75,12 +76,20 @@ function createOnPiEvent(threadId: string): (event: AgentSessionEvent) => void {
     // Convert AgentSessionEvent to the Record<string, unknown> shape
     // that translatePiEvent expects
     const eventRecord = event as unknown as Record<string, unknown>;
+    const tokenUsageSnapshot: PiTokenUsageSnapshot | undefined =
+      event.type === "agent_end"
+        ? {
+            sessionStats: threadSession.session.getSessionStats(),
+            contextUsage: threadSession.session.getContextUsage(),
+          }
+        : undefined;
 
     const { notifications, turnId } = translatePiEvent(
       eventRecord,
       threadId,
       threadSession.turnId,
       threadSession.turnCounter,
+      tokenUsageSnapshot,
     );
     threadSession.turnId = turnId;
 

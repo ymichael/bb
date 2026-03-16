@@ -328,6 +328,72 @@ describe("event-translator", () => {
     });
   });
 
+  it("emits token usage before turn/completed for result messages with usage", () => {
+    const message = {
+      type: "result",
+      subtype: "success",
+      usage: {
+        input_tokens: 120,
+        output_tokens: 45,
+        cache_read_input_tokens: 30,
+        cache_creation_input_tokens: 10,
+      },
+      modelUsage: {
+        "claude-sonnet-4": {
+          inputTokens: 120,
+          outputTokens: 45,
+          cacheReadInputTokens: 30,
+          cacheCreationInputTokens: 10,
+          webSearchRequests: 0,
+          costUSD: 0.12,
+          contextWindow: 200000,
+          maxOutputTokens: 64000,
+        },
+      },
+    } as unknown as SDKMessage;
+
+    const { notifications } = translateSdkMessage(
+      message,
+      "thread-1",
+      "turn-1",
+      counterState,
+    );
+
+    expect(notifications).toHaveLength(2);
+    expect(notifications[0]).toMatchObject({
+      method: "thread/tokenUsage/updated",
+      params: {
+        threadId: "thread-1",
+        turnId: "turn-1",
+        tokenUsage: {
+          total: {
+            totalTokens: 205,
+            inputTokens: 120,
+            cachedInputTokens: 40,
+            outputTokens: 45,
+            reasoningOutputTokens: 0,
+          },
+          last: {
+            totalTokens: 205,
+            inputTokens: 120,
+            cachedInputTokens: 40,
+            outputTokens: 45,
+            reasoningOutputTokens: 0,
+          },
+          modelContextWindow: 200000,
+        },
+      },
+    });
+    expect(notifications[1]).toMatchObject({
+      method: "turn/completed",
+      params: {
+        threadId: "thread-1",
+        turnId: "turn-1",
+        result: { subtype: "success" },
+      },
+    });
+  });
+
   it("does not emit turn/started twice for same turn", () => {
     const msg1 = {
       type: "assistant",
