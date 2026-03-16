@@ -1,7 +1,10 @@
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import Anthropic from "@anthropic-ai/sdk";
+import type { ModelInfo } from "@anthropic-ai/sdk/resources/models";
 import type {
   AvailableModel,
+  ModelReasoningEffort,
   ProviderDynamicTool,
   ProviderLaunchConfiguration,
   ProviderCapabilities,
@@ -32,7 +35,24 @@ const __dirname = dirname(__filename);
 
 const DEFAULT_BASE_INSTRUCTIONS = renderTemplate("agentBaseInstructions", {});
 
-const CLAUDE_CODE_MODELS: AvailableModel[] = [
+const LOW_REASONING_EFFORT: ModelReasoningEffort = {
+  reasoningEffort: "low",
+  description: "Low reasoning effort",
+};
+const MEDIUM_REASONING_EFFORT: ModelReasoningEffort = {
+  reasoningEffort: "medium",
+  description: "Medium reasoning effort",
+};
+const HIGH_REASONING_EFFORT: ModelReasoningEffort = {
+  reasoningEffort: "high",
+  description: "High reasoning effort",
+};
+const XHIGH_REASONING_EFFORT: ModelReasoningEffort = {
+  reasoningEffort: "xhigh",
+  description: "Extra high reasoning effort",
+};
+
+const STATIC_CLAUDE_CODE_MODELS: AvailableModel[] = [
   {
     id: "claude-sonnet-4-6",
     model: "claude-sonnet-4-6",
@@ -72,6 +92,14 @@ const CLAUDE_CODE_MODELS: AvailableModel[] = [
     isDefault: false,
   },
 ];
+
+const CLAUDE_DEFAULT_MODEL_PREFERENCES = [
+  "claude-sonnet-4-6",
+  "claude-sonnet-4-5",
+  "claude-sonnet-4",
+  "claude-opus-4-6",
+  "claude-haiku-4-5",
+] as const;
 
 function normalizeProviderEventType(type: string): string {
   return type.toLowerCase().replaceAll(".", "/");
@@ -234,6 +262,103 @@ function resolveBridgePath(): string {
   return resolve(__dirname, "..", "..", "claude-code-bridge", "dist", "bridge.js");
 }
 
+export function buildClaudeCodeAvailableModels(
+  modelInfos: ModelInfo[],
+): AvailableModel[] {
+  const models = modelInfos
+    .filter((model) => model.id.startsWith("claude-"))
+    .map((model) => {
+      const supportedReasoningEfforts = getClaudeReasoningEfforts(model.id);
+      return {
+        id: model.id,
+        model: model.id,
+        displayName: model.display_name,
+        description: describeClaudeModel(model.id),
+        supportedReasoningEfforts,
+        defaultReasoningEffort:
+          supportedReasoningEfforts.some(
+            (effort) => effort.reasoningEffort === "medium",
+          )
+            ? "medium"
+            : supportedReasoningEfforts[0].reasoningEffort,
+        isDefault: false,
+      };
+    });
+
+  const defaultModelId = resolveDefaultClaudeModelId(models);
+  return models.map((model) =>
+    model.id === defaultModelId ? { ...model, isDefault: true } : model,
+  );
+}
+
+async function listClaudeCodeModels(): Promise<AvailableModel[]> {
+  if (shouldUseStaticClaudeModelList(process.env)) {
+    return [...STATIC_CLAUDE_CODE_MODELS];
+  }
+
+  const apiKey = process.env.ANTHROPIC_API_KEY?.trim();
+  const authToken = process.env.CLAUDE_CODE_OAUTH_TOKEN?.trim();
+  if (!apiKey && !authToken) {
+    return [...STATIC_CLAUDE_CODE_MODELS];
+  }
+
+  const client = new Anthropic({
+    ...(apiKey ? { apiKey } : {}),
+    ...(authToken ? { authToken } : {}),
+  });
+
+  const page = await client.models.list();
+  const models = buildClaudeCodeAvailableModels(page.data);
+  return models.length > 0 ? models : [...STATIC_CLAUDE_CODE_MODELS];
+}
+
+function shouldUseStaticClaudeModelList(env: NodeJS.ProcessEnv): boolean {
+  return (
+    env.CLAUDE_CODE_USE_BEDROCK === "1" ||
+    env.CLAUDE_CODE_USE_VERTEX === "1" ||
+    env.CLAUDE_CODE_USE_FOUNDRY === "1"
+  );
+}
+
+function getClaudeReasoningEfforts(modelId: string): ModelReasoningEffort[] {
+  if (modelId.startsWith("claude-haiku")) {
+    return [LOW_REASONING_EFFORT, MEDIUM_REASONING_EFFORT];
+  }
+  if (modelId.startsWith("claude-opus-4-6")) {
+    return [
+      LOW_REASONING_EFFORT,
+      MEDIUM_REASONING_EFFORT,
+      HIGH_REASONING_EFFORT,
+      XHIGH_REASONING_EFFORT,
+    ];
+  }
+
+  // Claude model IDs come from the provider and can evolve independently of Beanbag.
+  // Unknown Claude families intentionally fall back to the common reasoning set.
+  return [LOW_REASONING_EFFORT, MEDIUM_REASONING_EFFORT, HIGH_REASONING_EFFORT];
+}
+
+function describeClaudeModel(modelId: string): string {
+  if (modelId.startsWith("claude-opus")) {
+    return "Most capable Claude model for complex coding tasks";
+  }
+  if (modelId.startsWith("claude-haiku")) {
+    return "Fast Claude model for lightweight coding tasks";
+  }
+  return "Fast, intelligent Claude model for everyday coding tasks";
+}
+
+function resolveDefaultClaudeModelId(
+  models: AvailableModel[],
+): string | undefined {
+  for (const preferred of CLAUDE_DEFAULT_MODEL_PREFERENCES) {
+    if (models.some((model) => model.id === preferred)) {
+      return preferred;
+    }
+  }
+  return models[0]?.id;
+}
+
 export interface CreateClaudeCodeProviderAdapterOptions {
   id?: ThreadProviderId;
   displayName?: string;
@@ -261,7 +386,7 @@ export function createClaudeCodeProviderAdapter(
 
   const listModels =
     opts?.listModels ??
-    (async () => [...CLAUDE_CODE_MODELS]);
+    listClaudeCodeModels;
 
   return {
     id: opts?.id ?? ("claude-code" as ThreadProviderId),

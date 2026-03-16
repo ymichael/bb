@@ -4,7 +4,10 @@ import {
   type ProviderDynamicTool,
   type ThreadEvent,
 } from "@beanbag/agent-core";
-import { createClaudeCodeProviderAdapter } from "../claude-code-provider-adapter.js";
+import {
+  buildClaudeCodeAvailableModels,
+  createClaudeCodeProviderAdapter,
+} from "../claude-code-provider-adapter.js";
 
 const DEFAULT_BASE_INSTRUCTIONS =
   "You are a coding agent working on a project thread. Follow the instructions carefully and write clean, working code.";
@@ -80,14 +83,72 @@ describe("claude-code provider adapter", () => {
     expect(adapter.createThreadNameSetParams).toBeUndefined();
   });
 
-  it("lists hardcoded Claude models", async () => {
-    const adapter = createClaudeCodeProviderAdapter();
-    const models = await adapter.listModels();
+  it("builds a dynamic Claude model list from the Anthropic models API", () => {
+    const models = buildClaudeCodeAvailableModels([
+      {
+        id: "claude-sonnet-4-6",
+        created_at: "2026-01-01T00:00:00Z",
+        display_name: "Claude Sonnet 4.6",
+        type: "model",
+      },
+      {
+        id: "claude-opus-4-6",
+        created_at: "2026-01-02T00:00:00Z",
+        display_name: "Claude Opus 4.6",
+        type: "model",
+      },
+      {
+        id: "claude-haiku-4-5",
+        created_at: "2026-01-03T00:00:00Z",
+        display_name: "Claude Haiku 4.5",
+        type: "model",
+      },
+      {
+        id: "text-embedding-3-large",
+        created_at: "2026-01-04T00:00:00Z",
+        display_name: "Embedding",
+        type: "model",
+      },
+    ]);
+
     const ids = models.map((m) => m.id);
     expect(ids).toContain("claude-sonnet-4-6");
     expect(ids).toContain("claude-opus-4-6");
     expect(ids).toContain("claude-haiku-4-5");
+    expect(ids).not.toContain("text-embedding-3-large");
     expect(models.find((m) => m.isDefault)?.id).toBe("claude-sonnet-4-6");
+    expect(models.find((m) => m.id === "claude-opus-4-6")).toMatchObject({
+      defaultReasoningEffort: "medium",
+      supportedReasoningEfforts: expect.arrayContaining([
+        expect.objectContaining({ reasoningEffort: "xhigh" }),
+      ]),
+    });
+  });
+
+  it("uses the supplied listModels implementation", async () => {
+    const adapter = createClaudeCodeProviderAdapter({
+      listModels: async () => [
+        {
+          id: "claude-custom",
+          model: "claude-custom",
+          displayName: "Claude Custom",
+          description: "Custom test model",
+          supportedReasoningEfforts: [
+            { reasoningEffort: "low", description: "Low reasoning effort" },
+          ],
+          defaultReasoningEffort: "low",
+          isDefault: true,
+        },
+      ],
+    });
+
+    const models = await adapter.listModels();
+    expect(models).toEqual([
+      expect.objectContaining({
+        id: "claude-custom",
+        isDefault: true,
+      }),
+    ]);
   });
 
   it("maps developerInstructions to baseInstructions for thread/start", () => {

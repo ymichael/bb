@@ -243,6 +243,9 @@ importers:
 
   packages/agent-server:
     dependencies:
+      '@anthropic-ai/sdk':
+        specifier: ^0.73.0
+        version: 0.73.0(zod@4.3.6)
       '@beanbag/agent-core':
         specifier: workspace:*
         version: link:../agent-core

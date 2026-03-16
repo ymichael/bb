@@ -60,7 +60,7 @@ The Pi adapter (`packages/agent-server/src/pi-provider-adapter.ts`) returns a ha
 ---
 
 ### 3. Dynamic model list for Claude Code provider
-**Status:** Not started
+**Status:** Implemented in code; manual QA pending
 
 The Claude Code adapter (`packages/agent-server/src/claude-code-provider-adapter.ts`) returns a hardcoded 3-model list. Anthropic has a `GET /v1/models` API endpoint that returns all models available to the caller's account.
 
@@ -68,6 +68,11 @@ The Claude Code adapter (`packages/agent-server/src/claude-code-provider-adapter
 - Call the Anthropic models API directly from the adapter using the existing `ANTHROPIC_API_KEY` or OAuth token
 - Filter response to agent-relevant models (Claude family, skip embeddings)
 - Map to `AvailableModel` shape — will need a small metadata mapping for `supportedReasoningEfforts` and `displayName` since the API doesn't return those
+
+**Validation:**
+- Update `claude-code-provider-adapter.test.ts` to verify dynamic listing
+  - Completed
+- Manual QA: switch to Claude Code provider in UI and confirm model selector populates dynamically
 
 **Open Questions/Risks:**
 - Bedrock (`CLAUDE_CODE_USE_BEDROCK`) and Vertex (`CLAUDE_CODE_USE_VERTEX`) have their own model listing APIs — may need provider-aware branching or only use dynamic listing for the direct API path.
