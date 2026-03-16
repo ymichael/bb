@@ -81,7 +81,7 @@ The Claude Code adapter (`packages/agent-server/src/claude-code-provider-adapter
 ---
 
 ### 4. Pi dynamic tool schema parity
-**Status:** Not started
+**Status:** Implemented in code; manual QA pending
 
 Pi's `tool-proxy.ts` only handles flat schemas (`string`, `number`, `boolean`). Nested `object` and `array` types are not converted, and all fields become `Type.Optional()`. This causes dynamic tools with complex schemas to silently degrade.
 
@@ -92,6 +92,7 @@ Pi's `tool-proxy.ts` only handles flat schemas (`string`, `number`, `boolean`). 
 
 **Validation:**
 - Unit tests with nested object schemas, array schemas, required fields
+  - Completed
 - Manual QA: register a dynamic tool with complex schema and verify Pi receives it correctly
 
 ---
