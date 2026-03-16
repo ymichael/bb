@@ -1,3 +1,19 @@
+/**
+ * Database schema — single source of truth for all table definitions.
+ *
+ * To make a schema change:
+ *   1. Edit this file
+ *   2. Run `pnpm --filter @bb/db db:generate` — Drizzle Kit generates a new migration SQL file
+ *   3. Review the generated SQL (Drizzle Kit sometimes generates suboptimal SQLite
+ *      migrations like unnecessary table rebuilds — edit if needed)
+ *   4. Run tests to validate
+ *   5. Commit both the schema change and the migration file
+ *
+ * Rules:
+ *   - Never hand-write migration SQL unless Drizzle Kit output is incorrect
+ *   - Never modify the schema without generating a corresponding migration
+ *   - Migration files are append-only (never edit a shipped migration)
+ */
 import {
   sqliteTable,
   text,
@@ -5,6 +21,7 @@ import {
   index,
   uniqueIndex,
 } from "drizzle-orm/sqlite-core";
+import type { AnySQLiteColumn } from "drizzle-orm/sqlite-core";
 import type { ThreadEventType } from "@bb/core";
 
 export const projects = sqliteTable("projects", {
@@ -12,11 +29,9 @@ export const projects = sqliteTable("projects", {
   name: text("name").notNull(),
   rootPath: text("root_path").notNull(),
   projectInstructions: text("project_instructions"),
-  // FK to threads.id declared in migration 0046; not inline here to avoid
-  // circular type inference between projects and threads tables.
   defaultProviderId: text("default_provider_id"),
-  primaryCheckoutThreadId: text("primary_checkout_thread_id"),
-  primaryManagerThreadId: text("primary_manager_thread_id"),
+  primaryCheckoutThreadId: text("primary_checkout_thread_id").references((): AnySQLiteColumn => threads.id, { onDelete: "set null" }),
+  primaryManagerThreadId: text("primary_manager_thread_id").references((): AnySQLiteColumn => threads.id, { onDelete: "set null" }),
   createdAt: integer("created_at").notNull(),
   updatedAt: integer("updated_at").notNull(),
 }, (table) => [
@@ -56,9 +71,7 @@ export const threads = sqliteTable(
     status: text("status").notNull().default("created"),
     environmentId: text("environment_id").references(() => environments.id, { onDelete: "set null" }),
     mergeBaseBranch: text("merge_base_branch"),
-    // FK to threads.id (self-reference) declared in migration 0046; not
-    // inline here to avoid circular type inference.
-    parentThreadId: text("parent_thread_id"),
+    parentThreadId: text("parent_thread_id").references((): AnySQLiteColumn => threads.id, { onDelete: "set null" }),
     archivedAt: integer("archived_at"),
     lastReadAt: integer("last_read_at").notNull().default(0),
     createdAt: integer("created_at").notNull(),
