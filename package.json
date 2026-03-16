@@ -19,6 +19,7 @@
     "qa:daemon:stress": "BEANBAG_E2E_PROVIDER_MODE=real pnpm --filter @beanbag/daemon test:e2e:qa:stress",
     "qa:daemon:regression": "BEANBAG_E2E_PROVIDER_MODE=real pnpm --filter @beanbag/daemon test:e2e:qa:regression",
     "qa:daemon:smoke:claude-code": "BEANBAG_E2E_PROVIDER_MODE=real-claude-code pnpm --filter @beanbag/daemon test:e2e:qa:smoke",
+    "qa:daemon:smoke:pi": "BEANBAG_E2E_PROVIDER_MODE=real-pi pnpm --filter @beanbag/daemon test:e2e:qa:smoke",
     "qa:daemon:recovery:fake": "BEANBAG_E2E_PROVIDER_MODE=fake pnpm --filter @beanbag/daemon test:e2e:qa:recovery:fake",
     "bb": "node apps/cli/dist/index.js",
     "bb:dev": "pnpm --filter @beanbag/daemon exec tsx ../cli/src/index.ts",

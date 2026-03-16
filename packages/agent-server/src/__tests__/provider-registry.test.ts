@@ -17,6 +17,12 @@ describe("provider registry", () => {
     expect(provider.processCommand).toBeTruthy();
   });
 
+  it("creates pi provider", () => {
+    const provider = createProviderAdapter({ providerId: "pi" });
+    expect(provider.id).toBe("pi");
+    expect(provider.processCommand).toBeTruthy();
+  });
+
   it("rejects unsupported adapters", () => {
     expect(() => createProviderAdapter({ providerId: "pi-mono" })).toThrow(
       'Unsupported provider "pi-mono"',
@@ -25,6 +31,6 @@ describe("provider registry", () => {
 
   it("lists provider catalog", () => {
     const ids = listAvailableProviderInfos().map((provider) => provider.id);
-    expect(ids).toEqual(["codex", "claude-code"]);
+    expect(ids).toEqual(["codex", "claude-code", "pi"]);
   });
 });

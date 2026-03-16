@@ -6,6 +6,7 @@ import {
 } from "@beanbag/agent-core";
 import { createClaudeCodeProviderAdapter } from "./claude-code-provider-adapter.js";
 import { createCodexProviderAdapter } from "./codex-provider-adapter.js";
+import { createPiProviderAdapter } from "./pi-provider-adapter.js";
 import type { ProviderAdapter } from "./provider-adapter.js";
 
 export interface CreateProviderAdapterOptions {
@@ -20,6 +21,8 @@ function createProviderForId(
       return createCodexProviderAdapter();
     case "claude-code":
       return createClaudeCodeProviderAdapter();
+    case "pi":
+      return createPiProviderAdapter();
     default:
       throw new Error(`Unsupported provider "${providerId}"`);
   }

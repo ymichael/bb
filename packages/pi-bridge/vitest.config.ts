@@ -1,0 +1,14 @@
+import { defineConfig } from "vitest/config";
+import { workspaceTestAliases } from "../../vitest.workspace-aliases";
+
+export default defineConfig({
+  resolve: {
+    alias: workspaceTestAliases,
+  },
+  test: {
+    silent: "passed-only",
+    name: "@beanbag/pi-bridge",
+    include: ["src/__tests__/**/*.test.ts"],
+    exclude: ["dist/**", "node_modules/**"],
+  },
+});

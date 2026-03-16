@@ -19,19 +19,23 @@ That script runs a disposable standalone daemon against the real provider and ex
 
 ## Provider selection
 
-By default, the QA pass uses the Codex provider. To run against **Claude Code** instead, set `BEANBAG_PROVIDER=claude-code` and ensure `ANTHROPIC_API_KEY` is available:
+By default, the QA pass uses the Codex provider. To run against a different provider, set `BEANBAG_PROVIDER` and the required auth:
 
+**Claude Code:**
 ```bash
 BEANBAG_PROVIDER=claude-code ANTHROPIC_API_KEY=... node scripts/qa/start-standalone-daemon-qa.mjs
-```
-
-For scripted smoke tests with Claude Code:
-
-```bash
 ANTHROPIC_API_KEY=... pnpm qa:daemon:smoke:claude-code
 ```
 
-All the test scenarios in this document apply to both providers. The only difference is the environment setup. Claude Code does not support rename, so `thread/name/set` tests should be skipped for that provider.
+**Pi:**
+```bash
+BEANBAG_PROVIDER=pi node scripts/qa/start-standalone-daemon-qa.mjs --provider pi
+pnpm qa:daemon:smoke:pi
+```
+
+Pi reads auth from `~/.pi/agent/auth.json` (set up via `npx @mariozechner/pi-ai login`). No env var needed.
+
+All the test scenarios in this document apply to all providers. The only difference is the environment setup. Claude Code and Pi do not support rename, so `thread/name/set` tests should be skipped for those providers.
 
 ### Multi-provider coverage strategy
 
@@ -62,7 +66,9 @@ pnpm exec turbo run build \
 
 For Codex: confirm `codex` is available in `PATH` and can be used by the daemon.
 
-For Claude Code: confirm `ANTHROPIC_API_KEY` is set and the `@beanbag/claude-code-bridge` package is built (`pnpm --filter @beanbag/claude-code-bridge build`).
+For Claude Code: confirm `ANTHROPIC_API_KEY` or `CLAUDE_CODE_OAUTH_TOKEN` is set and the `@beanbag/claude-code-bridge` package is built (`pnpm --filter @beanbag/claude-code-bridge build`).
+
+For Pi: confirm `pi` is in `PATH` and auth is configured (`npx @mariozechner/pi-ai login`). The `@beanbag/pi-bridge` package must be built (`pnpm --filter @beanbag/pi-bridge build`).
 
 Recommended during restart/liveness QA:
 

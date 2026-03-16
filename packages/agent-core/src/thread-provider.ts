@@ -1,4 +1,4 @@
-export const THREAD_PROVIDER_IDS = ["codex", "claude-code"] as const;
+export const THREAD_PROVIDER_IDS = ["codex", "claude-code", "pi"] as const;
 
 export type ThreadProviderId = (typeof THREAD_PROVIDER_IDS)[number];
 

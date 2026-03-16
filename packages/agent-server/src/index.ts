@@ -18,6 +18,9 @@ export {
 export {
   createClaudeCodeProviderAdapter,
 } from "./claude-code-provider-adapter.js";
+export {
+  createPiProviderAdapter,
+} from "./pi-provider-adapter.js";
 export { listCodexModels } from "./codex-models.js";
 export { generateCodexThreadTitle } from "./codex-title-generator.js";
 export { generateCodexCommitMessage } from "./codex-commit-message-generator.js";
