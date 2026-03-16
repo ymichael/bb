@@ -35,7 +35,9 @@ import {
   createFakeCodexScriptFile,
   type FakeCodexOptions,
 } from "./fake-codex.js";
+import { listManagedHostEnvironmentAgentPids } from "@beanbag/environment";
 import { beanbagTestTmpPrefix } from "./temp-root.js";
+import { installProcessExitSafetyNet, trackPid, untrackPid } from "./process-tracker.js";
 import {
   resolveE2eProviderMode,
   type E2eProviderMode,
@@ -206,6 +208,10 @@ function detachThreadManager(threadManager: unknown): void {
 export async function startDaemonE2eHarness(
   opts?: StartDaemonE2eHarnessOptions,
 ): Promise<DaemonE2eHarness> {
+  // Install process-exit safety net once so orphaned child processes are
+  // killed even when vitest terminates the worker on timeout.
+  installProcessExitSafetyNet();
+
   const providerMode = opts?.providerMode ?? resolveE2eProviderMode();
   const environmentAgentSessionOptions = {
     ...(providerMode === "fake"
@@ -333,9 +339,18 @@ export async function startDaemonE2eHarness(
       sqliteClient?.close?.();
     };
 
+    // Snapshot environment-agent PIDs before teardown so the safety net
+    // can kill them if the normal teardown path is interrupted.
+    const refreshTrackedAgentPids = (): void => {
+      for (const pid of listManagedHostEnvironmentAgentPids()) {
+        trackPid(pid);
+      }
+    };
+
     const cleanup = async (): Promise<void> => {
       if (!stopped) {
         stopped = true;
+        refreshTrackedAgentPids();
         const pendingProvisioningTasks = listPendingProvisioningTasks(threadManager);
         teardownThreadManager(threadManager);
         await Promise.race([
@@ -344,6 +359,11 @@ export async function startDaemonE2eHarness(
         ]);
       }
       await closeDaemon();
+      // After successful teardown, untrack all agent PIDs (they should be
+      // dead now) so the exit handler does not try to kill recycled PIDs.
+      for (const pid of listManagedHostEnvironmentAgentPids()) {
+        untrackPid(pid);
+      }
       if (!opts?.preserveTempDirOnCleanup) {
         rmSync(tempDir, { recursive: true, force: true });
       }

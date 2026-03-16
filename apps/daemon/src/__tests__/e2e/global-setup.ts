@@ -1,4 +1,4 @@
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, readdirSync, statSync } from "node:fs";
 import { resolve, join } from "node:path";
 import dotenv from "dotenv";
@@ -16,7 +16,7 @@ function latestModifiedAtMs(rootPath: string): number {
   return latest;
 }
 
-export default function globalSetup(): void {
+export default function globalSetup(): () => void {
   // Load .env from the workspace root so auth tokens are available for real-provider E2E runs.
   const workspaceRoot = resolve(process.cwd(), "../..");
   dotenv.config({ path: resolve(workspaceRoot, ".env") });
@@ -30,12 +30,37 @@ export default function globalSetup(): void {
   );
   const bundleIsCurrent =
     existsSync(bundlePath) && statSync(bundlePath).mtimeMs >= sourceLatestMs;
-  if (bundleIsCurrent) {
-    return;
+  if (!bundleIsCurrent) {
+    execFileSync("pnpm", ["exec", "turbo", "run", "build", "--filter=@beanbag/environment-agent"], {
+      cwd: process.cwd(),
+      stdio: "pipe",
+    });
   }
 
-  execFileSync("pnpm", ["exec", "turbo", "run", "build", "--filter=@beanbag/environment-agent"], {
-    cwd: process.cwd(),
-    stdio: "pipe",
-  });
+  // Return a teardown function that runs the cleanup script as a safety net.
+  // This catches orphaned processes left behind by tests that were killed by
+  // vitest timeout or crashed before their own cleanup ran.
+  return function globalTeardown(): void {
+    const cleanupScript = resolve(workspaceRoot, "scripts", "qa", "cleanup-beanbag-test-processes.mjs");
+    if (!existsSync(cleanupScript)) {
+      return;
+    }
+
+    const tmpRoot = process.env.BEANBAG_TEST_TMP_ROOT?.trim();
+    const args = [
+      cleanupScript,
+      ...(tmpRoot ? ["--tmp-root", tmpRoot] : []),
+      "--quiet",
+    ];
+
+    try {
+      spawnSync(process.execPath, args, {
+        cwd: workspaceRoot,
+        stdio: "ignore",
+        timeout: 10_000,
+      });
+    } catch {
+      // Best-effort cleanup; do not fail the test suite.
+    }
+  };
 }

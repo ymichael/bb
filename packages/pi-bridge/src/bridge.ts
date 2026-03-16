@@ -183,33 +183,6 @@ function applyDynamicTools(
 function handleRequest(request: JsonRpcRequest): void {
   const { id, method, params } = request;
 
-  // Check if this is a response to a pending tool call request
-  if (
-    id !== undefined &&
-    "result" in request
-  ) {
-    const threadSession = findSessionByPendingToolCall(id);
-    if (threadSession) {
-      const pending = threadSession.pendingToolCalls.get(id)!;
-      threadSession.pendingToolCalls.delete(id);
-      const result = (request as unknown as { result: unknown }).result;
-      const record = result as Record<string, unknown> | undefined;
-      const contentItems = record?.contentItems as
-        | Array<{ type: string; text?: string }>
-        | undefined;
-      const text =
-        contentItems
-          ?.filter((item) => item.type === "inputText" && typeof item.text === "string")
-          .map((item) => item.text)
-          .join("\n") ?? "OK";
-      pending.resolve({
-        content: text,
-        isError: (record?.success as boolean | undefined) === false,
-      });
-      return;
-    }
-  }
-
   switch (method) {
     case "initialize":
       sendResult(id, { ok: true });
@@ -448,9 +421,30 @@ function handleLine(line: string): void {
     return;
   }
 
-  // Handle tool call responses (they come back as JSON-RPC responses)
-  if ("result" in request && findSessionByPendingToolCall(request.id)) {
-    handleRequest(request);
+  // Handle tool call responses (they come back as JSON-RPC responses or errors)
+  if (("result" in request || "error" in request) && findSessionByPendingToolCall(request.id)) {
+    const threadSession = findSessionByPendingToolCall(request.id)!;
+    const pending = threadSession.pendingToolCalls.get(request.id)!;
+    threadSession.pendingToolCalls.delete(request.id);
+    if ("error" in request) {
+      const error = (request as unknown as { error: { message?: string } }).error;
+      pending.resolve({ content: error?.message ?? "Tool call failed", isError: true });
+    } else {
+      const result = (request as unknown as { result: unknown }).result;
+      const record = result as Record<string, unknown> | undefined;
+      const contentItems = record?.contentItems as
+        | Array<{ type: string; text?: string }>
+        | undefined;
+      const text =
+        contentItems
+          ?.filter((item) => item.type === "inputText" && typeof item.text === "string")
+          .map((item) => item.text)
+          .join("\n") ?? "OK";
+      pending.resolve({
+        content: text,
+        isError: (record?.success as boolean | undefined) === false,
+      });
+    }
     return;
   }
 

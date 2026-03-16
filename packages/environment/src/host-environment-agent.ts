@@ -485,3 +485,18 @@ export function __testOnly__getManagedHostEnvironmentAgentRecord(args: {
 }): ManagedHostEnvironmentAgentRecord | undefined {
   return managedHostEnvironmentAgents.get(managedHostEnvironmentAgentIdentityKey(args));
 }
+
+/**
+ * Return the PIDs of all currently tracked managed host environment-agent
+ * processes.  Used by the test harness process-exit safety net to kill
+ * orphaned agents when vitest kills a test on timeout.
+ */
+export function listManagedHostEnvironmentAgentPids(): number[] {
+  const pids: number[] = [];
+  for (const record of managedHostEnvironmentAgents.values()) {
+    if (typeof record.pid === "number") {
+      pids.push(record.pid);
+    }
+  }
+  return pids;
+}

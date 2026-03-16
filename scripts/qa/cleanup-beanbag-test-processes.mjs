@@ -24,6 +24,8 @@ const KNOWN_TMP_PREFIXES = [
   "beanbag-standalone-daemon-",
   "beanbag-standalone-blocked-",
   "beanbag-qa-",
+  "beanbag-environment-agent",
+  "beanbag-test-runs",
 ];
 
 function parseArgs(argv) {

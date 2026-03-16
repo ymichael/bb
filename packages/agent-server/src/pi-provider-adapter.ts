@@ -6,6 +6,8 @@ import type {
   ProviderLaunchConfiguration,
   ProviderCapabilities,
   PromptInput,
+  ProviderToolCallRequest,
+  ProviderToolCallResponse,
   SandboxMode,
   SpawnThreadRequest,
   Thread,
@@ -307,6 +309,35 @@ export function createPiProviderAdapter(
     },
     inactiveSessionErrorMessage(threadId: string): string {
       return `Thread ${threadId} has no pi session`;
+    },
+    decodeToolCallRequest(
+      requestId: string | number,
+      method: string,
+      params: unknown,
+    ): ProviderToolCallRequest | null {
+      if (normalizeProviderEventType(method) !== "item/tool/call") {
+        return null;
+      }
+      const record = toRecord(params);
+      if (!record) return null;
+      const threadId = typeof record.threadId === "string" ? record.threadId : undefined;
+      const turnId = typeof record.turnId === "string" ? record.turnId : undefined;
+      const callId = typeof record.callId === "string" ? record.callId : undefined;
+      const tool = typeof record.tool === "string" ? record.tool : undefined;
+      if (!threadId || !turnId || !callId || !tool) return null;
+      return { requestId, threadId, turnId, callId, tool, arguments: record.arguments };
+    },
+    encodeToolCallResponse(
+      response: ProviderToolCallResponse,
+    ): Record<string, unknown> {
+      return {
+        contentItems: response.contentItems.map((item) => {
+          if (item.type === "inputText") return { type: "inputText", text: item.text };
+          if (item.type === "inputImage") return { type: "inputImage", imageUrl: item.imageUrl };
+          return item;
+        }),
+        success: response.success,
+      };
     },
   };
 }

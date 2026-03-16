@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { mkdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
@@ -86,6 +86,26 @@ async function main() {
 
   process.on("SIGINT", () => forwardAndCleanup("SIGINT"));
   process.on("SIGTERM", () => forwardAndCleanup("SIGTERM"));
+
+  // Last-resort synchronous safety net: if the process exits without the
+  // async cleanup having run (e.g., unhandled exception or signal), fire
+  // the cleanup script synchronously with spawnSync.
+  process.on("exit", () => {
+    if (cleaned) return;
+    try {
+      spawnSync(process.execPath, [
+        cleanupScript,
+        "--tmp-root", tmpRoot,
+        "--quiet",
+      ], {
+        cwd: workspaceRoot,
+        stdio: "ignore",
+        timeout: 10_000,
+      });
+    } catch {
+      // Best-effort only.
+    }
+  });
 
   child.once("error", async (error) => {
     console.error(error instanceof Error ? error.message : String(error));

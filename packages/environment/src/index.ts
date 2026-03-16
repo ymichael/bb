@@ -51,3 +51,4 @@ export type {
   DockerEnvironmentState,
 } from "./docker-environment.js";
 export { createDockerEnvironmentDefinition } from "./docker-environment.js";
+export { listManagedHostEnvironmentAgentPids } from "./host-environment-agent.js";
