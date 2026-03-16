@@ -181,6 +181,7 @@ describe("CLI command output contracts", () => {
 
     expect(post).toHaveBeenCalledWith({
       param: { id: "project-123" },
+      json: {},
     });
     expect(collectLogLines(vi.mocked(console.log))).toContain("Manager ready: thread-manager-1");
   });

@@ -39,6 +39,11 @@ const projectAttachmentQuerySchema = z.object({
   path: z.string().min(1),
 });
 
+const projectManagerRequestSchema = z.object({
+  providerId: z.string().min(1).optional(),
+  model: z.string().min(1).optional(),
+});
+
 type SearchProjectFilesFn = (
   rootPath: string,
   query: string,
@@ -247,7 +252,7 @@ export function createProjectRoutes(
         return sendRouteError(c, err);
       }
     })
-    .post("/:id/manager", async (c) => {
+    .post("/:id/manager", zValidator("json", projectManagerRequestSchema), async (c) => {
       try {
         const projectId = c.req.param("id");
         const project = projectRepo.getById(projectId);
@@ -267,12 +272,7 @@ export function createProjectRoutes(
           projectRepo.update(projectId, { primaryManagerThreadId: null });
         }
 
-        let body: { providerId?: string; model?: string } | undefined;
-        try {
-          body = await c.req.json();
-        } catch {
-          // Body is optional.
-        }
+        const body = c.req.valid("json");
 
         const managerThread = await deps.threadManager.spawn({
           projectId,

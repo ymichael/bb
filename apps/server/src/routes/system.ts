@@ -64,6 +64,10 @@ const shutdownRequestSchema = z.object({
   force: z.boolean().optional(),
 });
 
+const modelsQuerySchema = z.object({
+  providerId: z.string().min(1).optional(),
+});
+
 const RESTART_POLICY_BY_STATUS: Record<Thread["status"], string> = {
   created: "noop",
   provisioning: "noop",
@@ -283,9 +287,9 @@ export function createSystemRoutes(
         return sendRouteError(c, err);
       }
     })
-    .get("/models", async (c) => {
+    .get("/models", zValidator("query", modelsQuerySchema), async (c) => {
       try {
-        const providerId = c.req.query("providerId") || undefined;
+        const { providerId } = c.req.valid("query");
         const models = await listModels(providerId);
         return c.json(models);
       } catch (err) {
@@ -320,14 +324,10 @@ export function createSystemRoutes(
         shouldRestart: shouldRestart(),
       });
     })
-    .post("/shutdown", async (c) => {
+    .post("/shutdown", zValidator("json", shutdownRequestSchema), async (c) => {
       try {
-        const bodyRaw = await c.req.json<unknown>().catch(() => ({}));
-        const parsed = shutdownRequestSchema.safeParse(bodyRaw);
-        if (!parsed.success) {
-          throw invalidRequestError("Invalid shutdown request body");
-        }
-        const force = parsed.data.force === true;
+        const body = c.req.valid("json");
+        const force = body.force === true;
         const blockingThreads = collectBlockingThreads(threadManager);
         if (!force && blockingThreads.length > 0) {
           return c.json({
@@ -350,14 +350,10 @@ export function createSystemRoutes(
         return sendRouteError(c, err);
       }
     })
-    .post("/restart", async (c) => {
+    .post("/restart", zValidator("json", shutdownRequestSchema), async (c) => {
       try {
-        const bodyRaw = await c.req.json<unknown>().catch(() => ({}));
-        const parsed = shutdownRequestSchema.safeParse(bodyRaw);
-        if (!parsed.success) {
-          throw invalidRequestError("Invalid restart request body");
-        }
-        const force = parsed.data.force === true;
+        const body = c.req.valid("json");
+        const force = body.force === true;
         const blockingThreads = collectBlockingThreads(threadManager);
         if (!force && blockingThreads.length > 0) {
           return c.json({

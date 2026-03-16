@@ -22,6 +22,7 @@ export function registerManagerCommands(program: Command, getUrl: () => string):
         const thread = await unwrap<Thread>(
           client.api.v1.projects[":id"].manager.$post({
             param: { id: projectId },
+            json: {},
           }),
         );
         if (opts.json) {

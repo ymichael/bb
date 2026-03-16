@@ -68,6 +68,9 @@ importers:
       clsx:
         specifier: ^2.1.1
         version: 2.1.1
+      hono:
+        specifier: ^4.7.0
+        version: 4.11.9
       lucide-react:
         specifier: ^0.563.0
         version: 0.563.0(react@19.2.4)
@@ -96,6 +99,9 @@ importers:
         specifier: ^3.4.0
         version: 3.4.0
     devDependencies:
+      '@bb/server':
+        specifier: workspace:*
+        version: link:../server
       '@react-grab/codex':
         specifier: ^0.1.27
         version: 0.1.27(@types/react@19.2.13)(react@19.2.4)
