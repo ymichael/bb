@@ -22,6 +22,7 @@ export default defineConfig({
       "src/__tests__/e2e/thread-worktree-followup-roundtrip.test.ts",
       "src/__tests__/e2e/thread-worktree-primary-checkout-roundtrip.test.ts",
       "src/__tests__/e2e/standalone-daemon-blocked-restart.test.ts",
+      "src/__tests__/e2e/dynamic-tools-daemon-roundtrip.test.ts",
     ],
   },
 });

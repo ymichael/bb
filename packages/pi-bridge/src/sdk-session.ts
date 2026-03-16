@@ -138,7 +138,10 @@ export class PiSdkSession {
     }
     if (event.type === "agent_end") {
       this.isProcessing = false;
-      this.onDone();
+      // NOTE: Do NOT call onDone() here. agent_end signals "turn complete,
+      // ready for next input" — NOT session termination. The session stays
+      // alive across multiple turns. onDone() is only called on fatal errors
+      // (prompt() catch) or explicit stop().
     }
   }
 }
