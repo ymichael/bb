@@ -9,7 +9,7 @@ import {
   sql,
 } from "drizzle-orm";
 import { nanoid } from "nanoid";
-import { assertNever } from "@beanbag/agent-core";
+import { assertNever } from "@bb/core";
 import type { DbConnection } from "./connection.js";
 import {
   environmentAgentCommands,

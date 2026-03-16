@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { PatchDiff } from "@pierre/diffs/react";
-import type { UIFileEditMessage } from "@beanbag/agent-core";
+import type { UIFileEditMessage } from "@bb/core";
 import {
   CollapsibleHeader,
   ExpandablePanel,
-} from "@beanbag/ui-core";
+} from "@bb/ui-core";
 import { usePreferredTheme } from "@/hooks/useTheme";
 import {
   EventTitle,

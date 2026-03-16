@@ -6,7 +6,7 @@ import type {
   Project,
   Thread,
   ThreadTimelineResponse,
-} from "@beanbag/agent-core";
+} from "@bb/core";
 import {
   startDaemonE2eHarness,
 } from "./harness.js";
@@ -15,10 +15,10 @@ import { e2eTimeoutMs } from "./provider-mode.js";
 
 const TEST_GIT_ENV: NodeJS.ProcessEnv = {
   ...process.env,
-  GIT_AUTHOR_NAME: "Beanbag",
-  GIT_AUTHOR_EMAIL: "beanbag@example.com",
-  GIT_COMMITTER_NAME: "Beanbag",
-  GIT_COMMITTER_EMAIL: "beanbag@example.com",
+  GIT_AUTHOR_NAME: "BB",
+  GIT_AUTHOR_EMAIL: "bb@example.com",
+  GIT_COMMITTER_NAME: "BB",
+  GIT_COMMITTER_EMAIL: "bb@example.com",
 };
 
 function git(cwd: string, ...args: string[]): string {

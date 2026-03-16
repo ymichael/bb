@@ -4,20 +4,20 @@ import { fileURLToPath } from "node:url";
 const repoRoot = path.dirname(fileURLToPath(import.meta.url));
 
 export const workspaceTestAliases = {
-  "@beanbag/agent-core/storage-paths": path.resolve(
+  "@bb/core/storage-paths": path.resolve(
     repoRoot,
-    "packages/agent-core/src/storage-paths.ts",
+    "packages/core/src/storage-paths.ts",
   ),
-  "@beanbag/agent-core": path.resolve(repoRoot, "packages/agent-core/src/index.ts"),
-  "@beanbag/environment": path.resolve(repoRoot, "packages/environment/src/index.ts"),
-  "@beanbag/environment-agent": path.resolve(
+  "@bb/core": path.resolve(repoRoot, "packages/core/src/index.ts"),
+  "@bb/environment": path.resolve(repoRoot, "packages/environment/src/index.ts"),
+  "@bb/environment-daemon": path.resolve(
     repoRoot,
-    "packages/environment-agent/src/index.ts",
+    "packages/environment-daemon/src/index.ts",
   ),
-  "@beanbag/agent-server": path.resolve(repoRoot, "packages/agent-server/src/index.ts"),
-  "@beanbag/templates": path.resolve(repoRoot, "packages/templates/src/index.ts"),
-  "@beanbag/db": path.resolve(repoRoot, "packages/db/src/index.ts"),
-  "@beanbag/daemon": path.resolve(repoRoot, "apps/daemon/src/index.ts"),
-  "@beanbag/cli": path.resolve(repoRoot, "apps/cli/src/index.ts"),
-  "@beanbag/ui-core": path.resolve(repoRoot, "packages/ui-core/src/index.ts"),
+  "@bb/agent-server": path.resolve(repoRoot, "packages/agent-server/src/index.ts"),
+  "@bb/templates": path.resolve(repoRoot, "packages/templates/src/index.ts"),
+  "@bb/db": path.resolve(repoRoot, "packages/db/src/index.ts"),
+  "@bb/server": path.resolve(repoRoot, "apps/server/src/index.ts"),
+  "@bb/cli": path.resolve(repoRoot, "apps/cli/src/index.ts"),
+  "@bb/ui-core": path.resolve(repoRoot, "packages/ui-core/src/index.ts"),
 } as const;

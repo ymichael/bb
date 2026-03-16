@@ -11,14 +11,14 @@ import type {
   Thread,
   ThreadEvent,
   ThreadProviderId,
-} from "@beanbag/agent-core";
+} from "@bb/core";
 import {
   assertNever,
   decodeThreadEventData,
   decodeThreadIdFromWireValue,
   toRecord,
-} from "@beanbag/agent-core";
-import { renderTemplate } from "@beanbag/templates";
+} from "@bb/core";
+import { renderTemplate } from "@bb/templates";
 import { resolveCodexProviderLaunchConfiguration } from "./codex-auth.js";
 import { listCodexModels } from "./codex-models.js";
 import type {
@@ -286,7 +286,7 @@ export function createCodexProviderAdapter(
       };
     },
     clientInfo: {
-      name: "beanbag",
+      name: "bb",
       version: "0.0.1",
     },
     initializeMethod: "initialize",

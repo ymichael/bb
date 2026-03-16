@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import type { PromptInput, ThreadDetailRow } from "@beanbag/agent-core"
+import type { PromptInput, ThreadDetailRow } from "@bb/core"
 import {
   buildFollowUpSignatureFromInput,
   buildFollowUpSignatureFromRow,

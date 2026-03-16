@@ -41,7 +41,7 @@ describe("toUIMessages replay coverage", () => {
         type: "item/completed",
         data: {
           __bb_provider_event: {
-            schema: "beanbag/provider-event-envelope",
+            schema: "bb/provider-event-envelope",
             version: 1,
             providerId: "codex",
             method: "item/completed",
@@ -79,7 +79,7 @@ describe("toUIMessages replay coverage", () => {
         type: "item/completed",
         data: {
           __bb_provider_event: {
-            schema: "beanbag/provider-event-envelope",
+            schema: "bb/provider-event-envelope",
             version: 1,
             providerId: "codex",
             method: "item/completed",
@@ -105,7 +105,7 @@ describe("toUIMessages replay coverage", () => {
         type: "item/completed",
         data: {
           __bb_provider_event: {
-            schema: "beanbag/provider-event-envelope",
+            schema: "bb/provider-event-envelope",
             version: 1,
             providerId: "codex",
             method: "item/completed",
@@ -3108,7 +3108,7 @@ describe("toUIMessages replay coverage", () => {
         type: "system/error",
         data: {
           code: "project_root_missing",
-          message: "Project folder not found: /Users/michael/Projects/beanbag",
+          message: "Project folder not found: /Users/michael/Projects/bb",
           detail:
             "This project points to a folder that no longer exists. Update the project path and retry.",
         },

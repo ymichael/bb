@@ -5,7 +5,7 @@ import { PromptExecutionControls } from "@/components/promptbox/PromptExecutionC
 import { PromptOptionPicker } from "@/components/promptbox/PromptOptionPicker";
 import { PageShell } from "@/components/layout/PageShell";
 import { WorkspaceStatusIndicator } from "@/components/shared/WorkspaceStatusIndicator";
-import { type StatusPillVariant } from "@beanbag/ui-core";
+import { type StatusPillVariant } from "@bb/ui-core";
 import {
   useProjectWorkspaceStatus,
   useProjects,

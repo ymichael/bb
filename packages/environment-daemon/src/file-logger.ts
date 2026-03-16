@@ -1,11 +1,11 @@
 import { join } from "node:path";
-import { resolveBeanbagPath } from "@beanbag/agent-core/storage-paths";
+import { resolveBbPath } from "@bb/core/storage-paths";
 import {
   createRotatingJsonLineFileWriter,
   removeRotatingJsonLineFileArtifacts,
 } from "./rotating-file-logger.js";
 
-const BEANBAG_ENVIRONMENT_AGENT_LOG_FILE = "BEANBAG_ENVIRONMENT_AGENT_LOG_FILE";
+const BB_ENV_DAEMON_LOG_FILE = "BB_ENV_DAEMON_LOG_FILE";
 const DEFAULT_ENVIRONMENT_AGENT_LOG_MAX_BYTES = 5 * 1024 * 1024;
 const DEFAULT_ENVIRONMENT_AGENT_LOG_MAX_FILES = 3;
 
@@ -28,7 +28,7 @@ function sanitizeSegment(value: string | undefined): string {
 export function resolveEnvironmentAgentLogFilePath(
   env: NodeJS.ProcessEnv,
 ): string {
-  const configured = env[BEANBAG_ENVIRONMENT_AGENT_LOG_FILE]?.trim();
+  const configured = env[BB_ENV_DAEMON_LOG_FILE]?.trim();
   if (configured) {
     return configured;
   }
@@ -45,7 +45,7 @@ export function resolveDefaultEnvironmentAgentLogFilePath(
   identity: EnvironmentAgentLogIdentity,
 ): string {
   return join(
-    resolveBeanbagPath(identity.runtimeEnv, "environment-agent-logs"),
+    resolveBbPath(identity.runtimeEnv, "environment-agent-logs"),
     sanitizeSegment(identity.projectId),
     `${sanitizeSegment(identity.environmentId)}-${sanitizeSegment(identity.threadId)}.log`,
   );

@@ -1,4 +1,4 @@
-import type { JsonLineTransport } from "@beanbag/environment-agent";
+import type { JsonLineTransport } from "@bb/environment-daemon";
 
 type JsonRpcId = string | number;
 

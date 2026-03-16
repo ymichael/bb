@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import type { DbConnection } from "@beanbag/db";
+import type { DbConnection } from "@bb/db";
 import {
   createConnection,
   migrate,
@@ -10,7 +10,7 @@ import {
   EnvironmentAgentSessionRepository,
   ProjectRepository,
   ThreadRepository,
-} from "@beanbag/db";
+} from "@bb/db";
 import { vi } from "vitest";
 import { EnvironmentAgentCommandDispatcher } from "../environment-agent-command-dispatcher.js";
 import { EnvironmentAgentEventApplier } from "../environment-agent-event-applier.js";
@@ -112,7 +112,7 @@ describe("EnvironmentAgentSessionService", () => {
       leaseExpiresAt: 47_000,
     });
     expect(opened.welcome).toMatchObject({
-      protocol: "beanbag.env-agent.v1",
+      protocol: "bb.env-daemon.v1",
       type: "session_welcome",
       sessionId: opened.session.id,
       sentAt: 2_000,
@@ -1302,7 +1302,7 @@ describe("EnvironmentAgentSessionService", () => {
         now: 3_000,
       }),
     ).toMatchObject({
-      protocol: "beanbag.env-agent.v1",
+      protocol: "bb.env-daemon.v1",
       type: "command_batch",
       sessionId: opened.session.id,
       sentAt: 3_000,

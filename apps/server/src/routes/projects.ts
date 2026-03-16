@@ -9,10 +9,10 @@ import {
   type ProjectFileSuggestion,
   type ThreadWorkStatus,
   type UploadedPromptAttachment,
-} from "@beanbag/agent-core";
-import { resolveBeanbagPath } from "@beanbag/agent-core/storage-paths";
+} from "@bb/core";
+import { resolveBbPath } from "@bb/core/storage-paths";
 import { z } from "zod";
-import type { EventRepository, ProjectRepository, ThreadRepository } from "@beanbag/db";
+import type { EventRepository, ProjectRepository, ThreadRepository } from "@bb/db";
 import { searchProjectFiles } from "../project-file-search.js";
 import { MANAGER_THREAD_TITLE, MANAGER_WELCOME_MESSAGE, buildManagerDeveloperInstructions, ensureManagerWorkspace } from "../manager-thread.js";
 import {
@@ -21,7 +21,7 @@ import {
   unsupportedOperationError,
 } from "../domain-errors.js";
 import { sendApiError, sendRouteError } from "./error-response.js";
-import type { ThreadOrchestrator } from "@beanbag/agent-core";
+import type { ThreadOrchestrator } from "@bb/core";
 
 const projectFileQuerySchema = z.object({
   query: z.string().default(""),
@@ -76,7 +76,7 @@ function isImageAttachment(fileName: string, mimeType: string | undefined): bool
 }
 
 function resolveAttachmentsRootPath(runtimeEnv: NodeJS.ProcessEnv): string {
-  return resolveBeanbagPath(runtimeEnv, "attachments");
+  return resolveBbPath(runtimeEnv, "attachments");
 }
 
 function resolvePromptAttachmentPath(
@@ -291,7 +291,7 @@ export function createProjectRoutes(
           projectRepo.update(projectId, { primaryManagerThreadId: managerThread.id });
         } catch (error) {
           projectRepo.update(projectId, { primaryManagerThreadId: null });
-          rmSync(resolveBeanbagPath(runtimeEnv, "workspace", managerThread.id), {
+          rmSync(resolveBbPath(runtimeEnv, "workspace", managerThread.id), {
             recursive: true,
             force: true,
           });

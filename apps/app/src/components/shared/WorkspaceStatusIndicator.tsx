@@ -1,4 +1,4 @@
-import { type ThreadWorkStatus } from "@beanbag/agent-core";
+import { type ThreadWorkStatus } from "@bb/core";
 import {
   Popover,
   PopoverContent,
@@ -9,7 +9,7 @@ import {
   threadWorkStatusDescription,
 } from "@/lib/thread-work-status";
 import { cn } from "@/lib/utils";
-import { StatusPill, type StatusPillVariant } from "@beanbag/ui-core";
+import { StatusPill, type StatusPillVariant } from "@bb/ui-core";
 
 interface WorkspaceStatusIndicatorProps {
   status: ThreadWorkStatus | undefined;

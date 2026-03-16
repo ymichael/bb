@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { copyFile, mkdtemp, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
-import { renderTemplate } from "@beanbag/templates";
+import { renderTemplate } from "@bb/templates";
 import type { LlmCommitMessageGenerationArgs } from "./llm-completion.js";
 import { generateOpenAIResponsesText } from "./openai-responses-model.js";
 
@@ -81,7 +81,7 @@ async function withSyntheticIndexSnapshot(cwd: string): Promise<CommitDiffSnapsh
   const gitIndexPath = isAbsolute(gitIndexPathRaw)
     ? gitIndexPathRaw
     : resolve(cwd, gitIndexPathRaw);
-  const tempDir = await mkdtemp(join(tmpdir(), "beanbag-commit-msg-"));
+  const tempDir = await mkdtemp(join(tmpdir(), "bb-commit-msg-"));
   const tempIndexPath = join(tempDir, "index");
 
   try {

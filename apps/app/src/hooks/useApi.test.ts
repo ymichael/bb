@@ -4,7 +4,7 @@ import type {
   ThreadGitDiffResponse,
   ThreadTimelineResponse,
   ThreadWorkStatus,
-} from "@beanbag/agent-core";
+} from "@bb/core";
 import {
   appendOptimisticUserRowToTimeline,
   buildOptimisticUserThreadRow,

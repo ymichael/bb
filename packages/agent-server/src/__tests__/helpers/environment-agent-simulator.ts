@@ -1,4 +1,4 @@
-import { assertNever } from "@beanbag/agent-core";
+import { assertNever } from "@bb/core";
 import {
   createEnvironmentAgentClient,
   ENVIRONMENT_AGENT_PROTOCOL_VERSION,
@@ -15,7 +15,7 @@ import {
   isEnvironmentAgentControlRequest,
   type JsonLineTransport,
   type JsonLineTransportHandlers,
-} from "@beanbag/environment-agent";
+} from "@bb/environment-daemon";
 
 interface ProviderRequest {
   id?: string | number;

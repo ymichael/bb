@@ -2,8 +2,8 @@ import type { ChildProcess } from "node:child_process";
 import { createServer } from "node:net";
 import { access, readFile } from "node:fs/promises";
 import path from "node:path";
-import type { EnvironmentAgentConnectionTarget } from "@beanbag/environment-agent";
-import { renderTemplate } from "@beanbag/templates";
+import type { EnvironmentAgentConnectionTarget } from "@bb/environment-daemon";
+import { renderTemplate } from "@bb/templates";
 import type {
   CreateEnvironmentContext,
   DemoteEnvironmentOptions,
@@ -62,7 +62,7 @@ export interface CreateDockerEnvironmentDefinitionOptions {
   dockerBin?: string;
 }
 
-const DEFAULT_CONTAINER_PREFIX = "beanbag-thread";
+const DEFAULT_CONTAINER_PREFIX = "bb-thread";
 const DEFAULT_MOUNT_PATH = "/workspace";
 
 const DOCKER_ENVIRONMENT_INFO: EnvironmentInfo = {
@@ -171,7 +171,7 @@ class DockerEnvironment implements IEnvironment {
     private readonly runtimeEnv: Record<string, string | undefined>,
     private readonly dockerBin: string,
   ) {
-    this.environmentId = runtimeEnv.BEANBAG_ENVIRONMENT_ID?.trim() || this.kind;
+    this.environmentId = runtimeEnv.BB_ENVIRONMENT_ID?.trim() || this.kind;
   }
 
   serialize(): DockerEnvironmentState {
@@ -258,7 +258,7 @@ class DockerEnvironment implements IEnvironment {
 
   getAgentConnectionTarget(): EnvironmentAgentConnectionTarget {
     const managedTarget = this.managedAgentTarget;
-    if (!managedTarget && !this.runtimeEnv.BEANBAG_ENVIRONMENT_AGENT_BASE_URL?.trim()) {
+    if (!managedTarget && !this.runtimeEnv.BB_ENV_DAEMON_BASE_URL?.trim()) {
       throw new Error("Missing managed environment-agent target for docker environment");
     }
     return resolveEnvironmentAgentConnectionTarget({

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import type { ThreadStatus } from "@beanbag/agent-core";
+import type { ThreadStatus } from "@bb/core";
 import { statusText as threadStatusText } from "../commands/thread.js";
 
 describe("thread statusText()", () => {

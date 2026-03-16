@@ -4,7 +4,7 @@ import type {
   AvailableModel,
   ModelReasoningEffort,
   ReasoningLevel,
-} from "@beanbag/agent-core";
+} from "@bb/core";
 
 const DEFAULT_TIMEOUT_MS = 10_000;
 
@@ -227,7 +227,7 @@ export async function listCodexModels(
   try {
     await sendRequest("initialize", {
       clientInfo: {
-        name: "beanbag-daemon",
+        name: "bb-server",
         version: "0.0.1",
       },
     });

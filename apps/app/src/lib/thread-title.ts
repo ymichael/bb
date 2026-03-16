@@ -1,4 +1,4 @@
-import type { Thread } from "@beanbag/agent-core"
+import type { Thread } from "@bb/core"
 
 export function getThreadDisplayTitle(thread: Pick<Thread, "id" | "title" | "titleFallback">): string {
   if (thread.title && thread.title.trim().length > 0) return thread.title

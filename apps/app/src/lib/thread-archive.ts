@@ -2,7 +2,7 @@ import {
   assertNever,
   type SystemEnvironmentInfo,
   type ThreadWorkStatus,
-} from "@beanbag/agent-core"
+} from "@bb/core"
 import { HttpError } from "./api"
 
 type ArchiveEnvironmentShape = Pick<SystemEnvironmentInfo, "capabilities">

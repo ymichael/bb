@@ -1,13 +1,13 @@
 import type {
   EnvironmentAgentCursorPosition,
   EnvironmentAgentCursorRepository,
-} from "@beanbag/db";
+} from "@bb/db";
 import {
   ENVIRONMENT_AGENT_PROTOCOL_VERSION,
   compareEnvironmentAgentSessionCursors,
   type EnvironmentAgentEventEnvelope,
   type EnvironmentAgentSessionEventBatchChannel,
-} from "@beanbag/environment-agent";
+} from "@bb/environment-daemon";
 
 export type EnvironmentAgentEventApplyBlockedReason =
   | "invalid_channel"

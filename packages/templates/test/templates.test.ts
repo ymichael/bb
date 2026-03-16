@@ -5,7 +5,7 @@ import {
   renderTemplate,
 } from "../src/index.js";
 
-describe("@beanbag/templates", () => {
+describe("@bb/templates", () => {
   it("lists template metadata", () => {
     const templates = listTemplates();
     expect(templates.some((template) => template.id === "threadOperationCommit")).toBe(true);

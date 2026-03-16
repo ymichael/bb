@@ -2,7 +2,7 @@ import { type ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import type { ThreadTimelineResponse, ThreadWorkStatus } from "@beanbag/agent-core";
+import type { ThreadTimelineResponse, ThreadWorkStatus } from "@bb/core";
 import { buildFollowUpSignatureFromInput, buildFollowUpSignatureFromRow } from "@/lib/thread-follow-up-signature";
 import { ThreadDetailView } from "./ThreadDetailView";
 
@@ -300,7 +300,7 @@ vi.mock("@/components/shared/ArchiveTimestampAction", () => ({
   ArchiveTimestampAction: () => <div>archived</div>,
 }));
 
-vi.mock("@beanbag/ui-core", () => ({
+vi.mock("@bb/ui-core", () => ({
   DEFAULT_SCROLL_STICK_THRESHOLD_PX: 32,
   DetailCard: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
   DetailMessageRow: ({ children }: { children?: ReactNode }) => <div>{children}</div>,

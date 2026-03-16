@@ -57,13 +57,13 @@ import {
   type ThreadRenameDialogTarget,
 } from "@/components/thread/ThreadRenameDialog";
 import { ThreadDeleteDialog } from "@/components/thread/ThreadDeleteDialog";
-import { DetailCard, DetailRow, StatusPill } from "@beanbag/ui-core";
+import { DetailCard, DetailRow, StatusPill } from "@bb/ui-core";
 import {
   formatEnvironmentDisplayName,
   type PromptInput,
   type ServiceTier,
   type Thread,
-} from "@beanbag/agent-core";
+} from "@bb/core";
 import { promptDraftToInput } from "@/lib/prompt-draft";
 import { HttpError } from "@/lib/api";
 import { getAutoArchivePreferences } from "@/lib/auto-archive-preferences";

@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { expect } from "vitest";
 import { createProject, listThreadEvents, waitForThreadCondition } from "./environment-agent-api.js";
 import { createFakeCodexBinDir } from "./fake-codex.js";
-import { beanbagTestTmpPrefix } from "./temp-root.js";
+import { bbTestTmpPrefix } from "./temp-root.js";
 import { runCliCommand, withFakeE2eEnvironmentAgentTimingEnv } from "./harness.js";
 
 type EnvironmentKind = "local" | "worktree";
@@ -27,10 +27,10 @@ const TSX_CLI_PATH = resolve(
 );
 const TEST_GIT_ENV: NodeJS.ProcessEnv = {
   ...process.env,
-  GIT_AUTHOR_NAME: "Beanbag Test",
-  GIT_AUTHOR_EMAIL: "beanbag-test@example.com",
-  GIT_COMMITTER_NAME: "Beanbag Test",
-  GIT_COMMITTER_EMAIL: "beanbag-test@example.com",
+  GIT_AUTHOR_NAME: "BB Test",
+  GIT_AUTHOR_EMAIL: "bb-test@example.com",
+  GIT_COMMITTER_NAME: "BB Test",
+  GIT_COMMITTER_EMAIL: "bb-test@example.com",
 };
 
 interface LaunchTarget {
@@ -157,11 +157,11 @@ async function waitForTurnStarted(baseUrl: string, threadId: string): Promise<vo
 
 async function runBlockedRestartScenario(environmentKind: EnvironmentKind): Promise<void> {
   const tempDir = mkdtempSync(
-    beanbagTestTmpPrefix(`beanbag-standalone-blocked-${environmentKind}-`),
+    bbTestTmpPrefix(`bb-standalone-blocked-${environmentKind}-`),
   );
-  const beanbagRoot = join(tempDir, "beanbag-root");
+  const bbRoot = join(tempDir, "bb-root");
   const projectRoot = join(tempDir, "project");
-  mkdirSync(beanbagRoot, { recursive: true });
+  mkdirSync(bbRoot, { recursive: true });
   mkdirSync(projectRoot, { recursive: true });
   if (environmentKind === "worktree") {
     execFileSync("git", ["init", "-b", "main"], {
@@ -186,9 +186,9 @@ async function runBlockedRestartScenario(environmentKind: EnvironmentKind): Prom
   const daemonEnv = withFakeE2eEnvironmentAgentTimingEnv({
     ...process.env,
     PATH: prependPathEntry(process.env.PATH, fakeCodexBinDir),
-    BB_ROOT: beanbagRoot,
-    BEANBAG_FAKE_CODEX_CONTROL_FILE: fakeCodexControlFilePath,
-    BEANBAG_FAKE_CODEX_SCENARIO: "start-then-manual-complete",
+    BB_ROOT: bbRoot,
+    BB_FAKE_CODEX_CONTROL_FILE: fakeCodexControlFilePath,
+    BB_FAKE_CODEX_SCENARIO: "start-then-manual-complete",
   });
 
   const daemon = startStandaloneDaemon({

@@ -14,7 +14,7 @@ const program = new Command();
 
 program
   .name("bb")
-  .description("Beanbag CLI - manage your AI coding agents")
+  .description("BB CLI - manage your AI coding agents")
   .version("0.0.1");
 
 program.addHelpText("after", () => {

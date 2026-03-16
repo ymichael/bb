@@ -112,7 +112,7 @@ describe("generateOpenAIResponsesText auth handling", () => {
   let tempHomePath = "";
 
   beforeEach(async () => {
-    tempHomePath = await mkdtemp(join(tmpdir(), "beanbag-openai-responses-"));
+    tempHomePath = await mkdtemp(join(tmpdir(), "bb-openai-responses-"));
     process.env.HOME = tempHomePath;
     delete process.env.OPENAI_API_KEY;
     delete process.env.OPENAI_BASE_URL;

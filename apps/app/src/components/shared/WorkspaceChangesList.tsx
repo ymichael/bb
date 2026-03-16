@@ -1,4 +1,4 @@
-import type { ThreadWorkStatus } from "@beanbag/agent-core";
+import type { ThreadWorkStatus } from "@bb/core";
 import { openThreadPathInEditor } from "@/lib/api";
 import { getPathCommandForTarget } from "@/lib/open-path-preferences";
 import { cn } from "@/lib/utils";

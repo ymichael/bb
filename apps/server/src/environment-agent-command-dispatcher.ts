@@ -1,14 +1,14 @@
-import { assertNever } from "@beanbag/agent-core";
+import { assertNever } from "@bb/core";
 import type {
   EnvironmentAgentCommandRecord,
   EnvironmentAgentCommandRepository,
   EnvironmentAgentSessionRecord,
   EnvironmentAgentSessionRepository,
-} from "@beanbag/db";
+} from "@bb/db";
 import type {
   EnvironmentAgentSessionCommandAckPayload,
   EnvironmentAgentSessionCommandResultPayload,
-} from "@beanbag/environment-agent";
+} from "@bb/environment-daemon";
 
 export interface RecordEnvironmentAgentCommandAckResult {
   commands: EnvironmentAgentCommandRecord[];

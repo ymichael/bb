@@ -1,4 +1,4 @@
-import type { ThreadWorkStatus } from "@beanbag/agent-core";
+import type { ThreadWorkStatus } from "@bb/core";
 
 type ChangeCounts = {
   changedFiles: number;

@@ -2,7 +2,7 @@ import type {
   EnvironmentAgentSessionCloseReason,
   EnvironmentAgentSessionRecord,
   EnvironmentAgentSessionRepository,
-} from "@beanbag/db";
+} from "@bb/db";
 
 export interface OpenEnvironmentAgentSessionInput {
   threadId: string;

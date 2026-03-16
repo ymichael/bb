@@ -37,8 +37,8 @@ async function createRepoWithThreadAheadOfMain() {
   const repoRoot = makeTempDir();
   const suffix = randomUUID();
   git(repoRoot, "init");
-  git(repoRoot, "config", "user.name", "Beanbag Test");
-  git(repoRoot, "config", "user.email", "beanbag-test@example.com");
+  git(repoRoot, "config", "user.name", "BB Test");
+  git(repoRoot, "config", "user.email", "bb-test@example.com");
   git(repoRoot, "checkout", "-b", "main");
 
   commitReadme(repoRoot, "initial\n", "initial");

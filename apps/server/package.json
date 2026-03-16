@@ -1,5 +1,5 @@
 {
-  "name": "@beanbag/daemon",
+  "name": "@bb/server",
   "version": "0.0.1",
   "type": "module",
   "exports": {
@@ -32,12 +32,12 @@
     "test:e2e:all": "vitest run --config vitest.e2e.config.ts --dir src/__tests__/e2e"
   },
   "dependencies": {
-    "@beanbag/agent-core": "workspace:*",
-    "@beanbag/agent-server": "workspace:*",
-    "@beanbag/db": "workspace:*",
-    "@beanbag/environment": "workspace:*",
-    "@beanbag/environment-agent": "workspace:*",
-    "@beanbag/templates": "workspace:*",
+    "@bb/core": "workspace:*",
+    "@bb/agent-server": "workspace:*",
+    "@bb/db": "workspace:*",
+    "@bb/environment": "workspace:*",
+    "@bb/environment-daemon": "workspace:*",
+    "@bb/templates": "workspace:*",
     "@hono/node-server": "^1.13.0",
     "@hono/node-ws": "^1.1.0",
     "@hono/zod-validator": "^0.4.0",
@@ -47,7 +47,7 @@
     "zod": "^3.24.0"
   },
   "devDependencies": {
-    "@beanbag/tsconfig": "workspace:*",
+    "@bb/tsconfig": "workspace:*",
     "@types/node": "^22.0.0",
     "@types/ws": "^8.5.0",
     "tsx": "^4.19.0",

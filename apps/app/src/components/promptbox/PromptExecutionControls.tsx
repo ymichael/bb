@@ -1,5 +1,5 @@
 import type { ComponentProps } from "react";
-import type { ReasoningLevel, SandboxMode, ServiceTier } from "@beanbag/agent-core";
+import type { ReasoningLevel, SandboxMode, ServiceTier } from "@bb/core";
 import { PromptModelPicker } from "./PromptModelPicker";
 import { PromptOptionPicker, PromptOptionDisplay, type PromptOption } from "./PromptOptionPicker";
 

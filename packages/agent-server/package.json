@@ -1,5 +1,5 @@
 {
-  "name": "@beanbag/agent-server",
+  "name": "@bb/agent-server",
   "version": "0.0.1",
   "type": "module",
   "exports": {
@@ -19,18 +19,18 @@
     "test": "vitest run --config vitest.config.ts"
   },
   "dependencies": {
-    "@beanbag/agent-core": "workspace:*",
+    "@bb/core": "workspace:*",
     "@anthropic-ai/sdk": "^0.73.0",
-    "@beanbag/claude-code-bridge": "workspace:*",
-    "@beanbag/environment-agent": "workspace:*",
-    "@beanbag/pi-bridge": "workspace:*",
-    "@beanbag/templates": "workspace:*",
+    "@bb/claude-code-bridge": "workspace:*",
+    "@bb/environment-daemon": "workspace:*",
+    "@bb/pi-bridge": "workspace:*",
+    "@bb/templates": "workspace:*",
     "@mariozechner/pi-ai": "^0.58.3",
     "@mariozechner/pi-coding-agent": "^0.58.3",
     "tsx": "^4.20.0"
   },
   "devDependencies": {
-    "@beanbag/tsconfig": "workspace:*",
+    "@bb/tsconfig": "workspace:*",
     "@types/node": "^22.0.0",
     "typescript": "^5.7.0",
     "vitest": "^4.0.0"

@@ -1,5 +1,5 @@
-import type { ThreadStatus } from "@beanbag/agent-core";
-import { StatusPill, type StatusPillVariant } from "@beanbag/ui-core";
+import type { ThreadStatus } from "@bb/core";
+import { StatusPill, type StatusPillVariant } from "@bb/ui-core";
 import { formatSnakeCaseLabel } from "@/lib/formatting";
 
 type Status = ThreadStatus;

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { createProviderEventEnvelope } from "@beanbag/agent-core";
+import { createProviderEventEnvelope } from "@bb/core";
 import type { DbConnection } from "../src/connection.js";
 import { createConnection } from "../src/connection.js";
 import { migrate } from "../src/migrate.js";

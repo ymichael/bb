@@ -4,7 +4,7 @@ import { existsSync } from "node:fs";
 import { createServer } from "node:net";
 import { request as httpRequest } from "node:http";
 import { fileURLToPath } from "node:url";
-import type { EnvironmentAgentConnectionTarget } from "@beanbag/environment-agent";
+import type { EnvironmentAgentConnectionTarget } from "@bb/environment-daemon";
 import { resolveDockerEnvironmentAgentArtifactEntry } from "./docker-environment-agent.js";
 
 const HOST = "127.0.0.1";
@@ -295,7 +295,7 @@ export async function ensureManagedHostEnvironmentAgent(args: {
     authToken?: string;
   };
 }, deps: EnsureManagedHostEnvironmentAgentDeps = {}): Promise<EnvironmentAgentConnectionTarget | undefined> {
-  if (args.runtimeEnv.BEANBAG_ENVIRONMENT_AGENT_BASE_URL?.trim()) {
+  if (args.runtimeEnv.BB_ENV_DAEMON_BASE_URL?.trim()) {
     return undefined;
   }
 
@@ -387,8 +387,8 @@ export async function ensureManagedHostEnvironmentAgent(args: {
           BB_THREAD_ID: args.threadId,
           BB_PROJECT_ID: args.projectId,
           BB_ENVIRONMENT_ID: args.environmentId,
-          BEANBAG_ENVIRONMENT_AGENT_AUTH_TOKEN: authToken,
-          BEANBAG_ENVIRONMENT_AGENT_CONTROL_BASE_URL: baseUrl,
+          BB_ENV_DAEMON_AUTH_TOKEN: authToken,
+          BB_ENV_DAEMON_CONTROL_BASE_URL: baseUrl,
         },
         detached: true,
         stdio: "ignore",
@@ -425,7 +425,7 @@ export async function disposeManagedHostEnvironmentAgent(args: {
   EnsureManagedHostEnvironmentAgentDeps,
   "isProcessAlive" | "killProcess" | "sleepMs" | "requestShutdown" | "pingAgent"
 > = {}): Promise<void> {
-  if (args.runtimeEnv.BEANBAG_ENVIRONMENT_AGENT_BASE_URL?.trim()) {
+  if (args.runtimeEnv.BB_ENV_DAEMON_BASE_URL?.trim()) {
     return;
   }
   const stateIdentity: ManagedHostEnvironmentAgentIdentity = {

@@ -1,5 +1,5 @@
 {
-  "name": "beanbag",
+  "name": "bb",
   "private": true,
   "type": "module",
   "scripts": {
@@ -15,16 +15,16 @@
     "test:integration": "turbo run test:integration test:e2e",
     "test:e2e": "turbo run test:e2e",
     "qa:daemon:manual-smoke": "node scripts/qa/run-standalone-daemon-manual-smoke.mjs",
-    "qa:daemon:smoke": "BB_E2E_PROVIDER_MODE=real pnpm --filter @beanbag/daemon test:e2e:qa:smoke",
-    "qa:daemon:stress": "BB_E2E_PROVIDER_MODE=real pnpm --filter @beanbag/daemon test:e2e:qa:stress",
-    "qa:daemon:regression": "BB_E2E_PROVIDER_MODE=real pnpm --filter @beanbag/daemon test:e2e:qa:regression",
-    "qa:daemon:smoke:claude-code": "BB_E2E_PROVIDER_MODE=real BB_E2E_PROVIDER=claude-code pnpm --filter @beanbag/daemon test:e2e:qa:smoke",
-    "qa:daemon:smoke:pi": "BB_E2E_PROVIDER_MODE=real BB_E2E_PROVIDER=pi pnpm --filter @beanbag/daemon test:e2e:qa:smoke",
-    "qa:daemon:recovery:fake": "BB_E2E_PROVIDER_MODE=fake pnpm --filter @beanbag/daemon test:e2e:qa:recovery:fake",
+    "qa:daemon:smoke": "BB_E2E_PROVIDER_MODE=real pnpm --filter @bb/server test:e2e:qa:smoke",
+    "qa:daemon:stress": "BB_E2E_PROVIDER_MODE=real pnpm --filter @bb/server test:e2e:qa:stress",
+    "qa:daemon:regression": "BB_E2E_PROVIDER_MODE=real pnpm --filter @bb/server test:e2e:qa:regression",
+    "qa:daemon:smoke:claude-code": "BB_E2E_PROVIDER_MODE=real BB_E2E_PROVIDER=claude-code pnpm --filter @bb/server test:e2e:qa:smoke",
+    "qa:daemon:smoke:pi": "BB_E2E_PROVIDER_MODE=real BB_E2E_PROVIDER=pi pnpm --filter @bb/server test:e2e:qa:smoke",
+    "qa:daemon:recovery:fake": "BB_E2E_PROVIDER_MODE=fake pnpm --filter @bb/server test:e2e:qa:recovery:fake",
     "bb": "node apps/cli/dist/index.js",
-    "bb:dev": "pnpm --filter @beanbag/daemon exec tsx ../cli/src/index.ts",
-    "daemon": "node apps/daemon/dist/index.js",
-    "drizzle-studio": "pnpm --filter @beanbag/db db:studio"
+    "bb:dev": "pnpm --filter @bb/server exec tsx ../cli/src/index.ts",
+    "daemon": "node apps/server/dist/index.js",
+    "drizzle-studio": "pnpm --filter @bb/db db:studio"
   },
   "devDependencies": {
     "turbo": "^2.4.0",

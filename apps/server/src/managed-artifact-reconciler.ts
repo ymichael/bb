@@ -11,13 +11,13 @@ import {
   type EnvironmentRecord,
   type Project,
   type Thread,
-} from "@beanbag/agent-core";
-import type { ThreadEnvironmentAttachmentRecord } from "@beanbag/db";
-import { resolveBeanbagPath } from "@beanbag/agent-core/storage-paths";
+} from "@bb/core";
+import type { ThreadEnvironmentAttachmentRecord } from "@bb/db";
+import { resolveBbPath } from "@bb/core/storage-paths";
 import {
   removeRotatingJsonLineFileArtifacts,
   resolveDefaultEnvironmentAgentLogFilePath,
-} from "@beanbag/environment-agent";
+} from "@bb/environment-daemon";
 import {
   resolveManagedWorktreeRootForProject,
 } from "./managed-storage-paths.js";
@@ -162,7 +162,7 @@ function environmentPathFromDescriptor(descriptor: EnvironmentDescriptor): strin
 export function resolveArchivedEnvironmentAgentLogRetentionMs(
   env: NodeJS.ProcessEnv,
 ): number {
-  const configured = parseNumberEnv(env.BEANBAG_ARCHIVED_LOG_RETENTION_HOURS);
+  const configured = parseNumberEnv(env.BB_ARCHIVED_LOG_RETENTION_HOURS);
   if (configured === undefined || configured < 0) {
     return DEFAULT_ARCHIVED_LOG_RETENTION_MS;
   }
@@ -172,7 +172,7 @@ export function resolveArchivedEnvironmentAgentLogRetentionMs(
 export function resolveManagedArtifactSweepIntervalMs(
   env: NodeJS.ProcessEnv,
 ): number {
-  const configured = parseNumberEnv(env.BEANBAG_MANAGED_ARTIFACT_SWEEP_INTERVAL_MS);
+  const configured = parseNumberEnv(env.BB_MANAGED_ARTIFACT_SWEEP_INTERVAL_MS);
   if (configured === undefined || configured < 0) {
     return DEFAULT_MANAGED_ARTIFACT_SWEEP_INTERVAL_MS;
   }
@@ -237,7 +237,7 @@ export function reconcileManagedArtifactStorage(
 
   let removedLogArtifacts = 0;
   const seenLogBasePaths = new Set<string>();
-  const environmentAgentLogsRoot = resolveBeanbagPath(args.runtimeEnv, "environment-agent-logs");
+  const environmentAgentLogsRoot = resolveBbPath(args.runtimeEnv, "environment-agent-logs");
   for (const filePath of scanFilesRecursively(environmentAgentLogsRoot)) {
     const basePath = baseLogPath(filePath);
     if (seenLogBasePaths.has(basePath)) continue;

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
-import type { Thread } from "@beanbag/agent-core"
+import type { Thread } from "@bb/core"
 import {
   AlertTriangle,
   ChevronDown,
@@ -72,7 +72,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { StatusPill } from "@beanbag/ui-core"
+import { StatusPill } from "@bb/ui-core"
 import { toast } from "sonner"
 
 interface ProjectListProps {
@@ -82,8 +82,8 @@ interface ProjectListProps {
   isCreatingProject?: boolean
 }
 
-const COLLAPSED_PROJECTS_STORAGE_KEY = "beanbag.sidebar.collapsedProjects"
-const COLLAPSED_MANAGERS_STORAGE_KEY = "beanbag.sidebar.collapsedManagers"
+const COLLAPSED_PROJECTS_STORAGE_KEY = "bb.sidebar.collapsedProjects"
+const COLLAPSED_MANAGERS_STORAGE_KEY = "bb.sidebar.collapsedManagers"
 
 function ManagedThreadBranchGlyph() {
   return (

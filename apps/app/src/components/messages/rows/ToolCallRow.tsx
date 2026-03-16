@@ -1,5 +1,5 @@
-import { ExpandablePanel } from "@beanbag/ui-core";
-import type { UIToolCallMessage } from "@beanbag/agent-core";
+import { ExpandablePanel } from "@bb/ui-core";
+import type { UIToolCallMessage } from "@bb/core";
 import {
   EventTitle,
   formatSummaryDuration,

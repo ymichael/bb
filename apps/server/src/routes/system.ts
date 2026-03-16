@@ -14,8 +14,8 @@ import type {
   Thread,
   SystemStatus,
   ThreadOrchestrator,
-} from "@beanbag/agent-core";
-import { assertNever } from "@beanbag/agent-core";
+} from "@bb/core";
+import { assertNever } from "@bb/core";
 import { pickFolderPath } from "../folder-picker.js";
 import { invalidRequestError } from "../domain-errors.js";
 import { sendRouteError } from "./error-response.js";

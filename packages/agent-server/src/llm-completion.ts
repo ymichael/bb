@@ -1,4 +1,4 @@
-import type { PromptInput } from "@beanbag/agent-core";
+import type { PromptInput } from "@bb/core";
 import { generateCodexCommitMessage } from "./codex-commit-message-generator.js";
 import { generateCodexThreadTitle } from "./codex-title-generator.js";
 

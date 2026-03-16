@@ -7,7 +7,7 @@ export default defineConfig({
   },
   test: {
     silent: "passed-only",
-    name: "@beanbag/daemon:e2e",
+    name: "@bb/server:e2e",
     globalSetup: ["./src/__tests__/e2e/global-setup.ts"],
   },
 });

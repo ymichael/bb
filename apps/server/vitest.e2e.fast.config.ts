@@ -7,7 +7,7 @@ export default defineConfig({
   },
   test: {
     silent: "passed-only",
-    name: "@beanbag/daemon:e2e:fast",
+    name: "@bb/server:e2e:fast",
     globalSetup: ["./src/__tests__/e2e/global-setup.ts"],
     include: [
       "src/__tests__/e2e/standalone-daemon-cli-roundtrip.test.ts",

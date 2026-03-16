@@ -21,7 +21,7 @@ export default function globalSetup(): () => void {
   const workspaceRoot = resolve(process.cwd(), "../..");
   dotenv.config({ path: resolve(workspaceRoot, ".env") });
 
-  const environmentAgentRoot = resolve(process.cwd(), "../../packages/environment-agent");
+  const environmentAgentRoot = resolve(process.cwd(), "../../packages/environment-daemon");
   const bundlePath = resolve(environmentAgentRoot, "dist/environment-agent.bundle.mjs");
   const sourceLatestMs = Math.max(
     latestModifiedAtMs(resolve(environmentAgentRoot, "src")),
@@ -31,7 +31,7 @@ export default function globalSetup(): () => void {
   const bundleIsCurrent =
     existsSync(bundlePath) && statSync(bundlePath).mtimeMs >= sourceLatestMs;
   if (!bundleIsCurrent) {
-    execFileSync("pnpm", ["exec", "turbo", "run", "build", "--filter=@beanbag/environment-agent"], {
+    execFileSync("pnpm", ["exec", "turbo", "run", "build", "--filter=@bb/environment-daemon"], {
       cwd: process.cwd(),
       stdio: "pipe",
     });
@@ -41,12 +41,12 @@ export default function globalSetup(): () => void {
   // This catches orphaned processes left behind by tests that were killed by
   // vitest timeout or crashed before their own cleanup ran.
   return function globalTeardown(): void {
-    const cleanupScript = resolve(workspaceRoot, "scripts", "qa", "cleanup-beanbag-test-processes.mjs");
+    const cleanupScript = resolve(workspaceRoot, "scripts", "qa", "cleanup-bb-test-processes.mjs");
     if (!existsSync(cleanupScript)) {
       return;
     }
 
-    const tmpRoot = process.env.BEANBAG_TEST_TMP_ROOT?.trim();
+    const tmpRoot = process.env.BB_TEST_TMP_ROOT?.trim();
     const args = [
       cleanupScript,
       ...(tmpRoot ? ["--tmp-root", tmpRoot] : []),

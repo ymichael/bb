@@ -148,7 +148,7 @@ describe("EnvironmentAgentRuntime", () => {
   });
 
   it("materializes launch env and auth files before spawning the provider", async () => {
-    const tempHome = await mkdtemp(join(tmpdir(), "beanbag-env-agent-runtime-"));
+    const tempHome = await mkdtemp(join(tmpdir(), "bb-env-daemon-runtime-"));
     cleanup.push(() => rm(tempHome, { recursive: true, force: true }));
 
     const runtime = new EnvironmentAgentRuntime({ threadId: "thread-1" });
@@ -233,7 +233,7 @@ describe("EnvironmentAgentRuntime", () => {
         params: { model: "gpt-5" },
         initialize: {
           method: "initialize",
-          params: { clientInfo: { name: "beanbag", version: "0.0.1" } },
+          params: { clientInfo: { name: "bb", version: "0.0.1" } },
         },
       },
     });
@@ -337,7 +337,7 @@ describe("EnvironmentAgentRuntime", () => {
         params: { threadId: "provider-thread-1" },
         initialize: {
           method: "initialize",
-          params: { clientInfo: { name: "beanbag", version: "0.0.1" } },
+          params: { clientInfo: { name: "bb", version: "0.0.1" } },
         },
       },
     });
@@ -355,7 +355,7 @@ describe("EnvironmentAgentRuntime", () => {
         params: { threadId: "provider-thread-2" },
         initialize: {
           method: "initialize",
-          params: { clientInfo: { name: "beanbag", version: "0.0.1" } },
+          params: { clientInfo: { name: "bb", version: "0.0.1" } },
         },
       },
     });

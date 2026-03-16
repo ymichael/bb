@@ -4,8 +4,8 @@ import {
   ENVIRONMENT_AGENT_PROTOCOL_VERSION,
   type EnvironmentAgentCommand,
   type EnvironmentAgentClient,
-} from "@beanbag/environment-agent";
-import { assertNever, toRecord } from "@beanbag/agent-core";
+} from "@bb/environment-daemon";
+import { assertNever, toRecord } from "@bb/core";
 import { vi } from "vitest";
 
 export const CODEX_THREAD_ID = "codex-thread-abc-123";

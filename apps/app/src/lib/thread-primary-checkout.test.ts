@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { EnvironmentCapabilities } from "@beanbag/agent-core";
+import type { EnvironmentCapabilities } from "@bb/core";
 import { supportsPrimaryCheckoutMetadata } from "./thread-primary-checkout";
 
 function makeCapabilities(

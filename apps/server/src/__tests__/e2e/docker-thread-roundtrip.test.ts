@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { afterEach, describe, expect, it } from "vitest";
-import type { Project, Thread, ThreadEvent } from "@beanbag/agent-core";
+import type { Project, Thread, ThreadEvent } from "@bb/core";
 import {
   startDaemonE2eHarness,
   type DaemonE2eHarness,

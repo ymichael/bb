@@ -507,7 +507,7 @@ export class EnvironmentAgentRuntime {
   private resolveManagedProviderHomeDir(): string {
     return path.join(
       tmpdir(),
-      "beanbag-environment-agent",
+      "bb-environment-daemon",
       this.resolveThreadId(),
       "provider-home",
     );

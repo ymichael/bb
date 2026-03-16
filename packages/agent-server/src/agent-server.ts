@@ -9,7 +9,7 @@ import {
   type EnvironmentAgentProviderLaunchWrapper,
   type EnvironmentAgentProviderSpec,
   type EnvironmentAgentStatusSnapshot,
-} from "@beanbag/environment-agent";
+} from "@bb/environment-daemon";
 import {
   assertNever,
   createProviderEventEnvelope,
@@ -25,7 +25,7 @@ import {
   type ThreadEvent,
   type ThreadEventData,
   type ThreadEventType,
-} from "@beanbag/agent-core";
+} from "@bb/core";
 import type { ProviderAdapter } from "./provider-adapter.js";
 import type { ProviderRuntimeNotification } from "./provider-runtime.js";
 import type { ProviderToolHost } from "./provider-tool-host.js";
@@ -552,7 +552,7 @@ export class AgentServer {
         this.opts.logger?.warn(
           `[thread ${threadId}] provider auth refresh conflict (refresh token reused). ` +
             "Another Codex process likely refreshed credentials first. " +
-            "If requests start failing, re-authenticate with `codex login` and restart Beanbag daemon.",
+            "If requests start failing, re-authenticate with `codex login` and restart BB server.",
         );
       }
 

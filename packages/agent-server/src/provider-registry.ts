@@ -4,7 +4,7 @@ import {
   THREAD_PROVIDER_IDS,
   type SystemProviderInfo,
   type ThreadProviderId,
-} from "@beanbag/agent-core";
+} from "@bb/core";
 import { createClaudeCodeProviderAdapter } from "./claude-code-provider-adapter.js";
 import { createCodexProviderAdapter } from "./codex-provider-adapter.js";
 import { createPiProviderAdapter } from "./pi-provider-adapter.js";
@@ -43,11 +43,11 @@ export function listAvailableProviderInfos(): SystemProviderInfo[] {
 /**
  * Resolve the default provider ID.
  *
- * Checks test/env-var overrides first (`BB_E2E_PROVIDER`, `BEANBAG_PROVIDER`),
+ * Checks the test/env-var override (`BB_E2E_PROVIDER`),
  * then falls back to the compile-time default (codex).
  */
 export function resolveDefaultProviderId(): ThreadProviderId {
-  const testOverride = process.env.BB_E2E_PROVIDER ?? process.env.BEANBAG_PROVIDER;
+  const testOverride = process.env.BB_E2E_PROVIDER;
   if (testOverride && isThreadProviderId(testOverride.trim().toLowerCase())) {
     return testOverride.trim().toLowerCase() as ThreadProviderId;
   }

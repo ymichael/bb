@@ -1,5 +1,5 @@
-import { assertNever, type ThreadWorkStatus } from "@beanbag/agent-core";
-import type { StatusPillVariant } from "@beanbag/ui-core";
+import { assertNever, type ThreadWorkStatus } from "@bb/core";
+import type { StatusPillVariant } from "@bb/ui-core";
 import {
   formatDirtyWorkspaceLabel,
   formatWorkspaceChangeSummary,

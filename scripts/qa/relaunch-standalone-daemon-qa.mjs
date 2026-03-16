@@ -12,7 +12,7 @@ const defaultDaemonEntry = resolve(workspaceRoot, "apps", "daemon", "dist", "ind
 function parseArgs(argv) {
   const options = {
     port: null,
-    beanbagRoot: null,
+    bbRoot: null,
     nodePath: process.execPath,
     daemonEntry: defaultDaemonEntry,
   };
@@ -24,8 +24,8 @@ function parseArgs(argv) {
         options.port = argv[index + 1] ?? null;
         index += 1;
         break;
-      case "--beanbag-root":
-        options.beanbagRoot = argv[index + 1] ?? null;
+      case "--bb-root":
+        options.bbRoot = argv[index + 1] ?? null;
         index += 1;
         break;
       case "--node-path":
@@ -44,15 +44,15 @@ function parseArgs(argv) {
   if (!options.port) {
     throw new Error("Missing required argument: --port");
   }
-  if (!options.beanbagRoot) {
-    throw new Error("Missing required argument: --beanbag-root");
+  if (!options.bbRoot) {
+    throw new Error("Missing required argument: --bb-root");
   }
 
   return options;
 }
 
 async function main() {
-  const { port, beanbagRoot, nodePath, daemonEntry } = parseArgs(process.argv.slice(2));
+  const { port, bbRoot, nodePath, daemonEntry } = parseArgs(process.argv.slice(2));
   const runtimeSummary = execFileSync(
     nodePath,
     ["-p", "JSON.stringify({ version: process.version, abi: process.versions.modules })"],
@@ -63,14 +63,14 @@ async function main() {
   console.error(
     `Relaunching standalone daemon with ${nodePath} (node ${version}, abi ${abi})`,
   );
-  console.error(`BB_ROOT=${beanbagRoot}`);
+  console.error(`BB_ROOT=${bbRoot}`);
   console.error(`Daemon entry=${daemonEntry}`);
 
   const daemonChild = spawn(nodePath, [daemonEntry, "--port", String(port)], {
     cwd: workspaceRoot,
     env: {
       ...process.env,
-      BB_ROOT: beanbagRoot,
+      BB_ROOT: bbRoot,
     },
     stdio: "inherit",
   });

@@ -1,7 +1,7 @@
-import type { EnvironmentAgentConnectionTarget } from "@beanbag/environment-agent";
+import type { EnvironmentAgentConnectionTarget } from "@bb/environment-daemon";
 
-const BEANBAG_ENVIRONMENT_AGENT_BASE_URL = "BEANBAG_ENVIRONMENT_AGENT_BASE_URL";
-const BEANBAG_ENVIRONMENT_AGENT_AUTH_TOKEN = "BEANBAG_ENVIRONMENT_AGENT_AUTH_TOKEN";
+const BB_ENV_DAEMON_BASE_URL = "BB_ENV_DAEMON_BASE_URL";
+const BB_ENV_DAEMON_AUTH_TOKEN = "BB_ENV_DAEMON_AUTH_TOKEN";
 
 function normalizeBaseUrl(value: string): string {
   return value.replace(/\/+$/, "");
@@ -11,12 +11,12 @@ export function resolveEnvironmentAgentConnectionTarget(args: {
   runtimeEnv: Record<string, string | undefined>;
   defaultTarget: EnvironmentAgentConnectionTarget;
 }): EnvironmentAgentConnectionTarget {
-  const baseUrl = args.runtimeEnv[BEANBAG_ENVIRONMENT_AGENT_BASE_URL]?.trim();
+  const baseUrl = args.runtimeEnv[BB_ENV_DAEMON_BASE_URL]?.trim();
   if (!baseUrl) {
     return args.defaultTarget;
   }
 
-  const authToken = args.runtimeEnv[BEANBAG_ENVIRONMENT_AGENT_AUTH_TOKEN]?.trim();
+  const authToken = args.runtimeEnv[BB_ENV_DAEMON_AUTH_TOKEN]?.trim();
   return {
     transport: "http",
     baseUrl: normalizeBaseUrl(baseUrl),

@@ -7,7 +7,7 @@ export default defineConfig({
   },
   test: {
     silent: "passed-only",
-    name: "@beanbag/claude-code-bridge",
+    name: "@bb/claude-code-bridge",
     include: ["src/__tests__/**/*.test.ts"],
     exclude: ["dist/**", "node_modules/**"],
   },

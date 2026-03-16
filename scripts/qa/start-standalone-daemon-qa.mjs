@@ -89,22 +89,22 @@ async function createProject(baseUrl, projectName, projectRoot) {
 async function main() {
   const { projectName, provider } = parseArgs(process.argv.slice(2));
   const tmpRoot = await import("node:fs/promises").then(({ mkdtemp }) =>
-    mkdtemp(join(tmpdir(), "beanbag-qa-")),
+    mkdtemp(join(tmpdir(), "bb-qa-")),
   );
   const projectRoot = join(tmpRoot, "project");
-  const beanbagRoot = join(tmpRoot, "beanbag-root");
+  const bbRoot = join(tmpRoot, "bb-root");
   await mkdir(projectRoot, { recursive: true });
-  await mkdir(beanbagRoot, { recursive: true });
+  await mkdir(bbRoot, { recursive: true });
 
   await writeFile(join(projectRoot, "alpha.txt"), "alpha\n", "utf8");
   await writeFile(join(projectRoot, "beta.md"), "# beta\n", "utf8");
 
   const gitEnv = {
     ...process.env,
-    GIT_AUTHOR_NAME: "Beanbag Test",
-    GIT_AUTHOR_EMAIL: "beanbag-test@example.com",
-    GIT_COMMITTER_NAME: "Beanbag Test",
-    GIT_COMMITTER_EMAIL: "beanbag-test@example.com",
+    GIT_AUTHOR_NAME: "BB Test",
+    GIT_AUTHOR_EMAIL: "bb-test@example.com",
+    GIT_COMMITTER_NAME: "BB Test",
+    GIT_COMMITTER_EMAIL: "bb-test@example.com",
   };
   await import("node:child_process").then(({ execFileSync }) => {
     execFileSync("git", ["init", "-b", "main"], { cwd: projectRoot, env: gitEnv });
@@ -117,12 +117,12 @@ async function main() {
   const daemonEntry = resolve(workspaceRoot, "apps", "daemon", "dist", "index.js");
   const daemonEnv = {
     ...process.env,
-    BB_ROOT: beanbagRoot,
-    ...(provider ? { BEANBAG_PROVIDER: provider } : {}),
+    BB_ROOT: bbRoot,
+    ...(provider ? { BB_PROVIDER: provider } : {}),
   };
   const relaunchEnvPrefix = [
-    `BB_ROOT="${beanbagRoot}"`,
-    ...(provider ? [`BEANBAG_PROVIDER="${provider}"`] : []),
+    `BB_ROOT="${bbRoot}"`,
+    ...(provider ? [`BB_PROVIDER="${provider}"`] : []),
   ].join(" ");
   const relaunchCommand = [
     relaunchEnvPrefix,
@@ -152,14 +152,14 @@ async function main() {
     String(daemonChild.pid),
     "--tmp-root",
     `"${tmpRoot}"`,
-    "--beanbag-root",
-    `"${beanbagRoot}"`,
+    "--bb-root",
+    `"${bbRoot}"`,
   ].join(" ");
 
   console.log(JSON.stringify({
     tmpRoot,
     projectRoot,
-    beanbagRoot,
+    bbRoot,
     port,
     daemonUrl,
     provider: provider ?? "codex",
@@ -167,7 +167,7 @@ async function main() {
     nodeVersion: process.version,
     nodeAbi: process.versions.modules,
     daemonPid: daemonChild.pid,
-    daemonLogPath: join(beanbagRoot, "logs", "daemon.log"),
+    daemonLogPath: join(bbRoot, "logs", "daemon.log"),
     projectId: project.id,
     relaunchCommand,
     cleanupCommand,

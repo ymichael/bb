@@ -64,7 +64,7 @@ Examples:
 
 ### 7. Session retirement after idle must be clean
 
-When Beanbag intentionally retires the worker after a turn settles back to `idle`, it should do so without leaving duplicate active session state behind.
+When BB intentionally retires the worker after a turn settles back to `idle`, it should do so without leaving duplicate active session state behind.
 
 Implications:
 - historical session rows are acceptable

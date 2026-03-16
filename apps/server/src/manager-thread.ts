@@ -1,6 +1,6 @@
 import { mkdirSync } from "node:fs";
-import { resolveBeanbagPath } from "@beanbag/agent-core/storage-paths";
-import { renderTemplate } from "@beanbag/templates";
+import { resolveBbPath } from "@bb/core/storage-paths";
+import { renderTemplate } from "@bb/templates";
 
 export const MANAGER_THREAD_TITLE = "Manager";
 
@@ -12,7 +12,7 @@ export function resolveManagerWorkspacePath(
   runtimeEnv: NodeJS.ProcessEnv,
   threadId: string,
 ): string {
-  return resolveBeanbagPath(runtimeEnv, "workspace", threadId);
+  return resolveBbPath(runtimeEnv, "workspace", threadId);
 }
 
 export function ensureManagerWorkspace(

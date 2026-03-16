@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { Thread } from "@beanbag/agent-core";
-import type * as environmentAgent from "@beanbag/environment-agent";
+import type { Thread } from "@bb/core";
+import type * as environmentAgent from "@bb/environment-daemon";
 import type { EnvironmentService } from "../environment-service.js";
 import {
   EnvironmentAgentSessionUnavailableError,
@@ -11,9 +11,9 @@ import {
   EventRepository,
   ProjectRepository,
   EnvironmentRepository,
-} from "@beanbag/db";
+} from "@bb/db";
 import type { WSManager } from "../ws.js";
-import type { IEnvironment } from "@beanbag/environment";
+import type { IEnvironment } from "@bb/environment";
 import { providerTimeoutError } from "../domain-errors.js";
 import { Orchestrator } from "../orchestrator.js";
 import {
@@ -339,8 +339,8 @@ describe("Orchestrator environment-agent delivery and replay", () => {
       createMockLlmCompletionService(),
       undefined,
       createTestRuntimeEnv({
-        BEANBAG_ENVIRONMENT_AGENT_BASE_URL: undefined,
-        BEANBAG_ENVIRONMENT_AGENT_AUTH_TOKEN: undefined,
+        BB_ENV_DAEMON_BASE_URL: undefined,
+        BB_ENV_DAEMON_AUTH_TOKEN: undefined,
       }),
       undefined,
       undefined,
@@ -481,8 +481,8 @@ describe("Orchestrator environment-agent delivery and replay", () => {
       createMockLlmCompletionService(),
       undefined,
       createTestRuntimeEnv({
-        BEANBAG_ENVIRONMENT_AGENT_BASE_URL: undefined,
-        BEANBAG_ENVIRONMENT_AGENT_AUTH_TOKEN: undefined,
+        BB_ENV_DAEMON_BASE_URL: undefined,
+        BB_ENV_DAEMON_AUTH_TOKEN: undefined,
       }),
       undefined,
       undefined,
@@ -580,8 +580,8 @@ describe("Orchestrator environment-agent delivery and replay", () => {
       createMockLlmCompletionService(),
       undefined,
       createTestRuntimeEnv({
-        BEANBAG_ENVIRONMENT_AGENT_BASE_URL: undefined,
-        BEANBAG_ENVIRONMENT_AGENT_AUTH_TOKEN: undefined,
+        BB_ENV_DAEMON_BASE_URL: undefined,
+        BB_ENV_DAEMON_AUTH_TOKEN: undefined,
       }),
       undefined,
       undefined,
@@ -677,8 +677,8 @@ describe("Orchestrator environment-agent delivery and replay", () => {
       createMockLlmCompletionService(),
       undefined,
       createTestRuntimeEnv({
-        BEANBAG_ENVIRONMENT_AGENT_BASE_URL: undefined,
-        BEANBAG_ENVIRONMENT_AGENT_AUTH_TOKEN: undefined,
+        BB_ENV_DAEMON_BASE_URL: undefined,
+        BB_ENV_DAEMON_AUTH_TOKEN: undefined,
       }),
       undefined,
       undefined,
@@ -792,8 +792,8 @@ describe("Orchestrator environment-agent delivery and replay", () => {
       createMockLlmCompletionService(),
       undefined,
       createTestRuntimeEnv({
-        BEANBAG_ENVIRONMENT_AGENT_BASE_URL: undefined,
-        BEANBAG_ENVIRONMENT_AGENT_AUTH_TOKEN: undefined,
+        BB_ENV_DAEMON_BASE_URL: undefined,
+        BB_ENV_DAEMON_AUTH_TOKEN: undefined,
       }),
       undefined,
       undefined,
@@ -874,8 +874,8 @@ describe("Orchestrator environment-agent delivery and replay", () => {
       createMockLlmCompletionService(),
       undefined,
       createTestRuntimeEnv({
-        BEANBAG_ENVIRONMENT_AGENT_BASE_URL: undefined,
-        BEANBAG_ENVIRONMENT_AGENT_AUTH_TOKEN: undefined,
+        BB_ENV_DAEMON_BASE_URL: undefined,
+        BB_ENV_DAEMON_AUTH_TOKEN: undefined,
       }),
       undefined,
       undefined,

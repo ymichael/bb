@@ -16,13 +16,13 @@ import type {
   Thread,
   ThreadEvent,
   ThreadProviderId,
-} from "@beanbag/agent-core";
+} from "@bb/core";
 import {
   decodeThreadEventData,
   decodeThreadIdFromWireValue,
   toRecord,
-} from "@beanbag/agent-core";
-import { renderTemplate } from "@beanbag/templates";
+} from "@bb/core";
+import { renderTemplate } from "@bb/templates";
 import type {
   ProviderAdapter,
   ProviderExecutionOptions,
@@ -286,7 +286,7 @@ export function createPiProviderAdapter(
       return { env };
     },
     clientInfo: {
-      name: "beanbag",
+      name: "bb",
       version: "0.0.1",
     },
     initializeMethod: "initialize",

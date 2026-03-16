@@ -12,7 +12,7 @@ All route errors use:
 - `details?`: optional structured details
 - `error`: backward-compatible alias for `message`
 
-Status mapping is defined in `apps/daemon/src/routes/error-response.ts`.
+Status mapping is defined in `apps/server/src/routes/error-response.ts`.
 
 ## Project Endpoints
 

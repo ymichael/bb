@@ -4,7 +4,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import dotenv from "dotenv";
 import { serve } from "@hono/node-server";
-import { resolveBeanbagPath } from "@beanbag/agent-core/storage-paths";
+import { resolveBbPath } from "@bb/core/storage-paths";
 
 // Load .env from the workspace root. Never overwrites existing env vars.
 // Works for `pnpm dev`, standalone QA, and production runs from the repo.
@@ -22,7 +22,7 @@ import {
   ThreadEnvironmentAttachmentRepository,
   ThreadRepository,
   EventRepository,
-} from "@beanbag/db";
+} from "@bb/db";
 import { createServer } from "./server.js";
 import { installConsoleFileLogger } from "./file-logger.js";
 import { closeHttpServer } from "./http-server-close.js";
@@ -37,8 +37,8 @@ import {
 function parseArgs(): { port: number; dbPath: string; logFilePath: string } {
   const args = process.argv.slice(2);
   let port = 3333;
-  let dbPath = resolveBeanbagPath(process.env, "beanbag.db");
-  let logFilePath = resolveBeanbagPath(process.env, "logs", "daemon.log");
+  let dbPath = resolveBbPath(process.env, "bb.db");
+  let logFilePath = resolveBbPath(process.env, "logs", "daemon.log");
 
   for (let i = 0; i < args.length; i++) {
     if ((args[i] === "--port" || args[i] === "-p") && args[i + 1]) {
@@ -56,14 +56,14 @@ function parseArgs(): { port: number; dbPath: string; logFilePath: string } {
       i++;
     } else if (args[i] === "--help" || args[i] === "-h") {
       console.log(`
-Beanbag Daemon
+BB Server
 
-Usage: beanbag-daemon [options]
+Usage: bb-server [options]
 
 Options:
   --port, -p <number>   Port to listen on (default: 3333)
-  --db, -d <path>       Path to SQLite database (default: <beanbag-root>/beanbag.db)
-  --log-file, -l <path> Path to daemon log file (default: <beanbag-root>/logs/daemon.log)
+  --db, -d <path>       Path to SQLite database (default: <bb-root>/bb.db)
+  --log-file, -l <path> Path to daemon log file (default: <bb-root>/logs/daemon.log)
   --help, -h            Show this help message
 `);
       process.exit(0);
@@ -93,7 +93,7 @@ function relaunchCurrentProcess(): boolean {
   }
 }
 
-const SUPERVISED_RESTART_ENV = "BEANBAG_SUPERVISED_RESTART";
+const SUPERVISED_RESTART_ENV = "BB_SUPERVISED_RESTART";
 const SUPERVISED_RESTART_EXIT_CODE = 75;
 
 // ---------------------------------------------------------------------------
@@ -249,7 +249,7 @@ async function main(): Promise<void> {
       hostname: "127.0.0.1",
     },
     (info) => {
-      console.log(`\nBeanbag daemon listening on http://localhost:${info.port}`);
+      console.log(`\nBB server listening on http://localhost:${info.port}`);
       console.log(`  REST API: http://localhost:${info.port}/api/v1/`);
       console.log(`  WebSocket: ws://localhost:${info.port}/ws`);
       console.log(`  Database: ${dbPath}`);

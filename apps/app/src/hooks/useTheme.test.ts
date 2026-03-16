@@ -16,7 +16,7 @@ function setupThemeEnvironment({
   const storage = new Map<string, string>()
 
   if (storedTheme) {
-    storage.set("beanbag.theme", storedTheme)
+    storage.set("bb.theme", storedTheme)
   }
 
   const classList = {

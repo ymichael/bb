@@ -1,5 +1,5 @@
 import { Command } from "commander";
-import { type Project } from "@beanbag/agent-core";
+import { type Project } from "@bb/core";
 import { createClient, unwrap } from "../client.js";
 import { getErrorMessage } from "./helpers.js";
 import { requireProjectId } from "../context-env.js";

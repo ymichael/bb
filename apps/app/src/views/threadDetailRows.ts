@@ -4,4 +4,4 @@ export {
   type ThreadDetailMessageRow,
   type ThreadDetailToolGroupRow,
   type ThreadDetailRow,
-} from "@beanbag/agent-core";
+} from "@bb/core";

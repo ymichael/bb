@@ -1,4 +1,4 @@
-import type { PromptInput, UploadedPromptAttachment } from "@beanbag/agent-core";
+import type { PromptInput, UploadedPromptAttachment } from "@bb/core";
 
 export type PromptDraftAttachment = UploadedPromptAttachment;
 

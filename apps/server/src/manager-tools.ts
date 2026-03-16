@@ -1,5 +1,5 @@
-import { toRecord } from "@beanbag/agent-core";
-import { ProviderToolHost, type ProviderToolDefinition } from "@beanbag/agent-server";
+import { toRecord } from "@bb/core";
+import { ProviderToolHost, type ProviderToolDefinition } from "@bb/agent-server";
 import { invalidRequestError } from "./domain-errors.js";
 import type { Orchestrator } from "./orchestrator.js";
 

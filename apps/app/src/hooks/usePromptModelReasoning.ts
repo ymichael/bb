@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
-import { formatEnvironmentDisplayName } from "@beanbag/agent-core";
+import { formatEnvironmentDisplayName } from "@bb/core";
 import type {
   AvailableModel,
   ReasoningLevel,
   SandboxMode,
   ServiceTier,
   SystemEnvironmentInfo,
-} from "@beanbag/agent-core";
+} from "@bb/core";
 import { getProjectScopedStorageKey } from "@/lib/project-scoped-storage";
 import {
   useAvailableModels,
@@ -15,12 +15,12 @@ import {
   useSystemProviders,
 } from "./useApi";
 
-const MODEL_STORAGE_KEY = "beanbag.promptbox.model";
-const SERVICE_TIER_STORAGE_KEY = "beanbag.promptbox.service-tier";
-const REASONING_STORAGE_KEY = "beanbag.promptbox.reasoning";
-const SANDBOX_STORAGE_KEY = "beanbag.promptbox.sandbox";
-const ENVIRONMENT_STORAGE_KEY = "beanbag.promptbox.environment";
-const PROVIDER_STORAGE_KEY = "beanbag.promptbox.provider";
+const MODEL_STORAGE_KEY = "bb.promptbox.model";
+const SERVICE_TIER_STORAGE_KEY = "bb.promptbox.service-tier";
+const REASONING_STORAGE_KEY = "bb.promptbox.reasoning";
+const SANDBOX_STORAGE_KEY = "bb.promptbox.sandbox";
+const ENVIRONMENT_STORAGE_KEY = "bb.promptbox.environment";
+const PROVIDER_STORAGE_KEY = "bb.promptbox.provider";
 
 const REASONING_LABELS: Record<ReasoningLevel, string> = {
   low: "Low",

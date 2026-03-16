@@ -2,8 +2,8 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { Project, Thread } from "@beanbag/agent-core";
-import type { ProjectRepository, ThreadRepository } from "@beanbag/db";
+import type { Project, Thread } from "@bb/core";
+import type { ProjectRepository, ThreadRepository } from "@bb/db";
 import { createSystemHealthReporter } from "../system-health-report.js";
 
 const originalHome = process.env.HOME;
@@ -51,27 +51,27 @@ afterEach(() => {
 
 describe("system health report", () => {
   it("summarizes thread counts and managed storage buckets", () => {
-    const homeDir = mkdtempSync(join(tmpdir(), "beanbag-health-home-"));
+    const homeDir = mkdtempSync(join(tmpdir(), "bb-health-home-"));
     cleanupPaths.push(homeDir);
     process.env.HOME = homeDir;
-    const beanbagRoot = mkdtempSync(join(tmpdir(), "beanbag-health-root-"));
-    cleanupPaths.push(beanbagRoot);
-    process.env.BB_ROOT = beanbagRoot;
+    const bbRoot = mkdtempSync(join(tmpdir(), "bb-health-root-"));
+    cleanupPaths.push(bbRoot);
+    process.env.BB_ROOT = bbRoot;
 
-    const projectRoot = mkdtempSync(join(tmpdir(), "beanbag-health-project-"));
+    const projectRoot = mkdtempSync(join(tmpdir(), "bb-health-project-"));
     cleanupPaths.push(projectRoot);
-    const dbPath = resolve(beanbagRoot, "beanbag.db");
-    const daemonLogPath = resolve(beanbagRoot, "logs", "daemon.log");
+    const dbPath = resolve(bbRoot, "bb.db");
+    const daemonLogPath = resolve(bbRoot, "logs", "daemon.log");
 
     writeBytes(dbPath, "db!");
     writeBytes(`${dbPath}-wal`, "wal!");
     writeBytes(`${dbPath}-shm`, "shm");
     writeBytes(daemonLogPath, "daemon");
     writeBytes(`${daemonLogPath}.1`, "archive");
-    writeBytes(resolve(beanbagRoot, "environment-agent-logs", "proj-1", "worktree-thread-1.log"), "envlog");
-    writeBytes(resolve(beanbagRoot, "worktrees", "proj-1", "thread-1", "README.md"), "workspace");
-    writeBytes(resolve(beanbagRoot, "attachments", "proj-1", "image.png"), "img");
-    writeBytes(resolve(beanbagRoot, "backups", "daily.sql"), "backup");
+    writeBytes(resolve(bbRoot, "environment-agent-logs", "proj-1", "worktree-thread-1.log"), "envlog");
+    writeBytes(resolve(bbRoot, "worktrees", "proj-1", "thread-1", "README.md"), "workspace");
+    writeBytes(resolve(bbRoot, "attachments", "proj-1", "image.png"), "img");
+    writeBytes(resolve(bbRoot, "backups", "daily.sql"), "backup");
 
     const project = makeProject({ rootPath: projectRoot });
     const threads = [
@@ -144,28 +144,28 @@ describe("system health report", () => {
         key: "environment_agent_logs",
         label: "Environment Agent Logs",
         bytes: 6,
-        paths: [resolve(beanbagRoot, "environment-agent-logs")],
+        paths: [resolve(bbRoot, "environment-agent-logs")],
       },
       {
         key: "worktrees",
         label: "Worktrees",
         bytes: 9,
-        paths: [resolve(beanbagRoot, "worktrees")],
+        paths: [resolve(bbRoot, "worktrees")],
       },
       {
         key: "attachments",
         label: "Attachments",
         bytes: 3,
-        paths: [resolve(beanbagRoot, "attachments")],
+        paths: [resolve(bbRoot, "attachments")],
       },
       {
         key: "backups",
         label: "Backups",
         bytes: 6,
-        paths: [resolve(beanbagRoot, "backups")],
+        paths: [resolve(bbRoot, "backups")],
       },
     ]);
-    expect(report.storage.disk?.path).toBe(beanbagRoot);
+    expect(report.storage.disk?.path).toBe(bbRoot);
     expect(report.storage.disk?.availableBytes).toBeGreaterThan(0);
   });
 });

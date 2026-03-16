@@ -23,20 +23,20 @@ import {
   ThreadRepository,
   createConnection,
   migrate,
-} from "@beanbag/db";
+} from "@bb/db";
 import {
   createCodexProviderAdapter,
   createProviderAdapter,
   type ProviderToolHost,
-} from "@beanbag/agent-server";
+} from "@bb/agent-server";
 import { createServer } from "../../server.js";
 import {
   createFakeCodexBinDir,
   createFakeCodexScriptFile,
   type FakeCodexOptions,
 } from "./fake-codex.js";
-import { listManagedHostEnvironmentAgentPids } from "@beanbag/environment";
-import { beanbagTestTmpPrefix } from "./temp-root.js";
+import { listManagedHostEnvironmentAgentPids } from "@bb/environment";
+import { bbTestTmpPrefix } from "./temp-root.js";
 import { installProcessExitSafetyNet, trackPid, untrackPid } from "./process-tracker.js";
 import {
   resolveE2eProviderMode,
@@ -71,30 +71,30 @@ export function withFakeE2eEnvironmentAgentTimingEnv(
 ): NodeJS.ProcessEnv {
   return {
     ...env,
-    BEANBAG_ENV_AGENT_LEASE_TTL_MS: String(
+    BB_ENV_DAEMON_LEASE_TTL_MS: String(
       FAKE_E2E_ENVIRONMENT_AGENT_SESSION_OPTIONS.leaseTtlMs,
     ),
-    BEANBAG_ENV_AGENT_HEARTBEAT_INTERVAL_MS: String(
+    BB_ENV_DAEMON_HEARTBEAT_INTERVAL_MS: String(
       FAKE_E2E_ENVIRONMENT_AGENT_SESSION_OPTIONS.heartbeatIntervalMs,
     ),
-    BEANBAG_ENV_AGENT_COMMAND_LONG_POLL_TIMEOUT_MS: String(
+    BB_ENV_DAEMON_COMMAND_LONG_POLL_TIMEOUT_MS: String(
       FAKE_E2E_ENVIRONMENT_AGENT_SESSION_OPTIONS.commandLongPollTimeoutMs,
     ),
-    BEANBAG_ENV_AGENT_COMMAND_LONG_POLL_INTERVAL_MS: String(
+    BB_ENV_DAEMON_COMMAND_LONG_POLL_INTERVAL_MS: String(
       FAKE_E2E_ENVIRONMENT_AGENT_SESSION_OPTIONS.commandLongPollIntervalMs,
     ),
-    BEANBAG_ENV_AGENT_LEASE_SWEEP_INTERVAL_MS: String(
+    BB_ENV_DAEMON_LEASE_SWEEP_INTERVAL_MS: String(
       FAKE_E2E_ENVIRONMENT_AGENT_SESSION_OPTIONS.leaseSweepIntervalMs,
     ),
-    BEANBAG_ENV_AGENT_STARTUP_RECOVERY_REQUEST_TIMEOUT_MS: "250",
+    BB_ENV_DAEMON_STARTUP_RECOVERY_REQUEST_TIMEOUT_MS: "250",
   };
 }
 const TEST_GIT_ENV: NodeJS.ProcessEnv = {
   ...process.env,
-  GIT_AUTHOR_NAME: "Beanbag Test",
-  GIT_AUTHOR_EMAIL: "beanbag-test@example.com",
-  GIT_COMMITTER_NAME: "Beanbag Test",
-  GIT_COMMITTER_EMAIL: "beanbag-test@example.com",
+  GIT_AUTHOR_NAME: "BB Test",
+  GIT_AUTHOR_EMAIL: "bb-test@example.com",
+  GIT_COMMITTER_NAME: "BB Test",
+  GIT_COMMITTER_EMAIL: "bb-test@example.com",
 };
 
 function prependPathEntry(
@@ -220,7 +220,7 @@ export async function startDaemonE2eHarness(
     ...(opts?.environmentAgentSessionOptions ?? {}),
   };
   const daemonPort = opts?.port ?? await allocatePort();
-  const tempDir = opts?.tempDir ?? mkdtempSync(beanbagTestTmpPrefix("beanbag-daemon-e2e-"));
+  const tempDir = opts?.tempDir ?? mkdtempSync(bbTestTmpPrefix("bb-daemon-e2e-"));
   const projectRoot = join(tempDir, "project");
   mkdirSync(projectRoot, { recursive: true });
   if (opts?.initGitRepo && !existsSync(join(projectRoot, ".git"))) {
@@ -236,7 +236,7 @@ export async function startDaemonE2eHarness(
     });
   }
 
-  const dbPath = join(tempDir, "beanbag.db");
+  const dbPath = join(tempDir, "bb.db");
   const fakeCodexControlFilePath = join(tempDir, "fake-codex-control", "events.log");
   const fakeCodexBinDir =
     providerMode === "fake" ? createFakeCodexBinDir(tempDir, opts?.fakeCodex) : undefined;
@@ -246,7 +246,7 @@ export async function startDaemonE2eHarness(
       ? createFakeCodexScriptFile(projectRoot, opts.fakeCodex)
       : undefined;
   if (workspaceFakeCodexPath && opts?.initGitRepo) {
-    execFileSync("git", ["add", ".beanbag-test/fake-codex.cjs"], {
+    execFileSync("git", ["add", ".bb-test/fake-codex.cjs"], {
       cwd: projectRoot,
       env: TEST_GIT_ENV,
       stdio: "pipe",
@@ -302,10 +302,10 @@ export async function startDaemonE2eHarness(
             ? createCodexProviderAdapter({
                 processCommand: workspaceFakeCodexPath ? "node" : fakeCodexCommand,
                 processArgs: workspaceFakeCodexPath
-                  ? ["/workspace/.beanbag-test/fake-codex.cjs", "app-server"]
+                  ? ["/workspace/.bb-test/fake-codex.cjs", "app-server"]
                   : ["app-server"],
                 launchEnv: {
-                  BEANBAG_FAKE_CODEX_CONTROL_FILE: fakeCodexControlFilePath,
+                  BB_FAKE_CODEX_CONTROL_FILE: fakeCodexControlFilePath,
                 },
               })
             : createProviderAdapter(),
@@ -376,7 +376,7 @@ export async function startDaemonE2eHarness(
         };
       };
       const pendingProvisioningTasks = listPendingProvisioningTasks(threadManager);
-      rawThreadManager.agentServer?.stopAllSessions?.("Beanbag daemon restart");
+      rawThreadManager.agentServer?.stopAllSessions?.("BB server restart");
       // Restart recovery expects managed environments to remain resumable after
       // daemon shutdown, so detach without destroying — mirrors production shutdown.
       detachThreadManager(threadManager);

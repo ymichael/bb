@@ -1,7 +1,7 @@
 import {
   extractThreadContextWindowUsage as extractThreadContextWindowUsageFromEvents,
   type ThreadContextWindowUsage,
-} from "@beanbag/agent-core";
+} from "@bb/core";
 
 export type { ThreadContextWindowUsage };
 

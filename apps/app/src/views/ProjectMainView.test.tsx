@@ -2,7 +2,7 @@ import { type ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import type { ThreadWorkStatus } from "@beanbag/agent-core";
+import type { ThreadWorkStatus } from "@bb/core";
 import { ProjectMainView } from "./ProjectMainView";
 
 const apiState = vi.hoisted(() => ({

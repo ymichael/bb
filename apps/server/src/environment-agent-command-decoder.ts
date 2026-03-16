@@ -1,9 +1,9 @@
-import { assertNever, getStringField, toRecord } from "@beanbag/agent-core";
+import { assertNever, getStringField, toRecord } from "@bb/core";
 import type {
   EnvironmentAgentCommand,
   EnvironmentAgentInitializeRequest,
   EnvironmentAgentProviderFile,
-} from "@beanbag/environment-agent";
+} from "@bb/environment-daemon";
 
 const ENVIRONMENT_AGENT_COMMAND_TYPES = [
   "provider.ensure",

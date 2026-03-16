@@ -1,7 +1,7 @@
 import {
   assertNever,
   type UIMessage,
-} from "@beanbag/agent-core";
+} from "@bb/core";
 import type { ThreadDetailRow } from "./threadDetailRows";
 
 function isProvisioningActivityOperation(

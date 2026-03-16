@@ -7,7 +7,7 @@ export default defineConfig({
   },
   test: {
     silent: "passed-only",
-    name: "@beanbag/agent-server",
+    name: "@bb/agent-server",
     include: ["src/__tests__/**/*.test.ts"],
     exclude: ["dist/**", "node_modules/**"],
   },

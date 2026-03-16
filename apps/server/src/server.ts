@@ -15,8 +15,8 @@ import type {
   ThreadEnvironmentAttachmentRepository,
   ThreadRepository,
   EventRepository,
-} from "@beanbag/db";
-import type { SpawnThreadRequest } from "@beanbag/agent-core";
+} from "@bb/db";
+import type { SpawnThreadRequest } from "@bb/core";
 import {
   AgentServer,
   createCodexLlmCompletionService,
@@ -25,11 +25,11 @@ import {
   resolveDefaultProviderId,
   type ProviderAdapter,
   type ProviderToolHost,
-} from "@beanbag/agent-server";
+} from "@bb/agent-server";
 import {
   createDefaultEnvironmentRegistry,
   listAvailableEnvironmentInfos,
-} from "@beanbag/environment";
+} from "@bb/environment";
 import { WSManager } from "./ws.js";
 import { Orchestrator } from "./orchestrator.js";
 import { createApiRoutes } from "./routes/index.js";
@@ -83,7 +83,7 @@ export function createServer(deps: ServerDeps) {
       return;
     }
     const durationMs = Math.round((performance.now() - startedAt) * 100) / 100;
-    c.header("x-beanbag-handler-ms", String(durationMs));
+    c.header("x-bb-handler-ms", String(durationMs));
     logPerf("http.request", {
       method: c.req.method,
       path: new URL(c.req.url).pathname,
@@ -144,7 +144,7 @@ export function createServer(deps: ServerDeps) {
   const daemonRuntimeEnv = {
     ...(deps.runtimeEnv ?? process.env),
     ...(deps.daemonBaseUrl
-      ? { BEANBAG_DAEMON_URL: deps.daemonBaseUrl }
+      ? { BB_DAEMON_URL: deps.daemonBaseUrl }
       : {}),
   };
   const environmentAgentSessionOptions = {
@@ -297,7 +297,7 @@ export function createServer(deps: ServerDeps) {
     app.get("/*", (c) => {
       return c.json({
         message:
-          "Beanbag daemon is running. Web UI not built yet — run `pnpm build` in apps/app.",
+          "BB server is running. Web UI not built yet — run `pnpm build` in apps/app.",
       });
     });
   }

@@ -7,7 +7,7 @@ import {
   type ServerMessage,
   type SystemChangeKind,
   type ThreadChangeKind,
-} from "@beanbag/agent-core";
+} from "@bb/core";
 
 function subscriptionKey(entity: RealtimeEntity, id?: string): string {
   return id ? `${entity}:${id}` : entity;

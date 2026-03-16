@@ -2,7 +2,7 @@ import {
   toRecord,
   type PromptInput,
   type ThreadQueuedMessage,
-} from "@beanbag/agent-core";
+} from "@bb/core";
 import { type PromptDraftState } from "@/lib/prompt-draft";
 
 const QUEUED_FOLLOW_UP_PREVIEW_MAX_CHARS = 220;

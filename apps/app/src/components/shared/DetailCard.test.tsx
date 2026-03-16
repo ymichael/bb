@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { DetailCard, DetailRow } from "@beanbag/ui-core";
+import { DetailCard, DetailRow } from "@bb/ui-core";
 
 describe("DetailCard", () => {
   it("renders rows inline as a two-column key/value layout when using columns", () => {

@@ -4,7 +4,7 @@ import * as schema from "./schema.js";
 
 export type DbConnection = ReturnType<typeof createConnection>;
 
-export function createConnection(dbPath: string = "beanbag.db") {
+export function createConnection(dbPath: string = "bb.db") {
   const sqlite = new Database(dbPath);
 
   // Enable WAL mode for better concurrent read performance

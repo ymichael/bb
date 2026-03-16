@@ -2,7 +2,7 @@ import type {
   ScheduleRunRecord,
   SchedulerService,
   ThreadSchedule,
-} from "@beanbag/agent-core";
+} from "@bb/core";
 
 export class InMemorySchedulerService implements SchedulerService {
   private schedules = new Map<string, ThreadSchedule>();

@@ -1,6 +1,6 @@
 import { expect } from "vitest";
-import type { Project, Thread, ThreadEvent } from "@beanbag/agent-core";
-import { isProviderEventEnvelope, DEFAULT_THREAD_PROVIDER_ID } from "@beanbag/agent-core";
+import type { Project, Thread, ThreadEvent } from "@bb/core";
+import { isProviderEventEnvelope, DEFAULT_THREAD_PROVIDER_ID } from "@bb/core";
 import {
   runCliCommand,
   startDaemonE2eHarness,

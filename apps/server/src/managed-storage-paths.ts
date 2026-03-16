@@ -1,13 +1,13 @@
 import { isAbsolute, resolve } from "node:path";
-import { expandHomeDirectory, resolveBeanbagPath } from "@beanbag/agent-core/storage-paths";
+import { expandHomeDirectory, resolveBbPath } from "@bb/core/storage-paths";
 import {
   type Project,
-} from "@beanbag/agent-core";
+} from "@bb/core";
 
 export function resolveDefaultManagedWorktreeRoot(
   runtimeEnv: NodeJS.ProcessEnv,
 ): string {
-  return resolveBeanbagPath(runtimeEnv, "worktrees");
+  return resolveBbPath(runtimeEnv, "worktrees");
 }
 
 export function resolveConfiguredWorktreeRoot(
@@ -32,7 +32,7 @@ export function resolveManagedWorktreeRootForProject(
   project: Pick<Project, "id" | "rootPath">,
   runtimeEnv: NodeJS.ProcessEnv,
 ): { worktreeRoot: string; globalRoot?: string } {
-  const configuredRoot = runtimeEnv.BEANBAG_WORKTREE_ROOT?.trim() ?? "";
+  const configuredRoot = runtimeEnv.BB_WORKTREE_ROOT?.trim() ?? "";
   const { root, isGlobalRoot } = resolveConfiguredWorktreeRoot(
     project.rootPath,
     configuredRoot,

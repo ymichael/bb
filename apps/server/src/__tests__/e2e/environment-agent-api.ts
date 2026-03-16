@@ -1,18 +1,18 @@
 import { createServer } from "node:net";
 import type {
   EnvironmentAgentStatusSnapshot,
-} from "@beanbag/environment-agent";
+} from "@bb/environment-daemon";
 import type {
   ChangedMessage,
   Project,
   Thread,
   ThreadEvent,
   ThreadQueuedMessage,
-} from "@beanbag/agent-core";
+} from "@bb/core";
 import type {
   EnvironmentAgentSessionCloseReason,
   EnvironmentAgentSessionStatus,
-} from "@beanbag/db";
+} from "@bb/db";
 
 export interface EnvironmentAgentSessionDebugView {
   id: string;

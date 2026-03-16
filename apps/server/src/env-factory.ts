@@ -1,10 +1,10 @@
 import { execFileSync } from "node:child_process";
 import { resolve } from "node:path";
-import type { EnvironmentDescriptor, PersistedEnvironmentRecord } from "@beanbag/agent-core";
+import type { EnvironmentDescriptor, PersistedEnvironmentRecord } from "@bb/core";
 import type {
   EnvironmentRepository,
   ThreadEnvironmentAttachmentRepository,
-} from "@beanbag/db";
+} from "@bb/db";
 
 interface PrimaryWorkspaceAwareEnvironment {
   getWorkspaceRootUnsafe(): string;

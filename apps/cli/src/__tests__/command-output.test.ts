@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Command } from "commander";
-import type { Thread } from "@beanbag/agent-core";
+import type { Thread } from "@bb/core";
 
 const readlineState = vi.hoisted(() => ({
   question: vi.fn(),
@@ -84,7 +84,7 @@ describe("CLI command output contracts", () => {
 
     delete process.env.BB_PROJECT_ID;
     delete process.env.BB_THREAD_ID;
-    delete process.env.BEANBAG_ENVIRONMENT;
+    delete process.env.BB_ENVIRONMENT;
   });
 
   afterEach(() => {
@@ -577,9 +577,9 @@ describe("CLI command output contracts", () => {
     });
   });
 
-  it("bb thread spawn falls back to BEANBAG_ENVIRONMENT", async () => {
+  it("bb thread spawn falls back to BB_ENVIRONMENT", async () => {
     process.env.BB_PROJECT_ID = "proj-1";
-    process.env.BEANBAG_ENVIRONMENT = "local";
+    process.env.BB_ENVIRONMENT = "local";
     const thread: Thread = {
       id: "thread-env-2",
       projectId: "proj-1",
@@ -874,7 +874,7 @@ describe("CLI command output contracts", () => {
           storage: {
             totalBytes: 1536,
             disk: {
-              path: "/Users/test/.beanbag",
+              path: "/Users/test/.bb",
               availableBytes: 4096,
               totalBytes: 8192,
               usedBytes: 4096,
@@ -884,7 +884,7 @@ describe("CLI command output contracts", () => {
                 key: "worktrees",
                 label: "Worktrees",
                 bytes: 1024,
-                paths: ["/Users/test/.beanbag/worktrees"],
+                paths: ["/Users/test/.bb/worktrees"],
               },
             ],
           },
@@ -922,7 +922,7 @@ describe("CLI command output contracts", () => {
     expect(lines).toContain("Managed storage: 1.50 KiB");
     expect(lines).toContain("Storage buckets:");
     expect(lines).toContain("- Worktrees: 1.00 KiB");
-    expect(lines).toContain("  /Users/test/.beanbag/worktrees");
+    expect(lines).toContain("  /Users/test/.bb/worktrees");
   });
 
   it("bb thread show prints archived timestamp for archived threads", async () => {

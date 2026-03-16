@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { UIMessage } from "@beanbag/agent-core";
+import type { UIMessage } from "@bb/core";
 import { buildThreadDetailRows } from "./threadDetailRows";
 
 function baseMessage(

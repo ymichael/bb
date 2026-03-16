@@ -7,7 +7,7 @@ export default defineConfig({
   },
   test: {
     silent: "passed-only",
-    name: "@beanbag/daemon:e2e:stress",
+    name: "@bb/server:e2e:stress",
     globalSetup: ["./src/__tests__/e2e/global-setup.ts"],
     include: [
       "src/__tests__/e2e/thread-recovery-heavy-runbook.test.ts",

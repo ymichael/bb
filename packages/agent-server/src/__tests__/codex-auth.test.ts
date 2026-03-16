@@ -18,7 +18,7 @@ describe("resolveCodexProviderLaunchConfiguration", () => {
   let tempHomePath = "";
 
   beforeEach(async () => {
-    tempHomePath = await mkdtemp(join(tmpdir(), "beanbag-codex-auth-"));
+    tempHomePath = await mkdtemp(join(tmpdir(), "bb-codex-auth-"));
     process.env.HOME = tempHomePath;
     delete process.env.OPENAI_API_KEY;
     delete process.env.OPENAI_BASE_URL;

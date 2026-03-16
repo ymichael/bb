@@ -2,7 +2,7 @@ import { Command } from "commander";
 import {
   resolveEnvironmentAgentServiceOptions,
   startEnvironmentAgentService,
-} from "@beanbag/environment-agent";
+} from "@bb/environment-daemon";
 
 interface EnvironmentAgentOptions {
   providerCommand?: string;

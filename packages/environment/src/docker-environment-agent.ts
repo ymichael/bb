@@ -1,16 +1,16 @@
 import { randomBytes } from "node:crypto";
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import type { EnvironmentAgentConnectionTarget } from "@beanbag/environment-agent";
+import type { EnvironmentAgentConnectionTarget } from "@bb/environment-daemon";
 import { runCommandAsync } from "./process.js";
 
 const HOST = "127.0.0.1";
 const START_TIMEOUT_MS = 5_000;
-const DOCKER_DAEMON_HOST_OVERRIDE_ENV = "BEANBAG_DOCKER_DAEMON_HOST";
+const DOCKER_DAEMON_HOST_OVERRIDE_ENV = "BB_DOCKER_DAEMON_HOST";
 const DEFAULT_DOCKER_DAEMON_HOST = "host.docker.internal";
 export const DEFAULT_DOCKER_ENVIRONMENT_AGENT_CONTAINER_PORT = 4310;
-export const DEFAULT_DOCKER_ENVIRONMENT_IMAGE = "beanbag/environment:local";
-const DEFAULT_DOCKER_ENVIRONMENT_AGENT_INSTALL_ROOT = "/opt/beanbag/environment-agent";
+export const DEFAULT_DOCKER_ENVIRONMENT_IMAGE = "bb/environment:local";
+const DEFAULT_DOCKER_ENVIRONMENT_AGENT_INSTALL_ROOT = "/opt/bb/environment-daemon";
 
 export interface ManagedDockerEnvironmentAgentRecord {
   baseUrl: string;
@@ -130,11 +130,11 @@ async function waitForEnvironmentAgent(baseUrl: string, authToken: string): Prom
 
 export function resolveDockerEnvironmentAgentArtifactEntry(): string {
   const entry = fileURLToPath(
-    new URL("../../environment-agent/dist/environment-agent.bundle.mjs", import.meta.url),
+    new URL("../../environment-daemon/dist/environment-agent.bundle.mjs", import.meta.url),
   );
   if (!existsSync(entry)) {
     throw new Error(
-      `Missing environment-agent artifact at ${entry}; build @beanbag/environment-agent first`,
+      `Missing environment-agent artifact at ${entry}; build @bb/environment-daemon first`,
     );
   }
   return entry;
@@ -148,7 +148,7 @@ export function resolveDockerEnvironmentImage(args: {
   configuredImage?: string;
   runtimeEnv: Record<string, string | undefined>;
 }): string {
-  const image = args.configuredImage ?? args.runtimeEnv.BEANBAG_DOCKER_IMAGE;
+  const image = args.configuredImage ?? args.runtimeEnv.BB_DOCKER_IMAGE;
   if (image?.trim()) {
     return image.trim();
   }
@@ -178,7 +178,7 @@ async function executeOrThrow(args: {
 function resolveDockerDaemonUrl(
   runtimeEnv: Record<string, string | undefined>,
 ): string | undefined {
-  const daemonUrl = runtimeEnv.BEANBAG_DAEMON_URL?.trim();
+  const daemonUrl = runtimeEnv.BB_DAEMON_URL?.trim();
   if (!daemonUrl) {
     return undefined;
   }
@@ -268,7 +268,7 @@ export async function ensureManagedDockerEnvironmentAgent(
     resolveArtifactEntry?: () => string;
   },
 ): Promise<EnvironmentAgentConnectionTarget | undefined> {
-  if (args.runtimeEnv.BEANBAG_ENVIRONMENT_AGENT_BASE_URL?.trim()) {
+  if (args.runtimeEnv.BB_ENV_DAEMON_BASE_URL?.trim()) {
     return undefined;
   }
 
@@ -339,14 +339,14 @@ export async function ensureManagedDockerEnvironmentAgent(
         "-e",
         `BB_ENVIRONMENT_ID=${args.environmentId}`,
         "-e",
-        `BEANBAG_ENVIRONMENT_AGENT_AUTH_TOKEN=${authToken}`,
+        `BB_ENV_DAEMON_AUTH_TOKEN=${authToken}`,
         "-e",
-        `BEANBAG_ENVIRONMENT_AGENT_CONTROL_BASE_URL=http://${HOST}:${args.hostPort}`,
-        ...((args.runtimeEnv.BB_ROOT?.trim() || args.runtimeEnv.BEANBAG_ROOT?.trim())
-          ? ["-e", `BB_ROOT=${args.runtimeEnv.BB_ROOT?.trim() || args.runtimeEnv.BEANBAG_ROOT}`]
+        `BB_ENV_DAEMON_CONTROL_BASE_URL=http://${HOST}:${args.hostPort}`,
+        ...((args.runtimeEnv.BB_ROOT?.trim() || args.runtimeEnv.BB_ROOT?.trim())
+          ? ["-e", `BB_ROOT=${args.runtimeEnv.BB_ROOT?.trim() || args.runtimeEnv.BB_ROOT}`]
           : []),
         ...(dockerDaemonUrl
-          ? ["-e", `BEANBAG_DAEMON_URL=${dockerDaemonUrl}`]
+          ? ["-e", `BB_DAEMON_URL=${dockerDaemonUrl}`]
           : []),
         args.containerName,
         "node",
@@ -400,7 +400,7 @@ export async function disposeManagedDockerEnvironmentAgent(args: {
   runtimeEnv: Record<string, string | undefined>;
 }): Promise<void> {
   await withManagedDockerEnvironmentAgentLock(args, async () => {
-    if (!args.runtimeEnv.BEANBAG_ENVIRONMENT_AGENT_BASE_URL?.trim()) {
+    if (!args.runtimeEnv.BB_ENV_DAEMON_BASE_URL?.trim()) {
       await runCommandAsync(
         args.dockerBin,
         [

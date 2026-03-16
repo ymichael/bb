@@ -8,9 +8,9 @@ import type {
   ProjectFileSuggestion,
   Thread,
   UploadedPromptAttachment,
-} from "@beanbag/agent-core";
+} from "@bb/core";
 import { createProjectRoutes } from "../../routes/projects.js";
-import type { EventRepository, ProjectRepository, ThreadRepository } from "@beanbag/db";
+import type { EventRepository, ProjectRepository, ThreadRepository } from "@bb/db";
 import { invalidRequestError } from "../../domain-errors.js";
 
 function makeProject(overrides: Partial<Project> = {}): Project {
@@ -80,7 +80,7 @@ describe("Project routes", () => {
   let eventRepo: ReturnType<typeof mockEventRepo>;
   let deleteThreadAsync: ReturnType<typeof vi.fn<DeleteThreadFn>>;
   let app: Hono;
-  let beanbagRoot: string;
+  let bbRoot: string;
   let threadManager: {
     spawn: ReturnType<typeof vi.fn>;
     systemTell: ReturnType<typeof vi.fn>;
@@ -89,8 +89,8 @@ describe("Project routes", () => {
   const originalBbRoot = process.env.BB_ROOT;
 
   beforeEach(() => {
-    beanbagRoot = mkdtempSync(join(tmpdir(), "beanbag-project-routes-root-"));
-    process.env.BB_ROOT = beanbagRoot;
+    bbRoot = mkdtempSync(join(tmpdir(), "bb-project-routes-root-"));
+    process.env.BB_ROOT = bbRoot;
     projectRepo = mockProjectRepo();
     threadRepo = mockThreadRepo();
     eventRepo = mockEventRepo();
@@ -103,7 +103,7 @@ describe("Project routes", () => {
     findProjectFiles = vi.fn<SearchProjectFilesFn>().mockResolvedValue([]);
     savePromptAttachment = vi.fn<StorePromptAttachmentFn>().mockResolvedValue({
       type: "localImage",
-      path: "/Users/test/.beanbag/attachments/proj-2/image.png",
+      path: "/Users/test/.bb/attachments/proj-2/image.png",
       name: "image.png",
       mimeType: "image/png",
       sizeBytes: 12,
@@ -125,7 +125,7 @@ describe("Project routes", () => {
 
   afterEach(() => {
     process.env.BB_ROOT = originalBbRoot;
-    rmSync(beanbagRoot, { recursive: true, force: true });
+    rmSync(bbRoot, { recursive: true, force: true });
   });
 
   describe("POST /projects", () => {
@@ -363,7 +363,7 @@ describe("Project routes", () => {
         primaryManagerThreadId: "thread-manager-1",
       });
       expect(threadManager.systemTell).not.toHaveBeenCalled();
-      expect(existsSync(join(beanbagRoot, "workspace", "thread-manager-1"))).toBe(true);
+      expect(existsSync(join(bbRoot, "workspace", "thread-manager-1"))).toBe(true);
     });
 
     it("rolls back the pointer and workspace when workspace bootstrap fails", async () => {
@@ -375,7 +375,7 @@ describe("Project routes", () => {
       });
       (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(project);
       threadManager.spawn.mockResolvedValue(managerThread);
-      writeFileSync(join(beanbagRoot, "workspace"), "occupied");
+      writeFileSync(join(bbRoot, "workspace"), "occupied");
 
       const res = await app.request("/projects/proj-1/manager", { method: "POST" });
 
@@ -385,7 +385,7 @@ describe("Project routes", () => {
       });
       expect(deleteThreadAsync).toHaveBeenCalledWith("thread-manager-rollback");
       expect(
-        existsSync(join(beanbagRoot, "workspace", "thread-manager-rollback")),
+        existsSync(join(bbRoot, "workspace", "thread-manager-rollback")),
       ).toBe(false);
     });
   });
@@ -399,7 +399,7 @@ describe("Project routes", () => {
         { id: "thread-1" },
         { id: "thread-2" },
       ]);
-      const attachmentsDir = resolve(beanbagRoot, "attachments", "proj-2");
+      const attachmentsDir = resolve(bbRoot, "attachments", "proj-2");
       mkdirSync(attachmentsDir, { recursive: true });
       writeFileSync(resolve(attachmentsDir, "image.png"), Buffer.from([0x89, 0x50, 0x4e, 0x47]));
 
@@ -514,7 +514,7 @@ describe("Project routes", () => {
       expect(res.status).toBe(201);
       expect(await res.json()).toEqual({
         type: "localImage",
-        path: "/Users/test/.beanbag/attachments/proj-2/image.png",
+        path: "/Users/test/.bb/attachments/proj-2/image.png",
         name: "image.png",
         mimeType: "image/png",
         sizeBytes: 12,
@@ -591,7 +591,7 @@ describe("Project routes", () => {
         makeProject({ id: "proj-2", rootPath: "/repo/root" }),
       );
 
-      const attachmentsDir = resolve(beanbagRoot, "attachments", "proj-2");
+      const attachmentsDir = resolve(bbRoot, "attachments", "proj-2");
       const filePath = resolve(attachmentsDir, "image.png");
       mkdirSync(attachmentsDir, { recursive: true });
       writeFileSync(filePath, Buffer.from([0x89, 0x50, 0x4e, 0x47]));

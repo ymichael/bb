@@ -1,4 +1,4 @@
-import type { ThreadStatus } from "@beanbag/agent-core";
+import type { ThreadStatus } from "@bb/core";
 
 // Single source of truth for persisted thread lifecycle transitions.
 const VALID_TRANSITIONS: ReadonlyMap<ThreadStatus, ReadonlySet<ThreadStatus>> = new Map<

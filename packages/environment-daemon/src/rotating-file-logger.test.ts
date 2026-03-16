@@ -17,7 +17,7 @@ afterEach(() => {
 
 describe("rotating file logger", () => {
   it("writes json lines to the configured file", () => {
-    const dir = mkdtempSync(join(tmpdir(), "beanbag-rotating-logger-"));
+    const dir = mkdtempSync(join(tmpdir(), "bb-rotating-logger-"));
     cleanupPaths.push(dir);
     const filePath = join(dir, "agent.log");
     const writer = createRotatingJsonLineFileWriter({
@@ -38,7 +38,7 @@ describe("rotating file logger", () => {
   });
 
   it("rotates files and caps the number of retained archives", () => {
-    const dir = mkdtempSync(join(tmpdir(), "beanbag-rotating-logger-"));
+    const dir = mkdtempSync(join(tmpdir(), "bb-rotating-logger-"));
     cleanupPaths.push(dir);
     const filePath = join(dir, "agent.log");
     const writer = createRotatingJsonLineFileWriter({
@@ -64,7 +64,7 @@ describe("rotating file logger", () => {
   });
 
   it("removes the active log file and retained archives", () => {
-    const dir = mkdtempSync(join(tmpdir(), "beanbag-rotating-logger-"));
+    const dir = mkdtempSync(join(tmpdir(), "bb-rotating-logger-"));
     cleanupPaths.push(dir);
     const filePath = join(dir, "agent.log");
     const writer = createRotatingJsonLineFileWriter({

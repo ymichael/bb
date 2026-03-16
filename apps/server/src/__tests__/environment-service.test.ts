@@ -5,13 +5,13 @@ import type {
   Thread,
   ThreadWorkStatus,
   ThreadEnvironmentStartReason,
-} from "@beanbag/agent-core";
+} from "@bb/core";
 import {
   EnvironmentRegistry,
   type CreateEnvironmentContext,
   type IEnvironment,
-} from "@beanbag/environment";
-import { removeEnvironmentAgentDefaultLogArtifacts } from "@beanbag/environment-agent";
+} from "@bb/environment";
+import { removeEnvironmentAgentDefaultLogArtifacts } from "@bb/environment-daemon";
 import {
   createConnection,
   migrate,
@@ -20,14 +20,14 @@ import {
   ProjectRepository,
   EnvironmentRepository,
   ThreadEnvironmentAttachmentRepository,
-} from "@beanbag/db";
-import type { DbConnection } from "@beanbag/db";
+} from "@bb/db";
+import type { DbConnection } from "@bb/db";
 import { createTestDb, createTestRepos, createTestProject, createTestThread } from "./test-factories.js";
 import { EnvironmentService } from "../environment-service.js";
 import { resolveProjectCheckoutSnapshotAsync } from "../git-project.js";
 
-vi.mock("@beanbag/environment-agent", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@beanbag/environment-agent")>();
+vi.mock("@bb/environment-daemon", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@bb/environment-daemon")>();
   return {
     ...actual,
     removeEnvironmentAgentDefaultLogArtifacts: vi.fn(),

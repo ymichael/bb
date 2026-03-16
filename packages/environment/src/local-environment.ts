@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import type { EnvironmentAgentConnectionTarget } from "@beanbag/environment-agent";
+import type { EnvironmentAgentConnectionTarget } from "@bb/environment-daemon";
 import type {
   CreateEnvironmentContext,
   DemoteEnvironmentOptions,
@@ -124,7 +124,7 @@ class LocalEnvironment implements IEnvironment {
 
   getAgentConnectionTarget(): EnvironmentAgentConnectionTarget {
     const managedTarget = this.managedAgentTarget;
-    if (!managedTarget && !this.env.BEANBAG_ENVIRONMENT_AGENT_BASE_URL?.trim()) {
+    if (!managedTarget && !this.env.BB_ENV_DAEMON_BASE_URL?.trim()) {
       throw new Error("Missing managed environment-agent target for local environment");
     }
     return resolveEnvironmentAgentConnectionTarget({

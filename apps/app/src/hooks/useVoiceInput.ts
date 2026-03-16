@@ -1,4 +1,4 @@
-import { assertNever } from "@beanbag/agent-core";
+import { assertNever } from "@bb/core";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 export type VoiceInputState = "idle" | "recording" | "transcribing" | "error";

@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { resolve } from "node:path";
-import type { ProviderLaunchConfiguration } from "@beanbag/agent-core";
+import type { ProviderLaunchConfiguration } from "@bb/core";
 
 export interface CodexAuthFile {
   auth_mode?: unknown;

@@ -1,6 +1,6 @@
 import * as React from "react"
 
-export const THEME_STORAGE_KEY = "beanbag.theme"
+export const THEME_STORAGE_KEY = "bb.theme"
 
 export type Theme = "light" | "dark"
 

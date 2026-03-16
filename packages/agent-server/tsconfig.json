@@ -1,5 +1,5 @@
 {
-  "extends": "@beanbag/tsconfig/base.json",
+  "extends": "@bb/tsconfig/base.json",
   "compilerOptions": {
     "outDir": "dist",
     "rootDir": "src"

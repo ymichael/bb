@@ -54,7 +54,7 @@ async function writeJson(path, value) {
 
 const { threadId, scenario, outDir } = parseArgs(process.argv.slice(2));
 const baseUrl = process.env.BB_DAEMON_URL ?? "http://127.0.0.1:4310";
-const beanbagRoot = process.env.BB_ROOT ?? process.env.BEANBAG_ROOT;
+const bbRoot = process.env.BB_ROOT ?? process.env.BB_ROOT;
 const artifactRoot = resolve(
   outDir ?? join(process.cwd(), "qa", "artifacts", `${scenario}-${threadId}-${Date.now()}`),
 );
@@ -81,7 +81,7 @@ await Promise.all([
   writeJson(join(artifactRoot, "metadata.json"), {
     generatedAt: new Date().toISOString(),
     daemonUrl: baseUrl,
-    beanbagRoot: beanbagRoot ?? null,
+    bbRoot: bbRoot ?? null,
     scenario,
     threadId,
   }),
@@ -93,8 +93,8 @@ await Promise.all([
   writeJson(join(artifactRoot, "daemon-health.json"), daemonHealth),
 ]);
 
-if (beanbagRoot) {
-  const daemonLogPath = join(beanbagRoot, "logs", "daemon.log");
+if (bbRoot) {
+  const daemonLogPath = join(bbRoot, "logs", "daemon.log");
   try {
     await cp(daemonLogPath, join(artifactRoot, basename(daemonLogPath)));
   } catch {

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { SYSTEM_CHANGE_KINDS, THREAD_CHANGE_KINDS } from "@beanbag/agent-core";
+import { SYSTEM_CHANGE_KINDS, THREAD_CHANGE_KINDS } from "@bb/core";
 import { WSManager } from "../ws.js";
 
 // Minimal mock WebSocket that emulates the 'ws' library interface

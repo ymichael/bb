@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { Hono } from "hono";
-import type { EnvironmentRecord } from "@beanbag/agent-core";
+import type { EnvironmentRecord } from "@bb/core";
 import { createEnvironmentRoutes } from "../../routes/environments.js";
-import type { EnvironmentRepository } from "@beanbag/db";
+import type { EnvironmentRepository } from "@bb/db";
 
 function makeEnvironment(
   overrides: Partial<EnvironmentRecord> = {},

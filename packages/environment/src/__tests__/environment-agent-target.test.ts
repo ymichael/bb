@@ -20,8 +20,8 @@ describe("resolveEnvironmentAgentConnectionTarget", () => {
     expect(
       resolveEnvironmentAgentConnectionTarget({
         runtimeEnv: {
-          BEANBAG_ENVIRONMENT_AGENT_BASE_URL: "http://127.0.0.1:4312/",
-          BEANBAG_ENVIRONMENT_AGENT_AUTH_TOKEN: "secret-token",
+          BB_ENV_DAEMON_BASE_URL: "http://127.0.0.1:4312/",
+          BB_ENV_DAEMON_AUTH_TOKEN: "secret-token",
         },
         defaultTarget: {
           transport: "http",
@@ -31,7 +31,7 @@ describe("resolveEnvironmentAgentConnectionTarget", () => {
           },
           providerLaunch: {
             command: "docker",
-            args: ["exec", "-i", "beanbag-thread-thread-1"],
+            args: ["exec", "-i", "bb-thread-thread-1"],
           },
         },
       }),
@@ -46,7 +46,7 @@ describe("resolveEnvironmentAgentConnectionTarget", () => {
       },
       providerLaunch: {
         command: "docker",
-        args: ["exec", "-i", "beanbag-thread-thread-1"],
+        args: ["exec", "-i", "bb-thread-thread-1"],
       },
     });
   });

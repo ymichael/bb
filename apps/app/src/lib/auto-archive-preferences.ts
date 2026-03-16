@@ -1,4 +1,4 @@
-const AUTO_ARCHIVE_PREFERENCES_STORAGE_KEY = "beanbag.auto-archive.preferences";
+const AUTO_ARCHIVE_PREFERENCES_STORAGE_KEY = "bb.auto-archive.preferences";
 
 export interface AutoArchivePreferences {
   autoArchiveThreadOnCommit: boolean;

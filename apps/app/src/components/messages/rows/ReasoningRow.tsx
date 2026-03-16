@@ -3,8 +3,8 @@ import {
   COLLAPSIBLE_HEADER_STATIC_TONE_CLASS,
   ExpandablePanel,
   getCollapsibleHeaderToneClass,
-} from "@beanbag/ui-core";
-import type { UIAssistantReasoningMessage } from "@beanbag/agent-core";
+} from "@bb/ui-core";
+import type { UIAssistantReasoningMessage } from "@bb/core";
 import { ConversationMarkdown } from "../ConversationMarkdown";
 import {
   EVENT_LARGE_DETAIL_MAX_HEIGHT_CLASS,

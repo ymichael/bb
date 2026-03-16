@@ -2,13 +2,13 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import type { Project, Thread } from "@beanbag/agent-core";
+import type { Project, Thread } from "@bb/core";
 import {
   reconcileManagedArtifactStorage,
 } from "../managed-artifact-reconciler.js";
 import {
   resolveDefaultEnvironmentAgentLogFilePath,
-} from "@beanbag/environment-agent";
+} from "@bb/environment-daemon";
 
 const originalHome = process.env.HOME;
 const originalBbRoot = process.env.BB_ROOT;
@@ -54,12 +54,12 @@ afterEach(() => {
 
 describe("managed artifact reconciler", () => {
   it("retains recent archived logs but removes expired and orphaned log artifacts", () => {
-    const homeDir = mkdtempSync(join(tmpdir(), "beanbag-reconcile-home-"));
+    const homeDir = mkdtempSync(join(tmpdir(), "bb-reconcile-home-"));
     cleanupPaths.push(homeDir);
     process.env.HOME = homeDir;
-    const beanbagRoot = mkdtempSync(join(tmpdir(), "beanbag-reconcile-root-"));
-    cleanupPaths.push(beanbagRoot);
-    process.env.BB_ROOT = beanbagRoot;
+    const bbRoot = mkdtempSync(join(tmpdir(), "bb-reconcile-root-"));
+    cleanupPaths.push(bbRoot);
+    process.env.BB_ROOT = bbRoot;
     const now = Date.now();
     const retentionMs = 3 * 24 * 60 * 60 * 1000;
 
@@ -111,7 +111,7 @@ describe("managed artifact reconciler", () => {
 
     const project = makeProject({
       id: "proj-1",
-      rootPath: mkdtempSync(join(tmpdir(), "beanbag-project-root-")),
+      rootPath: mkdtempSync(join(tmpdir(), "bb-project-root-")),
     });
     cleanupPaths.push(project.rootPath);
 
@@ -132,14 +132,14 @@ describe("managed artifact reconciler", () => {
   });
 
   it("removes stale managed worktrees", () => {
-    const homeDir = mkdtempSync(join(tmpdir(), "beanbag-reconcile-home-"));
+    const homeDir = mkdtempSync(join(tmpdir(), "bb-reconcile-home-"));
     cleanupPaths.push(homeDir);
     process.env.HOME = homeDir;
-    const beanbagRoot = mkdtempSync(join(tmpdir(), "beanbag-reconcile-root-"));
-    cleanupPaths.push(beanbagRoot);
-    process.env.BB_ROOT = beanbagRoot;
+    const bbRoot = mkdtempSync(join(tmpdir(), "bb-reconcile-root-"));
+    cleanupPaths.push(bbRoot);
+    process.env.BB_ROOT = bbRoot;
 
-    const projectRoot = mkdtempSync(join(tmpdir(), "beanbag-project-root-"));
+    const projectRoot = mkdtempSync(join(tmpdir(), "bb-project-root-"));
     cleanupPaths.push(projectRoot);
     const project = makeProject({
       id: "proj-1",
@@ -154,14 +154,14 @@ describe("managed artifact reconciler", () => {
       environmentId: "env-worktree-1",
       archivedAt: Date.now() - 1_000,
     });
-    const worktreeRoot = resolve(beanbagRoot, "worktrees", "proj-1");
+    const worktreeRoot = resolve(bbRoot, "worktrees", "proj-1");
     const liveWorkspacePath = join(worktreeRoot, "live-shared-env");
     const archivedWorkspacePath = join(worktreeRoot, "archived-shared-env");
 
     mkdirSync(liveWorkspacePath, { recursive: true });
     mkdirSync(archivedWorkspacePath, { recursive: true });
     mkdirSync(join(worktreeRoot, "orphan-thread"), { recursive: true });
-    mkdirSync(resolve(beanbagRoot, "worktrees", "orphan-project", "thread-1"), {
+    mkdirSync(resolve(bbRoot, "worktrees", "orphan-project", "thread-1"), {
       recursive: true,
     });
 
@@ -207,6 +207,6 @@ describe("managed artifact reconciler", () => {
     expect(existsSync(liveWorkspacePath)).toBe(true);
     expect(existsSync(archivedWorkspacePath)).toBe(false);
     expect(existsSync(join(worktreeRoot, "orphan-thread"))).toBe(false);
-    expect(existsSync(resolve(beanbagRoot, "worktrees", "orphan-project"))).toBe(false);
+    expect(existsSync(resolve(bbRoot, "worktrees", "orphan-project"))).toBe(false);
   });
 });

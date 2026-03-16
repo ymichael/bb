@@ -90,7 +90,7 @@ async function relaunchDaemon(metadata) {
       cwd: workspaceRoot,
       env: {
         ...process.env,
-        BB_ROOT: metadata.beanbagRoot,
+        BB_ROOT: metadata.bbRoot,
       },
       detached: true,
       stdio: "ignore",
@@ -125,8 +125,8 @@ async function main() {
       String(currentDaemonPid),
       "--tmp-root",
       metadata.tmpRoot,
-      "--beanbag-root",
-      metadata.beanbagRoot,
+      "--bb-root",
+      metadata.bbRoot,
     ]);
   };
 
@@ -252,7 +252,7 @@ async function main() {
         {
           ok: true,
           tmpRoot: metadata.tmpRoot,
-          beanbagRoot: metadata.beanbagRoot,
+          bbRoot: metadata.bbRoot,
           daemonUrl: metadata.daemonUrl,
           projectId: metadata.projectId,
           checkedThreads: {
@@ -273,7 +273,7 @@ async function main() {
       JSON.stringify(
         {
           tmpRoot: metadata.tmpRoot,
-          beanbagRoot: metadata.beanbagRoot,
+          bbRoot: metadata.bbRoot,
           daemonUrl: metadata.daemonUrl,
           daemonLogPath: metadata.daemonLogPath,
           projectId: metadata.projectId,

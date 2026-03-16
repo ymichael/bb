@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { DbConnection } from "@beanbag/db";
+import type { DbConnection } from "@bb/db";
 import {
   createConnection,
   migrate,
@@ -7,8 +7,8 @@ import {
   EnvironmentAgentSessionRepository,
   ProjectRepository,
   ThreadRepository,
-} from "@beanbag/db";
-import { AgentServer, createCodexProviderAdapter } from "@beanbag/agent-server";
+} from "@bb/db";
+import { AgentServer, createCodexProviderAdapter } from "@bb/agent-server";
 import { EnvironmentAgentCommandDispatcher } from "../environment-agent-command-dispatcher.js";
 import { EnvironmentAgentSessionCommandClient } from "../environment-agent-session-command-client.js";
 

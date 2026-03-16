@@ -19,10 +19,10 @@ export interface StandaloneDaemonHandle {
 }
 
 function resolveDaemonLaunchTarget(): { command: string; args: string[] } {
-  const distEntry = resolve(WORKSPACE_ROOT, "apps/daemon/dist/index.js");
+  const distEntry = resolve(WORKSPACE_ROOT, "apps/server/dist/index.js");
   if (!existsSync(distEntry)) {
     throw new Error(
-      `Daemon dist entry not found at ${distEntry}. Run "pnpm exec turbo run build --filter=@beanbag/daemon" first.`,
+      `Daemon dist entry not found at ${distEntry}. Run "pnpm exec turbo run build --filter=@bb/server" first.`,
     );
   }
   return { command: process.execPath, args: [distEntry] };

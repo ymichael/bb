@@ -1,6 +1,6 @@
 import { assertNever } from "./assert-never.js";
 import type { ThreadOperationRequest } from "./api-types.js";
-import { renderTemplate } from "@beanbag/templates";
+import { renderTemplate } from "@bb/templates";
 
 export type ThreadOperationPromptTarget = "thread" | "project_main";
 export type SquashMergeCommitFailureStage = "prep_commit" | "squash_commit";

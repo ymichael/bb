@@ -5,13 +5,13 @@
 ## Regenerate (stable API surface)
 
 ```bash
-pnpm --filter @beanbag/core gen:codex-event-types
+pnpm --filter @bb/core gen:codex-event-types
 ```
 
 ## Regenerate (stable + experimental API surface)
 
 ```bash
-pnpm --filter @beanbag/core gen:codex-event-types -- --experimental
+pnpm --filter @bb/core gen:codex-event-types -- --experimental
 ```
 
 ## What the generator does

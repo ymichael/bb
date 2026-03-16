@@ -1,4 +1,4 @@
-import type { OpenPathTarget } from "@beanbag/agent-core";
+import type { OpenPathTarget } from "@bb/core";
 import type { ReactNode } from "react";
 import { openPathInEditor } from "@/lib/api";
 import { getPathCommandForTarget } from "@/lib/open-path-preferences";

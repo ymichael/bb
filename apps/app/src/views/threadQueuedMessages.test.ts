@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { PromptInput } from "@beanbag/agent-core";
+import type { PromptInput } from "@bb/core";
 import {
   extractThreadQueuedMessages,
   formatQueuedFollowUpPreview,

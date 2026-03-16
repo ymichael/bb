@@ -1,6 +1,6 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { afterEach, describe, expect, it } from "vitest";
-import type { JsonLineTransport, JsonLineTransportHandlers } from "@beanbag/environment-agent";
+import type { JsonLineTransport, JsonLineTransportHandlers } from "@bb/environment-daemon";
 import { createCodexProviderAdapter } from "../codex-provider-adapter.js";
 import { ProviderRuntime } from "../provider-runtime.js";
 import { ProviderToolHost } from "../provider-tool-host.js";
@@ -58,7 +58,7 @@ class ChildProcessJsonLineTransport implements JsonLineTransport {
   }
 }
 
-const shouldRun = process.env.BEANBAG_REAL_CODEX === "1";
+const shouldRun = process.env.BB_REAL_CODEX === "1";
 
 describe.runIf(shouldRun).sequential("codex dynamic tools (real)", () => {
   const children: ChildProcessWithoutNullStreams[] = [];

@@ -7,7 +7,7 @@ export default defineConfig({
   },
   test: {
     silent: "passed-only",
-    name: "@beanbag/db",
+    name: "@bb/db",
     include: ["test/**/*.test.ts"],
     exclude: ["dist/**", "node_modules/**"],
   },

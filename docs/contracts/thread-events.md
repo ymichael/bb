@@ -18,7 +18,7 @@ Provider notifications are persisted as:
 ```ts
 {
   __bb_provider_event: {
-    schema: "beanbag/provider-event-envelope";
+    schema: "bb/provider-event-envelope";
     version: 1;
     providerId: string;
     method: string;
@@ -51,11 +51,11 @@ Notes:
 - `system/provisioning/completed` -> `SystemProvisioningCompletedEventData`
 - `system/provisioning/cleanup_failed` -> `SystemProvisioningCleanupFailedEventData`
 
-These are Beanbag-owned and must stay exhaustively handled.
+These are BB-owned and must stay exhaustively handled.
 
 ## Provider Notification Methods (Current Generated Set)
 
-From `ServerNotification["method"]` in generated codex schema (`packages/agent-core/src/generated/codex-app-server/schema/ServerNotification.ts`):
+From `ServerNotification["method"]` in generated codex schema (`packages/core/src/generated/codex-app-server/schema/ServerNotification.ts`):
 
 - `error`
 - `thread/started`

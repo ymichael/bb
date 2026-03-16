@@ -7,7 +7,7 @@ import {
   serializePromptDraftStorage,
 } from "@/lib/prompt-draft";
 
-const PROMPT_DRAFT_STORAGE_PREFIX = "beanbag.promptbox.contents";
+const PROMPT_DRAFT_STORAGE_PREFIX = "bb.promptbox.contents";
 const PROMPT_DRAFT_STORAGE_VERSION = "3";
 
 interface PromptDraftScope {

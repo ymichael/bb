@@ -3,8 +3,8 @@ import type {
   EnvironmentCapabilities,
   EnvironmentCapability,
   PersistedEnvironmentRecord,
-} from "@beanbag/agent-core";
-import type { EnvironmentAgentConnectionTarget } from "@beanbag/environment-agent";
+} from "@bb/core";
+import type { EnvironmentAgentConnectionTarget } from "@bb/environment-daemon";
 
 export type { EnvironmentCapability, EnvironmentCapabilities };
 

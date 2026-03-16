@@ -1,5 +1,5 @@
 import type { Context } from "hono";
-import { assertNever } from "@beanbag/agent-core";
+import { assertNever } from "@bb/core";
 import type { DomainErrorCode } from "../domain-errors.js";
 import { isDomainError } from "../domain-errors.js";
 

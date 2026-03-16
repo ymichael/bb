@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { DbConnection } from "@beanbag/db";
+import type { DbConnection } from "@bb/db";
 import {
   createConnection,
   EnvironmentRepository,
@@ -10,11 +10,11 @@ import {
   ProjectRepository,
   ThreadEnvironmentAttachmentRepository,
   ThreadRepository,
-} from "@beanbag/db";
+} from "@bb/db";
 import type {
   EnvironmentAgentEventEnvelope,
   EnvironmentAgentSessionEventBatchChannel,
-} from "@beanbag/environment-agent";
+} from "@bb/environment-daemon";
 import {
   EnvironmentAgentCommandDispatcher,
   EnvironmentAgentSessionUnavailableError,

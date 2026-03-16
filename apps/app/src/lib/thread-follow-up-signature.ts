@@ -1,4 +1,4 @@
-import type { PromptInput, ThreadDetailRow, UIUserMessage } from "@beanbag/agent-core"
+import type { PromptInput, ThreadDetailRow, UIUserMessage } from "@bb/core"
 
 interface FollowUpAttachmentsSignature {
   webImages: number

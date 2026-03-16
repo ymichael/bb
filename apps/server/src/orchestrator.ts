@@ -72,8 +72,8 @@ import {
   type ThreadProvisioningProgressPhase,
   type ThreadEnvironmentStartReason,
   type ThreadProviderId,
-} from "@beanbag/agent-core";
-import { resolveBeanbagPath } from "@beanbag/agent-core/storage-paths";
+} from "@bb/core";
+import { resolveBbPath } from "@bb/core/storage-paths";
 import {
   EnvironmentRegistry,
   EnvironmentSquashMergeCommitFailureError,
@@ -84,16 +84,16 @@ import {
   type EnvironmentSquashMergeCommitFailureStage,
   type EnvironmentSquashMergeMessageContext,
   type IEnvironment,
-} from "@beanbag/environment";
+} from "@bb/environment";
 import type {
   EnvironmentAgentClient,
   EnvironmentAgentConnectionTarget,
-} from "@beanbag/environment-agent";
+} from "@bb/environment-daemon";
 import type {
   EnvironmentAgentEventEnvelope,
   EnvironmentAgentStatusSnapshot,
-} from "@beanbag/environment-agent";
-import { ENVIRONMENT_AGENT_PROTOCOL_VERSION } from "@beanbag/environment-agent";
+} from "@bb/environment-daemon";
+import { ENVIRONMENT_AGENT_PROTOCOL_VERSION } from "@bb/environment-daemon";
 import type {
   DbConnection,
   EnvironmentAgentSessionCloseReason,
@@ -103,7 +103,7 @@ import type {
   EventRepository,
   ProjectRepository,
   EnvironmentAgentSessionRepository,
-} from "@beanbag/db";
+} from "@bb/db";
 
 type DbExecutor = Pick<DbConnection, "select" | "insert" | "update" | "delete">;
 import {
@@ -114,7 +114,7 @@ import {
   type LlmCompletionService,
   type ProviderToolHost,
   createProviderAdapter,
-} from "@beanbag/agent-server";
+} from "@bb/agent-server";
 import { WSManager } from "./ws.js";
 import {
   isDomainError,
@@ -164,8 +164,8 @@ import { measureAsync, measureSync } from "./perf.js";
 
 export type PromptExecutionOptions = ProviderExecutionOptions;
 
-const BEANBAG_ENVIRONMENT_AGENT_COMMAND_POLL_INTERVAL_MS =
-  "BEANBAG_ENVIRONMENT_AGENT_COMMAND_POLL_INTERVAL_MS";
+const BB_ENV_DAEMON_COMMAND_POLL_INTERVAL_MS =
+  "BB_ENV_DAEMON_COMMAND_POLL_INTERVAL_MS";
 const ENVIRONMENT_AGENT_SESSION_RECOVERY_WAIT_MS = 1_000;
 const ENVIRONMENT_AGENT_SESSION_RECOVERY_RETRY_WAIT_MS = 5_000;
 
@@ -326,7 +326,7 @@ function ensureBbShimBinDir(): string | undefined {
   const launchTarget = resolveBbLaunchTarget();
   if (!launchTarget) return undefined;
 
-  const shimBinDir = join(tmpdir(), "beanbag", "bin");
+  const shimBinDir = join(tmpdir(), "bb", "bin");
   const shimPath = join(shimBinDir, "bb");
   const runnerPath = shellEscapeDoubleQuoted(launchTarget.runnerPath);
   const entryPath = shellEscapeDoubleQuoted(launchTarget.entryPath);
@@ -601,7 +601,7 @@ export class Orchestrator implements ThreadOrchestrator {
     );
     this.threadShellPath = resolveThreadShellPath(this.runtimeEnv.PATH);
     this.environmentAgentCommandPollIntervalMs = parsePositiveIntegerEnv(
-      this.runtimeEnv[BEANBAG_ENVIRONMENT_AGENT_COMMAND_POLL_INTERVAL_MS],
+      this.runtimeEnv[BB_ENV_DAEMON_COMMAND_POLL_INTERVAL_MS],
     );
     this.environmentCatalog =
       environmentCatalog ??
@@ -640,7 +640,7 @@ export class Orchestrator implements ThreadOrchestrator {
             {
               action: "demote",
               status: "completed",
-              message: "Primary checkout changed outside Beanbag; marked as demoted",
+              message: "Primary checkout changed outside BB; marked as demoted",
               projectId,
               activeThreadId: threadId,
               ...(currentCheckout.branch ? { branch: currentCheckout.branch } : {}),
@@ -3968,7 +3968,7 @@ export class Orchestrator implements ThreadOrchestrator {
       runtimeEnv: {
         ...this.runtimeEnv,
         ...(attachedEnvironmentId
-          ? { BEANBAG_ENVIRONMENT_ID: attachedEnvironmentId }
+          ? { BB_ENVIRONMENT_ID: attachedEnvironmentId }
           : {}),
       },
       managedEnvironmentAgentReconnectTarget: (() => {
@@ -4132,11 +4132,11 @@ export class Orchestrator implements ThreadOrchestrator {
   private _resolveEnvironmentAgentConnectionTargetFromRuntimeEnv():
     | EnvironmentAgentConnectionTarget
     | undefined {
-    const baseUrl = this.runtimeEnv.BEANBAG_ENVIRONMENT_AGENT_BASE_URL?.trim();
+    const baseUrl = this.runtimeEnv.BB_ENV_DAEMON_BASE_URL?.trim();
     if (!baseUrl) {
       return undefined;
     }
-    const authToken = this.runtimeEnv.BEANBAG_ENVIRONMENT_AGENT_AUTH_TOKEN?.trim();
+    const authToken = this.runtimeEnv.BB_ENV_DAEMON_AUTH_TOKEN?.trim();
     return {
       transport: "http",
       baseUrl: baseUrl.replace(/\/+$/, ""),
@@ -4493,8 +4493,8 @@ export class Orchestrator implements ThreadOrchestrator {
     return {
       projectId: args.projectId,
       threadId: args.threadId,
-      ...(resolveCliDaemonUrl(this.runtimeEnv.BEANBAG_DAEMON_URL)
-        ? { daemonUrl: resolveCliDaemonUrl(this.runtimeEnv.BEANBAG_DAEMON_URL) }
+      ...(resolveCliDaemonUrl(this.runtimeEnv.BB_DAEMON_URL)
+        ? { daemonUrl: resolveCliDaemonUrl(this.runtimeEnv.BB_DAEMON_URL) }
         : {}),
       ...(this.threadShellPath ? { path: this.threadShellPath } : {}),
     };

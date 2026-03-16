@@ -16,14 +16,14 @@ import type {
   Thread,
   ThreadEvent,
   ThreadProviderId,
-} from "@beanbag/agent-core";
+} from "@bb/core";
 import {
   assertNever,
   decodeThreadEventData,
   decodeThreadIdFromWireValue,
   toRecord,
-} from "@beanbag/agent-core";
-import { renderTemplate } from "@beanbag/templates";
+} from "@bb/core";
+import { renderTemplate } from "@bb/templates";
 import type {
   ProviderAdapter,
   ProviderExecutionOptions,
@@ -344,7 +344,7 @@ function getClaudeReasoningEfforts(modelId: string): ModelReasoningEffort[] {
     ];
   }
 
-  // Claude model IDs come from the provider and can evolve independently of Beanbag.
+  // Claude model IDs come from the provider and can evolve independently of BB.
   // Unknown Claude families intentionally fall back to the common reasoning set.
   return [LOW_REASONING_EFFORT, MEDIUM_REASONING_EFFORT, HIGH_REASONING_EFFORT];
 }
@@ -436,7 +436,7 @@ export function createClaudeCodeProviderAdapter(
       return { env };
     },
     clientInfo: {
-      name: "beanbag",
+      name: "bb",
       version: "0.0.1",
     },
     initializeMethod: "initialize",
@@ -531,7 +531,7 @@ export function createClaudeCodeProviderAdapter(
       return undefined;
     },
     titleFromEvent(_method: string, _data: unknown): string | undefined {
-      // Claude Code does not emit thread name events; Beanbag manages
+      // Claude Code does not emit thread name events; BB manages
       // titles locally via deriveThreadTitle.
       return undefined;
     },

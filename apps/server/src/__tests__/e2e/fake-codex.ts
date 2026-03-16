@@ -49,7 +49,7 @@ export function createFakeCodexScriptFile(
     ...opts,
   };
 
-  const scriptDir = join(rootDir, ".beanbag-test");
+  const scriptDir = join(rootDir, ".bb-test");
   const scriptPath = join(scriptDir, "fake-codex.cjs");
   mkdirSync(scriptDir, { recursive: true });
   writeFileSync(scriptPath, buildFakeCodexScript(settings), "utf-8");
@@ -79,19 +79,19 @@ const defaultItemText = ${fallbackText};
 const defaultScenarioRaw = ${fallbackScenario};
 
 const parsedDelay = Number.parseInt(
-  process.env.BEANBAG_FAKE_CODEX_TURN_DELAY_MS || defaultTurnDelayRaw,
+  process.env.BB_FAKE_CODEX_TURN_DELAY_MS || defaultTurnDelayRaw,
   10,
 );
 const turnDelayMs = Number.isFinite(parsedDelay) ? parsedDelay : 0;
 const duplicateTurnCompletion = (
-  process.env.BEANBAG_FAKE_CODEX_DUPLICATE_COMPLETION || defaultDuplicateRaw
+  process.env.BB_FAKE_CODEX_DUPLICATE_COMPLETION || defaultDuplicateRaw
 ) === "1";
-const scenarioRaw = String(process.env.BEANBAG_FAKE_CODEX_SCENARIO || defaultScenarioRaw)
+const scenarioRaw = String(process.env.BB_FAKE_CODEX_SCENARIO || defaultScenarioRaw)
   .trim()
   .toLowerCase();
 // Open external test control: unknown scenario values intentionally use turn-complete behavior.
 const scenario = scenarioRaw.length > 0 ? scenarioRaw : "turn-complete";
-const controlFilePath = String(process.env.BEANBAG_FAKE_CODEX_CONTROL_FILE || "").trim();
+const controlFilePath = String(process.env.BB_FAKE_CODEX_CONTROL_FILE || "").trim();
 
 const stateFilePath = join(dirname(process.argv[1]), ".fake-codex-state.json");
 
@@ -200,7 +200,7 @@ function resolveCompletionText(input) {
       worktreeName: "test/fake-metadata-title",
     });
   }
-  return process.env.BEANBAG_FAKE_CODEX_ITEM_TEXT || defaultItemText;
+  return process.env.BB_FAKE_CODEX_ITEM_TEXT || defaultItemText;
 }
 
 function queueLifecycleStep(step) {

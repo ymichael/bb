@@ -1,5 +1,5 @@
 const THREAD_SECONDARY_PANEL_QUERY_KEY = "secondaryPanel";
-const THREAD_SECONDARY_PANEL_STORAGE_KEY = "beanbag.thread.secondaryPanel";
+const THREAD_SECONDARY_PANEL_STORAGE_KEY = "bb.thread.secondaryPanel";
 const THREAD_DIFF_PANEL_QUERY_VALUE = "git-diff";
 const THREAD_INFO_PANEL_QUERY_VALUE = "thread-info";
 const THREAD_MANAGER_WORKSPACE_PANEL_QUERY_VALUE = "manager-workspace";

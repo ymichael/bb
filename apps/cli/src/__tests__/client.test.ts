@@ -82,7 +82,7 @@ describe("unwrap()", () => {
     });
 
     await expect(unwrap(Promise.reject(connError))).rejects.toThrow(
-      "Cannot connect to Beanbag daemon. Ensure it is running and BB_DAEMON_URL is correct.",
+      "Cannot connect to BB server. Ensure it is running and BB_DAEMON_URL is correct.",
     );
   });
 

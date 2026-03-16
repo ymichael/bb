@@ -5,7 +5,7 @@ import {
 } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod/v4";
 
-export const BRIDGE_MCP_SERVER_NAME = "beanbag-bridge";
+export const BRIDGE_MCP_SERVER_NAME = "bb-bridge";
 
 export interface DynamicToolDefinition {
   name: string;

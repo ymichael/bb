@@ -43,7 +43,7 @@ afterEach(() => {
 describe("host environment-agent helper", () => {
   it("launches the standalone environment-agent artifact directly", () => {
     const artifactEntry = fileURLToPath(
-      new URL("../../../environment-agent/dist/environment-agent.bundle.mjs", import.meta.url),
+      new URL("../../../environment-daemon/dist/environment-agent.bundle.mjs", import.meta.url),
     );
     mkdirSync(dirname(artifactEntry), { recursive: true });
     if (!existsSync(artifactEntry)) {
@@ -57,8 +57,8 @@ describe("host environment-agent helper", () => {
   });
 
   it("coalesces concurrent managed agent startup for the same thread", async () => {
-    const beanbagRoot = makeTempDir();
-    process.env.BB_ROOT = beanbagRoot;
+    const bbRoot = makeTempDir();
+    process.env.BB_ROOT = bbRoot;
     const projectId = `project-${Date.now()}`;
     const workspaceRoot = makeTempDir();
 
@@ -73,7 +73,7 @@ describe("host environment-agent helper", () => {
       threadId: "thread-1",
       projectId,
       environmentId: "worktree",
-      runtimeEnv: { BB_ROOT: beanbagRoot },
+      runtimeEnv: { BB_ROOT: bbRoot },
     };
     const deps = {
       allocatePort: async () => 4123,
@@ -116,8 +116,8 @@ describe("host environment-agent helper", () => {
   });
 
   it("adopts a healthy reconnect target instead of spawning a duplicate agent", async () => {
-    const beanbagRoot = makeTempDir();
-    process.env.BB_ROOT = beanbagRoot;
+    const bbRoot = makeTempDir();
+    process.env.BB_ROOT = bbRoot;
     const projectId = `project-${Date.now()}`;
     const workspaceRoot = makeTempDir();
     const spawnProcess = vi.fn();
@@ -128,7 +128,7 @@ describe("host environment-agent helper", () => {
         threadId: "thread-1",
         projectId,
         environmentId: "local",
-        runtimeEnv: { BB_ROOT: beanbagRoot },
+        runtimeEnv: { BB_ROOT: bbRoot },
         reconnectTarget: {
           baseUrl: "http://127.0.0.1:4310",
           authToken: "reconnect-token",
@@ -163,8 +163,8 @@ describe("host environment-agent helper", () => {
   });
 
   it("reuses an existing healthy managed agent instead of replacing it", async () => {
-    const beanbagRoot = makeTempDir();
-    process.env.BB_ROOT = beanbagRoot;
+    const bbRoot = makeTempDir();
+    process.env.BB_ROOT = bbRoot;
     const projectId = `project-${Date.now()}`;
     const workspaceRoot = makeTempDir();
 
@@ -174,7 +174,7 @@ describe("host environment-agent helper", () => {
         threadId: "thread-1",
         projectId,
         environmentId: "local",
-        runtimeEnv: { BB_ROOT: beanbagRoot },
+        runtimeEnv: { BB_ROOT: bbRoot },
       },
       {
         allocatePort: async () => 4311,
@@ -200,7 +200,7 @@ describe("host environment-agent helper", () => {
         threadId: "thread-1",
         projectId,
         environmentId: "local",
-        runtimeEnv: { BB_ROOT: beanbagRoot },
+        runtimeEnv: { BB_ROOT: bbRoot },
       },
       {
         spawnProcess: vi.fn() as unknown as typeof import("node:child_process").spawn,
@@ -217,8 +217,8 @@ describe("host environment-agent helper", () => {
   });
 
   it("reuses the same managed agent across threads on one environment", async () => {
-    const beanbagRoot = makeTempDir();
-    process.env.BB_ROOT = beanbagRoot;
+    const bbRoot = makeTempDir();
+    process.env.BB_ROOT = bbRoot;
     const projectId = `project-${Date.now()}`;
     const workspaceRoot = makeTempDir();
     const spawnProcess = vi.fn(() => ({
@@ -232,7 +232,7 @@ describe("host environment-agent helper", () => {
         threadId: "thread-1",
         projectId,
         environmentId: "env-1",
-        runtimeEnv: { BB_ROOT: beanbagRoot },
+        runtimeEnv: { BB_ROOT: bbRoot },
       },
       {
         allocatePort: async () => 4312,
@@ -253,7 +253,7 @@ describe("host environment-agent helper", () => {
         threadId: "thread-2",
         projectId,
         environmentId: "env-1",
-        runtimeEnv: { BB_ROOT: beanbagRoot },
+        runtimeEnv: { BB_ROOT: bbRoot },
       },
       {
         spawnProcess,
@@ -269,11 +269,11 @@ describe("host environment-agent helper", () => {
   });
 
   it("removes the managed agent record and escalates to SIGKILL when SIGTERM does not exit promptly", async () => {
-    const beanbagRoot = makeTempDir();
-    process.env.BB_ROOT = beanbagRoot;
+    const bbRoot = makeTempDir();
+    process.env.BB_ROOT = bbRoot;
     const projectId = `project-${Date.now()}`;
     const workspaceRoot = makeTempDir();
-    const runtimeEnv = { BB_ROOT: beanbagRoot };
+    const runtimeEnv = { BB_ROOT: bbRoot };
 
     await ensureManagedHostEnvironmentAgent(
       {
@@ -333,11 +333,11 @@ describe("host environment-agent helper", () => {
   });
 
   it("keeps an adopted managed agent record when shutdown fails but the agent is still reachable", async () => {
-    const beanbagRoot = makeTempDir();
-    process.env.BB_ROOT = beanbagRoot;
+    const bbRoot = makeTempDir();
+    process.env.BB_ROOT = bbRoot;
     const projectId = `project-${Date.now()}`;
     const workspaceRoot = makeTempDir();
-    const runtimeEnv = { BB_ROOT: beanbagRoot };
+    const runtimeEnv = { BB_ROOT: bbRoot };
 
     await ensureManagedHostEnvironmentAgent(
       {

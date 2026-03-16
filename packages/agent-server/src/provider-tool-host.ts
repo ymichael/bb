@@ -3,7 +3,7 @@ import type {
   ProviderThreadContext,
   ProviderToolCallRequest,
   ProviderToolCallResponse,
-} from "@beanbag/agent-core";
+} from "@bb/core";
 
 export interface ProviderToolDefinition extends ProviderDynamicTool {
   execute(args: {

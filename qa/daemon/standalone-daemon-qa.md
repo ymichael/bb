@@ -1,6 +1,6 @@
 # Standalone Daemon CLI QA
 
-This document describes how to QA Beanbag daemon and CLI flows against a real provider.
+This document describes how to QA BB server and CLI flows against a real provider.
 
 Use this guide when you want to validate user-visible behavior end-to-end, especially after changes to:
 
@@ -19,17 +19,17 @@ That script runs a disposable standalone daemon against the real provider and ex
 
 ## Provider selection
 
-By default, the QA pass uses the Codex provider. To run against a different provider, set `BEANBAG_PROVIDER` and the required auth:
+By default, the QA pass uses the Codex provider. To run against a different provider, set `BB_PROVIDER` and the required auth:
 
 **Claude Code:**
 ```bash
-BEANBAG_PROVIDER=claude-code ANTHROPIC_API_KEY=... node scripts/qa/start-standalone-daemon-qa.mjs
+BB_PROVIDER=claude-code ANTHROPIC_API_KEY=... node scripts/qa/start-standalone-daemon-qa.mjs
 ANTHROPIC_API_KEY=... pnpm qa:daemon:smoke:claude-code
 ```
 
 **Pi:**
 ```bash
-BEANBAG_PROVIDER=pi node scripts/qa/start-standalone-daemon-qa.mjs --provider pi
+BB_PROVIDER=pi node scripts/qa/start-standalone-daemon-qa.mjs --provider pi
 pnpm qa:daemon:smoke:pi
 ```
 
@@ -44,12 +44,12 @@ It is fine to run the full exhaustive QA pass against only one provider and then
 ## Rules
 
 - Use the built binaries directly:
-  - `node apps/daemon/dist/index.js`
+  - `node apps/server/dist/index.js`
   - `node apps/cli/dist/index.js`
 - For restart and relaunch checks, use the exact Node binary that started the standalone daemon. Do not assume plain `node` resolves to the same runtime across shells.
 - Use the real Codex provider. Do not use the fake-codex test harness for this QA pass.
 - Some recovery scenarios in the automated suite are fake-provider-only because they require explicit worker-loss control hooks. Those are covered by `pnpm qa:daemon:recovery:fake`, not by the real-provider scripts.
-- Prefer disposable test repositories and disposable Beanbag roots so failures do not contaminate real projects.
+- Prefer disposable test repositories and disposable BB roots so failures do not contaminate real projects.
 - When testing a user’s already-running main daemon, do not run `bb daemon restart` unless they explicitly want that daemon restarted.
 - If a test project root is temporary, keep it on disk until all worktree checks finish. Cleaning it up early will correctly fail with `project_root_missing`, which is a test setup mistake, not a daemon bug.
 
@@ -59,30 +59,30 @@ Build the daemon stack first:
 
 ```bash
 pnpm exec turbo run build \
-  --filter=@beanbag/environment-agent \
-  --filter=@beanbag/daemon \
-  --filter=@beanbag/cli
+  --filter=@bb/environment-daemon \
+  --filter=@bb/server \
+  --filter=@bb/cli
 ```
 
 For Codex: confirm `codex` is available in `PATH` and can be used by the daemon.
 
-For Claude Code: confirm `ANTHROPIC_API_KEY` or `CLAUDE_CODE_OAUTH_TOKEN` is set and the `@beanbag/claude-code-bridge` package is built (`pnpm --filter @beanbag/claude-code-bridge build`).
+For Claude Code: confirm `ANTHROPIC_API_KEY` or `CLAUDE_CODE_OAUTH_TOKEN` is set and the `@bb/claude-code-bridge` package is built (`pnpm --filter @bb/claude-code-bridge build`).
 
-For Pi: confirm `pi` is in `PATH` and auth is configured (`npx @mariozechner/pi-ai login`). The `@beanbag/pi-bridge` package must be built (`pnpm --filter @beanbag/pi-bridge build`).
+For Pi: confirm `pi` is in `PATH` and auth is configured (`npx @mariozechner/pi-ai login`). The `@bb/pi-bridge` package must be built (`pnpm --filter @bb/pi-bridge build`).
 
 Recommended during restart/liveness QA:
 
 - keep one shell tailing the daemon log:
 
 ```bash
-tail -f "$beanbag_root/logs/daemon.log"
+tail -f "$bb_root/logs/daemon.log"
 ```
 
 - keep a separate persistent shell or terminal tab for daemon relaunches; avoid backgrounding the relaunched daemon from a one-shot shell command
 
 ## Standalone Daemon QA
 
-This path validates the standalone daemon process directly, with its own Beanbag root.
+This path validates the standalone daemon process directly, with its own BB root.
 
 Run the cases in order and record pass/fail for each one. Do not stop the whole pass after the
 first failure unless the daemon is completely unusable. The goal is to learn which recovery paths
@@ -96,44 +96,44 @@ Fast setup wrapper:
 node scripts/qa/start-standalone-daemon-qa.mjs
 ```
 
-That creates a disposable repo + Beanbag root, starts the standalone daemon, creates a project, and prints the resulting `daemonUrl`, `projectId`, paths, daemon PID, exact Node runtime details, a ready-to-run `relaunchCommand`, and a `cleanupCommand` as JSON.
+That creates a disposable repo + BB root, starts the standalone daemon, creates a project, and prints the resulting `daemonUrl`, `projectId`, paths, daemon PID, exact Node runtime details, a ready-to-run `relaunchCommand`, and a `cleanupCommand` as JSON.
 
-Keep the reported `nodePath`, `nodeVersion`, and `nodeAbi` with your QA notes. If you later relaunch the daemon under a different Node ABI, native modules such as `better-sqlite3` can fail before Beanbag finishes booting.
+Keep the reported `nodePath`, `nodeVersion`, and `nodeAbi` with your QA notes. If you later relaunch the daemon under a different Node ABI, native modules such as `better-sqlite3` can fail before BB finishes booting.
 
 When you finish the pass, run the reported `cleanupCommand` to stop the detached daemon and remove the disposable temp root.
 
 Manual setup:
 
 ```bash
-tmp_root=$(mktemp -d /tmp/beanbag-qa-XXXXXX)
+tmp_root=$(mktemp -d /tmp/bb-qa-XXXXXX)
 project_root="$tmp_root/project"
-beanbag_root="$tmp_root/beanbag-root"
-mkdir -p "$project_root" "$beanbag_root"
+bb_root="$tmp_root/bb-root"
+mkdir -p "$project_root" "$bb_root"
 printf 'alpha\n' > "$project_root/alpha.txt"
 printf '# beta\n' > "$project_root/beta.md"
 git -C "$project_root" init -b main
 git -C "$project_root" add .
-GIT_AUTHOR_NAME='Beanbag Test' \
-GIT_AUTHOR_EMAIL='beanbag-test@example.com' \
-GIT_COMMITTER_NAME='Beanbag Test' \
-GIT_COMMITTER_EMAIL='beanbag-test@example.com' \
+GIT_AUTHOR_NAME='BB Test' \
+GIT_AUTHOR_EMAIL='bb-test@example.com' \
+GIT_COMMITTER_NAME='BB Test' \
+GIT_COMMITTER_EMAIL='bb-test@example.com' \
 git -C "$project_root" commit -m init
 ```
 
 ### 2. Start the standalone daemon
 
 ```bash
-BB_ROOT="$beanbag_root" \
-node apps/daemon/dist/index.js --port 4311
+BB_ROOT="$bb_root" \
+node apps/server/dist/index.js --port 4311
 ```
 
 For Claude Code, also set the provider:
 
 ```bash
-BB_ROOT="$beanbag_root" \
-BEANBAG_PROVIDER=claude-code \
+BB_ROOT="$bb_root" \
+BB_PROVIDER=claude-code \
 ANTHROPIC_API_KEY=... \
-node apps/daemon/dist/index.js --port 4311
+node apps/server/dist/index.js --port 4311
 ```
 
 In another shell, target that daemon:
@@ -176,13 +176,13 @@ node apps/cli/dist/index.js thread output <thread-id>
 Optional deeper debugging helpers:
 
 ```bash
-sqlite3 "$beanbag_root/beanbag.db" \
+sqlite3 "$bb_root/bb.db" \
   "select id,status,updated_at from threads order by updated_at desc;"
 
-sqlite3 "$beanbag_root/beanbag.db" \
+sqlite3 "$bb_root/bb.db" \
   "select thread_id,status,control_base_url,lease_expires_at,last_heartbeat_at from environment_agent_sessions order by created_at desc;"
 
-sqlite3 "$beanbag_root/beanbag.db" \
+sqlite3 "$bb_root/bb.db" \
   "select thread_id,type,substr(json_data,1,160) from events order by seq desc limit 20;"
 ```
 
@@ -196,7 +196,7 @@ After spawning a thread and letting it reach `idle`, verify that the thread reco
 node apps/cli/dist/index.js thread show <thread-id>
 ```
 
-Expected: the `providerId` field matches the configured `BEANBAG_PROVIDER` (e.g. `codex`, `claude-code`, or `pi`).
+Expected: the `providerId` field matches the configured `BB_PROVIDER` (e.g. `codex`, `claude-code`, or `pi`).
 
 Inspect raw events to confirm provider event envelopes carry the correct provider:
 
@@ -267,7 +267,7 @@ Useful checks while waiting:
 node apps/cli/dist/index.js thread show <thread-id>
 node apps/cli/dist/index.js thread wait <thread-id> --status idle --timeout 90
 node apps/cli/dist/index.js thread sessions <thread-id>
-find "$beanbag_root/environment-agents" -maxdepth 3 -type f | sort
+find "$bb_root/environment-agents" -maxdepth 3 -type f | sort
 ```
 
 Expected result:
@@ -277,7 +277,7 @@ Expected result:
 - `thread log` shows the expected `turn/started` and `turn/completed` events
 - `thread show` and raw `thread status` agree on the terminal state
 - the thread row in SQLite matches the CLI status
-- while the local thread is active, a managed env-agent state file appears under `$beanbag_root/environment-agents`
+- while the local thread is active, a managed env-agent state file appears under `$bb_root/environment-agents`
 - after the local thread returns to `idle`, that local env-agent state file is removed within a short delay
 
 ### 5. Validate worktree flows
@@ -546,7 +546,7 @@ Relaunch:
 
 ```bash
 node scripts/qa/relaunch-standalone-daemon-qa.mjs \
-  --beanbag-root "$beanbag_root" \
+  --bb-root "$bb_root" \
   --port 4311
 ```
 
@@ -554,7 +554,7 @@ If you used `start-standalone-daemon-qa.mjs`, prefer its printed `relaunchComman
 
 ```bash
 node scripts/qa/relaunch-standalone-daemon-qa.mjs \
-  --beanbag-root "$beanbag_root" \
+  --bb-root "$bb_root" \
   --port 4311 \
   --node-path "/absolute/path/to/node"
 ```
@@ -583,20 +583,20 @@ Additional idle-thread follow-up checks for both `local` and `worktree`:
 2. Immediately send a follow-up before doing any restart.
 3. Verify that the follow-up succeeds without any transient `agent_shutdown` / session-closed failure.
 4. Start another thread and let it complete to `idle`.
-5. Record the last active env-agent control endpoint from the Beanbag DB:
+5. Record the last active env-agent control endpoint from the BB DB:
 
 ```bash
-sqlite3 "$beanbag_root/beanbag.db" \
+sqlite3 "$bb_root/bb.db" \
   "select control_base_url from environment_agent_sessions where thread_id='<thread-id>' order by created_at desc limit 1;"
 ```
 
 Also record the current session count and all session rows:
 
 ```bash
-sqlite3 "$beanbag_root/beanbag.db" \
+sqlite3 "$bb_root/bb.db" \
   "select count(*) from environment_agent_sessions where thread_id='<thread-id>';"
 
-sqlite3 "$beanbag_root/beanbag.db" \
+sqlite3 "$bb_root/bb.db" \
   "select id,status,control_base_url from environment_agent_sessions where thread_id='<thread-id>' order by created_at;"
 ```
 
@@ -605,10 +605,10 @@ sqlite3 "$beanbag_root/beanbag.db" \
 8. Verify that the daemon starts a fresh env-agent session cleanly:
 
 ```bash
-sqlite3 "$beanbag_root/beanbag.db" \
+sqlite3 "$bb_root/bb.db" \
   "select count(*) from environment_agent_sessions where thread_id='<thread-id>';"
 
-sqlite3 "$beanbag_root/beanbag.db" \
+sqlite3 "$bb_root/bb.db" \
   "select id,status,close_reason,control_base_url from environment_agent_sessions where thread_id='<thread-id>' order by created_at;"
 ```
 
@@ -620,7 +620,7 @@ Expected result:
 - after restart, the session count increases by exactly one for the fresh follow-up session
 - the previously idle session is closed or expires rather than remaining the live worker for the new follow-up
 - the daemon does not leave multiple live sessions competing for the same idle thread
-- by the time the follow-up settles back to `idle`, there may be zero active session rows because Beanbag intentionally retires the worker again; check for duplicate active rows during the run, not after final idle
+- by the time the follow-up settles back to `idle`, there may be zero active session rows because BB intentionally retires the worker again; check for duplicate active rows during the run, not after final idle
 
 Additional rapid-repeat follow-up check for both `local` and `worktree`:
 
@@ -630,7 +630,7 @@ Additional rapid-repeat follow-up check for both `local` and `worktree`:
 4. Confirm each turn completes successfully and inspect session rows:
 
 ```bash
-sqlite3 "$beanbag_root/beanbag.db" \
+sqlite3 "$bb_root/bb.db" \
   "select id,status,close_reason,control_base_url from environment_agent_sessions where thread_id='<thread-id>' order by created_at;"
 ```
 
@@ -649,7 +649,7 @@ Recommended provisioning-boundary restart check:
 ```bash
 node apps/cli/dist/index.js thread show <thread-id>
 node apps/cli/dist/index.js thread log <thread-id>
-sqlite3 "$beanbag_root/beanbag.db" \
+sqlite3 "$bb_root/bb.db" \
   "select id,status from threads where id='<thread-id>';"
 ```
 
@@ -710,7 +710,7 @@ Missing-worker restart check:
 ```bash
 node apps/cli/dist/index.js thread show <thread-id>
 node apps/cli/dist/index.js thread log <thread-id>
-sqlite3 "$beanbag_root/beanbag.db" \
+sqlite3 "$bb_root/bb.db" \
   "select status from threads where id='<thread-id>';"
 ```
 
@@ -786,7 +786,7 @@ node apps/cli/dist/index.js daemon health
 When a result looks suspicious, also inspect:
 
 ```bash
-sqlite3 "$beanbag_root/beanbag.db" \
+sqlite3 "$bb_root/bb.db" \
   "select id,status,control_base_url from environment_agent_sessions where thread_id='<thread-id>' order by created_at;"
 ```
 
@@ -818,7 +818,7 @@ sqlite3 "$beanbag_root/beanbag.db" \
 
 - local thread reaches `idle`, but its env-agent state file or process still exists after a short delay:
   - This is a real local cleanup bug candidate.
-  - Capture `thread show`, `thread log`, `find "$beanbag_root/environment-agents" -maxdepth 3 -type f`, and `ps` output before cleaning it up manually.
+  - Capture `thread show`, `thread log`, `find "$bb_root/environment-agents" -maxdepth 3 -type f`, and `ps` output before cleaning it up manually.
 
 ## QA Tiers
 

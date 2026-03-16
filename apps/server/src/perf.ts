@@ -1,6 +1,6 @@
 import { monitorEventLoopDelay, performance } from "node:perf_hooks";
 
-const PERF_DEBUG_ENABLED = process.env.BEANBAG_DEBUG_PERF === "1";
+const PERF_DEBUG_ENABLED = process.env.BB_DEBUG_PERF === "1";
 
 const eventLoopDelayMonitor = monitorEventLoopDelay({ resolution: 20 });
 if (PERF_DEBUG_ENABLED) {

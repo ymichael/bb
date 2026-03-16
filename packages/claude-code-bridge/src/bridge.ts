@@ -148,7 +148,7 @@ function buildSessionEnv(envOverrides: Record<string, string>): NodeJS.ProcessEn
   return {
     ...process.env,
     ...envOverrides,
-    CLAUDE_AGENT_SDK_CLIENT_APP: "beanbag/1.0.0",
+    CLAUDE_AGENT_SDK_CLIENT_APP: "bb/1.0.0",
   };
 }
 

@@ -2,9 +2,9 @@ import { mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-const TEST_TMP_ROOT_ENV = "BEANBAG_TEST_TMP_ROOT";
+const TEST_TMP_ROOT_ENV = "BB_TEST_TMP_ROOT";
 
-export function resolveBeanbagTestTmpParent(): string {
+export function resolveBbTestTmpParent(): string {
   const configured = process.env[TEST_TMP_ROOT_ENV]?.trim();
   if (configured) {
     mkdirSync(configured, { recursive: true });
@@ -13,6 +13,6 @@ export function resolveBeanbagTestTmpParent(): string {
   return tmpdir();
 }
 
-export function beanbagTestTmpPrefix(prefix: string): string {
-  return join(resolveBeanbagTestTmpParent(), prefix);
+export function bbTestTmpPrefix(prefix: string): string {
+  return join(resolveBbTestTmpParent(), prefix);
 }

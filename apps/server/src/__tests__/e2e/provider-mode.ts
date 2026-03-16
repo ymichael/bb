@@ -1,7 +1,7 @@
 export type E2eProviderMode = "fake" | "real";
 
 export function resolveE2eProviderMode(): E2eProviderMode {
-  const rawMode = (process.env.BB_E2E_PROVIDER_MODE ?? process.env.BEANBAG_E2E_PROVIDER_MODE ?? "fake")
+  const rawMode = (process.env.BB_E2E_PROVIDER_MODE ?? process.env.BB_E2E_PROVIDER_MODE ?? "fake")
     .trim()
     .toLowerCase();
 

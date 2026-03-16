@@ -1,6 +1,6 @@
-import type { OpenPathTarget } from "@beanbag/agent-core";
+import type { OpenPathTarget } from "@bb/core";
 
-const OPEN_PATH_PREFERENCES_STORAGE_KEY = "beanbag.open-path.preferences";
+const OPEN_PATH_PREFERENCES_STORAGE_KEY = "bb.open-path.preferences";
 
 export interface OpenPathPreferences {
   fileCommand: string;

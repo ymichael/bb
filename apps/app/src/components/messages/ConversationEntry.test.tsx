@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
-import type { UIMessage } from "@beanbag/agent-core";
+import type { UIMessage } from "@bb/core";
 import { ConversationEntry } from "./ConversationEntry";
 
 function baseMessage(): Pick<
@@ -94,7 +94,7 @@ describe("ConversationEntry", () => {
         webImages: 0,
         localImages: 1,
         localFiles: 0,
-        localImagePaths: ["/Users/me/.beanbag/attachments/proj-1/example.png"],
+        localImagePaths: ["/Users/me/.bb/attachments/proj-1/example.png"],
       },
     };
 
@@ -102,7 +102,7 @@ describe("ConversationEntry", () => {
       <ConversationEntry message={message} projectId="proj-1" />,
     );
     expect(html).toContain(
-      "/api/v1/projects/proj-1/attachments/content?path=%2FUsers%2Fme%2F.beanbag%2Fattachments%2Fproj-1%2Fexample.png",
+      "/api/v1/projects/proj-1/attachments/content?path=%2FUsers%2Fme%2F.bb%2Fattachments%2Fproj-1%2Fexample.png",
     );
   });
 
@@ -581,7 +581,7 @@ describe("ConversationEntry", () => {
       status: "completed",
       changes: [
         {
-          path: "/Users/michael/Projects/beanbag/apps/web/src/components/messages/ConversationEntry.tsx",
+          path: "/Users/michael/Projects/bb/apps/web/src/components/messages/ConversationEntry.tsx",
           kind: "update",
           diff: "@@ -1 +1 @@",
         },
@@ -838,7 +838,7 @@ describe("ConversationEntry", () => {
       status: "completed",
       changes: [
         {
-          path: "/Users/michael/.beanbag/worktrees/0KRGoBTf5G77qg2nmCE1o/5BQkMcxpll79LsS9Bf4sl/apps/app/src/hooks/useApi.ts",
+          path: "/Users/michael/.bb/worktrees/0KRGoBTf5G77qg2nmCE1o/5BQkMcxpll79LsS9Bf4sl/apps/app/src/hooks/useApi.ts",
           kind: "update",
           diff: "@@ -1 +1 @@\n-export const foo = 1;\n+export const foo = 2;",
         },
@@ -891,13 +891,13 @@ describe("ConversationEntry", () => {
       rawType: "system/error",
       message:
         "Thread provisioning failed for project proj-1 - " +
-        ".bb-env-setup.sh failed: • turbo 2.8.3\\n@beanbag/daemon:build: ERROR",
+        ".bb-env-setup.sh failed: • turbo 2.8.3\\n@bb/server:build: ERROR",
     };
 
     const html = renderToStaticMarkup(<ConversationEntry message={message} initialExpanded />);
     expect(html).toContain("<pre");
     expect(html).toContain(".bb-env-setup.sh failed:\n• turbo 2.8.3");
-    expect(html).toContain("@beanbag/daemon:build: ERROR");
+    expect(html).toContain("@bb/server:build: ERROR");
   });
 
   it("splits provisioning error bullet details with literal newlines from events", () => {
@@ -907,13 +907,13 @@ describe("ConversationEntry", () => {
       rawType: "system/error",
       message:
         "Thread provisioning failed for project proj-1 - " +
-        ".bb-env-setup.sh failed: • turbo 2.8.3\n@beanbag/daemon:build: ERROR",
+        ".bb-env-setup.sh failed: • turbo 2.8.3\n@bb/server:build: ERROR",
     };
 
     const html = renderToStaticMarkup(<ConversationEntry message={message} initialExpanded />);
     expect(html).toContain("<pre");
     expect(html).toContain(".bb-env-setup.sh failed:\n• turbo 2.8.3");
-    expect(html).toContain("@beanbag/daemon:build: ERROR");
+    expect(html).toContain("@bb/server:build: ERROR");
   });
 
   it("renders non-expandable error rows when no details are available", () => {
@@ -1096,7 +1096,7 @@ describe("ConversationEntry", () => {
           scriptPath: ".bb-env-setup.sh",
           timeoutMs: 600000,
           durationMs: 5988,
-          output: "@beanbag/daemon:build: ERROR: command failed",
+          output: "@bb/server:build: ERROR: command failed",
         },
       },
     };
@@ -1105,7 +1105,7 @@ describe("ConversationEntry", () => {
     expect(html).toContain("Provisioning");
     expect(html).toContain("environment: Worktree");
     expect(html).toContain("setup script failed: .bb-env-setup.sh in 6s");
-    expect(html).toContain("@beanbag/daemon:build: ERROR: command failed");
+    expect(html).toContain("@bb/server:build: ERROR: command failed");
   });
 
   it("renders streamed provisioning output with the terminal-style command block", () => {
@@ -1508,7 +1508,7 @@ describe("ConversationEntry", () => {
       kind: "error",
       rawType: "system/error",
       message:
-        "Project folder not found: /Users/michael/Projects/beanbag - This project points to a folder that no longer exists.",
+        "Project folder not found: /Users/michael/Projects/bb - This project points to a folder that no longer exists.",
     };
 
     const html = renderToStaticMarkup(
@@ -1517,7 +1517,7 @@ describe("ConversationEntry", () => {
     expect(html).toContain("Error:");
     expect(html).toContain("Project folder is missing");
     expect(html).toContain(
-      "Project folder not found: /Users/michael/Projects/beanbag. Please update the project path and try again.",
+      "Project folder not found: /Users/michael/Projects/bb. Please update the project path and try again.",
     );
     expect(html).not.toContain("Repair the project path from the sidebar and resend your message.");
     expect(html).not.toContain("This project points to a folder that no longer exists.");

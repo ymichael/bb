@@ -1,5 +1,5 @@
 {
-  "name": "@beanbag/claude-code-bridge",
+  "name": "@bb/claude-code-bridge",
   "version": "0.0.1",
   "type": "module",
   "bin": {
@@ -28,7 +28,7 @@
     "zod": "^4.0.0"
   },
   "devDependencies": {
-    "@beanbag/tsconfig": "workspace:*",
+    "@bb/tsconfig": "workspace:*",
     "@types/node": "^22.0.0",
     "typescript": "^5.7.0",
     "vitest": "^4.0.0"

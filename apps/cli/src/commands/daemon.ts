@@ -1,5 +1,5 @@
 import { Command } from "commander";
-import type { SystemHealthReport, Thread } from "@beanbag/agent-core";
+import type { SystemHealthReport, Thread } from "@bb/core";
 import { createClient, unwrap } from "../client.js";
 import { getErrorMessage } from "./helpers.js";
 

@@ -1,5 +1,5 @@
 {
-  "name": "@beanbag/pi-bridge",
+  "name": "@bb/pi-bridge",
   "version": "0.0.1",
   "type": "module",
   "bin": {
@@ -29,7 +29,7 @@
     "@sinclair/typebox": "^0.34.0"
   },
   "devDependencies": {
-    "@beanbag/tsconfig": "workspace:*",
+    "@bb/tsconfig": "workspace:*",
     "@types/node": "^22.0.0",
     "typescript": "^5.7.0",
     "vitest": "^4.0.0"

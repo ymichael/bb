@@ -4,7 +4,7 @@ import {
   type AvailableModel,
   type ProviderDynamicTool,
   type ThreadEvent,
-} from "@beanbag/agent-core";
+} from "@bb/core";
 
 vi.mock("../codex-models.js", () => ({
   listCodexModels: vi.fn(),
@@ -52,13 +52,13 @@ describe("codex provider adapter", () => {
   it("opts out of duplicate legacy item lifecycle notifications", () => {
     const adapter = createCodexProviderAdapter();
     const params = adapter.createInitializeParams?.({
-      name: "beanbag",
+      name: "bb",
       version: "0.0.1",
     });
 
     expect(params).toMatchObject({
       clientInfo: {
-        name: "beanbag",
+        name: "bb",
         version: "0.0.1",
       },
       capabilities: {

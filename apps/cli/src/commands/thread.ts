@@ -8,7 +8,7 @@ import {
   normalizeThreadEventType,
   toUIMessages,
   formatTimelineAsText,
-} from "@beanbag/agent-core";
+} from "@bb/core";
 import { assertNever } from "../assert-never.js";
 import { createClient, unwrap } from "../client.js";
 import { confirmDestructiveAction, getErrorMessage } from "./helpers.js";
@@ -281,7 +281,7 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
     .option("--project <id>", "Project ID (defaults to BB_PROJECT_ID)")
     .option(
       "--environment <id>",
-      "Environment ID (defaults to BEANBAG_ENVIRONMENT when set)",
+      "Environment ID (defaults to BB_ENVIRONMENT when set)",
     )
     .option(
       "--parent-thread <id>",

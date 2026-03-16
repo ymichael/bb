@@ -3,7 +3,7 @@ import type {
   ChangedMessage,
   RealtimeEntity,
   ServerMessage,
-} from "@beanbag/agent-core";
+} from "@bb/core";
 
 export type ChangeCallback = (message: ChangedMessage) => void;
 export type ConnectedCallback = (event: { reconnected: boolean }) => void;

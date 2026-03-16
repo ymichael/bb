@@ -8,7 +8,7 @@ import {
 import {
   DEFAULT_SCROLL_STICK_THRESHOLD_PX,
   getScrollAnimationBehavior,
-} from "@beanbag/ui-core";
+} from "@bb/ui-core";
 import { cn } from "@/lib/utils";
 import {
   useLatestInitialExpanded,

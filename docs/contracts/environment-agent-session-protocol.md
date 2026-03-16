@@ -2,7 +2,7 @@
 
 Status: current
 
-This document specifies the current canonical protocol between the Beanbag daemon and environment-agent.
+This document specifies the current canonical protocol between the BB server and environment-agent.
 
 It defines the session-based model used for liveness, command delivery, event delivery, acknowledgement, reconnect, and restart-time nudging of surviving agents.
 
@@ -23,7 +23,7 @@ It defines the session-based model used for liveness, command delivery, event de
 ## Terminology
 
 - **Agent**: the environment-agent process managing one or more thread channels.
-- **Daemon**: the Beanbag daemon.
+- **Daemon**: the BB server.
 - **Session**: an explicit leased relationship between daemon and a specific agent instance.
 - **Lease**: the daemon-granted validity window for a session. A session is active until its lease expires, is explicitly closed, or is replaced.
 - **Channel**: an independently ordered logical stream carried inside a session. In v1, a channel is expected to map to a thread.
@@ -71,7 +71,7 @@ All protocol messages share a common envelope.
 
 ```json
 {
-  "protocol": "beanbag.env-agent.v1",
+  "protocol": "bb.env-daemon.v1",
   "messageId": "01JXYZ...",
   "sentAt": 1770000000000,
   "sessionId": "sess_123",
@@ -97,7 +97,7 @@ Sent by agent when no valid resumable session is known.
 
 ```json
 {
-  "protocol": "beanbag.env-agent.v1",
+  "protocol": "bb.env-daemon.v1",
   "messageId": "msg_open_1",
   "sentAt": 1770000000000,
   "type": "session_open",
@@ -131,7 +131,7 @@ Sent by daemon in response to `session_open`.
 
 ```json
 {
-  "protocol": "beanbag.env-agent.v1",
+  "protocol": "bb.env-daemon.v1",
   "messageId": "msg_welcome_1",
   "sentAt": 1770000005100,
   "sessionId": "sess_124",
@@ -161,7 +161,7 @@ Either side may send heartbeats. Agent heartbeats are required for lease extensi
 
 ```json
 {
-  "protocol": "beanbag.env-agent.v1",
+  "protocol": "bb.env-daemon.v1",
   "messageId": "msg_hb_1",
   "sentAt": 1770000010000,
   "sessionId": "sess_124",
@@ -192,7 +192,7 @@ Sent by agent. Each batch may include events for one or more channels, but event
 
 ```json
 {
-  "protocol": "beanbag.env-agent.v1",
+  "protocol": "bb.env-daemon.v1",
   "messageId": "msg_evt_1",
   "sentAt": 1770000012000,
   "sessionId": "sess_124",
@@ -236,7 +236,7 @@ Sent by daemon after durable application.
 
 ```json
 {
-  "protocol": "beanbag.env-agent.v1",
+  "protocol": "bb.env-daemon.v1",
   "messageId": "msg_ack_1",
   "sentAt": 1770000012050,
   "sessionId": "sess_124",
@@ -263,7 +263,7 @@ Sent by daemon. Commands are durable before sending.
 
 ```json
 {
-  "protocol": "beanbag.env-agent.v1",
+  "protocol": "bb.env-daemon.v1",
   "messageId": "msg_cmd_1",
   "sentAt": 1770000014000,
   "sessionId": "sess_124",
@@ -294,7 +294,7 @@ Sent by agent when commands are durably received and deduped.
 
 ```json
 {
-  "protocol": "beanbag.env-agent.v1",
+  "protocol": "bb.env-daemon.v1",
   "messageId": "msg_cmd_ack_1",
   "sentAt": 1770000014010,
   "sessionId": "sess_124",
@@ -317,7 +317,7 @@ Optional dedicated result message if command lifecycle is not fully represented 
 
 ```json
 {
-  "protocol": "beanbag.env-agent.v1",
+  "protocol": "bb.env-daemon.v1",
   "messageId": "msg_cmd_result_1",
   "sentAt": 1770000015000,
   "sessionId": "sess_124",
@@ -339,7 +339,7 @@ Either side may close the session explicitly.
 
 ```json
 {
-  "protocol": "beanbag.env-agent.v1",
+  "protocol": "bb.env-daemon.v1",
   "messageId": "msg_close_1",
   "sentAt": 1770000019000,
   "sessionId": "sess_124",
@@ -356,7 +356,7 @@ Sent by daemon to an older session when a newer agent instance takes over.
 
 ```json
 {
-  "protocol": "beanbag.env-agent.v1",
+  "protocol": "bb.env-daemon.v1",
   "messageId": "msg_replaced_1",
   "sentAt": 1770000020000,
   "sessionId": "sess_124",

@@ -7,23 +7,23 @@ import {
   type Thread,
   type ThreadChangeKind,
   type ThreadEnvironmentStartReason,
-} from "@beanbag/agent-core";
+} from "@bb/core";
 import {
   type CreateEnvironmentContext,
   type EnvironmentCheckoutSnapshot,
   type EnvironmentRegistry,
   type IEnvironment,
-} from "@beanbag/environment";
+} from "@bb/environment";
 import {
   removeEnvironmentAgentDefaultLogArtifacts,
   type EnvironmentAgentConnectionTarget,
-} from "@beanbag/environment-agent";
+} from "@bb/environment-daemon";
 import type {
   EnvironmentRepository,
   ProjectRepository,
   ThreadEnvironmentAttachmentRepository,
   ThreadRepository,
-} from "@beanbag/db";
+} from "@bb/db";
 import {
   resolveProjectCheckoutSnapshotAsync,
   resolveProjectDefaultBranchCheckoutAsync,
@@ -233,7 +233,7 @@ export class EnvironmentService {
   }
 
   resolveRequestedEnvironmentId(value?: string): string {
-    const normalized = (value ?? process.env.BEANBAG_ENVIRONMENT ?? "local").trim();
+    const normalized = (value ?? process.env.BB_ENVIRONMENT ?? "local").trim();
     if (!normalized) return "local";
     if (!this.environmentRegistry.has(normalized)) {
       throw new Error(`Unsupported environment "${normalized}"`);

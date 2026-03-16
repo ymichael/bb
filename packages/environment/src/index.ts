@@ -30,7 +30,7 @@ export type {
   PromoteEnvironmentResult,
 } from "./contracts.js";
 export { EnvironmentSquashMergeCommitFailureError } from "./contracts.js";
-export type { EnvironmentAgentConnectionTarget } from "@beanbag/environment-agent";
+export type { EnvironmentAgentConnectionTarget } from "@bb/environment-daemon";
 export {
   EnvironmentRegistry,
 } from "./contracts.js";

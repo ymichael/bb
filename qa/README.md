@@ -1,6 +1,6 @@
 # QA
 
-This folder is the top-level landing page for manual and scripted QA in Beanbag.
+This folder is the top-level landing page for manual and scripted QA in BB.
 
 When we ask someone to **do a full QA pass**, start here.
 

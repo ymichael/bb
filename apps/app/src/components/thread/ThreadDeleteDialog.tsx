@@ -1,4 +1,4 @@
-import type { Thread } from "@beanbag/agent-core"
+import type { Thread } from "@bb/core"
 import { AlertTriangle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {

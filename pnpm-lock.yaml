@@ -20,10 +20,10 @@ importers:
 
   apps/app:
     dependencies:
-      '@beanbag/agent-core':
+      '@bb/core':
         specifier: workspace:*
-        version: link:../../packages/agent-core
-      '@beanbag/ui-core':
+        version: link:../../packages/core
+      '@bb/ui-core':
         specifier: workspace:*
         version: link:../../packages/ui-core
       '@pierre/diffs':
@@ -138,15 +138,15 @@ importers:
 
   apps/cli:
     dependencies:
-      '@beanbag/agent-core':
+      '@bb/core':
         specifier: workspace:*
-        version: link:../../packages/agent-core
-      '@beanbag/daemon':
+        version: link:../../packages/core
+      '@bb/environment-daemon':
         specifier: workspace:*
-        version: link:../daemon
-      '@beanbag/environment-agent':
+        version: link:../../packages/environment-daemon
+      '@bb/server':
         specifier: workspace:*
-        version: link:../../packages/environment-agent
+        version: link:../server
       commander:
         specifier: ^13.0.0
         version: 13.1.0
@@ -154,7 +154,7 @@ importers:
         specifier: ^4.7.0
         version: 4.11.9
     devDependencies:
-      '@beanbag/tsconfig':
+      '@bb/tsconfig':
         specifier: workspace:*
         version: link:../../packages/tsconfig
       '@types/node':
@@ -164,24 +164,24 @@ importers:
         specifier: ^5.7.0
         version: 5.9.3
 
-  apps/daemon:
+  apps/server:
     dependencies:
-      '@beanbag/agent-core':
-        specifier: workspace:*
-        version: link:../../packages/agent-core
-      '@beanbag/agent-server':
+      '@bb/agent-server':
         specifier: workspace:*
         version: link:../../packages/agent-server
-      '@beanbag/db':
+      '@bb/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@bb/db':
         specifier: workspace:*
         version: link:../../packages/db
-      '@beanbag/environment':
+      '@bb/environment':
         specifier: workspace:*
         version: link:../../packages/environment
-      '@beanbag/environment-agent':
+      '@bb/environment-daemon':
         specifier: workspace:*
-        version: link:../../packages/environment-agent
-      '@beanbag/templates':
+        version: link:../../packages/environment-daemon
+      '@bb/templates':
         specifier: workspace:*
         version: link:../../packages/templates
       '@hono/node-server':
@@ -206,7 +206,7 @@ importers:
         specifier: ^3.24.0
         version: 3.25.76
     devDependencies:
-      '@beanbag/tsconfig':
+      '@bb/tsconfig':
         specifier: workspace:*
         version: link:../../packages/tsconfig
       '@types/node':
@@ -222,43 +222,24 @@ importers:
         specifier: ^5.7.0
         version: 5.9.3
 
-  packages/agent-core:
-    dependencies:
-      '@beanbag/templates':
-        specifier: workspace:*
-        version: link:../templates
-      zod:
-        specifier: ^3.24.0
-        version: 3.25.76
-    devDependencies:
-      '@beanbag/tsconfig':
-        specifier: workspace:*
-        version: link:../tsconfig
-      '@types/node':
-        specifier: ^22.0.0
-        version: 22.19.10
-      typescript:
-        specifier: ^5.7.0
-        version: 5.9.3
-
   packages/agent-server:
     dependencies:
       '@anthropic-ai/sdk':
         specifier: ^0.73.0
         version: 0.73.0(zod@4.3.6)
-      '@beanbag/agent-core':
-        specifier: workspace:*
-        version: link:../agent-core
-      '@beanbag/claude-code-bridge':
+      '@bb/claude-code-bridge':
         specifier: workspace:*
         version: link:../claude-code-bridge
-      '@beanbag/environment-agent':
+      '@bb/core':
         specifier: workspace:*
-        version: link:../environment-agent
-      '@beanbag/pi-bridge':
+        version: link:../core
+      '@bb/environment-daemon':
+        specifier: workspace:*
+        version: link:../environment-daemon
+      '@bb/pi-bridge':
         specifier: workspace:*
         version: link:../pi-bridge
-      '@beanbag/templates':
+      '@bb/templates':
         specifier: workspace:*
         version: link:../templates
       '@mariozechner/pi-ai':
@@ -271,7 +252,7 @@ importers:
         specifier: ^4.20.0
         version: 4.21.0
     devDependencies:
-      '@beanbag/tsconfig':
+      '@bb/tsconfig':
         specifier: workspace:*
         version: link:../tsconfig
       '@types/node':
@@ -293,7 +274,7 @@ importers:
         specifier: ^4.0.0
         version: 4.3.6
     devDependencies:
-      '@beanbag/tsconfig':
+      '@bb/tsconfig':
         specifier: workspace:*
         version: link:../tsconfig
       '@types/node':
@@ -306,11 +287,30 @@ importers:
         specifier: ^4.0.0
         version: 4.0.18(@types/node@22.19.10)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.21.0)(yaml@2.8.2)
 
+  packages/core:
+    dependencies:
+      '@bb/templates':
+        specifier: workspace:*
+        version: link:../templates
+      zod:
+        specifier: ^3.24.0
+        version: 3.25.76
+    devDependencies:
+      '@bb/tsconfig':
+        specifier: workspace:*
+        version: link:../tsconfig
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.19.10
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
+
   packages/db:
     dependencies:
-      '@beanbag/agent-core':
+      '@bb/core':
         specifier: workspace:*
-        version: link:../agent-core
+        version: link:../core
       better-sqlite3:
         specifier: ^11.7.0
         version: 11.10.0
@@ -321,7 +321,7 @@ importers:
         specifier: ^5.0.9
         version: 5.1.6
     devDependencies:
-      '@beanbag/tsconfig':
+      '@bb/tsconfig':
         specifier: workspace:*
         version: link:../tsconfig
       '@types/better-sqlite3':
@@ -336,17 +336,17 @@ importers:
 
   packages/environment:
     dependencies:
-      '@beanbag/agent-core':
+      '@bb/core':
         specifier: workspace:*
-        version: link:../agent-core
-      '@beanbag/environment-agent':
+        version: link:../core
+      '@bb/environment-daemon':
         specifier: workspace:*
-        version: link:../environment-agent
-      '@beanbag/templates':
+        version: link:../environment-daemon
+      '@bb/templates':
         specifier: workspace:*
         version: link:../templates
     devDependencies:
-      '@beanbag/tsconfig':
+      '@bb/tsconfig':
         specifier: workspace:*
         version: link:../tsconfig
       '@types/node':
@@ -359,13 +359,13 @@ importers:
         specifier: ^4.0.0
         version: 4.0.18(@types/node@22.19.10)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.21.0)(yaml@2.8.2)
 
-  packages/environment-agent:
+  packages/environment-daemon:
     dependencies:
-      '@beanbag/agent-core':
+      '@bb/core':
         specifier: workspace:*
-        version: link:../agent-core
+        version: link:../core
     devDependencies:
-      '@beanbag/tsconfig':
+      '@bb/tsconfig':
         specifier: workspace:*
         version: link:../tsconfig
       '@types/node':
@@ -393,7 +393,7 @@ importers:
         specifier: ^0.34.0
         version: 0.34.48
     devDependencies:
-      '@beanbag/tsconfig':
+      '@bb/tsconfig':
         specifier: workspace:*
         version: link:../tsconfig
       '@types/node':
@@ -415,7 +415,7 @@ importers:
         specifier: ^4.7.8
         version: 4.7.8
     devDependencies:
-      '@beanbag/tsconfig':
+      '@bb/tsconfig':
         specifier: workspace:*
         version: link:../tsconfig
       '@types/node':
@@ -439,7 +439,7 @@ importers:
         specifier: ^19.0.0
         version: 19.2.4
     devDependencies:
-      '@beanbag/tsconfig':
+      '@bb/tsconfig':
         specifier: workspace:*
         version: link:../tsconfig
       '@types/react':

@@ -1,6 +1,6 @@
 import { hc } from "hono/client";
-import type { AppType } from "@beanbag/daemon/app-type";
-import { extractErrorMessage } from "@beanbag/agent-core";
+import type { AppType } from "@bb/server/app-type";
+import { extractErrorMessage } from "@bb/core";
 
 export function createClient(baseUrl: string) {
   return hc<AppType>(baseUrl);
@@ -64,7 +64,7 @@ export async function unwrap<T>(
   } catch (err) {
     if (isTypeErrorWithCauseCode(err, "ECONNREFUSED")) {
       throw new Error(
-        "Cannot connect to Beanbag daemon. Ensure it is running and BB_DAEMON_URL is correct.",
+        "Cannot connect to BB server. Ensure it is running and BB_DAEMON_URL is correct.",
       );
     }
     throw err;

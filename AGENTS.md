@@ -2,7 +2,7 @@
 
 ## Typing and Unions
 
-- Classify string domains before refactoring: `closed_internal` (Beanbag-owned) vs `open_external` (provider/runtime-owned).
+- Classify string domains before refactoring: `closed_internal` (BB-owned) vs `open_external` (provider/runtime-owned).
 - For `closed_internal` unions, require exhaustive `switch` handling with `assertNever`; avoid permissive `default` branches.
 - Keep tolerant fallbacks only for `open_external` values, with an explicit comment that unknown values are intentional.
 - Prefer typed decode/guard helpers over repeated inline casts like `as Record<string, unknown>`.
@@ -32,7 +32,7 @@
 
 ## Build and Typecheck
 
-- Prefer `pnpm exec turbo run typecheck --filter=@beanbag/<pkg>` for package-scoped typechecks instead of `pnpm --filter @beanbag/<pkg> typecheck`; Turbo preserves upstream `^build` dependencies and package-script runs do not.
+- Prefer `pnpm exec turbo run typecheck --filter=@bb/<pkg>` for package-scoped typechecks instead of `pnpm --filter @bb/<pkg> typecheck`; Turbo preserves upstream `^build` dependencies and package-script runs do not.
 - Do not "fix" workspace typecheck issues by pointing package `types` at `src/**` unless that source is also shipped in the packed artifact; keep package metadata valid for packed consumers.
 
 ## Testing / QA
@@ -65,7 +65,7 @@ Mock at boundaries, not inside the system.
 ### QA Passes
 
 - For daemon or environment-agent changes, run QA passes before wrapping up; do a full QA pass for the affected behavior, and do the broader daemon QA tiers when touching critical daemon/environment-agent code so regressions are caught early.
-- Start with the checked-in daemon QA tiers in `qa/` and the package scripts in `apps/daemon/package.json`; they are the canonical source for what automated QA is available and how to run it. When asked to do a QA pass for daemon/env-agent behavior, default to the real provider unless the user explicitly asks for fake-provider coverage.
-- Use the fast e2e suite in `apps/daemon/src/__tests__/e2e/` for targeted scenario work. Treat real-provider coverage as the default QA path for provider-facing behavior; use fake-provider coverage only when you specifically need deterministic fake-codex control hooks.
+- Start with the checked-in daemon QA tiers in `qa/` and the package scripts in `apps/server/package.json`; they are the canonical source for what automated QA is available and how to run it. When asked to do a QA pass for daemon/env-agent behavior, default to the real provider unless the user explicitly asks for fake-provider coverage.
+- Use the fast e2e suite in `apps/server/src/__tests__/e2e/` for targeted scenario work. Treat real-provider coverage as the default QA path for provider-facing behavior; use fake-provider coverage only when you specifically need deterministic fake-codex control hooks.
 - For the full manual daemon workflow and scenario checklist, see `qa/daemon/standalone-daemon-qa.md`.
-- For package-scoped validation, prefer `pnpm exec turbo run typecheck --filter=@beanbag/<pkg>`.
+- For package-scoped validation, prefer `pnpm exec turbo run typecheck --filter=@bb/<pkg>`.

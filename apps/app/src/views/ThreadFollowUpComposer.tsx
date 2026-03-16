@@ -5,7 +5,7 @@ import {
   type SandboxMode,
   type ServiceTier,
   type ThreadQueuedMessage,
-} from "@beanbag/agent-core";
+} from "@bb/core";
 import { PromptBox } from "@/components/promptbox/PromptBox";
 import {
   PromptOptionDisplay,
@@ -21,7 +21,7 @@ import {
   MergeBaseBranchPicker,
 } from "@/components/thread/MergeBaseBranchPicker";
 import { ThreadContextWindowIndicator } from "@/components/thread/ThreadContextWindowIndicator";
-import { PromptComposerShell } from "@beanbag/ui-core";
+import { PromptComposerShell } from "@bb/ui-core";
 import { cn } from "@/lib/utils";
 import {
   countQueuedMessageAttachments,

@@ -1,5 +1,5 @@
-import { CollapsibleHeader, ExpandablePanel, EventCodeBlock } from "@beanbag/ui-core";
-import type { UIErrorMessage } from "@beanbag/agent-core";
+import { CollapsibleHeader, ExpandablePanel, EventCodeBlock } from "@bb/ui-core";
+import type { UIErrorMessage } from "@bb/core";
 import {
   EVENT_LARGE_DETAIL_MAX_HEIGHT_CLASS,
   useLatestInitialExpanded,

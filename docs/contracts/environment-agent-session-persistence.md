@@ -103,7 +103,7 @@ Important invariants:
 
 ## Environment-Agent Runtime State
 
-The environment-agent keeps runtime-only in-memory state in `packages/environment-agent`.
+The environment-agent keeps runtime-only in-memory state in `packages/environment-daemon`.
 
 Important state:
 

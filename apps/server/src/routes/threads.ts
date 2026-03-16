@@ -15,7 +15,7 @@ import {
   type PromptInput,
   type ThreadGitDiffSelection,
   type Thread,
-} from "@beanbag/agent-core";
+} from "@bb/core";
 import { z } from "zod";
 import { isAbsolute, relative, resolve, sep } from "node:path";
 import type {
@@ -28,10 +28,10 @@ import type {
   EnvironmentAgentSessionOpenPayload,
   EnvironmentAgentSessionProviderRequestPayload,
   EnvironmentAgentStatusSnapshot,
-} from "@beanbag/environment-agent";
+} from "@bb/environment-daemon";
 import {
   ENVIRONMENT_AGENT_SESSION_PROTOCOL,
-} from "@beanbag/environment-agent";
+} from "@bb/environment-daemon";
 import { invalidRequestError, threadNotFoundError } from "../domain-errors.js";
 import { sendRouteError } from "./error-response.js";
 import { openPathInEditor } from "./system.js";
@@ -40,7 +40,7 @@ import type {
   EnvironmentAgentSessionRecord,
   EnvironmentRepository,
   ThreadEnvironmentAttachmentRepository,
-} from "@beanbag/db";
+} from "@bb/db";
 import { resolveManagerWorkspacePath } from "../manager-thread.js";
 
 const listThreadsQuerySchema = z.object({

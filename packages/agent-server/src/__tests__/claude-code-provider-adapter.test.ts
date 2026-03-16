@@ -3,7 +3,7 @@ import {
   createProviderEventEnvelope,
   type ProviderDynamicTool,
   type ThreadEvent,
-} from "@beanbag/agent-core";
+} from "@bb/core";
 import {
   buildClaudeCodeAvailableModels,
   createClaudeCodeProviderAdapter,

@@ -6,15 +6,15 @@ import type {
   ThreadEvent,
   ThreadOrchestrator,
   ThreadWorkStatus,
-} from "@beanbag/agent-core";
-import { ENVIRONMENT_AGENT_PROTOCOL_VERSION } from "@beanbag/environment-agent";
+} from "@bb/core";
+import { ENVIRONMENT_AGENT_PROTOCOL_VERSION } from "@bb/environment-daemon";
 import { createThreadRoutes } from "../../routes/threads.js";
 import { inactiveSessionError, threadArchivedError } from "../../domain-errors.js";
 import type { EnvironmentAgentSessionService } from "../../environment-agent-session-service.js";
 import {
   EnvironmentRepository,
   ThreadEnvironmentAttachmentRepository,
-} from "@beanbag/db";
+} from "@bb/db";
 import { resolveManagerWorkspacePath } from "../../manager-thread.js";
 import { createTestDb, createTestRepos, createTestProject, createTestThread } from "../test-factories.js";
 
@@ -574,7 +574,7 @@ describe("Thread routes", () => {
           id: "sess-1",
         },
         welcome: {
-          protocol: "beanbag.env-agent.v1",
+          protocol: "bb.env-daemon.v1",
           type: "session_welcome",
           messageId: "msg-1",
           sessionId: "sess-1",
@@ -664,7 +664,7 @@ describe("Thread routes", () => {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            protocol: "beanbag.env-agent.v1",
+            protocol: "bb.env-daemon.v1",
             messageId: "msg-heartbeat",
             sentAt: 1_001,
             sessionId: "sess-1",
@@ -718,7 +718,7 @@ describe("Thread routes", () => {
       const sessionService = mockEnvironmentAgentSessionService();
       (threadManager.getById as ReturnType<typeof vi.fn>).mockReturnValue(makeThread());
       (sessionService.applyEventBatch as ReturnType<typeof vi.fn>).mockResolvedValue({
-        protocol: "beanbag.env-agent.v1",
+        protocol: "bb.env-daemon.v1",
         type: "event_ack",
         messageId: "msg-evt-1",
         sessionId: "sess-1",
@@ -745,7 +745,7 @@ describe("Thread routes", () => {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            protocol: "beanbag.env-agent.v1",
+            protocol: "bb.env-daemon.v1",
             messageId: "msg-events",
             sentAt: 1_000,
             sessionId: "sess-1",
@@ -821,7 +821,7 @@ describe("Thread routes", () => {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            protocol: "beanbag.env-agent.v1",
+            protocol: "bb.env-daemon.v1",
             messageId: "msg-ack",
             sentAt: 1_000,
             sessionId: "sess-1",
@@ -871,7 +871,7 @@ describe("Thread routes", () => {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            protocol: "beanbag.env-agent.v1",
+            protocol: "bb.env-daemon.v1",
             messageId: "msg-result",
             sentAt: 1_000,
             sessionId: "sess-1",
@@ -905,7 +905,7 @@ describe("Thread routes", () => {
       const sessionService = mockEnvironmentAgentSessionService();
       (threadManager.getById as ReturnType<typeof vi.fn>).mockReturnValue(makeThread());
       (sessionService.handleProviderRequest as ReturnType<typeof vi.fn>).mockResolvedValue({
-        protocol: "beanbag.env-agent.v1",
+        protocol: "bb.env-daemon.v1",
         type: "provider_response",
         messageId: "msg-provider-response",
         sessionId: "sess-1",
@@ -932,7 +932,7 @@ describe("Thread routes", () => {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            protocol: "beanbag.env-agent.v1",
+            protocol: "bb.env-daemon.v1",
             messageId: "msg-provider-request",
             sentAt: 1_000,
             sessionId: "sess-1",
@@ -994,7 +994,7 @@ describe("Thread routes", () => {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            protocol: "beanbag.env-agent.v1",
+            protocol: "bb.env-daemon.v1",
             messageId: "msg-close",
             sentAt: 1_000,
             sessionId: "sess-1",
@@ -1030,7 +1030,7 @@ describe("Thread routes", () => {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            protocol: "beanbag.env-agent.v1",
+            protocol: "bb.env-daemon.v1",
             messageId: "msg-events",
             sentAt: 1_000,
             sessionId: "sess-1",
@@ -1060,7 +1060,7 @@ describe("Thread routes", () => {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            protocol: "beanbag.env-agent.v1",
+            protocol: "bb.env-daemon.v1",
             messageId: "msg-result",
             sentAt: 1_000,
             sessionId: "sess-1",
@@ -1086,7 +1086,7 @@ describe("Thread routes", () => {
         makeThread(),
       );
       (sessionService.waitForCommands as ReturnType<typeof vi.fn>).mockResolvedValue({
-        protocol: "beanbag.env-agent.v1",
+        protocol: "bb.env-daemon.v1",
         type: "command_batch",
         messageId: "msg-1",
         sessionId: "sess-1",

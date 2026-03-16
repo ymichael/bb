@@ -1,5 +1,5 @@
 import { vi } from "vitest";
-import type { Thread, Project } from "@beanbag/agent-core";
+import type { Thread, Project } from "@bb/core";
 import {
   createConnection,
   migrate,
@@ -8,9 +8,9 @@ import {
   EventRepository,
   EnvironmentRepository,
   ThreadEnvironmentAttachmentRepository,
-} from "@beanbag/db";
-import type { DbConnection } from "@beanbag/db";
-import type { LlmCompletionService } from "@beanbag/agent-server";
+} from "@bb/db";
+import type { DbConnection } from "@bb/db";
+import type { LlmCompletionService } from "@bb/agent-server";
 
 interface SqliteClient {
   close(): void;
@@ -97,8 +97,8 @@ export function createTestRuntimeEnv(
 ): NodeJS.ProcessEnv {
   return {
     ...process.env,
-    BEANBAG_ENVIRONMENT_AGENT_BASE_URL: "http://127.0.0.1:4312",
-    BEANBAG_ENVIRONMENT_AGENT_AUTH_TOKEN: "test-token",
+    BB_ENV_DAEMON_BASE_URL: "http://127.0.0.1:4312",
+    BB_ENV_DAEMON_AUTH_TOKEN: "test-token",
     ...overrides,
   };
 }

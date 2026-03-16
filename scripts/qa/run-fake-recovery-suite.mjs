@@ -10,7 +10,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = resolve(__filename, "..");
 const workspaceRoot = resolve(__dirname, "..", "..");
 const daemonRoot = resolve(workspaceRoot, "apps", "daemon");
-const cleanupScript = resolve(__dirname, "cleanup-beanbag-test-processes.mjs");
+const cleanupScript = resolve(__dirname, "cleanup-bb-test-processes.mjs");
 
 async function runCleanup({ quiet = false, tmpRoot = null } = {}) {
   await new Promise((resolveCleanup, rejectCleanup) => {
@@ -39,7 +39,7 @@ async function runCleanup({ quiet = false, tmpRoot = null } = {}) {
 
 async function main() {
   const runId = `${process.pid}-${Date.now().toString(36)}`;
-  const tmpRoot = resolve(tmpdir(), "beanbag-test-runs", runId);
+  const tmpRoot = resolve(tmpdir(), "bb-test-runs", runId);
   mkdirSync(tmpRoot, { recursive: true });
 
   const vitestArgs = [
@@ -60,7 +60,7 @@ async function main() {
     env: {
       ...process.env,
       BB_E2E_PROVIDER_MODE: "fake",
-      BEANBAG_TEST_TMP_ROOT: tmpRoot,
+      BB_TEST_TMP_ROOT: tmpRoot,
     },
     stdio: "inherit",
   });

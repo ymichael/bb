@@ -7,7 +7,7 @@ export default defineConfig({
   },
   test: {
     silent: "passed-only",
-    name: "@beanbag/daemon",
+    name: "@bb/server",
     exclude: ["dist/**", "node_modules/**", "src/__tests__/e2e/**"],
   },
 });

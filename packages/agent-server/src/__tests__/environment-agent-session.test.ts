@@ -1,7 +1,7 @@
 import {
   ENVIRONMENT_AGENT_PROTOCOL_VERSION,
   type EnvironmentAgentEventEnvelope,
-} from "@beanbag/environment-agent";
+} from "@bb/environment-daemon";
 import { describe, expect, it, vi } from "vitest";
 import { AgentServer, AgentServerSessionError } from "../agent-server.js";
 import { createCodexProviderAdapter } from "../codex-provider-adapter.js";

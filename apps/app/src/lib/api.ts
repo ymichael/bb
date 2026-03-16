@@ -2,7 +2,7 @@ import {
   decodeSystemShutdownBlockedResponse,
   extractErrorMessage,
   toRecord,
-} from "@beanbag/agent-core";
+} from "@bb/core";
 import type {
   EnvironmentRecord,
   Project,
@@ -41,7 +41,7 @@ import type {
   SystemShutdownAcceptedResponse,
   SystemShutdownRequest,
   SystemShutdownBlockingThread,
-} from "@beanbag/agent-core";
+} from "@bb/core";
 
 const BASE = "/api/v1";
 const MAX_ERROR_MESSAGE_LENGTH = 180;

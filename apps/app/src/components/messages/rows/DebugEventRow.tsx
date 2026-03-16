@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { UIDebugRawEventMessage } from "@beanbag/agent-core";
+import type { UIDebugRawEventMessage } from "@bb/core";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { DEBUG_EVENT_EXPANDED_MAX_LENGTH } from "./shared";

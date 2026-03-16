@@ -1,4 +1,4 @@
-import { assertNever, type Thread, type ThreadStatus } from "@beanbag/agent-core"
+import { assertNever, type Thread, type ThreadStatus } from "@bb/core"
 
 export interface ThreadActivitySummary {
   running: number

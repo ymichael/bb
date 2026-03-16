@@ -31,7 +31,7 @@ import type {
   ThreadEventType,
   ThreadExecutionOptions,
   PersistedThreadEventData,
-} from "@beanbag/agent-core";
+} from "@bb/core";
 import {
   DEFAULT_THREAD_PROVIDER_ID,
   isThreadProviderId,
@@ -41,7 +41,7 @@ import {
   normalizeThreadEventType,
   promptInputSchema,
   toRecord,
-} from "@beanbag/agent-core";
+} from "@bb/core";
 import type { DbConnection } from "./connection.js";
 
 type DbExecutor = Pick<DbConnection, "select" | "insert" | "update" | "delete">;

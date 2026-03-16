@@ -3,8 +3,8 @@ import {
   resolveApiKeyFromCodexAuthFile,
   type CodexAuthFile,
 } from "./codex-auth.js";
-import { extractErrorMessage } from "@beanbag/agent-core";
-import { renderTemplate } from "@beanbag/templates";
+import { extractErrorMessage } from "@bb/core";
+import { renderTemplate } from "@bb/templates";
 
 const DEFAULT_API_KEY_BASE_URL = "https://api.openai.com/v1";
 const DEFAULT_CHATGPT_BASE_URL = "https://chatgpt.com/backend-api/codex";
@@ -388,7 +388,7 @@ export async function generateOpenAIResponsesText(
   const headers = new Headers();
   headers.set("Authorization", `Bearer ${auth.bearerToken}`);
   headers.set("Content-Type", "application/json");
-  headers.set("User-Agent", "beanbag-agent-server/openai-responses");
+  headers.set("User-Agent", "bb-agent-server/openai-responses");
   if (auth.mode === "chatgpt" && auth.accountId) {
     headers.set("ChatGPT-Account-ID", auth.accountId);
   }

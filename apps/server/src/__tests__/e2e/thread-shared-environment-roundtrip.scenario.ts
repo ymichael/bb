@@ -1,5 +1,5 @@
 import { expect } from "vitest";
-import type { Thread, ThreadEvent } from "@beanbag/agent-core";
+import type { Thread, ThreadEvent } from "@bb/core";
 import {
   archiveThread,
   createProject,
@@ -145,7 +145,7 @@ export async function runThreadSharedEnvironmentRoundtripScenario(): Promise<voi
       defaultTurnDelayMs: 25,
     },
     initGitRepo: true,
-    preserveTempDirOnCleanup: process.env.BEANBAG_E2E_PRESERVE_TEMP_DIR === "1",
+    preserveTempDirOnCleanup: process.env.BB_E2E_PRESERVE_TEMP_DIR === "1",
   });
 
   try {

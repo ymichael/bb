@@ -1,6 +1,6 @@
 import { expect } from "vitest";
-import type { Thread } from "@beanbag/agent-core";
-import { ProviderToolHost } from "@beanbag/agent-server";
+import type { Thread } from "@bb/core";
+import { ProviderToolHost } from "@bb/agent-server";
 import {
   createProject,
   listThreadEvents,

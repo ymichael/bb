@@ -37,7 +37,7 @@ function hasDocker(): boolean {
 }
 
 function ensureEnvironmentAgentBundle(): void {
-  execFileSync("pnpm", ["--filter", "@beanbag/environment-agent", "build"], {
+  execFileSync("pnpm", ["--filter", "@bb/environment-daemon", "build"], {
     cwd: WORKSPACE_ROOT,
     stdio: "pipe",
   });
@@ -48,8 +48,8 @@ async function createDockerEnvironmentForTest() {
 
   const repoRoot = makeTempDir("bb-docker-integration-repo-");
   git(repoRoot, "init", "-b", "main");
-  git(repoRoot, "config", "user.name", "Beanbag Test");
-  git(repoRoot, "config", "user.email", "beanbag-test@example.com");
+  git(repoRoot, "config", "user.name", "BB Test");
+  git(repoRoot, "config", "user.email", "bb-test@example.com");
   writeFileSync(join(repoRoot, "README.md"), "hello\n", "utf8");
   git(repoRoot, "add", "README.md");
   git(repoRoot, "commit", "-m", "init");

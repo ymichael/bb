@@ -3,7 +3,7 @@ import type {
   EnvironmentAgentCursorPosition,
   EnvironmentAgentCursorRepository,
   EnvironmentAgentSessionRecord,
-} from "@beanbag/db";
+} from "@bb/db";
 import {
   ENVIRONMENT_AGENT_SESSION_PROTOCOL,
   ENVIRONMENT_AGENT_SESSION_PROTOCOL_VERSION,
@@ -19,7 +19,7 @@ import {
   type EnvironmentAgentSessionProviderResponseMessage,
   type EnvironmentAgentSessionWelcomeMessage,
   type EnvironmentAgentStatusSnapshot,
-} from "@beanbag/environment-agent";
+} from "@bb/environment-daemon";
 import type { EnvironmentAgentCommandDispatcher } from "./environment-agent-command-dispatcher.js";
 import type { EnvironmentAgentEventApplier } from "./environment-agent-event-applier.js";
 import { inactiveSessionError, invalidRequestError } from "./domain-errors.js";

@@ -156,7 +156,7 @@ export const templateDefinitions = [
   },
   {
     "id": "worktreeAgentInstructions",
-    "body": "[Beanbag worktree environment]\n- You are working in an isolated per-thread git worktree on a dedicated branch.\n- Commit meaningful work before reporting completion so changes are not stranded in the worktree.\n- Use the primary checkout only for manual verification when needed, then demote back to the thread worktree.",
+    "body": "[BB worktree environment]\n- You are working in an isolated per-thread git worktree on a dedicated branch.\n- Commit meaningful work before reporting completion so changes are not stranded in the worktree.\n- Use the primary checkout only for manual verification when needed, then demote back to the thread worktree.",
     "fileName": "worktree-agent-instructions.md",
     "kind": "instruction",
     "title": "Worktree Environment Instructions",

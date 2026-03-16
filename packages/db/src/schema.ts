@@ -5,7 +5,7 @@ import {
   index,
   uniqueIndex,
 } from "drizzle-orm/sqlite-core";
-import type { ThreadEventType } from "@beanbag/agent-core";
+import type { ThreadEventType } from "@bb/core";
 
 export const projects = sqliteTable("projects", {
   id: text("id").primaryKey(),

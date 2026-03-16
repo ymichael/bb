@@ -7,7 +7,7 @@ export default defineConfig({
   },
   test: {
     silent: "passed-only",
-    name: "@beanbag/cli",
+    name: "@bb/cli",
     exclude: ["dist/**", "node_modules/**"],
   },
 });

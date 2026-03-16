@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import type { EnvironmentCheckoutSnapshot } from "@beanbag/environment";
+import type { EnvironmentCheckoutSnapshot } from "@bb/environment";
 
 const defaultBranchByRepoRoot = new Map<string, string | undefined>();
 

@@ -11,7 +11,7 @@ import {
   UserRoundPlus,
   X,
 } from "lucide-react"
-import type { Thread } from "@beanbag/agent-core"
+import type { Thread } from "@bb/core"
 import {
   SidebarProvider,
   SidebarInset,
@@ -41,7 +41,7 @@ import {
 } from "@/lib/thread-activity"
 import { HireManagerModal } from "@/components/HireManagerModal"
 
-const SIDEBAR_WIDTH_KEY = "beanbag.sidebar.width"
+const SIDEBAR_WIDTH_KEY = "bb.sidebar.width"
 const SIDEBAR_MIN_WIDTH = 240
 const SIDEBAR_MAX_WIDTH = 460
 const SIDEBAR_DEFAULT_WIDTH = 320
@@ -342,7 +342,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
       }
     } else {
       const routeTitle = routeTitles[location.pathname]?.title
-      parts.push(routeTitle && routeTitle.length > 0 ? routeTitle : "Beanbag")
+      parts.push(routeTitle && routeTitle.length > 0 ? routeTitle : "BB")
       if (allThreadsSummary) {
         parts.push(allThreadsSummary)
       }

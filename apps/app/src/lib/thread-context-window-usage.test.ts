@@ -1,7 +1,7 @@
 import {
   createProviderEventEnvelope,
   type ThreadEvent,
-} from "@beanbag/agent-core";
+} from "@bb/core";
 import { describe, expect, it } from "vitest";
 import {
   calculateContextWindowUsagePercent,

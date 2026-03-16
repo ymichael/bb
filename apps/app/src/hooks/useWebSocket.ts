@@ -4,7 +4,7 @@ import {
   assertNever,
   type Thread,
   type ThreadChangeKind,
-} from "@beanbag/agent-core";
+} from "@bb/core";
 import { wsManager } from "../lib/ws";
 
 const INVALIDATION_DEBOUNCE_MS = 250;

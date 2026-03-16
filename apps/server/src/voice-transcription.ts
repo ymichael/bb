@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { resolve } from "node:path";
-import { extractErrorMessage } from "@beanbag/agent-core";
+import { extractErrorMessage } from "@bb/core";
 import { invalidRequestError, providerUnavailableError } from "./domain-errors.js";
 
 interface VoiceTranscriptionAuth {
@@ -75,7 +75,7 @@ function createTranscriptionFailureError(
     case 401:
     case 403:
       return invalidRequestError(
-        "Voice transcription authentication failed. Run `codex login` or set OPENAI_API_KEY, then restart Beanbag daemon.",
+        "Voice transcription authentication failed. Run `codex login` or set OPENAI_API_KEY, then restart BB server.",
       );
     case 413:
       return invalidRequestError("Voice recording exceeds the provider upload limit.");
@@ -140,7 +140,7 @@ async function resolveVoiceTranscriptionAuth(): Promise<VoiceTranscriptionAuth> 
     const token = authFile?.tokens?.access_token;
     if (typeof token !== "string" || token.trim().length === 0) {
       throw invalidRequestError(
-        "Voice transcription auth is missing. Run `codex login` and restart Beanbag daemon.",
+        "Voice transcription auth is missing. Run `codex login` and restart BB server.",
       );
     }
     return {
@@ -152,7 +152,7 @@ async function resolveVoiceTranscriptionAuth(): Promise<VoiceTranscriptionAuth> 
   const apiKey = resolveApiKeyFromAuthFile(authFile);
   if (!apiKey) {
     throw invalidRequestError(
-      "Voice transcription is not configured. Set OPENAI_API_KEY or run `codex login`, then restart Beanbag daemon.",
+      "Voice transcription is not configured. Set OPENAI_API_KEY or run `codex login`, then restart BB server.",
     );
   }
 
@@ -192,7 +192,7 @@ export async function transcribeVoiceInput(
 
   const headers = new Headers();
   headers.set("Authorization", `Bearer ${auth.bearerToken}`);
-  headers.set("User-Agent", "beanbag-daemon/voice-transcription");
+  headers.set("User-Agent", "bb-server/voice-transcription");
 
   const response = await fetch(OPENAI_TRANSCRIPTION_ENDPOINT, {
     method: "POST",

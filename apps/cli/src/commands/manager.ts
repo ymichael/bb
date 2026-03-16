@@ -1,5 +1,5 @@
 import { Command } from "commander";
-import { type Project, type Thread } from "@beanbag/agent-core";
+import { type Project, type Thread } from "@bb/core";
 import { createClient, unwrap } from "../client.js";
 import { requireProjectId, requireThreadId } from "../context-env.js";
 import { confirmDestructiveAction, getErrorMessage } from "./helpers.js";

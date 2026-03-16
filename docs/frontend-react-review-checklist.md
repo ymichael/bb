@@ -34,7 +34,7 @@ Use this checklist for larger React and frontend changes in `apps/app/src/**`.
 
 ## Validation
 
-- Run `pnpm --filter @beanbag/app lint`.
-- Run `pnpm --filter @beanbag/app build`.
+- Run `pnpm --filter @bb/app lint`.
+- Run `pnpm --filter @bb/app build`.
 - Run targeted tests for any extracted pure helpers or hooks.
 - For scroll-sensitive changes, manually verify pinned-bottom and scrolled-up cases.

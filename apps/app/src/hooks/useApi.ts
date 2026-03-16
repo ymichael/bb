@@ -40,7 +40,7 @@ import type {
   ThreadGitDiffResponse,
   ThreadQueuedMessage,
   ThreadDetailRow,
-} from "@beanbag/agent-core";
+} from "@bb/core";
 import * as api from "../lib/api";
 import { wsManager } from "../lib/ws";
 

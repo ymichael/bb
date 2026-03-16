@@ -33,10 +33,10 @@ Additional manager-specific coverage:
 - Build the daemon and CLI:
 
 ```bash
-pnpm exec turbo run build --filter=@beanbag/daemon --filter=@beanbag/cli
+pnpm exec turbo run build --filter=@bb/server --filter=@bb/cli
 ```
 
-- Use a disposable repo, disposable Beanbag root, and disposable `HOME`.
+- Use a disposable repo, disposable BB root, and disposable `HOME`.
 - Use a real standalone daemon, not the app-integrated daemon.
 - Keep the daemon log open in another shell while running the pass.
 - Copy the current Codex auth/config into the disposable `HOME` before starting the daemon. This avoids shared host state while preserving provider auth.
@@ -48,9 +48,9 @@ Create a disposable repo:
 ```bash
 tmp_root=$(mktemp -d /tmp/bb-manager-qa-XXXXXX)
 project_root="$tmp_root/repo"
-beanbag_root="$tmp_root/beanbag-root"
+bb_root="$tmp_root/bb-root"
 tmp_home="$tmp_root/home"
-mkdir -p "$project_root/src" "$beanbag_root" "$tmp_home/.codex"
+mkdir -p "$project_root/src" "$bb_root" "$tmp_home/.codex"
 cp ~/.codex/auth.json "$tmp_home/.codex/auth.json"
 [ -f ~/.codex/config.toml ] && cp ~/.codex/config.toml "$tmp_home/.codex/config.toml"
 [ -f ~/.codex/config.json ] && cp ~/.codex/config.json "$tmp_home/.codex/config.json"
@@ -78,10 +78,10 @@ console.log("product:", multiply(4, 5));
 EOF
 git -C "$project_root" init -b main
 git -C "$project_root" add .
-GIT_AUTHOR_NAME='Beanbag Test' \
-GIT_AUTHOR_EMAIL='beanbag-test@example.com' \
-GIT_COMMITTER_NAME='Beanbag Test' \
-GIT_COMMITTER_EMAIL='beanbag-test@example.com' \
+GIT_AUTHOR_NAME='BB Test' \
+GIT_AUTHOR_EMAIL='bb-test@example.com' \
+GIT_COMMITTER_NAME='BB Test' \
+GIT_COMMITTER_EMAIL='bb-test@example.com' \
 git -C "$project_root" commit -m init
 ```
 
@@ -89,8 +89,8 @@ Start the standalone daemon:
 
 ```bash
 HOME="$tmp_home" \
-BB_ROOT="$beanbag_root" \
-node apps/daemon/dist/index.js --port 4311
+BB_ROOT="$bb_root" \
+node apps/server/dist/index.js --port 4311
 ```
 
 In another shell:
@@ -204,14 +204,14 @@ Expected:
 Check whether the manager chose to create `PREFERENCES.md`:
 
 ```bash
-sqlite3 "$beanbag_root/beanbag.db" "select id,primary_manager_thread_id from projects;"
+sqlite3 "$bb_root/bb.db" "select id,primary_manager_thread_id from projects;"
 node apps/cli/dist/index.js thread show <manager-id>
 ```
 
 Then inspect the workspace directory:
 
 ```bash
-find "$beanbag_root/workspace/<manager-id>" -maxdepth 2 -type f | sort
+find "$bb_root/workspace/<manager-id>" -maxdepth 2 -type f | sort
 ```
 
 Expected:
@@ -228,7 +228,7 @@ node apps/cli/dist/index.js manager send <manager-id> \
   "Write a short markdown summary of the recent task in your workspace, then tell me where you put it."
 node apps/cli/dist/index.js thread wait <manager-id> --status idle --timeout 120
 node apps/cli/dist/index.js thread output <manager-id>
-find "$beanbag_root/workspace/<manager-id>" -maxdepth 2 -type f | sort
+find "$bb_root/workspace/<manager-id>" -maxdepth 2 -type f | sort
 ```
 
 Expected:
@@ -252,7 +252,7 @@ This QA pass is green only if all of the following are true:
 
 Record at least:
 
-- Beanbag root path
+- BB root path
 - project root path
 - manager id
 - any managed child thread ids

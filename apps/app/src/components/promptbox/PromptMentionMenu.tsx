@@ -1,6 +1,6 @@
 import type { MutableRefObject } from "react";
 import { FileText, FolderGit2, Loader2, UserRound } from "lucide-react";
-import type { PromptMentionSuggestion } from "@beanbag/agent-core";
+import type { PromptMentionSuggestion } from "@bb/core";
 import { cn } from "@/lib/utils";
 
 interface PromptMentionMenuProps {

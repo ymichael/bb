@@ -49,8 +49,8 @@ describe("EnvironmentRegistry", () => {
 
     try {
       git(projectRoot, "init", "-b", "main");
-      git(projectRoot, "config", "user.name", "Beanbag");
-      git(projectRoot, "config", "user.email", "beanbag@example.com");
+      git(projectRoot, "config", "user.name", "BB");
+      git(projectRoot, "config", "user.email", "bb@example.com");
       spawnSync("sh", ["-lc", "printf 'hello\\n' > README.md"], { cwd: projectRoot });
       git(projectRoot, "add", "README.md");
       git(projectRoot, "commit", "-m", "init");
@@ -120,8 +120,8 @@ describe("EnvironmentRegistry", () => {
 
     try {
       git(projectRoot, "init", "-b", "main");
-      git(projectRoot, "config", "user.name", "Beanbag");
-      git(projectRoot, "config", "user.email", "beanbag@example.com");
+      git(projectRoot, "config", "user.name", "BB");
+      git(projectRoot, "config", "user.email", "bb@example.com");
       spawnSync("sh", ["-lc", "printf 'hello\\n' > README.md"], { cwd: projectRoot });
       git(projectRoot, "add", "README.md");
       git(projectRoot, "commit", "-m", "init");
@@ -130,7 +130,7 @@ describe("EnvironmentRegistry", () => {
         .register(createLocalEnvironmentDefinition())
         .register(
           createDockerEnvironmentDefinition({
-            image: "beanbag/test-image:latest",
+            image: "bb/test-image:latest",
             worktree: { worktreeRootName: ".worktrees" },
           }),
         );
@@ -140,8 +140,8 @@ describe("EnvironmentRegistry", () => {
         threadId: "thread-1",
         projectRootPath: projectRoot,
         runtimeEnv: {
-          BEANBAG_ENVIRONMENT_AGENT_BASE_URL: "http://127.0.0.1:4312",
-          BEANBAG_ENVIRONMENT_AGENT_AUTH_TOKEN: "secret-token",
+          BB_ENV_DAEMON_BASE_URL: "http://127.0.0.1:4312",
+          BB_ENV_DAEMON_AUTH_TOKEN: "secret-token",
         },
       });
 

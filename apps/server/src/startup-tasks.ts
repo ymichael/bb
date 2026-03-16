@@ -1,4 +1,4 @@
-import type { EnvironmentAgentSessionRepository } from "@beanbag/db";
+import type { EnvironmentAgentSessionRepository } from "@bb/db";
 import type { Orchestrator } from "./orchestrator.js";
 
 interface StartupTaskLogger {

@@ -40,6 +40,6 @@ export function createEnvironment(
   context: CreateEnvironmentContext,
   registry: EnvironmentRegistry = createDefaultEnvironmentRegistry(),
 ): IEnvironment {
-  const resolvedKind = (kind ?? process.env.BEANBAG_ENVIRONMENT ?? "local").trim();
+  const resolvedKind = (kind ?? process.env.BB_ENVIRONMENT ?? "local").trim();
   return registry.create(resolvedKind, context);
 }

@@ -1,5 +1,5 @@
 {
-  "name": "@beanbag/environment",
+  "name": "@bb/environment",
   "version": "0.0.1",
   "type": "module",
   "exports": {
@@ -20,12 +20,12 @@
     "test:integration": "vitest run --config vitest.integration.config.ts"
   },
   "dependencies": {
-    "@beanbag/agent-core": "workspace:*",
-    "@beanbag/environment-agent": "workspace:*",
-    "@beanbag/templates": "workspace:*"
+    "@bb/core": "workspace:*",
+    "@bb/environment-daemon": "workspace:*",
+    "@bb/templates": "workspace:*"
   },
   "devDependencies": {
-    "@beanbag/tsconfig": "workspace:*",
+    "@bb/tsconfig": "workspace:*",
     "@types/node": "^22.0.0",
     "typescript": "^5.7.0",
     "vitest": "^4.0.0"

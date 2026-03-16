@@ -46,7 +46,7 @@ describe("PromptBox", () => {
         attachments={[
           {
             type: "localImage",
-            path: "/Users/me/.beanbag/attachments/proj-1/example.png",
+            path: "/Users/me/.bb/attachments/proj-1/example.png",
             name: "example.png",
             mimeType: "image/png",
             sizeBytes: 1024,
@@ -57,7 +57,7 @@ describe("PromptBox", () => {
     )
 
     expect(html).toContain(
-      '/api/v1/projects/proj-1/attachments/content?path=%2FUsers%2Fme%2F.beanbag%2Fattachments%2Fproj-1%2Fexample.png'
+      '/api/v1/projects/proj-1/attachments/content?path=%2FUsers%2Fme%2F.bb%2Fattachments%2Fproj-1%2Fexample.png'
     )
     expect(html).toContain('alt="example.png"')
   })
@@ -72,14 +72,14 @@ describe("PromptBox", () => {
         attachments={[
           {
             type: "localImage",
-            path: "/Users/me/.beanbag/attachments/proj-1/example.png",
+            path: "/Users/me/.bb/attachments/proj-1/example.png",
             name: "example.png",
             mimeType: "image/png",
             sizeBytes: 1024,
           },
           {
             type: "localFile",
-            path: "/Users/me/.beanbag/attachments/proj-1/notes.md",
+            path: "/Users/me/.bb/attachments/proj-1/notes.md",
             name: "notes.md",
             mimeType: "text/markdown",
             sizeBytes: 1024,

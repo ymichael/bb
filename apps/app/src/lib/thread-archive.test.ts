@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest"
 import type {
   SystemEnvironmentInfo,
   ThreadWorkStatus,
-} from "@beanbag/agent-core"
+} from "@bb/core"
 import { HttpError } from "./api"
 import {
   isArchiveForceRequiredError,

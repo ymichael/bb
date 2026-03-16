@@ -1,4 +1,4 @@
-import type { EnvironmentCapabilities } from "@beanbag/agent-core"
+import type { EnvironmentCapabilities } from "@bb/core"
 import { Container, FolderGit2, Laptop } from "lucide-react"
 import { describe, expect, it } from "vitest"
 import { getEnvironmentIconInfo } from "./environment-icon"

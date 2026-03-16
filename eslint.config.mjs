@@ -35,7 +35,7 @@ export default [
       "**/node_modules/**",
       "**/dist/**",
       "**/coverage/**",
-      "packages/agent-core/src/generated/**",
+      "packages/core/src/generated/**",
     ],
   },
   {
@@ -65,7 +65,7 @@ export default [
       "**/*.test.ts",
       "**/*.test.tsx",
       "**/scripts/**",
-      "packages/agent-core/src/generated/**",
+      "packages/core/src/generated/**",
     ],
     rules: noBlockingChildProcessRules,
   },

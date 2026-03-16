@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ThreadWorkStatus } from "@beanbag/agent-core";
+import type { ThreadWorkStatus } from "@bb/core";
 import {
   getThreadGitStatusDisplay,
   threadWorkStatusDescription,

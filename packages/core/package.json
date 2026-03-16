@@ -1,5 +1,5 @@
 {
-  "name": "@beanbag/agent-core",
+  "name": "@bb/core",
   "version": "0.0.1",
   "type": "module",
   "exports": {
@@ -24,11 +24,11 @@
     "gen:codex-event-types": "node ./scripts/generate-codex-event-types.mjs"
   },
   "dependencies": {
-    "@beanbag/templates": "workspace:*",
+    "@bb/templates": "workspace:*",
     "zod": "^3.24.0"
   },
   "devDependencies": {
-    "@beanbag/tsconfig": "workspace:*",
+    "@bb/tsconfig": "workspace:*",
     "@types/node": "^22.0.0",
     "typescript": "^5.7.0"
   }

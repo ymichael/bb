@@ -33,7 +33,7 @@ describe("EnvironmentAgentSessionSync", () => {
 
     const client = makeClientMock();
     (client.openSession as ReturnType<typeof vi.fn>).mockResolvedValue({
-      protocol: "beanbag.env-agent.v1",
+      protocol: "bb.env-daemon.v1",
       type: "session_welcome",
       messageId: "msg-open",
       sessionId: "sess-1",
@@ -46,7 +46,7 @@ describe("EnvironmentAgentSessionSync", () => {
       },
     });
     (client.pushEvents as ReturnType<typeof vi.fn>).mockResolvedValue({
-      protocol: "beanbag.env-agent.v1",
+      protocol: "bb.env-daemon.v1",
       type: "event_ack",
       messageId: "msg-ack",
       sessionId: "sess-1",
@@ -61,7 +61,7 @@ describe("EnvironmentAgentSessionSync", () => {
       },
     });
     (client.pullCommands as ReturnType<typeof vi.fn>).mockResolvedValue({
-      protocol: "beanbag.env-agent.v1",
+      protocol: "bb.env-daemon.v1",
       type: "command_batch",
       messageId: "msg-cmd",
       sessionId: "sess-1",
@@ -166,7 +166,7 @@ describe("EnvironmentAgentSessionSync", () => {
 
     const client = makeClientMock();
     (client.pushEvents as ReturnType<typeof vi.fn>).mockResolvedValue({
-      protocol: "beanbag.env-agent.v1",
+      protocol: "bb.env-daemon.v1",
       type: "event_ack",
       messageId: "msg-ack",
       sessionId: "sess-1",
@@ -231,7 +231,7 @@ describe("EnvironmentAgentSessionSync", () => {
 
     const client = makeClientMock();
     (client.openSession as ReturnType<typeof vi.fn>).mockResolvedValue({
-      protocol: "beanbag.env-agent.v1",
+      protocol: "bb.env-daemon.v1",
       type: "session_welcome",
       messageId: "msg-open",
       sessionId: "sess-1",
@@ -298,7 +298,7 @@ describe("EnvironmentAgentSessionSync", () => {
 
     const client = makeClientMock();
     (client.pullCommands as ReturnType<typeof vi.fn>).mockResolvedValue({
-      protocol: "beanbag.env-agent.v1",
+      protocol: "bb.env-daemon.v1",
       type: "command_batch",
       messageId: "msg-cmd",
       sessionId: "sess-1",

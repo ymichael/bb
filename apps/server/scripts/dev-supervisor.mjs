@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 
-const SUPERVISED_RESTART_ENV = "BEANBAG_SUPERVISED_RESTART";
+const SUPERVISED_RESTART_ENV = "BB_SUPERVISED_RESTART";
 const SUPERVISED_RESTART_EXIT_CODE = 75;
 const FORWARDED_ARGS = process.argv.slice(2);
 
@@ -49,7 +49,7 @@ process.on("SIGTERM", () => {
 async function ensureDependencyBuilds() {
   const result = await runCommand("pnpm", [
     "--filter",
-    "@beanbag/agent-server",
+    "@bb/agent-server",
     "build",
   ]);
   if (normalizeExitCode(result.code, result.signal) !== 0) {

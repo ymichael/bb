@@ -1,5 +1,5 @@
-import type { PromptInput } from "@beanbag/agent-core";
-import { renderTemplate } from "@beanbag/templates";
+import type { PromptInput } from "@bb/core";
+import { renderTemplate } from "@bb/templates";
 import type { LlmThreadTitleGenerationArgs } from "./llm-completion.js";
 import { generateOpenAIResponsesText } from "./openai-responses-model.js";
 

@@ -13,7 +13,7 @@ import {
   waitForThreadStatus,
 } from "./environment-agent-api.js";
 import { createFakeCodexBinDir } from "./fake-codex.js";
-import { beanbagTestTmpPrefix } from "./temp-root.js";
+import { bbTestTmpPrefix } from "./temp-root.js";
 import {
   runCliCommand,
   type CliRunResult,
@@ -36,10 +36,10 @@ const TSX_CLI_PATH = resolve(
 );
 const TEST_GIT_ENV: NodeJS.ProcessEnv = {
   ...process.env,
-  GIT_AUTHOR_NAME: "Beanbag Test",
-  GIT_AUTHOR_EMAIL: "beanbag-test@example.com",
-  GIT_COMMITTER_NAME: "Beanbag Test",
-  GIT_COMMITTER_EMAIL: "beanbag-test@example.com",
+  GIT_AUTHOR_NAME: "BB Test",
+  GIT_AUTHOR_EMAIL: "bb-test@example.com",
+  GIT_COMMITTER_NAME: "BB Test",
+  GIT_COMMITTER_EMAIL: "bb-test@example.com",
 };
 
 interface LaunchTarget {
@@ -106,7 +106,7 @@ function resolveDaemonLaunchTarget(): LaunchTarget {
   }
 
   throw new Error(
-    "Unable to launch daemon: missing tsx source runner and apps/daemon/dist/index.js fallback.",
+    "Unable to launch daemon: missing tsx source runner and apps/server/dist/index.js fallback.",
   );
 }
 
@@ -287,11 +287,11 @@ async function runEnvironmentBattery(
   environmentKind: EnvironmentKind,
 ): Promise<void> {
   const tempDir = mkdtempSync(
-    beanbagTestTmpPrefix(`beanbag-standalone-daemon-${environmentKind}-`),
+    bbTestTmpPrefix(`bb-standalone-daemon-${environmentKind}-`),
   );
-  const beanbagRoot = join(tempDir, "beanbag-root");
+  const bbRoot = join(tempDir, "bb-root");
   const projectRoot = join(tempDir, "project");
-  mkdirSync(beanbagRoot, { recursive: true });
+  mkdirSync(bbRoot, { recursive: true });
   mkdirSync(projectRoot, { recursive: true });
   if (environmentKind === "worktree") {
     execFileSync("git", ["init", "-b", "main"], {
@@ -317,9 +317,9 @@ async function runEnvironmentBattery(
   const daemonEnv = withFakeE2eEnvironmentAgentTimingEnv({
     ...process.env,
     PATH: prependPathEntry(process.env.PATH, fakeCodexBinDir),
-    BB_ROOT: beanbagRoot,
-    BEANBAG_FAKE_CODEX_CONTROL_FILE: fakeCodexControlFilePath,
-    BEANBAG_FAKE_CODEX_SCENARIO: "start-then-manual-complete",
+    BB_ROOT: bbRoot,
+    BB_FAKE_CODEX_CONTROL_FILE: fakeCodexControlFilePath,
+    BB_FAKE_CODEX_SCENARIO: "start-then-manual-complete",
   });
 
   // Track all daemon instances so we can kill their process trees on cleanup.

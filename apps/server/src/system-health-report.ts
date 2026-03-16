@@ -6,16 +6,16 @@ import {
   statfsSync,
 } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
-import { expandHomeDirectory, resolveBeanbagRoot } from "@beanbag/agent-core/storage-paths";
-import { type Project, type Thread } from "@beanbag/agent-core";
+import { expandHomeDirectory, resolveBbRoot } from "@bb/core/storage-paths";
+import { type Project, type Thread } from "@bb/core";
 import type {
   SystemHealthDiskSummary,
   SystemHealthReport,
   SystemHealthStorageBucket,
   SystemHealthStorageBucketKey,
   SystemHealthThreadCounts,
-} from "@beanbag/agent-core";
-import type { ProjectRepository, ThreadRepository } from "@beanbag/db";
+} from "@bb/core";
+import type { ProjectRepository, ThreadRepository } from "@bb/db";
 import {
   resolveDefaultManagedWorktreeRoot,
   resolveManagedWorktreeRootForProject,
@@ -153,7 +153,7 @@ function resolveWorktreeBucketPaths(
   projects: readonly Pick<Project, "id" | "rootPath">[],
   runtimeEnv: NodeJS.ProcessEnv,
 ): string[] {
-  const configuredRoot = runtimeEnv.BEANBAG_WORKTREE_ROOT?.trim() ?? "";
+  const configuredRoot = runtimeEnv.BB_WORKTREE_ROOT?.trim() ?? "";
   const normalizedRoot = expandHomeDirectory(configuredRoot);
 
   if (normalizedRoot.length === 0 || normalizedRoot.startsWith("/")) {
@@ -177,20 +177,20 @@ export function createSystemHealthReporter(args: CreateSystemHealthReporterArgs)
   return (): SystemHealthReport => {
     const projects = args.projectRepo.list();
     const threads = args.threadRepo.list({ includeArchived: true });
-    const beanbagRoot = resolveBeanbagRoot(args.runtimeEnv);
+    const bbRoot = resolveBbRoot(args.runtimeEnv);
     const buckets = [
       buildStorageBucket("database", [args.dbPath]),
       buildStorageBucket("database_wal", [`${args.dbPath}-wal`]),
       buildStorageBucket("database_shm", [`${args.dbPath}-shm`]),
       buildStorageBucket("daemon_logs", listRotatingLogArtifacts(args.daemonLogFilePath)),
-      buildStorageBucket("environment_agent_logs", [join(beanbagRoot, "environment-agent-logs")]),
+      buildStorageBucket("environment_agent_logs", [join(bbRoot, "environment-agent-logs")]),
       buildStorageBucket("worktrees", resolveWorktreeBucketPaths(projects, args.runtimeEnv)),
-      buildStorageBucket("attachments", [join(beanbagRoot, "attachments")]),
-      buildStorageBucket("backups", [join(beanbagRoot, "backups")]),
+      buildStorageBucket("attachments", [join(bbRoot, "attachments")]),
+      buildStorageBucket("backups", [join(bbRoot, "backups")]),
     ];
 
     const totalBytes = buckets.reduce((total, bucket) => total + bucket.bytes, 0);
-    const diskPath = existsSync(beanbagRoot) ? beanbagRoot : dirname(args.dbPath);
+    const diskPath = existsSync(bbRoot) ? bbRoot : dirname(args.dbPath);
 
     return {
       generatedAt: Date.now(),

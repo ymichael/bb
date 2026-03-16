@@ -8,7 +8,7 @@ import type {
   SystemProviderInfo,
   Thread,
   ThreadOrchestrator,
-} from "@beanbag/agent-core";
+} from "@bb/core";
 import { createSystemRoutes } from "../../routes/system.js";
 import { invalidRequestError } from "../../domain-errors.js";
 
@@ -235,13 +235,13 @@ describe("System routes", () => {
 
   describe("POST /system/pick-folder", () => {
     it("returns selected folder path", async () => {
-      pickFolder.mockResolvedValue("/Users/michael/Projects/beanbag");
+      pickFolder.mockResolvedValue("/Users/michael/Projects/bb");
 
       const res = await app.request("/system/pick-folder", { method: "POST" });
 
       expect(res.status).toBe(200);
       const body = await res.json();
-      expect(body.path).toBe("/Users/michael/Projects/beanbag");
+      expect(body.path).toBe("/Users/michael/Projects/bb");
     });
 
     it("returns null when user cancels selection", async () => {

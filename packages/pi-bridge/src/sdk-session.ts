@@ -26,7 +26,7 @@ export type PiSessionDoneHandler = (error?: unknown) => void;
 
 /**
  * Wraps the Pi programmatic SDK (`@mariozechner/pi-coding-agent`) in a
- * session object that bridges between the Beanbag JSON-RPC protocol and
+ * session object that bridges between the BB JSON-RPC protocol and
  * the Pi agent's event-driven API.
  */
 export class PiSdkSession {

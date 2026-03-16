@@ -2,7 +2,7 @@
 
 ## Overview
 
-Beanbag is a local-first coding-agent workspace built as a pnpm/Turbo monorepo.
+BB is a local-first coding-agent workspace built as a pnpm/Turbo monorepo.
 A local daemon is the durable coordinator: it owns the HTTP/WebSocket API,
 persists state in SQLite, manages per-thread execution environments, and serves
 both the React app and the `bb` CLI.
@@ -10,7 +10,7 @@ both the React app and the `bb` CLI.
 At a high level:
 
 1. The app and CLI talk to the daemon over HTTP.
-2. The daemon persists projects, threads, events, queued follow-ups, environment records, and environment-agent session state via `@beanbag/db`.
+2. The daemon persists projects, threads, events, queued follow-ups, environment records, and environment-agent session state via `@bb/db`.
 3. Each thread runs in a selected environment (`local`, `worktree`, or `docker`).
 4. Each active environment runs a per-thread `environment-agent` beside the provider runtime.
 5. The environment-agent opens a daemon-hosted session, long-polls for commands, and posts heartbeats, event batches, and command results.
@@ -28,7 +28,7 @@ Responsibilities:
 - talks only to the daemon HTTP API for reads and writes
 - uses React Query for server state
 - uses a small WebSocket subscription layer for invalidation messages (`thread` and `system` entities)
-- keeps one canonical thread-detail rendering path based on timeline rows + UI message projection from `@beanbag/agent-core`
+- keeps one canonical thread-detail rendering path based on timeline rows + UI message projection from `@bb/core`
 - fetches heavier payloads such as git diffs, tool-group expansions, attachment content, and health data on demand
 
 Notable behavior:
@@ -51,7 +51,7 @@ Responsibilities:
   - `BB_ENVIRONMENT_ID`
   - `BB_DAEMON_URL`
 
-### `apps/daemon`
+### `apps/server`
 
 The daemon is the system coordinator.
 
@@ -61,7 +61,7 @@ Responsibilities:
 - persists projects, threads, events, queued follow-ups, environment metadata, environment-agent sessions, command queues, and command results
 - provisions, restores, suspends, archives, unarchives, and deletes thread environments
 - manages provider sessions through per-thread environment-agents
-- normalizes provider/runtime notifications into Beanbag thread events
+- normalizes provider/runtime notifications into BB thread events
 - computes work status, git diffs, merge-base candidates, and thread/project summaries
 - exposes system APIs for provider/environment catalogs, health reporting, restart recommendations, open-path, and voice transcription
 - reconciles managed artifacts such as logs, worktrees, and stored attachments
@@ -77,7 +77,7 @@ Important daemon subsystems include:
 - startup reconciliation, restart recommendation, and system health reporting
 - managed artifact reconciliation for logs, worktrees, and attachments
 
-### `packages/agent-core`
+### `packages/core`
 
 Shared contracts and projection helpers for the rest of the monorepo.
 
@@ -128,7 +128,7 @@ Environment responsibilities:
 
 `docker` currently layers container execution on top of an isolated worktree-backed workspace.
 
-### `packages/environment-agent`
+### `packages/environment-daemon`
 
 Per-thread sidecar process between the daemon and the provider runtime.
 
@@ -159,7 +159,7 @@ Responsibilities:
 - Codex-specific thread/turn command building
 - model catalog access
 - title generation and commit-message generation helpers
-- normalization of provider notifications into Beanbag thread events
+- normalization of provider notifications into BB thread events
 
 Current built-in provider registry:
 
@@ -193,7 +193,7 @@ Persisted thread statuses are:
 - `active`
 - `error`
 
-Transition rules are centralized in `apps/daemon/src/thread-status-machine.ts`.
+Transition rules are centralized in `apps/server/src/thread-status-machine.ts`.
 
 ### New thread
 
@@ -237,7 +237,7 @@ Additional thread lifecycle behaviors include:
 
 ### Recovery behavior
 
-Beanbag treats the daemon and SQLite as the durable source of truth.
+BB treats the daemon and SQLite as the durable source of truth.
 
 On startup the daemon reconciles threads that were previously active or provisioning, restores enough environment metadata to continue, and pokes surviving env-agents. Session heartbeats and command cursors determine whether workers are still alive.
 
@@ -295,8 +295,8 @@ Important behavior:
 
 - workspace status feeds thread badges, archive safety checks, and project-level summaries
 - full git diffs are fetched on demand, not streamed over WebSocket
-- worktree and docker environments can use managed isolated workspaces rooted under Beanbag-managed storage
-- prompt attachments are stored under Beanbag-managed per-project attachment directories and then referenced as `localImage` / `localFile` inputs
+- worktree and docker environments can use managed isolated workspaces rooted under BB-managed storage
+- prompt attachments are stored under BB-managed per-project attachment directories and then referenced as `localImage` / `localFile` inputs
 - the app loads local attachment content back through daemon attachment endpoints rather than reading arbitrary filesystem paths directly
 
 ## Realtime Model
@@ -342,7 +342,7 @@ Non-durable state includes:
 
 ## Summary
 
-Beanbag is organized around one durable coordinator (the daemon), one durable store (SQLite), and one per-thread execution sidecar (the environment-agent).
+BB is organized around one durable coordinator (the server), one durable store (SQLite), and one per-thread execution sidecar (the environment-agent).
 
 The most important current architectural traits are:
 

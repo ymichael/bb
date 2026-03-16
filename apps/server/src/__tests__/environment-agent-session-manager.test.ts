@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import type { DbConnection } from "@beanbag/db";
+import type { DbConnection } from "@bb/db";
 import {
   createConnection,
   EnvironmentRepository,
@@ -8,7 +8,7 @@ import {
   ProjectRepository,
   ThreadEnvironmentAttachmentRepository,
   ThreadRepository,
-} from "@beanbag/db";
+} from "@bb/db";
 import { EnvironmentAgentSessionManager } from "../environment-agent-session-manager.js";
 
 interface SqliteClient {

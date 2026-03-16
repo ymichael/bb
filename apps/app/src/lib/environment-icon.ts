@@ -1,4 +1,4 @@
-import type { EnvironmentRecord, SystemEnvironmentInfo } from "@beanbag/agent-core"
+import type { EnvironmentRecord, SystemEnvironmentInfo } from "@bb/core"
 import { Container, FolderGit2, Laptop, type LucideIcon } from "lucide-react"
 
 interface EnvironmentIconInfo {

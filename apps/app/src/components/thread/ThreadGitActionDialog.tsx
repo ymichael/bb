@@ -1,6 +1,6 @@
 import { useMemo, useState, type FormEvent } from "react";
-import { assertNever, type ThreadWorkStatus } from "@beanbag/agent-core";
-import { DetailCard, DetailRow } from "@beanbag/ui-core";
+import { assertNever, type ThreadWorkStatus } from "@bb/core";
+import { DetailCard, DetailRow } from "@bb/ui-core";
 import { WorkspaceChangesList } from "@/components/shared/WorkspaceChangesList";
 import { Button } from "@/components/ui/button";
 import {

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { JsonLineTransport } from "@beanbag/environment-agent";
+import type { JsonLineTransport } from "@bb/environment-daemon";
 import { ProviderRuntime } from "../provider-runtime.js";
 
 function createTransport(): JsonLineTransport & {

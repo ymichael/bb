@@ -6,13 +6,13 @@ import { spawnSync } from "node:child_process";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = resolve(__filename, "..");
-const cleanupScript = resolve(__dirname, "cleanup-beanbag-test-processes.mjs");
+const cleanupScript = resolve(__dirname, "cleanup-bb-test-processes.mjs");
 
 function parseArgs(argv) {
   const options = {
     pid: null,
     tmpRoot: null,
-    beanbagRoot: null,
+    bbRoot: null,
   };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -26,8 +26,8 @@ function parseArgs(argv) {
         options.tmpRoot = argv[index + 1] ? resolve(argv[index + 1]) : null;
         index += 1;
         break;
-      case "--beanbag-root":
-        options.beanbagRoot = argv[index + 1] ? resolve(argv[index + 1]) : null;
+      case "--bb-root":
+        options.bbRoot = argv[index + 1] ? resolve(argv[index + 1]) : null;
         index += 1;
         break;
       default:
@@ -35,8 +35,8 @@ function parseArgs(argv) {
     }
   }
 
-  if (!options.pid && !options.tmpRoot && !options.beanbagRoot) {
-    throw new Error("Pass at least one of --pid, --tmp-root, or --beanbag-root");
+  if (!options.pid && !options.tmpRoot && !options.bbRoot) {
+    throw new Error("Pass at least one of --pid, --tmp-root, or --bb-root");
   }
 
   return options;
@@ -51,8 +51,8 @@ async function main() {
   if (options.tmpRoot) {
     args.push("--tmp-root", options.tmpRoot);
   }
-  if (options.beanbagRoot) {
-    args.push("--beanbag-root", options.beanbagRoot);
+  if (options.bbRoot) {
+    args.push("--bb-root", options.bbRoot);
   }
 
   const result = spawnSync(process.execPath, args, {

@@ -207,7 +207,7 @@ function resolvePiSessionFilePath(
 
   return join(
     homedir(),
-    ".beanbag",
+    ".bb",
     "pi-bridge-sessions",
     `${sanitizeSessionKey(threadId)}.jsonl`,
   );

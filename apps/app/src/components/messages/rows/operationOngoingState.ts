@@ -1,7 +1,7 @@
 import {
   assertNever,
   type UIOperationMessage,
-} from "@beanbag/agent-core";
+} from "@bb/core";
 
 type ThreadOperationIntentPhase = NonNullable<UIOperationMessage["threadOperation"]>["phase"];
 type PrimaryCheckoutPhase = NonNullable<UIOperationMessage["primaryCheckout"]>["phase"];

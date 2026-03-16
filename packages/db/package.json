@@ -1,5 +1,5 @@
 {
-  "name": "@beanbag/db",
+  "name": "@bb/db",
   "version": "0.0.1",
   "type": "module",
   "exports": {
@@ -25,13 +25,13 @@
     "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
-    "@beanbag/agent-core": "workspace:*",
+    "@bb/core": "workspace:*",
     "better-sqlite3": "^11.7.0",
     "drizzle-orm": "^0.38.0",
     "nanoid": "^5.0.9"
   },
   "devDependencies": {
-    "@beanbag/tsconfig": "workspace:*",
+    "@bb/tsconfig": "workspace:*",
     "@types/better-sqlite3": "^7.6.12",
     "drizzle-kit": "^0.30.0",
     "typescript": "^5.7.0"

@@ -1,5 +1,5 @@
 import { formatWithOptions } from "node:util";
-import { createRotatingJsonLineFileWriter } from "@beanbag/environment-agent";
+import { createRotatingJsonLineFileWriter } from "@bb/environment-daemon";
 
 type ConsoleMethod = "log" | "info" | "warn" | "error" | "debug";
 const DEFAULT_DAEMON_LOG_MAX_BYTES = 10 * 1024 * 1024;

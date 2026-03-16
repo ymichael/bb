@@ -13,26 +13,26 @@ const KNOWN_TEST_PROCESS_PATTERNS = [
   resolve(WORKSPACE_ROOT, "packages", "environment-agent", "dist", "environment-agent.bundle.mjs"),
   resolve(WORKSPACE_ROOT, "apps", "daemon", "dist", "index.js"),
   resolve(WORKSPACE_ROOT, "scripts", "qa", "run-fake-recovery-suite.mjs"),
-  resolve(WORKSPACE_ROOT, "scripts", "qa", "cleanup-beanbag-test-processes.mjs"),
+  resolve(WORKSPACE_ROOT, "scripts", "qa", "cleanup-bb-test-processes.mjs"),
   resolve(WORKSPACE_ROOT, "scripts", "qa", "start-standalone-daemon-qa.mjs"),
   resolve(WORKSPACE_ROOT, "scripts", "qa", "stop-standalone-daemon-qa.mjs"),
   resolve(WORKSPACE_ROOT, "scripts", "qa", "relaunch-standalone-daemon-qa.mjs"),
 ];
 
 const KNOWN_TMP_PREFIXES = [
-  "beanbag-daemon-e2e-",
-  "beanbag-standalone-daemon-",
-  "beanbag-standalone-blocked-",
-  "beanbag-qa-",
-  "beanbag-environment-agent",
-  "beanbag-test-runs",
+  "bb-daemon-e2e-",
+  "bb-standalone-daemon-",
+  "bb-standalone-blocked-",
+  "bb-qa-",
+  "bb-environment-daemon",
+  "bb-test-runs",
 ];
 
 function parseArgs(argv) {
   const options = {
     pid: null,
     tmpRoot: null,
-    beanbagRoot: null,
+    bbRoot: null,
     cleanupTmpDirs: false,
     quiet: false,
   };
@@ -48,8 +48,8 @@ function parseArgs(argv) {
         options.tmpRoot = argv[index + 1] ? resolve(argv[index + 1]) : null;
         index += 1;
         break;
-      case "--beanbag-root":
-        options.beanbagRoot = argv[index + 1] ? resolve(argv[index + 1]) : null;
+      case "--bb-root":
+        options.bbRoot = argv[index + 1] ? resolve(argv[index + 1]) : null;
         index += 1;
         break;
       case "--cleanup-tmp-dirs":
@@ -120,7 +120,7 @@ function collectTargetPids(processes, options) {
       targets.add(processInfo.pid);
       continue;
     }
-    if (options.beanbagRoot && processInfo.command.includes(options.beanbagRoot)) {
+    if (options.bbRoot && processInfo.command.includes(options.bbRoot)) {
       targets.add(processInfo.pid);
       continue;
     }
@@ -188,7 +188,7 @@ async function terminatePids(pids) {
 }
 
 function cleanupTmpDirs(options) {
-  const explicitDirs = [options.tmpRoot, options.beanbagRoot ? resolve(options.beanbagRoot, "..") : null]
+  const explicitDirs = [options.tmpRoot, options.bbRoot ? resolve(options.bbRoot, "..") : null]
     .filter((value) => typeof value === "string");
   for (const dir of explicitDirs) {
     rmSync(dir, { recursive: true, force: true });
@@ -221,7 +221,7 @@ async function main() {
       terminatedPids: pids,
       cleanupTmpDirs: options.cleanupTmpDirs,
       tmpRoot: options.tmpRoot,
-      beanbagRoot: options.beanbagRoot,
+      bbRoot: options.bbRoot,
     }, null, 2));
   }
 }

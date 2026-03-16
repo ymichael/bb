@@ -1,5 +1,5 @@
 import { expect } from "vitest";
-import type { Thread } from "@beanbag/agent-core";
+import type { Thread } from "@bb/core";
 import {
   createProject,
   createThread,

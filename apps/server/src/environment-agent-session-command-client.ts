@@ -6,10 +6,10 @@ import type {
   EnvironmentAgentProviderSpec,
   EnvironmentAgentProviderStatus,
   EnvironmentAgentStatusSnapshot,
-} from "@beanbag/environment-agent";
-import { ENVIRONMENT_AGENT_PROTOCOL_VERSION } from "@beanbag/environment-agent";
-import type { JsonLineTransport } from "@beanbag/environment-agent";
-import type { EnvironmentAgentCommandRecord } from "@beanbag/db";
+} from "@bb/environment-daemon";
+import { ENVIRONMENT_AGENT_PROTOCOL_VERSION } from "@bb/environment-daemon";
+import type { JsonLineTransport } from "@bb/environment-daemon";
+import type { EnvironmentAgentCommandRecord } from "@bb/db";
 import {
   EnvironmentAgentCommandDispatcher,
   isEnvironmentAgentSessionUnavailableError,

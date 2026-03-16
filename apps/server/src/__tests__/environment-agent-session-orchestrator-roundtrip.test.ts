@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createProviderEventEnvelope, type Thread } from "@beanbag/agent-core";
-import type { DbConnection } from "@beanbag/db";
+import { createProviderEventEnvelope, type Thread } from "@bb/core";
+import type { DbConnection } from "@bb/db";
 import {
   createConnection,
   migrate,
@@ -10,13 +10,13 @@ import {
   EventRepository,
   ProjectRepository,
   ThreadRepository,
-} from "@beanbag/db";
+} from "@bb/db";
 import type {
   EnvironmentAgentSessionEventBatchPayload,
   EnvironmentAgentSessionOpenPayload,
-} from "@beanbag/environment-agent";
-import { createCodexProviderAdapter, type LlmCompletionService } from "@beanbag/agent-server";
-import type { IEnvironment } from "@beanbag/environment";
+} from "@bb/environment-daemon";
+import { createCodexProviderAdapter, type LlmCompletionService } from "@bb/agent-server";
+import type { IEnvironment } from "@bb/environment";
 import type { WSManager } from "../ws.js";
 import { Orchestrator } from "../orchestrator.js";
 import { EnvironmentAgentCommandDispatcher } from "../environment-agent-command-dispatcher.js";
@@ -240,8 +240,8 @@ describe("environment-agent session orchestrator roundtrip", () => {
       createCodexProviderAdapter(),
       {
         ...process.env,
-        BEANBAG_ENVIRONMENT_AGENT_BASE_URL: "http://127.0.0.1:4312",
-        BEANBAG_ENVIRONMENT_AGENT_AUTH_TOKEN: "test-token",
+        BB_ENV_DAEMON_BASE_URL: "http://127.0.0.1:4312",
+        BB_ENV_DAEMON_AUTH_TOKEN: "test-token",
       },
       undefined,
       undefined,

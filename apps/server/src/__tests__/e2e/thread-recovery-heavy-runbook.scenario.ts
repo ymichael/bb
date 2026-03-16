@@ -5,8 +5,8 @@ import {
   type Thread,
   type ThreadEvent,
   type ThreadQueuedMessage,
-} from "@beanbag/agent-core";
-import { ENVIRONMENT_AGENT_SESSION_PROTOCOL } from "@beanbag/environment-agent";
+} from "@bb/core";
+import { ENVIRONMENT_AGENT_SESSION_PROTOCOL } from "@bb/environment-daemon";
 import type { EnvironmentAgentSessionDebugView } from "./environment-agent-api.js";
 import {
   allocateLocalPort,
@@ -31,7 +31,7 @@ import { e2eTimeoutMs } from "./provider-mode.js";
 type EnvironmentKind = "local" | "worktree";
 
 function debugLog(message: string): void {
-  if (process.env.BEANBAG_E2E_DEBUG !== "1") {
+  if (process.env.BB_E2E_DEBUG !== "1") {
     return;
   }
   console.info(`[thread-recovery-heavy-runbook] ${message}`);

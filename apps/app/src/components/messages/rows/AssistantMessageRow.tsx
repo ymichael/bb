@@ -1,4 +1,4 @@
-import type { UIAssistantTextMessage } from "@beanbag/agent-core";
+import type { UIAssistantTextMessage } from "@bb/core";
 import { ConversationMarkdown } from "../ConversationMarkdown";
 
 export function AssistantMessageRow({

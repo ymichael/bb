@@ -1,10 +1,10 @@
 import { useMemo } from "react";
-import { ExpandablePanel } from "@beanbag/ui-core";
+import { ExpandablePanel } from "@bb/ui-core";
 import {
   assertNever,
   type UIToolExploringMessage,
   type UIToolParsedIntent,
-} from "@beanbag/agent-core";
+} from "@bb/core";
 import {
   ExpandableDetailScrollArea,
   EventTitle,

@@ -23,9 +23,9 @@ describe("environment-agent service config", () => {
         BB_THREAD_ID: "thread-1",
         BB_PROJECT_ID: "project-1",
         BB_ENVIRONMENT_ID: "docker",
-        BB_ROOT: "/tmp/beanbag-root",
-        BEANBAG_DAEMON_URL: "http://127.0.0.1:9000",
-        BEANBAG_ENVIRONMENT_AGENT_AUTH_TOKEN: "secret-token",
+        BB_ROOT: "/tmp/bb-root",
+        BB_DAEMON_URL: "http://127.0.0.1:9000",
+        BB_ENV_DAEMON_AUTH_TOKEN: "secret-token",
       },
     });
 
@@ -53,7 +53,7 @@ describe("environment-agent service config", () => {
       },
       logging: {
         filePath: expect.stringContaining(
-          "/tmp/beanbag-root/environment-agent-logs/project-1/docker-thread-1.log",
+          "/tmp/bb-root/environment-agent-logs/project-1/docker-thread-1.log",
         ),
       },
       control: {
@@ -74,7 +74,7 @@ describe("environment-agent service config", () => {
         },
         env: {},
       }),
-    ).toThrow(/BEANBAG_ENVIRONMENT_AGENT_AUTH_TOKEN/);
+    ).toThrow(/BB_ENV_DAEMON_AUTH_TOKEN/);
   });
 
   it("rejects invalid http port", () => {
@@ -84,7 +84,7 @@ describe("environment-agent service config", () => {
           httpPort: "NaN",
         },
         env: {
-          BEANBAG_ENVIRONMENT_AGENT_AUTH_TOKEN: "secret-token",
+          BB_ENV_DAEMON_AUTH_TOKEN: "secret-token",
         },
       }),
     ).toThrow(/Invalid --http-port/);
@@ -96,7 +96,7 @@ describe("environment-agent service config", () => {
       if (url.includes("/env-daemon/session/open")) {
         return new Response(
           JSON.stringify({
-            protocol: "beanbag.env-agent.v1",
+            protocol: "bb.env-daemon.v1",
             type: "session_welcome",
             messageId: "msg-open",
             sessionId: "sess-1",
@@ -114,7 +114,7 @@ describe("environment-agent service config", () => {
       if (url.includes("/env-daemon/session/commands")) {
         return new Response(
           JSON.stringify({
-            protocol: "beanbag.env-agent.v1",
+            protocol: "bb.env-daemon.v1",
             type: "command_batch",
             messageId: "msg-cmd",
             sessionId: "sess-1",
@@ -129,7 +129,7 @@ describe("environment-agent service config", () => {
         if (body.type === "event_batch") {
           return new Response(
             JSON.stringify({
-              protocol: "beanbag.env-agent.v1",
+              protocol: "bb.env-daemon.v1",
               type: "event_ack",
               messageId: "msg-ack",
               sessionId: "sess-1",
@@ -170,7 +170,7 @@ describe("environment-agent service config", () => {
         bearerToken: "secret-token",
       },
       logging: {
-        filePath: "/tmp/beanbag-environment-agent-service-test.log",
+        filePath: "/tmp/bb-environment-daemon-service-test.log",
       },
       control: {
         endpoint: undefined,

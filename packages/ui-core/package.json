@@ -1,5 +1,5 @@
 {
-  "name": "@beanbag/ui-core",
+  "name": "@bb/ui-core",
   "version": "0.0.1",
   "type": "module",
   "exports": {
@@ -22,7 +22,7 @@
     "react": "^19.0.0"
   },
   "devDependencies": {
-    "@beanbag/tsconfig": "workspace:*",
+    "@bb/tsconfig": "workspace:*",
     "@types/react": "^19.0.0",
     "typescript": "^5.7.0",
     "vitest": "^4.0.0"

@@ -18,7 +18,7 @@ describe("EnvironmentAgentSessionHttpClient", () => {
     const fetchImpl = vi.fn<typeof fetch>()
       .mockResolvedValueOnce(
         jsonResponse(201, {
-          protocol: "beanbag.env-agent.v1",
+          protocol: "bb.env-daemon.v1",
           type: "session_welcome",
           messageId: "msg-1",
           sessionId: "sess-1",
@@ -34,7 +34,7 @@ describe("EnvironmentAgentSessionHttpClient", () => {
       .mockResolvedValueOnce(new Response(null, { status: 204 }))
       .mockResolvedValueOnce(
         jsonResponse(200, {
-          protocol: "beanbag.env-agent.v1",
+          protocol: "bb.env-daemon.v1",
           type: "event_ack",
           messageId: "msg-2",
           sessionId: "sess-1",
@@ -51,7 +51,7 @@ describe("EnvironmentAgentSessionHttpClient", () => {
       )
       .mockResolvedValueOnce(
         jsonResponse(200, {
-          protocol: "beanbag.env-agent.v1",
+          protocol: "bb.env-daemon.v1",
           type: "command_batch",
           messageId: "msg-3",
           sessionId: "sess-1",

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { UIUserMessage } from "@beanbag/agent-core";
+import type { UIUserMessage } from "@bb/core";
 import { Check, Copy } from "lucide-react";
 import { toast } from "sonner";
 import { ImageLightbox, getWrappedImageIndex } from "@/components/shared/ImageLightbox";

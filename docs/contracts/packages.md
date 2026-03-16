@@ -4,20 +4,20 @@ This document is the Phase 5 contract catalog for package boundaries.
 
 ## Dependency Direction (Allowed)
 
-- `@beanbag/agent-core`: no internal runtime dependencies.
-- `@beanbag/ui-core`: no internal runtime dependencies.
-- `@beanbag/agent-server` -> `@beanbag/agent-core`.
-- `@beanbag/db` -> `@beanbag/agent-core`.
-- `@beanbag/environment` -> `@beanbag/agent-core`.
-- `@beanbag/daemon` -> `@beanbag/agent-core`, `@beanbag/environment`, `@beanbag/agent-server`, `@beanbag/db`.
-- `@beanbag/app` -> `@beanbag/agent-core`, `@beanbag/ui-core`.
-- `@beanbag/cli` -> `@beanbag/agent-core`, `@beanbag/daemon`.
+- `@bb/core`: no internal runtime dependencies.
+- `@bb/ui-core`: no internal runtime dependencies.
+- `@bb/agent-server` -> `@bb/core`.
+- `@bb/db` -> `@bb/core`.
+- `@bb/environment` -> `@bb/core`.
+- `@bb/server` -> `@bb/core`, `@bb/environment`, `@bb/agent-server`, `@bb/db`.
+- `@bb/app` -> `@bb/core`, `@bb/ui-core`.
+- `@bb/cli` -> `@bb/core`, `@bb/server`.
 
 No other cross-package runtime imports are allowed.
 
 ## Public API Inventory
 
-### `@beanbag/agent-core`
+### `@bb/core`
 
 - Domain types: project, thread, event, protocol, API payloads.
 - Runtime contracts: provider/environment/orchestrator/scheduler interfaces.
@@ -32,40 +32,40 @@ No other cross-package runtime imports are allowed.
   - `extractProviderThreadIdFromPersistedEventData`
 - UI projection: `toUIMessages`.
 
-### `@beanbag/agent-server`
+### `@bb/agent-server`
 
 - Provider adapter registry and implementations (`codex`).
 - Provider runtime (`ProviderRuntime`) and RPC lifecycle errors.
 
-### `@beanbag/environment`
+### `@bb/environment`
 
 - Environment adapter registry and implementations (`local`, `worktree`).
 - Workspace/process helpers used by daemon orchestration.
 
-### `@beanbag/db`
+### `@bb/db`
 
 - Database connection and migration entrypoints.
 - Repositories: `ProjectRepository`, `ThreadRepository`, `EventRepository`.
 - Schema exports for `projects`, `threads`, `queued_thread_messages`, `events`.
 
-### `@beanbag/daemon`
+### `@bb/server`
 
 - HTTP + WS host app composition (`createServer`).
 - Thread orchestration implementation (`ThreadManager`).
 - Route layer for projects, threads, system APIs.
 
-### `@beanbag/ui-core`
+### `@bb/ui-core`
 
 - Reusable ADE primitives for shell/layout, timeline, composer, and context surfaces.
 
-### `@beanbag/app`
+### `@bb/app`
 
 - Product composition shell over `agent-core` + `ui-core` contracts.
 - React app shell, thread timeline, prompt composer, and settings views.
 
 ## Boundary Ownership
 
-- `closed_internal` (Beanbag-owned, exhaustive handling expected):
+- `closed_internal` (BB-owned, exhaustive handling expected):
   - app-defined thread events (`client/thread/start`, `client/turn/start`, `system/*`)
   - thread status unions
   - API error code unions

@@ -1,10 +1,10 @@
 import { type ReactNode, type RefObject } from "react";
-import { type ThreadDetailRow, type UIMessage } from "@beanbag/agent-core";
+import { type ThreadDetailRow, type UIMessage } from "@bb/core";
 import {
   ConversationEmptyState,
   ConversationTimeline,
   ExpandablePanel,
-} from "@beanbag/ui-core";
+} from "@bb/ui-core";
 import { PageShell } from "@/components/layout/PageShell";
 import { ConversationEntry } from "@/components/messages/ConversationEntry";
 import { ConversationWorkingIndicator } from "@/components/messages/ConversationWorkingIndicator";

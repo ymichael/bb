@@ -47,12 +47,12 @@ export interface EnvironmentAgentServiceOptions {
   };
 }
 
-const BEANBAG_ENVIRONMENT_AGENT_AUTH_TOKEN = "BEANBAG_ENVIRONMENT_AGENT_AUTH_TOKEN";
-const BEANBAG_DAEMON_URL = "BEANBAG_DAEMON_URL";
-const BEANBAG_ENVIRONMENT_AGENT_CONTROL_BASE_URL =
-  "BEANBAG_ENVIRONMENT_AGENT_CONTROL_BASE_URL";
-const BEANBAG_ENVIRONMENT_AGENT_SESSION_POLL_INTERVAL_MS =
-  "BEANBAG_ENVIRONMENT_AGENT_SESSION_POLL_INTERVAL_MS";
+const BB_ENV_DAEMON_AUTH_TOKEN = "BB_ENV_DAEMON_AUTH_TOKEN";
+const BB_DAEMON_URL = "BB_DAEMON_URL";
+const BB_ENV_DAEMON_CONTROL_BASE_URL =
+  "BB_ENV_DAEMON_CONTROL_BASE_URL";
+const BB_ENV_DAEMON_SESSION_POLL_INTERVAL_MS =
+  "BB_ENV_DAEMON_SESSION_POLL_INTERVAL_MS";
 
 function parsePositiveIntegerEnv(
   rawValue: string | undefined,
@@ -71,9 +71,9 @@ export function resolveEnvironmentAgentServiceOptions(args: {
   cli: EnvironmentAgentServiceCliOptions;
   env: NodeJS.ProcessEnv;
 }): EnvironmentAgentServiceOptions {
-  const authToken = args.env[BEANBAG_ENVIRONMENT_AGENT_AUTH_TOKEN]?.trim();
+  const authToken = args.env[BB_ENV_DAEMON_AUTH_TOKEN]?.trim();
   if (!authToken) {
-    throw new Error(`Missing required ${BEANBAG_ENVIRONMENT_AGENT_AUTH_TOKEN}`);
+    throw new Error(`Missing required ${BB_ENV_DAEMON_AUTH_TOKEN}`);
   }
 
   const httpPortRaw = args.cli.httpPort?.trim();
@@ -91,7 +91,7 @@ export function resolveEnvironmentAgentServiceOptions(args: {
       projectId: args.env.BB_PROJECT_ID,
       environmentId: args.env.BB_ENVIRONMENT_ID,
       daemonConnection: {
-        daemonUrl: args.env[BEANBAG_DAEMON_URL],
+        daemonUrl: args.env[BB_DAEMON_URL],
         authToken,
         threadId: args.env.BB_THREAD_ID,
         projectId: args.env.BB_PROJECT_ID,
@@ -111,9 +111,9 @@ export function resolveEnvironmentAgentServiceOptions(args: {
       filePath: resolveEnvironmentAgentLogFilePath(args.env),
     },
     control: {
-      endpoint: args.env[BEANBAG_ENVIRONMENT_AGENT_CONTROL_BASE_URL]?.trim()
+      endpoint: args.env[BB_ENV_DAEMON_CONTROL_BASE_URL]?.trim()
         ? {
-            baseUrl: args.env[BEANBAG_ENVIRONMENT_AGENT_CONTROL_BASE_URL]!.trim(),
+            baseUrl: args.env[BB_ENV_DAEMON_CONTROL_BASE_URL]!.trim(),
             authToken,
           }
         : undefined,
@@ -121,7 +121,7 @@ export function resolveEnvironmentAgentServiceOptions(args: {
     session: {
       pollIntervalMs:
         parsePositiveIntegerEnv(
-          args.env[BEANBAG_ENVIRONMENT_AGENT_SESSION_POLL_INTERVAL_MS],
+          args.env[BB_ENV_DAEMON_SESSION_POLL_INTERVAL_MS],
         ) ?? 250,
       commandBatchLimit: 50,
     },

@@ -194,7 +194,7 @@ export type AppThreadEventType =
   | "system/provisioning/cleanup_failed";
 
 export const PROVIDER_EVENT_ENVELOPE_SCHEMA =
-  "beanbag/provider-event-envelope" as const;
+  "bb/provider-event-envelope" as const;
 export const PROVIDER_EVENT_ENVELOPE_VERSION = 1 as const;
 
 export interface ProviderEventEnvelopeMetadata {

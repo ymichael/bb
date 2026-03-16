@@ -1,4 +1,4 @@
-import type { EnvironmentCapabilities } from "@beanbag/agent-core";
+import type { EnvironmentCapabilities } from "@bb/core";
 
 export function supportsPrimaryCheckoutMetadata(
   capabilities?: Pick<

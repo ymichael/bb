@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
-import type { Project, Thread, ThreadEvent } from "@beanbag/agent-core";
+import type { Project, Thread, ThreadEvent } from "@bb/core";
 import {
   runCliCommand,
   startDaemonE2eHarness,
-} from "../apps/daemon/src/__tests__/e2e/harness.ts";
+} from "../apps/server/src/__tests__/e2e/harness.ts";
 
 function normalizeEventType(type: string): string {
   return type.toLowerCase().replaceAll(".", "/");
@@ -78,7 +78,7 @@ async function main(): Promise<void> {
       args: ["thread", "spawn", "--prompt", "Verify local environment wiring."],
       env: {
         BB_PROJECT_ID: project.id,
-        BEANBAG_ENVIRONMENT: "local",
+        BB_ENVIRONMENT: "local",
       },
     });
 

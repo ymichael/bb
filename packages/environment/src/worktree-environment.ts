@@ -2,9 +2,9 @@ import { existsSync, mkdirSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
-import { expandHomeDirectory, resolveBeanbagPath } from "@beanbag/agent-core/storage-paths";
-import type { EnvironmentAgentConnectionTarget } from "@beanbag/environment-agent";
-import { renderTemplate } from "@beanbag/templates";
+import { expandHomeDirectory, resolveBbPath } from "@bb/core/storage-paths";
+import type { EnvironmentAgentConnectionTarget } from "@bb/environment-daemon";
+import { renderTemplate } from "@bb/templates";
 import {
   EnvironmentSquashMergeCommitFailureError,
   type CreateEnvironmentContext,
@@ -267,7 +267,7 @@ class WorktreeEnvironment implements IEnvironment {
   ) {
     this.projectId = projectId;
     this.threadId = threadId;
-    this.environmentId = runtimeEnv.BEANBAG_ENVIRONMENT_ID?.trim() || this.kind;
+    this.environmentId = runtimeEnv.BB_ENVIRONMENT_ID?.trim() || this.kind;
     this.rootPath = state.workspaceRoot;
     this.env = { ...runtimeEnv };
     this.reconnectTarget = reconnectTarget;
@@ -396,11 +396,11 @@ class WorktreeEnvironment implements IEnvironment {
   }
 
   getAgentConnectionTarget(): EnvironmentAgentConnectionTarget {
-    if (!this.manageEnvironmentAgent && !this.env.BEANBAG_ENVIRONMENT_AGENT_BASE_URL?.trim()) {
+    if (!this.manageEnvironmentAgent && !this.env.BB_ENV_DAEMON_BASE_URL?.trim()) {
       throw new Error("Worktree environment-agent management is disabled");
     }
     const managedTarget = this.managedAgentTarget;
-    if (!managedTarget && !this.env.BEANBAG_ENVIRONMENT_AGENT_BASE_URL?.trim()) {
+    if (!managedTarget && !this.env.BB_ENV_DAEMON_BASE_URL?.trim()) {
       throw new Error("Missing managed environment-agent target for worktree environment");
     }
     return resolveEnvironmentAgentConnectionTarget({
@@ -639,7 +639,7 @@ class WorktreeEnvironment implements IEnvironment {
         }
       }
 
-    const tempRoot = await mkdtemp(join(tmpdir(), "beanbag-squash-merge-"));
+    const tempRoot = await mkdtemp(join(tmpdir(), "bb-squash-merge-"));
     const tempWorkspaceRoot = resolve(tempRoot, "integration");
 
     try {
@@ -824,10 +824,10 @@ export function createWorktreeEnvironmentDefinition(
   opts?: CreateWorktreeEnvironmentDefinitionOptions,
 ): EnvironmentDefinition<WorktreeEnvironmentState> {
   const configuredWorktreeRootName =
-    opts?.worktreeRootName ?? process.env.BEANBAG_WORKTREE_ROOT?.trim();
+    opts?.worktreeRootName ?? process.env.BB_WORKTREE_ROOT?.trim();
   const worktreeRootName = configuredWorktreeRootName?.trim().length
     ? configuredWorktreeRootName
-    : resolveBeanbagPath(process.env, "worktrees");
+    : resolveBbPath(process.env, "worktrees");
   const manageEnvironmentAgent = opts?.manageEnvironmentAgent ?? true;
 
   return {

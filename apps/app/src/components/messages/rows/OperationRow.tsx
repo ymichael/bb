@@ -2,7 +2,7 @@ import { type ReactNode } from "react";
 import {
   ExpandablePanel,
   EventCodeBlock,
-} from "@beanbag/ui-core";
+} from "@bb/ui-core";
 import {
   assertNever,
   formatEnvironmentDisplayName,
@@ -10,7 +10,7 @@ import {
   type UIProvisioningPhase,
   type UIProvisioningMetadata,
   type UIProvisioningTranscriptEntry,
-} from "@beanbag/agent-core";
+} from "@bb/core";
 import { cn } from "@/lib/utils";
 import {
   EVENT_DETAIL_MAX_HEIGHT_CLASS,

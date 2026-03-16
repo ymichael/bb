@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Check, ChevronDown } from "lucide-react";
-import type { Thread } from "@beanbag/agent-core";
+import type { Thread } from "@bb/core";
 import {
   Dialog,
   DialogContent,

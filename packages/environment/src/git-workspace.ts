@@ -29,7 +29,7 @@ import type {
 const MAX_DIFF_RESPONSE_CHARS = 220_000;
 const MAX_UNTRACKED_DIFF_FILES = 24;
 const COMMIT_SUMMARY_FIELD_SEPARATOR = "\u001f";
-const COMMITTED_DIFF_INDEX_DIR_PREFIX = "beanbag-committed-diff-check-";
+const COMMITTED_DIFF_INDEX_DIR_PREFIX = "bb-committed-diff-check-";
 
 type DiffCounts = {
   changedFiles: number;

@@ -1,19 +1,19 @@
 import { Hono } from "hono";
-import type { ThreadOrchestrator, ThreadWorkStatus } from "@beanbag/agent-core";
+import type { ThreadOrchestrator, ThreadWorkStatus } from "@bb/core";
 import type {
   EnvironmentRepository,
   EventRepository,
   ProjectRepository,
   ThreadEnvironmentAttachmentRepository,
   ThreadRepository,
-} from "@beanbag/db";
+} from "@bb/db";
 import { createEnvironmentRoutes } from "./environments.js";
 import { createProjectRoutes } from "./projects.js";
 import { createThreadRoutes } from "./threads.js";
 import { createSystemRoutes } from "./system.js";
 import type { WSManager } from "../ws.js";
 import type { EnvironmentAgentSessionService } from "../environment-agent-session-service.js";
-import type { SystemHealthReport } from "@beanbag/agent-core";
+import type { SystemHealthReport } from "@bb/core";
 
 export interface ApiRouteDeps {
   projectRepo: ProjectRepository;

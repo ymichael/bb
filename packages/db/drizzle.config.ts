@@ -8,17 +8,17 @@ function expandHomeDirectory(path: string): string {
   return path;
 }
 
-function resolveBeanbagRoot(): string {
-  const configuredRoot = (process.env.BB_ROOT ?? process.env.BEANBAG_ROOT)?.trim();
+function resolveBbRoot(): string {
+  const configuredRoot = (process.env.BB_ROOT ?? process.env.BB_ROOT)?.trim();
   if (!configuredRoot) {
-    return resolve(homedir(), ".beanbag");
+    return resolve(homedir(), ".bb");
   }
   return resolve(expandHomeDirectory(configuredRoot));
 }
 
-const defaultDbPath = resolve(resolveBeanbagRoot(), "beanbag.db");
-const dbPath = process.env.BEANBAG_DB_PATH
-  ? resolve(process.env.BEANBAG_DB_PATH)
+const defaultDbPath = resolve(resolveBbRoot(), "bb.db");
+const dbPath = process.env.BB_DB_PATH
+  ? resolve(process.env.BB_DB_PATH)
   : defaultDbPath;
 
 export default defineConfig({

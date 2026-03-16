@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { ThreadTimelinePane } from "./ThreadTimelinePane";
 
-vi.mock("@beanbag/ui-core", () => ({
+vi.mock("@bb/ui-core", () => ({
   ConversationEmptyState: ({ message }: { message: string }) => <div>{message}</div>,
   ConversationTimeline: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
   ExpandablePanel: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
