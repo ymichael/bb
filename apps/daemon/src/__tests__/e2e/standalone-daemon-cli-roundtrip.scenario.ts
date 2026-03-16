@@ -47,10 +47,11 @@ interface LaunchTarget {
   args: string[];
 }
 
-interface StandaloneDaemonHandle {
-  waitForExit: () => Promise<number | null>;
-  stop: () => Promise<void>;
-}
+import {
+  startStandaloneDaemon,
+  collectChildPids,
+  type StandaloneDaemonHandle,
+} from "./standalone-daemon.js";
 
 type EnvironmentKind = "local" | "worktree";
 
@@ -146,41 +147,7 @@ async function waitForHealth(baseUrl: string, timeoutMs: number = 10_000): Promi
   throw new Error(`Timed out waiting for standalone daemon health at ${baseUrl}`);
 }
 
-function startStandaloneDaemon(args: {
-  port: number;
-  env: NodeJS.ProcessEnv;
-}): StandaloneDaemonHandle {
-  const launchTarget = resolveDaemonLaunchTarget();
-  const child = spawn(
-    launchTarget.command,
-    [...launchTarget.args, "--port", String(args.port)],
-    {
-      cwd: WORKSPACE_ROOT,
-      env: args.env,
-      stdio: ["ignore", "pipe", "pipe"],
-    },
-  );
-  child.stdout.resume();
-  child.stderr.resume();
-
-  return {
-    waitForExit: async () => {
-      if (child.exitCode !== null) {
-        return child.exitCode;
-      }
-      return new Promise((resolveClose) => {
-        child.once("close", (exitCode) => resolveClose(exitCode));
-      });
-    },
-    stop: async () => {
-      if (child.exitCode !== null) return;
-      child.kill("SIGTERM");
-      await new Promise((resolveClose) => {
-        child.once("close", () => resolveClose(undefined));
-      });
-    },
-  };
-}
+// startStandaloneDaemon, collectChildPids, StandaloneDaemonHandle imported from ./standalone-daemon.js
 
 function parseThreadIdFromCliOutput(stdout: string): string {
   const match = stdout.match(/Thread spawned:\s+([A-Za-z0-9_-]+)/);
@@ -355,6 +322,11 @@ async function runEnvironmentBattery(
     BEANBAG_FAKE_CODEX_SCENARIO: "start-then-manual-complete",
   });
 
+  // Track all daemon instances so we can kill their process trees on cleanup.
+  // The daemon restart test replaces `daemon` mid-test, but the old daemon's
+  // env-agents survive as orphans. We need to kill them all.
+  const allDaemonChildPids: number[] = [];
+
   let daemon = startStandaloneDaemon({
     port,
     env: daemonEnv,
@@ -415,6 +387,10 @@ async function runEnvironmentBattery(
         "Do not run commands or add extra text.",
     });
     await waitForNextTurnStarted(baseUrl, wsUrl, restartThreadId, 0);
+    // Snapshot child PIDs before restart kills the daemon — once the daemon
+    // exits, its children (env-agents, codex) get reparented to PID 1.
+    allDaemonChildPids.push(...daemon.snapshotChildPids());
+
     const restartResult = await expectCliSuccess(
       runCliCommand({
         baseUrl,
@@ -511,7 +487,12 @@ async function runEnvironmentBattery(
       previousCompletedTurns: countCompletedTurns(stoppedEvents),
     });
   } finally {
-    await daemon.stop();
+    // stopAndCleanup kills the daemon + its entire process tree.
+    await daemon.stopAndCleanup();
+    // Also kill children from earlier daemon instances (pre-restart orphans).
+    for (const pid of allDaemonChildPids.reverse()) {
+      try { process.kill(pid, "SIGKILL"); } catch { /* already dead */ }
+    }
     rmSync(tempDir, { recursive: true, force: true });
   }
 }
