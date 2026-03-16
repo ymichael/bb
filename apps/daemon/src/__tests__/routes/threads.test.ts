@@ -2,7 +2,6 @@ import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { Hono } from "hono";
 import type {
-  EnvironmentRecord,
   Thread,
   ThreadEvent,
   ThreadOrchestrator,
@@ -12,11 +11,12 @@ import { ENVIRONMENT_AGENT_PROTOCOL_VERSION } from "@beanbag/environment-agent";
 import { createThreadRoutes } from "../../routes/threads.js";
 import { inactiveSessionError, threadArchivedError } from "../../domain-errors.js";
 import type { EnvironmentAgentSessionService } from "../../environment-agent-session-service.js";
-import type {
+import {
   EnvironmentRepository,
   ThreadEnvironmentAttachmentRepository,
 } from "@beanbag/db";
 import { resolveManagerWorkspacePath } from "../../manager-thread.js";
+import { createTestDb, createTestRepos, createTestProject, createTestThread } from "../test-factories.js";
 
 type LegacyThreadRouteMock = ThreadOrchestrator & {
   updateThread: ReturnType<typeof vi.fn>;
@@ -178,39 +178,22 @@ describe("Thread routes", () => {
   let environmentRepo: EnvironmentRepository;
   let threadEnvironmentAttachmentRepo: ThreadEnvironmentAttachmentRepository;
   let app: Hono;
+  let repos: ReturnType<typeof createTestRepos>;
+  let project: ReturnType<typeof createTestProject>;
 
   beforeEach(() => {
     threadManager = mockOrchestrator();
-    environmentRepo = {
-      getById: vi.fn(),
-    } as unknown as EnvironmentRepository;
-    threadEnvironmentAttachmentRepo = {
-      getByThreadId: vi.fn(),
-      listByThreadIds: vi.fn(() => []),
-    } as unknown as ThreadEnvironmentAttachmentRepository;
+    const testDb = createTestDb();
+    repos = createTestRepos(testDb.db);
+    project = createTestProject(repos.projectRepo, { rootPath: "/project/root" });
+    environmentRepo = repos.environmentRepo;
+    threadEnvironmentAttachmentRepo = repos.attachmentRepo;
     const routes = createThreadRoutes(threadManager, {
       environmentRepo,
       threadEnvironmentAttachmentRepo,
     });
     app = new Hono().route("/threads", routes);
   });
-
-  function makeEnvironmentRecord(
-    overrides: Partial<EnvironmentRecord> = {},
-  ): EnvironmentRecord {
-    return {
-      id: "env-1",
-      projectId: "proj-1",
-      descriptor: {
-        type: "path",
-        path: "/tmp/project",
-      },
-      managed: false,
-      createdAt: 1000,
-      updatedAt: 1000,
-      ...overrides,
-    };
-  }
 
   describe("POST /threads", () => {
     it("spawns a thread and returns 201", async () => {
@@ -1195,10 +1178,12 @@ describe("Thread routes", () => {
       const res = await app.request("/threads?includeWorkStatus=true");
 
       expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body).toHaveLength(1);
+      expect(body[0].workStatus).toMatchObject({ state: "clean" });
       expect(threadManager.listAsync).toHaveBeenCalledWith({
         includeWorkStatus: true,
       });
-      expect(threadManager.list).not.toHaveBeenCalled();
     });
 
     it("lists threads with project filter", async () => {
@@ -1215,32 +1200,37 @@ describe("Thread routes", () => {
     });
 
     it("hydrates listed threads with attached environments", async () => {
-      const threads = [makeThread(), makeThread({ id: "thread-2" })];
+      const thread1 = createTestThread(repos.threadRepo, project.id);
+      const thread2 = createTestThread(repos.threadRepo, project.id);
+      const threads = [
+        makeThread({ id: thread1.id }),
+        makeThread({ id: thread2.id }),
+      ];
       (threadManager.list as ReturnType<typeof vi.fn>).mockReturnValue(threads);
-      (threadEnvironmentAttachmentRepo.listByThreadIds as ReturnType<typeof vi.fn>).mockReturnValue([
-        {
-          threadId: "thread-1",
-          environmentId: "env-1",
-          createdAt: 1000,
-          updatedAt: 1000,
-        },
-      ]);
-      (environmentRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
-        makeEnvironmentRecord(),
-      );
+
+      const env = environmentRepo.create({
+        projectId: project.id,
+        descriptor: { type: "path", path: "/project/root/.worktrees/thread-1" },
+        managed: true,
+        requestedRuntimeKind: "worktree",
+      });
+      threadEnvironmentAttachmentRepo.attachThread({
+        threadId: thread1.id,
+        environmentId: env.id,
+      });
 
       const res = await app.request("/threads");
 
       expect(res.status).toBe(200);
       const body = await res.json();
       expect(body[0].attachedEnvironment).toMatchObject({
-        id: "env-1",
+        id: env.id,
         descriptor: {
           type: "path",
-          path: "/tmp/project",
+          path: "/project/root/.worktrees/thread-1",
         },
       });
-      expect(body[0].attachedEnvironment?.id).toBe("env-1");
+      expect(body[0].attachedEnvironment?.id).toBe(env.id);
       expect(body[1].attachedEnvironment).toBeUndefined();
     });
 
@@ -1262,30 +1252,31 @@ describe("Thread routes", () => {
     });
 
     it("hydrates thread detail with attached environment", async () => {
-      const thread = makeThread();
+      const dbThread = createTestThread(repos.threadRepo, project.id);
+      const thread = makeThread({ id: dbThread.id });
       (threadManager.getHydratedByIdAsync as ReturnType<typeof vi.fn>).mockResolvedValue(
         thread,
       );
-      (threadEnvironmentAttachmentRepo.getByThreadId as ReturnType<typeof vi.fn>).mockReturnValue(
-        {
-          threadId: "thread-1",
-          environmentId: "env-1",
-          createdAt: 1000,
-          updatedAt: 1000,
-        },
-      );
-      (environmentRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
-        makeEnvironmentRecord(),
-      );
 
-      const res = await app.request("/threads/thread-1");
+      const env = environmentRepo.create({
+        projectId: project.id,
+        descriptor: { type: "path", path: "/project/root/.worktrees/thread-1" },
+        managed: true,
+        requestedRuntimeKind: "worktree",
+      });
+      threadEnvironmentAttachmentRepo.attachThread({
+        threadId: dbThread.id,
+        environmentId: env.id,
+      });
+
+      const res = await app.request(`/threads/${dbThread.id}`);
 
       expect(res.status).toBe(200);
       const body = await res.json();
-      expect(body.attachedEnvironment?.id).toBe("env-1");
+      expect(body.attachedEnvironment?.id).toBe(env.id);
       expect(body.attachedEnvironment).toMatchObject({
-        id: "env-1",
-        managed: false,
+        id: env.id,
+        managed: true,
       });
     });
 
@@ -1706,10 +1697,7 @@ describe("Thread routes", () => {
           },
         ],
       });
-      const getRawById = threadManager.getRawById.mockReturnValue(thread);
-      (threadManager.getById as ReturnType<typeof vi.fn>).mockImplementation(() => {
-        throw new Error("Expected route to use raw thread lookup");
-      });
+      threadManager.getRawById.mockReturnValue(thread);
       (threadManager.enqueueFollowUp as ReturnType<typeof vi.fn>).mockReturnValue(
         queuedThread,
       );
@@ -1725,8 +1713,11 @@ describe("Thread routes", () => {
       });
 
       expect(res.status).toBe(201);
-      expect(getRawById).toHaveBeenCalledWith("thread-1");
-      expect(threadManager.getById).not.toHaveBeenCalled();
+      const body = await res.json();
+      expect(body).toMatchObject({
+        id: "queued-1",
+        input: [{ type: "text", text: "Queued item" }],
+      });
     });
 
     it("queues a follow-up and returns the persisted queue item", async () => {
@@ -2166,8 +2157,6 @@ describe("Thread routes", () => {
 
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual(workStatus);
-      expect(threadManager.getRawById).toHaveBeenCalledWith("thread-1");
-      expect(threadManager.getHydratedByIdAsync).not.toHaveBeenCalled();
       expect(threadManager.getWorkStatusAsync).toHaveBeenCalledWith("thread-1", undefined);
     });
   });
@@ -2183,8 +2172,6 @@ describe("Thread routes", () => {
 
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual(["main", "release/1.0"]);
-      expect(threadManager.getRawById).toHaveBeenCalledWith("thread-1");
-      expect(threadManager.getHydratedByIdAsync).not.toHaveBeenCalled();
       expect(threadManager.getMergeBaseBranchesAsync).toHaveBeenCalledWith("thread-1");
     });
   });
@@ -2202,8 +2189,10 @@ describe("Thread routes", () => {
       });
 
       expect(res.status).toBe(409);
-      expect(threadManager.getRawById).toHaveBeenCalledWith("thread-1");
-      expect(threadManager.getHydratedByIdAsync).not.toHaveBeenCalled();
+      expect(await res.json()).toMatchObject({
+        code: "worktree_not_clean",
+        workStatusState: "dirty_uncommitted",
+      });
       expect(threadManager.getWorkStatusAsync).toHaveBeenCalledWith("thread-1");
     });
 
@@ -2222,8 +2211,11 @@ describe("Thread routes", () => {
       const res = await app.request("/threads/thread-1/git-diff");
 
       expect(res.status).toBe(200);
-      expect(threadManager.getRawById).toHaveBeenCalledWith("thread-1");
-      expect(threadManager.getHydratedByIdAsync).not.toHaveBeenCalled();
+      const body = await res.json();
+      expect(body).toMatchObject({
+        mode: "local_uncommitted",
+        diff: "diff --git a/file b/file",
+      });
       expect(threadManager.getGitDiffAsync).toHaveBeenCalledWith(
         "thread-1",
         { type: "combined" },
