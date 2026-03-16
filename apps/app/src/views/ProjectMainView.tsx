@@ -244,7 +244,7 @@ export function ProjectMainView() {
         ...(supportsServiceTier && serviceTier ? { serviceTier } : {}),
         ...(supportsReasoningLevels ? { reasoningLevel } : {}),
         sandboxMode,
-        ...(environmentId ? { environmentId } : {}),
+        ...(environmentId ? { environmentKind: environmentId } : {}),
       });
     } catch {
       promptDraft.restoreIfEmpty(submittedDraft);

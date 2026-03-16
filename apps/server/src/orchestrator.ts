@@ -897,11 +897,11 @@ export class Orchestrator implements ThreadOrchestrator {
     // environmentId is a first-class environment UUID
     if (args.environmentId) {
       if (!this.environmentRepo || !this.threadEnvironmentAttachmentRepo) {
-        throw new Error("First-class environment attachments are unavailable");
+        throw invalidRequestError("First-class environment attachments are unavailable");
       }
       const attachedEnvironment = this.environmentRepo.getById(args.environmentId);
       if (!attachedEnvironment || attachedEnvironment.projectId !== args.projectId) {
-        throw new Error(`Environment not found: ${args.environmentId}`);
+        throw invalidRequestError(`Environment not found: ${args.environmentId}`);
       }
       const requestedRuntimeKind = attachedEnvironment.requestedRuntimeKind?.trim();
       if (requestedRuntimeKind) {
