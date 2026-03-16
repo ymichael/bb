@@ -112,8 +112,8 @@ vi.mock("@/components/promptbox/PromptBox", () => ({
   PromptBox: ({ footerStart }: { footerStart?: ReactNode }) => <div>{footerStart}</div>,
 }));
 
-vi.mock("@/components/promptbox/PromptModelPicker", () => ({
-  PromptModelPicker: () => <div>model-picker</div>,
+vi.mock("@/components/promptbox/PromptProviderModelPicker", () => ({
+  PromptProviderModelPicker: () => <div>model-picker</div>,
 }));
 
 vi.mock("@/components/promptbox/PromptOptionPicker", () => ({

@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Check, ChevronDown } from "lucide-react";
 import type { Thread } from "@bb/core";
 import {
   Dialog,
@@ -10,14 +9,11 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { useAvailableModels, useSystemProviders, useHireProjectManager } from "@/hooks/useApi";
+import { formatModelLabel } from "@/hooks/usePromptModelReasoning";
 import { getProviderIconInfo } from "@/lib/provider-icon";
+import { PromptProviderModelPicker } from "@/components/promptbox/PromptProviderModelPicker";
+import type { PromptOption } from "@/components/promptbox/PromptOptionPicker";
 
 interface HireManagerModalProps {
   projectId: string;
@@ -54,9 +50,6 @@ export function HireManagerModal({
 
   const hasMultipleProviders = providers.length >= 2;
   const supportsModelList = selectedProvider?.capabilities.supportsModelList ?? false;
-  const SelectedProviderIcon = selectedProvider
-    ? getProviderIconInfo(selectedProvider.id)?.icon
-    : undefined;
 
   const modelsQuery = useAvailableModels(
     hasMultipleProviders ? selectedProviderId || undefined : undefined,
@@ -64,6 +57,25 @@ export function HireManagerModal({
   const models = useMemo(
     () => (supportsModelList && modelsQuery.data ? modelsQuery.data : []),
     [modelsQuery.data, supportsModelList],
+  );
+
+  const providerOptions = useMemo(
+    (): readonly PromptOption<string>[] =>
+      providers.map((p) => ({
+        value: p.id,
+        label: p.displayName,
+        icon: getProviderIconInfo(p.id)?.icon,
+      })),
+    [providers],
+  );
+
+  const modelOptions = useMemo(
+    (): readonly PromptOption<string>[] =>
+      models.map((model) => ({
+        value: model.model,
+        label: formatModelLabel(model.displayName || model.model, selectedProviderId),
+      })),
+    [models, selectedProviderId],
   );
 
   // Reset model when provider changes.
@@ -131,84 +143,22 @@ export function HireManagerModal({
           </DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-4 py-2">
-          {hasMultipleProviders ? (
+          {supportsModelList && modelOptions.length > 0 ? (
             <div className="flex flex-col gap-1.5">
-              <span className="text-sm font-medium">Provider</span>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="outline"
-                    className="w-full justify-between"
-                  >
-                    <span className="flex min-w-0 items-center gap-2 truncate">
-                      {SelectedProviderIcon ? <SelectedProviderIcon className="size-4 shrink-0" /> : null}
-                      <span className="truncate">
-                        {selectedProvider?.displayName ?? "Select provider..."}
-                      </span>
-                    </span>
-                    <ChevronDown className="ml-2 size-4 shrink-0 opacity-50" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="w-[--radix-dropdown-menu-trigger-width]">
-                  {providers.map((provider) => {
-                    const iconInfo = getProviderIconInfo(provider.id);
-                    const Icon = iconInfo?.icon;
-                    return (
-                      <DropdownMenuItem
-                        key={provider.id}
-                        onSelect={() => handleProviderChange(provider.id)}
-                        className="flex items-center justify-between gap-3"
-                      >
-                        <span className="flex min-w-0 items-center gap-2">
-                          {Icon ? <Icon className="size-4 shrink-0" /> : null}
-                          <span className="truncate">{provider.displayName}</span>
-                        </span>
-                        {provider.id === selectedProviderId ? (
-                          <Check className="size-4 shrink-0" />
-                        ) : null}
-                      </DropdownMenuItem>
-                    );
-                  })}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-          ) : null}
-          {supportsModelList && models.length > 0 ? (
-            <div className="flex flex-col gap-1.5">
-              <span className="text-sm font-medium">Model</span>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="outline"
-                    className="w-full justify-between"
-                  >
-                    <span className="truncate">
-                      {models.find((m) => m.model === selectedModel)?.displayName ??
-                        (selectedModel || "Select model...")}
-                    </span>
-                    <ChevronDown className="ml-2 size-4 shrink-0 opacity-50" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent
-                  align="start"
-                  className="max-h-60 w-[--radix-dropdown-menu-trigger-width] overflow-y-auto"
-                >
-                  {models.map((model) => (
-                    <DropdownMenuItem
-                      key={model.model}
-                      onSelect={() => handleModelChange(model.model)}
-                      className="flex items-center justify-between gap-3"
-                    >
-                      <span className="truncate">
-                        {model.displayName || model.model}
-                      </span>
-                      {model.model === selectedModel ? (
-                        <Check className="size-4 shrink-0" />
-                      ) : null}
-                    </DropdownMenuItem>
-                  ))}
-                </DropdownMenuContent>
-              </DropdownMenu>
+              <span className="text-sm font-medium">Provider & Model</span>
+              <PromptProviderModelPicker
+                providerOptions={providerOptions}
+                selectedProviderId={selectedProviderId}
+                onSelectedProviderChange={handleProviderChange}
+                hasMultipleProviders={hasMultipleProviders}
+                modelValue={selectedModel}
+                modelOptions={modelOptions}
+                onModelChange={handleModelChange}
+                formatModelLabel={formatModelLabel}
+                fastModeEnabled={false}
+                onFastModeChange={() => {}}
+                showFastModeToggle={false}
+              />
             </div>
           ) : null}
           {error ? (

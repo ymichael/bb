@@ -11,7 +11,6 @@ import {
   PromptOptionDisplay,
   type PromptOption,
 } from "@/components/promptbox/PromptOptionPicker";
-import { PromptModelPicker } from "@/components/promptbox/PromptModelPicker";
 import { PromptExecutionControls } from "@/components/promptbox/PromptExecutionControls";
 import { Button } from "@/components/ui/button";
 import { ScrollToBottomButton } from "@/components/shared/ScrollToBottomButton";
@@ -256,8 +255,8 @@ export function ThreadFollowUpComposer({
   supportsModelList: boolean;
   activeModel?: { model: string } | null;
   selectedModel: string;
-  modelOptions: ComponentProps<typeof PromptModelPicker>["options"];
-  onSelectedModelChange: ComponentProps<typeof PromptModelPicker>["onChange"];
+  modelOptions: readonly PromptOption<string>[];
+  onSelectedModelChange: (value: string) => void;
   serviceTier?: ServiceTier;
   onServiceTierChange: (value: ServiceTier | undefined) => void;
   supportsServiceTier: boolean;

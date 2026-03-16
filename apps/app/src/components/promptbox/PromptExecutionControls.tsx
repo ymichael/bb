@@ -1,8 +1,6 @@
-import type { ComponentProps } from "react";
 import type { ReasoningLevel, SandboxMode, ServiceTier } from "@bb/core";
 import { formatModelLabel } from "@/hooks/usePromptModelReasoning";
 import { PromptProviderModelPicker } from "./PromptProviderModelPicker";
-import { PromptModelPicker } from "./PromptModelPicker";
 import { PromptOptionPicker, PromptOptionDisplay, type PromptOption } from "./PromptOptionPicker";
 
 interface PromptExecutionControlsProps {
@@ -15,8 +13,8 @@ interface PromptExecutionControlsProps {
   supportsModelList: boolean;
   activeModel?: { model: string } | null;
   selectedModel: string;
-  modelOptions: ComponentProps<typeof PromptModelPicker>["options"];
-  onSelectedModelChange: ComponentProps<typeof PromptModelPicker>["onChange"];
+  modelOptions: readonly PromptOption<string>[];
+  onSelectedModelChange: (value: string) => void;
   serviceTier?: ServiceTier;
   onServiceTierChange: (value: ServiceTier | undefined) => void;
   supportsServiceTier: boolean;
@@ -54,24 +52,31 @@ export function PromptExecutionControls({
 }: PromptExecutionControlsProps) {
   const resolvedSandboxMode = sandboxMode ?? sandboxOptions[0]?.value ?? "workspace-write";
 
-  // Unified provider+model picker: when we have multiple providers and model support
-  const showUnifiedPicker =
+  // Show read-only provider label when provider is locked (thread follow-up)
+  // and there's no model list to show in the unified picker.
+  const showReadOnlyProvider =
     hasMultipleProviders &&
-    providerOptions &&
-    providerOptions.length > 0 &&
-    selectedProviderId &&
-    onSelectedProviderChange &&
-    supportsModelList &&
-    modelOptions.length > 0;
+    providerReadOnly &&
+    providerDisplayName &&
+    !(supportsModelList && modelOptions.length > 0);
+
+  const showModelPicker = supportsModelList && modelOptions.length > 0;
 
   return (
     <>
-      {showUnifiedPicker ? (
+      {showReadOnlyProvider ? (
+        <PromptOptionDisplay
+          label="Provider"
+          value={providerDisplayName}
+          icon={providerOptions?.find((p) => p.value === selectedProviderId)?.icon}
+        />
+      ) : null}
+      {showModelPicker ? (
         <PromptProviderModelPicker
-          providerOptions={providerOptions}
-          selectedProviderId={selectedProviderId}
-          onSelectedProviderChange={onSelectedProviderChange}
-          hasMultipleProviders
+          providerOptions={providerOptions ?? []}
+          selectedProviderId={selectedProviderId ?? ""}
+          onSelectedProviderChange={onSelectedProviderChange ?? (() => {})}
+          hasMultipleProviders={hasMultipleProviders ?? false}
           providerReadOnly={providerReadOnly}
           modelValue={activeModel?.model ?? selectedModel}
           modelOptions={modelOptions}
@@ -81,40 +86,7 @@ export function PromptExecutionControls({
           onFastModeChange={(enabled) => onServiceTierChange(enabled ? "fast" : undefined)}
           showFastModeToggle={supportsServiceTier}
         />
-      ) : (
-        <>
-          {hasMultipleProviders && providerReadOnly && providerDisplayName ? (
-            <PromptOptionDisplay
-              label="Provider"
-              value={providerDisplayName}
-              icon={providerOptions?.find((p) => p.value === selectedProviderId)?.icon}
-            />
-          ) : null}
-          {hasMultipleProviders &&
-          !providerReadOnly &&
-          providerOptions &&
-          providerOptions.length > 0 &&
-          selectedProviderId &&
-          onSelectedProviderChange ? (
-            <PromptOptionPicker
-              label="Provider"
-              value={selectedProviderId}
-              options={providerOptions}
-              onChange={onSelectedProviderChange}
-            />
-          ) : null}
-          {supportsModelList && modelOptions.length > 0 ? (
-            <PromptModelPicker
-              value={activeModel?.model ?? selectedModel}
-              options={modelOptions}
-              onChange={onSelectedModelChange}
-              fastModeEnabled={serviceTier === "fast"}
-              onFastModeChange={(enabled) => onServiceTierChange(enabled ? "fast" : undefined)}
-              showFastModeToggle={supportsServiceTier}
-            />
-          ) : null}
-        </>
-      )}
+      ) : null}
       {supportsReasoningLevels && reasoningOptions.length > 0 ? (
         <PromptOptionPicker
           label="Reasoning"
