@@ -239,6 +239,7 @@ export function ThreadDetailView() {
   });
   const {
     selectedProviderId,
+    providerOptions,
     hasMultipleProviders,
     selectedProviderDisplayName,
     selectedModel,
@@ -1513,6 +1514,8 @@ export function ThreadDetailView() {
       isAttaching={uploadPromptAttachment.isPending}
       attachmentError={attachmentError}
       hasMultipleProviders={hasMultipleProviders}
+      providerOptions={providerOptions}
+      selectedProviderId={selectedProviderId}
       providerDisplayName={selectedProviderDisplayName}
       supportsModelList={supportsModelList}
       activeModel={activeModel}

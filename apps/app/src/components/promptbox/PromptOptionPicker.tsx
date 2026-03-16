@@ -9,11 +9,11 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
 
-const PROMPT_OPTION_BASE_CLASS_NAME =
+export const PROMPT_OPTION_BASE_CLASS_NAME =
   "h-8 w-fit max-w-full min-w-0 items-center gap-1 px-1 text-xs leading-tight text-muted-foreground/75"
-const PROMPT_OPTION_INTERACTIVE_CLASS_NAME =
+export const PROMPT_OPTION_INTERACTIVE_CLASS_NAME =
   "border-none bg-transparent shadow-none hover:bg-transparent hover:text-foreground"
-const PROMPT_OPTION_CONTENT_CLASS_NAME = "flex min-w-0 items-center gap-1.5"
+export const PROMPT_OPTION_CONTENT_CLASS_NAME = "flex min-w-0 items-center gap-1.5"
 const PROMPT_OPTION_WARNING_TEXT_CLASS_NAME =
   "text-amber-600 dark:text-amber-400"
 const PROMPT_OPTION_WARNING_INTERACTIVE_CLASS_NAME =

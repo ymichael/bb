@@ -17,6 +17,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useAvailableModels, useSystemProviders, useHireProjectManager } from "@/hooks/useApi";
+import { getProviderIconInfo } from "@/lib/provider-icon";
 
 interface HireManagerModalProps {
   projectId: string;
@@ -53,6 +54,9 @@ export function HireManagerModal({
 
   const hasMultipleProviders = providers.length >= 2;
   const supportsModelList = selectedProvider?.capabilities.supportsModelList ?? false;
+  const SelectedProviderIcon = selectedProvider
+    ? getProviderIconInfo(selectedProvider.id)?.icon
+    : undefined;
 
   const modelsQuery = useAvailableModels(
     hasMultipleProviders ? selectedProviderId || undefined : undefined,
@@ -136,25 +140,35 @@ export function HireManagerModal({
                     variant="outline"
                     className="w-full justify-between"
                   >
-                    <span className="truncate">
-                      {selectedProvider?.displayName ?? "Select provider..."}
+                    <span className="flex min-w-0 items-center gap-2 truncate">
+                      {SelectedProviderIcon ? <SelectedProviderIcon className="size-4 shrink-0" /> : null}
+                      <span className="truncate">
+                        {selectedProvider?.displayName ?? "Select provider..."}
+                      </span>
                     </span>
                     <ChevronDown className="ml-2 size-4 shrink-0 opacity-50" />
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="start" className="w-[--radix-dropdown-menu-trigger-width]">
-                  {providers.map((provider) => (
-                    <DropdownMenuItem
-                      key={provider.id}
-                      onSelect={() => handleProviderChange(provider.id)}
-                      className="flex items-center justify-between gap-3"
-                    >
-                      <span className="truncate">{provider.displayName}</span>
-                      {provider.id === selectedProviderId ? (
-                        <Check className="size-4 shrink-0" />
-                      ) : null}
-                    </DropdownMenuItem>
-                  ))}
+                  {providers.map((provider) => {
+                    const iconInfo = getProviderIconInfo(provider.id);
+                    const Icon = iconInfo?.icon;
+                    return (
+                      <DropdownMenuItem
+                        key={provider.id}
+                        onSelect={() => handleProviderChange(provider.id)}
+                        className="flex items-center justify-between gap-3"
+                      >
+                        <span className="flex min-w-0 items-center gap-2">
+                          {Icon ? <Icon className="size-4 shrink-0" /> : null}
+                          <span className="truncate">{provider.displayName}</span>
+                        </span>
+                        {provider.id === selectedProviderId ? (
+                          <Check className="size-4 shrink-0" />
+                        ) : null}
+                      </DropdownMenuItem>
+                    );
+                  })}
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>

@@ -8,6 +8,7 @@ import type {
   SystemEnvironmentInfo,
 } from "@bb/core";
 import { getProjectScopedStorageKey } from "@/lib/project-scoped-storage";
+import { getProviderIconInfo } from "@/lib/provider-icon";
 import {
   useAvailableModels,
   useSystemEnvironments,
@@ -43,6 +44,7 @@ interface PromptOption<T extends string> {
   value: T;
   label: string;
   tone?: "default" | "warning";
+  icon?: import("react").ComponentType<{ className?: string }>;
 }
 
 interface PromptModelReasoningStorageKeys {
@@ -272,8 +274,8 @@ function toEnvironmentOptions(
   }));
 }
 
-function formatModelLabel(value: string): string {
-  return value
+export function formatModelLabel(value: string, providerId?: string): string {
+  let label = value
     .split("-")
     .map((part) => {
       if (part.toLowerCase() === "gpt") return "GPT";
@@ -284,6 +286,14 @@ function formatModelLabel(value: string): string {
       return part;
     })
     .join("-");
+
+  // Strip "Claude " prefix for claude-code provider — the provider icon already
+  // identifies the brand, so "Sonnet 4.6" is cleaner than "Claude Sonnet 4.6".
+  if (providerId === "claude-code") {
+    label = label.replace(/^Claude\s+/i, "");
+  }
+
+  return label;
 }
 
 export function usePromptModelReasoning(options?: UsePromptModelReasoningOptions) {
@@ -324,6 +334,7 @@ export function usePromptModelReasoning(options?: UsePromptModelReasoningOptions
       providers.map((p) => ({
         value: p.id,
         label: p.displayName,
+        icon: getProviderIconInfo(p.id)?.icon,
       })),
     [providers],
   );
@@ -376,9 +387,9 @@ export function usePromptModelReasoning(options?: UsePromptModelReasoningOptions
     (): PromptOption<string>[] =>
       availableModels.map((model) => ({
         value: model.model,
-        label: formatModelLabel(model.displayName || model.model),
+        label: formatModelLabel(model.displayName || model.model, effectiveProviderId),
       })),
-    [availableModels],
+    [availableModels, effectiveProviderId],
   );
 
   const activeModel = useMemo(
@@ -588,14 +599,9 @@ export function usePromptModelReasoning(options?: UsePromptModelReasoningOptions
   const setSelectedProviderId = useCallback(
     (value: string) => {
       setSelectedProviderIdRaw(value);
-      // Reset model selection when provider changes, since different providers
-      // have different model lists.
-      dispatch({
-        type: "set-field",
-        field: "selectedModel",
-        value: "",
-        touched: false,
-      });
+      // Don't eagerly reset the model here — the effect that watches
+      // availableModels will fall back to the default if the current
+      // selection isn't in the new provider's model list.
     },
     [],
   );

@@ -267,7 +267,7 @@ export function createCodexProviderAdapter(
 
   return {
     id: opts?.id ?? "codex",
-    displayName: opts?.displayName ?? "Codex app-server",
+    displayName: opts?.displayName ?? "Codex",
     capabilities,
     processCommand: opts?.processCommand ?? "codex",
     processArgs: opts?.processArgs ?? ["app-server"],

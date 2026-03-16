@@ -181,6 +181,8 @@ export function ThreadFollowUpComposer({
   isAttaching,
   attachmentError,
   hasMultipleProviders,
+  providerOptions,
+  selectedProviderId,
   providerDisplayName,
   supportsModelList,
   activeModel,
@@ -248,6 +250,8 @@ export function ThreadFollowUpComposer({
   isAttaching: boolean;
   attachmentError: string | null;
   hasMultipleProviders?: boolean;
+  providerOptions?: readonly PromptOption<string>[];
+  selectedProviderId?: string;
   providerDisplayName?: string;
   supportsModelList: boolean;
   activeModel?: { model: string } | null;
@@ -418,6 +422,8 @@ export function ThreadFollowUpComposer({
           footerStart={
             <PromptExecutionControls
               hasMultipleProviders={hasMultipleProviders}
+              providerOptions={providerOptions}
+              selectedProviderId={selectedProviderId}
               providerDisplayName={providerDisplayName}
               providerReadOnly
               supportsModelList={supportsModelList}

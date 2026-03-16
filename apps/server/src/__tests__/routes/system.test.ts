@@ -425,7 +425,7 @@ describe("System routes", () => {
     it("returns provider id and capabilities", async () => {
       const providerInfo: SystemProviderInfo = {
         id: "codex",
-        displayName: "Codex app-server",
+        displayName: "Codex",
         capabilities: {
           supportsSteer: true,
           supportsRename: true,
@@ -456,7 +456,7 @@ describe("System routes", () => {
       );
       const providerInfo: SystemProviderInfo = {
         id: "codex",
-        displayName: "Codex app-server",
+        displayName: "Codex",
         capabilities: {
           supportsSteer: true,
           supportsRename: true,
@@ -485,7 +485,7 @@ describe("System routes", () => {
       const providers: SystemProviderInfo[] = [
         {
           id: "codex",
-          displayName: "Codex app-server",
+          displayName: "Codex",
           capabilities: {
             supportsSteer: true,
             supportsRename: true,
