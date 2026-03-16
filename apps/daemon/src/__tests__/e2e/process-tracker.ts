@@ -44,9 +44,43 @@ function isAlive(pid: number): boolean {
   }
 }
 
+function collectProcessTree(rootPids: number[]): number[] {
+  // Build a full process tree from tracked root PIDs so we also kill
+  // grandchild processes (e.g. fake-codex spawned by env-agents).
+  try {
+    const { execFileSync } = require("node:child_process") as typeof import("node:child_process");
+    const output = execFileSync("ps", ["-axo", "pid=,ppid="], { encoding: "utf8" });
+    const childrenByParent = new Map<number, number[]>();
+    for (const line of output.split("\n")) {
+      const match = line.trim().match(/^(\d+)\s+(\d+)$/);
+      if (!match) continue;
+      const pid = Number.parseInt(match[1]!, 10);
+      const ppid = Number.parseInt(match[2]!, 10);
+      const siblings = childrenByParent.get(ppid) ?? [];
+      siblings.push(pid);
+      childrenByParent.set(ppid, siblings);
+    }
+    const all = new Set(rootPids);
+    const queue = [...rootPids];
+    while (queue.length > 0) {
+      const pid = queue.shift()!;
+      for (const child of childrenByParent.get(pid) ?? []) {
+        if (!all.has(child)) {
+          all.add(child);
+          queue.push(child);
+        }
+      }
+    }
+    return [...all];
+  } catch {
+    return rootPids;
+  }
+}
+
 function killTrackedPids(): void {
-  // Kill in reverse order (children before parents).
-  const pids = [...trackedPids].reverse();
+  // Expand tracked PIDs to include their full process trees (children, grandchildren).
+  const pids = collectProcessTree([...trackedPids]).reverse();
+
   for (const pid of pids) {
     try {
       if (isAlive(pid)) {
@@ -58,8 +92,6 @@ function killTrackedPids(): void {
   }
 
   // Give a brief window for SIGTERM, then SIGKILL any survivors.
-  // We are in a synchronous exit handler so we cannot await; use a
-  // spin-wait with a tiny budget.
   const deadline = Date.now() + 500;
   while (Date.now() < deadline && pids.some(isAlive)) {
     // busy-wait (acceptable in exit path, bounded to 500ms)
