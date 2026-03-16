@@ -29,15 +29,28 @@ This is currently the primary full QA pass for validating:
 - worktree flows
 - CLI behavior against a real running daemon
 
+## QA tiers
+
+The standalone daemon QA guide defines three named tiers. Use these names when requesting a QA pass:
+
+| Tier | Scope | Time | When to use |
+|---|---|---|---|
+| **Light QA pass** | start + follow-up + steer + worktree basics + provider verification | ~5 min/provider | Every PR, all providers |
+| **Extended QA pass** | + stop/follow-up, archive/unarchive, promote/demote, rapid follow-ups | ~15 min/provider | Lifecycle or state changes |
+| **Full QA pass** | + all restart/recovery, worker loss, session replacement, shared env | ~30 min | Big daemon/env-agent changes |
+
+See [`./daemon/standalone-daemon-qa.md` § QA Tiers](./daemon/standalone-daemon-qa.md#qa-tiers) for the complete checklist per tier.
+
 ## How to use this folder
 
-If you are asked to run a **full QA pass**:
+If you are asked to run a QA pass:
 
-1. Start with the relevant guide linked from this README.
-2. Run the entire required matrix, not just the first scenario that seems relevant.
-3. Record pass/fail for each case.
-4. Keep logs, command output, and any failure artifacts until triage is complete.
-5. Note whether the failure is:
+1. Identify the tier: **light**, **extended**, or **full**.
+2. Start with the relevant guide linked from this README.
+3. Run the entire checklist for that tier, not just the first scenario that seems relevant.
+4. Record pass/fail for each case.
+5. Keep logs, command output, and any failure artifacts until triage is complete.
+6. Note whether the failure is:
    - a product bug
    - a flaky/timing-sensitive test case
    - a stale QA expectation/documentation issue

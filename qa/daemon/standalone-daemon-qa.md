@@ -820,28 +820,59 @@ sqlite3 "$beanbag_root/beanbag.db" \
   - This is a real local cleanup bug candidate.
   - Capture `thread show`, `thread log`, `find "$beanbag_root/environment-agents" -maxdepth 3 -type f`, and `ps` output before cleaning it up manually.
 
-## QA Checklist
+## QA Tiers
 
-Use this as the minimum direct-binary pass with the real provider:
+Use the tier names **light**, **extended**, or **full** when requesting a QA pass. Each tier includes all items from the tiers above it.
+
+### Light QA pass
+
+~5 minutes per provider. Catches bridge wiring, event translation, and basic turn lifecycle bugs. Run this on every PR for all providers.
 
 - standalone daemon health
 - project create, list, files
 - local start
 - local follow-up
 - local steer after confirmed `turn/started`
-- local stop then follow-up
-- local blocked restart
-- local forced restart with surviving env-agent reconnect or thread `error`
-- local follow-up after restart failure
 - worktree start
 - worktree follow-up
+- provider verification (`providerId` in thread show + raw event envelopes)
+
+### Extended QA pass
+
+~15 minutes per provider. Catches session cleanup races, archive state bugs, and promote/demote correctness. Run this when changing lifecycle, state management, or session handling code.
+
+Everything in **light**, plus:
+
+- local stop then follow-up
+- local two immediate follow-ups in a row
 - worktree stop then follow-up
+- worktree two immediate follow-ups in a row
 - worktree promote-status, promote, demote
 - worktree archive removes the managed worktree and clears env-agent state
 - archived thread is visibly marked as archived in thread inspection output
+- worktree unarchive then follow-up
+
+### Full QA pass
+
+~30 minutes. Run against one real provider + the fake recovery suite. Run this before shipping big daemon or environment-agent changes.
+
+Everything in **extended**, plus:
+
+- local blocked restart
+- local forced restart with surviving env-agent reconnect or thread `error`
+- local follow-up after restart failure
+- local idle thread follow-up after restart starts fresh env-agent cleanly
 - worktree blocked restart
 - worktree forced restart with surviving env-agent reconnect or thread `error`
 - worktree follow-up after restart failure
+- worktree idle thread follow-up after restart starts fresh env-agent cleanly
+- active-thread restart failure emits `system/error` with `provider_unavailable`
+- provisioning-boundary restart check
+- queued follow-up during worker loss
+- archive/unarchive after worker-loss recovery
+- late old-agent noise rejection
+- shared environment multi-thread spawn, sibling follow-up, archive sibling, restart recovery
+- `pnpm qa:daemon:recovery:fake` (8 automated fake-provider tests)
 
 ## Cleanup
 
