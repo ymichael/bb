@@ -6,6 +6,7 @@ import { SdkSession, type SdkSessionOptions } from "./sdk-session.js";
 import {
   translateSdkMessage,
   createTurnCounterState,
+  nextTurnId,
   type JsonRpcNotification,
   type TurnCounterState,
 } from "./event-translator.js";
@@ -89,8 +90,41 @@ function createOnSdkMessage(threadId: string): (message: SDKMessage) => void {
   };
 }
 
-function onSdkDone(_error?: unknown): void {
-  // Stream ended; session remains available for resume.
+function createOnSdkDone(threadId: string): (error?: unknown) => void {
+  return (error?: unknown) => {
+    if (!error) return;
+
+    const threadSession = sessions.get(threadId);
+    if (!threadSession) return;
+
+    // If no turn was started yet, synthesize one so the orchestrator
+    // receives a complete turn lifecycle and doesn't hang forever.
+    let turnId = threadSession.turnId;
+    if (!turnId) {
+      turnId = nextTurnId(threadSession.turnCounter);
+      threadSession.turnId = turnId;
+      send({
+        jsonrpc: "2.0",
+        method: "turn/started",
+        params: { threadId, turnId },
+      });
+    }
+
+    const message =
+      error instanceof Error ? error.message : String(error);
+
+    send({
+      jsonrpc: "2.0",
+      method: "turn/completed",
+      params: {
+        threadId,
+        turnId,
+        error: { message },
+      },
+    });
+
+    threadSession.turnId = undefined;
+  };
 }
 
 function createForwardToolCall(threadId: string): ToolCallForwarder {
@@ -240,7 +274,7 @@ function handleThreadStart(
   applyDynamicTools(sessionOptions, params, threadId);
 
   const turnCounter = createTurnCounterState();
-  const session = new SdkSession(sessionOptions, createOnSdkMessage(threadId), onSdkDone);
+  const session = new SdkSession(sessionOptions, createOnSdkMessage(threadId), createOnSdkDone(threadId));
   session.start();
 
   const threadSession: ThreadSession = {
@@ -283,7 +317,7 @@ function handleThreadResume(
   applyDynamicTools(sessionOptions, params, threadId);
 
   const turnCounter = createTurnCounterState();
-  const session = new SdkSession(sessionOptions, createOnSdkMessage(threadId), onSdkDone);
+  const session = new SdkSession(sessionOptions, createOnSdkMessage(threadId), createOnSdkDone(threadId));
   session.start(sessionId);
 
   const threadSession: ThreadSession = {

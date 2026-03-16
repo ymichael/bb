@@ -11,6 +11,7 @@ import { PiSdkSession, type PiSdkSessionOptions } from "./sdk-session.js";
 import {
   translatePiEvent,
   createTurnCounterState,
+  nextTurnId,
   type JsonRpcNotification,
   type PiTokenUsageSnapshot,
   type TurnCounterState,
@@ -101,8 +102,41 @@ function createOnPiEvent(threadId: string): (event: AgentSessionEvent) => void {
   };
 }
 
-function onSessionDone(_error?: unknown): void {
-  // Stream ended; session remains available for resume.
+function createOnSessionDone(threadId: string): (error?: unknown) => void {
+  return (error?: unknown) => {
+    if (!error) return;
+
+    const threadSession = sessions.get(threadId);
+    if (!threadSession) return;
+
+    // If no turn was started yet, synthesize one so the orchestrator
+    // receives a complete turn lifecycle and doesn't hang forever.
+    let turnId = threadSession.turnId;
+    if (!turnId) {
+      turnId = nextTurnId(threadSession.turnCounter);
+      threadSession.turnId = turnId;
+      send({
+        jsonrpc: "2.0",
+        method: "turn/started",
+        params: { threadId, turnId },
+      });
+    }
+
+    const message =
+      error instanceof Error ? error.message : String(error);
+
+    send({
+      jsonrpc: "2.0",
+      method: "turn/completed",
+      params: {
+        threadId,
+        turnId,
+        error: { message },
+      },
+    });
+
+    threadSession.turnId = undefined;
+  };
 }
 
 function createForwardToolCall(threadId: string): ToolCallForwarder {
@@ -272,7 +306,7 @@ async function handleThreadStart(
   applyDynamicTools(sessionOptions, params, threadId);
 
   const turnCounter = createTurnCounterState();
-  const session = new PiSdkSession(sessionOptions, createOnPiEvent(threadId), onSessionDone);
+  const session = new PiSdkSession(sessionOptions, createOnPiEvent(threadId), createOnSessionDone(threadId));
 
   const threadSession: ThreadSession = {
     session,
@@ -315,7 +349,7 @@ async function handleThreadResume(
   applyDynamicTools(sessionOptions, params, threadId);
 
   const turnCounter = createTurnCounterState();
-  const session = new PiSdkSession(sessionOptions, createOnPiEvent(threadId), onSessionDone);
+  const session = new PiSdkSession(sessionOptions, createOnPiEvent(threadId), createOnSessionDone(threadId));
 
   const threadSession: ThreadSession = {
     session,

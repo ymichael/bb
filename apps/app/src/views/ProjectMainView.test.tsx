@@ -82,6 +82,7 @@ vi.mock("@/hooks/usePromptFileMentions", () => ({
 }));
 
 vi.mock("@/hooks/usePromptModelReasoning", () => ({
+  formatModelLabel: (value: string) => value,
   usePromptModelReasoning: () => ({
     selectedModel: "gpt-5",
     setSelectedModel: vi.fn(),

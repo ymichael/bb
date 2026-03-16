@@ -105,12 +105,13 @@ export class EnvironmentAgentSessionCommandClient implements EnvironmentAgentCli
 
   async ensureProviderRunning(
     spec: EnvironmentAgentProviderSpec,
+    forThreadId?: string,
   ): Promise<EnvironmentAgentProviderStatus> {
     this.ensureOpen();
     const command = await this.enqueueCommand({
       commandId: `provider-ensure-${randomUUID()}`,
       commandType: "provider.ensure",
-      payload: spec,
+      payload: { ...spec, ...(forThreadId ? { forThreadId } : {}) },
     });
 
     switch (command.state) {

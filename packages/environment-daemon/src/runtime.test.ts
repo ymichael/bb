@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { EnvironmentAgentRuntime } from "./runtime.js";
-import { ENVIRONMENT_AGENT_PROTOCOL_VERSION } from "./protocol.js";
+import { ENVIRONMENT_AGENT_PROTOCOL_VERSION, type EnvironmentAgentProviderSpec } from "./protocol.js";
 
 const cleanup: Array<() => Promise<void> | void> = [];
 
@@ -446,6 +446,420 @@ describe("EnvironmentAgentRuntime", () => {
       requestId: 999,
       message: "provider exploded",
     });
+  });
+
+  it("routes RPC commands to the correct child when multiple providers are active", async () => {
+    // This test catches the bug where ensureProviderForCommand() reads
+    // this.providerChild (a shared mutable pointer) instead of routing
+    // to the child that was spawned for the command's provider spec.
+    //
+    // Scenario: spawn child A, spawn child B (clobbers this.providerChild),
+    // then send a command that should go to child A — verify it arrives at A.
+
+    // Both children are echo-style JSON-RPC providers that include their
+    // ROLE env var in every response so we can tell which child handled it.
+    const echoProviderScript = [
+      "process.stdin.setEncoding('utf8');",
+      "let buffer='';",
+      "process.stdin.on('data',chunk=>{",
+      "buffer+=chunk;",
+      "const parts=buffer.split(/\\r\\n|\\n|\\r/g);",
+      "buffer=parts.pop() ?? '';",
+      "for (const line of parts) {",
+      "if (!line.trim()) continue;",
+      "const msg = JSON.parse(line);",
+      "if (msg.method === 'initialize') {",
+      "console.log(JSON.stringify({ id: msg.id, result: { capabilities: {}, role: process.env.ROLE } }));",
+      "} else if (msg.method === 'thread/start') {",
+      "console.log(JSON.stringify({ id: msg.id, result: { threadId: msg.params.threadId, role: process.env.ROLE } }));",
+      "} else if (msg.method === 'turn/start') {",
+      "console.log(JSON.stringify({ id: msg.id, result: { threadId: msg.params.threadId, role: process.env.ROLE } }));",
+      "}",
+      "}",
+      "});",
+    ].join("");
+
+    const runtime = new EnvironmentAgentRuntime({ threadId: "thread-1" });
+    cleanup.push(() => runtime.shutdown());
+
+    const specA: EnvironmentAgentProviderSpec = {
+      command: "node",
+      args: ["-e", echoProviderScript],
+      env: { ROLE: "provider-A" },
+    };
+    const specB: EnvironmentAgentProviderSpec = {
+      command: "node",
+      args: ["-e", echoProviderScript],
+      env: { ROLE: "provider-B" },
+    };
+
+    // 1. Spawn child A via provider.ensure with forThreadId
+    runtime.ensureProviderStatus(specA, "thread-a");
+
+    // 2. Send a command through child A to establish it works
+    const ackA1 = await runtime.executeCommand({
+      meta: {
+        protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+        commandId: "cmd-a1",
+        idempotencyKey: "cmd-a1",
+        sentAt: 100,
+      },
+      command: {
+        type: "thread.start",
+        threadId: "thread-a",
+        projectId: "proj-1",
+        params: { threadId: "thread-a" },
+        initialize: {
+          method: "initialize",
+          params: { clientInfo: { name: "bb", version: "0.0.1" } },
+        },
+      },
+    });
+    expect(ackA1.state).toBe("accepted");
+    expect((ackA1.result as Record<string, unknown>).role).toBe("provider-A");
+
+    // 3. Spawn child B with forThreadId — this clobbers this.providerChild
+    runtime.ensureProviderStatus(specB, "thread-b");
+
+    // 4. Send a command through child B to confirm it uses provider-B
+    const ackB = await runtime.executeCommand({
+      meta: {
+        protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+        commandId: "cmd-b1",
+        idempotencyKey: "cmd-b1",
+        sentAt: 200,
+      },
+      command: {
+        type: "thread.start",
+        threadId: "thread-b",
+        projectId: "proj-1",
+        params: { threadId: "thread-b" },
+        initialize: {
+          method: "initialize",
+          params: { clientInfo: { name: "bb", version: "0.0.1" } },
+        },
+      },
+    });
+    expect(ackB.state).toBe("accepted");
+    expect((ackB.result as Record<string, unknown>).role).toBe("provider-B");
+
+    // 5. NOW send a turn/start for thread-a WITHOUT calling
+    // ensureProviderRunning(specA) first. The runtime must route this
+    // to child A (mapped via forThreadId), not child B (this.providerChild).
+    const ackA2 = await runtime.executeCommand({
+      meta: {
+        protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+        commandId: "cmd-a2",
+        idempotencyKey: "cmd-a2",
+        sentAt: 300,
+      },
+      command: {
+        type: "turn.start",
+        threadId: "thread-a",
+        providerThreadId: "thread-a",
+        params: { threadId: "thread-a", input: [] },
+      },
+    });
+    expect(ackA2.state).toBe("accepted");
+    // The critical assertion: the command must have been handled by
+    // provider-A, not provider-B.
+    expect((ackA2.result as Record<string, unknown>).role).toBe("provider-A");
+  });
+
+  it("does not re-initialize a provider child that was already initialized by another thread", async () => {
+    // When two threads share an environment but use different providers,
+    // each child is initialized once. Switching back to an already-initialized
+    // child must NOT send initialize again — providers reject double-init
+    // with "Already initialized".
+    const echoProviderScript = [
+      "process.stdin.setEncoding('utf8');",
+      "let initialized = false;",
+      "let buffer='';",
+      "process.stdin.on('data',chunk=>{",
+      "buffer+=chunk;",
+      "const parts=buffer.split(/\\r\\n|\\n|\\r/g);",
+      "buffer=parts.pop() ?? '';",
+      "for (const line of parts) {",
+      "if (!line.trim()) continue;",
+      "const msg = JSON.parse(line);",
+      "if (msg.method === 'initialize') {",
+      "if (initialized) {",
+      "console.log(JSON.stringify({ id: msg.id, error: { code: -32000, message: 'Already initialized' } }));",
+      "} else {",
+      "initialized = true;",
+      "console.log(JSON.stringify({ id: msg.id, result: { capabilities: {} } }));",
+      "}",
+      "} else if (msg.method === 'thread/start') {",
+      "console.log(JSON.stringify({ id: msg.id, result: { threadId: msg.params.threadId } }));",
+      "} else if (msg.method === 'turn/start') {",
+      "console.log(JSON.stringify({ id: msg.id, result: { threadId: msg.params.threadId } }));",
+      "}",
+      "}",
+      "});",
+    ].join("");
+
+    const runtime = new EnvironmentAgentRuntime({ threadId: "thread-1" });
+    cleanup.push(() => runtime.shutdown());
+
+    const specA: EnvironmentAgentProviderSpec = {
+      command: "node",
+      args: ["-e", echoProviderScript],
+      env: { ROLE: "provider-A" },
+    };
+    const specB: EnvironmentAgentProviderSpec = {
+      command: "node",
+      args: ["-e", echoProviderScript],
+      env: { ROLE: "provider-B" },
+    };
+
+    // Initialize child A via thread.start (which sends initialize first)
+    runtime.ensureProviderStatus(specA, "thread-a");
+    const ackA1 = await runtime.executeCommand({
+      meta: {
+        protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+        commandId: "cmd-a1",
+        idempotencyKey: "cmd-a1",
+        sentAt: 100,
+      },
+      command: {
+        type: "thread.start",
+        threadId: "thread-a",
+        projectId: "proj-1",
+        params: { threadId: "thread-a" },
+        initialize: {
+          method: "initialize",
+          params: { clientInfo: { name: "bb", version: "0.0.1" } },
+        },
+      },
+    });
+    expect(ackA1.state).toBe("accepted");
+
+    // Initialize child B
+    runtime.ensureProviderStatus(specB, "thread-b");
+    const ackB = await runtime.executeCommand({
+      meta: {
+        protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+        commandId: "cmd-b1",
+        idempotencyKey: "cmd-b1",
+        sentAt: 200,
+      },
+      command: {
+        type: "thread.start",
+        threadId: "thread-b",
+        projectId: "proj-1",
+        params: { threadId: "thread-b" },
+        initialize: {
+          method: "initialize",
+          params: { clientInfo: { name: "bb", version: "0.0.1" } },
+        },
+      },
+    });
+    expect(ackB.state).toBe("accepted");
+
+    // Now send another command for thread-a. Child A is already initialized.
+    // Before the fix, providerInitializedPid was overwritten by child B's PID,
+    // so the runtime would try to re-initialize child A → "Already initialized" error.
+    const ackA2 = await runtime.executeCommand({
+      meta: {
+        protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+        commandId: "cmd-a2",
+        idempotencyKey: "cmd-a2",
+        sentAt: 300,
+      },
+      command: {
+        type: "turn.start",
+        threadId: "thread-a",
+        providerThreadId: "thread-a",
+        params: { threadId: "thread-a", input: [] },
+        initialize: {
+          method: "initialize",
+          params: { clientInfo: { name: "bb", version: "0.0.1" } },
+        },
+      },
+    });
+    // Must succeed — child A was already initialized, no re-init should happen.
+    expect(ackA2.state).toBe("accepted");
+  });
+
+  it("spawns separate children for specs with different env", async () => {
+    const runtime = new EnvironmentAgentRuntime({ threadId: "thread-1" });
+    const lines: string[] = [];
+    const unsubscribe = runtime.subscribeToProviderStdout((line) => {
+      lines.push(line);
+    });
+    cleanup.push(unsubscribe);
+    cleanup.push(() => runtime.shutdown());
+
+    // Spawn two provider children with the same command but different env.
+    runtime.ensureProviderStatus({
+      command: "node",
+      args: ["-e", "console.log(JSON.stringify({ marker: process.env.MARKER })); process.stdin.resume();"],
+      env: { MARKER: "child-A" },
+    });
+    runtime.ensureProviderStatus({
+      command: "node",
+      args: ["-e", "console.log(JSON.stringify({ marker: process.env.MARKER })); process.stdin.resume();"],
+      env: { MARKER: "child-B" },
+    });
+
+    await expect.poll(() => lines.length).toBeGreaterThanOrEqual(2);
+
+    const markers = lines
+      .map((l) => { try { return JSON.parse(l).marker; } catch { return undefined; } })
+      .filter(Boolean);
+    expect(markers).toContain("child-A");
+    expect(markers).toContain("child-B");
+  });
+
+  it("routes provider-initiated RPC responses back to the originating child", async () => {
+    // Spawn two providers: child A sends a server request (tool call),
+    // child B just idles. The RPC response must go to child A, not child B.
+    const toolCalls: Array<{ requestId: string | number; method: string }> = [];
+    const stdoutLines: string[] = [];
+    const runtime = new EnvironmentAgentRuntime({
+      threadId: "thread-1",
+      onProviderRequest: async (request) => {
+        toolCalls.push({ requestId: request.requestId, method: request.method });
+        return { success: true };
+      },
+    });
+    cleanup.push(() => runtime.shutdown());
+
+    // Subscribe to stdout before spawning so we don't miss early output.
+    const unsub = runtime.subscribeToProviderStdout((line) => {
+      stdoutLines.push(line);
+    });
+    cleanup.push(unsub);
+
+    // Child A: sends a provider-initiated RPC then echoes any stdin responses.
+    runtime.ensureProviderStatus({
+      command: "node",
+      args: [
+        "-e",
+        [
+          "console.log(JSON.stringify({ id: 42, method: 'item/tool/call', params: { tool: 'test' } }));",
+          "process.stdin.setEncoding('utf8');",
+          "let buffer='';",
+          "process.stdin.on('data',chunk=>{",
+          "buffer+=chunk;",
+          "const parts=buffer.split(/\\r\\n|\\n|\\r/g);",
+          "buffer=parts.pop() ?? '';",
+          "for (const line of parts) { if (line.trim()) console.log('ECHO:' + line); }",
+          "});",
+        ].join(""),
+      ],
+      env: { ROLE: "requester" },
+    });
+
+    // Child B: just idles — but because it is spawned second, it becomes
+    // `this.providerChild`. Before the fix, the RPC response would be
+    // written to B's stdin instead of A's.
+    runtime.ensureProviderStatus({
+      command: "node",
+      args: [
+        "-e",
+        [
+          "process.stdin.setEncoding('utf8');",
+          "process.stdin.on('data',chunk=>{",
+          "console.log('WRONG_CHILD:' + chunk.trim());",
+          "});",
+          "setTimeout(() => {}, 10000);",
+        ].join(""),
+      ],
+      env: { ROLE: "idle" },
+    });
+
+    // Wait for the tool call to arrive from child A.
+    await expect.poll(() => toolCalls).toContainEqual({
+      requestId: 42,
+      method: "item/tool/call",
+    });
+
+    // The response should be echoed back by child A (not written to child B).
+    await expect.poll(() =>
+      stdoutLines.some((l) => l.startsWith("ECHO:") && l.includes('"id":42')),
+    ).toBe(true);
+
+    // Child B should NOT have received any data.
+    expect(stdoutLines.filter((l) => l.startsWith("WRONG_CHILD:"))).toEqual([]);
+  });
+
+  it("only rejects requests for the exiting child, not siblings", async () => {
+    const runtime = new EnvironmentAgentRuntime({ threadId: "thread-1" });
+    cleanup.push(() => runtime.shutdown());
+
+    // Child A: responds to initialize immediately, but delays thread/start
+    // responses by 500ms so the request is still in-flight when child B exits.
+    runtime.ensureProviderStatus({
+      command: "node",
+      args: [
+        "-e",
+        [
+          "process.stdin.setEncoding('utf8');",
+          "let buffer='';",
+          "process.stdin.on('data',chunk=>{",
+          "buffer+=chunk;",
+          "const parts=buffer.split(/\\r\\n|\\n|\\r/g);",
+          "buffer=parts.pop() ?? '';",
+          "for (const line of parts) {",
+          "if (!line.trim()) continue;",
+          "const msg = JSON.parse(line);",
+          "if (msg.method === 'initialize') {",
+          "console.log(JSON.stringify({ id: msg.id, result: { capabilities: {} } }));",
+          "} else if (msg.method === 'thread/start') {",
+          "setTimeout(() => console.log(JSON.stringify({ id: msg.id, result: { threadId: msg.params.threadId } })), 500);",
+          "}",
+          "}",
+          "});",
+        ].join(""),
+      ],
+      env: { ROLE: "long-lived" },
+    });
+
+    // Start a command through child A — initialize completes immediately
+    // but the thread/start response is delayed 500ms, keeping it in-flight.
+    const commandPromise = runtime.executeCommand({
+      meta: {
+        protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+        commandId: "cmd-a",
+        idempotencyKey: "cmd-a",
+        sentAt: 100,
+      },
+      command: {
+        type: "thread.start",
+        threadId: "thread-1",
+        projectId: "proj-1",
+        params: { threadId: "provider-thread-1" },
+        initialize: {
+          method: "initialize",
+          params: { clientInfo: { name: "bb", version: "0.0.1" } },
+        },
+      },
+    });
+
+    // Give child A time to receive the command and start the delayed response,
+    // then spawn child B which exits immediately.
+    await new Promise((r) => setTimeout(r, 50));
+
+    // Child B: exits immediately — its exit handler must NOT reject child A's
+    // in-flight request.
+    runtime.ensureProviderStatus({
+      command: "node",
+      args: ["-e", "process.exit(0);"],
+      env: { ROLE: "short-lived" },
+    });
+
+    // Wait for child B to exit (it'll emit a degraded event).
+    await expect.poll(() => {
+      const snap = runtime.getQuiescenceSnapshot();
+      return snap.hasObservedWork;
+    }).toBe(true);
+
+    // Child A's command should still resolve successfully — its in-flight
+    // request must not have been rejected by child B's exit.
+    const ack = await commandPromise;
+    expect(ack.state).toBe("accepted");
+    expect(ack.result).toEqual({ threadId: "provider-thread-1" });
   });
 
   it("resolves provider server requests through the callback", async () => {

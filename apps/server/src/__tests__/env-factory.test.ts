@@ -58,4 +58,64 @@ describe("EnvironmentFactory", () => {
       },
     });
   });
+
+  it("creates a thread_environment_attachment row when reserving", () => {
+    const project = projects.create({
+      name: "factory-attach-project",
+      rootPath: "/tmp/factory-attach-project",
+    });
+    const thread = threads.create({ projectId: project.id });
+    const factory = new EnvironmentFactory(environments, attachments);
+
+    const environmentId = factory.reserveThreadEnvironment({
+      threadId: thread.id,
+      projectId: project.id,
+      projectRootPath: project.rootPath,
+      requestedEnvironmentId: "local",
+    });
+
+    expect(environmentId).toBeDefined();
+    const attachment = attachments.getByThreadId(thread.id);
+    expect(attachment).toMatchObject({
+      threadId: thread.id,
+      environmentId,
+    });
+  });
+
+  it("reuses existing environment for a second thread and creates its attachment", () => {
+    const project = projects.create({
+      name: "factory-shared-project",
+      rootPath: "/tmp/factory-shared-project",
+    });
+    const thread1 = threads.create({ projectId: project.id });
+    const thread2 = threads.create({ projectId: project.id });
+    const factory = new EnvironmentFactory(environments, attachments);
+
+    const envId1 = factory.reserveThreadEnvironment({
+      threadId: thread1.id,
+      projectId: project.id,
+      projectRootPath: project.rootPath,
+      requestedEnvironmentId: "local",
+    });
+
+    const envId2 = factory.reserveThreadEnvironment({
+      threadId: thread2.id,
+      projectId: project.id,
+      projectRootPath: project.rootPath,
+      requestedEnvironmentId: "local",
+    });
+
+    // Both threads should share the same environment (local/primary workspace)
+    expect(envId1).toBe(envId2);
+
+    // Both threads should have attachment rows
+    expect(attachments.getByThreadId(thread1.id)).toMatchObject({
+      threadId: thread1.id,
+      environmentId: envId1,
+    });
+    expect(attachments.getByThreadId(thread2.id)).toMatchObject({
+      threadId: thread2.id,
+      environmentId: envId2,
+    });
+  });
 });

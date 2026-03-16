@@ -29,6 +29,7 @@ export interface EnvironmentAgentClient {
   ): Promise<EnvironmentAgentCommandAck>;
   ensureProviderRunning(
     spec: EnvironmentAgentProviderSpec,
+    forThreadId?: string,
   ): Promise<EnvironmentAgentProviderStatus>;
   status(): Promise<EnvironmentAgentStatusSnapshot>;
   close(reason?: Error): void;
@@ -76,10 +77,11 @@ class EnvironmentAgentClientImpl implements EnvironmentAgentClient {
 
   ensureProviderRunning(
     spec: EnvironmentAgentProviderSpec,
+    forThreadId?: string,
   ): Promise<EnvironmentAgentProviderStatus> {
     return this.request<EnvironmentAgentProviderStatus>({
       type: "provider.ensure",
-      payload: spec,
+      payload: { ...spec, ...(forThreadId ? { forThreadId } : {}) },
     });
   }
 

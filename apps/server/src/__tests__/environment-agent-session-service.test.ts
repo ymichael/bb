@@ -1421,4 +1421,156 @@ describe("EnvironmentAgentSessionService", () => {
       vi.useRealTimers();
     }
   });
+
+  it("accepts event batches for sibling threads in a shared environment", async () => {
+    const project = projects.create({
+      name: "shared-event-batch-project",
+      rootPath: "/tmp/shared-event-batch-project",
+    });
+    const ownerThreadId = threads.create({ projectId: project.id }).id;
+    const siblingThreadId = threads.create({ projectId: project.id }).id;
+    const environmentId = environments.create({
+      projectId: project.id,
+      descriptor: {
+        type: "path",
+        path: "/tmp/shared-event-batch-project/.worktrees/shared",
+      },
+      managed: true,
+    }).id;
+
+    const sharedService = new EnvironmentAgentSessionService(
+      new EnvironmentAgentSessionManager(sessions),
+      cursors,
+      {
+        clock: () => TEST_LEASE_NOW,
+        resolveEnvironmentId: (tid) =>
+          tid === ownerThreadId || tid === siblingThreadId
+            ? environmentId
+            : undefined,
+        listAttachedThreadIds: (eid) =>
+          eid === environmentId ? [ownerThreadId, siblingThreadId] : [],
+        eventApplier: new EnvironmentAgentEventApplier(cursors, {
+          ingestReplayedEnvironmentAgentEvents: vi.fn(async () => undefined),
+        }),
+      },
+    );
+
+    const opened = sharedService.openSession({
+      threadId: ownerThreadId,
+      payload: {
+        agentId: "agent-shared",
+        agentInstanceId: "instance-1",
+        supportedProtocolVersions: [1],
+        channels: [
+          { channelId: ownerThreadId, generation: 1 },
+          { channelId: siblingThreadId, generation: 1 },
+        ],
+      },
+      now: 1_000,
+    });
+
+    // Env-daemon routes events for the sibling thread via the owner's route.
+    // This must succeed — the sibling is attached to the same environment.
+    const ack = await sharedService.applyEventBatch({
+      threadId: ownerThreadId,
+      sessionId: opened.session.id,
+      payload: {
+        batches: [
+          {
+            channelId: siblingThreadId,
+            generation: 1,
+            events: [
+              {
+                sequence: 1,
+                eventId: "evt-sibling-1",
+                emittedAt: 2_000,
+                event: {
+                  type: "provider.event",
+                  threadId: siblingThreadId,
+                  method: "turn/started",
+                  payload: { turnId: "turn-1" },
+                },
+              },
+            ],
+          },
+        ],
+      },
+      now: 2_100,
+    });
+    expect(ack.type).toBe("event_ack");
+  });
+
+  it("rejects event batches for threads not attached to the shared environment", async () => {
+    const project = projects.create({
+      name: "shared-event-reject-project",
+      rootPath: "/tmp/shared-event-reject-project",
+    });
+    const ownerThreadId = threads.create({ projectId: project.id }).id;
+    const unattachedThreadId = threads.create({ projectId: project.id }).id;
+    const environmentId = environments.create({
+      projectId: project.id,
+      descriptor: {
+        type: "path",
+        path: "/tmp/shared-event-reject-project/.worktrees/shared",
+      },
+      managed: true,
+    }).id;
+
+    const sharedService = new EnvironmentAgentSessionService(
+      new EnvironmentAgentSessionManager(sessions),
+      cursors,
+      {
+        clock: () => TEST_LEASE_NOW,
+        resolveEnvironmentId: (tid) =>
+          tid === ownerThreadId ? environmentId : undefined,
+        listAttachedThreadIds: (eid) =>
+          eid === environmentId ? [ownerThreadId] : [],
+        eventApplier: new EnvironmentAgentEventApplier(cursors, {
+          ingestReplayedEnvironmentAgentEvents: vi.fn(async () => undefined),
+        }),
+      },
+    );
+
+    const opened = sharedService.openSession({
+      threadId: ownerThreadId,
+      payload: {
+        agentId: "agent-owner",
+        agentInstanceId: "instance-1",
+        supportedProtocolVersions: [1],
+        channels: [{ channelId: ownerThreadId, generation: 1 }],
+      },
+      now: 1_000,
+    });
+
+    // Events for an unattached thread should be rejected with a domain error (400),
+    // not a plain Error (500).
+    await expect(
+      sharedService.applyEventBatch({
+        threadId: ownerThreadId,
+        sessionId: opened.session.id,
+        payload: {
+          batches: [
+            {
+              channelId: unattachedThreadId,
+              generation: 1,
+              events: [
+                {
+                  sequence: 1,
+                  eventId: "evt-unattached-1",
+                  emittedAt: 2_000,
+                  event: {
+                    type: "provider.event",
+                    threadId: unattachedThreadId,
+                    method: "turn/started",
+                    payload: { turnId: "turn-1" },
+                  },
+                },
+              ],
+            },
+          ],
+        },
+        now: 2_100,
+      }),
+    ).rejects.toSatisfy((err: unknown) => isDomainError(err));
+  });
 });

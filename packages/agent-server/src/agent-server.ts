@@ -585,7 +585,7 @@ export class AgentServer {
     providerLaunch?: EnvironmentAgentProviderLaunchWrapper,
   ): Promise<void> {
     const spec = await this.buildProviderSpec(context, providerLaunch);
-    await client.ensureProviderRunning(spec);
+    await client.ensureProviderRunning(spec, context.threadId);
   }
 
   private async buildProviderSpec(

@@ -171,6 +171,7 @@ export function decodePersistedEnvironmentAgentCommand(args: {
         );
       }
       const launchCommand = getStringField(record, "launchCommand");
+      const forThreadId = getStringField(record, "forThreadId");
       return {
         type: commandType,
         command,
@@ -179,6 +180,7 @@ export function decodePersistedEnvironmentAgentCommand(args: {
         ...(launchArgs ? { launchArgs } : {}),
         ...(env ? { env } : {}),
         ...(files ? { files } : {}),
+        ...(forThreadId ? { forThreadId } : {}),
       };
     }
     case "thread.start":

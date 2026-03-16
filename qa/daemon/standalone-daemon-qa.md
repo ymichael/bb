@@ -41,6 +41,8 @@ All the test scenarios in this document apply to all providers. The only differe
 
 It is fine to run the full exhaustive QA pass against only one provider and then run a lighter smoke pass (`pnpm qa:daemon:smoke` or `pnpm qa:daemon:smoke:claude-code`) against the other supported providers. The daemon lifecycle, restart, and recovery behaviors are provider-agnostic — a full pass on one provider gives high confidence that the core paths work, while a smoke pass on the others confirms that the provider-specific bridge and adapter wiring is healthy.
 
+**Multi-provider coexistence is NOT covered by single-provider passes.** When touching environment-daemon runtime code, provider bridges, or command routing, you MUST also run the multi-provider scenario below. Bugs in this area only manifest when two different providers are active in the same env-daemon simultaneously — single-provider tests will pass while multi-provider usage is completely broken.
+
 ## Rules
 
 - Use the built binaries directly:
@@ -432,6 +434,17 @@ Required matrix:
 - restart the daemon while the shared environment exists
 - confirm a sibling follow-up after restart reuses or recreates the env-daemon cleanly and returns to `idle`
 
+**Implicit shared environment** (critical — covers the `reserveThreadEnvironment` attachment path):
+
+- spawn two threads from the project main view **without** selecting a specific environment
+  (both will be assigned to the project's local environment during provisioning)
+- confirm both threads have the same `environmentId` in `thread show`
+- confirm both threads appear in `thread_environment_attachments` (query the DB or check
+  `thread sessions` shows a shared active session)
+- run follow-ups on both threads and confirm events flow correctly for both
+- if either thread's events cause a 500 on the env-daemon session messages endpoint, the
+  `thread_environment_attachments` row is missing — this is a regression
+
 Suggested flow:
 
 1. Spawn the first worktree thread and wait for `idle`:
@@ -751,6 +764,77 @@ Expected result:
 - the thread either continues into `active` or lands in `provisioning_failed`
 - it must not jump directly to `idle` without a real successful turn
 
+### 8. Validate multi-provider coexistence
+
+**This is a critical scenario.** Bugs in the env-daemon runtime's multi-child
+management only appear when two different providers are active in the same
+environment simultaneously. Single-provider tests will pass while multi-provider
+usage is completely broken. Past bugs in this area include:
+
+- RPC commands routed to the wrong provider child (thread hangs forever)
+- RPC responses written to the wrong provider's stdin (tool calls hang)
+- Double-initialization rejected by the provider ("Already initialized")
+- One provider child exiting spuriously rejects another child's in-flight requests
+
+Prerequisites: at least two providers must be available (e.g. codex + pi, or
+codex + claude-code). The daemon must be started without `BB_PROVIDER` so it
+uses the default and can accept explicit `providerId` per thread.
+
+**Basic multi-provider flow:**
+
+1. Spawn a thread with provider A (e.g. codex) in the project's local environment:
+
+```bash
+node apps/cli/dist/index.js thread spawn \
+  --project <project-id> \
+  --provider codex \
+  --prompt 'Reply with exactly CODEX-HELLO and finish.'
+node apps/cli/dist/index.js thread wait <thread-a> --status idle --timeout 120
+node apps/cli/dist/index.js thread output <thread-a>
+```
+
+2. Spawn a second thread with provider B (e.g. pi) in the same project (same local environment):
+
+```bash
+node apps/cli/dist/index.js thread spawn \
+  --project <project-id> \
+  --provider pi \
+  --prompt 'Reply with exactly PI-HELLO and finish.'
+node apps/cli/dist/index.js thread wait <thread-b> --status idle --timeout 120
+node apps/cli/dist/index.js thread output <thread-b>
+```
+
+3. Send follow-ups to both threads (tests that the correct provider child handles each):
+
+```bash
+node apps/cli/dist/index.js thread tell <thread-a> \
+  'Reply with exactly CODEX-FOLLOWUP and finish.'
+node apps/cli/dist/index.js thread tell <thread-b> \
+  'Reply with exactly PI-FOLLOWUP and finish.'
+node apps/cli/dist/index.js thread wait <thread-a> --status idle --timeout 120
+node apps/cli/dist/index.js thread wait <thread-b> --status idle --timeout 120
+node apps/cli/dist/index.js thread output <thread-a>
+node apps/cli/dist/index.js thread output <thread-b>
+```
+
+Expected:
+
+- both threads reach `idle` (not stuck `active`, not `provisioning_failed`)
+- `thread show <thread-a>` has `providerId: codex`
+- `thread show <thread-b>` has `providerId: pi`
+- both threads share the same `environmentId` (local environment)
+- follow-up output for thread-a comes from codex, not pi
+- follow-up output for thread-b comes from pi, not codex
+- no "Already initialized" errors in the daemon log
+- no provider rpc errors or timeouts in the event stream
+
+**What to look for if it fails:**
+
+- Thread stuck `active` with `turn/started` but no `turn/completed` → command routing bug: RPC commands going to wrong child
+- `provisioning_failed` with "Already initialized" → `providerInitializedPid` not tracked per-child
+- `provisioning_failed` with "Timed out waiting for active environment-agent session" → env-daemon failed to spawn or connect
+- Thread output contains response from the wrong provider → stdin writes going to wrong child
+
 ## Main Daemon QA
 
 Use this when the user already has the main daemon running and wants direct QA against it.
@@ -851,6 +935,7 @@ Everything in **light**, plus:
 - worktree archive removes the managed worktree and clears env-agent state
 - archived thread is visibly marked as archived in thread inspection output
 - worktree unarchive then follow-up
+- **multi-provider coexistence** (see scenario below) — spawn threads with two different providers in the same project/environment and confirm both work
 
 ### Full QA pass
 

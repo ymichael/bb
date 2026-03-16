@@ -415,7 +415,7 @@ export class EnvironmentAgentSessionService {
     return Promise.all(
       args.payload.batches.map(async (batch) => {
         if (!this.isAllowedChannelId(args.threadId, batch.channelId)) {
-          throw new Error(
+          throw invalidRequestError(
             `Environment-agent batch channel mismatch for thread ${batch.channelId}`,
           );
         }
@@ -426,7 +426,7 @@ export class EnvironmentAgentSessionService {
           now,
         });
         if (result.blockedReason === "invalid_channel") {
-          throw new Error(
+          throw invalidRequestError(
             `Environment-agent batch channel mismatch for thread ${batch.channelId}`,
           );
         }

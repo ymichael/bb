@@ -58,11 +58,17 @@ export class EnvironmentAgentRuntime {
   private readonly threadIdByProviderThreadId = new Map<string, string>();
   private sequence = 0;
   private providerRequestId = 0;
-  private providerInitializedPid: number | undefined;
+  private readonly providerInitializedPids = new Set<number>();
   private providerChild: ChildProcess | null = null;
+  private readonly providerChildren = new Map<string, ChildProcess>();
+  private readonly providerStdoutBuffers = new Map<string, string>();
+  private readonly providerStderrBuffers = new Map<string, string>();
+  /** Maps threadId → ChildProcess so RPC commands route to the correct provider child. */
+  private readonly threadIdToChild = new Map<string, ChildProcess>();
   private readonly pendingProviderRequests = new Map<
     string | number,
     {
+      child: ChildProcess;
       resolve: (value: unknown) => void;
       reject: (reason: Error) => void;
       timeout: ReturnType<typeof setTimeout>;
@@ -71,8 +77,6 @@ export class EnvironmentAgentRuntime {
   private readonly stdoutLineSubscribers = new Set<(line: string) => void>();
   private readonly stderrLineSubscribers = new Set<(line: string) => void>();
   private readonly eventSubscribers = new Set<(event: EnvironmentAgentEventEnvelope) => void>();
-  private providerStdoutBuffer = "";
-  private providerStderrBuffer = "";
   private shuttingDown = false;
   private shutdownPromise: Promise<void> | null = null;
   private commandExecutionCount = 0;
@@ -129,23 +133,47 @@ export class EnvironmentAgentRuntime {
   }
 
   ensureProviderRunning(spec?: EnvironmentAgentProviderSpec): ChildProcess | null {
-    if (this.providerChild && !this.providerChild.killed) {
-      return this.providerChild;
-    }
-
     const resolvedSpec = this.resolveProviderSpec(spec);
     if (!resolvedSpec) {
+      // No spec and no default command — return the active child if alive,
+      // falling back to any live child in the map.
+      if (this.providerChild && !this.providerChild.killed) {
+        return this.providerChild;
+      }
+      for (const child of this.providerChildren.values()) {
+        if (!child.killed && child.exitCode === null) {
+          this.providerChild = child;
+          return child;
+        }
+      }
       return null;
     }
 
-    const child = this.spawnProvider(resolvedSpec);
+    // Look up an existing child for this provider spec (keyed by the full
+    // launch configuration so that two threads using the same binary but
+    // different env/files/args get separate children).
+    const key = providerSpecKey(resolvedSpec);
+    const existing = this.providerChildren.get(key);
+    if (existing && !existing.killed && existing.exitCode === null) {
+      // Switch the active child so stdin writes target this provider.
+      this.providerChild = existing;
+      return existing;
+    }
+
+    // Spawn a new child for this provider spec.
+    const child = this.spawnProvider(resolvedSpec, key);
+    this.providerChildren.set(key, child);
     this.providerChild = child;
     return child;
   }
 
   getProviderStatus(): EnvironmentAgentProviderStatus {
+    // Report running if any provider child is alive.
     const child = this.providerChild;
-    const running = Boolean(child && child.exitCode === null && !child.killed);
+    const running = Boolean(child && child.exitCode === null && !child.killed)
+      || [...this.providerChildren.values()].some(
+        (c) => c.exitCode === null && !c.killed,
+      );
     return {
       running,
       launched: running,
@@ -256,6 +284,7 @@ export class EnvironmentAgentRuntime {
         envelope.command.type === "provider.ensure"
           ? this.ensureProviderStatus(
               this.toProviderEnsureSpec(envelope.command),
+              envelope.command.forThreadId,
             )
           : await this.executeRpcCommand(envelope.command);
       this.learnProviderThreadMapping(envelope.command, result);
@@ -374,9 +403,15 @@ export class EnvironmentAgentRuntime {
     }
   }
 
-  ensureProviderStatus(spec?: EnvironmentAgentProviderSpec): EnvironmentAgentProviderStatus {
+  ensureProviderStatus(
+    spec?: EnvironmentAgentProviderSpec,
+    forThreadId?: string,
+  ): EnvironmentAgentProviderStatus {
     const launchedBefore = this.getProviderStatus().running;
     const child = this.ensureProviderRunning(spec);
+    if (child && forThreadId) {
+      this.threadIdToChild.set(forThreadId, child);
+    }
     const status = this.getProviderStatus();
     if (!launchedBefore && child) {
       return {
@@ -404,7 +439,7 @@ export class EnvironmentAgentRuntime {
     };
   }
 
-  private spawnProvider(spec: EnvironmentAgentProviderSpec): ChildProcess {
+  private spawnProvider(spec: EnvironmentAgentProviderSpec, specKey: string): ChildProcess {
     const command = spec.launchCommand?.trim() || spec.command;
     const args = spec.launchCommand?.trim()
       ? [...(spec.launchArgs ?? []), spec.command, ...spec.args]
@@ -419,24 +454,28 @@ export class EnvironmentAgentRuntime {
 
     child.stdout?.setEncoding("utf-8");
     child.stdout?.on("data", (chunk: string) => {
-      this.providerStdoutBuffer = this.processBufferedLines({
-        buffer: this.providerStdoutBuffer,
+      const updated = this.processBufferedLines({
+        buffer: this.providerStdoutBuffers.get(specKey) ?? "",
         chunk,
         onLine: (line) => {
           this.opts.onStdoutLine?.(line);
           this.emitProviderStdoutLine(line);
-          if (this.tryHandleProviderRpcMessage(line)) {
+          // Capture `child` in this closure so provider-initiated RPCs
+          // are routed back to the originating process, not whichever
+          // child happens to be `this.providerChild` at response time.
+          if (this.tryHandleProviderRpcMessage(line, child)) {
             return;
           }
           this.appendEvent(this.toProviderEvent(line));
         },
       });
+      this.providerStdoutBuffers.set(specKey, updated);
     });
 
     child.stderr?.setEncoding("utf-8");
     child.stderr?.on("data", (chunk: string) => {
-      this.providerStderrBuffer = this.processBufferedLines({
-        buffer: this.providerStderrBuffer,
+      const updated = this.processBufferedLines({
+        buffer: this.providerStderrBuffers.get(specKey) ?? "",
         chunk,
         onLine: (line) => {
           this.opts.onStderrLine?.(line);
@@ -448,16 +487,27 @@ export class EnvironmentAgentRuntime {
           });
         },
       });
+      this.providerStderrBuffers.set(specKey, updated);
     });
 
     child.once("exit", (_code, _signal) => {
       if (this.providerChild === child) {
         this.providerChild = null;
       }
-      if (this.providerInitializedPid === child.pid) {
-        this.providerInitializedPid = undefined;
+      this.providerChildren.delete(specKey);
+      this.providerStdoutBuffers.delete(specKey);
+      this.providerStderrBuffers.delete(specKey);
+      // Remove any threadId → child mappings that point to this child.
+      for (const [tid, c] of this.threadIdToChild) {
+        if (c === child) this.threadIdToChild.delete(tid);
       }
-      this.rejectPendingProviderRequests(
+      if (child.pid !== undefined) {
+        this.providerInitializedPids.delete(child.pid);
+      }
+      // Only reject requests that belong to the exiting child — other
+      // children may still be healthy with in-flight RPCs.
+      this.rejectPendingProviderRequestsForChild(
+        child,
         new Error(`Provider runtime exited (code=${String(_code)}, signal=${String(_signal)})`),
       );
       if (this.shuttingDown) {
@@ -487,7 +537,7 @@ export class EnvironmentAgentRuntime {
       return env;
     }
 
-    const homeDir = env.HOME?.trim() || this.resolveManagedProviderHomeDir();
+    const homeDir = env.HOME?.trim() || this.resolveManagedProviderHomeDir(spec);
     this.materializeProviderFiles(homeDir, spec.files);
     env.HOME = homeDir;
     return env;
@@ -504,12 +554,17 @@ export class EnvironmentAgentRuntime {
     }
   }
 
-  private resolveManagedProviderHomeDir(): string {
+  private resolveManagedProviderHomeDir(spec: EnvironmentAgentProviderSpec): string {
+    // Each provider spec gets its own managed HOME so that concurrent
+    // children with different auth files don't overwrite each other.
+    const specHash = providerSpecKey(spec)
+      .replace(/[^A-Za-z0-9]/g, "")
+      .slice(0, 32);
     return path.join(
       tmpdir(),
       "bb-environment-daemon",
       this.resolveThreadId(),
-      "provider-home",
+      `provider-home-${specHash}`,
     );
   }
 
@@ -526,17 +581,35 @@ export class EnvironmentAgentRuntime {
   }
 
   private async stopProviderChild(timeoutMs: number): Promise<void> {
-    const child = this.providerChild;
-    if (!child) {
-      return;
+    // Collect all live children (the active one plus any others in the map).
+    const children = new Set<ChildProcess>();
+    if (this.providerChild) {
+      children.add(this.providerChild);
+    }
+    for (const child of this.providerChildren.values()) {
+      children.add(child);
     }
 
     this.providerChild = null;
-    this.providerInitializedPid = undefined;
+    this.providerChildren.clear();
+    this.providerStdoutBuffers.clear();
+    this.providerStderrBuffers.clear();
+    this.threadIdToChild.clear();
+    this.providerInitializedPids.clear();
     this.rejectPendingProviderRequests(
       new Error("Provider runtime stopped during environment-agent shutdown"),
     );
 
+    if (children.size === 0) {
+      return;
+    }
+
+    await Promise.all(
+      [...children].map((child) => this.stopSingleChild(child, timeoutMs)),
+    );
+  }
+
+  private async stopSingleChild(child: ChildProcess, timeoutMs: number): Promise<void> {
     child.stdin?.end();
     if (child.exitCode !== null || child.killed) {
       return;
@@ -722,27 +795,60 @@ export class EnvironmentAgentRuntime {
       case "turn.start":
       case "turn.steer":
       case "thread.rename": {
-        const child = this.ensureProviderRunning();
+        // Look up the child that was registered for this thread via
+        // provider.ensure(forThreadId).  Fall back to the generic
+        // ensureProviderRunning() for backwards-compat (single-provider
+        // environments where no forThreadId mapping exists).
+        const mapped = this.resolveChildForThread(command.threadId);
+        const child = mapped ?? this.ensureProviderRunning();
         if (!child) {
           throw new Error("Provider runtime is unavailable");
         }
+        // Make sure requestProvider targets this child. This set-then-await
+        // pattern looks racy but is safe because the session supervisor
+        // executes commands sequentially (one await per command in a for loop).
+        this.providerChild = child;
         if (!command.initialize) {
           return;
         }
-        if (this.providerInitializedPid === child.pid) {
+        if (child.pid !== undefined && this.providerInitializedPids.has(child.pid)) {
           return;
         }
         await this.requestProvider({
           method: command.initialize.method,
           params: command.initialize.params,
         });
-        this.providerInitializedPid = child.pid ?? undefined;
+        if (child.pid !== undefined) {
+          this.providerInitializedPids.add(child.pid);
+        }
         return;
       }
       case "workspace.status":
-      case "workspace.diff":
+      case "workspace.diff": {
+        // Workspace commands also need routing to the correct child so
+        // they reach the provider that owns the thread's workspace.
+        const mapped = this.resolveChildForThread(command.threadId);
+        if (mapped) {
+          this.providerChild = mapped;
+        }
         return;
+      }
     }
+  }
+
+  /**
+   * Look up the provider child that was registered for a given threadId
+   * via a preceding provider.ensure command.  Returns undefined when
+   * no mapping exists or the mapped child has already exited.
+   */
+  private resolveChildForThread(threadId: string): ChildProcess | undefined {
+    const child = this.threadIdToChild.get(threadId);
+    if (!child) return undefined;
+    if (child.killed || child.exitCode !== null) {
+      this.threadIdToChild.delete(threadId);
+      return undefined;
+    }
+    return child;
   }
 
   private requestProviderCommand(
@@ -820,7 +926,7 @@ export class EnvironmentAgentRuntime {
           ),
         );
       }, timeoutMs);
-      this.pendingProviderRequests.set(id, { resolve, reject, timeout });
+      this.pendingProviderRequests.set(id, { child, resolve, reject, timeout });
       try {
         stdin.write(`${message}\n`);
       } catch (error) {
@@ -831,7 +937,7 @@ export class EnvironmentAgentRuntime {
     });
   }
 
-  private tryHandleProviderRpcMessage(line: string): boolean {
+  private tryHandleProviderRpcMessage(line: string, sourceChild: ChildProcess): boolean {
     let parsed: unknown;
     try {
       parsed = JSON.parse(line);
@@ -850,7 +956,7 @@ export class EnvironmentAgentRuntime {
       return false;
     }
     if (typeof record.method === "string") {
-      void this.handleProviderServerRequest({
+      void this.handleProviderServerRequest(sourceChild, {
         requestId: id,
         method: record.method,
         params: record.params,
@@ -880,14 +986,18 @@ export class EnvironmentAgentRuntime {
     return true;
   }
 
-  private async handleProviderServerRequest(args: {
-    requestId: string | number;
-    method: string;
-    params?: unknown;
-  }): Promise<void> {
-    const child = this.providerChild;
-    const stdin = child?.stdin;
-    if (!stdin || child.killed || child.exitCode !== null) {
+  private async handleProviderServerRequest(
+    sourceChild: ChildProcess,
+    args: {
+      requestId: string | number;
+      method: string;
+      params?: unknown;
+    },
+  ): Promise<void> {
+    // Route the response back to the child that emitted the request,
+    // not whichever child happens to be active right now.
+    const stdin = sourceChild.stdin;
+    if (!stdin || sourceChild.killed || sourceChild.exitCode !== null) {
       return;
     }
 
@@ -937,6 +1047,15 @@ export class EnvironmentAgentRuntime {
 
   private rejectPendingProviderRequests(error: Error): void {
     for (const [id, pending] of this.pendingProviderRequests) {
+      clearTimeout(pending.timeout);
+      pending.reject(error);
+      this.pendingProviderRequests.delete(id);
+    }
+  }
+
+  private rejectPendingProviderRequestsForChild(child: ChildProcess, error: Error): void {
+    for (const [id, pending] of this.pendingProviderRequests) {
+      if (pending.child !== child) continue;
       clearTimeout(pending.timeout);
       pending.reject(error);
       this.pendingProviderRequests.delete(id);
@@ -993,4 +1112,19 @@ export class EnvironmentAgentRuntime {
 
 function normalizeRuntimeEventMethod(method: string): string {
   return method.toLowerCase().replaceAll(".", "/");
+}
+
+/**
+ * Produce a stable key for a provider spec so that children are only reused
+ * when the full launch configuration matches — not just the command name.
+ */
+function providerSpecKey(spec: EnvironmentAgentProviderSpec): string {
+  return JSON.stringify([
+    spec.command,
+    spec.args,
+    spec.launchCommand ?? null,
+    spec.launchArgs ?? [],
+    spec.env ?? null,
+    spec.files?.map((f) => [f.path, f.content, f.placement]) ?? null,
+  ]);
 }

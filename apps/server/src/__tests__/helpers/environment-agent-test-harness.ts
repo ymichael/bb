@@ -396,7 +396,7 @@ export function createFakeEnvironmentAgentClient(
         handlers?.onClose?.(reason);
       },
     },
-    ensureProviderRunning: async (spec) => {
+    ensureProviderRunning: async (spec, _forThreadId) => {
       ensureSpecs.push({
         command: spec.command,
         args: [...spec.args],

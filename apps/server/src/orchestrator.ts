@@ -3488,6 +3488,12 @@ export class Orchestrator implements ThreadOrchestrator {
     if (attachedEnvironmentId && thread && thread.environmentId !== attachedEnvironmentId) {
       this.threadRepo.update(threadId, { environmentId: attachedEnvironmentId });
     }
+    if (attachedEnvironmentId && this.threadEnvironmentAttachmentRepo) {
+      this.threadEnvironmentAttachmentRepo.attachThread({
+        threadId,
+        environmentId: attachedEnvironmentId,
+      });
+    }
     // Reusing a shared attached environment must preserve the live env-daemon runtime.
     if (!(attachedEnvironmentId && this.environmentService.hasSharedAttachedEnvironment(threadId))) {
       this._cleanupThreadRuntime(threadId);

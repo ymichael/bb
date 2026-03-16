@@ -14,7 +14,7 @@ export function createTurnCounterState(): TurnCounterState {
   return { turnCounter: 0 };
 }
 
-function nextTurnId(state: TurnCounterState): string {
+export function nextTurnId(state: TurnCounterState): string {
   state.turnCounter += 1;
   return `turn-${state.turnCounter}`;
 }

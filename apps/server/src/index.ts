@@ -43,8 +43,8 @@ function parseArgs(): { port: number; dbPath: string; logFilePath: string } {
   for (let i = 0; i < args.length; i++) {
     if ((args[i] === "--port" || args[i] === "-p") && args[i + 1]) {
       port = parseInt(args[i + 1], 10);
-      if (isNaN(port)) {
-        console.error(`Invalid port: ${args[i + 1]}`);
+      if (isNaN(port) || port <= 0) {
+        console.error(`Invalid port: ${args[i + 1]}. Port must be a positive integer.`);
         process.exit(1);
       }
       i++;
