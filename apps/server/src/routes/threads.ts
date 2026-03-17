@@ -234,6 +234,16 @@ const environmentAgentSessionMessageBodySchema = z.discriminatedUnion("type", [
       requestId: z.union([z.string().min(1), z.number()]),
       method: z.string().min(1),
       params: z.unknown().optional(),
+      providerId: z.string().min(1).optional(),
+      normalizedMethod: z.string().min(1).optional(),
+      toolCall: z.object({
+        requestId: z.union([z.string().min(1), z.number()]),
+        threadId: z.string().min(1),
+        turnId: z.string().min(1),
+        callId: z.string().min(1),
+        tool: z.string().min(1),
+        arguments: z.unknown(),
+      }).optional(),
     }),
   }),
   environmentAgentSessionMessageBaseSchema.extend({

@@ -178,6 +178,7 @@ export function resolveEnvironmentAgentServiceOptions(args: {
       threadId: args.env.BB_THREAD_ID,
       projectId: args.env.BB_PROJECT_ID,
       environmentId: args.env.BB_ENVIRONMENT_ID,
+      providerId: args.env[BB_THREAD_PROVIDER_ID]?.trim(),
       daemonConnection: {
         daemonUrl: args.env[BB_DAEMON_URL],
         authToken,

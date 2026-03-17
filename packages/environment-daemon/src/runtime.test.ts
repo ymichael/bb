@@ -714,13 +714,21 @@ describe("EnvironmentAgentRuntime", () => {
   it("routes provider-initiated RPC responses back to the originating child", async () => {
     // Spawn two providers: child A sends a server request (tool call),
     // child B just idles. The RPC response must go to child A, not child B.
-    const toolCalls: Array<{ requestId: string | number; method: string }> = [];
+    const toolCalls: Array<{ requestId: string | number; method: string; toolCall?: unknown }> = [];
     const stdoutLines: string[] = [];
     const runtime = new EnvironmentAgentRuntime({
       threadId: "thread-1",
+      providerId: "codex",
       onProviderRequest: async (request) => {
-        toolCalls.push({ requestId: request.requestId, method: request.method });
-        return { success: true };
+        toolCalls.push({
+          requestId: request.requestId,
+          method: request.method,
+          toolCall: request.toolCall,
+        });
+        return {
+          contentItems: [{ type: "inputText", text: "ok" }],
+          success: true,
+        };
       },
     });
     cleanup.push(() => runtime.shutdown());
@@ -932,15 +940,24 @@ describe("EnvironmentAgentRuntime", () => {
   });
 
   it("resolves provider server requests through the callback", async () => {
-    const requests: Array<{ requestId: string | number; method: string; params?: unknown }> = [];
+    const requests: Array<{
+      requestId: string | number;
+      method: string;
+      params?: unknown;
+      providerId?: string;
+      normalizedMethod?: string;
+      toolCall?: unknown;
+    }> = [];
     const stdout: string[] = [];
     const runtime = new EnvironmentAgentRuntime({
       threadId: "thread-1",
+      providerId: "codex",
       providerCommand: "node",
       providerArgs: [
         "-e",
         [
           "console.log(JSON.stringify({ id: 61, method: 'item/tool/call', params: { tool: 'echo', arguments: { text: 'hi' } } }));",
+          "console.log(JSON.stringify({ id: 62, method: 'item/tool/call', params: { threadId: 'provider-thread-1', turnId: 'turn-1', callId: 'call-1', tool: 'echo', arguments: { text: 'hi' } } }));",
           "process.stdin.setEncoding('utf8');",
           "let buffer='';",
           "process.stdin.on('data',chunk=>{",
@@ -967,13 +984,35 @@ describe("EnvironmentAgentRuntime", () => {
 
     runtime.start();
 
-    await expect.poll(() => requests).toContainEqual({
-      requestId: 61,
-      method: "item/tool/call",
-      params: { tool: "echo", arguments: { text: "hi" } },
-    });
+    await expect
+      .poll(() =>
+        requests.find((request) => {
+          return request.requestId === 62;
+        }),
+      )
+      .toEqual({
+        requestId: 62,
+        method: "item/tool/call",
+        params: {
+          threadId: "provider-thread-1",
+          turnId: "turn-1",
+          callId: "call-1",
+          tool: "echo",
+          arguments: { text: "hi" },
+        },
+        providerId: "codex",
+        normalizedMethod: "item/tool/call",
+        toolCall: {
+          requestId: 62,
+          threadId: "provider-thread-1",
+          turnId: "turn-1",
+          callId: "call-1",
+          tool: "echo",
+          arguments: { text: "hi" },
+        },
+      });
     await expect.poll(() =>
-      stdout.some((line) => line.includes('"id":61') && line.includes('"result"')),
+      stdout.some((line) => line.includes('"id":62') && line.includes('"result"')),
     ).toBe(true);
   });
 });

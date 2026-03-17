@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import type { ProviderToolCallResponse } from "@bb/core";
 import {
   ENVIRONMENT_AGENT_PROTOCOL_VERSION,
   type EnvironmentAgentCommand,
@@ -18,6 +19,7 @@ import {
   type EnvironmentAgentProviderStatus,
   type EnvironmentAgentStatusSnapshot,
 } from "./protocol.js";
+import { getEnvironmentAgentProviderSemantics } from "./provider-semantics.js";
 
 type EnvironmentAgentProviderEnsureCommand = Extract<
   EnvironmentAgentCommand,
@@ -32,6 +34,7 @@ export interface EnvironmentAgentRuntimeOptions {
   threadId?: string;
   projectId?: string;
   environmentId?: string;
+  providerId?: string;
   daemonConnection?: EnvironmentAgentDaemonConnectionConfig;
   providerCommand?: string;
   providerArgs?: string[];
@@ -41,6 +44,9 @@ export interface EnvironmentAgentRuntimeOptions {
     requestId: string | number;
     method: string;
     params?: unknown;
+    providerId?: string;
+    normalizedMethod?: string;
+    toolCall?: import("@bb/core").ProviderToolCallRequest;
   }) => Promise<unknown> | unknown;
   onStdoutLine?: (line: string) => void;
   onStderrLine?: (line: string) => void;
@@ -694,11 +700,23 @@ export class EnvironmentAgentRuntime {
       };
     }
 
+    const payload = record.params ?? {};
+    const normalized = this.getProviderSemantics()?.normalizeEvent(record.method, payload);
     return {
       type: "provider.event",
-      threadId: this.resolveProviderEventThreadId(record.params),
+      threadId: this.resolveProviderEventThreadId(payload),
       method: record.method,
-      payload: record.params ?? {},
+      payload,
+      ...(normalized?.providerId ? { providerId: normalized.providerId } : {}),
+      ...(normalized?.normalizedMethod
+        ? { normalizedMethod: normalized.normalizedMethod }
+        : {}),
+      ...(normalized ? { shouldPersist: normalized.shouldPersist } : {}),
+      ...(normalized ? { shouldBroadcast: normalized.shouldBroadcast } : {}),
+      ...(normalized?.nextStatus ? { nextStatus: normalized.nextStatus } : {}),
+      ...(normalized?.title ? { title: normalized.title } : {}),
+      ...(normalized?.turnState ? { turnState: normalized.turnState } : {}),
+      ...(normalized?.turnId ? { turnId: normalized.turnId } : {}),
     };
   }
 
@@ -746,6 +764,10 @@ export class EnvironmentAgentRuntime {
   }
 
   private extractProviderThreadId(value: unknown): string | undefined {
+    const normalizedThreadId = this.getProviderSemantics()?.extractThreadId(value);
+    if (normalizedThreadId) {
+      return normalizedThreadId;
+    }
     const record = this.asRecord(value);
     if (!record) {
       return undefined;
@@ -1061,8 +1083,28 @@ export class EnvironmentAgentRuntime {
       return;
     }
 
+    const providerId = this.opts.providerId ?? process.env.BB_THREAD_PROVIDER_ID;
+    const providerSemantics = this.getProviderSemantics();
+
     try {
-      const result = await this.opts.onProviderRequest(args);
+      const response = await this.opts.onProviderRequest({
+        ...args,
+        ...(providerSemantics
+          ? {
+              providerId,
+              normalizedMethod: normalizeRuntimeEventMethod(args.method),
+              toolCall: providerSemantics.decodeToolCallRequest(
+                args.requestId,
+                args.method,
+                args.params,
+              ) ?? undefined,
+            }
+          : {}),
+      });
+      const result =
+        isProviderToolCallResponse(response) && providerSemantics
+          ? providerSemantics.encodeToolCallResponse(response)
+          : response;
       stdin.write(
         `${JSON.stringify({
           jsonrpc: "2.0",
@@ -1149,11 +1191,30 @@ export class EnvironmentAgentRuntime {
     ) {
       return { code: "provider_unavailable", message };
     }
-    if (normalized.includes("no rollout found for thread id")) {
+    if (
+      this.getProviderSemantics()?.isMissingProviderThreadMessage(message) ||
+      normalized.includes("no rollout found for thread id")
+    ) {
       return { code: "missing_provider_thread", message };
     }
     return { code: "provider_rpc_error", message };
   }
+
+  private getProviderSemantics() {
+    return getEnvironmentAgentProviderSemantics(
+      this.opts.providerId ?? process.env.BB_THREAD_PROVIDER_ID,
+    );
+  }
+}
+
+function isProviderToolCallResponse(value: unknown): value is ProviderToolCallResponse {
+  return (
+    value !== null &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    Array.isArray((value as { contentItems?: unknown }).contentItems) &&
+    typeof (value as { success?: unknown }).success === "boolean"
+  );
 }
 
 function normalizeRuntimeEventMethod(method: string): string {

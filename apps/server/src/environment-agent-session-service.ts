@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import type { ProviderToolCallResponse } from "@bb/core";
 import type {
   EnvironmentAgentCursorPosition,
   EnvironmentAgentCursorRepository,
@@ -40,7 +41,11 @@ export interface EnvironmentAgentSessionServiceOptions {
   providerRequestHandler?: (args: {
     threadId: string;
     request: EnvironmentAgentSessionProviderRequestPayload;
-  }) => Promise<{ result: unknown } | { errorCode?: string; errorMessage: string }>;
+  }) => Promise<
+    | { result: unknown }
+    | { toolCallResponse: ProviderToolCallResponse }
+    | { errorCode?: string; errorMessage: string }
+  >;
   resolveEnvironmentId?: (threadId: string) => string | undefined;
   listAttachedThreadIds?: (environmentId: string) => string[];
   onSessionInvalidated?: (session: EnvironmentAgentSessionRecord) => void;
@@ -132,7 +137,11 @@ export class EnvironmentAgentSessionService {
       threadId: string;
       request: EnvironmentAgentSessionProviderRequestPayload;
     },
-  ) => Promise<{ result: unknown } | { errorCode?: string; errorMessage: string }>;
+  ) => Promise<
+    | { result: unknown }
+    | { toolCallResponse: ProviderToolCallResponse }
+    | { errorCode?: string; errorMessage: string }
+  >;
   private readonly onSessionInvalidated?: (
     session: EnvironmentAgentSessionRecord,
   ) => void;
@@ -610,6 +619,12 @@ export class EnvironmentAgentSessionService {
               ok: true,
               result: response.result,
             }
+          : "toolCallResponse" in response
+            ? {
+                requestId: args.payload.requestId,
+                ok: true,
+                toolCallResponse: response.toolCallResponse,
+              }
           : {
               requestId: args.payload.requestId,
               ok: false,

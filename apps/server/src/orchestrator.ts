@@ -11,6 +11,7 @@ import { delimiter, isAbsolute, join, relative, resolve } from "node:path";
 import {
   buildCommitFailureFollowUpInstruction,
   assertNever,
+  createProviderEventEnvelope,
   DEFAULT_THREAD_PROVIDER_ID,
   extractProviderThreadIdFromPersistedEventData,
   extractTurnIdFromPersistedEventData,
@@ -29,6 +30,8 @@ import {
   type ProviderAdapter,
   type ProviderExecutionOptions,
   type ProviderThreadContext,
+  type ProviderToolCallRequest,
+  type ProviderToolCallResponse,
   type SchedulerService,
   type ServiceTier,
   type SystemProviderInfo,
@@ -3307,9 +3310,43 @@ export class Orchestrator implements ThreadOrchestrator {
       throw threadNotFoundError(args.threadId);
     }
 
+    const fallbackEvents: EnvironmentAgentEventEnvelope[] = [];
+    for (const envelope of args.events) {
+      const event = envelope.event;
+      if (
+        event.type === "provider.event" &&
+        event.providerId &&
+        event.normalizedMethod
+      ) {
+        this._handleAgentServerNotification(args.threadId, {
+          method: event.method,
+          normalizedMethod: event.normalizedMethod,
+          eventType: event.method as ThreadEventType,
+          eventData: createProviderEventEnvelope({
+            providerId: event.providerId,
+            method: event.method,
+            payload: event.payload,
+            observedAt: envelope.emittedAt,
+          }),
+          shouldPersist: event.shouldPersist !== false,
+          shouldBroadcast: event.shouldBroadcast !== false,
+          ...(event.nextStatus ? { nextStatus: event.nextStatus } : {}),
+          ...(event.title ? { title: event.title } : {}),
+          ...(event.turnState ? { turnState: event.turnState } : {}),
+          ...(event.turnId ? { turnId: event.turnId } : {}),
+        });
+        continue;
+      }
+      fallbackEvents.push(envelope);
+    }
+
+    if (fallbackEvents.length === 0) {
+      return;
+    }
+
     await this._getAgentServerForThread(thread).ingestReplayedEnvironmentAgentEvents({
       threadId: args.threadId,
-      events: args.events,
+      events: fallbackEvents,
     });
   }
 
@@ -3318,10 +3355,27 @@ export class Orchestrator implements ThreadOrchestrator {
     requestId: string | number;
     method: string;
     params?: unknown;
+    providerId?: string;
+    normalizedMethod?: string;
+    toolCall?: ProviderToolCallRequest;
   }): Promise<unknown> {
     const thread = this.threadRepo.getById(args.threadId);
     if (!thread) {
       throw threadNotFoundError(args.threadId);
+    }
+
+    if (args.toolCall) {
+      if (!this.providerToolHost) {
+        throw unsupportedOperationError("No provider tool host is configured");
+      }
+      const toolCallResponse = await this.providerToolHost.execute({
+        call: args.toolCall,
+        context: this._buildProviderThreadContext({
+          threadId: args.threadId,
+          projectId: thread.projectId,
+        }),
+      });
+      return { toolCallResponse } satisfies { toolCallResponse: ProviderToolCallResponse };
     }
 
     return this._getAgentServerForThread(thread).handleProviderRequest({

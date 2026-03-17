@@ -870,6 +870,66 @@ describe("EnvironmentAgentSessionService", () => {
     });
   });
 
+  it("returns typed tool-call responses from the provider request handler", async () => {
+    const threadId = createThreadId();
+    const serviceWithProviderRequests = new EnvironmentAgentSessionService(
+      new EnvironmentAgentSessionManager(sessions),
+      cursors,
+      {
+        leaseTtlMs: 45_000,
+        heartbeatIntervalMs: 15_000,
+        clock: () => TEST_LEASE_NOW,
+        providerRequestHandler: vi.fn(async () => ({
+          toolCallResponse: {
+            contentItems: [{ type: "inputText", text: "ok" } as const],
+            success: true,
+          },
+        })),
+      },
+    );
+    const opened = serviceWithProviderRequests.openSession({
+      threadId,
+      now: 1_000,
+      payload: {
+        agentId: "agent-1",
+        agentInstanceId: "instance-1",
+        supportedProtocolVersions: [1],
+        channels: [{ channelId: threadId, generation: 1 }],
+      },
+    });
+
+    const response = await serviceWithProviderRequests.handleProviderRequest({
+      threadId,
+      sessionId: opened.session.id,
+      now: 2_000,
+      payload: {
+        requestId: 62,
+        method: "item/tool/call",
+        toolCall: {
+          requestId: 62,
+          threadId,
+          turnId: "turn-1",
+          callId: "call-1",
+          tool: "echo_test_tool",
+          arguments: { message: "hi" },
+        },
+      },
+    });
+
+    expect(response).toMatchObject({
+      type: "provider_response",
+      sessionId: opened.session.id,
+      payload: {
+        requestId: 62,
+        ok: true,
+        toolCallResponse: {
+          success: true,
+          contentItems: [{ type: "inputText", text: "ok" }],
+        },
+      },
+    });
+  });
+
   it("applies event batches and resets the agent cursor when the daemon detects a gap", async () => {
     const threadId = createThreadId();
     const opened = service.openSession({

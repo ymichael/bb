@@ -188,6 +188,14 @@ export type EnvironmentAgentEvent =
       threadId: string;
       method: string;
       payload: unknown;
+      providerId?: string;
+      normalizedMethod?: string;
+      shouldPersist?: boolean;
+      shouldBroadcast?: boolean;
+      nextStatus?: Thread["status"];
+      title?: string;
+      turnState?: "active" | "idle";
+      turnId?: string;
     }
   | {
       type: "provider.stderr";
@@ -312,3 +320,4 @@ export function isEnvironmentAgentControlResponse(
     type === "status.response"
   );
 }
+import type { Thread } from "@bb/core";

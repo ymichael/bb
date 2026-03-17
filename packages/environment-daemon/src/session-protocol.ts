@@ -1,4 +1,8 @@
 import type {
+  ProviderToolCallRequest,
+  ProviderToolCallResponse,
+} from "@bb/core";
+import type {
   EnvironmentAgentCommand,
   EnvironmentAgentEvent,
 } from "./protocol.js";
@@ -317,12 +321,16 @@ export interface EnvironmentAgentSessionProviderRequestPayload {
   requestId: string | number;
   method: string;
   params?: unknown;
+  providerId?: string;
+  normalizedMethod?: string;
+  toolCall?: ProviderToolCallRequest;
 }
 
 export interface EnvironmentAgentSessionProviderResponsePayload {
   requestId: string | number;
   ok: boolean;
   result?: unknown;
+  toolCallResponse?: ProviderToolCallResponse;
   errorCode?: string;
   errorMessage?: string;
 }

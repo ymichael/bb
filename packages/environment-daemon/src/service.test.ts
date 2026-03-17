@@ -35,6 +35,7 @@ describe("environment-agent service config", () => {
         threadId: "thread-1",
         projectId: "project-1",
         environmentId: "docker",
+        providerId: "codex",
         daemonConnection: {
           daemonUrl: "http://127.0.0.1:9000",
           authToken: "secret-token",

@@ -16,7 +16,7 @@ import type {
   ThreadRepository,
   EventRepository,
 } from "@bb/db";
-import type { SpawnThreadRequest } from "@bb/core";
+import type { ProviderToolCallResponse, SpawnThreadRequest } from "@bb/core";
 import {
   AgentServer,
   createCodexLlmCompletionService,
@@ -50,6 +50,17 @@ import { composeProviderToolHosts, createManagerProviderToolHost } from "./manag
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+
+function isToolCallResponseEnvelope(
+  value: unknown,
+): value is { toolCallResponse: ProviderToolCallResponse } {
+  return (
+    value !== null
+    && typeof value === "object"
+    && !Array.isArray(value)
+    && "toolCallResponse" in value
+  );
+}
 
 export interface ServerDeps {
   projectRepo: ProjectRepository;
@@ -171,7 +182,12 @@ export function createServer(deps: ServerDeps) {
           requestId: request.requestId,
           method: request.method,
           ...(request.params !== undefined ? { params: request.params } : {}),
-        }).then((result) => ({ result }))
+          ...(request.providerId ? { providerId: request.providerId } : {}),
+          ...(request.normalizedMethod
+            ? { normalizedMethod: request.normalizedMethod }
+            : {}),
+          ...(request.toolCall ? { toolCall: request.toolCall } : {}),
+        }).then((result) => (isToolCallResponseEnvelope(result) ? result : { result }))
         .catch((error: unknown) => ({
           errorMessage: error instanceof Error ? error.message : String(error),
         })),
