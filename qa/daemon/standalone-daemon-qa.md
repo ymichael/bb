@@ -7,6 +7,7 @@ Use this guide when you want to validate user-visible behavior end-to-end, espec
 - standalone daemon startup and restart
 - thread spawn, follow-up, steer, and stop flows
 - worktree provisioning and recovery
+- provider-initiated tool calls through env-daemon session supervision
 - CLI commands that should work against a running daemon
 
 For a faster representative pass, use:
@@ -42,6 +43,8 @@ All the test scenarios in this document apply to all providers. The only differe
 It is fine to run the full exhaustive QA pass against only one provider and then run a lighter smoke pass (`pnpm qa:daemon:smoke` or `pnpm qa:daemon:smoke:claude-code`) against the other supported providers. The daemon lifecycle, restart, and recovery behaviors are provider-agnostic — a full pass on one provider gives high confidence that the core paths work, while a smoke pass on the others confirms that the provider-specific bridge and adapter wiring is healthy.
 
 **Multi-provider coexistence is NOT covered by single-provider passes.** When touching environment-daemon runtime code, provider bridges, or command routing, you MUST also run the multi-provider scenario below. Bugs in this area only manifest when two different providers are active in the same env-daemon simultaneously — single-provider tests will pass while multi-provider usage is completely broken.
+
+**General tool-call smoke is NOT enough for env-daemon changes.** When touching environment-daemon service glue, session supervision, provider request handling, dynamic tools, or tool-call encoding/decoding, you MUST also run a provider-initiated tool call through the session-backed env-daemon path. Past regressions in this area passed normal lifecycle QA because thread spawn/follow-up worked while successful tool-call responses were silently dropped on the way back to the provider child.
 
 ## Rules
 
@@ -908,6 +911,33 @@ Expected:
 - Follow-up on A fails only after B has run → env-daemon reused the wrong provider thread/runtime state
 - Stopping A causes B to error, lose its session, or stop accepting follow-ups → runtime teardown is incorrectly global instead of scoped to the A provider child or thread
 
+### 9. Validate provider-initiated tool calls through the session-backed env-daemon path
+
+**This is required whenever the change touches env-daemon session glue, provider request routing, dynamic tools, or tool-call encoding/decoding.** Do not count generic thread lifecycle QA or direct-path tool-call checks as sufficient. The failure mode to catch here is: the provider issues a tool call successfully, BB executes it, but the env-daemon session-supervisor path returns the wrong success payload shape back to the provider child.
+
+Automated real-provider coverage already exists for this path:
+
+```bash
+pnpm --filter @bb/server exec vitest run \
+  src/__tests__/e2e/dynamic-tools-daemon-roundtrip.test.ts \
+  src/__tests__/e2e/codex-dynamic-tools-daemon-roundtrip.test.ts
+```
+
+If you are doing a manual standalone pass, also verify at least one provider-initiated tool call end-to-end:
+
+1. Start the standalone daemon normally.
+2. Spawn a thread that is guaranteed to invoke a BB tool exposed through the provider bridge.
+3. Wait for the thread to settle.
+4. Inspect the final output, raw events, and daemon log.
+
+Expected:
+
+- the tool call completes successfully
+- the provider receives a successful response, not `undefined`
+- the thread does not hang on the tool call
+- raw events show the tool request and completion, with no `provider_rpc_error`
+- no `Unhandled provider request` or env-daemon session-supervisor errors appear in the daemon log
+
 ## Main Daemon QA
 
 Use this when the user already has the main daemon running and wants direct QA against it.
@@ -993,6 +1023,7 @@ Use the tier names **light**, **extended**, or **full** when requesting a QA pas
 - worktree start
 - worktree follow-up
 - provider verification (`providerId` in thread show + raw event envelopes)
+- provider-initiated tool-call roundtrip through env-daemon (`dynamic-tools-daemon-roundtrip`)
 
 ### Extended QA pass
 
@@ -1009,6 +1040,7 @@ Everything in **light**, plus:
 - archived thread is visibly marked as archived in thread inspection output
 - worktree unarchive then follow-up
 - **multi-provider coexistence** (see scenario below) — spawn threads with two different providers in the same project/environment and confirm both work
+- explicit session-backed provider tool-call validation (see scenario below)
 
 ### Full QA pass
 
