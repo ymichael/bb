@@ -110,13 +110,6 @@ export type EnvironmentAgentCommand =
       initialize?: EnvironmentAgentInitializeRequest;
     }
   | {
-      type: "turn.start";
-      threadId: string;
-      providerThreadId: string;
-      params: unknown;
-      initialize?: EnvironmentAgentInitializeRequest;
-    }
-  | {
       type: "turn.run";
       threadId: string;
       providerThreadId: string;
@@ -124,14 +117,6 @@ export type EnvironmentAgentCommand =
       activeTurnId?: string;
       input?: PromptInput[];
       options?: ProviderExecutionOptions;
-      initialize?: EnvironmentAgentInitializeRequest;
-    }
-  | {
-      type: "turn.steer";
-      threadId: string;
-      providerThreadId: string;
-      turnId: string;
-      params: unknown;
       initialize?: EnvironmentAgentInitializeRequest;
     }
   | {

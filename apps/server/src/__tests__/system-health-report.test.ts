@@ -178,8 +178,6 @@ describe("system health report", () => {
             disposition: "degrade",
             missingRequiredCommands: [],
             missingOptionalCommands: [
-              "turn.start",
-              "turn.steer",
               "thread.rename",
               "provider.list_catalog",
               "workspace.status",

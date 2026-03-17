@@ -18,8 +18,6 @@ const REQUIRED_COMMANDS = [
 ] as const;
 
 const OPTIONAL_COMMANDS = [
-  "turn.start",
-  "turn.steer",
   "thread.rename",
   "provider.list_catalog",
   "workspace.status",

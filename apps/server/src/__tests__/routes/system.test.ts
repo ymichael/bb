@@ -204,8 +204,6 @@ describe("System routes", () => {
                 disposition: "degrade",
                 missingRequiredCommands: [],
                 missingOptionalCommands: [
-                  "turn.start",
-                  "turn.steer",
                   "thread.rename",
                   "provider.list_catalog",
                   "workspace.status",
@@ -286,8 +284,6 @@ describe("System routes", () => {
                 disposition: "degrade",
                 missingRequiredCommands: [],
                 missingOptionalCommands: [
-                  "turn.start",
-                  "turn.steer",
                   "thread.rename",
                   "provider.list_catalog",
                   "workspace.status",

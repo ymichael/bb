@@ -81,8 +81,6 @@ const environmentAgentSessionCapabilitiesSchema = z.object({
     "thread.resume",
     "thread.stop",
     "turn.run",
-    "turn.start",
-    "turn.steer",
     "thread.rename",
     "provider.list_models",
     "provider.list_catalog",

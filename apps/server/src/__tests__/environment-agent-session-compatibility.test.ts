@@ -53,8 +53,7 @@ describe("environment-agent session compatibility", () => {
 
     expect(assessment.compatibility.disposition).toBe("degrade");
     expect(assessment.compatibility.missingRequiredCommands).toEqual([]);
-    expect(assessment.compatibility.missingOptionalCommands).toContain("turn.start");
-    expect(assessment.compatibility.missingOptionalCommands).toContain("turn.steer");
+    expect(assessment.compatibility.missingOptionalCommands).toContain("thread.rename");
     expect(assessment.compatibility.missingOptionalCommands).toContain("provider.list_catalog");
   });
 });

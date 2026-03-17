@@ -68,10 +68,6 @@ function toProviderMethod(command: EnvironmentAgentRpcCommand): string {
       return command.requestedMode === "steer"
         ? provider.turnSteerMethod ?? provider.turnStartMethod
         : provider.turnStartMethod;
-    case "turn.start":
-      return provider.turnStartMethod;
-    case "turn.steer":
-      return provider.turnSteerMethod ?? "turn/steer";
     case "thread.rename":
       return provider.threadNameSetMethod ?? "thread/name/set";
     case "workspace.status":
@@ -119,9 +115,6 @@ function toProviderParams(command: EnvironmentAgentRpcCommand): unknown {
         command.input!,
         command.options,
       );
-    case "turn.start":
-    case "turn.steer":
-      return command.params;
     case "thread.rename":
       return provider.createThreadNameSetParams!(
         command.providerThreadId,

@@ -370,8 +370,6 @@ export class EnvironmentAgentRuntime {
       case "thread.start":
       case "thread.resume":
       case "turn.run":
-      case "turn.start":
-      case "turn.steer":
         this.turnState = "active";
         return;
       case "thread.stop":
@@ -761,9 +759,7 @@ export class EnvironmentAgentRuntime {
           this.extractProviderThreadId(result) ?? command.providerThreadId,
         );
         return;
-      case "turn.start":
       case "turn.run":
-      case "turn.steer":
       case "thread.rename":
         this.recordProviderThreadMapping(command.threadId, command.providerThreadId);
         return;
@@ -872,8 +868,6 @@ export class EnvironmentAgentRuntime {
       case "thread.resume":
       case "thread.stop":
       case "turn.run":
-      case "turn.start":
-      case "turn.steer":
       case "thread.rename": {
         // Route per-thread commands to the child registered via
         // provider.ensure(forThreadId). Single-provider runtimes may not
@@ -1050,10 +1044,6 @@ export class EnvironmentAgentRuntime {
         return "thread/stop";
       case "turn.run":
         return provider?.turnStartMethod ?? "turn/start";
-      case "turn.start":
-        return provider?.turnStartMethod ?? "turn/start";
-      case "turn.steer":
-        return provider?.turnSteerMethod ?? "turn/steer";
       case "thread.rename":
         return provider?.threadNameSetMethod ?? "thread/name/set";
       case "workspace.status":
@@ -1085,9 +1075,6 @@ export class EnvironmentAgentRuntime {
           command.options,
           command.resumePath,
         );
-      case "turn.start":
-      case "turn.steer":
-        return command.params;
       case "thread.rename":
         if (!provider?.createThreadNameSetParams) {
           throw new Error("thread/name/set params are unavailable");

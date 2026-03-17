@@ -444,10 +444,10 @@ describe("EnvironmentAgentRuntime", () => {
         sentAt: 102,
       },
       command: {
-        type: "turn.start",
+        type: "turn.run",
         threadId: "thread-1",
         providerThreadId: "provider-thread-1",
-        params: { threadId: "provider-thread-1", input: [] },
+        input: [],
       },
     });
     await runtime.executeCommand({
@@ -458,10 +458,10 @@ describe("EnvironmentAgentRuntime", () => {
         sentAt: 103,
       },
       command: {
-        type: "turn.start",
+        type: "turn.run",
         threadId: "thread-2",
         providerThreadId: "provider-thread-2",
-        params: { threadId: "provider-thread-2", input: [] },
+        input: [],
       },
     });
 
@@ -624,7 +624,7 @@ describe("EnvironmentAgentRuntime", () => {
     expect(ackB.state).toBe("accepted");
     expect((ackB.result as Record<string, unknown>).role).toBe("provider-B");
 
-    // 5. NOW send a turn/start for thread-a WITHOUT calling
+    // 5. NOW send a turn/run for thread-a WITHOUT calling
     // ensureProviderRunning(specA) first. The runtime must route this
     // to child A (mapped via forThreadId), not child B (this.providerChild).
     const ackA2 = await runtime.executeCommand({
@@ -635,10 +635,10 @@ describe("EnvironmentAgentRuntime", () => {
         sentAt: 300,
       },
       command: {
-        type: "turn.start",
+        type: "turn.run",
         threadId: "thread-a",
         providerThreadId: "thread-a",
-        params: { threadId: "thread-a", input: [] },
+        input: [],
       },
     });
     expect(ackA2.state).toBe("accepted");
@@ -750,10 +750,10 @@ describe("EnvironmentAgentRuntime", () => {
         sentAt: 300,
       },
       command: {
-        type: "turn.start",
+        type: "turn.run",
         threadId: "thread-a",
         providerThreadId: "thread-a",
-        params: { threadId: "thread-a", input: [] },
+        input: [],
         initialize: {
           method: "initialize",
           params: { clientInfo: { name: "bb", version: "0.0.1" } },

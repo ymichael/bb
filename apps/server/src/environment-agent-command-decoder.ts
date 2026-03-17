@@ -18,8 +18,6 @@ const ENVIRONMENT_AGENT_COMMAND_TYPES = [
   "thread.resume",
   "thread.stop",
   "turn.run",
-  "turn.start",
-  "turn.steer",
   "thread.rename",
   "provider.list_models",
   "provider.list_catalog",
@@ -309,41 +307,6 @@ export function decodePersistedEnvironmentAgentCommand(args: {
         ...(initialize ? { initialize } : {}),
       };
     }
-    case "turn.start":
-      if (!("params" in record)) {
-        throw new Error(
-          `Invalid persisted environment-agent command payload for ${commandType}`,
-        );
-      }
-      return {
-        type: commandType,
-        threadId: requireStringField(record, "threadId", commandType),
-        providerThreadId: requireStringField(
-          record,
-          "providerThreadId",
-          commandType,
-        ),
-        params: record.params,
-        ...(initialize ? { initialize } : {}),
-      };
-    case "turn.steer":
-      if (!("params" in record)) {
-        throw new Error(
-          `Invalid persisted environment-agent command payload for ${commandType}`,
-        );
-      }
-      return {
-        type: commandType,
-        threadId: requireStringField(record, "threadId", commandType),
-        providerThreadId: requireStringField(
-          record,
-          "providerThreadId",
-          commandType,
-        ),
-        turnId: requireStringField(record, "turnId", commandType),
-        params: record.params,
-        ...(initialize ? { initialize } : {}),
-      };
     case "thread.rename":
       return {
         type: commandType,
