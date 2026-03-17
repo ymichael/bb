@@ -27,9 +27,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { AppSidebar } from "./AppSidebar"
 import {
-  useHireProjectManager,
   useProjects,
-  useSystemProviders,
   useThread,
   useThreads,
 } from "@/hooks/useApi"
@@ -209,9 +207,6 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const navigate = useNavigate()
   const { data: projects, isLoading: projectsLoading } = useProjects()
   const { data: threads } = useThreads()
-  const hireProjectManager = useHireProjectManager()
-  const providersQuery = useSystemProviders()
-  const hasMultipleProviders = (providersQuery.data?.length ?? 0) >= 2
   const [hireManagerModalProjectId, setHireManagerModalProjectId] = useState<string | null>(null)
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
@@ -444,16 +439,10 @@ export function AppLayout({ children }: { children: ReactNode }) {
               projectMatch={projectMatch}
               projectName={projectLabel}
               projectId={projectId}
-              isManagerActionPending={hireProjectManager.isPending}
+              isManagerActionPending={hireManagerModalProjectId !== null}
               onOpenManager={() => {
-                if (!projectId || hireProjectManager.isPending) return
-                if (hasMultipleProviders) {
-                  setHireManagerModalProjectId(projectId)
-                  return
-                }
-                void hireProjectManager.mutateAsync({ projectId }).then((thread) => {
-                  navigate(`/projects/${thread.projectId}/threads/${thread.id}`)
-                })
+                if (!projectId || hireManagerModalProjectId !== null) return
+                setHireManagerModalProjectId(projectId)
               }}
               meta={meta}
             />

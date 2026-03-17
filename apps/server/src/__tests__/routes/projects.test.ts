@@ -322,6 +322,32 @@ describe("Project routes", () => {
       expect(existsSync(join(bbRoot, "workspace", "thread-manager-1"))).toBe(true);
     });
 
+    it("uses the provided manager title when present", async () => {
+      const project = makeProject({ id: "proj-1" });
+      const managerThread = makeThread({
+        id: "thread-manager-named",
+        projectId: project.id,
+        type: "manager",
+        title: "Release Manager",
+      });
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(project);
+      threadManager.spawn.mockResolvedValue(managerThread);
+      threadManager.getRawById.mockReturnValue(managerThread);
+
+      const res = await app.request("/projects/proj-1/manager", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: "Release Manager" }),
+      });
+
+      expect(res.status).toBe(201);
+      expect(threadManager.spawn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: "Release Manager",
+        }),
+      );
+    });
+
     it("rolls back workspace when bootstrap fails", async () => {
       const project = makeProject({ id: "proj-1" });
       const managerThread = makeThread({

@@ -14,10 +14,6 @@ const apiState = vi.hoisted(() => ({
     },
   ] as Array<Record<string, unknown>>,
   threads: [],
-  pendingMutation: {
-    isPending: false,
-    mutateAsync: vi.fn(),
-  },
 }));
 
 vi.mock("@/hooks/useApi", () => ({
@@ -30,10 +26,6 @@ vi.mock("@/hooks/useApi", () => ({
   }),
   useThread: () => ({
     data: undefined,
-  }),
-  useHireProjectManager: () => apiState.pendingMutation,
-  useSystemProviders: () => ({
-    data: [],
   }),
 }));
 
@@ -129,7 +121,7 @@ describe("AppLayout", () => {
     expect(html).not.toContain('aria-label="Open manager"');
   });
 
-  it("shows the open manager action when the project already has a manager", () => {
+  it("keeps the hire manager action available even when managers already exist", () => {
     apiState.projects = [
       {
         id: "project-1",
@@ -141,7 +133,7 @@ describe("AppLayout", () => {
 
     const html = renderAppLayout();
 
-    expect(html).toContain('aria-label="Open manager"');
-    expect(html).not.toContain('aria-label="Hire manager"');
+    expect(html).toContain('aria-label="Hire manager"');
+    expect(html).not.toContain('aria-label="Open manager"');
   });
 });

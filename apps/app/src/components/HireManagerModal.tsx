@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import type { Thread } from "@bb/core";
+import { useCallback, useEffect, useId, useMemo, useState, type FormEvent } from "react";
+import type { AvailableModel, Thread } from "@bb/core";
 import {
   Dialog,
   DialogContent,
@@ -9,6 +9,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { useAvailableModels, useSystemProviders, useHireProjectManager } from "@/hooks/useApi";
 import { formatModelLabel } from "@/hooks/usePromptModelReasoning";
 import { getProviderIconInfo } from "@/lib/provider-icon";
@@ -22,32 +23,65 @@ interface HireManagerModalProps {
   onHired: (thread: Thread) => void;
 }
 
+const MANAGER_DEFAULT_PROVIDER_ID = "claude-code";
+const MANAGER_DEFAULT_MODEL = "claude-opus-4-6";
+
+export function getPreferredManagerProviderId(
+  providerIds: readonly string[],
+  selectedProviderId?: string,
+): string {
+  if (selectedProviderId && providerIds.includes(selectedProviderId)) {
+    return selectedProviderId;
+  }
+  if (providerIds.includes(MANAGER_DEFAULT_PROVIDER_ID)) {
+    return MANAGER_DEFAULT_PROVIDER_ID;
+  }
+  return providerIds[0] ?? "";
+}
+
+export function getPreferredManagerModel(
+  models: readonly Pick<AvailableModel, "model" | "isDefault">[],
+  selectedModel?: string,
+): string {
+  if (selectedModel && models.some((model) => model.model === selectedModel)) {
+    return selectedModel;
+  }
+  const preferredModel = models.find((model) => model.model === MANAGER_DEFAULT_MODEL);
+  if (preferredModel) {
+    return preferredModel.model;
+  }
+  return (models.find((model) => model.isDefault) ?? models[0])?.model ?? "";
+}
+
 export function HireManagerModal({
   projectId,
   open,
   onClose,
   onHired,
 }: HireManagerModalProps) {
+  const nameInputId = useId();
   const providersQuery = useSystemProviders();
   const providers = providersQuery.data ?? [];
 
+  const [managerName, setManagerName] = useState("");
   const [selectedProviderId, setSelectedProviderId] = useState<string>("");
   const [selectedModel, setSelectedModel] = useState<string>("");
   const [isPending, setIsPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Default to first provider when list loads.
   useEffect(() => {
-    if (providers.length > 0 && !selectedProviderId) {
-      setSelectedProviderId(providers[0].id);
+    const nextProviderId = getPreferredManagerProviderId(
+      providers.map((provider) => provider.id),
+      selectedProviderId,
+    );
+    if (nextProviderId !== selectedProviderId) {
+      setSelectedProviderId(nextProviderId);
     }
   }, [providers, selectedProviderId]);
 
   const hasMultipleProviders = providers.length >= 2;
 
-  const modelsQuery = useAvailableModels(
-    hasMultipleProviders ? selectedProviderId || undefined : undefined,
-  );
+  const modelsQuery = useAvailableModels(selectedProviderId || undefined);
   const models = useMemo(
     () => modelsQuery.data ?? [],
     [modelsQuery.data],
@@ -77,11 +111,10 @@ export function HireManagerModal({
     setSelectedModel("");
   }, [selectedProviderId]);
 
-  // Default to the default model or first model.
   useEffect(() => {
-    if (models.length > 0 && !models.some((m) => m.model === selectedModel)) {
-      const defaultModel = models.find((m) => m.isDefault) ?? models[0];
-      setSelectedModel(defaultModel.model);
+    const nextModel = getPreferredManagerModel(models, selectedModel);
+    if (nextModel !== selectedModel) {
+      setSelectedModel(nextModel);
     }
   }, [models, selectedModel]);
 
@@ -97,13 +130,16 @@ export function HireManagerModal({
 
   const hireManager = useHireProjectManager();
 
-  const handleHire = useCallback(async () => {
+  const handleHire = useCallback(async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
     if (!projectId || isPending) return;
     setIsPending(true);
     setError(null);
+    const trimmedManagerName = managerName.trim();
     try {
       const thread = await hireManager.mutateAsync({
         projectId,
+        ...(trimmedManagerName ? { title: trimmedManagerName } : {}),
         ...(hasMultipleProviders && selectedProviderId
           ? { providerId: selectedProviderId }
           : {}),
@@ -117,6 +153,7 @@ export function HireManagerModal({
       setIsPending(false);
     }
   }, [
+    managerName,
     hasMultipleProviders,
     hireManager,
     isPending,
@@ -129,17 +166,33 @@ export function HireManagerModal({
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => { if (!isOpen) onClose(); }}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
+      <DialogContent className="max-w-[34rem] gap-0 overflow-hidden border-border/80 bg-background p-0 shadow-xl">
+        <DialogHeader className="px-6 pt-5 pb-3">
           <DialogTitle>Hire Manager</DialogTitle>
           <DialogDescription>
-            Select a provider and model for the project manager.
+            Name this manager and choose the provider and model it should use.
           </DialogDescription>
         </DialogHeader>
-        <div className="flex flex-col gap-4 py-2">
+        <form className="space-y-5 px-6 pt-3 pb-5" onSubmit={handleHire}>
+          <div className="space-y-1.5">
+            <label htmlFor={nameInputId} className="text-sm font-medium">
+              Name
+            </label>
+            <Input
+              id={nameInputId}
+              value={managerName}
+              placeholder="Manager"
+              autoFocus
+              disabled={isPending}
+              onChange={(event) => {
+                setManagerName(event.target.value);
+                setError(null);
+              }}
+            />
+          </div>
           {modelOptions.length > 0 ? (
-            <div className="flex flex-col gap-1.5">
-              <span className="text-sm font-medium">Provider & Model</span>
+            <div className="space-y-1.5">
+              <span className="block text-sm font-medium">Provider &amp; Model</span>
               <PromptProviderModelPicker
                 providerOptions={providerOptions}
                 selectedProviderId={selectedProviderId}
@@ -158,15 +211,15 @@ export function HireManagerModal({
           {error ? (
             <p className="text-sm text-destructive">{error}</p>
           ) : null}
-        </div>
-        <DialogFooter>
-          <Button variant="ghost" onClick={onClose} disabled={isPending}>
-            Cancel
-          </Button>
-          <Button onClick={handleHire} disabled={isPending}>
-            {isPending ? "Hiring..." : "Hire Manager"}
-          </Button>
-        </DialogFooter>
+          <DialogFooter>
+            <Button type="button" variant="ghost" onClick={onClose} disabled={isPending}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={isPending}>
+              {isPending ? "Hiring..." : "Hire Manager"}
+            </Button>
+          </DialogFooter>
+        </form>
       </DialogContent>
     </Dialog>
   );

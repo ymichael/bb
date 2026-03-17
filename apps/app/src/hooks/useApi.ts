@@ -395,8 +395,17 @@ export function useCreateProject() {
 export function useHireProjectManager() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ projectId, providerId, model }: { projectId: string; providerId?: string; model?: string }) =>
-      api.hireProjectManager(projectId, { providerId, model }),
+    mutationFn: ({
+      projectId,
+      title,
+      providerId,
+      model,
+    }: {
+      projectId: string;
+      title?: string;
+      providerId?: string;
+      model?: string;
+    }) => api.hireProjectManager(projectId, { title, providerId, model }),
     onSuccess: (thread) => {
       queryClient.setQueryData<Thread>(["thread", thread.id], thread);
 
