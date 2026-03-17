@@ -27,6 +27,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { AppSidebar } from "./AppSidebar"
 import {
+  useHireProjectManager,
   useProjects,
   useThread,
   useThreads,
@@ -207,6 +208,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const navigate = useNavigate()
   const { data: projects, isLoading: projectsLoading } = useProjects()
   const { data: threads } = useThreads()
+  const hireProjectManager = useHireProjectManager()
   const [hireManagerModalProjectId, setHireManagerModalProjectId] = useState<string | null>(null)
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
@@ -439,7 +441,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
               projectMatch={projectMatch}
               projectName={projectLabel}
               projectId={projectId}
-              isManagerActionPending={hireManagerModalProjectId !== null}
+              isManagerActionPending={hireProjectManager.isPending || hireManagerModalProjectId !== null}
               onOpenManager={() => {
                 if (!projectId || hireManagerModalProjectId !== null) return
                 setHireManagerModalProjectId(projectId)

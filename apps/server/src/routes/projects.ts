@@ -23,6 +23,9 @@ import {
 import { sendApiError, sendRouteError } from "./error-response.js";
 import type { ThreadOrchestrator } from "@bb/core";
 
+const MANAGER_DEFAULT_PROVIDER_ID = "claude-code";
+const MANAGER_DEFAULT_MODEL = "claude-opus-4-6";
+
 const projectFileQuerySchema = z.object({
   query: z.string().default(""),
   limit: z
@@ -40,9 +43,9 @@ const projectAttachmentQuerySchema = z.object({
 });
 
 const projectManagerRequestSchema = z.object({
-  title: z.string().min(1).optional(),
-  providerId: z.string().min(1).optional(),
-  model: z.string().min(1).optional(),
+  title: z.string().trim().min(1).optional(),
+  providerId: z.string().trim().min(1).optional(),
+  model: z.string().trim().min(1).optional(),
 });
 
 type SearchProjectFilesFn = (
@@ -186,6 +189,39 @@ function withProjectPathStatus(project: Project): Project {
   };
 }
 
+async function resolveManagerProviderDefaults(
+  threadManager: Pick<ThreadOrchestrator, "listProviders" | "listModels">,
+): Promise<{ providerId?: string; model?: string }> {
+  let providers;
+  try {
+    providers = await threadManager.listProviders();
+  } catch {
+    return {};
+  }
+
+  if (!providers.some((provider) => provider.id === MANAGER_DEFAULT_PROVIDER_ID)) {
+    return {};
+  }
+
+  try {
+    const models = await threadManager.listModels(MANAGER_DEFAULT_PROVIDER_ID);
+    const preferredModel =
+      models.find((model) => model.model === MANAGER_DEFAULT_MODEL) ??
+      models.find((model) => model.isDefault) ??
+      models[0];
+    if (preferredModel) {
+      return {
+        providerId: MANAGER_DEFAULT_PROVIDER_ID,
+        model: preferredModel.model,
+      };
+    }
+  } catch {
+    return { providerId: MANAGER_DEFAULT_PROVIDER_ID };
+  }
+
+  return { providerId: MANAGER_DEFAULT_PROVIDER_ID };
+}
+
 export function createProjectRoutes(
   projectRepo: ProjectRepository,
   findProjectFiles: SearchProjectFilesFn = searchProjectFiles,
@@ -265,6 +301,12 @@ export function createProjectRoutes(
         }
 
         const body = c.req.valid("json");
+        const managerDefaults =
+          !body?.providerId && !body?.model
+            ? await resolveManagerProviderDefaults(deps.threadManager)
+            : {};
+        const providerId = body?.providerId ?? managerDefaults.providerId;
+        const model = body?.model ?? managerDefaults.model;
 
         const managerThread = await deps.threadManager.spawn({
           projectId,
@@ -277,8 +319,8 @@ export function createProjectRoutes(
           developerInstructions: buildManagerDeveloperInstructions(),
           input: [{ type: "text", text: MANAGER_WELCOME_MESSAGE }],
           spawnInitiator: "system",
-          ...(body?.providerId ? { providerId: body.providerId } : {}),
-          ...(body?.model ? { model: body.model } : {}),
+          ...(providerId ? { providerId } : {}),
+          ...(model ? { model } : {}),
         });
 
         try {

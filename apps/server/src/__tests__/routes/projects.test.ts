@@ -85,6 +85,8 @@ describe("Project routes", () => {
     spawn: ReturnType<typeof vi.fn>;
     systemTell: ReturnType<typeof vi.fn>;
     getRawById: ReturnType<typeof vi.fn>;
+    listProviders: ReturnType<typeof vi.fn>;
+    listModels: ReturnType<typeof vi.fn>;
   };
   const originalBbRoot = process.env.BB_ROOT;
 
@@ -99,6 +101,8 @@ describe("Project routes", () => {
       spawn: vi.fn(),
       systemTell: vi.fn().mockResolvedValue(undefined),
       getRawById: vi.fn(),
+      listProviders: vi.fn().mockResolvedValue([]),
+      listModels: vi.fn().mockResolvedValue([]),
     };
     findProjectFiles = vi.fn<SearchProjectFilesFn>().mockResolvedValue([]);
     savePromptAttachment = vi.fn<StorePromptAttachmentFn>().mockResolvedValue({
@@ -322,7 +326,90 @@ describe("Project routes", () => {
       expect(existsSync(join(bbRoot, "workspace", "thread-manager-1"))).toBe(true);
     });
 
-    it("uses the provided manager title when present", async () => {
+    it("prefers claude-code opus for managers when available", async () => {
+      const project = makeProject({ id: "proj-1" });
+      const managerThread = makeThread({
+        id: "thread-manager-claude",
+        projectId: project.id,
+        type: "manager",
+      });
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(project);
+      threadManager.listProviders.mockResolvedValue([
+        {
+          id: "codex",
+          displayName: "Codex",
+          capabilities: {},
+        },
+        {
+          id: "claude-code",
+          displayName: "Claude Code",
+          capabilities: {},
+        },
+      ]);
+      threadManager.listModels.mockResolvedValue([
+        {
+          id: "claude-sonnet-4-6",
+          model: "claude-sonnet-4-6",
+          displayName: "Claude Sonnet 4.6",
+          description: "Default",
+          supportedReasoningEfforts: [],
+          defaultReasoningEffort: "medium",
+          isDefault: true,
+        },
+        {
+          id: "claude-opus-4-6",
+          model: "claude-opus-4-6",
+          displayName: "Claude Opus 4.6",
+          description: "Preferred",
+          supportedReasoningEfforts: [],
+          defaultReasoningEffort: "medium",
+          isDefault: false,
+        },
+      ]);
+      threadManager.spawn.mockResolvedValue(managerThread);
+      threadManager.getRawById.mockReturnValue(managerThread);
+
+      const res = await app.request("/projects/proj-1/manager", { method: "POST" });
+
+      expect(res.status).toBe(201);
+      expect(threadManager.spawn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          providerId: "claude-code",
+          model: "claude-opus-4-6",
+        }),
+      );
+    });
+
+    it("falls back to the existing provider resolution when claude-code is unavailable", async () => {
+      const project = makeProject({ id: "proj-1" });
+      const managerThread = makeThread({
+        id: "thread-manager-fallback",
+        projectId: project.id,
+        type: "manager",
+      });
+      (projectRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(project);
+      threadManager.listProviders.mockResolvedValue([
+        {
+          id: "codex",
+          displayName: "Codex",
+          capabilities: {},
+        },
+      ]);
+      threadManager.spawn.mockResolvedValue(managerThread);
+      threadManager.getRawById.mockReturnValue(managerThread);
+
+      const res = await app.request("/projects/proj-1/manager", { method: "POST" });
+
+      expect(res.status).toBe(201);
+      expect(threadManager.spawn).toHaveBeenCalledWith(
+        expect.not.objectContaining({
+          providerId: expect.anything(),
+        }),
+      );
+      expect(threadManager.listModels).not.toHaveBeenCalled();
+    });
+
+    it("passes the optional manager title through to spawn", async () => {
       const project = makeProject({ id: "proj-1" });
       const managerThread = makeThread({
         id: "thread-manager-named",

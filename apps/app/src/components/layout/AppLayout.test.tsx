@@ -13,7 +13,11 @@ const apiState = vi.hoisted(() => ({
       rootPathExists: true,
     },
   ] as Array<Record<string, unknown>>,
-  threads: [],
+  threads: [] as Array<Record<string, unknown>>,
+  pendingMutation: {
+    isPending: false,
+    mutateAsync: vi.fn(),
+  },
 }));
 
 vi.mock("@/hooks/useApi", () => ({
@@ -27,6 +31,7 @@ vi.mock("@/hooks/useApi", () => ({
   useThread: () => ({
     data: undefined,
   }),
+  useHireProjectManager: () => apiState.pendingMutation,
 }));
 
 vi.mock("./AppSidebar", () => ({
@@ -128,6 +133,18 @@ describe("AppLayout", () => {
         name: "Project One",
         rootPath: "/tmp/project-one",
         rootPathExists: true,
+      },
+    ];
+    apiState.threads = [
+      {
+        id: "thread-manager-1",
+        projectId: "project-1",
+        providerId: "claude-code",
+        type: "manager",
+        status: "idle",
+        createdAt: 1,
+        updatedAt: 1,
+        lastReadAt: 1,
       },
     ];
 
