@@ -409,6 +409,36 @@ describe("environment-agent delivery modules", () => {
     ).rejects.toBeInstanceOf(EnvironmentAgentSessionUnavailableError);
   });
 
+  it("does not treat replace-required sessions as active for command recovery", async () => {
+    const threadId = createThreadId();
+    const dispatcher = new EnvironmentAgentCommandDispatcher(sessions, commands, {
+      clock: () => TEST_LEASE_NOW,
+    });
+
+    sessions.create({
+      id: "sess-incompatible",
+      threadId,
+      agentId: "agent-1",
+      agentInstanceId: "instance-incompatible",
+      protocolVersion: 1,
+      selectedCapabilities: {
+        commands: ["thread.start"],
+        features: [],
+      },
+      leaseExpiresAt: TEST_LEASE_NOW + 10_000,
+      now: TEST_LEASE_NOW - 1_000,
+    });
+
+    expect(dispatcher.hasActiveSession(threadId)).toBe(false);
+    await expect(
+      dispatcher.awaitActiveSession({
+        threadId,
+        timeoutMs: 20,
+        pollIntervalMs: 5,
+      }),
+    ).rejects.toBeInstanceOf(EnvironmentAgentSessionUnavailableError);
+  });
+
   it("records command lifecycle results only for the matching active session", () => {
     const threadId = createThreadId();
     const sessionId = createActiveSession(threadId, "sess-results");
