@@ -559,6 +559,7 @@ export class EnvironmentAgentRuntime {
   private resolveProviderEnvironment(
     spec: EnvironmentAgentProviderSpec,
   ): NodeJS.ProcessEnv {
+    const explicitHome = spec.env?.HOME?.trim();
     const env: NodeJS.ProcessEnv = {
       ...process.env,
       ...(spec.env ?? {}),
@@ -567,9 +568,10 @@ export class EnvironmentAgentRuntime {
       return env;
     }
 
-    const homeDir = env.HOME?.trim() || this.resolveManagedProviderHomeDir(spec);
+    const homeDir = explicitHome || this.resolveManagedProviderHomeDir(spec);
     this.materializeProviderFiles(homeDir, spec.files);
     env.HOME = homeDir;
+    env.CODEX_HOME = env.CODEX_HOME?.trim() || path.join(homeDir, ".codex");
     return env;
   }
 

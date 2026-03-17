@@ -955,9 +955,6 @@ describe("EnvironmentAgentRuntime", () => {
   });
 
   it("derives unique managed HOME dirs for specs differing only in files", async () => {
-    // When spec.env does not provide HOME, resolveProviderEnvironment falls
-    // back to process.env.HOME. To exercise the managed-HOME path we must
-    // clear it so that resolveManagedProviderHomeDir is used.
     const runtime = new EnvironmentAgentRuntime({ threadId: "thread-1" });
     cleanup.push(() => runtime.shutdown());
 
@@ -967,18 +964,17 @@ describe("EnvironmentAgentRuntime", () => {
     });
     cleanup.push(unsubscribe);
 
-    // Two specs identical except for file content. Setting HOME="" forces
-    // the runtime to generate a managed HOME via the hash path.
+    // Two specs identical except for file content. When BB materializes
+    // provider files, the runtime should isolate the provider in a managed
+    // HOME unless the provider explicitly sets HOME itself.
     runtime.ensureProviderStatus({
       command: "node",
       args: ["-e", "console.log(process.env.HOME); process.stdin.resume();"],
-      env: { HOME: "" },
       files: [{ placement: "home", path: ".auth/token.json", content: '{"key":"aaa"}' }],
     });
     runtime.ensureProviderStatus({
       command: "node",
       args: ["-e", "console.log(process.env.HOME); process.stdin.resume();"],
-      env: { HOME: "" },
       files: [{ placement: "home", path: ".auth/token.json", content: '{"key":"bbb"}' }],
     });
 
@@ -1005,7 +1001,7 @@ describe("EnvironmentAgentRuntime", () => {
     runtime.ensureProviderStatus({
       command: "node",
       args: ["-e", "console.log(process.env.HOME); process.stdin.resume();"],
-      env: { HOME: "", API_KEY: secretKey },
+      env: { API_KEY: secretKey },
       files: [{ placement: "home", path: ".config/auth.json", content: `{"apiKey":"${secretKey}"}` }],
     });
 
@@ -1021,6 +1017,52 @@ describe("EnvironmentAgentRuntime", () => {
     expect(match).toBeTruthy();
     expect(match![1]).toHaveLength(32);
     expect(match![1]).toMatch(/^[0-9a-f]+$/);
+  });
+
+  it("preserves an explicit provider HOME when files are materialized", async () => {
+    const runtime = new EnvironmentAgentRuntime({ threadId: "thread-1" });
+    cleanup.push(() => runtime.shutdown());
+
+    const lines: string[] = [];
+    const unsubscribe = runtime.subscribeToProviderStdout((line) => {
+      lines.push(line);
+    });
+    cleanup.push(unsubscribe);
+
+    runtime.ensureProviderStatus({
+      command: "node",
+      args: ["-e", "console.log(process.env.HOME); process.stdin.resume();"],
+      env: { HOME: "/tmp/bb-explicit-home" },
+      files: [{ placement: "home", path: ".config/auth.json", content: '{"token":"abc"}' }],
+    });
+
+    await expect.poll(() => lines.length).toBeGreaterThanOrEqual(1);
+    expect(lines).toContain("/tmp/bb-explicit-home");
+  });
+
+  it("derives CODEX_HOME from the managed provider HOME by default", async () => {
+    const runtime = new EnvironmentAgentRuntime({ threadId: "thread-1" });
+    cleanup.push(() => runtime.shutdown());
+
+    const lines: string[] = [];
+    const unsubscribe = runtime.subscribeToProviderStdout((line) => {
+      lines.push(line);
+    });
+    cleanup.push(unsubscribe);
+
+    runtime.ensureProviderStatus({
+      command: "node",
+      args: [
+        "-e",
+        "console.log(JSON.stringify({ HOME: process.env.HOME, CODEX_HOME: process.env.CODEX_HOME })); process.stdin.resume();",
+      ],
+      files: [{ placement: "home", path: ".config/auth.json", content: '{"token":"abc"}' }],
+    });
+
+    await expect.poll(() => lines.length).toBeGreaterThanOrEqual(1);
+    const payload = JSON.parse(lines[0] ?? "{}") as { HOME?: string; CODEX_HOME?: string };
+    expect(payload.HOME).toContain("provider-home-");
+    expect(payload.CODEX_HOME).toBe(`${payload.HOME}/.codex`);
   });
 
   it("resolves provider server requests through the callback", async () => {

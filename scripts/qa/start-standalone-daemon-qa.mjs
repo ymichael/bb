@@ -114,7 +114,7 @@ async function main() {
 
   const port = await allocatePort();
   const daemonUrl = `http://127.0.0.1:${port}`;
-  const daemonEntry = resolve(workspaceRoot, "apps", "daemon", "dist", "index.js");
+  const daemonEntry = resolve(workspaceRoot, "apps", "server", "dist", "index.js");
   const daemonEnv = {
     ...process.env,
     BB_ROOT: bbRoot,
