@@ -34,7 +34,11 @@ export interface TemplateVariables {
     bbCliGuide: string;
     bbSystemOverview: string;
     managerPreferencesContent: string;
+    managerThreadId: string;
     managerWorkspacePath: string;
+    projectId: string;
+    projectName: string;
+    projectRootPath: string;
   };
   openaiResponsesDefaultInstructions: Record<string, never>;
   threadOperationCommit: {

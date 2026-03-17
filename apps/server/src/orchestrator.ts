@@ -170,7 +170,11 @@ import {
 } from "./environment-service.js";
 import {
   MANAGER_PREFERENCES_CONTENT_PLACEHOLDER,
+  MANAGER_THREAD_ID_PLACEHOLDER,
   MANAGER_WORKSPACE_PATH_PLACEHOLDER,
+  PROJECT_ID_PLACEHOLDER,
+  PROJECT_NAME_PLACEHOLDER,
+  PROJECT_ROOT_PATH_PLACEHOLDER,
   resolveManagerWorkspacePath,
 } from "./manager-thread.js";
 import { measureAsync, measureSync } from "./perf.js";
@@ -1319,12 +1323,14 @@ export class Orchestrator implements ThreadOrchestrator {
               const preferencesContent = existsSync(preferencesPath)
                 ? readFileSync(preferencesPath, "utf8")
                 : "(does not exist)";
+              const project = this.projectRepo.getById(req.projectId);
               return req.developerInstructions
                 .replaceAll(MANAGER_WORKSPACE_PATH_PLACEHOLDER, workspacePath)
-                .replaceAll(
-                  MANAGER_PREFERENCES_CONTENT_PLACEHOLDER,
-                  preferencesContent,
-                );
+                .replaceAll(MANAGER_PREFERENCES_CONTENT_PLACEHOLDER, preferencesContent)
+                .replaceAll(MANAGER_THREAD_ID_PLACEHOLDER, thread.id)
+                .replaceAll(PROJECT_ID_PLACEHOLDER, req.projectId)
+                .replaceAll(PROJECT_NAME_PLACEHOLDER, project?.name ?? req.projectId)
+                .replaceAll(PROJECT_ROOT_PATH_PLACEHOLDER, project?.rootPath ?? "(unknown)");
             })(),
           }
         : req;
