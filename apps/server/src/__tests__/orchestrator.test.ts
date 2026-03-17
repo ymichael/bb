@@ -187,27 +187,28 @@ function createTestEnvironmentRegistry(args: {
   rootPath: string;
   onCreate?: (context: CreateEnvironmentContext) => void;
 }): EnvironmentRegistry {
-  const kind = args.kind ?? "worktree";
+  const requestedKind = args.kind ?? "worktree";
+  const runtimeKind = requestedKind === "worktree" ? "local" : requestedKind;
   const info: SystemEnvironmentInfo = {
-    id: kind,
+    id: requestedKind,
     displayName: args.displayName ?? "Git Worktree Workspace",
     description: "",
     capabilities: {
       host_filesystem: true,
-      isolated_workspace: kind === "worktree",
-      promote_primary_checkout: kind === "worktree",
-      demote_primary_checkout: kind === "worktree",
-      squash_merge: kind === "worktree",
+      isolated_workspace: requestedKind === "worktree",
+      promote_primary_checkout: requestedKind === "worktree",
+      demote_primary_checkout: requestedKind === "worktree",
+      squash_merge: requestedKind === "worktree",
     },
   };
 
   return new EnvironmentRegistry().register({
-    kind,
+    kind: runtimeKind,
     info,
     create(context: CreateEnvironmentContext): IEnvironment {
       args.onCreate?.(context);
       return makeRuntimeEnvironment({
-        kind,
+        kind: runtimeKind,
         rootPath: args.rootPath,
         overrides: {
           info,
@@ -215,9 +216,21 @@ function createTestEnvironmentRegistry(args: {
             return { rootPath: args.rootPath };
           },
           buildAgentInstructions() {
-            return kind === "worktree"
+            return requestedKind === "worktree"
               ? "[BB worktree environment]"
               : undefined;
+          },
+          isIsolatedWorkspace() {
+            return requestedKind === "worktree";
+          },
+          supportsPromoteToActiveWorkspace() {
+            return requestedKind === "worktree";
+          },
+          supportsDemoteFromActiveWorkspace() {
+            return requestedKind === "worktree";
+          },
+          supportsSquashMergeIntoDefaultBranch() {
+            return requestedKind === "worktree";
           },
           promoteToActiveWorkspace() {
             throw new Error("not implemented in test environment");
@@ -1204,14 +1217,26 @@ describe("Orchestrator", () => {
         },
       };
       const customEnvironmentRegistry = new EnvironmentRegistry().register({
-        kind: "worktree",
+        kind: "local",
         info,
         create(): IEnvironment {
           return makeRuntimeEnvironment({
-            kind: "worktree",
+            kind: "local",
             rootPath: workspaceRoot,
             overrides: {
               info,
+              isIsolatedWorkspace() {
+                return true;
+              },
+              supportsPromoteToActiveWorkspace() {
+                return true;
+              },
+              supportsDemoteFromActiveWorkspace() {
+                return true;
+              },
+              supportsSquashMergeIntoDefaultBranch() {
+                return true;
+              },
               async prepare() {
                 mkdirSync(workspaceRoot, { recursive: true });
                 writeFileSync(
@@ -1348,14 +1373,26 @@ describe("Orchestrator", () => {
         },
       };
       const customEnvironmentRegistry = new EnvironmentRegistry().register({
-        kind: "worktree",
+        kind: "local",
         info,
         create(): IEnvironment {
           return makeRuntimeEnvironment({
-            kind: "worktree",
+            kind: "local",
             rootPath: workspaceRoot,
             overrides: {
               info,
+              isIsolatedWorkspace() {
+                return true;
+              },
+              supportsPromoteToActiveWorkspace() {
+                return true;
+              },
+              supportsDemoteFromActiveWorkspace() {
+                return true;
+              },
+              supportsSquashMergeIntoDefaultBranch() {
+                return true;
+              },
               async prepare() {
                 mkdirSync(workspaceRoot, { recursive: true });
                 writeFileSync(

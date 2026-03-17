@@ -20,9 +20,8 @@ describe("getEnvironmentIconInfo", () => {
   it("uses the container icon for docker", () => {
     expect(
       getEnvironmentIconInfo({
-        requestedRuntimeKind: "docker",
+        id: "docker",
         capabilities: createCapabilities({
-          host_filesystem: true,
           isolated_workspace: true,
         }),
       }),
@@ -35,7 +34,6 @@ describe("getEnvironmentIconInfo", () => {
   it("uses the worktree icon for isolated workspaces", () => {
     expect(
       getEnvironmentIconInfo({
-        requestedRuntimeKind: "worktree",
         capabilities: createCapabilities({
           isolated_workspace: true,
         }),
@@ -49,16 +47,17 @@ describe("getEnvironmentIconInfo", () => {
   it("uses the direct icon for host filesystem environments", () => {
     expect(
       getEnvironmentIconInfo({
-        runtimeState: {
-          kind: "local",
+        properties: {
+          provisioningSystemKind: "direct-path",
+          location: "localhost",
+          workspaceKind: "arbitrary_path",
         },
-        capabilities: createCapabilities({
-          host_filesystem: true,
-        }),
+        managed: false,
       }),
     ).toMatchObject({
       icon: Laptop,
       ariaLabel: "Direct thread",
     })
   })
+
 })

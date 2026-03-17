@@ -1,4 +1,5 @@
 import {
+  type EnvironmentProperties,
   type ThreadWorkStatus,
   type EnvironmentProvisioningEvent,
   type PersistedEnvironmentRecord,
@@ -191,6 +192,41 @@ export class EnvironmentService {
     return undefined;
   }
 
+  private resolveAttachedEnvironmentRecord(threadId: string) {
+    const attachedEnvironment = this.resolveAttachedEnvironment(threadId);
+    if (!attachedEnvironment) {
+      return undefined;
+    }
+    return this.environmentRepo?.getById(attachedEnvironment.environmentId);
+  }
+
+  private createRuntimeContext(
+    threadId: string,
+    projectRootPath: string,
+    overrides?: {
+      workspaceRootPath?: string;
+      environmentId?: string;
+      environmentProperties?: EnvironmentProperties;
+    },
+  ): CreateEnvironmentContext {
+    const attachedEnvironmentRecord = this.resolveAttachedEnvironmentRecord(threadId);
+    return {
+      ...this.callbacks.createContext(threadId, projectRootPath),
+      ...(attachedEnvironmentRecord ? { environmentId: attachedEnvironmentRecord.id } : {}),
+      ...(attachedEnvironmentRecord
+        ? { workspaceRootPath: attachedEnvironmentRecord.descriptor.path }
+        : {}),
+      ...(attachedEnvironmentRecord?.properties
+        ? { environmentProperties: attachedEnvironmentRecord.properties }
+        : {}),
+      ...(overrides?.environmentId ? { environmentId: overrides.environmentId } : {}),
+      ...(overrides?.workspaceRootPath ? { workspaceRootPath: overrides.workspaceRootPath } : {}),
+      ...(overrides?.environmentProperties
+        ? { environmentProperties: overrides.environmentProperties }
+        : {}),
+    };
+  }
+
   private resolveThreadRuntimeKind(
     thread: Thread,
     projectRootPath: string,
@@ -231,7 +267,7 @@ export class EnvironmentService {
     }));
   }
 
-  resolveRequestedEnvironmentId(value?: string): string {
+  resolveRuntimeEnvironmentKind(value?: string): string {
     const normalized = (value ?? "local").trim();
     if (!normalized) return "local";
     if (!this.environmentRegistry.has(normalized)) {
@@ -254,7 +290,7 @@ export class EnvironmentService {
     try {
       const restored = this.environmentRegistry.restore(
         environmentRecord,
-        this.callbacks.createContext(thread.id, projectRootPath),
+        this.createRuntimeContext(thread.id, projectRootPath),
       );
       this.restoreFailuresByThreadId.delete(thread.id);
       return restored;
@@ -276,7 +312,9 @@ export class EnvironmentService {
   async getProjectWorkspaceStatusAsync(projectId: string, rootPath: string): Promise<ThreadWorkStatus> {
     const environment = this.environmentRegistry.create(
       "local",
-      this.callbacks.createContext(`project-status:${projectId}`, rootPath),
+      this.createRuntimeContext(`project-status:${projectId}`, rootPath, {
+        workspaceRootPath: rootPath,
+      }),
     );
     try {
       return await environment.getWorkspaceStatus();
@@ -345,7 +383,7 @@ export class EnvironmentService {
 
       const environment = this.environmentRegistry.create(
         environmentKind,
-        this.callbacks.createContext(threadId, projectRootPath),
+        this.createRuntimeContext(threadId, projectRootPath),
       );
       try {
         await this.prepareEnvironment(threadId, projectRootPath, environment, reason);
@@ -397,7 +435,7 @@ export class EnvironmentService {
         this.restoreThreadEnvironment(thread, projectRootPath) ??
         this.environmentRegistry.create(
           environmentId,
-          this.callbacks.createContext(thread.id, projectRootPath),
+          this.createRuntimeContext(thread.id, projectRootPath),
         );
 
       try {
@@ -1047,7 +1085,9 @@ export class EnvironmentService {
     if (!project) return;
     const environment = this.environmentRegistry.create(
       "local",
-      this.callbacks.createContext(`primary-checkout-watch:${projectId}`, project.rootPath),
+      this.createRuntimeContext(`primary-checkout-watch:${projectId}`, project.rootPath, {
+        workspaceRootPath: project.rootPath,
+      }),
     );
     const stopWatching = environment.watchWorkspaceStatus(() => {
       this.ensurePrimaryPromotionStateIsCurrent(projectId, { force: true });

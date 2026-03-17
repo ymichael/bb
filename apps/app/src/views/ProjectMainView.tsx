@@ -79,14 +79,7 @@ export function ProjectMainView() {
       );
       return environmentOptions.map((option) => ({
         ...option,
-        icon: getEnvironmentIconInfo(
-          environmentById.has(option.value)
-            ? {
-                ...environmentById.get(option.value)!,
-                requestedRuntimeKind: option.value,
-              }
-            : undefined,
-        )?.icon,
+        icon: getEnvironmentIconInfo(environmentById.get(option.value))?.icon,
       }));
     },
     [environmentOptions, environments],

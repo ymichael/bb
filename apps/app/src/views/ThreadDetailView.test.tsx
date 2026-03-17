@@ -425,7 +425,7 @@ describe("ThreadDetailView", () => {
     expect(html).not.toContain("Parent thread");
     expect(html).not.toContain('href="/projects/project-1/threads/thread-parent"');
     expect(html).toContain("Rendered message");
-    expect(html).toContain("Ask for follow-up changes|1|Local Env");
+    expect(html).toContain("Ask for follow-up changes|1|");
   });
 
   it("renders the secondary panel diff view when the diff tab is active", () => {
@@ -458,8 +458,8 @@ describe("ThreadDetailView", () => {
     expect(html).toContain(">Parent thread<");
     expect(html).toContain('href="/projects/project-1/threads/thread-parent"');
     expect(html).toContain("Unassign manager");
-    expect(html).toContain("Environment");
-    expect(html).toContain("Local Env");
+    expect(html).not.toContain("Environment");
+    expect(html).not.toContain("Local Env");
     expect(html).toContain("Branch");
     expect(html).toContain("feature/thread-1");
     expect(html).toContain("Copy branch name");

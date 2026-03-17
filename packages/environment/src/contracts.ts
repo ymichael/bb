@@ -2,6 +2,7 @@ import type { ChildProcess, SpawnOptions } from "node:child_process";
 import type {
   EnvironmentCapabilities,
   EnvironmentCapability,
+  EnvironmentProperties,
   PersistedEnvironmentRecord,
 } from "@bb/core";
 import type { EnvironmentAgentConnectionTarget } from "@bb/environment-daemon";
@@ -19,7 +20,9 @@ export interface CreateEnvironmentContext {
   projectId: string;
   threadId: string;
   projectRootPath: string;
+  workspaceRootPath?: string;
   environmentId?: string;
+  environmentProperties?: EnvironmentProperties;
   runtimeEnv: Record<string, string | undefined>;
   managedEnvironmentAgentReconnectTarget?: {
     baseUrl: string;

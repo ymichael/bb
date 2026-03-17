@@ -30,12 +30,25 @@ export interface EnvironmentDescriptor {
   path: string;
 }
 
+export type EnvironmentLocation = "localhost" | "docker" | "remote";
+
+export type EnvironmentWorkspaceKind =
+  | "primary_checkout"
+  | "worktree"
+  | "arbitrary_path";
+
+export interface EnvironmentProperties {
+  provisioningSystemKind: string;
+  location: EnvironmentLocation;
+  workspaceKind: EnvironmentWorkspaceKind;
+}
+
 export interface EnvironmentRecord {
   id: string;
   projectId: string;
   descriptor: EnvironmentDescriptor;
   managed: boolean;
-  requestedRuntimeKind?: string;
+  properties?: EnvironmentProperties;
   runtimeState?: PersistedEnvironmentRecord;
   createdAt: number;
   updatedAt: number;

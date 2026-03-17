@@ -1212,7 +1212,11 @@ describe("Thread routes", () => {
         projectId: project.id,
         descriptor: { type: "path", path: "/project/root/.worktrees/thread-1" },
         managed: true,
-        requestedRuntimeKind: "worktree",
+        properties: {
+          provisioningSystemKind: "worktree",
+          location: "localhost",
+          workspaceKind: "worktree",
+        },
       });
       threadEnvironmentAttachmentRepo.attachThread({
         threadId: thread1.id,
@@ -1262,7 +1266,11 @@ describe("Thread routes", () => {
         projectId: project.id,
         descriptor: { type: "path", path: "/project/root/.worktrees/thread-1" },
         managed: true,
-        requestedRuntimeKind: "worktree",
+        properties: {
+          provisioningSystemKind: "worktree",
+          location: "localhost",
+          workspaceKind: "worktree",
+        },
       });
       threadEnvironmentAttachmentRepo.attachThread({
         threadId: dbThread.id,

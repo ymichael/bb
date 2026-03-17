@@ -59,8 +59,6 @@ import {
 import { ThreadDeleteDialog } from "@/components/thread/ThreadDeleteDialog";
 import { DetailCard, DetailRow, StatusPill } from "@bb/ui-core";
 import {
-  formatEnvironmentDisplayName,
-  formatRuntimeKind,
   type PromptInput,
   type ServiceTier,
   type Thread,
@@ -104,24 +102,20 @@ function formatAttachedEnvironmentLabel(path: string): string {
 function formatThreadEnvironmentLabel(args: {
   projectRootPath?: string;
   attachedEnvironment?: Thread["attachedEnvironment"];
-  legacyEnvironmentId?: string;
-  systemEnvironmentDisplayName?: string;
 }): string | undefined {
   const attachedEnvironment = args.attachedEnvironment;
   if (attachedEnvironment) {
-    const environmentKind =
-      attachedEnvironment.requestedRuntimeKind ?? attachedEnvironment.runtimeState?.kind;
-    const runtimeLabel = formatRuntimeKind(environmentKind);
+    const properties = attachedEnvironment.properties;
     const isPrimaryWorkspace =
       args.projectRootPath !== undefined &&
       attachedEnvironment.descriptor.path === args.projectRootPath;
     if (isPrimaryWorkspace) {
       return "Primary";
     }
-    if (runtimeLabel === "Docker Sandbox") {
+    if (properties?.location === "docker") {
       return "Docker";
     }
-    if (runtimeLabel === "Worktree") {
+    if (properties?.workspaceKind === "worktree") {
       return attachedEnvironment.managed
         ? formatAttachedEnvironmentLabel(attachedEnvironment.descriptor.path)
         : "Worktree";
@@ -130,17 +124,7 @@ function formatThreadEnvironmentLabel(args: {
       ? formatAttachedEnvironmentLabel(attachedEnvironment.descriptor.path)
       : "Direct";
   }
-
-  if (!args.legacyEnvironmentId) {
-    return undefined;
-  }
-
-  return (
-    formatEnvironmentDisplayName({
-      id: args.legacyEnvironmentId,
-      displayName: args.systemEnvironmentDisplayName,
-    }) ?? args.legacyEnvironmentId
-  );
+  return undefined;
 }
 
 const THREAD_HEADER_ACTION_BUTTON_CLASS =
@@ -850,8 +834,6 @@ export function ThreadDetailView() {
   const threadEnvironmentLabel = formatThreadEnvironmentLabel({
     projectRootPath,
     attachedEnvironment: thread.attachedEnvironment,
-    legacyEnvironmentId: thread.environmentId,
-    systemEnvironmentDisplayName: environmentInfo?.displayName,
   });
   const provisioningStatusLabel =
     isCreated

@@ -32,7 +32,7 @@ describe("EnvironmentFactory", () => {
     sqlite.close();
   });
 
-  it("stores the requested runtime kind when reserving a managed environment", () => {
+  it("stores authoritative properties when reserving a managed environment", () => {
     const project = projects.create({
       name: "factory-project",
       rootPath: "/tmp/factory-project",
@@ -53,7 +53,11 @@ describe("EnvironmentFactory", () => {
     expect(environmentId && environments.getById(environmentId)).toMatchObject({
       projectId: project.id,
       managed: true,
-      requestedRuntimeKind: "docker",
+      properties: {
+        provisioningSystemKind: "docker-worktree",
+        location: "docker",
+        workspaceKind: "arbitrary_path",
+      },
       descriptor: {
         type: "path",
         path: project.rootPath,

@@ -24,6 +24,10 @@ import type {
   PromoteEnvironmentOptions,
   PromoteEnvironmentResult,
 } from "./contracts.js";
+import type {
+  CreateWorktreeEnvironmentDefinitionOptions,
+  WorktreeEnvironmentState,
+} from "./worktree-environment.js";
 import {
   commitGitWorkspace,
   getGitWorkspaceDiffAsync,
@@ -39,8 +43,16 @@ import {
   ensureManagedHostEnvironmentAgent,
 } from "./host-environment-agent.js";
 import { runCommandAsync, spawnCommand } from "./process.js";
+import { createWorktreeEnvironmentDefinition } from "./worktree-environment.js";
 
-interface LocalEnvironmentState {}
+interface LocalEnvironmentState {
+  workspaceRoot?: string;
+  branchName?: string;
+}
+
+export interface CreateLocalEnvironmentDefinitionOptions {
+  worktree?: CreateWorktreeEnvironmentDefinitionOptions;
+}
 
 const LOCAL_ENVIRONMENT_INFO: EnvironmentInfo = {
   id: "local",
@@ -71,7 +83,7 @@ class LocalEnvironment implements IEnvironment {
     this.projectId = context.projectId;
     this.threadId = context.threadId;
     this.environmentId = context.environmentId ?? this.kind;
-    this.rootPath = context.projectRootPath;
+    this.rootPath = context.workspaceRootPath ?? context.projectRootPath;
     this.env = { ...context.runtimeEnv };
     this.services = context.services;
     this.reconnectTarget = context.managedEnvironmentAgentReconnectTarget;
@@ -267,15 +279,37 @@ class LocalEnvironment implements IEnvironment {
   }
 }
 
-export function createLocalEnvironmentDefinition(): EnvironmentDefinition<LocalEnvironmentState> {
+function isWorktreeEnvironmentState(value: LocalEnvironmentState): value is WorktreeEnvironmentState {
+  return typeof value.workspaceRoot === "string" && typeof value.branchName === "string";
+}
+
+function shouldUseManagedWorktreeRuntime(context: CreateEnvironmentContext): boolean {
+  return context.environmentProperties?.provisioningSystemKind === "worktree";
+}
+
+export function createLocalEnvironmentDefinition(
+  opts?: CreateLocalEnvironmentDefinitionOptions,
+): EnvironmentDefinition<LocalEnvironmentState> {
+  const worktreeDefinition = createWorktreeEnvironmentDefinition(opts?.worktree);
   return {
     kind: "local",
     info: { ...LOCAL_ENVIRONMENT_INFO },
     create(context: CreateEnvironmentContext): IEnvironment {
+      if (shouldUseManagedWorktreeRuntime(context)) {
+        return worktreeDefinition.create(context);
+      }
       return new LocalEnvironment(context);
     },
-    restore(_state: LocalEnvironmentState, context: CreateEnvironmentContext): IEnvironment {
-      return new LocalEnvironment(context);
+    restore(state: LocalEnvironmentState, context: CreateEnvironmentContext): IEnvironment {
+      if (isWorktreeEnvironmentState(state) && shouldUseManagedWorktreeRuntime(context)) {
+        return worktreeDefinition.restore(state, context);
+      }
+      return new LocalEnvironment({
+        ...context,
+        ...(typeof state.workspaceRoot === "string"
+          ? { workspaceRootPath: state.workspaceRoot }
+          : {}),
+      });
     },
     isState(value: unknown): value is LocalEnvironmentState {
       return value !== null && typeof value === "object" && !Array.isArray(value);

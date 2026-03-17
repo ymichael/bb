@@ -242,7 +242,7 @@ async function resolveDefaultBranchAsync(
 }
 
 class WorktreeEnvironment implements IEnvironment {
-  readonly kind = "worktree";
+  readonly kind = "local";
   readonly info = { ...WORKTREE_ENVIRONMENT_INFO };
   private readonly projectId: string;
   private readonly threadId: string;

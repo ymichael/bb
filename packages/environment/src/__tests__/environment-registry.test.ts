@@ -8,7 +8,6 @@ import {
   createDefaultEnvironmentRegistry,
   createDockerEnvironmentDefinition,
   createLocalEnvironmentDefinition,
-  createWorktreeEnvironmentDefinition,
 } from "../index.js";
 
 function makeTempDir(prefix: string): string {
@@ -55,35 +54,45 @@ describe("EnvironmentRegistry", () => {
       git(projectRoot, "add", "README.md");
       git(projectRoot, "commit", "-m", "init");
 
-      const registry = new EnvironmentRegistry()
-        .register(createLocalEnvironmentDefinition())
-        .register(
-          createWorktreeEnvironmentDefinition({
+      const registry = new EnvironmentRegistry().register(
+        createLocalEnvironmentDefinition({
+          worktree: {
             worktreeRootName: ".worktrees",
             manageEnvironmentAgent: false,
-          }),
-        );
-      const environment = registry.create("worktree", {
+          },
+        }),
+      );
+      const environment = registry.create("local", {
         projectId,
         threadId,
         projectRootPath: projectRoot,
+        environmentProperties: {
+          provisioningSystemKind: "worktree",
+          location: "localhost",
+          workspaceKind: "worktree",
+        },
         runtimeEnv: {},
       });
       await environment.prepare?.();
       const restored = registry.restore(
         {
-          kind: "worktree",
+          kind: "local",
           state: environment.serialize(),
         },
         {
           projectId,
           threadId,
           projectRootPath: projectRoot,
+          environmentProperties: {
+            provisioningSystemKind: "worktree",
+            location: "localhost",
+            workspaceKind: "worktree",
+          },
           runtimeEnv: {},
         },
       );
 
-      expect(restored.kind).toBe("worktree");
+      expect(restored.kind).toBe("local");
       expect(restored.getWorkspaceRootUnsafe()).toBe(join(worktreeRoot, threadId));
 
       await restored.destroy();
@@ -93,14 +102,18 @@ describe("EnvironmentRegistry", () => {
   });
 
   it("fails loudly when a persisted worktree is missing", () => {
-    const registry = new EnvironmentRegistry()
-      .register(createLocalEnvironmentDefinition())
-      .register(createWorktreeEnvironmentDefinition());
+    const registry = new EnvironmentRegistry().register(
+      createLocalEnvironmentDefinition({
+        worktree: {
+          manageEnvironmentAgent: false,
+        },
+      }),
+    );
 
     expect(() =>
       registry.restore(
         {
-          kind: "worktree",
+          kind: "local",
           state: {
             workspaceRoot: "/tmp/does-not-exist",
             branchName: "bb/thread-test",
@@ -110,6 +123,11 @@ describe("EnvironmentRegistry", () => {
           projectId: "proj-1",
           threadId: "thread-1",
           projectRootPath: "/tmp/project",
+          environmentProperties: {
+            provisioningSystemKind: "worktree",
+            location: "localhost",
+            workspaceKind: "worktree",
+          },
           runtimeEnv: {},
         },
       )).toThrow(/Worktree workspace is unavailable/);
@@ -161,10 +179,6 @@ describe("EnvironmentRegistry", () => {
   it("includes docker in the default environment registry", () => {
     const registry = createDefaultEnvironmentRegistry();
 
-    expect(registry.list().map((item) => item.id)).toEqual([
-      "local",
-      "worktree",
-      "docker",
-    ]);
+    expect(registry.list().map((item) => item.id)).toEqual(["local", "docker"]);
   });
 });

@@ -205,7 +205,11 @@ function createService(args: {
       path: "/project/root/.worktrees/thread-1",
     },
     managed: args.managed ?? true,
-    requestedRuntimeKind: "worktree",
+    properties: {
+      provisioningSystemKind: "worktree",
+      location: "localhost",
+      workspaceKind: "worktree",
+    },
     runtimeState: {
       kind: "worktree",
       state: {},
@@ -761,7 +765,11 @@ describe("EnvironmentService", () => {
         path: "/project/root/.worktrees/thread-1",
       },
       managed: true,
-      requestedRuntimeKind: "worktree",
+      properties: {
+        provisioningSystemKind: "worktree",
+        location: "localhost",
+        workspaceKind: "worktree",
+      },
       runtimeState: {
         kind: "worktree",
         state: {},
@@ -902,7 +910,11 @@ describe("EnvironmentService", () => {
         path: "/project/root/.worktrees/thread-1",
       },
       managed: true,
-      requestedRuntimeKind: "worktree",
+      properties: {
+        provisioningSystemKind: "worktree",
+        location: "localhost",
+        workspaceKind: "worktree",
+      },
       runtimeState: {
         kind: "worktree",
         state: {},
@@ -1022,7 +1034,11 @@ describe("EnvironmentService", () => {
         path: "/project/root/.worktrees/thread-1",
       },
       managed: true,
-      requestedRuntimeKind: "worktree",
+      properties: {
+        provisioningSystemKind: "worktree",
+        location: "localhost",
+        workspaceKind: "worktree",
+      },
       runtimeState: {
         kind: "worktree",
         state: {},

@@ -6,7 +6,6 @@ import {
 } from "./contracts.js";
 import { createLocalEnvironmentDefinition } from "./local-environment.js";
 import {
-  createWorktreeEnvironmentDefinition,
   type CreateWorktreeEnvironmentDefinitionOptions,
 } from "./worktree-environment.js";
 import {
@@ -23,8 +22,9 @@ export function createDefaultEnvironmentRegistry(
   opts?: CreateDefaultEnvironmentRegistryOptions,
 ): EnvironmentRegistry {
   const registry = new EnvironmentRegistry()
-    .register(createLocalEnvironmentDefinition())
-    .register(createWorktreeEnvironmentDefinition(opts?.worktree))
+    .register(createLocalEnvironmentDefinition({
+      ...(opts?.worktree ? { worktree: opts.worktree } : {}),
+    }))
     .register(createDockerEnvironmentDefinition(opts?.docker));
   return registry;
 }
