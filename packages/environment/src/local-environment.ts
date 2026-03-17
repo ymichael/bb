@@ -25,9 +25,9 @@ import type {
   PromoteEnvironmentResult,
 } from "./contracts.js";
 import type {
-  CreateWorktreeEnvironmentDefinitionOptions,
-  WorktreeEnvironmentState,
-} from "./worktree-environment.js";
+  CreateLocalGitWorkspaceOptions,
+  LocalGitWorkspaceState,
+} from "./local-git-workspace.js";
 import {
   commitGitWorkspace,
   getGitWorkspaceDiffAsync,
@@ -43,7 +43,7 @@ import {
   ensureManagedHostEnvironmentAgent,
 } from "./host-environment-agent.js";
 import { runCommandAsync, spawnCommand } from "./process.js";
-import { createWorktreeEnvironmentDefinition } from "./worktree-environment.js";
+import { createLocalGitWorkspaceDefinition } from "./local-git-workspace.js";
 
 interface LocalEnvironmentState {
   workspaceRoot?: string;
@@ -51,7 +51,7 @@ interface LocalEnvironmentState {
 }
 
 export interface CreateLocalEnvironmentDefinitionOptions {
-  worktree?: CreateWorktreeEnvironmentDefinitionOptions;
+  worktree?: CreateLocalGitWorkspaceOptions;
 }
 
 const LOCAL_ENVIRONMENT_INFO: EnvironmentInfo = {
@@ -279,30 +279,33 @@ class LocalEnvironment implements IEnvironment {
   }
 }
 
-function isWorktreeEnvironmentState(value: LocalEnvironmentState): value is WorktreeEnvironmentState {
+function isLocalGitWorkspaceState(value: LocalEnvironmentState): value is LocalGitWorkspaceState {
   return typeof value.workspaceRoot === "string" && typeof value.branchName === "string";
 }
 
-function shouldUseManagedWorktreeRuntime(context: CreateEnvironmentContext): boolean {
-  return context.environmentProperties?.provisioningSystemKind === "worktree";
+function shouldUseWorktreeRuntime(context: CreateEnvironmentContext): boolean {
+  return (
+    context.environmentProperties?.location === "localhost" &&
+    context.environmentProperties?.workspaceKind === "worktree"
+  );
 }
 
 export function createLocalEnvironmentDefinition(
   opts?: CreateLocalEnvironmentDefinitionOptions,
 ): EnvironmentDefinition<LocalEnvironmentState> {
-  const worktreeDefinition = createWorktreeEnvironmentDefinition(opts?.worktree);
+  const localGitWorkspaceDefinition = createLocalGitWorkspaceDefinition(opts?.worktree);
   return {
     kind: "local",
     info: { ...LOCAL_ENVIRONMENT_INFO },
     create(context: CreateEnvironmentContext): IEnvironment {
-      if (shouldUseManagedWorktreeRuntime(context)) {
-        return worktreeDefinition.create(context);
+      if (shouldUseWorktreeRuntime(context)) {
+        return localGitWorkspaceDefinition.create(context);
       }
       return new LocalEnvironment(context);
     },
     restore(state: LocalEnvironmentState, context: CreateEnvironmentContext): IEnvironment {
-      if (isWorktreeEnvironmentState(state) && shouldUseManagedWorktreeRuntime(context)) {
-        return worktreeDefinition.restore(state, context);
+      if (isLocalGitWorkspaceState(state) && shouldUseWorktreeRuntime(context)) {
+        return localGitWorkspaceDefinition.restore(state, context);
       }
       return new LocalEnvironment({
         ...context,

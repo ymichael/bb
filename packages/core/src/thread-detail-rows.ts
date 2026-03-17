@@ -128,12 +128,18 @@ function mergeProvisioningTranscriptEntry(
     };
   }
 
+  const shouldPreserveStartedAt =
+    incoming.startedAt === undefined &&
+    existing.text === incoming.text;
+
   return {
     key: existing.key,
     text: incoming.text,
-    ...((existing.startedAt ?? incoming.startedAt) !== undefined
+    ...(incoming.startedAt !== undefined
       ? { startedAt: existing.startedAt ?? incoming.startedAt }
-      : {}),
+      : shouldPreserveStartedAt && existing.startedAt !== undefined
+        ? { startedAt: existing.startedAt }
+        : {}),
     ...(incoming.metadata ? { metadata: { ...incoming.metadata } } : {}),
   };
 }

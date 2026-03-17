@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { isAbsolute, join, resolve } from "node:path";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 import { expandHomeDirectory, resolveBbPath } from "@bb/core/storage-paths";
 import type { EnvironmentAgentConnectionTarget } from "@bb/environment-daemon";
 import { renderTemplate } from "@bb/templates";
@@ -46,14 +46,23 @@ import {
 } from "./host-environment-agent.js";
 import { runCommandAsync, spawnCommand } from "./process.js";
 
-export interface WorktreeEnvironmentState {
+export interface LocalGitWorkspaceState {
   workspaceRoot: string;
   branchName: string;
 }
 
-export interface CreateWorktreeEnvironmentDefinitionOptions {
+export interface CreateLocalGitWorkspaceOptions {
   worktreeRootName?: string;
   manageEnvironmentAgent?: boolean;
+}
+
+export function isLocalGitWorkspaceState(value: unknown): value is LocalGitWorkspaceState {
+  return (
+    value !== null &&
+    typeof value === "object" &&
+    typeof (value as LocalGitWorkspaceState).workspaceRoot === "string" &&
+    typeof (value as LocalGitWorkspaceState).branchName === "string"
+  );
 }
 
 async function listUnmergedPathsAtAsync(
@@ -74,8 +83,8 @@ async function listUnmergedPathsAtAsync(
     .filter((line) => line.length > 0);
 }
 
-const WORKTREE_ENVIRONMENT_INFO: EnvironmentInfo = {
-  id: "worktree",
+const LOCAL_GIT_WORKSPACE_INFO: EnvironmentInfo = {
+  id: "local",
   displayName: "Git Worktree Workspace",
   description:
     "Provision an isolated per-thread git worktree when the project is a git repository.",
@@ -241,9 +250,9 @@ async function resolveDefaultBranchAsync(
   return undefined;
 }
 
-class WorktreeEnvironment implements IEnvironment {
+class LocalGitWorkspaceEnvironment implements IEnvironment {
   readonly kind = "local";
-  readonly info = { ...WORKTREE_ENVIRONMENT_INFO };
+  readonly info = { ...LOCAL_GIT_WORKSPACE_INFO };
   private readonly projectId: string;
   private readonly threadId: string;
   private readonly environmentId: string;
@@ -259,7 +268,7 @@ class WorktreeEnvironment implements IEnvironment {
     projectId: string,
     threadId: string,
     private readonly projectRoot: string,
-    private readonly state: WorktreeEnvironmentState,
+    private readonly state: LocalGitWorkspaceState,
     runtimeEnv: Record<string, string | undefined>,
     reconnectTarget?: CreateEnvironmentContext["managedEnvironmentAgentReconnectTarget"],
     services?: CreateEnvironmentContext["services"],
@@ -275,89 +284,35 @@ class WorktreeEnvironment implements IEnvironment {
     this.manageEnvironmentAgent = manageEnvironmentAgent;
   }
 
-  serialize(): WorktreeEnvironmentState {
+  serialize(): LocalGitWorkspaceState {
     return { ...this.state };
   }
 
   async prepare(): Promise<void> {
-    if (existsSync(this.state.workspaceRoot)) {
-      if (this.manageEnvironmentAgent) {
-        const managedAgentTarget = await ensureManagedHostEnvironmentAgent({
-          workspaceRootPath: this.state.workspaceRoot,
-          threadId: this.threadId,
-          projectId: this.projectId,
-          environmentId: this.environmentId,
-          runtimeEnv: this.env,
-          reconnectTarget: this.reconnectTarget,
-        });
-        if (managedAgentTarget) {
-          this.managedAgentTarget = managedAgentTarget;
-        }
-      }
+    if (!existsSync(this.state.workspaceRoot)) {
+      throw new Error(`Local git workspace is unavailable: ${this.state.workspaceRoot}`);
+    }
+    if (!this.manageEnvironmentAgent) {
       return;
     }
     if (this.preparePromise) {
       return this.preparePromise;
     }
-
-    this.preparePromise = this._prepareWorkspace().finally(() => {
-      this.preparePromise = null;
-    });
-    return this.preparePromise;
-  }
-
-  private async _prepareWorkspace(): Promise<void> {
-    if (existsSync(this.state.workspaceRoot)) {
-      return;
-    }
-
-    const startRef = await resolveWorktreeStartRefAsync(this.projectRoot, this.env);
-    const branchExists = await hasLocalBranchAsync(
-      this.projectRoot,
-      this.state.branchName,
-      this.env,
-    );
-    const branchAddArgs = branchExists
-      ? ["worktree", "add", this.state.workspaceRoot, this.state.branchName]
-      : [
-          "worktree",
-          "add",
-          "-b",
-          this.state.branchName,
-          this.state.workspaceRoot,
-          ...(startRef ? [startRef] : []),
-        ];
-    const branchAddResult = await runGitAtPathAsync(
-      this.projectRoot,
-      branchAddArgs,
-      this.env,
-    );
-    const addResult = branchAddResult.ok
-      ? branchAddResult
-      : await runGitAtPathAsync(
-          this.projectRoot,
-          ["worktree", "add", "--detach", this.state.workspaceRoot],
-          this.env,
-        );
-    if (!addResult.ok) {
-      throw new Error(
-        `Failed to create worktree: ${addResult.stderr || addResult.stdout || "unknown error"}`,
-      );
-    }
-
-    if (this.manageEnvironmentAgent) {
-      const managedAgentTarget = await ensureManagedHostEnvironmentAgent({
-        workspaceRootPath: this.state.workspaceRoot,
-        threadId: this.threadId,
-        projectId: this.projectId,
-        environmentId: this.environmentId,
-        runtimeEnv: this.env,
-        reconnectTarget: this.reconnectTarget,
-      });
+    this.preparePromise = ensureManagedHostEnvironmentAgent({
+      workspaceRootPath: this.state.workspaceRoot,
+      threadId: this.threadId,
+      projectId: this.projectId,
+      environmentId: this.environmentId,
+      runtimeEnv: this.env,
+      reconnectTarget: this.reconnectTarget,
+    }).then((managedAgentTarget) => {
       if (managedAgentTarget) {
         this.managedAgentTarget = managedAgentTarget;
       }
-    }
+    }).finally(() => {
+      this.preparePromise = null;
+    });
+    return this.preparePromise;
   }
 
   async suspend(): Promise<void> {
@@ -375,12 +330,6 @@ class WorktreeEnvironment implements IEnvironment {
 
   async destroy(): Promise<void> {
     await this.suspend();
-    await runGitAtPathAsync(
-      this.projectRoot,
-      ["worktree", "remove", "--force", this.state.workspaceRoot],
-      this.env,
-    );
-    await rm(this.state.workspaceRoot, { recursive: true, force: true });
   }
 
   exists(): boolean {
@@ -397,11 +346,11 @@ class WorktreeEnvironment implements IEnvironment {
 
   getAgentConnectionTarget(): EnvironmentAgentConnectionTarget {
     if (!this.manageEnvironmentAgent && !this.env.BB_ENV_DAEMON_BASE_URL?.trim()) {
-      throw new Error("Worktree environment-agent management is disabled");
+      throw new Error("Local git workspace environment-agent management is disabled");
     }
     const managedTarget = this.managedAgentTarget;
     if (!managedTarget && !this.env.BB_ENV_DAEMON_BASE_URL?.trim()) {
-      throw new Error("Missing managed environment-agent target for worktree environment");
+      throw new Error("Missing managed environment-agent target for local git workspace");
     }
     return resolveEnvironmentAgentConnectionTarget({
       runtimeEnv: this.env,
@@ -820,54 +769,43 @@ class WorktreeEnvironment implements IEnvironment {
   }
 }
 
-export function createWorktreeEnvironmentDefinition(
-  opts?: CreateWorktreeEnvironmentDefinitionOptions,
-): EnvironmentDefinition<WorktreeEnvironmentState> {
-  const configuredWorktreeRootName =
-    opts?.worktreeRootName ?? process.env.BB_WORKTREE_ROOT?.trim();
-  const worktreeRootName = configuredWorktreeRootName?.trim().length
-    ? configuredWorktreeRootName
-    : resolveBbPath(process.env, "worktrees");
+export function createLocalGitWorkspaceDefinition(
+  opts?: CreateLocalGitWorkspaceOptions,
+): EnvironmentDefinition<LocalGitWorkspaceState> {
   const manageEnvironmentAgent = opts?.manageEnvironmentAgent ?? true;
 
   return {
-    kind: "worktree",
-    info: { ...WORKTREE_ENVIRONMENT_INFO },
+    kind: "local",
+    info: { ...LOCAL_GIT_WORKSPACE_INFO },
     create(context: CreateEnvironmentContext): IEnvironment {
       const projectRoot = context.projectRootPath;
       if (!existsSync(join(projectRoot, ".git"))) {
         throw new Error("Worktree provisioning requires a git repository at the project root");
       }
 
-      const { root: configuredWorktreeRoot, isGlobalRoot } =
-        resolveConfiguredWorktreeRoot(projectRoot, worktreeRootName);
-      const worktreeRoot = isGlobalRoot
-        ? resolve(configuredWorktreeRoot, context.projectId)
-        : configuredWorktreeRoot;
-      const worktreeId = context.environmentId ?? context.threadId;
-      const workspaceRoot = resolve(worktreeRoot, worktreeId);
-      const branchName = toWorktreeBranchName(worktreeId);
-      mkdirSync(worktreeRoot, { recursive: true });
-
-      return new WorktreeEnvironment(
+      return new LocalGitWorkspaceEnvironment(
         context.projectId,
         context.threadId,
         projectRoot,
-        {
-          workspaceRoot,
-          branchName,
-        },
+        resolveLocalGitWorkspaceState({
+          projectId: context.projectId,
+          threadId: context.threadId,
+          environmentId: context.environmentId,
+          projectRootPath: context.projectRootPath,
+          runtimeEnv: context.runtimeEnv,
+          ...(opts?.worktreeRootName ? { worktreeRootName: opts.worktreeRootName } : {}),
+        }),
         context.runtimeEnv,
         context.managedEnvironmentAgentReconnectTarget,
         context.services,
         manageEnvironmentAgent,
       );
     },
-    restore(state: WorktreeEnvironmentState, context: CreateEnvironmentContext): IEnvironment {
+    restore(state: LocalGitWorkspaceState, context: CreateEnvironmentContext): IEnvironment {
       if (!existsSync(state.workspaceRoot)) {
         throw new Error(`Worktree workspace is unavailable: ${state.workspaceRoot}`);
       }
-      return new WorktreeEnvironment(
+      return new LocalGitWorkspaceEnvironment(
         context.projectId,
         context.threadId,
         context.projectRootPath,
@@ -878,13 +816,94 @@ export function createWorktreeEnvironmentDefinition(
         manageEnvironmentAgent,
       );
     },
-    isState(value: unknown): value is WorktreeEnvironmentState {
-      return (
-        value !== null &&
-        typeof value === "object" &&
-        typeof (value as WorktreeEnvironmentState).workspaceRoot === "string" &&
-        typeof (value as WorktreeEnvironmentState).branchName === "string"
-      );
-    },
+    isState: isLocalGitWorkspaceState,
   };
+}
+
+export function resolveLocalGitWorkspaceState(args: {
+  projectId: string;
+  threadId: string;
+  environmentId?: string;
+  projectRootPath: string;
+  runtimeEnv: Record<string, string | undefined>;
+  worktreeRootName?: string;
+}): LocalGitWorkspaceState {
+  const configuredWorktreeRootName =
+    args.worktreeRootName ?? args.runtimeEnv.BB_WORKTREE_ROOT?.trim();
+  const worktreeRootName = configuredWorktreeRootName?.trim().length
+    ? configuredWorktreeRootName
+    : resolveBbPath(args.runtimeEnv, "worktrees");
+  const { root: configuredWorktreeRoot, isGlobalRoot } =
+    resolveConfiguredWorktreeRoot(args.projectRootPath, worktreeRootName);
+  const worktreeRoot = isGlobalRoot
+    ? resolve(configuredWorktreeRoot, args.projectId)
+    : configuredWorktreeRoot;
+  const worktreeId = args.environmentId ?? args.threadId;
+  return {
+    workspaceRoot: resolve(worktreeRoot, worktreeId),
+    branchName: toWorktreeBranchName(worktreeId),
+  };
+}
+
+export async function ensureLocalGitWorkspace(args: {
+  projectRootPath: string;
+  state: LocalGitWorkspaceState;
+  runtimeEnv: Record<string, string | undefined>;
+}): Promise<boolean> {
+  if (existsSync(args.state.workspaceRoot)) {
+    return false;
+  }
+  mkdirSync(dirname(args.state.workspaceRoot), {
+    recursive: true,
+  });
+  const startRef = await resolveWorktreeStartRefAsync(args.projectRootPath, args.runtimeEnv);
+  const branchExists = await hasLocalBranchAsync(
+    args.projectRootPath,
+    args.state.branchName,
+    args.runtimeEnv,
+  );
+  const branchAddArgs = branchExists
+    ? ["worktree", "add", args.state.workspaceRoot, args.state.branchName]
+    : [
+        "worktree",
+        "add",
+        "-b",
+        args.state.branchName,
+        args.state.workspaceRoot,
+        ...(startRef ? [startRef] : []),
+      ];
+  const branchAddResult = await runGitAtPathAsync(
+    args.projectRootPath,
+    branchAddArgs,
+    args.runtimeEnv,
+  );
+  const addResult = branchAddResult.ok
+    ? branchAddResult
+    : await runGitAtPathAsync(
+        args.projectRootPath,
+        ["worktree", "add", "--detach", args.state.workspaceRoot],
+        args.runtimeEnv,
+      );
+  if (!addResult.ok) {
+    throw new Error(
+      `Failed to create worktree: ${addResult.stderr || addResult.stdout || "unknown error"}`,
+    );
+  }
+  return true;
+}
+
+export async function removeLocalGitWorkspace(args: {
+  projectRootPath: string;
+  workspaceRoot: string;
+  runtimeEnv: Record<string, string | undefined>;
+}): Promise<void> {
+  if (!existsSync(args.workspaceRoot)) {
+    return;
+  }
+  await runGitAtPathAsync(
+    args.projectRootPath,
+    ["worktree", "remove", "--force", args.workspaceRoot],
+    args.runtimeEnv,
+  );
+  await rm(args.workspaceRoot, { recursive: true, force: true });
 }

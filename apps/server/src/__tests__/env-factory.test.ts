@@ -58,11 +58,8 @@ describe("EnvironmentFactory", () => {
         location: "docker",
         workspaceKind: "arbitrary_path",
       },
-      descriptor: {
-        type: "path",
-        path: project.rootPath,
-      },
     });
+    expect(environmentId && environments.getById(environmentId)?.descriptor).toBeUndefined();
   });
 
   it("creates a thread_environment_attachment row when reserving", () => {

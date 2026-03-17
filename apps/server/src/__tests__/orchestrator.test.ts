@@ -3624,6 +3624,8 @@ describe("Orchestrator", () => {
   describe("primary checkout status reconciliation", () => {
     let testDb: ReturnType<typeof createTestDb>;
     let project: ReturnType<typeof createTestProject>;
+    let environmentRepo: ReturnType<typeof createTestRepos>["environmentRepo"];
+    let attachmentRepo: ReturnType<typeof createTestRepos>["attachmentRepo"];
 
     beforeEach(() => {
       testDb = createTestDb();
@@ -3631,10 +3633,26 @@ describe("Orchestrator", () => {
       threadRepo = repos.threadRepo;
       eventRepo = repos.eventRepo;
       projectRepo = repos.projectRepo;
+      environmentRepo = repos.environmentRepo;
+      attachmentRepo = repos.attachmentRepo;
       project = createTestProject(projectRepo, { rootPath: "/tmp/proj-1" });
       manager = new Orchestrator(
-        threadRepo, eventRepo, projectRepo, ws, llmCompletionService,
-        undefined, createTestRuntimeEnv(),
+        threadRepo,
+        eventRepo,
+        projectRepo,
+        ws,
+        llmCompletionService,
+        undefined,
+        createTestRuntimeEnv(),
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        environmentRepo as never,
+        attachmentRepo as never,
       );
     });
 
@@ -3797,16 +3815,28 @@ describe("Orchestrator", () => {
     });
 
     it("switches primary checkout when promoting a different thread", async () => {
-      const envRepo = new EnvironmentRepository(testDb.db);
-      const env = envRepo.create({ projectId: project.id, descriptor: { type: "path", path: "/tmp/env" }, managed: true });
+      const env = environmentRepo.create({
+        projectId: project.id,
+        descriptor: { type: "path", path: "/tmp/env" },
+        managed: true,
+        properties: {
+          provisioningSystemKind: "worktree",
+          location: "localhost",
+          workspaceKind: "worktree",
+        },
+      });
       const activeThread = createTestThread(threadRepo, project.id, { status: "idle", environmentId: env.id });
       const targetThread = createTestThread(threadRepo, project.id, { status: "idle", environmentId: env.id });
+      attachmentRepo.attachThread({ threadId: activeThread.id, environmentId: env.id });
+      attachmentRepo.attachThread({ threadId: targetThread.id, environmentId: env.id });
 
-      asOrchestratorHarness(manager).environmentRuntimes.set(targetThread.id, {
+      const runtimeEntry = {
         environment: makeRuntimeEnvironment({
           rootPath: "/tmp/worktrees/proj-1/thread-2",
         }),
-      });
+      };
+      asOrchestratorHarness(manager).environmentRuntimes.set(env.id, runtimeEntry);
+      asOrchestratorHarness(manager).environmentRuntimes.set(`thread:${targetThread.id}`, runtimeEntry);
       asOrchestratorHarness(manager).primaryPromotionByProjectId.set(project.id, {
         projectId: project.id,
         threadId: activeThread.id,
@@ -3828,10 +3858,17 @@ describe("Orchestrator", () => {
         manager as unknown as {
           environmentService: Pick<
             EnvironmentService,
-            "demotePrimaryCheckout" | "promoteThreadEnvironment"
+            "demotePrimaryCheckout" | "promoteThreadEnvironment" | "restoreThreadEnvironment"
           >;
         }
       ).environmentService;
+      vi
+        .spyOn(environmentService, "restoreThreadEnvironment")
+        .mockReturnValue(
+          makeRuntimeEnvironment({
+            rootPath: "/tmp/worktrees/proj-1/thread-2",
+          }),
+        );
       const demoteSpy = vi
         .spyOn(environmentService, "demotePrimaryCheckout")
         .mockResolvedValue({
@@ -3932,15 +3969,32 @@ describe("Orchestrator", () => {
     });
 
     it("keeps promote action available when another thread is currently promoted", async () => {
-      const envRepo = new EnvironmentRepository(testDb.db);
-      const env = envRepo.create({ projectId: project.id, descriptor: { type: "path", path: "/tmp/env" }, managed: true });
+      const env = environmentRepo.create({
+        projectId: project.id,
+        descriptor: { type: "path", path: "/tmp/env" },
+        managed: true,
+        properties: {
+          provisioningSystemKind: "worktree",
+          location: "localhost",
+          workspaceKind: "worktree",
+        },
+      });
       const otherThread = createTestThread(threadRepo, project.id, { status: "idle", environmentId: env.id });
       const targetThread = createTestThread(threadRepo, project.id, { status: "idle", environmentId: env.id });
-      asOrchestratorHarness(manager).environmentRuntimes.set(targetThread.id, {
-        environment: makeRuntimeEnvironment({
-          rootPath: "/tmp/worktrees/proj-1/thread-2",
-        }),
-      });
+      attachmentRepo.attachThread({ threadId: otherThread.id, environmentId: env.id });
+      attachmentRepo.attachThread({ threadId: targetThread.id, environmentId: env.id });
+      const environmentService = (
+        manager as unknown as {
+          environmentService: Pick<EnvironmentService, "restoreThreadEnvironment">;
+        }
+      ).environmentService;
+      vi
+        .spyOn(environmentService, "restoreThreadEnvironment")
+        .mockReturnValue(
+          makeRuntimeEnvironment({
+            rootPath: "/tmp/worktrees/proj-1/thread-2",
+          }),
+        );
       asOrchestratorHarness(manager).primaryPromotionByProjectId.set(project.id, {
         projectId: project.id,
         threadId: otherThread.id,

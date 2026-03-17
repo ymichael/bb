@@ -905,6 +905,43 @@ describe("buildThreadDetailRows provisioning operation collapsing", () => {
     ]);
   });
 
+  it("clears transcript startedAt when a replacement entry changes text and omits it", () => {
+    const rows = getOperationRows([
+      provisioningOperation(
+        1,
+        "provisioning-env-setup",
+        "Environment setup started",
+        undefined,
+        {
+          setup: {
+            status: "started",
+            startedAt: 10,
+            scriptPath: ".bb-env-setup.sh",
+          },
+          transcript: [{ key: "setup", text: "running .bb-env-setup.sh", startedAt: 10 }],
+        },
+      ),
+      provisioningOperation(
+        2,
+        "provisioning-env-setup",
+        "Environment setup completed",
+        undefined,
+        {
+          setup: {
+            status: "completed",
+            durationMs: 5_000,
+            scriptPath: ".bb-env-setup.sh",
+          },
+          transcript: [{ key: "setup", text: "ran .bb-env-setup.sh in 5s" }],
+        },
+      ),
+    ]);
+
+    expect(rows[0]?.provisioning?.transcript).toEqual([
+      { key: "setup", text: "ran .bb-env-setup.sh in 5s" },
+    ]);
+  });
+
   it("collapses env-setup-only updates without looking stuck in provisioning", () => {
     const rows = getOperationRows([
       provisioningOperation(

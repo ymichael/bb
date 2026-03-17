@@ -46,7 +46,7 @@ export interface EnvironmentProperties {
 export interface EnvironmentRecord {
   id: string;
   projectId: string;
-  descriptor: EnvironmentDescriptor;
+  descriptor?: EnvironmentDescriptor;
   managed: boolean;
   properties?: EnvironmentProperties;
   runtimeState?: PersistedEnvironmentRecord;

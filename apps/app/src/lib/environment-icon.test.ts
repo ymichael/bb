@@ -60,4 +60,20 @@ describe("getEnvironmentIconInfo", () => {
     })
   })
 
+  it("does not treat managed localhost environments as worktrees without worktree metadata", () => {
+    expect(
+      getEnvironmentIconInfo({
+        properties: {
+          provisioningSystemKind: "direct-path",
+          location: "localhost",
+          workspaceKind: "arbitrary_path",
+        },
+        managed: true,
+      }),
+    ).toMatchObject({
+      icon: Laptop,
+      ariaLabel: "Direct thread",
+    })
+  })
+
 })

@@ -8,10 +8,15 @@ import {
   EnvironmentSquashMergeCommitFailureError,
   type IEnvironment,
 } from "../contracts.js";
-import { createWorktreeEnvironmentDefinition } from "../worktree-environment.js";
+import {
+  createLocalGitWorkspaceDefinition,
+  ensureLocalGitWorkspace,
+  removeLocalGitWorkspace,
+  type LocalGitWorkspaceState,
+} from "../local-git-workspace.js";
 
 const tempDirs: string[] = [];
-const environments: IEnvironment[] = [];
+const environments: Array<{ environment: IEnvironment; projectRoot: string }> = [];
 
 function makeTempDir(): string {
   const path = mkdtempSync(join(tmpdir(), "bb-environment-worktree-"));
@@ -43,7 +48,7 @@ async function createRepoWithThreadAheadOfMain() {
 
   commitReadme(repoRoot, "initial\n", "initial");
 
-  const environment = createWorktreeEnvironmentDefinition({
+  const environment = createLocalGitWorkspaceDefinition({
     manageEnvironmentAgent: false,
   }).create({
     projectId: `project-${suffix}`,
@@ -51,8 +56,13 @@ async function createRepoWithThreadAheadOfMain() {
     projectRootPath: repoRoot,
     runtimeEnv: {},
   });
+  await ensureLocalGitWorkspace({
+    projectRootPath: repoRoot,
+    state: environment.serialize() as LocalGitWorkspaceState,
+    runtimeEnv: {},
+  });
   await environment.prepare?.();
-  environments.push(environment);
+  environments.push({ environment, projectRoot: repoRoot });
 
   commitReadme(
     environment.getWorkspaceRootUnsafe(),
@@ -74,15 +84,20 @@ async function createRepoWithThreadTwoCommits() {
 }
 
 afterEach(async () => {
-  for (const environment of environments.splice(0)) {
-    await environment.destroy();
+  for (const entry of environments.splice(0)) {
+    await entry.environment.destroy();
+    await removeLocalGitWorkspace({
+      projectRootPath: entry.projectRoot,
+      workspaceRoot: entry.environment.getWorkspaceRootUnsafe(),
+      runtimeEnv: {},
+    });
   }
   for (const dir of tempDirs.splice(0)) {
     rmSync(dir, { recursive: true, force: true });
   }
 });
 
-describe("WorktreeEnvironment", () => {
+describe("LocalGitWorkspace", () => {
   it("rejects promotion when the active workspace is dirty", async () => {
     const { repoRoot, environment } = await createRepoWithThreadAheadOfMain();
 
@@ -161,12 +176,12 @@ describe("WorktreeEnvironment", () => {
         message: "Squash-merged into main",
         committed: false,
         commitSha: expect.any(String),
-        commitSubject: expect.stringContaining("chore: squash merge from bb/thread-thread-"),
+        commitSubject: expect.stringContaining("chore: squash merge from bb/env-"),
       }),
     );
     expect(resolveMessage).toHaveBeenCalledTimes(1);
     expect(git(repoRoot, "show", "-s", "--format=%s", "main")).toContain(
-      "chore: squash merge from bb/thread-thread-",
+      "chore: squash merge from bb/env-",
     );
   });
 
@@ -187,7 +202,7 @@ describe("WorktreeEnvironment", () => {
     });
 
     expect(result.merged).toBe(false);
-    expect(result.message).toContain("failed with conflicts");
+    expect(result.message).toContain("Squash merge has conflicts against main");
     expect(resolveMessage).not.toHaveBeenCalled();
   });
 

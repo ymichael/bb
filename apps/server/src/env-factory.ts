@@ -6,6 +6,16 @@ import type {
   EnvironmentProperties,
   PersistedEnvironmentRecord,
 } from "@bb/core";
+import {
+  ensureDockerEnvironmentArtifacts,
+  ensureLocalGitWorkspace,
+  isDockerEnvironmentState,
+  isLocalGitWorkspaceState,
+  removeDockerEnvironmentArtifacts,
+  removeLocalGitWorkspace,
+  resolveDockerEnvironmentState,
+  resolveLocalGitWorkspaceState,
+} from "@bb/environment";
 import type {
   EnvironmentRepository,
   ThreadEnvironmentAttachmentRepository,
@@ -62,10 +72,6 @@ export class EnvironmentFactory {
 
     const environmentRecord = this.environmentRepo.create({
       projectId: args.projectId,
-      descriptor: {
-        type: "path",
-        path: args.projectRootPath,
-      },
       managed: true,
       properties: propertiesForManagedEnvironmentCreation(args.environmentCreationArgs.kind),
     });
@@ -145,6 +151,176 @@ export class EnvironmentFactory {
       environmentId: environmentRecord.id,
       managed,
     };
+  }
+
+  async ensureManagedEnvironmentArtifacts(args: {
+    threadId: string;
+    projectRootPath: string;
+    runtimeEnv: Record<string, string | undefined>;
+  }): Promise<{ created: boolean }> {
+    if (!this.environmentRepo || !this.threadEnvironmentAttachmentRepo) {
+      return { created: false };
+    }
+    const attachment = this.threadEnvironmentAttachmentRepo.getByThreadId(args.threadId);
+    if (!attachment) {
+      return { created: false };
+    }
+    const environmentRecord = this.environmentRepo.getById(attachment.environmentId);
+    if (!environmentRecord?.managed) {
+      return { created: false };
+    }
+
+    switch (environmentRecord.properties?.provisioningSystemKind) {
+      case "worktree": {
+        const state =
+          environmentRecord.runtimeState?.kind === "local" &&
+          isLocalGitWorkspaceState(environmentRecord.runtimeState.state)
+            ? environmentRecord.runtimeState.state
+            : resolveLocalGitWorkspaceState({
+                projectId: environmentRecord.projectId,
+                threadId: args.threadId,
+                environmentId: environmentRecord.id,
+                projectRootPath: args.projectRootPath,
+                runtimeEnv: args.runtimeEnv,
+              });
+        const created = await ensureLocalGitWorkspace({
+          projectRootPath: args.projectRootPath,
+          state,
+          runtimeEnv: args.runtimeEnv,
+        });
+        this.environmentRepo.update(environmentRecord.id, {
+          descriptor: {
+            type: "path",
+            path: state.workspaceRoot,
+          },
+          runtimeState: {
+            kind: "local",
+            state,
+          },
+        });
+        return { created };
+      }
+      case "docker-worktree": {
+        const worktreeState =
+          environmentRecord.runtimeState?.kind === "docker" &&
+          isDockerEnvironmentState(environmentRecord.runtimeState.state)
+            ? environmentRecord.runtimeState.state.worktree
+            : environmentRecord.runtimeState?.kind === "local" &&
+                isLocalGitWorkspaceState(environmentRecord.runtimeState.state)
+              ? environmentRecord.runtimeState.state
+              : resolveLocalGitWorkspaceState({
+                  projectId: environmentRecord.projectId,
+                  threadId: args.threadId,
+                  environmentId: environmentRecord.id,
+                  projectRootPath: args.projectRootPath,
+                  runtimeEnv: args.runtimeEnv,
+                });
+        const worktreeCreated = await ensureLocalGitWorkspace({
+          projectRootPath: args.projectRootPath,
+          state: worktreeState,
+          runtimeEnv: args.runtimeEnv,
+        });
+        const dockerState =
+          environmentRecord.runtimeState?.kind === "docker" &&
+          isDockerEnvironmentState(environmentRecord.runtimeState.state)
+            ? {
+                ...environmentRecord.runtimeState.state,
+                worktree: { ...worktreeState },
+              }
+            : await resolveDockerEnvironmentState({
+                projectId: environmentRecord.projectId,
+                threadId: args.threadId,
+                environmentId: environmentRecord.id,
+                runtimeEnv: args.runtimeEnv,
+                worktree: worktreeState,
+              });
+        const dockerCreated = await ensureDockerEnvironmentArtifacts({
+          projectId: environmentRecord.projectId,
+          threadId: args.threadId,
+          projectRootPath: args.projectRootPath,
+          state: dockerState,
+          runtimeEnv: args.runtimeEnv,
+        });
+        this.environmentRepo.update(environmentRecord.id, {
+          descriptor: {
+            type: "path",
+            path: worktreeState.workspaceRoot,
+          },
+          runtimeState: {
+            kind: "docker",
+            state: dockerState,
+          },
+        });
+        return {
+          created: worktreeCreated || dockerCreated,
+        };
+      }
+      default:
+        return { created: false };
+    }
+  }
+
+  async cleanupManagedEnvironmentArtifacts(args: {
+    threadId: string;
+    projectRootPath: string;
+    runtimeEnv: Record<string, string | undefined>;
+  }): Promise<void> {
+    if (!this.environmentRepo || !this.threadEnvironmentAttachmentRepo) {
+      return;
+    }
+    const attachment = this.threadEnvironmentAttachmentRepo.getByThreadId(args.threadId);
+    if (!attachment) {
+      return;
+    }
+    const environmentRecord = this.environmentRepo.getById(attachment.environmentId);
+    if (!environmentRecord?.managed) {
+      return;
+    }
+
+    switch (environmentRecord.properties?.provisioningSystemKind) {
+      case "worktree": {
+        const state =
+          environmentRecord.runtimeState?.kind === "local" &&
+          isLocalGitWorkspaceState(environmentRecord.runtimeState.state)
+            ? environmentRecord.runtimeState.state
+            : environmentRecord.descriptor
+              ? resolveLocalGitWorkspaceState({
+                  projectId: environmentRecord.projectId,
+                  threadId: args.threadId,
+                  environmentId: environmentRecord.id,
+                  projectRootPath: args.projectRootPath,
+                  runtimeEnv: args.runtimeEnv,
+                })
+              : undefined;
+        if (state) {
+          await removeLocalGitWorkspace({
+            projectRootPath: args.projectRootPath,
+            workspaceRoot: state.workspaceRoot,
+            runtimeEnv: args.runtimeEnv,
+          });
+        }
+        return;
+      }
+      case "docker-worktree": {
+        if (
+          environmentRecord.runtimeState?.kind === "docker" &&
+          isDockerEnvironmentState(environmentRecord.runtimeState.state)
+        ) {
+          await removeDockerEnvironmentArtifacts({
+            state: environmentRecord.runtimeState.state,
+            runtimeEnv: args.runtimeEnv,
+          });
+          await removeLocalGitWorkspace({
+            projectRootPath: args.projectRootPath,
+            workspaceRoot: environmentRecord.runtimeState.state.worktree.workspaceRoot,
+            runtimeEnv: args.runtimeEnv,
+          });
+        }
+        return;
+      }
+      default:
+        return;
+    }
   }
 }
 

@@ -103,7 +103,7 @@ function isWorktreeRuntimeState(value: unknown): boolean {
 }
 
 function resolveAttachedRuntimeKind(args: {
-  descriptor: EnvironmentDescriptor;
+  descriptor?: EnvironmentDescriptor;
   runtimeStateKind?: string;
   projectRootPath: string;
   normalizeRuntimeKind: (value?: string) => string;
@@ -112,19 +112,21 @@ function resolveAttachedRuntimeKind(args: {
   if (runtimeStateKind) {
     return args.normalizeRuntimeKind(runtimeStateKind);
   }
-  const derivedRecord = derivePersistedEnvironmentRecordFromDescriptor({
-    descriptor: args.descriptor,
-    projectRootPath: args.projectRootPath,
-  });
-  if (derivedRecord?.kind) {
-    return args.normalizeRuntimeKind(derivedRecord.kind);
+  if (args.descriptor) {
+    const derivedRecord = derivePersistedEnvironmentRecordFromDescriptor({
+      descriptor: args.descriptor,
+      projectRootPath: args.projectRootPath,
+    });
+    if (derivedRecord?.kind) {
+      return args.normalizeRuntimeKind(derivedRecord.kind);
+    }
   }
   return "local";
 }
 
 function resolveEnvironmentDisplayName(args: {
   provisioningSystemKind?: string;
-  descriptor: EnvironmentDescriptor;
+  descriptor?: EnvironmentDescriptor;
   projectRootPath: string;
   location?: string;
   workspaceKind?: string;
@@ -138,7 +140,7 @@ function resolveEnvironmentDisplayName(args: {
   ) {
     return "Git Worktree Workspace";
   }
-  return resolve(args.descriptor.path) === resolve(args.projectRootPath)
+  return args.descriptor && resolve(args.descriptor.path) === resolve(args.projectRootPath)
     ? "Direct Workspace"
     : "Direct Workspace";
 }
@@ -217,6 +219,7 @@ const directPathProvisioningSystem: EnvironmentProvisioningSystem = {
       args.environmentRepo.findByProjectDescriptor({
         projectId: args.projectId,
         descriptor: args.environmentDescriptor,
+        managed: false,
       }) ??
       args.environmentRepo.create({
         projectId: args.projectId,

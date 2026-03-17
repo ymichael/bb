@@ -814,6 +814,18 @@ export class Orchestrator implements ThreadOrchestrator {
             projectRootPath,
             reason,
           ),
+        ensureManagedEnvironmentArtifacts: (threadId, projectRootPath) =>
+          this.envFactory.ensureManagedEnvironmentArtifacts({
+            threadId,
+            projectRootPath,
+            runtimeEnv: this.runtimeEnv,
+          }),
+        cleanupManagedEnvironmentArtifacts: (threadId, projectRootPath) =>
+          this.envFactory.cleanupManagedEnvironmentArtifacts({
+            threadId,
+            projectRootPath,
+            runtimeEnv: this.runtimeEnv,
+          }),
       },
       this.environmentRepo,
       this.threadEnvironmentAttachmentRepo,
@@ -1125,6 +1137,23 @@ export class Orchestrator implements ThreadOrchestrator {
     return (
       this.threadEnvironmentAttachmentRepo?.getByThreadId(threadId)?.environmentId ??
       this.threadRepo.getById(threadId)?.environmentId
+    );
+  }
+
+  private _hasIsolatedThreadWorkspace(thread: Thread): boolean {
+    const attachedEnvironmentId =
+      this.threadEnvironmentAttachmentRepo?.getByThreadId(thread.id)?.environmentId ??
+      thread.attachedEnvironment?.id;
+    if (!attachedEnvironmentId || !this.environmentRepo) {
+      return false;
+    }
+    const attachedEnvironment = this.environmentRepo.getById(attachedEnvironmentId);
+    if (!attachedEnvironment?.properties) {
+      return false;
+    }
+    return (
+      attachedEnvironment.properties.location === "docker" ||
+      attachedEnvironment.properties.workspaceKind === "worktree"
     );
   }
 
@@ -2437,12 +2466,7 @@ export class Orchestrator implements ThreadOrchestrator {
     if (!thread) {
       return false;
     }
-    const project = this.projectRepo.getById(thread.projectId);
-    if (!project) {
-      return false;
-    }
-    const environment = this._restoreThreadEnvironment(thread, project.rootPath);
-    return environment?.isIsolatedWorkspace() === true;
+    return this._hasIsolatedThreadWorkspace(thread);
   }
 
   updateThread(
@@ -3244,10 +3268,7 @@ export class Orchestrator implements ThreadOrchestrator {
         };
       }
 
-      if (
-        !environment ||
-        !environment.isIsolatedWorkspace()
-      ) {
+      if (!environment || !this._hasIsolatedThreadWorkspace(thread)) {
         throw invalidRequestError(
           "Thread worktree path is unavailable (workspace resolved to project root); reprovision before promoting",
         );
@@ -5243,7 +5264,7 @@ export class Orchestrator implements ThreadOrchestrator {
     const promoteDisabledReason = (() => {
       if (archivedReason) return archivedReason;
       if (!environment) return environmentReason;
-      if (!environment.isIsolatedWorkspace() || !environment.supportsPromoteToActiveWorkspace()) {
+      if (!this._hasIsolatedThreadWorkspace(args.thread) || !environment.supportsPromoteToActiveWorkspace()) {
         return "Promotion is only available for isolated thread workspaces";
       }
       if (primaryCheckoutActive) {

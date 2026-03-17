@@ -559,6 +559,7 @@ describe("EnvironmentService", () => {
 
     await Promise.resolve();
     await Promise.resolve();
+    await Promise.resolve();
 
     expect(restoreImpl).toHaveBeenCalledTimes(1);
     expect(prepareSpy).toHaveBeenCalledTimes(1);
@@ -723,8 +724,8 @@ describe("EnvironmentService", () => {
 
     await service.teardownAllForTestsOnly();
 
-    // 1 call for the runtime teardown + 1 for the sibling's persisted environment cleanup
-    expect(destroySpy).toHaveBeenCalledTimes(2);
+    expect(destroySpy).toHaveBeenCalledTimes(1);
+    expect(attachmentRepo.listByEnvironmentId(thread.environmentId!)).toHaveLength(0);
   });
 
   it("clears persisted shared-environment attachments for all scoped threads during teardownAllForTestsOnly", async () => {

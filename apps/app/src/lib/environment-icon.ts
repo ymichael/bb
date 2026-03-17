@@ -25,13 +25,6 @@ export function getEnvironmentIconInfo(
     }
   }
 
-  if ("managed" in environment && environment.managed) {
-    return {
-      icon: FolderGit2,
-      ariaLabel: "Managed environment",
-    }
-  }
-
   if (
     ("capabilities" in environment && environment.capabilities.isolated_workspace) ||
     ("properties" in environment && environment.properties?.workspaceKind === "worktree")
@@ -44,7 +37,7 @@ export function getEnvironmentIconInfo(
 
   if (
     ("capabilities" in environment && environment.capabilities.host_filesystem) ||
-    ("managed" in environment && !environment.managed)
+    ("properties" in environment && environment.properties?.location === "localhost")
   ) {
     return {
       icon: Laptop,

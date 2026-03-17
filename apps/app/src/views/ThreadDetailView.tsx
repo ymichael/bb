@@ -99,6 +99,21 @@ function formatAttachedEnvironmentLabel(path: string): string {
   return segments.at(-1) ?? path;
 }
 
+function formatAttachedEnvironmentSuffix(path: string, projectRootPath?: string): string | undefined {
+  if (!projectRootPath) {
+    return formatAttachedEnvironmentLabel(path);
+  }
+  const normalizedProjectRoot = projectRootPath.replace(/\/+$/, "");
+  const normalizedPath = path.replace(/\/+$/, "");
+  if (normalizedPath === normalizedProjectRoot) {
+    return undefined;
+  }
+  if (normalizedPath.startsWith(`${normalizedProjectRoot}/`)) {
+    return normalizedPath.slice(normalizedProjectRoot.length + 1);
+  }
+  return formatAttachedEnvironmentLabel(path);
+}
+
 function formatThreadEnvironmentLabel(args: {
   projectRootPath?: string;
   attachedEnvironment?: Thread["attachedEnvironment"];
@@ -108,6 +123,7 @@ function formatThreadEnvironmentLabel(args: {
     const properties = attachedEnvironment.properties;
     const isPrimaryWorkspace =
       args.projectRootPath !== undefined &&
+      attachedEnvironment.descriptor !== undefined &&
       attachedEnvironment.descriptor.path === args.projectRootPath;
     if (isPrimaryWorkspace) {
       return "Primary";
@@ -116,13 +132,16 @@ function formatThreadEnvironmentLabel(args: {
       return "Docker";
     }
     if (properties?.workspaceKind === "worktree") {
-      return attachedEnvironment.managed
-        ? formatAttachedEnvironmentLabel(attachedEnvironment.descriptor.path)
-        : "Worktree";
+      const suffix = formatAttachedEnvironmentSuffix(
+        attachedEnvironment.descriptor?.path ?? "",
+        args.projectRootPath,
+      );
+      return suffix ? `Worktree (${suffix})` : "Worktree";
     }
-    return attachedEnvironment.managed
-      ? formatAttachedEnvironmentLabel(attachedEnvironment.descriptor.path)
-      : "Direct";
+    if (properties?.location === "localhost") {
+      return "Direct";
+    }
+    return "Unknown";
   }
   return undefined;
 }
@@ -873,7 +892,7 @@ export function ThreadDetailView() {
   const promptBannerMergeBaseBranch = effectiveMergeBaseBranch;
   const threadEnvironmentType =
     threadEnvironmentLabel ??
-    (thread.attachedEnvironment ? thread.attachedEnvironment.descriptor.type : undefined);
+    (thread.attachedEnvironment?.descriptor ? thread.attachedEnvironment.descriptor.type : undefined);
   const threadBranchName = resolvedThreadWorkStatus?.currentBranch;
   const threadMergeBaseBranch = effectiveMergeBaseBranch;
   const showThreadWorkspaceStatus =

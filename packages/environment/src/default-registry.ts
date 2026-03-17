@@ -6,15 +6,15 @@ import {
 } from "./contracts.js";
 import { createLocalEnvironmentDefinition } from "./local-environment.js";
 import {
-  type CreateWorktreeEnvironmentDefinitionOptions,
-} from "./worktree-environment.js";
+  type CreateLocalGitWorkspaceOptions,
+} from "./local-git-workspace.js";
 import {
   createDockerEnvironmentDefinition,
   type CreateDockerEnvironmentDefinitionOptions,
 } from "./docker-environment.js";
 
 export interface CreateDefaultEnvironmentRegistryOptions {
-  worktree?: CreateWorktreeEnvironmentDefinitionOptions;
+  worktree?: CreateLocalGitWorkspaceOptions;
   docker?: CreateDockerEnvironmentDefinitionOptions;
 }
 

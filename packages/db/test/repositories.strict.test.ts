@@ -210,6 +210,39 @@ describe("repository strict normalization", () => {
     ).toEqual(environment);
   });
 
+  it("can filter first-class environments by managed state when matching descriptors", () => {
+    const projectId = createProjectId();
+    const descriptor = {
+      type: "path" as const,
+      path: "/tmp/test-project",
+    };
+    const managed = environments.create({
+      projectId,
+      descriptor,
+      managed: true,
+    });
+    const unmanaged = environments.create({
+      projectId,
+      descriptor,
+      managed: false,
+    });
+
+    expect(
+      environments.findByProjectDescriptor({
+        projectId,
+        descriptor,
+        managed: true,
+      }),
+    ).toEqual(managed);
+    expect(
+      environments.findByProjectDescriptor({
+        projectId,
+        descriptor,
+        managed: false,
+      }),
+    ).toEqual(unmanaged);
+  });
+
   it("updates first-class environment descriptors and managed state", () => {
     const projectId = createProjectId();
     const environment = environments.create({

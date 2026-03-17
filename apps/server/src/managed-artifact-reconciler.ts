@@ -155,8 +155,8 @@ export interface ReconcileManagedArtifactStorageArgs {
   archivedLogRetentionMs?: number;
 }
 
-function environmentPathFromDescriptor(descriptor: EnvironmentDescriptor): string | undefined {
-  return resolve(descriptor.path);
+function environmentPathFromDescriptor(descriptor?: EnvironmentDescriptor): string | undefined {
+  return descriptor ? resolve(descriptor.path) : undefined;
 }
 
 function isLegacyManagedEnvironmentReference(environmentId: string | undefined): boolean {
