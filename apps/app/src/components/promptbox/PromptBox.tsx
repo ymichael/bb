@@ -43,6 +43,7 @@ interface PromptBoxProps {
   onStop?: () => void
   autoFocus?: boolean
   mentionSuggestions?: PromptMentionSuggestion[]
+  mentionSearchScope?: "files" | "files-and-managers" | "files-and-threads"
   mentionLoading?: boolean
   mentionError?: boolean
   onMentionQueryChange?: (query: string | null) => void
@@ -108,6 +109,7 @@ export function PromptBox({
   onStop,
   autoFocus = false,
   mentionSuggestions = [],
+  mentionSearchScope = "files",
   mentionLoading = false,
   mentionError = false,
   onMentionQueryChange,
@@ -606,6 +608,7 @@ export function PromptBox({
       {showMentionMenu ? (
         <PromptMentionMenu
           showQueryHint={showQueryHint}
+          mentionSearchScope={mentionSearchScope}
           mentionLoading={mentionLoading}
           mentionError={mentionError}
           mentionSuggestions={mentionSuggestions}

@@ -1,5 +1,5 @@
 import { type ReactNode } from "react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import type { Thread, ThreadTimelineResponse, ThreadWorkStatus } from "@bb/core";
@@ -139,6 +139,18 @@ const apiState = vi.hoisted(() => {
   };
 });
 
+const promptFileMentionsState = vi.hoisted(() => ({
+  calls: [] as Array<{
+    projectId: string | undefined;
+    options:
+      | {
+          threadSuggestionMode?: "none" | "managers" | "all";
+          currentThreadId?: string;
+        }
+      | undefined;
+  }>,
+}));
+
 vi.mock("../hooks/useApi", () => ({
   useThread: (id: string) => ({
     data: id === "thread-parent" ? apiState.parentThread : apiState.thread,
@@ -233,12 +245,24 @@ vi.mock("@/hooks/usePromptDraftStorage", () => ({
 }));
 
 vi.mock("@/hooks/usePromptFileMentions", () => ({
-  usePromptFileMentions: () => ({
-    suggestions: [],
-    isLoading: false,
-    isError: false,
-    setQuery: vi.fn(),
-  }),
+  usePromptFileMentions: (
+    projectId: string | undefined,
+    options:
+      | {
+          threadSuggestionMode?: "none" | "managers" | "all";
+          currentThreadId?: string;
+        }
+      | undefined,
+  ) => {
+    promptFileMentionsState.calls.push({ projectId, options });
+    return {
+      suggestions: [],
+      threadSuggestionMode: options?.threadSuggestionMode ?? "none",
+      isLoading: false,
+      isError: false,
+      setQuery: vi.fn(),
+    };
+  },
 }));
 
 vi.mock("@/hooks/useTheme", () => ({
@@ -394,6 +418,11 @@ vi.mock("./ThreadSecondaryPanel", () => ({
 }));
 
 describe("ThreadDetailView", () => {
+  beforeEach(() => {
+    promptFileMentionsState.calls = [];
+    apiState.thread.type = "standard";
+  });
+
   const renderThreadDetailView = (initialEntry = "/projects/project-1/threads/thread-1") =>
     renderToStaticMarkup(
       <MemoryRouter initialEntries={[initialEntry]}>
@@ -964,6 +993,32 @@ describe("ThreadDetailView", () => {
 
     expect(html).not.toContain("Loading thread...");
     expect(html).toContain("working");
+  });
+
+  it("searches managers for standard thread prompt mentions", () => {
+    renderThreadDetailView();
+
+    expect(promptFileMentionsState.calls.at(-1)).toEqual({
+      projectId: "project-1",
+      options: {
+        threadSuggestionMode: "managers",
+        currentThreadId: "thread-1",
+      },
+    });
+  });
+
+  it("searches all project threads for manager prompt mentions", () => {
+    apiState.thread.type = "manager";
+
+    renderThreadDetailView();
+
+    expect(promptFileMentionsState.calls.at(-1)).toEqual({
+      projectId: "project-1",
+      options: {
+        threadSuggestionMode: "all",
+        currentThreadId: "thread-1",
+      },
+    });
   });
 });
 

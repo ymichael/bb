@@ -36,7 +36,7 @@ function areSuggestionsEqual(
 export function usePromptFileMentions(
   projectId: string | undefined,
   options?: {
-    includeThreads?: boolean;
+    threadSuggestionMode?: "none" | "managers" | "all";
     currentThreadId?: string;
   },
 ) {
@@ -64,16 +64,18 @@ export function usePromptFileMentions(
     debouncedQuery,
     FILE_MENTION_LIMIT,
   );
+  const threadSuggestionMode = options?.threadSuggestionMode ?? "none";
   const threadsQuery = useThreads(
     { projectId, includeArchived: false },
     {
-      enabled: Boolean(projectId) && Boolean(options?.includeThreads),
+      enabled: Boolean(projectId) && threadSuggestionMode !== "none",
     },
   );
 
   const hasQuery = (query?.trim().length ?? 0) > 0;
   const isDebouncing = hasQuery && query !== debouncedQuery;
   const trimmedQuery = query?.trim().toLowerCase() ?? "";
+  const currentThreadId = options?.currentThreadId;
   const fileSuggestions = useMemo(
     () =>
       (search.data ?? []).map<PromptMentionSuggestion>((item) => ({
@@ -84,18 +86,30 @@ export function usePromptFileMentions(
     [search.data],
   );
   const threadSuggestions = useMemo(() => {
-    if (!options?.includeThreads || trimmedQuery.length === 0) {
+    if (threadSuggestionMode === "none" || trimmedQuery.length === 0) {
       return [];
     }
     return (threadsQuery.data ?? [])
       .filter((thread) => thread.archivedAt === undefined)
-      .filter((thread) => thread.id !== options.currentThreadId)
+      .filter((thread) => thread.id !== currentThreadId)
+      .filter((thread) =>
+        threadSuggestionMode === "managers" ? thread.type === "manager" : true,
+      )
       .filter((thread) => {
         const title = thread.title?.trim().toLowerCase() ?? "";
         return (
           thread.id.toLowerCase().includes(trimmedQuery) ||
           title.includes(trimmedQuery)
         );
+      })
+      .sort((left, right) => {
+        if (left.type !== right.type) {
+          return left.type === "manager" ? -1 : 1;
+        }
+
+        const leftTitle = left.title?.trim().toLowerCase() ?? "";
+        const rightTitle = right.title?.trim().toLowerCase() ?? "";
+        return leftTitle.localeCompare(rightTitle) || left.id.localeCompare(right.id);
       })
       .slice(0, FILE_MENTION_LIMIT)
       .map<PromptMentionSuggestion>((thread) => ({
@@ -107,8 +121,8 @@ export function usePromptFileMentions(
         threadType: thread.type,
       }));
   }, [
-    options?.currentThreadId,
-    options?.includeThreads,
+    currentThreadId,
+    threadSuggestionMode,
     threadsQuery.data,
     trimmedQuery,
   ]);
@@ -138,6 +152,7 @@ export function usePromptFileMentions(
     query,
     setQuery,
     suggestions,
+    threadSuggestionMode,
     isLoading:
       hasQuery &&
       suggestions.length === 0 &&

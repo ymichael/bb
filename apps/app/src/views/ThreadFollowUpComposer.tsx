@@ -170,6 +170,7 @@ export function ThreadFollowUpComposer({
   onStop,
   promptPlaceholder,
   mentionSuggestions,
+  mentionSearchScope,
   mentionLoading,
   mentionError,
   onMentionQueryChange,
@@ -237,6 +238,7 @@ export function ThreadFollowUpComposer({
   onStop?: () => void;
   promptPlaceholder: string;
   mentionSuggestions: ComponentProps<typeof PromptBox>["mentionSuggestions"];
+  mentionSearchScope?: ComponentProps<typeof PromptBox>["mentionSearchScope"];
   mentionLoading: boolean;
   mentionError: boolean;
   onMentionQueryChange: NonNullable<ComponentProps<typeof PromptBox>["onMentionQueryChange"]>;
@@ -405,6 +407,7 @@ export function ThreadFollowUpComposer({
           submitMode="enter"
           autoFocus
           mentionSuggestions={mentionSuggestions}
+          mentionSearchScope={mentionSearchScope}
           mentionLoading={mentionLoading}
           mentionError={mentionError}
           onMentionQueryChange={onMentionQueryChange}

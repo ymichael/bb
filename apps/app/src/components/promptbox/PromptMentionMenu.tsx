@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 
 interface PromptMentionMenuProps {
   showQueryHint: boolean;
+  mentionSearchScope: "files" | "files-and-managers" | "files-and-threads";
   mentionLoading: boolean;
   mentionError: boolean;
   mentionSuggestions: PromptMentionSuggestion[];
@@ -15,6 +16,7 @@ interface PromptMentionMenuProps {
 
 export function PromptMentionMenu({
   showQueryHint,
+  mentionSearchScope,
   mentionLoading,
   mentionError,
   mentionSuggestions,
@@ -22,25 +24,26 @@ export function PromptMentionMenu({
   mentionItemRefs,
   onApplyMention,
 }: PromptMentionMenuProps) {
-  const containsThreadSuggestions = mentionSuggestions.some(
-    (item) => item.kind === "thread",
-  );
+  const searchLabel =
+    mentionSearchScope === "files-and-threads"
+      ? "files, managers, and threads"
+      : mentionSearchScope === "files-and-managers"
+        ? "files and managers"
+        : "files";
 
   return (
     <div className="mx-3 mb-1 mt-1 overflow-hidden rounded-md border border-border/70 bg-popover text-popover-foreground shadow-sm">
       <div className="max-h-48 overflow-y-auto p-1">
         {showQueryHint ? (
           <div className="rounded px-2 py-1.5 text-xs text-muted-foreground">
-            {containsThreadSuggestions
-              ? "Type to search files and threads"
-              : "Type to search project files"}
+            {mentionSearchScope === "files"
+              ? "Type to search project files"
+              : `Type to search ${searchLabel}`}
           </div>
         ) : mentionLoading ? (
           <div className="flex items-center gap-2 rounded px-2 py-1.5 text-xs text-muted-foreground">
             <Loader2 className="size-3.5 animate-spin" />
-            <span>
-              {containsThreadSuggestions ? "Searching files and threads..." : "Searching files..."}
-            </span>
+            <span>{`Searching ${searchLabel}...`}</span>
           </div>
         ) : mentionError ? (
           <div className="rounded px-2 py-1.5 text-xs text-destructive">
@@ -55,7 +58,9 @@ export function PromptMentionMenu({
                 : item.path;
             const subtitle =
               item.kind === "thread"
-                ? `${item.threadType === "manager" ? "Manager" : "Thread"} · ${item.threadId}`
+                ? item.threadType === "manager"
+                  ? `Manager · ${item.threadId}`
+                  : "Thread"
                 : item.path;
             return (
               <button
@@ -77,12 +82,12 @@ export function PromptMentionMenu({
                 <div className="flex min-w-0 items-center gap-2">
                   {item.kind === "thread" ? (
                     item.threadType === "manager" ? (
-                      <UserRound className="size-3.5 shrink-0" />
+                      <UserRound className="size-3.5 shrink-0 text-muted-foreground" />
                     ) : (
-                      <FolderGit2 className="size-3.5 shrink-0" />
+                      <FolderGit2 className="size-3.5 shrink-0 text-muted-foreground" />
                     )
                   ) : (
-                    <FileText className="size-3.5 shrink-0" />
+                    <FileText className="size-3.5 shrink-0 text-muted-foreground" />
                   )}
                   <div className="min-w-0">
                     <div className="truncate">{title}</div>
@@ -96,7 +101,9 @@ export function PromptMentionMenu({
           })
         ) : (
           <div className="rounded px-2 py-1.5 text-xs text-muted-foreground">
-            {containsThreadSuggestions ? "No matching files or threads" : "No matching files"}
+            {mentionSearchScope === "files"
+              ? "No matching files"
+              : `No matching ${searchLabel}`}
           </div>
         )}
       </div>

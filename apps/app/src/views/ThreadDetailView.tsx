@@ -296,7 +296,8 @@ export function ThreadDetailView() {
   const promptDraft = usePromptDraftStorage({ projectId, threadId });
   const environmentCatalog = useSystemEnvironments();
   const fileMentions = usePromptFileMentions(projectId, {
-    includeThreads: thread?.type === "manager",
+    threadSuggestionMode:
+      thread?.type === "manager" ? "all" : thread ? "managers" : "none",
     currentThreadId: threadId,
   });
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
@@ -1629,6 +1630,13 @@ export function ThreadDetailView() {
       onStop={() => stopThread.mutate(thread.id)}
       promptPlaceholder={promptPlaceholder}
       mentionSuggestions={fileMentions.suggestions}
+      mentionSearchScope={
+        fileMentions.threadSuggestionMode === "all"
+          ? "files-and-threads"
+          : fileMentions.threadSuggestionMode === "managers"
+            ? "files-and-managers"
+            : "files"
+      }
       mentionLoading={fileMentions.isLoading}
       mentionError={fileMentions.isError}
       onMentionQueryChange={fileMentions.setQuery}
