@@ -418,4 +418,59 @@ describe("EnvironmentAgentSessionCommandClient", () => {
       state: "completed",
     });
   });
+
+  it("omits activeTurnId from auto turn.run commands when execution overrides require a new turn", async () => {
+    const thread = createThreadRecord();
+    const client = createSessionClient({
+      threadId: thread.threadId,
+      sessionId: "sess-turn-overrides",
+    });
+    const server = new ProviderSessionController({
+      provider: createCodexProviderAdapter(),
+    });
+    const ensureCompletion = completeNextQueuedCommand({
+      threadId: thread.threadId,
+      result: { running: true, launched: true, pid: 303 },
+    });
+    const turnCompletion = (async () => {
+      await ensureCompletion;
+      return completeNextQueuedCommand({
+        threadId: thread.threadId,
+        result: { mode: "start", turnId: "turn-2" },
+      });
+    })();
+
+    await expect(
+      server.sendTurnCommand({
+        client,
+        threadId: thread.threadId,
+        providerThreadId: "provider-thread-1",
+        activeTurnId: "turn-1",
+        input: [{ type: "text", text: "follow up" }],
+        options: { model: "gpt-5.4" },
+        context: {
+          projectId: thread.projectId,
+          threadId: thread.threadId,
+          path: process.env.PATH ?? "",
+        },
+      }),
+    ).resolves.toEqual({
+      mode: "start",
+      providerThreadId: "provider-thread-1",
+    });
+
+    await ensureCompletion;
+    const queuedTurnCommand = await turnCompletion;
+
+    expect(commands.getById(queuedTurnCommand.id)).toMatchObject({
+      commandType: "turn.run",
+      payload: {
+        providerThreadId: "provider-thread-1",
+        requestedMode: "auto",
+        options: { model: "gpt-5.4" },
+      },
+      state: "completed",
+    });
+    expect(commands.getById(queuedTurnCommand.id)?.payload).not.toHaveProperty("activeTurnId");
+  });
 });

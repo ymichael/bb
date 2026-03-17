@@ -275,7 +275,7 @@ export class ProviderSessionController {
       threadId: args.threadId,
       providerThreadId: args.providerThreadId,
       requestedMode,
-      ...(activeTurnId ? { activeTurnId } : {}),
+      ...(requestedMode === "steer" && activeTurnId ? { activeTurnId } : {}),
       input: args.input,
       ...(args.options ? { options: args.options } : {}),
       ...(canAutoSteer && activeTurnId ? { activeTurnId } : {}),
