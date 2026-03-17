@@ -55,5 +55,6 @@ describe("environment-agent session compatibility", () => {
     expect(assessment.compatibility.missingRequiredCommands).toEqual([]);
     expect(assessment.compatibility.missingOptionalCommands).toContain("turn.start");
     expect(assessment.compatibility.missingOptionalCommands).toContain("turn.steer");
+    expect(assessment.compatibility.missingOptionalCommands).toContain("provider.list_catalog");
   });
 });

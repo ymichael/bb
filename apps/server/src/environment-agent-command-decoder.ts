@@ -5,7 +5,6 @@ import type {
   ProviderExecutionOptions,
   ProviderThreadContext,
   SpawnThreadRequest,
-  ThreadProviderId,
 } from "@bb/core";
 import type {
   EnvironmentAgentCommand,
@@ -23,6 +22,7 @@ const ENVIRONMENT_AGENT_COMMAND_TYPES = [
   "turn.steer",
   "thread.rename",
   "provider.list_models",
+  "provider.list_catalog",
   "workspace.status",
   "workspace.diff",
 ] as const satisfies readonly EnvironmentAgentCommand["type"][];
@@ -148,9 +148,9 @@ function decodePromptInputArray(value: unknown): PromptInput[] | undefined {
   return Array.isArray(value) ? value as PromptInput[] : undefined;
 }
 
-function decodeThreadProviderId(value: unknown): ThreadProviderId | undefined {
-  return value === "codex" || value === "claude-code" || value === "pi"
-    ? value
+function decodeProviderId(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim().length > 0
+    ? value.trim()
     : undefined;
 }
 
@@ -197,7 +197,7 @@ export function decodePersistedEnvironmentAgentCommand(args: {
       }
       const launchCommand = getStringField(record, "launchCommand");
       const forThreadId = getStringField(record, "forThreadId");
-      if (!command && !decodeThreadProviderId(record.providerId)) {
+      if (!command && !decodeProviderId(record.providerId)) {
         throw new Error(
           `Invalid persisted environment-agent command payload for ${commandType}`,
         );
@@ -211,8 +211,8 @@ export function decodePersistedEnvironmentAgentCommand(args: {
         ...(env ? { env } : {}),
         ...(files ? { files } : {}),
         ...(forThreadId ? { forThreadId } : {}),
-        ...(decodeThreadProviderId(record.providerId)
-          ? { providerId: decodeThreadProviderId(record.providerId)! }
+        ...(decodeProviderId(record.providerId)
+          ? { providerId: decodeProviderId(record.providerId)! }
           : {}),
         ...(decodeThreadContext(record.context)
           ? { context: decodeThreadContext(record.context)! }
@@ -359,9 +359,13 @@ export function decodePersistedEnvironmentAgentCommand(args: {
     case "provider.list_models":
       return {
         type: commandType,
-        ...(decodeThreadProviderId(record.providerId)
-          ? { providerId: decodeThreadProviderId(record.providerId)! }
+        ...(decodeProviderId(record.providerId)
+          ? { providerId: decodeProviderId(record.providerId)! }
           : {}),
+      };
+    case "provider.list_catalog":
+      return {
+        type: commandType,
       };
     case "workspace.status":
     case "workspace.diff":

@@ -84,6 +84,8 @@ const environmentAgentSessionCapabilitiesSchema = z.object({
     "turn.start",
     "turn.steer",
     "thread.rename",
+    "provider.list_models",
+    "provider.list_catalog",
     "workspace.status",
     "workspace.diff",
   ])).min(1),

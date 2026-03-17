@@ -238,6 +238,29 @@ describe("EnvironmentAgentRuntime", () => {
     expect((ack.result as Array<{ model?: string }>).length).toBeGreaterThan(0);
   });
 
+  it("lists provider catalog through a BB-native env-daemon command", async () => {
+    const runtime = new EnvironmentAgentRuntime({
+      threadId: "thread-1",
+      providerId: "codex",
+    });
+
+    const ack = await runtime.executeCommand({
+      meta: {
+        protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+        commandId: "cmd-provider-catalog-1",
+        idempotencyKey: "cmd-provider-catalog-1",
+        sentAt: 123,
+      },
+      command: {
+        type: "provider.list_catalog",
+      },
+    });
+
+    expect(ack.state).toBe("accepted");
+    expect(Array.isArray(ack.result)).toBe(true);
+    expect((ack.result as Array<{ id?: string }>).length).toBeGreaterThan(0);
+  });
+
   it("accepts explicit commands and forwards them to the provider transport", async () => {
     const runtime = new EnvironmentAgentRuntime({
       threadId: "thread-1",

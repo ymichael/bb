@@ -26,6 +26,7 @@ export const ENVIRONMENT_AGENT_SESSION_CAPABILITY_COMMANDS = [
   "turn.steer",
   "thread.rename",
   "provider.list_models",
+  "provider.list_catalog",
   "workspace.status",
   "workspace.diff",
 ] as const satisfies readonly EnvironmentAgentCommand["type"][];
@@ -96,6 +97,7 @@ const LEGACY_INFERRED_COMMANDS = [
   "turn.steer",
   "thread.rename",
   "provider.list_models",
+  "provider.list_catalog",
   "workspace.status",
   "workspace.diff",
 ] as const satisfies readonly EnvironmentAgentSessionCapabilityCommand[];

@@ -838,15 +838,23 @@ export class Orchestrator implements ThreadOrchestrator {
     return this._getAgentServerForProviderId(this.defaultProviderId);
   }
 
+  private _requireBuiltInProviderId(providerId: string): ThreadProviderId {
+    if (isThreadProviderId(providerId)) {
+      return providerId;
+    }
+    throw new Error(`Unsupported provider "${providerId}"`);
+  }
+
   private _getAgentServerForProviderId(
-    providerId: ThreadProviderId,
+    providerId: string,
   ): ProviderSessionController {
-    const existing = this.agentServerByProviderId.get(providerId);
+    const builtInProviderId = this._requireBuiltInProviderId(providerId);
+    const existing = this.agentServerByProviderId.get(builtInProviderId);
     if (existing) {
       return existing;
     }
 
-    const provider = this._getProviderAdapterForProviderId(providerId);
+    const provider = this._getProviderAdapterForProviderId(builtInProviderId);
     const server = new ProviderSessionController({
       provider,
       ...(this.providerToolHost
@@ -865,17 +873,18 @@ export class Orchestrator implements ThreadOrchestrator {
       },
       logger: console,
     });
-    this.agentServerByProviderId.set(providerId, server);
+    this.agentServerByProviderId.set(builtInProviderId, server);
     return server;
   }
 
-  private _getProviderAdapterForProviderId(providerId: ThreadProviderId): ProviderAdapter {
-    const existing = this.providerAdapterByProviderId.get(providerId);
+  private _getProviderAdapterForProviderId(providerId: string): ProviderAdapter {
+    const builtInProviderId = this._requireBuiltInProviderId(providerId);
+    const existing = this.providerAdapterByProviderId.get(builtInProviderId);
     if (existing) {
       return existing;
     }
-    const provider = createProviderAdapter({ providerId });
-    this.providerAdapterByProviderId.set(providerId, provider);
+    const provider = createProviderAdapter({ providerId: builtInProviderId });
+    this.providerAdapterByProviderId.set(builtInProviderId, provider);
     return provider;
   }
 
@@ -3327,7 +3336,7 @@ export class Orchestrator implements ThreadOrchestrator {
     return request;
   }
 
-  getProviderInfo(): SystemProviderInfo {
+  private getDefaultProviderInfoFromCatalog(): SystemProviderInfo {
     const provider =
       this.providerCatalog.find((entry) => entry.id === this.defaultProviderId) ??
       (() => {
@@ -3344,14 +3353,29 @@ export class Orchestrator implements ThreadOrchestrator {
     };
   }
 
-  listProviders(): SystemProviderInfo[] {
+  async getProviderInfo(): Promise<SystemProviderInfo> {
+    const providers = await this.listProviders();
+    const provider =
+      providers.find((entry) => entry.id === this.defaultProviderId) ??
+      this.getDefaultProviderInfoFromCatalog();
+    return {
+      ...provider,
+      capabilities: { ...provider.capabilities },
+    };
+  }
+
+  async listProviders(): Promise<SystemProviderInfo[]> {
+    const envDaemonCatalog = await this._listProviderCatalogFromEnvironmentAgent();
+    if (envDaemonCatalog && envDaemonCatalog.length > 0) {
+      return envDaemonCatalog;
+    }
     if (this.providerCatalog.length > 0) {
       return this.providerCatalog.map((provider) => ({
         ...provider,
         capabilities: { ...provider.capabilities },
       }));
     }
-    return [this.getProviderInfo()];
+    return [this.getDefaultProviderInfoFromCatalog()];
   }
 
   listEnvironments(): SystemEnvironmentInfo[] {
@@ -3962,6 +3986,52 @@ export class Orchestrator implements ThreadOrchestrator {
       });
       return Array.isArray(ack.result)
         ? ack.result as AvailableModel[]
+        : undefined;
+    } finally {
+      client.close();
+    }
+  }
+
+  private async _listProviderCatalogFromEnvironmentAgent(): Promise<SystemProviderInfo[] | undefined> {
+    if (!this.environmentAgentCommandDispatcher || !this.environmentAgentSessionRepo) {
+      return undefined;
+    }
+    const matchingSession = this.environmentAgentSessionRepo.listActive().find((session) => {
+      const capabilities = toRecord(session.selectedCapabilities);
+      const commands = Array.isArray(capabilities?.commands)
+        ? capabilities.commands
+        : [];
+      return commands.includes("provider.list_catalog");
+    });
+    if (!matchingSession) {
+      return undefined;
+    }
+
+    const client = new EnvironmentAgentSessionCommandClient({
+      threadId: matchingSession.threadId,
+      commandDispatcher: this.environmentAgentCommandDispatcher,
+      ...(this.environmentAgentCommandPollIntervalMs !== undefined
+        ? { pollIntervalMs: this.environmentAgentCommandPollIntervalMs }
+        : {}),
+      ensureSessionAccess: async () => {
+        await this._recoverEnvironmentAgentAccess(matchingSession.threadId);
+      },
+    });
+    try {
+      const commandId = `provider-catalog-${Date.now()}`;
+      const ack = await client.sendCommand({
+        meta: {
+          protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+          commandId,
+          idempotencyKey: commandId,
+          sentAt: Date.now(),
+        },
+        command: {
+          type: "provider.list_catalog",
+        },
+      });
+      return Array.isArray(ack.result)
+        ? ack.result as SystemProviderInfo[]
         : undefined;
     } finally {
       client.close();
@@ -6226,7 +6296,7 @@ export class Orchestrator implements ThreadOrchestrator {
   }
 
   private _normalizePromptInputForProvider(
-    providerId: ThreadProviderId,
+    providerId: string,
     input: PromptInput[],
   ): PromptInput[] {
     return this._getAgentServerForProviderId(providerId).normalizePromptInput(input);

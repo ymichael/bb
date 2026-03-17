@@ -88,6 +88,19 @@ describe("repository strict normalization", () => {
     });
   });
 
+  it("persists and loads custom provider ids", () => {
+    const projectId = createProjectId();
+    const thread = threads.create({
+      projectId,
+      providerId: "gemini",
+    });
+
+    expect(threads.getById(thread.id)).toMatchObject({
+      id: thread.id,
+      providerId: "gemini",
+    });
+  });
+
   it("persists and loads project primary checkout pointers without touching updatedAt", () => {
     const project = projects.create({
       name: "test-project",

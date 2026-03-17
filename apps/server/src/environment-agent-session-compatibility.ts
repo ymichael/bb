@@ -21,6 +21,7 @@ const OPTIONAL_COMMANDS = [
   "turn.start",
   "turn.steer",
   "thread.rename",
+  "provider.list_catalog",
   "workspace.status",
   "workspace.diff",
 ] as const;

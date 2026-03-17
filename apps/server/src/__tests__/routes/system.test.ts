@@ -70,7 +70,7 @@ function mockOrchestrator(): ThreadOrchestrator {
     getRunningCount: vi.fn(),
     listModels: vi.fn(),
     getProviderInfo: vi.fn(),
-    listProviders: vi.fn(() => []),
+    listProviders: vi.fn().mockResolvedValue([]),
     listEnvironments: vi.fn(() => [environmentInfo]),
   } as unknown as ThreadOrchestrator;
 }
@@ -79,7 +79,7 @@ describe("System routes", () => {
   let threadManager: ReturnType<typeof mockOrchestrator>;
   let pickFolder: ReturnType<typeof vi.fn<() => Promise<string | null>>>;
   let listModels: ReturnType<typeof vi.fn<() => Promise<AvailableModel[]>>>;
-  let getProviderInfo: ReturnType<typeof vi.fn<() => SystemProviderInfo>>;
+  let getProviderInfo: ReturnType<typeof vi.fn<() => Promise<SystemProviderInfo>>>;
   let getHealthReport: ReturnType<typeof vi.fn<() => SystemHealthReport>>;
   let transcribeVoice: ReturnType<
     typeof vi.fn<
@@ -207,6 +207,7 @@ describe("System routes", () => {
                   "turn.start",
                   "turn.steer",
                   "thread.rename",
+                  "provider.list_catalog",
                   "workspace.status",
                   "workspace.diff",
                 ],
@@ -288,6 +289,7 @@ describe("System routes", () => {
                   "turn.start",
                   "turn.steer",
                   "thread.rename",
+                  "provider.list_catalog",
                   "workspace.status",
                   "workspace.diff",
                 ],
@@ -529,7 +531,7 @@ describe("System routes", () => {
           supportsServiceTier: true,
         },
       };
-      getProviderInfo.mockReturnValue(providerInfo);
+      getProviderInfo.mockResolvedValue(providerInfo);
 
       const res = await app.request("/system/provider");
 
@@ -556,7 +558,7 @@ describe("System routes", () => {
       };
       (
         threadManager.getProviderInfo as unknown as ReturnType<typeof vi.fn>
-      ).mockReturnValue(providerInfo);
+      ).mockResolvedValue(providerInfo);
 
       const res = await defaultApp.request("/system/provider");
 
@@ -588,7 +590,7 @@ describe("System routes", () => {
       ];
       (
         threadManager.listProviders as unknown as ReturnType<typeof vi.fn>
-      ).mockReturnValue(providers);
+      ).mockResolvedValue(providers);
 
       const res = await app.request("/system/providers");
 

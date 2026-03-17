@@ -3,8 +3,15 @@ import { createHash } from "node:crypto";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { isThreadProviderId, type ProviderAdapter, type ProviderToolCallResponse } from "@bb/core";
-import { createProviderAdapter } from "@bb/provider-adapters";
+import {
+  isThreadProviderId,
+  type ProviderAdapter,
+  type ProviderToolCallResponse,
+} from "@bb/core";
+import {
+  createProviderAdapter,
+  listAvailableProviderInfos,
+} from "@bb/provider-adapters";
 import {
   ENVIRONMENT_AGENT_PROTOCOL_VERSION,
   type EnvironmentAgentCommand,
@@ -30,9 +37,15 @@ type EnvironmentAgentProviderModelListCommand = Extract<
   EnvironmentAgentCommand,
   { type: "provider.list_models" }
 >;
+type EnvironmentAgentProviderCatalogCommand = Extract<
+  EnvironmentAgentCommand,
+  { type: "provider.list_catalog" }
+>;
 type EnvironmentAgentRpcCommand = Exclude<
   EnvironmentAgentCommand,
-  EnvironmentAgentProviderEnsureCommand | EnvironmentAgentProviderModelListCommand
+  | EnvironmentAgentProviderEnsureCommand
+  | EnvironmentAgentProviderModelListCommand
+  | EnvironmentAgentProviderCatalogCommand
 >;
 
 export interface EnvironmentAgentRuntimeOptions {
@@ -300,6 +313,8 @@ export class EnvironmentAgentRuntime {
             )
           : envelope.command.type === "provider.list_models"
             ? await this.listProviderModels(envelope.command.providerId)
+          : envelope.command.type === "provider.list_catalog"
+            ? this.listProviderCatalog()
           : await this.executeRpcCommand(envelope.command);
       this.learnProviderThreadMapping(envelope.command, result);
       this.trackAcceptedCommand(envelope.command);
@@ -364,6 +379,7 @@ export class EnvironmentAgentRuntime {
         return;
       case "provider.ensure":
       case "provider.list_models":
+      case "provider.list_catalog":
       case "thread.rename":
       case "workspace.status":
       case "workspace.diff":
@@ -756,6 +772,7 @@ export class EnvironmentAgentRuntime {
       case "workspace.diff":
       case "provider.ensure":
       case "provider.list_models":
+      case "provider.list_catalog":
         return;
       default:
         return command satisfies never;
@@ -939,6 +956,13 @@ export class EnvironmentAgentRuntime {
       throw new Error("Provider runtime is unavailable");
     }
     return provider.listModels();
+  }
+
+  private listProviderCatalog(): import("@bb/core").SystemProviderInfo[] {
+    return listAvailableProviderInfos().map((provider) => ({
+      ...provider,
+      capabilities: { ...provider.capabilities },
+    }));
   }
 
   private resolveTurnRunRequest(command: Extract<EnvironmentAgentRpcCommand, { type: "turn.run" }>): {

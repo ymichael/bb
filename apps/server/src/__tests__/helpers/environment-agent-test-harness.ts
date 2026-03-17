@@ -6,7 +6,10 @@ import {
   type EnvironmentAgentClient,
 } from "@bb/environment-daemon";
 import { assertNever, toRecord } from "@bb/core";
-import { createProviderAdapter } from "@bb/provider-adapters";
+import {
+  createProviderAdapter,
+  listAvailableProviderInfos,
+} from "@bb/provider-adapters";
 import { vi } from "vitest";
 
 export const CODEX_THREAD_ID = "codex-thread-abc-123";
@@ -41,9 +44,15 @@ type EnvironmentAgentProviderListModelsCommand = Extract<
   EnvironmentAgentCommand,
   { type: "provider.list_models" }
 >;
+type EnvironmentAgentProviderListCatalogCommand = Extract<
+  EnvironmentAgentCommand,
+  { type: "provider.list_catalog" }
+>;
 type EnvironmentAgentRpcCommand = Exclude<
   EnvironmentAgentCommand,
-  EnvironmentAgentProviderEnsureCommand | EnvironmentAgentProviderListModelsCommand
+  | EnvironmentAgentProviderEnsureCommand
+  | EnvironmentAgentProviderListModelsCommand
+  | EnvironmentAgentProviderListCatalogCommand
 >;
 
 function toProviderMethod(command: EnvironmentAgentRpcCommand): string {
@@ -476,6 +485,8 @@ export function createFakeEnvironmentAgentClient(
           result = await createProviderAdapter({
             providerId: command.providerId ?? "codex",
           }).listModels();
+        } else if (command.type === "provider.list_catalog") {
+          result = listAvailableProviderInfos();
         } else {
         result = await sendRpcRequest(
           toProviderMethod(command),
