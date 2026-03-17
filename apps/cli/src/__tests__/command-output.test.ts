@@ -564,6 +564,42 @@ describe("CLI command output contracts", () => {
       },
     }));
 
+    await runCommand(["thread", "spawn", "--environment", "env-worktree-001"], (program) =>
+      registerThreadCommands(program, () => "http://daemon"),
+    );
+
+    expect(post).toHaveBeenCalledWith({
+      json: {
+        projectId: "proj-1",
+        input: undefined,
+        environmentId: "env-worktree-001",
+      },
+    });
+  });
+
+  it("bb thread spawn forwards --new-environment", async () => {
+    process.env.BB_PROJECT_ID = "proj-1";
+    const thread: Thread = {
+      id: "thread-env-1",
+      projectId: "proj-1",
+      providerId: "codex",
+      type: "standard",
+      status: "created",
+      environmentId: "env-worktree-001",
+      createdAt: 1,
+      updatedAt: 1,
+    };
+    const post = vi.fn(async () => thread);
+    createClientMock.mockReturnValue(asDaemonClient({
+      api: {
+        v1: {
+          threads: {
+            $post: post,
+          },
+        },
+      },
+    }));
+
     await runCommand(
       ["thread", "spawn", "--new-environment", "worktree"],
       (program) => registerThreadCommands(program, () => "http://daemon"),

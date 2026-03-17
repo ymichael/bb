@@ -60,9 +60,6 @@ const DEFAULT_THREAD_WAIT_POLL_INTERVAL_MS = 250;
 
 class ThreadWaitTimeoutError extends Error {}
 
-const UUID_PATTERN =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-
 function looksLikePath(value: string): boolean {
   return value.includes("/") || value.startsWith(".") || value.startsWith("~");
 }
@@ -98,14 +95,9 @@ function buildSpawnEnvironmentSelection(args: {
       },
     };
   }
-  if (UUID_PATTERN.test(environmentValue)) {
-    return {
-      environmentId: environmentValue,
-    };
-  }
-  throw new Error(
-    "Invalid --environment value. Pass an existing environment UUID or a workspace path. Use --new-environment <kind> to create a managed environment.",
-  );
+  return {
+    environmentId: environmentValue,
+  };
 }
 
 function isLowSignalThreadStatusEventType(type: string): boolean {
