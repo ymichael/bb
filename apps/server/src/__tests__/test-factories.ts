@@ -10,7 +10,7 @@ import {
   ThreadEnvironmentAttachmentRepository,
 } from "@bb/db";
 import type { DbConnection } from "@bb/db";
-import type { LlmCompletionService } from "@bb/agent-server";
+import type { LlmCompletionService } from "@bb/provider-adapters";
 
 interface SqliteClient {
   close(): void;

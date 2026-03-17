@@ -8,6 +8,13 @@
       "when": 1773694166812,
       "tag": "0000_minor_firestar",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1773715914720,
+      "tag": "0001_moaning_korath",
+      "breakpoints": true
     }
   ]
 }

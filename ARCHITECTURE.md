@@ -150,18 +150,16 @@ Important nuances:
 - the local HTTP surface is intentionally small; today the important endpoint is `POST /control/status`
 - the package also builds the bundled `environment-agent.bundle.mjs` binary used by managed environments
 
-### `packages/agent-server`
+### `packages/provider-adapters`
 
-Provider adapter/runtime layer.
+Shared built-in provider adapter layer.
 
 Responsibilities:
 
 - provider registry and adapter selection
-- provider runtime supervision
-- Codex-specific thread/turn command building
 - model catalog access
 - title generation and commit-message generation helpers
-- normalization of provider notifications into BB thread events
+- shared provider-side launch metadata and request/response helpers consumed by env-daemon
 
 Current built-in provider registry:
 

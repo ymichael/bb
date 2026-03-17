@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = resolve(__filename, "..");
 const workspaceRoot = resolve(__dirname, "..", "..");
-const defaultDaemonEntry = resolve(workspaceRoot, "apps", "daemon", "dist", "index.js");
+const defaultDaemonEntry = resolve(workspaceRoot, "apps", "server", "dist", "index.js");
 
 function parseArgs(argv) {
   const options = {

@@ -254,8 +254,6 @@ export function ThreadDetailView() {
     modelOptions,
     reasoningOptions,
     sandboxOptions,
-    supportsModelList,
-    supportsReasoningLevels,
     supportsServiceTier,
   } = usePromptModelReasoning({
     scope: "thread",
@@ -1280,7 +1278,7 @@ export function ThreadDetailView() {
           input: promptInput,
           model: activeModel?.model ?? selectedModel,
           ...(supportsServiceTier && serviceTier ? { serviceTier } : {}),
-          ...(supportsReasoningLevels ? { reasoningLevel } : {}),
+          reasoningLevel,
           sandboxMode,
         });
         promptDraft.clear();
@@ -1303,8 +1301,8 @@ export function ThreadDetailView() {
         input: promptInput,
         model: activeModel?.model ?? selectedModel,
         ...(supportsServiceTier && serviceTier ? { serviceTier } : {}),
-          ...(supportsReasoningLevels ? { reasoningLevel } : {}),
-          sandboxMode,
+        reasoningLevel,
+        sandboxMode,
       });
     } catch (err) {
       setPendingSubmittedFollowUp(null);
@@ -1517,7 +1515,6 @@ export function ThreadDetailView() {
       providerOptions={providerOptions}
       selectedProviderId={selectedProviderId}
       providerDisplayName={selectedProviderDisplayName}
-      supportsModelList={supportsModelList}
       activeModel={activeModel}
       selectedModel={selectedModel}
       modelOptions={modelOptions}
@@ -1525,7 +1522,6 @@ export function ThreadDetailView() {
       serviceTier={serviceTier}
       onServiceTierChange={setServiceTier}
       supportsServiceTier={supportsServiceTier}
-      supportsReasoningLevels={supportsReasoningLevels}
       reasoningLevel={reasoningLevel}
       reasoningOptions={reasoningOptions}
       onReasoningLevelChange={setReasoningLevel}

@@ -13,7 +13,6 @@ import {
 } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import type {
-  ThreadProviderId,
   EnvironmentDescriptor,
   EnvironmentRecord,
   PersistedEnvironmentRecord,
@@ -34,7 +33,6 @@ import type {
 } from "@bb/core";
 import {
   DEFAULT_THREAD_PROVIDER_ID,
-  isThreadProviderId,
   extractProviderThreadIdFromPersistedEventData,
   extractTurnIdFromPersistedEventData,
   getStringField,
@@ -725,7 +723,7 @@ export class ThreadRepository {
 
   create(data: {
     projectId: string;
-    providerId?: ThreadProviderId;
+    providerId?: string;
     type?: ThreadType;
     title?: string;
     mergeBaseBranch?: string;
@@ -1038,9 +1036,6 @@ export class ThreadRepository {
     row: typeof threads.$inferSelect,
     queuedMessages: ThreadQueuedMessage[],
   ): Thread {
-    if (!isThreadProviderId(row.providerId)) {
-      throw new Error(`Invalid persisted thread provider: ${row.providerId}`);
-    }
     const thread: Thread = {
       id: row.id,
       projectId: row.projectId,

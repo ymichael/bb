@@ -183,7 +183,6 @@ export function ThreadFollowUpComposer({
   providerOptions,
   selectedProviderId,
   providerDisplayName,
-  supportsModelList,
   activeModel,
   selectedModel,
   modelOptions,
@@ -191,7 +190,6 @@ export function ThreadFollowUpComposer({
   serviceTier,
   onServiceTierChange,
   supportsServiceTier,
-  supportsReasoningLevels,
   reasoningLevel,
   reasoningOptions,
   onReasoningLevelChange,
@@ -252,7 +250,6 @@ export function ThreadFollowUpComposer({
   providerOptions?: readonly PromptOption<string>[];
   selectedProviderId?: string;
   providerDisplayName?: string;
-  supportsModelList: boolean;
   activeModel?: { model: string } | null;
   selectedModel: string;
   modelOptions: readonly PromptOption<string>[];
@@ -260,7 +257,6 @@ export function ThreadFollowUpComposer({
   serviceTier?: ServiceTier;
   onServiceTierChange: (value: ServiceTier | undefined) => void;
   supportsServiceTier: boolean;
-  supportsReasoningLevels: boolean;
   reasoningLevel: ReasoningLevel;
   reasoningOptions: readonly PromptOption<ReasoningLevel>[];
   onReasoningLevelChange: (value: ReasoningLevel) => void;
@@ -425,7 +421,6 @@ export function ThreadFollowUpComposer({
               selectedProviderId={selectedProviderId}
               providerDisplayName={providerDisplayName}
               providerReadOnly
-              supportsModelList={supportsModelList}
               activeModel={activeModel}
               selectedModel={selectedModel}
               modelOptions={modelOptions}
@@ -433,7 +428,6 @@ export function ThreadFollowUpComposer({
               serviceTier={serviceTier}
               onServiceTierChange={onServiceTierChange}
               supportsServiceTier={supportsServiceTier}
-              supportsReasoningLevels={supportsReasoningLevels}
               reasoningLevel={reasoningLevel}
               reasoningOptions={reasoningOptions}
               onReasoningLevelChange={onReasoningLevelChange}

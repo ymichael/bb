@@ -1,5 +1,5 @@
 {
-  "name": "@bb/agent-server",
+  "name": "@bb/provider-adapters",
   "version": "0.0.1",
   "type": "module",
   "exports": {
@@ -19,15 +19,13 @@
     "test": "vitest run --config vitest.config.ts"
   },
   "dependencies": {
-    "@bb/core": "workspace:*",
     "@anthropic-ai/sdk": "^0.73.0",
     "@bb/claude-code-bridge": "workspace:*",
-    "@bb/environment-daemon": "workspace:*",
+    "@bb/core": "workspace:*",
     "@bb/pi-bridge": "workspace:*",
     "@bb/templates": "workspace:*",
     "@mariozechner/pi-ai": "^0.58.3",
-    "@mariozechner/pi-coding-agent": "^0.58.3",
-    "tsx": "^4.20.0"
+    "@mariozechner/pi-coding-agent": "^0.58.3"
   },
   "devDependencies": {
     "@bb/tsconfig": "workspace:*",

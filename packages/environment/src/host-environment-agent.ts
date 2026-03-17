@@ -387,6 +387,9 @@ export async function ensureManagedHostEnvironmentAgent(args: {
           BB_THREAD_ID: args.threadId,
           BB_PROJECT_ID: args.projectId,
           BB_ENVIRONMENT_ID: args.environmentId,
+          ...(args.runtimeEnv.BB_THREAD_PROVIDER_ID
+            ? { BB_THREAD_PROVIDER_ID: args.runtimeEnv.BB_THREAD_PROVIDER_ID }
+            : {}),
           BB_ENV_DAEMON_AUTH_TOKEN: authToken,
           BB_ENV_DAEMON_CONTROL_BASE_URL: baseUrl,
         },

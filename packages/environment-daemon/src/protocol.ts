@@ -1,3 +1,12 @@
+import type {
+  PromptInput,
+  ProviderDynamicTool,
+  ProviderExecutionOptions,
+  ProviderThreadContext,
+  SpawnThreadRequest,
+  Thread,
+} from "@bb/core";
+
 export type EnvironmentAgentTransportKind = "http";
 export const ENVIRONMENT_AGENT_PROTOCOL_VERSION = 1 as const;
 
@@ -63,15 +72,26 @@ export interface EnvironmentAgentInitializeRequest {
 }
 
 export type EnvironmentAgentCommand =
-  | ({
+  | {
       type: "provider.ensure";
       forThreadId?: string;
-    } & EnvironmentAgentProviderSpec)
+      providerId?: string;
+      context?: ProviderThreadContext;
+      providerLaunch?: EnvironmentAgentProviderLaunchWrapper;
+      command?: string;
+      args?: string[];
+      launchCommand?: string;
+      launchArgs?: string[];
+      env?: Record<string, string>;
+      files?: EnvironmentAgentProviderFile[];
+    }
   | {
       type: "thread.start";
       threadId: string;
       projectId: string;
-      params: unknown;
+      request?: SpawnThreadRequest;
+      context?: ProviderThreadContext;
+      dynamicTools?: ProviderDynamicTool[];
       initialize?: EnvironmentAgentInitializeRequest;
     }
   | {
@@ -79,28 +99,24 @@ export type EnvironmentAgentCommand =
       threadId: string;
       projectId: string;
       providerThreadId: string;
-      params: unknown;
+      context?: ProviderThreadContext;
+      options?: ProviderExecutionOptions;
+      resumePath?: string;
       initialize?: EnvironmentAgentInitializeRequest;
     }
   | {
       type: "thread.stop";
       threadId: string;
-      params?: unknown;
       initialize?: EnvironmentAgentInitializeRequest;
     }
   | {
-      type: "turn.start";
+      type: "turn.run";
       threadId: string;
       providerThreadId: string;
-      params: unknown;
-      initialize?: EnvironmentAgentInitializeRequest;
-    }
-  | {
-      type: "turn.steer";
-      threadId: string;
-      providerThreadId: string;
-      turnId: string;
-      params: unknown;
+      requestedMode?: "auto" | "steer" | "start";
+      activeTurnId?: string;
+      input?: PromptInput[];
+      options?: ProviderExecutionOptions;
       initialize?: EnvironmentAgentInitializeRequest;
     }
   | {
@@ -108,8 +124,14 @@ export type EnvironmentAgentCommand =
       threadId: string;
       providerThreadId: string;
       title: string;
-      params: unknown;
       initialize?: EnvironmentAgentInitializeRequest;
+    }
+  | {
+      type: "provider.list_models";
+      providerId?: string;
+    }
+  | {
+      type: "provider.list_catalog";
     }
   | {
       type: "workspace.status";
@@ -178,6 +200,14 @@ export type EnvironmentAgentEvent =
       threadId: string;
       method: string;
       payload: unknown;
+      providerId?: string;
+      normalizedMethod?: string;
+      shouldPersist?: boolean;
+      shouldBroadcast?: boolean;
+      nextStatus?: Thread["status"];
+      title?: string;
+      turnState?: "active" | "idle";
+      turnId?: string;
     }
   | {
       type: "provider.stderr";

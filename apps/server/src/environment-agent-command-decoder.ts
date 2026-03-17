@@ -1,5 +1,12 @@
 import { assertNever, getStringField, toRecord } from "@bb/core";
 import type {
+  PromptInput,
+  ProviderDynamicTool,
+  ProviderExecutionOptions,
+  ProviderThreadContext,
+  SpawnThreadRequest,
+} from "@bb/core";
+import type {
   EnvironmentAgentCommand,
   EnvironmentAgentInitializeRequest,
   EnvironmentAgentProviderFile,
@@ -10,9 +17,10 @@ const ENVIRONMENT_AGENT_COMMAND_TYPES = [
   "thread.start",
   "thread.resume",
   "thread.stop",
-  "turn.start",
-  "turn.steer",
+  "turn.run",
   "thread.rename",
+  "provider.list_models",
+  "provider.list_catalog",
   "workspace.status",
   "workspace.diff",
 ] as const satisfies readonly EnvironmentAgentCommand["type"][];
@@ -118,16 +126,30 @@ function requireStringField(
   return value;
 }
 
-function requireParamsField(
-  record: Record<string, unknown>,
-  commandType: string,
-): unknown {
-  if (!("params" in record)) {
-    throw new Error(
-      `Invalid persisted environment-agent command payload for ${commandType}`,
-    );
-  }
-  return record.params;
+function decodeThreadContext(value: unknown): ProviderThreadContext | undefined {
+  return toRecord(value) as unknown as ProviderThreadContext | undefined;
+}
+
+function decodeSpawnThreadRequest(value: unknown): SpawnThreadRequest | undefined {
+  return toRecord(value) as unknown as SpawnThreadRequest | undefined;
+}
+
+function decodeDynamicTools(value: unknown): ProviderDynamicTool[] | undefined {
+  return Array.isArray(value) ? value as ProviderDynamicTool[] : undefined;
+}
+
+function decodeExecutionOptions(value: unknown): ProviderExecutionOptions | undefined {
+  return toRecord(value) as ProviderExecutionOptions | undefined;
+}
+
+function decodePromptInputArray(value: unknown): PromptInput[] | undefined {
+  return Array.isArray(value) ? value as PromptInput[] : undefined;
+}
+
+function decodeProviderId(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim().length > 0
+    ? value.trim()
+    : undefined;
 }
 
 export function decodePersistedEnvironmentAgentCommand(args: {
@@ -144,9 +166,10 @@ export function decodePersistedEnvironmentAgentCommand(args: {
 
   switch (commandType) {
     case "provider.ensure": {
-      const command = requireStringField(record, "command", commandType);
-      const providerArgs = decodeStringArray(record.args);
-      if (!providerArgs) {
+      const command = getStringField(record, "command");
+      const providerArgs =
+        record.args === undefined ? undefined : decodeStringArray(record.args);
+      if (record.args !== undefined && !providerArgs) {
         throw new Error(
           `Invalid persisted environment-agent command payload for ${commandType}`,
         );
@@ -172,15 +195,38 @@ export function decodePersistedEnvironmentAgentCommand(args: {
       }
       const launchCommand = getStringField(record, "launchCommand");
       const forThreadId = getStringField(record, "forThreadId");
+      if (!command && !decodeProviderId(record.providerId)) {
+        throw new Error(
+          `Invalid persisted environment-agent command payload for ${commandType}`,
+        );
+      }
       return {
         type: commandType,
-        command,
-        args: providerArgs,
+        ...(command ? { command } : {}),
+        ...(providerArgs ? { args: providerArgs } : {}),
         ...(launchCommand ? { launchCommand } : {}),
         ...(launchArgs ? { launchArgs } : {}),
         ...(env ? { env } : {}),
         ...(files ? { files } : {}),
         ...(forThreadId ? { forThreadId } : {}),
+        ...(decodeProviderId(record.providerId)
+          ? { providerId: decodeProviderId(record.providerId)! }
+          : {}),
+        ...(decodeThreadContext(record.context)
+          ? { context: decodeThreadContext(record.context)! }
+          : {}),
+        ...(toRecord(record.providerLaunch)
+          ? {
+              providerLaunch: {
+                command: requireStringField(
+                  toRecord(record.providerLaunch)!,
+                  "command",
+                  commandType,
+                ),
+                args: decodeStringArray(toRecord(record.providerLaunch)!.args) ?? [],
+              },
+            }
+          : {}),
       };
     }
     case "thread.start":
@@ -188,7 +234,15 @@ export function decodePersistedEnvironmentAgentCommand(args: {
         type: commandType,
         threadId: requireStringField(record, "threadId", commandType),
         projectId: requireStringField(record, "projectId", commandType),
-        params: requireParamsField(record, commandType),
+        ...(decodeSpawnThreadRequest(record.request)
+          ? { request: decodeSpawnThreadRequest(record.request)! }
+          : {}),
+        ...(decodeThreadContext(record.context)
+          ? { context: decodeThreadContext(record.context)! }
+          : {}),
+        ...(decodeDynamicTools(record.dynamicTools)
+          ? { dynamicTools: decodeDynamicTools(record.dynamicTools)! }
+          : {}),
         ...(initialize ? { initialize } : {}),
       };
     case "thread.resume":
@@ -201,17 +255,41 @@ export function decodePersistedEnvironmentAgentCommand(args: {
           "providerThreadId",
           commandType,
         ),
-        params: requireParamsField(record, commandType),
+        ...(decodeThreadContext(record.context)
+          ? { context: decodeThreadContext(record.context)! }
+          : {}),
+        ...(decodeExecutionOptions(record.options)
+          ? { options: decodeExecutionOptions(record.options)! }
+          : {}),
+        ...(getStringField(record, "resumePath")
+          ? { resumePath: getStringField(record, "resumePath")! }
+          : {}),
         ...(initialize ? { initialize } : {}),
       };
     case "thread.stop":
       return {
         type: commandType,
         threadId: requireStringField(record, "threadId", commandType),
-        ...(record.params !== undefined ? { params: record.params } : {}),
         ...(initialize ? { initialize } : {}),
       };
-    case "turn.start":
+    case "turn.run": {
+      const requestedMode = getStringField(record, "requestedMode");
+      if (
+        requestedMode !== undefined &&
+        requestedMode !== "auto" &&
+        requestedMode !== "steer" &&
+        requestedMode !== "start"
+      ) {
+        throw new Error(
+          `Invalid persisted environment-agent command payload for ${commandType}`,
+        );
+      }
+      const activeTurnId = getStringField(record, "activeTurnId");
+      if (!Array.isArray(record.input)) {
+        throw new Error(
+          `Invalid persisted environment-agent command payload for ${commandType}`,
+        );
+      }
       return {
         type: commandType,
         threadId: requireStringField(record, "threadId", commandType),
@@ -220,22 +298,15 @@ export function decodePersistedEnvironmentAgentCommand(args: {
           "providerThreadId",
           commandType,
         ),
-        params: requireParamsField(record, commandType),
+        ...(requestedMode ? { requestedMode } : {}),
+        ...(activeTurnId ? { activeTurnId } : {}),
+        input: decodePromptInputArray(record.input)!,
+        ...(decodeExecutionOptions(record.options)
+          ? { options: decodeExecutionOptions(record.options)! }
+          : {}),
         ...(initialize ? { initialize } : {}),
       };
-    case "turn.steer":
-      return {
-        type: commandType,
-        threadId: requireStringField(record, "threadId", commandType),
-        providerThreadId: requireStringField(
-          record,
-          "providerThreadId",
-          commandType,
-        ),
-        turnId: requireStringField(record, "turnId", commandType),
-        params: requireParamsField(record, commandType),
-        ...(initialize ? { initialize } : {}),
-      };
+    }
     case "thread.rename":
       return {
         type: commandType,
@@ -246,8 +317,18 @@ export function decodePersistedEnvironmentAgentCommand(args: {
           commandType,
         ),
         title: requireStringField(record, "title", commandType),
-        params: requireParamsField(record, commandType),
         ...(initialize ? { initialize } : {}),
+      };
+    case "provider.list_models":
+      return {
+        type: commandType,
+        ...(decodeProviderId(record.providerId)
+          ? { providerId: decodeProviderId(record.providerId)! }
+          : {}),
+      };
+    case "provider.list_catalog":
+      return {
+        type: commandType,
       };
     case "workspace.status":
     case "workspace.diff":

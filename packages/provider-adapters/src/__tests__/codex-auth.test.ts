@@ -8,7 +8,10 @@ const ORIGINAL_HOME = process.env.HOME;
 const ORIGINAL_OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const ORIGINAL_OPENAI_BASE_URL = process.env.OPENAI_BASE_URL;
 
-async function writeAuthJson(homePath: string, payload: Record<string, unknown>): Promise<void> {
+async function writeAuthJson(
+  homePath: string,
+  payload: Record<string, unknown>,
+): Promise<void> {
   const codexDir = join(homePath, ".codex");
   await mkdir(codexDir, { recursive: true });
   await writeFile(join(codexDir, "auth.json"), JSON.stringify(payload), "utf8");

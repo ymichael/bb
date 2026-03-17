@@ -350,9 +350,6 @@ export function usePromptModelReasoning(options?: UsePromptModelReasoningOptions
     ? selectedProviderInfo?.capabilities
     : providerInfoQuery.data?.capabilities;
 
-  const supportsModelList = activeProviderCapabilities?.supportsModelList ?? false;
-  const supportsReasoningLevels =
-    activeProviderCapabilities?.supportsReasoningLevels ?? false;
   const supportsServiceTier =
     activeProviderCapabilities?.supportsServiceTier ?? false;
 
@@ -375,12 +372,11 @@ export function usePromptModelReasoning(options?: UsePromptModelReasoningOptions
 
   const availableModels = useMemo(
     () =>
-      supportsModelList &&
       availableModelsQuery.data &&
       availableModelsQuery.data.length > 0
         ? availableModelsQuery.data
         : [],
-    [availableModelsQuery.data, supportsModelList],
+    [availableModelsQuery.data],
   );
 
   const modelOptions = useMemo(
@@ -401,7 +397,7 @@ export function usePromptModelReasoning(options?: UsePromptModelReasoningOptions
   );
 
   const reasoningOptions = useMemo((): PromptOption<ReasoningLevel>[] => {
-    if (!supportsReasoningLevels || !activeModel) {
+    if (!activeModel) {
       return [];
     }
 
@@ -423,7 +419,7 @@ export function usePromptModelReasoning(options?: UsePromptModelReasoningOptions
     }
 
     return options;
-  }, [activeModel, supportsReasoningLevels]);
+  }, [activeModel]);
 
   const environmentOptions = useMemo(
     () => toEnvironmentOptions(environmentsQuery.data),
@@ -482,15 +478,6 @@ export function usePromptModelReasoning(options?: UsePromptModelReasoningOptions
   }, [serviceTier, supportsServiceTier]);
 
   useEffect(() => {
-    if (!supportsReasoningLevels && reasoningLevel !== "medium") {
-      dispatch({
-        type: "set-field",
-        field: "reasoningLevel",
-        value: "medium",
-        touched: false,
-      });
-      return;
-    }
     if (reasoningOptions.length === 0) {
       return;
     }
@@ -502,7 +489,7 @@ export function usePromptModelReasoning(options?: UsePromptModelReasoningOptions
         touched: false,
       });
     }
-  }, [activeModel, reasoningLevel, reasoningOptions, supportsReasoningLevels]);
+  }, [activeModel, reasoningLevel, reasoningOptions]);
 
   useEffect(() => {
     if (environmentOptions.length === 0) return;
@@ -663,8 +650,6 @@ export function usePromptModelReasoning(options?: UsePromptModelReasoningOptions
     reasoningOptions,
     sandboxOptions: SANDBOX_OPTIONS,
     environmentOptions,
-    supportsModelList,
-    supportsReasoningLevels,
     supportsServiceTier,
   };
 }

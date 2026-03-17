@@ -258,7 +258,7 @@ function encodeClaudeCodeToolCallResponse(
 
 function resolveBridgePath(): string {
   // Resolve the bridge.js path relative to this package's location.
-  // In the monorepo layout: packages/agent-server/dist/ → packages/claude-code-bridge/dist/
+  // In the monorepo layout: packages/provider-adapters/dist/ → packages/claude-code-bridge/dist/
   return resolve(__dirname, "..", "..", "claude-code-bridge", "dist", "bridge.js");
 }
 
@@ -384,14 +384,8 @@ export function createClaudeCodeProviderAdapter(
   opts?: CreateClaudeCodeProviderAdapterOptions,
 ): ProviderAdapter {
   const capabilities: ProviderCapabilities = {
-    supportsSteer: true,
     supportsRename: false,
-    supportsModelList: true,
-    supportsReasoningLevels: true,
     supportsServiceTier: false,
-    supportsMultimodalInput: true,
-    supportsDynamicTools: true,
-    supportsToolCallRequests: true,
     ...(opts?.capabilities ?? {}),
   };
 

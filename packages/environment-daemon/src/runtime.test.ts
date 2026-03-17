@@ -2,6 +2,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import type { ProviderThreadContext, SpawnThreadRequest } from "@bb/core";
 import { EnvironmentAgentRuntime } from "./runtime.js";
 import { ENVIRONMENT_AGENT_PROTOCOL_VERSION, type EnvironmentAgentProviderSpec } from "./protocol.js";
 
@@ -14,9 +15,27 @@ afterEach(async () => {
   }
 });
 
+function createStartRequest(projectId: string): SpawnThreadRequest {
+  return {
+    projectId,
+    input: [{ type: "text", text: "hello" }],
+  };
+}
+
+function createThreadContext(
+  projectId: string,
+  threadId: string,
+): ProviderThreadContext {
+  return {
+    projectId,
+    threadId,
+    path: `/tmp/${threadId}`,
+  };
+}
+
 describe("EnvironmentAgentRuntime", () => {
   it("records sequenced events and reports basic status", () => {
-    const runtime = new EnvironmentAgentRuntime({ threadId: "thread-1" });
+    const runtime = new EnvironmentAgentRuntime({ threadId: "thread-1", providerId: "codex" });
 
     runtime.appendEvent({ type: "environment.ready", threadId: "thread-1" });
     runtime.appendEvent({ type: "workspace.status.changed", threadId: "thread-1" });
@@ -33,7 +52,7 @@ describe("EnvironmentAgentRuntime", () => {
   });
 
   it("updates daemon delivery status for retry visibility", () => {
-    const runtime = new EnvironmentAgentRuntime({ threadId: "thread-1" });
+    const runtime = new EnvironmentAgentRuntime({ threadId: "thread-1", providerId: "codex" });
 
     runtime.appendEvent({ type: "environment.ready", threadId: "thread-1" });
     runtime.setDaemonDeliveryState({
@@ -60,7 +79,7 @@ describe("EnvironmentAgentRuntime", () => {
   });
 
   it("publishes appended events to subscribers", () => {
-    const runtime = new EnvironmentAgentRuntime({ threadId: "thread-1" });
+    const runtime = new EnvironmentAgentRuntime({ threadId: "thread-1", providerId: "codex" });
     const events: Array<{ sequence: number; type: string }> = [];
     const unsubscribe = runtime.subscribeToEvents((event) => {
       events.push({ sequence: event.sequence, type: event.event.type });
@@ -77,7 +96,10 @@ describe("EnvironmentAgentRuntime", () => {
   });
 
   it("tracks quiescence lifecycle state from provider events and command failures", async () => {
-    const runtime = new EnvironmentAgentRuntime({ threadId: "thread-1" });
+    const runtime = new EnvironmentAgentRuntime({
+      threadId: "thread-1",
+      providerId: "codex",
+    });
 
     expect(runtime.getQuiescenceSnapshot()).toEqual({
       hasObservedWork: false,
@@ -192,9 +214,57 @@ describe("EnvironmentAgentRuntime", () => {
     );
   });
 
+  it("lists provider models through a BB-native env-daemon command", async () => {
+    const runtime = new EnvironmentAgentRuntime({
+      threadId: "thread-1",
+      providerId: "codex",
+    });
+
+    const ack = await runtime.executeCommand({
+      meta: {
+        protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+        commandId: "cmd-models-1",
+        idempotencyKey: "cmd-models-1",
+        sentAt: 123,
+      },
+      command: {
+        type: "provider.list_models",
+        providerId: "codex",
+      },
+    });
+
+    expect(ack.state).toBe("accepted");
+    expect(Array.isArray(ack.result)).toBe(true);
+    expect((ack.result as Array<{ model?: string }>).length).toBeGreaterThan(0);
+  });
+
+  it("lists provider catalog through a BB-native env-daemon command", async () => {
+    const runtime = new EnvironmentAgentRuntime({
+      threadId: "thread-1",
+      providerId: "codex",
+    });
+
+    const ack = await runtime.executeCommand({
+      meta: {
+        protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+        commandId: "cmd-provider-catalog-1",
+        idempotencyKey: "cmd-provider-catalog-1",
+        sentAt: 123,
+      },
+      command: {
+        type: "provider.list_catalog",
+      },
+    });
+
+    expect(ack.state).toBe("accepted");
+    expect(Array.isArray(ack.result)).toBe(true);
+    expect((ack.result as Array<{ id?: string }>).length).toBeGreaterThan(0);
+  });
+
   it("accepts explicit commands and forwards them to the provider transport", async () => {
     const runtime = new EnvironmentAgentRuntime({
       threadId: "thread-1",
+      providerId: "codex",
       providerCommand: "node",
       providerArgs: [
         "-e",
@@ -230,7 +300,8 @@ describe("EnvironmentAgentRuntime", () => {
         type: "thread.start",
         threadId: "thread-1",
         projectId: "proj-1",
-        params: { model: "gpt-5" },
+        request: createStartRequest("proj-1"),
+        context: createThreadContext("proj-1", "thread-1"),
         initialize: {
           method: "initialize",
           params: { clientInfo: { name: "bb", version: "0.0.1" } },
@@ -283,10 +354,12 @@ describe("EnvironmentAgentRuntime", () => {
   it("routes provider notifications to the mapped shared thread channel", async () => {
     const runtime = new EnvironmentAgentRuntime({
       threadId: "owner-thread",
+      providerId: "codex",
       providerCommand: "node",
       providerArgs: [
         "-e",
         [
+          "let threadCounter = 0;",
           "process.stdin.setEncoding('utf8');",
           "let buffer='';",
           "process.stdin.on('data',chunk=>{",
@@ -299,7 +372,8 @@ describe("EnvironmentAgentRuntime", () => {
           "if (msg.method === 'initialize') {",
           "console.log(JSON.stringify({ id: msg.id, result: { capabilities: {} } }));",
           "} else if (msg.method === 'thread/start') {",
-          "console.log(JSON.stringify({ id: msg.id, result: { threadId: msg.params.threadId } }));",
+          "threadCounter += 1;",
+          "console.log(JSON.stringify({ id: msg.id, result: { threadId: `provider-thread-${threadCounter}` } }));",
           "} else if (msg.method === 'turn/start') {",
           "const threadId = msg.params.threadId;",
           "const turnId = `turn-${threadId}`;",
@@ -334,7 +408,8 @@ describe("EnvironmentAgentRuntime", () => {
         type: "thread.start",
         threadId: "thread-1",
         projectId: "proj-1",
-        params: { threadId: "provider-thread-1" },
+        request: createStartRequest("proj-1"),
+        context: createThreadContext("proj-1", "thread-1"),
         initialize: {
           method: "initialize",
           params: { clientInfo: { name: "bb", version: "0.0.1" } },
@@ -352,7 +427,8 @@ describe("EnvironmentAgentRuntime", () => {
         type: "thread.start",
         threadId: "thread-2",
         projectId: "proj-1",
-        params: { threadId: "provider-thread-2" },
+        request: createStartRequest("proj-1"),
+        context: createThreadContext("proj-1", "thread-2"),
         initialize: {
           method: "initialize",
           params: { clientInfo: { name: "bb", version: "0.0.1" } },
@@ -368,10 +444,10 @@ describe("EnvironmentAgentRuntime", () => {
         sentAt: 102,
       },
       command: {
-        type: "turn.start",
+        type: "turn.run",
         threadId: "thread-1",
         providerThreadId: "provider-thread-1",
-        params: { threadId: "provider-thread-1", input: [] },
+        input: [],
       },
     });
     await runtime.executeCommand({
@@ -382,10 +458,10 @@ describe("EnvironmentAgentRuntime", () => {
         sentAt: 103,
       },
       command: {
-        type: "turn.start",
+        type: "turn.run",
         threadId: "thread-2",
         providerThreadId: "provider-thread-2",
-        params: { threadId: "provider-thread-2", input: [] },
+        input: [],
       },
     });
 
@@ -397,6 +473,164 @@ describe("EnvironmentAgentRuntime", () => {
       expect.arrayContaining([
         { threadId: "thread-1", method: "turn/completed" },
         { threadId: "thread-2", method: "turn/completed" },
+      ]),
+    );
+  });
+
+  it("namespaces shared provider-thread mappings by provider during interleaved multi-provider runs", async () => {
+    const providerScript = [
+      "process.stdin.setEncoding('utf8');",
+      "let buffer='';",
+      "process.stdin.on('data',chunk=>{",
+      "buffer+=chunk;",
+      "const parts=buffer.split(/\\r\\n|\\n|\\r/g);",
+      "buffer=parts.pop() ?? '';",
+      "for (const line of parts) {",
+      "if (!line.trim()) continue;",
+      "const msg = JSON.parse(line);",
+      "if (msg.method === 'initialize') {",
+      "console.log(JSON.stringify({ id: msg.id, result: { capabilities: {}, role: process.env.ROLE } }));",
+      "} else if (msg.method === 'thread/start') {",
+      "console.log(JSON.stringify({ id: msg.id, result: { threadId: 'shared-provider-thread', role: process.env.ROLE } }));",
+      "} else if (msg.method === 'turn/start') {",
+      "const threadId = msg.params.threadId;",
+      "const turnId = `${process.env.ROLE}-turn-${Date.now()}`;",
+      "console.log(JSON.stringify({ id: msg.id, result: { threadId, turnId, role: process.env.ROLE } }));",
+      "setTimeout(() => console.log(JSON.stringify({ method: 'turn/started', params: { threadId, turnId } })), 0);",
+      "setTimeout(() => console.log(JSON.stringify({ method: 'item/completed', params: { threadId, item: { type: 'agentMessage', text: { text: process.env.ROLE } } } })), 1);",
+      "setTimeout(() => console.log(JSON.stringify({ method: 'turn/completed', params: { threadId, turnId } })), 2);",
+      "}",
+      "}",
+      "});",
+    ].join("");
+
+    const runtime = new EnvironmentAgentRuntime({
+      threadId: "owner-thread",
+      providerId: "codex",
+    });
+    cleanup.push(() => runtime.shutdown());
+
+    const providerEvents: Array<{ threadId: string; providerId?: string; method: string }> = [];
+    const unsubscribe = runtime.subscribeToEvents((event) => {
+      if (event.event.type === "provider.event") {
+        providerEvents.push({
+          threadId: event.event.threadId,
+          providerId: event.event.providerId,
+          method: event.event.method,
+        });
+      }
+    });
+    cleanup.push(unsubscribe);
+
+    const ensure = async (
+      commandId: string,
+      threadId: string,
+      providerId: "codex" | "claude-code",
+      role: string,
+    ) => runtime.executeCommand({
+      meta: {
+        protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+        commandId,
+        idempotencyKey: commandId,
+        sentAt: Date.now(),
+      },
+      command: {
+        type: "provider.ensure",
+        providerId,
+        forThreadId: threadId,
+        command: "node",
+        args: ["-e", providerScript],
+        env: { ROLE: role },
+      },
+    });
+
+    await ensure("ensure-a", "thread-a", "codex", "provider-A");
+    await ensure("ensure-b", "thread-b", "claude-code", "provider-B");
+
+    await runtime.executeCommand({
+      meta: {
+        protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+        commandId: "start-a",
+        idempotencyKey: "start-a",
+        sentAt: Date.now(),
+      },
+      command: {
+        type: "thread.start",
+        threadId: "thread-a",
+        projectId: "proj-1",
+        request: createStartRequest("proj-1"),
+        context: createThreadContext("proj-1", "thread-a"),
+        initialize: {
+          method: "initialize",
+          params: { clientInfo: { name: "bb", version: "0.0.1" } },
+        },
+      },
+    });
+    await runtime.executeCommand({
+      meta: {
+        protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+        commandId: "start-b",
+        idempotencyKey: "start-b",
+        sentAt: Date.now(),
+      },
+      command: {
+        type: "thread.start",
+        threadId: "thread-b",
+        projectId: "proj-1",
+        request: createStartRequest("proj-1"),
+        context: createThreadContext("proj-1", "thread-b"),
+        initialize: {
+          method: "initialize",
+          params: { clientInfo: { name: "bb", version: "0.0.1" } },
+        },
+      },
+    });
+
+    await runtime.executeCommand({
+      meta: {
+        protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+        commandId: "turn-a",
+        idempotencyKey: "turn-a",
+        sentAt: Date.now(),
+      },
+      command: {
+        type: "turn.run",
+        threadId: "thread-a",
+        providerThreadId: "shared-provider-thread",
+        input: [{ type: "text", text: "A" }],
+      },
+    });
+    await runtime.executeCommand({
+      meta: {
+        protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+        commandId: "turn-b",
+        idempotencyKey: "turn-b",
+        sentAt: Date.now(),
+      },
+      command: {
+        type: "turn.run",
+        threadId: "thread-b",
+        providerThreadId: "shared-provider-thread",
+        input: [{ type: "text", text: "B" }],
+      },
+    });
+
+    await expect.poll(
+      () =>
+        providerEvents.filter((event) => event.method === "turn/completed"),
+      { timeout: 5_000 },
+    ).toEqual(
+      expect.arrayContaining([
+        {
+          threadId: "thread-a",
+          providerId: "codex",
+          method: "turn/completed",
+        },
+        {
+          threadId: "thread-b",
+          providerId: "claude-code",
+          method: "turn/completed",
+        },
       ]),
     );
   });
@@ -471,7 +705,7 @@ describe("EnvironmentAgentRuntime", () => {
       "if (msg.method === 'initialize') {",
       "console.log(JSON.stringify({ id: msg.id, result: { capabilities: {}, role: process.env.ROLE } }));",
       "} else if (msg.method === 'thread/start') {",
-      "console.log(JSON.stringify({ id: msg.id, result: { threadId: msg.params.threadId, role: process.env.ROLE } }));",
+      "console.log(JSON.stringify({ id: msg.id, result: { threadId: `${process.env.ROLE}-thread`, role: process.env.ROLE } }));",
       "} else if (msg.method === 'turn/start') {",
       "console.log(JSON.stringify({ id: msg.id, result: { threadId: msg.params.threadId, role: process.env.ROLE } }));",
       "}",
@@ -479,7 +713,10 @@ describe("EnvironmentAgentRuntime", () => {
       "});",
     ].join("");
 
-    const runtime = new EnvironmentAgentRuntime({ threadId: "thread-1" });
+    const runtime = new EnvironmentAgentRuntime({
+      threadId: "thread-1",
+      providerId: "codex",
+    });
     cleanup.push(() => runtime.shutdown());
 
     const specA: EnvironmentAgentProviderSpec = {
@@ -508,7 +745,8 @@ describe("EnvironmentAgentRuntime", () => {
         type: "thread.start",
         threadId: "thread-a",
         projectId: "proj-1",
-        params: { threadId: "thread-a" },
+        request: createStartRequest("proj-1"),
+        context: createThreadContext("proj-1", "thread-a"),
         initialize: {
           method: "initialize",
           params: { clientInfo: { name: "bb", version: "0.0.1" } },
@@ -533,7 +771,8 @@ describe("EnvironmentAgentRuntime", () => {
         type: "thread.start",
         threadId: "thread-b",
         projectId: "proj-1",
-        params: { threadId: "thread-b" },
+        request: createStartRequest("proj-1"),
+        context: createThreadContext("proj-1", "thread-b"),
         initialize: {
           method: "initialize",
           params: { clientInfo: { name: "bb", version: "0.0.1" } },
@@ -543,7 +782,7 @@ describe("EnvironmentAgentRuntime", () => {
     expect(ackB.state).toBe("accepted");
     expect((ackB.result as Record<string, unknown>).role).toBe("provider-B");
 
-    // 5. NOW send a turn/start for thread-a WITHOUT calling
+    // 5. NOW send a turn/run for thread-a WITHOUT calling
     // ensureProviderRunning(specA) first. The runtime must route this
     // to child A (mapped via forThreadId), not child B (this.providerChild).
     const ackA2 = await runtime.executeCommand({
@@ -554,10 +793,10 @@ describe("EnvironmentAgentRuntime", () => {
         sentAt: 300,
       },
       command: {
-        type: "turn.start",
+        type: "turn.run",
         threadId: "thread-a",
         providerThreadId: "thread-a",
-        params: { threadId: "thread-a", input: [] },
+        input: [],
       },
     });
     expect(ackA2.state).toBe("accepted");
@@ -590,7 +829,7 @@ describe("EnvironmentAgentRuntime", () => {
       "console.log(JSON.stringify({ id: msg.id, result: { capabilities: {} } }));",
       "}",
       "} else if (msg.method === 'thread/start') {",
-      "console.log(JSON.stringify({ id: msg.id, result: { threadId: msg.params.threadId } }));",
+      "console.log(JSON.stringify({ id: msg.id, result: { threadId: `provider-${process.env.ROLE ?? 'thread'}` } }));",
       "} else if (msg.method === 'turn/start') {",
       "console.log(JSON.stringify({ id: msg.id, result: { threadId: msg.params.threadId } }));",
       "}",
@@ -598,7 +837,7 @@ describe("EnvironmentAgentRuntime", () => {
       "});",
     ].join("");
 
-    const runtime = new EnvironmentAgentRuntime({ threadId: "thread-1" });
+    const runtime = new EnvironmentAgentRuntime({ threadId: "thread-1", providerId: "codex" });
     cleanup.push(() => runtime.shutdown());
 
     const specA: EnvironmentAgentProviderSpec = {
@@ -625,7 +864,8 @@ describe("EnvironmentAgentRuntime", () => {
         type: "thread.start",
         threadId: "thread-a",
         projectId: "proj-1",
-        params: { threadId: "thread-a" },
+        request: createStartRequest("proj-1"),
+        context: createThreadContext("proj-1", "thread-a"),
         initialize: {
           method: "initialize",
           params: { clientInfo: { name: "bb", version: "0.0.1" } },
@@ -647,7 +887,8 @@ describe("EnvironmentAgentRuntime", () => {
         type: "thread.start",
         threadId: "thread-b",
         projectId: "proj-1",
-        params: { threadId: "thread-b" },
+        request: createStartRequest("proj-1"),
+        context: createThreadContext("proj-1", "thread-b"),
         initialize: {
           method: "initialize",
           params: { clientInfo: { name: "bb", version: "0.0.1" } },
@@ -667,10 +908,10 @@ describe("EnvironmentAgentRuntime", () => {
         sentAt: 300,
       },
       command: {
-        type: "turn.start",
+        type: "turn.run",
         threadId: "thread-a",
         providerThreadId: "thread-a",
-        params: { threadId: "thread-a", input: [] },
+        input: [],
         initialize: {
           method: "initialize",
           params: { clientInfo: { name: "bb", version: "0.0.1" } },
@@ -714,13 +955,21 @@ describe("EnvironmentAgentRuntime", () => {
   it("routes provider-initiated RPC responses back to the originating child", async () => {
     // Spawn two providers: child A sends a server request (tool call),
     // child B just idles. The RPC response must go to child A, not child B.
-    const toolCalls: Array<{ requestId: string | number; method: string }> = [];
+    const toolCalls: Array<{ requestId: string | number; method: string; toolCall?: unknown }> = [];
     const stdoutLines: string[] = [];
     const runtime = new EnvironmentAgentRuntime({
       threadId: "thread-1",
+      providerId: "codex",
       onProviderRequest: async (request) => {
-        toolCalls.push({ requestId: request.requestId, method: request.method });
-        return { success: true };
+        toolCalls.push({
+          requestId: request.requestId,
+          method: request.method,
+          toolCall: request.toolCall,
+        });
+        return {
+          contentItems: [{ type: "inputText", text: "ok" }],
+          success: true,
+        };
       },
     });
     cleanup.push(() => runtime.shutdown());
@@ -785,7 +1034,7 @@ describe("EnvironmentAgentRuntime", () => {
   });
 
   it("only rejects requests for the exiting child, not siblings", async () => {
-    const runtime = new EnvironmentAgentRuntime({ threadId: "thread-1" });
+    const runtime = new EnvironmentAgentRuntime({ threadId: "thread-1", providerId: "codex" });
     cleanup.push(() => runtime.shutdown());
 
     // Child A: responds to initialize immediately, but delays thread/start
@@ -807,7 +1056,7 @@ describe("EnvironmentAgentRuntime", () => {
           "if (msg.method === 'initialize') {",
           "console.log(JSON.stringify({ id: msg.id, result: { capabilities: {} } }));",
           "} else if (msg.method === 'thread/start') {",
-          "setTimeout(() => console.log(JSON.stringify({ id: msg.id, result: { threadId: msg.params.threadId } })), 500);",
+          "setTimeout(() => console.log(JSON.stringify({ id: msg.id, result: { threadId: 'provider-thread-1' } })), 500);",
           "}",
           "}",
           "});",
@@ -829,7 +1078,8 @@ describe("EnvironmentAgentRuntime", () => {
         type: "thread.start",
         threadId: "thread-1",
         projectId: "proj-1",
-        params: { threadId: "provider-thread-1" },
+        request: createStartRequest("proj-1"),
+        context: createThreadContext("proj-1", "thread-1"),
         initialize: {
           method: "initialize",
           params: { clientInfo: { name: "bb", version: "0.0.1" } },
@@ -863,9 +1113,6 @@ describe("EnvironmentAgentRuntime", () => {
   });
 
   it("derives unique managed HOME dirs for specs differing only in files", async () => {
-    // When spec.env does not provide HOME, resolveProviderEnvironment falls
-    // back to process.env.HOME. To exercise the managed-HOME path we must
-    // clear it so that resolveManagedProviderHomeDir is used.
     const runtime = new EnvironmentAgentRuntime({ threadId: "thread-1" });
     cleanup.push(() => runtime.shutdown());
 
@@ -875,18 +1122,17 @@ describe("EnvironmentAgentRuntime", () => {
     });
     cleanup.push(unsubscribe);
 
-    // Two specs identical except for file content. Setting HOME="" forces
-    // the runtime to generate a managed HOME via the hash path.
+    // Two specs identical except for file content. When BB materializes
+    // provider files, the runtime should isolate the provider in a managed
+    // HOME unless the provider explicitly sets HOME itself.
     runtime.ensureProviderStatus({
       command: "node",
       args: ["-e", "console.log(process.env.HOME); process.stdin.resume();"],
-      env: { HOME: "" },
       files: [{ placement: "home", path: ".auth/token.json", content: '{"key":"aaa"}' }],
     });
     runtime.ensureProviderStatus({
       command: "node",
       args: ["-e", "console.log(process.env.HOME); process.stdin.resume();"],
-      env: { HOME: "" },
       files: [{ placement: "home", path: ".auth/token.json", content: '{"key":"bbb"}' }],
     });
 
@@ -913,7 +1159,7 @@ describe("EnvironmentAgentRuntime", () => {
     runtime.ensureProviderStatus({
       command: "node",
       args: ["-e", "console.log(process.env.HOME); process.stdin.resume();"],
-      env: { HOME: "", API_KEY: secretKey },
+      env: { API_KEY: secretKey },
       files: [{ placement: "home", path: ".config/auth.json", content: `{"apiKey":"${secretKey}"}` }],
     });
 
@@ -931,16 +1177,71 @@ describe("EnvironmentAgentRuntime", () => {
     expect(match![1]).toMatch(/^[0-9a-f]+$/);
   });
 
+  it("preserves an explicit provider HOME when files are materialized", async () => {
+    const runtime = new EnvironmentAgentRuntime({ threadId: "thread-1" });
+    cleanup.push(() => runtime.shutdown());
+
+    const lines: string[] = [];
+    const unsubscribe = runtime.subscribeToProviderStdout((line) => {
+      lines.push(line);
+    });
+    cleanup.push(unsubscribe);
+
+    runtime.ensureProviderStatus({
+      command: "node",
+      args: ["-e", "console.log(process.env.HOME); process.stdin.resume();"],
+      env: { HOME: "/tmp/bb-explicit-home" },
+      files: [{ placement: "home", path: ".config/auth.json", content: '{"token":"abc"}' }],
+    });
+
+    await expect.poll(() => lines.length).toBeGreaterThanOrEqual(1);
+    expect(lines).toContain("/tmp/bb-explicit-home");
+  });
+
+  it("derives CODEX_HOME from the managed provider HOME by default", async () => {
+    const runtime = new EnvironmentAgentRuntime({ threadId: "thread-1" });
+    cleanup.push(() => runtime.shutdown());
+
+    const lines: string[] = [];
+    const unsubscribe = runtime.subscribeToProviderStdout((line) => {
+      lines.push(line);
+    });
+    cleanup.push(unsubscribe);
+
+    runtime.ensureProviderStatus({
+      command: "node",
+      args: [
+        "-e",
+        "console.log(JSON.stringify({ HOME: process.env.HOME, CODEX_HOME: process.env.CODEX_HOME })); process.stdin.resume();",
+      ],
+      files: [{ placement: "home", path: ".config/auth.json", content: '{"token":"abc"}' }],
+    });
+
+    await expect.poll(() => lines.length).toBeGreaterThanOrEqual(1);
+    const payload = JSON.parse(lines[0] ?? "{}") as { HOME?: string; CODEX_HOME?: string };
+    expect(payload.HOME).toContain("provider-home-");
+    expect(payload.CODEX_HOME).toBe(`${payload.HOME}/.codex`);
+  });
+
   it("resolves provider server requests through the callback", async () => {
-    const requests: Array<{ requestId: string | number; method: string; params?: unknown }> = [];
+    const requests: Array<{
+      requestId: string | number;
+      method: string;
+      params?: unknown;
+      providerId?: string;
+      normalizedMethod?: string;
+      toolCall?: unknown;
+    }> = [];
     const stdout: string[] = [];
     const runtime = new EnvironmentAgentRuntime({
       threadId: "thread-1",
+      providerId: "codex",
       providerCommand: "node",
       providerArgs: [
         "-e",
         [
           "console.log(JSON.stringify({ id: 61, method: 'item/tool/call', params: { tool: 'echo', arguments: { text: 'hi' } } }));",
+          "console.log(JSON.stringify({ id: 62, method: 'item/tool/call', params: { threadId: 'provider-thread-1', turnId: 'turn-1', callId: 'call-1', tool: 'echo', arguments: { text: 'hi' } } }));",
           "process.stdin.setEncoding('utf8');",
           "let buffer='';",
           "process.stdin.on('data',chunk=>{",
@@ -967,13 +1268,102 @@ describe("EnvironmentAgentRuntime", () => {
 
     runtime.start();
 
-    await expect.poll(() => requests).toContainEqual({
-      requestId: 61,
-      method: "item/tool/call",
-      params: { tool: "echo", arguments: { text: "hi" } },
-    });
+    await expect
+      .poll(() =>
+        requests.find((request) => {
+          return request.requestId === 62;
+        }),
+      )
+      .toEqual({
+        requestId: 62,
+        method: "item/tool/call",
+        params: {
+          threadId: "provider-thread-1",
+          turnId: "turn-1",
+          callId: "call-1",
+          tool: "echo",
+          arguments: { text: "hi" },
+        },
+        providerId: "codex",
+        normalizedMethod: "item/tool/call",
+        toolCall: {
+          requestId: 62,
+          threadId: "provider-thread-1",
+          turnId: "turn-1",
+          callId: "call-1",
+          tool: "echo",
+          arguments: { text: "hi" },
+        },
+      });
     await expect.poll(() =>
-      stdout.some((line) => line.includes('"id":61') && line.includes('"result"')),
+      stdout.some((line) => line.includes('"id":62') && line.includes('"result"')),
     ).toBe(true);
+  });
+
+  it("decodes provider server requests using the child provider identity in shared environments", async () => {
+    const requests: Array<{
+      providerId?: string;
+      method: string;
+      toolCall?: unknown;
+    }> = [];
+    const providerScript = [
+      "console.log(JSON.stringify({ id: 77, method: 'item/tool/call', params: { threadId: 'provider-thread-shared', turnId: 'turn-1', callId: 'call-1', tool: 'echo', arguments: { text: process.env.ROLE } } }));",
+      "process.stdin.setEncoding('utf8');",
+      "let buffer='';",
+      "process.stdin.on('data',chunk=>{",
+      "buffer+=chunk;",
+      "const parts=buffer.split(/\\r\\n|\\n|\\r/g);",
+      "buffer=parts.pop() ?? '';",
+      "for (const line of parts) { if (line.trim()) console.log(line); }",
+      "});",
+      "setTimeout(() => process.exit(0), 100);",
+    ].join("");
+
+    const runtime = new EnvironmentAgentRuntime({
+      threadId: "owner-thread",
+      providerId: "codex",
+      onProviderRequest: async (request) => {
+        requests.push(request);
+        return {
+          success: true,
+          contentItems: [{ type: "inputText", text: "ok" }],
+        };
+      },
+    });
+    cleanup.push(() => runtime.shutdown());
+
+    await runtime.executeCommand({
+      meta: {
+        protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+        commandId: "ensure-claude",
+        idempotencyKey: "ensure-claude",
+        sentAt: Date.now(),
+      },
+      command: {
+        type: "provider.ensure",
+        providerId: "claude-code",
+        forThreadId: "thread-claude",
+        command: "node",
+        args: ["-e", providerScript],
+        env: { ROLE: "provider-claude" },
+      },
+    });
+
+    await expect
+      .poll(
+        () =>
+          requests.find((request) => request.providerId === "claude-code"),
+        { timeout: 5_000 },
+      )
+      .toMatchObject({
+        providerId: "claude-code",
+        method: "item/tool/call",
+        toolCall: {
+          threadId: "provider-thread-shared",
+          turnId: "turn-1",
+          callId: "call-1",
+          tool: "echo",
+        },
+      });
   });
 });

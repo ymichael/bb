@@ -43,20 +43,14 @@ export function HireManagerModal({
     }
   }, [providers, selectedProviderId]);
 
-  const selectedProvider = useMemo(
-    () => providers.find((p) => p.id === selectedProviderId),
-    [providers, selectedProviderId],
-  );
-
   const hasMultipleProviders = providers.length >= 2;
-  const supportsModelList = selectedProvider?.capabilities.supportsModelList ?? false;
 
   const modelsQuery = useAvailableModels(
     hasMultipleProviders ? selectedProviderId || undefined : undefined,
   );
   const models = useMemo(
-    () => (supportsModelList && modelsQuery.data ? modelsQuery.data : []),
-    [modelsQuery.data, supportsModelList],
+    () => modelsQuery.data ?? [],
+    [modelsQuery.data],
   );
 
   const providerOptions = useMemo(
@@ -143,7 +137,7 @@ export function HireManagerModal({
           </DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-4 py-2">
-          {supportsModelList && modelOptions.length > 0 ? (
+          {modelOptions.length > 0 ? (
             <div className="flex flex-col gap-1.5">
               <span className="text-sm font-medium">Provider & Model</span>
               <PromptProviderModelPicker

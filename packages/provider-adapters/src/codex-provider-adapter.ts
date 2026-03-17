@@ -249,21 +249,12 @@ export function createCodexProviderAdapter(
   opts?: CreateCodexProviderAdapterOptions,
 ): ProviderAdapter {
   const capabilities: ProviderCapabilities = {
-    supportsSteer: true,
     supportsRename: true,
-    supportsModelList: true,
-    supportsReasoningLevels: true,
     supportsServiceTier: true,
-    supportsMultimodalInput: true,
-    supportsDynamicTools: true,
-    supportsToolCallRequests: true,
     ...(opts?.capabilities ?? {}),
   };
-  const supportsSteer = capabilities.supportsSteer;
   const supportsRename = capabilities.supportsRename;
-  const listModels =
-    opts?.listModels ??
-    (capabilities.supportsModelList ? listCodexModels : async () => []);
+  const listModels = opts?.listModels ?? listCodexModels;
 
   return {
     id: opts?.id ?? "codex",
@@ -306,7 +297,7 @@ export function createCodexProviderAdapter(
     threadStartMethod: "thread/start",
     threadResumeMethod: "thread/resume",
     turnStartMethod: "turn/start",
-    turnSteerMethod: supportsSteer ? "turn/steer" : undefined,
+    turnSteerMethod: "turn/steer",
     threadNameSetMethod: supportsRename ? "thread/name/set" : undefined,
     createThreadStartParams(
       req: SpawnThreadRequest,
@@ -370,19 +361,17 @@ export function createCodexProviderAdapter(
         options,
       );
     },
-    createTurnSteerParams: supportsSteer
-      ? (
-          providerThreadId: string,
-          expectedTurnId: string,
-          input: PromptInput[],
-        ): Record<string, unknown> => {
-          return {
-            threadId: providerThreadId,
-            expectedTurnId,
-            input,
-          };
-        }
-      : undefined,
+    createTurnSteerParams: (
+      providerThreadId: string,
+      expectedTurnId: string,
+      input: PromptInput[],
+    ): Record<string, unknown> => {
+      return {
+        threadId: providerThreadId,
+        expectedTurnId,
+        input,
+      };
+    },
     createThreadNameSetParams: supportsRename
       ? (providerThreadId: string, title: string): Record<string, unknown> => {
           return {

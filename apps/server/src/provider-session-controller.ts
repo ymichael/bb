@@ -7,32 +7,26 @@ import {
   type EnvironmentAgentCommandEnvelope,
   type EnvironmentAgentEventEnvelope,
   type EnvironmentAgentProviderLaunchWrapper,
-  type EnvironmentAgentProviderSpec,
-  type EnvironmentAgentStatusSnapshot,
 } from "@bb/environment-daemon";
 import {
   assertNever,
   createProviderEventEnvelope,
   extractTurnIdFromPersistedEventData,
-  type AvailableModel,
   type PromptInput,
-  type ProviderExecutionOptions,
+  type ProviderAdapter,
   type ProviderDynamicTool,
+  type ProviderExecutionOptions,
   type ProviderThreadContext,
+  type ProviderToolCallResponse,
   type SpawnThreadRequest,
-  type SystemProviderInfo,
   type Thread,
   type ThreadEvent,
   type ThreadEventData,
   type ThreadEventType,
 } from "@bb/core";
-import type { ProviderAdapter } from "./provider-adapter.js";
-import type { ProviderRuntimeNotification } from "./provider-runtime.js";
-import type { ProviderToolHost } from "./provider-tool-host.js";
+import type { ProviderToolHost } from "@bb/provider-adapters";
 
-const MODEL_LIST_CACHE_TTL_MS = 60_000;
-
-export type AgentServerSessionErrorCode =
+export type ProviderSessionErrorCode =
   | "inactive_session"
   | "no_active_turn"
   | "unsupported_operation"
@@ -41,17 +35,17 @@ export type AgentServerSessionErrorCode =
   | "provider_unavailable"
   | "missing_provider_thread";
 
-export class AgentServerSessionError extends Error {
+export class ProviderSessionError extends Error {
   constructor(
-    readonly code: AgentServerSessionErrorCode,
+    readonly code: ProviderSessionErrorCode,
     message: string,
   ) {
     super(message);
-    this.name = "AgentServerSessionError";
+    this.name = "ProviderSessionError";
   }
 }
 
-export interface AgentServerNotification {
+export interface ProviderSessionNotification {
   method: string;
   normalizedMethod: string;
   eventType: ThreadEventType;
@@ -64,18 +58,22 @@ export interface AgentServerNotification {
   turnId?: string;
 }
 
-export interface AgentServerOptions {
+export interface ProviderSessionControllerOptions {
   provider: ProviderAdapter;
-  providerCatalog?: SystemProviderInfo[];
   dynamicTools?: ProviderDynamicTool[];
   resolveDynamicTools?: (args: {
     request: SpawnThreadRequest;
     context: ProviderThreadContext;
   }) => ProviderDynamicTool[] | undefined;
   toolHost?: ProviderToolHost;
-  onNotification?: (threadId: string, event: AgentServerNotification) => void;
+  onNotification?: (threadId: string, event: ProviderSessionNotification) => void;
   onProviderStderrLine?: (threadId: string, line: string) => void;
   logger?: Pick<Console, "warn" | "error">;
+}
+
+interface ProviderRuntimeNotification {
+  method: string;
+  params?: unknown;
 }
 
 function toProviderEventType(method: string): ThreadEventType {
@@ -102,72 +100,16 @@ function isMissingProviderThreadMessage(message: string): boolean {
   );
 }
 
-export class AgentServer {
+export class ProviderSessionController {
   private readonly authRefreshWarningThreadIds = new Set<string>();
   private readonly suppressedAuthStderrDepth = new Map<string, number>();
   private readonly rpcIdPrefix = randomUUID();
   private rpcIdCounter = 0;
-  private readonly providerCatalog: SystemProviderInfo[];
-  private cachedModels:
-    | {
-        expiresAt: number;
-        value: AvailableModel[];
-      }
-    | undefined;
-  private pendingModelsRequest: Promise<AvailableModel[]> | null = null;
 
-  constructor(private readonly opts: AgentServerOptions) {
-    this.providerCatalog =
-      opts.providerCatalog ??
-      [
-        {
-          id: opts.provider.id,
-          displayName: opts.provider.displayName,
-          capabilities: { ...opts.provider.capabilities },
-        },
-      ];
-  }
+  constructor(private readonly opts: ProviderSessionControllerOptions) {}
 
-  getProviderInfo(): SystemProviderInfo {
-    return {
-      id: this.opts.provider.id,
-      displayName: this.opts.provider.displayName,
-      capabilities: { ...this.opts.provider.capabilities },
-    };
-  }
-
-  listProviders(): SystemProviderInfo[] {
-    return this.providerCatalog.map((provider) => ({
-      ...provider,
-      capabilities: { ...provider.capabilities },
-    }));
-  }
-
-  async listModels(): Promise<AvailableModel[]> {
-    if (!this.opts.provider.capabilities.supportsModelList) {
-      return [];
-    }
-    const now = Date.now();
-    if (this.cachedModels && this.cachedModels.expiresAt > now) {
-      return this.cachedModels.value;
-    }
-    if (this.pendingModelsRequest) {
-      return this.pendingModelsRequest;
-    }
-
-    this.pendingModelsRequest = this.opts.provider.listModels()
-      .then((models) => {
-        this.cachedModels = {
-          value: models,
-          expiresAt: Date.now() + MODEL_LIST_CACHE_TTL_MS,
-        };
-        return models;
-      })
-      .finally(() => {
-        this.pendingModelsRequest = null;
-      });
-
-    return this.pendingModelsRequest;
+  get provider(): ProviderAdapter {
+    return this.opts.provider;
   }
 
   normalizePromptInput(input: PromptInput[]): PromptInput[] {
@@ -184,24 +126,10 @@ export class AgentServer {
           });
           break;
         case "image":
-          if (this.opts.provider.capabilities.supportsMultimodalInput) {
-            normalized.push(chunk);
-          } else {
-            normalized.push({
-              type: "text",
-              text: `Attached image URL: ${chunk.url}`,
-            });
-          }
+          normalized.push(chunk);
           break;
         case "localImage":
-          if (this.opts.provider.capabilities.supportsMultimodalInput) {
-            normalized.push(chunk);
-          } else {
-            normalized.push({
-              type: "text",
-              text: `Attached local image: ${chunk.path}`,
-            });
-          }
+          normalized.push(chunk);
           break;
         default:
           assertNever(chunk);
@@ -243,19 +171,17 @@ export class AgentServer {
       type: "thread.start",
       threadId: args.threadId,
       projectId: args.projectId,
-      params: this.opts.provider.createThreadStartParams(
-        args.request,
-        args.context,
+      request: args.request,
+      context: args.context,
+      dynamicTools:
         this.opts.resolveDynamicTools?.({
           request: args.request,
           context: args.context,
         }) ?? this.opts.dynamicTools,
-      ),
-      initialize: this.buildInitializeRequest(),
     });
     const providerThreadId = this.opts.provider.extractThreadIdFromResult(ack.result);
     if (!providerThreadId) {
-      throw new AgentServerSessionError(
+      throw new ProviderSessionError(
         "provider_rpc_error",
         `[thread ${args.threadId}] RPC response missing thread ID. Response: ${JSON.stringify(ack.result)}`,
       );
@@ -283,17 +209,13 @@ export class AgentServer {
       threadId: args.threadId,
       projectId: args.projectId,
       providerThreadId: args.providerThreadId,
-      params: this.opts.provider.createThreadResumeParams(
-        args.providerThreadId,
-        args.context,
-        args.options,
-        args.resumePath,
-      ),
-      initialize: this.buildInitializeRequest(),
+      context: args.context,
+      ...(args.options ? { options: args.options } : {}),
+      ...(args.resumePath ? { resumePath: args.resumePath } : {}),
     });
     const providerThreadId = this.opts.provider.extractThreadIdFromResult(ack.result);
     if (!providerThreadId) {
-      throw new AgentServerSessionError(
+      throw new ProviderSessionError(
         "provider_rpc_error",
         `[thread ${args.threadId}] RPC response missing thread ID. Response: ${JSON.stringify(ack.result)}`,
       );
@@ -323,24 +245,23 @@ export class AgentServer {
     const steerSupported = Boolean(
       this.opts.provider.turnSteerMethod && this.opts.provider.createTurnSteerParams,
     );
-    const shouldUseSteer =
-      requestedMode !== "start" &&
+    const canAutoSteer =
       steerSupported &&
       Boolean(activeTurnId) &&
-      (requestedMode === "steer" || !hasExecutionOverrides);
+      !hasExecutionOverrides;
 
     if (requestedMode === "steer") {
       if (!steerSupported) {
-        throw new AgentServerSessionError(
+        throw new ProviderSessionError(
           "unsupported_operation",
           `${this.opts.provider.displayName} does not support turn/steer`,
         );
       }
       if (!activeTurnId) {
-        throw new AgentServerSessionError("no_active_turn", "No active turn");
+        throw new ProviderSessionError("no_active_turn", "No active turn");
       }
       if (hasExecutionOverrides) {
-        throw new AgentServerSessionError(
+        throw new ProviderSessionError(
           "unsupported_operation",
           "Tell mode 'steer' does not support model, speed, or reasoning overrides",
         );
@@ -353,34 +274,22 @@ export class AgentServer {
       args.providerLaunch,
     );
 
-    if (shouldUseSteer && activeTurnId) {
-      await this.sendEnvironmentAgentCommand(args.client, {
-        type: "turn.steer",
-        threadId: args.threadId,
-        providerThreadId: args.providerThreadId,
-        turnId: activeTurnId,
-        params: this.opts.provider.createTurnSteerParams!(
-          args.providerThreadId,
-          activeTurnId,
-          args.input,
-        ),
-        initialize: this.buildInitializeRequest(),
-      });
-      return { mode: "steer", providerThreadId: args.providerThreadId };
-    }
-
-    await this.sendEnvironmentAgentCommand(args.client, {
-      type: "turn.start",
+    const ack = await this.sendEnvironmentAgentCommand(args.client, {
+      type: "turn.run",
       threadId: args.threadId,
       providerThreadId: args.providerThreadId,
-      params: this.opts.provider.createTurnStartParams(
-        args.providerThreadId,
-        args.input,
-        args.options,
-      ),
-      initialize: this.buildInitializeRequest(),
+      requestedMode,
+      ...(requestedMode === "steer" && activeTurnId ? { activeTurnId } : {}),
+      input: args.input,
+      ...(args.options ? { options: args.options } : {}),
+      ...(canAutoSteer && activeTurnId ? { activeTurnId } : {}),
     });
-    return { mode: "start", providerThreadId: args.providerThreadId };
+    return {
+      mode:
+        this.extractTurnModeFromResult(ack.result) ??
+        (requestedMode === "steer" ? "steer" : "start"),
+      providerThreadId: args.providerThreadId,
+    };
   }
 
   async renameThreadCommand(args: {
@@ -404,11 +313,6 @@ export class AgentServer {
       threadId: args.threadId,
       providerThreadId: args.providerThreadId,
       title: args.title,
-      params: this.opts.provider.createThreadNameSetParams(
-        args.providerThreadId,
-        args.title,
-      ),
-      initialize: this.buildInitializeRequest(),
     });
   }
 
@@ -420,19 +324,19 @@ export class AgentServer {
     params?: unknown;
   }): Promise<unknown> {
     if (!this.opts.provider.decodeToolCallRequest) {
-      throw new AgentServerSessionError(
+      throw new ProviderSessionError(
         "unsupported_operation",
         `${this.opts.provider.displayName} does not support provider tool calls`,
       );
     }
     if (!this.opts.provider.encodeToolCallResponse) {
-      throw new AgentServerSessionError(
+      throw new ProviderSessionError(
         "unsupported_operation",
         `${this.opts.provider.displayName} does not support provider tool call responses`,
       );
     }
     if (!this.opts.toolHost) {
-      throw new AgentServerSessionError(
+      throw new ProviderSessionError(
         "unsupported_operation",
         "No provider tool host is configured",
       );
@@ -444,7 +348,7 @@ export class AgentServer {
       args.params,
     );
     if (!call) {
-      throw new AgentServerSessionError(
+      throw new ProviderSessionError(
         "unsupported_operation",
         `Unhandled provider request method ${args.method}`,
       );
@@ -474,7 +378,7 @@ export class AgentServer {
 
   isMissingProviderThreadError(error: unknown): boolean {
     return (
-      error instanceof AgentServerSessionError &&
+      error instanceof ProviderSessionError &&
       (
         error.code === "missing_provider_thread" ||
         (error.code === "provider_rpc_error" &&
@@ -509,7 +413,10 @@ export class AgentServer {
     }
   }
 
-  private handleNotification(threadId: string, msg: ProviderRuntimeNotification): void {
+  private handleNotification(
+    threadId: string,
+    msg: ProviderRuntimeNotification,
+  ): void {
     if (typeof msg.method !== "string") return;
 
     const normalizedMethod = this.opts.provider.normalizeEventType(msg.method);
@@ -569,46 +476,18 @@ export class AgentServer {
     this.opts.logger?.error(`[thread ${threadId}] stderr: ${line}`);
   }
 
-  private buildInitializeRequest() {
-    return {
-      method: this.opts.provider.initializeMethod,
-      params:
-        this.opts.provider.createInitializeParams?.(this.opts.provider.clientInfo) ?? {
-          clientInfo: this.opts.provider.clientInfo,
-        },
-    };
-  }
-
   private async ensureProviderRunningForCommand(
     client: EnvironmentAgentClient,
     context: ProviderThreadContext,
     providerLaunch?: EnvironmentAgentProviderLaunchWrapper,
   ): Promise<void> {
-    const spec = await this.buildProviderSpec(context, providerLaunch);
-    await client.ensureProviderRunning(spec, context.threadId);
-  }
-
-  private async buildProviderSpec(
-    context: ProviderThreadContext,
-    providerLaunch?: EnvironmentAgentProviderLaunchWrapper,
-  ): Promise<EnvironmentAgentProviderSpec> {
-    const launchConfig = await this.opts.provider.resolveLaunchConfiguration?.(context);
-    return {
-      command: this.opts.provider.processCommand,
-      args: [...this.opts.provider.processArgs],
-      ...(launchConfig?.env ? { env: { ...launchConfig.env } } : {}),
-      ...(launchConfig?.files
-        ? {
-            files: launchConfig.files.map((file) => ({ ...file })),
-          }
-        : {}),
-      ...(providerLaunch
-        ? {
-            launchCommand: providerLaunch.command,
-            launchArgs: [...providerLaunch.args],
-          }
-        : {}),
-    };
+    await this.sendEnvironmentAgentCommand(client, {
+      type: "provider.ensure",
+      providerId: this.opts.provider.id,
+      context,
+      ...(providerLaunch ? { providerLaunch } : {}),
+      forThreadId: context.threadId,
+    });
   }
 
   private async sendEnvironmentAgentCommand(
@@ -632,26 +511,43 @@ export class AgentServer {
     throw this.toCommandError(ack);
   }
 
-  private toCommandError(ack: EnvironmentAgentCommandAck): AgentServerSessionError {
+  private toCommandError(ack: EnvironmentAgentCommandAck): ProviderSessionError {
     const message = ack.message ?? "Environment-agent command failed";
     switch (ack.errorCode) {
       case "missing_provider_thread":
-        return new AgentServerSessionError("missing_provider_thread", message);
+        return new ProviderSessionError("missing_provider_thread", message);
       case "provider_timeout":
-        return new AgentServerSessionError("provider_timeout", message);
+        return new ProviderSessionError("provider_timeout", message);
       case "provider_unavailable":
-        return new AgentServerSessionError("provider_unavailable", message);
+        return new ProviderSessionError("provider_unavailable", message);
       case "unsupported_operation":
-        return new AgentServerSessionError("unsupported_operation", message);
+        return new ProviderSessionError("unsupported_operation", message);
       case "provider_rpc_error":
       case undefined:
         if (isMissingProviderThreadMessage(message)) {
-          return new AgentServerSessionError("missing_provider_thread", message);
+          return new ProviderSessionError("missing_provider_thread", message);
         }
-        return new AgentServerSessionError("provider_rpc_error", message);
+        return new ProviderSessionError("provider_rpc_error", message);
       default:
-        return new AgentServerSessionError("provider_rpc_error", message);
+        return new ProviderSessionError("provider_rpc_error", message);
     }
+  }
+
+  private extractTurnModeFromResult(
+    result: unknown,
+  ): "steer" | "start" | undefined {
+    if (
+      result !== null &&
+      typeof result === "object" &&
+      !Array.isArray(result) &&
+      "mode" in result
+    ) {
+      const mode = (result as { mode?: unknown }).mode;
+      if (mode === "steer" || mode === "start") {
+        return mode;
+      }
+    }
+    return undefined;
   }
 
   private consumeSuppressedAuthStderrLine(threadId: string, line: string): boolean {
@@ -675,4 +571,15 @@ export class AgentServer {
     }
     return delta;
   }
+}
+
+export function isProviderSessionMissingThreadError(error: unknown): boolean {
+  return (
+    error instanceof ProviderSessionError &&
+    (
+      error.code === "missing_provider_thread" ||
+      (error.code === "provider_rpc_error" &&
+        isMissingProviderThreadMessage(error.message))
+    )
+  );
 }

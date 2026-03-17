@@ -1,6 +1,6 @@
 import { expect } from "vitest";
 import type { Thread } from "@bb/core";
-import { ProviderToolHost } from "@bb/agent-server";
+import { ProviderToolHost } from "@bb/provider-adapters";
 import {
   createProject,
   listThreadEvents,

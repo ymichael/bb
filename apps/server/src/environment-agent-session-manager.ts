@@ -10,6 +10,11 @@ export interface OpenEnvironmentAgentSessionInput {
   agentId: string;
   agentInstanceId: string;
   protocolVersion: number;
+  workerName?: string;
+  workerVersion?: string;
+  workerBuildId?: string;
+  providerMetadata?: unknown;
+  selectedCapabilities?: unknown;
   controlBaseUrl?: string;
   controlAuthToken?: string;
   leaseTtlMs: number;
@@ -77,6 +82,11 @@ export class EnvironmentAgentSessionManager {
       agentId: args.agentId,
       agentInstanceId: args.agentInstanceId,
       protocolVersion: args.protocolVersion,
+      workerName: args.workerName,
+      workerVersion: args.workerVersion,
+      workerBuildId: args.workerBuildId,
+      providerMetadata: args.providerMetadata,
+      selectedCapabilities: args.selectedCapabilities,
       controlBaseUrl: args.controlBaseUrl,
       controlAuthToken: args.controlAuthToken,
       leaseExpiresAt: now + args.leaseTtlMs,

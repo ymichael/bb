@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import type { ProviderToolCallResponse } from "@bb/core";
 import type {
   EnvironmentAgentCursorPosition,
   EnvironmentAgentCursorRepository,
@@ -6,8 +7,11 @@ import type {
 } from "@bb/db";
 import {
   ENVIRONMENT_AGENT_SESSION_PROTOCOL,
-  ENVIRONMENT_AGENT_SESSION_PROTOCOL_VERSION,
   ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+  ENVIRONMENT_AGENT_SESSION_SUPPORTED_PROTOCOL_VERSIONS,
+  negotiateEnvironmentAgentSessionCapabilities,
+  selectEnvironmentAgentSessionProtocolVersion,
+  type EnvironmentAgentSessionCapabilities,
   type EnvironmentAgentSessionCommandAckPayload,
   type EnvironmentAgentSessionCommandBatchMessage,
   type EnvironmentAgentSessionCommandResultPayload,
@@ -37,7 +41,11 @@ export interface EnvironmentAgentSessionServiceOptions {
   providerRequestHandler?: (args: {
     threadId: string;
     request: EnvironmentAgentSessionProviderRequestPayload;
-  }) => Promise<{ result: unknown } | { errorCode?: string; errorMessage: string }>;
+  }) => Promise<
+    | { result: unknown }
+    | { toolCallResponse: ProviderToolCallResponse }
+    | { errorCode?: string; errorMessage: string }
+  >;
   resolveEnvironmentId?: (threadId: string) => string | undefined;
   listAttachedThreadIds?: (environmentId: string) => string[];
   onSessionInvalidated?: (session: EnvironmentAgentSessionRecord) => void;
@@ -129,7 +137,11 @@ export class EnvironmentAgentSessionService {
       threadId: string;
       request: EnvironmentAgentSessionProviderRequestPayload;
     },
-  ) => Promise<{ result: unknown } | { errorCode?: string; errorMessage: string }>;
+  ) => Promise<
+    | { result: unknown }
+    | { toolCallResponse: ProviderToolCallResponse }
+    | { errorCode?: string; errorMessage: string }
+  >;
   private readonly onSessionInvalidated?: (
     session: EnvironmentAgentSessionRecord,
   ) => void;
@@ -203,11 +215,11 @@ export class EnvironmentAgentSessionService {
     welcome: EnvironmentAgentSessionWelcomeMessage;
   } {
     const now = args.now ?? this.clock();
-    if (
-      !args.payload.supportedProtocolVersions.includes(
-        ENVIRONMENT_AGENT_SESSION_PROTOCOL_VERSION,
-      )
-    ) {
+    const selectedProtocolVersion = selectEnvironmentAgentSessionProtocolVersion({
+      supportedByServer: ENVIRONMENT_AGENT_SESSION_SUPPORTED_PROTOCOL_VERSIONS,
+      supportedByAgent: args.payload.supportedProtocolVersions,
+    });
+    if (selectedProtocolVersion === undefined) {
       throw new Error("No compatible environment-agent session protocol version");
     }
 
@@ -220,12 +232,28 @@ export class EnvironmentAgentSessionService {
       );
     }
     const environmentId = this.getResolvedEnvironmentId(args.threadId);
+    const selectedCapabilities: EnvironmentAgentSessionCapabilities =
+      negotiateEnvironmentAgentSessionCapabilities({
+        requested: args.payload.capabilities,
+        fallback: {
+          worker: args.payload.worker,
+          providers: args.payload.providers,
+          controlEndpoint: args.payload.controlEndpoint,
+        },
+      });
     const opened = this.sessions.openSession({
       threadId: args.threadId,
       ...(environmentId ? { environmentId } : {}),
       agentId: args.payload.agentId,
       agentInstanceId: args.payload.agentInstanceId,
-      protocolVersion: ENVIRONMENT_AGENT_SESSION_PROTOCOL_VERSION,
+      protocolVersion: selectedProtocolVersion,
+      workerName: args.payload.worker?.name,
+      workerVersion: args.payload.worker?.version,
+      workerBuildId: args.payload.worker?.buildId,
+      ...(args.payload.providers !== undefined
+        ? { providerMetadata: args.payload.providers }
+        : {}),
+      selectedCapabilities,
       controlBaseUrl: args.payload.controlEndpoint?.baseUrl,
       controlAuthToken: args.payload.controlEndpoint?.authToken,
       leaseTtlMs: this.leaseTtlMs,
@@ -250,7 +278,8 @@ export class EnvironmentAgentSessionService {
         payload: {
           leaseTtlMs: this.leaseTtlMs,
           heartbeatIntervalMs: this.heartbeatIntervalMs,
-          protocolVersion: ENVIRONMENT_AGENT_SESSION_PROTOCOL_VERSION,
+          protocolVersion: selectedProtocolVersion,
+          selectedCapabilities,
           channels: this.listAllowedChannelIds(args.threadId).map((channelId) => {
             const bootstrap = bootstrapByChannelId.get(channelId);
             let cursor = this.cursors.getByThreadId(channelId);
@@ -590,6 +619,12 @@ export class EnvironmentAgentSessionService {
               ok: true,
               result: response.result,
             }
+          : "toolCallResponse" in response
+            ? {
+                requestId: args.payload.requestId,
+                ok: true,
+                toolCallResponse: response.toolCallResponse,
+              }
           : {
               requestId: args.payload.requestId,
               ok: false,

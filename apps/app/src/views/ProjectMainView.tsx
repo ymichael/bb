@@ -68,8 +68,6 @@ export function ProjectMainView() {
     reasoningOptions,
     sandboxOptions,
     environmentOptions,
-    supportsModelList,
-    supportsReasoningLevels,
     supportsServiceTier,
   } = usePromptModelReasoning({ scope: "new-thread", projectId });
   const environmentSelectorOptions = useMemo(
@@ -242,7 +240,7 @@ export function ProjectMainView() {
         ...(hasMultipleProviders && selectedProviderId ? { providerId: selectedProviderId } : {}),
         model: activeModel?.model,
         ...(supportsServiceTier && serviceTier ? { serviceTier } : {}),
-        ...(supportsReasoningLevels ? { reasoningLevel } : {}),
+        reasoningLevel,
         sandboxMode,
         ...(environmentId ? { environmentKind: environmentId } : {}),
       });
@@ -296,7 +294,6 @@ export function ProjectMainView() {
               selectedProviderId={selectedProviderId}
               onSelectedProviderChange={setSelectedProviderId}
               hasMultipleProviders={hasMultipleProviders}
-              supportsModelList={supportsModelList}
               activeModel={activeModel}
               selectedModel={selectedModel}
               modelOptions={modelOptions}
@@ -304,7 +301,6 @@ export function ProjectMainView() {
               serviceTier={serviceTier}
               onServiceTierChange={setServiceTier}
               supportsServiceTier={supportsServiceTier}
-              supportsReasoningLevels={supportsReasoningLevels}
               reasoningLevel={reasoningLevel}
               reasoningOptions={reasoningOptions}
               onReasoningLevelChange={setReasoningLevel}

@@ -4,6 +4,15 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import {
+  isThreadProviderId,
+  type ProviderAdapter,
+  type ProviderToolCallResponse,
+} from "@bb/core";
+import {
+  createProviderAdapter,
+  listAvailableProviderInfos,
+} from "@bb/provider-adapters";
+import {
   ENVIRONMENT_AGENT_PROTOCOL_VERSION,
   type EnvironmentAgentCommand,
   type EnvironmentAgentCommandEnvelope,
@@ -18,20 +27,32 @@ import {
   type EnvironmentAgentProviderStatus,
   type EnvironmentAgentStatusSnapshot,
 } from "./protocol.js";
+import { getEnvironmentAgentProviderSemantics } from "./provider-semantics.js";
 
 type EnvironmentAgentProviderEnsureCommand = Extract<
   EnvironmentAgentCommand,
   { type: "provider.ensure" }
 >;
+type EnvironmentAgentProviderModelListCommand = Extract<
+  EnvironmentAgentCommand,
+  { type: "provider.list_models" }
+>;
+type EnvironmentAgentProviderCatalogCommand = Extract<
+  EnvironmentAgentCommand,
+  { type: "provider.list_catalog" }
+>;
 type EnvironmentAgentRpcCommand = Exclude<
   EnvironmentAgentCommand,
-  EnvironmentAgentProviderEnsureCommand
+  | EnvironmentAgentProviderEnsureCommand
+  | EnvironmentAgentProviderModelListCommand
+  | EnvironmentAgentProviderCatalogCommand
 >;
 
 export interface EnvironmentAgentRuntimeOptions {
   threadId?: string;
   projectId?: string;
   environmentId?: string;
+  providerId?: string;
   daemonConnection?: EnvironmentAgentDaemonConnectionConfig;
   providerCommand?: string;
   providerArgs?: string[];
@@ -41,6 +62,9 @@ export interface EnvironmentAgentRuntimeOptions {
     requestId: string | number;
     method: string;
     params?: unknown;
+    providerId?: string;
+    normalizedMethod?: string;
+    toolCall?: import("@bb/core").ProviderToolCallRequest;
   }) => Promise<unknown> | unknown;
   onStdoutLine?: (line: string) => void;
   onStderrLine?: (line: string) => void;
@@ -56,7 +80,9 @@ export interface EnvironmentAgentRuntimeQuiescenceSnapshot {
 }
 
 export class EnvironmentAgentRuntime {
-  private readonly threadIdByProviderThreadId = new Map<string, string>();
+  private readonly threadIdByProviderThreadKey = new Map<string, string>();
+  private readonly threadIdToProviderId = new Map<string, string>();
+  private readonly childToProviderId = new Map<ChildProcess, string>();
   private sequence = 0;
   private providerRequestId = 0;
   private readonly providerInitializedPids = new Set<number>();
@@ -284,9 +310,14 @@ export class EnvironmentAgentRuntime {
       const result =
         envelope.command.type === "provider.ensure"
           ? this.ensureProviderStatus(
-              this.toProviderEnsureSpec(envelope.command),
+              await this.toProviderEnsureSpec(envelope.command),
               envelope.command.forThreadId,
+              envelope.command.providerId,
             )
+          : envelope.command.type === "provider.list_models"
+            ? await this.listProviderModels(envelope.command.providerId)
+          : envelope.command.type === "provider.list_catalog"
+            ? this.listProviderCatalog()
           : await this.executeRpcCommand(envelope.command);
       this.learnProviderThreadMapping(envelope.command, result);
       this.trackAcceptedCommand(envelope.command);
@@ -341,14 +372,15 @@ export class EnvironmentAgentRuntime {
     switch (command.type) {
       case "thread.start":
       case "thread.resume":
-      case "turn.start":
-      case "turn.steer":
+      case "turn.run":
         this.turnState = "active";
         return;
       case "thread.stop":
         this.turnState = "idle";
         return;
       case "provider.ensure":
+      case "provider.list_models":
+      case "provider.list_catalog":
       case "thread.rename":
       case "workspace.status":
       case "workspace.diff":
@@ -407,11 +439,17 @@ export class EnvironmentAgentRuntime {
   ensureProviderStatus(
     spec?: EnvironmentAgentProviderSpec,
     forThreadId?: string,
+    providerId?: string,
   ): EnvironmentAgentProviderStatus {
     const launchedBefore = this.getProviderStatus().running;
     const child = this.ensureProviderRunning(spec);
     if (child && forThreadId) {
       this.threadIdToChild.set(forThreadId, child);
+      const resolvedProviderId = providerId?.trim() || this.opts.providerId?.trim();
+      if (resolvedProviderId) {
+        this.threadIdToProviderId.set(forThreadId, resolvedProviderId);
+        this.childToProviderId.set(child, resolvedProviderId);
+      }
     }
     const status = this.getProviderStatus();
     if (!launchedBefore && child) {
@@ -467,7 +505,7 @@ export class EnvironmentAgentRuntime {
           if (this.tryHandleProviderRpcMessage(line, child)) {
             return;
           }
-          this.appendEvent(this.toProviderEvent(line));
+          this.appendEvent(this.toProviderEvent(line, child));
         },
       });
       this.providerStdoutBuffers.set(specKey, updated);
@@ -495,6 +533,7 @@ export class EnvironmentAgentRuntime {
       if (this.providerChild === child) {
         this.providerChild = null;
       }
+      this.childToProviderId.delete(child);
       this.providerChildren.delete(specKey);
       this.providerStdoutBuffers.delete(specKey);
       this.providerStderrBuffers.delete(specKey);
@@ -530,6 +569,7 @@ export class EnvironmentAgentRuntime {
   private resolveProviderEnvironment(
     spec: EnvironmentAgentProviderSpec,
   ): NodeJS.ProcessEnv {
+    const explicitHome = spec.env?.HOME?.trim();
     const env: NodeJS.ProcessEnv = {
       ...process.env,
       ...(spec.env ?? {}),
@@ -538,9 +578,10 @@ export class EnvironmentAgentRuntime {
       return env;
     }
 
-    const homeDir = env.HOME?.trim() || this.resolveManagedProviderHomeDir(spec);
+    const homeDir = explicitHome || this.resolveManagedProviderHomeDir(spec);
     this.materializeProviderFiles(homeDir, spec.files);
     env.HOME = homeDir;
+    env.CODEX_HOME = env.CODEX_HOME?.trim() || path.join(homeDir, ".codex");
     return env;
   }
 
@@ -653,16 +694,28 @@ export class EnvironmentAgentRuntime {
     return this.opts.threadId ?? process.env.BB_THREAD_ID ?? "unknown-thread";
   }
 
-  private resolveProviderEventThreadId(params: unknown): string {
-    const providerThreadId = this.extractProviderThreadId(params);
+  private resolveProviderEventThreadId(
+    params: unknown,
+    providerId: string | undefined,
+  ): string {
+    const providerThreadId = this.extractProviderThreadId(params, providerId);
     if (!providerThreadId) {
       return this.resolveThreadId();
     }
-    return this.threadIdByProviderThreadId.get(providerThreadId) ?? this.resolveThreadId();
+    return (
+      this.threadIdByProviderThreadKey.get(
+        this.createProviderThreadKey(providerId, providerThreadId),
+      ) ??
+      this.resolveThreadId()
+    );
   }
 
-  private toProviderEvent(line: string): EnvironmentAgentEvent {
+  private toProviderEvent(
+    line: string,
+    sourceChild?: ChildProcess,
+  ): EnvironmentAgentEvent {
     let parsed: unknown;
+    const providerId = this.resolveProviderIdForChild(sourceChild);
     try {
       parsed = JSON.parse(line);
     } catch {
@@ -693,11 +746,24 @@ export class EnvironmentAgentRuntime {
       };
     }
 
+    const payload = record.params ?? {};
+    const normalized = this.getProviderSemanticsForProviderId(providerId)
+      ?.normalizeEvent(record.method, payload);
     return {
       type: "provider.event",
-      threadId: this.resolveProviderEventThreadId(record.params),
+      threadId: this.resolveProviderEventThreadId(payload, providerId),
       method: record.method,
-      payload: record.params ?? {},
+      payload,
+      ...(normalized?.providerId ? { providerId: normalized.providerId } : {}),
+      ...(normalized?.normalizedMethod
+        ? { normalizedMethod: normalized.normalizedMethod }
+        : {}),
+      ...(normalized ? { shouldPersist: normalized.shouldPersist } : {}),
+      ...(normalized ? { shouldBroadcast: normalized.shouldBroadcast } : {}),
+      ...(normalized?.nextStatus ? { nextStatus: normalized.nextStatus } : {}),
+      ...(normalized?.title ? { title: normalized.title } : {}),
+      ...(normalized?.turnState ? { turnState: normalized.turnState } : {}),
+      ...(normalized?.turnId ? { turnId: normalized.turnId } : {}),
     };
   }
 
@@ -705,28 +771,36 @@ export class EnvironmentAgentRuntime {
     command: EnvironmentAgentCommand,
     result: unknown,
   ): void {
+    const providerId = this.resolveProviderIdForCommand(command);
     switch (command.type) {
       case "thread.start":
         this.recordProviderThreadMapping(
           command.threadId,
-          this.extractProviderThreadId(result),
+          this.extractProviderThreadId(result, providerId),
+          providerId,
         );
         return;
       case "thread.resume":
         this.recordProviderThreadMapping(
           command.threadId,
-          this.extractProviderThreadId(result) ?? command.providerThreadId,
+          this.extractProviderThreadId(result, providerId) ?? command.providerThreadId,
+          providerId,
         );
         return;
-      case "turn.start":
-      case "turn.steer":
+      case "turn.run":
       case "thread.rename":
-        this.recordProviderThreadMapping(command.threadId, command.providerThreadId);
+        this.recordProviderThreadMapping(
+          command.threadId,
+          command.providerThreadId,
+          providerId,
+        );
         return;
       case "thread.stop":
       case "workspace.status":
       case "workspace.diff":
       case "provider.ensure":
+      case "provider.list_models":
+      case "provider.list_catalog":
         return;
       default:
         return command satisfies never;
@@ -736,14 +810,26 @@ export class EnvironmentAgentRuntime {
   private recordProviderThreadMapping(
     threadId: string,
     providerThreadId: string | undefined,
+    providerId: string | undefined,
   ): void {
     if (!providerThreadId) {
       return;
     }
-    this.threadIdByProviderThreadId.set(providerThreadId, threadId);
+    this.threadIdByProviderThreadKey.set(
+      this.createProviderThreadKey(providerId, providerThreadId),
+      threadId,
+    );
   }
 
-  private extractProviderThreadId(value: unknown): string | undefined {
+  private extractProviderThreadId(
+    value: unknown,
+    providerId?: string,
+  ): string | undefined {
+    const normalizedThreadId =
+      this.getProviderSemanticsForProviderId(providerId)?.extractThreadId(value);
+    if (normalizedThreadId) {
+      return normalizedThreadId;
+    }
     const record = this.asRecord(value);
     if (!record) {
       return undefined;
@@ -772,9 +858,36 @@ export class EnvironmentAgentRuntime {
       : undefined;
   }
 
-  private toProviderEnsureSpec(
+  private async toProviderEnsureSpec(
     command: EnvironmentAgentProviderEnsureCommand,
-  ): EnvironmentAgentProviderSpec {
+  ): Promise<EnvironmentAgentProviderSpec> {
+    if (
+      command.command === undefined ||
+      command.args === undefined
+    ) {
+      const provider = this.getProviderAdapterForId(
+        command.providerId ?? this.opts.providerId ?? process.env.BB_THREAD_PROVIDER_ID,
+      );
+      if (!provider || !command.context) {
+        throw new Error("provider.ensure spec is unavailable");
+      }
+      const launchConfig = await provider.resolveLaunchConfiguration?.(command.context);
+      return {
+        command: provider.processCommand,
+        args: [...provider.processArgs],
+        ...(launchConfig?.env ? { env: { ...launchConfig.env } } : {}),
+        ...(launchConfig?.files
+          ? { files: launchConfig.files.map((file) => ({ ...file })) }
+          : {}),
+        ...(command.providerLaunch
+          ? {
+              launchCommand: command.providerLaunch.command,
+              launchArgs: [...command.providerLaunch.args],
+            }
+          : {}),
+      };
+    }
+
     return {
       command: command.command,
       args: [...command.args],
@@ -794,13 +907,11 @@ export class EnvironmentAgentRuntime {
       case "thread.start":
       case "thread.resume":
       case "thread.stop":
-      case "turn.start":
-      case "turn.steer":
+      case "turn.run":
       case "thread.rename": {
-        // Look up the child that was registered for this thread via
-        // provider.ensure(forThreadId).  Fall back to the generic
-        // ensureProviderRunning() for backwards-compat (single-provider
-        // environments where no forThreadId mapping exists).
+        // Route per-thread commands to the child registered via
+        // provider.ensure(forThreadId). Single-provider runtimes may not
+        // have a per-thread mapping, so they fall back to the shared child.
         const mapped = this.resolveChildForThread(command.threadId);
         const child = mapped ?? this.ensureProviderRunning();
         if (!child) {
@@ -810,15 +921,16 @@ export class EnvironmentAgentRuntime {
         // pattern looks racy but is safe because the session supervisor
         // executes commands sequentially (one await per command in a for loop).
         this.providerChild = child;
-        if (!command.initialize) {
+        const initialize = command.initialize ?? this.buildInitializeRequest();
+        if (!initialize) {
           return;
         }
         if (child.pid !== undefined && this.providerInitializedPids.has(child.pid)) {
           return;
         }
         await this.requestProvider({
-          method: command.initialize.method,
-          params: command.initialize.params,
+          method: initialize.method,
+          params: initialize.params,
         });
         if (child.pid !== undefined) {
           this.providerInitializedPids.add(child.pid);
@@ -835,6 +947,8 @@ export class EnvironmentAgentRuntime {
         }
         return;
       }
+      default:
+        return command satisfies never;
     }
   }
 
@@ -856,26 +970,122 @@ export class EnvironmentAgentRuntime {
   private requestProviderCommand(
     command: EnvironmentAgentRpcCommand,
   ): Promise<unknown> {
+    if (command.type === "turn.run") {
+      return this.requestProvider(this.resolveTurnRunRequest(command));
+    }
     return this.requestProvider({
       method: this.toProviderMethod(command),
       params: this.toProviderParams(command),
     });
   }
 
+  private async listProviderModels(
+    providerId?: string,
+  ): Promise<import("@bb/core").AvailableModel[]> {
+    const provider = this.getProviderAdapterForId(
+      providerId ?? this.opts.providerId ?? process.env.BB_THREAD_PROVIDER_ID,
+    );
+    if (!provider) {
+      throw new Error("Provider runtime is unavailable");
+    }
+    return provider.listModels();
+  }
+
+  private listProviderCatalog(): import("@bb/core").SystemProviderInfo[] {
+    return listAvailableProviderInfos().map((provider) => ({
+      ...provider,
+      capabilities: { ...provider.capabilities },
+    }));
+  }
+
+  private resolveTurnRunRequest(command: Extract<EnvironmentAgentRpcCommand, { type: "turn.run" }>): {
+    method: string;
+    params: unknown;
+  } {
+    const provider = this.getProviderAdapterForThread(command.threadId);
+    const requestedMode = command.requestedMode ?? "auto";
+    const canSteer = Boolean(command.activeTurnId) && Boolean(
+      provider?.turnSteerMethod &&
+      provider.createTurnSteerParams &&
+      command.input !== undefined,
+    );
+
+    if (requestedMode === "steer") {
+      if (!command.activeTurnId) {
+        throw new Error("No active turn");
+      }
+      const steerParams = this.resolveTurnSteerParams(command);
+      if (steerParams === undefined) {
+        throw new Error("turn/steer is unsupported");
+      }
+      return {
+        method: provider?.turnSteerMethod ?? "turn/steer",
+        params: steerParams,
+      };
+    }
+
+    if (requestedMode !== "start" && canSteer) {
+      const steerParams = this.resolveTurnSteerParams(command);
+      if (steerParams !== undefined) {
+        return {
+          method: provider?.turnSteerMethod ?? "turn/steer",
+          params: steerParams,
+        };
+      }
+    }
+
+    return {
+      method: provider?.turnStartMethod ?? "turn/start",
+      params: this.resolveTurnStartParams(command),
+    };
+  }
+
+  private resolveTurnStartParams(
+    command: Extract<EnvironmentAgentRpcCommand, { type: "turn.run" }>,
+  ): unknown {
+    const provider = this.getProviderAdapterForThread(command.threadId);
+    if (!provider || command.input === undefined) {
+      throw new Error("turn/start params are unavailable");
+    }
+    return provider.createTurnStartParams(
+      command.providerThreadId,
+      command.input,
+      command.options,
+    );
+  }
+
+  private resolveTurnSteerParams(
+    command: Extract<EnvironmentAgentRpcCommand, { type: "turn.run" }>,
+  ): unknown | undefined {
+    const provider = this.getProviderAdapterForThread(command.threadId);
+    if (
+      !provider?.turnSteerMethod ||
+      !provider.createTurnSteerParams ||
+      !command.activeTurnId ||
+      command.input === undefined
+    ) {
+      return undefined;
+    }
+    return provider.createTurnSteerParams(
+      command.providerThreadId,
+      command.activeTurnId,
+      command.input,
+    );
+  }
+
   private toProviderMethod(command: EnvironmentAgentRpcCommand): string {
+    const provider = this.getProviderAdapterForThread(command.threadId);
     switch (command.type) {
       case "thread.start":
-        return "thread/start";
+        return provider?.threadStartMethod ?? "thread/start";
       case "thread.resume":
-        return "thread/resume";
+        return provider?.threadResumeMethod ?? "thread/resume";
       case "thread.stop":
         return "thread/stop";
-      case "turn.start":
-        return "turn/start";
-      case "turn.steer":
-        return "turn/steer";
+      case "turn.run":
+        return provider?.turnStartMethod ?? "turn/start";
       case "thread.rename":
-        return "thread/name/set";
+        return provider?.threadNameSetMethod ?? "thread/name/set";
       case "workspace.status":
         return "workspace/status";
       case "workspace.diff":
@@ -884,15 +1094,39 @@ export class EnvironmentAgentRuntime {
   }
 
   private toProviderParams(command: EnvironmentAgentRpcCommand): unknown {
+    const provider = this.getProviderAdapterForThread(command.threadId);
     switch (command.type) {
       case "thread.start":
+        if (!provider || !command.request || !command.context) {
+          throw new Error("thread/start params are unavailable");
+        }
+        return provider.createThreadStartParams(
+          command.request,
+          command.context,
+          command.dynamicTools,
+        );
       case "thread.resume":
-      case "turn.start":
-      case "turn.steer":
+        if (!provider || !command.context) {
+          throw new Error("thread/resume params are unavailable");
+        }
+        return provider.createThreadResumeParams(
+          command.providerThreadId,
+          command.context,
+          command.options,
+          command.resumePath,
+        );
       case "thread.rename":
-        return command.params;
+        if (!provider?.createThreadNameSetParams) {
+          throw new Error("thread/name/set params are unavailable");
+        }
+        return provider.createThreadNameSetParams(
+          command.providerThreadId,
+          command.title,
+        );
+      case "turn.run":
+        return this.resolveTurnStartParams(command);
       case "thread.stop":
-        return command.params ?? {};
+        return {};
       case "workspace.status":
       case "workspace.diff":
         return { threadId: command.threadId };
@@ -1017,8 +1251,28 @@ export class EnvironmentAgentRuntime {
       return;
     }
 
+    const providerId = this.resolveProviderIdForChild(sourceChild);
+    const providerSemantics = this.getProviderSemanticsForProviderId(providerId);
+
     try {
-      const result = await this.opts.onProviderRequest(args);
+      const response = await this.opts.onProviderRequest({
+        ...args,
+        ...(providerSemantics
+          ? {
+              providerId,
+              normalizedMethod: normalizeRuntimeEventMethod(args.method),
+              toolCall: providerSemantics.decodeToolCallRequest(
+                args.requestId,
+                args.method,
+                args.params,
+              ) ?? undefined,
+            }
+          : {}),
+      });
+      const result =
+        isProviderToolCallResponse(response) && providerSemantics
+          ? providerSemantics.encodeToolCallResponse(response)
+          : response;
       stdin.write(
         `${JSON.stringify({
           jsonrpc: "2.0",
@@ -1105,11 +1359,103 @@ export class EnvironmentAgentRuntime {
     ) {
       return { code: "provider_unavailable", message };
     }
-    if (normalized.includes("no rollout found for thread id")) {
+    if (
+      this.getProviderSemanticsForProviderId(
+        this.opts.providerId ?? process.env.BB_THREAD_PROVIDER_ID,
+      )?.isMissingProviderThreadMessage(message) ||
+      normalized.includes("no rollout found for thread id")
+    ) {
       return { code: "missing_provider_thread", message };
     }
     return { code: "provider_rpc_error", message };
   }
+
+  private getProviderSemanticsForProviderId(providerId: string | undefined) {
+    return getEnvironmentAgentProviderSemantics(providerId);
+  }
+
+  private getProviderAdapterForThread(threadId: string): ProviderAdapter | undefined {
+    return this.getProviderAdapterForId(this.resolveProviderIdForThread(threadId));
+  }
+
+  private getProviderAdapterForId(providerId: string | undefined): ProviderAdapter | undefined {
+    if (!providerId || !isThreadProviderId(providerId)) {
+      return undefined;
+    }
+    return createProviderAdapter({ providerId });
+  }
+
+  private buildInitializeRequest() {
+    const provider = this.getProviderAdapterForId(
+      this.opts.providerId ?? process.env.BB_THREAD_PROVIDER_ID,
+    );
+    if (!provider) {
+      return undefined;
+    }
+    return {
+      method: provider.initializeMethod,
+      params:
+        provider.createInitializeParams?.(provider.clientInfo) ?? {
+          clientInfo: provider.clientInfo,
+        },
+    };
+  }
+
+  private resolveProviderIdForThread(threadId: string): string | undefined {
+    return (
+      this.threadIdToProviderId.get(threadId) ??
+      this.opts.providerId ??
+      process.env.BB_THREAD_PROVIDER_ID
+    );
+  }
+
+  private resolveProviderIdForCommand(
+    command: EnvironmentAgentCommand,
+  ): string | undefined {
+    switch (command.type) {
+      case "provider.ensure":
+        return command.providerId ?? this.opts.providerId ?? process.env.BB_THREAD_PROVIDER_ID;
+      case "provider.list_models":
+        return command.providerId ?? this.opts.providerId ?? process.env.BB_THREAD_PROVIDER_ID;
+      case "thread.start":
+      case "thread.resume":
+      case "thread.stop":
+      case "turn.run":
+      case "thread.rename":
+      case "workspace.status":
+      case "workspace.diff":
+        return this.resolveProviderIdForThread(command.threadId);
+      case "provider.list_catalog":
+        return this.opts.providerId ?? process.env.BB_THREAD_PROVIDER_ID;
+      default:
+        return command satisfies never;
+    }
+  }
+
+  private resolveProviderIdForChild(child: ChildProcess | undefined): string | undefined {
+    return (
+      (child ? this.childToProviderId.get(child) : undefined) ??
+      this.opts.providerId ??
+      process.env.BB_THREAD_PROVIDER_ID
+    );
+  }
+
+  private createProviderThreadKey(
+    providerId: string | undefined,
+    providerThreadId: string,
+  ): string {
+    return `${providerId ?? "__unknown__"}:${providerThreadId}`;
+  }
+}
+
+function isProviderToolCallResponse(value: unknown): value is ProviderToolCallResponse {
+  return (
+    value !== null &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    Array.isArray((value as { contentItems?: unknown }).contentItems) &&
+    typeof (value as { success?: unknown }).success === "boolean"
+  );
 }
 
 function normalizeRuntimeEventMethod(method: string): string {

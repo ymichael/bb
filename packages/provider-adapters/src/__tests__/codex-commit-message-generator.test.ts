@@ -9,7 +9,7 @@ describe("extractConventionalCommitLine", () => {
 
   it("extracts the first valid conventional commit line from mixed output", () => {
     const extracted = extractConventionalCommitLine([
-      "Sure — here's a suggestion:",
+      "Sure - here's a suggestion:",
       "```",
       "feat(api): support includeUnstaged in commit generation",
       "```",

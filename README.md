@@ -16,7 +16,7 @@ apps/
   cli/      bb CLI for daemon/thread operations
 packages/
   agent-core/   Shared contracts/types/schemas + event -> UI message projection
-  agent-server/ Provider adapter runtime and Codex integration
+  provider-adapters/ Built-in provider adapters, model catalogs, and LLM helper utilities
   environment/  Execution environment adapters and workspace lifecycle
   ui-core/      Reusable ADE UI primitives (layout, timeline, prompt shell, panels)
   db/           Drizzle schema, migrations, repositories (SQLite)
@@ -64,7 +64,7 @@ pnpm bb --help
 
 Notes:
 
-- `dist/` output is generated for `@bb/core`, `@bb/agent-server`, `@bb/environment`, `@bb/ui-core`, `@bb/db`, `@bb/server`, `@bb/app`, and `@bb/cli`.
+- `dist/` output is generated for `@bb/core`, `@bb/provider-adapters`, `@bb/environment`, `@bb/ui-core`, `@bb/db`, `@bb/server`, `@bb/app`, and `@bb/cli`.
 - `pnpm dev` starts the daemon on `:3333`.
 - CLI uses `BB_DAEMON_URL` when set, otherwise defaults to `http://localhost:3333`.
 

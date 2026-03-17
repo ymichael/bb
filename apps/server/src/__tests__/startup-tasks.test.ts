@@ -75,12 +75,32 @@ describe("startup tasks", () => {
           threadId: "thread-1",
           controlBaseUrl: "http://127.0.0.1:4310",
           controlAuthToken: "token-1",
+          protocolVersion: 1,
+          selectedCapabilities: {
+            commands: [
+              "provider.ensure",
+              "thread.start",
+              "thread.resume",
+              "turn.run",
+            ],
+            features: [],
+          },
         },
         {
           id: "sess-2",
           threadId: "thread-2",
           controlBaseUrl: "http://127.0.0.1:4311",
           controlAuthToken: "token-2",
+          protocolVersion: 1,
+          selectedCapabilities: {
+            commands: [
+              "provider.ensure",
+              "thread.start",
+              "thread.resume",
+              "turn.run",
+            ],
+            features: [],
+          },
         },
       ]),
     };
@@ -97,6 +117,7 @@ describe("startup tasks", () => {
       activeSessionCount: 2,
       pokedCount: 1,
       unreachableCount: 1,
+      replaceRequiredCount: 0,
     });
   });
 
@@ -145,6 +166,16 @@ describe("startup tasks", () => {
           threadId: "thread-slow",
           controlBaseUrl: "http://127.0.0.1:4310",
           controlAuthToken: "token-slow",
+          protocolVersion: 1,
+          selectedCapabilities: {
+            commands: [
+              "provider.ensure",
+              "thread.start",
+              "thread.resume",
+              "turn.run",
+            ],
+            features: [],
+          },
         },
       ]),
     };
@@ -162,6 +193,68 @@ describe("startup tasks", () => {
       activeSessionCount: 1,
       pokedCount: 0,
       unreachableCount: 1,
+      replaceRequiredCount: 0,
     });
+  });
+
+  it("skips replace-required sessions during boot recovery", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ ok: true }), {
+        status: 202,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+
+    const logger = {
+      log: vi.fn(),
+      warn: vi.fn(),
+    };
+    const sessionRepo = {
+      listActive: vi.fn().mockReturnValue([
+        {
+          id: "sess-reuse",
+          threadId: "thread-1",
+          controlBaseUrl: "http://127.0.0.1:4310",
+          controlAuthToken: "token-1",
+          protocolVersion: 1,
+          selectedCapabilities: {
+            commands: [
+              "provider.ensure",
+              "thread.start",
+              "thread.resume",
+              "turn.run",
+            ],
+            features: [],
+          },
+        },
+        {
+          id: "sess-replace",
+          threadId: "thread-2",
+          controlBaseUrl: "http://127.0.0.1:4311",
+          controlAuthToken: "token-2",
+          protocolVersion: 1,
+          selectedCapabilities: {
+            commands: ["thread.start"],
+            features: [],
+          },
+        },
+      ]),
+    };
+
+    const result = await recoverManagedEnvironmentAgentSessionsOnBoot({
+      sessionRepo,
+      logger,
+    });
+
+    expect(result).toEqual({
+      activeSessionCount: 2,
+      pokedCount: 1,
+      unreachableCount: 0,
+      replaceRequiredCount: 1,
+    });
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(logger.log).toHaveBeenCalledWith(
+      "Environment-agent startup recovery poked 1/1 reusable active sessions; left 0 unreachable and 1 replace-required sessions for lazy replacement.",
+    );
   });
 });

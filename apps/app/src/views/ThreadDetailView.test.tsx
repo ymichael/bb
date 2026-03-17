@@ -211,8 +211,6 @@ vi.mock("@/hooks/usePromptModelReasoning", () => ({
     modelOptions: [{ value: "gpt-5", label: "GPT-5" }],
     reasoningOptions: [{ value: "medium", label: "Medium" }],
     sandboxOptions: [{ value: "workspace-write", label: "Workspace Write" }],
-    supportsModelList: true,
-    supportsReasoningLevels: true,
     supportsServiceTier: true,
   }),
 }));

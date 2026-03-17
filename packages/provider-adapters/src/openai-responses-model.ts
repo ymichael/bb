@@ -15,7 +15,10 @@ const DEFAULT_RESPONSES_INSTRUCTIONS = renderTemplate(
 );
 const DEFAULT_TIMEOUT_MS = 15_000;
 const MAX_UPSTREAM_ERROR_LENGTH = 220;
-const ERROR_EXTRACT_OPTS = { maxLength: MAX_UPSTREAM_ERROR_LENGTH, legacyKeys: ["error", "detail"] as const };
+const ERROR_EXTRACT_OPTS = {
+  maxLength: MAX_UPSTREAM_ERROR_LENGTH,
+  legacyKeys: ["error", "detail"] as const,
+};
 
 type ResponsesAuthMode = "apiKey" | "chatgpt";
 
@@ -194,7 +197,6 @@ function decodeSseEvent(value: unknown): DecodedSseEvent | null {
       return response ? { type, response } : null;
     }
     default:
-      // OpenAI SSE event types are open_external; unknown events are ignored.
       return null;
   }
 }
@@ -219,15 +221,14 @@ function parseSseResponsePayload(rawBody: string): ParsedSseResponsePayload | nu
       .filter((line) => line.startsWith("data:"));
     if (dataLines.length === 0) continue;
 
-    const dataPayload = dataLines
-      .map((line) => line.slice("data:".length).trim())
-      .join("\n")
-      .trim();
-    if (!dataPayload || dataPayload === "[DONE]") continue;
+    const payloadRaw = dataLines
+      .map((line) => line.slice("data:".length).trimStart())
+      .join("\n");
+    if (!payloadRaw || payloadRaw === "[DONE]") continue;
 
     let parsed: unknown;
     try {
-      parsed = JSON.parse(dataPayload);
+      parsed = JSON.parse(payloadRaw);
     } catch {
       continue;
     }
@@ -242,208 +243,132 @@ function parseSseResponsePayload(rawBody: string): ParsedSseResponsePayload | nu
       case "response.output_text.done":
         textDone.push(event.text);
         break;
-      case "response.completed":
-        responseId = event.response.id ?? responseId;
-        if (event.response.text.trim()) {
-          textFromCompleted = event.response.text.trim();
-        }
-        break;
       case "response.created":
       case "response.in_progress":
+      case "response.completed":
         responseId = event.response.id ?? responseId;
+        if (event.response.text) {
+          textFromCompleted = event.response.text;
+        }
         break;
-      default: {
-        const exhausted: never = event;
-        throw new Error(`Unhandled SSE event: ${String(exhausted)}`);
-      }
+      default:
+        event satisfies never;
     }
   }
 
   const text =
-    textFromCompleted ??
-    (textDone.length > 0 ? textDone.join("") : textDeltas.length > 0 ? textDeltas.join("") : "");
+    textDone.join("") ||
+    textDeltas.join("") ||
+    textFromCompleted ||
+    "";
+
   if (!text) return null;
-
-  return {
-    text,
-    responseId,
-  };
+  return { text, ...(responseId ? { responseId } : {}) };
 }
 
-function resolveKnownAuthMode(value: unknown): KnownAuthMode | null {
-  if (
-    value === "apikey" ||
-    value === "apiKey" ||
-    value === "chatgpt" ||
-    value === "chatgptAuthTokens"
-  ) {
-    return value;
+async function resolveResponsesAuth(): Promise<ResolvedResponsesAuth> {
+  const apiKey = process.env.OPENAI_API_KEY?.trim();
+  if (apiKey) {
+    return {
+      mode: "apiKey",
+      bearerToken: apiKey,
+    };
   }
-  return null;
-}
 
-function resolveChatgptAuth(authFile: CodexAuthFile | null): ResolvedResponsesAuth | null {
-  const token = asNonEmptyString(authFile?.tokens?.access_token);
-  if (!token) return null;
+  const auth = await readCodexAuthFile();
+  const authMode = String(auth?.auth_mode ?? "").trim() as KnownAuthMode;
+  if (!authMode) {
+    throw new Error("OpenAI auth is missing");
+  }
+  if (authMode === "apikey" || authMode === "apiKey") {
+    const resolvedApiKey = resolveApiKeyFromCodexAuthFile(auth);
+    if (!resolvedApiKey) {
+      throw new Error("OpenAI API key is missing");
+    }
+    return {
+      mode: "apiKey",
+      bearerToken: resolvedApiKey,
+    };
+  }
 
-  const accountId = asNonEmptyString(authFile?.tokens?.account_id) ?? undefined;
+  const chatgptAuth = auth as CodexAuthFile & {
+    tokens?: {
+      id_token?: string;
+      access_token?: string;
+      account_id?: string;
+    };
+  };
+  const bearerToken =
+    chatgptAuth.tokens?.id_token?.trim() ||
+    chatgptAuth.tokens?.access_token?.trim();
+  if (!bearerToken) {
+    throw new Error("OpenAI auth is missing");
+  }
   return {
     mode: "chatgpt",
-    bearerToken: token,
-    accountId,
+    bearerToken,
+    ...(chatgptAuth.tokens?.account_id?.trim()
+      ? { accountId: chatgptAuth.tokens.account_id.trim() }
+      : {}),
   };
-}
-
-function resolveResponsesAuthFromAuthFile(
-  authFile: CodexAuthFile | null,
-): ResolvedResponsesAuth | null {
-  const envApiKey = asNonEmptyString(process.env.OPENAI_API_KEY);
-  if (envApiKey) {
-    return {
-      mode: "apiKey",
-      bearerToken: envApiKey,
-    };
-  }
-
-  const authMode = resolveKnownAuthMode(authFile?.auth_mode);
-  const apiKeyAuth = resolveApiKeyFromCodexAuthFile(authFile);
-  const chatgptAuth = resolveChatgptAuth(authFile);
-
-  if (authMode) {
-    switch (authMode) {
-      case "apikey":
-      case "apiKey":
-        return apiKeyAuth
-          ? {
-              mode: "apiKey",
-              bearerToken: apiKeyAuth,
-            }
-          : null;
-      case "chatgpt":
-      case "chatgptAuthTokens":
-        return chatgptAuth;
-      default: {
-        const exhausted: never = authMode;
-        throw new Error(`Unhandled auth mode: ${String(exhausted)}`);
-      }
-    }
-  }
-
-  // Tolerate older auth.json variants where mode might be absent.
-  if (apiKeyAuth) {
-    return {
-      mode: "apiKey",
-      bearerToken: apiKeyAuth,
-    };
-  }
-
-  return chatgptAuth;
-}
-
-async function resolveResponsesAuth(): Promise<ResolvedResponsesAuth | null> {
-  const authFile = await readCodexAuthFile();
-  return resolveResponsesAuthFromAuthFile(authFile);
 }
 
 export async function generateOpenAIResponsesText(
   args: GenerateOpenAIResponsesTextArgs,
 ): Promise<GenerateOpenAIResponsesTextResult> {
-  const prompt = args.prompt.trim();
-  if (!prompt) {
-    throw new Error("OpenAI responses prompt cannot be empty.");
-  }
-
   const auth = await resolveResponsesAuth();
-  if (!auth) {
-    throw new Error(
-      "OpenAI auth is missing. Set OPENAI_API_KEY or run `codex login`.",
-    );
-  }
-
-  const timeoutMs = Math.max(1, args.timeoutMs ?? DEFAULT_TIMEOUT_MS);
   const model = resolveModel(args.model);
-  const endpoint = `${normalizeBaseUrl(auth.mode)}/responses`;
-  const requestBody: Record<string, unknown> = {
-    model,
-    instructions: DEFAULT_RESPONSES_INSTRUCTIONS,
-    input: [
-      {
-        role: "user",
-        content: [{ type: "input_text", text: prompt }],
-      },
-    ],
-    store: false,
-  };
-
-  if (auth.mode === "chatgpt") {
-    requestBody.stream = true;
-  }
-  if (auth.mode === "apiKey" && args.maxOutputTokens !== undefined) {
-    requestBody.max_output_tokens = args.maxOutputTokens;
-  }
-  if (auth.mode === "apiKey" && args.temperature !== undefined) {
-    requestBody.temperature = args.temperature;
-  }
-
-  const headers = new Headers();
-  headers.set("Authorization", `Bearer ${auth.bearerToken}`);
-  headers.set("Content-Type", "application/json");
-  headers.set("User-Agent", "bb-agent-server/openai-responses");
-  if (auth.mode === "chatgpt" && auth.accountId) {
-    headers.set("ChatGPT-Account-ID", auth.accountId);
-  }
-
-  const abortController = new AbortController();
-  const timeout = setTimeout(() => abortController.abort(), timeoutMs);
+  const baseUrl = normalizeBaseUrl(auth.mode);
+  const timeoutMs = Math.max(1, args.timeoutMs ?? DEFAULT_TIMEOUT_MS);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
-    const response = await fetch(endpoint, {
+    const response = await fetch(`${baseUrl}/responses`, {
       method: "POST",
-      headers,
-      body: JSON.stringify(requestBody),
-      signal: abortController.signal,
+      signal: controller.signal,
+      headers: {
+        authorization: `Bearer ${auth.bearerToken}`,
+        "content-type": "application/json",
+        ...(auth.accountId ? { "openai-account-id": auth.accountId } : {}),
+      },
+      body: JSON.stringify({
+        model,
+        input: args.prompt,
+        instructions: DEFAULT_RESPONSES_INSTRUCTIONS,
+        stream: true,
+        ...(args.maxOutputTokens ? { max_output_tokens: args.maxOutputTokens } : {}),
+        ...(args.temperature !== undefined ? { temperature: args.temperature } : {}),
+      }),
     });
 
     const rawBody = await response.text();
-
     if (!response.ok) {
-      const upstreamMessage =
-        parseUpstreamErrorMessage(rawBody) ?? `request failed with status ${response.status}`;
-      throw new Error(`OpenAI responses request failed: ${upstreamMessage}`);
+      throw new Error(parseUpstreamErrorMessage(rawBody) ?? `OpenAI error ${response.status}`);
     }
 
-    const ssePayload = parseSseResponsePayload(rawBody);
-    if (ssePayload) {
+    const parsedSse = parseSseResponsePayload(rawBody);
+    if (parsedSse) {
       return {
-        text: ssePayload.text,
+        text: parsedSse.text,
         model,
-        responseId: ssePayload.responseId,
+        ...(parsedSse.responseId ? { responseId: parsedSse.responseId } : {}),
       };
     }
 
-    const payload = rawBody ? (JSON.parse(rawBody) as unknown) : null;
-    const payloadRecord = asRecord(payload);
-    if (!payloadRecord) {
-      throw new Error("OpenAI responses returned an invalid payload.");
-    }
-    const decodedResponse = decodeOpenAIResponse(payloadRecord);
-    const responseId = decodedResponse?.id;
-    const text = decodedResponse?.text.trim() ?? "";
-    if (!text) {
-      throw new Error("OpenAI responses returned no text content.");
+    const decoded = decodeOpenAIResponse(JSON.parse(rawBody));
+    if (!decoded?.text) {
+      throw new Error("OpenAI response did not include output text");
     }
 
     return {
-      text,
+      text: decoded.text,
       model,
-      responseId,
+      ...(decoded.id ? { responseId: decoded.id } : {}),
     };
   } catch (error) {
-    if (
-      error instanceof Error &&
-      (error.name === "AbortError" || error.message.includes("aborted"))
-    ) {
-      throw new Error(`OpenAI responses request timed out after ${timeoutMs}ms.`);
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw new Error(`Timed out after ${timeoutMs}ms`);
     }
     throw error;
   } finally {

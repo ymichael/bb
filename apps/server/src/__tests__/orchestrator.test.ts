@@ -51,8 +51,9 @@ import {
   createCodexProviderAdapter,
   createPiProviderAdapter,
   type LlmCompletionService,
-} from "@bb/agent-server";
+} from "@bb/provider-adapters";
 import { Orchestrator } from "../orchestrator.js";
+import { ProviderSessionController } from "../provider-session-controller.js";
 import type { EnvironmentService } from "../environment-service.js";
 import type { EnvironmentAgentSessionService } from "../environment-agent-session-service.js";
 import { WSManager } from "../ws.js";
@@ -346,6 +347,9 @@ function asOrchestratorHarness(manager: Orchestrator): OrchestratorTestHarness {
         };
       };
     }>;
+    providerAdapterByProviderId: Map<string, {
+      listModels: (...args: unknown[]) => unknown;
+    }>;
     environmentService: {
       environmentRuntimes: Map<string, unknown>;
     };
@@ -475,7 +479,9 @@ function asOrchestratorHarness(manager: Orchestrator): OrchestratorTestHarness {
     providerThreadIds,
     activeTurnIds,
     environmentRuntimes,
-    provider: Array.from(rawManager.agentServerByProviderId.values())[0]?.opts.provider,
+    provider:
+      Array.from(rawManager.providerAdapterByProviderId.values())[0] ??
+      Array.from(rawManager.agentServerByProviderId.values())[0]?.opts.provider,
   });
   return rawManager as OrchestratorTestHarness;
 }
@@ -607,6 +613,94 @@ describe("Orchestrator", () => {
       expect(events).toContainEqual(
         expect.objectContaining({
           threadId: siblingThread.id,
+          type: "item/completed",
+        }),
+      );
+    });
+
+    it("does not cross-route shared environment events when providers reuse the same provider thread id", () => {
+      const env = environmentRepo.create({
+        projectId: project.id,
+        descriptor: { type: "path", path: "/tmp/env" },
+        managed: true,
+      });
+      const codexThread = createTestThread(threadRepo, project.id, {
+        status: "idle",
+        environmentId: env.id,
+        providerId: "codex",
+      });
+      const claudeThread = createTestThread(threadRepo, project.id, {
+        status: "idle",
+        environmentId: env.id,
+        providerId: "claude-code",
+      });
+      attachmentRepo.attachThread({ threadId: codexThread.id, environmentId: env.id });
+      attachmentRepo.attachThread({ threadId: claudeThread.id, environmentId: env.id });
+
+      manager = new Orchestrator(
+        threadRepo,
+        eventRepo,
+        projectRepo,
+        ws,
+        llmCompletionService,
+        undefined,
+        createTestRuntimeEnv(),
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        attachmentRepo as never,
+      );
+
+      (
+        manager as unknown as {
+          providerThreadIdByThreadId: Map<string, string>;
+        }
+      ).providerThreadIdByThreadId.set(codexThread.id, "shared-provider-thread");
+      (
+        manager as unknown as {
+          providerThreadIdByThreadId: Map<string, string>;
+        }
+      ).providerThreadIdByThreadId.set(claudeThread.id, "shared-provider-thread");
+
+      (
+        manager as unknown as {
+          _handleAgentServerNotification: (threadId: string, event: unknown) => void;
+        }
+      )._handleAgentServerNotification(codexThread.id, {
+        method: "item/completed",
+        normalizedMethod: "item/completed",
+        eventType: "item/completed",
+        eventData: {
+          __bb_provider_event: {
+            schema: "bb/provider-event-envelope",
+            version: 1,
+            providerId: "claude-code",
+            method: "item/completed",
+            observedAt: 1_234,
+          },
+          payload: {
+            threadId: "shared-provider-thread",
+            item: { type: "agentMessage", text: "hello from claude" },
+          },
+        },
+        shouldPersist: true,
+        shouldBroadcast: false,
+      });
+
+      expect(eventRepo.listByThread(codexThread.id)).not.toContainEqual(
+        expect.objectContaining({
+          threadId: codexThread.id,
+          type: "item/completed",
+        }),
+      );
+      expect(eventRepo.listByThread(claudeThread.id)).toContainEqual(
+        expect.objectContaining({
+          threadId: claudeThread.id,
           type: "item/completed",
         }),
       );
@@ -1065,6 +1159,28 @@ describe("Orchestrator", () => {
       const thread = threadRepo.getById(result.id);
       expect(thread).toBeDefined();
       expect(thread?.providerId).toBe("pi");
+    });
+
+    it("preserves the provider id from an injected provider controller", async () => {
+      const piManager = new Orchestrator(
+        threadRepo,
+        eventRepo,
+        projectRepo,
+        ws,
+        llmCompletionService,
+        new ProviderSessionController({
+          provider: createPiProviderAdapter(),
+        }),
+        createTestRuntimeEnv(),
+      );
+      const project = createTestProject(projectRepo, { rootPath: "/test" });
+
+      const result = await piManager.spawn({ projectId: project.id });
+
+      const thread = threadRepo.getById(result.id);
+      expect(thread).toBeDefined();
+      expect(thread?.providerId).toBe("pi");
+      await expect(piManager.getProviderInfo()).resolves.toMatchObject({ id: "pi" });
     });
 
     it("returns before provisioning work starts", async () => {

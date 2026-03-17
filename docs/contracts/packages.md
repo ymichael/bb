@@ -6,10 +6,10 @@ This document is the Phase 5 contract catalog for package boundaries.
 
 - `@bb/core`: no internal runtime dependencies.
 - `@bb/ui-core`: no internal runtime dependencies.
-- `@bb/agent-server` -> `@bb/core`.
+- `@bb/provider-adapters` -> `@bb/core`.
 - `@bb/db` -> `@bb/core`.
 - `@bb/environment` -> `@bb/core`.
-- `@bb/server` -> `@bb/core`, `@bb/environment`, `@bb/agent-server`, `@bb/db`.
+- `@bb/server` -> `@bb/core`, `@bb/environment`, `@bb/provider-adapters`, `@bb/db`.
 - `@bb/app` -> `@bb/core`, `@bb/ui-core`.
 - `@bb/cli` -> `@bb/core`, `@bb/server`.
 
@@ -32,7 +32,7 @@ No other cross-package runtime imports are allowed.
   - `extractProviderThreadIdFromPersistedEventData`
 - UI projection: `toUIMessages`.
 
-### `@bb/agent-server`
+### `@bb/provider-adapters`
 
 - Provider adapter registry and implementations (`codex`).
 - Provider runtime (`ProviderRuntime`) and RPC lifecycle errors.

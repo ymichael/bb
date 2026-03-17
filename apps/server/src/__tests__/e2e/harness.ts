@@ -28,7 +28,7 @@ import {
   createCodexProviderAdapter,
   createProviderAdapter,
   type ProviderToolHost,
-} from "@bb/agent-server";
+} from "@bb/provider-adapters";
 import { createServer } from "../../server.js";
 import {
   createFakeCodexBinDir,

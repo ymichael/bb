@@ -91,6 +91,16 @@ describe("EnvironmentAgentSessionSync", () => {
         agentId: "agent-1",
         agentInstanceId: "instance-1",
         supportedProtocolVersions: [1],
+        worker: {
+          name: "environment-daemon",
+          version: "0.0.1",
+        },
+        providers: [
+          {
+            providerId: "codex",
+            adapterVersion: "0.0.1",
+          },
+        ],
         channels: [{ channelId: "thread-1", generation: 1 }],
       },
     });

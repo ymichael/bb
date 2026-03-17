@@ -23,7 +23,7 @@ describe("createLlmCompletionService", () => {
       threadTitleGenerator: vi.fn().mockResolvedValue("Title"),
       commitMessageGenerator: vi
         .fn()
-        .mockResolvedValue("fix(parser):    " + "x".repeat(140)),
+        .mockResolvedValue(`fix(parser): ${"x".repeat(140)}`),
     });
 
     const message = await service.generateCommitMessage({

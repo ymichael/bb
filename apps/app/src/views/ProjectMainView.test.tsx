@@ -99,8 +99,6 @@ vi.mock("@/hooks/usePromptModelReasoning", () => ({
     reasoningOptions: [{ value: "medium", label: "Medium" }],
     sandboxOptions: [{ value: "workspace-write", label: "Workspace Write" }],
     environmentOptions: [{ value: "env-1", label: "Local Env" }],
-    supportsModelList: true,
-    supportsReasoningLevels: true,
     supportsServiceTier: true,
   }),
 }));
