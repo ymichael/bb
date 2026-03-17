@@ -477,6 +477,164 @@ describe("EnvironmentAgentRuntime", () => {
     );
   });
 
+  it("namespaces shared provider-thread mappings by provider during interleaved multi-provider runs", async () => {
+    const providerScript = [
+      "process.stdin.setEncoding('utf8');",
+      "let buffer='';",
+      "process.stdin.on('data',chunk=>{",
+      "buffer+=chunk;",
+      "const parts=buffer.split(/\\r\\n|\\n|\\r/g);",
+      "buffer=parts.pop() ?? '';",
+      "for (const line of parts) {",
+      "if (!line.trim()) continue;",
+      "const msg = JSON.parse(line);",
+      "if (msg.method === 'initialize') {",
+      "console.log(JSON.stringify({ id: msg.id, result: { capabilities: {}, role: process.env.ROLE } }));",
+      "} else if (msg.method === 'thread/start') {",
+      "console.log(JSON.stringify({ id: msg.id, result: { threadId: 'shared-provider-thread', role: process.env.ROLE } }));",
+      "} else if (msg.method === 'turn/start') {",
+      "const threadId = msg.params.threadId;",
+      "const turnId = `${process.env.ROLE}-turn-${Date.now()}`;",
+      "console.log(JSON.stringify({ id: msg.id, result: { threadId, turnId, role: process.env.ROLE } }));",
+      "setTimeout(() => console.log(JSON.stringify({ method: 'turn/started', params: { threadId, turnId } })), 0);",
+      "setTimeout(() => console.log(JSON.stringify({ method: 'item/completed', params: { threadId, item: { type: 'agentMessage', text: { text: process.env.ROLE } } } })), 1);",
+      "setTimeout(() => console.log(JSON.stringify({ method: 'turn/completed', params: { threadId, turnId } })), 2);",
+      "}",
+      "}",
+      "});",
+    ].join("");
+
+    const runtime = new EnvironmentAgentRuntime({
+      threadId: "owner-thread",
+      providerId: "codex",
+    });
+    cleanup.push(() => runtime.shutdown());
+
+    const providerEvents: Array<{ threadId: string; providerId?: string; method: string }> = [];
+    const unsubscribe = runtime.subscribeToEvents((event) => {
+      if (event.event.type === "provider.event") {
+        providerEvents.push({
+          threadId: event.event.threadId,
+          providerId: event.event.providerId,
+          method: event.event.method,
+        });
+      }
+    });
+    cleanup.push(unsubscribe);
+
+    const ensure = async (
+      commandId: string,
+      threadId: string,
+      providerId: "codex" | "claude-code",
+      role: string,
+    ) => runtime.executeCommand({
+      meta: {
+        protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+        commandId,
+        idempotencyKey: commandId,
+        sentAt: Date.now(),
+      },
+      command: {
+        type: "provider.ensure",
+        providerId,
+        forThreadId: threadId,
+        command: "node",
+        args: ["-e", providerScript],
+        env: { ROLE: role },
+      },
+    });
+
+    await ensure("ensure-a", "thread-a", "codex", "provider-A");
+    await ensure("ensure-b", "thread-b", "claude-code", "provider-B");
+
+    await runtime.executeCommand({
+      meta: {
+        protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+        commandId: "start-a",
+        idempotencyKey: "start-a",
+        sentAt: Date.now(),
+      },
+      command: {
+        type: "thread.start",
+        threadId: "thread-a",
+        projectId: "proj-1",
+        request: createStartRequest("proj-1"),
+        context: createThreadContext("proj-1", "thread-a"),
+        initialize: {
+          method: "initialize",
+          params: { clientInfo: { name: "bb", version: "0.0.1" } },
+        },
+      },
+    });
+    await runtime.executeCommand({
+      meta: {
+        protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+        commandId: "start-b",
+        idempotencyKey: "start-b",
+        sentAt: Date.now(),
+      },
+      command: {
+        type: "thread.start",
+        threadId: "thread-b",
+        projectId: "proj-1",
+        request: createStartRequest("proj-1"),
+        context: createThreadContext("proj-1", "thread-b"),
+        initialize: {
+          method: "initialize",
+          params: { clientInfo: { name: "bb", version: "0.0.1" } },
+        },
+      },
+    });
+
+    await runtime.executeCommand({
+      meta: {
+        protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+        commandId: "turn-a",
+        idempotencyKey: "turn-a",
+        sentAt: Date.now(),
+      },
+      command: {
+        type: "turn.run",
+        threadId: "thread-a",
+        providerThreadId: "shared-provider-thread",
+        input: [{ type: "text", text: "A" }],
+      },
+    });
+    await runtime.executeCommand({
+      meta: {
+        protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+        commandId: "turn-b",
+        idempotencyKey: "turn-b",
+        sentAt: Date.now(),
+      },
+      command: {
+        type: "turn.run",
+        threadId: "thread-b",
+        providerThreadId: "shared-provider-thread",
+        input: [{ type: "text", text: "B" }],
+      },
+    });
+
+    await expect.poll(
+      () =>
+        providerEvents.filter((event) => event.method === "turn/completed"),
+      { timeout: 5_000 },
+    ).toEqual(
+      expect.arrayContaining([
+        {
+          threadId: "thread-a",
+          providerId: "codex",
+          method: "turn/completed",
+        },
+        {
+          threadId: "thread-b",
+          providerId: "claude-code",
+          method: "turn/completed",
+        },
+      ]),
+    );
+  });
+
   it("captures provider stderr as events", async () => {
     const runtime = new EnvironmentAgentRuntime({
       threadId: "thread-1",
@@ -1140,5 +1298,72 @@ describe("EnvironmentAgentRuntime", () => {
     await expect.poll(() =>
       stdout.some((line) => line.includes('"id":62') && line.includes('"result"')),
     ).toBe(true);
+  });
+
+  it("decodes provider server requests using the child provider identity in shared environments", async () => {
+    const requests: Array<{
+      providerId?: string;
+      method: string;
+      toolCall?: unknown;
+    }> = [];
+    const providerScript = [
+      "console.log(JSON.stringify({ id: 77, method: 'item/tool/call', params: { threadId: 'provider-thread-shared', turnId: 'turn-1', callId: 'call-1', tool: 'echo', arguments: { text: process.env.ROLE } } }));",
+      "process.stdin.setEncoding('utf8');",
+      "let buffer='';",
+      "process.stdin.on('data',chunk=>{",
+      "buffer+=chunk;",
+      "const parts=buffer.split(/\\r\\n|\\n|\\r/g);",
+      "buffer=parts.pop() ?? '';",
+      "for (const line of parts) { if (line.trim()) console.log(line); }",
+      "});",
+      "setTimeout(() => process.exit(0), 100);",
+    ].join("");
+
+    const runtime = new EnvironmentAgentRuntime({
+      threadId: "owner-thread",
+      providerId: "codex",
+      onProviderRequest: async (request) => {
+        requests.push(request);
+        return {
+          success: true,
+          contentItems: [{ type: "inputText", text: "ok" }],
+        };
+      },
+    });
+    cleanup.push(() => runtime.shutdown());
+
+    await runtime.executeCommand({
+      meta: {
+        protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+        commandId: "ensure-claude",
+        idempotencyKey: "ensure-claude",
+        sentAt: Date.now(),
+      },
+      command: {
+        type: "provider.ensure",
+        providerId: "claude-code",
+        forThreadId: "thread-claude",
+        command: "node",
+        args: ["-e", providerScript],
+        env: { ROLE: "provider-claude" },
+      },
+    });
+
+    await expect
+      .poll(
+        () =>
+          requests.find((request) => request.providerId === "claude-code"),
+        { timeout: 5_000 },
+      )
+      .toMatchObject({
+        providerId: "claude-code",
+        method: "item/tool/call",
+        toolCall: {
+          threadId: "provider-thread-shared",
+          turnId: "turn-1",
+          callId: "call-1",
+          tool: "echo",
+        },
+      });
   });
 });

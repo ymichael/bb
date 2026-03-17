@@ -618,6 +618,94 @@ describe("Orchestrator", () => {
       );
     });
 
+    it("does not cross-route shared environment events when providers reuse the same provider thread id", () => {
+      const env = environmentRepo.create({
+        projectId: project.id,
+        descriptor: { type: "path", path: "/tmp/env" },
+        managed: true,
+      });
+      const codexThread = createTestThread(threadRepo, project.id, {
+        status: "idle",
+        environmentId: env.id,
+        providerId: "codex",
+      });
+      const claudeThread = createTestThread(threadRepo, project.id, {
+        status: "idle",
+        environmentId: env.id,
+        providerId: "claude-code",
+      });
+      attachmentRepo.attachThread({ threadId: codexThread.id, environmentId: env.id });
+      attachmentRepo.attachThread({ threadId: claudeThread.id, environmentId: env.id });
+
+      manager = new Orchestrator(
+        threadRepo,
+        eventRepo,
+        projectRepo,
+        ws,
+        llmCompletionService,
+        undefined,
+        createTestRuntimeEnv(),
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        attachmentRepo as never,
+      );
+
+      (
+        manager as unknown as {
+          providerThreadIdByThreadId: Map<string, string>;
+        }
+      ).providerThreadIdByThreadId.set(codexThread.id, "shared-provider-thread");
+      (
+        manager as unknown as {
+          providerThreadIdByThreadId: Map<string, string>;
+        }
+      ).providerThreadIdByThreadId.set(claudeThread.id, "shared-provider-thread");
+
+      (
+        manager as unknown as {
+          _handleAgentServerNotification: (threadId: string, event: unknown) => void;
+        }
+      )._handleAgentServerNotification(codexThread.id, {
+        method: "item/completed",
+        normalizedMethod: "item/completed",
+        eventType: "item/completed",
+        eventData: {
+          __bb_provider_event: {
+            schema: "bb/provider-event-envelope",
+            version: 1,
+            providerId: "claude-code",
+            method: "item/completed",
+            observedAt: 1_234,
+          },
+          payload: {
+            threadId: "shared-provider-thread",
+            item: { type: "agentMessage", text: "hello from claude" },
+          },
+        },
+        shouldPersist: true,
+        shouldBroadcast: false,
+      });
+
+      expect(eventRepo.listByThread(codexThread.id)).not.toContainEqual(
+        expect.objectContaining({
+          threadId: codexThread.id,
+          type: "item/completed",
+        }),
+      );
+      expect(eventRepo.listByThread(claudeThread.id)).toContainEqual(
+        expect.objectContaining({
+          threadId: claudeThread.id,
+          type: "item/completed",
+        }),
+      );
+    });
+
     it("ignores active session invalidation during newer-session handoff", () => {
       const thread = createTestThread(threadRepo, project.id, { status: "active" });
       const updateSpy = vi.spyOn(threadRepo, "update");

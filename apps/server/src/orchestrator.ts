@@ -13,6 +13,7 @@ import {
   assertNever,
   createProviderEventEnvelope,
   DEFAULT_THREAD_PROVIDER_ID,
+  decodeProviderEventEnvelope,
   extractProviderThreadIdFromPersistedEventData,
   extractTurnIdFromPersistedEventData,
   getStringField,
@@ -5010,14 +5011,20 @@ export class Orchestrator implements ThreadOrchestrator {
     const providerThreadId = extractProviderThreadIdFromPersistedEventData(
       event.eventData,
     );
+    const providerId =
+      decodeProviderEventEnvelope(event.eventData)?.__bb_provider_event.providerId;
     if (!providerThreadId) {
       return threadId;
     }
 
+    const currentThread = this.threadRepo.getById(threadId);
     const currentProviderThreadId =
       this.providerThreadIdByThreadId.get(threadId) ??
       this._resolvePersistedProviderThreadId(threadId);
-    if (currentProviderThreadId === providerThreadId) {
+    if (
+      currentProviderThreadId === providerThreadId &&
+      (!providerId || currentThread?.providerId === providerId)
+    ) {
       return threadId;
     }
 
@@ -5032,6 +5039,10 @@ export class Orchestrator implements ThreadOrchestrator {
       attachedEnvironmentId,
     )) {
       const candidateThreadId = attachment.threadId;
+      const candidateThread = this.threadRepo.getById(candidateThreadId);
+      if (providerId && candidateThread?.providerId !== providerId) {
+        continue;
+      }
       const candidateProviderThreadId =
         this.providerThreadIdByThreadId.get(candidateThreadId) ??
         this._resolvePersistedProviderThreadId(candidateThreadId);

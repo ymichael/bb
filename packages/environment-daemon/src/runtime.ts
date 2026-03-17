@@ -80,7 +80,9 @@ export interface EnvironmentAgentRuntimeQuiescenceSnapshot {
 }
 
 export class EnvironmentAgentRuntime {
-  private readonly threadIdByProviderThreadId = new Map<string, string>();
+  private readonly threadIdByProviderThreadKey = new Map<string, string>();
+  private readonly threadIdToProviderId = new Map<string, string>();
+  private readonly childToProviderId = new Map<ChildProcess, string>();
   private sequence = 0;
   private providerRequestId = 0;
   private readonly providerInitializedPids = new Set<number>();
@@ -310,6 +312,7 @@ export class EnvironmentAgentRuntime {
           ? this.ensureProviderStatus(
               await this.toProviderEnsureSpec(envelope.command),
               envelope.command.forThreadId,
+              envelope.command.providerId,
             )
           : envelope.command.type === "provider.list_models"
             ? await this.listProviderModels(envelope.command.providerId)
@@ -436,11 +439,17 @@ export class EnvironmentAgentRuntime {
   ensureProviderStatus(
     spec?: EnvironmentAgentProviderSpec,
     forThreadId?: string,
+    providerId?: string,
   ): EnvironmentAgentProviderStatus {
     const launchedBefore = this.getProviderStatus().running;
     const child = this.ensureProviderRunning(spec);
     if (child && forThreadId) {
       this.threadIdToChild.set(forThreadId, child);
+      const resolvedProviderId = providerId?.trim() || this.opts.providerId?.trim();
+      if (resolvedProviderId) {
+        this.threadIdToProviderId.set(forThreadId, resolvedProviderId);
+        this.childToProviderId.set(child, resolvedProviderId);
+      }
     }
     const status = this.getProviderStatus();
     if (!launchedBefore && child) {
@@ -496,7 +505,7 @@ export class EnvironmentAgentRuntime {
           if (this.tryHandleProviderRpcMessage(line, child)) {
             return;
           }
-          this.appendEvent(this.toProviderEvent(line));
+          this.appendEvent(this.toProviderEvent(line, child));
         },
       });
       this.providerStdoutBuffers.set(specKey, updated);
@@ -524,6 +533,7 @@ export class EnvironmentAgentRuntime {
       if (this.providerChild === child) {
         this.providerChild = null;
       }
+      this.childToProviderId.delete(child);
       this.providerChildren.delete(specKey);
       this.providerStdoutBuffers.delete(specKey);
       this.providerStderrBuffers.delete(specKey);
@@ -684,16 +694,28 @@ export class EnvironmentAgentRuntime {
     return this.opts.threadId ?? process.env.BB_THREAD_ID ?? "unknown-thread";
   }
 
-  private resolveProviderEventThreadId(params: unknown): string {
-    const providerThreadId = this.extractProviderThreadId(params);
+  private resolveProviderEventThreadId(
+    params: unknown,
+    providerId: string | undefined,
+  ): string {
+    const providerThreadId = this.extractProviderThreadId(params, providerId);
     if (!providerThreadId) {
       return this.resolveThreadId();
     }
-    return this.threadIdByProviderThreadId.get(providerThreadId) ?? this.resolveThreadId();
+    return (
+      this.threadIdByProviderThreadKey.get(
+        this.createProviderThreadKey(providerId, providerThreadId),
+      ) ??
+      this.resolveThreadId()
+    );
   }
 
-  private toProviderEvent(line: string): EnvironmentAgentEvent {
+  private toProviderEvent(
+    line: string,
+    sourceChild?: ChildProcess,
+  ): EnvironmentAgentEvent {
     let parsed: unknown;
+    const providerId = this.resolveProviderIdForChild(sourceChild);
     try {
       parsed = JSON.parse(line);
     } catch {
@@ -725,10 +747,11 @@ export class EnvironmentAgentRuntime {
     }
 
     const payload = record.params ?? {};
-    const normalized = this.getProviderSemantics()?.normalizeEvent(record.method, payload);
+    const normalized = this.getProviderSemanticsForProviderId(providerId)
+      ?.normalizeEvent(record.method, payload);
     return {
       type: "provider.event",
-      threadId: this.resolveProviderEventThreadId(payload),
+      threadId: this.resolveProviderEventThreadId(payload, providerId),
       method: record.method,
       payload,
       ...(normalized?.providerId ? { providerId: normalized.providerId } : {}),
@@ -748,22 +771,29 @@ export class EnvironmentAgentRuntime {
     command: EnvironmentAgentCommand,
     result: unknown,
   ): void {
+    const providerId = this.resolveProviderIdForCommand(command);
     switch (command.type) {
       case "thread.start":
         this.recordProviderThreadMapping(
           command.threadId,
-          this.extractProviderThreadId(result),
+          this.extractProviderThreadId(result, providerId),
+          providerId,
         );
         return;
       case "thread.resume":
         this.recordProviderThreadMapping(
           command.threadId,
-          this.extractProviderThreadId(result) ?? command.providerThreadId,
+          this.extractProviderThreadId(result, providerId) ?? command.providerThreadId,
+          providerId,
         );
         return;
       case "turn.run":
       case "thread.rename":
-        this.recordProviderThreadMapping(command.threadId, command.providerThreadId);
+        this.recordProviderThreadMapping(
+          command.threadId,
+          command.providerThreadId,
+          providerId,
+        );
         return;
       case "thread.stop":
       case "workspace.status":
@@ -780,15 +810,23 @@ export class EnvironmentAgentRuntime {
   private recordProviderThreadMapping(
     threadId: string,
     providerThreadId: string | undefined,
+    providerId: string | undefined,
   ): void {
     if (!providerThreadId) {
       return;
     }
-    this.threadIdByProviderThreadId.set(providerThreadId, threadId);
+    this.threadIdByProviderThreadKey.set(
+      this.createProviderThreadKey(providerId, providerThreadId),
+      threadId,
+    );
   }
 
-  private extractProviderThreadId(value: unknown): string | undefined {
-    const normalizedThreadId = this.getProviderSemantics()?.extractThreadId(value);
+  private extractProviderThreadId(
+    value: unknown,
+    providerId?: string,
+  ): string | undefined {
+    const normalizedThreadId =
+      this.getProviderSemanticsForProviderId(providerId)?.extractThreadId(value);
     if (normalizedThreadId) {
       return normalizedThreadId;
     }
@@ -964,7 +1002,7 @@ export class EnvironmentAgentRuntime {
     method: string;
     params: unknown;
   } {
-    const provider = this.getProviderAdapter();
+    const provider = this.getProviderAdapterForThread(command.threadId);
     const requestedMode = command.requestedMode ?? "auto";
     const canSteer = Boolean(command.activeTurnId) && Boolean(
       provider?.turnSteerMethod &&
@@ -1005,7 +1043,7 @@ export class EnvironmentAgentRuntime {
   private resolveTurnStartParams(
     command: Extract<EnvironmentAgentRpcCommand, { type: "turn.run" }>,
   ): unknown {
-    const provider = this.getProviderAdapter();
+    const provider = this.getProviderAdapterForThread(command.threadId);
     if (!provider || command.input === undefined) {
       throw new Error("turn/start params are unavailable");
     }
@@ -1019,7 +1057,7 @@ export class EnvironmentAgentRuntime {
   private resolveTurnSteerParams(
     command: Extract<EnvironmentAgentRpcCommand, { type: "turn.run" }>,
   ): unknown | undefined {
-    const provider = this.getProviderAdapter();
+    const provider = this.getProviderAdapterForThread(command.threadId);
     if (
       !provider?.turnSteerMethod ||
       !provider.createTurnSteerParams ||
@@ -1036,7 +1074,7 @@ export class EnvironmentAgentRuntime {
   }
 
   private toProviderMethod(command: EnvironmentAgentRpcCommand): string {
-    const provider = this.getProviderAdapter();
+    const provider = this.getProviderAdapterForThread(command.threadId);
     switch (command.type) {
       case "thread.start":
         return provider?.threadStartMethod ?? "thread/start";
@@ -1056,7 +1094,7 @@ export class EnvironmentAgentRuntime {
   }
 
   private toProviderParams(command: EnvironmentAgentRpcCommand): unknown {
-    const provider = this.getProviderAdapter();
+    const provider = this.getProviderAdapterForThread(command.threadId);
     switch (command.type) {
       case "thread.start":
         if (!provider || !command.request || !command.context) {
@@ -1213,8 +1251,8 @@ export class EnvironmentAgentRuntime {
       return;
     }
 
-    const providerId = this.opts.providerId ?? process.env.BB_THREAD_PROVIDER_ID;
-    const providerSemantics = this.getProviderSemantics();
+    const providerId = this.resolveProviderIdForChild(sourceChild);
+    const providerSemantics = this.getProviderSemanticsForProviderId(providerId);
 
     try {
       const response = await this.opts.onProviderRequest({
@@ -1322,7 +1360,9 @@ export class EnvironmentAgentRuntime {
       return { code: "provider_unavailable", message };
     }
     if (
-      this.getProviderSemantics()?.isMissingProviderThreadMessage(message) ||
+      this.getProviderSemanticsForProviderId(
+        this.opts.providerId ?? process.env.BB_THREAD_PROVIDER_ID,
+      )?.isMissingProviderThreadMessage(message) ||
       normalized.includes("no rollout found for thread id")
     ) {
       return { code: "missing_provider_thread", message };
@@ -1330,16 +1370,12 @@ export class EnvironmentAgentRuntime {
     return { code: "provider_rpc_error", message };
   }
 
-  private getProviderSemantics() {
-    return getEnvironmentAgentProviderSemantics(
-      this.opts.providerId ?? process.env.BB_THREAD_PROVIDER_ID,
-    );
+  private getProviderSemanticsForProviderId(providerId: string | undefined) {
+    return getEnvironmentAgentProviderSemantics(providerId);
   }
 
-  private getProviderAdapter(): ProviderAdapter | undefined {
-    return this.getProviderAdapterForId(
-      this.opts.providerId ?? process.env.BB_THREAD_PROVIDER_ID,
-    );
+  private getProviderAdapterForThread(threadId: string): ProviderAdapter | undefined {
+    return this.getProviderAdapterForId(this.resolveProviderIdForThread(threadId));
   }
 
   private getProviderAdapterForId(providerId: string | undefined): ProviderAdapter | undefined {
@@ -1350,7 +1386,9 @@ export class EnvironmentAgentRuntime {
   }
 
   private buildInitializeRequest() {
-    const provider = this.getProviderAdapter();
+    const provider = this.getProviderAdapterForId(
+      this.opts.providerId ?? process.env.BB_THREAD_PROVIDER_ID,
+    );
     if (!provider) {
       return undefined;
     }
@@ -1361,6 +1399,52 @@ export class EnvironmentAgentRuntime {
           clientInfo: provider.clientInfo,
         },
     };
+  }
+
+  private resolveProviderIdForThread(threadId: string): string | undefined {
+    return (
+      this.threadIdToProviderId.get(threadId) ??
+      this.opts.providerId ??
+      process.env.BB_THREAD_PROVIDER_ID
+    );
+  }
+
+  private resolveProviderIdForCommand(
+    command: EnvironmentAgentCommand,
+  ): string | undefined {
+    switch (command.type) {
+      case "provider.ensure":
+        return command.providerId ?? this.opts.providerId ?? process.env.BB_THREAD_PROVIDER_ID;
+      case "provider.list_models":
+        return command.providerId ?? this.opts.providerId ?? process.env.BB_THREAD_PROVIDER_ID;
+      case "thread.start":
+      case "thread.resume":
+      case "thread.stop":
+      case "turn.run":
+      case "thread.rename":
+      case "workspace.status":
+      case "workspace.diff":
+        return this.resolveProviderIdForThread(command.threadId);
+      case "provider.list_catalog":
+        return this.opts.providerId ?? process.env.BB_THREAD_PROVIDER_ID;
+      default:
+        return command satisfies never;
+    }
+  }
+
+  private resolveProviderIdForChild(child: ChildProcess | undefined): string | undefined {
+    return (
+      (child ? this.childToProviderId.get(child) : undefined) ??
+      this.opts.providerId ??
+      process.env.BB_THREAD_PROVIDER_ID
+    );
+  }
+
+  private createProviderThreadKey(
+    providerId: string | undefined,
+    providerThreadId: string,
+  ): string {
+    return `${providerId ?? "__unknown__"}:${providerThreadId}`;
   }
 }
 
