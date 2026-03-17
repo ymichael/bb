@@ -75,7 +75,7 @@ export function AppSettingsView() {
     <PageShell contentClassName="pt-8 md:pt-10">
       <div className="mx-auto flex w-full max-w-3xl flex-col gap-4 pt-2">
         <SettingsWithControl
-          label="Folder/worktree open command"
+          label="Folder open command"
           description='Leave blank for system default. Saves on blur.'
         >
           <input
@@ -86,7 +86,7 @@ export function AppSettingsView() {
             }}
             onBlur={saveOpenPathSettings}
             className="w-full rounded-md border border-input bg-background px-2.5 py-1.5 text-sm outline-none ring-ring focus-visible:ring-2"
-            placeholder='e.g. "cursor"'
+            placeholder='e.g. "code"'
           />
         </SettingsWithControl>
         <SettingsWithControl
@@ -102,7 +102,7 @@ export function AppSettingsView() {
               }}
               onBlur={saveOpenPathSettings}
               className="w-full rounded-md border border-input bg-background px-2.5 py-1.5 text-sm outline-none ring-ring focus-visible:ring-2"
-              placeholder='e.g. "code -r"'
+              placeholder='e.g. "code"'
             />
             <p className="mt-1 text-xs text-muted-foreground">
               Use <code className="rounded bg-muted px-1 py-0.5">{`{path}`}</code> to place the
