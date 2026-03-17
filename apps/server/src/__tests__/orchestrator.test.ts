@@ -53,6 +53,7 @@ import {
   type LlmCompletionService,
 } from "@bb/provider-adapters";
 import { Orchestrator } from "../orchestrator.js";
+import { ProviderSessionController } from "../provider-session-controller.js";
 import type { EnvironmentService } from "../environment-service.js";
 import type { EnvironmentAgentSessionService } from "../environment-agent-session-service.js";
 import { WSManager } from "../ws.js";
@@ -1070,6 +1071,28 @@ describe("Orchestrator", () => {
       const thread = threadRepo.getById(result.id);
       expect(thread).toBeDefined();
       expect(thread?.providerId).toBe("pi");
+    });
+
+    it("preserves the provider id from an injected provider controller", async () => {
+      const piManager = new Orchestrator(
+        threadRepo,
+        eventRepo,
+        projectRepo,
+        ws,
+        llmCompletionService,
+        new ProviderSessionController({
+          provider: createPiProviderAdapter(),
+        }),
+        createTestRuntimeEnv(),
+      );
+      const project = createTestProject(projectRepo, { rootPath: "/test" });
+
+      const result = await piManager.spawn({ projectId: project.id });
+
+      const thread = threadRepo.getById(result.id);
+      expect(thread).toBeDefined();
+      expect(thread?.providerId).toBe("pi");
+      await expect(piManager.getProviderInfo()).resolves.toMatchObject({ id: "pi" });
     });
 
     it("returns before provisioning work starts", async () => {

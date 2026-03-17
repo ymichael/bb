@@ -108,6 +108,10 @@ export class ProviderSessionController {
 
   constructor(private readonly opts: ProviderSessionControllerOptions) {}
 
+  get provider(): ProviderAdapter {
+    return this.opts.provider;
+  }
+
   normalizePromptInput(input: PromptInput[]): PromptInput[] {
     const normalized: PromptInput[] = [];
     for (const chunk of input) {

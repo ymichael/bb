@@ -695,7 +695,7 @@ export class Orchestrator implements ThreadOrchestrator {
         ? undefined
         : agentServerOrProvider;
     if (agentServerOrProvider instanceof ProviderSessionController) {
-      const providerId = provider?.id ?? DEFAULT_THREAD_PROVIDER_ID;
+      const providerId = agentServerOrProvider.provider.id;
       this.defaultProviderId = providerId;
       this.agentServerByProviderId.set(providerId, agentServerOrProvider);
     } else {
