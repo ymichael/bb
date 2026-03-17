@@ -33,7 +33,7 @@ User sets up a workflow: after coding work is done, a separate thread should rev
 - Iterative follow-up to an existing thread
 
 **Current gaps:**
-- **Environment reuse:** Can `bb thread spawn` target an existing thread's environment? This may be a backend gap — need to verify whether `--environment <env-id>` can reference another thread's attached environment.
+- ~~**Environment reuse:**~~ RESOLVED — `bb thread spawn --environment <env-id>` now attaches to an existing environment. Multiple threads can share the same worktree.
 - **Prompt:** No guidance on pipeline workflows or chaining threads.
 - **Preference storage:** User's review workflow should be stored in `PREFERENCES.md` so the manager does this automatically for future tasks.
 
@@ -208,7 +208,7 @@ User comes back days later. Manager should remember preferences, past work patte
 
 | Gap | Workflows | Severity |
 |-----|-----------|----------|
-| Environment reuse: spawn a thread in another thread's worktree | W2, W3 | **Blocker for W2** |
+| ~~Environment reuse: spawn a thread in another thread's worktree~~ | ~~W2, W3~~ | ~~RESOLVED~~ |
 | `bb thread list --json` | W4, W6, W9 | P0 |
 | `bb thread list --include-archived` | W9 | P1 |
 | `bb thread list --include-work-status` | W4 | P1 |
@@ -234,7 +234,7 @@ User comes back days later. Manager should remember preferences, past work patte
 
 # Open Questions
 
-- **Environment reuse** is the biggest open question. W2 (pipeline workflow) fundamentally needs a review thread to see the coding thread's files. Options: (a) spawn into an existing environment, (b) the review thread reads from the coding thread's worktree path, (c) promote the worktree first. Which is the right model?
+- ~~**Environment reuse:**~~ RESOLVED — `bb thread spawn --environment <env-id>` now supports attaching to existing environments.
 - **Notification → turn:** When a managed thread completes, does the system message to the manager actually kick off a new manager turn, or does the manager only see it next time the user messages? This determines whether W7 error handling is proactive or reactive.
 - **Workflow preferences:** Should pipeline workflows (code → review → feedback) be stored as structured config or as natural language in `PREFERENCES.md`? Structured is more reliable but less flexible.
 - **Plan decomposition:** How much should the manager rely on the plan's structure vs its own analysis to identify parallelizable work? Should it ask the user to confirm before fanning out?

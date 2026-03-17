@@ -12,7 +12,7 @@ Core concepts:
 
 - **Project**: A project maps to a code repository. All threads belong to a project.
 - **Thread**: A thread is a single agent conversation. Threads are the fundamental unit of work in bb.
-- **Environment**: Each thread runs in an environment that determines where it runs. For example, a thread might run in the main project root, in a worktree, or inside a sandboxed container.
+- **Environment**: Each thread is attached to an environment that determines where it runs. Environments are first-class entities — multiple threads can share the same environment. For example, a coding thread and a review thread can both attach to the same worktree. Environment kinds include `local` (project root), `worktree` (isolated git worktree), and `docker` (sandboxed container).
 - **Agent Provider**: Each thread is powered by an agent provider (e.g., `codex`, `claude-code`). Different agent providers support different models (e.g., opus, gpt-5).
 
 There are 2 types of threads:

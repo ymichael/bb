@@ -20,9 +20,11 @@ Spawning:
 ```
 bb thread spawn --project <project-id> --prompt "Implement feature X"
 bb thread spawn --project <project-id> --prompt "Fix bug Y" --parent-thread <manager-id>
+bb thread spawn --project <project-id> --prompt "Review the changes" --environment <environment-id>
 ```
 
 The `--parent-thread` flag makes the new thread a managed child of the specified manager.
+The `--environment` flag attaches the new thread to an existing environment (e.g., another thread's worktree). This is useful for pipeline workflows where a review thread needs to see a coding thread's files.
 
 Inspecting:
 

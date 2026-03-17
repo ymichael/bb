@@ -142,16 +142,9 @@ The prompt currently only teaches simple delegation (W1). It needs to cover:
 - Expand runtime context to include project name, project id, project root, manager thread id, workspace path.
 - Add handoff-language examples ("take over", "@thread...", pasted URLs).
 
-### 7. Environment reuse for pipeline workflows
+### 7. ~~Environment reuse for pipeline workflows~~ RESOLVED
 
-W2 (pipeline workflow) fundamentally needs a review thread to see the coding thread's files. Today `bb thread spawn` always creates a new environment.
-
-**Options to evaluate:**
-- (a) Allow spawning a thread into an existing thread's environment
-- (b) Have the review thread read from the coding thread's worktree path directly
-- (c) Promote the worktree first, then spawn the review thread in local
-
-This is a backend investigation item that blocks the most valuable manager workflow.
+Resolved by `f25219a2` (Allow CLI attachment to existing environments). A manager can now spawn a thread into an existing environment with `bb thread spawn --environment <environment-id>`. Multiple threads can share the same environment via the `threadEnvironmentAttachments` table. W2 pipeline workflows are unblocked.
 
 ### 8. Thread lifecycle / archival guidance
 
@@ -266,8 +259,7 @@ Create a dedicated manager QA doc with scenarios derived from `plans/manager-her
 # Recommended Build Order
 
 1. **CLI audit P0s** — unblock manager quality (`--title`, `--model`, `--json` on list). See `plans/cli-audit.md`.
-2. **Environment reuse investigation** — determine the right model for pipeline workflows (W2). This is a potential blocker.
-3. **Prompt quality pass** — teach the manager the hero workflows (W1–W10), not just simple delegation. See `plans/manager-hero-workflows.md`.
+2. **Prompt quality pass** — teach the manager the hero workflows (W1–W10), not just simple delegation. See `plans/manager-hero-workflows.md`. Environment reuse (W2 blocker) is now resolved.
 4. **Multi-manager support** — foundational data model change that unblocks the rest.
 5. **Inter-agent messaging tool** — core V1 primitive, enables manager-to-manager workflows (W10).
 6. **Manager default provider/model** + **Hire modal improvements** — can ship together, quick wins.
@@ -282,7 +274,7 @@ Create a dedicated manager QA doc with scenarios derived from `plans/manager-her
 
 # Open Questions/Risks
 
-- **Environment reuse (blocker):** Pipeline workflows (W2) need a review thread to see a coding thread's worktree. Options: spawn into existing env, read from worktree path, or promote first. Needs investigation.
+- ~~**Environment reuse:**~~ RESOLVED by `f25219a2`. `bb thread spawn --environment <env-id>` attaches to existing environments.
 - **Notification → turn trigger:** When a managed thread completes, does the system message actually start a new manager turn? If not, W7 (error handling) is reactive only. Needs verification.
 - **Workflow preferences:** Should pipeline workflows be stored as structured config or natural language in `PREFERENCES.md`?
 - **Multi-manager:** Should the sidebar have a single "Managers" section or show each manager as a top-level entry?
