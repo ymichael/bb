@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = resolve(__filename, "..");
 const workspaceRoot = resolve(__dirname, "..", "..");
-const daemonRoot = resolve(workspaceRoot, "apps", "daemon");
+const serverRoot = resolve(workspaceRoot, "apps", "server");
 const cleanupScript = resolve(__dirname, "cleanup-bb-test-processes.mjs");
 
 async function runCleanup({ quiet = false, tmpRoot = null } = {}) {
@@ -56,7 +56,7 @@ async function main() {
   ];
 
   const child = spawn("pnpm", vitestArgs, {
-    cwd: daemonRoot,
+    cwd: serverRoot,
     env: {
       ...process.env,
       BB_E2E_PROVIDER_MODE: "fake",

@@ -50,7 +50,9 @@ async function createWorktreeThread(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       projectId,
-      environmentKind: "worktree",
+      environmentCreationArgs: {
+        kind: "worktree",
+      },
       input: [{ type: "text", text: inputText }],
     }),
   });

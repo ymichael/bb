@@ -278,7 +278,10 @@ export function createProjectRoutes(
           projectId,
           type: "manager",
           title: MANAGER_THREAD_TITLE,
-          environmentKind: "local",
+          environmentDescriptor: {
+            type: "path",
+            path: project.rootPath,
+          },
           developerInstructions: buildManagerDeveloperInstructions(),
           input: [{ type: "text", text: MANAGER_WELCOME_MESSAGE }],
           spawnInitiator: "system",

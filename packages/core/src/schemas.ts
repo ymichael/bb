@@ -22,23 +22,50 @@ export const promptInputSchema = z.discriminatedUnion("type", [
   }),
 ]);
 
-// Thread schemas
-export const spawnThreadSchema = z.object({
-  projectId: z.string(),
-  providerId: z.string().min(1).optional(),
-  title: z.string().min(1).optional(),
-  input: z.array(promptInputSchema).min(1).optional(),
-  model: z.string().optional(),
-  serviceTier: z.enum(["fast", "flex"]).optional(),
-  reasoningLevel: z.enum(["low", "medium", "high", "xhigh"]).optional(),
-  sandboxMode: z
-    .enum(["read-only", "workspace-write", "danger-full-access"])
-    .optional(),
-  environmentId: z.string().min(1).optional(),
-  environmentKind: z.string().min(1).optional(),
-  developerInstructions: z.string().optional(),
-  parentThreadId: z.string().optional(),
+const environmentDescriptorSchema = z.object({
+  type: z.literal("path"),
+  path: z.string().min(1),
 });
+
+const environmentCreationArgsSchema = z.object({
+  kind: z.string().min(1),
+});
+
+// Thread schemas
+export const spawnThreadSchema = z
+  .object({
+    projectId: z.string(),
+    providerId: z.string().min(1).optional(),
+    title: z.string().min(1).optional(),
+    input: z.array(promptInputSchema).min(1).optional(),
+    model: z.string().optional(),
+    serviceTier: z.enum(["fast", "flex"]).optional(),
+    reasoningLevel: z.enum(["low", "medium", "high", "xhigh"]).optional(),
+    sandboxMode: z
+      .enum(["read-only", "workspace-write", "danger-full-access"])
+      .optional(),
+    environmentId: z.string().min(1).optional(),
+    environmentDescriptor: environmentDescriptorSchema.optional(),
+    environmentCreationArgs: environmentCreationArgsSchema.optional(),
+    developerInstructions: z.string().optional(),
+    parentThreadId: z.string().optional(),
+  })
+  .superRefine((value, ctx) => {
+    const selectedCount = [
+      value.environmentId !== undefined,
+      value.environmentDescriptor !== undefined,
+      value.environmentCreationArgs !== undefined,
+    ].filter(Boolean).length;
+    if (selectedCount <= 1) {
+      return;
+    }
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message:
+        "Provide at most one of environmentId, environmentDescriptor, or environmentCreationArgs",
+      path: ["environmentId"],
+    });
+  });
 
 export const tellThreadSchema = z.object({
   input: z.array(promptInputSchema).min(1),

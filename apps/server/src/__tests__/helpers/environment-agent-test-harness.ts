@@ -6,6 +6,10 @@ import {
   type EnvironmentAgentClient,
 } from "@bb/environment-daemon";
 import { assertNever, toRecord } from "@bb/core";
+import {
+  createProviderAdapter,
+  listAvailableProviderInfos,
+} from "@bb/provider-adapters";
 import { vi } from "vitest";
 
 export const CODEX_THREAD_ID = "codex-thread-abc-123";
@@ -36,25 +40,36 @@ type EnvironmentAgentProviderEnsureCommand = Extract<
   EnvironmentAgentCommand,
   { type: "provider.ensure" }
 >;
+type EnvironmentAgentProviderListModelsCommand = Extract<
+  EnvironmentAgentCommand,
+  { type: "provider.list_models" }
+>;
+type EnvironmentAgentProviderListCatalogCommand = Extract<
+  EnvironmentAgentCommand,
+  { type: "provider.list_catalog" }
+>;
 type EnvironmentAgentRpcCommand = Exclude<
   EnvironmentAgentCommand,
-  EnvironmentAgentProviderEnsureCommand
+  | EnvironmentAgentProviderEnsureCommand
+  | EnvironmentAgentProviderListModelsCommand
+  | EnvironmentAgentProviderListCatalogCommand
 >;
 
 function toProviderMethod(command: EnvironmentAgentRpcCommand): string {
+  const provider = createProviderAdapter({ providerId: "codex" });
   switch (command.type) {
     case "thread.start":
-      return "thread/start";
+      return provider.threadStartMethod;
     case "thread.resume":
-      return "thread/resume";
+      return provider.threadResumeMethod;
     case "thread.stop":
       return "thread/stop";
-    case "turn.start":
-      return "turn/start";
-    case "turn.steer":
-      return "turn/steer";
+    case "turn.run":
+      return command.requestedMode === "steer"
+        ? provider.turnSteerMethod ?? provider.turnStartMethod
+        : provider.turnStartMethod;
     case "thread.rename":
-      return "thread/name/set";
+      return provider.threadNameSetMethod ?? "thread/name/set";
     case "workspace.status":
       return "workspace/status";
     case "workspace.diff":
@@ -65,15 +80,48 @@ function toProviderMethod(command: EnvironmentAgentRpcCommand): string {
 }
 
 function toProviderParams(command: EnvironmentAgentRpcCommand): unknown {
+  const provider = createProviderAdapter({ providerId: "codex" });
   switch (command.type) {
     case "thread.start":
+      return provider.createThreadStartParams(
+        command.request!,
+        command.context!,
+        command.dynamicTools,
+      );
     case "thread.resume":
-    case "turn.start":
-    case "turn.steer":
+      return provider.createThreadResumeParams(
+        command.providerThreadId,
+        command.context!,
+        command.options,
+        command.resumePath,
+      );
+    case "turn.run":
+      if (command.requestedMode === "steer") {
+        return provider.createTurnSteerParams!(
+          command.providerThreadId,
+          command.activeTurnId!,
+          command.input!,
+        );
+      }
+      if (command.requestedMode !== "start" && command.activeTurnId && command.input) {
+        return provider.createTurnSteerParams!(
+          command.providerThreadId,
+          command.activeTurnId,
+          command.input,
+        );
+      }
+      return provider.createTurnStartParams(
+        command.providerThreadId,
+        command.input!,
+        command.options,
+      );
     case "thread.rename":
-      return command.params;
+      return provider.createThreadNameSetParams!(
+        command.providerThreadId,
+        command.title,
+      );
     case "thread.stop":
-      return command.params ?? {};
+      return {};
     case "workspace.status":
     case "workspace.diff":
       return { threadId: command.threadId };
@@ -414,7 +462,10 @@ export function createFakeEnvironmentAgentClient(
       if (command.type === "provider.ensure") {
         throw new Error("provider.ensure should be sent via ensureProviderRunning");
       }
-      replayThreadId = command.threadId;
+      replayThreadId =
+        "threadId" in command && typeof command.threadId === "string"
+          ? command.threadId
+          : replayThreadId;
       const initialize =
         "initialize" in command ? command.initialize : undefined;
       if (initialize && !initialized) {
@@ -423,10 +474,18 @@ export function createFakeEnvironmentAgentClient(
       }
       let result: unknown;
       try {
+        if (command.type === "provider.list_models") {
+          result = await createProviderAdapter({
+            providerId: command.providerId ?? "codex",
+          }).listModels();
+        } else if (command.type === "provider.list_catalog") {
+          result = listAvailableProviderInfos();
+        } else {
         result = await sendRpcRequest(
           toProviderMethod(command),
           toProviderParams(command),
         );
+        }
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         const normalizedMessage = message.includes("no rollout found") || message.includes("missing thread")

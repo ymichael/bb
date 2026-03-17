@@ -97,39 +97,6 @@ async function waitForThreadIdleWithAnotherTurn(args: {
   }).then(({ thread }) => thread);
 }
 
-async function driveFakeCodexTurnToCompletion(args: {
-  harness: Awaited<ReturnType<typeof startDaemonE2eHarness>>;
-  threadId: string;
-  previousCompletedTurns: number;
-  maxAttempts?: number;
-}): Promise<Thread> {
-  const maxAttempts = args.maxAttempts ?? 6;
-  let lastThread: Thread | undefined;
-  let lastCompletedTurns = args.previousCompletedTurns;
-
-  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-    args.harness.emitFakeCodexControlEvent();
-    await sleep(250);
-
-    const [thread, events] = await Promise.all([
-      readJson<Thread>(`${args.harness.baseUrl}/api/v1/threads/${args.threadId}`),
-      listThreadEvents(args.harness.baseUrl, args.threadId),
-    ]);
-    lastThread = thread;
-    lastCompletedTurns = countCompletedTurns(events);
-    if (thread.status === "idle" && lastCompletedTurns > args.previousCompletedTurns) {
-      return thread;
-    }
-
-    await sleep(750);
-  }
-
-  throw new Error(
-    `Thread ${args.threadId} did not complete a recovery turn after ${maxAttempts} fake-codex completion attempts ` +
-      `(last status=${lastThread?.status ?? "unknown"}, completedTurns=${lastCompletedTurns})`,
-  );
-}
-
 async function waitForSessionCount(args: {
   baseUrl: string;
   wsUrl: string;
@@ -186,8 +153,8 @@ async function runMissingWorkerRestartRecoveryScenario(args: {
   let harness = await startDaemonE2eHarness({
     port,
     fakeCodex: {
-      defaultTurnDelayMs: 25,
-      defaultScenario: "start-then-manual-complete",
+      defaultTurnDelayMs: 2_000,
+      defaultScenario: "turn-complete",
     },
     initGitRepo: true,
     preserveTempDirOnCleanup: true,
@@ -232,8 +199,8 @@ async function runMissingWorkerRestartRecoveryScenario(args: {
       tempDir,
       port,
       fakeCodex: {
-        defaultTurnDelayMs: 25,
-        defaultScenario: "start-then-manual-complete",
+        defaultTurnDelayMs: 2_000,
+        defaultScenario: "turn-complete",
       },
       initGitRepo: true,
       preserveTempDirOnCleanup: true,
@@ -284,10 +251,12 @@ async function runMissingWorkerRestartRecoveryScenario(args: {
       e2eTimeoutMs(8_000, 20_000),
       harness.wsUrl,
     );
-    const recoveredThread = await driveFakeCodexTurnToCompletion({
-      harness,
+    const recoveredThread = await waitForThreadIdleWithAnotherTurn({
+      baseUrl: harness.baseUrl,
+      wsUrl: harness.wsUrl,
       threadId: thread.id,
       previousCompletedTurns: completedTurnsBeforeRestart,
+      timeoutMs: e2eTimeoutMs(12_000, 30_000),
     });
     expect(recoveredThread.status).toBe("idle");
   } finally {

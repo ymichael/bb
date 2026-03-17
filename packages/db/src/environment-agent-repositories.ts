@@ -43,6 +43,11 @@ export interface EnvironmentAgentSessionRecord {
   agentId: string;
   agentInstanceId: string;
   protocolVersion: number;
+  workerName?: string;
+  workerVersion?: string;
+  workerBuildId?: string;
+  providerMetadata?: unknown;
+  selectedCapabilities?: unknown;
   controlBaseUrl?: string;
   controlAuthToken?: string;
   status: EnvironmentAgentSessionStatus;
@@ -101,6 +106,11 @@ export interface CreateEnvironmentAgentSessionInput {
   agentId: string;
   agentInstanceId: string;
   protocolVersion: number;
+  workerName?: string;
+  workerVersion?: string;
+  workerBuildId?: string;
+  providerMetadata?: unknown;
+  selectedCapabilities?: unknown;
   controlBaseUrl?: string;
   controlAuthToken?: string;
   leaseExpiresAt: number;
@@ -204,6 +214,20 @@ function rowToEnvironmentAgentSessionRecord(
     agentId: row.agentId,
     agentInstanceId: row.agentInstanceId,
     protocolVersion: row.protocolVersion,
+    ...(row.workerName !== null ? { workerName: row.workerName } : {}),
+    ...(row.workerVersion !== null ? { workerVersion: row.workerVersion } : {}),
+    ...(row.workerBuildId !== null ? { workerBuildId: row.workerBuildId } : {}),
+    ...(row.providerMetadata !== null
+      ? { providerMetadata: parseJsonField(row.providerMetadata, "environment-agent provider metadata") }
+      : {}),
+    ...(row.selectedCapabilities !== null
+      ? {
+          selectedCapabilities: parseJsonField(
+            row.selectedCapabilities,
+            "environment-agent selected capabilities",
+          ),
+        }
+      : {}),
     ...(row.controlBaseUrl !== null ? { controlBaseUrl: row.controlBaseUrl } : {}),
     ...(row.controlAuthToken !== null ? { controlAuthToken: row.controlAuthToken } : {}),
     status: normalizeEnvironmentAgentSessionStatus(row.status),
@@ -409,6 +433,15 @@ export class EnvironmentAgentSessionRepository {
       agentId: args.agentId,
       agentInstanceId: args.agentInstanceId,
       protocolVersion: args.protocolVersion,
+      workerName: args.workerName ?? null,
+      workerVersion: args.workerVersion ?? null,
+      workerBuildId: args.workerBuildId ?? null,
+      providerMetadata:
+        args.providerMetadata !== undefined ? JSON.stringify(args.providerMetadata) : null,
+      selectedCapabilities:
+        args.selectedCapabilities !== undefined
+          ? JSON.stringify(args.selectedCapabilities)
+          : null,
       controlBaseUrl: args.controlBaseUrl ?? null,
       controlAuthToken: args.controlAuthToken ?? null,
       status: "active",
@@ -710,6 +743,17 @@ export class EnvironmentAgentSessionRepository {
         agentId: args.nextSession.agentId,
         agentInstanceId: args.nextSession.agentInstanceId,
         protocolVersion: args.nextSession.protocolVersion,
+        workerName: args.nextSession.workerName ?? null,
+        workerVersion: args.nextSession.workerVersion ?? null,
+        workerBuildId: args.nextSession.workerBuildId ?? null,
+        providerMetadata:
+          args.nextSession.providerMetadata !== undefined
+            ? JSON.stringify(args.nextSession.providerMetadata)
+            : null,
+        selectedCapabilities:
+          args.nextSession.selectedCapabilities !== undefined
+            ? JSON.stringify(args.nextSession.selectedCapabilities)
+            : null,
         controlBaseUrl: args.nextSession.controlBaseUrl ?? null,
         controlAuthToken: args.nextSession.controlAuthToken ?? null,
         status: "active",
@@ -776,6 +820,17 @@ export class EnvironmentAgentSessionRepository {
         agentId: args.nextSession.agentId,
         agentInstanceId: args.nextSession.agentInstanceId,
         protocolVersion: args.nextSession.protocolVersion,
+        workerName: args.nextSession.workerName ?? null,
+        workerVersion: args.nextSession.workerVersion ?? null,
+        workerBuildId: args.nextSession.workerBuildId ?? null,
+        providerMetadata:
+          args.nextSession.providerMetadata !== undefined
+            ? JSON.stringify(args.nextSession.providerMetadata)
+            : null,
+        selectedCapabilities:
+          args.nextSession.selectedCapabilities !== undefined
+            ? JSON.stringify(args.nextSession.selectedCapabilities)
+            : null,
         controlBaseUrl: args.nextSession.controlBaseUrl ?? null,
         controlAuthToken: args.nextSession.controlAuthToken ?? null,
         status: "active",

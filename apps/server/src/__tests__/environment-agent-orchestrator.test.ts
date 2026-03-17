@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { Thread } from "@bb/core";
+import type { Thread, ThreadEventDataForType } from "@bb/core";
 import type * as environmentAgent from "@bb/environment-daemon";
 import type { EnvironmentService } from "../environment-service.js";
 import {
@@ -133,6 +133,12 @@ function makeRuntimeEnvironment(args: {
       return undefined;
     },
   };
+}
+
+function createEventData<TType extends keyof import("@bb/core").ThreadEventDataByType>(
+  data: ThreadEventDataForType<TType>,
+): ThreadEventDataForType<TType> {
+  return data;
 }
 
 function createTestEnvironment(
@@ -301,7 +307,10 @@ describe("Orchestrator environment-agent delivery and replay", () => {
       threadId: thread.id,
       seq: 1,
       type: "system/provisioning/completed",
-      data: { providerThreadId: "provider-thread-1" } as never,
+      data: createEventData<"system/provisioning/completed">({
+        providerThreadId: "provider-thread-1",
+        transcript: [],
+      }),
     });
 
     let hasActiveSession = false;
@@ -444,7 +453,10 @@ describe("Orchestrator environment-agent delivery and replay", () => {
       threadId: thread.id,
       seq: 1,
       type: "system/provisioning/completed",
-      data: { providerThreadId: "provider-thread-1" } as never,
+      data: createEventData<"system/provisioning/completed">({
+        providerThreadId: "provider-thread-1",
+        transcript: [],
+      }),
     });
 
     const dispatcher = {
@@ -645,7 +657,10 @@ describe("Orchestrator environment-agent delivery and replay", () => {
       threadId: thread.id,
       seq: 1,
       type: "system/provisioning/completed",
-      data: { providerThreadId: "provider-thread-1" } as never,
+      data: createEventData<"system/provisioning/completed">({
+        providerThreadId: "provider-thread-1",
+        transcript: [],
+      }),
     });
 
     const dispatcher = {
@@ -775,7 +790,10 @@ describe("Orchestrator environment-agent delivery and replay", () => {
       threadId: thread.id,
       seq: 1,
       type: "system/provisioning/completed",
-      data: { providerThreadId: "provider-thread-1" } as never,
+      data: createEventData<"system/provisioning/completed">({
+        providerThreadId: "provider-thread-1",
+        transcript: [],
+      }),
     });
 
     const dispatcher = {
@@ -857,7 +875,10 @@ describe("Orchestrator environment-agent delivery and replay", () => {
       threadId: thread.id,
       seq: 1,
       type: "system/provisioning/completed",
-      data: { providerThreadId: "provider-thread-1" } as never,
+      data: createEventData<"system/provisioning/completed">({
+        providerThreadId: "provider-thread-1",
+        transcript: [],
+      }),
     });
 
     const dispatcher = {
@@ -985,11 +1006,11 @@ describe("Orchestrator environment-agent delivery and replay", () => {
       threadId: thread.id,
       seq: 1,
       type: "system/provisioning/completed",
-      data: {
-        environmentId: env.id,
-        environmentDisplayName: "Direct Workspace",
+      data: createEventData<"system/provisioning/completed">({
+        attachedEnvironmentId: env.id,
         providerThreadId: "provider-thread-1",
-      } as never,
+        transcript: [{ key: "environment", text: "environment: Direct" }],
+      }),
     });
 
     const providerThreadId = (

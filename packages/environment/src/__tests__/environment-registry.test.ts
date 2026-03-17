@@ -8,7 +8,8 @@ import {
   createDefaultEnvironmentRegistry,
   createDockerEnvironmentDefinition,
   createLocalEnvironmentDefinition,
-  createWorktreeEnvironmentDefinition,
+  ensureLocalGitWorkspace,
+  type LocalGitWorkspaceState,
 } from "../index.js";
 
 function makeTempDir(prefix: string): string {
@@ -55,35 +56,50 @@ describe("EnvironmentRegistry", () => {
       git(projectRoot, "add", "README.md");
       git(projectRoot, "commit", "-m", "init");
 
-      const registry = new EnvironmentRegistry()
-        .register(createLocalEnvironmentDefinition())
-        .register(
-          createWorktreeEnvironmentDefinition({
+      const registry = new EnvironmentRegistry().register(
+        createLocalEnvironmentDefinition({
+          worktree: {
             worktreeRootName: ".worktrees",
             manageEnvironmentAgent: false,
-          }),
-        );
-      const environment = registry.create("worktree", {
+          },
+        }),
+      );
+      const environment = registry.create("local", {
         projectId,
         threadId,
         projectRootPath: projectRoot,
+        environmentProperties: {
+          provisioningSystemKind: "worktree",
+          location: "localhost",
+          workspaceKind: "worktree",
+        },
+          runtimeEnv: {},
+      });
+      await ensureLocalGitWorkspace({
+        projectRootPath: projectRoot,
+        state: environment.serialize() as LocalGitWorkspaceState,
         runtimeEnv: {},
       });
       await environment.prepare?.();
       const restored = registry.restore(
         {
-          kind: "worktree",
+          kind: "local",
           state: environment.serialize(),
         },
         {
           projectId,
           threadId,
           projectRootPath: projectRoot,
+          environmentProperties: {
+            provisioningSystemKind: "worktree",
+            location: "localhost",
+            workspaceKind: "worktree",
+          },
           runtimeEnv: {},
         },
       );
 
-      expect(restored.kind).toBe("worktree");
+      expect(restored.kind).toBe("local");
       expect(restored.getWorkspaceRootUnsafe()).toBe(join(worktreeRoot, threadId));
 
       await restored.destroy();
@@ -92,15 +108,74 @@ describe("EnvironmentRegistry", () => {
     }
   });
 
+  it("restores direct-path git worktrees through the worktree-capable local runtime", async () => {
+    const projectRoot = makeTempDir("bb-env-project-");
+    const worktreeRoot = join(projectRoot, ".worktrees");
+    const threadId = `thread-${Date.now()}`;
+
+    try {
+      git(projectRoot, "init", "-b", "main");
+      git(projectRoot, "config", "user.name", "BB");
+      git(projectRoot, "config", "user.email", "bb@example.com");
+      spawnSync("sh", ["-lc", "printf 'hello\\n' > README.md"], { cwd: projectRoot });
+      git(projectRoot, "add", "README.md");
+      git(projectRoot, "commit", "-m", "init");
+      git(projectRoot, "worktree", "add", join(worktreeRoot, threadId), "-b", "feature/direct-path");
+
+      const registry = new EnvironmentRegistry().register(
+        createLocalEnvironmentDefinition({
+          worktree: {
+            worktreeRootName: ".worktrees",
+            manageEnvironmentAgent: false,
+          },
+        }),
+      );
+      const restored = registry.restore(
+        {
+          kind: "local",
+          state: {
+            workspaceRoot: join(worktreeRoot, threadId),
+            branchName: "feature/direct-path",
+          },
+        },
+        {
+          projectId: "proj-1",
+          threadId,
+          projectRootPath: projectRoot,
+          environmentProperties: {
+            provisioningSystemKind: "direct-path",
+            location: "localhost",
+            workspaceKind: "worktree",
+          },
+          runtimeEnv: {},
+        },
+      );
+
+      expect(restored.kind).toBe("local");
+      expect(restored.getWorkspaceRootUnsafe()).toBe(join(worktreeRoot, threadId));
+      expect(restored.supportsPromoteToActiveWorkspace()).toBe(true);
+      expect(restored.supportsDemoteFromActiveWorkspace()).toBe(true);
+      expect(restored.supportsSquashMergeIntoDefaultBranch()).toBe(true);
+
+      await restored.destroy();
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
   it("fails loudly when a persisted worktree is missing", () => {
-    const registry = new EnvironmentRegistry()
-      .register(createLocalEnvironmentDefinition())
-      .register(createWorktreeEnvironmentDefinition());
+    const registry = new EnvironmentRegistry().register(
+      createLocalEnvironmentDefinition({
+        worktree: {
+          manageEnvironmentAgent: false,
+        },
+      }),
+    );
 
     expect(() =>
       registry.restore(
         {
-          kind: "worktree",
+          kind: "local",
           state: {
             workspaceRoot: "/tmp/does-not-exist",
             branchName: "bb/thread-test",
@@ -110,6 +185,11 @@ describe("EnvironmentRegistry", () => {
           projectId: "proj-1",
           threadId: "thread-1",
           projectRootPath: "/tmp/project",
+          environmentProperties: {
+            provisioningSystemKind: "worktree",
+            location: "localhost",
+            workspaceKind: "worktree",
+          },
           runtimeEnv: {},
         },
       )).toThrow(/Worktree workspace is unavailable/);
@@ -161,10 +241,6 @@ describe("EnvironmentRegistry", () => {
   it("includes docker in the default environment registry", () => {
     const registry = createDefaultEnvironmentRegistry();
 
-    expect(registry.list().map((item) => item.id)).toEqual([
-      "local",
-      "worktree",
-      "docker",
-    ]);
+    expect(registry.list().map((item) => item.id)).toEqual(["local", "docker"]);
   });
 });

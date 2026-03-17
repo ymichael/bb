@@ -3,8 +3,6 @@ import type {
   UIMessage,
   UIPrimaryCheckoutAction,
   UIPrimaryCheckoutPhase,
-  UIProvisioningPhase,
-  UIProvisioningPhaseMetadata,
   UIProvisioningMetadata,
   UIProvisioningSetupMetadata,
   UIProvisioningTranscriptEntry,
@@ -115,90 +113,8 @@ function mergeProvisioningSetup(
   };
 }
 
-function mergeProvisioningPhaseMetadata(
-  existing: UIProvisioningPhaseMetadata | undefined,
-  incoming: UIProvisioningPhaseMetadata | undefined,
-): UIProvisioningPhaseMetadata | undefined {
-  if (!incoming) {
-    return existing ? { ...existing } : undefined;
-  }
-  if (!existing) {
-    return { ...incoming };
-  }
-
-  return {
-    status: incoming.status,
-    startedAt: existing.startedAt ?? incoming.startedAt,
-    durationMs: incoming.durationMs ?? existing.durationMs,
-  };
-}
-
-function mergeProvisioningPhases(
-  existing:
-    | Partial<Record<UIProvisioningPhase, UIProvisioningPhaseMetadata>>
-    | undefined,
-  incoming:
-    | Partial<Record<UIProvisioningPhase, UIProvisioningPhaseMetadata>>
-    | undefined,
-):
-  | Partial<Record<UIProvisioningPhase, UIProvisioningPhaseMetadata>>
-  | undefined {
-  if (!incoming) {
-    return existing ? { ...existing } : undefined;
-  }
-  if (!existing) {
-    return Object.fromEntries(
-      Object.entries(incoming).map(([phase, metadata]) => [
-        phase,
-        metadata ? { ...metadata } : metadata,
-      ]),
-    ) as Partial<Record<UIProvisioningPhase, UIProvisioningPhaseMetadata>>;
-  }
-
-  const merged: Partial<Record<UIProvisioningPhase, UIProvisioningPhaseMetadata>> = {
-    ...existing,
-  };
-  const phases = Object.keys(incoming) as UIProvisioningPhase[];
-  for (const phase of phases) {
-    const metadata = incoming[phase];
-    if (!metadata) continue;
-    merged[phase] = mergeProvisioningPhaseMetadata(existing[phase], metadata);
-  }
-  return merged;
-}
-
-function provisioningTranscriptEntrySortRank(entry: UIProvisioningTranscriptEntry): number {
-  switch (entry.kind) {
-    case "environment":
-      return 0;
-    case "worktree":
-      return 1;
-    case "branch":
-      return 2;
-    case "setup":
-      return 3;
-    case "phase":
-      return 4;
-    case "fallback":
-      return 5;
-    default:
-      return assertNever(entry);
-  }
-}
-
 function provisioningTranscriptEntryKey(entry: UIProvisioningTranscriptEntry): string {
-  switch (entry.kind) {
-    case "environment":
-    case "worktree":
-    case "branch":
-    case "setup":
-    case "fallback":
-      return entry.kind;
-    case "phase":
-      return `phase:${entry.phase}`;
-    default:
-      return assertNever(entry);
-  }
+  return entry.key;
 }
 
 function mergeProvisioningTranscriptEntry(
@@ -206,90 +122,26 @@ function mergeProvisioningTranscriptEntry(
   incoming: UIProvisioningTranscriptEntry,
 ): UIProvisioningTranscriptEntry {
   if (!existing) {
-    switch (incoming.kind) {
-      case "environment":
-        return { ...incoming };
-      case "worktree":
-        return { ...incoming };
-      case "branch":
-        return { ...incoming };
-      case "setup":
-        return { ...incoming, setup: { ...incoming.setup } };
-      case "phase":
-        return { ...incoming, metadata: { ...incoming.metadata } };
-      case "fallback":
-        return { ...incoming };
-      default:
-        return assertNever(incoming);
-    }
+    return {
+      ...incoming,
+      ...(incoming.metadata ? { metadata: { ...incoming.metadata } } : {}),
+    };
   }
 
-  switch (incoming.kind) {
-    case "environment":
-      if (existing.kind !== "environment") return { ...incoming };
-      return {
-        kind: "environment",
-        sourceSeq: Math.min(existing.sourceSeq, incoming.sourceSeq),
-        environmentId: incoming.environmentId ?? existing.environmentId,
-        environmentDisplayName:
-          incoming.environmentDisplayName ?? existing.environmentDisplayName,
-      };
-    case "worktree":
-      return {
-        kind: "worktree",
-        sourceSeq:
-          existing.kind === "worktree"
-            ? Math.min(existing.sourceSeq, incoming.sourceSeq)
-            : incoming.sourceSeq,
-      };
-    case "branch":
-      return {
-        kind: "branch",
-        sourceSeq:
-          existing.kind === "branch"
-            ? Math.min(existing.sourceSeq, incoming.sourceSeq)
-            : incoming.sourceSeq,
-        branchName: incoming.branchName,
-        headSha: incoming.headSha ?? (existing.kind === "branch" ? existing.headSha : undefined),
-      };
-    case "setup":
-      return {
-        kind: "setup",
-        sourceSeq:
-          existing.kind === "setup"
-            ? Math.min(existing.sourceSeq, incoming.sourceSeq)
-            : incoming.sourceSeq,
-        setup:
-          existing.kind === "setup"
-            ? mergeProvisioningSetup(existing.setup, incoming.setup) ?? { ...incoming.setup }
-            : { ...incoming.setup },
-      };
-    case "phase":
-      return {
-        kind: "phase",
-        phase: incoming.phase,
-        sourceSeq:
-          existing.kind === "phase" && existing.phase === incoming.phase
-            ? Math.min(existing.sourceSeq, incoming.sourceSeq)
-            : incoming.sourceSeq,
-        metadata:
-          existing.kind === "phase" && existing.phase === incoming.phase
-            ? mergeProvisioningPhaseMetadata(existing.metadata, incoming.metadata) ??
-              { ...incoming.metadata }
-            : { ...incoming.metadata },
-      };
-    case "fallback":
-      return {
-        kind: "fallback",
-        sourceSeq:
-          existing.kind === "fallback"
-            ? Math.min(existing.sourceSeq, incoming.sourceSeq)
-            : incoming.sourceSeq,
-        reason: incoming.reason,
-      };
-    default:
-      return assertNever(incoming);
-  }
+  const shouldPreserveStartedAt =
+    incoming.startedAt === undefined &&
+    existing.text === incoming.text;
+
+  return {
+    key: existing.key,
+    text: incoming.text,
+    ...(incoming.startedAt !== undefined
+      ? { startedAt: existing.startedAt ?? incoming.startedAt }
+      : shouldPreserveStartedAt && existing.startedAt !== undefined
+        ? { startedAt: existing.startedAt }
+        : {}),
+    ...(incoming.metadata ? { metadata: { ...incoming.metadata } } : {}),
+  };
 }
 
 function mergeProvisioningTranscript(
@@ -300,29 +152,26 @@ function mergeProvisioningTranscript(
     return existing?.map((entry) => mergeProvisioningTranscriptEntry(undefined, entry));
   }
   if (!existing) {
-    return incoming
-      .map((entry) => mergeProvisioningTranscriptEntry(undefined, entry))
-      .sort(
-        (left, right) =>
-          left.sourceSeq - right.sourceSeq ||
-          provisioningTranscriptEntrySortRank(left) -
-            provisioningTranscriptEntrySortRank(right),
-      );
+    return incoming.map((entry) => mergeProvisioningTranscriptEntry(undefined, entry));
   }
 
   const merged = new Map<string, UIProvisioningTranscriptEntry>();
+  const order: string[] = [];
   for (const entry of existing) {
-    merged.set(provisioningTranscriptEntryKey(entry), mergeProvisioningTranscriptEntry(undefined, entry));
+    const key = provisioningTranscriptEntryKey(entry);
+    order.push(key);
+    merged.set(key, mergeProvisioningTranscriptEntry(undefined, entry));
   }
   for (const entry of incoming) {
     const key = provisioningTranscriptEntryKey(entry);
+    if (!merged.has(key)) {
+      order.push(key);
+    }
     merged.set(key, mergeProvisioningTranscriptEntry(merged.get(key), entry));
   }
-  return [...merged.values()].sort(
-    (left, right) =>
-      left.sourceSeq - right.sourceSeq ||
-      provisioningTranscriptEntrySortRank(left) - provisioningTranscriptEntrySortRank(right),
-  );
+  return order
+    .map((key) => merged.get(key))
+    .filter((entry): entry is UIProvisioningTranscriptEntry => Boolean(entry));
 }
 
 function mergeProvisioningMetadata(
@@ -335,7 +184,6 @@ function mergeProvisioningMetadata(
   if (!existing) {
     return {
       ...incoming,
-      ...(incoming.phases ? { phases: mergeProvisioningPhases(undefined, incoming.phases) } : {}),
       ...(incoming.setup ? { setup: { ...incoming.setup } } : {}),
       ...(incoming.transcript
         ? { transcript: mergeProvisioningTranscript(undefined, incoming.transcript) }
@@ -344,16 +192,11 @@ function mergeProvisioningMetadata(
   }
 
   const setup = mergeProvisioningSetup(existing.setup, incoming.setup);
-  const phases = mergeProvisioningPhases(existing.phases, incoming.phases);
   const transcript = mergeProvisioningTranscript(existing.transcript, incoming.transcript);
   return {
-    environmentId: incoming.environmentId ?? existing.environmentId,
-    environmentDisplayName: incoming.environmentDisplayName ?? existing.environmentDisplayName,
+    attachedEnvironmentId:
+      incoming.attachedEnvironmentId ?? existing.attachedEnvironmentId,
     workspaceRoot: incoming.workspaceRoot ?? existing.workspaceRoot,
-    branchName: incoming.branchName ?? existing.branchName,
-    headSha: incoming.headSha ?? existing.headSha,
-    fallbackReason: incoming.fallbackReason ?? existing.fallbackReason,
-    ...(phases ? { phases } : {}),
     ...(setup ? { setup } : {}),
     ...(transcript ? { transcript } : {}),
   };

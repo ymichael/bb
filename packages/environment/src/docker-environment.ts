@@ -40,13 +40,14 @@ import {
   resolveEnvironmentAgentConnectionTarget,
 } from "./environment-agent-target.js";
 import {
-  createWorktreeEnvironmentDefinition,
-  type CreateWorktreeEnvironmentDefinitionOptions,
-  type WorktreeEnvironmentState,
-} from "./worktree-environment.js";
+  createLocalGitWorkspaceDefinition,
+  type CreateLocalGitWorkspaceOptions,
+  isLocalGitWorkspaceState,
+  type LocalGitWorkspaceState,
+} from "./local-git-workspace.js";
 
 export interface DockerEnvironmentState {
-  worktree: WorktreeEnvironmentState;
+  worktree: LocalGitWorkspaceState;
   containerName: string;
   image: string;
   mountPath: string;
@@ -55,11 +56,26 @@ export interface DockerEnvironmentState {
 }
 
 export interface CreateDockerEnvironmentDefinitionOptions {
-  worktree?: CreateWorktreeEnvironmentDefinitionOptions;
+  worktree?: CreateLocalGitWorkspaceOptions;
   image?: string;
   mountPath?: string;
   containerPrefix?: string;
   dockerBin?: string;
+}
+
+export function isDockerEnvironmentState(value: unknown): value is DockerEnvironmentState {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const record = value as Record<string, unknown>;
+  return (
+    typeof record.containerName === "string" &&
+    typeof record.image === "string" &&
+    typeof record.mountPath === "string" &&
+    (record.agentHostPort === undefined ||
+      typeof record.agentHostPort === "number") &&
+    (record.agentContainerPort === undefined ||
+      typeof record.agentContainerPort === "number") &&
+    isLocalGitWorkspaceState(record.worktree)
+  );
 }
 
 const DEFAULT_CONTAINER_PREFIX = "bb-thread";
@@ -156,6 +172,213 @@ function resolveContainerCwd(args: {
   return path.posix.join(args.mountPath, args.cwd.split(path.sep).join(path.posix.sep));
 }
 
+async function runDockerCommandAsync(args: {
+  dockerBin: string;
+  commandArgs: string[];
+  runtimeEnv: Record<string, string | undefined>;
+  workspaceRoot: string;
+}): Promise<{ exitCode: number | null; stdout: string; stderr: string }> {
+  return runCommandAsync(args.dockerBin, args.commandArgs, {
+    cwd: args.workspaceRoot,
+    env: args.runtimeEnv,
+    rawOutput: true,
+  });
+}
+
+async function dockerContainerExistsAsync(args: {
+  dockerBin: string;
+  containerName: string;
+  runtimeEnv: Record<string, string | undefined>;
+  workspaceRoot: string;
+}): Promise<boolean> {
+  const result = await runDockerCommandAsync({
+    dockerBin: args.dockerBin,
+    commandArgs: ["inspect", args.containerName],
+    runtimeEnv: args.runtimeEnv,
+    workspaceRoot: args.workspaceRoot,
+  });
+  return result.exitCode === 0;
+}
+
+async function ensureDockerContainerRunningAsync(args: {
+  dockerBin: string;
+  containerName: string;
+  runtimeEnv: Record<string, string | undefined>;
+  workspaceRoot: string;
+}): Promise<void> {
+  const stateResult = await runDockerCommandAsync({
+    dockerBin: args.dockerBin,
+    commandArgs: ["inspect", "-f", "{{.State.Running}}", args.containerName],
+    runtimeEnv: args.runtimeEnv,
+    workspaceRoot: args.workspaceRoot,
+  });
+  if (stateResult.exitCode === 0 && stateResult.stdout.trim() === "true") {
+    return;
+  }
+  const startResult = await runDockerCommandAsync({
+    dockerBin: args.dockerBin,
+    commandArgs: ["start", args.containerName],
+    runtimeEnv: args.runtimeEnv,
+    workspaceRoot: args.workspaceRoot,
+  });
+  if (startResult.exitCode !== 0) {
+    throw new Error(startResult.stderr || startResult.stdout || "Failed to start Docker container");
+  }
+}
+
+async function dockerContainerHasExpectedPortMappingAsync(args: {
+  dockerBin: string;
+  containerName: string;
+  agentHostPort?: number;
+  agentContainerPort?: number;
+  runtimeEnv: Record<string, string | undefined>;
+  workspaceRoot: string;
+}): Promise<boolean> {
+  const hostPort = args.agentHostPort;
+  const containerPort = args.agentContainerPort;
+  if (!hostPort || !containerPort) {
+    return false;
+  }
+  const inspectResult = await runDockerCommandAsync({
+    dockerBin: args.dockerBin,
+    commandArgs: [
+      "inspect",
+      "-f",
+      `{{with index .NetworkSettings.Ports "${containerPort}/tcp"}}{{(index . 0).HostPort}}{{end}}`,
+      args.containerName,
+    ],
+    runtimeEnv: args.runtimeEnv,
+    workspaceRoot: args.workspaceRoot,
+  });
+  return inspectResult.exitCode === 0 && inspectResult.stdout.trim() === String(hostPort);
+}
+
+async function resolveGitMetadataMountArgsAsync(args: {
+  projectRootPath: string;
+  workspaceRoot: string;
+}): Promise<string[]> {
+  const mountRoots = new Set<string>();
+  const workspaceGitFile = path.join(args.workspaceRoot, ".git");
+  try {
+    const rawGitFile = (await readFile(workspaceGitFile, "utf-8")).trim();
+    const prefix = "gitdir:";
+    if (rawGitFile.startsWith(prefix)) {
+      const rawGitDir = rawGitFile.slice(prefix.length).trim();
+      const resolvedGitDir = path.isAbsolute(rawGitDir)
+        ? rawGitDir
+        : path.resolve(args.workspaceRoot, rawGitDir);
+      const worktreesRoot = path.dirname(resolvedGitDir);
+      if (path.basename(worktreesRoot) === "worktrees") {
+        mountRoots.add(path.dirname(worktreesRoot));
+      }
+    }
+  } catch {
+    // Ignore missing workspace git metadata mounts.
+  }
+
+  const projectGitRoot = path.join(args.projectRootPath, ".git");
+  try {
+    await access(projectGitRoot);
+    mountRoots.add(projectGitRoot);
+  } catch {
+    // Ignore missing project git metadata mounts.
+  }
+
+  if (mountRoots.size === 0) {
+    return [];
+  }
+
+  return Array.from(mountRoots).flatMap((mountRoot) => ["-v", `${mountRoot}:${mountRoot}`]);
+}
+
+async function createDockerContainerAsync(args: {
+  dockerBin: string;
+  projectRootPath: string;
+  state: DockerEnvironmentState;
+  runtimeEnv: Record<string, string | undefined>;
+}): Promise<void> {
+  const gitMetadataMountArgs = await resolveGitMetadataMountArgsAsync({
+    projectRootPath: args.projectRootPath,
+    workspaceRoot: args.state.worktree.workspaceRoot,
+  });
+  const result = await runDockerCommandAsync({
+    dockerBin: args.dockerBin,
+    commandArgs: [
+      "run",
+      "-d",
+      "--name",
+      args.state.containerName,
+      "-p",
+      `${args.state.agentHostPort}:${args.state.agentContainerPort}`,
+      "-v",
+      `${args.state.worktree.workspaceRoot}:${args.state.mountPath}`,
+      ...gitMetadataMountArgs,
+      "-w",
+      args.state.mountPath,
+      args.state.image,
+      "sleep",
+      "infinity",
+    ],
+    runtimeEnv: args.runtimeEnv,
+    workspaceRoot: args.state.worktree.workspaceRoot,
+  });
+  if (result.exitCode !== 0) {
+    throw new Error(result.stderr || result.stdout || "Failed to create Docker container");
+  }
+}
+
+async function removeDockerContainerAsync(args: {
+  dockerBin: string;
+  containerName: string;
+  runtimeEnv: Record<string, string | undefined>;
+  workspaceRoot: string;
+}): Promise<void> {
+  await runDockerCommandAsync({
+    dockerBin: args.dockerBin,
+    commandArgs: ["rm", "-f", args.containerName],
+    runtimeEnv: args.runtimeEnv,
+    workspaceRoot: args.workspaceRoot,
+  });
+}
+
+async function verifyDockerGitRepositoryAccessibleAsync(args: {
+  dockerBin: string;
+  containerName: string;
+  mountPath: string;
+  runtimeEnv: Record<string, string | undefined>;
+  workspaceRoot: string;
+}): Promise<void> {
+  const commands: ReadonlyArray<readonly string[]> = [
+    ["git", "rev-parse", "--show-toplevel"],
+    ["git", "rev-parse", "--git-dir"],
+  ];
+
+  for (const commandArgs of commands) {
+    const result = await runDockerCommandAsync({
+      dockerBin: args.dockerBin,
+      commandArgs: [
+        "exec",
+        "-i",
+        "-w",
+        args.mountPath,
+        args.containerName,
+        ...commandArgs,
+      ],
+      runtimeEnv: args.runtimeEnv,
+      workspaceRoot: args.workspaceRoot,
+    });
+    if (result.exitCode === 0) {
+      continue;
+    }
+    const renderedCommand = commandArgs.join(" ");
+    throw new Error(
+      result.stderr ||
+        result.stdout ||
+        `Docker workspace git check failed: ${renderedCommand}`,
+    );
+  }
+}
+
 class DockerEnvironment implements IEnvironment {
   readonly kind = "docker";
   readonly info = { ...DOCKER_ENVIRONMENT_INFO };
@@ -183,29 +406,13 @@ class DockerEnvironment implements IEnvironment {
 
   async prepare(): Promise<void> {
     await this.inner.prepare?.();
-    await ensureDockerEnvironmentImageAvailable({
-      dockerBin: this.dockerBin,
-      image: this.state.image,
-      runtimeEnv: this.runtimeEnv,
-      cwd: this.getWorkspaceRootUnsafe(),
-    });
-    if (!this.state.agentHostPort) {
-      this.state.agentHostPort = await allocatePort();
+    if (!this.state.agentHostPort || !this.state.agentContainerPort) {
+      throw new Error(`Docker workspace is unavailable: ${this.state.containerName}`);
     }
-    if (!this.state.agentContainerPort) {
-      this.state.agentContainerPort = DEFAULT_DOCKER_ENVIRONMENT_AGENT_CONTAINER_PORT;
+    if (!await this.containerExistsAsync()) {
+      throw new Error(`Docker workspace is unavailable: ${this.state.containerName}`);
     }
-
-    if (await this.containerExistsAsync()) {
-      if (!await this.containerHasExpectedPortMappingAsync()) {
-        await this.removeContainerAsync();
-        await this.createContainerAsync();
-      } else {
-        await this.ensureContainerRunningAsync();
-      }
-    } else {
-      await this.createContainerAsync();
-    }
+    await this.ensureContainerRunningAsync();
     await this.verifyGitRepositoryAccessibleInContainerAsync();
 
     const managedAgentTarget = await ensureManagedDockerEnvironmentAgent({
@@ -240,8 +447,6 @@ class DockerEnvironment implements IEnvironment {
 
   async destroy(): Promise<void> {
     await this.suspend();
-    await this.removeContainerAsync();
-    await Promise.resolve(this.inner.destroy());
   }
 
   exists(): boolean {
@@ -565,7 +770,7 @@ async function allocatePort(): Promise<number> {
 export function createDockerEnvironmentDefinition(
   opts?: CreateDockerEnvironmentDefinitionOptions,
 ): EnvironmentDefinition<DockerEnvironmentState> {
-  const worktreeDefinition = createWorktreeEnvironmentDefinition({
+  const localGitWorkspaceDefinition = createLocalGitWorkspaceDefinition({
     ...opts?.worktree,
     manageEnvironmentAgent: false,
   });
@@ -577,12 +782,8 @@ export function createDockerEnvironmentDefinition(
     kind: "docker",
     info: { ...DOCKER_ENVIRONMENT_INFO },
     create(context: CreateEnvironmentContext): IEnvironment {
-      const inner = worktreeDefinition.create(context);
-      const worktreeState = inner.serialize() as WorktreeEnvironmentState;
-      const image = resolveDockerEnvironmentImage({
-        configuredImage: opts?.image,
-        runtimeEnv: context.runtimeEnv,
-      });
+      const inner = localGitWorkspaceDefinition.create(context);
+      const worktreeState = inner.serialize() as LocalGitWorkspaceState;
       return new DockerEnvironment(
         context.projectId,
         context.threadId,
@@ -594,7 +795,10 @@ export function createDockerEnvironmentDefinition(
             environmentId: context.environmentId ?? context.threadId,
             containerPrefix,
           }),
-          image,
+          image: resolveDockerEnvironmentImage({
+            configuredImage: opts?.image,
+            runtimeEnv: context.runtimeEnv,
+          }),
           mountPath,
           agentContainerPort: DEFAULT_DOCKER_ENVIRONMENT_AGENT_CONTAINER_PORT,
         },
@@ -603,7 +807,7 @@ export function createDockerEnvironmentDefinition(
       );
     },
     restore(state: DockerEnvironmentState, context: CreateEnvironmentContext): IEnvironment {
-      const inner = worktreeDefinition.restore(state.worktree, context);
+      const inner = localGitWorkspaceDefinition.restore(state.worktree, context);
       return new DockerEnvironment(
         context.projectId,
         context.threadId,
@@ -625,20 +829,110 @@ export function createDockerEnvironmentDefinition(
         dockerBin,
       );
     },
-    isState(value: unknown): value is DockerEnvironmentState {
-      if (!value || typeof value !== "object" || Array.isArray(value)) return false;
-      const record = value as Record<string, unknown>;
-      return (
-        typeof record.containerName === "string" &&
-        typeof record.image === "string" &&
-        typeof record.mountPath === "string" &&
-        (record.agentHostPort === undefined ||
-          typeof record.agentHostPort === "number") &&
-        (record.agentContainerPort === undefined ||
-          typeof record.agentContainerPort === "number") &&
-        Boolean(record.worktree) &&
-        typeof record.worktree === "object"
-      );
-    },
+    isState: isDockerEnvironmentState,
   };
+}
+
+export async function resolveDockerEnvironmentState(args: {
+  projectId: string;
+  threadId: string;
+  environmentId?: string;
+  runtimeEnv: Record<string, string | undefined>;
+  worktree: LocalGitWorkspaceState;
+  image?: string;
+  mountPath?: string;
+  containerPrefix?: string;
+}): Promise<DockerEnvironmentState> {
+  return {
+    worktree: { ...args.worktree },
+    containerName: resolveContainerName({
+      environmentId: args.environmentId ?? args.threadId,
+      containerPrefix: args.containerPrefix ?? DEFAULT_CONTAINER_PREFIX,
+    }),
+    image: resolveDockerEnvironmentImage({
+      configuredImage: args.image,
+      runtimeEnv: args.runtimeEnv,
+    }),
+    mountPath: args.mountPath ?? DEFAULT_MOUNT_PATH,
+    agentHostPort: await allocatePort(),
+    agentContainerPort: DEFAULT_DOCKER_ENVIRONMENT_AGENT_CONTAINER_PORT,
+  };
+}
+
+export async function ensureDockerEnvironmentArtifacts(args: {
+  projectId: string;
+  threadId: string;
+  projectRootPath: string;
+  state: DockerEnvironmentState;
+  runtimeEnv: Record<string, string | undefined>;
+  dockerBin?: string;
+}): Promise<boolean> {
+  const dockerBin = args.dockerBin ?? "docker";
+  await ensureDockerEnvironmentImageAvailable({
+    dockerBin,
+    image: args.state.image,
+    runtimeEnv: args.runtimeEnv,
+    cwd: args.state.worktree.workspaceRoot,
+  });
+  const existed = await dockerContainerExistsAsync({
+    dockerBin,
+    containerName: args.state.containerName,
+    runtimeEnv: args.runtimeEnv,
+    workspaceRoot: args.state.worktree.workspaceRoot,
+  });
+  if (!existed) {
+    await createDockerContainerAsync({
+      dockerBin,
+      projectRootPath: args.projectRootPath,
+      state: args.state,
+      runtimeEnv: args.runtimeEnv,
+    });
+  } else if (!await dockerContainerHasExpectedPortMappingAsync({
+    dockerBin,
+    containerName: args.state.containerName,
+    agentHostPort: args.state.agentHostPort,
+    agentContainerPort: args.state.agentContainerPort,
+    runtimeEnv: args.runtimeEnv,
+    workspaceRoot: args.state.worktree.workspaceRoot,
+  })) {
+    await removeDockerContainerAsync({
+      dockerBin,
+      containerName: args.state.containerName,
+      runtimeEnv: args.runtimeEnv,
+      workspaceRoot: args.state.worktree.workspaceRoot,
+    });
+    await createDockerContainerAsync({
+      dockerBin,
+      projectRootPath: args.projectRootPath,
+      state: args.state,
+      runtimeEnv: args.runtimeEnv,
+    });
+  }
+  await ensureDockerContainerRunningAsync({
+    dockerBin,
+    containerName: args.state.containerName,
+    runtimeEnv: args.runtimeEnv,
+    workspaceRoot: args.state.worktree.workspaceRoot,
+  });
+  await verifyDockerGitRepositoryAccessibleAsync({
+    dockerBin,
+    containerName: args.state.containerName,
+    mountPath: args.state.mountPath,
+    runtimeEnv: args.runtimeEnv,
+    workspaceRoot: args.state.worktree.workspaceRoot,
+  });
+  return !existed;
+}
+
+export async function removeDockerEnvironmentArtifacts(args: {
+  state: DockerEnvironmentState;
+  runtimeEnv: Record<string, string | undefined>;
+  dockerBin?: string;
+}): Promise<void> {
+  await removeDockerContainerAsync({
+    dockerBin: args.dockerBin ?? "docker",
+    containerName: args.state.containerName,
+    runtimeEnv: args.runtimeEnv,
+    workspaceRoot: args.state.worktree.workspaceRoot,
+  });
 }

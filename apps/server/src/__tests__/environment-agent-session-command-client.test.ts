@@ -8,9 +8,11 @@ import {
   ProjectRepository,
   ThreadRepository,
 } from "@bb/db";
-import { AgentServer, createCodexProviderAdapter } from "@bb/agent-server";
+import { createCodexProviderAdapter } from "@bb/provider-adapters";
+import { createEnvironmentAgentSessionCapabilities } from "@bb/environment-daemon";
 import { EnvironmentAgentCommandDispatcher } from "../environment-agent-command-dispatcher.js";
 import { EnvironmentAgentSessionCommandClient } from "../environment-agent-session-command-client.js";
+import { ProviderSessionController } from "../provider-session-controller.js";
 
 interface SqliteClient { close(): void; }
 function sqliteClient(db: DbConnection): SqliteClient {
@@ -75,6 +77,7 @@ describe("EnvironmentAgentSessionCommandClient", () => {
       agentId: "agent-1",
       agentInstanceId: `${args.sessionId}-instance`,
       protocolVersion: 1,
+      selectedCapabilities: createEnvironmentAgentSessionCapabilities({}),
       leaseExpiresAt: 30_000,
       now: 1_000,
     });
@@ -112,6 +115,7 @@ describe("EnvironmentAgentSessionCommandClient", () => {
       agentId: "agent-1",
       agentInstanceId: "instance-1",
       protocolVersion: 1,
+      selectedCapabilities: createEnvironmentAgentSessionCapabilities({}),
       leaseExpiresAt: 30_000,
       now: 1_000,
     });
@@ -145,7 +149,8 @@ describe("EnvironmentAgentSessionCommandClient", () => {
           type: "thread.start",
           threadId,
           projectId: "project-1",
-          params: { prompt: "hello" },
+          request: { projectId: "project-1", input: [{ type: "text", text: "hello" }] },
+          context: { projectId: "project-1", threadId, path: `/tmp/${threadId}` },
         },
       }),
     ).resolves.toMatchObject({
@@ -167,6 +172,7 @@ describe("EnvironmentAgentSessionCommandClient", () => {
       agentId: "agent-1",
       agentInstanceId: "instance-2",
       protocolVersion: 1,
+      selectedCapabilities: createEnvironmentAgentSessionCapabilities({}),
       leaseExpiresAt: 30_000,
       now: 1_000,
     });
@@ -214,6 +220,7 @@ describe("EnvironmentAgentSessionCommandClient", () => {
       agentId: "agent-1",
       agentInstanceId: "instance-stale",
       protocolVersion: 1,
+      selectedCapabilities: createEnvironmentAgentSessionCapabilities({}),
       leaseExpiresAt: 30_000,
       now: 1_000,
     });
@@ -274,6 +281,7 @@ describe("EnvironmentAgentSessionCommandClient", () => {
       agentId: "agent-1",
       agentInstanceId: "instance-provider-1",
       protocolVersion: 1,
+      selectedCapabilities: createEnvironmentAgentSessionCapabilities({}),
       leaseExpiresAt: 30_000,
       now: 1_000,
     });
@@ -325,7 +333,7 @@ describe("EnvironmentAgentSessionCommandClient", () => {
       threadId: first.threadId,
       sessionId: "sess-3",
     });
-    const firstServer = new AgentServer({
+    const firstServer = new ProviderSessionController({
       provider: createCodexProviderAdapter(),
     });
     const firstEnsureCompletion = completeNextQueuedCommand({
@@ -365,7 +373,7 @@ describe("EnvironmentAgentSessionCommandClient", () => {
       threadId: second.threadId,
       sessionId: "sess-4",
     });
-    const secondServer = new AgentServer({
+    const secondServer = new ProviderSessionController({
       provider: createCodexProviderAdapter(),
     });
     const secondEnsureCompletion = completeNextQueuedCommand({
@@ -409,5 +417,60 @@ describe("EnvironmentAgentSessionCommandClient", () => {
       threadId: second.threadId,
       state: "completed",
     });
+  });
+
+  it("omits activeTurnId from auto turn.run commands when execution overrides require a new turn", async () => {
+    const thread = createThreadRecord();
+    const client = createSessionClient({
+      threadId: thread.threadId,
+      sessionId: "sess-turn-overrides",
+    });
+    const server = new ProviderSessionController({
+      provider: createCodexProviderAdapter(),
+    });
+    const ensureCompletion = completeNextQueuedCommand({
+      threadId: thread.threadId,
+      result: { running: true, launched: true, pid: 303 },
+    });
+    const turnCompletion = (async () => {
+      await ensureCompletion;
+      return completeNextQueuedCommand({
+        threadId: thread.threadId,
+        result: { mode: "start", turnId: "turn-2" },
+      });
+    })();
+
+    await expect(
+      server.sendTurnCommand({
+        client,
+        threadId: thread.threadId,
+        providerThreadId: "provider-thread-1",
+        activeTurnId: "turn-1",
+        input: [{ type: "text", text: "follow up" }],
+        options: { model: "gpt-5.4" },
+        context: {
+          projectId: thread.projectId,
+          threadId: thread.threadId,
+          path: process.env.PATH ?? "",
+        },
+      }),
+    ).resolves.toEqual({
+      mode: "start",
+      providerThreadId: "provider-thread-1",
+    });
+
+    await ensureCompletion;
+    const queuedTurnCommand = await turnCompletion;
+
+    expect(commands.getById(queuedTurnCommand.id)).toMatchObject({
+      commandType: "turn.run",
+      payload: {
+        providerThreadId: "provider-thread-1",
+        requestedMode: "auto",
+        options: { model: "gpt-5.4" },
+      },
+      state: "completed",
+    });
+    expect(commands.getById(queuedTurnCommand.id)?.payload).not.toHaveProperty("activeTurnId");
   });
 });

@@ -10,7 +10,6 @@ interface PromptExecutionControlsProps {
   hasMultipleProviders?: boolean;
   providerDisplayName?: string;
   providerReadOnly?: boolean;
-  supportsModelList: boolean;
   activeModel?: { model: string } | null;
   selectedModel: string;
   modelOptions: readonly PromptOption<string>[];
@@ -18,7 +17,6 @@ interface PromptExecutionControlsProps {
   serviceTier?: ServiceTier;
   onServiceTierChange: (value: ServiceTier | undefined) => void;
   supportsServiceTier: boolean;
-  supportsReasoningLevels: boolean;
   reasoningLevel: ReasoningLevel;
   reasoningOptions: readonly PromptOption<ReasoningLevel>[];
   onReasoningLevelChange: (value: ReasoningLevel) => void;
@@ -34,7 +32,6 @@ export function PromptExecutionControls({
   hasMultipleProviders,
   providerDisplayName,
   providerReadOnly,
-  supportsModelList,
   activeModel,
   selectedModel,
   modelOptions,
@@ -42,7 +39,6 @@ export function PromptExecutionControls({
   serviceTier,
   onServiceTierChange,
   supportsServiceTier,
-  supportsReasoningLevels,
   reasoningLevel,
   reasoningOptions,
   onReasoningLevelChange,
@@ -58,9 +54,9 @@ export function PromptExecutionControls({
     hasMultipleProviders &&
     providerReadOnly &&
     providerDisplayName &&
-    !(supportsModelList && modelOptions.length > 0);
+    modelOptions.length === 0;
 
-  const showModelPicker = supportsModelList && modelOptions.length > 0;
+  const showModelPicker = modelOptions.length > 0;
 
   return (
     <>
@@ -87,7 +83,7 @@ export function PromptExecutionControls({
           showFastModeToggle={supportsServiceTier}
         />
       ) : null}
-      {supportsReasoningLevels && reasoningOptions.length > 0 ? (
+      {reasoningOptions.length > 0 ? (
         <PromptOptionPicker
           label="Reasoning"
           value={reasoningLevel}

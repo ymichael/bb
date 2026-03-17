@@ -155,8 +155,18 @@ export interface ReconcileManagedArtifactStorageArgs {
   archivedLogRetentionMs?: number;
 }
 
-function environmentPathFromDescriptor(descriptor: EnvironmentDescriptor): string | undefined {
-  return resolve(descriptor.path);
+function environmentPathFromDescriptor(descriptor?: EnvironmentDescriptor): string | undefined {
+  return descriptor ? resolve(descriptor.path) : undefined;
+}
+
+function isLegacyManagedEnvironmentReference(environmentId: string | undefined): boolean {
+  switch (environmentId?.trim()) {
+    case "worktree":
+    case "docker":
+      return true;
+    default:
+      return false;
+  }
 }
 
 export function resolveArchivedEnvironmentAgentLogRetentionMs(
@@ -224,7 +234,9 @@ export function reconcileManagedArtifactStorage(
     if (
       !hasFirstClassManagedEnvironments &&
       thread.archivedAt === undefined &&
-      (environmentId === "worktree" || environmentId === "docker")
+      // Legacy fallback for pre-attachment threads that persisted a runtime kind
+      // string in thread.environmentId instead of a first-class environment id.
+      isLegacyManagedEnvironmentReference(environmentId)
     ) {
       const activeThreadIds = activeThreadIdsByProjectId.get(thread.projectId);
       if (activeThreadIds) {

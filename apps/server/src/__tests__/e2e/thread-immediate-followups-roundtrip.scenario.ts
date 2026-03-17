@@ -52,7 +52,7 @@ async function createThread(args: {
     body: JSON.stringify({
       projectId: args.projectId,
       ...(args.environmentKind === "worktree"
-        ? { environmentKind: args.environmentKind }
+        ? { environmentCreationArgs: { kind: args.environmentKind } }
         : {}),
       input: [{ type: "text", text: args.inputText }],
     }),

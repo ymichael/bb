@@ -16,22 +16,21 @@ import type {
   ThreadRepository,
   EventRepository,
 } from "@bb/db";
-import type { SpawnThreadRequest } from "@bb/core";
+import type { ProviderToolCallResponse, SpawnThreadRequest } from "@bb/core";
 import {
-  AgentServer,
   createCodexLlmCompletionService,
   createProviderAdapter,
   listAvailableProviderInfos,
   resolveDefaultProviderId,
   type ProviderAdapter,
   type ProviderToolHost,
-} from "@bb/agent-server";
+} from "@bb/provider-adapters";
 import {
   createDefaultEnvironmentRegistry,
-  listAvailableEnvironmentInfos,
 } from "@bb/environment";
 import { WSManager } from "./ws.js";
 import { Orchestrator } from "./orchestrator.js";
+import { listBuiltInProvisioningSystemInfos } from "./environment-provisioning-systems.js";
 import { createApiRoutes } from "./routes/index.js";
 import { InMemorySchedulerService } from "./scheduler-service.js";
 import { createRestartRecommendationMonitor } from "./restart-recommendation.js";
@@ -47,9 +46,21 @@ import {
   type EnvironmentAgentSessionTimingOptions,
 } from "./environment-agent-timing.js";
 import { composeProviderToolHosts, createManagerProviderToolHost } from "./manager-tools.js";
+import { ProviderSessionController } from "./provider-session-controller.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+
+function isToolCallResponseEnvelope(
+  value: unknown,
+): value is { toolCallResponse: ProviderToolCallResponse } {
+  return (
+    value !== null
+    && typeof value === "object"
+    && !Array.isArray(value)
+    && "toolCallResponse" in value
+  );
+}
 
 export interface ServerDeps {
   projectRepo: ProjectRepository;
@@ -73,6 +84,7 @@ export interface ServerDeps {
 
 export function createServer(deps: ServerDeps) {
   const app = new Hono();
+  const runtimeEnv = deps.runtimeEnv ?? process.env;
 
   // Request logging
   app.use(logger());
@@ -97,7 +109,7 @@ export function createServer(deps: ServerDeps) {
 
   // Create managers
   const wsManager = new WSManager();
-  const defaultProviderId = resolveDefaultProviderId();
+  const defaultProviderId = resolveDefaultProviderId(runtimeEnv);
   const provider = deps.provider ?? createProviderAdapter({ providerId: defaultProviderId });
   let threadManager: Orchestrator;
   const managerToolHost = createManagerProviderToolHost({
@@ -107,9 +119,8 @@ export function createServer(deps: ServerDeps) {
     deps.providerToolHost,
     managerToolHost,
   ]);
-  const configuredAgentServer = new AgentServer({
+  const configuredProviderController = new ProviderSessionController({
     provider,
-    providerCatalog: listAvailableProviderInfos(),
     resolveDynamicTools: ({ request }: { request: SpawnThreadRequest }) =>
       request.type === "manager"
         ? providerToolHost?.listTools()
@@ -122,7 +133,7 @@ export function createServer(deps: ServerDeps) {
   });
   const providerCatalog = listAvailableProviderInfos();
   const environmentRegistry = createDefaultEnvironmentRegistry();
-  const environmentCatalog = listAvailableEnvironmentInfos(environmentRegistry);
+  const environmentCatalog = listBuiltInProvisioningSystemInfos();
   const scheduler = new InMemorySchedulerService();
   const llmCompletionService = createCodexLlmCompletionService();
   const environmentAgentSessionManager = new EnvironmentAgentSessionManager(
@@ -142,7 +153,7 @@ export function createServer(deps: ServerDeps) {
     },
   );
   const daemonRuntimeEnv = {
-    ...(deps.runtimeEnv ?? process.env),
+    ...runtimeEnv,
     ...(deps.daemonBaseUrl
       ? { BB_DAEMON_URL: deps.daemonBaseUrl }
       : {}),
@@ -171,7 +182,12 @@ export function createServer(deps: ServerDeps) {
           requestId: request.requestId,
           method: request.method,
           ...(request.params !== undefined ? { params: request.params } : {}),
-        }).then((result) => ({ result }))
+          ...(request.providerId ? { providerId: request.providerId } : {}),
+          ...(request.normalizedMethod
+            ? { normalizedMethod: request.normalizedMethod }
+            : {}),
+          ...(request.toolCall ? { toolCall: request.toolCall } : {}),
+        }).then((result) => (isToolCallResponseEnvelope(result) ? result : { result }))
         .catch((error: unknown) => ({
           errorMessage: error instanceof Error ? error.message : String(error),
         })),
@@ -204,7 +220,7 @@ export function createServer(deps: ServerDeps) {
     deps.projectRepo,
     wsManager,
     llmCompletionService,
-    configuredAgentServer,
+    configuredProviderController,
     daemonRuntimeEnv,
     environmentRegistry,
     providerCatalog,
@@ -267,6 +283,7 @@ export function createServer(deps: ServerDeps) {
     getHealthReport: createSystemHealthReporter({
       projectRepo: deps.projectRepo,
       threadRepo: deps.threadRepo,
+      environmentAgentSessionRepo: deps.environmentAgentSessionRepo,
       getRunningCount: () => threadManager.getRunningCount(),
       startTime,
       dbPath: deps.dbPath,

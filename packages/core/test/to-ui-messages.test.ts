@@ -349,8 +349,7 @@ describe("toUIMessages replay coverage", () => {
         seq: 1,
         type: "system/provisioning/started",
         data: {
-          environmentId: "worktree",
-          environmentDisplayName: "Worktree",
+          transcript: [{ key: "environment", text: "environment: Worktree" }],
         },
         createdAt: 1,
       },
@@ -1696,10 +1695,13 @@ describe("toUIMessages replay coverage", () => {
         seq: 1,
         type: "system/provisioning/env_setup",
         data: {
-          status: "started",
-          scriptPath: ".bb-env-setup.sh",
           workspaceRoot: "/tmp/worktree",
-          timeoutMs: 600000,
+          setup: {
+            status: "started",
+            scriptPath: ".bb-env-setup.sh",
+            timeoutMs: 600000,
+          },
+          transcript: [{ key: "setup", text: "running .bb-env-setup.sh", startedAt: 1 }],
         },
         createdAt: 1,
       },
@@ -1709,11 +1711,14 @@ describe("toUIMessages replay coverage", () => {
         seq: 2,
         type: "system/provisioning/env_setup",
         data: {
-          status: "running",
-          scriptPath: ".bb-env-setup.sh",
           workspaceRoot: "/tmp/worktree",
-          timeoutMs: 600000,
-          detail: "pnpm install",
+          setup: {
+            status: "running",
+            scriptPath: ".bb-env-setup.sh",
+            timeoutMs: 600000,
+            output: "pnpm install",
+          },
+          transcript: [{ key: "setup", text: "running .bb-env-setup.sh", startedAt: 2 }],
         },
         createdAt: 2,
       },
@@ -1723,10 +1728,13 @@ describe("toUIMessages replay coverage", () => {
         seq: 3,
         type: "system/provisioning/env_setup",
         data: {
-          status: "completed",
-          scriptPath: ".bb-env-setup.sh",
           workspaceRoot: "/tmp/worktree",
-          durationMs: 125,
+          setup: {
+            status: "completed",
+            scriptPath: ".bb-env-setup.sh",
+            durationMs: 125,
+          },
+          transcript: [{ key: "setup", text: "ran .bb-env-setup.sh in 125ms" }],
         },
         createdAt: 3,
       },
@@ -1782,6 +1790,17 @@ describe("toUIMessages replay coverage", () => {
         data: {
           phase: "start_provider_session",
           status: "started",
+          transcript: [
+            {
+              key: "phase:start_provider_session",
+              text: "starting provider session",
+              startedAt: 2,
+              metadata: {
+                phase: "start_provider_session",
+                status: "started",
+              },
+            },
+          ],
         },
         createdAt: 2,
       },
@@ -1799,33 +1818,18 @@ describe("toUIMessages replay coverage", () => {
     expect(ops[0]?.opType).toBe("provisioning-progress");
     expect(ops[0]?.title).toBe("Environment prepared");
     expect(ops[0]?.status).toBe("completed");
-    expect(ops[0]?.provisioning?.phases?.prepare_environment?.durationMs).toBe(1200);
-    expect(ops[0]?.provisioning?.phases?.prepare_environment?.startedAt).toBe(1);
-    expect(ops[0]?.provisioning?.transcript).toEqual([
-      {
-        kind: "phase",
-        sourceSeq: 1,
-        phase: "prepare_environment",
-        metadata: {
-          status: "completed",
-          startedAt: 1,
-          durationMs: 1200,
-        },
-      },
-    ]);
+    expect(ops[0]?.provisioning?.transcript).toBeUndefined();
     expect(ops[1]?.opType).toBe("provisioning-progress");
     expect(ops[1]?.title).toBe("Starting provider session");
     expect(ops[1]?.status).toBe("pending");
-    expect(ops[1]?.provisioning?.phases?.start_provider_session?.status).toBe("started");
-    expect(ops[1]?.provisioning?.phases?.start_provider_session?.startedAt).toBe(2);
     expect(ops[1]?.provisioning?.transcript).toEqual([
       {
-        kind: "phase",
-        sourceSeq: 2,
-        phase: "start_provider_session",
+        key: "phase:start_provider_session",
+        text: "starting provider session",
+        startedAt: 2,
         metadata: {
+          phase: "start_provider_session",
           status: "started",
-          startedAt: 2,
         },
       },
     ]);
@@ -1897,11 +1901,15 @@ describe("toUIMessages replay coverage", () => {
         seq: 1,
         type: "system/provisioning/env_setup",
         data: {
-          status: "started",
-          scriptPath: ".bb-env-setup.sh",
           workspaceRoot: "/tmp/worktree",
-          branchName: "bb/thread-123",
-          headSha: "abcdef1234567890",
+          setup: {
+            status: "started",
+            scriptPath: ".bb-env-setup.sh",
+          },
+          transcript: [
+            { key: "branch", text: "checked out branch bb/thread-123 (abcdef1)" },
+            { key: "setup", text: "running .bb-env-setup.sh", startedAt: 1 },
+          ],
         },
         createdAt: 1,
       },
@@ -1916,22 +1924,15 @@ describe("toUIMessages replay coverage", () => {
     );
 
     expect(op?.opType).toBe("provisioning-env-setup");
-    expect(op?.provisioning?.headSha).toBe("abcdef1234567890");
     expect(op?.provisioning?.transcript).toEqual([
       {
-        kind: "branch",
-        sourceSeq: 1,
-        branchName: "bb/thread-123",
-        headSha: "abcdef1234567890",
+        key: "branch",
+        text: "checked out branch bb/thread-123 (abcdef1)",
       },
       {
-        kind: "setup",
-        sourceSeq: 1,
-        setup: {
-          status: "started",
-          startedAt: 1,
-          scriptPath: ".bb-env-setup.sh",
-        },
+        key: "setup",
+        text: "running .bb-env-setup.sh",
+        startedAt: 1,
       },
     ]);
   });
@@ -2337,8 +2338,7 @@ describe("toUIMessages replay coverage", () => {
         seq: 2,
         type: "system/provisioning/started",
         data: {
-          environmentId: "worktree",
-          environmentDisplayName: "Git Worktree Workspace",
+          transcript: [{ key: "environment", text: "environment: Worktree" }],
         },
         createdAt: 2,
       },
@@ -2348,9 +2348,12 @@ describe("toUIMessages replay coverage", () => {
         seq: 3,
         type: "system/provisioning/env_setup",
         data: {
-          status: "started",
-          scriptPath: ".bb-env-setup.sh",
-          timeoutMs: 600000,
+          setup: {
+            status: "started",
+            scriptPath: ".bb-env-setup.sh",
+            timeoutMs: 600000,
+          },
+          transcript: [{ key: "setup", text: "running .bb-env-setup.sh", startedAt: 3 }],
         },
         createdAt: 3,
       },
@@ -2360,11 +2363,14 @@ describe("toUIMessages replay coverage", () => {
         seq: 4,
         type: "system/provisioning/env_setup",
         data: {
-          status: "failed",
-          scriptPath: ".bb-env-setup.sh",
-          timeoutMs: 600000,
-          durationMs: 1593,
-          detail: "pnpm build failed",
+          setup: {
+            status: "failed",
+            scriptPath: ".bb-env-setup.sh",
+            timeoutMs: 600000,
+            durationMs: 1593,
+            output: "pnpm build failed",
+          },
+          transcript: [{ key: "setup", text: "setup script failed: .bb-env-setup.sh in 1.6s" }],
         },
         createdAt: 4,
       },
@@ -2438,8 +2444,7 @@ describe("toUIMessages replay coverage", () => {
         seq: 2,
         type: "system/provisioning/started",
         data: {
-          environmentId: "direct",
-          environmentDisplayName: "Direct",
+          transcript: [{ key: "environment", text: "environment: Direct" }],
         },
         createdAt: 2,
       },
@@ -2755,8 +2760,7 @@ describe("toUIMessages replay coverage", () => {
         seq: 2,
         type: "system/provisioning/started",
         data: {
-          environmentId: "worktree",
-          environmentDisplayName: "Git Worktree Workspace",
+          transcript: [{ key: "environment", text: "environment: Worktree" }],
         },
         createdAt: 2,
       },
@@ -2766,8 +2770,7 @@ describe("toUIMessages replay coverage", () => {
         seq: 3,
         type: "system/provisioning/completed",
         data: {
-          environmentId: "worktree",
-          environmentDisplayName: "Git Worktree Workspace",
+          transcript: [{ key: "environment", text: "environment: Worktree" }],
         },
         createdAt: 3,
       },
@@ -2855,8 +2858,7 @@ describe("toUIMessages replay coverage", () => {
         seq: 2,
         type: "system/provisioning/started",
         data: {
-          environmentId: "docker",
-          environmentDisplayName: "Docker Sandbox",
+          transcript: [{ key: "environment", text: "environment: Docker Sandbox" }],
         },
         createdAt: 2,
       },
@@ -2866,8 +2868,7 @@ describe("toUIMessages replay coverage", () => {
         seq: 3,
         type: "system/provisioning/completed",
         data: {
-          environmentId: "docker",
-          environmentDisplayName: "Docker Sandbox",
+          transcript: [{ key: "environment", text: "environment: Docker Sandbox" }],
         },
         createdAt: 3,
       },
@@ -2892,8 +2893,8 @@ describe("toUIMessages replay coverage", () => {
 
     expect(messageRows[1].message.opType).toBe("provisioning");
     expect(messageRows[1].message.title).toBe("Provisioned environment");
-    expect(messageRows[1].message.provisioning?.environmentDisplayName).toBe(
-      "Docker Sandbox",
+    expect(messageRows[1].message.provisioning?.transcript?.[0]?.text).toBe(
+      "environment: Docker Sandbox",
     );
     expect(messageRows[1].message.detail).toBeUndefined();
   });

@@ -6,16 +6,15 @@ import {
 } from "./contracts.js";
 import { createLocalEnvironmentDefinition } from "./local-environment.js";
 import {
-  createWorktreeEnvironmentDefinition,
-  type CreateWorktreeEnvironmentDefinitionOptions,
-} from "./worktree-environment.js";
+  type CreateLocalGitWorkspaceOptions,
+} from "./local-git-workspace.js";
 import {
   createDockerEnvironmentDefinition,
   type CreateDockerEnvironmentDefinitionOptions,
 } from "./docker-environment.js";
 
 export interface CreateDefaultEnvironmentRegistryOptions {
-  worktree?: CreateWorktreeEnvironmentDefinitionOptions;
+  worktree?: CreateLocalGitWorkspaceOptions;
   docker?: CreateDockerEnvironmentDefinitionOptions;
 }
 
@@ -23,8 +22,9 @@ export function createDefaultEnvironmentRegistry(
   opts?: CreateDefaultEnvironmentRegistryOptions,
 ): EnvironmentRegistry {
   const registry = new EnvironmentRegistry()
-    .register(createLocalEnvironmentDefinition())
-    .register(createWorktreeEnvironmentDefinition(opts?.worktree))
+    .register(createLocalEnvironmentDefinition({
+      ...(opts?.worktree ? { worktree: opts.worktree } : {}),
+    }))
     .register(createDockerEnvironmentDefinition(opts?.docker));
   return registry;
 }
@@ -40,6 +40,6 @@ export function createEnvironment(
   context: CreateEnvironmentContext,
   registry: EnvironmentRegistry = createDefaultEnvironmentRegistry(),
 ): IEnvironment {
-  const resolvedKind = (kind ?? process.env.BB_ENVIRONMENT ?? "local").trim();
+  const resolvedKind = (kind ?? "local").trim();
   return registry.create(resolvedKind, context);
 }

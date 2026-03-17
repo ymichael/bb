@@ -1,5 +1,6 @@
 import type { EnvironmentAgentSessionRepository } from "@bb/db";
 import type { Orchestrator } from "./orchestrator.js";
+import { assessEnvironmentAgentSessionCompatibility } from "./environment-agent-session-compatibility.js";
 
 interface StartupTaskLogger {
   log(message: string): void;
@@ -55,6 +56,7 @@ export async function recoverManagedEnvironmentAgentSessionsOnBoot(args: {
   activeSessionCount: number;
   pokedCount: number;
   unreachableCount: number;
+  replaceRequiredCount: number;
 }> {
   const logger = args.logger ?? console;
   const requestTimeoutMs =
@@ -65,11 +67,19 @@ export async function recoverManagedEnvironmentAgentSessionsOnBoot(args: {
       activeSessionCount: 0,
       pokedCount: 0,
       unreachableCount: 0,
+      replaceRequiredCount: 0,
     };
   }
 
+  const reusableSessions = activeSessions.filter(
+    (session) =>
+      assessEnvironmentAgentSessionCompatibility(session).compatibility.disposition !==
+      "replace",
+  );
+  const replaceRequiredCount = activeSessions.length - reusableSessions.length;
+
   const results = await Promise.all(
-    activeSessions.map(async (session) => {
+    reusableSessions.map(async (session) => {
       if (!session.controlBaseUrl || !session.controlAuthToken) {
         return false;
       }
@@ -83,16 +93,17 @@ export async function recoverManagedEnvironmentAgentSessionsOnBoot(args: {
     }),
   );
   const pokedCount = results.filter(Boolean).length;
-  const unreachableSessions = activeSessions.filter((_, index) => !results[index]);
+  const unreachableSessions = reusableSessions.filter((_, index) => !results[index]);
   const unreachableCount = unreachableSessions.length;
 
   logger.log(
-    `Environment-agent startup recovery poked ${pokedCount}/${activeSessions.length} active sessions; left ${unreachableCount} unreachable sessions for lazy replacement.`,
+    `Environment-agent startup recovery poked ${pokedCount}/${reusableSessions.length} reusable active sessions; left ${unreachableCount} unreachable and ${replaceRequiredCount} replace-required sessions for lazy replacement.`,
   );
   return {
     activeSessionCount: activeSessions.length,
     pokedCount,
     unreachableCount,
+    replaceRequiredCount,
   };
 }
 

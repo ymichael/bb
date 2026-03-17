@@ -28,7 +28,7 @@ import {
   createCodexProviderAdapter,
   createProviderAdapter,
   type ProviderToolHost,
-} from "@bb/agent-server";
+} from "@bb/provider-adapters";
 import { createServer } from "../../server.js";
 import {
   createFakeCodexBinDir,
@@ -42,6 +42,8 @@ import {
   resolveE2eProviderMode,
   type E2eProviderMode,
 } from "./provider-mode.js";
+import { recoverManagedEnvironmentAgentSessionsOnBoot } from "../../startup-tasks.js";
+import { closeHttpServer } from "../../http-server-close.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -105,24 +107,6 @@ function prependPathEntry(
     .split(delimiter)
     .filter((entry) => entry.length > 0 && entry !== entryToPrepend);
   return [entryToPrepend, ...entries].join(delimiter);
-}
-
-function closeHttpServer(server: ReturnType<typeof serve>): Promise<void> {
-  return new Promise((resolveClose) => {
-    let settled = false;
-    const settle = () => {
-      if (settled) return;
-      settled = true;
-      resolveClose();
-    };
-
-    try {
-      server.close(settle);
-      setTimeout(settle, 250).unref();
-    } catch {
-      settle();
-    }
-  });
 }
 
 function sleep(ms: number): Promise<void> {
@@ -238,6 +222,10 @@ export async function startDaemonE2eHarness(
 
   const dbPath = join(tempDir, "bb.db");
   const fakeCodexControlFilePath = join(tempDir, "fake-codex-control", "events.log");
+  if (providerMode === "fake") {
+    mkdirSync(dirname(fakeCodexControlFilePath), { recursive: true });
+    appendFileSync(fakeCodexControlFilePath, "", "utf8");
+  }
   const fakeCodexBinDir =
     providerMode === "fake" ? createFakeCodexBinDir(tempDir, opts?.fakeCodex) : undefined;
   const fakeCodexCommand = fakeCodexBinDir ? join(fakeCodexBinDir, "codex") : undefined;
@@ -325,6 +313,12 @@ export async function startDaemonE2eHarness(
       );
       injectWebSocket(httpServer);
     });
+    await recoverManagedEnvironmentAgentSessionsOnBoot({
+      sessionRepo: environmentAgentSessionRepo,
+      requestTimeoutMs:
+        environmentAgentSessionOptions.heartbeatIntervalMs
+          ?? FAKE_E2E_ENVIRONMENT_AGENT_SESSION_OPTIONS.heartbeatIntervalMs,
+    });
     let closed = false;
     let stopped = false;
 
@@ -352,9 +346,9 @@ export async function startDaemonE2eHarness(
         stopped = true;
         refreshTrackedAgentPids();
         const pendingProvisioningTasks = listPendingProvisioningTasks(threadManager);
-        teardownThreadManager(threadManager);
+        const teardownTask = teardownThreadManager(threadManager);
         await Promise.race([
-          Promise.allSettled(pendingProvisioningTasks),
+          Promise.allSettled([...pendingProvisioningTasks, teardownTask]),
           sleep(PROVISIONING_SETTLE_TIMEOUT_MS),
         ]);
       }
@@ -445,7 +439,7 @@ function isCurrentCliDistAvailable(): boolean {
   }
 
   const cliRoot = resolve(WORKSPACE_ROOT, "apps", "cli");
-  const distModifiedAtMs = statSync(CLI_DIST_PATH).mtimeMs;
+  const distModifiedAtMs = latestModifiedAtMs(resolve(cliRoot, "dist"));
   const sourceLatestMs = Math.max(
     latestModifiedAtMs(resolve(cliRoot, "src")),
     latestModifiedAtMs(resolve(cliRoot, "package.json")),

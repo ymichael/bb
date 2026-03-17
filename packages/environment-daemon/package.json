@@ -12,14 +12,15 @@
   "types": "./dist/index.d.ts",
   "files": ["dist"],
   "scripts": {
-    "build": "rm -rf dist tsconfig.tsbuildinfo && tsc && pnpm exec esbuild src/bin/environment-agent.ts --bundle --platform=node --target=node22 --format=esm --outfile=dist/environment-agent.bundle.mjs",
+    "build": "rm -rf dist tsconfig.tsbuildinfo && tsc && pnpm exec esbuild src/bin/environment-agent.ts --bundle --platform=node --target=node22 --format=esm --banner:js='import { createRequire as __bbCreateRequire } from \"node:module\"; const require = __bbCreateRequire(import.meta.url);' --outfile=dist/environment-agent.bundle.mjs",
     "dev": "tsc --watch --preserveWatchOutput",
     "clean": "rm -rf dist tsconfig.tsbuildinfo",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --config vitest.config.ts"
   },
   "dependencies": {
-    "@bb/core": "workspace:*"
+    "@bb/core": "workspace:*",
+    "@bb/provider-adapters": "workspace:*"
   },
   "devDependencies": {
     "@bb/tsconfig": "workspace:*",

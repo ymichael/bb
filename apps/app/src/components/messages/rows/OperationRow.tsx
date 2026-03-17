@@ -5,9 +5,7 @@ import {
 } from "@bb/ui-core";
 import {
   assertNever,
-  formatEnvironmentDisplayName,
   type UIOperationMessage,
-  type UIProvisioningPhase,
   type UIProvisioningMetadata,
   type UIProvisioningTranscriptEntry,
 } from "@bb/core";
@@ -36,14 +34,6 @@ function splitNonEmptyLines(value: string | undefined): string[] {
     .filter((line) => line.length > 0);
 }
 
-function normalizeProvisioningEnvironmentLabel(
-  provisioning: UIProvisioningMetadata | undefined,
-): string | undefined {
-  const value = provisioning?.environmentDisplayName?.trim();
-  if (!value) return undefined;
-  return formatEnvironmentDisplayName({ id: value, displayName: value });
-}
-
 function formatProvisioningSetupCommand(scriptPath: string | undefined): string | undefined {
   const value = scriptPath?.trim();
   if (!value) return undefined;
@@ -68,118 +58,11 @@ function formatProvisioningRunningSuffix(
   return ` (${formatElapsedSince(startedAt, now)})`;
 }
 
-function formatProvisioningPhaseLine(
-  phase: UIProvisioningPhase,
-  metadata: NonNullable<UIProvisioningMetadata["phases"]>[UIProvisioningPhase],
-  now?: number,
-): string | undefined {
-  if (!metadata) return undefined;
-  const durationText =
-    metadata.durationMs !== undefined
-      ? ` in ${formatCompactDuration(metadata.durationMs)}`
-      : "";
-
-  switch (phase) {
-    case "prepare_environment":
-      // Intentionally omitted from the provisioning timeline row to reduce noise;
-      // the row title/status already captures environment preparation progress.
-      switch (metadata.status) {
-        case "started":
-        case "completed":
-        case "failed":
-          return undefined;
-        default:
-          return assertNever(metadata.status);
-      }
-    case "start_provider_session":
-      switch (metadata.status) {
-        case "started":
-          return `starting provider session${formatProvisioningRunningSuffix(metadata.startedAt, now)}`;
-        case "completed":
-          return `started provider session${durationText}`;
-        case "failed":
-          return `provider session start failed${durationText}`;
-        default:
-          return assertNever(metadata.status);
-      }
-    default:
-      return assertNever(phase);
-  }
-}
-
-function formatProvisioningSetupLine(
-  setup: UIProvisioningMetadata["setup"],
-  now?: number,
-): string | undefined {
-  if (!setup) return undefined;
-  const scriptPath = setup.scriptPath?.trim();
-  if (!scriptPath) return undefined;
-  const durationText =
-    setup.durationMs !== undefined
-      ? ` in ${formatCompactDuration(setup.durationMs)}`
-      : "";
-
-  switch (setup.status) {
-    case "started":
-    case "running":
-      return `running ${scriptPath}${formatProvisioningRunningSuffix(setup.startedAt, now)}`;
-    case "completed":
-      return `ran ${scriptPath}${durationText}`;
-    case "failed":
-      return `setup script failed: ${scriptPath}${durationText}`;
-    default:
-      return assertNever(setup.status);
-  }
-}
-
-function formatProvisioningBranchLine(provisioning: UIOperationMessage["provisioning"]): string | undefined {
-  const branchName = provisioning?.branchName?.trim();
-  const shortSha = provisioning?.headSha?.trim()?.slice(0, 7);
-
-  if (!branchName && !shortSha) return undefined;
-  if (branchName && shortSha) {
-    return `checked out branch ${branchName} (${shortSha})`;
-  }
-  if (branchName) {
-    return `checked out branch ${branchName}`;
-  }
-  return `checked out commit ${shortSha}`;
-}
-
 function formatProvisioningTranscriptEntry(
   entry: UIProvisioningTranscriptEntry,
-  provisioning: UIOperationMessage["provisioning"],
   now?: number,
 ): string | undefined {
-  switch (entry.kind) {
-    case "environment": {
-      const environmentDisplayName =
-        entry.environmentDisplayName ?? provisioning?.environmentDisplayName;
-      const label =
-        (environmentDisplayName
-          ? formatEnvironmentDisplayName({
-              id: environmentDisplayName,
-              displayName: environmentDisplayName,
-            })
-          : undefined) ?? "environment";
-      return `environment: ${label}`;
-    }
-    case "worktree":
-      return "creating worktree";
-    case "branch":
-      return formatProvisioningBranchLine({
-        branchName: entry.branchName,
-        ...(entry.headSha ? { headSha: entry.headSha } : {}),
-      });
-    case "setup":
-      return formatProvisioningSetupLine(entry.setup, now);
-    case "phase":
-      return formatProvisioningPhaseLine(entry.phase, entry.metadata, now);
-    case "fallback":
-      return `fallback: ${entry.reason}`;
-    default:
-      return assertNever(entry);
-  }
+  return `${entry.text}${formatProvisioningRunningSuffix(entry.startedAt, now)}`;
 }
 
 function extractPromptSections(detailText: string | undefined): {
@@ -410,44 +293,11 @@ function buildProvisioningTranscript(
   outputCommand?: string;
 } {
   const provisioning = message.provisioning;
-  const environmentLabel = normalizeProvisioningEnvironmentLabel(provisioning) ?? "environment";
   const setup = provisioning?.setup;
   const transcriptLines = provisioning?.transcript
-    ?.map((entry) => formatProvisioningTranscriptEntry(entry, provisioning, now))
+    ?.map((entry) => formatProvisioningTranscriptEntry(entry, now))
     .filter((line): line is string => Boolean(line));
-  const lines =
-    transcriptLines && transcriptLines.length > 0
-      ? transcriptLines
-      : (() => {
-          const fallbackLines = [`environment: ${environmentLabel}`];
-          const provisioningPhases = provisioning?.phases;
-          const orderedPhases: UIProvisioningPhase[] = ["start_provider_session"];
-          const isWorktreeEnvironment = provisioning?.environmentId === "worktree";
-
-          if (isWorktreeEnvironment) {
-            fallbackLines.push("creating worktree");
-          }
-          const branchLine = isWorktreeEnvironment
-            ? formatProvisioningBranchLine(provisioning)
-            : undefined;
-          if (branchLine) {
-            fallbackLines.push(branchLine);
-          }
-          const setupLine = formatProvisioningSetupLine(setup, now);
-          if (setupLine) {
-            fallbackLines.push(setupLine);
-          }
-          for (const phase of orderedPhases) {
-            const line = formatProvisioningPhaseLine(phase, provisioningPhases?.[phase], now);
-            if (line) {
-              fallbackLines.push(line);
-            }
-          }
-          if (provisioning?.fallbackReason) {
-            fallbackLines.push(`fallback: ${provisioning.fallbackReason}`);
-          }
-          return fallbackLines;
-        })();
+  const lines = transcriptLines && transcriptLines.length > 0 ? transcriptLines : [];
   if (message.status !== "pending" && message.startedAt !== undefined && message.createdAt >= message.startedAt) {
     lines.push(`provisioning took ${formatCompactDuration(message.createdAt - message.startedAt)}`);
   }

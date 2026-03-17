@@ -22,6 +22,8 @@ import {
   type SystemEnvironmentInfo,
   type Thread,
   type ThreadEvent,
+  type ThreadEventDataForType,
+  type ThreadEventType,
   type ThreadWorkStatus,
 } from "@bb/core";
 import {
@@ -51,8 +53,9 @@ import {
   createCodexProviderAdapter,
   createPiProviderAdapter,
   type LlmCompletionService,
-} from "@bb/agent-server";
+} from "@bb/provider-adapters";
 import { Orchestrator } from "../orchestrator.js";
+import { ProviderSessionController } from "../provider-session-controller.js";
 import type { EnvironmentService } from "../environment-service.js";
 import type { EnvironmentAgentSessionService } from "../environment-agent-session-service.js";
 import { WSManager } from "../ws.js";
@@ -93,6 +96,84 @@ function makeWorkspaceStatus(
   };
 }
 
+function createEventData<TType extends ThreadEventType>(
+  data: ThreadEventDataForType<TType>,
+): ThreadEventDataForType<TType> {
+  return data;
+}
+
+function createItemCompletedData(args: {
+  threadId: string;
+  turnId: string;
+  item: ThreadEventDataForType<"item/completed">["item"];
+}): ThreadEventDataForType<"item/completed"> {
+  return {
+    threadId: args.threadId,
+    turnId: args.turnId,
+    item: args.item,
+  };
+}
+
+function createTurnStartedData(
+  threadId: string,
+  turnId = "turn-1",
+): ThreadEventDataForType<"turn/started"> {
+  return {
+    threadId,
+    turn: {
+      id: turnId,
+      items: [],
+      status: "inProgress",
+      error: null,
+    },
+  };
+}
+
+function createTurnCompletedData(
+  threadId: string,
+  turnId = "turn-1",
+): ThreadEventDataForType<"turn/completed"> {
+  return {
+    threadId,
+    turn: {
+      id: turnId,
+      items: [],
+      status: "completed",
+      error: null,
+    },
+  };
+}
+
+function createAgentMessageItem(
+  text: string,
+  id = "assistant-1",
+): ThreadEventDataForType<"item/completed">["item"] {
+  return {
+    type: "agentMessage",
+    id,
+    text,
+  };
+}
+
+function createClientStartData(args: {
+  input: Array<{ type: "text"; text: string }>;
+  source?: "spawn" | "tell";
+  initiator?: "agent" | "system" | "user";
+  method?: "thread/start" | "turn/start";
+}): ThreadEventDataForType<"client/thread/start"> {
+  return {
+    direction: "outbound",
+    source: args.source ?? "spawn",
+    initiator: args.initiator ?? "agent",
+    input: args.input,
+    request: {
+      method: args.method ?? "thread/start",
+      params: {},
+    },
+    execution: {},
+  };
+}
+
 function git(repoRoot: string, ...args: string[]): string {
   return execFileSync("git", args, {
     cwd: repoRoot,
@@ -107,27 +188,28 @@ function createTestEnvironmentRegistry(args: {
   rootPath: string;
   onCreate?: (context: CreateEnvironmentContext) => void;
 }): EnvironmentRegistry {
-  const kind = args.kind ?? "worktree";
+  const requestedKind = args.kind ?? "worktree";
+  const runtimeKind = requestedKind === "worktree" ? "local" : requestedKind;
   const info: SystemEnvironmentInfo = {
-    id: kind,
+    id: requestedKind,
     displayName: args.displayName ?? "Git Worktree Workspace",
     description: "",
     capabilities: {
       host_filesystem: true,
-      isolated_workspace: kind === "worktree",
-      promote_primary_checkout: kind === "worktree",
-      demote_primary_checkout: kind === "worktree",
-      squash_merge: kind === "worktree",
+      isolated_workspace: requestedKind === "worktree",
+      promote_primary_checkout: requestedKind === "worktree",
+      demote_primary_checkout: requestedKind === "worktree",
+      squash_merge: requestedKind === "worktree",
     },
   };
 
   return new EnvironmentRegistry().register({
-    kind,
+    kind: runtimeKind,
     info,
     create(context: CreateEnvironmentContext): IEnvironment {
       args.onCreate?.(context);
       return makeRuntimeEnvironment({
-        kind,
+        kind: runtimeKind,
         rootPath: args.rootPath,
         overrides: {
           info,
@@ -135,9 +217,21 @@ function createTestEnvironmentRegistry(args: {
             return { rootPath: args.rootPath };
           },
           buildAgentInstructions() {
-            return kind === "worktree"
+            return requestedKind === "worktree"
               ? "[BB worktree environment]"
               : undefined;
+          },
+          isIsolatedWorkspace() {
+            return requestedKind === "worktree";
+          },
+          supportsPromoteToActiveWorkspace() {
+            return requestedKind === "worktree";
+          },
+          supportsDemoteFromActiveWorkspace() {
+            return requestedKind === "worktree";
+          },
+          supportsSquashMergeIntoDefaultBranch() {
+            return requestedKind === "worktree";
           },
           promoteToActiveWorkspace() {
             throw new Error("not implemented in test environment");
@@ -346,6 +440,9 @@ function asOrchestratorHarness(manager: Orchestrator): OrchestratorTestHarness {
         };
       };
     }>;
+    providerAdapterByProviderId: Map<string, {
+      listModels: (...args: unknown[]) => unknown;
+    }>;
     environmentService: {
       environmentRuntimes: Map<string, unknown>;
     };
@@ -475,7 +572,9 @@ function asOrchestratorHarness(manager: Orchestrator): OrchestratorTestHarness {
     providerThreadIds,
     activeTurnIds,
     environmentRuntimes,
-    provider: Array.from(rawManager.agentServerByProviderId.values())[0]?.opts.provider,
+    provider:
+      Array.from(rawManager.providerAdapterByProviderId.values())[0] ??
+      Array.from(rawManager.agentServerByProviderId.values())[0]?.opts.provider,
   });
   return rawManager as OrchestratorTestHarness;
 }
@@ -607,6 +706,94 @@ describe("Orchestrator", () => {
       expect(events).toContainEqual(
         expect.objectContaining({
           threadId: siblingThread.id,
+          type: "item/completed",
+        }),
+      );
+    });
+
+    it("does not cross-route shared environment events when providers reuse the same provider thread id", () => {
+      const env = environmentRepo.create({
+        projectId: project.id,
+        descriptor: { type: "path", path: "/tmp/env" },
+        managed: true,
+      });
+      const codexThread = createTestThread(threadRepo, project.id, {
+        status: "idle",
+        environmentId: env.id,
+        providerId: "codex",
+      });
+      const claudeThread = createTestThread(threadRepo, project.id, {
+        status: "idle",
+        environmentId: env.id,
+        providerId: "claude-code",
+      });
+      attachmentRepo.attachThread({ threadId: codexThread.id, environmentId: env.id });
+      attachmentRepo.attachThread({ threadId: claudeThread.id, environmentId: env.id });
+
+      manager = new Orchestrator(
+        threadRepo,
+        eventRepo,
+        projectRepo,
+        ws,
+        llmCompletionService,
+        undefined,
+        createTestRuntimeEnv(),
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        attachmentRepo as never,
+      );
+
+      (
+        manager as unknown as {
+          providerThreadIdByThreadId: Map<string, string>;
+        }
+      ).providerThreadIdByThreadId.set(codexThread.id, "shared-provider-thread");
+      (
+        manager as unknown as {
+          providerThreadIdByThreadId: Map<string, string>;
+        }
+      ).providerThreadIdByThreadId.set(claudeThread.id, "shared-provider-thread");
+
+      (
+        manager as unknown as {
+          _handleAgentServerNotification: (threadId: string, event: unknown) => void;
+        }
+      )._handleAgentServerNotification(codexThread.id, {
+        method: "item/completed",
+        normalizedMethod: "item/completed",
+        eventType: "item/completed",
+        eventData: {
+          __bb_provider_event: {
+            schema: "bb/provider-event-envelope",
+            version: 1,
+            providerId: "claude-code",
+            method: "item/completed",
+            observedAt: 1_234,
+          },
+          payload: {
+            threadId: "shared-provider-thread",
+            item: { type: "agentMessage", text: "hello from claude" },
+          },
+        },
+        shouldPersist: true,
+        shouldBroadcast: false,
+      });
+
+      expect(eventRepo.listByThread(codexThread.id)).not.toContainEqual(
+        expect.objectContaining({
+          threadId: codexThread.id,
+          type: "item/completed",
+        }),
+      );
+      expect(eventRepo.listByThread(claudeThread.id)).toContainEqual(
+        expect.objectContaining({
+          threadId: claudeThread.id,
           type: "item/completed",
         }),
       );
@@ -1067,6 +1254,28 @@ describe("Orchestrator", () => {
       expect(thread?.providerId).toBe("pi");
     });
 
+    it("preserves the provider id from an injected provider controller", async () => {
+      const piManager = new Orchestrator(
+        threadRepo,
+        eventRepo,
+        projectRepo,
+        ws,
+        llmCompletionService,
+        new ProviderSessionController({
+          provider: createPiProviderAdapter(),
+        }),
+        createTestRuntimeEnv(),
+      );
+      const project = createTestProject(projectRepo, { rootPath: "/test" });
+
+      const result = await piManager.spawn({ projectId: project.id });
+
+      const thread = threadRepo.getById(result.id);
+      expect(thread).toBeDefined();
+      expect(thread?.providerId).toBe("pi");
+      await expect(piManager.getProviderInfo()).resolves.toMatchObject({ id: "pi" });
+    });
+
     it("returns before provisioning work starts", async () => {
       const onCreate = vi.fn();
       const customEnvironmentRegistry = createTestEnvironmentRegistry({
@@ -1088,7 +1297,7 @@ describe("Orchestrator", () => {
 
       const result = await managerWithCustomEnvironment.spawn({
         projectId: project.id,
-        environmentKind: "worktree",
+        environmentCreationArgs: { kind: "worktree" },
       });
 
       expect(result.id).toBeDefined();
@@ -1124,14 +1333,26 @@ describe("Orchestrator", () => {
         },
       };
       const customEnvironmentRegistry = new EnvironmentRegistry().register({
-        kind: "worktree",
+        kind: "local",
         info,
         create(): IEnvironment {
           return makeRuntimeEnvironment({
-            kind: "worktree",
+            kind: "local",
             rootPath: workspaceRoot,
             overrides: {
               info,
+              isIsolatedWorkspace() {
+                return true;
+              },
+              supportsPromoteToActiveWorkspace() {
+                return true;
+              },
+              supportsDemoteFromActiveWorkspace() {
+                return true;
+              },
+              supportsSquashMergeIntoDefaultBranch() {
+                return true;
+              },
               async prepare() {
                 mkdirSync(workspaceRoot, { recursive: true });
                 writeFileSync(
@@ -1176,7 +1397,7 @@ describe("Orchestrator", () => {
       try {
         const result = await managerWithCustomEnvironment.spawn({
           projectId: project.id,
-          environmentKind: "worktree",
+          environmentCreationArgs: { kind: "worktree" },
         });
         const threadId = result.id;
 
@@ -1187,10 +1408,16 @@ describe("Orchestrator", () => {
               threadId,
               type: "system/provisioning/env_setup",
               data: expect.objectContaining({
-                status: "started",
-                branchName: "bb/thread-1",
-                headSha: "abc123",
                 reason: "thread-created",
+                setup: expect.objectContaining({
+                  status: "started",
+                }),
+                transcript: expect.arrayContaining([
+                  expect.objectContaining({
+                    key: "branch",
+                    text: "on branch bb/thread-1 (abc123)",
+                  }),
+                ]),
               }),
             }),
           );
@@ -1199,7 +1426,8 @@ describe("Orchestrator", () => {
         const eventsBeforeResolve = eventRepo.listByThread(threadId);
         const completedEvents = eventsBeforeResolve.filter(
           (e) => e.type === "system/provisioning/env_setup" &&
-            (e.data as Record<string, unknown>)?.status === "completed",
+            (((e.data as Record<string, unknown>)?.setup as Record<string, unknown> | undefined)
+              ?.status === "completed"),
         );
         expect(completedEvents).toHaveLength(0);
 
@@ -1216,10 +1444,16 @@ describe("Orchestrator", () => {
               threadId,
               type: "system/provisioning/env_setup",
               data: expect.objectContaining({
-                status: "completed",
-                branchName: "bb/thread-1",
-                headSha: "abc123",
                 reason: "thread-created",
+                setup: expect.objectContaining({
+                  status: "completed",
+                }),
+                transcript: expect.arrayContaining([
+                  expect.objectContaining({
+                    key: "branch",
+                    text: "on branch bb/thread-1 (abc123)",
+                  }),
+                ]),
               }),
             }),
           );
@@ -1255,14 +1489,26 @@ describe("Orchestrator", () => {
         },
       };
       const customEnvironmentRegistry = new EnvironmentRegistry().register({
-        kind: "worktree",
+        kind: "local",
         info,
         create(): IEnvironment {
           return makeRuntimeEnvironment({
-            kind: "worktree",
+            kind: "local",
             rootPath: workspaceRoot,
             overrides: {
               info,
+              isIsolatedWorkspace() {
+                return true;
+              },
+              supportsPromoteToActiveWorkspace() {
+                return true;
+              },
+              supportsDemoteFromActiveWorkspace() {
+                return true;
+              },
+              supportsSquashMergeIntoDefaultBranch() {
+                return true;
+              },
               async prepare() {
                 mkdirSync(workspaceRoot, { recursive: true });
                 writeFileSync(
@@ -1320,7 +1566,7 @@ describe("Orchestrator", () => {
       try {
         const result = await managerWithCustomEnvironment.spawn({
           projectId: project.id,
-          environmentKind: "worktree",
+          environmentCreationArgs: { kind: "worktree" },
         });
         const threadId = result.id;
 
@@ -1331,8 +1577,10 @@ describe("Orchestrator", () => {
               threadId,
               type: "system/provisioning/env_setup",
               data: expect.objectContaining({
-                status: "running",
-                detail: "+ pnpm install",
+                setup: expect.objectContaining({
+                  status: "running",
+                  output: "+ pnpm install",
+                }),
               }),
             }),
           );
@@ -1344,8 +1592,10 @@ describe("Orchestrator", () => {
             threadId,
             type: "system/provisioning/env_setup",
             data: expect.objectContaining({
-              status: "running",
-              detail: "warning: cache miss",
+              setup: expect.objectContaining({
+                status: "running",
+                output: "warning: cache miss",
+              }),
             }),
           }),
         );
@@ -1363,7 +1613,9 @@ describe("Orchestrator", () => {
               threadId,
               type: "system/provisioning/env_setup",
               data: expect.objectContaining({
-                status: "completed",
+                setup: expect.objectContaining({
+                  status: "completed",
+                }),
               }),
             }),
           );
@@ -2397,8 +2649,7 @@ describe("Orchestrator", () => {
         seq: 1,
         type: "system/provisioning/completed",
         data: {
-          environmentId: "worktree",
-          environmentDisplayName: "Git Worktree Workspace",
+          transcript: [{ key: "environment", text: "environment: Worktree" }],
         },
       });
 
@@ -2584,8 +2835,8 @@ describe("Orchestrator", () => {
 
     it("returns raw persisted events", () => {
       const thread = createTestThread(threadRepo, project.id, { status: "idle" });
-      eventRepo.create({ threadId: thread.id, seq: 1, type: "turn/started", data: { turnId: "turn-1" } as unknown as import("@bb/core").ThreadEventData });
-      eventRepo.create({ threadId: thread.id, seq: 2, type: "turn/completed", data: { turnId: "turn-1" } as unknown as import("@bb/core").ThreadEventData });
+      eventRepo.create({ threadId: thread.id, seq: 1, type: "turn/started", data: createTurnStartedData(thread.id, "turn-1") });
+      eventRepo.create({ threadId: thread.id, seq: 2, type: "turn/completed", data: createTurnCompletedData(thread.id, "turn-1") });
 
       const result = manager.getEvents(thread.id, 0);
 
@@ -2686,23 +2937,23 @@ describe("Orchestrator", () => {
 
     it("extracts text from last item/completed agentMessage event", () => {
       const thread = createTestThread(threadRepo, project.id, { status: "idle" });
-      eventRepo.create({ threadId: thread.id, seq: 1, type: "turn/started", data: {} as unknown as import("@bb/core").ThreadEventData });
-      eventRepo.create({ threadId: thread.id, seq: 2, type: "item/completed", data: { item: { type: "agentMessage", text: "Final output" } } as unknown as import("@bb/core").ThreadEventData });
+      eventRepo.create({ threadId: thread.id, seq: 1, type: "turn/started", data: createTurnStartedData(thread.id) });
+      eventRepo.create({ threadId: thread.id, seq: 2, type: "item/completed", data: createItemCompletedData({ threadId: thread.id, turnId: "turn-1", item: createAgentMessageItem("Final output") }) });
 
       expect(manager.getOutput(thread.id)).toBe("Final output");
     });
 
     it("ignores item/completed events that are not agentMessage type", () => {
       const thread = createTestThread(threadRepo, project.id, { status: "idle" });
-      eventRepo.create({ threadId: thread.id, seq: 1, type: "item/completed", data: { item: { type: "toolCall", name: "bash" } } as unknown as import("@bb/core").ThreadEventData });
+      eventRepo.create({ threadId: thread.id, seq: 1, type: "item/completed", data: createItemCompletedData({ threadId: thread.id, turnId: "turn-1", item: { type: "plan", id: "plan-1", text: "Run bash" } }) });
 
       expect(manager.getOutput(thread.id)).toBeUndefined();
     });
 
     it("returns undefined if no item/completed events", () => {
       const thread = createTestThread(threadRepo, project.id, { status: "idle" });
-      eventRepo.create({ threadId: thread.id, seq: 1, type: "turn/started", data: {} as unknown as import("@bb/core").ThreadEventData });
-      eventRepo.create({ threadId: thread.id, seq: 2, type: "turn/completed", data: {} as unknown as import("@bb/core").ThreadEventData });
+      eventRepo.create({ threadId: thread.id, seq: 1, type: "turn/started", data: createTurnStartedData(thread.id) });
+      eventRepo.create({ threadId: thread.id, seq: 2, type: "turn/completed", data: createTurnCompletedData(thread.id) });
 
       expect(manager.getOutput(thread.id)).toBeUndefined();
     });
@@ -2715,23 +2966,43 @@ describe("Orchestrator", () => {
 
     it("returns undefined when item has no text field", () => {
       const thread = createTestThread(threadRepo, project.id, { status: "idle" });
-      eventRepo.create({ threadId: thread.id, seq: 1, type: "item/completed", data: { item: { type: "agentMessage" } } as unknown as import("@bb/core").ThreadEventData });
+      eventRepo.create({
+        threadId: thread.id,
+        seq: 1,
+        type: "item/completed",
+        // Intentionally malformed persisted payload for defensive parsing coverage.
+        data: {
+          threadId: thread.id,
+          turnId: "turn-1",
+          item: { type: "agentMessage" },
+        } as unknown as ThreadEventDataForType<"item/completed">,
+      });
 
       expect(manager.getOutput(thread.id)).toBeUndefined();
     });
 
     it("returns undefined when item.text is not a string", () => {
       const thread = createTestThread(threadRepo, project.id, { status: "idle" });
-      eventRepo.create({ threadId: thread.id, seq: 1, type: "item/completed", data: { item: { type: "agentMessage", text: 42 } } as unknown as import("@bb/core").ThreadEventData });
+      eventRepo.create({
+        threadId: thread.id,
+        seq: 1,
+        type: "item/completed",
+        // Intentionally malformed persisted payload for defensive parsing coverage.
+        data: {
+          threadId: thread.id,
+          turnId: "turn-1",
+          item: { type: "agentMessage", id: "assistant-1", text: 42 },
+        } as unknown as ThreadEventDataForType<"item/completed">,
+      });
 
       expect(manager.getOutput(thread.id)).toBeUndefined();
     });
 
     it("returns text from the LAST agentMessage item/completed event when multiple exist", () => {
       const thread = createTestThread(threadRepo, project.id, { status: "idle" });
-      eventRepo.create({ threadId: thread.id, seq: 1, type: "item/completed", data: { item: { type: "agentMessage", text: "First output" } } as unknown as import("@bb/core").ThreadEventData });
-      eventRepo.create({ threadId: thread.id, seq: 2, type: "turn/started", data: {} as unknown as import("@bb/core").ThreadEventData });
-      eventRepo.create({ threadId: thread.id, seq: 3, type: "item/completed", data: { item: { type: "agentMessage", text: "Latest output" } } as unknown as import("@bb/core").ThreadEventData });
+      eventRepo.create({ threadId: thread.id, seq: 1, type: "item/completed", data: createItemCompletedData({ threadId: thread.id, turnId: "turn-1", item: createAgentMessageItem("First output", "assistant-1") }) });
+      eventRepo.create({ threadId: thread.id, seq: 2, type: "turn/started", data: createTurnStartedData(thread.id) });
+      eventRepo.create({ threadId: thread.id, seq: 3, type: "item/completed", data: createItemCompletedData({ threadId: thread.id, turnId: "turn-1", item: createAgentMessageItem("Latest output", "assistant-2") }) });
 
       expect(manager.getOutput(thread.id)).toBe("Latest output");
     });
@@ -2768,7 +3039,7 @@ describe("Orchestrator", () => {
 
     it("includes prompt-derived title fallback when persisted title is missing", async () => {
       const thread = createTestThread(threadRepo, project.id, { status: "idle" });
-      eventRepo.create({ threadId: thread.id, seq: 1, type: "client/thread/start", data: { input: [{ type: "text", text: "Investigate flaky test reruns" }] } as unknown as import("@bb/core").ThreadEventData });
+      eventRepo.create({ threadId: thread.id, seq: 1, type: "client/thread/start", data: createClientStartData({ input: [{ type: "text", text: "Investigate flaky test reruns" }] }) });
 
       const result = await manager.getHydratedByIdAsync(thread.id);
       const resultSecondRead = await manager.getHydratedByIdAsync(thread.id);
@@ -2780,8 +3051,8 @@ describe("Orchestrator", () => {
 
     it("returns persisted active status even when lifecycle events suggest completion", async () => {
       const thread = createTestThread(threadRepo, project.id, { status: "active" });
-      eventRepo.create({ threadId: thread.id, seq: 1, type: "turn/started", data: {} as unknown as import("@bb/core").ThreadEventData });
-      eventRepo.create({ threadId: thread.id, seq: 2, type: "turn/completed", data: {} as unknown as import("@bb/core").ThreadEventData });
+      eventRepo.create({ threadId: thread.id, seq: 1, type: "turn/started", data: createTurnStartedData(thread.id) });
+      eventRepo.create({ threadId: thread.id, seq: 2, type: "turn/completed", data: createTurnCompletedData(thread.id) });
 
       const result = await manager.getHydratedByIdAsync(thread.id);
 
@@ -2791,8 +3062,8 @@ describe("Orchestrator", () => {
 
     it("reconciles idle thread to idle when latest turn is started but no process exists", async () => {
       const thread = createTestThread(threadRepo, project.id, { status: "idle" });
-      eventRepo.create({ threadId: thread.id, seq: 1, type: "turn/completed", data: {} as unknown as import("@bb/core").ThreadEventData });
-      eventRepo.create({ threadId: thread.id, seq: 2, type: "turn/started", data: {} as unknown as import("@bb/core").ThreadEventData });
+      eventRepo.create({ threadId: thread.id, seq: 1, type: "turn/completed", data: createTurnCompletedData(thread.id) });
+      eventRepo.create({ threadId: thread.id, seq: 2, type: "turn/started", data: createTurnStartedData(thread.id) });
 
       const result = await manager.getHydratedByIdAsync(thread.id);
 
@@ -2924,7 +3195,7 @@ describe("Orchestrator", () => {
         status: "idle",
         environmentId: env.id,
       });
-      eventRepo.create({ threadId: thread.id, seq: 1, type: "system/provisioning/completed", data: { environmentId: "worktree", environmentDisplayName: "Git Worktree Workspace" } as unknown as import("@bb/core").ThreadEventData });
+      eventRepo.create({ threadId: thread.id, seq: 1, type: "system/provisioning/completed", data: createEventData<"system/provisioning/completed">({ transcript: [{ key: "environment", text: "environment: Worktree" }] }) });
       asOrchestratorHarness(manager).environmentRuntimes.set(`thread:${thread.id}`, {
         environment: {
           kind: "worktree",
@@ -3076,7 +3347,7 @@ describe("Orchestrator", () => {
       const cleanup = vi.fn();
       const thread = createTestThread(threadRepo, project.id, { status: "idle" });
       // Add an event so we can verify it gets deleted
-      eventRepo.create({ threadId: thread.id, seq: 1, type: "turn/started", data: {} as unknown as import("@bb/core").ThreadEventData });
+      eventRepo.create({ threadId: thread.id, seq: 1, type: "turn/started", data: createTurnStartedData(thread.id) });
       asOrchestratorHarness(manager).environmentRuntimes.set(`thread:${thread.id}`, {
         environment: makeRuntimeEnvironment({
           rootPath: "/tmp/worktree",
@@ -3128,7 +3399,7 @@ describe("Orchestrator", () => {
       });
       const thread = createTestThread(threadRepo, project.id, { status: "active" });
       // Add an event so we can verify it gets deleted
-      eventRepo.create({ threadId: thread.id, seq: 1, type: "turn/started", data: {} as unknown as import("@bb/core").ThreadEventData });
+      eventRepo.create({ threadId: thread.id, seq: 1, type: "turn/started", data: createTurnStartedData(thread.id) });
 
       const harness = asOrchestratorHarness(manager);
       harness.environmentRuntimes.set(`thread:${thread.id}`, {
@@ -3433,7 +3704,7 @@ describe("Orchestrator", () => {
 
     it("includes prompt-derived title fallback for untitled threads", () => {
       const thread = createTestThread(threadRepo, project.id, { status: "idle" });
-      eventRepo.create({ threadId: thread.id, seq: 1, type: "client/thread/start", data: { input: [{ type: "text", text: "Stabilize flaky auth redirect tests" }] } as unknown as import("@bb/core").ThreadEventData });
+      eventRepo.create({ threadId: thread.id, seq: 1, type: "client/thread/start", data: createClientStartData({ input: [{ type: "text", text: "Stabilize flaky auth redirect tests" }] }) });
 
       const result = manager.list();
       const secondResult = manager.list();
@@ -3445,7 +3716,7 @@ describe("Orchestrator", () => {
 
     it("returns persisted active list status even when lifecycle events suggest completion", () => {
       const thread = createTestThread(threadRepo, project.id, { status: "active" });
-      eventRepo.create({ threadId: thread.id, seq: 1, type: "turn/completed", data: {} as unknown as import("@bb/core").ThreadEventData });
+      eventRepo.create({ threadId: thread.id, seq: 1, type: "turn/completed", data: createTurnCompletedData(thread.id) });
 
       const result = manager.list();
 
@@ -3455,8 +3726,8 @@ describe("Orchestrator", () => {
 
     it("reconciles idle threads to idle when latest turn is started but no process exists", () => {
       const thread = createTestThread(threadRepo, project.id, { status: "idle" });
-      eventRepo.create({ threadId: thread.id, seq: 1, type: "turn/completed", data: {} as unknown as import("@bb/core").ThreadEventData });
-      eventRepo.create({ threadId: thread.id, seq: 2, type: "turn/started", data: {} as unknown as import("@bb/core").ThreadEventData });
+      eventRepo.create({ threadId: thread.id, seq: 1, type: "turn/completed", data: createTurnCompletedData(thread.id) });
+      eventRepo.create({ threadId: thread.id, seq: 2, type: "turn/started", data: createTurnStartedData(thread.id) });
 
       const result = manager.list();
 
@@ -3469,6 +3740,8 @@ describe("Orchestrator", () => {
   describe("primary checkout status reconciliation", () => {
     let testDb: ReturnType<typeof createTestDb>;
     let project: ReturnType<typeof createTestProject>;
+    let environmentRepo: ReturnType<typeof createTestRepos>["environmentRepo"];
+    let attachmentRepo: ReturnType<typeof createTestRepos>["attachmentRepo"];
 
     beforeEach(() => {
       testDb = createTestDb();
@@ -3476,10 +3749,26 @@ describe("Orchestrator", () => {
       threadRepo = repos.threadRepo;
       eventRepo = repos.eventRepo;
       projectRepo = repos.projectRepo;
+      environmentRepo = repos.environmentRepo;
+      attachmentRepo = repos.attachmentRepo;
       project = createTestProject(projectRepo, { rootPath: "/tmp/proj-1" });
       manager = new Orchestrator(
-        threadRepo, eventRepo, projectRepo, ws, llmCompletionService,
-        undefined, createTestRuntimeEnv(),
+        threadRepo,
+        eventRepo,
+        projectRepo,
+        ws,
+        llmCompletionService,
+        undefined,
+        createTestRuntimeEnv(),
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        environmentRepo as never,
+        attachmentRepo as never,
       );
     });
 
@@ -3642,16 +3931,28 @@ describe("Orchestrator", () => {
     });
 
     it("switches primary checkout when promoting a different thread", async () => {
-      const envRepo = new EnvironmentRepository(testDb.db);
-      const env = envRepo.create({ projectId: project.id, descriptor: { type: "path", path: "/tmp/env" }, managed: true });
+      const env = environmentRepo.create({
+        projectId: project.id,
+        descriptor: { type: "path", path: "/tmp/env" },
+        managed: true,
+        properties: {
+          provisioningSystemKind: "worktree",
+          location: "localhost",
+          workspaceKind: "worktree",
+        },
+      });
       const activeThread = createTestThread(threadRepo, project.id, { status: "idle", environmentId: env.id });
       const targetThread = createTestThread(threadRepo, project.id, { status: "idle", environmentId: env.id });
+      attachmentRepo.attachThread({ threadId: activeThread.id, environmentId: env.id });
+      attachmentRepo.attachThread({ threadId: targetThread.id, environmentId: env.id });
 
-      asOrchestratorHarness(manager).environmentRuntimes.set(targetThread.id, {
+      const runtimeEntry = {
         environment: makeRuntimeEnvironment({
           rootPath: "/tmp/worktrees/proj-1/thread-2",
         }),
-      });
+      };
+      asOrchestratorHarness(manager).environmentRuntimes.set(env.id, runtimeEntry);
+      asOrchestratorHarness(manager).environmentRuntimes.set(`thread:${targetThread.id}`, runtimeEntry);
       asOrchestratorHarness(manager).primaryPromotionByProjectId.set(project.id, {
         projectId: project.id,
         threadId: activeThread.id,
@@ -3673,10 +3974,17 @@ describe("Orchestrator", () => {
         manager as unknown as {
           environmentService: Pick<
             EnvironmentService,
-            "demotePrimaryCheckout" | "promoteThreadEnvironment"
+            "demotePrimaryCheckout" | "promoteThreadEnvironment" | "restoreThreadEnvironment"
           >;
         }
       ).environmentService;
+      vi
+        .spyOn(environmentService, "restoreThreadEnvironment")
+        .mockReturnValue(
+          makeRuntimeEnvironment({
+            rootPath: "/tmp/worktrees/proj-1/thread-2",
+          }),
+        );
       const demoteSpy = vi
         .spyOn(environmentService, "demotePrimaryCheckout")
         .mockResolvedValue({
@@ -3777,15 +4085,32 @@ describe("Orchestrator", () => {
     });
 
     it("keeps promote action available when another thread is currently promoted", async () => {
-      const envRepo = new EnvironmentRepository(testDb.db);
-      const env = envRepo.create({ projectId: project.id, descriptor: { type: "path", path: "/tmp/env" }, managed: true });
+      const env = environmentRepo.create({
+        projectId: project.id,
+        descriptor: { type: "path", path: "/tmp/env" },
+        managed: true,
+        properties: {
+          provisioningSystemKind: "worktree",
+          location: "localhost",
+          workspaceKind: "worktree",
+        },
+      });
       const otherThread = createTestThread(threadRepo, project.id, { status: "idle", environmentId: env.id });
       const targetThread = createTestThread(threadRepo, project.id, { status: "idle", environmentId: env.id });
-      asOrchestratorHarness(manager).environmentRuntimes.set(targetThread.id, {
-        environment: makeRuntimeEnvironment({
-          rootPath: "/tmp/worktrees/proj-1/thread-2",
-        }),
-      });
+      attachmentRepo.attachThread({ threadId: otherThread.id, environmentId: env.id });
+      attachmentRepo.attachThread({ threadId: targetThread.id, environmentId: env.id });
+      const environmentService = (
+        manager as unknown as {
+          environmentService: Pick<EnvironmentService, "restoreThreadEnvironment">;
+        }
+      ).environmentService;
+      vi
+        .spyOn(environmentService, "restoreThreadEnvironment")
+        .mockReturnValue(
+          makeRuntimeEnvironment({
+            rootPath: "/tmp/worktrees/proj-1/thread-2",
+          }),
+        );
       asOrchestratorHarness(manager).primaryPromotionByProjectId.set(project.id, {
         projectId: project.id,
         threadId: otherThread.id,
@@ -3990,7 +4315,7 @@ describe("Orchestrator", () => {
 
     it("treats stale persisted active rows as active until explicitly updated", () => {
       const t1 = createTestThread(threadRepo, project.id, { status: "active" });
-      eventRepo.create({ threadId: t1.id, seq: 1, type: "turn/started", data: {} as unknown as import("@bb/core").ThreadEventData });
+      eventRepo.create({ threadId: t1.id, seq: 1, type: "turn/started", data: createTurnStartedData(t1.id) });
 
       expect(manager.getRunningCount()).toBe(1);
     });
@@ -4017,7 +4342,7 @@ describe("Orchestrator", () => {
       it("exposes queued thread operations on hydrated thread state", async () => {
         const thread = createTestThread(threadRepo, project.id, { status: "idle" });
         // Add provisioning event so hydration resolves environment info
-        eventRepo.create({ threadId: thread.id, seq: 1, type: "system/provisioning/completed", data: { environmentId: "worktree", environmentDisplayName: "Git Worktree Workspace" } as unknown as import("@bb/core").ThreadEventData });
+        eventRepo.create({ threadId: thread.id, seq: 1, type: "system/provisioning/completed", data: createEventData<"system/provisioning/completed">({ transcript: [{ key: "environment", text: "environment: Worktree" }] }) });
         (
           asOrchestratorHarness(manager) as unknown as {
             queuedOperationsByThreadId: Map<string, Array<{
@@ -4857,11 +5182,11 @@ describe("Orchestrator", () => {
 
     it("projects start-first provisioning failure into user, provisioning, and error rows", () => {
       const thread = createTestThread(threadRepo, project.id, { status: "provisioning_failed" });
-      eventRepo.create({ threadId: thread.id, seq: 1, type: "client/thread/start", data: { direction: "outbound", source: "spawn", initiator: "agent", input: [{ type: "text", text: "Fix env setup script regression" }], request: { method: "thread/start", params: {} }, execution: {} } as unknown as import("@bb/core").ThreadEventData });
-      eventRepo.create({ threadId: thread.id, seq: 2, type: "system/provisioning/started", data: { environmentId: "worktree", environmentDisplayName: "Git Worktree Workspace" } as unknown as import("@bb/core").ThreadEventData });
-      eventRepo.create({ threadId: thread.id, seq: 3, type: "system/provisioning/env_setup", data: { status: "started", scriptPath: ".bb-env-setup.sh", timeoutMs: 600000 } as unknown as import("@bb/core").ThreadEventData });
-      eventRepo.create({ threadId: thread.id, seq: 4, type: "system/provisioning/env_setup", data: { status: "failed", scriptPath: ".bb-env-setup.sh", timeoutMs: 600000, durationMs: 1593, detail: "pnpm build failed" } as unknown as import("@bb/core").ThreadEventData });
-      eventRepo.create({ threadId: thread.id, seq: 5, type: "system/error", data: { code: "thread_provisioning_failed", message: "Thread provisioning failed for project proj-1", detail: "pnpm build failed" } as unknown as import("@bb/core").ThreadEventData });
+      eventRepo.create({ threadId: thread.id, seq: 1, type: "client/thread/start", data: createEventData<"client/thread/start">({ direction: "outbound", source: "spawn", initiator: "agent", input: [{ type: "text", text: "Fix env setup script regression" }], request: { method: "thread/start", params: {} }, execution: {} }) });
+      eventRepo.create({ threadId: thread.id, seq: 2, type: "system/provisioning/started", data: createEventData<"system/provisioning/started">({ transcript: [{ key: "environment", text: "environment: Worktree" }] }) });
+      eventRepo.create({ threadId: thread.id, seq: 3, type: "system/provisioning/env_setup", data: createEventData<"system/provisioning/env_setup">({ setup: { status: "started", scriptPath: ".bb-env-setup.sh", timeoutMs: 600000 }, transcript: [{ key: "setup", text: "running .bb-env-setup.sh", startedAt: 3 }] }) });
+      eventRepo.create({ threadId: thread.id, seq: 4, type: "system/provisioning/env_setup", data: createEventData<"system/provisioning/env_setup">({ setup: { status: "failed", scriptPath: ".bb-env-setup.sh", timeoutMs: 600000, durationMs: 1593, output: "pnpm build failed" }, transcript: [{ key: "setup", text: "setup script failed: .bb-env-setup.sh in 1.6s" }] }) });
+      eventRepo.create({ threadId: thread.id, seq: 5, type: "system/error", data: createEventData<"system/error">({ code: "thread_provisioning_failed", message: "Thread provisioning failed for project proj-1", detail: "pnpm build failed" }) });
 
       const timeline = manager.getTimeline(thread.id);
       const messageRows = timeline.rows.filter(
@@ -4890,7 +5215,7 @@ describe("Orchestrator", () => {
 
     it("includes provider thread/name/updated rows in the projected timeline", () => {
       const thread = createTestThread(threadRepo, project.id, { status: "idle" });
-      eventRepo.create({ threadId: thread.id, seq: 1, type: "thread/name/updated", data: { threadId: "provider-thread-1", threadName: "Renamed by agent" } as unknown as import("@bb/core").ThreadEventData });
+      eventRepo.create({ threadId: thread.id, seq: 1, type: "thread/name/updated", data: createEventData<"thread/name/updated">({ threadId: "provider-thread-1", threadName: "Renamed by agent" }) });
       const listSpy = vi.spyOn(eventRepo, "listByThread");
 
       const timeline = manager.getTimeline(thread.id);
@@ -4912,7 +5237,7 @@ describe("Orchestrator", () => {
 
     it("includes compaction rows in the projected timeline", () => {
       const thread = createTestThread(threadRepo, project.id, { status: "idle" });
-      eventRepo.create({ threadId: thread.id, seq: 1, type: "thread/compacted", data: { threadId: "provider-thread-1", turnId: "turn-1" } as unknown as import("@bb/core").ThreadEventData });
+      eventRepo.create({ threadId: thread.id, seq: 1, type: "thread/compacted", data: createEventData<"thread/compacted">({ threadId: "provider-thread-1", turnId: "turn-1" }) });
 
       const timeline = manager.getTimeline(thread.id);
       const rows = timeline.rows.filter(
@@ -4929,9 +5254,9 @@ describe("Orchestrator", () => {
 
     it("shows only published manager messages for manager threads", () => {
       const thread = createTestThread(threadRepo, project.id, { type: "manager", status: "idle" });
-      eventRepo.create({ threadId: thread.id, seq: 1, type: "client/turn/start", data: { direction: "outbound", source: "tell", initiator: "system", input: [{ type: "text", text: "[bb system] Welcome!" }], request: { method: "turn/start", params: {} }, execution: {} } as unknown as import("@bb/core").ThreadEventData });
-      eventRepo.create({ threadId: thread.id, seq: 2, type: "item/completed", data: { threadId: thread.id, turnId: "turn-1", item: { type: "agentMessage", id: "assistant-1", text: "internal manager chatter" } } as unknown as import("@bb/core").ThreadEventData });
-      eventRepo.create({ threadId: thread.id, seq: 3, type: "system/manager/user_message", data: { text: "Visible manager update", turnId: "turn-1" } as unknown as import("@bb/core").ThreadEventData });
+      eventRepo.create({ threadId: thread.id, seq: 1, type: "client/turn/start", data: createEventData<"client/turn/start">({ direction: "outbound", source: "tell", initiator: "system", input: [{ type: "text", text: "[bb system] Welcome!" }], request: { method: "turn/start", params: {} }, execution: {} }) });
+      eventRepo.create({ threadId: thread.id, seq: 2, type: "item/completed", data: createEventData<"item/completed">({ threadId: thread.id, turnId: "turn-1", item: { type: "agentMessage", id: "assistant-1", text: "internal manager chatter" } }) });
+      eventRepo.create({ threadId: thread.id, seq: 3, type: "system/manager/user_message", data: createEventData<"system/manager/user_message">({ text: "Visible manager update", turnId: "turn-1" }) });
 
       const timeline = manager.getTimeline(thread.id);
       const messageRows = timeline.rows.filter(
@@ -4948,9 +5273,9 @@ describe("Orchestrator", () => {
 
     it("shows the regular projected timeline for manager threads in debug view", () => {
       const thread = createTestThread(threadRepo, project.id, { type: "manager", status: "idle" });
-      eventRepo.create({ threadId: thread.id, seq: 1, type: "client/turn/start", data: { direction: "outbound", source: "tell", initiator: "system", input: [{ type: "text", text: "[bb system] Welcome!" }], request: { method: "turn/start", params: {} }, execution: {} } as unknown as import("@bb/core").ThreadEventData });
-      eventRepo.create({ threadId: thread.id, seq: 2, type: "item/completed", data: { threadId: thread.id, turnId: "turn-1", item: { type: "agentMessage", id: "assistant-1", text: "internal manager chatter" } } as unknown as import("@bb/core").ThreadEventData });
-      eventRepo.create({ threadId: thread.id, seq: 3, type: "system/manager/user_message", data: { text: "Visible manager update", turnId: "turn-1" } as unknown as import("@bb/core").ThreadEventData });
+      eventRepo.create({ threadId: thread.id, seq: 1, type: "client/turn/start", data: createEventData<"client/turn/start">({ direction: "outbound", source: "tell", initiator: "system", input: [{ type: "text", text: "[bb system] Welcome!" }], request: { method: "turn/start", params: {} }, execution: {} }) });
+      eventRepo.create({ threadId: thread.id, seq: 2, type: "item/completed", data: createEventData<"item/completed">({ threadId: thread.id, turnId: "turn-1", item: { type: "agentMessage", id: "assistant-1", text: "internal manager chatter" } }) });
+      eventRepo.create({ threadId: thread.id, seq: 3, type: "system/manager/user_message", data: createEventData<"system/manager/user_message">({ text: "Visible manager update", turnId: "turn-1" }) });
 
       const timeline = manager.getTimeline(thread.id, undefined, false, true);
       const messageRows = timeline.rows.filter(

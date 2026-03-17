@@ -9,7 +9,6 @@ import type {
   ServiceTier,
 } from "./shared-types.js";
 import type { ThreadExecutionOptions } from "./api-types.js";
-import type { ThreadProviderId } from "./thread-provider.js";
 
 // Project
 export interface Project {
@@ -30,12 +29,25 @@ export interface EnvironmentDescriptor {
   path: string;
 }
 
+export type EnvironmentLocation = "localhost" | "docker" | "remote";
+
+export type EnvironmentWorkspaceKind =
+  | "primary_checkout"
+  | "worktree"
+  | "arbitrary_path";
+
+export interface EnvironmentProperties {
+  provisioningSystemKind: string;
+  location: EnvironmentLocation;
+  workspaceKind: EnvironmentWorkspaceKind;
+}
+
 export interface EnvironmentRecord {
   id: string;
   projectId: string;
-  descriptor: EnvironmentDescriptor;
+  descriptor?: EnvironmentDescriptor;
   managed: boolean;
-  requestedRuntimeKind?: string;
+  properties?: EnvironmentProperties;
   runtimeState?: PersistedEnvironmentRecord;
   createdAt: number;
   updatedAt: number;
@@ -101,7 +113,7 @@ export interface ThreadQueuedMessage {
 export interface Thread {
   id: string;
   projectId: string;
-  providerId: ThreadProviderId;
+  providerId: string;
   type: ThreadType;
   title?: string;
   mergeBaseBranch?: string;
@@ -279,10 +291,17 @@ export type ThreadEnvironmentStartReason =
   | "boot-active-resume"
   | "resume-existing-provider-session";
 
+export interface ProvisioningTranscriptEntry {
+  key: string;
+  text: string;
+  metadata?: Record<string, unknown>;
+  startedAt?: number;
+}
+
 export interface SystemProvisioningStartedEventData {
-  environmentId: string;
-  environmentDisplayName: string;
+  attachedEnvironmentId?: string;
   reason?: ThreadProvisioningReason;
+  transcript: ProvisioningTranscriptEntry[];
 }
 
 export type ThreadProvisioningProgressPhase =
@@ -298,40 +317,38 @@ export interface SystemProvisioningProgressEventData {
   phase: ThreadProvisioningProgressPhase;
   status: ThreadProvisioningProgressStatus;
   durationMs?: number;
+  transcript: ProvisioningTranscriptEntry[];
 }
 
 export interface SystemProvisioningEnvSetupEventData {
-  status: "started" | "running" | "completed" | "failed";
-  scriptPath: string;
+  setup: {
+    status: "started" | "running" | "completed" | "failed";
+    scriptPath: string;
+    timeoutMs?: number;
+    durationMs?: number;
+    output?: string;
+  };
   workspaceRoot?: string;
-  branchName?: string;
-  headSha?: string;
-  timeoutMs?: number;
-  durationMs?: number;
-  detail?: string;
   reason?: ThreadEnvironmentStartReason;
+  transcript: ProvisioningTranscriptEntry[];
 }
 
 export interface SystemProvisioningFallbackEventData {
   requestedEnvironmentId: string;
   fallbackEnvironmentId: string;
-  reason: string;
   detail?: string;
+  transcript: ProvisioningTranscriptEntry[];
 }
 
 export interface SystemProvisioningCompletedEventData {
-  environmentId: string;
-  environmentDisplayName: string;
+  attachedEnvironmentId?: string;
   providerThreadId?: string;
   workspaceRoot?: string;
-  branchName?: string;
-  headSha?: string;
-  fallbackReason?: string;
   reason?: ThreadProvisioningReason;
+  transcript: ProvisioningTranscriptEntry[];
 }
 
 export interface SystemProvisioningCleanupFailedEventData {
-  environmentId: string;
   message: string;
   detail?: string;
 }

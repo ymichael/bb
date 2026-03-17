@@ -352,7 +352,10 @@ describe("Project routes", () => {
           projectId: "proj-1",
           type: "manager",
           title: "Manager",
-          environmentKind: "local",
+          environmentDescriptor: {
+            type: "path",
+            path: project.rootPath,
+          },
           developerInstructions: expect.stringContaining(
             "{{MANAGER_WORKSPACE_PATH}}",
           ),

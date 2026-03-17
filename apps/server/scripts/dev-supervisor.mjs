@@ -49,7 +49,7 @@ process.on("SIGTERM", () => {
 async function ensureDependencyBuilds() {
   const result = await runCommand("pnpm", [
     "--filter",
-    "@bb/agent-server",
+    "@bb/provider-adapters",
     "build",
   ]);
   if (normalizeExitCode(result.code, result.signal) !== 0) {

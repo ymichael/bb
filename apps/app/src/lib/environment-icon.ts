@@ -7,32 +7,28 @@ interface EnvironmentIconInfo {
 }
 
 type EnvironmentIconSource =
-  | Pick<SystemEnvironmentInfo, "id" | "capabilities">
-  | Pick<EnvironmentRecord, "managed">
+  | (Pick<SystemEnvironmentInfo, "capabilities"> & { id?: string })
+  | Pick<EnvironmentRecord, "managed" | "properties">
 
 export function getEnvironmentIconInfo(
   environment?: EnvironmentIconSource | null,
 ): EnvironmentIconInfo | undefined {
   if (!environment) return undefined
 
-  // Environment ids are open_external runtime values, so only known special
-  // cases get id-specific icons. Unknown ids intentionally fall back to
-  // capability-based icons when possible.
-  if ("id" in environment && environment.id === "docker") {
+  if (
+    ("id" in environment && environment.id === "docker") ||
+    ("properties" in environment && environment.properties?.location === "docker")
+  ) {
     return {
       icon: Container,
       ariaLabel: "Docker thread",
     }
   }
 
-  if ("managed" in environment && environment.managed) {
-    return {
-      icon: FolderGit2,
-      ariaLabel: "Managed environment",
-    }
-  }
-
-  if ("capabilities" in environment && environment.capabilities.isolated_workspace) {
+  if (
+    ("capabilities" in environment && environment.capabilities.isolated_workspace) ||
+    ("properties" in environment && environment.properties?.workspaceKind === "worktree")
+  ) {
     return {
       icon: FolderGit2,
       ariaLabel: "Worktree thread",
@@ -41,7 +37,7 @@ export function getEnvironmentIconInfo(
 
   if (
     ("capabilities" in environment && environment.capabilities.host_filesystem) ||
-    ("managed" in environment && !environment.managed)
+    ("properties" in environment && environment.properties?.location === "localhost")
   ) {
     return {
       icon: Laptop,

@@ -276,7 +276,7 @@ describe("Thread routes", () => {
         body: JSON.stringify({
           projectId: "proj-1",
           input: [{ type: "text", text: "Do work" }],
-          environmentKind: "worktree",
+          environmentCreationArgs: { kind: "worktree" },
         }),
       });
 
@@ -284,7 +284,7 @@ describe("Thread routes", () => {
       expect(threadManager.spawn).toHaveBeenCalledWith({
         projectId: "proj-1",
         input: [{ type: "text", text: "Do work" }],
-        environmentKind: "worktree",
+        environmentCreationArgs: { kind: "worktree" },
       });
     });
 
@@ -1212,7 +1212,11 @@ describe("Thread routes", () => {
         projectId: project.id,
         descriptor: { type: "path", path: "/project/root/.worktrees/thread-1" },
         managed: true,
-        requestedRuntimeKind: "worktree",
+        properties: {
+          provisioningSystemKind: "worktree",
+          location: "localhost",
+          workspaceKind: "worktree",
+        },
       });
       threadEnvironmentAttachmentRepo.attachThread({
         threadId: thread1.id,
@@ -1262,7 +1266,11 @@ describe("Thread routes", () => {
         projectId: project.id,
         descriptor: { type: "path", path: "/project/root/.worktrees/thread-1" },
         managed: true,
-        requestedRuntimeKind: "worktree",
+        properties: {
+          provisioningSystemKind: "worktree",
+          location: "localhost",
+          workspaceKind: "worktree",
+        },
       });
       threadEnvironmentAttachmentRepo.attachThread({
         threadId: dbThread.id,

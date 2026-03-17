@@ -1,5 +1,5 @@
 import { toRecord } from "@bb/core";
-import { ProviderToolHost, type ProviderToolDefinition } from "@bb/agent-server";
+import { ProviderToolHost, type ProviderToolDefinition } from "@bb/provider-adapters";
 import { invalidRequestError } from "./domain-errors.js";
 import type { Orchestrator } from "./orchestrator.js";
 

@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = resolve(__filename, "..");
 const workspaceRoot = resolve(__dirname, "..", "..");
-const daemonEntry = resolve(workspaceRoot, "apps", "daemon", "dist", "index.js");
+const daemonEntry = resolve(workspaceRoot, "apps", "server", "dist", "index.js");
 const cliEntry = resolve(workspaceRoot, "apps", "cli", "dist", "index.js");
 const startHelperEntry = resolve(workspaceRoot, "scripts", "qa", "start-standalone-daemon-qa.mjs");
 const stopHelperEntry = resolve(workspaceRoot, "scripts", "qa", "stop-standalone-daemon-qa.mjs");
@@ -178,7 +178,7 @@ async function main() {
         "spawn",
         "--project",
         metadata.projectId,
-        "--environment",
+        "--new-environment",
         "worktree",
         "--prompt",
         "Reply with exactly WORKTREE-SMOKE-START and finish.",

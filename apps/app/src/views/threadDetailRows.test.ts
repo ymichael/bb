@@ -505,7 +505,7 @@ describe("buildThreadDetailRows", () => {
         opType: "provisioning-started",
         title: "Provisioning started",
         provisioning: {
-          environmentDisplayName: "Direct",
+          transcript: [{ key: "environment", text: "environment: Direct" }],
         },
       },
       {
@@ -543,8 +543,8 @@ describe("buildThreadDetailRows", () => {
         opType: "provisioning-completed",
         title: "Provisioning ready",
         provisioning: {
-          environmentDisplayName: "Direct",
           workspaceRoot: "/Users/michael/Projects/bb",
+          transcript: [{ key: "environment", text: "environment: Direct" }],
         },
       },
     ];
@@ -557,8 +557,8 @@ describe("buildThreadDetailRows", () => {
     if (rows[0].message.kind !== "operation") return;
     expect(rows[0].message.opType).toBe("provisioning");
     expect(rows[0].message.title).toBe("Provisioned environment");
-    expect(rows[0].message.provisioning?.environmentDisplayName).toBe("Direct");
     expect(rows[0].message.provisioning?.workspaceRoot).toBe("/Users/michael/Projects/bb");
+    expect(rows[0].message.provisioning?.transcript?.[0]?.text).toBe("environment: Direct");
     expect(rows[0].message.provisioning?.setup?.scriptPath).toBe(".bb-env-setup.ts");
     expect(rows[0].message.provisioning?.setup?.durationMs).toBe(3074);
     expect(rows[0].message.detail).toBeUndefined();
@@ -608,7 +608,7 @@ describe("buildThreadDetailRows", () => {
         opType: "provisioning-started",
         title: "Provisioning started",
         provisioning: {
-          environmentDisplayName: "Direct",
+          transcript: [{ key: "environment", text: "environment: Direct" }],
         },
       },
       {

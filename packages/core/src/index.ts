@@ -1,6 +1,7 @@
 export type {
   Project,
   EnvironmentDescriptor,
+  EnvironmentProperties,
   EnvironmentRecord,
   Thread,
   ThreadStatus,
@@ -14,6 +15,7 @@ export type {
   ThreadProvisioningProgressPhase,
   ThreadProvisioningProgressStatus,
   ThreadEnvironmentStartReason,
+  ProvisioningTranscriptEntry,
   ThreadQueuedMessage,
   ThreadBuiltInAction,
   ThreadBuiltInActionId,
@@ -64,10 +66,15 @@ export type {
 } from "./protocol.js";
 
 export { THREAD_CHANGE_KINDS, SYSTEM_CHANGE_KINDS } from "./protocol.js";
-export { formatEnvironmentDisplayName } from "./environment-display-name.js";
+export {
+  formatEnvironmentDisplayName,
+  formatRuntimeKind,
+  isWorktreeEnvironmentReference,
+} from "./environment-display-name.js";
 
 export type {
   SpawnThreadRequest,
+  EnvironmentCreationArgs,
   TellThreadRequest,
   EnqueueThreadMessageRequest,
   SendQueuedThreadMessageRequest,
@@ -96,6 +103,11 @@ export type {
   SystemHealthStorageBucket,
   SystemHealthDiskSummary,
   SystemHealthThreadCounts,
+  SystemHealthEnvironmentAgentWorker,
+  SystemHealthEnvironmentAgentProvider,
+  SystemHealthEnvironmentAgentCapabilities,
+  SystemHealthEnvironmentAgentCompatibility,
+  SystemHealthEnvironmentAgentSession,
   SystemHealthReport,
   SystemRestartAction,
   SystemRestartPolicy,
@@ -151,9 +163,6 @@ export type {
   UIFileEditChange,
   UIFileEditMessage,
   UIProvisioningMetadata,
-  UIProvisioningPhase,
-  UIProvisioningPhaseMetadata,
-  UIProvisioningPhaseStatus,
   UIProvisioningSetupMetadata,
   UIProvisioningSetupStatus,
   UIProvisioningTranscriptEntry,

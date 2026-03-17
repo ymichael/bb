@@ -938,8 +938,8 @@ describe("ConversationEntry", () => {
       opType: "provisioning",
       title: "Provisioned environment",
       provisioning: {
-        environmentDisplayName: "Direct",
         workspaceRoot: "/Users/michael/Projects/bb",
+        transcript: [{ key: "environment", text: "environment: Direct" }],
       },
     };
 
@@ -956,8 +956,8 @@ describe("ConversationEntry", () => {
       opType: "provisioning",
       title: "Provisioned environment",
       provisioning: {
-        environmentDisplayName: "Worktree",
         workspaceRoot: "/tmp/worktree",
+        transcript: [{ key: "environment", text: "environment: Worktree" }],
       },
     };
 
@@ -974,11 +974,12 @@ describe("ConversationEntry", () => {
       opType: "provisioning",
       title: "Provisioned environment",
       provisioning: {
-        environmentId: "worktree",
-        environmentDisplayName: "Worktree",
         workspaceRoot: "/tmp/worktree",
-        branchName: "bb/thread-123",
-        headSha: "abcdef1234567890",
+        transcript: [
+          { key: "environment", text: "environment: Worktree" },
+          { key: "worktree", text: "creating worktree" },
+          { key: "branch", text: "checked out branch bb/thread-123 (abcdef1)" },
+        ],
       },
     };
 
@@ -994,27 +995,11 @@ describe("ConversationEntry", () => {
       opType: "provisioning",
       title: "Provisioned environment",
       provisioning: {
-        environmentId: "worktree",
-        environmentDisplayName: "Worktree",
         workspaceRoot: "/tmp/worktree",
-        branchName: "bb/thread-123",
-        headSha: "abcdef1234567890",
         transcript: [
-          {
-            kind: "environment",
-            sourceSeq: 1,
-            environmentDisplayName: "Worktree",
-          },
-          {
-            kind: "worktree",
-            sourceSeq: 1,
-          },
-          {
-            kind: "branch",
-            sourceSeq: 2,
-            branchName: "bb/thread-123",
-            headSha: "abcdef1234567890",
-          },
+          { key: "environment", text: "environment: Worktree" },
+          { key: "worktree", text: "creating worktree" },
+          { key: "branch", text: "checked out branch bb/thread-123 (abcdef1)" },
         ],
       },
     };
@@ -1030,7 +1015,7 @@ describe("ConversationEntry", () => {
       opType: "provisioning",
       title: "Provisioned environment",
       provisioning: {
-        environmentDisplayName: "Direct",
+        transcript: [{ key: "environment", text: "environment: Direct" }],
       },
     };
 
@@ -1047,9 +1032,11 @@ describe("ConversationEntry", () => {
       title: "Provisioned environment",
       detail: "bootstrap note: used cached dependencies",
       provisioning: {
-        environmentDisplayName: "Worktree",
         workspaceRoot: "/tmp/worktree",
-        fallbackReason: "fallback because worktree bootstrap was unavailable",
+        transcript: [
+          { key: "environment", text: "environment: Worktree" },
+          { key: "fallback", text: "fallback: fallback because worktree bootstrap was unavailable" },
+        ],
       },
     };
 
@@ -1066,13 +1053,16 @@ describe("ConversationEntry", () => {
       opType: "provisioning",
       title: "Provisioned environment",
       provisioning: {
-        environmentDisplayName: "Worktree",
         workspaceRoot: "/tmp/worktree",
         setup: {
           status: "completed",
           scriptPath: ".bb-env-setup.sh",
           durationMs: 10200,
         },
+        transcript: [
+          { key: "environment", text: "environment: Worktree" },
+          { key: "setup", text: "ran .bb-env-setup.sh in 10s" },
+        ],
       },
     };
 
@@ -1089,7 +1079,6 @@ describe("ConversationEntry", () => {
       opType: "provisioning",
       title: "Provisioning environment",
       provisioning: {
-        environmentDisplayName: "Worktree",
         workspaceRoot: "/tmp/worktree",
         setup: {
           status: "failed",
@@ -1098,6 +1087,10 @@ describe("ConversationEntry", () => {
           durationMs: 5988,
           output: "@bb/server:build: ERROR: command failed",
         },
+        transcript: [
+          { key: "environment", text: "environment: Worktree" },
+          { key: "setup", text: "setup script failed: .bb-env-setup.sh in 6s" },
+        ],
       },
     };
 
@@ -1115,7 +1108,6 @@ describe("ConversationEntry", () => {
       opType: "provisioning",
       title: "Provisioning environment",
       provisioning: {
-        environmentDisplayName: "Worktree",
         workspaceRoot: "/tmp/worktree",
         setup: {
           status: "running",
@@ -1123,6 +1115,10 @@ describe("ConversationEntry", () => {
           timeoutMs: 600000,
           output: "+ pnpm install\nDone in 3.2s",
         },
+        transcript: [
+          { key: "environment", text: "environment: Worktree" },
+          { key: "setup", text: "running .bb-env-setup.sh" },
+        ],
       },
     };
 
@@ -1140,7 +1136,6 @@ describe("ConversationEntry", () => {
       opType: "provisioning",
       title: "Provisioning environment",
       provisioning: {
-        environmentDisplayName: "Worktree",
         workspaceRoot: "/tmp/worktree",
         setup: {
           status: "failed",
@@ -1149,6 +1144,10 @@ describe("ConversationEntry", () => {
           durationMs: 600000,
           output: ".bb-env-setup.sh timed out after 10 minutes",
         },
+        transcript: [
+          { key: "environment", text: "environment: Worktree" },
+          { key: "setup", text: "setup script failed: .bb-env-setup.sh in 600s" },
+        ],
       },
     };
 
@@ -1166,13 +1165,7 @@ describe("ConversationEntry", () => {
       createdAt: 15_000,
       status: "pending",
       provisioning: {
-        environmentDisplayName: "Worktree",
-        phases: {
-          prepare_environment: {
-            status: "started",
-            startedAt: 1000,
-          },
-        },
+        transcript: [{ key: "environment", text: "environment: Worktree" }],
       },
     };
 
@@ -1200,22 +1193,16 @@ describe("ConversationEntry", () => {
       createdAt: 15_000,
       status: "pending",
       provisioning: {
-        environmentDisplayName: "Worktree",
-        phases: {
-          prepare_environment: {
-            status: "completed",
-            durationMs: 1200,
-          },
-          start_provider_session: {
-            status: "started",
-            startedAt: 1000,
-          },
-        },
         setup: {
           status: "running",
           startedAt: 11000,
           scriptPath: ".bb-env-setup.sh",
         },
+        transcript: [
+          { key: "environment", text: "environment: Worktree" },
+          { key: "phase:start_provider_session", text: "starting provider session", startedAt: 1000 },
+          { key: "setup", text: "running .bb-env-setup.sh", startedAt: 11000 },
+        ],
       },
     };
 
@@ -1246,20 +1233,17 @@ describe("ConversationEntry", () => {
       title: "Provisioning environment",
       status: "completed",
       provisioning: {
-        environmentId: "worktree",
-        environmentDisplayName: "Worktree",
-        branchName: "feature/test",
         setup: {
           status: "completed",
           scriptPath: ".bb-env-setup.sh",
           durationMs: 5_000,
         },
-        phases: {
-          start_provider_session: {
-            status: "completed",
-            durationMs: 2_000,
-          },
-        },
+        transcript: [
+          { key: "environment", text: "environment: Worktree" },
+          { key: "worktree", text: "creating worktree" },
+          { key: "setup", text: "ran .bb-env-setup.sh in 5s" },
+          { key: "phase:start_provider_session", text: "started provider session in 2s" },
+        ],
       },
     };
 
@@ -1286,6 +1270,7 @@ describe("ConversationEntry", () => {
           timeoutMs: 600000,
           durationMs: 5988,
         },
+        transcript: [{ key: "setup", text: "ran .bb-env-setup.sh in 6s" }],
       },
     };
 

@@ -1,4 +1,5 @@
 import {
+  type EnvironmentProperties,
   type ThreadWorkStatus,
   type EnvironmentProvisioningEvent,
   type PersistedEnvironmentRecord,
@@ -51,7 +52,7 @@ interface EnvironmentServiceCallbacks {
   createContext: (threadId: string, projectRootPath: string) => CreateEnvironmentContext;
   onProvisioningEvent: (threadId: string, event: EnvironmentProvisioningEvent) => void;
   onThreadChanged: (threadId: string, changes: readonly ThreadChangeKind[]) => void;
-  onCleanupFailure: (threadId: string, environmentId: string, error: unknown) => void;
+  onCleanupFailure: (threadId: string, environmentKind: string, error: unknown) => void;
   onPrimaryCheckoutDemoted: (args: {
     projectId: string;
     threadId: string;
@@ -62,6 +63,14 @@ interface EnvironmentServiceCallbacks {
     environment: IEnvironment,
     projectRootPath: string,
     reason: ThreadEnvironmentStartReason,
+  ) => Promise<void>;
+  ensureManagedEnvironmentArtifacts?: (
+    threadId: string,
+    projectRootPath: string,
+  ) => Promise<{ created: boolean }>;
+  cleanupManagedEnvironmentArtifacts?: (
+    threadId: string,
+    projectRootPath: string,
   ) => Promise<void>;
 }
 
@@ -178,17 +187,66 @@ export class EnvironmentService {
       if (attachedEnvironmentRecord.runtimeState) {
         return attachedEnvironmentRecord.runtimeState;
       }
-      const derivedRecord = derivePersistedEnvironmentRecordFromDescriptor({
-        descriptor: attachedEnvironmentRecord.descriptor,
-        projectRootPath:
-          this.projectRepo.getById(attachedEnvironmentRecord.projectId)?.rootPath ??
-          attachedEnvironmentRecord.descriptor.path,
-      });
-      if (derivedRecord) {
-        return derivedRecord;
+      if (attachedEnvironmentRecord.descriptor) {
+        const derivedRecord = derivePersistedEnvironmentRecordFromDescriptor({
+          descriptor: attachedEnvironmentRecord.descriptor,
+          projectRootPath:
+            this.projectRepo.getById(attachedEnvironmentRecord.projectId)?.rootPath ??
+            attachedEnvironmentRecord.descriptor.path,
+        });
+        if (derivedRecord) {
+          return derivedRecord;
+        }
       }
     }
     return undefined;
+  }
+
+  private resolveAttachedEnvironmentRecord(threadId: string) {
+    const attachedEnvironment = this.resolveAttachedEnvironment(threadId);
+    if (!attachedEnvironment) {
+      return undefined;
+    }
+    return this.environmentRepo?.getById(attachedEnvironment.environmentId);
+  }
+
+  private resolveAttachedEnvironmentProperties(threadId: string): EnvironmentProperties | undefined {
+    return this.resolveAttachedEnvironmentRecord(threadId)?.properties;
+  }
+
+  private isThreadIsolatedWorkspaceEnvironment(threadId: string): boolean {
+    const properties = this.resolveAttachedEnvironmentProperties(threadId);
+    if (!properties) {
+      return false;
+    }
+    return properties.location === "docker" || properties.workspaceKind === "worktree";
+  }
+
+  private createRuntimeContext(
+    threadId: string,
+    projectRootPath: string,
+    overrides?: {
+      workspaceRootPath?: string;
+      environmentId?: string;
+      environmentProperties?: EnvironmentProperties;
+    },
+  ): CreateEnvironmentContext {
+    const attachedEnvironmentRecord = this.resolveAttachedEnvironmentRecord(threadId);
+    return {
+      ...this.callbacks.createContext(threadId, projectRootPath),
+      ...(attachedEnvironmentRecord ? { environmentId: attachedEnvironmentRecord.id } : {}),
+      ...(attachedEnvironmentRecord?.descriptor
+        ? { workspaceRootPath: attachedEnvironmentRecord.descriptor.path }
+        : {}),
+      ...(attachedEnvironmentRecord?.properties
+        ? { environmentProperties: attachedEnvironmentRecord.properties }
+        : {}),
+      ...(overrides?.environmentId ? { environmentId: overrides.environmentId } : {}),
+      ...(overrides?.workspaceRootPath ? { workspaceRootPath: overrides.workspaceRootPath } : {}),
+      ...(overrides?.environmentProperties
+        ? { environmentProperties: overrides.environmentProperties }
+        : {}),
+    };
   }
 
   private resolveThreadRuntimeKind(
@@ -198,7 +256,6 @@ export class EnvironmentService {
     const attachedEnvironmentRecord = this.resolveAttachedPersistedEnvironmentRecord(thread.id);
     const candidateKinds = [
       attachedEnvironmentRecord?.kind,
-      thread.environmentId,
       "local",
     ];
     for (const candidateKind of candidateKinds) {
@@ -232,8 +289,8 @@ export class EnvironmentService {
     }));
   }
 
-  resolveRequestedEnvironmentId(value?: string): string {
-    const normalized = (value ?? process.env.BB_ENVIRONMENT ?? "local").trim();
+  resolveRuntimeEnvironmentKind(value?: string): string {
+    const normalized = (value ?? "local").trim();
     if (!normalized) return "local";
     if (!this.environmentRegistry.has(normalized)) {
       throw new Error(`Unsupported environment "${normalized}"`);
@@ -255,7 +312,7 @@ export class EnvironmentService {
     try {
       const restored = this.environmentRegistry.restore(
         environmentRecord,
-        this.callbacks.createContext(thread.id, projectRootPath),
+        this.createRuntimeContext(thread.id, projectRootPath),
       );
       this.restoreFailuresByThreadId.delete(thread.id);
       return restored;
@@ -277,7 +334,9 @@ export class EnvironmentService {
   async getProjectWorkspaceStatusAsync(projectId: string, rootPath: string): Promise<ThreadWorkStatus> {
     const environment = this.environmentRegistry.create(
       "local",
-      this.callbacks.createContext(`project-status:${projectId}`, rootPath),
+      this.createRuntimeContext(`project-status:${projectId}`, rootPath, {
+        workspaceRootPath: rootPath,
+      }),
     );
     try {
       return await environment.getWorkspaceStatus();
@@ -291,8 +350,9 @@ export class EnvironmentService {
     projectRootPath: string,
     environment: IEnvironment,
     reason: ThreadEnvironmentStartReason,
+    materializedFreshEnvironment = false,
   ): Promise<{ existedBeforePrepare: boolean }> {
-    const existedBeforePrepare = environment.exists();
+    const existedBeforePrepare = !materializedFreshEnvironment && environment.exists();
     if (typeof environment.prepare === "function") {
       await environment.prepare();
     }
@@ -344,17 +404,37 @@ export class EnvironmentService {
         };
       }
 
-      const environment = this.environmentRegistry.create(
-        environmentKind,
-        this.callbacks.createContext(threadId, projectRootPath),
-      );
+      const materialization =
+        await this.callbacks.ensureManagedEnvironmentArtifacts?.(threadId, projectRootPath) ??
+        { created: false };
+
+      const thread = this.threadRepo.getById(threadId);
+      const environment =
+        (thread ? this.restoreThreadEnvironment(thread, projectRootPath) : undefined) ??
+        this.environmentRegistry.create(
+          environmentKind,
+          this.createRuntimeContext(threadId, projectRootPath),
+        );
       try {
-        await this.prepareEnvironment(threadId, projectRootPath, environment, reason);
+        await this.prepareEnvironment(
+          threadId,
+          projectRootPath,
+          environment,
+          reason,
+          materialization.created,
+        );
       } catch (error) {
         try {
           await Promise.resolve(environment.destroy());
         } catch {
           // Best-effort cleanup for partially provisioned environments.
+        }
+        if (materialization.created) {
+          try {
+            await this.callbacks.cleanupManagedEnvironmentArtifacts?.(threadId, projectRootPath);
+          } catch {
+            // Best-effort cleanup for partially provisioned environments.
+          }
         }
         throw error;
       }
@@ -393,21 +473,38 @@ export class EnvironmentService {
         };
       }
 
+      const materialization =
+        await this.callbacks.ensureManagedEnvironmentArtifacts?.(thread.id, projectRootPath) ??
+        { created: false };
+
       const environmentId = this.resolveThreadRuntimeKind(thread, projectRootPath);
       const environment =
         this.restoreThreadEnvironment(thread, projectRootPath) ??
         this.environmentRegistry.create(
           environmentId,
-          this.callbacks.createContext(thread.id, projectRootPath),
+          this.createRuntimeContext(thread.id, projectRootPath),
         );
 
       try {
-        await this.prepareEnvironment(thread.id, projectRootPath, environment, reason);
+        await this.prepareEnvironment(
+          thread.id,
+          projectRootPath,
+          environment,
+          reason,
+          materialization.created,
+        );
       } catch (error) {
         try {
           await Promise.resolve(environment.destroy());
         } catch {
           // Best-effort cleanup for partially restored environments.
+        }
+        if (materialization.created) {
+          try {
+            await this.callbacks.cleanupManagedEnvironmentArtifacts?.(thread.id, projectRootPath);
+          } catch {
+            // Best-effort cleanup for partially restored environments.
+          }
         }
         throw error;
       }
@@ -539,7 +636,6 @@ export class EnvironmentService {
   ): Promise<void> {
     await Promise.resolve(runtime.environment.destroy());
     this.detachEnvironmentRuntimeByScopeKey(runtime.scopeKey);
-    this.clearPersistedEnvironmentStateForRuntimeScope(runtime.scopeKey, threadId);
   }
 
   private clearPersistedEnvironmentStateForRuntimeScope(
@@ -573,6 +669,10 @@ export class EnvironmentService {
   async destroyThreadEnvironment(threadId: string): Promise<void> {
     const runtime = this.getEnvironmentRuntime(threadId);
     const attachedEnvironment = this.resolveAttachedEnvironment(threadId);
+    const thread = this.threadRepo.getById(threadId);
+    const projectRootPath = thread
+      ? this.projectRepo.getById(thread.projectId)?.rootPath
+      : undefined;
 
     this.workspaceCleanupInFlightThreadIds.add(threadId);
     const refresh = () => {
@@ -603,6 +703,10 @@ export class EnvironmentService {
           this.clearPersistedEnvironmentState(threadId);
         } else {
           await this.destroyDetachedRuntime(threadId, runtime);
+          if (projectRootPath) {
+            await this.callbacks.cleanupManagedEnvironmentArtifacts?.(threadId, projectRootPath);
+          }
+          this.clearPersistedEnvironmentStateForRuntimeScope(runtime.scopeKey, threadId);
         }
       } catch (error) {
         reportFailure(environmentId, error);
@@ -640,9 +744,14 @@ export class EnvironmentService {
       throw error;
     }
     if (!environment) {
+      if (project.rootPath) {
+        await this.callbacks.cleanupManagedEnvironmentArtifacts?.(threadId, project.rootPath);
+      }
+      this.clearPersistedEnvironmentState(threadId);
       return;
     }
     await Promise.resolve(environment.destroy());
+    await this.callbacks.cleanupManagedEnvironmentArtifacts?.(threadId, project.rootPath);
     this.clearPersistedEnvironmentState(threadId);
   }
 
@@ -839,7 +948,11 @@ export class EnvironmentService {
     }
 
     const environment = this.restoreThreadEnvironment(thread, project.rootPath);
-    if (!environment || !environment.exists() || !environment.isIsolatedWorkspace()) {
+    if (
+      !environment ||
+      !environment.exists() ||
+      !this.isThreadIsolatedWorkspaceEnvironment(thread.id)
+    ) {
       this.clearPrimaryPromotionState(projectId);
       this.primaryPromotionValidatedAtByProjectId.set(projectId, now);
       return;
@@ -916,7 +1029,7 @@ export class EnvironmentService {
     if (!environment || !environment.supportsPromoteToActiveWorkspace()) {
       throw new Error("Promotion is not supported for this environment");
     }
-    if (!environment.isIsolatedWorkspace() || !environment.exists()) {
+    if (!this.isThreadIsolatedWorkspaceEnvironment(args.thread.id) || !environment.exists()) {
       throw new Error("Thread worktree is unavailable; reprovision the thread first");
     }
     const promoted = await environment.promoteToActiveWorkspace({
@@ -1007,7 +1120,13 @@ export class EnvironmentService {
     );
     const teardownTasks: Promise<void>[] = [];
     for (const runtime of Array.from(this.environmentRuntimes.values())) {
-      teardownTasks.push(this.destroyDetachedRuntime(runtime.ownerThreadId, runtime));
+      teardownTasks.push(
+        this.destroyThreadEnvironment(runtime.ownerThreadId).catch((error: unknown) => {
+          const environmentId =
+            this.threadRepo.getById(runtime.ownerThreadId)?.environmentId ?? "unknown";
+          this.callbacks.onCleanupFailure(runtime.ownerThreadId, environmentId, error);
+        }),
+      );
     }
     const projects = this.projectRepo.list();
     if (!Array.isArray(projects) || projects.length === 0) {
@@ -1048,7 +1167,9 @@ export class EnvironmentService {
     if (!project) return;
     const environment = this.environmentRegistry.create(
       "local",
-      this.callbacks.createContext(`primary-checkout-watch:${projectId}`, project.rootPath),
+      this.createRuntimeContext(`primary-checkout-watch:${projectId}`, project.rootPath, {
+        workspaceRootPath: project.rootPath,
+      }),
     );
     const stopWatching = environment.watchWorkspaceStatus(() => {
       this.ensurePrimaryPromotionStateIsCurrent(projectId, { force: true });

@@ -7,6 +7,7 @@ import type {
 import type { ThreadDetailRow } from "./thread-detail-rows.js";
 import type { UIMessage } from "./ui-message.js";
 import type {
+  EnvironmentDescriptor,
   EnvironmentCapabilities,
   ThreadBuiltInAction,
   ThreadBuiltInActionId,
@@ -43,6 +44,10 @@ export interface AvailableModel {
   isDefault: boolean;
 }
 
+export interface EnvironmentCreationArgs {
+  kind: string;
+}
+
 // Thread endpoints
 export interface SpawnThreadRequest {
   projectId: string;
@@ -55,7 +60,8 @@ export interface SpawnThreadRequest {
   reasoningLevel?: ReasoningLevel;
   sandboxMode?: SandboxMode;
   environmentId?: string;
-  environmentKind?: string;
+  environmentDescriptor?: EnvironmentDescriptor;
+  environmentCreationArgs?: EnvironmentCreationArgs;
   developerInstructions?: string;
   parentThreadId?: string;
   /**
@@ -319,12 +325,58 @@ export interface SystemHealthThreadCounts {
   idle: number;
 }
 
+export interface SystemHealthEnvironmentAgentWorker {
+  name: string;
+  version: string;
+  buildId?: string;
+}
+
+export interface SystemHealthEnvironmentAgentProvider {
+  providerId: string;
+  adapterVersion: string;
+  runtimeVersion?: string;
+}
+
+export interface SystemHealthEnvironmentAgentCapabilities {
+  commands: string[];
+  features: string[];
+}
+
+export interface SystemHealthEnvironmentAgentCompatibility {
+  disposition: "reuse" | "degrade" | "replace";
+  missingRequiredCommands: string[];
+  missingOptionalCommands: string[];
+  missingOptionalFeatures: string[];
+}
+
+export interface SystemHealthEnvironmentAgentSession {
+  sessionId: string;
+  threadId: string;
+  environmentId?: string;
+  agentId: string;
+  agentInstanceId: string;
+  protocolVersion: number;
+  worker?: SystemHealthEnvironmentAgentWorker;
+  providers?: SystemHealthEnvironmentAgentProvider[];
+  selectedCapabilities?: SystemHealthEnvironmentAgentCapabilities;
+  compatibility?: SystemHealthEnvironmentAgentCompatibility;
+  controlBaseUrl?: string;
+  leaseExpiresAt: number;
+  lastHeartbeatAt?: number;
+  createdAt: number;
+  updatedAt: number;
+}
+
 export interface SystemHealthReport {
   generatedAt: number;
   uptime: number;
   projectCount: number;
   runningThreads: number;
   threadCounts: SystemHealthThreadCounts;
+  environmentAgent: {
+    activeSessionCount: number;
+    activeSessions: SystemHealthEnvironmentAgentSession[];
+  };
   storage: {
     totalBytes: number;
     disk?: SystemHealthDiskSummary;
@@ -372,14 +424,8 @@ export interface SystemShutdownBlockedResponse {
 }
 
 export interface ProviderCapabilities {
-  supportsSteer: boolean;
   supportsRename: boolean;
-  supportsModelList: boolean;
-  supportsReasoningLevels: boolean;
   supportsServiceTier: boolean;
-  supportsMultimodalInput: boolean;
-  supportsDynamicTools: boolean;
-  supportsToolCallRequests: boolean;
 }
 
 export interface SystemProviderInfo {

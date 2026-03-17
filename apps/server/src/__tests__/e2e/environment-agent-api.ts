@@ -74,7 +74,13 @@ export async function createThread(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       projectId,
-      ...(opts?.environmentKind ? { environmentKind: opts.environmentKind } : {}),
+      ...(opts?.environmentKind
+        ? {
+            environmentCreationArgs: {
+              kind: opts.environmentKind,
+            },
+          }
+        : {}),
       ...(opts?.environmentId ? { environmentId: opts.environmentId } : {}),
       input: [{ type: "text", text: inputText }],
     }),

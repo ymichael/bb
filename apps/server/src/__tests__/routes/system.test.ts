@@ -70,7 +70,7 @@ function mockOrchestrator(): ThreadOrchestrator {
     getRunningCount: vi.fn(),
     listModels: vi.fn(),
     getProviderInfo: vi.fn(),
-    listProviders: vi.fn(() => []),
+    listProviders: vi.fn().mockResolvedValue([]),
     listEnvironments: vi.fn(() => [environmentInfo]),
   } as unknown as ThreadOrchestrator;
 }
@@ -79,7 +79,7 @@ describe("System routes", () => {
   let threadManager: ReturnType<typeof mockOrchestrator>;
   let pickFolder: ReturnType<typeof vi.fn<() => Promise<string | null>>>;
   let listModels: ReturnType<typeof vi.fn<() => Promise<AvailableModel[]>>>;
-  let getProviderInfo: ReturnType<typeof vi.fn<() => SystemProviderInfo>>;
+  let getProviderInfo: ReturnType<typeof vi.fn<() => Promise<SystemProviderInfo>>>;
   let getHealthReport: ReturnType<typeof vi.fn<() => SystemHealthReport>>;
   let transcribeVoice: ReturnType<
     typeof vi.fn<
@@ -172,6 +172,54 @@ describe("System routes", () => {
           active: 1,
           idle: 2,
         },
+        environmentAgent: {
+          activeSessionCount: 1,
+          activeSessions: [
+            {
+              sessionId: "session-1",
+              threadId: "thread-1",
+              agentId: "environment-agent:thread-1",
+              agentInstanceId: "instance-1",
+              protocolVersion: 1,
+              worker: {
+                name: "environment-daemon",
+                version: "0.0.1",
+              },
+              providers: [
+                {
+                  providerId: "codex",
+                  adapterVersion: "0.0.1",
+                },
+              ],
+              selectedCapabilities: {
+                commands: [
+                  "provider.ensure",
+                  "thread.start",
+                  "thread.resume",
+                  "turn.run",
+                ],
+                features: ["worker_metadata", "provider_metadata"],
+              },
+              compatibility: {
+                disposition: "degrade",
+                missingRequiredCommands: [],
+                missingOptionalCommands: [
+                  "thread.rename",
+                  "provider.list_catalog",
+                  "workspace.status",
+                  "workspace.diff",
+                ],
+                missingOptionalFeatures: [
+                  "provider_runtime_version",
+                  "control_endpoint",
+                ],
+              },
+              leaseExpiresAt: 1_700_000_045_000,
+              createdAt: 1_700_000_000_000,
+              updatedAt: 1_700_000_001_000,
+            },
+          ],
+        },
         storage: {
           totalBytes: 4096,
           buckets: [
@@ -203,6 +251,54 @@ describe("System routes", () => {
           error: 0,
           active: 1,
           idle: 2,
+        },
+        environmentAgent: {
+          activeSessionCount: 1,
+          activeSessions: [
+            {
+              sessionId: "session-1",
+              threadId: "thread-1",
+              agentId: "environment-agent:thread-1",
+              agentInstanceId: "instance-1",
+              protocolVersion: 1,
+              worker: {
+                name: "environment-daemon",
+                version: "0.0.1",
+              },
+              providers: [
+                {
+                  providerId: "codex",
+                  adapterVersion: "0.0.1",
+                },
+              ],
+              selectedCapabilities: {
+                commands: [
+                  "provider.ensure",
+                  "thread.start",
+                  "thread.resume",
+                  "turn.run",
+                ],
+                features: ["worker_metadata", "provider_metadata"],
+              },
+              compatibility: {
+                disposition: "degrade",
+                missingRequiredCommands: [],
+                missingOptionalCommands: [
+                  "thread.rename",
+                  "provider.list_catalog",
+                  "workspace.status",
+                  "workspace.diff",
+                ],
+                missingOptionalFeatures: [
+                  "provider_runtime_version",
+                  "control_endpoint",
+                ],
+              },
+              leaseExpiresAt: 1_700_000_045_000,
+              createdAt: 1_700_000_000_000,
+              updatedAt: 1_700_000_001_000,
+            },
+          ],
         },
         storage: {
           totalBytes: 4096,
@@ -427,17 +523,11 @@ describe("System routes", () => {
         id: "codex",
         displayName: "Codex",
         capabilities: {
-          supportsSteer: true,
           supportsRename: true,
-          supportsModelList: true,
-          supportsReasoningLevels: true,
           supportsServiceTier: true,
-          supportsMultimodalInput: true,
-          supportsDynamicTools: true,
-          supportsToolCallRequests: true,
         },
       };
-      getProviderInfo.mockReturnValue(providerInfo);
+      getProviderInfo.mockResolvedValue(providerInfo);
 
       const res = await app.request("/system/provider");
 
@@ -458,19 +548,13 @@ describe("System routes", () => {
         id: "codex",
         displayName: "Codex",
         capabilities: {
-          supportsSteer: true,
           supportsRename: true,
-          supportsModelList: true,
-          supportsReasoningLevels: true,
           supportsServiceTier: true,
-          supportsMultimodalInput: true,
-          supportsDynamicTools: true,
-          supportsToolCallRequests: true,
         },
       };
       (
         threadManager.getProviderInfo as unknown as ReturnType<typeof vi.fn>
-      ).mockReturnValue(providerInfo);
+      ).mockResolvedValue(providerInfo);
 
       const res = await defaultApp.request("/system/provider");
 
@@ -487,34 +571,22 @@ describe("System routes", () => {
           id: "codex",
           displayName: "Codex",
           capabilities: {
-            supportsSteer: true,
             supportsRename: true,
-            supportsModelList: true,
-            supportsReasoningLevels: true,
             supportsServiceTier: true,
-            supportsMultimodalInput: true,
-            supportsDynamicTools: true,
-            supportsToolCallRequests: true,
           },
         },
         {
           id: "claude-code",
           displayName: "Claude Code (protocol-compatible)",
           capabilities: {
-            supportsSteer: false,
             supportsRename: true,
-            supportsModelList: false,
-            supportsReasoningLevels: false,
             supportsServiceTier: false,
-            supportsMultimodalInput: true,
-            supportsDynamicTools: true,
-            supportsToolCallRequests: true,
           },
         },
       ];
       (
         threadManager.listProviders as unknown as ReturnType<typeof vi.fn>
-      ).mockReturnValue(providers);
+      ).mockResolvedValue(providers);
 
       const res = await app.request("/system/providers");
 

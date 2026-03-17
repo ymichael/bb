@@ -160,39 +160,6 @@ async function tellThreadWithRetry(args: {
   }
 }
 
-async function driveFakeCodexTurnToCompletion(args: {
-  harness: Awaited<ReturnType<typeof startDaemonE2eHarness>>;
-  threadId: string;
-  previousCompletedTurns: number;
-  maxAttempts?: number;
-}): Promise<Thread> {
-  const maxAttempts = args.maxAttempts ?? 6;
-  let lastThread: Thread | undefined;
-  let lastCompletedTurns = args.previousCompletedTurns;
-
-  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-    args.harness.emitFakeCodexControlEvent();
-    await sleep(250);
-
-    const [thread, events] = await Promise.all([
-      readJson<Thread>(`${args.harness.baseUrl}/api/v1/threads/${args.threadId}`),
-      listThreadEvents(args.harness.baseUrl, args.threadId),
-    ]);
-    lastThread = thread;
-    lastCompletedTurns = countCompletedTurns(events);
-    if (thread.status === "idle" && lastCompletedTurns > args.previousCompletedTurns) {
-      return thread;
-    }
-
-    await sleep(750);
-  }
-
-  throw new Error(
-    `Thread ${args.threadId} did not complete a recovery turn after ${maxAttempts} fake-codex completion attempts ` +
-      `(last status=${lastThread?.status ?? "unknown"}, completedTurns=${lastCompletedTurns})`,
-  );
-}
-
 export async function runQueuedFollowUpWorkerLossScenario(
   environmentKind: EnvironmentKind,
 ): Promise<void> {
@@ -201,8 +168,8 @@ export async function runQueuedFollowUpWorkerLossScenario(
   let harness = await startDaemonE2eHarness({
     port,
     fakeCodex: {
-      defaultTurnDelayMs: 25,
-      defaultScenario: "start-then-manual-complete",
+      defaultTurnDelayMs: 2_000,
+      defaultScenario: "turn-complete",
     },
     initGitRepo: true,
     preserveTempDirOnCleanup: true,
@@ -253,8 +220,8 @@ export async function runQueuedFollowUpWorkerLossScenario(
       tempDir,
       port,
       fakeCodex: {
-        defaultTurnDelayMs: 25,
-        defaultScenario: "start-then-manual-complete",
+        defaultTurnDelayMs: 2_000,
+        defaultScenario: "turn-complete",
       },
       initGitRepo: true,
       preserveTempDirOnCleanup: true,
@@ -299,10 +266,12 @@ export async function runQueuedFollowUpWorkerLossScenario(
       e2eTimeoutMs(8_000, 20_000),
       harness.wsUrl,
     );
-    const recoveredThread = await driveFakeCodexTurnToCompletion({
-      harness,
+    const recoveredThread = await waitForThreadIdleWithAnotherTurn({
+      baseUrl: harness.baseUrl,
+      wsUrl: harness.wsUrl,
       threadId: thread.id,
       previousCompletedTurns: completedBeforeRestart,
+      timeoutMs: e2eTimeoutMs(12_000, 30_000),
     });
     expect(recoveredThread.status).toBe("idle");
     debugLog(`queued-followup/${environmentKind}: recovered`);
@@ -320,8 +289,8 @@ export async function runArchiveAfterWorkerLossRecoveryScenario(): Promise<void>
   let harness = await startDaemonE2eHarness({
     port,
     fakeCodex: {
-      defaultTurnDelayMs: 25,
-      defaultScenario: "start-then-manual-complete",
+      defaultTurnDelayMs: 2_000,
+      defaultScenario: "turn-complete",
     },
     initGitRepo: true,
     preserveTempDirOnCleanup: true,
@@ -361,8 +330,8 @@ export async function runArchiveAfterWorkerLossRecoveryScenario(): Promise<void>
       tempDir,
       port,
       fakeCodex: {
-        defaultTurnDelayMs: 25,
-        defaultScenario: "start-then-manual-complete",
+        defaultTurnDelayMs: 2_000,
+        defaultScenario: "turn-complete",
       },
       initGitRepo: true,
       preserveTempDirOnCleanup: true,
@@ -449,10 +418,12 @@ export async function runArchiveAfterWorkerLossRecoveryScenario(): Promise<void>
       e2eTimeoutMs(8_000, 20_000),
       harness.wsUrl,
     );
-    const recoveredThread = await driveFakeCodexTurnToCompletion({
-      harness,
+    const recoveredThread = await waitForThreadIdleWithAnotherTurn({
+      baseUrl: harness.baseUrl,
+      wsUrl: harness.wsUrl,
       threadId: thread.id,
       previousCompletedTurns: completedBeforeRecovery,
+      timeoutMs: e2eTimeoutMs(12_000, 30_000),
     });
     expect(recoveredThread.status).toBe("idle");
     debugLog("archive-after-worker-loss: recovered");
@@ -506,8 +477,8 @@ export async function runStaleOldSessionNoiseScenario(): Promise<void> {
   let harness = await startDaemonE2eHarness({
     port,
     fakeCodex: {
-      defaultTurnDelayMs: 25,
-      defaultScenario: "start-then-manual-complete",
+      defaultTurnDelayMs: 2_000,
+      defaultScenario: "turn-complete",
     },
     initGitRepo: true,
     preserveTempDirOnCleanup: true,
@@ -546,8 +517,8 @@ export async function runStaleOldSessionNoiseScenario(): Promise<void> {
       tempDir,
       port,
       fakeCodex: {
-        defaultTurnDelayMs: 25,
-        defaultScenario: "start-then-manual-complete",
+        defaultTurnDelayMs: 2_000,
+        defaultScenario: "turn-complete",
       },
       initGitRepo: true,
       preserveTempDirOnCleanup: true,
@@ -596,10 +567,12 @@ export async function runStaleOldSessionNoiseScenario(): Promise<void> {
     expect(staleResult.status).toBeGreaterThanOrEqual(400);
     debugLog(`stale-old-session-noise: stale event rejected with ${staleResult.status}`);
 
-    const recoveredThread = await driveFakeCodexTurnToCompletion({
-      harness,
+    const recoveredThread = await waitForThreadIdleWithAnotherTurn({
+      baseUrl: harness.baseUrl,
+      wsUrl: harness.wsUrl,
       threadId: thread.id,
       previousCompletedTurns: completedBeforeRestart,
+      timeoutMs: e2eTimeoutMs(12_000, 30_000),
     });
     expect(recoveredThread.status).toBe("idle");
     debugLog("stale-old-session-noise: recovered");

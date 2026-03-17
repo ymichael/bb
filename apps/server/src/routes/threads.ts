@@ -74,10 +74,44 @@ const environmentAgentSessionChannelBootstrapSchema = z.object({
   lastDaemonAcked: environmentAgentSessionCursorSchema.optional(),
 });
 
+const environmentAgentSessionCapabilitiesSchema = z.object({
+  commands: z.array(z.enum([
+    "provider.ensure",
+    "thread.start",
+    "thread.resume",
+    "thread.stop",
+    "turn.run",
+    "thread.rename",
+    "provider.list_models",
+    "provider.list_catalog",
+    "workspace.status",
+    "workspace.diff",
+  ])).min(1),
+  features: z.array(z.enum([
+    "worker_metadata",
+    "provider_metadata",
+    "provider_runtime_version",
+    "control_endpoint",
+  ])),
+});
+
 const environmentAgentSessionOpenBodySchema = z.object({
   agentId: z.string().min(1),
   agentInstanceId: z.string().min(1),
   supportedProtocolVersions: z.array(z.number().int()).min(1),
+  capabilities: environmentAgentSessionCapabilitiesSchema.optional(),
+  worker: z.object({
+    name: z.string().min(1),
+    version: z.string().min(1),
+    buildId: z.string().min(1).optional(),
+  }).optional(),
+  providers: z.array(
+    z.object({
+      providerId: z.string().min(1),
+      adapterVersion: z.string().min(1),
+      runtimeVersion: z.string().min(1).optional(),
+    }),
+  ).optional(),
   controlEndpoint: z.object({
     baseUrl: z.string().url(),
     authToken: z.string().min(1),
@@ -117,7 +151,22 @@ const environmentAgentSessionCommandsQuerySchema = z.object({
 });
 
 function isAbortError(error: unknown): error is Error {
-  return error instanceof Error && error.name === "AbortError";
+  if (!(error instanceof Error)) {
+    return false;
+  }
+  if (error.name === "AbortError") {
+    return true;
+  }
+  const errorWithCode = error as Error & { code?: string };
+  if (
+    errorWithCode.code === "ABORT_ERR" ||
+    errorWithCode.code === "ERR_ABORTED" ||
+    errorWithCode.code === "ERR_HTTP_ABORTED"
+  ) {
+    return true;
+  }
+  const message = error.message.toLowerCase();
+  return message.includes("aborted") || message.includes("aborterror");
 }
 
 const environmentAgentSessionMessageBaseSchema = z.object({
@@ -200,6 +249,16 @@ const environmentAgentSessionMessageBodySchema = z.discriminatedUnion("type", [
       requestId: z.union([z.string().min(1), z.number()]),
       method: z.string().min(1),
       params: z.unknown().optional(),
+      providerId: z.string().min(1).optional(),
+      normalizedMethod: z.string().min(1).optional(),
+      toolCall: z.object({
+        requestId: z.union([z.string().min(1), z.number()]),
+        threadId: z.string().min(1),
+        turnId: z.string().min(1),
+        callId: z.string().min(1),
+        tool: z.string().min(1),
+        arguments: z.unknown(),
+      }).optional(),
     }),
   }),
   environmentAgentSessionMessageBaseSchema.extend({
@@ -354,6 +413,15 @@ function toEnvironmentAgentSessionDebugView(
     agentId: session.agentId,
     agentInstanceId: session.agentInstanceId,
     protocolVersion: session.protocolVersion,
+    ...(session.workerName ? { workerName: session.workerName } : {}),
+    ...(session.workerVersion ? { workerVersion: session.workerVersion } : {}),
+    ...(session.workerBuildId ? { workerBuildId: session.workerBuildId } : {}),
+    ...(session.providerMetadata !== undefined
+      ? { providerMetadata: session.providerMetadata }
+      : {}),
+    ...(session.selectedCapabilities !== undefined
+      ? { selectedCapabilities: session.selectedCapabilities }
+      : {}),
     status: session.status,
     leaseExpiresAt: session.leaseExpiresAt,
     ...(session.lastHeartbeatAt !== undefined
@@ -451,7 +519,12 @@ export function createThreadRoutes(
           ...(body.reasoningLevel ? { reasoningLevel: body.reasoningLevel } : {}),
           ...(body.sandboxMode ? { sandboxMode: body.sandboxMode } : {}),
           ...(body.environmentId ? { environmentId: body.environmentId } : {}),
-          ...(body.environmentKind ? { environmentKind: body.environmentKind } : {}),
+          ...(body.environmentDescriptor
+            ? { environmentDescriptor: body.environmentDescriptor }
+            : {}),
+          ...(body.environmentCreationArgs
+            ? { environmentCreationArgs: body.environmentCreationArgs }
+            : {}),
           ...(body.parentThreadId ? { parentThreadId: body.parentThreadId } : {}),
           ...(body.developerInstructions !== undefined
             ? { developerInstructions: body.developerInstructions }

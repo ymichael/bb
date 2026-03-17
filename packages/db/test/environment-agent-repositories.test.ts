@@ -59,6 +59,14 @@ describe("environment-agent repositories", () => {
       agentId: "agent-1",
       agentInstanceId: "instance-1",
       protocolVersion: 1,
+      workerName: "environment-daemon",
+      workerVersion: "0.0.1",
+      workerBuildId: "build-1",
+      providerMetadata: [{ providerId: "codex", adapterVersion: "0.0.1" }],
+      selectedCapabilities: {
+        commands: ["thread.start", "turn.start"],
+        features: ["worker_metadata", "provider_metadata"],
+      },
       controlBaseUrl: "http://127.0.0.1:4310",
       controlAuthToken: "token-1",
       leaseExpiresAt: 5_000,
@@ -68,6 +76,14 @@ describe("environment-agent repositories", () => {
     expect(sessions.getActiveByThreadId(threadId, 1_000)).toMatchObject({
       id: "sess-1",
       status: "active",
+      workerName: "environment-daemon",
+      workerVersion: "0.0.1",
+      workerBuildId: "build-1",
+      providerMetadata: [{ providerId: "codex", adapterVersion: "0.0.1" }],
+      selectedCapabilities: {
+        commands: ["thread.start", "turn.start"],
+        features: ["worker_metadata", "provider_metadata"],
+      },
       controlBaseUrl: "http://127.0.0.1:4310",
       controlAuthToken: "token-1",
     });
@@ -92,6 +108,13 @@ describe("environment-agent repositories", () => {
         agentId: "agent-1",
         agentInstanceId: "instance-2",
         protocolVersion: 1,
+        workerName: "environment-daemon",
+        workerVersion: "0.0.2",
+        providerMetadata: [{ providerId: "pi", adapterVersion: "0.0.2" }],
+        selectedCapabilities: {
+          commands: ["thread.resume", "turn.start"],
+          features: ["worker_metadata", "provider_metadata"],
+        },
         controlBaseUrl: "http://127.0.0.1:4311",
         controlAuthToken: "token-2",
         leaseExpiresAt: 15_000,
@@ -107,6 +130,13 @@ describe("environment-agent repositories", () => {
     expect(replaced.active).toMatchObject({
       id: "sess-2",
       status: "active",
+      workerName: "environment-daemon",
+      workerVersion: "0.0.2",
+      providerMetadata: [{ providerId: "pi", adapterVersion: "0.0.2" }],
+      selectedCapabilities: {
+        commands: ["thread.resume", "turn.start"],
+        features: ["worker_metadata", "provider_metadata"],
+      },
       controlBaseUrl: "http://127.0.0.1:4311",
       controlAuthToken: "token-2",
     });
@@ -124,6 +154,7 @@ describe("environment-agent repositories", () => {
       agentId: "agent-expire",
       agentInstanceId: "instance-expire",
       protocolVersion: 1,
+      selectedCapabilities: { commands: [], features: [] },
       leaseExpiresAt: 5_000,
       now: 1_000,
     });
@@ -158,6 +189,7 @@ describe("environment-agent repositories", () => {
       agentId: "agent-1",
       agentInstanceId: "instance-1",
       protocolVersion: 1,
+      selectedCapabilities: { commands: [], features: [] },
       leaseExpiresAt: 10_000,
       now: 1_000,
     });
@@ -167,6 +199,7 @@ describe("environment-agent repositories", () => {
       agentId: "agent-2",
       agentInstanceId: "instance-2",
       protocolVersion: 1,
+      selectedCapabilities: { commands: [], features: [] },
       leaseExpiresAt: 10_000,
       now: 1_000,
     });
@@ -197,6 +230,7 @@ describe("environment-agent repositories", () => {
       agentId: "agent-invalid",
       agentInstanceId: "instance-invalid",
       protocolVersion: 1,
+      selectedCapabilities: { commands: [], features: [] },
       leaseExpiresAt: 5_000,
       now: 1_000,
     });

@@ -5,14 +5,29 @@ import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import type { IEnvironment } from "../contracts.js";
-import { createDockerEnvironmentDefinition } from "../docker-environment.js";
+import {
+  createDockerEnvironmentDefinition,
+  ensureDockerEnvironmentArtifacts,
+  removeDockerEnvironmentArtifacts,
+  resolveDockerEnvironmentState,
+  type DockerEnvironmentState,
+} from "../docker-environment.js";
+import {
+  ensureLocalGitWorkspace,
+  removeLocalGitWorkspace,
+  type LocalGitWorkspaceState,
+} from "../local-git-workspace.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = resolve(__filename, "..");
 const WORKSPACE_ROOT = resolve(__dirname, "..", "..", "..", "..");
 
 const tempDirs: string[] = [];
-const environments: IEnvironment[] = [];
+const environments: Array<{
+  environment: IEnvironment;
+  projectRoot: string;
+  dockerState: DockerEnvironmentState;
+}> = [];
 
 function makeTempDir(prefix: string): string {
   const path = mkdtempSync(join(tmpdir(), prefix));
@@ -54,20 +69,57 @@ async function createDockerEnvironmentForTest() {
   git(repoRoot, "add", "README.md");
   git(repoRoot, "commit", "-m", "init");
 
-  const environment = createDockerEnvironmentDefinition().create({
-    projectId: `project-${Date.now()}`,
-    threadId: `thread-${Date.now()}`,
+  const projectId = `project-${Date.now()}`;
+  const threadId = `thread-${Date.now()}`;
+  const definition = createDockerEnvironmentDefinition();
+  const seed = definition.create({
+    projectId,
+    threadId,
     projectRootPath: repoRoot,
     runtimeEnv: {},
   });
-  environments.push(environment);
+  const seedState = seed.serialize() as DockerEnvironmentState;
+  await ensureLocalGitWorkspace({
+    projectRootPath: repoRoot,
+    state: seedState.worktree as LocalGitWorkspaceState,
+    runtimeEnv: {},
+  });
+  const dockerState = await resolveDockerEnvironmentState({
+    projectId,
+    threadId,
+    runtimeEnv: {},
+    worktree: seedState.worktree,
+  });
+  await ensureDockerEnvironmentArtifacts({
+    projectId,
+    threadId,
+    projectRootPath: repoRoot,
+    state: dockerState,
+    runtimeEnv: {},
+  });
+  const environment = definition.restore(dockerState, {
+    projectId,
+    threadId,
+    projectRootPath: repoRoot,
+    runtimeEnv: {},
+  });
+  environments.push({ environment, projectRoot: repoRoot, dockerState });
   await environment.prepare?.();
   return environment;
 }
 
 afterEach(async () => {
-  for (const environment of environments.splice(0)) {
-    await environment.destroy();
+  for (const entry of environments.splice(0)) {
+    await entry.environment.destroy();
+    await removeDockerEnvironmentArtifacts({
+      state: entry.dockerState,
+      runtimeEnv: {},
+    });
+    await removeLocalGitWorkspace({
+      projectRootPath: entry.projectRoot,
+      workspaceRoot: entry.dockerState.worktree.workspaceRoot,
+      runtimeEnv: {},
+    });
   }
   for (const dir of tempDirs.splice(0)) {
     rmSync(dir, { recursive: true, force: true });

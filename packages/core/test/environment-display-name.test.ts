@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { formatEnvironmentDisplayName } from "../src/environment-display-name.js";
+import {
+  formatEnvironmentDisplayName,
+  isWorktreeEnvironmentReference,
+} from "../src/environment-display-name.js";
 
 describe("formatEnvironmentDisplayName", () => {
   it("maps built-in environment ids to concise labels", () => {
@@ -27,5 +30,14 @@ describe("formatEnvironmentDisplayName", () => {
         displayName: "Remote Sandbox",
       }),
     ).toBe("Remote Sandbox");
+  });
+
+  it("detects worktree references from runtime ids and legacy display names", () => {
+    expect(isWorktreeEnvironmentReference({ id: "worktree" })).toBe(true);
+    expect(
+      isWorktreeEnvironmentReference({ displayName: "Git Worktree Workspace" }),
+    ).toBe(true);
+    expect(isWorktreeEnvironmentReference({ displayName: "Worktree" })).toBe(true);
+    expect(isWorktreeEnvironmentReference({ id: "docker" })).toBe(false);
   });
 });

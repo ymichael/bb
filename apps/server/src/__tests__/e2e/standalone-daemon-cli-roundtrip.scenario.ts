@@ -80,7 +80,7 @@ function isCurrentDaemonDistAvailable(): boolean {
     return false;
   }
 
-  const daemonRoot = resolve(WORKSPACE_ROOT, "apps", "daemon");
+  const daemonRoot = resolve(WORKSPACE_ROOT, "apps", "server");
   const distModifiedAtMs = statSync(DAEMON_DIST_PATH).mtimeMs;
   const sourceLatestMs = Math.max(
     latestModifiedAtMs(resolve(daemonRoot, "src")),
@@ -268,7 +268,7 @@ async function spawnThread(args: {
       args.prompt,
       ...(args.environmentKind === "local"
         ? []
-        : ["--environment", args.environmentKind]),
+        : ["--new-environment", args.environmentKind]),
     ],
   });
   expect(cli.exitCode).toBe(0);

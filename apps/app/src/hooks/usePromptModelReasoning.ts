@@ -65,7 +65,7 @@ interface UsePromptModelReasoningOptions {
   initialServiceTier?: ServiceTier;
   initialReasoningLevel?: ReasoningLevel;
   initialSandboxMode?: SandboxMode;
-  initialEnvironmentId?: string;
+  initialEnvironmentSelectionValue?: string;
 }
 
 interface PromptModelReasoningState {
@@ -73,13 +73,13 @@ interface PromptModelReasoningState {
   serviceTier: ServiceTier | undefined;
   reasoningLevel: ReasoningLevel;
   sandboxMode: SandboxMode;
-  environmentId: string;
+  environmentSelectionValue: string;
   touched: {
     selectedModel: boolean;
     serviceTier: boolean;
     reasoningLevel: boolean;
     sandboxMode: boolean;
-    environmentId: boolean;
+    environmentSelectionValue: boolean;
   };
 }
 
@@ -156,7 +156,7 @@ function getStoredSandboxMode(storageKeys: PromptModelReasoningStorageKeys): San
   return isSandboxMode(raw) ? raw : "danger-full-access";
 }
 
-function getStoredEnvironmentId(storageKeys: PromptModelReasoningStorageKeys): string {
+function getStoredEnvironmentSelectionValue(storageKeys: PromptModelReasoningStorageKeys): string {
   return readStoredString(storageKeys.environment) ?? "";
 }
 
@@ -170,7 +170,7 @@ function createPromptModelReasoningState(
       serviceTier: false,
       reasoningLevel: false,
       sandboxMode: false,
-      environmentId: false,
+      environmentSelectionValue: false,
     },
   };
 }
@@ -183,7 +183,7 @@ function getStoredPromptModelReasoningState(
     serviceTier: getStoredServiceTier(storageKeys),
     reasoningLevel: getStoredReasoningLevel(storageKeys),
     sandboxMode: getStoredSandboxMode(storageKeys),
-    environmentId: getStoredEnvironmentId(storageKeys),
+    environmentSelectionValue: getStoredEnvironmentSelectionValue(storageKeys),
   });
 }
 
@@ -195,7 +195,7 @@ function getInitialThreadPromptModelReasoningState(
     serviceTier: options?.initialServiceTier,
     reasoningLevel: options?.initialReasoningLevel ?? "medium",
     sandboxMode: options?.initialSandboxMode ?? "danger-full-access",
-    environmentId: options?.initialEnvironmentId ?? "",
+    environmentSelectionValue: options?.initialEnvironmentSelectionValue ?? "",
   });
 }
 
@@ -231,8 +231,11 @@ function promptModelReasoningReducer(
         nextState.sandboxMode = action.state.sandboxMode;
         changed = true;
       }
-      if (!state.touched.environmentId && state.environmentId !== action.state.environmentId) {
-        nextState.environmentId = action.state.environmentId;
+      if (
+        !state.touched.environmentSelectionValue &&
+        state.environmentSelectionValue !== action.state.environmentSelectionValue
+      ) {
+        nextState.environmentSelectionValue = action.state.environmentSelectionValue;
         changed = true;
       }
 
@@ -350,9 +353,6 @@ export function usePromptModelReasoning(options?: UsePromptModelReasoningOptions
     ? selectedProviderInfo?.capabilities
     : providerInfoQuery.data?.capabilities;
 
-  const supportsModelList = activeProviderCapabilities?.supportsModelList ?? false;
-  const supportsReasoningLevels =
-    activeProviderCapabilities?.supportsReasoningLevels ?? false;
   const supportsServiceTier =
     activeProviderCapabilities?.supportsServiceTier ?? false;
 
@@ -370,17 +370,16 @@ export function usePromptModelReasoning(options?: UsePromptModelReasoningOptions
     serviceTier,
     reasoningLevel,
     sandboxMode,
-    environmentId,
+    environmentSelectionValue,
   } = state;
 
   const availableModels = useMemo(
     () =>
-      supportsModelList &&
       availableModelsQuery.data &&
       availableModelsQuery.data.length > 0
         ? availableModelsQuery.data
         : [],
-    [availableModelsQuery.data, supportsModelList],
+    [availableModelsQuery.data],
   );
 
   const modelOptions = useMemo(
@@ -401,7 +400,7 @@ export function usePromptModelReasoning(options?: UsePromptModelReasoningOptions
   );
 
   const reasoningOptions = useMemo((): PromptOption<ReasoningLevel>[] => {
-    if (!supportsReasoningLevels || !activeModel) {
+    if (!activeModel) {
       return [];
     }
 
@@ -423,7 +422,7 @@ export function usePromptModelReasoning(options?: UsePromptModelReasoningOptions
     }
 
     return options;
-  }, [activeModel, supportsReasoningLevels]);
+  }, [activeModel]);
 
   const environmentOptions = useMemo(
     () => toEnvironmentOptions(environmentsQuery.data),
@@ -482,15 +481,6 @@ export function usePromptModelReasoning(options?: UsePromptModelReasoningOptions
   }, [serviceTier, supportsServiceTier]);
 
   useEffect(() => {
-    if (!supportsReasoningLevels && reasoningLevel !== "medium") {
-      dispatch({
-        type: "set-field",
-        field: "reasoningLevel",
-        value: "medium",
-        touched: false,
-      });
-      return;
-    }
     if (reasoningOptions.length === 0) {
       return;
     }
@@ -502,18 +492,18 @@ export function usePromptModelReasoning(options?: UsePromptModelReasoningOptions
         touched: false,
       });
     }
-  }, [activeModel, reasoningLevel, reasoningOptions, supportsReasoningLevels]);
+  }, [activeModel, reasoningLevel, reasoningOptions]);
 
   useEffect(() => {
     if (environmentOptions.length === 0) return;
-    if (environmentOptions.some((option) => option.value === environmentId)) return;
+    if (environmentOptions.some((option) => option.value === environmentSelectionValue)) return;
     dispatch({
       type: "set-field",
-      field: "environmentId",
+      field: "environmentSelectionValue",
       value: environmentOptions[0].value,
       touched: false,
     });
-  }, [environmentId, environmentOptions]);
+  }, [environmentOptions, environmentSelectionValue]);
 
   useEffect(() => {
     if (scope !== "new-thread") {
@@ -546,12 +536,12 @@ export function usePromptModelReasoning(options?: UsePromptModelReasoningOptions
         serviceTier: nextState.serviceTier,
         reasoningLevel: nextState.reasoningLevel,
         sandboxMode: nextState.sandboxMode,
-        environmentId: nextState.environmentId,
+        environmentSelectionValue: nextState.environmentSelectionValue,
       },
     });
   }, [
     options,
-    options?.initialEnvironmentId,
+    options?.initialEnvironmentSelectionValue,
     options?.initialModel,
     options?.initialReasoningLevel,
     options?.initialSandboxMode,
@@ -576,13 +566,13 @@ export function usePromptModelReasoning(options?: UsePromptModelReasoningOptions
     }
     window.localStorage.setItem(storageKeys.reasoning, reasoningLevel);
     window.localStorage.setItem(storageKeys.sandbox, sandboxMode);
-    if (environmentId) {
-      window.localStorage.setItem(storageKeys.environment, environmentId);
+    if (environmentSelectionValue) {
+      window.localStorage.setItem(storageKeys.environment, environmentSelectionValue);
     } else {
       window.localStorage.removeItem(storageKeys.environment);
     }
   }, [
-    environmentId,
+    environmentSelectionValue,
     hydratedStorageKey,
     reasoningLevel,
     sandboxMode,
@@ -634,10 +624,10 @@ export function usePromptModelReasoning(options?: UsePromptModelReasoningOptions
       value,
     });
   }, []);
-  const setEnvironmentId = useCallback((value: string) => {
+  const setEnvironmentSelectionValue = useCallback((value: string) => {
     dispatch({
       type: "set-field",
-      field: "environmentId",
+      field: "environmentSelectionValue",
       value,
     });
   }, []);
@@ -656,15 +646,13 @@ export function usePromptModelReasoning(options?: UsePromptModelReasoningOptions
     setReasoningLevel,
     sandboxMode,
     setSandboxMode,
-    environmentId,
-    setEnvironmentId,
+    environmentSelectionValue,
+    setEnvironmentSelectionValue,
     activeModel,
     modelOptions,
     reasoningOptions,
     sandboxOptions: SANDBOX_OPTIONS,
     environmentOptions,
-    supportsModelList,
-    supportsReasoningLevels,
     supportsServiceTier,
   };
 }

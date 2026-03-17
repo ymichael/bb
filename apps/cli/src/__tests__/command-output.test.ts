@@ -564,8 +564,44 @@ describe("CLI command output contracts", () => {
       },
     }));
 
+    await runCommand(["thread", "spawn", "--environment", "env-worktree-001"], (program) =>
+      registerThreadCommands(program, () => "http://daemon"),
+    );
+
+    expect(post).toHaveBeenCalledWith({
+      json: {
+        projectId: "proj-1",
+        input: undefined,
+        environmentId: "env-worktree-001",
+      },
+    });
+  });
+
+  it("bb thread spawn forwards --new-environment", async () => {
+    process.env.BB_PROJECT_ID = "proj-1";
+    const thread: Thread = {
+      id: "thread-env-1",
+      projectId: "proj-1",
+      providerId: "codex",
+      type: "standard",
+      status: "created",
+      environmentId: "env-worktree-001",
+      createdAt: 1,
+      updatedAt: 1,
+    };
+    const post = vi.fn(async () => thread);
+    createClientMock.mockReturnValue(asDaemonClient({
+      api: {
+        v1: {
+          threads: {
+            $post: post,
+          },
+        },
+      },
+    }));
+
     await runCommand(
-      ["thread", "spawn", "--environment", "worktree"],
+      ["thread", "spawn", "--new-environment", "worktree"],
       (program) => registerThreadCommands(program, () => "http://daemon"),
     );
 
@@ -573,14 +609,16 @@ describe("CLI command output contracts", () => {
       json: {
         projectId: "proj-1",
         input: undefined,
-        environmentKind: "worktree",
+        environmentCreationArgs: {
+          kind: "worktree",
+        },
       },
     });
   });
 
-  it("bb thread spawn falls back to BB_ENVIRONMENT", async () => {
+  it("bb thread spawn does not read BB_ENVIRONMENT", async () => {
     process.env.BB_PROJECT_ID = "proj-1";
-    process.env.BB_ENVIRONMENT = "local";
+    process.env.BB_ENVIRONMENT = "/tmp/project-root";
     const thread: Thread = {
       id: "thread-env-2",
       projectId: "proj-1",
@@ -610,7 +648,6 @@ describe("CLI command output contracts", () => {
       json: {
         projectId: "proj-1",
         input: undefined,
-        environmentKind: "local",
       },
     });
   });

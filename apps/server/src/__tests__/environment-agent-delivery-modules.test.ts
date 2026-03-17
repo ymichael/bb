@@ -15,6 +15,7 @@ import type {
   EnvironmentAgentEventEnvelope,
   EnvironmentAgentSessionEventBatchChannel,
 } from "@bb/environment-daemon";
+import { createEnvironmentAgentSessionCapabilities } from "@bb/environment-daemon";
 import {
   EnvironmentAgentCommandDispatcher,
   EnvironmentAgentSessionUnavailableError,
@@ -94,6 +95,7 @@ describe("environment-agent delivery modules", () => {
       agentId: "agent-1",
       agentInstanceId: `${id}-instance`,
       protocolVersion: 1,
+      selectedCapabilities: createEnvironmentAgentSessionCapabilities({}),
       leaseExpiresAt: 30_000,
       now: 1_000,
     }).id;
@@ -248,7 +250,10 @@ describe("environment-agent delivery modules", () => {
       threadId,
       sessionId,
       commandType: "thread.start",
-      payload: { params: { prompt: "hello" } },
+      payload: {
+        request: { projectId: "project-1", input: [{ type: "text", text: "hello" }] },
+        context: { projectId: "project-1", threadId, path: `/tmp/${threadId}` },
+      },
       now: 2_000,
     });
     commands.enqueue({
@@ -297,6 +302,7 @@ describe("environment-agent delivery modules", () => {
       agentId: "agent-shared",
       agentInstanceId: "sess-shared-instance",
       protocolVersion: 1,
+      selectedCapabilities: createEnvironmentAgentSessionCapabilities({}),
       leaseExpiresAt: 30_000,
       now: 1_000,
     }).id;
@@ -332,6 +338,7 @@ describe("environment-agent delivery modules", () => {
         agentId: "agent-1",
         agentInstanceId: "instance-await",
         protocolVersion: 1,
+        selectedCapabilities: createEnvironmentAgentSessionCapabilities({}),
         leaseExpiresAt: 30_000,
         now: 1_000,
       });
@@ -387,6 +394,7 @@ describe("environment-agent delivery modules", () => {
       agentId: "agent-1",
       agentInstanceId: "instance-expired",
       protocolVersion: 1,
+      selectedCapabilities: createEnvironmentAgentSessionCapabilities({}),
       leaseExpiresAt: now - 1_000,
       now: now - 2_000,
     });
@@ -409,6 +417,36 @@ describe("environment-agent delivery modules", () => {
     ).rejects.toBeInstanceOf(EnvironmentAgentSessionUnavailableError);
   });
 
+  it("does not treat replace-required sessions as active for command recovery", async () => {
+    const threadId = createThreadId();
+    const dispatcher = new EnvironmentAgentCommandDispatcher(sessions, commands, {
+      clock: () => TEST_LEASE_NOW,
+    });
+
+    sessions.create({
+      id: "sess-incompatible",
+      threadId,
+      agentId: "agent-1",
+      agentInstanceId: "instance-incompatible",
+      protocolVersion: 1,
+      selectedCapabilities: {
+        commands: ["thread.start"],
+        features: [],
+      },
+      leaseExpiresAt: TEST_LEASE_NOW + 10_000,
+      now: TEST_LEASE_NOW - 1_000,
+    });
+
+    expect(dispatcher.hasActiveSession(threadId)).toBe(false);
+    await expect(
+      dispatcher.awaitActiveSession({
+        threadId,
+        timeoutMs: 20,
+        pollIntervalMs: 5,
+      }),
+    ).rejects.toBeInstanceOf(EnvironmentAgentSessionUnavailableError);
+  });
+
   it("records command lifecycle results only for the matching active session", () => {
     const threadId = createThreadId();
     const sessionId = createActiveSession(threadId, "sess-results");
@@ -421,7 +459,10 @@ describe("environment-agent delivery modules", () => {
       threadId,
       sessionId,
       commandType: "thread.start",
-      payload: { params: { prompt: "hello" } },
+      payload: {
+        request: { projectId: "project-1", input: [{ type: "text", text: "hello" }] },
+        context: { projectId: "project-1", threadId, path: `/tmp/${threadId}` },
+      },
       now: 2_000,
     });
     commands.enqueue({

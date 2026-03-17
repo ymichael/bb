@@ -22,7 +22,6 @@ describe("getEnvironmentIconInfo", () => {
       getEnvironmentIconInfo({
         id: "docker",
         capabilities: createCapabilities({
-          host_filesystem: true,
           isolated_workspace: true,
         }),
       }),
@@ -35,7 +34,6 @@ describe("getEnvironmentIconInfo", () => {
   it("uses the worktree icon for isolated workspaces", () => {
     expect(
       getEnvironmentIconInfo({
-        id: "worktree",
         capabilities: createCapabilities({
           isolated_workspace: true,
         }),
@@ -49,14 +47,33 @@ describe("getEnvironmentIconInfo", () => {
   it("uses the direct icon for host filesystem environments", () => {
     expect(
       getEnvironmentIconInfo({
-        id: "local",
-        capabilities: createCapabilities({
-          host_filesystem: true,
-        }),
+        properties: {
+          provisioningSystemKind: "direct-path",
+          location: "localhost",
+          workspaceKind: "arbitrary_path",
+        },
+        managed: false,
       }),
     ).toMatchObject({
       icon: Laptop,
       ariaLabel: "Direct thread",
     })
   })
+
+  it("does not treat managed localhost environments as worktrees without worktree metadata", () => {
+    expect(
+      getEnvironmentIconInfo({
+        properties: {
+          provisioningSystemKind: "direct-path",
+          location: "localhost",
+          workspaceKind: "arbitrary_path",
+        },
+        managed: true,
+      }),
+    ).toMatchObject({
+      icon: Laptop,
+      ariaLabel: "Direct thread",
+    })
+  })
+
 })

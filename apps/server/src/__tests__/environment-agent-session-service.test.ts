@@ -12,6 +12,7 @@ import {
   ThreadRepository,
 } from "@bb/db";
 import { vi } from "vitest";
+import { createEnvironmentAgentSessionCapabilities } from "@bb/environment-daemon";
 import { EnvironmentAgentCommandDispatcher } from "../environment-agent-command-dispatcher.js";
 import { EnvironmentAgentEventApplier } from "../environment-agent-event-applier.js";
 import { EnvironmentAgentSessionManager } from "../environment-agent-session-manager.js";
@@ -92,6 +93,30 @@ describe("EnvironmentAgentSessionService", () => {
         agentId: "agent-1",
         agentInstanceId: "instance-1",
         supportedProtocolVersions: [1],
+        capabilities: createEnvironmentAgentSessionCapabilities({
+          worker: {
+            name: "environment-daemon",
+            version: "0.0.1",
+            buildId: "build-1",
+          },
+          providers: [
+            {
+              providerId: "codex",
+              adapterVersion: "0.0.1",
+            },
+          ],
+        }),
+        worker: {
+          name: "environment-daemon",
+          version: "0.0.1",
+          buildId: "build-1",
+        },
+        providers: [
+          {
+            providerId: "codex",
+            adapterVersion: "0.0.1",
+          },
+        ],
         channels: [
           {
             channelId: threadId,
@@ -109,6 +134,30 @@ describe("EnvironmentAgentSessionService", () => {
       threadId,
       agentId: "agent-1",
       agentInstanceId: "instance-1",
+      workerName: "environment-daemon",
+      workerVersion: "0.0.1",
+      workerBuildId: "build-1",
+      providerMetadata: [
+        {
+          providerId: "codex",
+          adapterVersion: "0.0.1",
+        },
+      ],
+      selectedCapabilities: {
+        commands: [
+          "provider.ensure",
+          "thread.start",
+          "thread.resume",
+          "thread.stop",
+          "turn.run",
+          "thread.rename",
+          "provider.list_models",
+          "provider.list_catalog",
+          "workspace.status",
+          "workspace.diff",
+        ],
+        features: ["worker_metadata", "provider_metadata"],
+      },
       leaseExpiresAt: 47_000,
     });
     expect(opened.welcome).toMatchObject({
@@ -120,6 +169,21 @@ describe("EnvironmentAgentSessionService", () => {
         leaseTtlMs: 45_000,
         heartbeatIntervalMs: 15_000,
         protocolVersion: 1,
+        selectedCapabilities: {
+          commands: [
+            "provider.ensure",
+            "thread.start",
+            "thread.resume",
+            "thread.stop",
+            "turn.run",
+            "thread.rename",
+            "provider.list_models",
+            "provider.list_catalog",
+            "workspace.status",
+            "workspace.diff",
+          ],
+          features: ["worker_metadata", "provider_metadata"],
+        },
         channels: [
           {
             channelId: threadId,
@@ -161,6 +225,51 @@ describe("EnvironmentAgentSessionService", () => {
         },
       },
     ]);
+  });
+
+  it("accepts a session when the agent offers additional newer protocol versions", () => {
+    const threadId = createThreadId();
+
+    const opened = service.openSession({
+      threadId,
+      now: 2_000,
+      payload: {
+        agentId: "agent-1",
+        agentInstanceId: "instance-1",
+        supportedProtocolVersions: [3, 2, 1],
+        channels: [
+          {
+            channelId: threadId,
+            generation: 5,
+          },
+        ],
+      },
+    });
+
+    expect(opened.session.protocolVersion).toBe(1);
+    expect(opened.welcome.payload.protocolVersion).toBe(1);
+  });
+
+  it("rejects a session when there is no mutually supported protocol version", () => {
+    const threadId = createThreadId();
+
+    expect(() =>
+      service.openSession({
+        threadId,
+        now: 2_000,
+        payload: {
+          agentId: "agent-1",
+          agentInstanceId: "instance-1",
+          supportedProtocolVersions: [3, 2],
+          channels: [
+            {
+              channelId: threadId,
+              generation: 5,
+            },
+          ],
+        },
+      }),
+    ).toThrow("No compatible environment-agent session protocol version");
   });
 
   it("lists only thread-owned history plus the active shared environment session", () => {
@@ -761,6 +870,66 @@ describe("EnvironmentAgentSessionService", () => {
     });
   });
 
+  it("returns typed tool-call responses from the provider request handler", async () => {
+    const threadId = createThreadId();
+    const serviceWithProviderRequests = new EnvironmentAgentSessionService(
+      new EnvironmentAgentSessionManager(sessions),
+      cursors,
+      {
+        leaseTtlMs: 45_000,
+        heartbeatIntervalMs: 15_000,
+        clock: () => TEST_LEASE_NOW,
+        providerRequestHandler: vi.fn(async () => ({
+          toolCallResponse: {
+            contentItems: [{ type: "inputText", text: "ok" } as const],
+            success: true,
+          },
+        })),
+      },
+    );
+    const opened = serviceWithProviderRequests.openSession({
+      threadId,
+      now: 1_000,
+      payload: {
+        agentId: "agent-1",
+        agentInstanceId: "instance-1",
+        supportedProtocolVersions: [1],
+        channels: [{ channelId: threadId, generation: 1 }],
+      },
+    });
+
+    const response = await serviceWithProviderRequests.handleProviderRequest({
+      threadId,
+      sessionId: opened.session.id,
+      now: 2_000,
+      payload: {
+        requestId: 62,
+        method: "item/tool/call",
+        toolCall: {
+          requestId: 62,
+          threadId,
+          turnId: "turn-1",
+          callId: "call-1",
+          tool: "echo_test_tool",
+          arguments: { message: "hi" },
+        },
+      },
+    });
+
+    expect(response).toMatchObject({
+      type: "provider_response",
+      sessionId: opened.session.id,
+      payload: {
+        requestId: 62,
+        ok: true,
+        toolCallResponse: {
+          success: true,
+          contentItems: [{ type: "inputText", text: "ok" }],
+        },
+      },
+    });
+  });
+
   it("applies event batches and resets the agent cursor when the daemon detects a gap", async () => {
     const threadId = createThreadId();
     const opened = service.openSession({
@@ -1290,7 +1459,8 @@ describe("EnvironmentAgentSessionService", () => {
       payload: {
         threadId,
         projectId: "project-1",
-        params: { prompt: "hello" },
+        request: { projectId: "project-1", input: [{ type: "text", text: "hello" }] },
+        context: { projectId: "project-1", threadId, path: `/tmp/${threadId}` },
       },
       now: 2_000,
     });
@@ -1316,7 +1486,8 @@ describe("EnvironmentAgentSessionService", () => {
               type: "thread.start",
               threadId,
               projectId: "project-1",
-              params: { prompt: "hello" },
+              request: { projectId: "project-1", input: [{ type: "text", text: "hello" }] },
+              context: { projectId: "project-1", threadId, path: `/tmp/${threadId}` },
             },
           },
         ],
@@ -1360,7 +1531,8 @@ describe("EnvironmentAgentSessionService", () => {
             type: "thread.start",
             threadId,
             projectId: "project-1",
-            params: { prompt: "hello" },
+            request: { projectId: "project-1", input: [{ type: "text", text: "hello" }] },
+            context: { projectId: "project-1", threadId, path: `/tmp/${threadId}` },
           },
         });
       }, 30);

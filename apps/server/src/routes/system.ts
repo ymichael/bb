@@ -27,8 +27,8 @@ import {
 
 type PickFolderFn = () => Promise<string | null>;
 type ListModelsFn = (providerId?: string) => Promise<AvailableModel[]>;
-type ProviderInfoFn = () => SystemProviderInfo;
-type ProviderCatalogFn = () => SystemProviderInfo[];
+type ProviderInfoFn = () => Promise<SystemProviderInfo>;
+type ProviderCatalogFn = () => Promise<SystemProviderInfo[]>;
 type EnvironmentCatalogFn = () => SystemEnvironmentInfo[];
 type TranscribeVoiceFn = (
   args: TranscribeVoiceInputArgs,
@@ -233,6 +233,10 @@ export function createSystemRoutes(
             active: threads.filter((thread) => thread.status === "active").length,
             idle: threads.filter((thread) => thread.status === "idle").length,
           },
+          environmentAgent: {
+            activeSessionCount: 0,
+            activeSessions: [],
+          },
           storage: {
             totalBytes: 0,
             buckets: [],
@@ -298,14 +302,14 @@ export function createSystemRoutes(
     })
     .get("/provider", async (c) => {
       try {
-        return c.json(getProviderInfo());
+        return c.json(await getProviderInfo());
       } catch (err) {
         return sendRouteError(c, err);
       }
     })
     .get("/providers", async (c) => {
       try {
-        return c.json(listProviders());
+        return c.json(await listProviders());
       } catch (err) {
         return sendRouteError(c, err);
       }

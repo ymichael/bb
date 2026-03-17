@@ -42,13 +42,25 @@ export {
 export { listGitWorkspaceMergeBaseBranchesAsync } from "./git-workspace.js";
 export { createLocalEnvironmentDefinition } from "./local-environment.js";
 export type {
-  CreateWorktreeEnvironmentDefinitionOptions,
-  WorktreeEnvironmentState,
-} from "./worktree-environment.js";
-export { createWorktreeEnvironmentDefinition } from "./worktree-environment.js";
+  CreateLocalGitWorkspaceOptions,
+  LocalGitWorkspaceState,
+} from "./local-git-workspace.js";
+export {
+  createLocalGitWorkspaceDefinition,
+  ensureLocalGitWorkspace,
+  isLocalGitWorkspaceState,
+  removeLocalGitWorkspace,
+  resolveLocalGitWorkspaceState,
+} from "./local-git-workspace.js";
 export type {
   CreateDockerEnvironmentDefinitionOptions,
   DockerEnvironmentState,
 } from "./docker-environment.js";
-export { createDockerEnvironmentDefinition } from "./docker-environment.js";
+export {
+  createDockerEnvironmentDefinition,
+  ensureDockerEnvironmentArtifacts,
+  isDockerEnvironmentState,
+  removeDockerEnvironmentArtifacts,
+  resolveDockerEnvironmentState,
+} from "./docker-environment.js";
 export { listManagedHostEnvironmentAgentPids } from "./host-environment-agent.js";

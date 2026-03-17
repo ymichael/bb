@@ -14,7 +14,10 @@ export const workspaceTestAliases = {
     repoRoot,
     "packages/environment-daemon/src/index.ts",
   ),
-  "@bb/agent-server": path.resolve(repoRoot, "packages/agent-server/src/index.ts"),
+  "@bb/provider-adapters": path.resolve(
+    repoRoot,
+    "packages/provider-adapters/src/index.ts",
+  ),
   "@bb/templates": path.resolve(repoRoot, "packages/templates/src/index.ts"),
   "@bb/db": path.resolve(repoRoot, "packages/db/src/index.ts"),
   "@bb/server": path.resolve(repoRoot, "apps/server/src/index.ts"),

@@ -205,7 +205,11 @@ function createService(args: {
       path: "/project/root/.worktrees/thread-1",
     },
     managed: args.managed ?? true,
-    requestedRuntimeKind: "worktree",
+    properties: {
+      provisioningSystemKind: "worktree",
+      location: "localhost",
+      workspaceKind: "worktree",
+    },
     runtimeState: {
       kind: "worktree",
       state: {},
@@ -555,6 +559,7 @@ describe("EnvironmentService", () => {
 
     await Promise.resolve();
     await Promise.resolve();
+    await Promise.resolve();
 
     expect(restoreImpl).toHaveBeenCalledTimes(1);
     expect(prepareSpy).toHaveBeenCalledTimes(1);
@@ -719,8 +724,8 @@ describe("EnvironmentService", () => {
 
     await service.teardownAllForTestsOnly();
 
-    // 1 call for the runtime teardown + 1 for the sibling's persisted environment cleanup
-    expect(destroySpy).toHaveBeenCalledTimes(2);
+    expect(destroySpy).toHaveBeenCalledTimes(1);
+    expect(attachmentRepo.listByEnvironmentId(thread.environmentId!)).toHaveLength(0);
   });
 
   it("clears persisted shared-environment attachments for all scoped threads during teardownAllForTestsOnly", async () => {
@@ -761,7 +766,11 @@ describe("EnvironmentService", () => {
         path: "/project/root/.worktrees/thread-1",
       },
       managed: true,
-      requestedRuntimeKind: "worktree",
+      properties: {
+        provisioningSystemKind: "worktree",
+        location: "localhost",
+        workspaceKind: "worktree",
+      },
       runtimeState: {
         kind: "worktree",
         state: {},
@@ -902,7 +911,11 @@ describe("EnvironmentService", () => {
         path: "/project/root/.worktrees/thread-1",
       },
       managed: true,
-      requestedRuntimeKind: "worktree",
+      properties: {
+        provisioningSystemKind: "worktree",
+        location: "localhost",
+        workspaceKind: "worktree",
+      },
       runtimeState: {
         kind: "worktree",
         state: {},
@@ -1022,7 +1035,11 @@ describe("EnvironmentService", () => {
         path: "/project/root/.worktrees/thread-1",
       },
       managed: true,
-      requestedRuntimeKind: "worktree",
+      properties: {
+        provisioningSystemKind: "worktree",
+        location: "localhost",
+        workspaceKind: "worktree",
+      },
       runtimeState: {
         kind: "worktree",
         state: {},

@@ -68,7 +68,7 @@ function isCurrentDaemonDistAvailable(): boolean {
     return false;
   }
 
-  const daemonRoot = resolve(WORKSPACE_ROOT, "apps", "daemon");
+  const daemonRoot = resolve(WORKSPACE_ROOT, "apps", "server");
   const distModifiedAtMs = statSync(DAEMON_DIST_PATH).mtimeMs;
   const sourceLatestMs = Math.max(
     latestModifiedAtMs(resolve(daemonRoot, "src")),
@@ -208,7 +208,7 @@ async function runBlockedRestartScenario(environmentKind: EnvironmentKind): Prom
         project.id,
         "--prompt",
         `Reply with exactly BLOCKED-RESTART-${environmentKind.toUpperCase()} and finish.`,
-        ...(environmentKind === "local" ? [] : ["--environment", "worktree"]),
+        ...(environmentKind === "local" ? [] : ["--new-environment", "worktree"]),
       ],
     });
     expect(spawnResult.exitCode).toBe(0);

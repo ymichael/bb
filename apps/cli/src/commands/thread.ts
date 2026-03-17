@@ -1,5 +1,6 @@
 import { Command } from "commander";
 import {
+  type SpawnThreadRequest,
   type Thread,
   type ThreadEvent,
   type ThreadOperationResponse,
@@ -58,6 +59,46 @@ const DEFAULT_THREAD_WAIT_TIMEOUT_SECONDS = 30;
 const DEFAULT_THREAD_WAIT_POLL_INTERVAL_MS = 250;
 
 class ThreadWaitTimeoutError extends Error {}
+
+function looksLikePath(value: string): boolean {
+  return value.includes("/") || value.startsWith(".") || value.startsWith("~");
+}
+
+function buildSpawnEnvironmentSelection(args: {
+  environmentValue?: string;
+  newEnvironmentKind?: string;
+}): Pick<
+  SpawnThreadRequest,
+  "environmentId" | "environmentDescriptor" | "environmentCreationArgs"
+> {
+  const environmentValue = args.environmentValue?.trim();
+  const newEnvironmentKind = args.newEnvironmentKind?.trim();
+
+  if (environmentValue && newEnvironmentKind) {
+    throw new Error("Cannot combine --environment with --new-environment.");
+  }
+  if (newEnvironmentKind) {
+    return {
+      environmentCreationArgs: {
+        kind: newEnvironmentKind,
+      },
+    };
+  }
+  if (!environmentValue) {
+    return {};
+  }
+  if (looksLikePath(environmentValue)) {
+    return {
+      environmentDescriptor: {
+        type: "path",
+        path: environmentValue,
+      },
+    };
+  }
+  return {
+    environmentId: environmentValue,
+  };
+}
 
 function isLowSignalThreadStatusEventType(type: string): boolean {
   const normalized = normalizeThreadEventType(type);
@@ -280,8 +321,12 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
     .option("--json", "Print machine-readable JSON output")
     .option("--project <id>", "Project ID (defaults to BB_PROJECT_ID)")
     .option(
-      "--environment <id>",
-      "Environment ID (defaults to BB_ENVIRONMENT when set)",
+      "--environment <id-or-path>",
+      "Existing environment UUID or unmanaged workspace path",
+    )
+    .option(
+      "--new-environment <kind>",
+      "Create a new managed environment of the given kind (for example worktree or docker)",
     )
     .option(
       "--parent-thread <id>",
@@ -300,6 +345,7 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
       json?: boolean;
       project?: string;
       environment?: string;
+      newEnvironment?: string;
       parentThread?: string;
       provider?: string;
       contextParentThread?: boolean;
@@ -314,10 +360,10 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
 
         const projectId = requireProjectId(opts.project);
         const environmentValue = resolveEnvironmentId(opts.environment);
-        const KNOWN_ENVIRONMENT_KINDS = ["worktree", "local", "docker"];
-        const isKind = environmentValue && KNOWN_ENVIRONMENT_KINDS.includes(environmentValue);
-        const environmentId = isKind ? undefined : environmentValue;
-        const environmentKind = isKind ? environmentValue : undefined;
+        const environmentSelection = buildSpawnEnvironmentSelection({
+          environmentValue,
+          newEnvironmentKind: opts.newEnvironment,
+        });
         const parentThreadId =
           opts.parentThread ??
           (opts.contextParentThread === false
@@ -331,8 +377,7 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
                 ? [{ type: "text", text: opts.prompt }]
                 : undefined,
               ...(opts.provider ? { providerId: opts.provider } : {}),
-              ...(environmentId ? { environmentId } : {}),
-              ...(environmentKind ? { environmentKind } : {}),
+              ...environmentSelection,
               ...(parentThreadId ? { parentThreadId } : {}),
             },
           }),

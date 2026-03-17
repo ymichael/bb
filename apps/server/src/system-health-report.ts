@@ -9,21 +9,30 @@ import { basename, dirname, join, resolve } from "node:path";
 import { expandHomeDirectory, resolveBbRoot } from "@bb/core/storage-paths";
 import { type Project, type Thread } from "@bb/core";
 import type {
+  SystemHealthEnvironmentAgentProvider,
+  SystemHealthEnvironmentAgentSession,
   SystemHealthDiskSummary,
   SystemHealthReport,
   SystemHealthStorageBucket,
   SystemHealthStorageBucketKey,
   SystemHealthThreadCounts,
 } from "@bb/core";
-import type { ProjectRepository, ThreadRepository } from "@bb/db";
+import type {
+  EnvironmentAgentSessionRecord,
+  EnvironmentAgentSessionRepository,
+  ProjectRepository,
+  ThreadRepository,
+} from "@bb/db";
 import {
   resolveDefaultManagedWorktreeRoot,
   resolveManagedWorktreeRootForProject,
 } from "./managed-storage-paths.js";
+import { assessEnvironmentAgentSessionCompatibility } from "./environment-agent-session-compatibility.js";
 
 export interface CreateSystemHealthReporterArgs {
   projectRepo: ProjectRepository;
   threadRepo: ThreadRepository;
+  environmentAgentSessionRepo: EnvironmentAgentSessionRepository;
   getRunningCount: () => number;
   startTime: number;
   dbPath: string;
@@ -149,6 +158,55 @@ function buildThreadCounts(threads: readonly Thread[]): SystemHealthThreadCounts
   };
 }
 
+function isProviderMetadataArray(
+  value: unknown,
+): value is SystemHealthEnvironmentAgentProvider[] {
+  return (
+    Array.isArray(value) &&
+    value.every(
+      (item) =>
+        typeof item === "object" &&
+        item !== null &&
+        typeof item.providerId === "string" &&
+        typeof item.adapterVersion === "string" &&
+        (item.runtimeVersion === undefined || typeof item.runtimeVersion === "string"),
+    )
+  );
+}
+
+function toEnvironmentAgentSessionSummary(
+  session: EnvironmentAgentSessionRecord,
+): SystemHealthEnvironmentAgentSession {
+  const assessment = assessEnvironmentAgentSessionCompatibility(session);
+  return {
+    sessionId: session.id,
+    threadId: session.threadId,
+    ...(session.environmentId ? { environmentId: session.environmentId } : {}),
+    agentId: session.agentId,
+    agentInstanceId: session.agentInstanceId,
+    protocolVersion: session.protocolVersion,
+    ...(session.workerName && session.workerVersion
+      ? {
+          worker: {
+            name: session.workerName,
+            version: session.workerVersion,
+            ...(session.workerBuildId ? { buildId: session.workerBuildId } : {}),
+          },
+        }
+      : {}),
+    ...(isProviderMetadataArray(session.providerMetadata)
+      ? { providers: session.providerMetadata }
+      : {}),
+    selectedCapabilities: assessment.capabilities,
+    compatibility: assessment.compatibility,
+    ...(session.controlBaseUrl ? { controlBaseUrl: session.controlBaseUrl } : {}),
+    leaseExpiresAt: session.leaseExpiresAt,
+    ...(session.lastHeartbeatAt ? { lastHeartbeatAt: session.lastHeartbeatAt } : {}),
+    createdAt: session.createdAt,
+    updatedAt: session.updatedAt,
+  };
+}
+
 function resolveWorktreeBucketPaths(
   projects: readonly Pick<Project, "id" | "rootPath">[],
   runtimeEnv: NodeJS.ProcessEnv,
@@ -177,6 +235,7 @@ export function createSystemHealthReporter(args: CreateSystemHealthReporterArgs)
   return (): SystemHealthReport => {
     const projects = args.projectRepo.list();
     const threads = args.threadRepo.list({ includeArchived: true });
+    const activeEnvironmentAgentSessions = args.environmentAgentSessionRepo.listActive();
     const bbRoot = resolveBbRoot(args.runtimeEnv);
     const buckets = [
       buildStorageBucket("database", [args.dbPath]),
@@ -198,6 +257,12 @@ export function createSystemHealthReporter(args: CreateSystemHealthReporterArgs)
       projectCount: projects.length,
       runningThreads: args.getRunningCount(),
       threadCounts: buildThreadCounts(threads),
+      environmentAgent: {
+        activeSessionCount: activeEnvironmentAgentSessions.length,
+        activeSessions: activeEnvironmentAgentSessions.map(
+          toEnvironmentAgentSessionSummary,
+        ),
+      },
       storage: {
         totalBytes,
         disk: resolveDiskSummary(diskPath),

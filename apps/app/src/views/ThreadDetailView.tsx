@@ -59,7 +59,6 @@ import {
 import { ThreadDeleteDialog } from "@/components/thread/ThreadDeleteDialog";
 import { DetailCard, DetailRow, StatusPill } from "@bb/ui-core";
 import {
-  formatEnvironmentDisplayName,
   type PromptInput,
   type ServiceTier,
   type Thread,
@@ -98,6 +97,53 @@ import { toast } from "sonner";
 function formatAttachedEnvironmentLabel(path: string): string {
   const segments = path.split("/").filter(Boolean);
   return segments.at(-1) ?? path;
+}
+
+function formatAttachedEnvironmentSuffix(path: string, projectRootPath?: string): string | undefined {
+  if (!projectRootPath) {
+    return formatAttachedEnvironmentLabel(path);
+  }
+  const normalizedProjectRoot = projectRootPath.replace(/\/+$/, "");
+  const normalizedPath = path.replace(/\/+$/, "");
+  if (normalizedPath === normalizedProjectRoot) {
+    return undefined;
+  }
+  if (normalizedPath.startsWith(`${normalizedProjectRoot}/`)) {
+    return normalizedPath.slice(normalizedProjectRoot.length + 1);
+  }
+  return formatAttachedEnvironmentLabel(path);
+}
+
+function formatThreadEnvironmentLabel(args: {
+  projectRootPath?: string;
+  attachedEnvironment?: Thread["attachedEnvironment"];
+}): string | undefined {
+  const attachedEnvironment = args.attachedEnvironment;
+  if (attachedEnvironment) {
+    const properties = attachedEnvironment.properties;
+    const isPrimaryWorkspace =
+      args.projectRootPath !== undefined &&
+      attachedEnvironment.descriptor !== undefined &&
+      attachedEnvironment.descriptor.path === args.projectRootPath;
+    if (isPrimaryWorkspace) {
+      return "Primary";
+    }
+    if (properties?.location === "docker") {
+      return "Docker";
+    }
+    if (properties?.workspaceKind === "worktree") {
+      const suffix = formatAttachedEnvironmentSuffix(
+        attachedEnvironment.descriptor?.path ?? "",
+        args.projectRootPath,
+      );
+      return suffix ? `Worktree (${suffix})` : "Worktree";
+    }
+    if (properties?.location === "localhost") {
+      return "Direct";
+    }
+    return "Unknown";
+  }
+  return undefined;
 }
 
 const THREAD_HEADER_ACTION_BUTTON_CLASS =
@@ -254,8 +300,6 @@ export function ThreadDetailView() {
     modelOptions,
     reasoningOptions,
     sandboxOptions,
-    supportsModelList,
-    supportsReasoningLevels,
     supportsServiceTier,
   } = usePromptModelReasoning({
     scope: "thread",
@@ -265,7 +309,7 @@ export function ThreadDetailView() {
     initialServiceTier: defaultExecutionOptions?.serviceTier,
     initialReasoningLevel: defaultExecutionOptions?.reasoningLevel,
     initialSandboxMode: defaultExecutionOptions?.sandboxMode,
-    initialEnvironmentId: thread?.environmentId,
+    initialEnvironmentSelectionValue: thread?.environmentId,
   });
   const preferredTheme = usePreferredTheme();
   const threadDetailRows = useMemo(() => timeline?.rows ?? [], [timeline?.rows]);
@@ -803,19 +847,11 @@ export function ThreadDetailView() {
   const isThreadGitActionPending =
     requestThreadCommitOperation.isPending || requestThreadSquashOperation.isPending;
   const environmentIconInfo = getEnvironmentIconInfo(environmentInfo);
-  const threadEnvironmentLabel =
-    thread.attachedEnvironment
-      ? (thread.attachedEnvironment.managed
-        ? formatAttachedEnvironmentLabel(thread.attachedEnvironment.descriptor.path)
-        : "Primary workspace")
-      : thread.environmentId
-        ? (
-            formatEnvironmentDisplayName({
-              id: thread.environmentId,
-              displayName: environmentInfo?.displayName,
-            }) ?? thread.environmentId
-          )
-        : undefined;
+  const projectRootPath = project?.rootPath;
+  const threadEnvironmentLabel = formatThreadEnvironmentLabel({
+    projectRootPath,
+    attachedEnvironment: thread.attachedEnvironment,
+  });
   const provisioningStatusLabel =
     isCreated
       ? "Created..."
@@ -854,7 +890,7 @@ export function ThreadDetailView() {
   const promptBannerMergeBaseBranch = effectiveMergeBaseBranch;
   const threadEnvironmentType =
     threadEnvironmentLabel ??
-    (thread.attachedEnvironment ? thread.attachedEnvironment.descriptor.type : undefined);
+    (thread.attachedEnvironment?.descriptor ? thread.attachedEnvironment.descriptor.type : undefined);
   const threadBranchName = resolvedThreadWorkStatus?.currentBranch;
   const threadMergeBaseBranch = effectiveMergeBaseBranch;
   const showThreadWorkspaceStatus =
@@ -1280,7 +1316,7 @@ export function ThreadDetailView() {
           input: promptInput,
           model: activeModel?.model ?? selectedModel,
           ...(supportsServiceTier && serviceTier ? { serviceTier } : {}),
-          ...(supportsReasoningLevels ? { reasoningLevel } : {}),
+          reasoningLevel,
           sandboxMode,
         });
         promptDraft.clear();
@@ -1303,8 +1339,8 @@ export function ThreadDetailView() {
         input: promptInput,
         model: activeModel?.model ?? selectedModel,
         ...(supportsServiceTier && serviceTier ? { serviceTier } : {}),
-          ...(supportsReasoningLevels ? { reasoningLevel } : {}),
-          sandboxMode,
+        reasoningLevel,
+        sandboxMode,
       });
     } catch (err) {
       setPendingSubmittedFollowUp(null);
@@ -1517,7 +1553,6 @@ export function ThreadDetailView() {
       providerOptions={providerOptions}
       selectedProviderId={selectedProviderId}
       providerDisplayName={selectedProviderDisplayName}
-      supportsModelList={supportsModelList}
       activeModel={activeModel}
       selectedModel={selectedModel}
       modelOptions={modelOptions}
@@ -1525,7 +1560,6 @@ export function ThreadDetailView() {
       serviceTier={serviceTier}
       onServiceTierChange={setServiceTier}
       supportsServiceTier={supportsServiceTier}
-      supportsReasoningLevels={supportsReasoningLevels}
       reasoningLevel={reasoningLevel}
       reasoningOptions={reasoningOptions}
       onReasoningLevelChange={setReasoningLevel}

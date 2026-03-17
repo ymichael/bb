@@ -9,6 +9,7 @@ import type {
   EnvironmentAgentSessionCommandAckPayload,
   EnvironmentAgentSessionCommandResultPayload,
 } from "@bb/environment-daemon";
+import { assessEnvironmentAgentSessionCompatibility } from "./environment-agent-session-compatibility.js";
 
 export interface RecordEnvironmentAgentCommandAckResult {
   commands: EnvironmentAgentCommandRecord[];
@@ -54,10 +55,16 @@ export class EnvironmentAgentCommandDispatcher {
     now: number = this.clock(),
   ): EnvironmentAgentSessionRecord | undefined {
     const environmentId = this.resolveEnvironmentId?.(threadId);
-    if (environmentId) {
-      return this.sessions.getActiveByEnvironmentId(environmentId, now);
+    const session = environmentId
+      ? this.sessions.getActiveByEnvironmentId(environmentId, now)
+      : this.sessions.getActiveByThreadId(threadId, now);
+    if (!session) {
+      return undefined;
     }
-    return this.sessions.getActiveByThreadId(threadId, now);
+    return assessEnvironmentAgentSessionCompatibility(session).compatibility
+      .disposition === "replace"
+      ? undefined
+      : session;
   }
 
   async awaitActiveSession(args: {

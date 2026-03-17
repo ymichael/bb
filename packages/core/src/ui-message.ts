@@ -1,4 +1,8 @@
-import type { Thread, ThreadEvent } from "./types.js";
+import type {
+  ProvisioningTranscriptEntry,
+  Thread,
+  ThreadEvent,
+} from "./types.js";
 
 export type UIMessageStatus =
   | "streaming"
@@ -163,21 +167,6 @@ export type UIProvisioningSetupStatus =
   | "completed"
   | "failed";
 
-export type UIProvisioningPhase =
-  | "prepare_environment"
-  | "start_provider_session";
-
-export type UIProvisioningPhaseStatus =
-  | "started"
-  | "completed"
-  | "failed";
-
-export interface UIProvisioningPhaseMetadata {
-  status: UIProvisioningPhaseStatus;
-  startedAt?: number;
-  durationMs?: number;
-}
-
 export interface UIProvisioningSetupMetadata {
   status: UIProvisioningSetupStatus;
   startedAt?: number;
@@ -187,60 +176,11 @@ export interface UIProvisioningSetupMetadata {
   output?: string;
 }
 
-export interface UIProvisioningTranscriptEnvironmentEntry {
-  kind: "environment";
-  sourceSeq: number;
-  environmentId?: string;
-  environmentDisplayName?: string;
-}
-
-export interface UIProvisioningTranscriptWorktreeEntry {
-  kind: "worktree";
-  sourceSeq: number;
-}
-
-export interface UIProvisioningTranscriptBranchEntry {
-  kind: "branch";
-  sourceSeq: number;
-  branchName: string;
-  headSha?: string;
-}
-
-export interface UIProvisioningTranscriptSetupEntry {
-  kind: "setup";
-  sourceSeq: number;
-  setup: UIProvisioningSetupMetadata;
-}
-
-export interface UIProvisioningTranscriptPhaseEntry {
-  kind: "phase";
-  sourceSeq: number;
-  phase: UIProvisioningPhase;
-  metadata: UIProvisioningPhaseMetadata;
-}
-
-export interface UIProvisioningTranscriptFallbackEntry {
-  kind: "fallback";
-  sourceSeq: number;
-  reason: string;
-}
-
-export type UIProvisioningTranscriptEntry =
-  | UIProvisioningTranscriptEnvironmentEntry
-  | UIProvisioningTranscriptWorktreeEntry
-  | UIProvisioningTranscriptBranchEntry
-  | UIProvisioningTranscriptSetupEntry
-  | UIProvisioningTranscriptPhaseEntry
-  | UIProvisioningTranscriptFallbackEntry;
+export type UIProvisioningTranscriptEntry = ProvisioningTranscriptEntry;
 
 export interface UIProvisioningMetadata {
-  environmentId?: string;
-  environmentDisplayName?: string;
+  attachedEnvironmentId?: string;
   workspaceRoot?: string;
-  branchName?: string;
-  headSha?: string;
-  fallbackReason?: string;
-  phases?: Partial<Record<UIProvisioningPhase, UIProvisioningPhaseMetadata>>;
   setup?: UIProvisioningSetupMetadata;
   transcript?: UIProvisioningTranscriptEntry[];
 }

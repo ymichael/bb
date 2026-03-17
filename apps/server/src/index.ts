@@ -27,6 +27,7 @@ import { createServer } from "./server.js";
 import { installConsoleFileLogger } from "./file-logger.js";
 import { closeHttpServer } from "./http-server-close.js";
 import {
+  scheduleManagedEnvironmentAgentSessionRecoveryOnBoot,
   scheduleManagedArtifactReconciliation,
 } from "./startup-tasks.js";
 
@@ -257,6 +258,10 @@ async function main(): Promise<void> {
       console.log(`\nPress Ctrl+C to stop.\n`);
       console.log("Managed artifact reconciliation scheduled in background.");
       scheduleManagedArtifactReconciliation(threadManager);
+      console.log("Managed environment-agent session recovery scheduled in background.");
+      scheduleManagedEnvironmentAgentSessionRecoveryOnBoot({
+        sessionRepo: environmentAgentSessionRepo,
+      });
       listeningResolve?.();
     },
   );

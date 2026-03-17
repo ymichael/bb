@@ -166,9 +166,6 @@ importers:
 
   apps/server:
     dependencies:
-      '@bb/agent-server':
-        specifier: workspace:*
-        version: link:../../packages/agent-server
       '@bb/core':
         specifier: workspace:*
         version: link:../../packages/core
@@ -181,6 +178,9 @@ importers:
       '@bb/environment-daemon':
         specifier: workspace:*
         version: link:../../packages/environment-daemon
+      '@bb/provider-adapters':
+        specifier: workspace:*
+        version: link:../../packages/provider-adapters
       '@bb/templates':
         specifier: workspace:*
         version: link:../../packages/templates
@@ -221,49 +221,6 @@ importers:
       typescript:
         specifier: ^5.7.0
         version: 5.9.3
-
-  packages/agent-server:
-    dependencies:
-      '@anthropic-ai/sdk':
-        specifier: ^0.73.0
-        version: 0.73.0(zod@4.3.6)
-      '@bb/claude-code-bridge':
-        specifier: workspace:*
-        version: link:../claude-code-bridge
-      '@bb/core':
-        specifier: workspace:*
-        version: link:../core
-      '@bb/environment-daemon':
-        specifier: workspace:*
-        version: link:../environment-daemon
-      '@bb/pi-bridge':
-        specifier: workspace:*
-        version: link:../pi-bridge
-      '@bb/templates':
-        specifier: workspace:*
-        version: link:../templates
-      '@mariozechner/pi-ai':
-        specifier: ^0.58.3
-        version: 0.58.3(ws@8.19.0)(zod@4.3.6)
-      '@mariozechner/pi-coding-agent':
-        specifier: ^0.58.3
-        version: 0.58.3(ws@8.19.0)(zod@4.3.6)
-      tsx:
-        specifier: ^4.20.0
-        version: 4.21.0
-    devDependencies:
-      '@bb/tsconfig':
-        specifier: workspace:*
-        version: link:../tsconfig
-      '@types/node':
-        specifier: ^22.0.0
-        version: 22.19.10
-      typescript:
-        specifier: ^5.7.0
-        version: 5.9.3
-      vitest:
-        specifier: ^4.0.0
-        version: 4.0.18(@types/node@22.19.10)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.21.0)(yaml@2.8.2)
 
   packages/claude-code-bridge:
     dependencies:
@@ -364,6 +321,9 @@ importers:
       '@bb/core':
         specifier: workspace:*
         version: link:../core
+      '@bb/provider-adapters':
+        specifier: workspace:*
+        version: link:../provider-adapters
     devDependencies:
       '@bb/tsconfig':
         specifier: workspace:*
@@ -392,6 +352,43 @@ importers:
       '@sinclair/typebox':
         specifier: ^0.34.0
         version: 0.34.48
+    devDependencies:
+      '@bb/tsconfig':
+        specifier: workspace:*
+        version: link:../tsconfig
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.19.10
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
+      vitest:
+        specifier: ^4.0.0
+        version: 4.0.18(@types/node@22.19.10)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.21.0)(yaml@2.8.2)
+
+  packages/provider-adapters:
+    dependencies:
+      '@anthropic-ai/sdk':
+        specifier: ^0.73.0
+        version: 0.73.0(zod@4.3.6)
+      '@bb/claude-code-bridge':
+        specifier: workspace:*
+        version: link:../claude-code-bridge
+      '@bb/core':
+        specifier: workspace:*
+        version: link:../core
+      '@bb/pi-bridge':
+        specifier: workspace:*
+        version: link:../pi-bridge
+      '@bb/templates':
+        specifier: workspace:*
+        version: link:../templates
+      '@mariozechner/pi-ai':
+        specifier: ^0.58.3
+        version: 0.58.3(ws@8.19.0)(zod@4.3.6)
+      '@mariozechner/pi-coding-agent':
+        specifier: ^0.58.3
+        version: 0.58.3(ws@8.19.0)(zod@4.3.6)
     devDependencies:
       '@bb/tsconfig':
         specifier: workspace:*

@@ -40,7 +40,9 @@ async function createDockerThread(baseUrl: string, projectId: string): Promise<T
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       projectId,
-      environmentKind: "docker",
+      environmentCreationArgs: {
+        kind: "docker",
+      },
       input: [{
         type: "text",
         text: "Reply with exactly DOCKER-ROUNDTRIP and finish. Do not run commands or add extra text.",

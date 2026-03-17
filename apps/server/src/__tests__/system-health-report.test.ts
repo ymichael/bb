@@ -3,7 +3,11 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Project, Thread } from "@bb/core";
-import type { ProjectRepository, ThreadRepository } from "@bb/db";
+import type {
+  EnvironmentAgentSessionRepository,
+  ProjectRepository,
+  ThreadRepository,
+} from "@bb/db";
 import { createSystemHealthReporter } from "../system-health-report.js";
 
 const originalHome = process.env.HOME;
@@ -79,19 +83,51 @@ describe("system health report", () => {
       makeThread({ id: "thread-2", status: "idle", archivedAt: 2_000 }),
       makeThread({ id: "thread-3", status: "provisioning" }),
     ];
+    const now = 1_700_000_000_000;
     const projectRepo = {
       list: () => [project],
     } as unknown as ProjectRepository;
     const threadRepo = {
       list: () => threads,
     } as unknown as ThreadRepository;
+    const environmentAgentSessionRepo = {
+      listActive: () => [
+        {
+          id: "session-1",
+          threadId: "thread-1",
+          environmentId: "env-worktree-1",
+          agentId: "environment-agent:thread-1",
+          agentInstanceId: "instance-1",
+          protocolVersion: 1,
+          workerName: "environment-daemon",
+          workerVersion: "0.0.1",
+          workerBuildId: "build-123",
+          providerMetadata: [{ providerId: "codex", adapterVersion: "0.0.1" }],
+          selectedCapabilities: {
+            commands: [
+              "provider.ensure",
+              "thread.start",
+              "thread.resume",
+              "turn.run",
+            ],
+            features: ["worker_metadata", "provider_metadata"],
+          },
+          controlBaseUrl: "http://127.0.0.1:4321",
+          status: "active",
+          leaseExpiresAt: now + 45_000,
+          lastHeartbeatAt: now - 5_000,
+          createdAt: now - 30_000,
+          updatedAt: now - 1_000,
+        },
+      ],
+    } as unknown as EnvironmentAgentSessionRepository;
 
-    const now = 1_700_000_000_000;
     vi.spyOn(Date, "now").mockReturnValue(now);
 
     const report = createSystemHealthReporter({
       projectRepo,
       threadRepo,
+      environmentAgentSessionRepo,
       getRunningCount: () => 1,
       startTime: now - 3_600_000,
       dbPath,
@@ -112,6 +148,53 @@ describe("system health report", () => {
       error: 0,
       active: 1,
       idle: 1,
+    });
+    expect(report.environmentAgent).toEqual({
+      activeSessionCount: 1,
+      activeSessions: [
+        {
+          sessionId: "session-1",
+          threadId: "thread-1",
+          environmentId: "env-worktree-1",
+          agentId: "environment-agent:thread-1",
+          agentInstanceId: "instance-1",
+          protocolVersion: 1,
+          worker: {
+            name: "environment-daemon",
+            version: "0.0.1",
+            buildId: "build-123",
+          },
+          providers: [{ providerId: "codex", adapterVersion: "0.0.1" }],
+          selectedCapabilities: {
+            commands: [
+              "provider.ensure",
+              "thread.start",
+              "thread.resume",
+              "turn.run",
+            ],
+            features: ["worker_metadata", "provider_metadata"],
+          },
+          compatibility: {
+            disposition: "degrade",
+            missingRequiredCommands: [],
+            missingOptionalCommands: [
+              "thread.rename",
+              "provider.list_catalog",
+              "workspace.status",
+              "workspace.diff",
+            ],
+            missingOptionalFeatures: [
+              "provider_runtime_version",
+              "control_endpoint",
+            ],
+          },
+          controlBaseUrl: "http://127.0.0.1:4321",
+          leaseExpiresAt: now + 45_000,
+          lastHeartbeatAt: now - 5_000,
+          createdAt: now - 30_000,
+          updatedAt: now - 1_000,
+        },
+      ],
     });
 
     expect(report.storage.totalBytes).toBe(47);

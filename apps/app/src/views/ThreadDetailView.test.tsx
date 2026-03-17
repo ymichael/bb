@@ -2,7 +2,7 @@ import { type ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import type { ThreadTimelineResponse, ThreadWorkStatus } from "@bb/core";
+import type { Thread, ThreadTimelineResponse, ThreadWorkStatus } from "@bb/core";
 import { buildFollowUpSignatureFromInput, buildFollowUpSignatureFromRow } from "@/lib/thread-follow-up-signature";
 import { ThreadDetailView } from "./ThreadDetailView";
 
@@ -28,6 +28,7 @@ const apiState = vi.hoisted(() => {
     thread: {
       id: "thread-1",
       projectId: "project-1",
+      providerId: "codex",
       createdAt: 20,
       type: "standard",
       status: "idle",
@@ -42,12 +43,16 @@ const apiState = vi.hoisted(() => {
         {
           id: "queued-1",
           input: [{ type: "text", text: "queued follow up" }],
+          reasoningLevel: "medium",
+          sandboxMode: "workspace-write",
+          createdAt: 20,
         },
       ],
-    },
+    } as Thread,
     parentThread: {
       id: "thread-parent",
       projectId: "project-1",
+      providerId: "codex",
       createdAt: 10,
       type: "manager",
       status: "idle",
@@ -55,7 +60,7 @@ const apiState = vi.hoisted(() => {
       lastReadAt: 10,
       title: "Parent thread",
       builtInActions: [],
-    },
+    } as Thread,
     timeline: {
       rows: [
         {
@@ -211,8 +216,6 @@ vi.mock("@/hooks/usePromptModelReasoning", () => ({
     modelOptions: [{ value: "gpt-5", label: "GPT-5" }],
     reasoningOptions: [{ value: "medium", label: "Medium" }],
     sandboxOptions: [{ value: "workspace-write", label: "Workspace Write" }],
-    supportsModelList: true,
-    supportsReasoningLevels: true,
     supportsServiceTier: true,
   }),
 }));
@@ -425,7 +428,76 @@ describe("ThreadDetailView", () => {
     expect(html).not.toContain("Parent thread");
     expect(html).not.toContain('href="/projects/project-1/threads/thread-parent"');
     expect(html).toContain("Rendered message");
-    expect(html).toContain("Ask for follow-up changes|1|Local Env");
+    expect(html).toContain("Ask for follow-up changes|1|");
+  });
+
+  it("shows Direct for the primary checkout promptbox label", () => {
+    apiState.thread.attachedEnvironment = {
+      id: "env-1",
+      projectId: "project-1",
+      descriptor: {
+        type: "path",
+        path: "/tmp/project-one",
+      },
+      managed: false,
+      properties: {
+        provisioningSystemKind: "direct-path",
+        location: "localhost",
+        workspaceKind: "primary_checkout",
+      },
+      createdAt: 1,
+      updatedAt: 1,
+    };
+
+    const html = renderThreadDetailView();
+
+    expect(html).toContain("Ask for follow-up changes|1|Primary");
+  });
+
+  it("shows Worktree with a useful suffix for localhost worktrees", () => {
+    apiState.thread.attachedEnvironment = {
+      id: "env-1",
+      projectId: "project-1",
+      descriptor: {
+        type: "path",
+        path: "/tmp/project-one/worktrees/feature-branch",
+      },
+      managed: true,
+      properties: {
+        provisioningSystemKind: "worktree",
+        location: "localhost",
+        workspaceKind: "worktree",
+      },
+      createdAt: 1,
+      updatedAt: 1,
+    };
+
+    const html = renderThreadDetailView();
+
+    expect(html).toContain("Ask for follow-up changes|1|Worktree (worktrees/feature-branch)");
+  });
+
+  it("shows Docker for docker-backed environments", () => {
+    apiState.thread.attachedEnvironment = {
+      id: "env-1",
+      projectId: "project-1",
+      descriptor: {
+        type: "path",
+        path: "/workspace",
+      },
+      managed: true,
+      properties: {
+        provisioningSystemKind: "docker-worktree",
+        location: "docker",
+        workspaceKind: "arbitrary_path",
+      },
+      createdAt: 1,
+      updatedAt: 1,
+    };
+
+    const html = renderThreadDetailView();
+
+    expect(html).toContain("Ask for follow-up changes|1|Docker");
   });
 
   it("renders the secondary panel diff view when the diff tab is active", () => {
@@ -459,7 +531,7 @@ describe("ThreadDetailView", () => {
     expect(html).toContain('href="/projects/project-1/threads/thread-parent"');
     expect(html).toContain("Unassign manager");
     expect(html).toContain("Environment");
-    expect(html).toContain("Local Env");
+    expect(html).toContain("Docker");
     expect(html).toContain("Branch");
     expect(html).toContain("feature/thread-1");
     expect(html).toContain("Copy branch name");

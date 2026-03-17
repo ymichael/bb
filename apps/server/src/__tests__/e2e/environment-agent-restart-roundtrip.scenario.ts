@@ -3,7 +3,9 @@ import {
   allocateLocalPort,
   createProject,
   createThread,
+  listEnvironmentAgentSessions,
   listThreadEvents,
+  waitForThreadCondition,
   waitForThreadStatus,
 } from "./environment-agent-api.js";
 import {
@@ -15,8 +17,8 @@ export async function runEnvironmentAgentRestartRoundtripScenario(): Promise<voi
   let harness = await startDaemonE2eHarness({
     port,
     fakeCodex: {
-      defaultTurnDelayMs: 0,
-      defaultScenario: "start-then-manual-complete",
+      defaultTurnDelayMs: 4_000,
+      defaultScenario: "turn-complete",
     },
     preserveTempDirOnCleanup: true,
   });
@@ -44,11 +46,22 @@ export async function runEnvironmentAgentRestartRoundtripScenario(): Promise<voi
       tempDir,
       port,
       fakeCodex: {
-        defaultTurnDelayMs: 0,
-        defaultScenario: "start-then-manual-complete",
+        defaultTurnDelayMs: 4_000,
+        defaultScenario: "turn-complete",
       },
+      preserveTempDirOnCleanup: true,
     });
 
+    await waitForThreadCondition({
+      threadId: thread.id,
+      timeoutMs: 5_000,
+      wsUrl: harness.wsUrl,
+      load: async () => listEnvironmentAgentSessions(harness.baseUrl, thread.id),
+      isReady: (payload) => payload.sessions.some((session) => session.status === "active"),
+      describeLast: (payload) =>
+        `Thread ${thread.id} did not reopen an active env-daemon session ` +
+        `(last session count=${payload?.sessions.length ?? 0})`,
+    });
     await waitForThreadStatus(harness.baseUrl, thread.id, "idle", 12_000, harness.wsUrl);
 
     const events = await listThreadEvents(harness.baseUrl, thread.id);

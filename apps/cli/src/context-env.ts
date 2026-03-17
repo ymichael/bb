@@ -23,7 +23,7 @@ export function resolveThreadId(flagValue?: string): string | undefined {
 }
 
 export function resolveEnvironmentId(flagValue?: string): string | undefined {
-  return normalizeValue(flagValue) ?? normalizeValue(process.env.BB_ENVIRONMENT);
+  return normalizeValue(flagValue);
 }
 
 export function requireProjectId(flagValue?: string): string {

@@ -195,7 +195,7 @@ export class EnvironmentAgentSessionHttpClient {
     });
   }
 
-  private postClientMessage<
+  private async postClientMessage<
     TType extends EnvironmentAgentSessionBoundClientMessage["type"],
   >(args: {
     type: TType;
@@ -218,10 +218,7 @@ export class EnvironmentAgentSessionHttpClient {
         200,
       );
     }
-    return this.postNoContent(
-      `/threads/${this.threadId}/env-daemon/session/messages`,
-      message,
-    );
+    return this.postNoContent(`/threads/${this.threadId}/env-daemon/session/messages`, message);
   }
 
   private async getJson(
@@ -229,12 +226,22 @@ export class EnvironmentAgentSessionHttpClient {
     expectedStatus: number,
     options?: { signal?: AbortSignal },
   ): Promise<unknown> {
-    const response = await this.fetchImpl(joinUrl(this.daemonUrl, path), {
-      method: "GET",
-      headers: this.defaultHeaders,
-      ...(options?.signal ? { signal: options.signal } : {}),
-    });
-    return this.requireJson(response, expectedStatus);
+    try {
+      const response = await this.fetchImpl(joinUrl(this.daemonUrl, path), {
+        method: "GET",
+        headers: this.defaultHeaders,
+        ...(options?.signal ? { signal: options.signal } : {}),
+      });
+      return await this.requireJson(response, expectedStatus);
+    } catch (error) {
+      if (
+        options?.signal?.aborted &&
+        error instanceof EnvironmentAgentSessionHttpClientError
+      ) {
+        throw new DOMException("The operation was aborted.", "AbortError");
+      }
+      throw error;
+    }
   }
 
   private async postJson(

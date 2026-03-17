@@ -6,7 +6,7 @@ const itWithSupportedProvider = supportsFakeCodexControl() ? it : it.skip;
 
 describe.sequential("e2e: environment-agent restart recovery", () => {
   itWithSupportedProvider(
-    "recovers buffered provider events automatically after daemon restart",
+    "completes the in-flight turn after the env-agent reconnects to the restarted daemon",
     runEnvironmentAgentRestartRoundtripScenario,
     20_000,
   );

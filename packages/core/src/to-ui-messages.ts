@@ -1,7 +1,6 @@
 import type { ThreadEvent } from "./types.js";
 import { assertNever } from "./assert-never.js";
 import { getStringField, toRecord } from "./unknown-helpers.js";
-import { formatEnvironmentDisplayName } from "./environment-display-name.js";
 import {
   decodeLooseTextContent,
   decodeThreadEventData,
@@ -22,9 +21,6 @@ import type {
   UIPrimaryCheckoutAction,
   UIPrimaryCheckoutMetadata,
   UIPrimaryCheckoutPhase,
-  UIProvisioningPhase,
-  UIProvisioningPhaseMetadata,
-  UIProvisioningPhaseStatus,
   UIProvisioningSetupMetadata,
   UIProvisioningSetupStatus,
   UIProvisioningTranscriptEntry,
@@ -475,7 +471,7 @@ function provisioningSetupOperationStatus(
 }
 
 function provisioningProgressOperationStatus(
-  status: UIProvisioningPhaseStatus | undefined,
+  status: "started" | "completed" | "failed" | undefined,
 ): UIOperationMessage["status"] {
   if (!status) return undefined;
   switch (status) {
@@ -831,7 +827,9 @@ function toProvisioningSetupStatus(
   }
 }
 
-function toProvisioningPhase(value: unknown): UIProvisioningPhase | undefined {
+function toProvisioningProgressPhase(
+  value: unknown,
+): "prepare_environment" | "start_provider_session" | undefined {
   if (typeof value !== "string") return undefined;
   const token = normalizeToken(value);
   switch (token) {
@@ -844,9 +842,9 @@ function toProvisioningPhase(value: unknown): UIProvisioningPhase | undefined {
   }
 }
 
-function toProvisioningPhaseStatus(
+function toProvisioningProgressStatus(
   value: unknown,
-): UIProvisioningPhaseStatus | undefined {
+): "started" | "completed" | "failed" | undefined {
   if (typeof value !== "string") return undefined;
   const token = normalizeToken(value);
   switch (token) {
@@ -867,8 +865,8 @@ function toProvisioningPhaseStatus(
 }
 
 function provisioningProgressTitle(
-  phase: UIProvisioningPhase | undefined,
-  status: UIProvisioningPhaseStatus | undefined,
+  phase: "prepare_environment" | "start_provider_session" | undefined,
+  status: "started" | "completed" | "failed" | undefined,
 ): string {
   switch (phase) {
     case "prepare_environment":
@@ -898,53 +896,53 @@ function provisioningProgressTitle(
   }
 }
 
-function createProvisioningPhaseTranscriptEntry(
-  sourceSeq: number,
-  phase: UIProvisioningPhase,
-  metadata: UIProvisioningPhaseMetadata,
-): UIProvisioningTranscriptEntry {
-  return {
-    kind: "phase",
-    sourceSeq,
-    phase,
-    metadata: { ...metadata },
-  };
-}
+function readProvisioningTranscript(
+  payload: Record<string, unknown> | null,
+): UIProvisioningTranscriptEntry[] | undefined {
+  const transcript = payload?.transcript;
+  if (!Array.isArray(transcript)) return undefined;
 
-function createProvisioningSetupTranscriptEntry(
-  sourceSeq: number,
-  setup: UIProvisioningSetupMetadata,
-): UIProvisioningTranscriptEntry {
-  return {
-    kind: "setup",
-    sourceSeq,
-    setup: { ...setup },
-  };
-}
+  const entries = transcript.flatMap((entry) => {
+    const record = toRecord(entry);
+    const key = getStringField(record, "key")?.trim();
+    const text = getStringField(record, "text")?.trim();
+    if (!key || !text) {
+      return [];
+    }
 
-function maybeCreateProvisioningEnvironmentTranscriptEntries(args: {
-  sourceSeq: number;
-  environmentId?: string;
-  environmentDisplayName?: string;
-}): UIProvisioningTranscriptEntry[] | undefined {
-  const entries: UIProvisioningTranscriptEntry[] = [];
-  if (args.environmentId || args.environmentDisplayName) {
-    entries.push({
-      kind: "environment",
-      sourceSeq: args.sourceSeq,
-      ...(args.environmentId ? { environmentId: args.environmentId } : {}),
-      ...(args.environmentDisplayName
-        ? { environmentDisplayName: args.environmentDisplayName }
-        : {}),
-    });
-  }
-  if (args.environmentId === "worktree") {
-    entries.push({
-      kind: "worktree",
-      sourceSeq: args.sourceSeq,
-    });
-  }
+    const startedAtValue = record?.startedAt;
+    const startedAt =
+      typeof startedAtValue === "number" && Number.isFinite(startedAtValue)
+        ? startedAtValue
+        : undefined;
+    const metadata = toRecord(record?.metadata) ?? undefined;
+    return [
+      {
+        key,
+        text,
+        ...(startedAt !== undefined ? { startedAt } : {}),
+        ...(metadata ? { metadata } : {}),
+      },
+    ];
+  });
+
   return entries.length > 0 ? entries : undefined;
+}
+
+function getProvisioningProgressFromTranscript(
+  transcript: UIProvisioningTranscriptEntry[] | undefined,
+): {
+  phase?: "prepare_environment" | "start_provider_session";
+  status?: "started" | "completed" | "failed";
+} {
+  const progressEntry = transcript?.find((entry) => entry.key.startsWith("phase:"));
+  if (!progressEntry) return {};
+  const metadata = progressEntry.metadata ?? null;
+
+  return {
+    phase: toProvisioningProgressPhase(getStringField(metadata, "phase")),
+    status: toProvisioningProgressStatus(getStringField(metadata, "status")),
+  };
 }
 
 function extractShellCommand(value: unknown): string | undefined {
@@ -1732,15 +1730,8 @@ function parseOperationMessage(
 
   if (eventTypeMatches(eventType, "system/provisioning/started")) {
     const payload = toEventRecord(event.data);
-    const environmentId = getStringField(payload, "environmentId");
-    const environmentDisplayName = formatEnvironmentDisplayName({
-      displayName: getStringField(payload, "environmentDisplayName"),
-    });
-    const transcript = maybeCreateProvisioningEnvironmentTranscriptEntries({
-      sourceSeq: event.seq,
-      environmentId,
-      environmentDisplayName,
-    });
+    const attachedEnvironmentId = getStringField(payload, "attachedEnvironmentId");
+    const transcript = readProvisioningTranscript(payload);
     return {
       kind: "operation",
       id: messageId(event.threadId, "op", `provisioning-started:${event.seq}`),
@@ -1754,10 +1745,9 @@ function parseOperationMessage(
       title: "Provisioning started",
       status: "pending",
       provisioning:
-        environmentId || environmentDisplayName
+        attachedEnvironmentId || transcript
           ? {
-              ...(environmentId ? { environmentId } : {}),
-              ...(environmentDisplayName ? { environmentDisplayName } : {}),
+              ...(attachedEnvironmentId ? { attachedEnvironmentId } : {}),
               ...(transcript ? { transcript } : {}),
             }
           : undefined,
@@ -1766,17 +1756,13 @@ function parseOperationMessage(
 
   if (eventTypeMatches(eventType, "system/provisioning/progress")) {
     const payload = toEventRecord(event.data);
-    const phase = toProvisioningPhase(getStringField(payload, "phase"));
-    const status = toProvisioningPhaseStatus(getStringField(payload, "status"));
-    const durationMs = getNumberField(payload, "durationMs");
-    const phaseMetadata =
-      phase && status
-        ? {
-            status,
-            startedAt: event.createdAt,
-            ...(durationMs !== undefined ? { durationMs } : {}),
-          }
-        : undefined;
+    const transcript = readProvisioningTranscript(payload);
+    const phase =
+      toProvisioningProgressPhase(getStringField(payload, "phase")) ??
+      getProvisioningProgressFromTranscript(transcript).phase;
+    const status =
+      toProvisioningProgressStatus(getStringField(payload, "status")) ??
+      getProvisioningProgressFromTranscript(transcript).status;
 
     return {
       kind: "operation",
@@ -1790,13 +1776,10 @@ function parseOperationMessage(
       opType: "provisioning-progress",
       title: provisioningProgressTitle(phase, status),
       status: provisioningProgressOperationStatus(status),
-      ...(phase && status && phaseMetadata
+      ...(transcript
         ? {
             provisioning: {
-              phases: {
-                [phase]: phaseMetadata,
-              },
-              transcript: [createProvisioningPhaseTranscriptEntry(event.seq, phase, phaseMetadata)],
+              transcript,
             },
           }
         : {}),
@@ -1805,7 +1788,8 @@ function parseOperationMessage(
 
   if (eventTypeMatches(eventType, "system/provisioning/env_setup")) {
     const payload = toEventRecord(event.data);
-    const rawStatus = getStringField(payload, "status");
+    const setupPayload = toRecord(payload?.setup);
+    const rawStatus = getStringField(setupPayload, "status");
     const status = toProvisioningSetupStatus(rawStatus);
     const title = (() => {
       switch (status) {
@@ -1822,14 +1806,11 @@ function parseOperationMessage(
           return "Environment setup update";
       }
     })();
-
-    const scriptPath = getStringField(payload, "scriptPath");
+    const scriptPath = getStringField(setupPayload, "scriptPath");
     const workspaceRoot = getStringField(payload, "workspaceRoot");
-    const branchName = getStringField(payload, "branchName");
-    const headSha = getStringField(payload, "headSha");
-    const timeoutMs = getNumberField(payload, "timeoutMs");
-    const durationMs = getNumberField(payload, "durationMs");
-    const output = getStringField(payload, "detail");
+    const timeoutMs = getNumberField(setupPayload, "timeoutMs");
+    const durationMs = getNumberField(setupPayload, "durationMs");
+    const output = getStringField(setupPayload, "output");
     const setupMetadata =
       status
         ? {
@@ -1841,21 +1822,7 @@ function parseOperationMessage(
             ...(output ? { output } : {}),
           }
         : undefined;
-    const transcript: UIProvisioningTranscriptEntry[] = [
-      ...(branchName
-        ? [
-            {
-              kind: "branch" as const,
-              sourceSeq: event.seq,
-              branchName,
-              ...(headSha ? { headSha } : {}),
-            },
-          ]
-        : []),
-      ...(setupMetadata
-        ? [createProvisioningSetupTranscriptEntry(event.seq, setupMetadata)]
-        : []),
-    ];
+    const transcript = readProvisioningTranscript(payload);
 
     return {
       kind: "operation",
@@ -1873,10 +1840,8 @@ function parseOperationMessage(
         ? {
             provisioning: {
               ...(workspaceRoot ? { workspaceRoot } : {}),
-              ...(branchName ? { branchName } : {}),
-              ...(headSha ? { headSha } : {}),
               setup: setupMetadata,
-              ...(transcript.length > 0 ? { transcript } : {}),
+              ...(transcript ? { transcript } : {}),
             },
           }
         : {}),
@@ -2089,11 +2054,7 @@ function parseOperationMessage(
   if (eventTypeMatches(eventType, "system/provisioning/fallback")) {
     const payload = toEventRecord(event.data);
     const fallbackEnvironmentId = getStringField(payload, "fallbackEnvironmentId");
-    const reason = getStringField(payload, "reason");
-    const fallbackEnvironmentLabel = formatEnvironmentDisplayName({
-      id: fallbackEnvironmentId,
-      displayName: fallbackEnvironmentId,
-    });
+    const transcript = readProvisioningTranscript(payload);
     return {
       kind: "operation",
       id: messageId(event.threadId, "op", `provisioning-fallback:${event.seq}`),
@@ -2108,24 +2069,9 @@ function parseOperationMessage(
       detail: getStringField(payload, "detail") || undefined,
       status: "pending",
       provisioning:
-        fallbackEnvironmentId || fallbackEnvironmentLabel || reason
+        fallbackEnvironmentId || transcript
           ? {
-              ...(fallbackEnvironmentId ? { environmentId: fallbackEnvironmentId } : {}),
-              ...(fallbackEnvironmentLabel
-                ? { environmentDisplayName: fallbackEnvironmentLabel }
-                : {}),
-              ...(reason ? { fallbackReason: reason } : {}),
-              ...(reason
-                ? {
-                    transcript: [
-                      {
-                        kind: "fallback",
-                        sourceSeq: event.seq,
-                        reason,
-                      },
-                    ],
-                  }
-                : {}),
+              ...(transcript ? { transcript } : {}),
             }
           : undefined,
     };
@@ -2133,40 +2079,9 @@ function parseOperationMessage(
 
   if (eventTypeMatches(eventType, "system/provisioning/completed")) {
     const payload = toEventRecord(event.data);
-    const environmentId = getStringField(payload, "environmentId");
-    const environmentDisplayName = formatEnvironmentDisplayName({
-      displayName: getStringField(payload, "environmentDisplayName"),
-    });
+    const attachedEnvironmentId = getStringField(payload, "attachedEnvironmentId");
     const workspaceRoot = getStringField(payload, "workspaceRoot");
-    const branchName = getStringField(payload, "branchName");
-    const headSha = getStringField(payload, "headSha");
-    const fallbackReason = getStringField(payload, "fallbackReason");
-    const transcript: UIProvisioningTranscriptEntry[] = [
-      ...(maybeCreateProvisioningEnvironmentTranscriptEntries({
-        sourceSeq: event.seq,
-        environmentId,
-        environmentDisplayName,
-      }) ?? []),
-      ...(branchName
-        ? [
-            {
-              kind: "branch" as const,
-              sourceSeq: event.seq,
-              branchName,
-              ...(headSha ? { headSha } : {}),
-            },
-          ]
-        : []),
-      ...(fallbackReason
-        ? [
-            {
-              kind: "fallback" as const,
-              sourceSeq: event.seq,
-              reason: fallbackReason,
-            },
-          ]
-        : []),
-    ];
+    const transcript = readProvisioningTranscript(payload);
     return {
       kind: "operation",
       id: messageId(event.threadId, "op", `provisioning-completed:${event.seq}`),
@@ -2180,15 +2095,13 @@ function parseOperationMessage(
       title: "Provisioning ready",
       status: "completed",
       provisioning:
-        environmentId || environmentDisplayName || workspaceRoot || branchName || headSha || fallbackReason
+        attachedEnvironmentId ||
+        workspaceRoot ||
+        transcript
           ? {
-              ...(environmentId ? { environmentId } : {}),
-              ...(environmentDisplayName ? { environmentDisplayName } : {}),
+              ...(attachedEnvironmentId ? { attachedEnvironmentId } : {}),
               ...(workspaceRoot ? { workspaceRoot } : {}),
-              ...(branchName ? { branchName } : {}),
-              ...(headSha ? { headSha } : {}),
-              ...(fallbackReason ? { fallbackReason } : {}),
-              ...(transcript.length > 0 ? { transcript } : {}),
+              ...(transcript ? { transcript } : {}),
             }
           : undefined,
     };
@@ -2196,12 +2109,7 @@ function parseOperationMessage(
 
   if (eventTypeMatches(eventType, "system/provisioning/cleanup_failed")) {
     const payload = toEventRecord(event.data);
-    const environmentDisplayName = formatEnvironmentDisplayName({
-      id: getStringField(payload, "environmentId"),
-      displayName: getStringField(payload, "environmentDisplayName"),
-    });
     const detailParts = [
-      environmentDisplayName,
       getStringField(payload, "message"),
       getStringField(payload, "detail"),
     ].filter((value): value is string => Boolean(value));
@@ -3150,11 +3058,17 @@ function finalizeOperationMessage(
         return;
       case "provisioning-progress":
         message.status = "error";
-        if (message.provisioning?.phases?.prepare_environment?.status === "started") {
+        if (
+          getProvisioningProgressFromTranscript(message.provisioning?.transcript).phase ===
+          "prepare_environment"
+        ) {
           message.title = "Environment preparation failed";
           return;
         }
-        if (message.provisioning?.phases?.start_provider_session?.status === "started") {
+        if (
+          getProvisioningProgressFromTranscript(message.provisioning?.transcript).phase ===
+          "start_provider_session"
+        ) {
           message.title = "Provider session start failed";
           return;
         }

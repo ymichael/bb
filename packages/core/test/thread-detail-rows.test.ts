@@ -80,6 +80,59 @@ function provisioningOperation(
     transcript?: UIProvisioningTranscriptEntry[];
   },
 ): Extract<UIMessage, { kind: "operation" }> {
+  const transcript = [
+    ...(options?.environmentDisplayName
+      ? [{ key: "environment", text: `environment: ${options.environmentDisplayName}` }]
+      : []),
+    ...(options?.branchName
+      ? [{ key: "branch", text: `checked out branch ${options.branchName}` }]
+      : []),
+    ...(options?.setup?.scriptPath
+      ? [{
+          key: "setup",
+          text:
+            options.setup.status === "completed"
+              ? `ran ${options.setup.scriptPath}`
+              : options.setup.status === "failed"
+                ? `setup script failed: ${options.setup.scriptPath}`
+                : `running ${options.setup.scriptPath}`,
+          ...(options.setup.startedAt !== undefined
+            ? { startedAt: options.setup.startedAt }
+            : {}),
+        }]
+      : []),
+    ...(options?.phases?.start_provider_session
+      ? [{
+          key: "phase:start_provider_session",
+          text:
+            options.phases.start_provider_session.status === "completed"
+              ? "started provider session"
+              : options.phases.start_provider_session.status === "failed"
+                ? "provider session start failed"
+                : "starting provider session",
+          ...(options.phases.start_provider_session.startedAt !== undefined
+            ? { startedAt: options.phases.start_provider_session.startedAt }
+            : {}),
+        }]
+      : []),
+    ...(options?.fallbackReason
+      ? [{ key: "fallback", text: `fallback: ${options.fallbackReason}` }]
+      : []),
+    ...(options?.transcript
+      ? options.transcript.map((entry) => structuredClone(entry))
+      : []),
+  ].reduce<UIProvisioningTranscriptEntry[]>((entries, entry) => {
+    const existingIndex = entries.findIndex(
+      (existingEntry) => existingEntry.key === entry.key,
+    );
+    if (existingIndex === -1) {
+      entries.push(entry);
+      return entries;
+    }
+    entries[existingIndex] = entry;
+    return entries;
+  }, []);
+
   return {
     kind: "operation",
     id: `provisioning-${seq}`,
@@ -93,39 +146,13 @@ function provisioningOperation(
     options?.workspaceRoot ||
     options?.fallbackReason ||
     options?.phases ||
-    options?.setup)
+    options?.setup ||
+    transcript.length > 0)
       ? {
           provisioning: {
-            ...(options?.environmentDisplayName
-              ? { environmentDisplayName: options.environmentDisplayName }
-              : {}),
             ...(options?.workspaceRoot ? { workspaceRoot: options.workspaceRoot } : {}),
-            ...(options?.branchName ? { branchName: options.branchName } : {}),
-            ...(options?.fallbackReason ? { fallbackReason: options.fallbackReason } : {}),
-            ...(options?.phases
-              ? {
-                  phases: {
-                    ...(options.phases.prepare_environment
-                      ? {
-                          prepare_environment: {
-                            ...options.phases.prepare_environment,
-                          },
-                        }
-                      : {}),
-                    ...(options.phases.start_provider_session
-                      ? {
-                          start_provider_session: {
-                            ...options.phases.start_provider_session,
-                          },
-                        }
-                      : {}),
-                  },
-                }
-              : {}),
             ...(options?.setup ? { setup: { ...options.setup } } : {}),
-            ...(options?.transcript
-              ? { transcript: options.transcript.map((entry) => structuredClone(entry)) }
-              : {}),
+            ...(transcript.length > 0 ? { transcript } : {}),
           },
         }
       : {}),
@@ -525,7 +552,7 @@ describe("buildThreadDetailRows provisioning operation collapsing", () => {
     expect(rows).toHaveLength(1);
     expect(rows[0]?.opType).toBe("provisioning");
     expect(rows[0]?.title).toBe("Provisioned environment");
-    expect(rows[0]?.provisioning?.environmentDisplayName).toBe("Worktree");
+    expect(rows[0]?.provisioning?.transcript?.[0]?.text).toBe("environment: Worktree");
     expect(rows[0]?.provisioning?.workspaceRoot).toBe("/tmp/worktree");
     expect(rows[0]?.provisioning?.setup?.scriptPath).toBe(".bb-env-setup.ts");
     expect(rows[0]?.provisioning?.setup?.timeoutMs).toBe(600000);
@@ -556,7 +583,7 @@ describe("buildThreadDetailRows provisioning operation collapsing", () => {
     expect(rows).toHaveLength(1);
     expect(rows[0]?.opType).toBe("provisioning");
     expect(rows[0]?.title).toBe("Provisioned environment");
-    expect(rows[0]?.provisioning?.environmentDisplayName).toBe("Direct");
+    expect(rows[0]?.provisioning?.transcript?.[0]?.text).toBe("environment: Direct");
     expect(rows[0]?.detail).toBeUndefined();
   });
 
@@ -673,7 +700,7 @@ describe("buildThreadDetailRows provisioning operation collapsing", () => {
     expect(rows).toHaveLength(1);
     expect(rows[0]?.opType).toBe("provisioning");
     expect(rows[0]?.title).toBe("Provisioning environment");
-    expect(rows[0]?.provisioning?.environmentDisplayName).toBe("Worktree");
+    expect(rows[0]?.provisioning?.transcript?.[0]?.text).toBe("environment: Worktree");
     expect(rows[0]?.provisioning?.workspaceRoot).toBe("/tmp/worktree");
     expect(rows[0]?.provisioning?.setup?.status).toBe("running");
     expect(rows[0]?.provisioning?.setup?.output).toBe("+ pnpm install\nDone in 3.2s");
@@ -723,10 +750,11 @@ describe("buildThreadDetailRows provisioning operation collapsing", () => {
     expect(rows).toHaveLength(1);
     expect(rows[0]?.opType).toBe("provisioning");
     expect(rows[0]?.title).toBe("Provisioning environment");
-    expect(rows[0]?.provisioning?.phases?.prepare_environment?.durationMs).toBe(1200);
-    expect(rows[0]?.provisioning?.phases?.prepare_environment?.startedAt).toBe(2);
-    expect(rows[0]?.provisioning?.phases?.start_provider_session?.status).toBe("started");
-    expect(rows[0]?.provisioning?.phases?.start_provider_session?.startedAt).toBe(3);
+    expect(rows[0]?.provisioning?.transcript?.map((entry) => entry.key)).toEqual([
+      "environment",
+      "phase:start_provider_session",
+    ]);
+    expect(rows[0]?.provisioning?.transcript?.[1]?.startedAt).toBe(3);
   });
 
   it("preserves ordered provisioning transcript items when collapsing rows", () => {
@@ -739,15 +767,8 @@ describe("buildThreadDetailRows provisioning operation collapsing", () => {
         {
           environmentDisplayName: "Worktree",
           transcript: [
-            {
-              kind: "environment",
-              sourceSeq: 1,
-              environmentDisplayName: "Worktree",
-            },
-            {
-              kind: "worktree",
-              sourceSeq: 1,
-            },
+            { key: "environment", text: "environment: Worktree" },
+            { key: "worktree", text: "creating worktree" },
           ],
         },
       ),
@@ -765,21 +786,8 @@ describe("buildThreadDetailRows provisioning operation collapsing", () => {
             scriptPath: ".bb-env-setup.sh",
           },
           transcript: [
-            {
-              kind: "branch",
-              sourceSeq: 2,
-              branchName: "feature/test",
-              headSha: "abcdef1234567890",
-            },
-            {
-              kind: "setup",
-              sourceSeq: 2,
-              setup: {
-                status: "started",
-                startedAt: 2,
-                scriptPath: ".bb-env-setup.sh",
-              },
-            },
+            { key: "branch", text: "checked out branch feature/test (abcdef1)" },
+            { key: "setup", text: "running .bb-env-setup.sh", startedAt: 2 },
           ],
         },
       ),
@@ -797,16 +805,7 @@ describe("buildThreadDetailRows provisioning operation collapsing", () => {
             },
           },
           transcript: [
-            {
-              kind: "phase",
-              sourceSeq: 3,
-              phase: "start_provider_session",
-              metadata: {
-                status: "completed",
-                startedAt: 3,
-                durationMs: 2000,
-              },
-            },
+            { key: "phase:start_provider_session", text: "started provider session in 2s" },
           ],
         },
       ),
@@ -814,32 +813,133 @@ describe("buildThreadDetailRows provisioning operation collapsing", () => {
 
     expect(rows).toHaveLength(1);
     expect(rows[0]?.opType).toBe("provisioning");
-    expect(rows[0]?.provisioning?.transcript?.map((entry) => entry.kind)).toEqual([
+    expect(rows[0]?.provisioning?.transcript?.map((entry) => entry.key)).toEqual([
       "environment",
       "worktree",
       "branch",
       "setup",
-      "phase",
+      "phase:start_provider_session",
     ]);
     expect(rows[0]?.provisioning?.transcript?.[3]).toMatchObject({
-      kind: "setup",
-      sourceSeq: 2,
-      setup: {
-        status: "started",
-        scriptPath: ".bb-env-setup.sh",
-      },
+      key: "setup",
+      text: "running .bb-env-setup.sh",
+      startedAt: 2,
     });
     expect(rows[0]?.provisioning?.transcript?.[4]).toMatchObject({
-      kind: "phase",
-      sourceSeq: 3,
-      phase: "start_provider_session",
+      key: "phase:start_provider_session",
+      text: "started provider session in 2s",
     });
     expect(rows[0]?.provisioning?.transcript?.[2]).toMatchObject({
-      kind: "branch",
-      sourceSeq: 2,
-      branchName: "feature/test",
-      headSha: "abcdef1234567890",
+      key: "branch",
+      text: "checked out branch feature/test (abcdef1)",
     });
+  });
+
+  it("keeps the earliest transcript startedAt when later updates replace the same key", () => {
+    const rows = getOperationRows([
+      provisioningOperation(
+        1,
+        "provisioning-env-setup",
+        "Environment setup started",
+        undefined,
+        {
+          setup: {
+            status: "started",
+            startedAt: 10,
+            scriptPath: ".bb-env-setup.sh",
+          },
+          transcript: [{ key: "setup", text: "running .bb-env-setup.sh", startedAt: 10 }],
+        },
+      ),
+      provisioningOperation(
+        2,
+        "provisioning-env-setup",
+        "Environment setup running",
+        undefined,
+        {
+          setup: {
+            status: "running",
+            startedAt: 25,
+            scriptPath: ".bb-env-setup.sh",
+            output: "+ pnpm install",
+          },
+          transcript: [{ key: "setup", text: "running .bb-env-setup.sh", startedAt: 25 }],
+        },
+      ),
+      provisioningOperation(
+        3,
+        "provisioning-progress",
+        "Starting provider session",
+        undefined,
+        {
+          phases: {
+            start_provider_session: {
+              status: "started",
+              startedAt: 30,
+            },
+          },
+          transcript: [{ key: "phase:start_provider_session", text: "starting provider session", startedAt: 30 }],
+        },
+      ),
+      provisioningOperation(
+        4,
+        "provisioning-progress",
+        "Starting provider session",
+        undefined,
+        {
+          phases: {
+            start_provider_session: {
+              status: "started",
+              startedAt: 45,
+            },
+          },
+          transcript: [{ key: "phase:start_provider_session", text: "starting provider session", startedAt: 45 }],
+        },
+      ),
+    ]);
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.provisioning?.transcript).toEqual([
+      { key: "setup", text: "running .bb-env-setup.sh", startedAt: 10 },
+      { key: "phase:start_provider_session", text: "starting provider session", startedAt: 30 },
+    ]);
+  });
+
+  it("clears transcript startedAt when a replacement entry changes text and omits it", () => {
+    const rows = getOperationRows([
+      provisioningOperation(
+        1,
+        "provisioning-env-setup",
+        "Environment setup started",
+        undefined,
+        {
+          setup: {
+            status: "started",
+            startedAt: 10,
+            scriptPath: ".bb-env-setup.sh",
+          },
+          transcript: [{ key: "setup", text: "running .bb-env-setup.sh", startedAt: 10 }],
+        },
+      ),
+      provisioningOperation(
+        2,
+        "provisioning-env-setup",
+        "Environment setup completed",
+        undefined,
+        {
+          setup: {
+            status: "completed",
+            durationMs: 5_000,
+            scriptPath: ".bb-env-setup.sh",
+          },
+          transcript: [{ key: "setup", text: "ran .bb-env-setup.sh in 5s" }],
+        },
+      ),
+    ]);
+
+    expect(rows[0]?.provisioning?.transcript).toEqual([
+      { key: "setup", text: "ran .bb-env-setup.sh in 5s" },
+    ]);
   });
 
   it("collapses env-setup-only updates without looking stuck in provisioning", () => {
