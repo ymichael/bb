@@ -1,7 +1,7 @@
 import { Command } from "commander";
 import { type Project } from "@bb/core";
 import { createClient, unwrap } from "../client.js";
-import { getErrorMessage } from "./helpers.js";
+import { getErrorMessage, outputJson } from "./helpers.js";
 import { requireProjectId } from "../context-env.js";
 
 export function registerProjectCommands(program: Command, getUrl: () => string): void {
@@ -17,10 +17,7 @@ export function registerProjectCommands(program: Command, getUrl: () => string):
         const projects = await unwrap<Project[]>(
           client.api.v1.projects.$get(),
         );
-        if (opts.json) {
-          console.log(JSON.stringify(projects, null, 2));
-          return;
-        }
+        if (outputJson(opts, projects)) return;
         if (projects.length === 0) {
           console.log("No projects found");
           return;
@@ -49,10 +46,7 @@ export function registerProjectCommands(program: Command, getUrl: () => string):
             },
           }),
         );
-        if (opts.json) {
-          console.log(JSON.stringify(created, null, 2));
-          return;
-        }
+        if (outputJson(opts, created)) return;
         console.log(`Project created: ${created.id}`);
         printProject(created);
       } catch (err: unknown) {

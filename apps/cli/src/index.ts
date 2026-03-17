@@ -5,6 +5,7 @@ import { registerDaemonCommands } from "./commands/daemon.js";
 import { registerEnvironmentAgentCommand } from "./commands/environment-agent.js";
 import { registerManagerCommands } from "./commands/manager.js";
 import { registerProjectCommands } from "./commands/project.js";
+import { registerProviderCommands } from "./commands/provider.js";
 import { registerStatusCommand } from "./commands/status.js";
 import { registerThreadCommands } from "./commands/thread.js";
 import { normalizeCliArgv } from "./argv-normalization.js";
@@ -48,6 +49,7 @@ function getUrl(): string {
 // Register all command groups
 registerStatusCommand(program, getUrl);
 registerProjectCommands(program, getUrl);
+registerProviderCommands(program, getUrl);
 registerManagerCommands(program, getUrl);
 registerThreadCommands(program, getUrl);
 registerDaemonCommands(program, getUrl);

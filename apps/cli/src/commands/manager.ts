@@ -2,7 +2,7 @@ import { Command } from "commander";
 import { type Project, type Thread } from "@bb/core";
 import { createClient, unwrap } from "../client.js";
 import { requireProjectId, requireThreadId } from "../context-env.js";
-import { confirmDestructiveAction, getErrorMessage } from "./helpers.js";
+import { confirmDestructiveAction, getErrorMessage, outputJson } from "./helpers.js";
 
 export function registerManagerCommands(program: Command, getUrl: () => string): void {
   const manager = program.command("manager").description("Manage project managers");
@@ -11,10 +11,12 @@ export function registerManagerCommands(program: Command, getUrl: () => string):
     .command("hire [projectId]")
     .description("Hire or reopen the primary manager for a project")
     .option("--project <id>", "Project ID (defaults to BB_PROJECT_ID)")
+    .option("--provider <id>", "Provider ID for the manager (e.g. claude-code, codex)")
+    .option("--model <model>", "Model ID for the manager")
     .option("--json", "Print machine-readable JSON output")
     .action(async (
       projectIdArg: string | undefined,
-      opts: { json?: boolean; project?: string },
+      opts: { json?: boolean; project?: string; provider?: string; model?: string },
     ) => {
       const client = createClient(getUrl());
       try {
@@ -22,13 +24,13 @@ export function registerManagerCommands(program: Command, getUrl: () => string):
         const thread = await unwrap<Thread>(
           client.api.v1.projects[":id"].manager.$post({
             param: { id: projectId },
-            json: {},
+            json: {
+              ...(opts.provider ? { providerId: opts.provider } : {}),
+              ...(opts.model ? { model: opts.model } : {}),
+            },
           }),
         );
-        if (opts.json) {
-          console.log(JSON.stringify(thread, null, 2));
-          return;
-        }
+        if (outputJson(opts, thread)) return;
         console.log(`Manager ready: ${thread.id}`);
         printManagerThread(thread);
       } catch (err: unknown) {
@@ -55,10 +57,7 @@ export function registerManagerCommands(program: Command, getUrl: () => string):
           return;
         }
         const thread = await getThreadById(client, project.primaryManagerThreadId);
-        if (opts.json) {
-          console.log(JSON.stringify(thread, null, 2));
-          return;
-        }
+        if (outputJson(opts, thread)) return;
         printManagerThread(thread);
       } catch (err: unknown) {
         console.error(`Error: ${getErrorMessage(err)}`);
@@ -76,10 +75,7 @@ export function registerManagerCommands(program: Command, getUrl: () => string):
         const managerThreadId = requireThreadId(id);
         const managerThread = await getManagerThreadById(client, managerThreadId);
         const managedThreads = await listManagedThreads(client, managerThreadId);
-        if (opts.json) {
-          console.log(JSON.stringify({ manager: managerThread, managedThreads }, null, 2));
-          return;
-        }
+        if (outputJson(opts, { manager: managerThread, managedThreads })) return;
         printManagerThread(managerThread);
         printManagedThreadTable(managedThreads);
       } catch (err: unknown) {
@@ -98,10 +94,7 @@ export function registerManagerCommands(program: Command, getUrl: () => string):
         const managerThreadId = requireThreadId(id);
         await getManagerThreadById(client, managerThreadId);
         const managedThreads = await listManagedThreads(client, managerThreadId);
-        if (opts.json) {
-          console.log(JSON.stringify(managedThreads, null, 2));
-          return;
-        }
+        if (outputJson(opts, managedThreads)) return;
         printManagedThreadTable(managedThreads);
       } catch (err: unknown) {
         console.error(`Error: ${getErrorMessage(err)}`);
@@ -126,10 +119,7 @@ export function registerManagerCommands(program: Command, getUrl: () => string):
             },
           }),
         );
-        if (opts.json) {
-          console.log(JSON.stringify({ managerId: managerThreadId, ...result }, null, 2));
-          return;
-        }
+        if (outputJson(opts, { managerId: managerThreadId, ...result })) return;
         console.log(`Manager ${managerThreadId} updated`);
       } catch (err: unknown) {
         console.error(`Error: ${getErrorMessage(err)}`);
@@ -152,10 +142,7 @@ export function registerManagerCommands(program: Command, getUrl: () => string):
             query: {},
           }),
         );
-        if (opts.json) {
-          console.log(JSON.stringify(events, null, 2));
-          return;
-        }
+        if (outputJson(opts, events)) return;
         for (const event of events) {
           printEvent(event);
         }

@@ -12,7 +12,7 @@ import {
 } from "@bb/core";
 import { assertNever } from "../assert-never.js";
 import { createClient, unwrap } from "../client.js";
-import { confirmDestructiveAction, getErrorMessage } from "./helpers.js";
+import { confirmDestructiveAction, getErrorMessage, outputJson } from "./helpers.js";
 import {
   resolveEnvironmentId,
   requireProjectId,
@@ -336,6 +336,8 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
       "--provider <id>",
       "Provider ID for the thread (e.g. codex, claude-code, pi)",
     )
+    .option("--model <model>", "Model ID for the thread")
+    .option("--title <title>", "Thread title")
     .option(
       "--no-context-parent-thread",
       "Do not default parent thread context to BB_THREAD_ID",
@@ -348,6 +350,8 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
       newEnvironment?: string;
       parentThread?: string;
       provider?: string;
+      model?: string;
+      title?: string;
       contextParentThread?: boolean;
     }) => {
       const client = createClient(getUrl());
@@ -377,15 +381,14 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
                 ? [{ type: "text", text: opts.prompt }]
                 : undefined,
               ...(opts.provider ? { providerId: opts.provider } : {}),
+              ...(opts.model ? { model: opts.model } : {}),
+              ...(opts.title ? { title: opts.title } : {}),
               ...environmentSelection,
               ...(parentThreadId ? { parentThreadId } : {}),
             },
           }),
         );
-        if (opts.json) {
-          console.log(JSON.stringify(thread, null, 2));
-          return;
-        }
+        if (outputJson(opts, thread)) return;
         console.log(`Thread spawned: ${thread.id}`);
         if (
           thread.parentThreadId &&
@@ -405,7 +408,8 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
     .description("List threads")
     .option("--project <id>", "Filter by project ID (defaults to BB_PROJECT_ID)")
     .option("--parent-thread <id>", "Filter by managing parent thread ID")
-    .action(async (opts: { project?: string; parentThread?: string }) => {
+    .option("--json", "Print machine-readable JSON output")
+    .action(async (opts: { project?: string; parentThread?: string; json?: boolean }) => {
       const client = createClient(getUrl());
       try {
         const projectId = resolveProjectId(opts.project);
@@ -418,6 +422,7 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
             },
           }),
         );
+        if (outputJson(opts, threads)) return;
         if (threads.length === 0) {
           console.log("No threads found");
           return;
@@ -442,10 +447,7 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
             param: { id: threadId },
           }),
         );
-        if (opts.json) {
-          console.log(JSON.stringify(response, null, 2));
-          return;
-        }
+        if (outputJson(opts, response)) return;
         printThreadSessions(response);
       } catch (err: unknown) {
         console.error(`Error: ${getErrorMessage(err)}`);
@@ -503,10 +505,7 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
             eventMode,
             includeLowSignal,
           });
-          if (opts.json) {
-            console.log(JSON.stringify(statusPayload, null, 2));
-            return;
-          }
+          if (outputJson(opts, statusPayload)) return;
           printThreadStatus(statusPayload);
         } catch (err: unknown) {
           console.error(`Error: ${getErrorMessage(err)}`);
@@ -526,10 +525,7 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
         const thread = await unwrap<Thread>(
           client.api.v1.threads[":id"].$get({ param: { id: threadId } }),
         );
-        if (opts.json) {
-          console.log(JSON.stringify(thread, null, 2));
-          return;
-        }
+        if (outputJson(opts, thread)) return;
         printThread(thread);
       } catch (err: unknown) {
         console.error(`Error: ${getErrorMessage(err)}`);
@@ -541,6 +537,7 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
     .command("update [id]")
     .description("Update a thread (defaults to BB_THREAD_ID)")
     .option("--json", "Print machine-readable JSON output")
+    .option("--title <title>", "Set the thread title")
     .option("--parent-thread <id>", "Set the managing parent thread id")
     .option("--clear-parent-thread", "Clear the managing parent thread id")
     .action(
@@ -548,6 +545,7 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
         id: string | undefined,
         opts: {
           json?: boolean;
+          title?: string;
           parentThread?: string;
           clearParentThread?: boolean;
         },
@@ -559,33 +557,40 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
               "Cannot combine --parent-thread with --clear-parent-thread.",
             );
           }
-          if (!opts.parentThread && !opts.clearParentThread) {
+          if (!opts.parentThread && !opts.clearParentThread && !opts.title) {
             throw new Error(
-              "No changes requested. Provide --parent-thread or --clear-parent-thread.",
+              "No changes requested. Provide --title, --parent-thread, or --clear-parent-thread.",
             );
           }
 
           const threadId = requireThreadId(id);
+          const body: Record<string, unknown> = {};
+          if (opts.title) {
+            body.title = opts.title;
+          }
+          if (opts.parentThread) {
+            body.parentThreadId = opts.parentThread;
+          } else if (opts.clearParentThread) {
+            body.parentThreadId = null;
+          }
           const thread = await unwrap<Thread>(
             client.api.v1.threads[":id"].$patch({
               param: { id: threadId },
-              json: {
-                ...(opts.parentThread
-                  ? { parentThreadId: opts.parentThread }
-                  : { parentThreadId: null }),
-              },
+              json: body,
             }),
           );
-          if (opts.json) {
-            console.log(JSON.stringify(thread, null, 2));
-            return;
-          }
+          if (outputJson(opts, thread)) return;
           console.log(`Thread ${thread.id} updated`);
-          console.log(
-            thread.parentThreadId
-              ? `Managed by ${thread.parentThreadId}`
-              : "No managing parent thread",
-          );
+          if (opts.title) {
+            console.log(`Title: ${thread.title ?? "<untitled>"}`);
+          }
+          if (opts.parentThread || opts.clearParentThread) {
+            console.log(
+              thread.parentThreadId
+                ? `Managed by ${thread.parentThreadId}`
+                : "No managing parent thread",
+            );
+          }
         } catch (err: unknown) {
           console.error(`Error: ${getErrorMessage(err)}`);
           process.exit(1);
@@ -677,10 +682,7 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
     .action(async (id: string, message: string, opts: { json?: boolean }) => {
       try {
         const response = await postThreadMessage(id, message);
-        if (opts.json) {
-          console.log(JSON.stringify({ threadId: id, ...response }, null, 2));
-          return;
-        }
+        if (outputJson(opts, { threadId: id, ...response })) return;
         console.log(`Thread ${id} updated`);
       } catch (err: unknown) {
         console.error(`Error: ${getErrorMessage(err)}`);
@@ -937,10 +939,7 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
         const result = await unwrap<{ output: string }>(
           client.api.v1.threads[":id"].output.$get({ param: { id: threadId } }),
         );
-        if (opts.json) {
-          console.log(JSON.stringify(result, null, 2));
-          return;
-        }
+        if (outputJson(opts, result)) return;
         console.log(result.output);
       } catch (err: unknown) {
         console.error(`Error: ${getErrorMessage(err)}`);

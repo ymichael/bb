@@ -1,7 +1,7 @@
 import { Command } from "commander";
 import type { SystemHealthReport, Thread } from "@bb/core";
 import { createClient, unwrap } from "../client.js";
-import { getErrorMessage } from "./helpers.js";
+import { getErrorMessage, outputJson } from "./helpers.js";
 
 interface ShutdownAcceptedResponse {
   ok: boolean;
@@ -92,10 +92,7 @@ export function registerDaemonCommands(program: Command, getUrl: () => string): 
         const report = await unwrap<SystemHealthReport>(
           client.api.v1.system.health.$get(),
         );
-        if (opts.json) {
-          console.log(JSON.stringify(report, null, 2));
-          return;
-        }
+        if (outputJson(opts, report)) return;
         printHealthReport(report);
       } catch (err: unknown) {
         console.error(`Error: ${getErrorMessage(err)}`);
