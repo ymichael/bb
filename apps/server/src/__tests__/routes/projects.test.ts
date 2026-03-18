@@ -449,7 +449,9 @@ describe("Project routes", () => {
       const res = await app.request("/projects/proj-1/manager", { method: "POST" });
 
       expect(res.status).toBe(500);
-      expect(deleteThreadAsync).toHaveBeenCalledWith("thread-manager-rollback");
+      expect(projectRepo.update).toHaveBeenNthCalledWith(1, "proj-1", {
+        primaryManagerThreadId: null,
+      });
       expect(
         existsSync(join(bbRoot, "workspace", "thread-manager-rollback")),
       ).toBe(false);
