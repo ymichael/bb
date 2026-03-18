@@ -7,194 +7,127 @@ or hand off only specific parts of it. Babysit an agent while it works,
 or have another agent do it. Micromanage an agent or let it run. Teach
 an agent to work like you would, then watch it use bb like you would.
 
-## Monorepo Layout
+bb gives coding agents a shared workspace with a UI, CLI, and server they can
+all operate through. Use it to run work in threads, inspect progress, steer
+execution, and keep humans and agents working in the same loop.
 
-```text
-apps/
-  server/   Hono REST + WebSocket server, provider runtime orchestration
-  app/      React + Vite frontend
-  cli/      bb CLI for server/thread operations
-packages/
-  agent-core/   Shared contracts/types/schemas + event -> UI message projection
-  provider-adapters/ Built-in provider adapters, model catalogs, and LLM helper utilities
-  environment/  Execution environment adapters and workspace lifecycle
-  ui-core/      Reusable ADE UI primitives (layout, timeline, prompt shell, panels)
-  db/           Drizzle schema, migrations, repositories (SQLite)
-```
+> [!NOTE]
+> bb is still pre-alpha. Core ideas are in place, but interfaces, workflows,
+> and APIs may still change quickly.
+
+## Table of Contents
+
+- [Quick Start](#quick-start)
+- [Setup](#setup)
+- [Core Concepts](#core-concepts)
+  - [Data Model](#data-model)
+  - [Runtime Components](#runtime-components)
+  - [System Surfaces](#system-surfaces)
+- [Configuration](#configuration)
+- [Further Reading](#further-reading)
+- [Contributing](#contributing)
 
 ## Quick Start
 
+bb currently runs from source.
+
+### Prerequisites
+
+- Node.js
+- pnpm
+- Credentials for at least one supported agent provider
+
 ```bash
 pnpm install
+```
+
+## Setup
+
+Before starting bb, configure credentials for at least one supported provider.
+
+1. Copy `.env.example` to `.env`.
+2. Configure at least one provider:
+
+| Provider      | Setup                                                                                                                                                                                                                                                                            |
+| ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `codex`       | Install the [Codex CLI](https://developers.openai.com/codex/cli). Then either set `OPENAI_API_KEY` in your environment or `.env`, or run `codex login`.                                                                                                                          |
+| `claude-code` | Either set `ANTHROPIC_API_KEY` in your environment or `.env`, or run `claude setup-token` and then set the resulting token as `CLAUDE_CODE_OAUTH_TOKEN` in your environment or `.env`.                                                                                           |
+| `pi`          | Authenticate with the Pi agent. See the [Pi coding agent docs](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent). Pi supports API keys in the environment, or interactive login through `pi` and then `/login` to authenticate with a supported subscription. |
+
+3. Set `OPENAI_API_KEY` in your environment or `.env`. bb uses it for non-agent inference features such as thread title generation and commit message generation.
+
+See [.env.example](./.env.example) for the full set of options and setup notes.
+
+### Run bb
+
+```bash
 pnpm dev
 ```
 
-`pnpm install` also installs the repo's git hooks via `core.hooksPath`, so local commits run `pnpm build` before they are created.
+Then open: `http://localhost:5173`
 
-Endpoints:
+`pnpm dev` starts the Vite app on `http://localhost:5173` and proxies API and WebSocket traffic to the server on `:3333`.
 
-- Web UI: `http://localhost:5173`
-- API base: `http://localhost:3333/api/v1`
-- WebSocket: `ws://localhost:3333/ws`
-
-`apps/app` proxies `/api` and `/ws` to the server on `:3333` in development.
-
-## CLI and Server Run Modes
-
-Development (source + watch):
+If you want to drive bb from the CLI during development:
 
 ```bash
-pnpm install
-pnpm dev
-
-# run CLI from source in dev
 pnpm bb:dev --help
 pnpm bb:dev status
 ```
 
-Production (built `dist`):
+To run the built server and CLI instead of the dev setup:
 
 ```bash
 pnpm build
-
-# run built server and built CLI
 pnpm server --help
 pnpm bb --help
 ```
 
-Notes:
+## Core Concepts
 
-- `dist/` output is generated for `@bb/core`, `@bb/provider-adapters`, `@bb/environment`, `@bb/ui-core`, `@bb/db`, `@bb/server`, `@bb/app`, and `@bb/cli`.
-- `pnpm dev` starts the server on `:3333`.
-- CLI uses `BB_SERVER_URL` when set, otherwise defaults to `http://localhost:3333`.
+### Data Model
 
-## Build, Typecheck, Test
+| Concept        | What it means                                                                                                                                                                |
+| -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Project        | The top-level container for related work, usually mapped to a repository.                                                                                                    |
+| Thread         | The fundamental unit of agent work. Standard threads do the work directly. Manager threads coordinate other threads and can delegate work across the project.                |
+| Thread Ownership | Threads can be managed by the user or another thread. Delegation and handoff are core to bb's model, not bolt-on workflow features.                                      |
+| Environment    | The execution context a thread runs in, such as a local checkout, worktree, or other sandboxed environment. Environments are first-class, multiple threads can share one, and bb is designed to support different execution backends. |
+| Environment Provisioning | bb can provision and manage environments for you, but the system is designed to support both managed and unmanaged environments.                                  |
+| Agent provider | The model runtime that powers a thread, such as `codex`, `claude-code`, or `pi`. bb is designed to support different provider implementations.                               |
 
-Workspace:
+### Runtime Components
 
-```bash
-pnpm build
-pnpm typecheck
-pnpm test
-```
+| Part               | What it does                                                                                                                      |
+| ------------------ | --------------------------------------------------------------------------------------------------------------------------------- |
+| Server             | The main bb service that owns state, orchestration, APIs, provider coordination, and thread lifecycle.                            |
+| Environments       | The runtime layer where threads actually execute, whether that is a local checkout, worktree, or another environment kind.        |
+| Environment daemon | The environment-side session layer that communicates with the server and manages agent and command execution within environments. This split keeps orchestration in the server and execution inside environments. |
+| Agent providers    | The provider runtimes that power threads and models.                                                                              |
 
-UI consistency checklist for frontend changes:
+### System Surfaces
 
-- Reuse shared primitives (`PageShell`, `DetailCard`/`DetailRow`, `CollapsibleHeader`, status pills).
-- Keep the canonical message rendering path (`ConversationEntry` + `ConversationWorkingIndicator`).
-- Use `ui-text-*` typography utilities instead of arbitrary `text-[Npx]` classes.
-- Keep light/dark typography tokens aligned unless a divergence is intentionally documented.
+| Surface  | What it does                                                                                                       |
+| -------- | ------------------------------------------------------------------------------------------------------------------ |
+| Web app  | The visual surface for inspecting projects and threads, following progress, and steering active work.              |
+| `bb` CLI | A first-class interface for both users and agents. It can inspect and operate the same bb system programmatically. |
 
-## Union Handling
+Several of these boundaries are intentional extension points. bb is meant to
+support different provider implementations, environment models, and execution
+setups over time.
 
-When working with string domains:
+## Configuration
 
-- `closed_internal`: BB-owned values. Use exhaustive `switch` handling and `assertNever`.
-- `open_external`: provider/runtime-owned values. Keep tolerant fallback branches with a comment that unknown values are intentional.
+Most runtime configuration lives in [.env.example](./.env.example), including provider selection, authentication, server settings, worktree settings, and inference options.
 
-`assertNever` is exported from `@bb/core`.
+Local state defaults to `~/.bb/`. Thread execution context also exposes `BB_PROJECT_ID`, `BB_THREAD_ID`, and `BB_ENVIRONMENT_ID`.
 
-## Thread Lifecycle
+## Further Reading
 
-Persisted status model:
+- [Vision](docs/VISION.md)
+- [QA docs](qa/README.md)
+- [.env.example](./.env.example)
 
-`created -> provisioning -> idle|active|provisioning_failed`
+## Contributing
 
-Transition rules are centralized in
-`apps/server/src/thread-status-machine.ts`.
-
-- `spawn`: creates a DB thread, then provisions async.
-- `tell`: sends `turn/start` or `turn/steer` (`mode=auto|start|steer`).
-- `archive`: stops process/runtime and sets `archivedAt`.
-- server boot: reconciles persisted active/provisioning threads.
-
-## CLI Context Env
-
-Thread execution context is exposed to agent shells as:
-
-- `BB_PROJECT_ID`
-- `BB_THREAD_ID`
-- `BB_ENVIRONMENT_ID`
-- `BB_SERVER_URL` (optional server endpoint override; default is `http://localhost:3333`)
-
-`bb` is also kept on `PATH` for agent shell commands.
-
-CLI commands that need project context accept `--project`, or fall back to
-`BB_PROJECT_ID` when the flag is omitted.
-
-Creation defaults:
-
-- `bb thread spawn` defaults parent-thread context to `BB_THREAD_ID` (opt out with `--no-context-parent-thread`).
-
-Status output defaults:
-
-- `bb status` prints `Project` and `Thread` ids from the current context.
-- `bb thread status` is concise by default (no recent-event block unless requested).
-
-Status event flags:
-
-- `bb thread status --recent-events <n> [--event-mode summary|raw] [--include-low-signal]`
-
-Show command context fallback:
-
-- `bb thread show [id]` defaults to `BB_THREAD_ID` when `id` is omitted.
-
-Agent-driven git operation commands:
-
-- `bb thread commit <id> [--message "..."] [--staged-only]`
-- `bb thread squash-merge <id> [--commit-if-needed] [--staged-only] [--commit-message "..."] [--squash-message "..."] [--merge-base-branch <branch>]`
-
-Provider and environment selection:
-
-- `BB_E2E_PROVIDER` selects the active provider adapter in test suites (`codex`, `claude-code`, `pi`). Deprecated alias: `BB_PROVIDER`.
-- `BB_ENVIRONMENT` selects the execution environment adapter (`local`, `worktree`).
-- `BB_WORKTREE_ROOT` overrides the base worktree directory for the `worktree` adapter (default: `~/.bb/worktrees`; absolute roots are scoped by project id).
-- `GET /api/v1/system/providers` and `GET /api/v1/system/environments` expose adapter catalogs.
-
-Server e2e provider mode:
-
-- `BB_E2E_PROVIDER_MODE=fake|real` selects whether server e2e tests use the fake Codex harness or the real Codex provider. Deprecated alias: `BB_E2E_PROVIDER_MODE`.
-- The low-level e2e default is still `fake` when the variable is unset.
-- The checked-in server QA entrypoints (`pnpm qa:server:smoke`, `pnpm qa:server:stress`, `pnpm qa:server:regression`) override this to `real`.
-- `pnpm --filter @bb/server test:e2e` runs the default smoke server e2e suite.
-- `pnpm --filter @bb/server test:e2e:stress` runs the slower recovery/stress server e2e suite.
-- `pnpm --filter @bb/server test:e2e:real` runs the smoke server e2e suite in `real` mode.
-- `pnpm --filter @bb/server test:e2e:stress:real` runs the slower recovery/stress server e2e suite in `real` mode.
-- Fake-only tests that depend on manual fake-codex event control are skipped automatically in `real` mode.
-
-## Typed Codex Event Schema
-
-`packages/core` derives thread event types from generated Codex app-server
-TypeScript schemas in:
-
-- `packages/core/src/generated/codex-app-server/schema/`
-- `packages/core/src/generated/codex-app-server/index.ts`
-
-Regenerate:
-
-```bash
-pnpm --filter @bb/core gen:codex-event-types
-```
-
-## Database and Local State
-
-Default server DB:
-
-```text
-~/.bb/bb.db
-```
-
-CLI server PID file:
-
-```text
-~/.bb/agent-server.pid
-```
-
-Drizzle Studio:
-
-```bash
-pnpm drizzle-studio
-```
-
-`packages/db/drizzle.config.ts` uses `BB_DB_PATH` when set; otherwise
-`~/.bb/bb.db`.
+While bb is still pre-alpha, the most useful contributions are feature requests and bug reports. If you run into something broken, confusing, or missing, open an issue with the workflow you were trying to accomplish and what happened instead.
