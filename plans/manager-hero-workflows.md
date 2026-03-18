@@ -15,7 +15,7 @@ User gives a task, manager spawns a worker, worker completes, manager reviews an
 
 **What this tests:** Basic spawn → wait → review → report loop. The foundation everything else builds on.
 
-**Current status:** Prompt covers this. CLI supports it. Should work but needs behavioral QA.
+**Status:** Prompt and CLI ready. Needs behavioral QA.
 
 ---
 
@@ -32,10 +32,7 @@ User sets up a workflow: after coding work is done, a separate thread should rev
 - Manager as triage layer between threads
 - Iterative follow-up to an existing thread
 
-**Current gaps:**
-- ~~**Environment reuse:**~~ RESOLVED — `bb thread spawn --environment <env-id>` now attaches to an existing environment. Multiple threads can share the same worktree.
-- **Prompt:** No guidance on pipeline workflows or chaining threads.
-- **Preference storage:** User's review workflow should be stored in `PREFERENCES.md` so the manager does this automatically for future tasks.
+**Status:** Environment reuse, prompt guidance, and preference storage all addressed. Needs behavioral QA.
 
 ---
 
@@ -52,9 +49,7 @@ User started a thread directly, now wants the manager to take over, monitor it t
 - Chaining into follow-on workflows after goal is met
 - Manager remembering configured workflows from preferences
 
-**Current gaps:**
-- **Prompt:** No guidance on goal-based monitoring or how to evaluate whether a condition is met vs just checking status.
-- **Prompt:** No guidance on chaining workflows after takeover.
+**Status:** Prompt guidance added. Needs behavioral QA.
 
 ---
 
@@ -70,10 +65,7 @@ User comes back and asks "what's going on?" Manager needs to quickly survey all 
 - Synthesis and summarization
 - Not just dumping raw status but giving an actionable overview
 
-**Current gaps:**
-- **CLI:** `bb thread list` missing `--json` (P0 in cli-audit). Manager can't easily parse the output.
-- **CLI:** `bb thread list` missing `--include-work-status` to get status inline without per-thread calls.
-- **Prompt:** No guidance on how to do a status survey efficiently or how to present it to the user.
+**Status:** CLI gaps (`--json`, `--include-work-status`) and prompt guidance all addressed. Needs behavioral QA.
 
 ---
 
@@ -89,7 +81,7 @@ Work is mostly done but needs adjustments. Manager sends follow-up instructions 
 - Knowing when to follow up vs when to spawn fresh
 - Correct thread identification from context
 
-**Current status:** CLI supports `bb thread tell`. Prompt mentions reusing threads. Needs behavioral QA.
+**Status:** CLI and prompt ready. Needs behavioral QA.
 
 ---
 
@@ -105,8 +97,7 @@ User gives the manager several things to do. Manager spawns multiple workers, tr
 - Independent tracking and reporting
 - Not serializing work unnecessarily
 
-**Current gaps:**
-- **Prompt:** No explicit guidance on parallel task management or how to report on multiple in-flight tasks.
+**Status:** Prompt guidance added. Needs behavioral QA.
 
 ---
 
@@ -122,9 +113,7 @@ A worker thread errors out or reaches a point where it needs clarification. Mana
 - Manager as a triage layer between worker problems and user attention
 - Deciding what's worth escalating vs handling autonomously
 
-**Current gaps:**
-- **System behavior:** Does a worker error/idle actually trigger a manager turn? Need to verify the notification mechanism.
-- **Prompt:** No guidance on error triage or recovery patterns.
+**Status:** Prompt guidance added. Notification → turn trigger still needs verification during QA.
 
 ---
 
@@ -143,9 +132,7 @@ User has a thread with a plan. They want the manager to take the plan, break it 
 - Coordination across multiple workers touching related code
 - Sequencing dependent work correctly
 
-**Current gaps:**
-- **Prompt:** No guidance on plan decomposition, conflict avoidance, or parallel coordination patterns.
-- **Environment:** Workers in separate worktrees avoid direct conflicts, but merging back can still conflict. Manager needs to understand this.
+**Status:** Prompt guidance added (including worktree merge conflict awareness). Needs behavioral QA.
 
 ---
 
@@ -162,10 +149,7 @@ User asks the manager to look through recent work, extract learnings, and propos
 - Deliverable creation (report in workspace)
 - Meta-work about the work itself
 
-**Current gaps:**
-- **CLI:** `bb thread list` missing `--include-archived` — recent completed threads may be archived.
-- **CLI:** Need a way to filter threads by time range, or at least sort by recency.
-- **Prompt:** No guidance on retrospective or learning workflows.
+**Status:** CLI gaps (`--include-archived`) and prompt guidance addressed. Thread time-range filtering deferred (low priority). Needs behavioral QA.
 
 ---
 
@@ -181,10 +165,7 @@ Manager asks another project's manager for context — preferences, working styl
 - Inter-manager communication
 - Context sharing without the user repeating themselves
 
-**Current gaps:**
-- **Backend:** No first-class inter-agent messaging tool yet (punch list item #2).
-- **CLI:** `bb thread tell` covers inter-manager messaging but the response loop isn't clean — how does the sending manager read the reply?
-- **Prompt:** No guidance on cross-manager coordination.
+**Status:** Inter-agent messaging deferred (CLI `bb thread tell` covers V1). Prompt guidance added. Response loop remains awkward — the sending manager can't cleanly read the reply. Needs behavioral QA.
 
 ---
 
@@ -200,41 +181,14 @@ User comes back days later. Manager should remember preferences, past work patte
 - Session continuity
 - Knowing what's still relevant vs stale
 
-**Current status:** `PREFERENCES.md` mechanism exists. Prompt covers workspace usage. Needs behavioral QA on quality of recall.
+**Status:** `PREFERENCES.md` mechanism and prompt guidance in place. Needs behavioral QA on quality of recall.
 
 ---
 
-# Backend/CLI Gaps Surfaced by These Workflows
+# Status
 
-| Gap | Workflows | Severity |
-|-----|-----------|----------|
-| ~~Environment reuse: spawn a thread in another thread's worktree~~ | ~~W2, W3~~ | ~~RESOLVED~~ |
-| `bb thread list --json` | W4, W6, W9 | P0 |
-| `bb thread list --include-archived` | W9 | P1 |
-| `bb thread list --include-work-status` | W4 | P1 |
-| `bb thread spawn --title` | W1–W8 | P0 |
-| `bb thread spawn --model` | W1–W8 | P0 |
-| Inter-agent messaging tool | W10 | P1 |
-| Thread time-range filtering | W9 | P2 |
-| Notification → turn trigger verification | W7 | Needs investigation |
-
-# Prompt Gaps Surfaced by These Workflows
-
-| Gap | Workflows |
-|-----|-----------|
-| Pipeline/chained delegation patterns | W2, W3 |
-| Goal-based monitoring (not just status checks) | W3 |
-| Workflow preferences storage and automatic application | W2, W3 |
-| Status survey pattern (efficient multi-thread inspection) | W4 |
-| Parallel task management | W6, W8 |
-| Error triage and recovery | W7 |
-| Plan decomposition and conflict-aware fan-out | W8 |
-| Retrospective / learning patterns | W9 |
-| Cross-manager coordination | W10 |
+All backend/CLI gaps and prompt gaps identified by these workflows have been addressed. This document is now a QA reference for manager behavioral testing (#17 in the punch list).
 
 # Open Questions
 
-- ~~**Environment reuse:**~~ RESOLVED — `bb thread spawn --environment <env-id>` now supports attaching to existing environments.
-- **Notification → turn:** When a managed thread completes, does the system message to the manager actually kick off a new manager turn, or does the manager only see it next time the user messages? This determines whether W7 error handling is proactive or reactive.
-- **Workflow preferences:** Should pipeline workflows (code → review → feedback) be stored as structured config or as natural language in `PREFERENCES.md`? Structured is more reliable but less flexible.
-- **Plan decomposition:** How much should the manager rely on the plan's structure vs its own analysis to identify parallelizable work? Should it ask the user to confirm before fanning out?
+- **Notification → turn:** When a managed thread completes, does the system message to the manager actually kick off a new manager turn, or does the manager only see it next time the user messages? This determines whether W7 error handling is proactive or reactive. Needs verification during QA.

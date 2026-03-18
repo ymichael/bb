@@ -8,9 +8,11 @@ import {
   type ThreadStatus,
   type ThreadWorkStatus,
   type TimelineFormat,
+  type Project,
   normalizeThreadEventType,
   toUIMessages,
   formatTimelineAsText,
+  formatEnvironmentDisplay,
 } from "@bb/core";
 import { assertNever } from "../assert-never.js";
 import { createClient, unwrap } from "../client.js";
@@ -536,6 +538,20 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
       const thread = await unwrap<Thread>(
         client.api.v1.threads[":id"].$get({ param: { id: threadId } }),
       );
+
+      // Fetch project root path for environment display labels
+      let projectRootPath: string | undefined;
+      if (thread.projectId) {
+        try {
+          const project = await unwrap<Project>(
+            client.api.v1.projects[":id"].$get({ param: { id: thread.projectId } }),
+          );
+          projectRootPath = project.rootPath;
+        } catch {
+          // Project fetch failed; environment labels will be less specific
+        }
+      }
+
       const events =
         recentEvents === undefined
           ? []
@@ -603,7 +619,7 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
         return;
       }
 
-      printThreadStatus(statusPayload);
+      printThreadStatus(statusPayload, projectRootPath);
 
       if (workStatus) {
         console.log("");
@@ -1306,7 +1322,7 @@ function buildThreadStatusPayload(
   };
 }
 
-function printThreadStatus(payload: ThreadStatusPayload): void {
+function printThreadStatus(payload: ThreadStatusPayload, projectRootPath?: string): void {
   const { thread } = payload;
   console.log(`Thread ${thread.id}`);
   console.log(`Status ${statusText(thread.status)}`);
@@ -1316,6 +1332,14 @@ function printThreadStatus(payload: ThreadStatusPayload): void {
   }
   if (thread.archivedAt !== undefined) {
     console.log(`Archived: ${new Date(thread.archivedAt).toLocaleString()}`);
+  }
+  if (thread.attachedEnvironment) {
+    const envDisplay = formatEnvironmentDisplay(thread.attachedEnvironment, projectRootPath);
+    console.log(`Environment ${envDisplay.label}`);
+    console.log(`  ID: ${envDisplay.id}`);
+    if (envDisplay.path) {
+      console.log(`  Path: ${envDisplay.path}`);
+    }
   }
   console.log(`Created ${new Date(thread.createdAt).toLocaleString()}`);
   console.log(`Updated ${new Date(thread.updatedAt).toLocaleString()}`);

@@ -1,5 +1,5 @@
 import { Command } from "commander";
-import type { Project, Thread } from "@bb/core";
+import { type Project, type Thread, formatEnvironmentDisplay, type EnvironmentDisplayInfo } from "@bb/core";
 import { resolveContextSnapshot } from "../context-env.js";
 import { createClient, unwrap } from "../client.js";
 import { outputJson } from "./helpers.js";
@@ -12,6 +12,7 @@ interface StatusPayload {
     status: string;
     title: string | null;
     parentThreadId: string | null;
+    environment: EnvironmentDisplayInfo | null;
   } | null;
   managedThreads: Array<{
     id: string;
@@ -69,12 +70,16 @@ export function registerStatusCommand(
                   param: { id: context.threadId },
                 }),
               );
+              const envDisplay = thread.attachedEnvironment
+                ? formatEnvironmentDisplay(thread.attachedEnvironment, payload.project?.rootPath)
+                : null;
               payload.thread = {
                 id: thread.id,
                 type: thread.type,
                 status: thread.status,
                 title: thread.title ?? thread.titleFallback ?? null,
                 parentThreadId: thread.parentThreadId ?? null,
+                environment: envDisplay,
               };
               daemonAvailable = true;
 
@@ -128,6 +133,13 @@ export function registerStatusCommand(
         }
         if (payload.thread.parentThreadId) {
           console.log(`  Parent: ${payload.thread.parentThreadId}`);
+        }
+        if (payload.thread.environment) {
+          console.log(`  Environment: ${payload.thread.environment.label}`);
+          console.log(`  Environment ID: ${payload.thread.environment.id}`);
+          if (payload.thread.environment.path) {
+            console.log(`  Path: ${payload.thread.environment.path}`);
+          }
         }
 
         if (payload.managedThreads && payload.managedThreads.length > 0) {
