@@ -23,6 +23,9 @@ const IGNORED_DIRECTORY_NAMES = new Set([
   "dist",
   ".git",
   ".turbo",
+  "__tests__",
+  "test",
+  "generated",
 ]);
 
 function shouldCheckFile(path: string): boolean {
@@ -79,15 +82,19 @@ function resolveWatchRoots(): string[] {
   const serverRoot = resolve(thisDir, "..");
   const repoRoot = resolve(serverRoot, "..", "..");
 
+  // Only watch source directories that affect the running server process.
+  // Skip dist/ — the dev supervisor runs from source via tsx, and build
+  // artifacts change on every `pnpm build` (including pre-commit hooks)
+  // which would cause noisy false-positive restart recommendations.
+  // Skip test files via the IGNORED_DIRECTORY_NAMES set (__tests__).
   return [
     resolve(serverRoot, "src"),
-    resolve(serverRoot, "dist"),
-    resolve(repoRoot, "packages", "agent-core", "src"),
-    resolve(repoRoot, "packages", "agent-core", "dist"),
-    resolve(repoRoot, "packages", "agent-server", "src"),
-    resolve(repoRoot, "packages", "agent-server", "dist"),
+    resolve(repoRoot, "packages", "core", "src"),
     resolve(repoRoot, "packages", "db", "src"),
-    resolve(repoRoot, "packages", "db", "dist"),
+    resolve(repoRoot, "packages", "environment", "src"),
+    resolve(repoRoot, "packages", "environment-daemon", "src"),
+    resolve(repoRoot, "packages", "provider-adapters", "src"),
+    resolve(repoRoot, "packages", "templates", "src"),
   ];
 }
 
