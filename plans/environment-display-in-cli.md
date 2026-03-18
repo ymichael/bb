@@ -108,7 +108,15 @@ The UI currently has its own copy of this logic in `ThreadDetailView.tsx`. As a 
 - Labels match what the UI shows for the same thread
 - Typecheck passes for `@bb/core`, `@bb/cli`, and `@bb/server`
 
+# Design Principle
+
+The shared utility returns the same structured information for both CLI and UI. Each surface presents it appropriately for its medium:
+
+- **CLI:** Show full paths (appropriate for terminal context where users copy-paste paths). Show environment ID prominently (agents need it for `--environment`).
+- **UI:** Show relative path suffixes or abbreviated labels. Offer "open" buttons instead of raw paths. Environment ID available on hover or in detail panel.
+
+Both surfaces consume the same `EnvironmentDisplayInfo` — they just render different fields.
+
 # Open Questions/Risks
 
-- Should the environment label include the full path or just a relative suffix? The UI uses a relative suffix for worktrees. The CLI could show the full path since terminal width is less constrained.
 - Should `bb thread list --include-work-status` also show environment info per thread? Probably not in the table view (too wide), but the `--json` output already includes it.
