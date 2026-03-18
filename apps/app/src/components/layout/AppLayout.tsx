@@ -338,7 +338,7 @@ export function AppLayout({ children }: { children: ReactNode }) {
       }
     }
 
-    return `bb | ${parts.join(" · ")}`
+    return parts.join(" · ")
   })()
 
   const handleResizeMouseDown = useCallback(
