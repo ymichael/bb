@@ -39,7 +39,10 @@ All commands now support `--json` (enforced by `apps/cli/src/__tests__/json-flag
 | Command | Flags | Notes |
 |---------|-------|-------|
 | `bb project list` | `--json` | |
+| `bb project show <id>` | `--json` | |
 | `bb project create` | `--name` (required), `--root` (required), `--json` | |
+| `bb project update <id>` | `--name`, `--root`, `--project-instructions`, `--default-provider`, `--json` | |
+| `bb project delete <id>` | `--yes`, `--json` | |
 | `bb project files <query>` | `--project`, `--limit`, `--json` | |
 
 ### `bb provider`
@@ -53,14 +56,14 @@ All commands now support `--json` (enforced by `apps/cli/src/__tests__/json-flag
 
 | Command | Flags | Notes |
 |---------|-------|-------|
-| `bb thread spawn` | `--prompt`, `--json`, `--project`, `--environment`, `--new-environment`, `--parent-thread`, `--provider`, `--model`, `--reasoning-level`, `--title`, `--no-context-parent-thread` | Missing: `--service-tier`, `--sandbox-mode`, `--developer-instructions` |
-| `bb thread list` | `--project`, `--parent-thread`, `--include-archived`, `--json` | Missing: `--include-work-status` |
-| `bb thread show [id]` | `--json`, `--recent-events`, `--event-mode`, `--include-low-signal`, `--work-status`, `--git-diff`, `--diff-selection`, `--diff-merge-base` | Merged `thread status` flags into `show` |
+| `bb thread spawn` | `--prompt`, `--json`, `--project`, `--environment`, `--new-environment`, `--parent-thread`, `--provider`, `--model`, `--reasoning-level`, `--service-tier`, `--sandbox-mode`, `--title`, `--no-context-parent-thread` | |
+| `bb thread list` | `--project`, `--parent-thread`, `--include-archived`, `--include-work-status`, `--json` | |
+| `bb thread show [id]` | `--json`, `--recent-events`, `--event-mode`, `--include-low-signal`, `--work-status`, `--git-diff`, `--diff-selection`, `--diff-merge-base`, `--merge-base-branches` | Merged `thread status` flags into `show` |
 | `bb thread output [id]` | `--json` | |
 | `bb thread log [id]` | `--json`, `--format` | `--json` aliases `--format json` |
 | `bb thread sessions [id]` | `--json` | |
 | `bb thread tell <id> <message>` | `--json`, `--model`, `--reasoning-level`, `--mode` | `--mode steer` replaces old `thread steer`. Missing: `--service-tier`, `--sandbox-mode`, `--demote-primary-if-needed` |
-| `bb thread update [id]` | `--json`, `--title`, `--parent-thread`, `--clear-parent-thread` | Missing: `--merge-base-branch` |
+| `bb thread update [id]` | `--json`, `--title`, `--parent-thread`, `--clear-parent-thread`, `--merge-base-branch` | |
 | `bb thread wait [id]` | `--status`, `--event`, `--timeout`, `--poll-interval`, `--json` | |
 | `bb thread commit <id>` | `--message`, `--staged-only`, `--json` | |
 | `bb thread squash-merge <id>` | `--commit-if-needed`, `--staged-only`, `--commit-message`, `--squash-message`, `--merge-base-branch`, `--json` | |
@@ -120,15 +123,15 @@ Current state is inconsistent. Some commands require explicit `<id>`, others def
 
 ## 4. Missing CLI commands for agent workflows
 
-| API Endpoint | Proposed CLI | Priority | Rationale |
-|-------------|-------------|----------|-----------|
-| `GET /threads/:id/work-status` | `bb thread work-status [id]` | P1 | Agents need to check if work is committed/merged before deciding next steps |
-| `GET /threads/:id/git-diff` | `bb thread git-diff [id]` | P1 | Critical for code review workflows (W2) |
-| `GET /projects/:id` | `bb project show <id>` | P1 | Agents need to inspect a single project |
-| `PATCH /projects/:id` | `bb project update <id>` | P2 | Project lifecycle management |
-| `DELETE /projects/:id` | `bb project delete <id>` | P2 | Project lifecycle management |
-| `GET /threads/:id/merge-base-branches` | `bb thread merge-base-branches [id]` | P2 | Useful before squash-merge |
-| `GET /system/status` | `bb daemon status` | P2 | Lighter alternative to `daemon health` |
+| API Endpoint | Proposed CLI | Status | Rationale |
+|-------------|-------------|--------|-----------|
+| `GET /threads/:id/work-status` | `bb thread show --work-status` | DONE | Collapsed into `thread show` flag |
+| `GET /threads/:id/git-diff` | `bb thread show --git-diff` | DONE | Collapsed into `thread show` flag |
+| `GET /projects/:id` | `bb project show <id>` | DONE | |
+| `PATCH /projects/:id` | `bb project update <id>` | DONE | |
+| `DELETE /projects/:id` | `bb project delete <id>` | DONE | |
+| `GET /threads/:id/merge-base-branches` | `bb thread show --merge-base-branches` | DONE | Collapsed into `thread show` flag |
+| `GET /system/status` | — | Won't do | `daemon health --json` covers this; not worth a separate command |
 | `GET /threads/:id/default-execution-options` | — | Won't do | Internal plumbing, not an agent workflow |
 | `GET /projects/:id/workspace-status` | — | Won't do | Subsumed by `thread work-status` per-thread |
 | `GET /system/environments` | — | Won't do | Environment types are fixed (`local`, `worktree`, `docker`); no discovery needed |
@@ -138,16 +141,16 @@ Current state is inconsistent. Some commands require explicit `<id>`, others def
 
 ## 5. Missing backend flags
 
-| Command | Missing Flag | Backend Field | Priority |
-|---------|-------------|---------------|----------|
-| `thread spawn` | `--service-tier` | `serviceTier` | P1 |
-| `thread spawn` | `--sandbox-mode` | `sandboxMode` | P1 |
-| `thread spawn` | `--developer-instructions` | `developerInstructions` | P1 |
-| `thread tell` | `--service-tier` | `serviceTier` | P2 |
-| `thread tell` | `--sandbox-mode` | `sandboxMode` | P2 |
-| `thread tell` | `--demote-primary-if-needed` | `demotePrimaryIfNeeded` | P2 |
-| `thread update` | `--merge-base-branch` | `mergeBaseBranch` | P2 |
-| `thread list` | `--include-work-status` | `includeWorkStatus` | P2 |
+| Command | Missing Flag | Backend Field | Status |
+|---------|-------------|---------------|--------|
+| `thread spawn` | `--service-tier` | `serviceTier` | DONE |
+| `thread spawn` | `--sandbox-mode` | `sandboxMode` | DONE |
+| `thread spawn` | `--developer-instructions` | `developerInstructions` | Won't do — internal plumbing |
+| `thread tell` | `--service-tier` | `serviceTier` | Won't do — agents rarely change mid-conversation |
+| `thread tell` | `--sandbox-mode` | `sandboxMode` | Won't do — agents rarely change mid-conversation |
+| `thread tell` | `--demote-primary-if-needed` | `demotePrimaryIfNeeded` | Won't do — niche |
+| `thread update` | `--merge-base-branch` | `mergeBaseBranch` | DONE |
+| `thread list` | `--include-work-status` | `includeWorkStatus` | DONE |
 
 ## 6. `--json` enforcement
 
@@ -165,7 +168,4 @@ Note: `bb thread log` has special `--json` semantics (alias for `--format json`)
 
 # Open Questions/Risks
 
-- Should deprecated commands be removed immediately or kept as hidden aliases for one release cycle?
-- Should `--developer-instructions` on `bb thread spawn` accept a file path (`@path/to/file`) or only inline strings?
-- Should `bb thread tell --mode steer` keep the `<id> <message>` positional pattern, or move the message to `--prompt` for extensibility?
-- `archive` and `unarchive` currently default to `BB_THREAD_ID`. Changing them to require explicit `<id>` is a breaking change for agents that rely on the current behavior. Needs a migration path.
+- `archive` and `unarchive` currently default to `BB_THREAD_ID`. The thread ID safety policy says destructive/lifecycle ops should require explicit ID, but changing this would break existing agent workflows. Low priority to fix.

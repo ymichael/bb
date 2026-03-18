@@ -439,8 +439,9 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
     .option("--project <id>", "Filter by project ID (defaults to BB_PROJECT_ID)")
     .option("--parent-thread <id>", "Filter by managing parent thread ID")
     .option("--include-archived", "Include archived threads in the listing")
+    .option("--include-work-status", "Include work status columns in output")
     .option("--json", "Print machine-readable JSON output")
-    .action(async (opts: { project?: string; parentThread?: string; includeArchived?: boolean; json?: boolean }) => {
+    .action(async (opts: { project?: string; parentThread?: string; includeArchived?: boolean; includeWorkStatus?: boolean; json?: boolean }) => {
       const client = createClient(getUrl());
       try {
         const projectId = resolveProjectId(opts.project);
@@ -451,6 +452,7 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
               ...(projectId ? { projectId } : {}),
               ...(parentThreadId ? { parentThreadId } : {}),
               ...(opts.includeArchived ? { includeArchived: "true" as const } : {}),
+              ...(opts.includeWorkStatus ? { includeWorkStatus: "true" as const } : {}),
             },
           }),
         );
@@ -459,7 +461,7 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
           console.log("No threads found");
           return;
         }
-        printThreadTable(threads);
+        printThreadTable(threads, opts.includeWorkStatus);
       } catch (err: unknown) {
         console.error(`Error: ${getErrorMessage(err)}`);
         process.exit(1);
@@ -497,6 +499,7 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
       gitDiff?: boolean;
       diffSelection?: string;
       diffMergeBase?: string;
+      mergeBaseBranches?: boolean;
       json?: boolean;
     },
   ): Promise<void> => {
@@ -554,6 +557,15 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
         );
       }
 
+      let mergeBaseBranches: string[] | undefined;
+      if (opts.mergeBaseBranches) {
+        mergeBaseBranches = await unwrap<string[]>(
+          client.api.v1.threads[":id"]["merge-base-branches"].$get({
+            param: { id: threadId },
+          }),
+        );
+      }
+
       if (opts.json) {
         const jsonPayload: Record<string, unknown> = { ...statusPayload };
         if (workStatus !== undefined) {
@@ -561,6 +573,9 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
         }
         if (gitDiff !== undefined) {
           jsonPayload.gitDiff = gitDiff;
+        }
+        if (mergeBaseBranches !== undefined) {
+          jsonPayload.mergeBaseBranches = mergeBaseBranches;
         }
         outputJson({ json: true }, jsonPayload);
         return;
@@ -608,6 +623,18 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
           console.log("  (diff truncated)");
         }
       }
+
+      if (mergeBaseBranches !== undefined) {
+        console.log("");
+        if (mergeBaseBranches.length === 0) {
+          console.log("Merge-base branches: none");
+        } else {
+          console.log("Merge-base branches:");
+          for (const branch of mergeBaseBranches) {
+            console.log(`  ${branch}`);
+          }
+        }
+      }
     } catch (err: unknown) {
       console.error(`Error: ${getErrorMessage(err)}`);
       process.exit(1);
@@ -638,6 +665,7 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
       "--diff-merge-base <branch>",
       "Merge base branch for diff (used with --git-diff)",
     )
+    .option("--merge-base-branches", "Include available merge-base branches in output")
     .action(threadShowAction);
 
   thread
@@ -645,6 +673,7 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
     .description("Update a thread (defaults to BB_THREAD_ID)")
     .option("--json", "Print machine-readable JSON output")
     .option("--title <title>", "Set the thread title")
+    .option("--merge-base-branch <branch>", "Set the merge base branch")
     .option("--parent-thread <id>", "Set the managing parent thread id")
     .option("--clear-parent-thread", "Clear the managing parent thread id")
     .action(
@@ -653,6 +682,7 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
         opts: {
           json?: boolean;
           title?: string;
+          mergeBaseBranch?: string;
           parentThread?: string;
           clearParentThread?: boolean;
         },
@@ -664,9 +694,9 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
               "Cannot combine --parent-thread with --clear-parent-thread.",
             );
           }
-          if (!opts.parentThread && !opts.clearParentThread && !opts.title) {
+          if (!opts.parentThread && !opts.clearParentThread && !opts.title && !opts.mergeBaseBranch) {
             throw new Error(
-              "No changes requested. Provide --title, --parent-thread, or --clear-parent-thread.",
+              "No changes requested. Provide --title, --merge-base-branch, --parent-thread, or --clear-parent-thread.",
             );
           }
 
@@ -674,6 +704,9 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
           const body: Record<string, unknown> = {};
           if (opts.title) {
             body.title = opts.title;
+          }
+          if (opts.mergeBaseBranch) {
+            body.mergeBaseBranch = opts.mergeBaseBranch;
           }
           if (opts.parentThread) {
             body.parentThreadId = opts.parentThread;
@@ -690,6 +723,9 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
           console.log(`Thread ${thread.id} updated`);
           if (opts.title) {
             console.log(`Title: ${thread.title ?? "<untitled>"}`);
+          }
+          if (opts.mergeBaseBranch) {
+            console.log(`Merge base branch: ${thread.mergeBaseBranch ?? opts.mergeBaseBranch}`);
           }
           if (opts.parentThread || opts.clearParentThread) {
             console.log(
@@ -1113,7 +1149,7 @@ function printThread(thread: Thread): void {
   console.log("");
 }
 
-function printThreadTable(threads: Thread[]): void {
+function printThreadTable(threads: Thread[], includeWorkStatus?: boolean): void {
   const idWidth = Math.max(4, ...threads.map((t) => t.id.length));
   const statusWidth = Math.max(
     12,
@@ -1125,11 +1161,22 @@ function printThreadTable(threads: Thread[]): void {
   );
   const projectWidth = Math.max(7, ...threads.map((t) => t.projectId.length));
 
-  const header = [
+  const headerCols = [
     "ID".padEnd(idWidth),
     "Project".padEnd(projectWidth),
     "Status".padEnd(statusWidth),
-  ].join("  ");
+  ];
+
+  if (includeWorkStatus) {
+    headerCols.push(
+      "Work".padEnd(10),
+      "Branch".padEnd(20),
+      "Files".padEnd(5),
+      "+/-".padEnd(10),
+    );
+  }
+
+  const header = headerCols.join("  ");
 
   console.log("");
   console.log(header);
@@ -1140,11 +1187,27 @@ function printThreadTable(threads: Thread[]): void {
       thread.archivedAt !== undefined
         ? `${statusText(thread.status)} (archived)`
         : statusText(thread.status);
-    const row = [
+    const rowCols = [
       thread.id.padEnd(idWidth),
       thread.projectId.padEnd(projectWidth),
       renderedStatus.padEnd(statusWidth),
-    ].join("  ");
+    ];
+
+    if (includeWorkStatus) {
+      const ws = thread.workStatus;
+      if (ws) {
+        rowCols.push(
+          ws.state.padEnd(10),
+          (ws.currentBranch ?? "-").padEnd(20),
+          String(ws.changedFiles).padEnd(5),
+          `+${ws.insertions}/-${ws.deletions}`.padEnd(10),
+        );
+      } else {
+        rowCols.push("-".padEnd(10), "-".padEnd(20), "-".padEnd(5), "-".padEnd(10));
+      }
+    }
+
+    const row = rowCols.join("  ");
     console.log(row);
   }
   console.log("");

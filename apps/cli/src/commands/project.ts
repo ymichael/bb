@@ -1,7 +1,7 @@
 import { Command } from "commander";
 import { type Project } from "@bb/core";
 import { createClient, unwrap } from "../client.js";
-import { getErrorMessage, outputJson } from "./helpers.js";
+import { confirmDestructiveAction, getErrorMessage, outputJson } from "./helpers.js";
 import { requireProjectId } from "../context-env.js";
 
 export function registerProjectCommands(program: Command, getUrl: () => string): void {
@@ -69,6 +69,72 @@ export function registerProjectCommands(program: Command, getUrl: () => string):
         );
         if (outputJson(opts, found)) return;
         printProject(found);
+      } catch (err: unknown) {
+        console.error(`Error: ${getErrorMessage(err)}`);
+        process.exit(1);
+      }
+    });
+
+  project
+    .command("update <id>")
+    .description("Update a project")
+    .option("--name <name>", "Set the project name")
+    .option("--root <path>", "Set the project root path")
+    .option("--project-instructions <text>", "Set project instructions")
+    .option("--default-provider <id>", "Set the default provider ID")
+    .option("--json", "Print machine-readable JSON output")
+    .action(async (id: string, opts: { name?: string; root?: string; projectInstructions?: string; defaultProvider?: string; json?: boolean }) => {
+      const client = createClient(getUrl());
+      try {
+        if (!opts.name && !opts.root && !opts.projectInstructions && !opts.defaultProvider) {
+          throw new Error(
+            "No changes requested. Provide --name, --root, --project-instructions, or --default-provider.",
+          );
+        }
+        const body: Record<string, unknown> = {};
+        if (opts.name) body.name = opts.name;
+        if (opts.root) body.rootPath = opts.root;
+        if (opts.projectInstructions) body.projectInstructions = opts.projectInstructions;
+        if (opts.defaultProvider) body.defaultProviderId = opts.defaultProvider;
+        const updated = await unwrap<Project>(
+          client.api.v1.projects[":id"].$patch({
+            param: { id },
+            json: body,
+          }),
+        );
+        if (outputJson(opts, updated)) return;
+        console.log(`Project ${updated.id} updated`);
+        printProject(updated);
+      } catch (err: unknown) {
+        console.error(`Error: ${getErrorMessage(err)}`);
+        process.exit(1);
+      }
+    });
+
+  project
+    .command("delete <id>")
+    .description("Delete a project and all its threads")
+    .option("--yes", "Skip confirmation prompt")
+    .option("--json", "Print machine-readable JSON output")
+    .action(async (id: string, opts: { yes?: boolean; json?: boolean }) => {
+      const client = createClient(getUrl());
+      try {
+        if (!opts.yes) {
+          const confirmed = await confirmDestructiveAction(
+            `Delete project ${id} and all its threads?`,
+          );
+          if (!confirmed) {
+            console.log("Aborted.");
+            return;
+          }
+        }
+        await unwrap<{ ok: boolean }>(
+          client.api.v1.projects[":id"].$delete({
+            param: { id },
+          }),
+        );
+        if (outputJson(opts, { ok: true, id })) return;
+        console.log(`Project ${id} deleted`);
       } catch (err: unknown) {
         console.error(`Error: ${getErrorMessage(err)}`);
         process.exit(1);
