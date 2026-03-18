@@ -129,15 +129,6 @@ export function AppSidebar({ onResizeMouseDown, isResizing }: AppSidebarProps) {
         <SidebarFooter>
           <SidebarMenu className="flex-row items-center">
             <SidebarMenuItem>
-              <img
-                src={isDarkTheme ? "/bb-icon-24-dark.png" : "/bb-icon-24.png"}
-                alt="bb"
-                width={18}
-                height={18}
-                className="ml-3 mr-0.5 translate-y-px"
-              />
-            </SidebarMenuItem>
-            <SidebarMenuItem>
               <SidebarMenuButton
                 onClick={toggleTheme}
                 className="w-8 justify-center p-0"
