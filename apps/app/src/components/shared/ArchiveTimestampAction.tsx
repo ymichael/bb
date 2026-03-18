@@ -1,22 +1,27 @@
+import type { ThreadType } from "@bb/core";
 import { ArchiveRestore, LoaderCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { threadTypeLabel } from "@/lib/thread-title";
 
 export function ArchiveTimestampAction({
   isPending,
   onUnarchive,
-  buttonLabel = "Unarchive thread",
+  buttonLabel,
+  threadType,
 }: {
   isPending?: boolean;
   onUnarchive: () => void;
   buttonLabel?: string;
+  threadType?: ThreadType;
 }) {
+  const resolvedLabel = buttonLabel ?? `Unarchive ${threadTypeLabel(threadType ?? "standard")}`;
   return (
     <Button
       type="button"
       variant="ghost"
       size="icon"
-      aria-label={buttonLabel}
-      title={buttonLabel}
+      aria-label={resolvedLabel}
+      title={resolvedLabel}
       onClick={onUnarchive}
       disabled={Boolean(isPending)}
       className="size-6"

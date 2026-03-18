@@ -1,3 +1,4 @@
+import type { ThreadType } from "@bb/core"
 import { useId, useState, type FormEvent } from "react"
 import { Button } from "@/components/ui/button"
 import {
@@ -9,10 +10,12 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
+import { threadTypeLabel } from "@/lib/thread-title"
 
 export interface ThreadRenameDialogTarget {
   id: string
   currentTitle: string
+  threadType?: ThreadType
 }
 
 interface ThreadRenameDialogProps {
@@ -66,24 +69,26 @@ function ThreadRenameDialogContent({
 
     const trimmedTitle = nextTitle.trim()
     if (!trimmedTitle) {
-      setValidationMessage("Thread name cannot be empty.")
+      setValidationMessage(`${label.charAt(0).toUpperCase() + label.slice(1)} name cannot be empty.`)
       return
     }
 
     onRename(target.id, trimmedTitle)
   }
 
+  const label = threadTypeLabel(target.threadType ?? "standard")
+
   return (
     <>
       <DialogHeader>
-        <DialogTitle>Rename thread</DialogTitle>
-        <DialogDescription>Choose a new name for this thread.</DialogDescription>
+        <DialogTitle>Rename {label}</DialogTitle>
+        <DialogDescription>Choose a new name for this {label}.</DialogDescription>
       </DialogHeader>
       <form className="space-y-4" onSubmit={handleSubmit}>
         <div className="space-y-2">
           <Input
             id={inputId}
-            aria-label="Thread name"
+            aria-label={`${label.charAt(0).toUpperCase() + label.slice(1)} name`}
             value={nextTitle}
             autoFocus
             disabled={pending}
@@ -108,7 +113,7 @@ function ThreadRenameDialogContent({
             Cancel
           </Button>
           <Button type="submit" disabled={pending}>
-            Rename thread
+            Rename {label}
           </Button>
         </DialogFooter>
       </form>

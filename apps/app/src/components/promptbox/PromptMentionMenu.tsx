@@ -1,5 +1,5 @@
 import type { MutableRefObject } from "react";
-import { FileText, FolderGit2, Loader2, UserRound } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import type { PromptMentionSuggestion } from "@bb/core";
 import { cn } from "@/lib/utils";
 
@@ -12,6 +12,18 @@ interface PromptMentionMenuProps {
   selectedMentionIndex: number;
   mentionItemRefs: MutableRefObject<Array<HTMLButtonElement | null>>;
   onApplyMention: (item: PromptMentionSuggestion) => void;
+}
+
+/** Extract the basename and parent directory from a file path. */
+function splitFilePath(filePath: string): { name: string; directory: string } {
+  const lastSlash = filePath.lastIndexOf("/");
+  if (lastSlash === -1) {
+    return { name: filePath, directory: "" };
+  }
+  return {
+    name: filePath.slice(lastSlash + 1),
+    directory: filePath.slice(0, lastSlash),
+  };
 }
 
 export function PromptMentionMenu({
@@ -43,7 +55,7 @@ export function PromptMentionMenu({
         ) : mentionLoading ? (
           <div className="flex items-center gap-2 rounded px-2 py-1.5 text-xs text-muted-foreground">
             <Loader2 className="size-3.5 animate-spin" />
-            <span>{`Searching ${searchLabel}...`}</span>
+            <span>{`Searching ${searchLabel}\u2026`}</span>
           </div>
         ) : mentionError ? (
           <div className="rounded px-2 py-1.5 text-xs text-destructive">
@@ -52,16 +64,21 @@ export function PromptMentionMenu({
         ) : mentionSuggestions.length > 0 ? (
           mentionSuggestions.map((item, index) => {
             const isSelected = index === selectedMentionIndex;
-            const title =
-              item.kind === "thread"
-                ? item.title || item.path
-                : item.path;
-            const subtitle =
-              item.kind === "thread"
-                ? item.threadType === "manager"
-                  ? `Manager · ${item.threadId}`
-                  : "Thread"
-                : item.path;
+
+            let primary: string;
+            let secondary: string | null = null;
+            let typeLabel: string | null = null;
+
+            if (item.kind === "thread") {
+              primary = item.title || "Untitled thread";
+              typeLabel =
+                item.threadType === "manager" ? "Manager" : "Thread";
+            } else {
+              const { name, directory } = splitFilePath(item.path);
+              primary = name;
+              secondary = directory || null;
+            }
+
             return (
               <button
                 key={`${item.kind}-${item.path}-${index}`}
@@ -79,22 +96,18 @@ export function PromptMentionMenu({
                 )}
                 title={item.path}
               >
-                <div className="flex min-w-0 items-center gap-2">
-                  {item.kind === "thread" ? (
-                    item.threadType === "manager" ? (
-                      <UserRound className="size-3.5 shrink-0 text-muted-foreground" />
-                    ) : (
-                      <FolderGit2 className="size-3.5 shrink-0 text-muted-foreground" />
-                    )
-                  ) : (
-                    <FileText className="size-3.5 shrink-0 text-muted-foreground" />
-                  )}
-                  <div className="min-w-0">
-                    <div className="truncate">{title}</div>
-                    <div className="truncate text-xs text-muted-foreground">
-                      {subtitle}
-                    </div>
-                  </div>
+                <div className="flex min-w-0 items-center gap-1.5">
+                  {typeLabel !== null ? (
+                    <span className="shrink-0 rounded bg-muted px-1 py-px text-[10px] leading-tight text-muted-foreground">
+                      {typeLabel}
+                    </span>
+                  ) : null}
+                  <span className="truncate">{primary}</span>
+                  {secondary !== null ? (
+                    <span className="ml-auto shrink-0 truncate pl-2 text-muted-foreground">
+                      {secondary}
+                    </span>
+                  ) : null}
                 </div>
               </button>
             );

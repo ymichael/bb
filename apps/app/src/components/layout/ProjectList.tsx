@@ -30,7 +30,7 @@ import {
 import { NavLink, useLocation, useNavigate } from "react-router-dom"
 import { getEnvironmentIconInfo } from "@/lib/environment-icon"
 import { cn } from "@/lib/utils"
-import { getThreadDisplayTitle } from "@/lib/thread-title"
+import { getThreadDisplayTitle, threadTypeLabel } from "@/lib/thread-title"
 import {
   isBusyThread,
   isUnreadDoneThread,
@@ -309,7 +309,7 @@ export function ProjectList({
           return
         }
         toast.error(
-          error instanceof Error ? error.message : "Failed to archive thread.",
+          error instanceof Error ? error.message : `Failed to archive ${threadTypeLabel(thread.type)}.`,
         )
       },
     })
@@ -321,6 +321,7 @@ export function ProjectList({
     setThreadRenameTarget({
       id: thread.id,
       currentTitle: getThreadDisplayTitle(thread),
+      threadType: thread.type,
     })
   }
 
@@ -355,7 +356,7 @@ export function ProjectList({
         },
         onError: (error) => {
           toast.error(
-            error instanceof Error ? error.message : "Failed to delete thread.",
+            error instanceof Error ? error.message : `Failed to delete ${threadTypeLabel(thread.type)}.`,
           )
         },
       }
@@ -366,13 +367,14 @@ export function ProjectList({
     if (!archiveConfirmationThread || archiveThread.isPending) return
 
     const threadId = archiveConfirmationThread.id
+    const label = threadTypeLabel(archiveConfirmationThread.type)
     setArchiveConfirmationThread(null)
     archiveThread.mutate(
       { id: threadId, force: true },
       {
         onError: (error) => {
           toast.error(
-            error instanceof Error ? error.message : "Failed to archive thread.",
+            error instanceof Error ? error.message : `Failed to archive ${label}.`,
           )
         },
       }
@@ -522,6 +524,7 @@ export function ProjectList({
                   requestDeleteThread(thread)
                 }}
                 isArchived={thread.archivedAt !== undefined}
+                threadType={thread.type}
               />
             </div>
           </span>
@@ -790,7 +793,7 @@ export function ProjectList({
               Archive and clean up workspace?
             </DialogTitle>
             <DialogDescription>
-              This thread has uncommitted or unmerged work in its worktree. Archiving will remove
+              This {archiveConfirmationThread ? threadTypeLabel(archiveConfirmationThread.type) : "thread"} has uncommitted or unmerged work in its worktree. Archiving will remove
               that workspace and changes may be lost.
             </DialogDescription>
           </DialogHeader>

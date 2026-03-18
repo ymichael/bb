@@ -58,6 +58,7 @@ export function ProjectArchivedThreadsView() {
                   onUnarchive={() => {
                     unarchiveThread.mutate({ id: thread.id });
                   }}
+                  threadType={thread.type}
                 />
               </div>
             ))}

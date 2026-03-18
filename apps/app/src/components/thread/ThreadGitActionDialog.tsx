@@ -1,5 +1,5 @@
 import { useMemo, useState, type FormEvent } from "react";
-import { assertNever, type ThreadWorkStatus } from "@bb/core";
+import { assertNever, type ThreadType, type ThreadWorkStatus } from "@bb/core";
 import { DetailCard, DetailRow } from "@bb/ui-core";
 import { WorkspaceChangesList } from "@/components/shared/WorkspaceChangesList";
 import { Button } from "@/components/ui/button";
@@ -16,6 +16,7 @@ import {
   getMergeBaseBranchCandidates,
   MergeBaseBranchPicker,
 } from "@/components/thread/MergeBaseBranchPicker";
+import { threadTypeLabel } from "@/lib/thread-title";
 
 export type ThreadGitActionDialogTarget =
   | { kind: "commit" }
@@ -30,6 +31,7 @@ interface ThreadGitActionDialogProps {
   gitStatusSummary?: string;
   changedFiles?: ThreadWorkStatus["files"];
   threadId?: string;
+  threadType?: ThreadType;
   showMergeBaseDetails?: boolean;
   mergeBaseBranch?: string;
   mergeBaseBranchOptions?: string[];
@@ -45,7 +47,7 @@ interface ThreadGitActionDialogProps {
   }) => Promise<void>;
 }
 
-function getDialogCopy(target: ThreadGitActionDialogTarget) {
+function getDialogCopy(target: ThreadGitActionDialogTarget, label: string) {
   switch (target.kind) {
     case "commit":
       return {
@@ -58,7 +60,7 @@ function getDialogCopy(target: ThreadGitActionDialogTarget) {
     case "commit_and_squash_merge":
       return {
         title: "Commit and squash merge",
-        description: "Commit the current workspace changes, then squash merge this thread branch.",
+        description: `Commit the current workspace changes, then squash merge this ${label} branch.`,
         submitLabel: "Commit + squash merge",
         showCommitControls: true,
         showMergeBase: true,
@@ -66,7 +68,7 @@ function getDialogCopy(target: ThreadGitActionDialogTarget) {
     case "squash_merge":
       return {
         title: "Squash merge",
-        description: "Squash merge this thread branch into the selected merge base.",
+        description: `Squash merge this ${label} branch into the selected merge base.`,
         submitLabel: "Squash merge",
         showCommitControls: false,
         showMergeBase: true,
@@ -84,6 +86,7 @@ export function ThreadGitActionDialog({
   gitStatusSummary,
   changedFiles,
   threadId,
+  threadType,
   showMergeBaseDetails = false,
   mergeBaseBranch,
   mergeBaseBranchOptions,
@@ -94,7 +97,8 @@ export function ThreadGitActionDialog({
   onCommit,
   onSquashMerge,
 }: ThreadGitActionDialogProps) {
-  const dialogCopy = useMemo(() => (target ? getDialogCopy(target) : null), [target]);
+  const label = threadTypeLabel(threadType ?? "standard");
+  const dialogCopy = useMemo(() => (target ? getDialogCopy(target, label) : null), [target, label]);
 
   return (
     <Dialog open={target !== null} onOpenChange={onOpenChange}>
@@ -109,6 +113,7 @@ export function ThreadGitActionDialog({
             gitStatusSummary={gitStatusSummary}
             changedFiles={changedFiles}
             threadId={threadId}
+            threadType={threadType}
             showMergeBaseDetails={showMergeBaseDetails}
             mergeBaseBranch={mergeBaseBranch}
             mergeBaseBranchOptions={mergeBaseBranchOptions}
@@ -133,6 +138,7 @@ function ThreadGitActionDialogContent({
   gitStatusSummary,
   changedFiles,
   threadId,
+  threadType,
   showMergeBaseDetails,
   mergeBaseBranch,
   mergeBaseBranchOptions,
@@ -147,7 +153,8 @@ function ThreadGitActionDialogContent({
 }) {
   const [includeUnstaged, setIncludeUnstaged] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const dialogCopy = getDialogCopy(target);
+  const label = threadTypeLabel(threadType ?? "standard");
+  const dialogCopy = getDialogCopy(target, label);
   const mergeBaseCandidates = getMergeBaseBranchCandidates({
     mergeBaseBranch,
     mergeBaseBranchOptions,

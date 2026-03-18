@@ -81,7 +81,7 @@ import {
   formatWorkspaceChangeSummary,
 } from "@/lib/workspace-change-summary";
 import { supportsPrimaryCheckoutMetadata } from "@/lib/thread-primary-checkout";
-import { getThreadDisplayTitle } from "@/lib/thread-title";
+import { getThreadDisplayTitle, threadTypeLabel } from "@/lib/thread-title";
 import {
   isArchiveForceRequiredError,
   requiresArchiveConfirmation,
@@ -573,6 +573,7 @@ export function ThreadDetailView() {
     setThreadRenameTarget({
       id: thread.id,
       currentTitle: getThreadDisplayTitle(thread),
+      threadType: thread.type,
     });
   }, [thread, updateThread.isPending]);
 
@@ -632,6 +633,7 @@ export function ThreadDetailView() {
 
   const toggleArchiveThread = useCallback(() => {
     if (!thread) return;
+    const label = threadTypeLabel(thread.type);
     if (thread.archivedAt !== undefined) {
       unarchiveThread.mutate({ id: thread.id });
       return;
@@ -646,7 +648,7 @@ export function ThreadDetailView() {
           },
           onError: (nextError) => {
             toast.error(
-              nextError instanceof Error ? nextError.message : "Failed to archive thread.",
+              nextError instanceof Error ? nextError.message : `Failed to archive ${label}.`,
             );
           },
         },
@@ -655,7 +657,7 @@ export function ThreadDetailView() {
 
     if (requiresArchiveConfirmation(thread.workStatus, environmentInfo)) {
       const confirmed = window.confirm(
-        "This thread has uncommitted or unmerged work. Archive anyway?",
+        `This ${label} has uncommitted or unmerged work. Archive anyway?`,
       );
       if (!confirmed) {
         return;
@@ -673,7 +675,7 @@ export function ThreadDetailView() {
         onError: (nextError) => {
           if (isArchiveForceRequiredError(nextError)) {
             const confirmed = window.confirm(
-              "This thread has uncommitted or unmerged work. Archive anyway?",
+              `This ${label} has uncommitted or unmerged work. Archive anyway?`,
             );
             if (confirmed) {
               archiveWithForce();
@@ -681,7 +683,7 @@ export function ThreadDetailView() {
             return;
           }
           toast.error(
-            nextError instanceof Error ? nextError.message : "Failed to archive thread.",
+            nextError instanceof Error ? nextError.message : `Failed to archive ${label}.`,
           );
         },
       },
@@ -1271,6 +1273,7 @@ export function ThreadDetailView() {
             onUnarchive={() => {
               unarchiveThread.mutate({ id: thread.id });
             }}
+            threadType={thread.type}
           />
         </DetailRow>
       ) : null}
@@ -1393,6 +1396,7 @@ export function ThreadDetailView() {
         isManagerThread ? handleManagerDebugViewChange : undefined
       }
       isArchived={thread.archivedAt !== undefined}
+      threadType={thread.type}
     />
   );
 
@@ -1784,7 +1788,7 @@ export function ThreadDetailView() {
               },
               onError: (error) => {
                 toast.error(
-                  error instanceof Error ? error.message : "Failed to delete thread.",
+                  error instanceof Error ? error.message : `Failed to delete ${threadTypeLabel(target.type)}.`,
                 );
               },
             },
@@ -1804,6 +1808,7 @@ export function ThreadDetailView() {
           gitStatusSummary={threadGitStatusDisplay.summary}
           changedFiles={resolvedThreadWorkStatus?.files}
           threadId={thread.id}
+          threadType={thread.type}
           showMergeBaseDetails={showBranchComparisonUi}
           mergeBaseBranch={effectiveMergeBaseBranch}
           mergeBaseBranchOptions={mergeBaseBranchOptions}

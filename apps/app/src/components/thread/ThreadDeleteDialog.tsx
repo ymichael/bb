@@ -9,7 +9,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { getThreadDisplayTitle } from "@/lib/thread-title"
+import { getThreadDisplayTitle, threadTypeLabel } from "@/lib/thread-title"
 
 interface ThreadDeleteDialogProps {
   target: Thread | null
@@ -25,6 +25,7 @@ export function ThreadDeleteDialog({
   onDelete,
 }: ThreadDeleteDialogProps) {
   const threadTitle = target ? getThreadDisplayTitle(target) : ""
+  const label = target ? threadTypeLabel(target.type) : "thread"
 
   return (
     <Dialog open={target !== null} onOpenChange={onOpenChange}>
@@ -32,12 +33,12 @@ export function ThreadDeleteDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <AlertTriangle className="size-4 text-destructive" />
-            Delete thread?
+            Delete {label}?
           </DialogTitle>
           <DialogDescription>
             {target
               ? `Delete "${threadTitle}" and its timeline permanently? This cannot be undone.`
-              : "Delete this thread permanently? This cannot be undone."}
+              : `Delete this ${label} permanently? This cannot be undone.`}
           </DialogDescription>
         </DialogHeader>
         <DialogFooter>
@@ -53,7 +54,7 @@ export function ThreadDeleteDialog({
               onDelete(target)
             }}
           >
-            Delete thread
+            Delete {label}
           </Button>
         </DialogFooter>
       </DialogContent>

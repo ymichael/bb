@@ -30,9 +30,9 @@ The most important manager operation. The manager needs to create a named worker
 **Currently exposed:**
 - `--prompt`, `--project`, `--environment`, `--parent-thread`, `--provider`, `--no-context-parent-thread`, `--json`
 
-**Missing (backend supports these):**
-- `--title` — managers can't name worker threads. Everything shows up untitled in the sidebar.
-- `--model` — managers can't pick the model. Stuck with whatever the project default is.
+**Recently added:**
+- `--title` — ~~managers can't name worker threads~~ DONE
+- `--model` — ~~managers can't pick the model~~ DONE
 - `--service-tier` — can't specify fast/flex tier.
 - `--reasoning-level` — can't control reasoning depth (low/medium/high/xhigh).
 - `--sandbox-mode` — can't control sandbox access level.
@@ -68,8 +68,10 @@ The most important manager operation. The manager needs to create a named worker
 
 **Currently exposed:** `--project`, `--parent-thread`
 
-**Missing (backend supports these):**
-- `--json` — no machine-readable output. Inconsistent with other commands.
+**Recently added:**
+- `--json` — ~~no machine-readable output~~ DONE
+
+**Still missing:**
 - `--include-archived` — can't see archived threads.
 - `--include-work-status` — can't get work status inline with the list.
 
@@ -114,8 +116,8 @@ The most important manager operation. The manager needs to create a named worker
 
 **Currently exposed:** `--json`, `--parent-thread`, `--clear-parent-thread`
 
-**Missing (backend supports these):**
-- `--title` — can't rename threads. Managers can't fix untitled workers after the fact.
+**Recently added:**
+- `--title` — ~~can't rename threads~~ DONE
 - `--merge-base-branch` — can't set merge base via CLI.
 
 **Priority:** P0 for `--title`. P2 for `--merge-base-branch`.
@@ -176,14 +178,9 @@ The most important manager operation. The manager needs to create a named worker
 
 **Command:** `bb manager hire`
 
-**Currently exposed:** `--project`, `--json`
+**Currently exposed:** `--project`, `--json`, `--provider`, `--model`, `--title`
 
-**Missing (backend supports these):**
-- `--provider` — can't pick manager provider.
-- `--model` — can't pick manager model.
-- `--title` — can't name the manager (backend doesn't support this yet either, but should for multi-manager).
-
-**Priority:** P0 for `--provider` and `--model`. P1 for `--title` (needs backend change too).
+**Status:** All flags added. DONE.
 
 ---
 
@@ -219,14 +216,16 @@ The most important manager operation. The manager needs to create a named worker
 
 # Task List
 
-## P0 — Blocks manager quality
+## P0 — Blocks manager quality (DONE)
 
-- [ ] Add `--title` to `bb thread spawn`
-- [ ] Add `--model` to `bb thread spawn`
-- [ ] Add `--title` to `bb thread update`
-- [ ] Add `--json` to `bb thread list`
-- [ ] Add `--provider` to `bb manager hire`
-- [ ] Add `--model` to `bb manager hire`
+- [x] Add `--title` to `bb thread spawn`
+- [x] Add `--model` to `bb thread spawn`
+- [x] Add `--title` to `bb thread update`
+- [x] Add `--json` to `bb thread list`
+- [x] Add `--provider` to `bb manager hire`
+- [x] Add `--model` to `bb manager hire`
+- [x] Add `--title` to `bb manager hire`
+- [x] Add `bb provider list` and `bb provider models` commands
 
 ## P1 — Improves manager workflows
 
@@ -238,7 +237,6 @@ The most important manager operation. The manager needs to create a named worker
 - [ ] Add `--include-work-status` to `bb thread list`
 - [ ] Add `--auto-archive-on-success` to `bb thread commit`
 - [ ] Add `--auto-archive-on-success` to `bb thread squash-merge`
-- [ ] Add `--title` to `bb manager hire` (needs backend support for naming managers at creation)
 
 ## P2 — Nice to have
 

@@ -1,3 +1,4 @@
+import type { ThreadType } from "@bb/core"
 import { MoreHorizontal } from "lucide-react"
 import {
   DropdownMenu,
@@ -9,6 +10,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
+import { threadTypeLabel } from "@/lib/thread-title"
 
 interface ThreadActionsMenuProps {
   onToggleRead: () => void
@@ -24,6 +26,7 @@ interface ThreadActionsMenuProps {
   disabled?: boolean
   triggerClassName?: string
   align?: "start" | "center" | "end"
+  threadType?: ThreadType
 }
 
 export function ThreadActionsMenu({
@@ -40,7 +43,10 @@ export function ThreadActionsMenu({
   disabled = false,
   triggerClassName,
   align = "end",
+  threadType,
 }: ThreadActionsMenuProps) {
+  const label = threadTypeLabel(threadType ?? "standard")
+  const capitalizedLabel = label.charAt(0).toUpperCase() + label.slice(1)
   return (
     <DropdownMenu onOpenChange={onOpenChange}>
       <DropdownMenuTrigger asChild>
@@ -52,8 +58,8 @@ export function ThreadActionsMenu({
             "rounded-md p-0 text-muted-foreground hover:bg-accent/45 hover:text-foreground data-[state=open]:bg-accent/35 data-[state=open]:text-foreground",
             triggerClassName
           )}
-          aria-label="Thread actions"
-          title="Thread actions"
+          aria-label={`${capitalizedLabel} actions`}
+          title={`${capitalizedLabel} actions`}
           disabled={disabled}
           onClick={(event) => {
             event.preventDefault()

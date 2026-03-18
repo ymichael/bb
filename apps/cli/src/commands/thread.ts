@@ -203,7 +203,11 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
   const postThreadMessage = async (
     threadId: string,
     message: string,
-    mode?: "steer",
+    options?: {
+      mode?: "steer";
+      model?: string;
+      reasoningLevel?: string;
+    },
   ): Promise<{ ok: boolean }> => {
     const client = createClient(getUrl());
     return unwrap<{ ok: boolean }>(
@@ -211,7 +215,9 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
         param: { id: threadId },
         json: {
           input: [{ type: "text", text: message }],
-          ...(mode ? { mode } : {}),
+          ...(options?.mode ? { mode: options.mode } : {}),
+          ...(options?.model ? { model: options.model } : {}),
+          ...(options?.reasoningLevel ? { reasoningLevel: options.reasoningLevel as "low" | "medium" | "high" | "xhigh" } : {}),
         },
       }),
     );
@@ -337,6 +343,10 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
       "Provider ID for the thread (e.g. codex, claude-code, pi)",
     )
     .option("--model <model>", "Model ID for the thread")
+    .option(
+      "--reasoning-level <level>",
+      "Reasoning level: low, medium, high, xhigh",
+    )
     .option("--title <title>", "Thread title")
     .option(
       "--no-context-parent-thread",
@@ -351,6 +361,7 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
       parentThread?: string;
       provider?: string;
       model?: string;
+      reasoningLevel?: string;
       title?: string;
       contextParentThread?: boolean;
     }) => {
@@ -382,6 +393,7 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
                 : undefined,
               ...(opts.provider ? { providerId: opts.provider } : {}),
               ...(opts.model ? { model: opts.model } : {}),
+              ...(opts.reasoningLevel ? { reasoningLevel: opts.reasoningLevel as "low" | "medium" | "high" | "xhigh" } : {}),
               ...(opts.title ? { title: opts.title } : {}),
               ...environmentSelection,
               ...(parentThreadId ? { parentThreadId } : {}),
@@ -408,8 +420,9 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
     .description("List threads")
     .option("--project <id>", "Filter by project ID (defaults to BB_PROJECT_ID)")
     .option("--parent-thread <id>", "Filter by managing parent thread ID")
+    .option("--include-archived", "Include archived threads in the listing")
     .option("--json", "Print machine-readable JSON output")
-    .action(async (opts: { project?: string; parentThread?: string; json?: boolean }) => {
+    .action(async (opts: { project?: string; parentThread?: string; includeArchived?: boolean; json?: boolean }) => {
       const client = createClient(getUrl());
       try {
         const projectId = resolveProjectId(opts.project);
@@ -419,6 +432,7 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
             query: {
               ...(projectId ? { projectId } : {}),
               ...(parentThreadId ? { parentThreadId } : {}),
+              ...(opts.includeArchived ? { includeArchived: "true" as const } : {}),
             },
           }),
         );
@@ -679,9 +693,17 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
     .command("tell <id> <message>")
     .description("Send a follow-up message to a thread")
     .option("--json", "Print machine-readable JSON output")
-    .action(async (id: string, message: string, opts: { json?: boolean }) => {
+    .option("--model <model>", "Model ID for this message")
+    .option(
+      "--reasoning-level <level>",
+      "Reasoning level: low, medium, high, xhigh",
+    )
+    .action(async (id: string, message: string, opts: { json?: boolean; model?: string; reasoningLevel?: string }) => {
       try {
-        const response = await postThreadMessage(id, message);
+        const response = await postThreadMessage(id, message, {
+          model: opts.model,
+          reasoningLevel: opts.reasoningLevel,
+        });
         if (outputJson(opts, { threadId: id, ...response })) return;
         console.log(`Thread ${id} updated`);
       } catch (err: unknown) {
@@ -693,9 +715,20 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
   thread
     .command("steer <id> <message>")
     .description("Steer a thread with an additional message")
-    .action(async (id: string, message: string) => {
+    .option("--json", "Print machine-readable JSON output")
+    .option("--model <model>", "Model ID for this message")
+    .option(
+      "--reasoning-level <level>",
+      "Reasoning level: low, medium, high, xhigh",
+    )
+    .action(async (id: string, message: string, opts: { json?: boolean; model?: string; reasoningLevel?: string }) => {
       try {
-        await postThreadMessage(id, message, "steer");
+        const response = await postThreadMessage(id, message, {
+          mode: "steer",
+          model: opts.model,
+          reasoningLevel: opts.reasoningLevel,
+        });
+        if (outputJson(opts, { threadId: id, ...response })) return;
         console.log(`Thread ${id} steered`);
       } catch (err: unknown) {
         console.error(`Error: ${getErrorMessage(err)}`);
