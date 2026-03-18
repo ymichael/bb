@@ -29,6 +29,13 @@
       "when": 1778782000000,
       "tag": "0003_environment_descriptor_nullable",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1779292800000,
+      "tag": "0004_drop_primary_manager_thread_id",
+      "breakpoints": true
     }
   ]
 }
