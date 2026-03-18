@@ -60,7 +60,8 @@ export function registerProjectCommands(program: Command, getUrl: () => string):
     .description("Search files within a project")
     .option("--project <id>", "Project ID (defaults to BB_PROJECT_ID)")
     .option("--limit <n>", "Result limit", "8")
-    .action(async (query: string, opts: { project?: string; limit?: string }) => {
+    .option("--json", "Print machine-readable JSON output")
+    .action(async (query: string, opts: { project?: string; limit?: string; json?: boolean }) => {
       const client = createClient(getUrl());
       try {
         const projectId = requireProjectId(opts.project);
@@ -78,6 +79,7 @@ export function registerProjectCommands(program: Command, getUrl: () => string):
             },
           }),
         );
+        if (outputJson(opts, files)) return;
         if (files.length === 0) {
           console.log("No matching files");
           return;

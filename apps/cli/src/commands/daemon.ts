@@ -104,7 +104,8 @@ export function registerDaemonCommands(program: Command, getUrl: () => string): 
     .command("restart")
     .description("Safely request daemon shutdown before restart")
     .option("--force", "Shutdown even when active/provisioning work exists")
-    .action(async (opts: { force?: boolean }) => {
+    .option("--json", "Print machine-readable JSON output")
+    .action(async (opts: { force?: boolean; json?: boolean }) => {
       const client = createClient(getUrl());
       try {
         const shutdownResponse = await client.api.v1.system.shutdown.$post({
@@ -131,6 +132,7 @@ export function registerDaemonCommands(program: Command, getUrl: () => string): 
         const payload = await unwrap<ShutdownAcceptedResponse>(
           Promise.resolve(shutdownResponse),
         );
+        if (outputJson(opts, payload)) return;
         console.log(
           payload.forced
             ? "Daemon shutdown requested (forced)."

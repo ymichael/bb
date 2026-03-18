@@ -161,7 +161,8 @@ export function registerManagerCommands(program: Command, getUrl: () => string):
     .command("delete <id>")
     .description("Delete a manager permanently")
     .option("--yes", "Skip the confirmation prompt")
-    .action(async (id: string, opts: { yes?: boolean }) => {
+    .option("--json", "Print machine-readable JSON output")
+    .action(async (id: string, opts: { yes?: boolean; json?: boolean }) => {
       const client = createClient(getUrl());
       try {
         const managerThreadId = requireThreadId(id);
@@ -180,6 +181,7 @@ export function registerManagerCommands(program: Command, getUrl: () => string):
             param: { id: managerThreadId },
           }),
         );
+        if (outputJson(opts, { ok: true, managerId: managerThreadId })) return;
         console.log(`Manager ${managerThreadId} deleted`);
       } catch (err: unknown) {
         console.error(`Error: ${getErrorMessage(err)}`);

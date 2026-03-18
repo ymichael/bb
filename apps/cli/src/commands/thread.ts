@@ -236,6 +236,7 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
       "--poll-interval <ms>",
       `Polling interval in milliseconds (default: ${DEFAULT_THREAD_WAIT_POLL_INTERVAL_MS})`,
     )
+    .option("--json", "Print machine-readable JSON output")
     .action(
       async (
         id: string | undefined,
@@ -244,6 +245,7 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
           event?: string;
           timeout?: string;
           pollInterval?: string;
+          json?: boolean;
         },
       ) => {
         const client = createClient(getUrl());
@@ -261,6 +263,7 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
                 client.api.v1.threads[":id"].$get({ param: { id: threadId } }),
               );
               if (thread.status === target.status) {
+                if (outputJson(opts, { threadId, matched: true, target })) return;
                 console.log(
                   `Thread ${threadId} reached status ${target.status}.`,
                 );
@@ -281,6 +284,7 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
                   normalizeThreadEventType(event.type) === target.eventType,
               );
               if (matched) {
+                if (outputJson(opts, { threadId, matched: true, target })) return;
                 console.log(
                   `Thread ${threadId} observed event ${target.eventType} at seq ${matched.seq}.`,
                 );
@@ -619,7 +623,8 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
       "--force",
       "Archive even when the thread workspace has uncommitted or unmerged work",
     )
-    .action(async (id: string | undefined, opts: { force?: boolean }) => {
+    .option("--json", "Print machine-readable JSON output")
+    .action(async (id: string | undefined, opts: { force?: boolean; json?: boolean }) => {
       try {
         const threadId = requireThreadId(id);
         const client = createClient(getUrl());
@@ -629,6 +634,7 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
             json: opts.force ? { force: true } : {},
           }),
         );
+        if (outputJson(opts, { ok: true, threadId })) return;
         console.log(`Thread ${threadId} archived`);
       } catch (err: unknown) {
         console.error(`Error: ${getErrorMessage(err)}`);
@@ -639,7 +645,8 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
   thread
     .command("unarchive [id]")
     .description("Unarchive a thread (defaults to BB_THREAD_ID)")
-    .action(async (id: string | undefined) => {
+    .option("--json", "Print machine-readable JSON output")
+    .action(async (id: string | undefined, opts: { json?: boolean }) => {
       const client = createClient(getUrl());
       try {
         const threadId = requireThreadId(id);
@@ -648,6 +655,7 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
             param: { id: threadId },
           }),
         );
+        if (outputJson(opts, { ok: true, threadId })) return;
         console.log(`Thread ${threadId} unarchived`);
       } catch (err: unknown) {
         console.error(`Error: ${getErrorMessage(err)}`);
@@ -659,7 +667,8 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
     .command("delete [id]")
     .description("Delete a thread permanently (defaults to BB_THREAD_ID)")
     .option("--yes", "Skip the confirmation prompt")
-    .action(async (id: string | undefined, opts: { yes?: boolean }) => {
+    .option("--json", "Print machine-readable JSON output")
+    .action(async (id: string | undefined, opts: { yes?: boolean; json?: boolean }) => {
       const client = createClient(getUrl());
       try {
         const threadId = requireThreadId(id);
@@ -682,6 +691,7 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
             param: { id: threadId },
           }),
         );
+        if (outputJson(opts, { ok: true, threadId })) return;
         console.log(`Thread ${threadId} deleted`);
       } catch (err: unknown) {
         console.error(`Error: ${getErrorMessage(err)}`);
@@ -741,11 +751,13 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
     .description("Request an agent-driven commit operation for a thread")
     .option("--message <message>", "Commit message hint")
     .option("--staged-only", "Commit only currently staged changes")
+    .option("--json", "Print machine-readable JSON output")
     .action(async (
       id: string,
       opts: {
         message?: string;
         stagedOnly?: boolean;
+        json?: boolean;
       },
     ) => {
       const client = createClient(getUrl());
@@ -762,6 +774,7 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
             },
           }),
         );
+        if (outputJson(opts, result)) return;
         printThreadOperationResult(result);
       } catch (err: unknown) {
         console.error(`Error: ${getErrorMessage(err)}`);
@@ -777,6 +790,7 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
     .option("--commit-message <message>", "Prep commit message hint")
     .option("--squash-message <message>", "Squash commit message hint")
     .option("--merge-base-branch <branch>", "Merge-base branch hint")
+    .option("--json", "Print machine-readable JSON output")
     .action(async (
       id: string,
       opts: {
@@ -785,6 +799,7 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
         commitMessage?: string;
         squashMessage?: string;
         mergeBaseBranch?: string;
+        json?: boolean;
       },
     ) => {
       const client = createClient(getUrl());
@@ -804,6 +819,7 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
             },
           }),
         );
+        if (outputJson(opts, result)) return;
         printThreadOperationResult(result);
       } catch (err: unknown) {
         console.error(`Error: ${getErrorMessage(err)}`);
@@ -814,12 +830,14 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
   thread
     .command("stop <id>")
     .description("Stop an active thread")
-    .action(async (id: string) => {
+    .option("--json", "Print machine-readable JSON output")
+    .action(async (id: string, opts: { json?: boolean }) => {
       const client = createClient(getUrl());
       try {
         await unwrap<{ ok: boolean }>(
           client.api.v1.threads[":id"].stop.$post({ param: { id } }),
         );
+        if (outputJson(opts, { ok: true, threadId: id })) return;
         console.log(`Thread ${id} stopped`);
       } catch (err: unknown) {
         console.error(`Error: ${getErrorMessage(err)}`);
@@ -830,7 +848,8 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
   thread
     .command("promote <id>")
     .description("Promote a worktree thread into the primary checkout")
-    .action(async (id: string) => {
+    .option("--json", "Print machine-readable JSON output")
+    .action(async (id: string, opts: { json?: boolean }) => {
       const client = createClient(getUrl());
       try {
         const result = await unwrap<{ ok: true; promoted: boolean; message: string }>(
@@ -838,6 +857,7 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
             param: { id },
           }),
         );
+        if (outputJson(opts, result)) return;
         console.log(result.message);
       } catch (err: unknown) {
         console.error(`Error: ${getErrorMessage(err)}`);
@@ -849,7 +869,8 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
     .command("demote [id]")
     .description("Demote the currently promoted thread from the primary checkout")
     .option("--project <id>", "Project ID (defaults to BB_PROJECT_ID when id is omitted)")
-    .action(async (id: string | undefined, opts: { project?: string }) => {
+    .option("--json", "Print machine-readable JSON output")
+    .action(async (id: string | undefined, opts: { project?: string; json?: boolean }) => {
       const client = createClient(getUrl());
       try {
         const threadId = (() => {
@@ -877,6 +898,7 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
             param: { id: resolvedThreadId },
           }),
         );
+        if (outputJson(opts, result)) return;
         console.log(result.message);
       } catch (err: unknown) {
         console.error(`Error: ${getErrorMessage(err)}`);
@@ -888,7 +910,8 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
     .command("promote-status")
     .description("Show which thread is active in the primary checkout")
     .option("--project <id>", "Project ID (defaults to BB_PROJECT_ID)")
-    .action(async (opts: { project?: string }) => {
+    .option("--json", "Print machine-readable JSON output")
+    .action(async (opts: { project?: string; json?: boolean }) => {
       const client = createClient(getUrl());
       try {
         const projectId = requireProjectId(opts.project);
@@ -898,6 +921,7 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
           }),
         );
         const active = threads.find((thread) => thread.primaryCheckout?.isActive);
+        if (outputJson(opts, { threadId: active?.id ?? null })) return;
         if (!active) {
           console.log("Primary checkout: demoted");
           return;
