@@ -34,8 +34,6 @@ import type {
   ThreadExecutionOptions,
   ThreadGitDiffResponse,
   ThreadGitDiffSelection,
-  ThreadOperationRequest,
-  ThreadOperationResponse,
   ThreadQueuedMessage,
   ThreadTimelineResponse,
   ThreadToolGroupMessagesResponse,
@@ -501,15 +499,6 @@ export async function getThreadPrimaryStatus(
 ): Promise<PrimaryCheckoutStatus> {
   return request<PrimaryCheckoutStatus>(
     apiClient.threads[":id"]["primary-status"].$get({ param: { id } }),
-  );
-}
-
-export async function requestThreadOperation(
-  id: string,
-  req: ThreadOperationRequest,
-): Promise<ThreadOperationResponse> {
-  return request<ThreadOperationResponse>(
-    apiClient.threads[":id"].operations.$post({ param: { id }, json: req }),
   );
 }
 

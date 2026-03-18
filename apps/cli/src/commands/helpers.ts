@@ -1,4 +1,5 @@
 import { createInterface } from "node:readline/promises";
+import type { ThreadOperationResponse } from "@bb/core";
 
 /**
  * Print data as formatted JSON and return true, or return false if --json was not requested.
@@ -96,6 +97,14 @@ export function printContextLabel(
   if (resolved.source === "env") {
     console.error(`${kind} ${resolved.id} (from ${envVar})`);
   }
+}
+
+export function printThreadOperationResult(result: ThreadOperationResponse): void {
+  const flags = [
+    result.executionStatus,
+    ...(result.demotedPrimaryCheckout ? ["demoted-primary-checkout"] : []),
+  ];
+  console.log(`${result.message} [${flags.join(", ")}]`);
 }
 
 export async function confirmDestructiveAction(message: string): Promise<boolean> {

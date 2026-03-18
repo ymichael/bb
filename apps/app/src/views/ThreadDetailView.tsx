@@ -12,7 +12,6 @@ import {
   useSendQueuedThreadMessage,
   useDeleteQueuedThreadMessage,
   useArchiveThread,
-  useRequestThreadOperation,
   useRequestEnvironmentOperation,
   useStopThread,
   useMarkThreadRead,
@@ -297,8 +296,6 @@ export function ThreadDetailView() {
   const sendQueuedThreadMessage = useSendQueuedThreadMessage();
   const deleteQueuedThreadMessage = useDeleteQueuedThreadMessage();
   const archiveThread = useArchiveThread();
-  const requestThreadCommitOperation = useRequestThreadOperation();
-  const requestThreadSquashOperation = useRequestThreadOperation();
   const requestEnvironmentOperation = useRequestEnvironmentOperation();
   const stopThread = useStopThread();
   const unarchiveThread = useUnarchiveThread();
@@ -946,8 +943,7 @@ export function ThreadDetailView() {
 
     return null;
   })();
-  const isThreadGitActionPending =
-    requestThreadCommitOperation.isPending || requestThreadSquashOperation.isPending;
+  const isThreadGitActionPending = requestEnvironmentOperation.isPending;
   const environmentIconInfo = getEnvironmentIconInfo(environmentInfo);
   const projectRootPath = project?.rootPath;
   const threadEnvironmentDisplay = getThreadEnvironmentDisplay({
@@ -1094,13 +1090,14 @@ export function ThreadDetailView() {
   }: {
     includeUnstaged: boolean;
   }) => {
-    if (!threadId) {
+    if (!threadId || !thread?.environmentId) {
       return;
     }
     const autoArchiveOnSuccess = getAutoArchivePreferences().autoArchiveThreadOnCommit;
-    await requestThreadCommitOperation.mutateAsync({
-      id: threadId,
+    await requestEnvironmentOperation.mutateAsync({
+      id: thread.environmentId,
       operation: "commit",
+      initiatingThreadId: threadId,
       options: {
         includeUnstaged,
         autoArchiveOnSuccess,
@@ -1116,13 +1113,14 @@ export function ThreadDetailView() {
     includeUnstaged: boolean;
     mergeBaseBranch?: string;
   }) => {
-    if (!threadId) {
+    if (!threadId || !thread?.environmentId) {
       return;
     }
     const autoArchiveOnSuccess = getAutoArchivePreferences().autoArchiveThreadOnCommit;
-    await requestThreadSquashOperation.mutateAsync({
-      id: threadId,
+    await requestEnvironmentOperation.mutateAsync({
+      id: thread.environmentId,
       operation: "squash_merge",
+      initiatingThreadId: threadId,
       options: {
         commitIfNeeded,
         includeUnstaged,
@@ -1822,11 +1820,7 @@ export function ThreadDetailView() {
       {canUseGitUi ? (
         <ThreadGitActionDialog
           target={threadGitActionTarget}
-          pending={
-            threadGitActionTarget?.kind === "commit"
-              ? requestThreadCommitOperation.isPending
-              : requestThreadSquashOperation.isPending
-          }
+          pending={requestEnvironmentOperation.isPending}
           branchName={threadBranchName}
           gitStatusLabel={threadGitStatusDisplay.label}
           gitStatusSummary={threadGitStatusDisplay.summary}

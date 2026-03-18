@@ -32,8 +32,6 @@ import type {
   ThreadExecutionOptions,
   ThreadWorkStatus,
   UploadedPromptAttachment,
-  ThreadOperationRequest,
-  ThreadOperationResponse,
   EnvironmentOperationResponse,
   ThreadTimelineResponse,
   ThreadToolGroupMessagesResponse,
@@ -1121,26 +1119,6 @@ export function useMarkThreadUnread() {
     onSuccess: (thread) => {
       queryClient.setQueryData<Thread>(["thread", thread.id], thread);
       queryClient.invalidateQueries({ queryKey: ["threads"] });
-    },
-  });
-}
-
-export function useRequestThreadOperation() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: ({
-      id,
-      ...req
-    }: {
-      id: string;
-    } & ThreadOperationRequest): Promise<ThreadOperationResponse> =>
-      api.requestThreadOperation(id, req),
-    onSuccess: (_data, variables) => {
-      queryClient.invalidateQueries({ queryKey: ["thread", variables.id] });
-      queryClient.invalidateQueries({ queryKey: ["threadTimeline", variables.id] });
-      queryClient.invalidateQueries({ queryKey: ["threadWorkStatus", variables.id] });
-      queryClient.invalidateQueries({ queryKey: ["threads"] });
-      queryClient.invalidateQueries({ queryKey: ["status"] });
     },
   });
 }

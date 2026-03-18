@@ -1,12 +1,14 @@
 import { Command } from "commander";
-import type { Thread } from "@bb/core";
+import type { Thread, ThreadOperationResponse } from "@bb/core";
 import { createClient, unwrap } from "../client.js";
-import { requireProjectId } from "../context-env.js";
+import { requireProjectId, resolveThreadId } from "../context-env.js";
 import {
   getErrorMessage,
   outputJson,
+  printThreadOperationResult,
   printContextLabel,
   resolveProjectIdWithLabel,
+  resolveThreadIdOrSelf,
 } from "./helpers.js";
 
 export function registerEnvironmentCommands(
@@ -16,6 +18,99 @@ export function registerEnvironmentCommands(
   const environment = program
     .command("environment")
     .description("Inspect and operate on first-class environments");
+
+  environment
+    .command("commit <id>")
+    .description("Request an agent-driven commit operation for an environment")
+    .option("--thread <thread-id>", "Initiating thread ID")
+    .option("--self", "Use BB_THREAD_ID as the initiating thread")
+    .option("--message <message>", "Commit message hint")
+    .option("--staged-only", "Commit only currently staged changes")
+    .option("--json", "Print machine-readable JSON output")
+    .action(async (
+      id: string,
+      opts: {
+        thread?: string;
+        self?: boolean;
+        message?: string;
+        stagedOnly?: boolean;
+        json?: boolean;
+      },
+    ) => {
+      const client = createClient(getUrl());
+      try {
+        const initiatingThreadId = resolveThreadIdOrSelf(opts.thread, opts);
+        const result = await unwrap<ThreadOperationResponse>(
+          client.api.v1.environments[":id"].operations.$post({
+            param: { id },
+            json: {
+              operation: "commit",
+              initiatingThreadId,
+              options: {
+                includeUnstaged: opts.stagedOnly ? false : true,
+                ...(opts.message ? { message: opts.message } : {}),
+              },
+            },
+          }),
+        );
+        if (outputJson(opts, result)) return;
+        printThreadOperationResult(result);
+      } catch (err: unknown) {
+        console.error(`Error: ${getErrorMessage(err)}`);
+        process.exit(1);
+      }
+    });
+
+  environment
+    .command("squash-merge <id>")
+    .description("Request an agent-driven squash-merge operation for an environment")
+    .option("--thread <thread-id>", "Initiating thread ID")
+    .option("--self", "Use BB_THREAD_ID as the initiating thread")
+    .option("--commit-if-needed", "Allow a prep commit before squash merge")
+    .option("--staged-only", "Use only staged changes for the prep commit")
+    .option("--commit-message <message>", "Prep commit message hint")
+    .option("--squash-message <message>", "Squash commit message hint")
+    .option("--merge-base-branch <branch>", "Merge-base branch hint")
+    .option("--json", "Print machine-readable JSON output")
+    .action(async (
+      id: string,
+      opts: {
+        thread?: string;
+        self?: boolean;
+        commitIfNeeded?: boolean;
+        stagedOnly?: boolean;
+        commitMessage?: string;
+        squashMessage?: string;
+        mergeBaseBranch?: string;
+        json?: boolean;
+      },
+    ) => {
+      const client = createClient(getUrl());
+      try {
+        const initiatingThreadId = resolveThreadIdOrSelf(opts.thread, opts);
+        const result = await unwrap<ThreadOperationResponse>(
+          client.api.v1.environments[":id"].operations.$post({
+            param: { id },
+            json: {
+              operation: "squash_merge",
+              initiatingThreadId,
+              options: {
+                commitIfNeeded: opts.commitIfNeeded === true,
+                includeUnstaged: opts.stagedOnly ? false : true,
+                ...(opts.commitMessage ? { commitMessage: opts.commitMessage } : {}),
+                ...(opts.squashMessage ? { squashMessage: opts.squashMessage } : {}),
+                ...(opts.mergeBaseBranch ? { mergeBaseBranch: opts.mergeBaseBranch } : {}),
+              },
+            },
+          }),
+        );
+        if (outputJson(opts, result)) return;
+        printThreadOperationResult(result);
+      } catch (err: unknown) {
+        console.error(`Error: ${getErrorMessage(err)}`);
+        process.exit(1);
+      }
+    });
 
   environment
     .command("promote <id>")
@@ -48,6 +143,17 @@ export function registerEnvironmentCommands(
       try {
         const environmentId = (() => {
           if (id) return Promise.resolve(id);
+          const threadIdFromContext = resolveThreadId();
+          if (threadIdFromContext) {
+            return unwrap<Thread>(
+              client.api.v1.threads[":id"].$get({ param: { id: threadIdFromContext } }),
+            ).then((thread) => {
+              if (!thread.environmentId) {
+                throw new Error(`Thread ${thread.id} has no attached environment.`);
+              }
+              return thread.environmentId;
+            });
+          }
           const projectId = requireProjectId(opts.project);
           return unwrap<Thread[]>(
             client.api.v1.threads.$get({

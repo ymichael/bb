@@ -4,7 +4,6 @@ import {
   type Thread,
   type ThreadEvent,
   type ThreadGitDiffResponse,
-  type ThreadOperationResponse,
   type ThreadStatus,
   type ThreadWorkStatus,
   type TimelineFormat,
@@ -20,6 +19,7 @@ import {
   confirmDestructiveAction,
   getErrorMessage,
   outputJson,
+  printThreadOperationResult,
   resolveThreadIdOrSelf,
   resolveThreadIdWithLabel,
   resolveProjectIdWithLabel,
@@ -200,14 +200,6 @@ function parseThreadWaitTarget(opts: {
 
 async function sleep(ms: number): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function printThreadOperationResult(result: ThreadOperationResponse): void {
-  const flags = [
-    result.executionStatus,
-    ...(result.demotedPrimaryCheckout ? ["demoted-primary-checkout"] : []),
-  ];
-  console.log(`${result.message} [${flags.join(", ")}]`);
 }
 
 export function registerThreadCommands(program: Command, getUrl: () => string): void {
@@ -905,93 +897,6 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
     )
     .option("--mode <mode>", "Message mode (e.g. steer)")
     .action(tellAction);
-
-  thread
-    .command("commit [id]")
-    .description("Request an agent-driven commit operation for a thread")
-    .option("--self", "Target the current thread (from BB_THREAD_ID)")
-    .option("--message <message>", "Commit message hint")
-    .option("--staged-only", "Commit only currently staged changes")
-    .option("--json", "Print machine-readable JSON output")
-    .action(async (
-      id: string | undefined,
-      opts: {
-        self?: boolean;
-        message?: string;
-        stagedOnly?: boolean;
-        json?: boolean;
-      },
-    ) => {
-      const client = createClient(getUrl());
-      try {
-        const threadId = resolveThreadIdOrSelf(id, opts);
-        const result = await unwrap<ThreadOperationResponse>(
-          client.api.v1.threads[":id"].operations.$post({
-            param: { id: threadId },
-            json: {
-              operation: "commit",
-              options: {
-                includeUnstaged: opts.stagedOnly ? false : true,
-                ...(opts.message ? { message: opts.message } : {}),
-              },
-            },
-          }),
-        );
-        if (outputJson(opts, result)) return;
-        printThreadOperationResult(result);
-      } catch (err: unknown) {
-        console.error(`Error: ${getErrorMessage(err)}`);
-        process.exit(1);
-      }
-    });
-
-  thread
-    .command("squash-merge [id]")
-    .description("Request an agent-driven squash-merge operation for a thread")
-    .option("--self", "Target the current thread (from BB_THREAD_ID)")
-    .option("--commit-if-needed", "Allow a prep commit before squash merge")
-    .option("--staged-only", "Use only staged changes for the prep commit")
-    .option("--commit-message <message>", "Prep commit message hint")
-    .option("--squash-message <message>", "Squash commit message hint")
-    .option("--merge-base-branch <branch>", "Merge-base branch hint")
-    .option("--json", "Print machine-readable JSON output")
-    .action(async (
-      id: string | undefined,
-      opts: {
-        self?: boolean;
-        commitIfNeeded?: boolean;
-        stagedOnly?: boolean;
-        commitMessage?: string;
-        squashMessage?: string;
-        mergeBaseBranch?: string;
-        json?: boolean;
-      },
-    ) => {
-      const client = createClient(getUrl());
-      try {
-        const threadId = resolveThreadIdOrSelf(id, opts);
-        const result = await unwrap<ThreadOperationResponse>(
-          client.api.v1.threads[":id"].operations.$post({
-            param: { id: threadId },
-            json: {
-              operation: "squash_merge",
-              options: {
-                commitIfNeeded: opts.commitIfNeeded === true,
-                includeUnstaged: opts.stagedOnly ? false : true,
-                ...(opts.commitMessage ? { commitMessage: opts.commitMessage } : {}),
-                ...(opts.squashMessage ? { squashMessage: opts.squashMessage } : {}),
-                ...(opts.mergeBaseBranch ? { mergeBaseBranch: opts.mergeBaseBranch } : {}),
-              },
-            },
-          }),
-        );
-        if (outputJson(opts, result)) return;
-        printThreadOperationResult(result);
-      } catch (err: unknown) {
-        console.error(`Error: ${getErrorMessage(err)}`);
-        process.exit(1);
-      }
-    });
 
   thread
     .command("stop [id]")

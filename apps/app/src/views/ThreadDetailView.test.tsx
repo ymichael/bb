@@ -187,7 +187,6 @@ vi.mock("../hooks/useApi", () => ({
   useSendQueuedThreadMessage: () => apiState.pendingMutation,
   useDeleteQueuedThreadMessage: () => apiState.pendingMutation,
   useArchiveThread: () => apiState.pendingMutation,
-  useRequestThreadOperation: () => apiState.pendingMutation,
   useRequestEnvironmentOperation: () => apiState.pendingMutation,
   useStopThread: () => apiState.pendingMutation,
   useMarkThreadRead: () => apiState.pendingMutation,

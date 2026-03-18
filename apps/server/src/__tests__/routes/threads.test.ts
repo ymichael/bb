@@ -98,7 +98,6 @@ function mockOrchestrator(): LegacyThreadRouteMock {
     updateThread: vi.fn(),
     promoteThreadEnvironmentToPrimaryCheckout: vi.fn(),
     demoteThreadEnvironmentFromPrimaryCheckout: vi.fn(),
-    requestThreadOperation: vi.fn(),
     requestEnvironmentOperation: vi.fn(),
     markRead: vi.fn(),
     getRawById: vi.fn(),
@@ -1196,64 +1195,6 @@ describe("Thread routes", () => {
 
       expect(res.status).toBe(404);
       expect(threadManager.stop).not.toHaveBeenCalled();
-    });
-  });
-
-  describe("POST /threads/:id/operations", () => {
-    it("requests a commit operation intent", async () => {
-      const thread = makeThread({ status: "idle" });
-      (threadManager.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
-      (threadManager.requestThreadOperation as ReturnType<typeof vi.fn>).mockResolvedValue({
-        ok: true,
-        operationId: "op-1",
-        operation: "commit",
-        status: "accepted",
-        executionStatus: "running",
-        queued: false,
-        message: "Commit operation accepted and running",
-        demotedPrimaryCheckout: false,
-      });
-
-      const res = await app.request("/threads/thread-1/operations", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          operation: "commit",
-          options: {
-            includeUnstaged: true,
-            message: "feat: test",
-          },
-        }),
-      });
-
-      expect(res.status).toBe(202);
-      expect(threadManager.requestThreadOperation).toHaveBeenCalledWith("thread-1", {
-        operation: "commit",
-        options: {
-          includeUnstaged: true,
-          message: "feat: test",
-        },
-      });
-      expect(await res.json()).toMatchObject({
-        ok: true,
-        operation: "commit",
-      });
-    });
-
-    it("returns 400 for invalid operation payloads", async () => {
-      const thread = makeThread({ status: "idle" });
-      (threadManager.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
-
-      const res = await app.request("/threads/thread-1/operations", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          operation: "unknown",
-        }),
-      });
-
-      expect(res.status).toBe(400);
-      expect(threadManager.requestThreadOperation).not.toHaveBeenCalled();
     });
   });
 

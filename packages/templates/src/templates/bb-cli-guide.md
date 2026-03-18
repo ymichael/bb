@@ -72,10 +72,10 @@ bb thread delete <thread-id>          # Delete permanently
 Operations:
 
 ```
-bb thread commit <thread-id>                          # Request an agent-driven commit
-bb thread commit --self --message "feat: add X"       # Commit the current thread with a message
-bb thread squash-merge <thread-id>                    # Request an agent-driven squash merge
-bb thread squash-merge --self                         # Squash-merge the current thread
+bb environment commit <environment-id> --thread <thread-id>            # Request an agent-driven commit
+bb environment commit <environment-id> --self --message "feat: add X"  # Commit using the current thread as initiator
+bb environment squash-merge <environment-id> --thread <thread-id>      # Request an agent-driven squash merge
+bb environment squash-merge <environment-id> --self                    # Squash-merge using the current thread as initiator
 bb environment promote <environment-id>               # Promote an environment to primary checkout
 bb environment demote [environment-id]                # Demote the active primary-checkout environment
 bb environment promote-status --project <project-id>  # Show the active primary-checkout environment

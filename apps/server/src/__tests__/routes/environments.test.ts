@@ -91,4 +91,43 @@ describe("Environment routes", () => {
       operation: "promote_primary",
     });
   });
+
+  it("dispatches commit operations with initiating thread context", async () => {
+    (environmentRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+      makeEnvironment({ id: "env-2", managed: true }),
+    );
+    (threadManager.requestEnvironmentOperation as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      operationId: "op-1",
+      operation: "commit",
+      status: "accepted",
+      executionStatus: "running",
+      queued: false,
+      message: "Commit operation accepted and running",
+      demotedPrimaryCheckout: false,
+    });
+
+    const res = await app.request("/environments/env-2/operations", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        operation: "commit",
+        initiatingThreadId: "thread-1",
+        options: {
+          includeUnstaged: true,
+          message: "feat: test",
+        },
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(threadManager.requestEnvironmentOperation).toHaveBeenCalledWith("env-2", {
+      operation: "commit",
+      initiatingThreadId: "thread-1",
+      options: {
+        includeUnstaged: true,
+        message: "feat: test",
+      },
+    });
+  });
 });
