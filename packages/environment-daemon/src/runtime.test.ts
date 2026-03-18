@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type { ProviderThreadContext, SpawnThreadRequest } from "@bb/core";
+import { createCodexProviderAdapter } from "@bb/provider-adapters";
 import { EnvironmentAgentRuntime } from "./runtime.js";
 import { ENVIRONMENT_AGENT_PROTOCOL_VERSION, type EnvironmentAgentProviderSpec } from "./protocol.js";
 
@@ -215,9 +216,25 @@ describe("EnvironmentAgentRuntime", () => {
   });
 
   it("lists provider models through a BB-native env-daemon command", async () => {
+    const providerAdapter = createCodexProviderAdapter({
+      listModels: async () => [
+        {
+          id: "gpt-5.1-codex-mini",
+          model: "gpt-5.1-codex-mini",
+          displayName: "GPT-5.1 Codex Mini",
+          description: "Stubbed model list for runtime tests",
+          supportedReasoningEfforts: [
+            { reasoningEffort: "medium", description: "Medium reasoning effort" },
+          ],
+          defaultReasoningEffort: "medium",
+          isDefault: true,
+        },
+      ],
+    });
     const runtime = new EnvironmentAgentRuntime({
       threadId: "thread-1",
       providerId: "codex",
+      createProviderAdapter: () => providerAdapter,
     });
 
     const ack = await runtime.executeCommand({

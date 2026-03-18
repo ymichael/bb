@@ -68,6 +68,8 @@ export interface EnvironmentAgentRuntimeOptions {
   }) => Promise<unknown> | unknown;
   onStdoutLine?: (line: string) => void;
   onStderrLine?: (line: string) => void;
+  createProviderAdapter?: (providerId: import("@bb/core").ThreadProviderId) => ProviderAdapter;
+  listAvailableProviderInfos?: typeof listAvailableProviderInfos;
 }
 
 export type EnvironmentAgentRuntimeTurnState = "unknown" | "active" | "idle";
@@ -345,8 +347,8 @@ export class EnvironmentAgentRuntime {
   private async executeRpcCommand(
     command: EnvironmentAgentRpcCommand,
   ): Promise<unknown> {
-    await this.ensureProviderForCommand(command);
-    return this.requestProviderCommand(command);
+    const child = await this.ensureProviderForCommand(command);
+    return this.requestProviderCommand(command, child);
   }
 
   private emitProviderStdoutLine(line: string): void {
@@ -902,7 +904,7 @@ export class EnvironmentAgentRuntime {
 
   private async ensureProviderForCommand(
     command: EnvironmentAgentRpcCommand,
-  ): Promise<void> {
+  ): Promise<ChildProcess | undefined> {
     switch (command.type) {
       case "thread.start":
       case "thread.resume":
@@ -917,35 +919,29 @@ export class EnvironmentAgentRuntime {
         if (!child) {
           throw new Error("Provider runtime is unavailable");
         }
-        // Make sure requestProvider targets this child. This set-then-await
-        // pattern looks racy but is safe because the session supervisor
-        // executes commands sequentially (one await per command in a for loop).
-        this.providerChild = child;
         const initialize = command.initialize ?? this.buildInitializeRequest();
         if (!initialize) {
-          return;
+          return child;
         }
         if (child.pid !== undefined && this.providerInitializedPids.has(child.pid)) {
-          return;
+          return child;
         }
         await this.requestProvider({
           method: initialize.method,
           params: initialize.params,
+          child,
         });
         if (child.pid !== undefined) {
           this.providerInitializedPids.add(child.pid);
         }
-        return;
+        return child;
       }
       case "workspace.status":
       case "workspace.diff": {
         // Workspace commands also need routing to the correct child so
         // they reach the provider that owns the thread's workspace.
         const mapped = this.resolveChildForThread(command.threadId);
-        if (mapped) {
-          this.providerChild = mapped;
-        }
-        return;
+        return mapped ?? this.providerChild ?? this.ensureProviderRunning() ?? undefined;
       }
       default:
         return command satisfies never;
@@ -969,13 +965,18 @@ export class EnvironmentAgentRuntime {
 
   private requestProviderCommand(
     command: EnvironmentAgentRpcCommand,
+    child?: ChildProcess,
   ): Promise<unknown> {
     if (command.type === "turn.run") {
-      return this.requestProvider(this.resolveTurnRunRequest(command));
+      return this.requestProvider({
+        ...this.resolveTurnRunRequest(command),
+        child,
+      });
     }
     return this.requestProvider({
       method: this.toProviderMethod(command),
       params: this.toProviderParams(command),
+      child,
     });
   }
 
@@ -992,7 +993,7 @@ export class EnvironmentAgentRuntime {
   }
 
   private listProviderCatalog(): import("@bb/core").SystemProviderInfo[] {
-    return listAvailableProviderInfos().map((provider) => ({
+    return (this.opts.listAvailableProviderInfos ?? listAvailableProviderInfos)().map((provider) => ({
       ...provider,
       capabilities: { ...provider.capabilities },
     }));
@@ -1137,8 +1138,9 @@ export class EnvironmentAgentRuntime {
     method: string;
     params: unknown;
     timeoutMs?: number;
+    child?: ChildProcess;
   }): Promise<unknown> {
-    const child = this.providerChild;
+    const child = args.child ?? this.providerChild;
     const stdin = child?.stdin;
     if (!stdin || child.killed || child.exitCode !== null) {
       return Promise.reject(new Error("Provider runtime is unavailable"));
@@ -1381,6 +1383,9 @@ export class EnvironmentAgentRuntime {
   private getProviderAdapterForId(providerId: string | undefined): ProviderAdapter | undefined {
     if (!providerId || !isThreadProviderId(providerId)) {
       return undefined;
+    }
+    if (this.opts.createProviderAdapter) {
+      return this.opts.createProviderAdapter(providerId);
     }
     return createProviderAdapter({ providerId });
   }
