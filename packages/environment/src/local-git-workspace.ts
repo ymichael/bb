@@ -379,7 +379,7 @@ class LocalGitWorkspaceEnvironment implements IEnvironment {
   }
 
   buildAgentInstructions(): string | undefined {
-    return WORKTREE_AGENT_INSTRUCTIONS;
+    return this.manageEnvironmentAgent ? WORKTREE_AGENT_INSTRUCTIONS : undefined;
   }
 
   getWorkspaceStatus(args?: EnvironmentWorkspaceStatusOptions) {
