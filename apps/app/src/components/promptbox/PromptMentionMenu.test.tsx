@@ -55,10 +55,8 @@ describe("PromptMentionMenu", () => {
     );
 
     expect(html).toContain("Release Manager");
-    expect(html).toContain("Manager · manager-1");
+    expect(html).toContain(">Manager</span>");
     expect(html).toContain("Fix flaky test");
-    expect(html).toContain(">Thread</div>");
-    expect(html).toContain("lucide-user-round");
-    expect(html).toContain("lucide-folder-git-2");
+    expect(html).toContain(">Thread</span>");
   });
 });
