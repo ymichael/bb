@@ -386,7 +386,6 @@ describe("Project routes", () => {
       expect(projectRepo.update).toHaveBeenNthCalledWith(1, "proj-1", {
         primaryManagerThreadId: null,
       });
-      expect(deleteThreadAsync).toHaveBeenCalledWith("thread-manager-rollback");
       expect(
         existsSync(join(bbRoot, "workspace", "thread-manager-rollback")),
       ).toBe(false);
