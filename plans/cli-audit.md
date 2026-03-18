@@ -105,21 +105,14 @@ Merged into `bb thread show` with all of `status`'s event flags. Hidden `thread 
 
 All three removed. The canonical `bb thread` commands (`thread list --parent-thread`, `thread tell`, `thread log`) are the only path. Templates and QA docs updated.
 
-## 3. Thread ID argument safety policy
+## 3. Thread ID argument safety policy — DONE
 
-Current state is inconsistent. Some commands require explicit `<id>`, others default to `BB_THREAD_ID` via `[id]`.
+Implemented with three tiers:
+- **Read-only commands** (`show`, `log`, `output`, `wait`, `sessions`): fallback to `BB_THREAD_ID` with context label printed to stderr.
+- **Mutating commands** (`commit`, `squash-merge`, `stop`, `archive`, `unarchive`, `update`): require explicit `<id>` or `--self` flag. No silent fallback.
+- **Destructive commands** (`delete`): require explicit `<id>` always. No `--self`, no fallback.
 
-**Policy:**
-- **Read-only inspection** (`show`, `status`, `output`, `log`, `sessions`, `wait`, `promote-status`): env fallback allowed (`[id]`).
-- **Non-destructive messaging** (`tell`, `steer`): env fallback allowed. These are the most common agent operations and agents run with `BB_THREAD_ID` set.
-- **Repo-mutating operations** (`commit`, `squash-merge`, `promote`): env fallback allowed — these always operate on the calling thread's own worktree, so ambient context is correct.
-- **Destructive/irreversible operations** (`delete`): require explicit `<id>`. Too dangerous to default from env.
-- **Lifecycle operations** (`archive`, `unarchive`, `stop`): require explicit `<id>`. These change thread state in ways that could be surprising if the wrong thread is targeted.
-- **Update operations** (`update`): env fallback allowed — the flags make the intent explicit.
-
-**Current violations:**
-- `archive [id]`, `unarchive [id]`, `delete [id]` currently default to env. `delete` should require explicit ID. `archive`/`unarchive` should also require explicit ID per the policy above.
-- `tell <id>`, `steer <id>`, `commit <id>`, `stop <id>`, `promote <id>` currently require explicit ID. `tell`/`steer`/`commit`/`squash-merge`/`promote` could allow env fallback.
+Project ID follows the same pattern: read-only operations print context labels on env fallback.
 
 ## 4. Missing CLI commands for agent workflows
 
@@ -168,4 +161,4 @@ Note: `bb thread log` has special `--json` semantics (alias for `--format json`)
 
 # Open Questions/Risks
 
-- `archive` and `unarchive` currently default to `BB_THREAD_ID`. The thread ID safety policy says destructive/lifecycle ops should require explicit ID, but changing this would break existing agent workflows. Low priority to fix.
+None remaining. All items are either DONE or explicitly Won't do.
