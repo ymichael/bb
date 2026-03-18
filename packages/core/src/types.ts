@@ -193,8 +193,7 @@ export type AppThreadEventType =
   | "system/manager/user_message"
   | "system/thread/interrupted"
   | "system/thread-title/updated"
-  | "system/thread_operation"
-  | "system/primary_checkout/updated"
+  | "system/operation"
   | "system/worktree/commit"
   | "system/worktree/squash_merge"
   | "system/provisioning/started"
@@ -256,21 +255,12 @@ export interface SystemThreadTitleUpdatedEventData {
   providerMethod?: string;
 }
 
-export interface SystemPrimaryCheckoutUpdatedEventData {
-  action: "promote" | "demote";
-  status: "started" | "completed" | "failed" | "noop";
-  message: string;
-  projectId: string;
-  activeThreadId?: string;
-  branch?: string;
-}
-
-export interface SystemThreadOperationEventData {
-  operation: "commit" | "squash_merge";
-  status: "requested" | "queued" | "running" | "completed" | "failed";
+export interface SystemOperationEventData {
+  operation: string;
+  status: string;
   message: string;
   operationId?: string;
-  demotedPrimaryCheckout?: boolean;
+  metadata?: Record<string, unknown>;
 }
 
 export interface SystemThreadInterruptedEventData {
@@ -391,8 +381,7 @@ export type ThreadEventDataByType = CodexServerNotificationParamsByMethod & {
   "system/manager/user_message": SystemManagerUserMessageEventData;
   "system/thread/interrupted": SystemThreadInterruptedEventData;
   "system/thread-title/updated": SystemThreadTitleUpdatedEventData;
-  "system/thread_operation": SystemThreadOperationEventData;
-  "system/primary_checkout/updated": SystemPrimaryCheckoutUpdatedEventData;
+  "system/operation": SystemOperationEventData;
   "system/worktree/commit": SystemWorktreeCommitEventData;
   "system/worktree/squash_merge": SystemWorktreeSquashMergeEventData;
   "system/provisioning/started": SystemProvisioningStartedEventData;

@@ -136,29 +136,11 @@ export interface UIFileEditMessage extends UIMessageBase {
   >;
 }
 
-export type UIThreadOperationIntentAction = "commit" | "squash_merge";
-
-export type UIThreadOperationIntentPhase =
-  | "requested"
-  | "queued"
-  | "running"
-  | "completed"
-  | "failed"
-  | "update";
-
-export interface UIThreadOperationIntentMetadata {
-  action: UIThreadOperationIntentAction;
-  phase: UIThreadOperationIntentPhase;
+export interface UIThreadOperationMetadata {
+  operation: string;
+  status: string;
   operationId?: string;
-}
-
-export type UIPrimaryCheckoutAction = "promote" | "demote";
-
-export type UIPrimaryCheckoutPhase = "started" | "completed" | "failed" | "noop" | "update";
-
-export interface UIPrimaryCheckoutMetadata {
-  action: UIPrimaryCheckoutAction;
-  phase: UIPrimaryCheckoutPhase;
+  metadata?: Record<string, unknown>;
 }
 
 export type UIProvisioningSetupStatus =
@@ -215,8 +197,7 @@ export interface UIOperationMessage extends UIMessageBase {
     "pending" | "completed" | "error" | "interrupted"
   >;
   provisioning?: UIProvisioningMetadata;
-  primaryCheckout?: UIPrimaryCheckoutMetadata;
-  threadOperation?: UIThreadOperationIntentMetadata;
+  threadOperation?: UIThreadOperationMetadata;
   worktreeCommit?: UIWorktreeCommitMetadata;
   worktreeSquashMerge?: UIWorktreeSquashMergeMetadata;
 }

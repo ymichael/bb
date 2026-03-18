@@ -661,12 +661,12 @@ describe("buildThreadDetailRows", () => {
       {
         ...baseMessage("squash-requested-1", 1),
         kind: "operation",
-        opType: "thread-operation-intent",
+        opType: "operation",
         title: "Squash merge requested",
         detail: "Squash-merge operation requested",
         threadOperation: {
-          action: "squash_merge",
-          phase: "requested",
+          operation: "squash_merge",
+          status: "requested",
         },
       },
       {
@@ -677,12 +677,12 @@ describe("buildThreadDetailRows", () => {
       {
         ...baseMessage("squash-queued-1", 3),
         kind: "operation",
-        opType: "thread-operation-intent",
+        opType: "operation",
         title: "Squash merge queued",
         detail: "Squash-merge operation queued for deterministic execution",
         threadOperation: {
-          action: "squash_merge",
-          phase: "queued",
+          operation: "squash_merge",
+          status: "queued",
         },
       },
     ];
@@ -693,7 +693,7 @@ describe("buildThreadDetailRows", () => {
     if (rows[0]?.kind !== "message") return;
     expect(rows[0].message.kind).toBe("operation");
     if (rows[0].message.kind !== "operation") return;
-    expect(rows[0].message.opType).toBe("thread-operation-intent");
+    expect(rows[0].message.opType).toBe("operation");
     expect(rows[0].message.title).toBe("Squash merge queued");
     expect(rows[0].message.detail).toContain("Squash-merge operation queued for deterministic execution");
     expect(rows[0].message.detail).toContain("Prompt:");
@@ -705,23 +705,23 @@ describe("buildThreadDetailRows", () => {
       {
         ...baseMessage("squash-requested-1", 1),
         kind: "operation",
-        opType: "thread-operation-intent",
+        opType: "operation",
         title: "Squash merge requested",
         detail: "Squash-merge operation requested",
         threadOperation: {
-          action: "squash_merge",
-          phase: "requested",
+          operation: "squash_merge",
+          status: "requested",
         },
       },
       {
         ...baseMessage("squash-running-1", 2),
         kind: "operation",
-        opType: "thread-operation-intent",
+        opType: "operation",
         title: "Squash merging changes",
         detail: "Running squash-merge operation",
         threadOperation: {
-          action: "squash_merge",
-          phase: "running",
+          operation: "squash_merge",
+          status: "running",
         },
       },
       {
@@ -734,12 +734,12 @@ describe("buildThreadDetailRows", () => {
       {
         ...baseMessage("squash-completed-1", 4),
         kind: "operation",
-        opType: "thread-operation-intent",
+        opType: "operation",
         title: "Squash merge completed",
         detail: "Squash merged into main",
         threadOperation: {
-          action: "squash_merge",
-          phase: "completed",
+          operation: "squash_merge",
+          status: "completed",
         },
       },
     ];
@@ -760,12 +760,12 @@ describe("buildThreadDetailRows", () => {
       {
         ...baseMessage("commit-running-1", 1),
         kind: "operation",
-        opType: "thread-operation-intent",
+        opType: "operation",
         title: "Committing changes",
         detail: "Running commit operation",
         threadOperation: {
-          action: "commit",
-          phase: "running",
+          operation: "commit",
+          status: "running",
         },
       },
       {
@@ -778,12 +778,12 @@ describe("buildThreadDetailRows", () => {
       {
         ...baseMessage("commit-completed-1", 3),
         kind: "operation",
-        opType: "thread-operation-intent",
+        opType: "operation",
         title: "Commit completed",
         detail: "Committed changes",
         threadOperation: {
-          action: "commit",
-          phase: "completed",
+          operation: "commit",
+          status: "completed",
         },
       },
     ];
@@ -804,23 +804,23 @@ describe("buildThreadDetailRows", () => {
       {
         ...baseMessage("commit-running-1", 1),
         kind: "operation",
-        opType: "thread-operation-intent",
+        opType: "operation",
         title: "Committing changes",
         detail: "Running commit operation",
         threadOperation: {
-          action: "commit",
-          phase: "running",
+          operation: "commit",
+          status: "running",
         },
       },
       {
         ...baseMessage("commit-completed-1", 2),
         kind: "operation",
-        opType: "thread-operation-intent",
+        opType: "operation",
         title: "Commit completed",
         detail: "Committed changes",
         threadOperation: {
-          action: "commit",
-          phase: "completed",
+          operation: "commit",
+          status: "completed",
         },
       },
     ];
@@ -831,7 +831,7 @@ describe("buildThreadDetailRows", () => {
     if (rows[0]?.kind !== "message") return;
     expect(rows[0].message.kind).toBe("operation");
     if (rows[0].message.kind !== "operation") return;
-    expect(rows[0].message.opType).toBe("thread-operation-intent");
+    expect(rows[0].message.opType).toBe("operation");
     expect(rows[0].message.title).toBe("Commit completed");
     expect(rows[0].message.sourceSeqStart).toBe(1);
     expect(rows[0].message.sourceSeqEnd).toBe(2);
@@ -843,24 +843,24 @@ describe("buildThreadDetailRows", () => {
       {
         ...baseMessage("commit-running-1", 1),
         kind: "operation",
-        opType: "thread-operation-intent",
+        opType: "operation",
         title: "Committing changes",
         detail: "Running commit operation for first request",
         threadOperation: {
-          action: "commit",
-          phase: "running",
+          operation: "commit",
+          status: "running",
           operationId: "op-1",
         },
       },
       {
         ...baseMessage("commit-completed-2", 2),
         kind: "operation",
-        opType: "thread-operation-intent",
+        opType: "operation",
         title: "Commit completed",
         detail: "Committed changes for second request",
         threadOperation: {
-          action: "commit",
-          phase: "completed",
+          operation: "commit",
+          status: "completed",
           operationId: "op-2",
         },
       },

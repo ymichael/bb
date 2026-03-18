@@ -4023,22 +4023,28 @@ describe("Orchestrator", () => {
       expect(allEvents).toContainEqual(
         expect.objectContaining({
           threadId: activeThread.id,
-          type: "system/primary_checkout/updated",
+          type: "system/operation",
           data: expect.objectContaining({
-            action: "demote",
+            operation: "primary_checkout",
             status: "started",
-            projectId: project.id,
+            metadata: expect.objectContaining({
+              action: "demote",
+              projectId: project.id,
+            }),
           }),
         }),
       );
       expect(allEvents).toContainEqual(
         expect.objectContaining({
           threadId: activeThread.id,
-          type: "system/primary_checkout/updated",
+          type: "system/operation",
           data: expect.objectContaining({
-            action: "demote",
+            operation: "primary_checkout",
             status: "completed",
-            projectId: project.id,
+            metadata: expect.objectContaining({
+              action: "demote",
+              projectId: project.id,
+            }),
           }),
         }),
       );
@@ -4046,11 +4052,14 @@ describe("Orchestrator", () => {
       expect(targetEvents).toContainEqual(
         expect.objectContaining({
           threadId: targetThread.id,
-          type: "system/primary_checkout/updated",
+          type: "system/operation",
           data: expect.objectContaining({
-            action: "promote",
+            operation: "primary_checkout",
             status: "completed",
-            projectId: project.id,
+            metadata: expect.objectContaining({
+              action: "promote",
+              projectId: project.id,
+            }),
           }),
         }),
       );
@@ -4412,7 +4421,7 @@ describe("Orchestrator", () => {
         const events = eventRepo.listByThread(thread.id);
         expect(events).toContainEqual(
           expect.objectContaining({
-            type: "system/thread_operation",
+            type: "system/operation",
             data: expect.objectContaining({
               operation: "commit",
               status: "requested",
@@ -4520,7 +4529,7 @@ describe("Orchestrator", () => {
         const events = eventRepo.listByThread(thread.id);
         expect(events).toContainEqual(
           expect.objectContaining({
-            type: "system/thread_operation",
+            type: "system/operation",
             data: expect.objectContaining({
               operation: "squash_merge",
               status: "queued",
@@ -4636,7 +4645,7 @@ describe("Orchestrator", () => {
         const events = eventRepo.listByThread(thread.id);
         expect(events).toContainEqual(
           expect.objectContaining({
-            type: "system/thread_operation",
+            type: "system/operation",
             data: expect.objectContaining({
               operation: "commit",
               status: "failed",
@@ -4708,7 +4717,7 @@ describe("Orchestrator", () => {
         const events = eventRepo.listByThread(thread.id);
         expect(events).toContainEqual(
           expect.objectContaining({
-            type: "system/thread_operation",
+            type: "system/operation",
             data: expect.objectContaining({
               operation: "commit",
               status: "failed",
@@ -4878,7 +4887,7 @@ describe("Orchestrator", () => {
         const events = eventRepo.listByThread(thread.id);
         expect(events).toContainEqual(
           expect.objectContaining({
-            type: "system/thread_operation",
+            type: "system/operation",
             data: expect.objectContaining({
               operation: "squash_merge",
               status: "completed",
@@ -4889,7 +4898,7 @@ describe("Orchestrator", () => {
         const completedEventCreateOrder = createSpy.mock.invocationCallOrder[
           createSpy.mock.calls.findIndex(
             ([event]) =>
-              (event as any).type === "system/thread_operation" &&
+              (event as any).type === "system/operation" &&
               (event as any).data?.status === "completed" &&
               (event as any).data?.operationId === "op-1",
           )
@@ -4969,7 +4978,7 @@ describe("Orchestrator", () => {
         const events = eventRepo.listByThread(thread.id);
         expect(events).toContainEqual(
           expect.objectContaining({
-            type: "system/thread_operation",
+            type: "system/operation",
             data: expect.objectContaining({
               operation: "squash_merge",
               status: "failed",
@@ -4981,7 +4990,7 @@ describe("Orchestrator", () => {
         const failedEventCreateOrder = createSpy.mock.invocationCallOrder[
           createSpy.mock.calls.findIndex(
             ([event]) =>
-              (event as any).type === "system/thread_operation" &&
+              (event as any).type === "system/operation" &&
               (event as any).data?.status === "failed" &&
               (event as any).data?.operationId === "op-1",
           )

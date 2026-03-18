@@ -819,19 +819,15 @@ export class Orchestrator implements ThreadOrchestrator {
           );
         },
         onPrimaryCheckoutDemoted: ({ projectId, threadId, currentCheckout }) => {
-          this._appendEvent(
-            threadId,
-            "system/primary_checkout/updated",
-            {
+          this._appendOperationEvent(threadId, "primary_checkout", "completed", {
+            message: "Primary checkout changed outside BB; marked as demoted",
+            metadata: {
               action: "demote",
-              status: "completed",
-              message: "Primary checkout changed outside BB; marked as demoted",
               projectId,
               activeThreadId: threadId,
               ...(currentCheckout.branch ? { branch: currentCheckout.branch } : {}),
             },
-            { broadcastChanges: ["events-appended"] },
-          );
+          });
           this._broadcastThreadChanged(threadId, THREAD_STATUS_CHANGE_KINDS);
         },
         runOptionalSetup: (threadId, environment, projectRootPath, reason) =>
@@ -1572,6 +1568,17 @@ export class Orchestrator implements ThreadOrchestrator {
         );
       });
     }
+
+    this._appendOperationEvent(args.threadId, "ownership_change", "completed", {
+      message: args.previousParentThreadId
+        ? `Thread management transferred from ${args.previousParentThreadId} to ${args.nextParentThreadId ?? "none"}`
+        : `Thread assigned to manager ${args.nextParentThreadId}`,
+      metadata: {
+        ...(args.previousParentThreadId ? { previousParentThreadId: args.previousParentThreadId } : {}),
+        ...(args.nextParentThreadId ? { nextParentThreadId: args.nextParentThreadId } : {}),
+        ...(args.threadTitle ? { threadTitle: args.threadTitle } : {}),
+      },
+    });
   }
 
   private _tell(
@@ -1921,14 +1928,16 @@ export class Orchestrator implements ThreadOrchestrator {
 
     this.projectOperationTransitionsInFlight.add(thread.projectId);
     this.runningOperationByThreadId.set(thread.id, queuedOperation);
-    this._appendThreadOperationEvent(
+    this._appendOperationEvent(
       thread.id,
       queuedOperation.request.operation,
       "running",
       {
         operationId: queuedOperation.operationId,
         message: this._threadOperationRunningMessage(queuedOperation.request.operation),
-        demotedPrimaryCheckout: queuedOperation.demotedPrimaryCheckout,
+        ...(queuedOperation.demotedPrimaryCheckout
+          ? { metadata: { demotedPrimaryCheckout: true } }
+          : {}),
       },
     );
 
@@ -1958,28 +1967,32 @@ export class Orchestrator implements ThreadOrchestrator {
           assertNever(queuedOperation.request);
       }
 
-      this._appendThreadOperationEvent(
+      this._appendOperationEvent(
         thread.id,
         queuedOperation.request.operation,
         "completed",
         {
           operationId: queuedOperation.operationId,
           message: completionMessage,
-          demotedPrimaryCheckout: queuedOperation.demotedPrimaryCheckout,
+          ...(queuedOperation.demotedPrimaryCheckout
+            ? { metadata: { demotedPrimaryCheckout: true } }
+            : {}),
         },
       );
 
       await this._applyThreadOperationPostActions(thread.id, postActions);
     } catch (err) {
       const failureMessage = this._toErrorMessage(err);
-      this._appendThreadOperationEvent(
+      this._appendOperationEvent(
         thread.id,
         queuedOperation.request.operation,
         "failed",
         {
           operationId: queuedOperation.operationId,
           message: failureMessage,
-          demotedPrimaryCheckout: queuedOperation.demotedPrimaryCheckout,
+          ...(queuedOperation.demotedPrimaryCheckout
+            ? { metadata: { demotedPrimaryCheckout: true } }
+            : {}),
         },
       );
       await this._applyThreadOperationPostActions(
@@ -3126,10 +3139,10 @@ export class Orchestrator implements ThreadOrchestrator {
           demotedPrimaryCheckout = true;
         }
 
-        this._appendThreadOperationEvent(thread.id, request.operation, "requested", {
+        this._appendOperationEvent(thread.id, request.operation, "requested", {
           operationId,
           message: this._threadOperationRequestedMessage(request.operation),
-          demotedPrimaryCheckout,
+          ...(demotedPrimaryCheckout ? { metadata: { demotedPrimaryCheckout: true } } : {}),
         });
         this._enqueueThreadOperation(
           thread.id,
@@ -3143,10 +3156,10 @@ export class Orchestrator implements ThreadOrchestrator {
           latestThread?.status !== "idle" ||
           this.projectOperationTransitionsInFlight.has(thread.projectId);
         if (shouldQueue) {
-          this._appendThreadOperationEvent(thread.id, request.operation, "queued", {
+          this._appendOperationEvent(thread.id, request.operation, "queued", {
             operationId,
             message: this._threadOperationQueuedMessage(request.operation),
-            demotedPrimaryCheckout,
+            ...(demotedPrimaryCheckout ? { metadata: { demotedPrimaryCheckout: true } } : {}),
           });
         }
 
@@ -3166,10 +3179,10 @@ export class Orchestrator implements ThreadOrchestrator {
         };
       } catch (err) {
         const message = this._toErrorMessage(err);
-        this._appendThreadOperationEvent(thread.id, request.operation, "failed", {
+        this._appendOperationEvent(thread.id, request.operation, "failed", {
           operationId,
           message,
-          ...(demotedPrimaryCheckout ? { demotedPrimaryCheckout } : {}),
+          ...(demotedPrimaryCheckout ? { metadata: { demotedPrimaryCheckout: true } } : {}),
         });
         if (isDomainError(err)) {
           throw err;
@@ -3204,21 +3217,17 @@ export class Orchestrator implements ThreadOrchestrator {
       const existingPromotion = this.primaryPromotionByProjectId.get(project.id);
 
       if (existingPromotion?.threadId === thread.id) {
-        this._appendEvent(
-          thread.id,
-          "system/primary_checkout/updated",
-          {
+        this._appendOperationEvent(thread.id, "primary_checkout", "noop", {
+          message: "Primary checkout is already promoted to this thread",
+          metadata: {
             action: "promote",
-            status: "noop",
-            message: "Primary checkout is already promoted to this thread",
             projectId: project.id,
             activeThreadId: thread.id,
             ...(existingPromotion.promotedCheckout.branch
               ? { branch: existingPromotion.promotedCheckout.branch }
               : {}),
           },
-          { broadcastChanges: ["events-appended"] },
-        );
+        });
         return {
           ok: true,
           promoted: false,
@@ -3234,50 +3243,38 @@ export class Orchestrator implements ThreadOrchestrator {
             `Thread ${existingPromotion.threadId} is currently promoted in primary checkout`,
           );
         }
-        this._appendEvent(
-          activeThread.id,
-          "system/primary_checkout/updated",
-          {
+        this._appendOperationEvent(activeThread.id, "primary_checkout", "started", {
+          message: "Demoting primary checkout back to pre-promotion state",
+          metadata: {
             action: "demote",
-            status: "started",
-            message: "Demoting primary checkout back to pre-promotion state",
             projectId: project.id,
             activeThreadId: activeThread.id,
           },
-          { broadcastChanges: ["events-appended"] },
-        );
+        });
         try {
           const demoteResult = await this.environmentService.demotePrimaryCheckout({
             thread: activeThread,
             ttlMs: PRIMARY_CHECKOUT_VALIDATION_TTL_MS,
           });
-          this._appendEvent(
-            activeThread.id,
-            "system/primary_checkout/updated",
-            {
+          this._appendOperationEvent(activeThread.id, "primary_checkout", "completed", {
+            message: "Primary checkout restored from promoted state",
+            metadata: {
               action: "demote",
-              status: "completed",
-              message: "Primary checkout restored from promoted state",
               projectId: project.id,
               ...(demoteResult.snapshot?.branch ? { branch: demoteResult.snapshot.branch } : {}),
             },
-            { broadcastChanges: ["events-appended"] },
-          );
+          });
           this._broadcastThreadChanged(activeThread.id, THREAD_STATUS_CHANGE_KINDS);
         } catch (err) {
           const message = this._toErrorMessage(err);
-          this._appendEvent(
-            activeThread.id,
-            "system/primary_checkout/updated",
-            {
+          this._appendOperationEvent(activeThread.id, "primary_checkout", "failed", {
+            message,
+            metadata: {
               action: "demote",
-              status: "failed",
-              message,
               projectId: project.id,
               activeThreadId: activeThread.id,
             },
-            { broadcastChanges: ["events-appended"] },
-          );
+          });
           this._broadcastThreadChanged(activeThread.id, THREAD_STATUS_CHANGE_KINDS);
           throw invalidRequestError(message);
         }
@@ -3289,21 +3286,17 @@ export class Orchestrator implements ThreadOrchestrator {
       });
 
       if (result.reason === "already-promoted-same-thread" && result.state) {
-        this._appendEvent(
-          thread.id,
-          "system/primary_checkout/updated",
-          {
+        this._appendOperationEvent(thread.id, "primary_checkout", "noop", {
+          message: "Primary checkout is already promoted to this thread",
+          metadata: {
             action: "promote",
-            status: "noop",
-            message: "Primary checkout is already promoted to this thread",
             projectId: project.id,
             activeThreadId: thread.id,
             ...(result.state.promotedCheckout.branch
               ? { branch: result.state.promotedCheckout.branch }
               : {}),
           },
-          { broadcastChanges: ["events-appended"] },
-        );
+        });
         return {
           ok: true,
           promoted: false,
@@ -3320,36 +3313,28 @@ export class Orchestrator implements ThreadOrchestrator {
       if (!environment.exists()) {
         throw invalidRequestError("Thread worktree is unavailable; reprovision the thread first");
       }
-      this._appendEvent(
-        thread.id,
-        "system/primary_checkout/updated",
-        {
+      this._appendOperationEvent(thread.id, "primary_checkout", "started", {
+        message: "Promoting thread worktree into primary checkout",
+        metadata: {
           action: "promote",
-          status: "started",
-          message: "Promoting thread worktree into primary checkout",
           projectId: project.id,
           activeThreadId: thread.id,
         },
-        { broadcastChanges: ["events-appended"] },
-      );
+      });
 
       try {
         const promotedState = result.state;
-        this._appendEvent(
-          thread.id,
-          "system/primary_checkout/updated",
-          {
+        this._appendOperationEvent(thread.id, "primary_checkout", "completed", {
+          message: "Primary checkout now reflects this thread worktree",
+          metadata: {
             action: "promote",
-            status: "completed",
-            message: "Primary checkout now reflects this thread worktree",
             projectId: project.id,
             activeThreadId: thread.id,
             ...(promotedState?.promotedCheckout.branch
               ? { branch: promotedState.promotedCheckout.branch }
               : {}),
           },
-          { broadcastChanges: ["events-appended"] },
-        );
+        });
         this._broadcastThreadChanged(thread.id, THREAD_STATUS_CHANGE_KINDS);
         return {
           ok: true,
@@ -3359,18 +3344,14 @@ export class Orchestrator implements ThreadOrchestrator {
         };
       } catch (err) {
         const message = this._toErrorMessage(err);
-        this._appendEvent(
-          thread.id,
-          "system/primary_checkout/updated",
-          {
+        this._appendOperationEvent(thread.id, "primary_checkout", "failed", {
+          message,
+          metadata: {
             action: "promote",
-            status: "failed",
-            message,
             projectId: project.id,
             activeThreadId: thread.id,
           },
-          { broadcastChanges: ["events-appended"] },
-        );
+        });
         this._broadcastThreadChanged(thread.id, THREAD_STATUS_CHANGE_KINDS);
         throw invalidRequestError(message);
       }
@@ -3394,17 +3375,13 @@ export class Orchestrator implements ThreadOrchestrator {
       this._ensurePrimaryPromotionStateIsCurrent(project.id, { force: true });
       const active = this.primaryPromotionByProjectId.get(project.id);
       if (!active) {
-        this._appendEvent(
-          thread.id,
-          "system/primary_checkout/updated",
-          {
+        this._appendOperationEvent(thread.id, "primary_checkout", "noop", {
+          message: "Primary checkout is already demoted",
+          metadata: {
             action: "demote",
-            status: "noop",
-            message: "Primary checkout is already demoted",
             projectId: project.id,
           },
-          { broadcastChanges: ["events-appended"] },
-        );
+        });
         return {
           ok: true,
           demoted: false,
@@ -3419,36 +3396,28 @@ export class Orchestrator implements ThreadOrchestrator {
         );
       }
       const activeThread = this.threadRepo.getById(active.threadId);
-      this._appendEvent(
-        active.threadId,
-        "system/primary_checkout/updated",
-        {
+      this._appendOperationEvent(active.threadId, "primary_checkout", "started", {
+        message: "Demoting primary checkout back to pre-promotion state",
+        metadata: {
           action: "demote",
-          status: "started",
-          message: "Demoting primary checkout back to pre-promotion state",
           projectId: project.id,
           activeThreadId: active.threadId,
         },
-        { broadcastChanges: ["events-appended"] },
-      );
+      });
 
       try {
         const result = await this.environmentService.demotePrimaryCheckout({
           thread,
           ttlMs: PRIMARY_CHECKOUT_VALIDATION_TTL_MS,
         });
-        this._appendEvent(
-          active.threadId,
-          "system/primary_checkout/updated",
-          {
+        this._appendOperationEvent(active.threadId, "primary_checkout", "completed", {
+          message: "Primary checkout restored from promoted state",
+          metadata: {
             action: "demote",
-            status: "completed",
-            message: "Primary checkout restored from promoted state",
             projectId: project.id,
             ...(result.snapshot?.branch ? { branch: result.snapshot.branch } : {}),
           },
-          { broadcastChanges: ["events-appended"] },
-        );
+        });
 
         if (activeThread) {
           this._broadcastThreadChanged(activeThread.id, THREAD_STATUS_CHANGE_KINDS);
@@ -3463,18 +3432,14 @@ export class Orchestrator implements ThreadOrchestrator {
         };
       } catch (err) {
         const message = this._toErrorMessage(err);
-        this._appendEvent(
-          active.threadId,
-          "system/primary_checkout/updated",
-          {
+        this._appendOperationEvent(active.threadId, "primary_checkout", "failed", {
+          message,
+          metadata: {
             action: "demote",
-            status: "failed",
-            message,
             projectId: project.id,
             activeThreadId: active.threadId,
           },
-          { broadcastChanges: ["events-appended"] },
-        );
+        });
         this._broadcastThreadChanged(active.threadId, THREAD_STATUS_CHANGE_KINDS);
         throw invalidRequestError(message);
       }
@@ -5705,27 +5670,21 @@ export class Orchestrator implements ThreadOrchestrator {
     }
   }
 
-  private _appendThreadOperationEvent(
+  private _appendOperationEvent(
     threadId: string,
-    operation: ThreadOperationType,
-    status: ThreadEventDataForType<"system/thread_operation">["status"],
-    args: {
-      message: string;
-      operationId?: string;
-      demotedPrimaryCheckout?: boolean;
-    },
+    operation: string,
+    status: string,
+    args: { message: string; operationId?: string; metadata?: Record<string, unknown> },
   ): void {
     this._appendEvent(
       threadId,
-      "system/thread_operation",
+      "system/operation",
       {
         operation,
         status,
         message: args.message,
         ...(args.operationId ? { operationId: args.operationId } : {}),
-        ...(args.demotedPrimaryCheckout !== undefined
-          ? { demotedPrimaryCheckout: args.demotedPrimaryCheckout }
-          : {}),
+        ...(args.metadata ? { metadata: args.metadata } : {}),
       },
       { broadcastChanges: ["events-appended"] },
     );

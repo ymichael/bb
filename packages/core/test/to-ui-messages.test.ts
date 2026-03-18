@@ -1841,13 +1841,12 @@ describe("toUIMessages replay coverage", () => {
         id: "evt-1",
         threadId: "thread-1",
         seq: 1,
-        type: "system/primary_checkout/updated",
+        type: "system/operation",
         data: {
-          action: "promote",
+          operation: "primary_checkout",
           status: "started",
           message: "Promoting thread worktree into primary checkout",
-          projectId: "proj-1",
-          activeThreadId: "thread-1",
+          metadata: { action: "promote" },
         },
         createdAt: 1,
       },
@@ -1855,14 +1854,13 @@ describe("toUIMessages replay coverage", () => {
         id: "evt-2",
         threadId: "thread-1",
         seq: 2,
-        type: "system/primary_checkout/updated",
+        type: "system/operation",
         data: {
-          action: "promote",
+          operation: "primary_checkout",
           status: "completed",
           message: "Primary checkout now reflects this thread worktree",
-          projectId: "proj-1",
-          activeThreadId: "thread-1",
           branch: "feat/example",
+          metadata: { action: "promote" },
         },
         createdAt: 2,
       },
@@ -1877,18 +1875,20 @@ describe("toUIMessages replay coverage", () => {
     );
 
     expect(ops).toHaveLength(2);
-    expect(ops[0]?.opType).toBe("primary-checkout");
-    expect(ops[0]?.title).toBe("Promoting primary checkout");
-    expect(ops[0]?.primaryCheckout).toEqual({
-      action: "promote",
-      phase: "started",
+    expect(ops[0]?.opType).toBe("operation");
+    expect(ops[0]?.title).toBe("Promoting to primary checkout");
+    expect(ops[0]?.threadOperation).toEqual({
+      operation: "primary_checkout",
+      status: "started",
+      metadata: { action: "promote" },
     });
 
-    expect(ops[1]?.opType).toBe("primary-checkout");
+    expect(ops[1]?.opType).toBe("operation");
     expect(ops[1]?.title).toBe("Promoted to primary checkout");
-    expect(ops[1]?.primaryCheckout).toEqual({
-      action: "promote",
-      phase: "completed",
+    expect(ops[1]?.threadOperation).toEqual({
+      operation: "primary_checkout",
+      status: "completed",
+      metadata: { action: "promote" },
     });
     expect(ops[1]?.detail).toContain("Branch: feat/example");
   });
@@ -1937,13 +1937,13 @@ describe("toUIMessages replay coverage", () => {
     ]);
   });
 
-  it("projects thread operation intent lifecycle events as operations", () => {
+  it("projects thread operation lifecycle events as operations", () => {
     const events: ThreadEvent[] = [
       {
         id: "evt-1",
         threadId: "thread-1",
         seq: 1,
-        type: "system/thread_operation",
+        type: "system/operation",
         data: {
           operation: "commit",
           status: "requested",
@@ -1955,7 +1955,7 @@ describe("toUIMessages replay coverage", () => {
         id: "evt-2",
         threadId: "thread-1",
         seq: 2,
-        type: "system/thread_operation",
+        type: "system/operation",
         data: {
           operation: "commit",
           status: "queued",
@@ -1975,17 +1975,17 @@ describe("toUIMessages replay coverage", () => {
     );
 
     expect(ops).toHaveLength(2);
-    expect(ops[0]?.opType).toBe("thread-operation-intent");
+    expect(ops[0]?.opType).toBe("operation");
     expect(ops[0]?.title).toBe("Commit requested");
     expect(ops[0]?.threadOperation).toEqual({
-      action: "commit",
-      phase: "requested",
+      operation: "commit",
+      status: "requested",
     });
-    expect(ops[1]?.opType).toBe("thread-operation-intent");
+    expect(ops[1]?.opType).toBe("operation");
     expect(ops[1]?.title).toBe("Commit queued");
     expect(ops[1]?.threadOperation).toEqual({
-      action: "commit",
-      phase: "queued",
+      operation: "commit",
+      status: "queued",
       operationId: "op-1",
     });
     expect(ops[1]?.detail).toContain("deterministic execution");

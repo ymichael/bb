@@ -7,24 +7,24 @@ function primaryCheckoutOperation(
   title: string,
   detail?: string,
 ): Extract<UIMessage, { kind: "operation" }> {
-  const primaryCheckout = (() => {
+  const threadOperation = (() => {
     switch (title) {
       case "Promoting primary checkout":
-        return { action: "promote", phase: "started" } as const;
+        return { operation: "primary_checkout", status: "started", metadata: { action: "promote" } } as const;
       case "Promoted to primary checkout":
-        return { action: "promote", phase: "completed" } as const;
+        return { operation: "primary_checkout", status: "completed", metadata: { action: "promote" } } as const;
       case "Primary checkout promotion failed":
-        return { action: "promote", phase: "failed" } as const;
+        return { operation: "primary_checkout", status: "failed", metadata: { action: "promote" } } as const;
       case "Primary checkout already promoted":
-        return { action: "promote", phase: "noop" } as const;
+        return { operation: "primary_checkout", status: "noop", metadata: { action: "promote" } } as const;
       case "Demoting primary checkout":
-        return { action: "demote", phase: "started" } as const;
+        return { operation: "primary_checkout", status: "started", metadata: { action: "demote" } } as const;
       case "Demoted from primary checkout":
-        return { action: "demote", phase: "completed" } as const;
+        return { operation: "primary_checkout", status: "completed", metadata: { action: "demote" } } as const;
       case "Primary checkout demotion failed":
-        return { action: "demote", phase: "failed" } as const;
+        return { operation: "primary_checkout", status: "failed", metadata: { action: "demote" } } as const;
       case "Primary checkout already demoted":
-        return { action: "demote", phase: "noop" } as const;
+        return { operation: "primary_checkout", status: "noop", metadata: { action: "demote" } } as const;
       default:
         return undefined;
     }
@@ -36,9 +36,9 @@ function primaryCheckoutOperation(
     sourceSeqStart: seq,
     sourceSeqEnd: seq,
     createdAt: seq,
-    opType: "primary-checkout",
+    opType: "operation",
     title,
-    ...(primaryCheckout ? { primaryCheckout } : {}),
+    ...(threadOperation ? { threadOperation } : {}),
     ...(detail ? { detail } : {}),
   };
 }
@@ -173,29 +173,29 @@ function threadOperationIntent(
   const inferredThreadOperation = (() => {
     switch (title) {
       case "Commit requested":
-        return { action: "commit", phase: "requested" } as const;
+        return { operation: "commit", status: "requested" } as const;
       case "Commit queued":
-        return { action: "commit", phase: "queued" } as const;
+        return { operation: "commit", status: "queued" } as const;
       case "Committing changes":
-        return { action: "commit", phase: "running" } as const;
+        return { operation: "commit", status: "running" } as const;
       case "Commit completed":
-        return { action: "commit", phase: "completed" } as const;
+        return { operation: "commit", status: "completed" } as const;
       case "Commit failed":
-        return { action: "commit", phase: "failed" } as const;
+        return { operation: "commit", status: "failed" } as const;
       case "Commit operation update":
-        return { action: "commit", phase: "update" } as const;
+        return { operation: "commit", status: "update" } as const;
       case "Squash merge requested":
-        return { action: "squash_merge", phase: "requested" } as const;
+        return { operation: "squash_merge", status: "requested" } as const;
       case "Squash merge queued":
-        return { action: "squash_merge", phase: "queued" } as const;
+        return { operation: "squash_merge", status: "queued" } as const;
       case "Squash merging changes":
-        return { action: "squash_merge", phase: "running" } as const;
+        return { operation: "squash_merge", status: "running" } as const;
       case "Squash merge completed":
-        return { action: "squash_merge", phase: "completed" } as const;
+        return { operation: "squash_merge", status: "completed" } as const;
       case "Squash merge failed":
-        return { action: "squash_merge", phase: "failed" } as const;
+        return { operation: "squash_merge", status: "failed" } as const;
       case "Squash merge operation update":
-        return { action: "squash_merge", phase: "update" } as const;
+        return { operation: "squash_merge", status: "update" } as const;
       default:
         return undefined;
     }
@@ -207,13 +207,13 @@ function threadOperationIntent(
     sourceSeqStart: seq,
     sourceSeqEnd: seq,
     createdAt: seq,
-    opType: "thread-operation-intent",
+    opType: "operation",
     title,
     ...((options?.action && options?.phase) || inferredThreadOperation
       ? {
           threadOperation: {
-            action: options?.action ?? inferredThreadOperation?.action ?? "commit",
-            phase: options?.phase ?? inferredThreadOperation?.phase ?? "update",
+            operation: options?.action ?? inferredThreadOperation?.operation ?? "commit",
+            status: options?.phase ?? inferredThreadOperation?.status ?? "update",
             ...(options?.operationId ? { operationId: options.operationId } : {}),
           },
         }
@@ -248,7 +248,7 @@ function getOperationRows(messages: UIMessage[]): Array<Extract<UIMessage, { kin
     .map((row) => row.message);
 }
 
-describe("buildThreadDetailRows primary-checkout operation collapsing", () => {
+describe("buildThreadDetailRows primary-checkout (operation) collapsing", () => {
   it("does not collapse earlier assistant messages into a tool group", () => {
     const rows = buildThreadDetailRows([
       {
@@ -307,11 +307,10 @@ describe("buildThreadDetailRows primary-checkout operation collapsing", () => {
     expect(rows[0]?.title).toBe("Promoted to primary checkout");
     expect(rows[0]?.sourceSeqStart).toBe(1);
     expect(rows[0]?.sourceSeqEnd).toBe(2);
-    expect(rows[0]?.detail).toContain("Promoting thread worktree into primary checkout");
     expect(rows[0]?.detail).toContain("Primary checkout now reflects this thread worktree");
   });
 
-  it("collapses a completed promote/demote cycle into a single round-trip row", () => {
+  it("collapses a completed promote/demote cycle into two merged operation rows", () => {
     const rows = getOperationRows([
       primaryCheckoutOperation(1, "Promoting primary checkout"),
       primaryCheckoutOperation(2, "Promoted to primary checkout"),
@@ -319,10 +318,13 @@ describe("buildThreadDetailRows primary-checkout operation collapsing", () => {
       primaryCheckoutOperation(4, "Demoted from primary checkout"),
     ]);
 
-    expect(rows).toHaveLength(1);
-    expect(rows[0]?.title).toBe("Promoted then demoted as primary checkout");
+    expect(rows).toHaveLength(2);
+    expect(rows[0]?.title).toBe("Promoted to primary checkout");
     expect(rows[0]?.sourceSeqStart).toBe(1);
-    expect(rows[0]?.sourceSeqEnd).toBe(4);
+    expect(rows[0]?.sourceSeqEnd).toBe(2);
+    expect(rows[1]?.title).toBe("Demoted from primary checkout");
+    expect(rows[1]?.sourceSeqStart).toBe(3);
+    expect(rows[1]?.sourceSeqEnd).toBe(4);
   });
 
   it("keeps an in-progress primary-checkout update visible while pending", () => {
@@ -336,7 +338,7 @@ describe("buildThreadDetailRows primary-checkout operation collapsing", () => {
     expect(rows[0]?.sourceSeqEnd).toBe(1);
   });
 
-  it("uses primary-checkout metadata for collapse boundaries instead of title text", () => {
+  it("uses operation metadata for collapse boundaries instead of title text", () => {
     const rows = getOperationRows([
       {
         ...primaryCheckoutOperation(
@@ -344,9 +346,10 @@ describe("buildThreadDetailRows primary-checkout operation collapsing", () => {
           "Primary checkout promotion update",
           "Promoting thread worktree into primary checkout",
         ),
-        primaryCheckout: {
-          action: "promote",
-          phase: "started",
+        threadOperation: {
+          operation: "primary_checkout",
+          status: "started",
+          metadata: { action: "promote" },
         },
       },
       {
@@ -355,9 +358,10 @@ describe("buildThreadDetailRows primary-checkout operation collapsing", () => {
           "Primary checkout promotion update",
           "Primary checkout now reflects this thread worktree",
         ),
-        primaryCheckout: {
-          action: "promote",
-          phase: "completed",
+        threadOperation: {
+          operation: "primary_checkout",
+          status: "completed",
+          metadata: { action: "promote" },
         },
       },
     ]);
@@ -368,7 +372,7 @@ describe("buildThreadDetailRows primary-checkout operation collapsing", () => {
     expect(rows[0]?.sourceSeqEnd).toBe(2);
   });
 
-  it("does not collapse primary-checkout rows that only share display titles", () => {
+  it("does not collapse operation rows that only share display titles", () => {
     const rows = getOperationRows([
       {
         kind: "operation",
@@ -377,7 +381,7 @@ describe("buildThreadDetailRows primary-checkout operation collapsing", () => {
         sourceSeqStart: 1,
         sourceSeqEnd: 1,
         createdAt: 1,
-        opType: "primary-checkout",
+        opType: "operation",
         title: "Promoting primary checkout",
       },
       {
@@ -387,7 +391,7 @@ describe("buildThreadDetailRows primary-checkout operation collapsing", () => {
         sourceSeqStart: 2,
         sourceSeqEnd: 2,
         createdAt: 2,
-        opType: "primary-checkout",
+        opType: "operation",
         title: "Promoted to primary checkout",
       },
     ]);
@@ -1053,7 +1057,7 @@ describe("buildThreadDetailRows squash merge operation collapsing", () => {
     ]);
 
     expect(rows).toHaveLength(1);
-    expect(rows[0]?.opType).toBe("thread-operation-intent");
+    expect(rows[0]?.opType).toBe("operation");
     expect(rows[0]?.title).toBe("Squash merging changes");
     expect(rows[0]?.detail).toContain("Running squash-merge operation");
     expect(rows[0]?.detail).toContain("Prompt:");
@@ -1122,7 +1126,7 @@ describe("buildThreadDetailRows commit operation collapsing", () => {
     ]);
 
     expect(rows).toHaveLength(1);
-    expect(rows[0]?.opType).toBe("thread-operation-intent");
+    expect(rows[0]?.opType).toBe("operation");
     expect(rows[0]?.title).toBe("Commit completed");
     expect(rows[0]?.sourceSeqStart).toBe(1);
     expect(rows[0]?.sourceSeqEnd).toBe(2);
@@ -1138,7 +1142,7 @@ describe("buildThreadDetailRows commit operation collapsing", () => {
         sourceSeqStart: 1,
         sourceSeqEnd: 1,
         createdAt: 1,
-        opType: "thread-operation-intent",
+        opType: "operation",
         title: "Committing changes",
       },
       {
@@ -1148,7 +1152,7 @@ describe("buildThreadDetailRows commit operation collapsing", () => {
         sourceSeqStart: 2,
         sourceSeqEnd: 2,
         createdAt: 2,
-        opType: "thread-operation-intent",
+        opType: "operation",
         title: "Commit completed",
       },
     ]);
@@ -1228,7 +1232,7 @@ describe("buildThreadDetailRows commit operation collapsing", () => {
     ]);
 
     expect(rows).toHaveLength(2);
-    expect(rows[0]?.opType).toBe("thread-operation-intent");
+    expect(rows[0]?.opType).toBe("operation");
     expect(rows[0]?.title).toBe("Commit completed");
     expect(rows[0]?.detail).toContain("op-1");
     expect(rows[1]?.opType).toBe("worktree-commit");

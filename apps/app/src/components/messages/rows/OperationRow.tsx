@@ -4,7 +4,6 @@ import {
   EventCodeBlock,
 } from "@bb/ui-core";
 import {
-  assertNever,
   type UIOperationMessage,
   type UIProvisioningMetadata,
   type UIProvisioningTranscriptEntry,
@@ -22,9 +21,6 @@ import {
   useLatestInitialExpanded,
 } from "./shared";
 import { TerminalOutputBlock } from "./TerminalOutputBlock";
-
-type ThreadOperationIntentPhase = NonNullable<UIOperationMessage["threadOperation"]>["phase"];
-type PrimaryCheckoutPhase = NonNullable<UIOperationMessage["primaryCheckout"]>["phase"];
 
 function splitNonEmptyLines(value: string | undefined): string[] {
   if (!value) return [];
@@ -120,32 +116,15 @@ function formatCommitDetailLine({
   return normalizedMessage;
 }
 
-function isShimmeringThreadOperationIntentPhase(phase: ThreadOperationIntentPhase): boolean {
-  switch (phase) {
+function isShimmeringOperationStatus(status: string): boolean {
+  switch (status) {
     case "requested":
     case "queued":
     case "running":
-      return true;
-    case "completed":
-    case "failed":
-    case "update":
-      return false;
-    default:
-      return assertNever(phase);
-  }
-}
-
-function isShimmeringPrimaryCheckoutPhase(phase: PrimaryCheckoutPhase): boolean {
-  switch (phase) {
     case "started":
       return true;
-    case "completed":
-    case "failed":
-    case "noop":
-    case "update":
-      return false;
     default:
-      return assertNever(phase);
+      return false;
   }
 }
 
@@ -154,10 +133,7 @@ function isPendingOperation(message: UIOperationMessage): boolean {
     return message.status === "pending";
   }
   if (message.threadOperation) {
-    return isShimmeringThreadOperationIntentPhase(message.threadOperation.phase);
-  }
-  if (message.primaryCheckout) {
-    return isShimmeringPrimaryCheckoutPhase(message.primaryCheckout.phase);
+    return isShimmeringOperationStatus(message.threadOperation.status);
   }
   return false;
 }
@@ -309,93 +285,108 @@ function buildProvisioningTranscript(
   };
 }
 
-function buildThreadOperationIntentSummary(
+function capitalizeFirst(value: string): string {
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+function buildOperationSummary(
   message: UIOperationMessage,
   tone: "default" | "destructive",
 ): ReactNode {
   const metadata = message.threadOperation;
   if (!metadata) return <span>{message.title}</span>;
 
-  const baseLabel = metadata.action === "commit" ? "Commit" : "Squash merge";
-  switch (metadata.phase) {
-    case "requested":
-      return <EventTitle prefix={baseLabel} detail="requested" tone={tone} />;
-    case "queued":
-      return <EventTitle prefix={baseLabel} detail="queued" tone={tone} />;
-    case "running":
-      return (
-        <EventTitle
-          prefix={metadata.action === "commit" ? "Committing" : "Squash merging"}
-          detail="changes"
-          tone={tone}
-          shimmerPrefix
-        />
-      );
-    case "completed":
-      return <EventTitle prefix={baseLabel} detail="completed" tone={tone} />;
-    case "failed":
-      return <EventTitle prefix={baseLabel} emphasis="failed" tone={tone} />;
-    case "update":
-      return <EventTitle prefix={baseLabel} detail="update" tone={tone} />;
-    default:
-      return assertNever(metadata.phase);
-  }
-}
-
-function buildPrimaryCheckoutSummary(
-  message: UIOperationMessage,
-  tone: "default" | "destructive",
-): ReactNode {
-  const metadata = message.primaryCheckout;
-  if (!metadata) return <span>{message.title}</span>;
-
-  switch (metadata.action) {
-    case "promote":
-      switch (metadata.phase) {
-        case "started":
+  switch (metadata.operation) {
+    case "commit":
+    case "squash_merge": {
+      const baseLabel = metadata.operation === "commit" ? "Commit" : "Squash merge";
+      switch (metadata.status) {
+        case "requested":
+          return <EventTitle prefix={baseLabel} detail="requested" tone={tone} />;
+        case "queued":
+          return <EventTitle prefix={baseLabel} detail="queued" tone={tone} />;
+        case "running":
           return (
             <EventTitle
-              prefix="Promoting"
-              detail="primary checkout"
+              prefix={metadata.operation === "commit" ? "Committing" : "Squash merging"}
+              detail="changes"
               tone={tone}
               shimmerPrefix
             />
           );
         case "completed":
-          return <EventTitle prefix="Promoted" detail="to primary checkout" tone={tone} />;
+          return <EventTitle prefix={baseLabel} detail="completed" tone={tone} />;
         case "failed":
-          return <EventTitle prefix="Primary checkout promotion" emphasis="failed" tone={tone} />;
-        case "noop":
-          return <EventTitle prefix="Primary checkout" detail="already promoted" tone={tone} />;
+          return <EventTitle prefix={baseLabel} emphasis="failed" tone={tone} />;
         case "update":
-          return <EventTitle prefix="Primary checkout promotion" detail="update" tone={tone} />;
+          return <EventTitle prefix={baseLabel} detail="update" tone={tone} />;
         default:
-          return assertNever(metadata.phase);
+          return <EventTitle prefix={baseLabel} detail={metadata.status} tone={tone} />;
       }
-    case "demote":
-      switch (metadata.phase) {
-        case "started":
-          return (
-            <EventTitle
-              prefix="Demoting"
-              detail="primary checkout"
-              tone={tone}
-              shimmerPrefix
-            />
-          );
+    }
+    case "primary_checkout": {
+      const action = (metadata.metadata?.action as string) ?? "promote";
+      switch (action) {
+        case "promote":
+          switch (metadata.status) {
+            case "started":
+            case "running":
+              return (
+                <EventTitle
+                  prefix="Promoting"
+                  detail="primary checkout"
+                  tone={tone}
+                  shimmerPrefix
+                />
+              );
+            case "completed":
+              return <EventTitle prefix="Promoted" detail="to primary checkout" tone={tone} />;
+            case "failed":
+              return <EventTitle prefix="Primary checkout promotion" emphasis="failed" tone={tone} />;
+            default:
+              return <EventTitle prefix="Primary checkout promotion" detail={metadata.status} tone={tone} />;
+          }
+        case "demote":
+          switch (metadata.status) {
+            case "started":
+            case "running":
+              return (
+                <EventTitle
+                  prefix="Demoting"
+                  detail="primary checkout"
+                  tone={tone}
+                  shimmerPrefix
+                />
+              );
+            case "completed":
+              return <EventTitle prefix="Demoted" detail="from primary checkout" tone={tone} />;
+            case "failed":
+              return <EventTitle prefix="Primary checkout demotion" emphasis="failed" tone={tone} />;
+            default:
+              return <EventTitle prefix="Primary checkout demotion" detail={metadata.status} tone={tone} />;
+          }
+        default:
+          return <EventTitle prefix="Primary checkout" detail={metadata.status} tone={tone} />;
+      }
+    }
+    case "ownership_change": {
+      const action = (metadata.metadata?.action as string) ?? "transfer";
+      switch (metadata.status) {
         case "completed":
-          return <EventTitle prefix="Demoted" detail="from primary checkout" tone={tone} />;
+          return <EventTitle prefix={`Ownership ${action}`} detail="completed" tone={tone} />;
         case "failed":
-          return <EventTitle prefix="Primary checkout demotion" emphasis="failed" tone={tone} />;
-        case "noop":
-          return <EventTitle prefix="Primary checkout" detail="already demoted" tone={tone} />;
-        case "update":
-          return <EventTitle prefix="Primary checkout demotion" detail="update" tone={tone} />;
+          return <EventTitle prefix={`Ownership ${action}`} emphasis="failed" tone={tone} />;
+        case "started":
+        case "running":
+          return <EventTitle prefix={`Ownership ${action}`} detail="in progress" tone={tone} shimmerPrefix />;
         default:
-          return assertNever(metadata.phase);
+          return <EventTitle prefix={`Ownership ${action}`} detail={metadata.status} tone={tone} />;
       }
-    default:
-      return assertNever(metadata.action);
+    }
+    default: {
+      const label = capitalizeFirst(metadata.operation.replace(/_/g, " "));
+      return <EventTitle prefix={label} detail={metadata.status} tone={tone} />;
+    }
   }
 }
 
@@ -481,9 +472,9 @@ export function OperationRow({
     );
   }
 
-  if (message.opType === "thread-operation-intent") {
+  if (message.opType === "operation") {
     const { operationDetailText, promptText } = extractPromptSections(message.detail);
-    const summaryContent = buildThreadOperationIntentSummary(message, tone);
+    const summaryContent = buildOperationSummary(message, tone);
     if (!operationDetailText && !promptText) {
       return <StaticOperationRow summaryContent={summaryContent} tone={tone} />;
     }
@@ -586,38 +577,6 @@ export function OperationRow({
         onToggle={onToggle}
         summaryContent={summaryContent}
         tone={tone}
-      >
-        <OperationDetailLines lines={detailLines} />
-      </ExpandableOperationRow>
-    );
-  }
-
-  if (message.opType === "primary-checkout") {
-    const detailLines = splitNonEmptyLines(message.detail);
-    const shouldUseSubtleTitle =
-      tone !== "destructive" &&
-      (message.title === "Promoted to primary checkout" ||
-        message.title === "Demoted from primary checkout" ||
-        message.title === "Promoted then demoted as primary checkout");
-    const summaryContent = buildPrimaryCheckoutSummary(message, tone);
-
-    if (detailLines.length === 0) {
-      return (
-        <StaticOperationRow
-          summaryContent={summaryContent}
-          tone={tone}
-          className={shouldUseSubtleTitle ? "text-muted-foreground/70" : undefined}
-        />
-      );
-    }
-
-    return (
-      <ExpandableOperationRow
-        isExpanded={isExpanded}
-        onToggle={onToggle}
-        summaryContent={summaryContent}
-        tone={tone}
-        summaryContentClassName={cn("min-w-0", shouldUseSubtleTitle ? "text-muted-foreground/70" : undefined)}
       >
         <OperationDetailLines lines={detailLines} />
       </ExpandableOperationRow>

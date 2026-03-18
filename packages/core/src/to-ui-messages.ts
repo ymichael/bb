@@ -18,19 +18,14 @@ import type {
   UIFileEditMessage,
   UIMessage,
   UIOperationMessage,
-  UIPrimaryCheckoutAction,
-  UIPrimaryCheckoutMetadata,
-  UIPrimaryCheckoutPhase,
   UIProvisioningSetupMetadata,
   UIProvisioningSetupStatus,
   UIProvisioningTranscriptEntry,
+  UIThreadOperationMetadata,
   UIToolCallMessage,
   UIToolCallSummary,
   UIToolExploringMessage,
   UIToolParsedIntent,
-  UIThreadOperationIntentAction,
-  UIThreadOperationIntentMetadata,
-  UIThreadOperationIntentPhase,
   UIWebSearchMessage,
   UIWorktreeCommitMetadata,
   UIWorktreeSquashMergeMetadata,
@@ -244,204 +239,113 @@ function parsePromptInput(input: unknown): {
   };
 }
 
-function parseThreadOperationIntentAction(
-  operation: string | undefined,
-): UIThreadOperationIntentAction | null {
+function toThreadOperationMetadata(
+  payload: Record<string, unknown> | null,
+): UIThreadOperationMetadata | null {
+  const operation = getStringField(payload, "operation");
+  if (!operation) return null;
+
+  const status = getStringField(payload, "status") ?? "unknown";
+  const operationId = getStringField(payload, "operationId");
+  const rawMetadata = toRecord(payload?.metadata);
+  return {
+    operation,
+    status,
+    ...(operationId ? { operationId } : {}),
+    ...(rawMetadata ? { metadata: rawMetadata } : {}),
+  };
+}
+
+function capitalize(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+function threadOperationTitle(meta: UIThreadOperationMetadata | null): string {
+  if (!meta) return "Operation update";
+
+  const { operation, status, metadata } = meta;
+
   switch (operation) {
     case "commit":
-      return "commit";
-    case "squash_merge":
-      return "squash_merge";
-    default:
-      return null;
-  }
-}
-
-function parsePrimaryCheckoutAction(action: string | undefined): UIPrimaryCheckoutAction | null {
-  switch (action) {
-    case "promote":
-      return "promote";
-    case "demote":
-      return "demote";
-    default:
-      return null;
-  }
-}
-
-function parsePrimaryCheckoutPhase(status: string | undefined): UIPrimaryCheckoutPhase {
-  switch (status) {
-    case "started":
-      return "started";
-    case "completed":
-      return "completed";
-    case "failed":
-      return "failed";
-    case "noop":
-      return "noop";
-    default:
-      // Persisted event payloads are open_external at read-time; unknown statuses map to generic updates.
-      return "update";
-  }
-}
-
-function toPrimaryCheckoutMetadata(
-  payload: Record<string, unknown> | null,
-): UIPrimaryCheckoutMetadata | null {
-  const action = parsePrimaryCheckoutAction(getStringField(payload, "action"));
-  if (!action) return null;
-  return {
-    action,
-    phase: parsePrimaryCheckoutPhase(getStringField(payload, "status")),
-  };
-}
-
-function primaryCheckoutTitle(metadata: UIPrimaryCheckoutMetadata | null): string {
-  if (!metadata) {
-    return "Primary checkout update";
-  }
-
-  switch (metadata.action) {
-    case "promote":
-      switch (metadata.phase) {
-        case "started":
-          return "Promoting primary checkout";
+      switch (status) {
+        case "running":
+          return "Committing changes";
         case "completed":
-          return "Promoted to primary checkout";
+          return "Changes committed";
         case "failed":
-          return "Primary checkout promotion failed";
-        case "noop":
-          return "Primary checkout already promoted";
-        case "update":
-          return "Primary checkout promotion update";
-        default:
-          return assertNever(metadata.phase);
-      }
-    case "demote":
-      switch (metadata.phase) {
-        case "started":
-          return "Demoting primary checkout";
-        case "completed":
-          return "Demoted from primary checkout";
-        case "failed":
-          return "Primary checkout demotion failed";
-        case "noop":
-          return "Primary checkout already demoted";
-        case "update":
-          return "Primary checkout demotion update";
-        default:
-          return assertNever(metadata.phase);
-      }
-    default:
-      return assertNever(metadata.action);
-  }
-}
-
-function parseThreadOperationIntentPhase(
-  status: string | undefined,
-): UIThreadOperationIntentPhase {
-  switch (status) {
-    case "requested":
-      return "requested";
-    case "queued":
-      return "queued";
-    case "running":
-      return "running";
-    case "completed":
-      return "completed";
-    case "failed":
-      return "failed";
-    default:
-      // Persisted event payloads are open_external at read-time; unknown statuses map to generic updates.
-      return "update";
-  }
-}
-
-function toThreadOperationIntentMetadata(
-  payload: Record<string, unknown> | null,
-): UIThreadOperationIntentMetadata | null {
-  const action = parseThreadOperationIntentAction(getStringField(payload, "operation"));
-  if (!action) return null;
-
-  const phase = parseThreadOperationIntentPhase(getStringField(payload, "status"));
-  const operationId = getStringField(payload, "operationId");
-  return {
-    action,
-    phase,
-    ...(operationId ? { operationId } : {}),
-  };
-}
-
-function threadOperationIntentTitle(metadata: UIThreadOperationIntentMetadata | null): string {
-  if (!metadata) {
-    return "Thread operation update";
-  }
-
-  switch (metadata.action) {
-    case "commit":
-      switch (metadata.phase) {
+          return "Commit failed";
         case "requested":
           return "Commit requested";
         case "queued":
           return "Commit queued";
-        case "running":
-          return "Committing changes";
-        case "completed":
-          return "Commit completed";
-        case "failed":
-          return "Commit failed";
-        case "update":
-          return "Commit operation update";
+        case "noop":
+          return "No commit needed";
         default:
-          return assertNever(metadata.phase);
+          return `Commit ${status}`;
       }
     case "squash_merge":
-      switch (metadata.phase) {
+      switch (status) {
+        case "running":
+          return "Squash merging";
+        case "completed":
+          return "Squash merged";
+        case "failed":
+          return "Squash merge failed";
         case "requested":
           return "Squash merge requested";
         case "queued":
           return "Squash merge queued";
-        case "running":
-          return "Squash merging changes";
-        case "completed":
-          return "Squash merge completed";
-        case "failed":
-          return "Squash merge failed";
-        case "update":
-          return "Squash merge operation update";
+        case "noop":
+          return "No squash merge needed";
         default:
-          return assertNever(metadata.phase);
+          return `Squash merge ${status}`;
       }
+    case "primary_checkout": {
+      const action = typeof metadata?.action === "string" ? metadata.action : undefined;
+      const verb = action === "demote" ? "Demoting from" : "Promoting to";
+      const past = action === "demote" ? "Demoted from" : "Promoted to";
+      switch (status) {
+        case "started":
+        case "running":
+          return `${verb} primary checkout`;
+        case "completed":
+          return `${past} primary checkout`;
+        case "failed":
+          return `Primary checkout ${action ?? "update"} failed`;
+        case "noop":
+          return `Primary checkout already ${action === "demote" ? "demoted" : "promoted"}`;
+        default:
+          return `Primary checkout ${status}`;
+      }
+    }
+    case "ownership_change": {
+      const action = typeof metadata?.action === "string" ? metadata.action : undefined;
+      switch (status) {
+        case "completed":
+          return action === "release"
+            ? "Thread management transferred"
+            : "Thread assigned to manager";
+        case "failed":
+          return "Ownership change failed";
+        default:
+          return `Ownership change ${status}`;
+      }
+    }
     default:
-      return assertNever(metadata.action);
+      // open_external: unknown operations get a generic label.
+      return `${capitalize(operation.replace(/_/g, " "))} ${status}`;
   }
 }
 
-function threadOperationIntentStatus(
-  metadata: UIThreadOperationIntentMetadata | null,
+function threadOperationStatus(
+  meta: UIThreadOperationMetadata | null,
 ): UIOperationMessage["status"] {
-  if (!metadata) return undefined;
-  switch (metadata.phase) {
+  if (!meta) return undefined;
+  switch (meta.status) {
     case "requested":
     case "queued":
     case "running":
-    case "update":
-      return "pending";
-    case "completed":
-      return "completed";
-    case "failed":
-      return "error";
-    default:
-      return assertNever(metadata.phase);
-  }
-}
-
-function primaryCheckoutStatus(
-  metadata: UIPrimaryCheckoutMetadata | null,
-): UIOperationMessage["status"] {
-  if (!metadata) return undefined;
-  switch (metadata.phase) {
     case "started":
-    case "update":
       return "pending";
     case "completed":
     case "noop":
@@ -449,7 +353,8 @@ function primaryCheckoutStatus(
     case "failed":
       return "error";
     default:
-      return assertNever(metadata.phase);
+      // open_external: unknown statuses treated as pending.
+      return "pending";
   }
 }
 
@@ -1900,58 +1805,29 @@ function parseOperationMessage(
     };
   }
 
-  if (eventTypeMatches(eventType, "system/primary_checkout/updated")) {
+  if (eventTypeMatches(eventType, "system/operation")) {
     const payload = toEventRecord(event.data);
-    const primaryCheckout = toPrimaryCheckoutMetadata(payload);
-    const message = getStringField(payload, "message");
-    const branch = getStringField(payload, "branch");
-    const detailParts = [
-      message,
-      branch ? `Branch: ${branch}` : undefined,
-    ].filter((value): value is string => Boolean(value));
-    const title = primaryCheckoutTitle(primaryCheckout);
-
-    return {
-      kind: "operation",
-      id: messageId(event.threadId, "op", `primary-checkout-updated:${event.seq}`),
-      threadId: event.threadId,
-      sourceSeqStart: event.seq,
-      sourceSeqEnd: event.seq,
-      createdAt: event.createdAt,
-      startedAt: event.createdAt,
-      turnId: getTurnId(event.data),
-      opType: "primary-checkout",
-      title,
-      detail: detailParts.length > 0 ? detailParts.join(" • ") : undefined,
-      status: primaryCheckoutStatus(primaryCheckout),
-      ...(primaryCheckout ? { primaryCheckout } : {}),
-    };
-  }
-
-  if (eventTypeMatches(eventType, "system/thread_operation")) {
-    const payload = toEventRecord(event.data);
-    const threadOperation = toThreadOperationIntentMetadata(payload);
-    // Keep lifecycle naming aligned with thread-detail-rows collapsing so operation timelines
-    // remain familiar and mergeable across projections (requested → queued → running → terminal).
-    const title = threadOperationIntentTitle(threadOperation);
+    const threadOperation = toThreadOperationMetadata(payload);
+    const title = threadOperationTitle(threadOperation);
 
     const detailParts = [
       getStringField(payload, "message"),
+      getStringField(payload, "branch") ? `Branch: ${getStringField(payload, "branch")}` : undefined,
     ].filter((value): value is string => Boolean(value));
 
     return {
       kind: "operation",
-      id: messageId(event.threadId, "op", `thread-operation:${event.seq}`),
+      id: messageId(event.threadId, "op", `operation:${event.seq}`),
       threadId: event.threadId,
       sourceSeqStart: event.seq,
       sourceSeqEnd: event.seq,
       createdAt: event.createdAt,
       startedAt: event.createdAt,
       turnId: getTurnId(event.data),
-      opType: "thread-operation-intent",
+      opType: "operation",
       title,
       detail: detailParts.length > 0 ? detailParts.join(" • ") : undefined,
-      status: threadOperationIntentStatus(threadOperation),
+      status: threadOperationStatus(threadOperation),
       ...(threadOperation ? { threadOperation } : {}),
     };
   }
@@ -3007,16 +2883,19 @@ function interruptOperationMessage(message: UIOperationMessage): void {
   message.status = "interrupted";
 
   switch (message.opType) {
-    case "thread-operation-intent":
-      switch (message.threadOperation?.action) {
+    case "operation":
+      switch (message.threadOperation?.operation) {
         case "commit":
           message.title = "Commit interrupted";
           return;
         case "squash_merge":
           message.title = "Squash merge interrupted";
           return;
+        case "primary_checkout":
+          message.title = "Primary checkout interrupted";
+          return;
         default:
-          message.title = "Thread operation interrupted";
+          message.title = "Operation interrupted";
           return;
       }
     case "provisioning-started":
@@ -3028,9 +2907,6 @@ function interruptOperationMessage(message: UIOperationMessage): void {
       return;
     case "provisioning-env-setup":
       message.title = "Environment setup interrupted";
-      return;
-    case "primary-checkout":
-      message.title = "Primary checkout interrupted";
       return;
     case "mcp-progress":
       message.title = "MCP tool progress interrupted";

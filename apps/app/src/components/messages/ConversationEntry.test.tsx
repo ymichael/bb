@@ -1281,42 +1281,53 @@ describe("ConversationEntry", () => {
     expect(html).not.toContain("animate-shine");
   });
 
-  it("renders completed primary-checkout operation titles with a subtler tone", () => {
+  it("renders completed primary-checkout operation titles", () => {
     const message: UIMessage = {
       ...baseMessage(),
       kind: "operation",
-      opType: "primary-checkout",
+      opType: "operation",
       title: "Promoted to primary checkout",
+      threadOperation: {
+        operation: "primary_checkout",
+        status: "completed",
+        metadata: { action: "promote" },
+      },
     };
 
     const html = renderToStaticMarkup(<ConversationEntry message={message} />);
-    expect(html).toContain("Promoted to primary checkout");
-    expect(html).toContain("text-muted-foreground/70");
+    expect(html).toContain("Promoted");
+    expect(html).toContain("primary checkout");
   });
 
-  it("renders collapsed primary-checkout round trips with a subtler tone", () => {
+  it("renders completed primary-checkout demote operations", () => {
     const message: UIMessage = {
       ...baseMessage(),
       kind: "operation",
-      opType: "primary-checkout",
-      title: "Promoted then demoted as primary checkout",
+      opType: "operation",
+      title: "Demoted from primary checkout",
+      threadOperation: {
+        operation: "primary_checkout",
+        status: "completed",
+        metadata: { action: "demote" },
+      },
     };
 
     const html = renderToStaticMarkup(<ConversationEntry message={message} />);
-    expect(html).toContain("Promoted then demoted as primary checkout");
-    expect(html).toContain("text-muted-foreground/70");
+    expect(html).toContain("Demoted");
+    expect(html).toContain("primary checkout");
   });
 
-  it("keeps in-progress primary-checkout operation titles at the default tone", () => {
+  it("keeps in-progress primary-checkout operation titles with shimmer", () => {
     const message: UIMessage = {
       ...baseMessage(),
       kind: "operation",
-      opType: "primary-checkout",
+      opType: "operation",
       title: "Promoting primary checkout",
       status: "pending",
-      primaryCheckout: {
-        action: "promote",
-        phase: "started",
+      threadOperation: {
+        operation: "primary_checkout",
+        status: "started",
+        metadata: { action: "promote" },
       },
     };
 
@@ -1324,7 +1335,6 @@ describe("ConversationEntry", () => {
     expect(html).toContain(">Promoting<");
     expect(html).toContain("primary checkout");
     expect(html).toContain("animate-shine");
-    expect(html).not.toContain("text-muted-foreground/70");
   });
 
   it("renders worktree commit summaries without commit hash until expanded", () => {
@@ -1413,20 +1423,25 @@ describe("ConversationEntry", () => {
     expect(html).toContain("max-h-[220px] overflow-auto mt-0.5 space-y-0.5");
   });
 
-  it("renders merged thread-operation intents as expandable rows with prompt details", () => {
+  it("renders merged operations as expandable rows with prompt details", () => {
     const promptText =
       "Please squash-merge the changes in this thread workspace.\n" +
       "Please use the default merge-base branch reported by git.";
     const message: UIMessage = {
       ...baseMessage(),
       kind: "operation",
-      opType: "thread-operation-intent",
+      opType: "operation",
       title: "Squash merge queued",
       detail: `Squash-merge operation queued for deterministic execution\n\nPrompt:\n${promptText}`,
+      threadOperation: {
+        operation: "squash_merge",
+        status: "queued",
+      },
     };
 
     const collapsedHtml = renderToStaticMarkup(<ConversationEntry message={message} />);
-    expect(collapsedHtml).toContain("Squash merge queued");
+    expect(collapsedHtml).toContain("Squash merge");
+    expect(collapsedHtml).toContain("queued");
     expect(collapsedHtml).toContain("lucide-chevron-right");
     expect(collapsedHtml).toContain("aria-hidden=\"true\"");
 
@@ -1438,16 +1453,16 @@ describe("ConversationEntry", () => {
     expect(expandedHtml).toContain("Squash-merge operation queued for deterministic execution");
   });
 
-  it("renders running thread-operation intent summaries with shimmer feedback", () => {
+  it("renders running operation summaries with shimmer feedback", () => {
     const message: UIMessage = {
       ...baseMessage(),
       kind: "operation",
-      opType: "thread-operation-intent",
+      opType: "operation",
       title: "Committing changes",
       detail: "Running commit operation",
       threadOperation: {
-        action: "commit",
-        phase: "running",
+        operation: "commit",
+        status: "running",
         operationId: "op-1",
       },
     };

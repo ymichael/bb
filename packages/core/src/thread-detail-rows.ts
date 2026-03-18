@@ -1,13 +1,10 @@
 import { assertNever } from "./assert-never.js";
 import type {
   UIMessage,
-  UIPrimaryCheckoutAction,
-  UIPrimaryCheckoutPhase,
   UIProvisioningMetadata,
   UIProvisioningSetupMetadata,
   UIProvisioningTranscriptEntry,
-  UIThreadOperationIntentAction,
-  UIThreadOperationIntentPhase,
+  UIThreadOperationMetadata,
 } from "./ui-message.js";
 
 type CollapsibleTurnMessage = UIMessage;
@@ -341,196 +338,30 @@ function mergeProvisioningOperations(messages: UIMessage[]): UIMessage[] {
   return merged;
 }
 
-type PrimaryCheckoutAction = UIPrimaryCheckoutAction | "unknown";
-type PrimaryCheckoutPhase = UIPrimaryCheckoutPhase;
+type ThreadOperationAction = string;
+type ThreadOperationStatus = string;
 
-function isPrimaryCheckoutOperation(
-  message: UIMessage,
-): message is Extract<UIMessage, { kind: "operation" }> {
-  return message.kind === "operation" && message.opType === "primary-checkout";
-}
-
-function classifyPrimaryCheckoutOperation(message: Extract<UIMessage, { kind: "operation" }>): {
-  action: PrimaryCheckoutAction;
-  phase: PrimaryCheckoutPhase;
-} | null {
-  if (!message.primaryCheckout) {
-    return null;
-  }
-  return {
-    action: message.primaryCheckout.action,
-    phase: message.primaryCheckout.phase,
-  };
-}
-
-function mergePrimaryCheckoutOperations(messages: UIMessage[]): UIMessage[] {
-  const merged: UIMessage[] = [];
-  let active: Array<Extract<UIMessage, { kind: "operation" }>> = [];
-  let activeAction: Exclude<PrimaryCheckoutAction, "unknown"> | null = null;
-
-  const flush = () => {
-    if (active.length === 0) return;
-    if (active.length === 1) {
-      merged.push(active[0]);
-      active = [];
-      activeAction = null;
-      return;
-    }
-
-    const first = active[0];
-    const last = active[active.length - 1];
-    if (!first || !last) {
-      active = [];
-      activeAction = null;
-      return;
-    }
-
-    const details = active
-      .map((message) => message.detail?.trim())
-      .filter((value): value is string => Boolean(value));
-    const uniqueDetailLines = [...new Set(details)];
-
-    merged.push({
-      kind: "operation",
-      id: `${first.id}:primary-checkout:${last.id}`,
-      threadId: first.threadId,
-      sourceSeqStart: Math.min(...active.map((message) => message.sourceSeqStart)),
-      sourceSeqEnd: Math.max(...active.map((message) => message.sourceSeqEnd)),
-      createdAt: Math.max(...active.map((message) => message.createdAt)),
-      startedAt: Math.min(...active.map((message) => getMessageStartedAt(message))),
-      turnId: first.turnId ?? last.turnId,
-      opType: "primary-checkout",
-      title: last.title,
-      detail: uniqueDetailLines.length > 0 ? uniqueDetailLines.join("\n") : undefined,
-      status: last.status,
-      ...(last.primaryCheckout ? { primaryCheckout: last.primaryCheckout } : {}),
-    });
-
-    active = [];
-    activeAction = null;
-  };
-
-  for (const message of messages) {
-    if (!isPrimaryCheckoutOperation(message)) {
-      flush();
-      merged.push(message);
-      continue;
-    }
-
-    const classified = classifyPrimaryCheckoutOperation(message);
-    if (!classified || classified.action === "unknown") {
-      flush();
-      merged.push(message);
-      continue;
-    }
-
-    if (active.length === 0) {
-      active = [message];
-      activeAction = classified.action;
-      if (classified.phase !== "started") {
-        flush();
-      }
-      continue;
-    }
-
-    if (activeAction !== classified.action || classified.phase === "started") {
-      flush();
-      active = [message];
-      activeAction = classified.action;
-      if (classified.phase !== "started") {
-        flush();
-      }
-      continue;
-    }
-
-    active.push(message);
-    flush();
-  }
-
-  flush();
-  return mergePrimaryCheckoutCompletedRoundTrips(merged);
-}
-
-function mergePrimaryCheckoutCompletedRoundTrips(messages: UIMessage[]): UIMessage[] {
-  const merged: UIMessage[] = [];
-
-  for (let index = 0; index < messages.length; index += 1) {
-    const promoted = messages[index];
-    if (!promoted || !isPrimaryCheckoutOperation(promoted)) {
-      if (promoted) {
-        merged.push(promoted);
-      }
-      continue;
-    }
-
-    const promotedClass = classifyPrimaryCheckoutOperation(promoted);
-    if (!promotedClass || promotedClass.action !== "promote" || promotedClass.phase !== "completed") {
-      merged.push(promoted);
-      continue;
-    }
-
-    const demoted = messages[index + 1];
-    if (!demoted || !isPrimaryCheckoutOperation(demoted)) {
-      merged.push(promoted);
-      continue;
-    }
-
-    const demotedClass = classifyPrimaryCheckoutOperation(demoted);
-    if (!demotedClass || demotedClass.action !== "demote" || demotedClass.phase !== "completed") {
-      merged.push(promoted);
-      continue;
-    }
-
-    const details = [promoted.detail?.trim(), demoted.detail?.trim()].filter(
-      (value): value is string => Boolean(value),
-    );
-    const uniqueDetailLines = [...new Set(details)];
-
-    merged.push({
-      kind: "operation",
-      id: `${promoted.id}:primary-checkout-roundtrip:${demoted.id}`,
-      threadId: promoted.threadId,
-      sourceSeqStart: Math.min(promoted.sourceSeqStart, demoted.sourceSeqStart),
-      sourceSeqEnd: Math.max(promoted.sourceSeqEnd, demoted.sourceSeqEnd),
-      createdAt: Math.max(promoted.createdAt, demoted.createdAt),
-      startedAt: Math.min(getMessageStartedAt(promoted), getMessageStartedAt(demoted)),
-      turnId: demoted.turnId ?? promoted.turnId,
-      opType: "primary-checkout",
-      title: "Promoted then demoted as primary checkout",
-      detail: uniqueDetailLines.length > 0 ? uniqueDetailLines.join("\n") : undefined,
-      status: "completed",
-    });
-
-    index += 1;
-  }
-
-  return merged;
-}
-
-type ThreadOperationIntentAction = UIThreadOperationIntentAction | "unknown";
-type ThreadOperationIntentPhase = UIThreadOperationIntentPhase;
-
-interface ClassifiedThreadOperationIntent {
-  action: ThreadOperationIntentAction;
-  phase: ThreadOperationIntentPhase;
+interface ClassifiedThreadOperation {
+  operation: ThreadOperationAction;
+  status: ThreadOperationStatus;
   operationId?: string;
 }
 
-function isThreadOperationIntent(
+function isThreadOperation(
   message: UIMessage,
 ): message is Extract<UIMessage, { kind: "operation" }> {
-  return message.kind === "operation" && message.opType === "thread-operation-intent";
+  return message.kind === "operation" && message.opType === "operation";
 }
 
-function classifyThreadOperationIntent(
+function classifyThreadOperation(
   message: Extract<UIMessage, { kind: "operation" }>,
-): ClassifiedThreadOperationIntent | null {
+): ClassifiedThreadOperation | null {
   if (!message.threadOperation) {
     return null;
   }
   return {
-    action: message.threadOperation.action,
-    phase: message.threadOperation.phase,
+    operation: message.threadOperation.operation,
+    status: message.threadOperation.status,
     ...(message.threadOperation.operationId
       ? { operationId: message.threadOperation.operationId }
       : {}),
@@ -547,35 +378,37 @@ function areThreadOperationIdsCompatible(
   return leftOperationId === rightOperationId;
 }
 
-function isTerminalThreadOperationIntentPhase(phase: ThreadOperationIntentPhase): boolean {
-  switch (phase) {
+function isTerminalThreadOperationStatus(status: ThreadOperationStatus): boolean {
+  switch (status) {
     case "completed":
     case "failed":
       return true;
     case "requested":
     case "queued":
     case "running":
+    case "started":
     case "update":
       return false;
     default:
-      return assertNever(phase);
+      // status is open_external; unknown values are intentionally treated as non-terminal.
+      return false;
   }
 }
 
-function mergeThreadOperationIntentMessages(messages: UIMessage[]): UIMessage[] {
+function mergeThreadOperationMessages(messages: UIMessage[]): UIMessage[] {
   const merged: UIMessage[] = [];
 
   for (let index = 0; index < messages.length; index += 1) {
     const initial = messages[index];
-    if (!initial || !isThreadOperationIntent(initial)) {
+    if (!initial || !isThreadOperation(initial)) {
       if (initial) {
         merged.push(initial);
       }
       continue;
     }
 
-    const initialClass = classifyThreadOperationIntent(initial);
-    if (!initialClass || initialClass.action === "unknown") {
+    const initialClass = classifyThreadOperation(initial);
+    if (!initialClass) {
       merged.push(initial);
       continue;
     }
@@ -584,8 +417,8 @@ function mergeThreadOperationIntentMessages(messages: UIMessage[]): UIMessage[] 
     let promptMessage: Extract<UIMessage, { kind: "user" }> | null = null;
     const promptCandidate = messages[cursor];
     if (
-      initialClass.action === "squash_merge" &&
-      initialClass.phase === "requested" &&
+      initialClass.operation === "squash_merge" &&
+      initialClass.status === "requested" &&
       promptCandidate?.kind === "user"
     ) {
       promptMessage = promptCandidate;
@@ -593,27 +426,27 @@ function mergeThreadOperationIntentMessages(messages: UIMessage[]): UIMessage[] 
     }
 
     const lifecycleMessages: Array<Extract<UIMessage, { kind: "operation" }>> = [initial];
-    let sawTerminalLifecyclePhase = isTerminalThreadOperationIntentPhase(initialClass.phase);
-    while (!sawTerminalLifecyclePhase) {
+    let sawTerminalStatus = isTerminalThreadOperationStatus(initialClass.status);
+    while (!sawTerminalStatus) {
       const lifecycleCandidate = messages[cursor];
-      if (!lifecycleCandidate || !isThreadOperationIntent(lifecycleCandidate)) {
+      if (!lifecycleCandidate || !isThreadOperation(lifecycleCandidate)) {
         break;
       }
-      const lifecycleClass = classifyThreadOperationIntent(lifecycleCandidate);
+      const lifecycleClass = classifyThreadOperation(lifecycleCandidate);
       if (!lifecycleClass) {
         break;
       }
       if (
-        lifecycleClass.action !== initialClass.action ||
-        lifecycleClass.phase === "requested" ||
+        lifecycleClass.operation !== initialClass.operation ||
+        lifecycleClass.status === "requested" ||
         !areThreadOperationIdsCompatible(initialClass.operationId, lifecycleClass.operationId)
       ) {
         break;
       }
       lifecycleMessages.push(lifecycleCandidate);
       cursor += 1;
-      if (isTerminalThreadOperationIntentPhase(lifecycleClass.phase)) {
-        sawTerminalLifecyclePhase = true;
+      if (isTerminalThreadOperationStatus(lifecycleClass.status)) {
+        sawTerminalStatus = true;
       }
     }
 
@@ -648,7 +481,7 @@ function mergeThreadOperationIntentMessages(messages: UIMessage[]): UIMessage[] 
 
     merged.push({
       kind: "operation",
-      id: `${initial.id}:thread-operation-intent:${lifecycleCandidate.id}`,
+      id: `${initial.id}:operation:${lifecycleCandidate.id}`,
       threadId: initial.threadId,
       sourceSeqStart: Math.min(...sequence.map((message) => message.sourceSeqStart)),
       sourceSeqEnd: Math.max(...sequence.map((message) => message.sourceSeqEnd)),
@@ -658,7 +491,7 @@ function mergeThreadOperationIntentMessages(messages: UIMessage[]): UIMessage[] 
         lifecycleCandidate.turnId ??
         promptMessage?.turnId ??
         initial.turnId,
-      opType: "thread-operation-intent",
+      opType: "operation",
       title: lifecycleCandidate.title,
       detail: detailSections.length > 0 ? detailSections.join("\n\n") : undefined,
       status: lifecycleCandidate.status,
@@ -689,7 +522,7 @@ function hasAdjacentThreadOperationOutcome(
   messages: UIMessage[],
   startIndex: number,
   direction: -1 | 1,
-  action: Exclude<ThreadOperationIntentAction, "unknown">,
+  operation: ThreadOperationAction,
   operationId?: string,
 ): boolean {
   for (
@@ -700,27 +533,19 @@ function hasAdjacentThreadOperationOutcome(
     const candidate = messages[cursor];
     if (!candidate) break;
 
-    switch (action) {
-      case "commit":
-        if (isWorktreeCommitOperation(candidate)) {
-          return true;
-        }
-        break;
-      case "squash_merge":
-        if (isWorktreeSquashMergeOperation(candidate)) {
-          return true;
-        }
-        break;
-      default:
-        return assertNever(action);
+    if (operation === "commit" && isWorktreeCommitOperation(candidate)) {
+      return true;
+    }
+    if (operation === "squash_merge" && isWorktreeSquashMergeOperation(candidate)) {
+      return true;
     }
 
-    if (isThreadOperationIntent(candidate)) {
-      const candidateClass = classifyThreadOperationIntent(candidate);
+    if (isThreadOperation(candidate)) {
+      const candidateClass = classifyThreadOperation(candidate);
       if (!candidateClass) {
         return false;
       }
-      if (candidateClass.action === action) {
+      if (candidateClass.operation === operation) {
         if (!areThreadOperationIdsCompatible(operationId, candidateClass.operationId)) {
           return false;
         }
@@ -729,7 +554,7 @@ function hasAdjacentThreadOperationOutcome(
       return false;
     }
 
-    if (action === "squash_merge" && isWorktreeCommitOperation(candidate)) {
+    if (operation === "squash_merge" && isWorktreeCommitOperation(candidate)) {
       continue;
     }
 
@@ -744,15 +569,15 @@ function mergeThreadOperationOutcomeMessages(messages: UIMessage[]): UIMessage[]
 
   for (let index = 0; index < messages.length; index += 1) {
     const message = messages[index];
-    if (!message || !isThreadOperationIntent(message)) {
+    if (!message || !isThreadOperation(message)) {
       if (message) {
         merged.push(message);
       }
       continue;
     }
 
-    const classified = classifyThreadOperationIntent(message);
-    if (!classified || classified.action === "unknown" || classified.phase === "failed") {
+    const classified = classifyThreadOperation(message);
+    if (!classified || classified.status === "failed") {
       merged.push(message);
       continue;
     }
@@ -762,14 +587,14 @@ function mergeThreadOperationOutcomeMessages(messages: UIMessage[]): UIMessage[]
         messages,
         index,
         1,
-        classified.action,
+        classified.operation,
         classified.operationId,
       ) ||
       hasAdjacentThreadOperationOutcome(
         messages,
         index,
         -1,
-        classified.action,
+        classified.operation,
         classified.operationId,
       )
     ) {
@@ -1124,9 +949,8 @@ export function buildThreadDetailRows(
   // stay familiar across projections instead of showing near-duplicate status updates.
   const includeToolGroupMessages = options?.includeToolGroupMessages ?? true;
   const provisioningMergedMessages = mergeProvisioningOperations(messages);
-  const primaryCheckoutMergedMessages = mergePrimaryCheckoutOperations(provisioningMergedMessages);
-  const threadOperationMergedMessages = mergeThreadOperationIntentMessages(
-    primaryCheckoutMergedMessages,
+  const threadOperationMergedMessages = mergeThreadOperationMessages(
+    provisioningMergedMessages,
   );
   const operationOutcomeMergedMessages = mergeThreadOperationOutcomeMessages(
     threadOperationMergedMessages,
