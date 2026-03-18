@@ -389,6 +389,8 @@ export function ProjectList({
       isManager?: boolean
       hasManagedChildren?: boolean
       isManagerCollapsed?: boolean
+      managedChildCount?: number
+      managedChildBusyCount?: number
     }
   ) => {
     const threadIsBusy = isBusyThread(thread)
@@ -405,6 +407,8 @@ export function ProjectList({
     const isManagedChild = options?.isManagedChild === true
     const hasManagedChildren = options?.hasManagedChildren === true
     const isManagerCollapsed = options?.isManagerCollapsed === true
+    const managedChildCount = options?.managedChildCount ?? 0
+    const managedChildBusyCount = options?.managedChildBusyCount ?? 0
 
     return (
       <div
@@ -461,6 +465,16 @@ export function ProjectList({
           </span>
         )}
         <span className="min-w-0 flex-1 truncate">{threadTitle}</span>
+        {isManager && isManagerCollapsed && managedChildCount > 0 ? (
+          <span className="flex shrink-0 items-center gap-1 pl-1">
+            {managedChildBusyCount > 0 ? (
+              <CircleDashed className="size-3 animate-spin text-sidebar-foreground/60" />
+            ) : null}
+            <span className="text-xs tabular-nums text-sidebar-foreground/50">
+              ({managedChildCount})
+            </span>
+          </span>
+        ) : null}
         <span className="flex h-7 shrink-0 items-center justify-end gap-1 pl-1">
           {thread.primaryCheckout?.isActive ? (
             <StatusPill variant="emphasis">active</StatusPill>
@@ -727,12 +741,16 @@ export function ProjectList({
                             key={thread.id}
                             className="space-y-1"
                           >
-                            {renderThreadRow(project.id, thread, {
-                              isManager: true,
-                              hasManagedChildren:
-                                (managedThreadsByManagerId.get(thread.id)?.length ?? 0) > 0,
-                              isManagerCollapsed: collapsedManagerIds.has(thread.id),
-                            })}
+                            {(() => {
+                              const managedChildren = managedThreadsByManagerId.get(thread.id) ?? []
+                              return renderThreadRow(project.id, thread, {
+                                isManager: true,
+                                hasManagedChildren: managedChildren.length > 0,
+                                isManagerCollapsed: collapsedManagerIds.has(thread.id),
+                                managedChildCount: managedChildren.length,
+                                managedChildBusyCount: managedChildren.filter(isBusyThread).length,
+                              })
+                            })()}
                             {!collapsedManagerIds.has(thread.id) &&
                             (managedThreadsByManagerId.get(thread.id)?.length ?? 0) > 0 ? (
                               <div className="space-y-1">
