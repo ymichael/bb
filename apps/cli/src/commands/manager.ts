@@ -20,10 +20,11 @@ export function registerManagerCommands(program: Command, getUrl: () => string):
     .option("--title <title>", "Manager name")
     .option("--provider <id>", "Provider ID for the manager (e.g. claude-code, codex)")
     .option("--model <model>", "Model ID for the manager")
+    .option("--reasoning-level <level>", "Reasoning level (low, medium, high, xhigh)")
     .option("--json", "Print machine-readable JSON output")
     .action(async (
       projectIdArg: string | undefined,
-      opts: { json?: boolean; project?: string; title?: string; provider?: string; model?: string },
+      opts: { json?: boolean; project?: string; title?: string; provider?: string; model?: string; reasoningLevel?: string },
     ) => {
       const client = createClient(getUrl());
       try {
@@ -37,6 +38,7 @@ export function registerManagerCommands(program: Command, getUrl: () => string):
               ...(opts.title ? { title: opts.title } : {}),
               ...(opts.provider ? { providerId: opts.provider } : {}),
               ...(opts.model ? { model: opts.model } : {}),
+              ...(opts.reasoningLevel ? { reasoningLevel: opts.reasoningLevel as "low" | "medium" | "high" | "xhigh" } : {}),
             },
           }),
         );

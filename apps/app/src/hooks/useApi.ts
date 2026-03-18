@@ -9,6 +9,7 @@ import type {
   EnvironmentRecord,
   PromptInput,
   Project,
+  ReasoningLevel,
   Thread,
   CreateProjectRequest,
   UpdateProjectRequest,
@@ -412,12 +413,14 @@ export function useHireProjectManager() {
       title,
       providerId,
       model,
+      reasoningLevel,
     }: {
       projectId: string;
       title?: string;
       providerId?: string;
       model?: string;
-    }) => api.hireProjectManager(projectId, { title, providerId, model }),
+      reasoningLevel?: ReasoningLevel;
+    }) => api.hireProjectManager(projectId, { title, providerId, model, reasoningLevel }),
     onSuccess: (thread) => {
       queryClient.setQueryData<Thread>(["thread", thread.id], thread);
 

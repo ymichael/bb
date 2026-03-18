@@ -7,6 +7,7 @@ import type {
   AvailableModel,
   CreateProjectRequest,
   DemotePrimaryResponse,
+  ReasoningLevel,
   EnvironmentRecord,
   OpenPathTarget,
   OpenThreadPathRequest,
@@ -226,7 +227,7 @@ export async function createProject(req: CreateProjectRequest): Promise<Project>
 
 export async function hireProjectManager(
   projectId: string,
-  options?: { title?: string; providerId?: string; model?: string },
+  options?: { title?: string; providerId?: string; model?: string; reasoningLevel?: ReasoningLevel },
 ): Promise<Thread> {
   return request<Thread>(
     apiClient.projects[":id"].manager.$post({

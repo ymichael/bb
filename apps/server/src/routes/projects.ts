@@ -46,6 +46,7 @@ const projectManagerRequestSchema = z.object({
   title: z.string().trim().min(1).optional(),
   providerId: z.string().trim().min(1).optional(),
   model: z.string().trim().min(1).optional(),
+  reasoningLevel: z.enum(["low", "medium", "high", "xhigh"]).optional(),
 });
 
 type SearchProjectFilesFn = (
@@ -321,6 +322,7 @@ export function createProjectRoutes(
           spawnInitiator: "system",
           ...(providerId ? { providerId } : {}),
           ...(model ? { model } : {}),
+          ...(body?.reasoningLevel ? { reasoningLevel: body.reasoningLevel } : {}),
         });
 
         try {
