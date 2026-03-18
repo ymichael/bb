@@ -214,7 +214,7 @@ async function spawnThread(args: {
 
 async function expectCliSuccess(resultPromise: Promise<CliRunResult>): Promise<CliRunResult> {
   const result = await resultPromise;
-  expect(result.exitCode).toBe(0);
+  expect(result.exitCode, `CLI failed (stderr: ${result.stderr || "(empty)"})`).toBe(0);
   expect(result.stderr).toBe("");
   return result;
 }
