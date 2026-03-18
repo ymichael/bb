@@ -13,8 +13,7 @@ import {
   useDeleteQueuedThreadMessage,
   useArchiveThread,
   useRequestThreadOperation,
-  usePromoteThread,
-  useDemotePrimaryCheckout,
+  useRequestEnvironmentOperation,
   useStopThread,
   useMarkThreadRead,
   useMarkThreadUnread,
@@ -300,8 +299,7 @@ export function ThreadDetailView() {
   const archiveThread = useArchiveThread();
   const requestThreadCommitOperation = useRequestThreadOperation();
   const requestThreadSquashOperation = useRequestThreadOperation();
-  const promoteThread = usePromoteThread();
-  const demotePrimaryCheckout = useDemotePrimaryCheckout();
+  const requestEnvironmentOperation = useRequestEnvironmentOperation();
   const stopThread = useStopThread();
   const unarchiveThread = useUnarchiveThread();
   const markThreadRead = useMarkThreadRead();
@@ -866,7 +864,7 @@ export function ThreadDetailView() {
   const isFollowUpSubmitting =
     tellThread.isPending ||
     pendingSubmittedFollowUp !== null ||
-    demotePrimaryCheckout.isPending ||
+    requestEnvironmentOperation.isPending ||
     enqueueThreadMessage.isPending;
   const canSendFollowUp = !isCreated && !isProvisioning;
   const promptPlaceholder =
@@ -890,12 +888,12 @@ export function ThreadDetailView() {
   const canTakeOverThread =
     thread.type === "standard" && Boolean(thread.parentThreadId);
   const isPrimaryCheckoutActive = thread.primaryCheckout?.isActive === true;
-  const isPrimaryCheckoutMutationPending = promoteThread.isPending || demotePrimaryCheckout.isPending;
+  const isPrimaryCheckoutMutationPending = requestEnvironmentOperation.isPending;
   const primaryCheckoutActionLabel = isPrimaryCheckoutActive
-    ? demotePrimaryCheckout.isPending
+    ? requestEnvironmentOperation.isPending
       ? "Demoting..."
       : "Demote"
-    : promoteThread.isPending
+    : requestEnvironmentOperation.isPending
     ? "Promoting..."
     : "Promote";
   const isArchivedThread = thread.archivedAt !== undefined;
@@ -1070,9 +1068,19 @@ export function ThreadDetailView() {
     }
   };
   const handleTogglePrimaryCheckout = () => {
+    if (!thread.environmentId) {
+      window.alert("Thread has no attached environment");
+      return;
+    }
     const action = isPrimaryCheckoutActive
-      ? demotePrimaryCheckout.mutateAsync({ id: thread.id })
-      : promoteThread.mutateAsync({ id: thread.id });
+      ? requestEnvironmentOperation.mutateAsync({
+          id: thread.environmentId,
+          operation: "demote_primary",
+        })
+      : requestEnvironmentOperation.mutateAsync({
+          id: thread.environmentId,
+          operation: "promote_primary",
+        });
     void action.catch((err) => {
       window.alert(
         err instanceof Error

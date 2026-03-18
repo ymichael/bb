@@ -1,6 +1,8 @@
 import type {
   AvailableModel,
   DemotePrimaryResponse,
+  EnvironmentOperationRequest,
+  EnvironmentOperationResponse,
   EnqueueThreadMessageRequest,
   PrimaryCheckoutStatus,
   PromoteThreadResponse,
@@ -240,6 +242,10 @@ export interface ThreadOrchestrator {
     threadId: string,
     request: ThreadOperationRequest,
   ): Promise<ThreadOperationResponse>;
+  requestEnvironmentOperation(
+    environmentId: string,
+    request: EnvironmentOperationRequest,
+  ): Promise<EnvironmentOperationResponse>;
   promoteThread(threadId: string): Promise<PromoteThreadResponse>;
   demotePrimaryCheckout(threadId: string): Promise<DemotePrimaryResponse>;
   getPrimaryCheckoutStatus(projectId: string): PrimaryCheckoutStatus;

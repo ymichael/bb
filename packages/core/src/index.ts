@@ -86,10 +86,13 @@ export type {
   CreateProjectRequest,
   UpdateProjectRequest,
   ThreadOperationType,
+  EnvironmentOperationType,
   CommitOperationOptions,
   SquashMergeOperationOptions,
   ThreadOperationRequest,
+  EnvironmentOperationRequest,
   ThreadOperationResponse,
+  EnvironmentOperationResponse,
   PrimaryCheckoutStatus,
   PromoteThreadResponse,
   DemotePrimaryResponse,
@@ -151,6 +154,7 @@ export {
   createProjectSchema,
   updateProjectSchema,
   threadOperationSchema,
+  environmentOperationSchema,
 } from "./schemas.js";
 
 export type {

@@ -5,18 +5,19 @@ import {
 } from "@bb/core";
 import type {
   AvailableModel,
+  CommitOperationOptions,
   CreateProjectRequest,
-  DemotePrimaryResponse,
   ReasoningLevel,
+  EnvironmentOperationResponse,
   EnvironmentRecord,
   OpenPathTarget,
   OpenThreadPathRequest,
   PrimaryCheckoutStatus,
   Project,
   ProjectFileSuggestion,
-  PromoteThreadResponse,
   SendQueuedThreadMessageRequest,
   SendQueuedThreadMessageResponse,
+  SquashMergeOperationOptions,
   SpawnThreadRequest,
   SystemEnvironmentInfo,
   SystemProviderInfo,
@@ -512,17 +513,24 @@ export async function requestThreadOperation(
   );
 }
 
-export async function promoteThread(id: string): Promise<PromoteThreadResponse> {
-  return request<PromoteThreadResponse>(
-    apiClient.threads[":id"].promote.$post({ param: { id } }),
-  );
-}
-
-export async function demotePrimaryCheckout(
+export async function requestEnvironmentOperation(
   id: string,
-): Promise<DemotePrimaryResponse> {
-  return request<DemotePrimaryResponse>(
-    apiClient.threads[":id"]["demote-primary"].$post({ param: { id } }),
+  req: {
+    operation: "promote_primary";
+  } | {
+    operation: "demote_primary";
+  } | {
+    operation: "commit";
+    initiatingThreadId: string;
+    options?: CommitOperationOptions;
+  } | {
+    operation: "squash_merge";
+    initiatingThreadId: string;
+    options?: SquashMergeOperationOptions;
+  },
+): Promise<EnvironmentOperationResponse> {
+  return request<EnvironmentOperationResponse>(
+    apiClient.environments[":id"].operations.$post({ param: { id }, json: req }),
   );
 }
 

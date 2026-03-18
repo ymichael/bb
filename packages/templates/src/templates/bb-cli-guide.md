@@ -76,8 +76,9 @@ bb thread commit <thread-id>                          # Request an agent-driven 
 bb thread commit --self --message "feat: add X"       # Commit the current thread with a message
 bb thread squash-merge <thread-id>                    # Request an agent-driven squash merge
 bb thread squash-merge --self                         # Squash-merge the current thread
-bb thread promote <thread-id>                         # Promote a worktree to primary checkout
-bb thread demote                                      # Demote the currently promoted thread
+bb environment promote <environment-id>               # Promote an environment to primary checkout
+bb environment demote [environment-id]                # Demote the active primary-checkout environment
+bb environment promote-status --project <project-id>  # Show the active primary-checkout environment
 ```
 
 ## Managers

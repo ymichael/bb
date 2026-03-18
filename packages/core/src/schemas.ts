@@ -154,3 +154,22 @@ export const threadOperationSchema = z.discriminatedUnion("operation", [
     options: squashMergeOperationOptionsSchema.optional(),
   }),
 ]);
+
+export const environmentOperationSchema = z.discriminatedUnion("operation", [
+  z.object({
+    operation: z.literal("promote_primary"),
+  }),
+  z.object({
+    operation: z.literal("demote_primary"),
+  }),
+  z.object({
+    operation: z.literal("commit"),
+    initiatingThreadId: z.string().min(1),
+    options: commitOperationOptionsSchema.optional(),
+  }),
+  z.object({
+    operation: z.literal("squash_merge"),
+    initiatingThreadId: z.string().min(1),
+    options: squashMergeOperationOptionsSchema.optional(),
+  }),
+]);

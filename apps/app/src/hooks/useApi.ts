@@ -6,6 +6,7 @@ import {
   type QueryKey,
 } from "@tanstack/react-query";
 import type {
+  CommitOperationOptions,
   EnvironmentRecord,
   PromptInput,
   Project,
@@ -33,8 +34,7 @@ import type {
   UploadedPromptAttachment,
   ThreadOperationRequest,
   ThreadOperationResponse,
-  PromoteThreadResponse,
-  DemotePrimaryResponse,
+  EnvironmentOperationResponse,
   ThreadTimelineResponse,
   ThreadToolGroupMessagesResponse,
   ThreadGitDiffSelection,
@@ -42,6 +42,7 @@ import type {
   ThreadQueuedMessage,
   ThreadDetailRow,
   ThreadType,
+  SquashMergeOperationOptions,
 } from "@bb/core";
 import * as api from "../lib/api";
 import { wsManager } from "../lib/ws";
@@ -1144,29 +1145,26 @@ export function useRequestThreadOperation() {
   });
 }
 
-export function usePromoteThread() {
+export function useRequestEnvironmentOperation() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id }: { id: string }): Promise<PromoteThreadResponse> =>
-      api.promoteThread(id),
-    onSuccess: (_data, variables) => {
-      queryClient.invalidateQueries({ queryKey: ["thread", variables.id] });
+    mutationFn: ({
+      id,
+      ...req
+    }: {
+      id: string;
+    } & (
+      | { operation: "promote_primary" }
+      | { operation: "demote_primary" }
+      | { operation: "commit"; initiatingThreadId: string; options?: CommitOperationOptions }
+      | { operation: "squash_merge"; initiatingThreadId: string; options?: SquashMergeOperationOptions }
+    )): Promise<EnvironmentOperationResponse> =>
+      api.requestEnvironmentOperation(id, req),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["thread"] });
       queryClient.invalidateQueries({ queryKey: ["threads"] });
-      queryClient.invalidateQueries({ queryKey: ["threadTimeline", variables.id] });
-      queryClient.invalidateQueries({ queryKey: ["status"] });
-    },
-  });
-}
-
-export function useDemotePrimaryCheckout() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: ({ id }: { id: string }): Promise<DemotePrimaryResponse> =>
-      api.demotePrimaryCheckout(id),
-    onSuccess: (_data, variables) => {
-      queryClient.invalidateQueries({ queryKey: ["thread", variables.id] });
-      queryClient.invalidateQueries({ queryKey: ["threads"] });
-      queryClient.invalidateQueries({ queryKey: ["threadTimeline", variables.id] });
+      queryClient.invalidateQueries({ queryKey: ["threadTimeline"] });
+      queryClient.invalidateQueries({ queryKey: ["threadWorkStatus"] });
       queryClient.invalidateQueries({ queryKey: ["status"] });
     },
   });

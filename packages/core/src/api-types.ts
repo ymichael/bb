@@ -201,6 +201,30 @@ export type ThreadOperationRequest =
       options?: SquashMergeOperationOptions;
     };
 
+export type EnvironmentOperationType =
+  | "promote_primary"
+  | "demote_primary"
+  | "commit"
+  | "squash_merge";
+
+export type EnvironmentOperationRequest =
+  | {
+      operation: "promote_primary";
+    }
+  | {
+      operation: "demote_primary";
+    }
+  | {
+      operation: "commit";
+      initiatingThreadId: string;
+      options?: CommitOperationOptions;
+    }
+  | {
+      operation: "squash_merge";
+      initiatingThreadId: string;
+      options?: SquashMergeOperationOptions;
+    };
+
 export interface ThreadOperationResponse {
   ok: true;
   operationId: string;
@@ -214,6 +238,7 @@ export interface ThreadOperationResponse {
 
 export interface PrimaryCheckoutStatus {
   projectId: string;
+  activeEnvironmentId?: string;
   activeThreadId?: string;
   promotedAt?: number;
 }
@@ -231,6 +256,11 @@ export interface DemotePrimaryResponse {
   message: string;
   primaryStatus: PrimaryCheckoutStatus;
 }
+
+export type EnvironmentOperationResponse =
+  | PromoteThreadResponse
+  | DemotePrimaryResponse
+  | ThreadOperationResponse;
 
 export interface ProjectFileSuggestion {
   path: string;

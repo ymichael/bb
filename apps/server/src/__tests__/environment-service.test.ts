@@ -963,6 +963,7 @@ describe("EnvironmentService", () => {
 
     expect(service.getPrimaryCheckoutStatus(projectId)).toEqual({
       projectId,
+      activeEnvironmentId: env.id,
       activeThreadId: thread.id,
       promotedAt: expect.any(Number),
     });
@@ -1087,6 +1088,7 @@ describe("EnvironmentService", () => {
 
     expect(service.getPrimaryCheckoutStatus(projectId)).toEqual({
       projectId,
+      activeEnvironmentId: env.id,
       activeThreadId: thread.id,
       promotedAt: expect.any(Number),
     });

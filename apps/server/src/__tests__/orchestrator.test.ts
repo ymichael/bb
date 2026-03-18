@@ -2735,6 +2735,7 @@ describe("Orchestrator", () => {
       harness.providerThreadIds.set(thread.id, "provider-thread-1");
       harness.primaryPromotionByProjectId.set(project.id, {
         projectId: project.id,
+        environmentId: thread.environmentId ?? thread.id,
         threadId: thread.id,
       });
       (manager as unknown as {
@@ -3770,6 +3771,7 @@ describe("Orchestrator", () => {
 
       asOrchestratorHarness(manager).primaryPromotionByProjectId.set(project.id, {
         projectId: project.id,
+        environmentId: env.id,
         threadId: thread1.id,
         promotedAt: 1000,
         promotedCheckout: {
@@ -3784,7 +3786,7 @@ describe("Orchestrator", () => {
       const result = manager.list({ projectId: project.id });
 
       expect(result[0]?.primaryCheckout?.isActive).toBe(true);
-      expect(result[1]?.primaryCheckout).toBeUndefined();
+      expect(result[1]?.primaryCheckout?.isActive).toBe(true);
       expect(ws.broadcast).not.toHaveBeenCalled();
     });
 
@@ -3869,6 +3871,7 @@ describe("Orchestrator", () => {
 
       asOrchestratorHarness(manager).primaryPromotionByProjectId.set(project.id, {
         projectId: project.id,
+        environmentId: env.id,
         threadId: thread.id,
         promotedAt: 1000,
         promotedCheckout: {
@@ -3909,7 +3912,7 @@ describe("Orchestrator", () => {
       });
     });
 
-    it("switches primary checkout when promoting a different thread", async () => {
+    it("treats promoting a sibling thread on the same environment as a no-op", async () => {
       const env = environmentRepo.create({
         projectId: project.id,
         descriptor: { type: "path", path: "/tmp/env" },
@@ -3934,6 +3937,7 @@ describe("Orchestrator", () => {
       asOrchestratorHarness(manager).environmentRuntimes.set(`thread:${targetThread.id}`, runtimeEntry);
       asOrchestratorHarness(manager).primaryPromotionByProjectId.set(project.id, {
         projectId: project.id,
+        environmentId: env.id,
         threadId: activeThread.id,
         promotedAt: 1000,
         previousCheckout: {
@@ -3979,15 +3983,17 @@ describe("Orchestrator", () => {
       const promoteSpy = vi
         .spyOn(environmentService, "promoteThreadEnvironment")
         .mockResolvedValue({
-          promoted: true,
+          promoted: false,
           status: {
             projectId: project.id,
-            activeThreadId: targetThread.id,
+            activeEnvironmentId: env.id,
+            activeThreadId: activeThread.id,
             promotedAt: 1001,
           },
           state: {
             projectId: project.id,
-            threadId: targetThread.id,
+            environmentId: env.id,
+            threadId: activeThread.id,
             promotedAt: 1001,
             previousCheckout: {
               branch: "main",
@@ -4005,52 +4011,26 @@ describe("Orchestrator", () => {
 
       const result = await manager.promoteThread(targetThread.id);
 
-      expect(demoteSpy).toHaveBeenCalledWith(
-        expect.objectContaining({
-          thread: expect.objectContaining({ id: activeThread.id }),
-        }),
-      );
-      expect(promoteSpy).toHaveBeenCalledWith(
-        expect.objectContaining({
-          thread: expect.objectContaining({ id: targetThread.id }),
-        }),
-      );
-      expect(demoteSpy.mock.invocationCallOrder[0]).toBeLessThan(
-        promoteSpy.mock.invocationCallOrder[0] ?? Number.POSITIVE_INFINITY,
-      );
+      expect(promoteSpy).not.toHaveBeenCalled();
+      expect(demoteSpy).not.toHaveBeenCalled();
       expect(result).toMatchObject({
         ok: true,
-        promoted: true,
+        promoted: false,
         primaryStatus: {
           projectId: project.id,
-          activeThreadId: targetThread.id,
+          activeEnvironmentId: env.id,
+          activeThreadId: activeThread.id,
         },
       });
       const allEvents = eventRepo.listByThread(activeThread.id);
-      expect(allEvents).toContainEqual(
+      expect(allEvents).not.toContainEqual(
         expect.objectContaining({
           threadId: activeThread.id,
           type: "system/operation",
           data: expect.objectContaining({
             operation: "primary_checkout",
-            status: "started",
             metadata: expect.objectContaining({
               action: "demote",
-              projectId: project.id,
-            }),
-          }),
-        }),
-      );
-      expect(allEvents).toContainEqual(
-        expect.objectContaining({
-          threadId: activeThread.id,
-          type: "system/operation",
-          data: expect.objectContaining({
-            operation: "primary_checkout",
-            status: "completed",
-            metadata: expect.objectContaining({
-              action: "demote",
-              projectId: project.id,
             }),
           }),
         }),
@@ -4062,7 +4042,7 @@ describe("Orchestrator", () => {
           type: "system/operation",
           data: expect.objectContaining({
             operation: "primary_checkout",
-            status: "completed",
+            status: "noop",
             metadata: expect.objectContaining({
               action: "promote",
               projectId: project.id,
@@ -4072,7 +4052,7 @@ describe("Orchestrator", () => {
       );
     });
 
-    it("keeps promote action available when another thread is currently promoted", async () => {
+    it("treats sibling threads on the promoted environment as already active", async () => {
       const env = environmentRepo.create({
         projectId: project.id,
         descriptor: { type: "path", path: "/tmp/env" },
@@ -4101,6 +4081,7 @@ describe("Orchestrator", () => {
         );
       asOrchestratorHarness(manager).primaryPromotionByProjectId.set(project.id, {
         projectId: project.id,
+        environmentId: env.id,
         threadId: otherThread.id,
         promotedAt: 1000,
         promotedCheckout: {
@@ -4112,12 +4093,17 @@ describe("Orchestrator", () => {
 
       const hydrated = await manager.getHydratedByIdAsync(targetThread.id);
       const promoteAction = hydrated?.builtInActions?.find((action: { id: string }) => action.id === "promote");
+      const demoteAction = hydrated?.builtInActions?.find((action: { id: string }) => action.id === "demote");
 
       expect(promoteAction).toMatchObject({
         id: "promote",
+        available: false,
+      });
+      expect(promoteAction?.disabledReason).toBe("Primary checkout is already promoted to this thread");
+      expect(demoteAction).toMatchObject({
+        id: "demote",
         available: true,
       });
-      expect(promoteAction?.disabledReason).toBeUndefined();
     });
 
     it("rejects promote when another primary-checkout transition is already in flight", async () => {
@@ -4592,6 +4578,7 @@ describe("Orchestrator", () => {
         const thread = createTestThread(threadRepo, project.id, { status: "idle", environmentId: env.id });
         asOrchestratorHarness(manager).primaryPromotionByProjectId.set(project.id, {
           projectId: project.id,
+          environmentId: env.id,
           threadId: thread.id,
           promotedAt: 1000,
           promotedCheckout: {
@@ -4632,6 +4619,7 @@ describe("Orchestrator", () => {
         const thread = createTestThread(threadRepo, project.id, { status: "idle", environmentId: env.id });
         asOrchestratorHarness(manager).primaryPromotionByProjectId.set(project.id, {
           projectId: project.id,
+          environmentId: env.id,
           threadId: thread.id,
           promotedAt: 1000,
           promotedCheckout: {

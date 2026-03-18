@@ -58,6 +58,8 @@ import {
   type PromoteThreadResponse,
   type ProvisioningTranscriptEntry,
   type DemotePrimaryResponse,
+  type EnvironmentOperationRequest,
+  type EnvironmentOperationResponse,
   type EnqueueThreadMessageRequest,
   type PrimaryCheckoutStatus,
   type ReasoningLevel,
@@ -1184,6 +1186,32 @@ export class Orchestrator implements ThreadOrchestrator {
       this.threadEnvironmentAttachmentRepo?.getByThreadId(threadId)?.environmentId ??
       this.threadRepo.getById(threadId)?.environmentId
     );
+  }
+
+  private _getThreadsAttachedToEnvironment(environmentId: string): Thread[] {
+    const attachedThreadIds = this.threadEnvironmentAttachmentRepo
+      ? this.threadEnvironmentAttachmentRepo
+          .listByEnvironmentId(environmentId)
+          .map((attachment) => attachment.threadId)
+      : this.threadRepo.list()
+          .filter((thread) => thread.environmentId === environmentId)
+          .map((thread) => thread.id);
+    return attachedThreadIds
+      .map((threadId) => this.threadRepo.getById(threadId))
+      .filter((thread): thread is Thread => Boolean(thread));
+  }
+
+  private _isThreadAttachedToPromotedEnvironment(threadId: string): boolean {
+    const thread = this.threadRepo.getById(threadId);
+    if (!thread) {
+      return false;
+    }
+    this._ensurePrimaryPromotionStateIsCurrent(thread.projectId);
+    const activePromotion = this.primaryPromotionByProjectId.get(thread.projectId);
+    if (!activePromotion) {
+      return false;
+    }
+    return this._resolveThreadEnvironmentReference(threadId) === activePromotion.environmentId;
   }
 
   private _hasIsolatedThreadWorkspace(thread: Thread): boolean {
@@ -2973,11 +3001,7 @@ export class Orchestrator implements ThreadOrchestrator {
    * know whether a demotion should be attempted.
    */
   isPrimaryCheckoutActive(threadId: string): boolean {
-    const thread = this.threadRepo.getById(threadId);
-    if (!thread) return false;
-    this._ensurePrimaryPromotionStateIsCurrent(thread.projectId);
-    const activePromotion = this.primaryPromotionByProjectId.get(thread.projectId);
-    return activePromotion?.threadId === threadId;
+    return this._isThreadAttachedToPromotedEnvironment(threadId);
   }
 
   /**
@@ -3060,6 +3084,7 @@ export class Orchestrator implements ThreadOrchestrator {
     }
     return {
       projectId,
+      activeEnvironmentId: active.environmentId,
       activeThreadId: active.threadId,
       promotedAt: active.promotedAt,
     };
@@ -3131,8 +3156,7 @@ export class Orchestrator implements ThreadOrchestrator {
         }
       }
 
-      const requiresDemoteFirst =
-        this.primaryPromotionByProjectId.get(thread.projectId)?.threadId === thread.id;
+      const requiresDemoteFirst = this._isThreadAttachedToPromotedEnvironment(thread.id);
 
       const operationId = this._nextOperationId();
       let demotedPrimaryCheckout = false;
@@ -3198,6 +3222,51 @@ export class Orchestrator implements ThreadOrchestrator {
     });
   }
 
+  async requestEnvironmentOperation(
+    environmentId: string,
+    request: EnvironmentOperationRequest,
+  ): Promise<EnvironmentOperationResponse> {
+    const environmentRecord = this.environmentRepo?.getById(environmentId);
+    if (!environmentRecord) {
+      throw invalidRequestError(`Environment not found: ${environmentId}`);
+    }
+
+    switch (request.operation) {
+      case "promote_primary": {
+        const targetThread = this._getThreadsAttachedToEnvironment(environmentId)
+          .find((thread) => thread.projectId === environmentRecord.projectId && thread.archivedAt === undefined);
+        if (!targetThread) {
+          throw invalidRequestError(
+            `No active thread is attached to environment ${environmentId}`,
+          );
+        }
+        return this.promoteThread(targetThread.id);
+      }
+      case "demote_primary": {
+        const targetThread = this._getThreadsAttachedToEnvironment(environmentId)
+          .find((thread) => thread.projectId === environmentRecord.projectId && thread.archivedAt === undefined)
+          ?? this._getThreadsAttachedToEnvironment(environmentId)[0];
+        if (!targetThread) {
+          throw invalidRequestError(
+            `No thread is attached to environment ${environmentId}`,
+          );
+        }
+        return this.demotePrimaryCheckout(targetThread.id);
+      }
+      case "commit":
+      case "squash_merge": {
+        if (this._resolveThreadEnvironmentReference(request.initiatingThreadId) !== environmentId) {
+          throw invalidRequestError(
+            `Thread ${request.initiatingThreadId} is not attached to environment ${environmentId}`,
+          );
+        }
+        return this.requestThreadOperation(request.initiatingThreadId, request);
+      }
+      default:
+        return assertNever(request);
+    }
+  }
+
   async promoteThread(threadId: string): Promise<PromoteThreadResponse> {
     const thread = this.threadRepo.getById(threadId);
     if (!thread) {
@@ -3218,13 +3287,19 @@ export class Orchestrator implements ThreadOrchestrator {
     return this._runWithPrimaryCheckoutTransitionLock(project.id, async () => {
       this._ensurePrimaryPromotionStateIsCurrent(project.id, { force: true });
       const existingPromotion = this.primaryPromotionByProjectId.get(project.id);
+      const threadEnvironmentId = this._resolveThreadEnvironmentReference(thread.id);
 
-      if (existingPromotion?.threadId === thread.id) {
+      if (
+        existingPromotion &&
+        threadEnvironmentId &&
+        existingPromotion.environmentId === threadEnvironmentId
+      ) {
         this._appendOperationEvent(thread.id, "primary_checkout", "noop", {
-          message: "Primary checkout is already promoted to this thread",
+          message: "Primary checkout is already promoted to this environment",
           metadata: {
             action: "promote",
             projectId: project.id,
+            environmentId: existingPromotion.environmentId,
             activeThreadId: thread.id,
             ...(existingPromotion.promotedCheckout.branch
               ? { branch: existingPromotion.promotedCheckout.branch }
@@ -3234,7 +3309,7 @@ export class Orchestrator implements ThreadOrchestrator {
         return {
           ok: true,
           promoted: false,
-          message: "Primary checkout is already promoted to this thread",
+          message: "Primary checkout is already promoted to this environment",
           primaryStatus: this.getPrimaryCheckoutStatus(project.id),
         };
       }
@@ -3251,6 +3326,7 @@ export class Orchestrator implements ThreadOrchestrator {
           metadata: {
             action: "demote",
             projectId: project.id,
+            environmentId: existingPromotion.environmentId,
             activeThreadId: activeThread.id,
           },
         });
@@ -3264,6 +3340,7 @@ export class Orchestrator implements ThreadOrchestrator {
             metadata: {
               action: "demote",
               projectId: project.id,
+              environmentId: existingPromotion.environmentId,
               ...(demoteResult.snapshot?.branch ? { branch: demoteResult.snapshot.branch } : {}),
             },
           });
@@ -3275,6 +3352,7 @@ export class Orchestrator implements ThreadOrchestrator {
             metadata: {
               action: "demote",
               projectId: project.id,
+              environmentId: existingPromotion.environmentId,
               activeThreadId: activeThread.id,
             },
           });
@@ -3288,12 +3366,17 @@ export class Orchestrator implements ThreadOrchestrator {
         ttlMs: PRIMARY_CHECKOUT_VALIDATION_TTL_MS,
       });
 
-      if (result.reason === "already-promoted-same-thread" && result.state) {
+      if (
+        (result.reason === "already-promoted-same-thread" ||
+          result.reason === "already-promoted-same-environment") &&
+        result.state
+      ) {
         this._appendOperationEvent(thread.id, "primary_checkout", "noop", {
-          message: "Primary checkout is already promoted to this thread",
+          message: "Primary checkout is already promoted to this environment",
           metadata: {
             action: "promote",
             projectId: project.id,
+            environmentId: result.state.environmentId,
             activeThreadId: thread.id,
             ...(result.state.promotedCheckout.branch
               ? { branch: result.state.promotedCheckout.branch }
@@ -3303,7 +3386,7 @@ export class Orchestrator implements ThreadOrchestrator {
         return {
           ok: true,
           promoted: false,
-          message: "Primary checkout is already promoted to this thread",
+          message: "Primary checkout is already promoted to this environment",
           primaryStatus: result.status,
         };
       }
@@ -3321,6 +3404,7 @@ export class Orchestrator implements ThreadOrchestrator {
         metadata: {
           action: "promote",
           projectId: project.id,
+          environmentId: threadEnvironmentId,
           activeThreadId: thread.id,
         },
       });
@@ -3332,13 +3416,19 @@ export class Orchestrator implements ThreadOrchestrator {
           metadata: {
             action: "promote",
             projectId: project.id,
+            environmentId: promotedState?.environmentId ?? threadEnvironmentId,
             activeThreadId: thread.id,
             ...(promotedState?.promotedCheckout.branch
               ? { branch: promotedState.promotedCheckout.branch }
               : {}),
           },
         });
-        this._broadcastThreadChanged(thread.id, THREAD_STATUS_CHANGE_KINDS);
+        const affectedThreads = promotedState
+          ? this._getThreadsAttachedToEnvironment(promotedState.environmentId)
+          : [thread];
+        for (const affectedThread of affectedThreads) {
+          this._broadcastThreadChanged(affectedThread.id, THREAD_STATUS_CHANGE_KINDS);
+        }
         return {
           ok: true,
           promoted: true,
@@ -3352,6 +3442,7 @@ export class Orchestrator implements ThreadOrchestrator {
           metadata: {
             action: "promote",
             projectId: project.id,
+            environmentId: threadEnvironmentId,
             activeThreadId: thread.id,
           },
         });
@@ -3393,18 +3484,20 @@ export class Orchestrator implements ThreadOrchestrator {
         };
       }
 
-      if (active.threadId !== thread.id) {
+      const threadEnvironmentId = this._resolveThreadEnvironmentReference(thread.id);
+      if (!threadEnvironmentId || threadEnvironmentId !== active.environmentId) {
         throw invalidRequestError(
           `Thread ${active.threadId} is currently promoted in primary checkout`,
         );
       }
       const activeThread = this.threadRepo.getById(active.threadId);
-      this._appendOperationEvent(active.threadId, "primary_checkout", "started", {
+      this._appendOperationEvent(thread.id, "primary_checkout", "started", {
         message: "Demoting primary checkout back to pre-promotion state",
         metadata: {
           action: "demote",
           projectId: project.id,
-          activeThreadId: active.threadId,
+          environmentId: active.environmentId,
+          activeThreadId: thread.id,
         },
       });
 
@@ -3413,16 +3506,22 @@ export class Orchestrator implements ThreadOrchestrator {
           thread,
           ttlMs: PRIMARY_CHECKOUT_VALIDATION_TTL_MS,
         });
-        this._appendOperationEvent(active.threadId, "primary_checkout", "completed", {
+        this._appendOperationEvent(thread.id, "primary_checkout", "completed", {
           message: "Primary checkout restored from promoted state",
           metadata: {
             action: "demote",
             projectId: project.id,
+            environmentId: active.environmentId,
             ...(result.snapshot?.branch ? { branch: result.snapshot.branch } : {}),
           },
         });
 
-        if (activeThread) {
+        const affectedThreads = this._getThreadsAttachedToEnvironment(active.environmentId);
+        if (affectedThreads.length > 0) {
+          for (const affectedThread of affectedThreads) {
+            this._broadcastThreadChanged(affectedThread.id, THREAD_STATUS_CHANGE_KINDS);
+          }
+        } else if (activeThread) {
           this._broadcastThreadChanged(activeThread.id, THREAD_STATUS_CHANGE_KINDS);
         } else {
           this._broadcastThreadChanged(active.threadId, THREAD_STATUS_CHANGE_KINDS);
@@ -3435,15 +3534,23 @@ export class Orchestrator implements ThreadOrchestrator {
         };
       } catch (err) {
         const message = this._toErrorMessage(err);
-        this._appendOperationEvent(active.threadId, "primary_checkout", "failed", {
+        this._appendOperationEvent(thread.id, "primary_checkout", "failed", {
           message,
           metadata: {
             action: "demote",
             projectId: project.id,
-            activeThreadId: active.threadId,
+            environmentId: active.environmentId,
+            activeThreadId: thread.id,
           },
         });
-        this._broadcastThreadChanged(active.threadId, THREAD_STATUS_CHANGE_KINDS);
+        const affectedThreads = this._getThreadsAttachedToEnvironment(active.environmentId);
+        if (affectedThreads.length > 0) {
+          for (const affectedThread of affectedThreads) {
+            this._broadcastThreadChanged(affectedThread.id, THREAD_STATUS_CHANGE_KINDS);
+          }
+        } else {
+          this._broadcastThreadChanged(active.threadId, THREAD_STATUS_CHANGE_KINDS);
+        }
         throw invalidRequestError(message);
       }
     });
@@ -5479,7 +5586,9 @@ export class Orchestrator implements ThreadOrchestrator {
   }): ThreadBuiltInAction[] {
     this._ensurePrimaryPromotionStateIsCurrent(args.thread.projectId);
     const activePromotion = this.primaryPromotionByProjectId.get(args.thread.projectId);
-    const primaryCheckoutActive = activePromotion?.threadId === args.thread.id;
+    const primaryCheckoutActive =
+      activePromotion !== undefined &&
+      this._resolveThreadEnvironmentReference(args.thread.id) === activePromotion.environmentId;
     const requiresDemoteFirst = primaryCheckoutActive;
     const archivedReason =
       args.thread.archivedAt !== undefined ? "Archived threads cannot run built-in actions" : undefined;
@@ -5909,7 +6018,9 @@ export class Orchestrator implements ThreadOrchestrator {
   private _withPrimaryCheckoutState(thread: Thread): Thread {
     this._ensurePrimaryPromotionStateIsCurrent(thread.projectId);
     const activePromotion = this.primaryPromotionByProjectId.get(thread.projectId);
-    const isActivePrimary = activePromotion?.threadId === thread.id;
+    const isActivePrimary =
+      activePromotion !== undefined &&
+      this._resolveThreadEnvironmentReference(thread.id) === activePromotion.environmentId;
     const withPrimaryCheckout = !isActivePrimary
       ? thread
       : {

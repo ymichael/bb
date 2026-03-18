@@ -99,6 +99,7 @@ function mockOrchestrator(): LegacyThreadRouteMock {
     promoteThread: vi.fn(),
     demotePrimaryCheckout: vi.fn(),
     requestThreadOperation: vi.fn(),
+    requestEnvironmentOperation: vi.fn(),
     markRead: vi.fn(),
     getRawById: vi.fn(),
     getById: vi.fn(),
@@ -1193,59 +1194,6 @@ describe("Thread routes", () => {
 
       expect(res.status).toBe(404);
       expect(threadManager.stop).not.toHaveBeenCalled();
-    });
-  });
-
-  describe("POST /threads/:id/promote", () => {
-    it("promotes a thread into primary checkout", async () => {
-      const thread = makeThread({ environmentId: "env-worktree-1" });
-      (threadManager.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
-      (threadManager.promoteThread as ReturnType<typeof vi.fn>).mockResolvedValue({
-        ok: true,
-        promoted: true,
-        message: "Primary checkout promoted",
-        primaryStatus: {
-          projectId: thread.projectId,
-          activeThreadId: thread.id,
-        },
-      });
-
-      const res = await app.request("/threads/thread-1/promote", {
-        method: "POST",
-      });
-
-      expect(res.status).toBe(200);
-      expect(threadManager.promoteThread).toHaveBeenCalledWith("thread-1");
-      expect(await res.json()).toMatchObject({
-        ok: true,
-        promoted: true,
-      });
-    });
-  });
-
-  describe("POST /threads/:id/demote-primary", () => {
-    it("demotes an active primary checkout thread", async () => {
-      const thread = makeThread({ environmentId: "env-worktree-1" });
-      (threadManager.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
-      (threadManager.demotePrimaryCheckout as ReturnType<typeof vi.fn>).mockResolvedValue({
-        ok: true,
-        demoted: true,
-        message: "Primary checkout demoted",
-        primaryStatus: {
-          projectId: thread.projectId,
-        },
-      });
-
-      const res = await app.request("/threads/thread-1/demote-primary", {
-        method: "POST",
-      });
-
-      expect(res.status).toBe(200);
-      expect(threadManager.demotePrimaryCheckout).toHaveBeenCalledWith("thread-1");
-      expect(await res.json()).toMatchObject({
-        ok: true,
-        demoted: true,
-      });
     });
   });
 

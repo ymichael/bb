@@ -853,38 +853,6 @@ export function createThreadRoutes(
       },
     )
     .post(
-      "/:id/promote",
-      async (c) => {
-        try {
-          const threadId = c.req.param("id");
-          const thread = await getThreadForRouteLookup(threadManager, threadId);
-          if (!thread) {
-            return sendRouteError(c, threadNotFoundError(threadId));
-          }
-          const result = await threadManager.promoteThread(threadId);
-          return c.json(result);
-        } catch (err) {
-          return sendRouteError(c, err);
-        }
-      },
-    )
-    .post(
-      "/:id/demote-primary",
-      async (c) => {
-        try {
-          const threadId = c.req.param("id");
-          const thread = await getThreadForRouteLookup(threadManager, threadId);
-          if (!thread) {
-            return sendRouteError(c, threadNotFoundError(threadId));
-          }
-          const result = await threadManager.demotePrimaryCheckout(threadId);
-          return c.json(result);
-        } catch (err) {
-          return sendRouteError(c, err);
-        }
-      },
-    )
-    .post(
       "/:id/operations",
       zValidator("json", threadOperationSchema),
       async (c) => {

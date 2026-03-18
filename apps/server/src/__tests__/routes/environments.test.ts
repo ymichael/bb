@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { Hono } from "hono";
-import type { EnvironmentRecord } from "@bb/core";
+import type { EnvironmentRecord, ThreadOrchestrator } from "@bb/core";
 import { createEnvironmentRoutes } from "../../routes/environments.js";
 import type { EnvironmentRepository } from "@bb/db";
 
@@ -23,6 +23,7 @@ function makeEnvironment(
 
 describe("Environment routes", () => {
   let environmentRepo: EnvironmentRepository;
+  let threadManager: ThreadOrchestrator;
   let app: Hono;
 
   beforeEach(() => {
@@ -30,7 +31,10 @@ describe("Environment routes", () => {
       getById: vi.fn(),
       list: vi.fn(() => []),
     } as unknown as EnvironmentRepository;
-    app = new Hono().route("/environments", createEnvironmentRoutes(environmentRepo));
+    threadManager = {
+      requestEnvironmentOperation: vi.fn(),
+    } as unknown as ThreadOrchestrator;
+    app = new Hono().route("/environments", createEnvironmentRoutes(environmentRepo, threadManager));
   });
 
   it("lists environments", async () => {
@@ -58,6 +62,33 @@ describe("Environment routes", () => {
     expect(body).toMatchObject({
       id: "env-2",
       managed: true,
+    });
+  });
+
+  it("dispatches environment operations through the orchestrator", async () => {
+    (environmentRepo.getById as ReturnType<typeof vi.fn>).mockReturnValue(
+      makeEnvironment({ id: "env-2", managed: true }),
+    );
+    (threadManager.requestEnvironmentOperation as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      promoted: true,
+      message: "Primary checkout promoted",
+      primaryStatus: {
+        projectId: "proj-1",
+        activeEnvironmentId: "env-2",
+        activeThreadId: "thread-1",
+      },
+    });
+
+    const res = await app.request("/environments/env-2/operations", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ operation: "promote_primary" }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(threadManager.requestEnvironmentOperation).toHaveBeenCalledWith("env-2", {
+      operation: "promote_primary",
     });
   });
 });
