@@ -3,6 +3,7 @@
 import { Command } from "commander";
 import { registerDaemonCommands } from "./commands/daemon.js";
 import { registerEnvironmentAgentCommand } from "./commands/environment-agent.js";
+import { registerGuideCommand } from "./commands/guide.js";
 import { registerManagerCommands } from "./commands/manager.js";
 import { registerProjectCommands } from "./commands/project.js";
 import { registerProviderCommands } from "./commands/provider.js";
@@ -54,6 +55,7 @@ registerManagerCommands(program, getUrl);
 registerThreadCommands(program, getUrl);
 registerDaemonCommands(program, getUrl);
 registerEnvironmentAgentCommand(program);
+registerGuideCommand(program);
 
 program.parseAsync(normalizeCliArgv(process.argv)).catch((err) => {
   console.error(err.message);

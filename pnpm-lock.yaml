@@ -147,6 +147,9 @@ importers:
       '@bb/server':
         specifier: workspace:*
         version: link:../server
+      '@bb/templates':
+        specifier: workspace:*
+        version: link:../../packages/templates
       commander:
         specifier: ^13.0.0
         version: 13.1.0

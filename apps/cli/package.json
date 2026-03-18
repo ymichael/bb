@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@bb/core": "workspace:*",
+    "@bb/templates": "workspace:*",
     "@bb/environment-daemon": "workspace:*",
     "@bb/server": "workspace:*",
     "commander": "^13.0.0",

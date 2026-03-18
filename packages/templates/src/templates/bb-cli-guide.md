@@ -13,6 +13,9 @@ Context variables are set automatically when running inside a thread environment
 - `BB_PROJECT_ID` — current project
 - `BB_THREAD_ID` — current thread
 
+Read-only commands (e.g., `show`, `list`, `log`) print which thread or project was resolved from these env vars.
+Mutating commands (e.g., `commit`, `stop`, `archive`, `update`) require an explicit thread ID or the `--self` flag to target the current thread from `BB_THREAD_ID`.
+
 ## Threads
 
 Spawning:
@@ -32,7 +35,10 @@ Inspecting:
 bb thread list --project <project-id>                 # List all threads in a project
 bb thread list --project <project-id> --parent-thread <manager-id>  # List managed threads only
 bb thread show <thread-id>                            # Show thread details
-bb thread status <thread-id>                          # Show thread status and recent events
+bb thread show <thread-id> --work-status              # Include git working-tree status
+bb thread show <thread-id> --git-diff                 # Include git diff
+bb thread show <thread-id> --merge-base-branches      # Include available merge-base branches
+bb thread show <thread-id> --recent-events 10         # Include last N thread events
 bb thread log <thread-id>                             # Show thread event log
 bb thread output <thread-id>                          # Get the final output of a thread
 ```
@@ -43,6 +49,7 @@ Interacting:
 bb thread tell <thread-id> "Please also add tests"           # Send a follow-up message
 bb thread tell <thread-id> "Focus on the API first" --mode steer  # Steer an active thread
 bb thread stop <thread-id>                                   # Stop an active thread
+bb thread stop --self                                        # Stop the current thread
 ```
 
 Ownership:
@@ -50,12 +57,14 @@ Ownership:
 ```
 bb thread update <thread-id> --parent-thread <manager-id>   # Assign thread to a manager
 bb thread update <thread-id> --clear-parent-thread           # Remove manager ownership
+bb thread update --self --title "New title"                  # Update the current thread
 ```
 
 Lifecycle:
 
 ```
 bb thread archive <thread-id>         # Archive a thread
+bb thread archive --self              # Archive the current thread
 bb thread unarchive <thread-id>       # Unarchive a thread
 bb thread delete <thread-id>          # Delete permanently
 ```
@@ -64,8 +73,9 @@ Operations:
 
 ```
 bb thread commit <thread-id>                          # Request an agent-driven commit
-bb thread commit <thread-id> --message "feat: add X"  # Commit with a specific message
+bb thread commit --self --message "feat: add X"       # Commit the current thread with a message
 bb thread squash-merge <thread-id>                    # Request an agent-driven squash merge
+bb thread squash-merge --self                         # Squash-merge the current thread
 bb thread promote <thread-id>                         # Promote a worktree to primary checkout
 bb thread demote                                      # Demote the currently promoted thread
 ```
@@ -92,13 +102,24 @@ bb thread log <manager-id>                   # Show manager log
 ```
 bb project list                        # List all projects
 bb project create --name "name" --root /path  # Create a project
+bb project show <project-id>           # Show project details
+bb project update <project-id> --name "new name"  # Update a project
+bb project delete <project-id>         # Delete a project and all its threads
 bb project files <query>               # Search files in a project
+```
+
+## Providers
+
+```
+bb provider list                       # List available providers
+bb provider models [providerId]        # List available models (optionally filtered by provider)
 ```
 
 ## Other
 
 ```
-bb status                              # Show current context (project, thread)
+bb status                              # Show current context (resolved project and thread IDs)
+bb guide                               # Show the BB system overview and CLI guide
 bb daemon health                       # Show daemon health and storage usage
 bb daemon restart                      # Restart the daemon
 ```
