@@ -432,9 +432,11 @@ async function runEnvironmentBattery(
         baseUrl,
         args: [
           "thread",
-          "steer",
+          "tell",
           steerThreadId,
           `Reply with exactly BATTERY-STEERED-${environmentKind.toUpperCase()} and finish. Do not run commands or add extra text.`,
+          "--mode",
+          "steer",
         ],
       }),
     );
