@@ -14,7 +14,7 @@
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",
-    "dev": "node scripts/dev-supervisor.mjs",
+    "dev": "node scripts/dev-supervisor.mjs --port ${BB_SERVER_PORT:-3334}",
     "clean": "rm -rf dist",
     "typecheck": "tsc --noEmit",
     "test": "pnpm test:unit && pnpm test:e2e",

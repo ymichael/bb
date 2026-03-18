@@ -4,8 +4,9 @@
   "type": "module",
   "scripts": {
     "prepare": "git config core.hooksPath .githooks",
-    "dev": "turbo run dev --ui tui --concurrency 20",
+    "dev": "BB_ROOT=${BB_ROOT:-$HOME/.bb-dev} BB_SERVER_PORT=${BB_SERVER_PORT:-3334} BB_APP_PORT=${BB_APP_PORT:-5173} turbo run dev --ui tui --concurrency 20",
     "build": "turbo run build",
+    "start": "pnpm exec turbo run build --filter=@bb/app --filter=@bb/server --filter=@bb/cli && node apps/server/dist/index.js",
     "precommit:build": "pnpm build",
     "clean": "turbo run clean",
     "lint": "turbo run lint",
@@ -22,7 +23,7 @@
     "qa:server:smoke:pi": "BB_E2E_PROVIDER_MODE=real BB_E2E_PROVIDER=pi pnpm --filter @bb/server test:e2e:qa:smoke",
     "qa:server:recovery:fake": "BB_E2E_PROVIDER_MODE=fake pnpm --filter @bb/server test:e2e:qa:recovery:fake",
     "bb": "node apps/cli/dist/index.js",
-    "bb:dev": "pnpm --filter @bb/server exec tsx ../cli/src/index.ts",
+    "bb:dev": "BB_SERVER_URL=${BB_SERVER_URL:-http://localhost:3334} pnpm --filter @bb/server exec tsx ../cli/src/index.ts",
     "server": "node apps/server/dist/index.js",
     "drizzle-studio": "pnpm --filter @bb/db db:studio"
   },

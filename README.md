@@ -58,15 +58,23 @@ Before starting bb, configure credentials for at least one supported provider.
 
 See [.env.example](./.env.example) for the full set of options and setup notes.
 
-### Run bb
+### Start bb
+
+```bash
+pnpm start
+```
+
+Then open: `http://localhost:3333`
+
+`pnpm start` builds the app, server, and CLI when needed, then runs the built server without watch mode or hot reloading.
+
+If you want to work on bb itself, use the development loop instead:
 
 ```bash
 pnpm dev
 ```
 
-Then open: `http://localhost:5173`
-
-`pnpm dev` starts the Vite app on `http://localhost:5173` and proxies API and WebSocket traffic to the server on `:3333`.
+That starts the Vite app on `http://localhost:5173` and proxies API and WebSocket traffic to a separate dev server on `:3334`, using `~/.bb-dev` by default so it can run alongside `pnpm start`.
 
 If you want to drive bb from the CLI during development:
 
