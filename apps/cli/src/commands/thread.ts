@@ -3,8 +3,10 @@ import {
   type SpawnThreadRequest,
   type Thread,
   type ThreadEvent,
+  type ThreadGitDiffResponse,
   type ThreadOperationResponse,
   type ThreadStatus,
+  type ThreadWorkStatus,
   type TimelineFormat,
   normalizeThreadEventType,
   toUIMessages,
@@ -353,6 +355,14 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
     )
     .option("--title <title>", "Thread title")
     .option(
+      "--service-tier <tier>",
+      "Service tier: fast or flex",
+    )
+    .option(
+      "--sandbox-mode <mode>",
+      "Sandbox mode: read-only, workspace-write, or danger-full-access",
+    )
+    .option(
       "--no-context-parent-thread",
       "Do not default parent thread context to BB_THREAD_ID",
     )
@@ -367,6 +377,8 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
       model?: string;
       reasoningLevel?: string;
       title?: string;
+      serviceTier?: string;
+      sandboxMode?: string;
       contextParentThread?: boolean;
     }) => {
       const client = createClient(getUrl());
@@ -399,6 +411,8 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
               ...(opts.model ? { model: opts.model } : {}),
               ...(opts.reasoningLevel ? { reasoningLevel: opts.reasoningLevel as "low" | "medium" | "high" | "xhigh" } : {}),
               ...(opts.title ? { title: opts.title } : {}),
+              ...(opts.serviceTier ? { serviceTier: opts.serviceTier as "fast" | "flex" } : {}),
+              ...(opts.sandboxMode ? { sandboxMode: opts.sandboxMode as "read-only" | "workspace-write" | "danger-full-access" } : {}),
               ...environmentSelection,
               ...(parentThreadId ? { parentThreadId } : {}),
             },
@@ -473,9 +487,136 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
       }
     });
 
+  const threadShowAction = async (
+    id: string | undefined,
+    opts: {
+      recentEvents?: string;
+      eventMode?: string;
+      includeLowSignal?: boolean;
+      workStatus?: boolean;
+      gitDiff?: boolean;
+      diffSelection?: string;
+      diffMergeBase?: string;
+      json?: boolean;
+    },
+  ): Promise<void> => {
+    const client = createClient(getUrl());
+    try {
+      const threadId = requireThreadId(id);
+      const recentEvents =
+        opts.recentEvents === undefined
+          ? undefined
+          : parseRecentEventsCount(opts.recentEvents);
+      const eventMode = parseThreadStatusEventMode(opts.eventMode);
+      const thread = await unwrap<Thread>(
+        client.api.v1.threads[":id"].$get({ param: { id: threadId } }),
+      );
+      const events =
+        recentEvents === undefined
+          ? []
+          : await unwrap<ThreadEvent[]>(
+              client.api.v1.threads[":id"].events.$get({
+                param: { id: threadId },
+                query: {},
+              }),
+            );
+      const includeLowSignal = Boolean(opts.includeLowSignal);
+      const statusPayload = buildThreadStatusPayload(thread, events, {
+        recentEvents,
+        eventMode,
+        includeLowSignal,
+      });
+
+      let workStatus: ThreadWorkStatus | null | undefined;
+      if (opts.workStatus) {
+        workStatus = await unwrap<ThreadWorkStatus | null>(
+          client.api.v1.threads[":id"]["work-status"].$get({
+            param: { id: threadId },
+            query: {},
+          }),
+        );
+      }
+
+      let gitDiff: ThreadGitDiffResponse | undefined;
+      if (opts.gitDiff) {
+        const query: Record<string, string> = {};
+        if (opts.diffSelection) {
+          query.selection = opts.diffSelection;
+        }
+        if (opts.diffMergeBase) {
+          query.mergeBaseBranch = opts.diffMergeBase;
+        }
+        gitDiff = await unwrap<ThreadGitDiffResponse>(
+          client.api.v1.threads[":id"]["git-diff"].$get({
+            param: { id: threadId },
+            query,
+          }),
+        );
+      }
+
+      if (opts.json) {
+        const jsonPayload: Record<string, unknown> = { ...statusPayload };
+        if (workStatus !== undefined) {
+          jsonPayload.workStatus = workStatus;
+        }
+        if (gitDiff !== undefined) {
+          jsonPayload.gitDiff = gitDiff;
+        }
+        outputJson({ json: true }, jsonPayload);
+        return;
+      }
+
+      printThreadStatus(statusPayload);
+
+      if (workStatus) {
+        console.log("");
+        console.log("Work status:");
+        console.log(`  State:    ${workStatus.state}`);
+        if (workStatus.currentBranch) {
+          console.log(`  Branch:   ${workStatus.currentBranch}`);
+        }
+        console.log(`  Changed files: ${workStatus.changedFiles} (workspace: ${workStatus.workspaceChangedFiles})`);
+        console.log(`  Insertions:    +${workStatus.insertions} (workspace: +${workStatus.workspaceInsertions})`);
+        console.log(`  Deletions:     -${workStatus.deletions} (workspace: -${workStatus.workspaceDeletions})`);
+        console.log(`  Ahead: ${workStatus.aheadCount}  Behind: ${workStatus.behindCount}`);
+      } else if (opts.workStatus && workStatus === null) {
+        console.log("");
+        console.log("Work status: unavailable");
+      }
+
+      if (gitDiff) {
+        console.log("");
+        console.log("Git diff:");
+        console.log(`  Mode: ${gitDiff.mode}`);
+        if (gitDiff.currentBranch) {
+          console.log(`  Branch: ${gitDiff.currentBranch}`);
+        }
+        if (gitDiff.mergeBaseBranch) {
+          console.log(`  Merge base branch: ${gitDiff.mergeBaseBranch}`);
+        }
+        if (gitDiff.commits.length > 0) {
+          console.log(`  Commits: ${gitDiff.commits.length}`);
+          for (const commit of gitDiff.commits) {
+            console.log(`    ${commit.shortSha} ${commit.subject}`);
+          }
+        }
+        if (gitDiff.diff) {
+          console.log("");
+          console.log(gitDiff.diff);
+        }
+        if (gitDiff.truncated) {
+          console.log("  (diff truncated)");
+        }
+      }
+    } catch (err: unknown) {
+      console.error(`Error: ${getErrorMessage(err)}`);
+      process.exit(1);
+    }
+  };
+
   thread
-    .command("status [id]")
-    .description("Show thread status (defaults to BB_THREAD_ID)")
+    .command("show [id]")
+    .description("Show thread details (defaults to BB_THREAD_ID)")
     .option("--json", "Print machine-readable JSON output")
     .option("--recent-events <count>", "Include last N thread events")
     .option(
@@ -487,69 +628,44 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
       "--include-low-signal",
       "Include low-signal internal lifecycle events in recent events",
     )
-    .action(
-      async (
-        id: string | undefined,
-        opts: {
-          recentEvents?: string;
-          eventMode?: string;
-          includeLowSignal?: boolean;
-          json?: boolean;
-        },
-      ) => {
-        const client = createClient(getUrl());
-        try {
-          const threadId = requireThreadId(id);
-          const recentEvents =
-            opts.recentEvents === undefined
-              ? undefined
-              : parseRecentEventsCount(opts.recentEvents);
-          const eventMode = parseThreadStatusEventMode(opts.eventMode);
-          const thread = await unwrap<Thread>(
-            client.api.v1.threads[":id"].$get({ param: { id: threadId } }),
-          );
-          const events =
-            recentEvents === undefined
-              ? []
-              : await unwrap<ThreadEvent[]>(
-                  client.api.v1.threads[":id"].events.$get({
-                    param: { id: threadId },
-                    query: {},
-                  }),
-                );
-          const includeLowSignal = Boolean(opts.includeLowSignal);
-          const statusPayload = buildThreadStatusPayload(thread, events, {
-            recentEvents,
-            eventMode,
-            includeLowSignal,
-          });
-          if (outputJson(opts, statusPayload)) return;
-          printThreadStatus(statusPayload);
-        } catch (err: unknown) {
-          console.error(`Error: ${getErrorMessage(err)}`);
-          process.exit(1);
-        }
-      },
-    );
+    .option("--work-status", "Include work status (git state) in output")
+    .option("--git-diff", "Include git diff in output")
+    .option(
+      "--diff-selection <type>",
+      "Diff selection type: combined or commit (used with --git-diff)",
+    )
+    .option(
+      "--diff-merge-base <branch>",
+      "Merge base branch for diff (used with --git-diff)",
+    )
+    .action(threadShowAction);
 
+  // Hidden backward-compatibility alias for "thread status"
   thread
-    .command("show [id]")
-    .description("Show thread details (defaults to BB_THREAD_ID)")
+    .command("status [id]", { hidden: true })
+    .description("Show thread status (alias for show)")
     .option("--json", "Print machine-readable JSON output")
-    .action(async (id: string | undefined, opts: { json?: boolean }) => {
-      const client = createClient(getUrl());
-      try {
-        const threadId = requireThreadId(id);
-        const thread = await unwrap<Thread>(
-          client.api.v1.threads[":id"].$get({ param: { id: threadId } }),
-        );
-        if (outputJson(opts, thread)) return;
-        printThread(thread);
-      } catch (err: unknown) {
-        console.error(`Error: ${getErrorMessage(err)}`);
-        process.exit(1);
-      }
-    });
+    .option("--recent-events <count>", "Include last N thread events")
+    .option(
+      "--event-mode <mode>",
+      "summary|raw event formatting for --recent-events",
+      "summary",
+    )
+    .option(
+      "--include-low-signal",
+      "Include low-signal internal lifecycle events in recent events",
+    )
+    .option("--work-status", "Include work status (git state) in output")
+    .option("--git-diff", "Include git diff in output")
+    .option(
+      "--diff-selection <type>",
+      "Diff selection type: combined or commit (used with --git-diff)",
+    )
+    .option(
+      "--diff-merge-base <branch>",
+      "Merge base branch for diff (used with --git-diff)",
+    )
+    .action(threadShowAction);
 
   thread
     .command("update [id]")
@@ -699,6 +815,26 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
       }
     });
 
+  const tellAction = async (
+    id: string,
+    message: string,
+    opts: { json?: boolean; model?: string; reasoningLevel?: string; mode?: string },
+  ): Promise<void> => {
+    try {
+      const mode = opts.mode === "steer" ? "steer" as const : undefined;
+      const response = await postThreadMessage(id, message, {
+        mode,
+        model: opts.model,
+        reasoningLevel: opts.reasoningLevel,
+      });
+      if (outputJson(opts, { threadId: id, ...response })) return;
+      console.log(mode === "steer" ? `Thread ${id} steered` : `Thread ${id} updated`);
+    } catch (err: unknown) {
+      console.error(`Error: ${getErrorMessage(err)}`);
+      process.exit(1);
+    }
+  };
+
   thread
     .command("tell <id> <message>")
     .description("Send a follow-up message to a thread")
@@ -708,23 +844,13 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
       "--reasoning-level <level>",
       "Reasoning level: low, medium, high, xhigh",
     )
-    .action(async (id: string, message: string, opts: { json?: boolean; model?: string; reasoningLevel?: string }) => {
-      try {
-        const response = await postThreadMessage(id, message, {
-          model: opts.model,
-          reasoningLevel: opts.reasoningLevel,
-        });
-        if (outputJson(opts, { threadId: id, ...response })) return;
-        console.log(`Thread ${id} updated`);
-      } catch (err: unknown) {
-        console.error(`Error: ${getErrorMessage(err)}`);
-        process.exit(1);
-      }
-    });
+    .option("--mode <mode>", "Message mode (e.g. steer)")
+    .action(tellAction);
 
+  // Backward-compatibility alias: "thread steer" is equivalent to "thread tell --mode steer"
   thread
-    .command("steer <id> <message>")
-    .description("Steer a thread with an additional message")
+    .command("steer <id> <message>", { hidden: true })
+    .description("Alias for tell --mode steer")
     .option("--json", "Print machine-readable JSON output")
     .option("--model <model>", "Model ID for this message")
     .option(
@@ -732,18 +858,7 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
       "Reasoning level: low, medium, high, xhigh",
     )
     .action(async (id: string, message: string, opts: { json?: boolean; model?: string; reasoningLevel?: string }) => {
-      try {
-        const response = await postThreadMessage(id, message, {
-          mode: "steer",
-          model: opts.model,
-          reasoningLevel: opts.reasoningLevel,
-        });
-        if (outputJson(opts, { threadId: id, ...response })) return;
-        console.log(`Thread ${id} steered`);
-      } catch (err: unknown) {
-        console.error(`Error: ${getErrorMessage(err)}`);
-        process.exit(1);
-      }
+      await tellAction(id, message, { ...opts, mode: "steer" });
     });
 
   thread
@@ -1137,6 +1252,10 @@ function printThreadStatus(payload: ThreadStatusPayload): void {
   if (thread.parentThreadId) {
     console.log(`Parent ${thread.parentThreadId}`);
   }
+  if (thread.archivedAt !== undefined) {
+    console.log(`Archived: ${new Date(thread.archivedAt).toLocaleString()}`);
+  }
+  console.log(`Created ${new Date(thread.createdAt).toLocaleString()}`);
   console.log(`Updated ${new Date(thread.updatedAt).toLocaleString()}`);
 
   const recentEvents = payload.recentEvents;

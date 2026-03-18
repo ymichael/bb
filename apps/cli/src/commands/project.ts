@@ -56,6 +56,26 @@ export function registerProjectCommands(program: Command, getUrl: () => string):
     });
 
   project
+    .command("show <id>")
+    .description("Show project details")
+    .option("--json", "Print machine-readable JSON output")
+    .action(async (id: string, opts: { json?: boolean }) => {
+      const client = createClient(getUrl());
+      try {
+        const found = await unwrap<Project>(
+          client.api.v1.projects[":id"].$get({
+            param: { id },
+          }),
+        );
+        if (outputJson(opts, found)) return;
+        printProject(found);
+      } catch (err: unknown) {
+        console.error(`Error: ${getErrorMessage(err)}`);
+        process.exit(1);
+      }
+    });
+
+  project
     .command("files <query>")
     .description("Search files within a project")
     .option("--project <id>", "Project ID (defaults to BB_PROJECT_ID)")

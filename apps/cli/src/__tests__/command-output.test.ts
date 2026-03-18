@@ -1103,7 +1103,7 @@ describe("CLI JSON output contracts", () => {
     );
   });
 
-  it("bb thread show --json prints the raw thread", async () => {
+  it("bb thread show --json prints the thread in status payload format", async () => {
     const thread: Thread = {
       id: "thread-json-show",
       projectId: "proj-1",
@@ -1131,7 +1131,7 @@ describe("CLI JSON output contracts", () => {
     );
 
     expect(JSON.parse(String(vi.mocked(console.log).mock.calls[0]?.[0]))).toEqual(
-      thread,
+      { thread },
     );
   });
 
