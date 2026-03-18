@@ -16,6 +16,18 @@ describe("wire decoders", () => {
     expect(decodeThreadIdFromWireValue(null)).toBeUndefined();
   });
 
+  it("extracts thread ids from conversationId and thread_id fields", () => {
+    expect(decodeThreadIdFromWireValue({ conversationId: "conv-1" })).toBe("conv-1");
+    expect(decodeThreadIdFromWireValue({ conversation_id: "conv-2" })).toBe("conv-2");
+    expect(decodeThreadIdFromWireValue({ thread_id: "tid-3" })).toBe("tid-3");
+  });
+
+  it("prefers threadId over conversationId when both are present", () => {
+    expect(
+      decodeThreadIdFromWireValue({ threadId: "thread-1", conversationId: "conv-1" }),
+    ).toBe("thread-1");
+  });
+
   it("decodes shutdown-blocked responses and filters invalid blocking threads", () => {
     expect(
       decodeSystemShutdownBlockedResponse({

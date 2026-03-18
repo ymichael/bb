@@ -901,13 +901,27 @@ Expected:
 - no "Already initialized" errors in the server log
 - no provider rpc errors or timeouts in the event stream
 
+8. Verify no event cross-contamination between providers:
+
+```bash
+node apps/cli/dist/index.js thread status <thread-a> --recent-events 20 --event-mode raw
+node apps/cli/dist/index.js thread status <thread-b> --recent-events 20 --event-mode raw
+```
+
+Expected:
+
+- thread-a's raw events contain only codex methods (e.g. `codex/event/*`, `turn/*`, `item/*`) — no pi methods
+- thread-b's raw events contain only pi methods — no codex methods or `codex/event/*` events
+- no `conversationId` mismatch: every event on thread-a references thread-a's provider thread ID, not thread-b's
+- if any `codex/event/*` appears on the pi thread, this is a **critical bug** — events are being misrouted in the env-daemon runtime because `extractProviderThreadId` is not resolving the `conversationId` field
+
 **What to look for if it fails:**
 
 - Thread stuck `active` with `turn/started` but no `turn/completed` → command routing bug: RPC commands going to wrong child
 - `provisioning_failed` with "Already initialized" → `providerInitializedPid` not tracked per-child
 - `provisioning_failed` with "Timed out waiting for active environment-agent session" → env-daemon failed to spawn or connect
 - Thread output contains response from the wrong provider → stdin writes going to wrong child
-- A thread starts receiving provider envelopes for the other provider → thread-to-child routing bug
+- A thread starts receiving provider envelopes for the other provider → thread-to-child routing bug (check `extractProviderThreadId` in `packages/environment-daemon/src/runtime.ts`)
 - B's output contains A's requested token (or vice versa) → cross-thread/provider state contamination
 - Follow-up on A fails only after B has run → env-daemon reused the wrong provider thread/runtime state
 - Stopping A causes B to error, lose its session, or stop accepting follow-ups → runtime teardown is incorrectly global instead of scoped to the A provider child or thread

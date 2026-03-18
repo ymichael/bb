@@ -836,20 +836,25 @@ export class EnvironmentAgentRuntime {
     if (!record) {
       return undefined;
     }
-    const directThreadId =
+    // Check all known thread ID field variants: direct threadId, thread_id,
+    // conversationId/conversation_id (Codex), and nested thread.id.
+    const candidates: (string | undefined)[] = [
       typeof record.threadId === "string" && record.threadId.length > 0
-        ? record.threadId
-        : undefined;
-    if (directThreadId) {
-      return directThreadId;
+        ? record.threadId : undefined,
+      typeof record.thread_id === "string" && record.thread_id.length > 0
+        ? record.thread_id : undefined,
+      typeof record.conversationId === "string" && record.conversationId.length > 0
+        ? record.conversationId : undefined,
+      typeof record.conversation_id === "string" && record.conversation_id.length > 0
+        ? record.conversation_id : undefined,
+    ];
+    const directMatch = candidates.find((c): c is string => c !== undefined);
+    if (directMatch) {
+      return directMatch;
     }
     const nestedThread = this.asRecord(record.thread);
-    const nestedThreadId =
-      nestedThread && typeof nestedThread.id === "string" && nestedThread.id.length > 0
-        ? nestedThread.id
-        : undefined;
-    if (nestedThreadId) {
-      return nestedThreadId;
+    if (nestedThread && typeof nestedThread.id === "string" && nestedThread.id.length > 0) {
+      return nestedThread.id;
     }
     return undefined;
   }

@@ -23,11 +23,13 @@ export function decodeThreadIdFromWireValue(value: unknown): string | undefined 
   const payload = toRecord(value);
   if (!payload) return undefined;
 
-  const threadId = getStringField(payload, "threadId");
-  if (threadId) return threadId;
-
-  const thread = toRecord(payload.thread);
-  return getStringField(thread, "id");
+  return (
+    getStringField(payload, "threadId") ??
+    getStringField(payload, "thread_id") ??
+    getStringField(payload, "conversationId") ??
+    getStringField(payload, "conversation_id") ??
+    getStringField(toRecord(payload.thread), "id")
+  );
 }
 
 function decodeSystemShutdownBlockingThread(
