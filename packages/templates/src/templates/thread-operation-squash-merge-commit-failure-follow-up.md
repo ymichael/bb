@@ -6,7 +6,7 @@ intent: Direct the agent to fix the blocker in-place and retry the squash merge 
 editingNotes: The failure instruction is computed by the caller so this template can stay small and reusable across failure stages.
 variables:
   failureInstruction: Stage-specific retry instruction.
-  errorMessage: Optional git error surfaced to the agent.
+  errorMessage?: Optional git error surfaced to the agent.
 ---
 {{failureInstruction}}
 {{#if errorMessage}}

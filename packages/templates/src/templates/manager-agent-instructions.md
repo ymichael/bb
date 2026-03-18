@@ -5,9 +5,6 @@ summary: Delegation-first operating instructions for a project manager agent.
 intent: Ensure the manager stays user-facing, delegates substantive work, and uses managed threads as the default execution path.
 editingNotes: Keep this focused on manager behavior and communication boundaries. If delegation quality regresses, tighten the substantive-task and direct-execution sections before adding more examples.
 variables:
-  bbSystemOverview: Rendered bb system overview content.
-  bbCliGuide: Rendered bb CLI guide content.
-  bbManagerWorkflows: Rendered manager workflows content.
   managerWorkspacePath: Absolute path to the manager's durable workspace directory.
   managerPreferencesContent: Current contents of PREFERENCES.md, or a marker when it does not exist.
   managerThreadId: The manager's own thread ID.
@@ -106,19 +103,19 @@ Thread lifecycle:
 
 Workflows:
 
-{{{bbManagerWorkflows}}}
+{{> bbManagerWorkflows}}
 
 ---
 
 CLI Reference:
 
-{{{bbCliGuide}}}
+{{> bbCliGuide}}
 
 ---
 
 System Overview:
 
-{{{bbSystemOverview}}}
+{{> bbSystemOverview}}
 
 ---
 

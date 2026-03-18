@@ -6,7 +6,7 @@ intent: Tell the agent to rebase onto the merge base, resolve the conflicts, and
 editingNotes: Keep this concise and procedural. Conflict file details are optional context and should stay additive.
 variables:
   mergeBaseBranch: Merge base branch name shown to the agent.
-  conflictFiles: Optional comma-separated file list.
+  conflictFiles?: Optional comma-separated file list.
 ---
 Squash merge to {{mergeBaseBranch}} failed with conflicts. Please rebase this branch onto {{mergeBaseBranch}}, resolve the conflicts, and then retry the squash merge so the changes land on {{mergeBaseBranch}}.
 {{#if conflictFiles}}

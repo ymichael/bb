@@ -6,8 +6,8 @@ intent: Keep the retry focused on diagnosing the blocker, preserving any exact c
 editingNotes: Do not add generic response-format instructions here; this prompt is meant to be a concise follow-up inside an active thread.
 variables:
   targetDescription: Human-readable description of the workspace target.
-  exactCommitMessageInstruction: Optional exact commit message requirement.
-  errorMessage: Optional git error surfaced to the agent.
+  exactCommitMessageInstruction?: Optional exact commit message requirement.
+  errorMessage?: Optional git error surfaced to the agent.
 ---
 Commit in {{targetDescription}} failed. Please inspect the workspace, fix the commit blocker, and retry the commit.
 {{#if exactCommitMessageInstruction}}

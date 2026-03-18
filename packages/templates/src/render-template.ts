@@ -6,6 +6,15 @@ import {
   templateRegistry,
 } from "./registry.js";
 
+let partialsRegistered = false;
+function ensurePartialsRegistered() {
+  if (partialsRegistered) return;
+  for (const definition of Object.values(templateRegistry)) {
+    Handlebars.registerPartial(definition.id, definition.body);
+  }
+  partialsRegistered = true;
+}
+
 const compiledTemplateCache = new Map<
   TemplateId,
   HandlebarsTemplateDelegate<TemplateVariables[TemplateId]>
@@ -29,6 +38,7 @@ export function renderTemplate<TTemplateId extends TemplateId>(
   templateId: TTemplateId,
   variables: TemplateVariables[TTemplateId],
 ): string {
+  ensurePartialsRegistered();
   return getCompiledTemplate(templateId)(variables).trim();
 }
 

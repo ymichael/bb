@@ -1,4 +1,7 @@
 import { templateDefinitions } from "./generated/templates.generated.js";
+import type { TemplateId, TemplateVariables } from "./generated/templates.generated.js";
+
+export type { TemplateId, TemplateVariables };
 
 export type TemplateKind = "instruction" | "prompt" | "skill_seed";
 
@@ -15,64 +18,6 @@ export interface TemplateDefinition {
 }
 
 export interface TemplateMetadata extends Omit<TemplateDefinition, "body"> {}
-
-export interface TemplateVariables {
-  agentBaseInstructions: Record<string, never>;
-  bbCliGuide: Record<string, never>;
-  bbManagerWorkflows: Record<string, never>;
-  bbSystemOverview: Record<string, never>;
-  codexCommitMessage: {
-    diffDescription: string;
-    files: string;
-    patch: string;
-    shortstat: string;
-  };
-  codexRunMetadata: {
-    cleanedPrompt: string;
-  };
-  dockerAgentNote: Record<string, never>;
-  managerAgentInstructions: {
-    bbCliGuide: string;
-    bbManagerWorkflows: string;
-    bbSystemOverview: string;
-    managerPreferencesContent: string;
-    managerThreadId: string;
-    managerWorkspacePath: string;
-    projectId: string;
-    projectName: string;
-    projectRootPath: string;
-  };
-  openaiResponsesDefaultInstructions: Record<string, never>;
-  threadOperationCommit: {
-    commitMessageInstruction: string;
-    stageInstruction: string;
-    targetDescription: string;
-  };
-  threadOperationCommitFailureFollowUp: {
-    exactCommitMessageInstruction?: string;
-    errorMessage?: string;
-    targetDescription: string;
-  };
-  threadOperationSquashMerge: {
-    commitMessageInstruction: string;
-    conflictInstruction: string;
-    mergeBaseInstruction: string;
-    prepCommitInstruction: string;
-    squashMessageInstruction: string;
-    targetDescription: string;
-  };
-  threadOperationSquashMergeCommitFailureFollowUp: {
-    errorMessage?: string;
-    failureInstruction: string;
-  };
-  threadOperationSquashMergeConflictFollowUp: {
-    conflictFiles?: string;
-    mergeBaseBranch: string;
-  };
-  worktreeAgentInstructions: Record<string, never>;
-}
-
-export type TemplateId = keyof TemplateVariables;
 
 function isTemplateId(value: string): value is TemplateId {
   return templateDefinitions.some((definition) => definition.id === value);
