@@ -243,14 +243,14 @@ export interface PrimaryCheckoutStatus {
   promotedAt?: number;
 }
 
-export interface PromoteThreadResponse {
+export interface PromotePrimaryCheckoutResponse {
   ok: true;
   promoted: boolean;
   message: string;
   primaryStatus: PrimaryCheckoutStatus;
 }
 
-export interface DemotePrimaryResponse {
+export interface DemotePrimaryCheckoutResponse {
   ok: true;
   demoted: boolean;
   message: string;
@@ -258,8 +258,8 @@ export interface DemotePrimaryResponse {
 }
 
 export type EnvironmentOperationResponse =
-  | PromoteThreadResponse
-  | DemotePrimaryResponse
+  | PromotePrimaryCheckoutResponse
+  | DemotePrimaryCheckoutResponse
   | ThreadOperationResponse;
 
 export interface ProjectFileSuggestion {

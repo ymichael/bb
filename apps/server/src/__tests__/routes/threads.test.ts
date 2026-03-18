@@ -96,8 +96,8 @@ function mockOrchestrator(): LegacyThreadRouteMock {
     unarchive: vi.fn(),
     requiresForceArchive: vi.fn(),
     updateThread: vi.fn(),
-    promoteThread: vi.fn(),
-    demotePrimaryCheckout: vi.fn(),
+    promoteThreadEnvironmentToPrimaryCheckout: vi.fn(),
+    demoteThreadEnvironmentFromPrimaryCheckout: vi.fn(),
     requestThreadOperation: vi.fn(),
     requestEnvironmentOperation: vi.fn(),
     markRead: vi.fn(),
@@ -862,7 +862,7 @@ describe("Thread routes", () => {
       const thread = makeThread({ status: "idle" });
       (threadManager.getById as ReturnType<typeof vi.fn>).mockReturnValue(thread);
       (threadManager.isPrimaryCheckoutActive as ReturnType<typeof vi.fn>).mockReturnValue(true);
-      (threadManager.demotePrimaryCheckout as ReturnType<typeof vi.fn>).mockResolvedValue({
+      (threadManager.demoteThreadEnvironmentFromPrimaryCheckout as ReturnType<typeof vi.fn>).mockResolvedValue({
         ok: true,
         demoted: true,
         message: "Primary checkout demoted",
@@ -880,12 +880,14 @@ describe("Thread routes", () => {
 
       expect(res.status).toBe(200);
       expect(threadManager.isPrimaryCheckoutActive).toHaveBeenCalledWith("thread-1");
-      expect(threadManager.demotePrimaryCheckout).toHaveBeenCalledWith("thread-1");
+      expect(threadManager.demoteThreadEnvironmentFromPrimaryCheckout).toHaveBeenCalledWith("thread-1");
       expect(threadManager.tell).toHaveBeenCalledWith(
         "thread-1",
         { input: [{ type: "text", text: "Do more stuff" }] },
       );
-      const demoteCallOrder = (threadManager.demotePrimaryCheckout as ReturnType<typeof vi.fn>)
+      const demoteCallOrder = (
+        threadManager.demoteThreadEnvironmentFromPrimaryCheckout as ReturnType<typeof vi.fn>
+      )
         .mock.invocationCallOrder[0];
       const tellCallOrder = (threadManager.tell as ReturnType<typeof vi.fn>)
         .mock.invocationCallOrder[0];
@@ -908,7 +910,7 @@ describe("Thread routes", () => {
       });
 
       expect(res.status).toBe(200);
-      expect(threadManager.demotePrimaryCheckout).not.toHaveBeenCalled();
+      expect(threadManager.demoteThreadEnvironmentFromPrimaryCheckout).not.toHaveBeenCalled();
       expect(threadManager.tell).toHaveBeenCalledWith(
         "thread-1",
         { input: [{ type: "text", text: "Do more stuff" }], mode: "steer" },

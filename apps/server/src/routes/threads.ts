@@ -536,7 +536,7 @@ export function createThreadRoutes(
             mode !== "steer" &&
             threadManager.isPrimaryCheckoutActive(threadId)
           ) {
-            await threadManager.demotePrimaryCheckout(threadId);
+            await threadManager.demoteThreadEnvironmentFromPrimaryCheckout(threadId);
           }
           const tellRequest = mode ? { input, mode } : { input };
           const options =

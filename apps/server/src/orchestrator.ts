@@ -55,9 +55,9 @@ import {
   type SpawnThreadRequest,
   type TellThreadRequest,
   type ThreadProvisioningState,
-  type PromoteThreadResponse,
+  type PromotePrimaryCheckoutResponse,
   type ProvisioningTranscriptEntry,
-  type DemotePrimaryResponse,
+  type DemotePrimaryCheckoutResponse,
   type EnvironmentOperationRequest,
   type EnvironmentOperationResponse,
   type EnqueueThreadMessageRequest,
@@ -3162,7 +3162,7 @@ export class Orchestrator implements ThreadOrchestrator {
       let demotedPrimaryCheckout = false;
       try {
         if (requiresDemoteFirst) {
-          await this.demotePrimaryCheckout(thread.id);
+          await this.demoteThreadEnvironmentFromPrimaryCheckout(thread.id);
           demotedPrimaryCheckout = true;
         }
 
@@ -3240,7 +3240,7 @@ export class Orchestrator implements ThreadOrchestrator {
             `No active thread is attached to environment ${environmentId}`,
           );
         }
-        return this.promoteThread(targetThread.id);
+        return this.promoteThreadEnvironmentToPrimaryCheckout(targetThread.id);
       }
       case "demote_primary": {
         const targetThread = this._getThreadsAttachedToEnvironment(environmentId)
@@ -3251,7 +3251,7 @@ export class Orchestrator implements ThreadOrchestrator {
             `No thread is attached to environment ${environmentId}`,
           );
         }
-        return this.demotePrimaryCheckout(targetThread.id);
+        return this.demoteThreadEnvironmentFromPrimaryCheckout(targetThread.id);
       }
       case "commit":
       case "squash_merge": {
@@ -3267,7 +3267,9 @@ export class Orchestrator implements ThreadOrchestrator {
     }
   }
 
-  async promoteThread(threadId: string): Promise<PromoteThreadResponse> {
+  async promoteThreadEnvironmentToPrimaryCheckout(
+    threadId: string,
+  ): Promise<PromotePrimaryCheckoutResponse> {
     const thread = this.threadRepo.getById(threadId);
     if (!thread) {
       throw threadNotFoundError(threadId);
@@ -3331,7 +3333,7 @@ export class Orchestrator implements ThreadOrchestrator {
           },
         });
         try {
-          const demoteResult = await this.environmentService.demotePrimaryCheckout({
+          const demoteResult = await this.environmentService.demoteThreadEnvironment({
             thread: activeThread,
             ttlMs: PRIMARY_CHECKOUT_VALIDATION_TTL_MS,
           });
@@ -3452,7 +3454,9 @@ export class Orchestrator implements ThreadOrchestrator {
     });
   }
 
-  async demotePrimaryCheckout(threadId: string): Promise<DemotePrimaryResponse> {
+  async demoteThreadEnvironmentFromPrimaryCheckout(
+    threadId: string,
+  ): Promise<DemotePrimaryCheckoutResponse> {
     const thread = this.threadRepo.getById(threadId);
     if (!thread) {
       throw threadNotFoundError(threadId);
@@ -3502,7 +3506,7 @@ export class Orchestrator implements ThreadOrchestrator {
       });
 
       try {
-        const result = await this.environmentService.demotePrimaryCheckout({
+        const result = await this.environmentService.demoteThreadEnvironment({
           thread,
           ttlMs: PRIMARY_CHECKOUT_VALIDATION_TTL_MS,
         });

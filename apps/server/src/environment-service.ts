@@ -1087,7 +1087,7 @@ export class EnvironmentService {
     };
   }
 
-  async demotePrimaryCheckout(args: {
+  async demoteThreadEnvironment(args: {
     thread: Thread;
     ttlMs?: number;
   }): Promise<{

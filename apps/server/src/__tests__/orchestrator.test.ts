@@ -3885,7 +3885,7 @@ describe("Orchestrator", () => {
         .spyOn(asOrchestratorHarness(manager), "_ensurePrimaryPromotionStateIsCurrent")
         .mockImplementation(() => {});
 
-      const result = await manager.promoteThread(thread.id);
+      const result = await manager.promoteThreadEnvironmentToPrimaryCheckout(thread.id);
 
       expect(ensurePrimaryStatusSpy).toHaveBeenCalledWith(project.id, { force: true });
       expect(result).toMatchObject({
@@ -3903,7 +3903,7 @@ describe("Orchestrator", () => {
         .spyOn(asOrchestratorHarness(manager), "_ensurePrimaryPromotionStateIsCurrent")
         .mockImplementation(() => {});
 
-      const result = await manager.demotePrimaryCheckout(thread.id);
+      const result = await manager.demoteThreadEnvironmentFromPrimaryCheckout(thread.id);
 
       expect(ensurePrimaryStatusSpy).toHaveBeenCalledWith(project.id, { force: true });
       expect(result).toMatchObject({
@@ -3957,7 +3957,7 @@ describe("Orchestrator", () => {
         manager as unknown as {
           environmentService: Pick<
             EnvironmentService,
-            "demotePrimaryCheckout" | "promoteThreadEnvironment" | "restoreThreadEnvironment"
+            "demoteThreadEnvironment" | "promoteThreadEnvironment" | "restoreThreadEnvironment"
           >;
         }
       ).environmentService;
@@ -3969,7 +3969,7 @@ describe("Orchestrator", () => {
           }),
         );
       const demoteSpy = vi
-        .spyOn(environmentService, "demotePrimaryCheckout")
+        .spyOn(environmentService, "demoteThreadEnvironment")
         .mockResolvedValue({
           demoted: true,
           status: { projectId: project.id },
@@ -4009,7 +4009,7 @@ describe("Orchestrator", () => {
           },
         });
 
-      const result = await manager.promoteThread(targetThread.id);
+      const result = await manager.promoteThreadEnvironmentToPrimaryCheckout(targetThread.id);
 
       expect(promoteSpy).not.toHaveBeenCalled();
       expect(demoteSpy).not.toHaveBeenCalled();
@@ -4186,7 +4186,7 @@ describe("Orchestrator", () => {
       });
       asOrchestratorHarness(manager).primaryCheckoutTransitionsInFlight.add(project.id);
 
-      await expect(manager.promoteThread(thread.id)).rejects.toThrow(
+      await expect(manager.promoteThreadEnvironmentToPrimaryCheckout(thread.id)).rejects.toThrow(
         "Another primary-checkout promotion/demotion operation is already in progress for this project",
       );
     });
@@ -4197,7 +4197,7 @@ describe("Orchestrator", () => {
       const thread = createTestThread(threadRepo, project.id, { status: "idle", environmentId: env.id });
       asOrchestratorHarness(manager).primaryCheckoutTransitionsInFlight.add(project.id);
 
-      await expect(manager.demotePrimaryCheckout(thread.id)).rejects.toThrow(
+      await expect(manager.demoteThreadEnvironmentFromPrimaryCheckout(thread.id)).rejects.toThrow(
         "Another primary-checkout promotion/demotion operation is already in progress for this project",
       );
     });
@@ -4589,7 +4589,7 @@ describe("Orchestrator", () => {
         });
 
         const demoteSpy = vi
-          .spyOn(manager, "demotePrimaryCheckout")
+          .spyOn(manager, "demoteThreadEnvironmentFromPrimaryCheckout")
           .mockResolvedValue({
             ok: true,
             demoted: true,
@@ -4628,7 +4628,9 @@ describe("Orchestrator", () => {
           },
           reconstructed: false,
         });
-        vi.spyOn(manager, "demotePrimaryCheckout").mockRejectedValue(new Error("demotion failed"));
+        vi
+          .spyOn(manager, "demoteThreadEnvironmentFromPrimaryCheckout")
+          .mockRejectedValue(new Error("demotion failed"));
 
         await expect(
           manager.requestThreadOperation(thread.id, {

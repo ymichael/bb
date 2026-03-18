@@ -1,11 +1,11 @@
 import type {
   AvailableModel,
-  DemotePrimaryResponse,
+  DemotePrimaryCheckoutResponse,
   EnvironmentOperationRequest,
   EnvironmentOperationResponse,
   EnqueueThreadMessageRequest,
   PrimaryCheckoutStatus,
-  PromoteThreadResponse,
+  PromotePrimaryCheckoutResponse,
   SendQueuedThreadMessageRequest,
   SendQueuedThreadMessageResponse,
   ThreadOperationRequest,
@@ -246,8 +246,12 @@ export interface ThreadOrchestrator {
     environmentId: string,
     request: EnvironmentOperationRequest,
   ): Promise<EnvironmentOperationResponse>;
-  promoteThread(threadId: string): Promise<PromoteThreadResponse>;
-  demotePrimaryCheckout(threadId: string): Promise<DemotePrimaryResponse>;
+  promoteThreadEnvironmentToPrimaryCheckout(
+    threadId: string,
+  ): Promise<PromotePrimaryCheckoutResponse>;
+  demoteThreadEnvironmentFromPrimaryCheckout(
+    threadId: string,
+  ): Promise<DemotePrimaryCheckoutResponse>;
   getPrimaryCheckoutStatus(projectId: string): PrimaryCheckoutStatus;
   getRawById(threadId: string): Thread | undefined;
   isPrimaryCheckoutActive(threadId: string): boolean;
