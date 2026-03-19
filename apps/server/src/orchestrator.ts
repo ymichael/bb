@@ -5549,7 +5549,15 @@ export class Orchestrator implements ThreadOrchestrator {
 
   private _withResolvedEnvironmentReference(thread: Thread): Thread {
     const attachedEnvironmentId = this._resolveThreadEnvironmentReference(thread.id);
-    if (!attachedEnvironmentId || thread.environmentId === attachedEnvironmentId) {
+    if (!this.threadEnvironmentAttachmentRepo) {
+      return !attachedEnvironmentId || thread.environmentId === attachedEnvironmentId
+        ? thread
+        : {
+            ...thread,
+            environmentId: attachedEnvironmentId,
+          };
+    }
+    if (thread.environmentId === attachedEnvironmentId) {
       return thread;
     }
     return {

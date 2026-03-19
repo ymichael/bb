@@ -3349,6 +3349,8 @@ describe("Orchestrator", () => {
       });
 
       expect((manager as any)._resolveThreadEnvironmentReference(thread.id)).toBeUndefined();
+      expect(manager.getRawById(thread.id)?.environmentId).toBeUndefined();
+      expect(manager.list().find((candidate) => candidate.id === thread.id)?.environmentId).toBeUndefined();
     });
 
     it("canonicalizes thread.environmentId from attachments on read paths", () => {

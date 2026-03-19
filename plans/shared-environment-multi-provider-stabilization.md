@@ -192,6 +192,62 @@ Out of scope unless directly required by the refactor:
   - archive/unarchive/resume behave correctly for shared managed and unmanaged environments
   - provider catalog/model queries are environment-scoped and never routed through an arbitrary attached thread
 
+# Remaining Checklist
+
+1. Finish removing `threads.environmentId` as live runtime authority when attachments exist.
+
+- Audit [apps/server/src/environment-service.ts](/Users/michael/.codex/worktrees/299a/bb/apps/server/src/environment-service.ts) for methods that still fall back to `threadRepo.getById(threadId)?.environmentId` in operational paths.
+- Audit [apps/server/src/orchestrator.ts](/Users/michael/.codex/worktrees/299a/bb/apps/server/src/orchestrator.ts) for the remaining write/read paths that still treat thread-row `environmentId` as operational state instead of compatibility residue.
+- Keep the rule strict:
+  - if attachments exist, attachment rows are authoritative
+  - stale thread-row `environmentId` must not influence routing, lifecycle, cleanup, or capability answers
+
+2. Tighten `EnvironmentService` behavior to fail closed on missing/ambiguous attachment state.
+
+- Remove helper behavior that treats “missing attachment” as “maybe still attached via thread row”.
+- Review cleanup, suspend, destroy, archive, and primary-checkout helpers for representative-thread or thread-row fallbacks.
+- Where attachment state is missing for an environment-scoped operation, return unattached/not-found semantics instead of guessing.
+
+3. Sweep environment lifecycle transitions end-to-end for shared-environment correctness.
+
+- Re-verify:
+  - suspend
+  - resume
+  - archive
+  - unarchive
+  - reprovision after cleanup
+  - sibling detach / last attached thread detach
+- Ensure every one of those flows is keyed by `environmentId` and attachment membership, not by whichever thread happened to provision or resume first.
+
+4. Re-audit env-daemon session/runtime recovery for hidden single-thread assumptions.
+
+- Review [apps/server/src/environment-daemon-session-service.ts](/Users/michael/.codex/worktrees/299a/bb/apps/server/src/environment-daemon-session-service.ts), [apps/server/src/environment-daemon-session-manager.ts](/Users/michael/.codex/worktrees/299a/bb/apps/server/src/environment-daemon-session-manager.ts), and [packages/environment-daemon/src/runtime.ts](/Users/michael/.codex/worktrees/299a/bb/packages/environment-daemon/src/runtime.ts).
+- Specifically check reconnect, invalidation, session replacement, allowed-channel enforcement, and notification routing for:
+  - same provider across multiple threads in one environment
+  - multiple providers in one environment
+  - stale old-session noise after replacement
+
+5. Fill the remaining regression gaps before calling the refactor complete.
+
+- Add or extend automated coverage for:
+  - same provider, multiple threads, one environment
+  - mixed providers, one environment, archive/resume/restart transitions
+  - missing/stale attachments failing closed
+  - ambiguous provider-thread identity or notification routing
+  - managed vs unmanaged shared-environment lifecycle differences
+
+6. Run the full server/env-daemon QA gate at the end, not just targeted suites.
+
+- Required automated pass:
+  - `pnpm --filter @bb/server test:e2e:smoke`
+  - `pnpm --filter @bb/server test:e2e:qa:regression`
+  - `pnpm --filter @bb/server test:e2e:qa:multi-provider` with real provider credentials
+  - `pnpm --filter @bb/server test:e2e:qa:stress`
+- Required final invariant sweep:
+  - grep for representative-thread / first-thread fallback patterns
+  - grep for new writes of `threads.environmentId` in attached-environment flows
+  - confirm no silent routing fallback remains for provider/thread/environment identity
+
 # Open Questions/Risks
 
 - Env-daemon should be environment-scoped, but thread/provider activation inside it should be lazy. The remaining work is making sure the implementation does not preserve a “special bootstrap thread” concept while doing that.
