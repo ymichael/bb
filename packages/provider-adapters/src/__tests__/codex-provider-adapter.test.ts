@@ -23,7 +23,7 @@ describe("codex provider adapter", () => {
     );
   });
 
-  it("opts out of duplicate legacy item lifecycle notifications", () => {
+  it("enables experimental codex APIs during initialize", () => {
     const adapter = createCodexProviderAdapter();
     const params = adapter.createInitializeParams?.({
       name: "bb",
@@ -37,10 +37,6 @@ describe("codex provider adapter", () => {
       },
       capabilities: {
         experimentalApi: true,
-        optOutNotificationMethods: expect.arrayContaining([
-          "codex/event/item_started",
-          "codex/event/item_completed",
-        ]),
       },
     });
   });

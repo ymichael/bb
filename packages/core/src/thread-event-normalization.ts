@@ -203,6 +203,7 @@ export function decodeThreadEventData(
   }
 
   const candidates = getNestedRecordCandidates(payload);
+  const providerId = envelope?.__bb_provider_event.providerId;
   const turnId =
     candidates
       .map((candidate) => {
@@ -219,8 +220,16 @@ export function decodeThreadEventData(
   const providerThreadId =
     candidates
       .map((candidate) => {
-        return (
+        const explicitProviderThreadId =
           getStringField(candidate, "providerThreadId") ??
+          getStringField(candidate, "provider_thread_id");
+        if (explicitProviderThreadId) {
+          return explicitProviderThreadId;
+        }
+        if (providerId === "claude-code") {
+          return undefined;
+        }
+        return (
           getStringField(candidate, "threadId") ??
           getStringField(candidate, "thread_id") ??
           getStringField(candidate, "conversationId") ??

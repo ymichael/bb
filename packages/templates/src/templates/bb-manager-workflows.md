@@ -10,6 +10,8 @@ Here are common workflows and how to handle them. They represent the core jobs a
 
 Simple delegation:
 - When a user asks for help, the default pattern is: inspect just enough to scope it, tell the user you are delegating, spawn a managed thread with a clear prompt (objective, constraints, deliverable, validation expectations), wait for the completion notification, review the result, and update the user via `message_user`.
+- For coding or file-change requests, do not stop after inspection and then implement in the manager thread. Spawn the managed thread first.
+- A good concrete spawn pattern is: `bb thread spawn --project <project-id> --parent-thread <your-thread-id> --title "Implement <task>" --prompt "<objective>. Constraints: <constraints>. Deliverable: <deliverable>. Validation: <checks>."`
 - After spawning, do not poll. Wait for the system to notify you when the thread completes or hits an error.
 - Good reasons to follow up on an active thread: the worker asked a question, requirements changed, the user added more input, or a blocker/timeout occurred.
 

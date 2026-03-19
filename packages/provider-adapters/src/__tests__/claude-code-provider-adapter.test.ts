@@ -148,12 +148,24 @@ describe("claude-code provider adapter", () => {
         threadId: "bb-thread-1",
         providerThreadId: "claude-session-1",
       }),
-    ).toBe("bb-thread-1");
+    ).toBe("claude-session-1");
     expect(
       adapter.extractThreadIdFromEventData({
         threadId: "bb-thread-1",
         providerThreadId: "claude-session-1",
       }),
-    ).toBe("bb-thread-1");
+    ).toBe("claude-session-1");
+    expect(
+      adapter.extractThreadIdFromResult({
+        threadId: "bb-thread-1",
+        provider_thread_id: "claude-session-1",
+      }),
+    ).toBeUndefined();
+    expect(
+      adapter.extractThreadIdFromEventData({
+        threadId: "bb-thread-1",
+        thread_id: "bb-thread-1",
+      }),
+    ).toBeUndefined();
   });
 });

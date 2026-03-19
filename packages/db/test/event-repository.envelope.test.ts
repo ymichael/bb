@@ -114,6 +114,39 @@ describe("event repository provider envelope indexing", () => {
     );
   });
 
+  it("does not index Claude routing thread ids as provider thread ids", () => {
+    events.create({
+      threadId,
+      seq: 1,
+      type: "thread/started",
+      data: createProviderEventEnvelope({
+        providerId: "claude-code",
+        method: "thread/started",
+        payload: {
+          threadId,
+          providerThreadId: "claude-session-1",
+        },
+        observedAt: 1,
+      }),
+    });
+    events.create({
+      threadId,
+      seq: 2,
+      type: "turn/completed",
+      data: createProviderEventEnvelope({
+        providerId: "claude-code",
+        method: "turn/completed",
+        payload: {
+          threadId,
+          turnId: "turn-1",
+        },
+        observedAt: 2,
+      }),
+    });
+
+    expect(events.getLatestProviderThreadId(threadId)).toBe("claude-session-1");
+  });
+
   it("prunes historical high-frequency noise while preserving recent and non-noise events", () => {
     events.create({
       threadId,

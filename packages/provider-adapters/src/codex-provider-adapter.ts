@@ -30,11 +30,6 @@ import type {
 const DEFAULT_BASE_INSTRUCTIONS = renderTemplate("agentBaseInstructions", {});
 const DEFAULT_APPROVAL_POLICY = "never";
 const DEFAULT_SANDBOX_MODE = "danger-full-access";
-// Ask Codex to suppress noisy legacy notifications at source.
-const LEGACY_DUPLICATE_NOTIFICATION_METHODS = [
-  "codex/event/item_started",
-  "codex/event/item_completed",
-] as const;
 const DEFAULT_WORKSPACE_WRITE_POLICY = {
   type: "workspaceWrite",
   writableRoots: [] as string[],
@@ -288,9 +283,6 @@ export function createCodexProviderAdapter(
         clientInfo,
         capabilities: {
           experimentalApi: true,
-          // Codex app-server emits both legacy codex/event/* and v2 item/* lifecycle
-          // notifications; suppress duplicate legacy item lifecycle events at source.
-          optOutNotificationMethods: [...LEGACY_DUPLICATE_NOTIFICATION_METHODS],
         },
       };
     },

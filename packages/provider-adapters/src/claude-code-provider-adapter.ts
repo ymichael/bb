@@ -116,8 +116,9 @@ function decodeClaudeRoutingThreadId(value: unknown): string | undefined {
   const payload = toRecord(value);
   if (!payload) return undefined;
   return (
-    (typeof payload.threadId === "string" ? payload.threadId : undefined) ??
-    (typeof payload.thread_id === "string" ? payload.thread_id : undefined)
+    (typeof payload.providerThreadId === "string"
+      ? payload.providerThreadId
+      : undefined)
   );
 }
 

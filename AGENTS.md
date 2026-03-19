@@ -1,14 +1,5 @@
 # Codebase Guidelines
 
-## Typing and Unions
-
-- Classify string domains before refactoring: `closed_internal` (BB-owned) vs `open_external` (provider/runtime-owned).
-- For `closed_internal` unions, require exhaustive `switch` handling with `assertNever`; avoid permissive `default` branches.
-- Keep tolerant fallbacks only for `open_external` values, with an explicit comment that unknown values are intentional.
-- Prefer typed decode/guard helpers over repeated inline casts like `as Record<string, unknown>`.
-- For known union keys, use `Record<MyUnion, ...>` instead of `Record<string, ...>`.
-- Do not modify generated code under `packages/core/src/generated/**`.
-
 ## UI Consistency
 
 - Reuse shared primitives before introducing view-local class bundles (for example: page shell, detail card/rows, collapsible headers, status pill).

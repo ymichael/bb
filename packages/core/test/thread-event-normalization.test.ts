@@ -65,6 +65,20 @@ describe("thread event normalization", () => {
     ).toBe("thread-legacy");
   });
 
+  it("does not treat Claude routing thread ids as provider session ids", () => {
+    const envelope = createProviderEventEnvelope({
+      providerId: "claude-code",
+      method: "turn/completed",
+      payload: {
+        threadId: "bb-thread-1",
+        turnId: "turn-1",
+      },
+      observedAt: 1,
+    });
+
+    expect(extractProviderThreadIdFromPersistedEventData(envelope)).toBeUndefined();
+  });
+
   it("decodes a normalized event view from mixed legacy/provider shapes", () => {
     const decoded = decodeThreadEventData({
       payload: {
