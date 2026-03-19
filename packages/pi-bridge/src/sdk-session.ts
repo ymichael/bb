@@ -1,6 +1,7 @@
 import { dirname } from "node:path";
 import {
   createAgentSession,
+  DefaultResourceLoader,
   SessionManager,
   SettingsManager,
   type AgentSession,
@@ -19,6 +20,7 @@ export interface PiSdkSessionOptions {
   env?: NodeJS.ProcessEnv;
   customTools?: ToolDefinition[];
   sessionFilePath?: string;
+  systemPrompt?: string;
 }
 
 export type PiSessionEventHandler = (event: AgentSessionEvent) => void;
@@ -67,6 +69,20 @@ export class PiSdkSession {
       }),
     };
 
+    // Pass custom system prompt (e.g. manager instructions) via ResourceLoader
+    if (this.options.systemPrompt) {
+      const resourceLoader = new DefaultResourceLoader({
+        cwd: this.options.cwd,
+        systemPrompt: this.options.systemPrompt,
+        noExtensions: true,
+        noSkills: true,
+        noPromptTemplates: true,
+        noThemes: true,
+      });
+      await resourceLoader.reload();
+      sessionOptions.resourceLoader = resourceLoader;
+    }
+
     // Resolve model if specified
     if (this.options.model) {
       const model = resolveModel(this.options.model);
@@ -96,6 +112,17 @@ export class PiSdkSession {
     try {
       const { session } = await createAgentSession(sessionOptions);
       this.session = session;
+
+      // Explicitly activate custom tools so they survive internal tool
+      // registry refreshes (e.g. compaction). Without this, the Pi SDK may
+      // drop custom tools from the active set after the first turn.
+      if (this.options.customTools && this.options.customTools.length > 0) {
+        const activeToolNames = new Set(session.getActiveToolNames());
+        for (const tool of this.options.customTools) {
+          activeToolNames.add(tool.name);
+        }
+        session.setActiveToolsByName(Array.from(activeToolNames));
+      }
 
       // Subscribe to session events
       this.unsubscribe = session.subscribe((event: AgentSessionEvent) => {

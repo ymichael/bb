@@ -206,8 +206,12 @@ function buildSessionOptions(
   const cwd =
     typeof params.cwd === "string" ? params.cwd : process.cwd();
   const sessionFilePath = resolvePiSessionFilePath(threadId, params);
+  const systemPrompt =
+    typeof params.baseInstructions === "string"
+      ? params.baseInstructions
+      : undefined;
 
-  return { cwd, model, env, sessionFilePath };
+  return { cwd, model, env, sessionFilePath, systemPrompt };
 }
 
 function applyDynamicTools(
