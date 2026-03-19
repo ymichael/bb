@@ -2730,7 +2730,8 @@ export class Orchestrator implements ThreadOrchestrator {
    * need hydrated work status or built-in action state.
    */
   getRawById(threadId: string): Thread | undefined {
-    return this.threadRepo.getById(threadId);
+    const thread = this.threadRepo.getById(threadId);
+    return thread ? this._withResolvedEnvironmentReference(thread) : undefined;
   }
 
   getById(threadId: string): Thread | undefined {
@@ -5534,7 +5535,18 @@ export class Orchestrator implements ThreadOrchestrator {
   }
 
   private _withDerivedThreadState(thread: Thread): Thread {
-    return this._withPrimaryCheckoutState(thread);
+    return this._withPrimaryCheckoutState(this._withResolvedEnvironmentReference(thread));
+  }
+
+  private _withResolvedEnvironmentReference(thread: Thread): Thread {
+    const attachedEnvironmentId = this._resolveThreadEnvironmentReference(thread.id);
+    if (!attachedEnvironmentId || thread.environmentId === attachedEnvironmentId) {
+      return thread;
+    }
+    return {
+      ...thread,
+      environmentId: attachedEnvironmentId,
+    };
   }
 
   private _withPrimaryCheckoutState(thread: Thread): Thread {

@@ -3304,6 +3304,27 @@ describe("Orchestrator", () => {
 
       expect((manager as any)._resolveThreadEnvironmentReference(thread.id)).toBeUndefined();
     });
+
+    it("canonicalizes thread.environmentId from attachments on read paths", () => {
+      const env = environmentRepo.create({
+        projectId: project.id,
+        descriptor: { type: "path", path: "/tmp/env" },
+        managed: false,
+      });
+      const otherEnv = environmentRepo.create({
+        projectId: project.id,
+        descriptor: { type: "path", path: "/tmp/other-env" },
+        managed: false,
+      });
+      const thread = createTestThread(threadRepo, project.id, {
+        status: "idle",
+        environmentId: otherEnv.id,
+      });
+      attachmentRepo.attachThread({ threadId: thread.id, environmentId: env.id });
+
+      expect(manager.getRawById(thread.id)?.environmentId).toBe(env.id);
+      expect(manager.list().find((candidate) => candidate.id === thread.id)?.environmentId).toBe(env.id);
+    });
   });
 
   describe("getOutput()", () => {

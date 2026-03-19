@@ -630,6 +630,35 @@ describe("Thread routes", () => {
         id: env.id,
         managed: true,
       });
+      expect(body.environmentId).toBe(env.id);
+    });
+
+    it("canonicalizes list environmentId from attached environments", async () => {
+      const dbThread = createTestThread(repos.threadRepo, project.id);
+      const thread = makeThread({ id: dbThread.id, environmentId: "stale-env" });
+      (threadManager.list as ReturnType<typeof vi.fn>).mockReturnValue([thread]);
+
+      const env = environmentRepo.create({
+        projectId: project.id,
+        descriptor: { type: "path", path: "/project/root/.worktrees/thread-1" },
+        managed: true,
+        properties: {
+          provisioningSystemKind: "worktree",
+          location: "localhost",
+          workspaceKind: "worktree",
+        },
+      });
+      threadEnvironmentAttachmentRepo.attachThread({
+        threadId: dbThread.id,
+        environmentId: env.id,
+      });
+
+      const res = await app.request("/threads");
+
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body[0].environmentId).toBe(env.id);
+      expect(body[0].attachedEnvironment?.id).toBe(env.id);
     });
 
     it("returns 404 for nonexistent thread", async () => {
