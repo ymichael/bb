@@ -32,6 +32,7 @@ Use this pass for changes to daemon supervision, session management, and runtime
 - run one simultaneous follow-up round and confirm both turns complete cleanly
 - archive one sibling and confirm the other still accepts follow-up work
 - if daemon routing changed, run one multi-provider shared-environment scenario rather than only single-provider smoke
+- if provider routing changed, interleave follow-ups across provider A and provider B in the same shared environment and confirm no event cross-contamination
 
 ## Existing automation
 
@@ -40,5 +41,5 @@ Use this pass for changes to daemon supervision, session management, and runtime
 
 ## Related docs
 
-- Legacy umbrella setup: [`../legacy/server/standalone-server-qa.md`](../legacy/server/standalone-server-qa.md)
+- Standalone workflow: [`../shared/standalone-workflow.md`](../shared/standalone-workflow.md)
 - Env-daemon invariants: [`./invariants.md`](./invariants.md)

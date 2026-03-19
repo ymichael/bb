@@ -38,3 +38,7 @@ Relevant automated slices include:
 - `apps/server/src/__tests__/e2e/thread-worktree-followup-roundtrip.test.ts`
 - `apps/server/src/__tests__/e2e/thread-shared-environment-roundtrip.test.ts`
 - `apps/server/src/__tests__/e2e/dynamic-tools-server-roundtrip.test.ts`
+
+Related docs:
+
+- [`../shared/standalone-workflow.md`](../shared/standalone-workflow.md)

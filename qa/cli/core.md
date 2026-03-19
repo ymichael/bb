@@ -36,4 +36,4 @@ node apps/cli/dist/index.js thread output <thread-id>
 
 ## Related docs
 
-- [`../legacy/server/standalone-server-qa.md`](../legacy/server/standalone-server-qa.md)
+- [`../shared/standalone-workflow.md`](../shared/standalone-workflow.md)

@@ -18,6 +18,7 @@ Use this pass when changing provider bridges, protocol handling, or request/resp
 - verify system instructions are respected across turns
 - verify dynamic tools remain available when the flow requires them
 - verify provider errors surface as explicit failures rather than silent hangs or false success
+- verify `thread show` and raw provider envelopes report the expected `providerId`
 
 ## Provider-specific overlays
 
@@ -51,3 +52,7 @@ If the provider change also touches daemon/tool-call runtime behavior, add:
 ```bash
 pnpm qa:env-daemon:recovery
 ```
+
+## Related docs
+
+- Standalone workflow: [`../shared/standalone-workflow.md`](../shared/standalone-workflow.md)

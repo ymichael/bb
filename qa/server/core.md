@@ -49,5 +49,5 @@ Use the command that best matches the intended depth until the automation names 
 
 ## Related docs
 
-- Legacy umbrella setup: [`../legacy/server/standalone-server-qa.md`](../legacy/server/standalone-server-qa.md)
+- Standalone workflow: [`../shared/standalone-workflow.md`](../shared/standalone-workflow.md)
 - Server invariants: [`./invariants.md`](./invariants.md)

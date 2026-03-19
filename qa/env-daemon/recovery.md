@@ -20,6 +20,7 @@ Use this pass for worker-loss, reconnect, replacement, liveness, and timing-sens
 - queued follow-up present while worker is lost
 - late old env-daemon traffic after replacement does not mutate recovered thread state
 - archive or unarchive after worker-loss recovery does not resurrect stale session state
+- after relaunch, startup logs should show the surviving session being poked or the missing session awaiting timeout handling
 
 ## Automation today
 
@@ -41,6 +42,6 @@ Existing automated slices:
 
 ## Related docs
 
-- [`../legacy/server/standalone-server-qa.md`](../legacy/server/standalone-server-qa.md)
+- [`../shared/standalone-workflow.md`](../shared/standalone-workflow.md)
 - [`./invariants.md`](./invariants.md)
 - [`./regressions.md`](./regressions.md)

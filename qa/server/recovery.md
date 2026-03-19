@@ -16,6 +16,8 @@ Use this pass when the change affects server restart, shutdown, or persisted res
 - restart after a thread has already returned to `idle`
 - follow-up after restart failure clears `error` back to a healthy terminal state
 - restart during `provisioning` or `provisioned` before the first real `turn/started`
+- after relaunch, surviving-worker cases continue and missing-worker cases converge to explicit `error`
+- when relaunching an idle thread, the next follow-up starts a fresh session without duplicate active rows
 
 ## Notes
 
@@ -24,6 +26,6 @@ Use this pass when the change affects server restart, shutdown, or persisted res
 
 ## Related docs
 
-- [`../legacy/server/standalone-server-qa.md`](../legacy/server/standalone-server-qa.md)
+- [`../shared/standalone-workflow.md`](../shared/standalone-workflow.md)
 - [`./invariants.md`](./invariants.md)
 - [`./regressions.md`](./regressions.md)

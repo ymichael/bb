@@ -17,6 +17,7 @@ Use this pass for changes to environment provisioning, reuse, and resume behavio
 - unarchive the thread and confirm follow-up works again
 - promote and demote a worktree thread and confirm `promote-status` matches underlying git state
 - attach a second thread to an existing environment and confirm sibling behavior remains coherent
+- spawn two implicit local-environment threads and confirm both attach to the same environment cleanly
 
 ## Existing automation
 
@@ -26,4 +27,4 @@ Use this pass for changes to environment provisioning, reuse, and resume behavio
 
 ## Related docs
 
-- [`../legacy/server/standalone-server-qa.md`](../legacy/server/standalone-server-qa.md)
+- [`../shared/standalone-workflow.md`](../shared/standalone-workflow.md)

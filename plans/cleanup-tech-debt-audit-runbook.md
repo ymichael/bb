@@ -368,7 +368,7 @@ Out of scope:
   - package-scoped typecheck via `pnpm exec turbo run typecheck --filter=@bb/<pkg>`
   - focused tests (unit tests colocated with source, or `apps/server/src/__tests__/`)
   - e2e server scenarios under `apps/server/src/__tests__/e2e/`
-  - surface-based QA docs under `qa/` (start at `qa/README.md`; use `qa/legacy/server/standalone-server-qa.md` only for the remaining umbrella standalone checklist)
+  - surface-based QA docs under `qa/` (start at `qa/README.md`; use `qa/shared/standalone-workflow.md` for the shared standalone setup and relaunch procedure)
   - manual UI verification where relevant (the app runs at `http://localhost:5173/`)
 - Before closing an audit pass, ensure it produced:
   - a findings doc
