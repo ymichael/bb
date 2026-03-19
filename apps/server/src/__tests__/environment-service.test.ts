@@ -671,7 +671,7 @@ describe("EnvironmentService", () => {
       existsInitially: true,
     });
 
-    attachmentRepo.deleteByThreadId(thread.id, { nextThreadEnvironmentId: null });
+    attachmentRepo.deleteByThreadId(thread.id);
 
     service.removeManagedThreadLogs({
       id: thread.id,
@@ -687,7 +687,7 @@ describe("EnvironmentService", () => {
       existsInitially: true,
     });
 
-    attachmentRepo.deleteByThreadId(thread.id, { nextThreadEnvironmentId: null });
+    attachmentRepo.deleteByThreadId(thread.id);
 
     expect(service.getAttachedEnvironmentId(thread.id)).toBeUndefined();
     expect(service.isThreadAttachedToEnvironment(thread.id, env.id)).toBe(false);
@@ -747,7 +747,7 @@ describe("EnvironmentService", () => {
     service.setEnvironmentRuntime(thread.id, runtimeEnvironment);
     destroySpy.mockClear();
 
-    attachmentRepo.deleteByThreadId(thread.id, { nextThreadEnvironmentId: null });
+    attachmentRepo.deleteByThreadId(thread.id);
 
     await service.teardownAllForTestsOnly();
 
@@ -769,8 +769,8 @@ describe("EnvironmentService", () => {
     service.setEnvironmentRuntime(thread.id, runtimeEnvironment);
     destroySpy.mockClear();
 
-    attachmentRepo.deleteByThreadId(thread.id, { nextThreadEnvironmentId: null });
-    attachmentRepo.deleteByThreadId(siblingThreads[0]!.id, { nextThreadEnvironmentId: null });
+    attachmentRepo.deleteByThreadId(thread.id);
+    attachmentRepo.deleteByThreadId(siblingThreads[0]!.id);
 
     await service.teardownAllForTestsOnly();
 
@@ -888,7 +888,7 @@ describe("EnvironmentService", () => {
         },
       }),
     );
-    attachmentRepo.deleteByThreadId(thread.id, { nextThreadEnvironmentId: null });
+    attachmentRepo.deleteByThreadId(thread.id);
 
     emitWorkspaceStatusChange?.();
 

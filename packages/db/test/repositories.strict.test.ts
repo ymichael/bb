@@ -392,7 +392,7 @@ describe("repository strict normalization", () => {
     expect(updated.updatedAt).toBeGreaterThanOrEqual(initial.updatedAt);
   });
 
-  it("can preserve a fallback thread environment id when removing an attachment", () => {
+  it("removing an attachment does not rewrite thread.environmentId", () => {
     const projectId = createProjectId();
     const environment = environments.create({
       projectId,
@@ -402,24 +402,17 @@ describe("repository strict normalization", () => {
       },
       managed: true,
     });
-    const fallbackEnv = environments.create({
-      projectId,
-      descriptor: { type: "path", path: "/tmp/test-project/fallback" },
-      managed: true,
-    });
-    const thread = threads.create({ projectId });
+    const thread = threads.create({ projectId, environmentId: environment.id });
 
     attachments.attachThread({
       threadId: thread.id,
       environmentId: environment.id,
     });
 
-    attachments.deleteByThreadId(thread.id, {
-      nextThreadEnvironmentId: fallbackEnv.id,
-    });
+    attachments.deleteByThreadId(thread.id);
 
     expect(attachments.getByThreadId(thread.id)).toBeUndefined();
-    expect(threads.getById(thread.id)?.environmentId).toBe(fallbackEnv.id);
+    expect(threads.getById(thread.id)?.environmentId).toBe(environment.id);
   });
 
   it("lists only non-archived active threads with persisted environments", () => {
