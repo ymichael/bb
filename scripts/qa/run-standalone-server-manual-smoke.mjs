@@ -187,11 +187,39 @@ async function main() {
     await waitForThreadStatus(metadata, worktreeThreadId, "idle", 180);
     assertIncludes(threadOutput(metadata, worktreeThreadId), "WORKTREE-SMOKE-START", "worktree spawn output");
 
-    assertIncludes(runCli(metadata, ["thread", "promote-status", "--project", metadata.projectId]).stdout, "demoted", "initial promote status");
-    assertIncludes(runCli(metadata, ["thread", "promote", worktreeThreadId]).stdout, "promoted", "promote output");
-    assertIncludes(runCli(metadata, ["thread", "promote-status", "--project", metadata.projectId]).stdout, worktreeThreadId, "post-promote status");
-    assertIncludes(runCli(metadata, ["thread", "demote", worktreeThreadId]).stdout, "demoted", "demote output");
-    assertIncludes(runCli(metadata, ["thread", "promote-status", "--project", metadata.projectId]).stdout, "demoted", "post-demote status");
+    const worktreeShow = runCli(metadata, ["thread", "show", worktreeThreadId]).stdout;
+    const environmentIdMatch = worktreeShow.match(/^\s*ID:\s+(\S+)$/m);
+    if (!environmentIdMatch) {
+      throw new Error(`Could not parse worktree environment id from:\n${worktreeShow}`);
+    }
+    const worktreeEnvironmentId = environmentIdMatch[1];
+
+    assertIncludes(
+      runCli(metadata, ["environment", "promote-status", "--project", metadata.projectId]).stdout,
+      "demoted",
+      "initial promote status",
+    );
+    assertIncludes(
+      runCli(metadata, ["environment", "promote", worktreeEnvironmentId]).stdout,
+      "promoted",
+      "promote output",
+    );
+    assertIncludes(
+      runCli(metadata, ["environment", "promote-status", "--project", metadata.projectId]).stdout,
+      worktreeThreadId,
+      "post-promote status",
+    );
+    const demoteOutput = runCli(
+      metadata,
+      ["environment", "demote", "--project", metadata.projectId],
+      { allowFailure: true },
+    );
+    assertIncludes(demoteOutput.stderr || demoteOutput.stdout, "demoted", "demote output");
+    assertIncludes(
+      runCli(metadata, ["environment", "promote-status", "--project", metadata.projectId]).stdout,
+      "demoted",
+      "post-demote status",
+    );
 
     logStep("archive and unarchive");
     assertIncludes(runCli(metadata, ["thread", "archive", worktreeThreadId]).stdout, "archived", "archive output");

@@ -35,6 +35,7 @@
     "qa:env-daemon:recovery": "pnpm qa:server:recovery:fake",
     "qa:env-daemon:recovery:fake": "pnpm qa:server:recovery:fake",
     "qa:environments:core": "BB_E2E_PROVIDER_MODE=real pnpm --filter @bb/server exec vitest run --config vitest.e2e.fast.config.ts src/__tests__/e2e/thread-worktree-followup-roundtrip.test.ts src/__tests__/e2e/thread-worktree-primary-checkout-roundtrip.test.ts src/__tests__/e2e/thread-shared-environment-roundtrip.test.ts",
+    "qa:environments:attachments": "BB_E2E_PROVIDER_MODE=real pnpm --filter @bb/server exec vitest run --config vitest.e2e.fast.config.ts src/__tests__/e2e/thread-multi-thread-stress.test.ts",
     "bb": "node apps/cli/dist/index.js",
     "bb:dev": "BB_SERVER_URL=${BB_SERVER_URL:-http://localhost:3334} pnpm --filter @bb/server exec tsx ../cli/src/index.ts",
     "server": "node apps/server/dist/index.js",

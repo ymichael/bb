@@ -13,6 +13,7 @@ Reviewing the new QA system like a future tester surfaced these rough edges:
 - a tester-style dry run found that one early CLI smoke alias was accidentally wired to a fake-only test; the process should keep favoring real-provider-compatible scripts for public entrypoints
 - a later tester-style dry run found that `qa:e2e:smoke` still included fake-only skipped tests and that the stress path had a broken restart filename; both are the kind of rough edge the public QA entrypoints should avoid
 - the env-daemon recovery alias also needed tightening so the named pass resolves to the deterministic fake-provider suite rather than a mostly-skipped transitional real-provider script
+- a manual standalone pass found that the environment docs and helper were still using nonexistent `thread promote*` commands; the real commands live under `bb environment`
 
 The sections below track the substantive depth gaps by surface, not just the usability gaps.
 
@@ -55,12 +56,14 @@ Already covered by checked-in automation:
 - worktree follow-up
 - primary checkout behavior
 - shared environment sibling behavior
+- implicit local attachment and sibling reuse
 
 Representative files:
 
 - `apps/server/src/__tests__/e2e/thread-worktree-followup-roundtrip.test.ts`
 - `apps/server/src/__tests__/e2e/thread-worktree-primary-checkout-roundtrip.test.ts`
 - `apps/server/src/__tests__/e2e/thread-shared-environment-roundtrip.test.ts`
+- `apps/server/src/__tests__/e2e/thread-multi-thread-stress.test.ts`
 
 ### Providers
 
@@ -133,12 +136,12 @@ Recommended next depth increase:
 
 What is weak today:
 
-- explicit worktree and shared-environment behavior is covered better than implicit local-environment attachment behavior
-- attachment invariants are still easiest to infer from the shared-environment tests rather than a dedicated environment-focused slice
+- implicit local attachment now has a dedicated scripted slice, but the broader environment pass still leans more heavily on worktree-oriented flows
+- attachment invariants are covered more explicitly than before, but the manual docs still emphasize worktree flows over local reuse checks
 
 Recommended next depth increase:
 
-- keep the new environment core slice, then add a more explicit check for implicit local-environment attachment and sibling reuse
+- keep the new environment attachment slice and add a short manual local-reuse checklist to the standalone workflow or environment docs
 
 ### Regression depth is only partly normalized
 

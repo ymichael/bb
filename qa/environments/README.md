@@ -16,3 +16,4 @@ Default pass:
 Fastest scripted entrypoint:
 
 - `pnpm qa:environments:core`
+- `pnpm qa:environments:attachments`

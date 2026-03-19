@@ -153,6 +153,24 @@ sqlite3 "$bb_root/bb.db" \
   "select thread_id,type,substr(json_data,1,160) from events order by seq desc limit 20;"
 ```
 
+## Environment checks
+
+For implicit local-environment reuse, spawn two local threads and compare the environment IDs shown by:
+
+```bash
+node apps/cli/dist/index.js thread show <thread-id>
+```
+
+Matching `Environment Direct` IDs mean both threads attached to the same local environment.
+
+For worktree primary-checkout checks, use the environment subcommands rather than thread subcommands:
+
+```bash
+node apps/cli/dist/index.js environment promote-status --project <project-id>
+node apps/cli/dist/index.js environment promote <environment-id>
+node apps/cli/dist/index.js environment demote --project <project-id>
+```
+
 ## Relaunch guidance
 
 For restart and relaunch checks, prefer the helper:
