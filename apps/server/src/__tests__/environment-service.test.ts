@@ -727,6 +727,28 @@ describe("EnvironmentService", () => {
     expect(attachmentRepo.listByEnvironmentId(thread.environmentId!)).toHaveLength(0);
   });
 
+  it("can tear down a detached shared runtime when no attached threads remain", async () => {
+    const destroySpy = vi.fn();
+    const { service, attachmentRepo, thread, siblingThreads } = createService({
+      existsInitially: true,
+      destroySpy,
+      siblingThreadIds: ["thread-2"],
+    });
+    const runtimeEnvironment = createTestEnvironment({
+      existsInitially: true,
+      destroySpy,
+    });
+    service.setEnvironmentRuntime(thread.id, runtimeEnvironment);
+    destroySpy.mockClear();
+
+    attachmentRepo.deleteByThreadId(thread.id, { nextThreadEnvironmentId: null });
+    attachmentRepo.deleteByThreadId(siblingThreads[0]!.id, { nextThreadEnvironmentId: null });
+
+    await service.teardownAllForTestsOnly();
+
+    expect(destroySpy).toHaveBeenCalledTimes(1);
+  });
+
   it("clears persisted shared-environment attachments for all scoped threads during teardownAllForTestsOnly", async () => {
     const runtimeDestroySpy = vi.fn();
     const persistedDestroySpy = vi.fn();

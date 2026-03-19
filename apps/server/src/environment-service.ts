@@ -33,7 +33,6 @@ import { derivePersistedEnvironmentRecordFromDescriptor } from "./env-factory.js
 
 export interface ActiveEnvironmentRuntime {
   scopeKey: string;
-  ownerThreadId: string;
   environment: IEnvironment;
   agentConnectionTarget: EnvironmentDaemonConnectionTarget;
   stopWatchingWorkspaceStatus?: () => void;
@@ -162,14 +161,16 @@ export class EnvironmentService {
       .map((attachment) => attachment.threadId);
   }
 
-  private getThreadIdsForRuntimeScopeKey(scopeKey: string, fallbackThreadId: string): string[] {
-    if (scopeKey.startsWith("thread:") || !this.threadEnvironmentAttachmentRepo) {
-      return [fallbackThreadId];
+  private getThreadIdsForRuntimeScopeKey(scopeKey: string): string[] {
+    if (scopeKey.startsWith("thread:")) {
+      return [scopeKey.slice("thread:".length)];
     }
-    const attachedThreadIds = this.threadEnvironmentAttachmentRepo
+    if (!this.threadEnvironmentAttachmentRepo) {
+      return [];
+    }
+    return this.threadEnvironmentAttachmentRepo
       .listByEnvironmentId(scopeKey)
       .map((attachment) => attachment.threadId);
-    return attachedThreadIds.length > 0 ? attachedThreadIds : [fallbackThreadId];
   }
 
   hasSharedAttachedEnvironment(threadId: string): boolean {
@@ -557,7 +558,7 @@ export class EnvironmentService {
       void this.suspendDetachedRuntime(threadId, existingRuntime);
     }
     const stopWatchingWorkspaceStatus = environment.watchWorkspaceStatus(() => {
-      for (const scopedThreadId of this.getThreadIdsForRuntimeScopeKey(scopeKey, threadId)) {
+      for (const scopedThreadId of this.getThreadIdsForRuntimeScopeKey(scopeKey)) {
         if (!this.threadRepo.getById(scopedThreadId)) {
           continue;
         }
@@ -566,7 +567,6 @@ export class EnvironmentService {
     });
     this.environmentRuntimes.set(scopeKey, {
       scopeKey,
-      ownerThreadId: threadId,
       environment,
       agentConnectionTarget,
       stopWatchingWorkspaceStatus,
@@ -661,9 +661,8 @@ export class EnvironmentService {
 
   private clearPersistedEnvironmentStateForRuntimeScope(
     scopeKey: string,
-    fallbackThreadId: string,
   ): void {
-    const scopedThreadIds = this.getThreadIdsForRuntimeScopeKey(scopeKey, fallbackThreadId);
+    const scopedThreadIds = this.getThreadIdsForRuntimeScopeKey(scopeKey);
     for (const scopedThreadId of scopedThreadIds) {
       this.clearPersistedEnvironmentState(scopedThreadId);
     }
@@ -727,7 +726,7 @@ export class EnvironmentService {
           if (projectRootPath) {
             await this.callbacks.cleanupManagedEnvironmentArtifacts?.(threadId, projectRootPath);
           }
-          this.clearPersistedEnvironmentStateForRuntimeScope(runtime.scopeKey, threadId);
+          this.clearPersistedEnvironmentStateForRuntimeScope(runtime.scopeKey);
         }
       } catch (error) {
         reportFailure(environmentId, error);
@@ -1184,18 +1183,31 @@ export class EnvironmentService {
   }
 
   async teardownAllForTestsOnly(): Promise<void> {
-    const runtimeThreadIds = new Set(
-      Array.from(this.environmentRuntimes.values()).map((runtime) => runtime.ownerThreadId),
+    const runtimeScopeKeys = new Set(
+      Array.from(this.environmentRuntimes.values()).map((runtime) => runtime.scopeKey),
     );
     const teardownTasks: Promise<void>[] = [];
     for (const runtime of Array.from(this.environmentRuntimes.values())) {
-      teardownTasks.push(
-        this.destroyThreadEnvironment(runtime.ownerThreadId).catch((error: unknown) => {
-          const environmentId =
-            this.threadRepo.getById(runtime.ownerThreadId)?.environmentId ?? "unknown";
-          this.callbacks.onCleanupFailure(runtime.ownerThreadId, environmentId, error);
-        }),
-      );
+      const scopedThreadIds = this.getThreadIdsForRuntimeScopeKey(runtime.scopeKey);
+      if (scopedThreadIds.length === 0) {
+        teardownTasks.push(
+          Promise.resolve(runtime.environment.destroy()).catch((error: unknown) => {
+            this.callbacks.onCleanupFailure(runtime.scopeKey, runtime.environment.kind, error);
+          }).finally(() => {
+            this.detachEnvironmentRuntimeByScopeKey(runtime.scopeKey);
+          }),
+        );
+        continue;
+      }
+      for (const scopedThreadId of scopedThreadIds) {
+        teardownTasks.push(
+          this.destroyThreadEnvironment(scopedThreadId).catch((error: unknown) => {
+            const environmentId =
+              this.threadRepo.getById(scopedThreadId)?.environmentId ?? "unknown";
+            this.callbacks.onCleanupFailure(scopedThreadId, environmentId, error);
+          }),
+        );
+      }
     }
     const projects = this.projectRepo.list();
     if (!Array.isArray(projects) || projects.length === 0) {
@@ -1212,7 +1224,8 @@ export class EnvironmentService {
       const threadIds =
         this.threadRepo.listProjectNonArchivedIdsWithEnvironmentRecord(project.id);
       for (const threadId of threadIds) {
-        if (runtimeThreadIds.has(threadId)) continue;
+        const scopeKey = this.getRuntimeScopeKey(threadId);
+        if (runtimeScopeKeys.has(scopeKey)) continue;
         teardownTasks.push(
           this.destroyPersistedEnvironment(threadId).catch((error: unknown) => {
             const environmentId = this.threadRepo.getById(threadId)?.environmentId ?? "unknown";

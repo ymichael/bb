@@ -4266,6 +4266,28 @@ describe("Orchestrator", () => {
       );
     });
 
+    it("rejects demote_primary when only archived threads remain attached", async () => {
+      const env = environmentRepo.create({
+        projectId: project.id,
+        descriptor: { type: "path", path: "/tmp/env" },
+        managed: true,
+      });
+      const archivedThread = createTestThread(threadRepo, project.id, {
+        status: "idle",
+        environmentId: env.id,
+        archivedAt: 1234,
+      });
+      attachmentRepo.attachThread({ threadId: archivedThread.id, environmentId: env.id });
+
+      await expect(
+        manager.requestEnvironmentOperation(env.id, {
+          operation: "demote_primary",
+        }),
+      ).rejects.toThrow(
+        `No active thread is attached to environment ${env.id}`,
+      );
+    });
+
   });
 
   describe("isActive()", () => {

@@ -2859,11 +2859,10 @@ export class Orchestrator implements ThreadOrchestrator {
       }
       case "demote_primary": {
         const targetThread = this._getThreadsAttachedToEnvironment(environmentId)
-          .find((thread) => thread.projectId === environmentRecord.projectId && thread.archivedAt === undefined)
-          ?? this._getThreadsAttachedToEnvironment(environmentId)[0];
+          .find((thread) => thread.projectId === environmentRecord.projectId && thread.archivedAt === undefined);
         if (!targetThread) {
           throw invalidRequestError(
-            `No thread is attached to environment ${environmentId}`,
+            `No active thread is attached to environment ${environmentId}`,
           );
         }
         return this.demoteThreadEnvironmentFromPrimaryCheckout(targetThread.id);
