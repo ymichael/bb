@@ -75,6 +75,7 @@ export function MergeBaseBranchPicker({
 
   return (
     <Popover
+      modal
       open={open}
       onOpenChange={(nextOpen) => {
         setOpen(nextOpen);
