@@ -953,6 +953,28 @@ export class Orchestrator implements ThreadOrchestrator {
     return this.environmentService.clearPrimaryPromotionState(projectId);
   }
 
+  private async _refreshPrimaryPromotionSnapshotAfterEnvironmentMutation(
+    thread: Thread,
+    environment: IEnvironment,
+  ): Promise<void> {
+    const active = this.primaryPromotionByProjectId.get(thread.projectId);
+    const threadEnvironmentId = this._resolveThreadEnvironmentReference(thread.id);
+    if (!active || !threadEnvironmentId || active.environmentId !== threadEnvironmentId) {
+      return;
+    }
+
+    try {
+      const promotedCheckout = await environment.getCheckoutSnapshot();
+      this._setPrimaryPromotionState(thread.projectId, {
+        ...active,
+        promotedCheckout,
+      });
+      this.primaryPromotionValidatedAtByProjectId.set(thread.projectId, Date.now());
+    } catch {
+      // Keep the existing promotion state if the checkout snapshot cannot be refreshed.
+    }
+  }
+
   private _getDefaultAgentServer(): ProviderSessionController {
     return this._getAgentServerForProviderId(this.defaultProviderId);
   }
@@ -1859,6 +1881,7 @@ export class Orchestrator implements ThreadOrchestrator {
       message: request?.message?.trim(),
       includeUnstaged: request?.includeUnstaged,
     });
+    await this._refreshPrimaryPromotionSnapshotAfterEnvironmentMutation(thread, environment);
     const autoArchived =
       result.commitCreated &&
       await this._shouldAutoArchiveThreadAsync({
@@ -1932,6 +1955,7 @@ export class Orchestrator implements ThreadOrchestrator {
           includeUnstaged: false,
         }),
     });
+    await this._refreshPrimaryPromotionSnapshotAfterEnvironmentMutation(thread, environment);
     if (!mergeResult.merged && mergeResult.conflictFiles && mergeResult.conflictFiles.length > 0) {
       throw invalidRequestError(mergeResult.message, {
         operation: "squash_merge",
@@ -2858,20 +2882,26 @@ export class Orchestrator implements ThreadOrchestrator {
             `Thread ${request.initiatingThreadId} is not attached to environment ${environmentId}`,
           );
         }
-        try {
-          return request.operation === "commit"
-            ? await this._runWorktreeCommitOperation(thread.id, request.options)
-            : await this._runWorktreeSquashMergeOperation(thread.id, request.options);
-        } catch (err) {
-          const details = this._environmentOperationFailureDetails(request, err);
-          if (details) {
-            throw invalidRequestError(this._toErrorMessage(err), details);
-          }
-          if (isDomainError(err)) {
-            throw err;
-          }
-          throw invalidRequestError(this._toErrorMessage(err));
-        }
+        return this._runWithProjectGitMutationLock(
+          thread.projectId,
+          "Another environment git operation is already in progress for this project",
+          async () => {
+            try {
+              return request.operation === "commit"
+                ? await this._runWorktreeCommitOperation(thread.id, request.options)
+                : await this._runWorktreeSquashMergeOperation(thread.id, request.options);
+            } catch (err) {
+              const details = this._environmentOperationFailureDetails(request, err);
+              if (details) {
+                throw invalidRequestError(this._toErrorMessage(err), details);
+              }
+              if (isDomainError(err)) {
+                throw err;
+              }
+              throw invalidRequestError(this._toErrorMessage(err));
+            }
+          },
+        );
       }
       default:
         return assertNever(request);
@@ -5253,10 +5283,20 @@ export class Orchestrator implements ThreadOrchestrator {
     projectId: string,
     fn: () => Promise<T>,
   ): Promise<T> {
+    return this._runWithProjectGitMutationLock(
+      projectId,
+      "Another primary-checkout promotion/demotion operation is already in progress for this project",
+      fn,
+    );
+  }
+
+  private async _runWithProjectGitMutationLock<T>(
+    projectId: string,
+    message: string,
+    fn: () => Promise<T>,
+  ): Promise<T> {
     if (this.primaryCheckoutTransitionsInFlight.has(projectId)) {
-      throw invalidRequestError(
-        "Another primary-checkout promotion/demotion operation is already in progress for this project",
-      );
+      throw invalidRequestError(message);
     }
 
     this.primaryCheckoutTransitionsInFlight.add(projectId);

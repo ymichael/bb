@@ -3834,6 +3834,80 @@ describe("Orchestrator", () => {
       });
     });
 
+    it("refreshes promoted checkout snapshots after commit operations on the promoted environment", async () => {
+      const env = environmentRepo.create({
+        projectId: project.id,
+        descriptor: { type: "path", path: "/tmp/env" },
+        managed: true,
+      });
+      const thread = createTestThread(threadRepo, project.id, { status: "idle", environmentId: env.id });
+      const getCheckoutSnapshot = vi
+        .fn()
+        .mockResolvedValueOnce({
+          branch: "bb/thread-1",
+          head: "next-head",
+          detached: false,
+        });
+      asOrchestratorHarness(manager).environmentRuntimes.set(thread.id, {
+        environment: makeRuntimeEnvironment({
+          kind: "worktree",
+          rootPath: "/tmp/worktrees/proj-1/thread-1",
+          overrides: {
+            getCheckoutSnapshot,
+            async commitWorkspace() {
+              return {
+                ok: true,
+                commitCreated: true,
+                message: "Created commit",
+                commitSha: "next-head",
+                commitSubject: "Create commit",
+                includeUnstaged: false,
+                workStatus: makeWorkspaceStatus(),
+              };
+            },
+          },
+        }),
+      });
+      asOrchestratorHarness(manager).primaryPromotionByProjectId.set(project.id, {
+        projectId: project.id,
+        environmentId: env.id,
+        threadId: thread.id,
+        promotedAt: 1000,
+        previousCheckout: {
+          branch: "main",
+          head: "base-head",
+          detached: false,
+        },
+        promotedCheckout: {
+          branch: "bb/thread-1",
+          head: "old-head",
+          detached: false,
+        },
+        reconstructed: false,
+      });
+
+      const result = await manager.requestEnvironmentOperation(env.id, {
+        operation: "commit",
+        initiatingThreadId: thread.id,
+      });
+
+      expect(result).toMatchObject({
+        ok: true,
+        operation: "commit",
+        commitSha: "next-head",
+      });
+      expect(
+        asOrchestratorHarness(manager).primaryPromotionByProjectId.get(project.id),
+      ).toMatchObject({
+        promotedCheckout: {
+          branch: "bb/thread-1",
+          head: "next-head",
+          detached: false,
+        },
+      });
+      expect(getCheckoutSnapshot).toHaveBeenCalledTimes(1);
+    });
+
     it("treats promoting a sibling thread on the same environment as a no-op", async () => {
       const env = environmentRepo.create({
         projectId: project.id,
@@ -4113,6 +4187,44 @@ describe("Orchestrator", () => {
 
       await expect(manager.demoteThreadEnvironmentFromPrimaryCheckout(thread.id)).rejects.toThrow(
         "Another primary-checkout promotion/demotion operation is already in progress for this project",
+      );
+    });
+
+    it("rejects commit when another project git mutation is already in flight", async () => {
+      const env = environmentRepo.create({
+        projectId: project.id,
+        descriptor: { type: "path", path: "/tmp/env" },
+        managed: true,
+      });
+      const thread = createTestThread(threadRepo, project.id, { status: "idle", environmentId: env.id });
+      asOrchestratorHarness(manager).primaryCheckoutTransitionsInFlight.add(project.id);
+
+      await expect(
+        manager.requestEnvironmentOperation(env.id, {
+          operation: "commit",
+          initiatingThreadId: thread.id,
+        }),
+      ).rejects.toThrow(
+        "Another environment git operation is already in progress for this project",
+      );
+    });
+
+    it("rejects squash merge when another project git mutation is already in flight", async () => {
+      const env = environmentRepo.create({
+        projectId: project.id,
+        descriptor: { type: "path", path: "/tmp/env" },
+        managed: true,
+      });
+      const thread = createTestThread(threadRepo, project.id, { status: "idle", environmentId: env.id });
+      asOrchestratorHarness(manager).primaryCheckoutTransitionsInFlight.add(project.id);
+
+      await expect(
+        manager.requestEnvironmentOperation(env.id, {
+          operation: "squash_merge",
+          initiatingThreadId: thread.id,
+        }),
+      ).rejects.toThrow(
+        "Another environment git operation is already in progress for this project",
       );
     });
 
