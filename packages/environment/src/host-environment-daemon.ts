@@ -381,6 +381,9 @@ export async function ensureManagedHostEnvironmentDaemon(args: {
           ...args.runtimeEnv,
           BB_PROJECT_ID: args.projectId,
           BB_ENVIRONMENT_ID: args.environmentId,
+          ...(args.runtimeEnv.BB_THREAD_ID
+            ? { BB_THREAD_ID: args.runtimeEnv.BB_THREAD_ID }
+            : {}),
           ...(args.runtimeEnv.BB_THREAD_PROVIDER_ID
             ? { BB_THREAD_PROVIDER_ID: args.runtimeEnv.BB_THREAD_PROVIDER_ID }
             : {}),

@@ -225,6 +225,7 @@ describe("environment-daemon service config", () => {
       session: {
         pollIntervalMs: 10_000,
         commandBatchLimit: 10,
+        initialThreadIds: ["thread-1"],
         capabilities: {
           commands: [
             "provider.ensure",
@@ -250,6 +251,17 @@ describe("environment-daemon service config", () => {
       "http://127.0.0.1:9000/api/v1/environments/local/env-daemon/session/open",
       expect.objectContaining({ method: "POST" }),
     ]);
+    expect(
+      JSON.parse(
+        String(
+          fetchSpy.mock.calls.find(([url]) =>
+            String(url).includes("/env-daemon/session/open")
+          )?.[1]?.body ?? "{}",
+        ),
+      ),
+    ).toMatchObject({
+      channels: [{ channelId: "thread-1", generation: 1 }],
+    });
 
     await started.close();
   });

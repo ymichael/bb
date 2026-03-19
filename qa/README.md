@@ -1,113 +1,105 @@
 # QA
 
-This folder is the top-level landing page for manual and scripted QA in BB.
+This folder is the source of truth for manual and scripted QA in BB.
 
-When we ask someone to **do a full QA pass**, start here.
+The goal of this structure is simple:
 
-## Purpose
+- QA instructions should be easy to find and follow
+- targeted requests like "run QA for the Pi provider" should map to an obvious place
+- cross-cutting requests like "run e2e QA and any relevant QA for the code we touched" should also map cleanly
+- new scenarios should have an obvious home so QA can grow without collapsing into one giant runbook
 
-Use this folder to:
+## How QA Is Organized
 
-- find the current QA runbooks
-- understand which pass to run for a given change
-- record and expand repeatable QA coverage over time
-- keep QA guidance centralized instead of scattering it across docs and ad hoc notes
+QA is organized by owning surface:
 
-## Current QA Entry Points
+- `server/`
+- `env-daemon/`
+- `providers/`
+- `cli/`
+- `environments/`
+- `product/`
+- `e2e/`
 
-### Full server/env-daemon QA pass
+The rule is:
 
-Use the standalone server CLI QA guide:
+- if one subsystem owns the invariant, that subsystem owns the QA scenario
+- `e2e/` is only for thin assembled-system smoke checks
 
-- [`./server/standalone-server-qa.md`](./server/standalone-server-qa.md)
+## Quick Starts
 
-This is currently the primary full QA pass for validating:
+Use these when you want the shortest route from request to action:
 
-- server startup and restart behavior
-- thread lifecycle behavior
-- env-daemon liveness and recovery
-- worktree flows
-- CLI behavior against a real running server
+| If someone says... | Start here | Minimum useful scripted pass |
+|---|---|---|
+| "run e2e QA" | `qa/e2e/smoke.md` | `pnpm qa:e2e:smoke` |
+| "run QA for the Pi provider" | `qa/providers/core.md` + `qa/providers/pi/README.md` | `pnpm qa:providers:core` + `pnpm qa:providers:smoke:pi` |
+| "run CLI smoke QA" | `qa/cli/core.md` | `pnpm qa:cli:smoke` |
+| "run env-daemon recovery QA" | `qa/env-daemon/recovery.md` | `pnpm qa:env-daemon:recovery` |
+| "run environment QA" | `qa/environments/core.md` | `pnpm qa:environments:core` |
+| "run provider smoke" | `qa/providers/smoke.md` | `pnpm qa:providers:smoke` |
+| "run provider core QA" | `qa/providers/core.md` | `pnpm qa:providers:core` |
+| "run server core QA" | `qa/server/core.md` | `pnpm qa:server:core` |
+| "run relevant QA for this change" | identify touched surfaces below | start with the closest scripted pass for each touched surface, then add the manual checklist where the docs call for it |
 
-## QA tiers
+## What Should I Run For A Change?
 
-The standalone server QA guide defines three named tiers. Use these names when requesting a QA pass:
+Use this table when the change is primarily in one area:
 
-| Tier | Scope | Time | When to use |
-|---|---|---|---|
-| **Light QA pass** | start + follow-up + steer + worktree basics + provider verification | ~5 min/provider | Every PR, all providers |
-| **Extended QA pass** | + stop/follow-up, archive/unarchive, promote/demote, rapid follow-ups | ~15 min/provider | Lifecycle or state changes |
-| **Full QA pass** | + all restart/recovery, worker loss, session replacement, shared env | ~30 min | Big server/env-daemon changes |
+| If you changed... | Run... |
+|---|---|
+| server routes, thread persistence, restart/shutdown behavior | `server/core` |
+| env-daemon supervision, reconnect, multi-session behavior | `env-daemon/core` and `env-daemon/recovery` |
+| provider bridge/protocol behavior | `providers/core` plus the relevant provider overlay |
+| CLI behavior or operator-facing command flows | `cli/core` |
+| environment lifecycle or resume behavior | `environments/core` |
+| manager mode or other higher-level product semantics | `product/core` |
+| cross-cutting or user-visible flows | relevant surface passes plus `e2e/smoke` |
 
-See [`./server/standalone-server-qa.md` § QA Tiers](./server/standalone-server-qa.md#qa-tiers) for the complete checklist per tier.
+## Request Translation
 
-## How to use this folder
+Use this table to map informal requests to concrete docs and commands:
 
-If you are asked to run a QA pass:
+| Request | Docs | Minimum useful scripted pass |
+|---|---|
+| "run QA for the Pi provider" | `providers/core.md` + `providers/pi/README.md` | `pnpm qa:providers:core`, then `pnpm qa:providers:smoke:pi` |
+| "run provider QA" | `providers/core.md` | `pnpm qa:providers:core` |
+| "run env-daemon QA" | `env-daemon/core.md`, then `env-daemon/recovery.md` if needed | `pnpm qa:env-daemon:core`, then `pnpm qa:env-daemon:recovery` when the change is restart/recovery-heavy |
+| "run CLI QA" | `cli/core.md` | `pnpm qa:cli:core` |
+| "run environment QA" | `environments/core.md` | `pnpm qa:environments:core` |
+| "run e2e QA" | `e2e/smoke.md` | `pnpm qa:e2e:smoke` |
+| "run relevant QA for this change" | identify touched surfaces, run each surface's default pass, then add `e2e/smoke.md` if the change is cross-cutting or user-visible | there is not always one exact script; use the surface docs plus the closest scripted pass |
 
-1. Identify the tier: **light**, **extended**, or **full**.
-2. Start with the relevant guide linked from this README.
-3. Run the entire checklist for that tier, not just the first scenario that seems relevant.
-4. Record pass/fail for each case.
-5. Keep logs, command output, and any failure artifacts until triage is complete.
-6. Note whether the failure is:
-   - a product bug
-   - a flaky/timing-sensitive test case
-   - a stale QA expectation/documentation issue
+## Default Pass Levels
 
-## QA Principles
+Keep pass levels lightweight:
 
-Our QA direction is to make passes:
+- `smoke`: fastest confidence check for a surface
+- `core`: default regression pass for a surface
+- `recovery`: deeper restart/failure/liveness coverage where needed
 
-- **reliable**: assert durable lifecycle invariants, not fragile timing details
-- **operator-oriented**: prefer supported CLI/API surfaces over shell parsing
-- **invariant-friendly**: prefer `bb thread wait` and `bb thread sessions` over ad hoc sleep loops or raw DB checks
-- **efficient**: make failures easy to triage without rediscovering the system manually
-- **maintainable**: keep docs, invariants, and harness behavior aligned with architecture changes
+Not every surface needs all three.
 
-## Expected evolution of this folder
+## Where Do New Scenarios Go?
 
-Over time, this folder should become the home for:
+- Add new scenarios to the owning surface first.
+- Add something to `e2e/` only if it is truly a top-level smoke behavior.
+- Prefer extending an existing pass over creating a new file.
+- If a surface lacks the exact depth or automation you want, add it under that surface instead of bolting it into another runbook.
 
-- QA runbooks by subsystem
-- smoke / stress / regression pass definitions
-- links to automation entrypoints and artifact locations
-- guidance for collecting failure bundles
-- a changelog of newly added regression scenarios when useful
+## Shared Guidance
 
-Current server QA docs:
+- Pass-level conventions: [`./shared/pass-levels.md`](./shared/pass-levels.md)
+- Standalone setup and relaunch workflow: [`./shared/standalone-workflow.md`](./shared/standalone-workflow.md)
+- Current automation and coverage audit: [`./shared/coverage-audit.md`](./shared/coverage-audit.md)
+- Artifact capture and retention: [`./artifacts/README.md`](./artifacts/README.md)
 
-- `qa/server/standalone-server-qa.md`
-- `qa/server/smoke.md`
-- `qa/server/lifecycle-invariants.md`
-- `qa/server/stress.md`
-- `qa/server/regressions.md`
-- `qa/artifacts/README.md`
+## Current Surface Entry Points
 
-## Automation entrypoints
-
-For checked-in server/env-daemon automation tiers:
-
-- `pnpm qa:server:manual-smoke`
-- `pnpm qa:server:smoke`
-- `pnpm qa:server:smoke:claude-code`
-- `pnpm qa:server:smoke:pi`
-- `pnpm qa:server:stress`
-- `pnpm qa:server:regression`
-- `pnpm qa:server:recovery:fake`
-
-Provider coverage split:
-
-- `qa:server:manual-smoke`, `qa:server:smoke`, `qa:server:stress`, and `qa:server:regression` use the real Codex provider.
-- `qa:server:smoke:claude-code` runs the same scripted smoke suite against the Claude Code provider (requires `ANTHROPIC_API_KEY` or `CLAUDE_CODE_OAUTH_TOKEN`).
-- `qa:server:smoke:pi` runs the same suite against the Pi provider (requires `pi` in PATH with auth configured via `~/.pi/agent/auth.json`).
-- `qa:server:recovery:fake` is the deterministic fake-provider recovery suite for worker-loss and forced-recovery paths that real-provider automation cannot reliably drive.
-
-Use the standalone server guide when you need the full direct-binary workflow and exhaustive scenario checklist.
-
-Likely future additions:
-
-- `qa/app/`
-- `qa/regressions/`
-
-The server/env-daemon QA roadmap has been completed; keep this folder updated directly as the source of truth for future QA changes.
+- Server: [`./server/README.md`](./server/README.md)
+- Env-daemon: [`./env-daemon/README.md`](./env-daemon/README.md)
+- Providers: [`./providers/README.md`](./providers/README.md)
+- CLI: [`./cli/README.md`](./cli/README.md)
+- Environments: [`./environments/README.md`](./environments/README.md)
+- Product: [`./product/README.md`](./product/README.md)
+- E2E: [`./e2e/README.md`](./e2e/README.md)

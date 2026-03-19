@@ -4231,6 +4231,7 @@ export class Orchestrator implements ThreadOrchestrator {
       ...(attachedEnvironmentId ? { environmentId: attachedEnvironmentId } : {}),
       runtimeEnv: {
         ...this.runtimeEnv,
+        BB_THREAD_ID: threadId,
         ...(thread?.providerId ? { BB_THREAD_PROVIDER_ID: thread.providerId } : {}),
         ...(attachedEnvironmentId
           ? { BB_ENVIRONMENT_ID: attachedEnvironmentId }
@@ -5003,6 +5004,12 @@ export class Orchestrator implements ThreadOrchestrator {
       );
       return;
     }
+    const resolvedProviderThreadId = extractProviderThreadIdFromPersistedEventData(
+      event.eventData,
+    );
+    if (resolvedProviderThreadId) {
+      this.providerThreadIdByThreadId.set(resolvedThreadId, resolvedProviderThreadId);
+    }
     if (this._shouldSuppressNotification(resolvedThreadId, event)) {
       return;
     }
@@ -5070,6 +5077,7 @@ export class Orchestrator implements ThreadOrchestrator {
       return currentThreadMatches ? threadId : undefined;
     }
 
+    const providerScopedThreadIds: string[] = [];
     const matchingThreadIds: string[] = [];
     for (const attachment of this.threadEnvironmentAttachmentRepo.listByEnvironmentId(
       attachedEnvironmentId,
@@ -5079,6 +5087,7 @@ export class Orchestrator implements ThreadOrchestrator {
       if (providerId && candidateThread?.providerId !== providerId) {
         continue;
       }
+      providerScopedThreadIds.push(candidateThreadId);
       const candidateProviderThreadId =
         this.providerThreadIdByThreadId.get(candidateThreadId) ??
         this._resolvePersistedProviderThreadId(candidateThreadId);
@@ -5092,6 +5101,9 @@ export class Orchestrator implements ThreadOrchestrator {
       currentThreadMatches
     ) {
       return threadId;
+    }
+    if (matchingThreadIds.length === 0 && providerScopedThreadIds.length === 1) {
+      return providerScopedThreadIds[0];
     }
     return matchingThreadIds.length === 1 ? matchingThreadIds[0] : undefined;
   }

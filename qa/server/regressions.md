@@ -1,41 +1,24 @@
-# Server / Env-Daemon Regression QA
+# Server Regression QA
 
-Use this pass to capture stable repros for previously discovered bugs.
+Use this doc to capture stable repros for previously discovered server-owned bugs.
 
 ## Goal
 
-Make sure once a server/env-daemon lifecycle bug is fixed, it stays fixed.
+Make sure once a server-owned lifecycle or control-plane bug is fixed, it stays fixed.
 
-## How to use
+## Add regressions here when the bug is primarily about
 
-Add one entry per regression with:
-- short name
-- original bug / incident reference
-- minimal repro steps
-- expected outcome
-- invariants protected by the regression
+- persisted thread state convergence
+- restart or resume visibility from the server's point of view
+- control-plane actions such as stop, archive, unarchive, promote, and demote
+- operator-facing state becoming ambiguous even when runtime behavior is otherwise healthy
 
-## Automation entrypoint
+## Seed areas
 
-For the checked-in regression seed suite:
-
-```bash
-pnpm qa:server:regression
-pnpm qa:server:recovery:fake
-```
-
-The checked-in regression seed suite targets the real provider by default. Recovery regressions that require fake Codex control should also be covered by `qa:server:recovery:fake`.
-
-## Current seed regression areas
-
-Add entries here as fixes land for issues such as:
-- immediate follow-up after idle failing with session-closed behavior
-- restart while active leaving thread stuck instead of converging
-- missing-worker restart incorrectly landing in `idle`
-- duplicate live session acceptance after replacement
-- queued follow-up being dropped during worker-loss recovery
-- archive/unarchive resurrecting stale session state
-- late old-agent traffic mutating recovered thread state
+- restart while active leaving thread state ambiguous instead of converging cleanly
+- follow-up after restart failure not clearing `error` back to a healthy terminal state
+- control-plane actions leaving contradictory thread state behind
+- provisioning-boundary restart incorrectly landing in a healthy terminal state without a real turn
 
 ## Template
 

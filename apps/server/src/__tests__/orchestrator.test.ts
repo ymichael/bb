@@ -731,6 +731,80 @@ describe("Orchestrator", () => {
       );
     });
 
+    it("rebinds a restarted provider thread id when one attached thread matches the provider", () => {
+      const env = environmentRepo.create({
+        projectId: project.id,
+        descriptor: { type: "path", path: "/tmp/env" },
+        managed: true,
+      });
+      const thread = createTestThread(threadRepo, project.id, {
+        status: "active",
+        environmentId: env.id,
+        providerId: "codex",
+      });
+      attachmentRepo.attachThread({ threadId: thread.id, environmentId: env.id });
+
+      manager = new Orchestrator(
+        threadRepo,
+        eventRepo,
+        projectRepo,
+        ws,
+        llmCompletionService,
+        undefined,
+        createTestRuntimeEnv(),
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        attachmentRepo as never,
+      );
+
+      (
+        manager as unknown as {
+          providerThreadIdByThreadId: Map<string, string>;
+        }
+      ).providerThreadIdByThreadId.set(thread.id, "provider-thread-old");
+
+      (
+        manager as unknown as {
+          _handleAgentServerNotification: (threadId: string, event: unknown) => void;
+        }
+      )._handleAgentServerNotification(thread.id, {
+        method: "item/completed",
+        normalizedMethod: "item/completed",
+        eventType: "item/completed",
+        eventData: {
+          __bb_provider_event: {
+            schema: "bb/provider-event-envelope",
+            version: 1,
+            providerId: "codex",
+            method: "item/completed",
+            observedAt: 1_234,
+          },
+          payload: {
+            threadId: "provider-thread-new",
+            item: { type: "agentMessage", text: "hello after restart" },
+          },
+        },
+        shouldPersist: true,
+        shouldBroadcast: false,
+      });
+
+      expect(eventRepo.listByThread(thread.id)).toContainEqual(
+        expect.objectContaining({
+          threadId: thread.id,
+          type: "item/completed",
+        }),
+      );
+      expect(asOrchestratorHarness(manager).providerThreadIds.get(thread.id)).toBe(
+        "provider-thread-new",
+      );
+    });
+
     it("does not cross-route shared environment events when providers reuse the same provider thread id", () => {
       const env = environmentRepo.create({
         projectId: project.id,

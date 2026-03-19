@@ -94,6 +94,7 @@ async function waitForTurnStarted(baseUrl: string, threadId: string): Promise<vo
 }
 
 async function runBlockedRestartScenario(environmentKind: EnvironmentKind): Promise<void> {
+  const preserveTempDir = process.env.BB_E2E_PRESERVE_TEMP_DIR === "1";
   const tempDir = mkdtempSync(
     bbTestTmpPrefix(`bb-standalone-blocked-${environmentKind}-`),
   );
@@ -165,7 +166,11 @@ async function runBlockedRestartScenario(environmentKind: EnvironmentKind): Prom
     appendFileSync(fakeCodexControlFilePath, "emit-next-event\n", "utf8");
   } finally {
     await server.stopAndCleanup();
-    rmSync(tempDir, { recursive: true, force: true });
+    if (preserveTempDir) {
+      console.log(`[standalone-blocked-restart] preserved temp dir: ${tempDir}`);
+    } else {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
   }
 }
 

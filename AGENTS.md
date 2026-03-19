@@ -64,8 +64,10 @@ Mock at boundaries, not inside the system.
 
 ### QA Passes
 
-- For server or environment-daemon changes, run QA passes before wrapping up; do a full QA pass for the affected behavior, and do the broader server QA tiers when touching critical server/environment-daemon code so regressions are caught early.
-- Start with the checked-in server QA tiers in `qa/` and the package scripts in `apps/server/package.json`; they are the canonical source for what automated QA is available and how to run it. When asked to do a QA pass for server/env-daemon behavior, default to the real provider unless the user explicitly asks for fake-provider coverage.
+- For server or environment-daemon changes, run QA passes before wrapping up. Use the surface-based QA docs in `qa/` to pick the relevant pass instead of defaulting to one monolithic full-server checklist.
+- Start with `qa/README.md`; it is the canonical entrypoint for "what QA should I run for this change?" and for mapping informal requests like "run QA for the Pi provider" or "run e2e QA and any relevant QA for the code we touched."
+- Prefer the owning surface for the behavior you changed: `qa/server/`, `qa/env-daemon/`, `qa/providers/`, `qa/cli/`, `qa/environments/`, `qa/product/`, and `qa/e2e/`. Add `qa/e2e/smoke` for cross-cutting or user-visible changes.
+- Use the checked-in package scripts and aliases in `package.json` as the source of truth for current automation entrypoints, including `qa:e2e:smoke`, `qa:providers:smoke*`, and `qa:env-daemon:recovery*`. When asked to do provider-facing QA, default to the real provider unless the owning pass explicitly depends on fake-provider control hooks.
 - Use the fast e2e suite in `apps/server/src/__tests__/e2e/` for targeted scenario work. Treat real-provider coverage as the default QA path for provider-facing behavior; use fake-provider coverage only when you specifically need deterministic fake-codex control hooks.
-- For the full manual server workflow and scenario checklist, see `qa/server/standalone-server-qa.md`.
+- Use `qa/shared/standalone-workflow.md` for the shared standalone setup and relaunch procedure that supports the owned surface docs.
 - For package-scoped validation, prefer `pnpm exec turbo run typecheck --filter=@bb/<pkg>`.

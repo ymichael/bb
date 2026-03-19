@@ -149,7 +149,7 @@ Out of scope unless directly required by the refactor:
 
 11. Promote the manual QA matrix into required automated and human-gated checks.
 
-- Treat section 8 of [standalone-server-qa.md](/Users/michael/.codex/worktrees/299a/bb/qa/server/standalone-server-qa.md) as a release gate for env-daemon/runtime/provider-routing changes.
+- Treat the restart and relaunch checks in [standalone-workflow.md](/Users/michael/.codex/worktrees/4b0b/bb/qa/shared/standalone-workflow.md) as a release gate for env-daemon/runtime/provider-routing changes.
 - Add a checked-in automated scenario for that matrix, then reduce the manual pass to a shorter confirmation run.
 - Update `qa/README.md` and server package scripts so “shared env + multi-provider coexistence” is an explicit tier, not a note buried in documentation.
 

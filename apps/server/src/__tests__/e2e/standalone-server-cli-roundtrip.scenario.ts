@@ -222,6 +222,7 @@ async function expectCliSuccess(resultPromise: Promise<CliRunResult>): Promise<C
 async function runEnvironmentBattery(
   environmentKind: EnvironmentKind,
 ): Promise<void> {
+  const preserveTempDir = process.env.BB_E2E_PRESERVE_TEMP_DIR === "1";
   const tempDir = mkdtempSync(
     bbTestTmpPrefix(`bb-standalone-server-${environmentKind}-`),
   );
@@ -431,7 +432,11 @@ async function runEnvironmentBattery(
     for (const pid of allServerChildPids.reverse()) {
       try { process.kill(pid, "SIGKILL"); } catch { /* already dead */ }
     }
-    rmSync(tempDir, { recursive: true, force: true });
+    if (preserveTempDir) {
+      console.log(`[standalone-cli-roundtrip] preserved temp dir: ${tempDir}`);
+    } else {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
   }
 }
 
