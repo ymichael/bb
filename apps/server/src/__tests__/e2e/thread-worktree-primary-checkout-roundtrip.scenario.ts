@@ -58,17 +58,22 @@ export async function runThreadWorktreePrimaryCheckoutRoundtripScenario(): Promi
       { environmentKind: "worktree" },
     );
 
-    await waitForThreadStatus(
+    const hydratedThread = await waitForThreadStatus(
       harness.baseUrl,
       thread.id,
       "idle",
       e2eTimeoutMs(12_000, 45_000),
       harness.wsUrl,
     );
+    const environmentId = hydratedThread.attachedEnvironment?.id ?? hydratedThread.environmentId;
+    expect(environmentId).toBeTruthy();
+    if (!environmentId) {
+      throw new Error(`Thread ${thread.id} never attached to an environment`);
+    }
 
     const initialStatus = await runCliCommand({
       baseUrl: harness.baseUrl,
-      args: ["thread", "promote-status", "--project", project.id],
+      args: ["environment", "promote-status", "--project", project.id],
     });
     expect(initialStatus.exitCode).toBe(0);
     expect(initialStatus.stderr).toBe("");
@@ -76,7 +81,7 @@ export async function runThreadWorktreePrimaryCheckoutRoundtripScenario(): Promi
 
     const promote = await runCliCommand({
       baseUrl: harness.baseUrl,
-      args: ["thread", "promote", thread.id],
+      args: ["environment", "promote", environmentId],
     });
     expect(promote.exitCode).toBe(0);
     expect(promote.stderr).toBe("");
@@ -92,15 +97,17 @@ export async function runThreadWorktreePrimaryCheckoutRoundtripScenario(): Promi
 
     const promotedStatus = await runCliCommand({
       baseUrl: harness.baseUrl,
-      args: ["thread", "promote-status", "--project", project.id],
+      args: ["environment", "promote-status", "--project", project.id],
     });
     expect(promotedStatus.exitCode).toBe(0);
     expect(promotedStatus.stderr).toBe("");
-    expect(promotedStatus.stdout).toContain(`Primary checkout: ${thread.id}`);
+    expect(promotedStatus.stdout).toContain(
+      `Primary checkout environment: ${environmentId!}`,
+    );
 
     const demote = await runCliCommand({
       baseUrl: harness.baseUrl,
-      args: ["thread", "demote", thread.id],
+      args: ["environment", "demote", environmentId],
     });
     expect(demote.exitCode).toBe(0);
     expect(demote.stderr).toBe("");
@@ -116,7 +123,7 @@ export async function runThreadWorktreePrimaryCheckoutRoundtripScenario(): Promi
 
     const demotedStatus = await runCliCommand({
       baseUrl: harness.baseUrl,
-      args: ["thread", "promote-status", "--project", project.id],
+      args: ["environment", "promote-status", "--project", project.id],
     });
     expect(demotedStatus.exitCode).toBe(0);
     expect(demotedStatus.stderr).toBe("");

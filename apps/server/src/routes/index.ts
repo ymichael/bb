@@ -70,7 +70,7 @@ export function createApiRoutes(deps: ApiRouteDeps) {
         runtimeEnv: deps.runtimeEnv,
       }),
     )
-    .route("/environments", createEnvironmentRoutes(deps.environmentRepo))
+    .route("/environments", createEnvironmentRoutes(deps.environmentRepo, deps.threadManager))
     .route(
       "/environments",
       deps.environmentAgentSessionService && deps.environmentRepo

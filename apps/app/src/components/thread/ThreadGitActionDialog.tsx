@@ -1,5 +1,5 @@
 import { useMemo, useState, type FormEvent } from "react";
-import { assertNever, type ThreadType, type ThreadWorkStatus } from "@bb/core";
+import { assertNever, type PromptInput, type ThreadType, type ThreadWorkStatus } from "@bb/core";
 import { DetailCard, DetailRow } from "@bb/ui-core";
 import { WorkspaceChangesList } from "@/components/shared/WorkspaceChangesList";
 import { Button } from "@/components/ui/button";
@@ -23,9 +23,20 @@ export type ThreadGitActionDialogTarget =
   | { kind: "commit_and_squash_merge" }
   | { kind: "squash_merge" };
 
+export class ThreadGitActionDialogError extends Error {
+  readonly askAgentInput?: PromptInput[];
+
+  constructor(message: string, options?: { askAgentInput?: PromptInput[] }) {
+    super(message);
+    this.name = "ThreadGitActionDialogError";
+    this.askAgentInput = options?.askAgentInput;
+  }
+}
+
 interface ThreadGitActionDialogProps {
   target: ThreadGitActionDialogTarget | null;
   pending?: boolean;
+  askAgentPending?: boolean;
   branchName?: string;
   gitStatusLabel?: string;
   gitStatusSummary?: string;
@@ -45,6 +56,7 @@ interface ThreadGitActionDialogProps {
     includeUnstaged: boolean;
     mergeBaseBranch?: string;
   }) => Promise<void>;
+  onAskAgentToFix?: (input: PromptInput[]) => Promise<void>;
 }
 
 function getDialogCopy(target: ThreadGitActionDialogTarget, label: string) {
@@ -81,6 +93,7 @@ function getDialogCopy(target: ThreadGitActionDialogTarget, label: string) {
 export function ThreadGitActionDialog({
   target,
   pending = false,
+  askAgentPending = false,
   branchName,
   gitStatusLabel,
   gitStatusSummary,
@@ -96,6 +109,7 @@ export function ThreadGitActionDialog({
   onOpenChange,
   onCommit,
   onSquashMerge,
+  onAskAgentToFix,
 }: ThreadGitActionDialogProps) {
   const label = threadTypeLabel(threadType ?? "standard");
   const dialogCopy = useMemo(() => (target ? getDialogCopy(target, label) : null), [target, label]);
@@ -108,6 +122,7 @@ export function ThreadGitActionDialog({
             key={target.kind}
             target={target}
             pending={pending}
+            askAgentPending={askAgentPending}
             branchName={branchName}
             gitStatusLabel={gitStatusLabel}
             gitStatusSummary={gitStatusSummary}
@@ -123,6 +138,7 @@ export function ThreadGitActionDialog({
             onOpenChange={onOpenChange}
             onCommit={onCommit}
             onSquashMerge={onSquashMerge}
+            onAskAgentToFix={onAskAgentToFix}
           />
         ) : null}
       </DialogContent>
@@ -133,6 +149,7 @@ export function ThreadGitActionDialog({
 function ThreadGitActionDialogContent({
   target,
   pending,
+  askAgentPending,
   branchName,
   gitStatusLabel,
   gitStatusSummary,
@@ -148,11 +165,13 @@ function ThreadGitActionDialogContent({
   onOpenChange,
   onCommit,
   onSquashMerge,
+  onAskAgentToFix,
 }: Omit<ThreadGitActionDialogProps, "target"> & {
   target: ThreadGitActionDialogTarget;
 }) {
   const [includeUnstaged, setIncludeUnstaged] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [askAgentInput, setAskAgentInput] = useState<PromptInput[] | null>(null);
   const label = threadTypeLabel(threadType ?? "standard");
   const dialogCopy = getDialogCopy(target, label);
   const mergeBaseCandidates = getMergeBaseBranchCandidates({
@@ -183,6 +202,7 @@ function ThreadGitActionDialogContent({
       return;
     }
     setErrorMessage(null);
+    setAskAgentInput(null);
 
     try {
       switch (target.kind) {
@@ -210,10 +230,25 @@ function ThreadGitActionDialogContent({
       }
       onOpenChange(false);
     } catch (error) {
+      setAskAgentInput(
+        error instanceof ThreadGitActionDialogError && error.askAgentInput
+          ? error.askAgentInput
+          : null,
+      );
       setErrorMessage(
         error instanceof Error ? error.message : "Failed to start git action",
       );
     }
+  };
+
+  const handleAskAgentToFix = async () => {
+    if (!askAgentInput || !onAskAgentToFix || askAgentPending) {
+      return;
+    }
+    await onAskAgentToFix(askAgentInput);
+    setErrorMessage(null);
+    setAskAgentInput(null);
+    onOpenChange(false);
   };
 
   return (
@@ -308,7 +343,19 @@ function ThreadGitActionDialogContent({
             {errorMessage}
           </p>
         ) : null}
-        <DialogFooter className="px-0 pt-4 sm:justify-end">
+        <DialogFooter className="px-0 pt-4 sm:justify-between">
+          {askAgentInput && onAskAgentToFix ? (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => void handleAskAgentToFix()}
+              disabled={pending || askAgentPending}
+            >
+              {askAgentPending ? "Asking agent..." : "Ask the agent to fix"}
+            </Button>
+          ) : (
+            <span />
+          )}
           <Button type="submit" disabled={pending}>
             {pending ? "Starting..." : dialogCopy.submitLabel}
           </Button>

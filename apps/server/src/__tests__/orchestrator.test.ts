@@ -2450,12 +2450,6 @@ describe("Orchestrator", () => {
         },
         "_scheduleQueuedFollowUpDispatch",
       ).mockImplementation(() => {});
-      vi.spyOn(
-        manager as unknown as {
-          _scheduleQueuedOperationDispatch: (threadId: string) => void;
-        },
-        "_scheduleQueuedOperationDispatch",
-      ).mockImplementation(() => {});
 
       const cleanup = vi.fn();
       const stopWatchingWorkspaceStatus = vi.fn();
@@ -2502,12 +2496,6 @@ describe("Orchestrator", () => {
         },
         "_scheduleQueuedFollowUpDispatch",
       ).mockImplementation(() => {});
-      vi.spyOn(
-        manager as unknown as {
-          _scheduleQueuedOperationDispatch: (threadId: string) => void;
-        },
-        "_scheduleQueuedOperationDispatch",
-      ).mockImplementation(() => {});
 
       const cleanup = vi.fn();
       const stopWatchingWorkspaceStatus = vi.fn();
@@ -2532,64 +2520,6 @@ describe("Orchestrator", () => {
       expect(asOrchestratorHarness(manager).environmentRuntimes.has(`thread:${thread.id}`)).toBe(true);
     });
 
-    it("keeps managed environments alive when threads become idle with queued operations", async () => {
-      const env = environmentRepo.create({
-        projectId: project.id,
-        descriptor: { type: "path", path: "/tmp/env" },
-        managed: true,
-      });
-      const thread = createTestThread(threadRepo, project.id, {
-        status: "active",
-        environmentId: env.id,
-      });
-      vi.spyOn(
-        manager as unknown as {
-          _scheduleQueuedFollowUpDispatch: (threadId: string) => void;
-        },
-        "_scheduleQueuedFollowUpDispatch",
-      ).mockImplementation(() => {});
-      vi.spyOn(
-        manager as unknown as {
-          _scheduleQueuedOperationDispatch: (threadId: string) => void;
-        },
-        "_scheduleQueuedOperationDispatch",
-      ).mockImplementation(() => {});
-
-      const cleanup = vi.fn();
-      const stopWatchingWorkspaceStatus = vi.fn();
-      asOrchestratorHarness(manager).environmentRuntimes.set(`thread:${thread.id}`, {
-        environment: makeRuntimeEnvironment({
-          rootPath: "/tmp/worktree",
-          cleanup,
-        }),
-        agentConnectionTarget: {
-          transport: "http",
-          baseUrl: "http://127.0.0.1:4312",
-        },
-        stopWatchingWorkspaceStatus,
-      });
-      (asOrchestratorHarness(manager) as unknown as {
-        queuedOperationsByThreadId: Map<string, Array<{
-          operationId: string;
-          request: { operation: "commit"; options?: undefined };
-          requestedAt: number;
-          demotedPrimaryCheckout: boolean;
-        }>>;
-      }).queuedOperationsByThreadId.set(thread.id, [{
-        operationId: "op-1",
-        request: { operation: "commit" },
-        requestedAt: 1,
-        demotedPrimaryCheckout: false,
-      }]);
-
-      (manager as unknown as {
-        _setThreadStatus: (threadId: string, status: Thread["status"]) => boolean;
-      })._setThreadStatus(thread.id, "idle");
-
-      expect(cleanup).not.toHaveBeenCalled();
-      expect(stopWatchingWorkspaceStatus).not.toHaveBeenCalled();
-      expect(asOrchestratorHarness(manager).environmentRuntimes.has(`thread:${thread.id}`)).toBe(true);
-    });
   });
 
   describe("archive()", () => {
@@ -2667,6 +2597,44 @@ describe("Orchestrator", () => {
       expect(updated?.archivedAt).toBeTypeOf("number");
     });
 
+    it("preserves attached environment state on archive so unarchive can reprovision", async () => {
+      const environmentRepo = new EnvironmentRepository(testDb.db);
+      const attachmentRepo = new ThreadEnvironmentAttachmentRepository(testDb.db);
+      const env = environmentRepo.create({
+        projectId: project.id,
+        descriptor: { type: "path", path: "/tmp/env" },
+        managed: true,
+      });
+      const thread = createTestThread(threadRepo, project.id, {
+        status: "idle",
+        environmentId: env.id,
+      });
+      attachmentRepo.attachThread({ threadId: thread.id, environmentId: env.id });
+      manager = new Orchestrator(
+        threadRepo,
+        eventRepo,
+        projectRepo,
+        ws,
+        llmCompletionService,
+        undefined,
+        createTestRuntimeEnv(),
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        environmentRepo as never,
+        attachmentRepo as never,
+      );
+
+      await manager.archive(thread.id);
+
+      expect(attachmentRepo.getByThreadId(thread.id)?.environmentId).toBe(env.id);
+      expect(environmentRepo.getById(env.id)).toBeTruthy();
+    });
+
     it("rebroadcasts work status after async workspace cleanup settles", async () => {
       let resolveCleanup: (() => void) | undefined;
       const cleanup = vi.fn(
@@ -2735,22 +2703,15 @@ describe("Orchestrator", () => {
       harness.providerThreadIds.set(thread.id, "provider-thread-1");
       harness.primaryPromotionByProjectId.set(project.id, {
         projectId: project.id,
+        environmentId: thread.environmentId ?? thread.id,
         threadId: thread.id,
       });
-      (manager as unknown as {
-        queuedOperationsByThreadId: Map<string, unknown[]>;
-      }).queuedOperationsByThreadId.set(thread.id, [{ operation: "commit" }]);
 
       await expect(manager.archive(thread.id)).resolves.toBeUndefined();
 
       expect(harness.environmentRuntimes.has(`thread:${thread.id}`)).toBe(false);
       expect(harness.providerThreadIds.has(thread.id)).toBe(false);
       expect(harness.primaryPromotionByProjectId.has(project.id)).toBe(false);
-      expect(
-        (manager as unknown as {
-          queuedOperationsByThreadId: Map<string, unknown[]>;
-        }).queuedOperationsByThreadId.has(thread.id),
-      ).toBe(false);
       const updated = threadRepo.getById(thread.id);
       expect(updated?.status).toBe("idle");
       expect(updated?.archivedAt).toBeTypeOf("number");
@@ -3770,6 +3731,7 @@ describe("Orchestrator", () => {
 
       asOrchestratorHarness(manager).primaryPromotionByProjectId.set(project.id, {
         projectId: project.id,
+        environmentId: env.id,
         threadId: thread1.id,
         promotedAt: 1000,
         promotedCheckout: {
@@ -3784,7 +3746,7 @@ describe("Orchestrator", () => {
       const result = manager.list({ projectId: project.id });
 
       expect(result[0]?.primaryCheckout?.isActive).toBe(true);
-      expect(result[1]?.primaryCheckout).toBeUndefined();
+      expect(result[1]?.primaryCheckout?.isActive).toBe(true);
       expect(ws.broadcast).not.toHaveBeenCalled();
     });
 
@@ -3869,6 +3831,7 @@ describe("Orchestrator", () => {
 
       asOrchestratorHarness(manager).primaryPromotionByProjectId.set(project.id, {
         projectId: project.id,
+        environmentId: env.id,
         threadId: thread.id,
         promotedAt: 1000,
         promotedCheckout: {
@@ -3882,7 +3845,7 @@ describe("Orchestrator", () => {
         .spyOn(asOrchestratorHarness(manager), "_ensurePrimaryPromotionStateIsCurrent")
         .mockImplementation(() => {});
 
-      const result = await manager.promoteThread(thread.id);
+      const result = await manager.promoteThreadEnvironmentToPrimaryCheckout(thread.id);
 
       expect(ensurePrimaryStatusSpy).toHaveBeenCalledWith(project.id, { force: true });
       expect(result).toMatchObject({
@@ -3900,7 +3863,7 @@ describe("Orchestrator", () => {
         .spyOn(asOrchestratorHarness(manager), "_ensurePrimaryPromotionStateIsCurrent")
         .mockImplementation(() => {});
 
-      const result = await manager.demotePrimaryCheckout(thread.id);
+      const result = await manager.demoteThreadEnvironmentFromPrimaryCheckout(thread.id);
 
       expect(ensurePrimaryStatusSpy).toHaveBeenCalledWith(project.id, { force: true });
       expect(result).toMatchObject({
@@ -3909,7 +3872,81 @@ describe("Orchestrator", () => {
       });
     });
 
-    it("switches primary checkout when promoting a different thread", async () => {
+    it("refreshes promoted checkout snapshots after commit operations on the promoted environment", async () => {
+      const env = environmentRepo.create({
+        projectId: project.id,
+        descriptor: { type: "path", path: "/tmp/env" },
+        managed: true,
+      });
+      const thread = createTestThread(threadRepo, project.id, { status: "idle", environmentId: env.id });
+      const getCheckoutSnapshot = vi
+        .fn()
+        .mockResolvedValueOnce({
+          branch: "bb/thread-1",
+          head: "next-head",
+          detached: false,
+        });
+      asOrchestratorHarness(manager).environmentRuntimes.set(thread.id, {
+        environment: makeRuntimeEnvironment({
+          kind: "worktree",
+          rootPath: "/tmp/worktrees/proj-1/thread-1",
+          overrides: {
+            getCheckoutSnapshot,
+            async commitWorkspace() {
+              return {
+                ok: true,
+                commitCreated: true,
+                message: "Created commit",
+                commitSha: "next-head",
+                commitSubject: "Create commit",
+                includeUnstaged: false,
+                workStatus: makeWorkspaceStatus(),
+              };
+            },
+          },
+        }),
+      });
+      asOrchestratorHarness(manager).primaryPromotionByProjectId.set(project.id, {
+        projectId: project.id,
+        environmentId: env.id,
+        threadId: thread.id,
+        promotedAt: 1000,
+        previousCheckout: {
+          branch: "main",
+          head: "base-head",
+          detached: false,
+        },
+        promotedCheckout: {
+          branch: "bb/thread-1",
+          head: "old-head",
+          detached: false,
+        },
+        reconstructed: false,
+      });
+
+      const result = await manager.requestEnvironmentOperation(env.id, {
+        operation: "commit",
+        initiatingThreadId: thread.id,
+      });
+
+      expect(result).toMatchObject({
+        ok: true,
+        operation: "commit",
+        commitSha: "next-head",
+      });
+      expect(
+        asOrchestratorHarness(manager).primaryPromotionByProjectId.get(project.id),
+      ).toMatchObject({
+        promotedCheckout: {
+          branch: "bb/thread-1",
+          head: "next-head",
+          detached: false,
+        },
+      });
+      expect(getCheckoutSnapshot).toHaveBeenCalledTimes(1);
+    });
+
+    it("treats promoting a sibling thread on the same environment as a no-op", async () => {
       const env = environmentRepo.create({
         projectId: project.id,
         descriptor: { type: "path", path: "/tmp/env" },
@@ -3934,6 +3971,7 @@ describe("Orchestrator", () => {
       asOrchestratorHarness(manager).environmentRuntimes.set(`thread:${targetThread.id}`, runtimeEntry);
       asOrchestratorHarness(manager).primaryPromotionByProjectId.set(project.id, {
         projectId: project.id,
+        environmentId: env.id,
         threadId: activeThread.id,
         promotedAt: 1000,
         previousCheckout: {
@@ -3953,7 +3991,7 @@ describe("Orchestrator", () => {
         manager as unknown as {
           environmentService: Pick<
             EnvironmentService,
-            "demotePrimaryCheckout" | "promoteThreadEnvironment" | "restoreThreadEnvironment"
+            "demoteThreadEnvironment" | "promoteThreadEnvironment" | "restoreThreadEnvironment"
           >;
         }
       ).environmentService;
@@ -3965,7 +4003,7 @@ describe("Orchestrator", () => {
           }),
         );
       const demoteSpy = vi
-        .spyOn(environmentService, "demotePrimaryCheckout")
+        .spyOn(environmentService, "demoteThreadEnvironment")
         .mockResolvedValue({
           demoted: true,
           status: { projectId: project.id },
@@ -3979,15 +4017,17 @@ describe("Orchestrator", () => {
       const promoteSpy = vi
         .spyOn(environmentService, "promoteThreadEnvironment")
         .mockResolvedValue({
-          promoted: true,
+          promoted: false,
           status: {
             projectId: project.id,
-            activeThreadId: targetThread.id,
+            activeEnvironmentId: env.id,
+            activeThreadId: activeThread.id,
             promotedAt: 1001,
           },
           state: {
             projectId: project.id,
-            threadId: targetThread.id,
+            environmentId: env.id,
+            threadId: activeThread.id,
             promotedAt: 1001,
             previousCheckout: {
               branch: "main",
@@ -4003,76 +4043,42 @@ describe("Orchestrator", () => {
           },
         });
 
-      const result = await manager.promoteThread(targetThread.id);
+      const result = await manager.promoteThreadEnvironmentToPrimaryCheckout(targetThread.id);
 
-      expect(demoteSpy).toHaveBeenCalledWith(
-        expect.objectContaining({
-          thread: expect.objectContaining({ id: activeThread.id }),
-        }),
-      );
-      expect(promoteSpy).toHaveBeenCalledWith(
-        expect.objectContaining({
-          thread: expect.objectContaining({ id: targetThread.id }),
-        }),
-      );
-      expect(demoteSpy.mock.invocationCallOrder[0]).toBeLessThan(
-        promoteSpy.mock.invocationCallOrder[0] ?? Number.POSITIVE_INFINITY,
-      );
+      expect(promoteSpy).not.toHaveBeenCalled();
+      expect(demoteSpy).not.toHaveBeenCalled();
       expect(result).toMatchObject({
         ok: true,
-        promoted: true,
+        promoted: false,
         primaryStatus: {
           projectId: project.id,
-          activeThreadId: targetThread.id,
+          activeEnvironmentId: env.id,
+          activeThreadId: activeThread.id,
         },
       });
       const allEvents = eventRepo.listByThread(activeThread.id);
-      expect(allEvents).toContainEqual(
+      expect(allEvents).not.toContainEqual(
         expect.objectContaining({
           threadId: activeThread.id,
           type: "system/operation",
           data: expect.objectContaining({
             operation: "primary_checkout",
-            status: "started",
             metadata: expect.objectContaining({
               action: "demote",
-              projectId: project.id,
-            }),
-          }),
-        }),
-      );
-      expect(allEvents).toContainEqual(
-        expect.objectContaining({
-          threadId: activeThread.id,
-          type: "system/operation",
-          data: expect.objectContaining({
-            operation: "primary_checkout",
-            status: "completed",
-            metadata: expect.objectContaining({
-              action: "demote",
-              projectId: project.id,
             }),
           }),
         }),
       );
       const targetEvents = eventRepo.listByThread(targetThread.id);
-      expect(targetEvents).toContainEqual(
+      expect(targetEvents).not.toContainEqual(
         expect.objectContaining({
           threadId: targetThread.id,
           type: "system/operation",
-          data: expect.objectContaining({
-            operation: "primary_checkout",
-            status: "completed",
-            metadata: expect.objectContaining({
-              action: "promote",
-              projectId: project.id,
-            }),
-          }),
         }),
       );
     });
 
-    it("keeps promote action available when another thread is currently promoted", async () => {
+    it("treats sibling threads on the promoted environment as already active", async () => {
       const env = environmentRepo.create({
         projectId: project.id,
         descriptor: { type: "path", path: "/tmp/env" },
@@ -4101,6 +4107,7 @@ describe("Orchestrator", () => {
         );
       asOrchestratorHarness(manager).primaryPromotionByProjectId.set(project.id, {
         projectId: project.id,
+        environmentId: env.id,
         threadId: otherThread.id,
         promotedAt: 1000,
         promotedCheckout: {
@@ -4112,12 +4119,17 @@ describe("Orchestrator", () => {
 
       const hydrated = await manager.getHydratedByIdAsync(targetThread.id);
       const promoteAction = hydrated?.builtInActions?.find((action: { id: string }) => action.id === "promote");
+      const demoteAction = hydrated?.builtInActions?.find((action: { id: string }) => action.id === "demote");
 
       expect(promoteAction).toMatchObject({
         id: "promote",
+        available: false,
+      });
+      expect(promoteAction?.disabledReason).toBe("Primary checkout is already promoted to this thread");
+      expect(demoteAction).toMatchObject({
+        id: "demote",
         available: true,
       });
-      expect(promoteAction?.disabledReason).toBeUndefined();
     });
 
     it("rejects promote when another primary-checkout transition is already in flight", async () => {
@@ -4200,7 +4212,7 @@ describe("Orchestrator", () => {
       });
       asOrchestratorHarness(manager).primaryCheckoutTransitionsInFlight.add(project.id);
 
-      await expect(manager.promoteThread(thread.id)).rejects.toThrow(
+      await expect(manager.promoteThreadEnvironmentToPrimaryCheckout(thread.id)).rejects.toThrow(
         "Another primary-checkout promotion/demotion operation is already in progress for this project",
       );
     });
@@ -4211,8 +4223,46 @@ describe("Orchestrator", () => {
       const thread = createTestThread(threadRepo, project.id, { status: "idle", environmentId: env.id });
       asOrchestratorHarness(manager).primaryCheckoutTransitionsInFlight.add(project.id);
 
-      await expect(manager.demotePrimaryCheckout(thread.id)).rejects.toThrow(
+      await expect(manager.demoteThreadEnvironmentFromPrimaryCheckout(thread.id)).rejects.toThrow(
         "Another primary-checkout promotion/demotion operation is already in progress for this project",
+      );
+    });
+
+    it("rejects commit when another project git mutation is already in flight", async () => {
+      const env = environmentRepo.create({
+        projectId: project.id,
+        descriptor: { type: "path", path: "/tmp/env" },
+        managed: true,
+      });
+      const thread = createTestThread(threadRepo, project.id, { status: "idle", environmentId: env.id });
+      asOrchestratorHarness(manager).primaryCheckoutTransitionsInFlight.add(project.id);
+
+      await expect(
+        manager.requestEnvironmentOperation(env.id, {
+          operation: "commit",
+          initiatingThreadId: thread.id,
+        }),
+      ).rejects.toThrow(
+        "Another environment git operation is already in progress for this project",
+      );
+    });
+
+    it("rejects squash merge when another project git mutation is already in flight", async () => {
+      const env = environmentRepo.create({
+        projectId: project.id,
+        descriptor: { type: "path", path: "/tmp/env" },
+        managed: true,
+      });
+      const thread = createTestThread(threadRepo, project.id, { status: "idle", environmentId: env.id });
+      asOrchestratorHarness(manager).primaryCheckoutTransitionsInFlight.add(project.id);
+
+      await expect(
+        manager.requestEnvironmentOperation(env.id, {
+          operation: "squash_merge",
+          initiatingThreadId: thread.id,
+        }),
+      ).rejects.toThrow(
+        "Another environment git operation is already in progress for this project",
       );
     });
 
@@ -4307,770 +4357,6 @@ describe("Orchestrator", () => {
 
       expect(manager.getRunningCount()).toBe(1);
     });
-  });
-
-  describe("worktree operation broadcasts", () => {
-    let testDb: ReturnType<typeof createTestDb>;
-    let project: ReturnType<typeof createTestProject>;
-
-    beforeEach(() => {
-      testDb = createTestDb();
-      const repos = createTestRepos(testDb.db);
-      threadRepo = repos.threadRepo;
-      eventRepo = repos.eventRepo;
-      projectRepo = repos.projectRepo;
-      project = createTestProject(projectRepo, { rootPath: "/tmp/proj-1" });
-      manager = new Orchestrator(
-        threadRepo, eventRepo, projectRepo, ws, llmCompletionService,
-        undefined, createTestRuntimeEnv(),
-      );
-    });
-
-    describe("requestThreadOperation()", () => {
-      it("exposes queued thread operations on hydrated thread state", async () => {
-        const thread = createTestThread(threadRepo, project.id, { status: "idle" });
-        // Add provisioning event so hydration resolves environment info
-        eventRepo.create({ threadId: thread.id, seq: 1, type: "system/provisioning/completed", data: createEventData<"system/provisioning/completed">({ transcript: [{ key: "environment", text: "environment: Worktree" }] }) });
-        (
-          asOrchestratorHarness(manager) as unknown as {
-            queuedOperationsByThreadId: Map<string, Array<{
-              operationId: string;
-              request: { operation: "commit"; options?: undefined };
-              requestedAt: number;
-              demotedPrimaryCheckout: boolean;
-            }>>;
-          }
-        ).queuedOperationsByThreadId.set(thread.id, [{
-          operationId: "op-1",
-          request: { operation: "commit" },
-          requestedAt: 123,
-          demotedPrimaryCheckout: false,
-        }]);
-
-        await expect(manager.getHydratedByIdAsync(thread.id)).resolves.toMatchObject({
-          pendingOperation: {
-            operation: "commit",
-            status: "queued",
-            operationId: "op-1",
-            requestedAt: 123,
-          },
-        });
-      });
-
-      it("includes pending operations in thread lists without work-status hydration", async () => {
-        const thread = createTestThread(threadRepo, project.id, { status: "idle" });
-
-        (
-          asOrchestratorHarness(manager) as unknown as {
-            queuedOperationsByThreadId: Map<string, Array<{
-              operationId: string;
-              request: { operation: "squash_merge"; options?: undefined };
-              requestedAt: number;
-              demotedPrimaryCheckout: boolean;
-            }>>;
-          }
-        ).queuedOperationsByThreadId.set(thread.id, [{
-          operationId: "op-2",
-          request: { operation: "squash_merge" },
-          requestedAt: 456,
-          demotedPrimaryCheckout: false,
-        }]);
-
-        expect(manager.list()).toMatchObject([
-          {
-            id: thread.id,
-            pendingOperation: {
-              operation: "squash_merge",
-              status: "queued",
-              operationId: "op-2",
-              requestedAt: 456,
-            },
-          },
-        ]);
-        await expect(manager.listAsync()).resolves.toMatchObject([
-          {
-            id: thread.id,
-            pendingOperation: {
-              operation: "squash_merge",
-              status: "queued",
-              operationId: "op-2",
-              requestedAt: 456,
-            },
-          },
-        ]);
-      });
-
-      it("accepts commit operations and schedules deterministic execution for idle threads", async () => {
-        const envRepo = new EnvironmentRepository(testDb.db);
-        const env = envRepo.create({ projectId: project.id, descriptor: { type: "path", path: "/tmp/env" }, managed: true });
-        const thread = createTestThread(threadRepo, project.id, { status: "idle", environmentId: env.id });
-        const scheduleDispatchSpy = vi
-          .spyOn(asOrchestratorHarness(manager), "_scheduleQueuedOperationDispatch")
-          .mockImplementation(() => {});
-
-        const result = await manager.requestThreadOperation(thread.id, {
-          operation: "commit",
-          options: {
-            includeUnstaged: true,
-            message: "feat: test commit",
-          },
-        });
-
-        expect(result).toMatchObject({
-          ok: true,
-          operation: "commit",
-          status: "accepted",
-          executionStatus: "running",
-          queued: false,
-          demotedPrimaryCheckout: false,
-        });
-        expect(scheduleDispatchSpy).toHaveBeenCalledWith(thread.id);
-        const events = eventRepo.listByThread(thread.id);
-        expect(events).toContainEqual(
-          expect.objectContaining({
-            type: "system/operation",
-            data: expect.objectContaining({
-              operation: "commit",
-              status: "requested",
-            }),
-          }),
-        );
-      });
-
-      it("queues squash operations when a thread is active", async () => {
-        const envRepo = new EnvironmentRepository(testDb.db);
-        const env = envRepo.create({ projectId: project.id, descriptor: { type: "path", path: "/tmp/env" }, managed: true });
-        const thread = createTestThread(threadRepo, project.id, { status: "active", environmentId: env.id });
-        asOrchestratorHarness(manager).environmentRuntimes.set(thread.id, {
-          environment: {
-            kind: "worktree",
-            info: {
-              id: "worktree",
-              displayName: "Git Worktree Workspace",
-              description: "",
-            },
-            serialize() {
-              return {};
-            },
-            suspend() {},
-            destroy() {},
-            exists() {
-              return true;
-            },
-            supportsHostFilesystemAccess() {
-              return true;
-            },
-            isIsolatedWorkspace() {
-              return true;
-            },
-            getCheckoutSnapshot() {
-              return {
-                branch: "bb/thread-1",
-                head: "abc123",
-                detached: false,
-              };
-            },
-            getWorkspaceRootUnsafe() {
-              return "/tmp/worktrees/proj-1/thread-1";
-            },
-            getWorkspaceStatus() {
-              return makeWorkspaceStatus();
-            },
-            watchWorkspaceStatus() {
-              return () => {};
-            },
-            async commitWorkspace() {
-              return {
-                ok: true,
-                commitCreated: false,
-                message: "Working directory is clean",
-                workStatus: makeWorkspaceStatus(),
-              };
-            },
-            listWorkspaceCommitsSinceRef() {
-              return [];
-            },
-            getWorkspaceDiff() {
-              return { diff: "", truncated: false };
-            },
-            supportsPromoteToActiveWorkspace() {
-              return false;
-            },
-            supportsDemoteFromActiveWorkspace() {
-              return false;
-            },
-            supportsSquashMergeIntoDefaultBranch() {
-              return true;
-            },
-            promoteToActiveWorkspace() {
-              throw new Error("not implemented");
-            },
-            demoteFromActiveWorkspace() {
-              throw new Error("not implemented");
-            },
-            async squashMergeIntoDefaultBranch() {
-              throw new Error("not implemented");
-            },
-            run: vi.fn(),
-          },
-        });
-        vi
-          .spyOn(asOrchestratorHarness(manager), "_scheduleQueuedOperationDispatch")
-          .mockImplementation(() => {});
-
-        const result = await manager.requestThreadOperation(thread.id, {
-          operation: "squash_merge",
-          options: {
-            commitIfNeeded: true,
-          },
-        });
-
-        expect(result).toMatchObject({
-          ok: true,
-          operation: "squash_merge",
-          status: "accepted",
-          executionStatus: "queued",
-          queued: true,
-          demotedPrimaryCheckout: false,
-        });
-        const events = eventRepo.listByThread(thread.id);
-        expect(events).toContainEqual(
-          expect.objectContaining({
-            type: "system/operation",
-            data: expect.objectContaining({
-              operation: "squash_merge",
-              status: "queued",
-            }),
-          }),
-        );
-      });
-
-      it("accepts squash operations for async-only environments", async () => {
-        const envRepo = new EnvironmentRepository(testDb.db);
-        const env = envRepo.create({ projectId: project.id, descriptor: { type: "path", path: "/tmp/env" }, managed: true });
-        const thread = createTestThread(threadRepo, project.id, { status: "idle", environmentId: env.id });
-        asOrchestratorHarness(manager).environmentRuntimes.set(thread.id, {
-          environment: makeRuntimeEnvironment({
-            kind: "worktree",
-            rootPath: "/tmp/worktrees/proj-1/thread-1",
-            overrides: {
-              async getWorkspaceStatus() {
-                return makeWorkspaceStatus({
-                  state: "committed_unmerged",
-                  hasCommittedUnmergedChanges: true,
-                  aheadCount: 1,
-                  currentBranch: "bb/thread-1",
-                  defaultBranch: "main",
-                });
-              },
-              supportsSquashMergeIntoDefaultBranch() {
-                return true;
-              },
-            },
-          }),
-        });
-        vi
-          .spyOn(asOrchestratorHarness(manager), "_scheduleQueuedOperationDispatch")
-          .mockImplementation(() => {});
-
-        const result = await manager.requestThreadOperation(thread.id, {
-          operation: "squash_merge",
-        });
-
-        expect(result).toMatchObject({
-          ok: true,
-          operation: "squash_merge",
-          status: "accepted",
-          executionStatus: "running",
-          queued: false,
-        });
-      });
-
-      it("demotes primary checkout before accepting operations", async () => {
-        const envRepo = new EnvironmentRepository(testDb.db);
-        const env = envRepo.create({ projectId: project.id, descriptor: { type: "path", path: "/tmp/env" }, managed: true });
-        const thread = createTestThread(threadRepo, project.id, { status: "idle", environmentId: env.id });
-        asOrchestratorHarness(manager).primaryPromotionByProjectId.set(project.id, {
-          projectId: project.id,
-          threadId: thread.id,
-          promotedAt: 1000,
-          promotedCheckout: {
-            head: "abc123",
-            detached: false,
-          },
-          reconstructed: false,
-        });
-
-        const demoteSpy = vi
-          .spyOn(manager, "demotePrimaryCheckout")
-          .mockResolvedValue({
-            ok: true,
-            demoted: true,
-            message: "Primary checkout demoted",
-            primaryStatus: { projectId: project.id },
-          });
-        const scheduleDispatchSpy = vi
-          .spyOn(asOrchestratorHarness(manager), "_scheduleQueuedOperationDispatch")
-          .mockImplementation(() => {});
-
-        const result = await manager.requestThreadOperation(thread.id, {
-          operation: "commit",
-          options: {},
-        });
-
-        expect(demoteSpy).toHaveBeenCalledWith(thread.id);
-        expect(scheduleDispatchSpy).toHaveBeenCalled();
-        expect(demoteSpy.mock.invocationCallOrder[0]).toBeLessThan(
-          scheduleDispatchSpy.mock.invocationCallOrder[0] ?? Number.POSITIVE_INFINITY,
-        );
-        expect(result.demotedPrimaryCheckout).toBe(true);
-      });
-
-      it("records failed thread-operation events when preflight demotion fails", async () => {
-        const envRepo = new EnvironmentRepository(testDb.db);
-        const env = envRepo.create({ projectId: project.id, descriptor: { type: "path", path: "/tmp/env" }, managed: true });
-        const thread = createTestThread(threadRepo, project.id, { status: "idle", environmentId: env.id });
-        asOrchestratorHarness(manager).primaryPromotionByProjectId.set(project.id, {
-          projectId: project.id,
-          threadId: thread.id,
-          promotedAt: 1000,
-          promotedCheckout: {
-            head: "abc123",
-            detached: false,
-          },
-          reconstructed: false,
-        });
-        vi.spyOn(manager, "demotePrimaryCheckout").mockRejectedValue(new Error("demotion failed"));
-
-        await expect(
-          manager.requestThreadOperation(thread.id, {
-            operation: "commit",
-            options: {},
-          }),
-        ).rejects.toThrow("demotion failed");
-
-        const events = eventRepo.listByThread(thread.id);
-        expect(events).toContainEqual(
-          expect.objectContaining({
-            type: "system/operation",
-            data: expect.objectContaining({
-              operation: "commit",
-              status: "failed",
-              message: "demotion failed",
-            }),
-          }),
-        );
-      });
-
-      it("queues follow-up side effects after commit failures are recorded", async () => {
-        const envRepo = new EnvironmentRepository(testDb.db);
-        const env = envRepo.create({ projectId: project.id, descriptor: { type: "path", path: "/tmp/env" }, managed: true });
-        const thread = createTestThread(threadRepo, project.id, { status: "idle", environmentId: env.id });
-        const enqueueSpy = vi.spyOn(threadRepo, "enqueueQueuedMessage");
-        asOrchestratorHarness(manager).environmentRuntimes.set(thread.id, {
-          threadId: thread.id,
-          projectId: project.id,
-          rootPath: "/tmp/proj-1",
-          workspaceRoot: "/tmp/worktrees/proj-1/thread-1",
-          branchName: "bb/thread-1",
-          environment: makeRuntimeEnvironment({
-            rootPath: "/tmp/worktrees/proj-1/thread-1",
-            overrides: {
-              async commitWorkspace() {
-                throw new Error("Commit message is required");
-              },
-            },
-          }),
-        });
-        const scheduleFollowUpSpy = vi
-          .spyOn(asOrchestratorHarness(manager), "_scheduleQueuedFollowUpDispatch")
-          .mockImplementation(() => {});
-
-        await (asOrchestratorHarness(manager) as any)._runQueuedThreadOperation(thread, {
-          operationId: "op-1",
-          requestedAt: 1000,
-          demotedPrimaryCheckout: false,
-          request: {
-            operation: "commit",
-            options: {
-              message: "feat: add tests",
-            },
-          },
-        });
-
-        expect(enqueueSpy).toHaveBeenCalledWith(
-          thread.id,
-          expect.objectContaining({
-            input: [
-              {
-                type: "text",
-                text: buildCommitFailureFollowUpInstruction(
-                  {
-                    operation: "commit",
-                    options: {
-                      message: "feat: add tests",
-                    },
-                  },
-                  {
-                    errorMessage: "Commit message is required",
-                  },
-                ),
-              },
-            ],
-          }),
-        );
-        expect(scheduleFollowUpSpy).toHaveBeenCalledWith(thread.id);
-        expect(ws.broadcast).toHaveBeenCalledWith("thread", thread.id, ["queue-changed"]);
-        const events = eventRepo.listByThread(thread.id);
-        expect(events).toContainEqual(
-          expect.objectContaining({
-            type: "system/operation",
-            data: expect.objectContaining({
-              operation: "commit",
-              status: "failed",
-              operationId: "op-1",
-              message: "Commit message is required",
-            }),
-          }),
-        );
-      });
-
-      it("returns deferred follow-up actions when squash merge hits conflicts", async () => {
-        const envRepo = new EnvironmentRepository(testDb.db);
-        const env = envRepo.create({ projectId: project.id, descriptor: { type: "path", path: "/tmp/env" }, managed: true });
-        const thread = createTestThread(threadRepo, project.id, { status: "idle", environmentId: env.id });
-        const enqueueSpy = vi.spyOn(threadRepo, "enqueueQueuedMessage");
-        asOrchestratorHarness(manager).environmentRuntimes.set(thread.id, {
-          threadId: thread.id,
-          projectId: project.id,
-          rootPath: "/tmp/proj-1",
-          workspaceRoot: "/tmp/worktrees/proj-1/thread-1",
-          branchName: "bb/thread-1",
-          environment: makeRuntimeEnvironment({
-            rootPath: "/tmp/worktrees/proj-1/thread-1",
-            overrides: {
-              supportsSquashMergeIntoDefaultBranch() {
-                return true;
-              },
-              async squashMergeIntoDefaultBranch() {
-                return {
-                  merged: false,
-                  message: "Squash merge has conflicts against main.",
-                  conflictFiles: ["src/conflicted.ts", "README.md"],
-                };
-              },
-            },
-          }),
-        });
-        const result = await (asOrchestratorHarness(manager) as any)._runWorktreeSquashMergeOperation(thread.id, {
-          mergeBaseBranch: "main",
-          squashMessage: "feat: ship thread changes",
-        });
-
-        expect(result).toEqual({
-          message: "Squash merge has conflicts against main.",
-          postActions: [
-            {
-              type: "enqueue_squash_merge_conflict_follow_up",
-              request: {
-                operation: "squash_merge",
-                options: {
-                  mergeBaseBranch: "main",
-                  squashMessage: "feat: ship thread changes",
-                },
-              },
-              conflictFiles: ["src/conflicted.ts", "README.md"],
-            },
-          ],
-        });
-        expect(enqueueSpy).not.toHaveBeenCalled();
-        expect(ws.broadcast).not.toHaveBeenCalledWith("thread", thread.id, ["queue-changed"]);
-      });
-
-      it("queues follow-up side effects after squash merge operation terminal status is recorded", async () => {
-        const envRepo = new EnvironmentRepository(testDb.db);
-        const env = envRepo.create({ projectId: project.id, descriptor: { type: "path", path: "/tmp/env" }, managed: true });
-        const thread = createTestThread(threadRepo, project.id, { status: "idle", environmentId: env.id });
-        const createSpy = vi.spyOn(eventRepo, "create");
-        const enqueueSpy = vi.spyOn(threadRepo, "enqueueQueuedMessage");
-        asOrchestratorHarness(manager).environmentRuntimes.set(thread.id, {
-          threadId: thread.id,
-          projectId: project.id,
-          rootPath: "/tmp/proj-1",
-          workspaceRoot: "/tmp/worktrees/proj-1/thread-1",
-          branchName: "bb/thread-1",
-          environment: makeRuntimeEnvironment({
-            rootPath: "/tmp/worktrees/proj-1/thread-1",
-            overrides: {
-              supportsSquashMergeIntoDefaultBranch() {
-                return true;
-              },
-              async squashMergeIntoDefaultBranch() {
-                return {
-                  merged: false,
-                  message: "Squash merge has conflicts against main.",
-                  conflictFiles: ["src/conflicted.ts", "README.md"],
-                };
-              },
-            },
-          }),
-        });
-        const scheduleFollowUpSpy = vi
-          .spyOn(asOrchestratorHarness(manager), "_scheduleQueuedFollowUpDispatch")
-          .mockImplementation(() => {});
-
-        await (asOrchestratorHarness(manager) as any)._runQueuedThreadOperation(thread, {
-          operationId: "op-1",
-          requestedAt: 1000,
-          demotedPrimaryCheckout: false,
-          request: {
-            operation: "squash_merge",
-            options: {
-              mergeBaseBranch: "main",
-              squashMessage: "feat: ship thread changes",
-            },
-          },
-        });
-
-        expect(enqueueSpy).toHaveBeenCalledWith(
-          thread.id,
-          expect.objectContaining({
-            input: [
-              {
-                type: "text",
-                text: buildSquashMergeConflictFollowUpInstruction(
-                  {
-                    operation: "squash_merge",
-                    options: {
-                      mergeBaseBranch: "main",
-                      squashMessage: "feat: ship thread changes",
-                    },
-                  },
-                  { conflictFiles: ["src/conflicted.ts", "README.md"] },
-                ),
-              },
-            ],
-          }),
-        );
-        expect(scheduleFollowUpSpy).toHaveBeenCalledWith(thread.id);
-        expect(ws.broadcast).toHaveBeenCalledWith("thread", thread.id, ["queue-changed"]);
-        const firstEventsBroadcastOrder = (
-          ws.broadcast as ReturnType<typeof vi.fn>
-        ).mock.calls.find(([scope, id, changes]) =>
-          scope === "thread" &&
-          id === thread.id &&
-          Array.isArray(changes) &&
-          changes.includes("events-appended"),
-        )
-          ? (ws.broadcast as ReturnType<typeof vi.fn>).mock.invocationCallOrder[
-              (ws.broadcast as ReturnType<typeof vi.fn>).mock.calls.findIndex(
-                ([scope, id, changes]) =>
-                  scope === "thread" &&
-                  id === thread.id &&
-                  Array.isArray(changes) &&
-                  changes.includes("events-appended"),
-              )
-            ]
-          : Number.POSITIVE_INFINITY;
-        const queueChangedBroadcastOrder = (
-          ws.broadcast as ReturnType<typeof vi.fn>
-        ).mock.calls.find(([scope, id, changes]) =>
-          scope === "thread" &&
-          id === thread.id &&
-          Array.isArray(changes) &&
-          changes.includes("queue-changed"),
-        )
-          ? (ws.broadcast as ReturnType<typeof vi.fn>).mock.invocationCallOrder[
-              (ws.broadcast as ReturnType<typeof vi.fn>).mock.calls.findIndex(
-                ([scope, id, changes]) =>
-                  scope === "thread" &&
-                  id === thread.id &&
-                  Array.isArray(changes) &&
-                  changes.includes("queue-changed"),
-              )
-            ]
-          : Number.POSITIVE_INFINITY;
-        expect(firstEventsBroadcastOrder).toBeLessThan(queueChangedBroadcastOrder);
-        const events = eventRepo.listByThread(thread.id);
-        expect(events).toContainEqual(
-          expect.objectContaining({
-            type: "system/operation",
-            data: expect.objectContaining({
-              operation: "squash_merge",
-              status: "completed",
-              operationId: "op-1",
-            }),
-          }),
-        );
-        const completedEventCreateOrder = createSpy.mock.invocationCallOrder[
-          createSpy.mock.calls.findIndex(
-            ([event]) =>
-              (event as any).type === "system/operation" &&
-              (event as any).data?.status === "completed" &&
-              (event as any).data?.operationId === "op-1",
-          )
-        ] ?? Number.POSITIVE_INFINITY;
-        expect(completedEventCreateOrder).toBeLessThan(
-          enqueueSpy.mock.invocationCallOrder[0] ?? Number.POSITIVE_INFINITY,
-        );
-      });
-
-      it("queues follow-up side effects after squash merge commit-step failures are recorded", async () => {
-        const envRepo = new EnvironmentRepository(testDb.db);
-        const env = envRepo.create({ projectId: project.id, descriptor: { type: "path", path: "/tmp/env" }, managed: true });
-        const thread = createTestThread(threadRepo, project.id, { status: "idle", environmentId: env.id });
-        const createSpy = vi.spyOn(eventRepo, "create");
-        const enqueueSpy = vi.spyOn(threadRepo, "enqueueQueuedMessage");
-        asOrchestratorHarness(manager).environmentRuntimes.set(thread.id, {
-          threadId: thread.id,
-          projectId: project.id,
-          rootPath: "/tmp/proj-1",
-          workspaceRoot: "/tmp/worktrees/proj-1/thread-1",
-          branchName: "bb/thread-1",
-          environment: makeRuntimeEnvironment({
-            rootPath: "/tmp/worktrees/proj-1/thread-1",
-            overrides: {
-              supportsSquashMergeIntoDefaultBranch() {
-                return true;
-              },
-              async squashMergeIntoDefaultBranch() {
-                throw new EnvironmentSquashMergeCommitFailureError(
-                  "squash_commit",
-                  "nothing to commit, working tree clean",
-                );
-              },
-            },
-          }),
-        });
-        const scheduleFollowUpSpy = vi
-          .spyOn(asOrchestratorHarness(manager), "_scheduleQueuedFollowUpDispatch")
-          .mockImplementation(() => {});
-
-        await (asOrchestratorHarness(manager) as any)._runQueuedThreadOperation(thread, {
-          operationId: "op-1",
-          requestedAt: 1000,
-          demotedPrimaryCheckout: false,
-          request: {
-            operation: "squash_merge",
-            options: {
-              mergeBaseBranch: "main",
-            },
-          },
-        });
-
-        expect(enqueueSpy).toHaveBeenCalledWith(
-          thread.id,
-          expect.objectContaining({
-            input: [
-              {
-                type: "text",
-                text: buildSquashMergeCommitFailureFollowUpInstruction(
-                  {
-                    operation: "squash_merge",
-                    options: {
-                      mergeBaseBranch: "main",
-                    },
-                  },
-                  {
-                    stage: "squash_commit",
-                    errorMessage: "nothing to commit, working tree clean",
-                  },
-                ),
-              },
-            ],
-          }),
-        );
-        expect(scheduleFollowUpSpy).toHaveBeenCalledWith(thread.id);
-        expect(ws.broadcast).toHaveBeenCalledWith("thread", thread.id, ["queue-changed"]);
-        const events = eventRepo.listByThread(thread.id);
-        expect(events).toContainEqual(
-          expect.objectContaining({
-            type: "system/operation",
-            data: expect.objectContaining({
-              operation: "squash_merge",
-              status: "failed",
-              operationId: "op-1",
-              message: "nothing to commit, working tree clean",
-            }),
-          }),
-        );
-        const failedEventCreateOrder = createSpy.mock.invocationCallOrder[
-          createSpy.mock.calls.findIndex(
-            ([event]) =>
-              (event as any).type === "system/operation" &&
-              (event as any).data?.status === "failed" &&
-              (event as any).data?.operationId === "op-1",
-          )
-        ] ?? Number.POSITIVE_INFINITY;
-        expect(failedEventCreateOrder).toBeLessThan(
-          enqueueSpy.mock.invocationCallOrder[0] ?? Number.POSITIVE_INFINITY,
-        );
-      });
-
-      it("emits a commit event when squash merge creates a prep commit", async () => {
-        const envRepo = new EnvironmentRepository(testDb.db);
-        const env = envRepo.create({ projectId: project.id, descriptor: { type: "path", path: "/tmp/env" }, managed: true });
-        const thread = createTestThread(threadRepo, project.id, { status: "idle", environmentId: env.id });
-        asOrchestratorHarness(manager).environmentRuntimes.set(thread.id, {
-          threadId: thread.id,
-          projectId: project.id,
-          rootPath: "/tmp/proj-1",
-          workspaceRoot: "/tmp/worktrees/proj-1/thread-1",
-          branchName: "bb/thread-1",
-          environment: makeRuntimeEnvironment({
-            rootPath: "/tmp/worktrees/proj-1/thread-1",
-            overrides: {
-              supportsSquashMergeIntoDefaultBranch() {
-                return true;
-              },
-              async squashMergeIntoDefaultBranch() {
-                return {
-                  merged: true,
-                  message: "Squash-merged into main",
-                  committed: true,
-                  commitSha: "def4567890",
-                  commitSubject: "feat: squash merged thread work",
-                  prepCommit: {
-                    message: "Committed changes",
-                    commitSha: "abc123",
-                    includeUnstaged: true,
-                  },
-                };
-              },
-            },
-          }),
-        });
-
-        await (asOrchestratorHarness(manager) as any)._runWorktreeSquashMergeOperation(thread.id, {
-          mergeBaseBranch: "main",
-        });
-
-        const events = eventRepo.listByThread(thread.id);
-        expect(events).toContainEqual(
-          expect.objectContaining({
-            type: "system/worktree/commit",
-            data: expect.objectContaining({
-              status: "committed",
-              message: "Committed changes",
-              commitSha: "abc123",
-              includeUnstaged: true,
-            }),
-          }),
-        );
-        expect(events).toContainEqual(
-          expect.objectContaining({
-            type: "system/worktree/squash_merge",
-            data: expect.objectContaining({
-              status: "merged",
-              message: "Squash-merged into main",
-              commitSha: "def4567890",
-              commitSubject: "feat: squash merged thread work",
-            }),
-          }),
-        );
-      });
-    });
-
   });
 
   describe("detachAll()", () => {

@@ -4,7 +4,6 @@ import {
   type Thread,
   type ThreadEvent,
   type ThreadGitDiffResponse,
-  type ThreadOperationResponse,
   type ThreadStatus,
   type ThreadWorkStatus,
   type TimelineFormat,
@@ -200,14 +199,6 @@ function parseThreadWaitTarget(opts: {
 
 async function sleep(ms: number): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function printThreadOperationResult(result: ThreadOperationResponse): void {
-  const flags = [
-    result.executionStatus,
-    ...(result.demotedPrimaryCheckout ? ["demoted-primary-checkout"] : []),
-  ];
-  console.log(`${result.message} [${flags.join(", ")}]`);
 }
 
 export function registerThreadCommands(program: Command, getUrl: () => string): void {
@@ -907,93 +898,6 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
     .action(tellAction);
 
   thread
-    .command("commit [id]")
-    .description("Request an agent-driven commit operation for a thread")
-    .option("--self", "Target the current thread (from BB_THREAD_ID)")
-    .option("--message <message>", "Commit message hint")
-    .option("--staged-only", "Commit only currently staged changes")
-    .option("--json", "Print machine-readable JSON output")
-    .action(async (
-      id: string | undefined,
-      opts: {
-        self?: boolean;
-        message?: string;
-        stagedOnly?: boolean;
-        json?: boolean;
-      },
-    ) => {
-      const client = createClient(getUrl());
-      try {
-        const threadId = resolveThreadIdOrSelf(id, opts);
-        const result = await unwrap<ThreadOperationResponse>(
-          client.api.v1.threads[":id"].operations.$post({
-            param: { id: threadId },
-            json: {
-              operation: "commit",
-              options: {
-                includeUnstaged: opts.stagedOnly ? false : true,
-                ...(opts.message ? { message: opts.message } : {}),
-              },
-            },
-          }),
-        );
-        if (outputJson(opts, result)) return;
-        printThreadOperationResult(result);
-      } catch (err: unknown) {
-        console.error(`Error: ${getErrorMessage(err)}`);
-        process.exit(1);
-      }
-    });
-
-  thread
-    .command("squash-merge [id]")
-    .description("Request an agent-driven squash-merge operation for a thread")
-    .option("--self", "Target the current thread (from BB_THREAD_ID)")
-    .option("--commit-if-needed", "Allow a prep commit before squash merge")
-    .option("--staged-only", "Use only staged changes for the prep commit")
-    .option("--commit-message <message>", "Prep commit message hint")
-    .option("--squash-message <message>", "Squash commit message hint")
-    .option("--merge-base-branch <branch>", "Merge-base branch hint")
-    .option("--json", "Print machine-readable JSON output")
-    .action(async (
-      id: string | undefined,
-      opts: {
-        self?: boolean;
-        commitIfNeeded?: boolean;
-        stagedOnly?: boolean;
-        commitMessage?: string;
-        squashMessage?: string;
-        mergeBaseBranch?: string;
-        json?: boolean;
-      },
-    ) => {
-      const client = createClient(getUrl());
-      try {
-        const threadId = resolveThreadIdOrSelf(id, opts);
-        const result = await unwrap<ThreadOperationResponse>(
-          client.api.v1.threads[":id"].operations.$post({
-            param: { id: threadId },
-            json: {
-              operation: "squash_merge",
-              options: {
-                commitIfNeeded: opts.commitIfNeeded === true,
-                includeUnstaged: opts.stagedOnly ? false : true,
-                ...(opts.commitMessage ? { commitMessage: opts.commitMessage } : {}),
-                ...(opts.squashMessage ? { squashMessage: opts.squashMessage } : {}),
-                ...(opts.mergeBaseBranch ? { mergeBaseBranch: opts.mergeBaseBranch } : {}),
-              },
-            },
-          }),
-        );
-        if (outputJson(opts, result)) return;
-        printThreadOperationResult(result);
-      } catch (err: unknown) {
-        console.error(`Error: ${getErrorMessage(err)}`);
-        process.exit(1);
-      }
-    });
-
-  thread
     .command("stop [id]")
     .description("Stop an active thread")
     .option("--self", "Target the current thread (from BB_THREAD_ID)")
@@ -1007,99 +911,6 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
         );
         if (outputJson(opts, { ok: true, threadId })) return;
         console.log(`Thread ${threadId} stopped`);
-      } catch (err: unknown) {
-        console.error(`Error: ${getErrorMessage(err)}`);
-        process.exit(1);
-      }
-    });
-
-  thread
-    .command("promote <id>")
-    .description("Promote a worktree thread into the primary checkout")
-    .option("--json", "Print machine-readable JSON output")
-    .action(async (id: string, opts: { json?: boolean }) => {
-      const client = createClient(getUrl());
-      try {
-        const result = await unwrap<{ ok: true; promoted: boolean; message: string }>(
-          client.api.v1.threads[":id"].promote.$post({
-            param: { id },
-          }),
-        );
-        if (outputJson(opts, result)) return;
-        console.log(result.message);
-      } catch (err: unknown) {
-        console.error(`Error: ${getErrorMessage(err)}`);
-        process.exit(1);
-      }
-    });
-
-  thread
-    .command("demote [id]")
-    .description("Demote the currently promoted thread from the primary checkout")
-    .option("--project <id>", "Project ID (defaults to BB_PROJECT_ID when id is omitted)")
-    .option("--json", "Print machine-readable JSON output")
-    .action(async (id: string | undefined, opts: { project?: string; json?: boolean }) => {
-      const client = createClient(getUrl());
-      try {
-        const threadId = (() => {
-          if (id) return id;
-          const fallbackFromContext = resolveThreadId();
-          if (fallbackFromContext) return fallbackFromContext;
-          const projectId = requireProjectId(opts.project);
-          return unwrap<Thread[]>(
-            client.api.v1.threads.$get({
-              query: { projectId },
-            }),
-          ).then((threads) => {
-            const active = threads.find((thread) => thread.primaryCheckout?.isActive);
-            if (!active) {
-              throw new Error("Primary checkout is already demoted.");
-            }
-            return active.id;
-          });
-        })();
-        const resolvedThreadId = typeof threadId === "string"
-          ? threadId
-          : await threadId;
-        const result = await unwrap<{ ok: true; demoted: boolean; message: string }>(
-          client.api.v1.threads[":id"]["demote-primary"].$post({
-            param: { id: resolvedThreadId },
-          }),
-        );
-        if (outputJson(opts, result)) return;
-        console.log(result.message);
-      } catch (err: unknown) {
-        console.error(`Error: ${getErrorMessage(err)}`);
-        process.exit(1);
-      }
-    });
-
-  thread
-    .command("promote-status")
-    .description("Show which thread is active in the primary checkout")
-    .option("--project <id>", "Project ID (defaults to BB_PROJECT_ID)")
-    .option("--json", "Print machine-readable JSON output")
-    .action(async (opts: { project?: string; json?: boolean }) => {
-      const client = createClient(getUrl());
-      try {
-        const resolvedProject = resolveProjectIdWithLabel(opts.project);
-        const projectId = resolvedProject.id;
-        printContextLabel(resolvedProject, "Project", "BB_PROJECT_ID", opts);
-        const threads = await unwrap<Thread[]>(
-          client.api.v1.threads.$get({
-            query: { projectId },
-          }),
-        );
-        const active = threads.find((thread) => thread.primaryCheckout?.isActive);
-        if (outputJson(opts, { threadId: active?.id ?? null })) return;
-        if (!active) {
-          console.log("Primary checkout: demoted");
-          return;
-        }
-        console.log(`Primary checkout: ${active.id}`);
-        if (active.title) {
-          console.log(`Title: ${active.title}`);
-        }
       } catch (err: unknown) {
         console.error(`Error: ${getErrorMessage(err)}`);
         process.exit(1);

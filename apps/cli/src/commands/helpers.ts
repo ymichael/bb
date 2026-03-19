@@ -1,4 +1,8 @@
 import { createInterface } from "node:readline/promises";
+import type {
+  CommitEnvironmentOperationResponse,
+  SquashMergeEnvironmentOperationResponse,
+} from "@bb/core";
 
 /**
  * Print data as formatted JSON and return true, or return false if --json was not requested.
@@ -96,6 +100,18 @@ export function printContextLabel(
   if (resolved.source === "env") {
     console.error(`${kind} ${resolved.id} (from ${envVar})`);
   }
+}
+
+export function printEnvironmentGitOperationResult(
+  result: CommitEnvironmentOperationResponse | SquashMergeEnvironmentOperationResponse,
+): void {
+  const flags = [
+    ...(result.operation === "commit"
+      ? [result.commitCreated ? "committed" : "noop"]
+      : [result.merged ? "merged" : "noop"]),
+    ...(result.autoArchived ? ["archived"] : []),
+  ];
+  console.log(`${result.message} [${flags.join(", ")}]`);
 }
 
 export async function confirmDestructiveAction(message: string): Promise<boolean> {

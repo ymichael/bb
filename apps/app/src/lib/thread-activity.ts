@@ -9,7 +9,7 @@ export interface ThreadActivitySummary {
 type ThreadVisibilityShape = Pick<Thread, "archivedAt" | "parentThreadId">
 type ThreadStatusShape = Pick<
   Thread,
-  "status" | "lastReadAt" | "updatedAt" | "pendingOperation" | "parentThreadId"
+  "status" | "lastReadAt" | "updatedAt" | "parentThreadId"
 >
 type ThreadActivityShape = ThreadVisibilityShape & ThreadStatusShape
 
@@ -35,12 +35,8 @@ export function isRunningThreadStatus(status: ThreadStatus): boolean {
   }
 }
 
-export function hasPendingThreadOperation(thread: Pick<Thread, "pendingOperation">): boolean {
-  return thread.pendingOperation !== undefined
-}
-
-export function isBusyThread(thread: Pick<Thread, "status" | "pendingOperation">): boolean {
-  return isRunningThreadStatus(thread.status) || hasPendingThreadOperation(thread)
+export function isBusyThread(thread: Pick<Thread, "status">): boolean {
+  return isRunningThreadStatus(thread.status)
 }
 
 export function isUnreadDoneThread(thread: ThreadStatusShape): boolean {

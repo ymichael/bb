@@ -41,6 +41,7 @@ export interface ActiveEnvironmentRuntime {
 
 export interface PrimaryPromotionState {
   projectId: string;
+  environmentId: string;
   threadId: string;
   promotedAt: number;
   previousCheckout?: EnvironmentCheckoutSnapshot;
@@ -173,6 +174,26 @@ export class EnvironmentService {
 
   hasSharedAttachedEnvironment(threadId: string): boolean {
     return this.getThreadIdsForRuntimeScope(threadId).length > 1;
+  }
+
+  getAttachedEnvironmentId(threadId: string): string | undefined {
+    return this.resolveAttachedEnvironment(threadId)?.environmentId ??
+      this.threadRepo.getById(threadId)?.environmentId;
+  }
+
+  getAttachedThreadIdsForEnvironment(environmentId: string): string[] {
+    if (!this.threadEnvironmentAttachmentRepo) {
+      return this.threadRepo.list()
+        .filter((thread) => thread.environmentId === environmentId)
+        .map((thread) => thread.id);
+    }
+    return this.threadEnvironmentAttachmentRepo
+      .listByEnvironmentId(environmentId)
+      .map((attachment) => attachment.threadId);
+  }
+
+  isThreadAttachedToEnvironment(threadId: string, environmentId: string): boolean {
+    return this.getAttachedEnvironmentId(threadId) === environmentId;
   }
 
   private resolveAttachedPersistedEnvironmentRecord(
@@ -717,6 +738,35 @@ export class EnvironmentService {
     }
   }
 
+  async archiveThreadEnvironment(threadId: string): Promise<void> {
+    const thread = this.threadRepo.getById(threadId);
+    if (!thread) return;
+
+    const attachedEnvironment = this.resolveAttachedEnvironment(threadId);
+    const projectRootPath = this.projectRepo.getById(thread.projectId)?.rootPath;
+
+    this.workspaceCleanupInFlightThreadIds.add(threadId);
+    const refresh = () => {
+      this.workspaceCleanupInFlightThreadIds.delete(threadId);
+      if (this.threadRepo.getById(threadId)) {
+        this.callbacks.onThreadChanged(threadId, ["work-status-changed"]);
+      }
+    };
+
+    try {
+      await this.suspendEnvironmentRuntimeAndWait(threadId);
+      if (
+        attachedEnvironment?.managed &&
+        !attachedEnvironment.hasSiblingAttachments &&
+        projectRootPath
+      ) {
+        await this.callbacks.cleanupManagedEnvironmentArtifacts?.(threadId, projectRootPath);
+      }
+    } finally {
+      refresh();
+    }
+  }
+
   destroyEnvironmentRuntime(threadId: string): void {
     void this.destroyThreadEnvironment(threadId).catch(() => {
       // Errors are already reported via onCleanupFailure.
@@ -977,6 +1027,10 @@ export class EnvironmentService {
     }
     this.setPrimaryPromotionState(project.id, {
       projectId: project.id,
+      environmentId:
+        this.getAttachedEnvironmentId(thread.id) ??
+        thread.environmentId ??
+        thread.id,
       threadId: thread.id,
       promotedAt: Date.now(),
       promotedCheckout: workspaceCheckout,
@@ -991,6 +1045,7 @@ export class EnvironmentService {
     }
     return {
       projectId,
+      activeEnvironmentId: active.environmentId,
       activeThreadId: active.threadId,
       promotedAt: active.promotedAt,
     };
@@ -1003,7 +1058,10 @@ export class EnvironmentService {
     promoted: boolean;
     status: PrimaryCheckoutStatus;
     state?: PrimaryPromotionState;
-    reason?: "already-promoted-same-thread" | "already-promoted-other-thread";
+    reason?:
+      | "already-promoted-same-thread"
+      | "already-promoted-same-environment"
+      | "already-promoted-other-thread";
   }> {
     const project = this.projectRepo.getById(args.thread.projectId);
     if (!project) {
@@ -1015,6 +1073,7 @@ export class EnvironmentService {
     });
     const existing = this.primaryPromotionByProjectId.get(project.id);
     if (existing) {
+      const attachedEnvironmentId = this.getAttachedEnvironmentId(args.thread.id);
       return {
         promoted: false,
         status: this.getPrimaryCheckoutStatus(project.id),
@@ -1022,6 +1081,8 @@ export class EnvironmentService {
         reason:
           existing.threadId === args.thread.id
             ? "already-promoted-same-thread"
+            : attachedEnvironmentId === existing.environmentId
+            ? "already-promoted-same-environment"
             : "already-promoted-other-thread",
       };
     }
@@ -1037,6 +1098,10 @@ export class EnvironmentService {
     });
     const state: PrimaryPromotionState = {
       projectId: project.id,
+      environmentId:
+        this.getAttachedEnvironmentId(args.thread.id) ??
+        args.thread.environmentId ??
+        args.thread.id,
       threadId: args.thread.id,
       promotedAt: Date.now(),
       previousCheckout: promoted.previousCheckout,
@@ -1051,7 +1116,7 @@ export class EnvironmentService {
     };
   }
 
-  async demotePrimaryCheckout(args: {
+  async demoteThreadEnvironment(args: {
     thread: Thread;
     ttlMs?: number;
   }): Promise<{
@@ -1072,10 +1137,15 @@ export class EnvironmentService {
     if (!active) {
       return { demoted: false, status: this.getPrimaryCheckoutStatus(project.id) };
     }
-    if (active.threadId !== args.thread.id) {
+    const attachedEnvironmentId = this.getAttachedEnvironmentId(args.thread.id);
+    if (!attachedEnvironmentId || attachedEnvironmentId !== active.environmentId) {
       throw new Error(`Thread ${active.threadId} is currently promoted in primary checkout`);
     }
-    const activeThread = this.threadRepo.getById(active.threadId);
+    const activeThread =
+      this.threadRepo.getById(active.threadId) ??
+      this.getAttachedThreadIdsForEnvironment(active.environmentId)
+        .map((threadId) => this.threadRepo.getById(threadId))
+        .find((thread): thread is Thread => Boolean(thread));
     const environment = activeThread
       ? this.restoreThreadEnvironment(activeThread, project.rootPath)
       : undefined;

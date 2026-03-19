@@ -2,6 +2,7 @@
 
 import { Command } from "commander";
 import { registerServerCommands } from "./commands/server.js";
+import { registerEnvironmentCommands } from "./commands/environment.js";
 import { registerEnvironmentAgentCommand } from "./commands/environment-agent.js";
 import { registerGuideCommand } from "./commands/guide.js";
 import { registerManagerCommands } from "./commands/manager.js";
@@ -53,6 +54,7 @@ registerProjectCommands(program, getUrl);
 registerProviderCommands(program, getUrl);
 registerManagerCommands(program, getUrl);
 registerThreadCommands(program, getUrl);
+registerEnvironmentCommands(program, getUrl);
 registerServerCommands(program, getUrl);
 registerEnvironmentAgentCommand(program);
 registerGuideCommand(program);

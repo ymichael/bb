@@ -9,7 +9,6 @@ import {
   enqueueThreadMessageSchema,
   sendQueuedThreadMessageSchema,
   spawnThreadSchema,
-  threadOperationSchema,
   tellThreadSchema,
   updateThreadSchema,
   type PromptInput,
@@ -536,7 +535,7 @@ export function createThreadRoutes(
             mode !== "steer" &&
             threadManager.isPrimaryCheckoutActive(threadId)
           ) {
-            await threadManager.demotePrimaryCheckout(threadId);
+            await threadManager.demoteThreadEnvironmentFromPrimaryCheckout(threadId);
           }
           const tellRequest = mode ? { input, mode } : { input };
           const options =
@@ -847,56 +846,6 @@ export function createThreadRoutes(
             query.mergeBaseBranch,
           );
           return c.json(result);
-        } catch (err) {
-          return sendRouteError(c, err);
-        }
-      },
-    )
-    .post(
-      "/:id/promote",
-      async (c) => {
-        try {
-          const threadId = c.req.param("id");
-          const thread = await getThreadForRouteLookup(threadManager, threadId);
-          if (!thread) {
-            return sendRouteError(c, threadNotFoundError(threadId));
-          }
-          const result = await threadManager.promoteThread(threadId);
-          return c.json(result);
-        } catch (err) {
-          return sendRouteError(c, err);
-        }
-      },
-    )
-    .post(
-      "/:id/demote-primary",
-      async (c) => {
-        try {
-          const threadId = c.req.param("id");
-          const thread = await getThreadForRouteLookup(threadManager, threadId);
-          if (!thread) {
-            return sendRouteError(c, threadNotFoundError(threadId));
-          }
-          const result = await threadManager.demotePrimaryCheckout(threadId);
-          return c.json(result);
-        } catch (err) {
-          return sendRouteError(c, err);
-        }
-      },
-    )
-    .post(
-      "/:id/operations",
-      zValidator("json", threadOperationSchema),
-      async (c) => {
-        try {
-          const threadId = c.req.param("id");
-          const thread = await getThreadForRouteLookup(threadManager, threadId);
-          if (!thread) {
-            return sendRouteError(c, threadNotFoundError(threadId));
-          }
-          const body = c.req.valid("json");
-          const result = await threadManager.requestThreadOperation(threadId, body);
-          return c.json(result, 202);
         } catch (err) {
           return sendRouteError(c, err);
         }
