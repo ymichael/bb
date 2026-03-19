@@ -4453,6 +4453,9 @@ export class Orchestrator implements ThreadOrchestrator {
               options,
               resumePath,
               providerLaunch,
+              dynamicTools: latestThread.type === "manager"
+                ? this.providerToolHost?.listTools()
+                : undefined,
             }),
         );
         this.providerThreadIdByThreadId.set(threadId, resumed.providerThreadId);

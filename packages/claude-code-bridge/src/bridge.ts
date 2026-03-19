@@ -71,14 +71,14 @@ function sendError(
   send({ jsonrpc: "2.0", id, error: { code, message } });
 }
 
-function createOnSdkMessage(threadId: string): (message: SDKMessage) => void {
+function createOnSdkMessage(threadIdRef: { current: string }): (message: SDKMessage) => void {
   return (message: SDKMessage) => {
-    const threadSession = sessions.get(threadId);
+    const threadSession = sessions.get(threadIdRef.current);
     if (!threadSession) return;
 
     const { notifications, turnId } = translateSdkMessage(
       message,
-      threadId,
+      threadIdRef.current,
       threadSession.turnId,
       threadSession.turnCounter,
     );
@@ -90,46 +90,41 @@ function createOnSdkMessage(threadId: string): (message: SDKMessage) => void {
   };
 }
 
-function createOnSdkDone(threadId: string): (error?: unknown) => void {
+function createOnSdkDone(threadIdRef: { current: string }): (error?: unknown) => void {
   return (error?: unknown) => {
     if (!error) return;
 
-    const threadSession = sessions.get(threadId);
+    const threadSession = sessions.get(threadIdRef.current);
     if (!threadSession) return;
 
     const message =
       error instanceof Error ? error.message : String(error);
 
     if (threadSession.turnId) {
-      // A turn was already in progress — close it normally so the
-      // orchestrator sees a complete lifecycle.
       send({
         jsonrpc: "2.0",
         method: "turn/completed",
         params: {
-          threadId,
+          threadId: threadIdRef.current,
           turnId: threadSession.turnId,
           error: { message },
         },
       });
       threadSession.turnId = undefined;
     } else {
-      // Fatal startup error before any turn lifecycle events.  Emit an
-      // error notification so the orchestrator can transition the thread
-      // to an error/provisioning_failed state instead of idle.
       send({
         jsonrpc: "2.0",
         method: "error",
-        params: { threadId, message },
+        params: { threadId: threadIdRef.current, message },
       });
     }
   };
 }
 
-function createForwardToolCall(threadId: string): ToolCallForwarder {
+function createForwardToolCall(threadIdRef: { current: string }): ToolCallForwarder {
   return (toolName, args) => {
     return new Promise<{ content: string; isError?: boolean }>((resolve) => {
-      const threadSession = sessions.get(threadId);
+      const threadSession = sessions.get(threadIdRef.current);
       if (!threadSession) {
         resolve({ content: "Thread session not found", isError: true });
         return;
@@ -142,7 +137,7 @@ function createForwardToolCall(threadId: string): ToolCallForwarder {
         id: requestId,
         method: "item/tool/call",
         params: {
-          threadId,
+          threadId: threadIdRef.current,
           turnId: threadSession.turnId ?? "",
           callId: `call-${requestId}`,
           tool: toolName,
@@ -204,13 +199,13 @@ function buildSessionOptions(
 function applyDynamicTools(
   sessionOptions: SdkSessionOptions,
   params: Record<string, unknown>,
-  threadId: string,
+  threadIdRef: { current: string },
 ): void {
   const dynamicTools = params.dynamicTools as
     | DynamicToolDefinition[]
     | undefined;
   if (dynamicTools && dynamicTools.length > 0) {
-    const mcpServer = buildBridgeMcpServer(dynamicTools, createForwardToolCall(threadId));
+    const mcpServer = buildBridgeMcpServer(dynamicTools, createForwardToolCall(threadIdRef));
     sessionOptions.mcpServers = {
       [BRIDGE_MCP_SERVER_NAME]: mcpServer,
     };
@@ -255,25 +250,22 @@ function handleThreadStart(
   id: string | number,
   params: Record<string, unknown>,
 ): void {
-  const threadId =
-    typeof params.threadId === "string"
-      ? params.threadId
-      : `bridge-${Date.now()}`;
+  const threadIdRef = { current: `bridge-${Date.now()}` };
 
   // Stop existing session for this thread if any
-  const existing = sessions.get(threadId);
+  const existing = sessions.get(threadIdRef.current);
   if (existing) {
     existing.session.stop();
-    sessions.delete(threadId);
+    sessions.delete(threadIdRef.current);
   }
 
   const envOverrides = extractEnvOverrides(params);
   const sessionEnv = buildSessionEnv(envOverrides);
   const sessionOptions = buildSessionOptions(params, sessionEnv);
-  applyDynamicTools(sessionOptions, params, threadId);
+  applyDynamicTools(sessionOptions, params, threadIdRef);
 
   const turnCounter = createTurnCounterState();
-  const session = new SdkSession(sessionOptions, createOnSdkMessage(threadId), createOnSdkDone(threadId));
+  const session = new SdkSession(sessionOptions, createOnSdkMessage(threadIdRef), createOnSdkDone(threadIdRef));
   session.start();
 
   const threadSession: ThreadSession = {
@@ -282,22 +274,33 @@ function handleThreadStart(
     turnCounter,
     pendingToolCalls: new Map(),
   };
-  sessions.set(threadId, threadSession);
+  sessions.set(threadIdRef.current, threadSession);
 
   const input = extractInputText(params.input);
   if (input) {
     session.pushInput(input);
   }
 
-  sendResult(id, { threadId });
+  // Return a temporary ID immediately. Once the SDK session ID is
+  // captured, re-key the session map and update the threadIdRef so
+  // subsequent events carry the real SDK session ID. The orchestrator
+  // picks up the real ID from persisted event data (same field it
+  // uses for Codex's conversationId).
+  sendResult(id, { threadId: threadIdRef.current });
+
+  void session.waitForSessionId().then((sdkSessionId) => {
+    sessions.delete(threadIdRef.current);
+    threadIdRef.current = sdkSessionId;
+    sessions.set(sdkSessionId, threadSession);
+  });
 }
 
 function handleThreadResume(
   id: string | number,
   params: Record<string, unknown>,
 ): void {
-  const sessionId =
-    typeof params.sessionId === "string" ? params.sessionId : undefined;
+  // The threadId from the orchestrator IS the SDK session ID (persisted
+  // from the original thread/start result). Use it to resume the session.
   const threadId =
     typeof params.threadId === "string"
       ? params.threadId
@@ -313,11 +316,13 @@ function handleThreadResume(
   const envOverrides = extractEnvOverrides(params);
   const sessionEnv = buildSessionEnv(envOverrides);
   const sessionOptions = buildSessionOptions(params, sessionEnv);
-  applyDynamicTools(sessionOptions, params, threadId);
-
+  const threadIdRef = { current: threadId };
+  applyDynamicTools(sessionOptions, params, threadIdRef);
   const turnCounter = createTurnCounterState();
-  const session = new SdkSession(sessionOptions, createOnSdkMessage(threadId), createOnSdkDone(threadId));
-  session.start(sessionId);
+  const session = new SdkSession(sessionOptions, createOnSdkMessage(threadIdRef), createOnSdkDone(threadIdRef));
+
+  // Resume using the threadId as the SDK session ID.
+  session.start(threadId);
 
   const threadSession: ThreadSession = {
     session,

@@ -103,6 +103,7 @@ export type EnvironmentDaemonCommand =
       context?: ProviderThreadContext;
       options?: ProviderExecutionOptions;
       resumePath?: string;
+      dynamicTools?: ProviderDynamicTool[];
       initialize?: EnvironmentDaemonInitializeRequest;
     }
   | {

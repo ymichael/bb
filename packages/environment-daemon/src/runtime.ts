@@ -1112,16 +1112,23 @@ export class EnvironmentDaemonRuntime {
           command.context,
           command.dynamicTools,
         );
-      case "thread.resume":
+      case "thread.resume": {
         if (!provider || !command.context) {
           throw new Error("thread/resume params are unavailable");
         }
-        return provider.createThreadResumeParams(
+        const resumeParams = provider.createThreadResumeParams(
           command.providerThreadId,
           command.context,
           command.options,
           command.resumePath,
         );
+        // Pass dynamic tools so the bridge can re-register them on resume.
+        if (command.dynamicTools && command.dynamicTools.length > 0) {
+          (resumeParams as Record<string, unknown>).dynamicTools =
+            command.dynamicTools;
+        }
+        return resumeParams;
+      }
       case "thread.rename":
         if (!provider?.createThreadNameSetParams) {
           throw new Error("thread/name/set params are unavailable");

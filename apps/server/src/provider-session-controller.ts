@@ -198,6 +198,7 @@ export class ProviderSessionController {
     options?: ProviderExecutionOptions;
     resumePath?: string;
     providerLaunch?: EnvironmentDaemonProviderLaunchWrapper;
+    dynamicTools?: ProviderDynamicTool[];
   }): Promise<{ providerThreadId: string }> {
     await this.ensureProviderRunningForCommand(
       args.client,
@@ -212,6 +213,7 @@ export class ProviderSessionController {
       context: args.context,
       ...(args.options ? { options: args.options } : {}),
       ...(args.resumePath ? { resumePath: args.resumePath } : {}),
+      ...(args.dynamicTools ? { dynamicTools: args.dynamicTools } : {}),
     });
     const providerThreadId = this.opts.provider.extractThreadIdFromResult(ack.result);
     if (!providerThreadId) {

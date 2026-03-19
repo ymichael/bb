@@ -24,6 +24,7 @@ export type SdkSessionDoneHandler = (error?: unknown) => void;
 export class SdkSession {
   private query: Query | undefined;
   private sessionId: string | undefined;
+  private sessionIdResolve: ((id: string) => void) | null = null;
   private inputResolve:
     | ((value: IteratorResult<SDKUserMessage>) => void)
     | null = null;
@@ -40,6 +41,17 @@ export class SdkSession {
 
   getSessionId(): string | undefined {
     return this.sessionId;
+  }
+
+  /**
+   * Returns a promise that resolves with the SDK session ID once the first
+   * message with a session_id arrives from the SDK stream.
+   */
+  waitForSessionId(): Promise<string> {
+    if (this.sessionId) return Promise.resolve(this.sessionId);
+    return new Promise<string>((resolve) => {
+      this.sessionIdResolve = resolve;
+    });
   }
 
   getIsProcessing(): boolean {
@@ -172,6 +184,10 @@ export class SdkSession {
       maybeSessionId.trim().length > 0
     ) {
       this.sessionId = maybeSessionId;
+      if (this.sessionIdResolve) {
+        this.sessionIdResolve(maybeSessionId);
+        this.sessionIdResolve = null;
+      }
     }
   }
 
