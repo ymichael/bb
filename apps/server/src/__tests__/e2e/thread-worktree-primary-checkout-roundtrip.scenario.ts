@@ -57,16 +57,19 @@ export async function runThreadWorktreePrimaryCheckoutRoundtripScenario(): Promi
       "Reply with exactly WORKTREE-PROMOTE and finish. Do not run commands or add extra text.",
       { environmentKind: "worktree" },
     );
-    const environmentId = thread.environmentId;
-    expect(environmentId).toBeTruthy();
 
-    await waitForThreadStatus(
+    const hydratedThread = await waitForThreadStatus(
       harness.baseUrl,
       thread.id,
       "idle",
       e2eTimeoutMs(12_000, 45_000),
       harness.wsUrl,
     );
+    const environmentId = hydratedThread.attachedEnvironment?.id ?? hydratedThread.environmentId;
+    expect(environmentId).toBeTruthy();
+    if (!environmentId) {
+      throw new Error(`Thread ${thread.id} never attached to an environment`);
+    }
 
     const initialStatus = await runCliCommand({
       baseUrl: harness.baseUrl,
@@ -78,7 +81,7 @@ export async function runThreadWorktreePrimaryCheckoutRoundtripScenario(): Promi
 
     const promote = await runCliCommand({
       baseUrl: harness.baseUrl,
-      args: ["environment", "promote", environmentId!],
+      args: ["environment", "promote", environmentId],
     });
     expect(promote.exitCode).toBe(0);
     expect(promote.stderr).toBe("");
@@ -104,7 +107,7 @@ export async function runThreadWorktreePrimaryCheckoutRoundtripScenario(): Promi
 
     const demote = await runCliCommand({
       baseUrl: harness.baseUrl,
-      args: ["environment", "demote", environmentId!],
+      args: ["environment", "demote", environmentId],
     });
     expect(demote.exitCode).toBe(0);
     expect(demote.stderr).toBe("");
