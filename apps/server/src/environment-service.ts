@@ -837,7 +837,6 @@ export class EnvironmentService {
     try {
       removeEnvironmentDaemonDefaultLogArtifacts({
         projectId: thread.projectId,
-        threadId: thread.id,
         environmentId,
       });
     } catch (error) {

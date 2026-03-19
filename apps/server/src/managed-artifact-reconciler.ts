@@ -224,7 +224,6 @@ export function reconcileManagedArtifactStorage(
       if (shouldKeepLogs) {
         keptLogPaths.add(resolveDefaultEnvironmentDaemonLogFilePath({
           projectId: thread.projectId,
-          threadId: thread.id,
           environmentId,
           runtimeEnv: args.runtimeEnv,
         }));

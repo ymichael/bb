@@ -72,7 +72,7 @@ describe("system health report", () => {
     writeBytes(`${dbPath}-shm`, "shm");
     writeBytes(serverLogPath, "server");
     writeBytes(`${serverLogPath}.1`, "archive");
-    writeBytes(resolve(bbRoot, "environment-daemon-logs", "proj-1", "worktree-thread-1.log"), "envlog");
+    writeBytes(resolve(bbRoot, "environment-daemon-logs", "proj-1", "worktree-1.log"), "envlog");
     writeBytes(resolve(bbRoot, "worktrees", "proj-1", "thread-1", "README.md"), "workspace");
     writeBytes(resolve(bbRoot, "attachments", "proj-1", "image.png"), "img");
     writeBytes(resolve(bbRoot, "backups", "daily.sql"), "backup");

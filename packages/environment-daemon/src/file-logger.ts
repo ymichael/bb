@@ -11,7 +11,6 @@ const DEFAULT_ENVIRONMENT_AGENT_LOG_MAX_FILES = 3;
 
 export interface EnvironmentDaemonLogIdentity {
   projectId: string | undefined;
-  threadId: string | undefined;
   environmentId: string | undefined;
   runtimeEnv?: NodeJS.ProcessEnv;
 }
@@ -35,7 +34,6 @@ export function resolveEnvironmentDaemonLogFilePath(
 
   return resolveDefaultEnvironmentDaemonLogFilePath({
     projectId: env.BB_PROJECT_ID,
-    threadId: env.BB_THREAD_ID,
     environmentId: env.BB_ENVIRONMENT_ID,
     runtimeEnv: env,
   });
@@ -47,7 +45,7 @@ export function resolveDefaultEnvironmentDaemonLogFilePath(
   return join(
     resolveBbPath(identity.runtimeEnv, "environment-daemon-logs"),
     sanitizeSegment(identity.projectId),
-    `${sanitizeSegment(identity.environmentId)}-${sanitizeSegment(identity.threadId)}.log`,
+    `${sanitizeSegment(identity.environmentId)}.log`,
   );
 }
 

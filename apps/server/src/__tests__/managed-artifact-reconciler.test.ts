@@ -65,41 +65,37 @@ describe("managed artifact reconciler", () => {
 
     const liveThread = makeThread({
       id: "live-thread",
-      environmentId: "env-worktree-1",
+      environmentId: "env-live",
     });
     const recentArchivedThread = makeThread({
       id: "recent-archived",
-      environmentId: "env-worktree-1",
+      environmentId: "env-recent",
       archivedAt: now - (retentionMs / 2),
     });
     const expiredArchivedThread = makeThread({
       id: "expired-archived",
-      environmentId: "env-worktree-1",
+      environmentId: "env-expired",
       archivedAt: now - retentionMs - 1,
     });
 
     const liveLogPath = resolveDefaultEnvironmentDaemonLogFilePath({
       projectId: "proj-1",
-      threadId: liveThread.id,
-      environmentId: "env-worktree-1",
+      environmentId: "env-live",
       runtimeEnv: process.env,
     });
     const recentLogPath = resolveDefaultEnvironmentDaemonLogFilePath({
       projectId: "proj-1",
-      threadId: recentArchivedThread.id,
-      environmentId: "env-worktree-1",
+      environmentId: "env-recent",
       runtimeEnv: process.env,
     });
     const expiredLogPath = resolveDefaultEnvironmentDaemonLogFilePath({
       projectId: "proj-1",
-      threadId: expiredArchivedThread.id,
-      environmentId: "env-worktree-1",
+      environmentId: "env-expired",
       runtimeEnv: process.env,
     });
     const orphanLogPath = resolveDefaultEnvironmentDaemonLogFilePath({
       projectId: "proj-1",
-      threadId: "orphan-thread",
-      environmentId: "env-worktree-1",
+      environmentId: "env-orphan",
       runtimeEnv: process.env,
     });
 
