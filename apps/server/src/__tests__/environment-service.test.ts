@@ -650,7 +650,7 @@ describe("EnvironmentService", () => {
   });
 
   it("removes managed thread logs only when explicitly requested", () => {
-    const { service, thread, projectId } = createService({
+    const { service, thread, projectId, env } = createService({
       existsInitially: true,
     });
 
@@ -662,8 +662,24 @@ describe("EnvironmentService", () => {
 
     expect(removeEnvironmentDaemonDefaultLogArtifacts).toHaveBeenCalledWith({
       projectId,
-      environmentId: "worktree",
+      environmentId: env.id,
     });
+  });
+
+  it("does not remove logs from stale thread.environmentId when the attachment row is missing", () => {
+    const { service, attachmentRepo, thread } = createService({
+      existsInitially: true,
+    });
+
+    attachmentRepo.deleteByThreadId(thread.id, { nextThreadEnvironmentId: null });
+
+    service.removeManagedThreadLogs({
+      id: thread.id,
+      projectId: thread.projectId,
+      environmentId: thread.environmentId,
+    });
+
+    expect(removeEnvironmentDaemonDefaultLogArtifacts).not.toHaveBeenCalled();
   });
 
   it("does not treat thread.environmentId as attached when the attachment row is missing", () => {

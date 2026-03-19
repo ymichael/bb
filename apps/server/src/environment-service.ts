@@ -263,6 +263,17 @@ export class EnvironmentService {
     };
   }
 
+  private resolveCleanupEnvironmentId(
+    threadId: string,
+    fallbackThreadEnvironmentId?: string,
+  ): string | undefined {
+    if (this.threadEnvironmentAttachmentRepo) {
+      return this.resolveAttachedEnvironment(threadId)?.environmentId;
+    }
+    return fallbackThreadEnvironmentId?.trim() ??
+      this.threadRepo.getById(threadId)?.environmentId?.trim();
+  }
+
   private isThreadIsolatedWorkspaceEnvironment(threadId: string): boolean {
     const properties = this.resolveAttachedEnvironmentProperties(threadId);
     if (!properties) {
@@ -673,7 +684,7 @@ export class EnvironmentService {
     } catch (error) {
       this.callbacks.onCleanupFailure(
         threadId,
-        this.resolveAttachedEnvironment(threadId)?.environmentId ?? thread.environmentId ?? "unknown",
+        this.resolveCleanupEnvironmentId(threadId, thread.environmentId) ?? "unknown",
         error,
       );
       return;
@@ -901,7 +912,10 @@ export class EnvironmentService {
   removeManagedThreadLogs(
     thread: Pick<Thread, "id" | "projectId" | "environmentId">,
   ): void {
-    const environmentId = thread.environmentId?.trim();
+    const environmentId = this.resolveCleanupEnvironmentId(
+      thread.id,
+      thread.environmentId,
+    );
     if (!environmentId) {
       return;
     }
