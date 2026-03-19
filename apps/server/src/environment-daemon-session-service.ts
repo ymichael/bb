@@ -102,6 +102,10 @@ function createAbortError(): Error {
   return error;
 }
 
+function hasDuplicates(values: readonly string[]): boolean {
+  return new Set(values).size !== values.length;
+}
+
 async function delay(ms: number, signal?: AbortSignal): Promise<void> {
   if (ms <= 0) {
     return;
@@ -198,6 +202,20 @@ export class EnvironmentDaemonSessionService {
       throw new Error("No compatible environment-daemon session protocol version");
     }
 
+    const allowedChannelIds = this.listAllowedChannelIds(args.environmentId);
+    const requestedChannelIds = args.payload.channels.map((channel) => channel.channelId);
+    if (hasDuplicates(requestedChannelIds)) {
+      throw invalidRequestError("Environment-daemon session open payload contains duplicate channels");
+    }
+    const invalidChannelId = requestedChannelIds.find(
+      (channelId) => !allowedChannelIds.includes(channelId),
+    );
+    if (invalidChannelId) {
+      throw invalidRequestError(
+        `Environment-daemon session open payload contains unattached channel ${invalidChannelId}`,
+      );
+    }
+
     const selectedCapabilities: EnvironmentDaemonSessionCapabilities =
       negotiateEnvironmentDaemonSessionCapabilities({
         requested: args.payload.capabilities,
@@ -245,7 +263,7 @@ export class EnvironmentDaemonSessionService {
           heartbeatIntervalMs: this.heartbeatIntervalMs,
           protocolVersion: selectedProtocolVersion,
           selectedCapabilities,
-          channels: this.listAllowedChannelIds(args.environmentId).map((channelId) => {
+          channels: allowedChannelIds.map((channelId) => {
             const bootstrap = bootstrapByChannelId.get(channelId);
             let cursor = this.cursors.getByThreadId(channelId);
             if (cursor && bootstrap?.lastServerAcked === undefined) {
@@ -432,6 +450,10 @@ export class EnvironmentDaemonSessionService {
     const now = args.now ?? this.clock();
     const records = this.commandDispatcher.listDeliverableCommandRecords({
       sessionId: session.id,
+      ...(this.listAllowedChannelIds(args.environmentId).length === 1 &&
+      args.afterCursor !== undefined
+        ? { afterCursor: args.afterCursor }
+        : {}),
       limit: args.limit,
     });
 

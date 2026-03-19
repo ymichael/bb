@@ -240,6 +240,57 @@ describe("EnvironmentDaemonSessionService", () => {
     ]);
   });
 
+  it("rejects session bootstrap channels that are not attached to the environment", () => {
+    const { environmentId } = createTestIds();
+    const { threadId: detachedThreadId } = createTestIds();
+
+    expect(() =>
+      service.openSession({
+        environmentId,
+        now: 2_000,
+        payload: {
+          agentId: "agent-1",
+          agentInstanceId: "instance-1",
+          supportedProtocolVersions: [1],
+          channels: [
+            {
+              channelId: detachedThreadId,
+              generation: 1,
+            },
+          ],
+        },
+      }),
+    ).toThrow(
+      `Environment-daemon session open payload contains unattached channel ${detachedThreadId}`,
+    );
+  });
+
+  it("rejects duplicate session bootstrap channels", () => {
+    const { threadId, environmentId } = createTestIds();
+
+    expect(() =>
+      service.openSession({
+        environmentId,
+        now: 2_000,
+        payload: {
+          agentId: "agent-1",
+          agentInstanceId: "instance-1",
+          supportedProtocolVersions: [1],
+          channels: [
+            {
+              channelId: threadId,
+              generation: 1,
+            },
+            {
+              channelId: threadId,
+              generation: 2,
+            },
+          ],
+        },
+      }),
+    ).toThrow("Environment-daemon session open payload contains duplicate channels");
+  });
+
   it("accepts a session when the agent offers additional newer protocol versions", () => {
     const { threadId, environmentId } = createTestIds();
 
@@ -305,6 +356,10 @@ describe("EnvironmentDaemonSessionService", () => {
       cursors,
       {
         clock: () => TEST_LEASE_NOW,
+        listAttachedThreadIds: (candidateEnvironmentId) =>
+          candidateEnvironmentId === sharedEnvironment.id
+            ? [threadId, siblingThreadId]
+            : [],
       },
     );
 
@@ -429,6 +484,10 @@ describe("EnvironmentDaemonSessionService", () => {
               ? sharedEnvironment.id
               : undefined,
         }),
+        listAttachedThreadIds: (candidateEnvironmentId) =>
+          candidateEnvironmentId === sharedEnvironment.id
+            ? [threadId, siblingThreadId]
+            : [],
       },
     );
 
@@ -476,6 +535,53 @@ describe("EnvironmentDaemonSessionService", () => {
       expect.objectContaining({
         channelId: siblingThreadId,
         commandId: "cmd-thread-2",
+      }),
+    ]);
+  });
+
+  it("applies afterCursor for single-channel sessions", () => {
+    const { threadId, environmentId } = createTestIds();
+    const opened = service.openSession({
+      environmentId,
+      now: 1_000,
+      payload: {
+        agentId: "agent-1",
+        agentInstanceId: "instance-1",
+        supportedProtocolVersions: [1],
+        channels: [{ channelId: threadId, generation: 1 }],
+      },
+    }).session;
+
+    const first = commands.enqueue({
+      id: "cmd-1",
+      threadId,
+      sessionId: opened.id,
+      commandType: "provider.ensure",
+      payload: { initialize: null, command: "codex", args: ["exec"] },
+      now: 1_500,
+    });
+    const second = commands.enqueue({
+      id: "cmd-2",
+      threadId,
+      sessionId: opened.id,
+      commandType: "provider.ensure",
+      payload: { initialize: null, command: "codex", args: ["exec"] },
+      now: 1_600,
+    });
+
+    const listed = service.listCommands({
+      environmentId,
+      sessionId: opened.id,
+      afterCursor: first.commandCursor,
+      limit: 50,
+      now: 2_000,
+    });
+
+    expect(listed.payload.commands).toEqual([
+      expect.objectContaining({
+        channelId: threadId,
+        commandId: second.id,
+        commandCursor: second.commandCursor,
       }),
     ]);
   });
