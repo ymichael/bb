@@ -100,6 +100,14 @@ const CLAUDE_DEFAULT_MODEL_PREFERENCES = [
   "claude-haiku-4-5",
 ] as const;
 
+const CLAUDE_CODE_AUTH_ENV_VARS = [
+  "ANTHROPIC_API_KEY",
+  "CLAUDE_CODE_OAUTH_TOKEN",
+  "CLAUDE_CODE_USE_BEDROCK",
+  "CLAUDE_CODE_USE_VERTEX",
+  "CLAUDE_CODE_USE_FOUNDRY",
+] as const;
+
 function normalizeProviderEventType(type: string): string {
   return type.toLowerCase().replaceAll(".", "/");
 }
@@ -118,8 +126,52 @@ function decodeClaudeRoutingThreadId(value: unknown): string | undefined {
   return (
     (typeof payload.providerThreadId === "string"
       ? payload.providerThreadId
+      : undefined) ??
+    (typeof payload.provider_thread_id === "string"
+      ? payload.provider_thread_id
       : undefined)
   );
+}
+
+function resolveClaudeCodeLaunchEnv(
+  launchEnv?: Record<string, string>,
+): Record<string, string> {
+  const env: Record<string, string> = {};
+
+  for (const varName of CLAUDE_CODE_AUTH_ENV_VARS) {
+    const value = process.env[varName];
+    if (value) {
+      env[varName] = value;
+    }
+  }
+
+  if (launchEnv) {
+    Object.assign(env, launchEnv);
+  }
+
+  return env;
+}
+
+function isClaudeCodeAuthConfigured(launchEnv?: Record<string, string>): boolean {
+  const env = resolveClaudeCodeLaunchEnv(launchEnv);
+  return CLAUDE_CODE_AUTH_ENV_VARS.some((varName) => {
+    const value = env[varName];
+    return typeof value === "string" && value.trim().length > 0;
+  });
+}
+
+function decodeClaudeCodeAgentMessageText(data: unknown): string | undefined {
+  const decoded = decodeThreadEventData(data);
+  if (decoded.item?.normalizedType !== "agentmessage") {
+    return undefined;
+  }
+  return decoded.item.text.text || undefined;
+}
+
+function isClaudeCodeAuthFailureMessage(message: string | undefined): boolean {
+  const normalized = message?.toLowerCase();
+  if (!normalized) return false;
+  return normalized.includes("not logged in") || normalized.includes("please run /login");
 }
 
 function resolveBaseInstructions(developerInstructions?: string): string {
@@ -411,32 +463,15 @@ export function createClaudeCodeProviderAdapter(
     async resolveLaunchConfiguration(): Promise<
       ProviderLaunchConfiguration | undefined
     > {
-      const env: Record<string, string> = {};
-
-      // Pass auth credentials from the process environment.
-      // ANTHROPIC_API_KEY is the standard API key; CLAUDE_CODE_OAUTH_TOKEN
-      // is a long-lived token generated via `claude setup-token` for
-      // Claude subscription holders.
-      const AUTH_ENV_VARS = [
-        "ANTHROPIC_API_KEY",
-        "CLAUDE_CODE_OAUTH_TOKEN",
-        "CLAUDE_CODE_USE_BEDROCK",
-        "CLAUDE_CODE_USE_VERTEX",
-        "CLAUDE_CODE_USE_FOUNDRY",
-      ] as const;
-      for (const varName of AUTH_ENV_VARS) {
-        const value = process.env[varName];
-        if (value) {
-          env[varName] = value;
-        }
-      }
-
-      if (opts?.launchEnv) {
-        Object.assign(env, opts.launchEnv);
-      }
-
+      const env = resolveClaudeCodeLaunchEnv(opts?.launchEnv);
       if (Object.keys(env).length === 0) return undefined;
       return { env };
+    },
+    preflightSessionStart(): string | undefined {
+      if (isClaudeCodeAuthConfigured(opts?.launchEnv)) {
+        return undefined;
+      }
+      return "Claude Code authentication is unavailable. Set ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN.";
     },
     clientInfo: {
       name: "bb",
@@ -536,13 +571,22 @@ export function createClaudeCodeProviderAdapter(
       if (normalized === "item/agentmessage/delta") return false;
       return true;
     },
-    statusForEvent(method: string): Thread["status"] | undefined {
+    statusForEvent(method: string, data: unknown): Thread["status"] | undefined {
       const normalized = normalizeProviderEventType(method);
       if (normalized === "turn/start" || normalized === "turn/started") {
         return "active";
       }
       if (normalized === "turn/completed" || normalized === "turn/end") {
         return "idle";
+      }
+      if (normalized === "error") {
+        return "error";
+      }
+      if (
+        normalized === "item/completed" &&
+        isClaudeCodeAuthFailureMessage(decodeClaudeCodeAgentMessageText(data))
+      ) {
+        return "error";
       }
       return undefined;
     },

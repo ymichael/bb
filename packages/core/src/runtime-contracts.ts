@@ -122,6 +122,10 @@ export interface ProviderAdapter {
     | ProviderLaunchConfiguration
     | Promise<ProviderLaunchConfiguration | undefined>
     | undefined;
+  preflightSessionStart?():
+    | string
+    | undefined
+    | Promise<string | undefined>;
   clientInfo: { name: string; version: string };
   initializeMethod: string;
   createInitializeParams?(
@@ -165,7 +169,7 @@ export interface ProviderAdapter {
   normalizeEventType(type: string): string;
   shouldPersistEvent?(method: string, data: unknown): boolean;
   shouldBroadcastForEvent(method: string): boolean;
-  statusForEvent(method: string): Thread["status"] | undefined;
+  statusForEvent(method: string, data: unknown): Thread["status"] | undefined;
   titleFromEvent(method: string, data: unknown): string | undefined;
   outputFromEvent(event: ThreadEvent): string | undefined;
   listModels(): Promise<AvailableModel[]>;

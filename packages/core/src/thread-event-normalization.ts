@@ -168,6 +168,36 @@ function getNestedRecordCandidates(
   );
 }
 
+function decodeProviderThreadId(
+  candidates: Record<string, unknown>[],
+  providerId?: string,
+): string | undefined {
+  const explicitProviderThreadId = candidates
+    .map((candidate) => getStringField(candidate, "providerThreadId"))
+    .find((value): value is string => Boolean(value));
+  if (explicitProviderThreadId) {
+    return explicitProviderThreadId;
+  }
+
+  const normalizedProviderId = providerId?.trim().toLowerCase();
+  const allowThreadIdFallback = normalizedProviderId !== "claude-code";
+  return candidates
+    .map((candidate) => {
+      return (
+        (allowThreadIdFallback
+          ? (
+              getStringField(candidate, "threadId") ??
+              getStringField(candidate, "thread_id") ??
+              getStringField(toRecord(candidate.thread), "id")
+            )
+          : undefined) ??
+        getStringField(candidate, "conversationId") ??
+        getStringField(candidate, "conversation_id")
+      );
+    })
+    .find((value): value is string => Boolean(value)) ?? undefined;
+}
+
 function decodeItem(root: Record<string, unknown>): DecodedThreadEventItem | null {
   const candidates = getNestedRecordCandidates(root);
   const rawItem =
@@ -217,27 +247,7 @@ export function decodeThreadEventData(
     getStringField(payload, "id") ??
     undefined;
 
-  const providerThreadId =
-    candidates
-      .map((candidate) => {
-        const explicitProviderThreadId =
-          getStringField(candidate, "providerThreadId") ??
-          getStringField(candidate, "provider_thread_id");
-        if (explicitProviderThreadId) {
-          return explicitProviderThreadId;
-        }
-        if (providerId === "claude-code") {
-          return undefined;
-        }
-        return (
-          getStringField(candidate, "threadId") ??
-          getStringField(candidate, "thread_id") ??
-          getStringField(candidate, "conversationId") ??
-          getStringField(candidate, "conversation_id") ??
-          getStringField(toRecord(candidate.thread), "id")
-        );
-      })
-      .find((value): value is string => Boolean(value)) ?? undefined;
+  const providerThreadId = decodeProviderThreadId(candidates, providerId);
 
   const item = decodeItem(payload);
   const itemId =

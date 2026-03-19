@@ -235,6 +235,15 @@ function outputFromEvent(event: ThreadEvent): string | undefined {
   return decoded.item.text.text || undefined;
 }
 
+async function hasPiModelsAvailable(listModels: () => Promise<AvailableModel[]>): Promise<boolean> {
+  try {
+    const models = await listModels();
+    return models.length > 0;
+  } catch {
+    return true;
+  }
+}
+
 function resolveBridgePath(): string {
   return resolve(__dirname, "..", "..", "pi-bridge", "dist", "bridge.js");
 }
@@ -278,6 +287,13 @@ export function createPiProviderAdapter(
 
       if (Object.keys(env).length === 0) return undefined;
       return { env };
+    },
+    async preflightSessionStart(): Promise<string | undefined> {
+      const hasModels = await hasPiModelsAvailable(listModels);
+      if (hasModels) {
+        return undefined;
+      }
+      return "Pi authentication or model selection is unavailable. Use /login to configure a provider and choose a model.";
     },
     clientInfo: {
       name: "bb",
@@ -376,10 +392,11 @@ export function createPiProviderAdapter(
       if (normalized === "item/agentmessage/delta") return false;
       return true;
     },
-    statusForEvent(method: string): Thread["status"] | undefined {
+    statusForEvent(method: string, _data: unknown): Thread["status"] | undefined {
       const normalized = normalizeProviderEventType(method);
       if (normalized === "turn/start" || normalized === "turn/started") return "active";
       if (normalized === "turn/completed" || normalized === "turn/end") return "idle";
+      if (normalized === "error") return "error";
       return undefined;
     },
     titleFromEvent(_method: string, _data: unknown): string | undefined {

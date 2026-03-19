@@ -174,6 +174,10 @@ export class ProviderSessionController {
     context: ProviderThreadContext;
     providerLaunch?: EnvironmentDaemonProviderLaunchWrapper;
   }): Promise<{ providerThreadId?: string }> {
+    const preflightError = await this.opts.provider.preflightSessionStart?.();
+    if (preflightError) {
+      throw new ProviderSessionError("provider_rpc_error", preflightError);
+    }
     await this.ensureProviderRunningForCommand(
       args.client,
       args.context,
@@ -206,6 +210,10 @@ export class ProviderSessionController {
     providerLaunch?: EnvironmentDaemonProviderLaunchWrapper;
     dynamicTools?: ProviderDynamicTool[];
   }): Promise<{ providerThreadId?: string }> {
+    const preflightError = await this.opts.provider.preflightSessionStart?.();
+    if (preflightError) {
+      throw new ProviderSessionError("provider_rpc_error", preflightError);
+    }
     await this.ensureProviderRunningForCommand(
       args.client,
       args.context,
@@ -423,7 +431,10 @@ export class ProviderSessionController {
     if (typeof msg.method !== "string") return;
 
     const normalizedMethod = this.opts.provider.normalizeEventType(msg.method);
-    const turnState = toTurnLifecycleState(normalizedMethod);
+    const nextStatus = this.opts.provider.statusForEvent(msg.method, msg.params ?? {});
+    const turnState =
+      toTurnLifecycleState(normalizedMethod) ??
+      (nextStatus === "error" ? "idle" : undefined);
     const turnId = extractTurnIdFromPersistedEventData(msg.params);
 
     this.opts.onNotification?.(threadId, {
@@ -437,7 +448,7 @@ export class ProviderSessionController {
       }),
       shouldPersist: this.opts.provider.shouldPersistEvent?.(msg.method, msg.params) !== false,
       shouldBroadcast: this.opts.provider.shouldBroadcastForEvent(msg.method),
-      nextStatus: this.opts.provider.statusForEvent(msg.method),
+      nextStatus,
       title: this.opts.provider.titleFromEvent(msg.method, msg.params ?? {}),
       ...(turnState ? { turnState } : {}),
       ...(turnId ? { turnId } : {}),

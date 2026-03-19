@@ -54,6 +54,7 @@ describe("EnvironmentDaemonSessionCommandClient", () => {
   });
 
   afterEach(() => {
+    vi.unstubAllEnvs();
     sqlite.close();
   });
 
@@ -445,6 +446,8 @@ describe("EnvironmentDaemonSessionCommandClient", () => {
   });
 
   it("treats explicit null providerThreadId results as unknown provider metadata", async () => {
+    vi.stubEnv("ANTHROPIC_API_KEY", "test-key");
+
     const thread = createThreadRecord();
     const client = createSessionClient({
       threadId: thread.threadId,
@@ -491,6 +494,46 @@ describe("EnvironmentDaemonSessionCommandClient", () => {
       }),
       state: "completed",
     });
+  });
+
+  it("fails Claude starts before launching the provider when auth is unavailable", async () => {
+    vi.stubEnv("ANTHROPIC_API_KEY", "");
+    vi.stubEnv("CLAUDE_CODE_OAUTH_TOKEN", "");
+    vi.stubEnv("CLAUDE_CODE_USE_BEDROCK", "");
+    vi.stubEnv("CLAUDE_CODE_USE_VERTEX", "");
+    vi.stubEnv("CLAUDE_CODE_USE_FOUNDRY", "");
+
+    const thread = createThreadRecord();
+    const client = createSessionClient({
+      threadId: thread.threadId,
+      sessionId: "sess-claude-preflight",
+    });
+    const server = new ProviderSessionController({
+      provider: createClaudeCodeProviderAdapter(),
+    });
+
+    await expect(
+      server.startThreadCommand({
+        client,
+        threadId: thread.threadId,
+        projectId: thread.projectId,
+        request: {
+          projectId: thread.projectId,
+          input: [{ type: "text", text: "hello" }],
+        },
+        context: {
+          projectId: thread.projectId,
+          threadId: thread.threadId,
+          path: process.env.PATH ?? "",
+        },
+      }),
+    ).rejects.toMatchObject({
+      code: "provider_rpc_error",
+      message:
+        "Claude Code authentication is unavailable. Set ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN.",
+    });
+
+    expect(commands.listPendingByThreadId(thread.threadId)).toHaveLength(0);
   });
 
   it("omits activeTurnId from auto turn.run commands when execution overrides require a new turn", async () => {

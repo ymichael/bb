@@ -19,7 +19,11 @@ import {
   toRecord,
 } from "@bb/core";
 import { renderTemplate } from "@bb/templates";
-import { resolveCodexProviderLaunchConfiguration } from "./codex-auth.js";
+import {
+  hasCodexAuth,
+  readCodexAuthFile,
+  resolveCodexProviderLaunchConfiguration,
+} from "./codex-auth.js";
 import { listCodexModels } from "./codex-models.js";
 import type {
   ProviderAdapter,
@@ -230,6 +234,31 @@ function outputFromEvent(event: ThreadEvent): string | undefined {
   return decoded.item.text.text || undefined;
 }
 
+function extractCodexErrorMessage(data: unknown): string | undefined {
+  const record = toRecord(data);
+  if (!record) return undefined;
+
+  const error = toRecord(record.error);
+  return (
+    (typeof record.message === "string" ? record.message : undefined) ??
+    (typeof error?.message === "string" ? error.message : undefined)
+  );
+}
+
+function isTerminalCodexErrorPayload(data: unknown): boolean {
+  const message = extractCodexErrorMessage(data)?.toLowerCase();
+  if (!message) return false;
+
+  return (
+    message.includes("401") &&
+    (
+      message.includes("unauthorized") ||
+      message.includes("authentication") ||
+      message.includes("api key")
+    )
+  );
+}
+
 export interface CreateCodexProviderAdapterOptions {
   id?: ThreadProviderId;
   displayName?: string;
@@ -270,6 +299,18 @@ export function createCodexProviderAdapter(
           ...opts.launchEnv,
         },
       };
+    },
+    async preflightSessionStart(): Promise<string | undefined> {
+      if (opts?.launchEnv?.OPENAI_API_KEY?.trim() || process.env.OPENAI_API_KEY?.trim()) {
+        return undefined;
+      }
+
+      const authFile = await readCodexAuthFile();
+      if (hasCodexAuth(authFile)) {
+        return undefined;
+      }
+
+      return "Codex authentication is unavailable. Run `codex login` or set OPENAI_API_KEY.";
     },
     clientInfo: {
       name: "bb",
@@ -398,13 +439,16 @@ export function createCodexProviderAdapter(
       if (normalized === "item/reasoning/summarypartadded") return false;
       return true;
     },
-    statusForEvent(method: string): Thread["status"] | undefined {
+    statusForEvent(method: string, data: unknown): Thread["status"] | undefined {
       const normalized = normalizeProviderEventType(method);
       if (normalized === "turn/start" || normalized === "turn/started") {
         return "active";
       }
       if (normalized === "turn/completed" || normalized === "turn/end") {
         return "idle";
+      }
+      if (normalized === "error" && isTerminalCodexErrorPayload(data)) {
+        return "error";
       }
       // Open provider/runtime set: ignore unrelated provider event methods.
       return undefined;

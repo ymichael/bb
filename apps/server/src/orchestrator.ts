@@ -5132,6 +5132,7 @@ export class Orchestrator implements ThreadOrchestrator {
     event: ProviderSessionNotification,
   ): string | undefined {
     const payload = toRecord(unwrapProviderEventPayload(event.eventData));
+    const currentThread = this.threadRepo.getById(threadId);
     const routingThreadId =
       getStringField(payload, "threadId") ??
       getStringField(payload, "thread_id") ??
@@ -5146,10 +5147,11 @@ export class Orchestrator implements ThreadOrchestrator {
     const providerId =
       decodeProviderEventEnvelope(event.eventData)?.__bb_provider_event.providerId;
     if (!providerThreadId) {
-      return threadId;
+      return !providerId || currentThread?.providerId === providerId
+        ? threadId
+        : undefined;
     }
 
-    const currentThread = this.threadRepo.getById(threadId);
     const currentProviderThreadId =
       this.providerThreadIdByThreadId.get(threadId) ??
       this._resolvePersistedProviderThreadId(threadId);

@@ -19,9 +19,10 @@ describe("pi provider adapter", () => {
 
   it("derives status transitions from turn lifecycle events", () => {
     const adapter = createPiProviderAdapter();
-    expect(adapter.statusForEvent("turn/started")).toBe("active");
-    expect(adapter.statusForEvent("turn/completed")).toBe("idle");
-    expect(adapter.statusForEvent("item/completed")).toBeUndefined();
+    expect(adapter.statusForEvent("turn/started", {})).toBe("active");
+    expect(adapter.statusForEvent("turn/completed", {})).toBe("idle");
+    expect(adapter.statusForEvent("item/completed", {})).toBeUndefined();
+    expect(adapter.statusForEvent("error", {})).toBe("error");
   });
 
   it("advertises trimmed capabilities", () => {

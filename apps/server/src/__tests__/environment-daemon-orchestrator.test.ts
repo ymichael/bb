@@ -1174,4 +1174,62 @@ describe("Orchestrator environment-daemon delivery and replay", () => {
 
     expect(providerThreadId).toBe("provider-thread-1");
   });
+
+  it("recovers Claude provider session ids from persisted events after relaunch", () => {
+    const env = createTestEnvironment(environmentRepo, projectId);
+    const thread = createTestThread(threadRepo, projectId, {
+      status: "idle",
+      environmentId: env.id,
+      providerId: "claude-code",
+    });
+
+    eventRepo.create({
+      threadId: thread.id,
+      seq: 1,
+      type: "thread/started",
+      data: {
+        __bb_provider_event: {
+          schema: "bb/provider-event-envelope",
+          version: 1,
+          providerId: "claude-code",
+          method: "thread/started",
+          observedAt: 1_000,
+        },
+        payload: {
+          threadId: thread.id,
+          providerThreadId: "claude-session-1",
+        },
+      },
+    });
+    eventRepo.create({
+      threadId: thread.id,
+      seq: 2,
+      type: "item/completed",
+      data: {
+        __bb_provider_event: {
+          schema: "bb/provider-event-envelope",
+          version: 1,
+          providerId: "claude-code",
+          method: "item/completed",
+          observedAt: 1_100,
+        },
+        payload: {
+          threadId: thread.id,
+          turnId: "claude-turn-1",
+          item: {
+            type: "agentMessage",
+            text: "follow-up reply",
+          },
+        },
+      },
+    });
+
+    const providerThreadId = (
+      manager as unknown as {
+        _resolvePersistedProviderThreadId: (threadId: string) => string | undefined;
+      }
+    )._resolvePersistedProviderThreadId(thread.id);
+
+    expect(providerThreadId).toBe("claude-session-1");
+  });
 });

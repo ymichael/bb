@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   buildClaudeCodeAvailableModels,
   createClaudeCodeProviderAdapter,
@@ -6,6 +6,10 @@ import {
 } from "../claude-code-provider-adapter.js";
 
 describe("claude-code provider adapter", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   it("has correct identity", () => {
     const adapter = createClaudeCodeProviderAdapter();
     expect(adapter.id).toBe("claude-code");
@@ -20,9 +24,21 @@ describe("claude-code provider adapter", () => {
 
   it("derives status transitions from turn lifecycle events", () => {
     const adapter = createClaudeCodeProviderAdapter();
-    expect(adapter.statusForEvent("turn/start")).toBe("active");
-    expect(adapter.statusForEvent("turn/completed")).toBe("idle");
-    expect(adapter.statusForEvent("item/completed")).toBeUndefined();
+    expect(adapter.statusForEvent("turn/start", {})).toBe("active");
+    expect(adapter.statusForEvent("turn/completed", {})).toBe("idle");
+    expect(adapter.statusForEvent("item/completed", {})).toBeUndefined();
+  });
+
+  it("treats Claude login prompts as terminal auth failures", () => {
+    const adapter = createClaudeCodeProviderAdapter();
+    expect(
+      adapter.statusForEvent("item/completed", {
+        item: {
+          type: "agentMessage",
+          text: "Not logged in · Please run /login",
+        },
+      }),
+    ).toBe("error");
   });
 
   it("suppresses delta events from persistence and broadcast", () => {
@@ -160,12 +176,31 @@ describe("claude-code provider adapter", () => {
         threadId: "bb-thread-1",
         provider_thread_id: "claude-session-1",
       }),
-    ).toBeUndefined();
+    ).toBe("claude-session-1");
     expect(
       adapter.extractThreadIdFromEventData({
         threadId: "bb-thread-1",
         thread_id: "bb-thread-1",
       }),
     ).toBeUndefined();
+    expect(
+      adapter.extractThreadIdFromResult({
+        threadId: "bb-thread-1",
+        providerThreadId: null,
+      }),
+    ).toBeUndefined();
+  });
+
+  it("fails preflight when Claude auth is unavailable", () => {
+    vi.stubEnv("ANTHROPIC_API_KEY", "");
+    vi.stubEnv("CLAUDE_CODE_OAUTH_TOKEN", "");
+    vi.stubEnv("CLAUDE_CODE_USE_BEDROCK", "");
+    vi.stubEnv("CLAUDE_CODE_USE_VERTEX", "");
+    vi.stubEnv("CLAUDE_CODE_USE_FOUNDRY", "");
+
+    const adapter = createClaudeCodeProviderAdapter();
+    expect(adapter.preflightSessionStart?.()).toBe(
+      "Claude Code authentication is unavailable. Set ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN.",
+    );
   });
 });

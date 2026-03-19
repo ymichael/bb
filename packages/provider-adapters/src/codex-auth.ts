@@ -56,6 +56,14 @@ export function resolveApiKeyFromCodexAuthFile(authFile: CodexAuthFile | null): 
   return null;
 }
 
+export function hasCodexAuth(authFile: CodexAuthFile | null): boolean {
+  if (resolveApiKeyFromCodexAuthFile(authFile)) {
+    return true;
+  }
+  return typeof authFile?.tokens?.access_token === "string" &&
+    authFile.tokens.access_token.trim().length > 0;
+}
+
 export async function resolveCodexProviderLaunchConfiguration(): Promise<ProviderLaunchConfiguration | undefined> {
   const env: Record<string, string> = {};
   const apiKey = process.env.OPENAI_API_KEY?.trim();

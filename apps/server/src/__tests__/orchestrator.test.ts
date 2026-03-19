@@ -885,7 +885,7 @@ describe("Orchestrator", () => {
           type: "item/completed",
         }),
       );
-      expect(eventRepo.listByThread(claudeThread.id)).toContainEqual(
+      expect(eventRepo.listByThread(claudeThread.id)).not.toContainEqual(
         expect.objectContaining({
           threadId: claudeThread.id,
           type: "item/completed",
@@ -964,6 +964,91 @@ describe("Orchestrator", () => {
           }
         ).providerThreadIdByThreadId.get(claudeThread.id),
       ).toBe("claude-session-1");
+    });
+
+    it("does not overwrite Claude provider session ids with BB thread ids on follow-up events", () => {
+      const env = environmentRepo.create({
+        projectId: project.id,
+        descriptor: { type: "path", path: "/tmp/env" },
+        managed: true,
+      });
+      const claudeThread = createTestThread(threadRepo, project.id, {
+        status: "idle",
+        environmentId: env.id,
+        providerId: "claude-code",
+      });
+      attachmentRepo.attachThread({ threadId: claudeThread.id, environmentId: env.id });
+
+      manager = new Orchestrator(
+        threadRepo,
+        eventRepo,
+        projectRepo,
+        ws,
+        llmCompletionService,
+        undefined,
+        createTestRuntimeEnv(),
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        attachmentRepo as never,
+      );
+
+      const rawManager = manager as unknown as {
+        _handleAgentServerNotification: (threadId: string, event: unknown) => void;
+        providerThreadIdByThreadId: Map<string, string>;
+      };
+
+      rawManager._handleAgentServerNotification(claudeThread.id, {
+        method: "thread/started",
+        normalizedMethod: "thread/started",
+        eventType: "thread/started",
+        eventData: {
+          __bb_provider_event: {
+            schema: "bb/provider-event-envelope",
+            version: 1,
+            providerId: "claude-code",
+            method: "thread/started",
+            observedAt: 1_234,
+          },
+          payload: {
+            threadId: claudeThread.id,
+            providerThreadId: "claude-session-1",
+          },
+        },
+        shouldPersist: true,
+        shouldBroadcast: false,
+      });
+
+      rawManager._handleAgentServerNotification(claudeThread.id, {
+        method: "item/completed",
+        normalizedMethod: "item/completed",
+        eventType: "item/completed",
+        eventData: {
+          __bb_provider_event: {
+            schema: "bb/provider-event-envelope",
+            version: 1,
+            providerId: "claude-code",
+            method: "item/completed",
+            observedAt: 1_235,
+          },
+          payload: {
+            threadId: claudeThread.id,
+            turnId: "claude-turn-1",
+            item: { type: "agentMessage", text: "hello from claude" },
+          },
+        },
+        shouldPersist: true,
+        shouldBroadcast: false,
+      });
+
+      expect(rawManager.providerThreadIdByThreadId.get(claudeThread.id)).toBe(
+        "claude-session-1",
+      );
     });
 
     it("drops ambiguous shared environment provider events for the same provider", () => {

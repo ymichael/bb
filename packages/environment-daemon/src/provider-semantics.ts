@@ -106,7 +106,7 @@ function normalizeCommonEvent(
   const normalizedMethod = provider.normalizeEventType(method);
   const turnState = toTurnState(normalizedMethod);
   const turnId = getStringField(toRecord(payload), "turnId") ?? undefined;
-  const providerStatus = provider.statusForEvent(method);
+  const providerStatus = provider.statusForEvent(method, payload);
   const providerTitle = provider.titleFromEvent(method, payload);
 
   return {

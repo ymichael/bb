@@ -61,6 +61,21 @@ describe("codex provider adapter", () => {
     });
   });
 
+  it("treats 401 auth errors as terminal thread failures", () => {
+    const adapter = createCodexProviderAdapter();
+
+    expect(
+      adapter.statusForEvent("error", {
+        message: "OpenAI API error 401 Unauthorized: invalid api key",
+      }),
+    ).toBe("error");
+    expect(
+      adapter.statusForEvent("error", {
+        message: "temporary network error",
+      }),
+    ).toBeUndefined();
+  });
+
   it("lists models through the injected implementation", async () => {
     mockedListCodexModels.mockResolvedValue([
       {
