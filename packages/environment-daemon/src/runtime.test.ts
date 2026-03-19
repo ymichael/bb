@@ -4,8 +4,8 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type { ProviderThreadContext, SpawnThreadRequest } from "@bb/core";
 import { createCodexProviderAdapter } from "@bb/provider-adapters";
-import { EnvironmentAgentRuntime } from "./runtime.js";
-import { ENVIRONMENT_AGENT_PROTOCOL_VERSION, type EnvironmentAgentProviderSpec } from "./protocol.js";
+import { EnvironmentDaemonRuntime } from "./runtime.js";
+import { ENVIRONMENT_DAEMON_PROTOCOL_VERSION, type EnvironmentDaemonProviderSpec } from "./protocol.js";
 
 const cleanup: Array<() => Promise<void> | void> = [];
 
@@ -34,15 +34,15 @@ function createThreadContext(
   };
 }
 
-describe("EnvironmentAgentRuntime", () => {
+describe("EnvironmentDaemonRuntime", () => {
   it("records sequenced events and reports basic status", () => {
-    const runtime = new EnvironmentAgentRuntime({ threadId: "thread-1", providerId: "codex" });
+    const runtime = new EnvironmentDaemonRuntime({ threadId: "thread-1", providerId: "codex" });
 
     runtime.appendEvent({ type: "environment.ready", threadId: "thread-1" });
     runtime.appendEvent({ type: "workspace.status.changed", threadId: "thread-1" });
 
     expect(runtime.getStatusSnapshot()).toMatchObject({
-      protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+      protocolVersion: ENVIRONMENT_DAEMON_PROTOCOL_VERSION,
       latestSequence: 2,
       pendingEventCount: 2,
       pendingCommandCount: 0,
@@ -53,7 +53,7 @@ describe("EnvironmentAgentRuntime", () => {
   });
 
   it("updates daemon delivery status for retry visibility", () => {
-    const runtime = new EnvironmentAgentRuntime({ threadId: "thread-1", providerId: "codex" });
+    const runtime = new EnvironmentDaemonRuntime({ threadId: "thread-1", providerId: "codex" });
 
     runtime.appendEvent({ type: "environment.ready", threadId: "thread-1" });
     runtime.setDaemonDeliveryState({
@@ -80,7 +80,7 @@ describe("EnvironmentAgentRuntime", () => {
   });
 
   it("publishes appended events to subscribers", () => {
-    const runtime = new EnvironmentAgentRuntime({ threadId: "thread-1", providerId: "codex" });
+    const runtime = new EnvironmentDaemonRuntime({ threadId: "thread-1", providerId: "codex" });
     const events: Array<{ sequence: number; type: string }> = [];
     const unsubscribe = runtime.subscribeToEvents((event) => {
       events.push({ sequence: event.sequence, type: event.event.type });
@@ -97,7 +97,7 @@ describe("EnvironmentAgentRuntime", () => {
   });
 
   it("tracks quiescence lifecycle state from provider events and command failures", async () => {
-    const runtime = new EnvironmentAgentRuntime({
+    const runtime = new EnvironmentDaemonRuntime({
       threadId: "thread-1",
       providerId: "codex",
     });
@@ -137,7 +137,7 @@ describe("EnvironmentAgentRuntime", () => {
 
     const ack = await runtime.executeCommand({
       meta: {
-        protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+        protocolVersion: ENVIRONMENT_DAEMON_PROTOCOL_VERSION,
         commandId: "cmd-fail-1",
         idempotencyKey: "cmd-fail-1",
         sentAt: 123,
@@ -161,7 +161,7 @@ describe("EnvironmentAgentRuntime", () => {
   });
 
   it("does not require a provider at startup when launched in control-plane mode", () => {
-    const runtime = new EnvironmentAgentRuntime({ threadId: "thread-1" });
+    const runtime = new EnvironmentDaemonRuntime({ threadId: "thread-1" });
 
     expect(runtime.start()).toBeNull();
     expect(runtime.getProviderStatus()).toEqual({
@@ -174,7 +174,7 @@ describe("EnvironmentAgentRuntime", () => {
     const tempHome = await mkdtemp(join(tmpdir(), "bb-env-daemon-runtime-"));
     cleanup.push(() => rm(tempHome, { recursive: true, force: true }));
 
-    const runtime = new EnvironmentAgentRuntime({ threadId: "thread-1" });
+    const runtime = new EnvironmentDaemonRuntime({ threadId: "thread-1" });
     const lines: string[] = [];
     const unsubscribe = runtime.subscribeToProviderStdout((line) => {
       lines.push(line);
@@ -231,7 +231,7 @@ describe("EnvironmentAgentRuntime", () => {
         },
       ],
     });
-    const runtime = new EnvironmentAgentRuntime({
+    const runtime = new EnvironmentDaemonRuntime({
       threadId: "thread-1",
       providerId: "codex",
       createProviderAdapter: () => providerAdapter,
@@ -239,7 +239,7 @@ describe("EnvironmentAgentRuntime", () => {
 
     const ack = await runtime.executeCommand({
       meta: {
-        protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+        protocolVersion: ENVIRONMENT_DAEMON_PROTOCOL_VERSION,
         commandId: "cmd-models-1",
         idempotencyKey: "cmd-models-1",
         sentAt: 123,
@@ -256,14 +256,14 @@ describe("EnvironmentAgentRuntime", () => {
   });
 
   it("lists provider catalog through a BB-native env-daemon command", async () => {
-    const runtime = new EnvironmentAgentRuntime({
+    const runtime = new EnvironmentDaemonRuntime({
       threadId: "thread-1",
       providerId: "codex",
     });
 
     const ack = await runtime.executeCommand({
       meta: {
-        protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+        protocolVersion: ENVIRONMENT_DAEMON_PROTOCOL_VERSION,
         commandId: "cmd-provider-catalog-1",
         idempotencyKey: "cmd-provider-catalog-1",
         sentAt: 123,
@@ -279,7 +279,7 @@ describe("EnvironmentAgentRuntime", () => {
   });
 
   it("accepts explicit commands and forwards them to the provider transport", async () => {
-    const runtime = new EnvironmentAgentRuntime({
+    const runtime = new EnvironmentDaemonRuntime({
       threadId: "thread-1",
       providerId: "codex",
       providerCommand: "node",
@@ -308,7 +308,7 @@ describe("EnvironmentAgentRuntime", () => {
 
     const ack = await runtime.executeCommand({
       meta: {
-        protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+        protocolVersion: ENVIRONMENT_DAEMON_PROTOCOL_VERSION,
         commandId: "cmd-1",
         idempotencyKey: "idem-1",
         sentAt: 123,
@@ -334,13 +334,13 @@ describe("EnvironmentAgentRuntime", () => {
   });
 
   it("accepts provider.ensure commands and returns provider status", async () => {
-    const runtime = new EnvironmentAgentRuntime({
+    const runtime = new EnvironmentDaemonRuntime({
       threadId: "thread-1",
     });
 
     const ack = await runtime.executeCommand({
       meta: {
-        protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+        protocolVersion: ENVIRONMENT_DAEMON_PROTOCOL_VERSION,
         commandId: "cmd-provider-1",
         idempotencyKey: "idem-provider-1",
         sentAt: 123,
@@ -369,7 +369,7 @@ describe("EnvironmentAgentRuntime", () => {
   });
 
   it("routes provider notifications to the mapped shared thread channel", async () => {
-    const runtime = new EnvironmentAgentRuntime({
+    const runtime = new EnvironmentDaemonRuntime({
       threadId: "owner-thread",
       providerId: "codex",
       providerCommand: "node",
@@ -416,7 +416,7 @@ describe("EnvironmentAgentRuntime", () => {
 
     await runtime.executeCommand({
       meta: {
-        protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+        protocolVersion: ENVIRONMENT_DAEMON_PROTOCOL_VERSION,
         commandId: "cmd-start-1",
         idempotencyKey: "cmd-start-1",
         sentAt: 100,
@@ -435,7 +435,7 @@ describe("EnvironmentAgentRuntime", () => {
     });
     await runtime.executeCommand({
       meta: {
-        protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+        protocolVersion: ENVIRONMENT_DAEMON_PROTOCOL_VERSION,
         commandId: "cmd-start-2",
         idempotencyKey: "cmd-start-2",
         sentAt: 101,
@@ -455,7 +455,7 @@ describe("EnvironmentAgentRuntime", () => {
 
     await runtime.executeCommand({
       meta: {
-        protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+        protocolVersion: ENVIRONMENT_DAEMON_PROTOCOL_VERSION,
         commandId: "cmd-turn-1",
         idempotencyKey: "cmd-turn-1",
         sentAt: 102,
@@ -469,7 +469,7 @@ describe("EnvironmentAgentRuntime", () => {
     });
     await runtime.executeCommand({
       meta: {
-        protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+        protocolVersion: ENVIRONMENT_DAEMON_PROTOCOL_VERSION,
         commandId: "cmd-turn-2",
         idempotencyKey: "cmd-turn-2",
         sentAt: 103,
@@ -521,7 +521,7 @@ describe("EnvironmentAgentRuntime", () => {
       "});",
     ].join("");
 
-    const runtime = new EnvironmentAgentRuntime({
+    const runtime = new EnvironmentDaemonRuntime({
       threadId: "owner-thread",
       providerId: "codex",
     });
@@ -546,7 +546,7 @@ describe("EnvironmentAgentRuntime", () => {
       role: string,
     ) => runtime.executeCommand({
       meta: {
-        protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+        protocolVersion: ENVIRONMENT_DAEMON_PROTOCOL_VERSION,
         commandId,
         idempotencyKey: commandId,
         sentAt: Date.now(),
@@ -566,7 +566,7 @@ describe("EnvironmentAgentRuntime", () => {
 
     await runtime.executeCommand({
       meta: {
-        protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+        protocolVersion: ENVIRONMENT_DAEMON_PROTOCOL_VERSION,
         commandId: "start-a",
         idempotencyKey: "start-a",
         sentAt: Date.now(),
@@ -585,7 +585,7 @@ describe("EnvironmentAgentRuntime", () => {
     });
     await runtime.executeCommand({
       meta: {
-        protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+        protocolVersion: ENVIRONMENT_DAEMON_PROTOCOL_VERSION,
         commandId: "start-b",
         idempotencyKey: "start-b",
         sentAt: Date.now(),
@@ -605,7 +605,7 @@ describe("EnvironmentAgentRuntime", () => {
 
     await runtime.executeCommand({
       meta: {
-        protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+        protocolVersion: ENVIRONMENT_DAEMON_PROTOCOL_VERSION,
         commandId: "turn-a",
         idempotencyKey: "turn-a",
         sentAt: Date.now(),
@@ -619,7 +619,7 @@ describe("EnvironmentAgentRuntime", () => {
     });
     await runtime.executeCommand({
       meta: {
-        protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+        protocolVersion: ENVIRONMENT_DAEMON_PROTOCOL_VERSION,
         commandId: "turn-b",
         idempotencyKey: "turn-b",
         sentAt: Date.now(),
@@ -653,7 +653,7 @@ describe("EnvironmentAgentRuntime", () => {
   });
 
   it("captures provider stderr as events", async () => {
-    const runtime = new EnvironmentAgentRuntime({
+    const runtime = new EnvironmentDaemonRuntime({
       threadId: "thread-1",
       providerCommand: "node",
       providerArgs: [
@@ -675,7 +675,7 @@ describe("EnvironmentAgentRuntime", () => {
   });
 
   it("captures unmatched provider rpc errors as events", async () => {
-    const runtime = new EnvironmentAgentRuntime({
+    const runtime = new EnvironmentDaemonRuntime({
       threadId: "thread-1",
       providerCommand: "node",
       providerArgs: [
@@ -730,18 +730,18 @@ describe("EnvironmentAgentRuntime", () => {
       "});",
     ].join("");
 
-    const runtime = new EnvironmentAgentRuntime({
+    const runtime = new EnvironmentDaemonRuntime({
       threadId: "thread-1",
       providerId: "codex",
     });
     cleanup.push(() => runtime.shutdown());
 
-    const specA: EnvironmentAgentProviderSpec = {
+    const specA: EnvironmentDaemonProviderSpec = {
       command: "node",
       args: ["-e", echoProviderScript],
       env: { ROLE: "provider-A" },
     };
-    const specB: EnvironmentAgentProviderSpec = {
+    const specB: EnvironmentDaemonProviderSpec = {
       command: "node",
       args: ["-e", echoProviderScript],
       env: { ROLE: "provider-B" },
@@ -753,7 +753,7 @@ describe("EnvironmentAgentRuntime", () => {
     // 2. Send a command through child A to establish it works
     const ackA1 = await runtime.executeCommand({
       meta: {
-        protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+        protocolVersion: ENVIRONMENT_DAEMON_PROTOCOL_VERSION,
         commandId: "cmd-a1",
         idempotencyKey: "cmd-a1",
         sentAt: 100,
@@ -779,7 +779,7 @@ describe("EnvironmentAgentRuntime", () => {
     // 4. Send a command through child B to confirm it uses provider-B
     const ackB = await runtime.executeCommand({
       meta: {
-        protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+        protocolVersion: ENVIRONMENT_DAEMON_PROTOCOL_VERSION,
         commandId: "cmd-b1",
         idempotencyKey: "cmd-b1",
         sentAt: 200,
@@ -804,7 +804,7 @@ describe("EnvironmentAgentRuntime", () => {
     // to child A (mapped via forThreadId), not child B (this.providerChild).
     const ackA2 = await runtime.executeCommand({
       meta: {
-        protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+        protocolVersion: ENVIRONMENT_DAEMON_PROTOCOL_VERSION,
         commandId: "cmd-a2",
         idempotencyKey: "cmd-a2",
         sentAt: 300,
@@ -854,15 +854,15 @@ describe("EnvironmentAgentRuntime", () => {
       "});",
     ].join("");
 
-    const runtime = new EnvironmentAgentRuntime({ threadId: "thread-1", providerId: "codex" });
+    const runtime = new EnvironmentDaemonRuntime({ threadId: "thread-1", providerId: "codex" });
     cleanup.push(() => runtime.shutdown());
 
-    const specA: EnvironmentAgentProviderSpec = {
+    const specA: EnvironmentDaemonProviderSpec = {
       command: "node",
       args: ["-e", echoProviderScript],
       env: { ROLE: "provider-A" },
     };
-    const specB: EnvironmentAgentProviderSpec = {
+    const specB: EnvironmentDaemonProviderSpec = {
       command: "node",
       args: ["-e", echoProviderScript],
       env: { ROLE: "provider-B" },
@@ -872,7 +872,7 @@ describe("EnvironmentAgentRuntime", () => {
     runtime.ensureProviderStatus(specA, "thread-a");
     const ackA1 = await runtime.executeCommand({
       meta: {
-        protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+        protocolVersion: ENVIRONMENT_DAEMON_PROTOCOL_VERSION,
         commandId: "cmd-a1",
         idempotencyKey: "cmd-a1",
         sentAt: 100,
@@ -895,7 +895,7 @@ describe("EnvironmentAgentRuntime", () => {
     runtime.ensureProviderStatus(specB, "thread-b");
     const ackB = await runtime.executeCommand({
       meta: {
-        protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+        protocolVersion: ENVIRONMENT_DAEMON_PROTOCOL_VERSION,
         commandId: "cmd-b1",
         idempotencyKey: "cmd-b1",
         sentAt: 200,
@@ -919,7 +919,7 @@ describe("EnvironmentAgentRuntime", () => {
     // so the runtime would try to re-initialize child A → "Already initialized" error.
     const ackA2 = await runtime.executeCommand({
       meta: {
-        protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+        protocolVersion: ENVIRONMENT_DAEMON_PROTOCOL_VERSION,
         commandId: "cmd-a2",
         idempotencyKey: "cmd-a2",
         sentAt: 300,
@@ -940,7 +940,7 @@ describe("EnvironmentAgentRuntime", () => {
   });
 
   it("spawns separate children for specs with different env", async () => {
-    const runtime = new EnvironmentAgentRuntime({ threadId: "thread-1" });
+    const runtime = new EnvironmentDaemonRuntime({ threadId: "thread-1" });
     const lines: string[] = [];
     const unsubscribe = runtime.subscribeToProviderStdout((line) => {
       lines.push(line);
@@ -974,7 +974,7 @@ describe("EnvironmentAgentRuntime", () => {
     // child B just idles. The RPC response must go to child A, not child B.
     const toolCalls: Array<{ requestId: string | number; method: string; toolCall?: unknown }> = [];
     const stdoutLines: string[] = [];
-    const runtime = new EnvironmentAgentRuntime({
+    const runtime = new EnvironmentDaemonRuntime({
       threadId: "thread-1",
       providerId: "codex",
       onProviderRequest: async (request) => {
@@ -1051,7 +1051,7 @@ describe("EnvironmentAgentRuntime", () => {
   });
 
   it("only rejects requests for the exiting child, not siblings", async () => {
-    const runtime = new EnvironmentAgentRuntime({ threadId: "thread-1", providerId: "codex" });
+    const runtime = new EnvironmentDaemonRuntime({ threadId: "thread-1", providerId: "codex" });
     cleanup.push(() => runtime.shutdown());
 
     // Child A: responds to initialize immediately, but delays thread/start
@@ -1086,7 +1086,7 @@ describe("EnvironmentAgentRuntime", () => {
     // but the thread/start response is delayed 500ms, keeping it in-flight.
     const commandPromise = runtime.executeCommand({
       meta: {
-        protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+        protocolVersion: ENVIRONMENT_DAEMON_PROTOCOL_VERSION,
         commandId: "cmd-a",
         idempotencyKey: "cmd-a",
         sentAt: 100,
@@ -1130,7 +1130,7 @@ describe("EnvironmentAgentRuntime", () => {
   });
 
   it("derives unique managed HOME dirs for specs differing only in files", async () => {
-    const runtime = new EnvironmentAgentRuntime({ threadId: "thread-1" });
+    const runtime = new EnvironmentDaemonRuntime({ threadId: "thread-1" });
     cleanup.push(() => runtime.shutdown());
 
     const lines: string[] = [];
@@ -1162,7 +1162,7 @@ describe("EnvironmentAgentRuntime", () => {
   });
 
   it("does not leak raw secrets into managed HOME directory names", async () => {
-    const runtime = new EnvironmentAgentRuntime({ threadId: "thread-1" });
+    const runtime = new EnvironmentDaemonRuntime({ threadId: "thread-1" });
     cleanup.push(() => runtime.shutdown());
 
     const secretKey = "sk-super-secret-api-key-12345";
@@ -1195,7 +1195,7 @@ describe("EnvironmentAgentRuntime", () => {
   });
 
   it("preserves an explicit provider HOME when files are materialized", async () => {
-    const runtime = new EnvironmentAgentRuntime({ threadId: "thread-1" });
+    const runtime = new EnvironmentDaemonRuntime({ threadId: "thread-1" });
     cleanup.push(() => runtime.shutdown());
 
     const lines: string[] = [];
@@ -1216,7 +1216,7 @@ describe("EnvironmentAgentRuntime", () => {
   });
 
   it("derives CODEX_HOME from the managed provider HOME by default", async () => {
-    const runtime = new EnvironmentAgentRuntime({ threadId: "thread-1" });
+    const runtime = new EnvironmentDaemonRuntime({ threadId: "thread-1" });
     cleanup.push(() => runtime.shutdown());
 
     const lines: string[] = [];
@@ -1251,7 +1251,7 @@ describe("EnvironmentAgentRuntime", () => {
       toolCall?: unknown;
     }> = [];
     const stdout: string[] = [];
-    const runtime = new EnvironmentAgentRuntime({
+    const runtime = new EnvironmentDaemonRuntime({
       threadId: "thread-1",
       providerId: "codex",
       providerCommand: "node",
@@ -1338,7 +1338,7 @@ describe("EnvironmentAgentRuntime", () => {
       "setTimeout(() => process.exit(0), 100);",
     ].join("");
 
-    const runtime = new EnvironmentAgentRuntime({
+    const runtime = new EnvironmentDaemonRuntime({
       threadId: "owner-thread",
       providerId: "codex",
       onProviderRequest: async (request) => {
@@ -1353,7 +1353,7 @@ describe("EnvironmentAgentRuntime", () => {
 
     await runtime.executeCommand({
       meta: {
-        protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+        protocolVersion: ENVIRONMENT_DAEMON_PROTOCOL_VERSION,
         commandId: "ensure-claude",
         idempotencyKey: "ensure-claude",
         sentAt: Date.now(),

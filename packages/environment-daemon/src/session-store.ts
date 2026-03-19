@@ -1,35 +1,35 @@
-import type { EnvironmentAgentCommand } from "./protocol.js";
+import type { EnvironmentDaemonCommand } from "./protocol.js";
 import type {
-  EnvironmentAgentSessionCloseReason,
-  EnvironmentAgentSessionCursor,
+  EnvironmentDaemonSessionCloseReason,
+  EnvironmentDaemonSessionCursor,
 } from "./session-protocol.js";
 
-export type EnvironmentAgentSessionStoreCommandReceiptState =
+export type EnvironmentDaemonSessionStoreCommandReceiptState =
   | "received"
   | "started"
   | "completed"
   | "failed";
 
-export type EnvironmentAgentSessionStoreSessionStatus =
+export type EnvironmentDaemonSessionStoreSessionStatus =
   | "active"
   | "expired"
   | "closed"
   | "replaced";
 
-export interface EnvironmentAgentSessionStateRecord {
+export interface EnvironmentDaemonSessionStateRecord {
   threadId: string;
   agentId: string;
   agentInstanceId: string;
   sessionId?: string;
   generation: number;
   nextSequence: number;
-  lastAcked?: EnvironmentAgentSessionCursor;
+  lastAcked?: EnvironmentDaemonSessionCursor;
   lastDeliveredCommandCursor?: number;
   createdAt: number;
   updatedAt: number;
 }
 
-export interface EnvironmentAgentOutboxEventRecord {
+export interface EnvironmentDaemonOutboxEventRecord {
   threadId: string;
   generation: number;
   sequence: number;
@@ -39,38 +39,38 @@ export interface EnvironmentAgentOutboxEventRecord {
   ackedAt?: number;
 }
 
-export interface EnvironmentAgentCommandReceiptRecord {
+export interface EnvironmentDaemonCommandReceiptRecord {
   commandId: string;
   threadId: string;
   commandCursor: number;
-  commandType: EnvironmentAgentCommand["type"] | string;
-  state: EnvironmentAgentSessionStoreCommandReceiptState;
+  commandType: EnvironmentDaemonCommand["type"] | string;
+  state: EnvironmentDaemonSessionStoreCommandReceiptState;
   result?: unknown;
   errorCode?: string;
   errorMessage?: string;
   ackReportedAt?: number;
-  lastResultReportedState?: EnvironmentAgentSessionStoreCommandReceiptState;
+  lastResultReportedState?: EnvironmentDaemonSessionStoreCommandReceiptState;
   lastResultReportedAt?: number;
   createdAt: number;
   updatedAt: number;
 }
 
-export interface EnvironmentAgentPersistedSessionRecord {
+export interface EnvironmentDaemonPersistedSessionRecord {
   id: string;
   threadId: string;
   agentId: string;
   agentInstanceId: string;
   protocolVersion: number;
-  status: EnvironmentAgentSessionStoreSessionStatus;
+  status: EnvironmentDaemonSessionStoreSessionStatus;
   leaseExpiresAt: number;
   lastHeartbeatAt?: number;
   closedAt?: number;
-  closeReason?: EnvironmentAgentSessionCloseReason | "newer_session";
+  closeReason?: EnvironmentDaemonSessionCloseReason | "newer_session";
   createdAt: number;
   updatedAt: number;
 }
 
-export interface InitializeEnvironmentAgentThreadStateInput {
+export interface InitializeEnvironmentDaemonThreadStateInput {
   threadId: string;
   agentId: string;
   agentInstanceId: string;
@@ -78,113 +78,113 @@ export interface InitializeEnvironmentAgentThreadStateInput {
   now?: number;
 }
 
-export interface AppendEnvironmentAgentOutboxEventInput {
+export interface AppendEnvironmentDaemonOutboxEventInput {
   threadId: string;
   payload: unknown;
   eventId?: string;
   emittedAt?: number;
 }
 
-export interface AckEnvironmentAgentOutboxThroughInput {
+export interface AckEnvironmentDaemonOutboxThroughInput {
   threadId: string;
   generation: number;
   sequence: number;
   ackedAt?: number;
 }
 
-export interface RecordEnvironmentAgentCommandReceivedInput {
+export interface RecordEnvironmentDaemonCommandReceivedInput {
   commandId: string;
   threadId: string;
   commandCursor: number;
-  commandType: EnvironmentAgentCommand["type"] | string;
+  commandType: EnvironmentDaemonCommand["type"] | string;
   now?: number;
 }
 
-export interface CompleteEnvironmentAgentCommandReceiptInput {
+export interface CompleteEnvironmentDaemonCommandReceiptInput {
   commandId: string;
   result?: unknown;
   now?: number;
 }
 
-export interface FailEnvironmentAgentCommandReceiptInput {
+export interface FailEnvironmentDaemonCommandReceiptInput {
   commandId: string;
   errorCode?: string;
   errorMessage?: string;
   now?: number;
 }
 
-export interface BindEnvironmentAgentSessionInput {
+export interface BindEnvironmentDaemonSessionInput {
   threadId: string;
   sessionId: string;
   now?: number;
 }
 
-export interface ClearEnvironmentAgentSessionInput {
+export interface ClearEnvironmentDaemonSessionInput {
   threadId: string;
   now?: number;
 }
 
-export interface SetEnvironmentAgentLastDeliveredCommandCursorInput {
+export interface SetEnvironmentDaemonLastDeliveredCommandCursorInput {
   threadId: string;
   commandCursor: number;
   now?: number;
 }
 
-export interface ReconcileEnvironmentAgentEventCursorInput {
+export interface ReconcileEnvironmentDaemonEventCursorInput {
   threadId: string;
-  cursor: EnvironmentAgentSessionCursor;
+  cursor: EnvironmentDaemonSessionCursor;
   now?: number;
 }
 
-export interface EnvironmentAgentSessionStore {
+export interface EnvironmentDaemonSessionStore {
   listThreadIds(): string[];
-  loadSessionState(threadId: string): EnvironmentAgentSessionStateRecord | undefined;
+  loadSessionState(threadId: string): EnvironmentDaemonSessionStateRecord | undefined;
   initializeThreadState(
-    input: InitializeEnvironmentAgentThreadStateInput,
-  ): EnvironmentAgentSessionStateRecord;
-  bindSession(input: BindEnvironmentAgentSessionInput): EnvironmentAgentSessionStateRecord;
-  clearSession(input: ClearEnvironmentAgentSessionInput): EnvironmentAgentSessionStateRecord;
-  bumpGeneration(threadId: string, now?: number): EnvironmentAgentSessionStateRecord;
+    input: InitializeEnvironmentDaemonThreadStateInput,
+  ): EnvironmentDaemonSessionStateRecord;
+  bindSession(input: BindEnvironmentDaemonSessionInput): EnvironmentDaemonSessionStateRecord;
+  clearSession(input: ClearEnvironmentDaemonSessionInput): EnvironmentDaemonSessionStateRecord;
+  bumpGeneration(threadId: string, now?: number): EnvironmentDaemonSessionStateRecord;
   appendOutboxEvent(
-    input: AppendEnvironmentAgentOutboxEventInput,
-  ): EnvironmentAgentOutboxEventRecord;
+    input: AppendEnvironmentDaemonOutboxEventInput,
+  ): EnvironmentDaemonOutboxEventRecord;
   listUnackedOutbox(args: {
     threadId: string;
     limit?: number;
-  }): EnvironmentAgentOutboxEventRecord[];
-  ackOutboxThrough(input: AckEnvironmentAgentOutboxThroughInput): number;
+  }): EnvironmentDaemonOutboxEventRecord[];
+  ackOutboxThrough(input: AckEnvironmentDaemonOutboxThroughInput): number;
   reconcileEventCursor(
-    input: ReconcileEnvironmentAgentEventCursorInput,
-  ): EnvironmentAgentSessionStateRecord;
+    input: ReconcileEnvironmentDaemonEventCursorInput,
+  ): EnvironmentDaemonSessionStateRecord;
   recordCommandReceived(
-    input: RecordEnvironmentAgentCommandReceivedInput,
-  ): EnvironmentAgentCommandReceiptRecord;
-  getCommandReceipt(commandId: string): EnvironmentAgentCommandReceiptRecord | undefined;
-  listPendingCommandAcks(threadId: string): EnvironmentAgentCommandReceiptRecord[];
+    input: RecordEnvironmentDaemonCommandReceivedInput,
+  ): EnvironmentDaemonCommandReceiptRecord;
+  getCommandReceipt(commandId: string): EnvironmentDaemonCommandReceiptRecord | undefined;
+  listPendingCommandAcks(threadId: string): EnvironmentDaemonCommandReceiptRecord[];
   markCommandAckReported(
     commandId: string,
     now?: number,
-  ): EnvironmentAgentCommandReceiptRecord | undefined;
+  ): EnvironmentDaemonCommandReceiptRecord | undefined;
   markCommandStarted(
     commandId: string,
     now?: number,
-  ): EnvironmentAgentCommandReceiptRecord | undefined;
-  listPendingCommandResults(threadId: string): EnvironmentAgentCommandReceiptRecord[];
+  ): EnvironmentDaemonCommandReceiptRecord | undefined;
+  listPendingCommandResults(threadId: string): EnvironmentDaemonCommandReceiptRecord[];
   markCommandResultReported(args: {
     commandId: string;
-    state: EnvironmentAgentSessionStoreCommandReceiptState;
+    state: EnvironmentDaemonSessionStoreCommandReceiptState;
     now?: number;
-  }): EnvironmentAgentCommandReceiptRecord | undefined;
+  }): EnvironmentDaemonCommandReceiptRecord | undefined;
   markCommandCompleted(
-    input: CompleteEnvironmentAgentCommandReceiptInput,
-  ): EnvironmentAgentCommandReceiptRecord | undefined;
+    input: CompleteEnvironmentDaemonCommandReceiptInput,
+  ): EnvironmentDaemonCommandReceiptRecord | undefined;
   markCommandFailed(
-    input: FailEnvironmentAgentCommandReceiptInput,
-  ): EnvironmentAgentCommandReceiptRecord | undefined;
+    input: FailEnvironmentDaemonCommandReceiptInput,
+  ): EnvironmentDaemonCommandReceiptRecord | undefined;
   setLastDeliveredCommandCursor(
-    input: SetEnvironmentAgentLastDeliveredCommandCursorInput,
-  ): EnvironmentAgentSessionStateRecord;
+    input: SetEnvironmentDaemonLastDeliveredCommandCursorInput,
+  ): EnvironmentDaemonSessionStateRecord;
   alignLastDeliveredCommandCursor(
-    input: SetEnvironmentAgentLastDeliveredCommandCursorInput,
-  ): EnvironmentAgentSessionStateRecord;
+    input: SetEnvironmentDaemonLastDeliveredCommandCursorInput,
+  ): EnvironmentDaemonSessionStateRecord;
 }

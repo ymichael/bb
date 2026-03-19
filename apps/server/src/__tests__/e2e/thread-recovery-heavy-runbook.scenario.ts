@@ -6,15 +6,15 @@ import {
   type ThreadEvent,
   type ThreadQueuedMessage,
 } from "@bb/core";
-import { ENVIRONMENT_AGENT_SESSION_PROTOCOL } from "@bb/environment-daemon";
-import type { EnvironmentAgentSessionDebugView } from "./environment-agent-api.js";
+import { ENVIRONMENT_DAEMON_SESSION_PROTOCOL } from "@bb/environment-daemon";
+import type { EnvironmentDaemonSessionDebugView } from "./environment-daemon-api.js";
 import {
   allocateLocalPort,
   archiveThread,
   createProject,
   createThread,
   enqueueThreadFollowUp,
-  listEnvironmentAgentSessions,
+  listEnvironmentDaemonSessions,
   listThreadEvents,
   readError,
   readJson,
@@ -24,7 +24,7 @@ import {
   unarchiveThread,
   waitForThreadCondition,
   waitForThreadStatus,
-} from "./environment-agent-api.js";
+} from "./environment-daemon-api.js";
 import { startServerE2eHarness } from "./harness.js";
 import { e2eTimeoutMs } from "./provider-mode.js";
 
@@ -48,7 +48,7 @@ function countCompletedTurns(events: ThreadEvent[]): number {
   }).length;
 }
 
-function parseControlPort(session: EnvironmentAgentSessionDebugView): number {
+function parseControlPort(session: EnvironmentDaemonSessionDebugView): number {
   if (!session.controlBaseUrl) {
     throw new Error(`Session ${session.id} has no controlBaseUrl`);
   }
@@ -80,7 +80,7 @@ function lookupListeningPid(port: number): number {
   return pid;
 }
 
-function killSessionProcess(session: EnvironmentAgentSessionDebugView): void {
+function killSessionProcess(session: EnvironmentDaemonSessionDebugView): void {
   const pid = lookupListeningPid(parseControlPort(session));
   process.kill(pid, "SIGKILL");
 }
@@ -136,12 +136,12 @@ async function waitForMinimumSessionCount(args: {
   environmentId: string;
   minimumCount: number;
   timeoutMs: number;
-}): Promise<EnvironmentAgentSessionDebugView[]> {
+}): Promise<EnvironmentDaemonSessionDebugView[]> {
   return waitForThreadCondition({
     threadId: args.threadId,
     timeoutMs: args.timeoutMs,
     wsUrl: args.wsUrl,
-    load: async () => listEnvironmentAgentSessions(args.baseUrl, args.environmentId),
+    load: async () => listEnvironmentDaemonSessions(args.baseUrl, args.environmentId),
     isReady: (payload) => payload.sessions.length >= args.minimumCount,
     describeLast: (payload) =>
       `Thread ${args.threadId} never reached ${args.minimumCount} session rows (actual=${payload?.sessions.length ?? 0})`,
@@ -210,7 +210,7 @@ export async function runQueuedFollowUpWorkerLossScenario(
     const completedBeforeRestart = countCompletedTurns(
       await listThreadEvents(harness.baseUrl, thread.id),
     );
-    const sessionsBeforeRestart = await listEnvironmentAgentSessions(harness.baseUrl, environmentId);
+    const sessionsBeforeRestart = await listEnvironmentDaemonSessions(harness.baseUrl, environmentId);
     const activeSession = sessionsBeforeRestart.sessions.find((session) => session.status === "active");
     expect(activeSession).toBeDefined();
 
@@ -234,7 +234,7 @@ export async function runQueuedFollowUpWorkerLossScenario(
       wsUrl: harness.wsUrl,
       threadId: thread.id,
       timeoutMs: e2eTimeoutMs(45_000, 75_000),
-      load: async () => listEnvironmentAgentSessions(harness.baseUrl, environmentId),
+      load: async () => listEnvironmentDaemonSessions(harness.baseUrl, environmentId),
       isReady: (sessions) =>
         sessions.sessions.every((session) => session.status !== "active"),
       describeLast: (sessions) =>
@@ -253,7 +253,7 @@ export async function runQueuedFollowUpWorkerLossScenario(
       wsUrl: harness.wsUrl,
       threadId: thread.id,
       timeoutMs: e2eTimeoutMs(12_000, 30_000),
-      load: async () => listEnvironmentAgentSessions(harness.baseUrl, environmentId),
+      load: async () => listEnvironmentDaemonSessions(harness.baseUrl, environmentId),
       isReady: (sessions) =>
         sessions.sessions.some(
           (session) => session.status === "active" && session.id !== activeSession!.id,
@@ -321,7 +321,7 @@ export async function runArchiveAfterWorkerLossRecoveryScenario(): Promise<void>
     const environmentId = activeThread.attachedEnvironment!.id;
     debugLog("archive-after-worker-loss: active");
 
-    const sessionsBeforeRestart = await listEnvironmentAgentSessions(harness.baseUrl, environmentId);
+    const sessionsBeforeRestart = await listEnvironmentDaemonSessions(harness.baseUrl, environmentId);
     const activeSession = sessionsBeforeRestart.sessions.find((session) => session.status === "active");
     expect(activeSession).toBeDefined();
 
@@ -349,7 +349,7 @@ export async function runArchiveAfterWorkerLossRecoveryScenario(): Promise<void>
       wsUrl: harness.wsUrl,
       threadId: thread.id,
       timeoutMs: e2eTimeoutMs(45_000, 75_000),
-      load: async () => listEnvironmentAgentSessions(harness.baseUrl, environmentId),
+      load: async () => listEnvironmentDaemonSessions(harness.baseUrl, environmentId),
       isReady: (sessions) =>
         sessions.sessions.every((session) => session.status !== "active"),
       describeLast: (sessions) =>
@@ -368,7 +368,7 @@ export async function runArchiveAfterWorkerLossRecoveryScenario(): Promise<void>
     expect(archivedThread.archivedAt).toBeTypeOf("number");
     debugLog("archive-after-worker-loss: archived");
 
-    const sessionsWhileArchived = await listEnvironmentAgentSessions(harness.baseUrl, environmentId);
+    const sessionsWhileArchived = await listEnvironmentDaemonSessions(harness.baseUrl, environmentId);
     expect(sessionsWhileArchived.sessions.filter((session) => session.status === "active")).toHaveLength(0);
 
     const archivedTellError = await readError(
@@ -406,7 +406,7 @@ export async function runArchiveAfterWorkerLossRecoveryScenario(): Promise<void>
       wsUrl: harness.wsUrl,
       threadId: thread.id,
       timeoutMs: e2eTimeoutMs(12_000, 30_000),
-      load: async () => listEnvironmentAgentSessions(harness.baseUrl, environmentId),
+      load: async () => listEnvironmentDaemonSessions(harness.baseUrl, environmentId),
       isReady: (sessions) =>
         sessions.sessions.some(
           (session) => session.status === "active" && session.id !== activeSession!.id,
@@ -446,7 +446,7 @@ async function postStaleEventBatch(args: {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      protocol: ENVIRONMENT_AGENT_SESSION_PROTOCOL,
+      protocol: ENVIRONMENT_DAEMON_SESSION_PROTOCOL,
       messageId: `msg-${args.eventId}`,
       sentAt: Date.now(),
       sessionId: args.sessionId,
@@ -507,7 +507,7 @@ export async function runStaleOldSessionNoiseScenario(): Promise<void> {
     const environmentId = activeThread.attachedEnvironment!.id;
     debugLog("stale-old-session-noise: active");
 
-    const sessionsBeforeRestart = await listEnvironmentAgentSessions(harness.baseUrl, environmentId);
+    const sessionsBeforeRestart = await listEnvironmentDaemonSessions(harness.baseUrl, environmentId);
     const oldSession = sessionsBeforeRestart.sessions.find((session) => session.status === "active");
     expect(oldSession).toBeDefined();
     const completedBeforeRestart = countCompletedTurns(
@@ -534,7 +534,7 @@ export async function runStaleOldSessionNoiseScenario(): Promise<void> {
       wsUrl: harness.wsUrl,
       threadId: thread.id,
       timeoutMs: e2eTimeoutMs(45_000, 75_000),
-      load: async () => listEnvironmentAgentSessions(harness.baseUrl, environmentId),
+      load: async () => listEnvironmentDaemonSessions(harness.baseUrl, environmentId),
       isReady: (sessions) =>
         sessions.sessions.every((session) => session.status !== "active"),
       describeLast: (sessions) =>

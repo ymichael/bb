@@ -7,7 +7,7 @@ import {
   reconcileManagedArtifactStorage,
 } from "../managed-artifact-reconciler.js";
 import {
-  resolveDefaultEnvironmentAgentLogFilePath,
+  resolveDefaultEnvironmentDaemonLogFilePath,
 } from "@bb/environment-daemon";
 
 const originalHome = process.env.HOME;
@@ -78,25 +78,25 @@ describe("managed artifact reconciler", () => {
       archivedAt: now - retentionMs - 1,
     });
 
-    const liveLogPath = resolveDefaultEnvironmentAgentLogFilePath({
+    const liveLogPath = resolveDefaultEnvironmentDaemonLogFilePath({
       projectId: "proj-1",
       threadId: liveThread.id,
       environmentId: "env-worktree-1",
       runtimeEnv: process.env,
     });
-    const recentLogPath = resolveDefaultEnvironmentAgentLogFilePath({
+    const recentLogPath = resolveDefaultEnvironmentDaemonLogFilePath({
       projectId: "proj-1",
       threadId: recentArchivedThread.id,
       environmentId: "env-worktree-1",
       runtimeEnv: process.env,
     });
-    const expiredLogPath = resolveDefaultEnvironmentAgentLogFilePath({
+    const expiredLogPath = resolveDefaultEnvironmentDaemonLogFilePath({
       projectId: "proj-1",
       threadId: expiredArchivedThread.id,
       environmentId: "env-worktree-1",
       runtimeEnv: process.env,
     });
-    const orphanLogPath = resolveDefaultEnvironmentAgentLogFilePath({
+    const orphanLogPath = resolveDefaultEnvironmentDaemonLogFilePath({
       projectId: "proj-1",
       threadId: "orphan-thread",
       environmentId: "env-worktree-1",

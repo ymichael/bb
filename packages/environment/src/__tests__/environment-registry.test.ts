@@ -60,7 +60,7 @@ describe("EnvironmentRegistry", () => {
         createLocalEnvironmentDefinition({
           worktree: {
             worktreeRootName: ".worktrees",
-            manageEnvironmentAgent: false,
+            manageEnvironmentDaemon: false,
           },
         }),
       );
@@ -126,7 +126,7 @@ describe("EnvironmentRegistry", () => {
         createLocalEnvironmentDefinition({
           worktree: {
             worktreeRootName: ".worktrees",
-            manageEnvironmentAgent: false,
+            manageEnvironmentDaemon: false,
           },
         }),
       );
@@ -167,7 +167,7 @@ describe("EnvironmentRegistry", () => {
     const registry = new EnvironmentRegistry().register(
       createLocalEnvironmentDefinition({
         worktree: {
-          manageEnvironmentAgent: false,
+          manageEnvironmentDaemon: false,
         },
       }),
     );
@@ -195,7 +195,7 @@ describe("EnvironmentRegistry", () => {
       )).toThrow(/Worktree workspace is unavailable/);
   });
 
-  it("creates docker environments with a direct environment-agent target", () => {
+  it("creates docker environments with a direct environment-daemon target", () => {
     const projectRoot = makeTempDir("bb-docker-env-project-");
 
     try {

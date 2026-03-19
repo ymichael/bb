@@ -3,16 +3,16 @@ import {
   allocateLocalPort,
   createProject,
   createThread,
-  listEnvironmentAgentSessions,
+  listEnvironmentDaemonSessions,
   listThreadEvents,
   waitForThreadCondition,
   waitForThreadStatus,
-} from "./environment-agent-api.js";
+} from "./environment-daemon-api.js";
 import {
   startServerE2eHarness,
 } from "./harness.js";
 
-export async function runEnvironmentAgentRestartRoundtripScenario(): Promise<void> {
+export async function runEnvironmentDaemonRestartRoundtripScenario(): Promise<void> {
   const port = await allocateLocalPort();
   let harness = await startServerE2eHarness({
     port,
@@ -37,7 +37,7 @@ export async function runEnvironmentAgentRestartRoundtripScenario(): Promise<voi
 
     const activeThread = await waitForThreadStatus(harness.baseUrl, thread.id, "active", 5_000, harness.wsUrl);
     const environmentId = activeThread.attachedEnvironment!.id;
-    const cursorBeforeRestart = harness.getEnvironmentAgentCursor(thread.id);
+    const cursorBeforeRestart = harness.getEnvironmentDaemonCursor(thread.id);
     const tempDir = harness.tempDir;
 
     await harness.shutdownForRestart();
@@ -57,7 +57,7 @@ export async function runEnvironmentAgentRestartRoundtripScenario(): Promise<voi
       threadId: thread.id,
       timeoutMs: 5_000,
       wsUrl: harness.wsUrl,
-      load: async () => listEnvironmentAgentSessions(harness.baseUrl, environmentId),
+      load: async () => listEnvironmentDaemonSessions(harness.baseUrl, environmentId),
       isReady: (payload) => payload.sessions.some((session) => session.status === "active"),
       describeLast: (payload) =>
         `Thread ${thread.id} did not reopen an active env-daemon session ` +
@@ -68,7 +68,7 @@ export async function runEnvironmentAgentRestartRoundtripScenario(): Promise<voi
     const events = await listThreadEvents(harness.baseUrl, thread.id);
     expect(events.filter((event) => event.type === "turn/started")).toHaveLength(1);
     expect(events.filter((event) => event.type === "turn/completed")).toHaveLength(1);
-    expect(harness.getEnvironmentAgentCursor(thread.id)).toBeGreaterThan(
+    expect(harness.getEnvironmentDaemonCursor(thread.id)).toBeGreaterThan(
       cursorBeforeRestart,
     );
   } finally {

@@ -13,9 +13,9 @@ import { delimiter, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { serve } from "@hono/node-server";
 import {
-  EnvironmentAgentCommandRepository,
-  EnvironmentAgentCursorRepository,
-  EnvironmentAgentSessionRepository,
+  EnvironmentDaemonCommandRepository,
+  EnvironmentDaemonCursorRepository,
+  EnvironmentDaemonSessionRepository,
   EnvironmentRepository,
   EventRepository,
   ProjectRepository,
@@ -35,14 +35,14 @@ import {
   createFakeCodexScriptFile,
   type FakeCodexOptions,
 } from "./fake-codex.js";
-import { listManagedHostEnvironmentAgentPids } from "@bb/environment";
+import { listManagedHostEnvironmentDaemonPids } from "@bb/environment";
 import { bbTestTmpPrefix } from "./temp-root.js";
 import { installProcessExitSafetyNet, trackPid, untrackPid } from "./process-tracker.js";
 import {
   resolveE2eProviderMode,
   type E2eProviderMode,
 } from "./provider-mode.js";
-import { recoverManagedEnvironmentAgentSessionsOnBoot } from "../../startup-tasks.js";
+import { recoverManagedEnvironmentDaemonSessionsOnBoot } from "../../startup-tasks.js";
 import { closeHttpServer } from "../../http-server-close.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -68,7 +68,7 @@ export const FAKE_E2E_ENVIRONMENT_AGENT_SESSION_OPTIONS = {
   leaseSweepIntervalMs: 250,
 } as const;
 
-export function withFakeE2eEnvironmentAgentTimingEnv(
+export function withFakeE2eEnvironmentDaemonTimingEnv(
   env: NodeJS.ProcessEnv,
 ): NodeJS.ProcessEnv {
   return {
@@ -139,7 +139,7 @@ export interface StartServerE2eHarnessOptions {
   providerToolHost?: ProviderToolHost;
   fakeCodex?: FakeCodexOptions;
   useWorkspaceFakeCodex?: boolean;
-  environmentAgentSessionOptions?: {
+  environmentDaemonSessionOptions?: {
     leaseTtlMs?: number;
     heartbeatIntervalMs?: number;
     commandLongPollTimeoutMs?: number;
@@ -159,8 +159,8 @@ export interface ServerE2eHarness {
   dbPath: string;
   projectRoot: string;
   providerMode: E2eProviderMode;
-  getEnvironmentAgentAuthorization: (threadId: string) => string | undefined;
-  getEnvironmentAgentCursor: (threadId: string) => number;
+  getEnvironmentDaemonAuthorization: (threadId: string) => string | undefined;
+  getEnvironmentDaemonCursor: (threadId: string) => number;
   emitFakeCodexControlEvent: () => void;
   shutdownForRestart: () => Promise<void>;
   cleanup: () => Promise<void>;
@@ -197,11 +197,11 @@ export async function startServerE2eHarness(
   installProcessExitSafetyNet();
 
   const providerMode = opts?.providerMode ?? resolveE2eProviderMode();
-  const environmentAgentSessionOptions = {
+  const environmentDaemonSessionOptions = {
     ...(providerMode === "fake"
       ? FAKE_E2E_ENVIRONMENT_AGENT_SESSION_OPTIONS
       : {}),
-    ...(opts?.environmentAgentSessionOptions ?? {}),
+    ...(opts?.environmentDaemonSessionOptions ?? {}),
   };
   const serverPort = opts?.port ?? await allocatePort();
   const tempDir = opts?.tempDir ?? mkdtempSync(bbTestTmpPrefix("bb-server-e2e-"));
@@ -265,9 +265,9 @@ export async function startServerE2eHarness(
     const eventRepo = new EventRepository(db);
     const environmentRepo = new EnvironmentRepository(db);
     const threadEnvironmentAttachmentRepo = new ThreadEnvironmentAttachmentRepository(db);
-    const environmentAgentSessionRepo = new EnvironmentAgentSessionRepository(db);
-    const environmentAgentCursorRepo = new EnvironmentAgentCursorRepository(db);
-    const environmentAgentCommandRepo = new EnvironmentAgentCommandRepository(db);
+    const environmentDaemonSessionRepo = new EnvironmentDaemonSessionRepository(db);
+    const environmentDaemonCursorRepo = new EnvironmentDaemonCursorRepository(db);
+    const environmentDaemonCommandRepo = new EnvironmentDaemonCommandRepository(db);
 
     const { app, injectWebSocket, wsManager, threadManager, close: closeServer } =
       createServer({
@@ -276,10 +276,10 @@ export async function startServerE2eHarness(
         eventRepo,
         environmentRepo,
         threadEnvironmentAttachmentRepo,
-        environmentAgentSessionRepo,
-        environmentAgentCursorRepo,
-        environmentAgentCommandRepo,
-        environmentAgentSessionOptions,
+        environmentDaemonSessionRepo,
+        environmentDaemonCursorRepo,
+        environmentDaemonCommandRepo,
+        environmentDaemonSessionOptions,
         ...(opts?.providerToolHost ? { providerToolHost: opts.providerToolHost } : {}),
         runtimeEnv: serverRuntimeEnv,
         dbPath,
@@ -313,10 +313,10 @@ export async function startServerE2eHarness(
       );
       injectWebSocket(httpServer);
     });
-    await recoverManagedEnvironmentAgentSessionsOnBoot({
-      sessionRepo: environmentAgentSessionRepo,
+    await recoverManagedEnvironmentDaemonSessionsOnBoot({
+      sessionRepo: environmentDaemonSessionRepo,
       requestTimeoutMs:
-        environmentAgentSessionOptions.heartbeatIntervalMs
+        environmentDaemonSessionOptions.heartbeatIntervalMs
           ?? FAKE_E2E_ENVIRONMENT_AGENT_SESSION_OPTIONS.heartbeatIntervalMs,
     });
     let closed = false;
@@ -333,10 +333,10 @@ export async function startServerE2eHarness(
       sqliteClient?.close?.();
     };
 
-    // Snapshot environment-agent PIDs before teardown so the safety net
+    // Snapshot environment-daemon PIDs before teardown so the safety net
     // can kill them if the normal teardown path is interrupted.
     const refreshTrackedAgentPids = (): void => {
-      for (const pid of listManagedHostEnvironmentAgentPids()) {
+      for (const pid of listManagedHostEnvironmentDaemonPids()) {
         trackPid(pid);
       }
     };
@@ -355,7 +355,7 @@ export async function startServerE2eHarness(
       await closeServerHarness();
       // After successful teardown, untrack all agent PIDs (they should be
       // dead now) so the exit handler does not try to kill recycled PIDs.
-      for (const pid of listManagedHostEnvironmentAgentPids()) {
+      for (const pid of listManagedHostEnvironmentDaemonPids()) {
         untrackPid(pid);
       }
       if (!opts?.preserveTempDirOnCleanup) {
@@ -388,14 +388,14 @@ export async function startServerE2eHarness(
       dbPath,
       projectRoot,
       providerMode,
-      getEnvironmentAgentAuthorization: (threadId: string) =>
+      getEnvironmentDaemonAuthorization: (threadId: string) =>
         (
           threadManager as unknown as {
-            _resolveEnvironmentAgentAuthorization: (threadId: string) => string | undefined;
+            _resolveEnvironmentDaemonAuthorization: (threadId: string) => string | undefined;
           }
-        )._resolveEnvironmentAgentAuthorization(threadId),
-      getEnvironmentAgentCursor: (threadId: string) =>
-        environmentAgentCursorRepo.getByThreadId(threadId)?.sequence ?? 0,
+        )._resolveEnvironmentDaemonAuthorization(threadId),
+      getEnvironmentDaemonCursor: (threadId: string) =>
+        environmentDaemonCursorRepo.getByThreadId(threadId)?.sequence ?? 0,
       emitFakeCodexControlEvent: () => {
         if (providerMode !== "fake") {
           throw new Error("emitFakeCodexControlEvent is only available in fake e2e provider mode.");

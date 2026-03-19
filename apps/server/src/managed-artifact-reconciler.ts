@@ -16,7 +16,7 @@ import type { ThreadEnvironmentAttachmentRecord } from "@bb/db";
 import { resolveBbPath } from "@bb/core/storage-paths";
 import {
   removeRotatingJsonLineFileArtifacts,
-  resolveDefaultEnvironmentAgentLogFilePath,
+  resolveDefaultEnvironmentDaemonLogFilePath,
 } from "@bb/environment-daemon";
 import {
   resolveManagedWorktreeRootForProject,
@@ -169,7 +169,7 @@ function isLegacyManagedEnvironmentReference(environmentId: string | undefined):
   }
 }
 
-export function resolveArchivedEnvironmentAgentLogRetentionMs(
+export function resolveArchivedEnvironmentDaemonLogRetentionMs(
   env: NodeJS.ProcessEnv,
 ): number {
   const configured = parseNumberEnv(env.BB_ARCHIVED_LOG_RETENTION_HOURS);
@@ -194,7 +194,7 @@ export function reconcileManagedArtifactStorage(
 ): ManagedArtifactReconcilerResult {
   const now = args.now ?? Date.now();
   const archivedLogRetentionMs =
-    args.archivedLogRetentionMs ?? resolveArchivedEnvironmentAgentLogRetentionMs(args.runtimeEnv);
+    args.archivedLogRetentionMs ?? resolveArchivedEnvironmentDaemonLogRetentionMs(args.runtimeEnv);
   const archivedLogCutoff = now - archivedLogRetentionMs;
   const projectById = new Map(args.projects.map((project) => [project.id, project]));
 
@@ -222,7 +222,7 @@ export function reconcileManagedArtifactStorage(
         thread.archivedAt === undefined ||
         (typeof thread.archivedAt === "number" && thread.archivedAt >= archivedLogCutoff);
       if (shouldKeepLogs) {
-        keptLogPaths.add(resolveDefaultEnvironmentAgentLogFilePath({
+        keptLogPaths.add(resolveDefaultEnvironmentDaemonLogFilePath({
           projectId: thread.projectId,
           threadId: thread.id,
           environmentId,
@@ -249,8 +249,8 @@ export function reconcileManagedArtifactStorage(
 
   let removedLogArtifacts = 0;
   const seenLogBasePaths = new Set<string>();
-  const environmentAgentLogsRoot = resolveBbPath(args.runtimeEnv, "environment-agent-logs");
-  for (const filePath of scanFilesRecursively(environmentAgentLogsRoot)) {
+  const environmentDaemonLogsRoot = resolveBbPath(args.runtimeEnv, "environment-daemon-logs");
+  for (const filePath of scanFilesRecursively(environmentDaemonLogsRoot)) {
     const basePath = baseLogPath(filePath);
     if (seenLogBasePaths.has(basePath)) continue;
     seenLogBasePaths.add(basePath);
@@ -258,7 +258,7 @@ export function reconcileManagedArtifactStorage(
     removeRotatingJsonLineFileArtifacts(basePath);
     removedLogArtifacts += 1;
   }
-  removeEmptyDirectories(environmentAgentLogsRoot);
+  removeEmptyDirectories(environmentDaemonLogsRoot);
 
   let removedWorkspaceDirectories = 0;
   const activeManagedWorkspacePathsByProjectId = new Map<string, Set<string>>();

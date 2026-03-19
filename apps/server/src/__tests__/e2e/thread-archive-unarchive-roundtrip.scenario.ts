@@ -8,7 +8,7 @@ import {
   readJson,
   waitForThreadCondition,
   waitForThreadStatus,
-} from "./environment-agent-api.js";
+} from "./environment-daemon-api.js";
 import {
   startServerE2eHarness,
 } from "./harness.js";

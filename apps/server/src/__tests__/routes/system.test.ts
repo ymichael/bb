@@ -172,13 +172,13 @@ describe("System routes", () => {
           active: 1,
           idle: 2,
         },
-        environmentAgent: {
+        environmentDaemon: {
           activeSessionCount: 1,
           activeSessions: [
             {
               sessionId: "session-1",
               environmentId: "env-1",
-              agentId: "environment-agent:thread-1",
+              agentId: "environment-daemon:thread-1",
               agentInstanceId: "instance-1",
               protocolVersion: 1,
               worker: {
@@ -252,13 +252,13 @@ describe("System routes", () => {
           active: 1,
           idle: 2,
         },
-        environmentAgent: {
+        environmentDaemon: {
           activeSessionCount: 1,
           activeSessions: [
             {
               sessionId: "session-1",
               environmentId: "env-1",
-              agentId: "environment-agent:thread-1",
+              agentId: "environment-daemon:thread-1",
               agentInstanceId: "instance-1",
               protocolVersion: 1,
               worker: {

@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 
 import {
-  resolveEnvironmentAgentServiceOptions,
-  startEnvironmentAgentService,
+  resolveEnvironmentDaemonServiceOptions,
+  startEnvironmentDaemonService,
 } from "../service.js";
 
 interface ParsedArgs {
@@ -51,13 +51,13 @@ function parseArgs(argv: string[]): ParsedArgs {
 
 async function main(): Promise<void> {
   try {
-    const options = resolveEnvironmentAgentServiceOptions({
+    const options = resolveEnvironmentDaemonServiceOptions({
       cli: parseArgs(process.argv.slice(2)),
       env: process.env,
     });
-    const { server, close } = await startEnvironmentAgentService(options);
+    const { server, close } = await startEnvironmentDaemonService(options);
     console.error(
-      `environment-agent http listening on ${server.baseUrl} (log: ${options.logging.filePath})`,
+      `environment-daemon http listening on ${server.baseUrl} (log: ${options.logging.filePath})`,
     );
 
     const shutdown = async () => {

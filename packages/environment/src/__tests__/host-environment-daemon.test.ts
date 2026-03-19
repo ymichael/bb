@@ -4,11 +4,11 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
-  __testOnly__getManagedHostEnvironmentAgentRecord,
-  disposeManagedHostEnvironmentAgent,
-  ensureManagedHostEnvironmentAgent,
-  resolveManagedHostEnvironmentAgentLaunchCommand,
-} from "../host-environment-agent.js";
+  __testOnly__getManagedHostEnvironmentDaemonRecord,
+  disposeManagedHostEnvironmentDaemon,
+  ensureManagedHostEnvironmentDaemon,
+  resolveManagedHostEnvironmentDaemonLaunchCommand,
+} from "../host-environment-daemon.js";
 
 const tempDirs: string[] = [];
 const originalBbRoot = process.env.BB_ROOT;
@@ -40,17 +40,17 @@ afterEach(() => {
   }
 });
 
-describe("host environment-agent helper", () => {
-  it("launches the standalone environment-agent artifact directly", () => {
+describe("host environment-daemon helper", () => {
+  it("launches the standalone environment-daemon artifact directly", () => {
     const artifactEntry = fileURLToPath(
-      new URL("../../../environment-daemon/dist/environment-agent.bundle.mjs", import.meta.url),
+      new URL("../../../environment-daemon/dist/environment-daemon.bundle.mjs", import.meta.url),
     );
     mkdirSync(dirname(artifactEntry), { recursive: true });
     if (!existsSync(artifactEntry)) {
       writeFileSync(artifactEntry, "console.log('agent')\n", "utf8");
     }
 
-    expect(resolveManagedHostEnvironmentAgentLaunchCommand()).toEqual({
+    expect(resolveManagedHostEnvironmentDaemonLaunchCommand()).toEqual({
       command: process.execPath,
       args: [artifactEntry],
     });
@@ -88,8 +88,8 @@ describe("host environment-agent helper", () => {
       },
     };
 
-    const first = ensureManagedHostEnvironmentAgent(ensureArgs, deps);
-    const second = ensureManagedHostEnvironmentAgent(ensureArgs, deps);
+    const first = ensureManagedHostEnvironmentDaemon(ensureArgs, deps);
+    const second = ensureManagedHostEnvironmentDaemon(ensureArgs, deps);
 
     await Promise.resolve();
     await Promise.resolve();
@@ -99,7 +99,7 @@ describe("host environment-agent helper", () => {
     waitGate.resolve();
     await Promise.all([first, second]);
 
-    expect(__testOnly__getManagedHostEnvironmentAgentRecord({
+    expect(__testOnly__getManagedHostEnvironmentDaemonRecord({
       projectId,
       threadId: "thread-1",
       environmentId: "worktree",
@@ -122,7 +122,7 @@ describe("host environment-agent helper", () => {
     const workspaceRoot = makeTempDir();
     const spawnProcess = vi.fn();
 
-    const target = await ensureManagedHostEnvironmentAgent(
+    const target = await ensureManagedHostEnvironmentDaemon(
       {
         workspaceRootPath: workspaceRoot,
         threadId: "thread-1",
@@ -150,7 +150,7 @@ describe("host environment-agent helper", () => {
         authorization: "Bearer reconnect-token",
       },
     });
-    expect(__testOnly__getManagedHostEnvironmentAgentRecord({
+    expect(__testOnly__getManagedHostEnvironmentDaemonRecord({
       projectId,
       threadId: "thread-1",
       environmentId: "local",
@@ -168,7 +168,7 @@ describe("host environment-agent helper", () => {
     const projectId = `project-${Date.now()}`;
     const workspaceRoot = makeTempDir();
 
-    const first = await ensureManagedHostEnvironmentAgent(
+    const first = await ensureManagedHostEnvironmentDaemon(
       {
         workspaceRootPath: workspaceRoot,
         threadId: "thread-1",
@@ -194,7 +194,7 @@ describe("host environment-agent helper", () => {
     );
 
     const killProcess = vi.fn();
-    const second = await ensureManagedHostEnvironmentAgent(
+    const second = await ensureManagedHostEnvironmentDaemon(
       {
         workspaceRootPath: workspaceRoot,
         threadId: "thread-1",
@@ -226,7 +226,7 @@ describe("host environment-agent helper", () => {
       unref: vi.fn(),
     })) as unknown as typeof import("node:child_process").spawn;
 
-    const first = await ensureManagedHostEnvironmentAgent(
+    const first = await ensureManagedHostEnvironmentDaemon(
       {
         workspaceRootPath: workspaceRoot,
         threadId: "thread-1",
@@ -247,7 +247,7 @@ describe("host environment-agent helper", () => {
       },
     );
 
-    const second = await ensureManagedHostEnvironmentAgent(
+    const second = await ensureManagedHostEnvironmentDaemon(
       {
         workspaceRootPath: workspaceRoot,
         threadId: "thread-2",
@@ -275,7 +275,7 @@ describe("host environment-agent helper", () => {
     const workspaceRoot = makeTempDir();
     const runtimeEnv = { BB_ROOT: bbRoot };
 
-    await ensureManagedHostEnvironmentAgent(
+    await ensureManagedHostEnvironmentDaemon(
       {
         workspaceRootPath: workspaceRoot,
         threadId: "thread-1",
@@ -305,7 +305,7 @@ describe("host environment-agent helper", () => {
       () => killProcess.mock.calls.length < 2,
     );
 
-    await disposeManagedHostEnvironmentAgent(
+    await disposeManagedHostEnvironmentDaemon(
       {
         projectId,
         threadId: "thread-1",
@@ -324,7 +324,7 @@ describe("host environment-agent helper", () => {
 
     expect(killProcess).toHaveBeenNthCalledWith(1, 4321, "SIGTERM");
     expect(killProcess).toHaveBeenNthCalledWith(2, 4321, "SIGKILL");
-    expect(__testOnly__getManagedHostEnvironmentAgentRecord({
+    expect(__testOnly__getManagedHostEnvironmentDaemonRecord({
       projectId,
       threadId: "thread-1",
       environmentId: "local",
@@ -339,7 +339,7 @@ describe("host environment-agent helper", () => {
     const workspaceRoot = makeTempDir();
     const runtimeEnv = { BB_ROOT: bbRoot };
 
-    await ensureManagedHostEnvironmentAgent(
+    await ensureManagedHostEnvironmentDaemon(
       {
         workspaceRootPath: workspaceRoot,
         threadId: "thread-1",
@@ -363,7 +363,7 @@ describe("host environment-agent helper", () => {
       throw new Error("shutdown failed");
     });
 
-    await disposeManagedHostEnvironmentAgent(
+    await disposeManagedHostEnvironmentDaemon(
       {
         projectId,
         threadId: "thread-1",
@@ -381,7 +381,7 @@ describe("host environment-agent helper", () => {
       "http://127.0.0.1:4310",
       "reconnect-token",
     );
-    expect(__testOnly__getManagedHostEnvironmentAgentRecord({
+    expect(__testOnly__getManagedHostEnvironmentDaemonRecord({
       projectId,
       threadId: "thread-1",
       environmentId: "local",

@@ -1,10 +1,10 @@
 import type {
-  EnvironmentAgentSessionCloseReason,
-  EnvironmentAgentSessionRecord,
-  EnvironmentAgentSessionRepository,
+  EnvironmentDaemonSessionCloseReason,
+  EnvironmentDaemonSessionRecord,
+  EnvironmentDaemonSessionRepository,
 } from "@bb/db";
 
-export interface OpenEnvironmentAgentSessionInput {
+export interface OpenEnvironmentDaemonSessionInput {
   environmentId: string;
   agentId: string;
   agentInstanceId: string;
@@ -20,42 +20,42 @@ export interface OpenEnvironmentAgentSessionInput {
   now?: number;
 }
 
-export interface RecordEnvironmentAgentHeartbeatInput {
+export interface RecordEnvironmentDaemonHeartbeatInput {
   sessionId: string;
   leaseTtlMs: number;
   now?: number;
 }
 
-export interface CloseEnvironmentAgentSessionInput {
+export interface CloseEnvironmentDaemonSessionInput {
   sessionId: string;
   reason: Exclude<
-    EnvironmentAgentSessionCloseReason,
+    EnvironmentDaemonSessionCloseReason,
     "lease_expired" | "newer_session"
   >;
   now?: number;
 }
 
-export class EnvironmentAgentSessionManager {
-  constructor(private readonly sessions: EnvironmentAgentSessionRepository) {}
+export class EnvironmentDaemonSessionManager {
+  constructor(private readonly sessions: EnvironmentDaemonSessionRepository) {}
 
-  getSession(sessionId: string): EnvironmentAgentSessionRecord | undefined {
+  getSession(sessionId: string): EnvironmentDaemonSessionRecord | undefined {
     return this.sessions.getById(sessionId);
   }
 
   getActiveSessionByEnvironmentId(
     environmentId: string,
     now?: number,
-  ): EnvironmentAgentSessionRecord | undefined {
+  ): EnvironmentDaemonSessionRecord | undefined {
     return this.sessions.getActiveByEnvironmentId(environmentId, now);
   }
 
-  listSessionsByEnvironmentId(environmentId: string): EnvironmentAgentSessionRecord[] {
+  listSessionsByEnvironmentId(environmentId: string): EnvironmentDaemonSessionRecord[] {
     return this.sessions.listByEnvironmentId(environmentId);
   }
 
-  openSession(args: OpenEnvironmentAgentSessionInput): {
-    replaced?: EnvironmentAgentSessionRecord;
-    active: EnvironmentAgentSessionRecord;
+  openSession(args: OpenEnvironmentDaemonSessionInput): {
+    replaced?: EnvironmentDaemonSessionRecord;
+    active: EnvironmentDaemonSessionRecord;
   } {
     const now = args.now ?? Date.now();
     const existing = this.sessions.getActiveByEnvironmentId(args.environmentId, now);
@@ -83,8 +83,8 @@ export class EnvironmentAgentSessionManager {
   }
 
   recordHeartbeat(
-    args: RecordEnvironmentAgentHeartbeatInput,
-  ): EnvironmentAgentSessionRecord | undefined {
+    args: RecordEnvironmentDaemonHeartbeatInput,
+  ): EnvironmentDaemonSessionRecord | undefined {
     const now = args.now ?? Date.now();
     return this.sessions.touchHeartbeat({
       sessionId: args.sessionId,
@@ -94,12 +94,12 @@ export class EnvironmentAgentSessionManager {
   }
 
   closeSession(
-    args: CloseEnvironmentAgentSessionInput,
-  ): EnvironmentAgentSessionRecord | undefined {
+    args: CloseEnvironmentDaemonSessionInput,
+  ): EnvironmentDaemonSessionRecord | undefined {
     return this.sessions.markClosed(args);
   }
 
-  expireLeases(now: number = Date.now()): EnvironmentAgentSessionRecord[] {
+  expireLeases(now: number = Date.now()): EnvironmentDaemonSessionRecord[] {
     return this.sessions
       .listExpiringBefore(now)
       .flatMap((session) => {

@@ -1,32 +1,32 @@
-import type { EnvironmentAgentCommand } from "./protocol.js";
+import type { EnvironmentDaemonCommand } from "./protocol.js";
 import type {
-  EnvironmentAgentCommandReceiptRecord,
-  EnvironmentAgentSessionStateRecord,
+  EnvironmentDaemonCommandReceiptRecord,
+  EnvironmentDaemonSessionStateRecord,
 } from "./session-store.js";
-import type { EnvironmentAgentSessionRuntime } from "./session-runtime.js";
+import type { EnvironmentDaemonSessionRuntime } from "./session-runtime.js";
 import type {
-  EnvironmentAgentSessionCommandAckItem,
-  EnvironmentAgentSessionOpenPayload,
-  EnvironmentAgentSessionProviderResponsePayload,
-  EnvironmentAgentSessionWelcomeMessage,
+  EnvironmentDaemonSessionCommandAckItem,
+  EnvironmentDaemonSessionOpenPayload,
+  EnvironmentDaemonSessionProviderResponsePayload,
+  EnvironmentDaemonSessionWelcomeMessage,
 } from "./session-protocol.js";
-import { compareEnvironmentAgentSessionCursors } from "./session-protocol.js";
-import type { EnvironmentAgentSessionHttpClient } from "./session-http-client.js";
+import { compareEnvironmentDaemonSessionCursors } from "./session-protocol.js";
+import type { EnvironmentDaemonSessionHttpClient } from "./session-http-client.js";
 
-export interface EnvironmentAgentSessionSyncOptions {
-  runtime: EnvironmentAgentSessionRuntime;
-  client: EnvironmentAgentSessionHttpClient;
+export interface EnvironmentDaemonSessionSyncOptions {
+  runtime: EnvironmentDaemonSessionRuntime;
+  client: EnvironmentDaemonSessionHttpClient;
 }
 
-export interface EnvironmentAgentPulledCommand {
+export interface EnvironmentDaemonPulledCommand {
   threadId: string;
   commandId: string;
   commandCursor: number;
-  command: EnvironmentAgentCommand;
-  ackState: EnvironmentAgentSessionCommandAckItem["state"];
+  command: EnvironmentDaemonCommand;
+  ackState: EnvironmentDaemonSessionCommandAckItem["state"];
 }
 
-export interface FlushEnvironmentAgentEventBatchResult {
+export interface FlushEnvironmentDaemonEventBatchResult {
   sessionId: string;
   channelResults: Array<{
     threadId: string;
@@ -38,13 +38,13 @@ export interface FlushEnvironmentAgentEventBatchResult {
   }>;
 }
 
-export class EnvironmentAgentSessionSync {
-  constructor(private readonly options: EnvironmentAgentSessionSyncOptions) {}
+export class EnvironmentDaemonSessionSync {
+  constructor(private readonly options: EnvironmentDaemonSessionSyncOptions) {}
 
   async openSession(args: {
     threadId: string;
-    payload: EnvironmentAgentSessionOpenPayload;
-  }): Promise<EnvironmentAgentSessionWelcomeMessage> {
+    payload: EnvironmentDaemonSessionOpenPayload;
+  }): Promise<EnvironmentDaemonSessionWelcomeMessage> {
     const welcome = await this.options.client.openSession(args.payload);
     this.options.runtime.bindSession({
       threadId: args.threadId,
@@ -68,7 +68,7 @@ export class EnvironmentAgentSessionSync {
   }
 
   bindWelcomeChannels(args: {
-    welcome: EnvironmentAgentSessionWelcomeMessage;
+    welcome: EnvironmentDaemonSessionWelcomeMessage;
     agentId: string;
     agentInstanceId: string;
     now?: number;
@@ -131,7 +131,7 @@ export class EnvironmentAgentSessionSync {
 
   async flushPendingEvents(
     threadIds: readonly string[],
-  ): Promise<FlushEnvironmentAgentEventBatchResult> {
+  ): Promise<FlushEnvironmentDaemonEventBatchResult> {
     const state = this.requireSessionState(threadIds[0]!);
     const batches = threadIds
       .map((threadId) => this.options.runtime.getPendingEventBatch({ threadId }))
@@ -163,7 +163,7 @@ export class EnvironmentAgentSessionSync {
           generation: batch.generation,
           sequence: batch.events[batch.events.length - 1]!.sequence,
         };
-        if (compareEnvironmentAgentSessionCursors(ack.ackedThrough, batchTail) < 0) {
+        if (compareEnvironmentDaemonSessionCursors(ack.ackedThrough, batchTail) < 0) {
           return {
             threadId: batch.channelId,
             acknowledged: false,
@@ -187,7 +187,7 @@ export class EnvironmentAgentSessionSync {
     limit?: number;
     waitMs?: number;
     signal?: AbortSignal;
-  }): Promise<EnvironmentAgentPulledCommand[]> {
+  }): Promise<EnvironmentDaemonPulledCommand[]> {
     const state = this.requireSessionState(args.threadIds[0]!);
     const batch = await this.options.client.pullCommands({
       sessionId: state.sessionId,
@@ -226,7 +226,7 @@ export class EnvironmentAgentSessionSync {
           commandCursor: command.commandCursor,
           command: command.command,
           ackState: received.ackState,
-        } satisfies EnvironmentAgentPulledCommand;
+        } satisfies EnvironmentDaemonPulledCommand;
       });
 
     if (pulled.length > 0) {
@@ -295,7 +295,7 @@ export class EnvironmentAgentSessionSync {
     providerId?: string;
     normalizedMethod?: string;
     toolCall?: import("@bb/core").ProviderToolCallRequest;
-  }): Promise<EnvironmentAgentSessionProviderResponsePayload> {
+  }): Promise<EnvironmentDaemonSessionProviderResponsePayload> {
     const state = this.requireSessionState(args.threadId);
     const response = await this.options.client.sendProviderRequest({
       sessionId: state.sessionId,
@@ -314,10 +314,10 @@ export class EnvironmentAgentSessionSync {
     return response.payload;
   }
 
-  async flushPendingCommandResults(threadId: string): Promise<EnvironmentAgentCommandReceiptRecord[]> {
+  async flushPendingCommandResults(threadId: string): Promise<EnvironmentDaemonCommandReceiptRecord[]> {
     const state = this.requireSessionState(threadId);
     const pending = this.options.runtime.getPendingCommandResults(threadId);
-    const sent: EnvironmentAgentCommandReceiptRecord[] = [];
+    const sent: EnvironmentDaemonCommandReceiptRecord[] = [];
 
     for (const receipt of pending) {
       if (receipt.state === "received") {
@@ -345,8 +345,8 @@ export class EnvironmentAgentSessionSync {
 
   async flushPendingCommandResultsForThreads(
     threadIds: readonly string[],
-  ): Promise<EnvironmentAgentCommandReceiptRecord[]> {
-    const sent: EnvironmentAgentCommandReceiptRecord[] = [];
+  ): Promise<EnvironmentDaemonCommandReceiptRecord[]> {
+    const sent: EnvironmentDaemonCommandReceiptRecord[] = [];
     for (const threadId of threadIds) {
       sent.push(...await this.flushPendingCommandResults(threadId));
     }
@@ -355,13 +355,13 @@ export class EnvironmentAgentSessionSync {
 
   private requireSessionState(
     threadId: string,
-  ): EnvironmentAgentSessionStateRecord & {
+  ): EnvironmentDaemonSessionStateRecord & {
     sessionId: string;
   } {
     const state = this.options.runtime.loadThreadState(threadId);
     if (!state?.sessionId) {
       throw new Error(`Missing bound session for thread ${threadId}`);
     }
-    return state as EnvironmentAgentSessionStateRecord & { sessionId: string };
+    return state as EnvironmentDaemonSessionStateRecord & { sessionId: string };
   }
 }

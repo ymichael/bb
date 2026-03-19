@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import {
-  ENVIRONMENT_AGENT_PROTOCOL_VERSION,
-  type EnvironmentAgentControlRequest,
+  ENVIRONMENT_DAEMON_PROTOCOL_VERSION,
+  type EnvironmentDaemonControlRequest,
   type JsonLineTransport,
-  createEnvironmentAgentClient,
+  createEnvironmentDaemonClient,
 } from "./index.js";
 
 function createFakeTransport(): JsonLineTransport & {
@@ -42,24 +42,24 @@ function createFakeTransport(): JsonLineTransport & {
   };
 }
 
-describe("EnvironmentAgentClient", () => {
+describe("EnvironmentDaemonClient", () => {
   it("routes control responses away from provider transport", async () => {
     const transport = createFakeTransport();
-    const client = createEnvironmentAgentClient(transport);
+    const client = createEnvironmentDaemonClient(transport);
     const providerLineSpy = vi.fn();
     client.providerTransport.setHandlers({
       onLine: providerLineSpy,
     });
 
     const statusPromise = client.status();
-    const request = JSON.parse(transport.emittedLines[0] ?? "") as EnvironmentAgentControlRequest;
+    const request = JSON.parse(transport.emittedLines[0] ?? "") as EnvironmentDaemonControlRequest;
     transport.emitStdout(
       JSON.stringify({
-        environmentAgentMessage: true,
+        environmentDaemonMessage: true,
         requestId: request.requestId,
         type: "status.response",
         payload: {
-          protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+          protocolVersion: ENVIRONMENT_DAEMON_PROTOCOL_VERSION,
           latestSequence: 2,
           connectedToServer: true,
           pendingEventCount: 0,
@@ -77,16 +77,16 @@ describe("EnvironmentAgentClient", () => {
 
   it("sends provider ensure requests through the control plane", async () => {
     const transport = createFakeTransport();
-    const client = createEnvironmentAgentClient(transport);
+    const client = createEnvironmentDaemonClient(transport);
 
     const ensurePromise = client.ensureProviderRunning({
       command: "codex",
       args: ["app-server"],
     });
-    const request = JSON.parse(transport.emittedLines[0] ?? "") as EnvironmentAgentControlRequest;
+    const request = JSON.parse(transport.emittedLines[0] ?? "") as EnvironmentDaemonControlRequest;
     transport.emitStdout(
       JSON.stringify({
-        environmentAgentMessage: true,
+        environmentDaemonMessage: true,
         requestId: request.requestId,
         type: "provider.ensure.response",
         payload: {
@@ -106,7 +106,7 @@ describe("EnvironmentAgentClient", () => {
 
   it("forwards provider lines to the provider transport", () => {
     const transport = createFakeTransport();
-    const client = createEnvironmentAgentClient(transport);
+    const client = createEnvironmentDaemonClient(transport);
     const providerLineSpy = vi.fn();
     client.providerTransport.setHandlers({
       onLine: providerLineSpy,

@@ -9,7 +9,7 @@ const BB_ENV_DAEMON_LOG_FILE = "BB_ENV_DAEMON_LOG_FILE";
 const DEFAULT_ENVIRONMENT_AGENT_LOG_MAX_BYTES = 5 * 1024 * 1024;
 const DEFAULT_ENVIRONMENT_AGENT_LOG_MAX_FILES = 3;
 
-export interface EnvironmentAgentLogIdentity {
+export interface EnvironmentDaemonLogIdentity {
   projectId: string | undefined;
   threadId: string | undefined;
   environmentId: string | undefined;
@@ -25,7 +25,7 @@ function sanitizeSegment(value: string | undefined): string {
   return normalized.length > 0 ? normalized : "unknown";
 }
 
-export function resolveEnvironmentAgentLogFilePath(
+export function resolveEnvironmentDaemonLogFilePath(
   env: NodeJS.ProcessEnv,
 ): string {
   const configured = env[BB_ENV_DAEMON_LOG_FILE]?.trim();
@@ -33,7 +33,7 @@ export function resolveEnvironmentAgentLogFilePath(
     return configured;
   }
 
-  return resolveDefaultEnvironmentAgentLogFilePath({
+  return resolveDefaultEnvironmentDaemonLogFilePath({
     projectId: env.BB_PROJECT_ID,
     threadId: env.BB_THREAD_ID,
     environmentId: env.BB_ENVIRONMENT_ID,
@@ -41,30 +41,30 @@ export function resolveEnvironmentAgentLogFilePath(
   });
 }
 
-export function resolveDefaultEnvironmentAgentLogFilePath(
-  identity: EnvironmentAgentLogIdentity,
+export function resolveDefaultEnvironmentDaemonLogFilePath(
+  identity: EnvironmentDaemonLogIdentity,
 ): string {
   return join(
-    resolveBbPath(identity.runtimeEnv, "environment-agent-logs"),
+    resolveBbPath(identity.runtimeEnv, "environment-daemon-logs"),
     sanitizeSegment(identity.projectId),
     `${sanitizeSegment(identity.environmentId)}-${sanitizeSegment(identity.threadId)}.log`,
   );
 }
 
-export function removeEnvironmentAgentDefaultLogArtifacts(
-  identity: EnvironmentAgentLogIdentity,
+export function removeEnvironmentDaemonDefaultLogArtifacts(
+  identity: EnvironmentDaemonLogIdentity,
 ): void {
-  removeRotatingJsonLineFileArtifacts(resolveDefaultEnvironmentAgentLogFilePath(identity));
+  removeRotatingJsonLineFileArtifacts(resolveDefaultEnvironmentDaemonLogFilePath(identity));
 }
 
-export interface EnvironmentAgentFileLogger {
+export interface EnvironmentDaemonFileLogger {
   readonly filePath: string;
   log(level: "info" | "warn" | "error", message: string, meta?: Record<string, unknown>): void;
 }
 
-export function createEnvironmentAgentFileLogger(
+export function createEnvironmentDaemonFileLogger(
   filePath: string,
-): EnvironmentAgentFileLogger {
+): EnvironmentDaemonFileLogger {
   const writer = createRotatingJsonLineFileWriter({
     filePath,
     maxBytes: DEFAULT_ENVIRONMENT_AGENT_LOG_MAX_BYTES,

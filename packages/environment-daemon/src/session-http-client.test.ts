@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import {
-  EnvironmentAgentSessionHttpClient,
-  EnvironmentAgentSessionHttpClientError,
-  isEnvironmentAgentSessionInactiveError,
-  createEnvironmentAgentSessionHttpClientFromConnection,
+  EnvironmentDaemonSessionHttpClient,
+  EnvironmentDaemonSessionHttpClientError,
+  isEnvironmentDaemonSessionInactiveError,
+  createEnvironmentDaemonSessionHttpClientFromConnection,
 } from "./session-http-client.js";
 
 function jsonResponse(status: number, body: unknown): Response {
@@ -13,7 +13,7 @@ function jsonResponse(status: number, body: unknown): Response {
   });
 }
 
-describe("EnvironmentAgentSessionHttpClient", () => {
+describe("EnvironmentDaemonSessionHttpClient", () => {
   it("calls the daemon session endpoints with the expected payloads", async () => {
     const fetchImpl = vi.fn<typeof fetch>()
       .mockResolvedValueOnce(
@@ -63,7 +63,7 @@ describe("EnvironmentAgentSessionHttpClient", () => {
       .mockResolvedValueOnce(new Response(null, { status: 204 }))
       .mockResolvedValueOnce(new Response(null, { status: 204 }));
 
-    const client = new EnvironmentAgentSessionHttpClient({
+    const client = new EnvironmentDaemonSessionHttpClient({
       serverUrl: "http://127.0.0.1:3333/api/v1",
       environmentId: "env-1",
       authToken: "token-1",
@@ -160,10 +160,10 @@ describe("EnvironmentAgentSessionHttpClient", () => {
     const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async () =>
       jsonResponse(409, {
         code: "inactive_session",
-        message: "Environment-agent session sess-1 is not active",
+        message: "Environment-daemon session sess-1 is not active",
       }),
     );
-    const client = createEnvironmentAgentSessionHttpClientFromConnection(
+    const client = createEnvironmentDaemonSessionHttpClientFromConnection(
       {
         serverUrl: "http://127.0.0.1:3333/api/v1",
         environmentId: "env-1",
@@ -174,13 +174,13 @@ describe("EnvironmentAgentSessionHttpClient", () => {
 
     await expect(client.pullCommands({ sessionId: "sess-1" })).rejects.toMatchObject({
       message:
-        "Unexpected daemon response 409 (expected 200): Environment-agent session sess-1 is not active",
+        "Unexpected daemon response 409 (expected 200): Environment-daemon session sess-1 is not active",
       status: 409,
       code: "inactive_session",
-    } satisfies Partial<EnvironmentAgentSessionHttpClientError>);
+    } satisfies Partial<EnvironmentDaemonSessionHttpClientError>);
 
     await client.pullCommands({ sessionId: "sess-1" }).catch((error: unknown) => {
-      expect(isEnvironmentAgentSessionInactiveError(error)).toBe(true);
+      expect(isEnvironmentDaemonSessionInactiveError(error)).toBe(true);
     });
   });
 });

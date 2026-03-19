@@ -12,7 +12,7 @@ export default defineConfig({
     include: [
       "src/__tests__/e2e/standalone-server-cli-roundtrip.test.ts",
       "src/__tests__/e2e/thread-archive-unarchive-roundtrip.test.ts",
-      "src/__tests__/e2e/environment-agent-restart-roundtrip.test.ts",
+      "src/__tests__/e2e/environment-daemon-restart-roundtrip.test.ts",
       "src/__tests__/e2e/thread-provisioning-responsiveness.test.ts",
       "src/__tests__/e2e/thread-spawn-roundtrip.test.ts",
       "src/__tests__/e2e/thread-immediate-followups-roundtrip.test.ts",

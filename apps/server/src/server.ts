@@ -7,9 +7,9 @@ import { logger } from "hono/logger";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { createNodeWebSocket } from "@hono/node-ws";
 import type {
-  EnvironmentAgentCommandRepository,
-  EnvironmentAgentCursorRepository,
-  EnvironmentAgentSessionRepository,
+  EnvironmentDaemonCommandRepository,
+  EnvironmentDaemonCursorRepository,
+  EnvironmentDaemonSessionRepository,
   EnvironmentRepository,
   ProjectRepository,
   ThreadEnvironmentAttachmentRepository,
@@ -39,16 +39,16 @@ import { createApiRoutes } from "./routes/index.js";
 import { InMemorySchedulerService } from "./scheduler-service.js";
 import { createRestartRecommendationMonitor } from "./restart-recommendation.js";
 import { isPerfDebugEnabled, logPerf } from "./perf.js";
-import { EnvironmentAgentCommandDispatcher } from "./environment-agent-command-dispatcher.js";
-import { EnvironmentAgentEventApplier } from "./environment-agent-event-applier.js";
-import { EnvironmentAgentSessionManager } from "./environment-agent-session-manager.js";
-import { EnvironmentAgentSessionService } from "./environment-agent-session-service.js";
+import { EnvironmentDaemonCommandDispatcher } from "./environment-daemon-command-dispatcher.js";
+import { EnvironmentDaemonEventApplier } from "./environment-daemon-event-applier.js";
+import { EnvironmentDaemonSessionManager } from "./environment-daemon-session-manager.js";
+import { EnvironmentDaemonSessionService } from "./environment-daemon-session-service.js";
 import { resolveManagedArtifactSweepIntervalMs } from "./managed-artifact-reconciler.js";
 import { createSystemHealthReporter } from "./system-health-report.js";
 import {
-  resolveEnvironmentAgentSessionTimingOptions,
-  type EnvironmentAgentSessionTimingOptions,
-} from "./environment-agent-timing.js";
+  resolveEnvironmentDaemonSessionTimingOptions,
+  type EnvironmentDaemonSessionTimingOptions,
+} from "./environment-daemon-timing.js";
 import { composeProviderToolHosts, createManagerProviderToolHost } from "./manager-tools.js";
 import { ProviderSessionController } from "./provider-session-controller.js";
 
@@ -72,15 +72,15 @@ export interface ServerDeps {
   threadEnvironmentAttachmentRepo?: ThreadEnvironmentAttachmentRepository;
   threadRepo: ThreadRepository;
   eventRepo: EventRepository;
-  environmentAgentSessionRepo: EnvironmentAgentSessionRepository;
-  environmentAgentCursorRepo: EnvironmentAgentCursorRepository;
-  environmentAgentCommandRepo: EnvironmentAgentCommandRepository;
+  environmentDaemonSessionRepo: EnvironmentDaemonSessionRepository;
+  environmentDaemonCursorRepo: EnvironmentDaemonCursorRepository;
+  environmentDaemonCommandRepo: EnvironmentDaemonCommandRepository;
   provider?: ProviderAdapter;
   runtimeEnv?: NodeJS.ProcessEnv;
   serverBaseUrl?: string;
   dbPath: string;
   serverLogFilePath: string;
-  environmentAgentSessionOptions?: EnvironmentAgentSessionTimingOptions;
+  environmentDaemonSessionOptions?: EnvironmentDaemonSessionTimingOptions;
   providerToolHost?: ProviderToolHost;
   requestShutdown?: (reason: string) => void;
   requestRestart?: (reason: string) => void;
@@ -142,8 +142,8 @@ export function createServer(deps: ServerDeps) {
   const environmentCatalog = listBuiltInProvisioningSystemInfos();
   const scheduler = new InMemorySchedulerService();
   const llmCompletionService = createCodexLlmCompletionService();
-  const environmentAgentSessionManager = new EnvironmentAgentSessionManager(
-    deps.environmentAgentSessionRepo,
+  const environmentDaemonSessionManager = new EnvironmentDaemonSessionManager(
+    deps.environmentDaemonSessionRepo,
   );
   const resolveAttachedEnvironmentId = (threadId: string): string | undefined =>
     deps.threadEnvironmentAttachmentRepo?.getByThreadId(threadId)?.environmentId;
@@ -152,9 +152,9 @@ export function createServer(deps: ServerDeps) {
       row.threadId
     ) ?? [];
 
-  const environmentAgentCommandDispatcher = new EnvironmentAgentCommandDispatcher(
-    deps.environmentAgentSessionRepo,
-    deps.environmentAgentCommandRepo,
+  const environmentDaemonCommandDispatcher = new EnvironmentDaemonCommandDispatcher(
+    deps.environmentDaemonSessionRepo,
+    deps.environmentDaemonCommandRepo,
     {
       resolveEnvironmentId: resolveAttachedEnvironmentId,
     },
@@ -165,26 +165,26 @@ export function createServer(deps: ServerDeps) {
       ? { BB_SERVER_URL: deps.serverBaseUrl }
       : {}),
   };
-  const environmentAgentSessionOptions = {
-    ...resolveEnvironmentAgentSessionTimingOptions(serverRuntimeEnv),
-    ...(deps.environmentAgentSessionOptions ?? {}),
+  const environmentDaemonSessionOptions = {
+    ...resolveEnvironmentDaemonSessionTimingOptions(serverRuntimeEnv),
+    ...(deps.environmentDaemonSessionOptions ?? {}),
   };
-  const environmentAgentEventApplier = new EnvironmentAgentEventApplier(
-    deps.environmentAgentCursorRepo,
+  const environmentDaemonEventApplier = new EnvironmentDaemonEventApplier(
+    deps.environmentDaemonCursorRepo,
     {
-      ingestReplayedEnvironmentAgentEvents: ({ threadId, events }) =>
-        threadManager.ingestReplayedEnvironmentAgentEvents({ threadId, events }),
+      ingestReplayedEnvironmentDaemonEvents: ({ threadId, events }) =>
+        threadManager.ingestReplayedEnvironmentDaemonEvents({ threadId, events }),
     },
   );
-  const environmentAgentSessionService = new EnvironmentAgentSessionService(
-    environmentAgentSessionManager,
-    deps.environmentAgentCursorRepo,
+  const environmentDaemonSessionService = new EnvironmentDaemonSessionService(
+    environmentDaemonSessionManager,
+    deps.environmentDaemonCursorRepo,
     {
-      ...environmentAgentSessionOptions,
-      commandDispatcher: environmentAgentCommandDispatcher,
-      eventApplier: environmentAgentEventApplier,
+      ...environmentDaemonSessionOptions,
+      commandDispatcher: environmentDaemonCommandDispatcher,
+      eventApplier: environmentDaemonEventApplier,
       providerRequestHandler: ({ threadId, request }) =>
-        threadManager.handleEnvironmentAgentProviderRequest({
+        threadManager.handleEnvironmentDaemonProviderRequest({
           threadId,
           requestId: request.requestId,
           method: request.method,
@@ -206,7 +206,7 @@ export function createServer(deps: ServerDeps) {
               session.environmentId,
             )
           ) {
-            threadManager.handleEnvironmentAgentSessionInvalidated(
+            threadManager.handleEnvironmentDaemonSessionInvalidated(
               attachment.threadId,
               session.closeReason,
             );
@@ -227,19 +227,19 @@ export function createServer(deps: ServerDeps) {
     providerCatalog,
     environmentCatalog,
     scheduler,
-    environmentAgentCommandDispatcher,
-    environmentAgentSessionService,
-    deps.environmentAgentSessionRepo,
+    environmentDaemonCommandDispatcher,
+    environmentDaemonSessionService,
+    deps.environmentDaemonSessionRepo,
     deps.environmentRepo,
     deps.threadEnvironmentAttachmentRepo,
     providerToolHost,
   );
-  const environmentAgentLeaseSweepIntervalMs =
-    environmentAgentSessionOptions.leaseSweepIntervalMs ?? 5_000;
-  const environmentAgentLeaseSweepInterval = setInterval(() => {
-    environmentAgentSessionService.expireLeases();
-  }, environmentAgentLeaseSweepIntervalMs);
-  environmentAgentLeaseSweepInterval.unref();
+  const environmentDaemonLeaseSweepIntervalMs =
+    environmentDaemonSessionOptions.leaseSweepIntervalMs ?? 5_000;
+  const environmentDaemonLeaseSweepInterval = setInterval(() => {
+    environmentDaemonSessionService.expireLeases();
+  }, environmentDaemonLeaseSweepIntervalMs);
+  environmentDaemonLeaseSweepInterval.unref();
   const managedArtifactSweepIntervalMs = resolveManagedArtifactSweepIntervalMs(serverRuntimeEnv);
   const managedArtifactSweepInterval = managedArtifactSweepIntervalMs > 0
     ? setInterval(() => {
@@ -280,7 +280,7 @@ export function createServer(deps: ServerDeps) {
     threadRepo: deps.threadRepo,
     eventRepo: deps.eventRepo,
     threadManager,
-    environmentAgentSessionService,
+    environmentDaemonSessionService,
     wsManager,
     startTime,
     requestShutdown: deps.requestShutdown,
@@ -290,7 +290,7 @@ export function createServer(deps: ServerDeps) {
     getHealthReport: createSystemHealthReporter({
       projectRepo: deps.projectRepo,
       threadRepo: deps.threadRepo,
-      environmentAgentSessionRepo: deps.environmentAgentSessionRepo,
+      environmentDaemonSessionRepo: deps.environmentDaemonSessionRepo,
       getRunningCount: () => threadManager.getRunningCount(),
       startTime,
       dbPath: deps.dbPath,
@@ -333,7 +333,7 @@ export function createServer(deps: ServerDeps) {
     threadManager,
     restartRecommendationMonitor,
     close: () => {
-      clearInterval(environmentAgentLeaseSweepInterval);
+      clearInterval(environmentDaemonLeaseSweepInterval);
       if (managedArtifactSweepInterval) {
         clearInterval(managedArtifactSweepInterval);
       }

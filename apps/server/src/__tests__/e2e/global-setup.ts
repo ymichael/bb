@@ -21,12 +21,12 @@ export default function globalSetup(): () => void {
   const workspaceRoot = resolve(process.cwd(), "../..");
   dotenv.config({ path: resolve(workspaceRoot, ".env") });
 
-  const environmentAgentRoot = resolve(process.cwd(), "../../packages/environment-daemon");
-  const bundlePath = resolve(environmentAgentRoot, "dist/environment-agent.bundle.mjs");
+  const environmentDaemonRoot = resolve(process.cwd(), "../../packages/environment-daemon");
+  const bundlePath = resolve(environmentDaemonRoot, "dist/environment-daemon.bundle.mjs");
   const sourceLatestMs = Math.max(
-    latestModifiedAtMs(resolve(environmentAgentRoot, "src")),
-    latestModifiedAtMs(resolve(environmentAgentRoot, "package.json")),
-    latestModifiedAtMs(resolve(environmentAgentRoot, "tsconfig.json")),
+    latestModifiedAtMs(resolve(environmentDaemonRoot, "src")),
+    latestModifiedAtMs(resolve(environmentDaemonRoot, "package.json")),
+    latestModifiedAtMs(resolve(environmentDaemonRoot, "tsconfig.json")),
   );
   const bundleIsCurrent =
     existsSync(bundlePath) && statSync(bundlePath).mtimeMs >= sourceLatestMs;

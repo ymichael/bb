@@ -371,7 +371,7 @@ export type SystemHealthStorageBucketKey =
   | "database_wal"
   | "database_shm"
   | "server_logs"
-  | "environment_agent_logs"
+  | "environment_daemon_logs"
   | "worktrees"
   | "attachments"
   | "backups";
@@ -402,40 +402,40 @@ export interface SystemHealthThreadCounts {
   idle: number;
 }
 
-export interface SystemHealthEnvironmentAgentWorker {
+export interface SystemHealthEnvironmentDaemonWorker {
   name: string;
   version: string;
   buildId?: string;
 }
 
-export interface SystemHealthEnvironmentAgentProvider {
+export interface SystemHealthEnvironmentDaemonProvider {
   providerId: string;
   adapterVersion: string;
   runtimeVersion?: string;
 }
 
-export interface SystemHealthEnvironmentAgentCapabilities {
+export interface SystemHealthEnvironmentDaemonCapabilities {
   commands: string[];
   features: string[];
 }
 
-export interface SystemHealthEnvironmentAgentCompatibility {
+export interface SystemHealthEnvironmentDaemonCompatibility {
   disposition: "reuse" | "degrade" | "replace";
   missingRequiredCommands: string[];
   missingOptionalCommands: string[];
   missingOptionalFeatures: string[];
 }
 
-export interface SystemHealthEnvironmentAgentSession {
+export interface SystemHealthEnvironmentDaemonSession {
   sessionId: string;
   environmentId: string;
   agentId: string;
   agentInstanceId: string;
   protocolVersion: number;
-  worker?: SystemHealthEnvironmentAgentWorker;
-  providers?: SystemHealthEnvironmentAgentProvider[];
-  selectedCapabilities?: SystemHealthEnvironmentAgentCapabilities;
-  compatibility?: SystemHealthEnvironmentAgentCompatibility;
+  worker?: SystemHealthEnvironmentDaemonWorker;
+  providers?: SystemHealthEnvironmentDaemonProvider[];
+  selectedCapabilities?: SystemHealthEnvironmentDaemonCapabilities;
+  compatibility?: SystemHealthEnvironmentDaemonCompatibility;
   controlBaseUrl?: string;
   leaseExpiresAt: number;
   lastHeartbeatAt?: number;
@@ -449,9 +449,9 @@ export interface SystemHealthReport {
   projectCount: number;
   runningThreads: number;
   threadCounts: SystemHealthThreadCounts;
-  environmentAgent: {
+  environmentDaemon: {
     activeSessionCount: number;
-    activeSessions: SystemHealthEnvironmentAgentSession[];
+    activeSessions: SystemHealthEnvironmentDaemonSession[];
   };
   storage: {
     totalBytes: number;

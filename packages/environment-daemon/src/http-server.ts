@@ -1,7 +1,7 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
-import type { EnvironmentAgentRuntime } from "./runtime.js";
+import type { EnvironmentDaemonRuntime } from "./runtime.js";
 
-export interface EnvironmentAgentHttpServer {
+export interface EnvironmentDaemonHttpServer {
   readonly baseUrl: string;
   close(): Promise<void>;
 }
@@ -44,14 +44,14 @@ function isAuthorized(
   return authorizationHeader === `Bearer ${expectedBearerToken}`;
 }
 
-export async function createEnvironmentAgentHttpServer(args: {
-  runtime: EnvironmentAgentRuntime;
+export async function createEnvironmentDaemonHttpServer(args: {
+  runtime: EnvironmentDaemonRuntime;
   host?: string;
   port?: number;
   bearerToken?: string;
   onSessionSyncRequested?: () => void;
   onShutdownRequested?: () => void | Promise<void>;
-}): Promise<EnvironmentAgentHttpServer> {
+}): Promise<EnvironmentDaemonHttpServer> {
   const server = createServer(async (request, response) => {
     try {
       if (!isAuthorized(request, args.bearerToken)) {
@@ -104,7 +104,7 @@ export async function createEnvironmentAgentHttpServer(args: {
 
   const address = server.address();
   if (!address || typeof address === "string") {
-    throw new Error("Failed to resolve environment-agent HTTP server address");
+    throw new Error("Failed to resolve environment-daemon HTTP server address");
   }
 
   return {

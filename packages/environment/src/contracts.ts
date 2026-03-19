@@ -5,7 +5,7 @@ import type {
   EnvironmentProperties,
   PersistedEnvironmentRecord,
 } from "@bb/core";
-import type { EnvironmentAgentConnectionTarget } from "@bb/environment-daemon";
+import type { EnvironmentDaemonConnectionTarget } from "@bb/environment-daemon";
 
 export type { EnvironmentCapability, EnvironmentCapabilities };
 
@@ -24,7 +24,7 @@ export interface CreateEnvironmentContext {
   environmentId?: string;
   environmentProperties?: EnvironmentProperties;
   runtimeEnv: Record<string, string | undefined>;
-  managedEnvironmentAgentReconnectTarget?: {
+  managedEnvironmentDaemonReconnectTarget?: {
     baseUrl: string;
     authToken?: string;
   };
@@ -70,7 +70,7 @@ export interface IEnvironment {
   exists(): boolean;
   supportsHostFilesystemAccess(): boolean;
   isIsolatedWorkspace(): boolean;
-  getAgentConnectionTarget(): EnvironmentAgentConnectionTarget;
+  getAgentConnectionTarget(): EnvironmentDaemonConnectionTarget;
   getCheckoutSnapshot(): Promise<EnvironmentCheckoutSnapshot>;
   getWorkspaceRootUnsafe(): string;
   isPrimaryWorkspace?(projectRootPath: string): boolean;

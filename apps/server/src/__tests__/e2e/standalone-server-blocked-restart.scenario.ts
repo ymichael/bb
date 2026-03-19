@@ -4,10 +4,10 @@ import { createServer as createNetServer } from "node:net";
 import { delimiter, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect } from "vitest";
-import { createProject, listThreadEvents, waitForThreadCondition } from "./environment-agent-api.js";
+import { createProject, listThreadEvents, waitForThreadCondition } from "./environment-daemon-api.js";
 import { createFakeCodexBinDir } from "./fake-codex.js";
 import { bbTestTmpPrefix } from "./temp-root.js";
-import { runCliCommand, withFakeE2eEnvironmentAgentTimingEnv } from "./harness.js";
+import { runCliCommand, withFakeE2eEnvironmentDaemonTimingEnv } from "./harness.js";
 
 type EnvironmentKind = "local" | "worktree";
 
@@ -121,7 +121,7 @@ async function runBlockedRestartScenario(environmentKind: EnvironmentKind): Prom
   });
   const port = await allocatePort();
   const baseUrl = `http://127.0.0.1:${port}`;
-  const serverEnv = withFakeE2eEnvironmentAgentTimingEnv({
+  const serverEnv = withFakeE2eEnvironmentDaemonTimingEnv({
     ...process.env,
     PATH: prependPathEntry(process.env.PATH, fakeCodexBinDir),
     BB_ROOT: bbRoot,

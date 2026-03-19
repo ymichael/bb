@@ -2,9 +2,9 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { DbConnection } from "../src/connection.js";
 import { createConnection } from "../src/connection.js";
 import {
-  EnvironmentAgentCommandRepository,
-  EnvironmentAgentCursorRepository,
-  EnvironmentAgentSessionRepository,
+  EnvironmentDaemonCommandRepository,
+  EnvironmentDaemonCursorRepository,
+  EnvironmentDaemonSessionRepository,
   EnvironmentRepository,
   ProjectRepository,
   ThreadRepository,
@@ -20,15 +20,15 @@ function sqliteClient(db: DbConnection): SqliteClient {
   return (db as unknown as { $client: SqliteClient }).$client;
 }
 
-describe("environment-agent repositories", () => {
+describe("environment-daemon repositories", () => {
   let db: DbConnection;
   let sqlite: SqliteClient;
   let projects: ProjectRepository;
   let envs: EnvironmentRepository;
   let threads: ThreadRepository;
-  let sessions: EnvironmentAgentSessionRepository;
-  let cursors: EnvironmentAgentCursorRepository;
-  let commands: EnvironmentAgentCommandRepository;
+  let sessions: EnvironmentDaemonSessionRepository;
+  let cursors: EnvironmentDaemonCursorRepository;
+  let commands: EnvironmentDaemonCommandRepository;
 
   beforeEach(() => {
     db = createConnection(":memory:");
@@ -37,9 +37,9 @@ describe("environment-agent repositories", () => {
     projects = new ProjectRepository(db);
     envs = new EnvironmentRepository(db);
     threads = new ThreadRepository(db);
-    sessions = new EnvironmentAgentSessionRepository(db);
-    cursors = new EnvironmentAgentCursorRepository(db);
-    commands = new EnvironmentAgentCommandRepository(db);
+    sessions = new EnvironmentDaemonSessionRepository(db);
+    cursors = new EnvironmentDaemonCursorRepository(db);
+    commands = new EnvironmentDaemonCommandRepository(db);
   });
 
   afterEach(() => {
@@ -56,7 +56,7 @@ describe("environment-agent repositories", () => {
     return { threadId, environmentId: environment.id };
   }
 
-  it("creates, replaces, and heartbeats environment-agent sessions", () => {
+  it("creates, replaces, and heartbeats environment-daemon sessions", () => {
     const { threadId, environmentId } = createThreadAndEnvironmentId();
     const created = sessions.create({
       id: "sess-1",
@@ -240,14 +240,14 @@ describe("environment-agent repositories", () => {
       now: 1_000,
     });
 
-    sqlite.exec("UPDATE environment_agent_sessions SET status='broken' WHERE id='sess-invalid'");
+    sqlite.exec("UPDATE environment_daemon_sessions SET status='broken' WHERE id='sess-invalid'");
 
     expect(() => sessions.getById("sess-invalid")).toThrow(
-      "Invalid persisted environment-agent session status: broken",
+      "Invalid persisted environment-daemon session status: broken",
     );
   });
 
-  it("upserts and advances environment-agent cursors only when contiguous", () => {
+  it("upserts and advances environment-daemon cursors only when contiguous", () => {
     const { threadId } = createThreadAndEnvironmentId();
 
     const initial = cursors.upsert(
@@ -456,7 +456,7 @@ describe("environment-agent repositories", () => {
         errorMessage: "Should not override completed",
         now: 5_000,
       }),
-    ).toThrow("Invalid environment-agent command transition: completed -> failed");
+    ).toThrow("Invalid environment-daemon command transition: completed -> failed");
   });
 
   it("throws for invalid persisted command state values", () => {
@@ -470,11 +470,11 @@ describe("environment-agent repositories", () => {
     });
 
     sqlite.exec(
-      "UPDATE environment_agent_commands SET state='bogus' WHERE id='cmd-invalid'",
+      "UPDATE environment_daemon_commands SET state='bogus' WHERE id='cmd-invalid'",
     );
 
     expect(() => commands.getById("cmd-invalid")).toThrow(
-      "Invalid persisted environment-agent command state: bogus",
+      "Invalid persisted environment-daemon command state: bogus",
     );
   });
 });

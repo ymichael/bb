@@ -1,14 +1,14 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { EnvironmentAgentSessionRuntime } from "./session-runtime.js";
-import { InMemoryEnvironmentAgentSessionStore } from "./in-memory-session-store.js";
+import { EnvironmentDaemonSessionRuntime } from "./session-runtime.js";
+import { InMemoryEnvironmentDaemonSessionStore } from "./in-memory-session-store.js";
 
-describe("EnvironmentAgentSessionRuntime", () => {
-  let store: InMemoryEnvironmentAgentSessionStore;
-  let runtime: EnvironmentAgentSessionRuntime;
+describe("EnvironmentDaemonSessionRuntime", () => {
+  let store: InMemoryEnvironmentDaemonSessionStore;
+  let runtime: EnvironmentDaemonSessionRuntime;
 
   beforeEach(() => {
-    store = new InMemoryEnvironmentAgentSessionStore();
-    runtime = new EnvironmentAgentSessionRuntime({
+    store = new InMemoryEnvironmentDaemonSessionStore();
+    runtime = new EnvironmentDaemonSessionRuntime({
       store,
       clock: () => 10_000,
     });
@@ -297,7 +297,7 @@ describe("EnvironmentAgentSessionRuntime", () => {
     ]);
   });
 
-  it("throws when persisted outbox payloads are not valid environment-agent events", () => {
+  it("throws when persisted outbox payloads are not valid environment-daemon events", () => {
     runtime.initializeThread({
       threadId: "thread-1",
       agentId: "agent-1",
@@ -324,7 +324,7 @@ describe("EnvironmentAgentSessionRuntime", () => {
     };
 
     expect(() => runtime.getPendingEventBatch({ threadId: "thread-1" })).toThrow(
-      "Invalid persisted environment-agent outbox payload for thread thread-1",
+      "Invalid persisted environment-daemon outbox payload for thread thread-1",
     );
   });
 });

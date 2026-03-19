@@ -15,22 +15,22 @@ export type {
   ThreadEnvironmentAttachmentRecord,
 } from "./repositories.js";
 export type {
-  EnvironmentAgentSessionStatus,
-  EnvironmentAgentSessionCloseReason,
-  EnvironmentAgentCursorPosition,
-  EnvironmentAgentSessionRecord,
-  EnvironmentAgentCursorRecord,
-  EnvironmentAgentCursorAdvanceResult,
-  EnvironmentAgentCommandState,
-  EnvironmentAgentCommandRecord,
-  CreateEnvironmentAgentSessionInput,
-  ReplaceActiveEnvironmentAgentSessionInput,
-  EnqueueEnvironmentAgentCommandInput,
-} from "./environment-agent-repositories.js";
+  EnvironmentDaemonSessionStatus,
+  EnvironmentDaemonSessionCloseReason,
+  EnvironmentDaemonCursorPosition,
+  EnvironmentDaemonSessionRecord,
+  EnvironmentDaemonCursorRecord,
+  EnvironmentDaemonCursorAdvanceResult,
+  EnvironmentDaemonCommandState,
+  EnvironmentDaemonCommandRecord,
+  CreateEnvironmentDaemonSessionInput,
+  ReplaceActiveEnvironmentDaemonSessionInput,
+  EnqueueEnvironmentDaemonCommandInput,
+} from "./environment-daemon-repositories.js";
 export {
-  EnvironmentAgentSessionRepository,
-  EnvironmentAgentCursorRepository,
-  EnvironmentAgentCommandRepository,
-} from "./environment-agent-repositories.js";
+  EnvironmentDaemonSessionRepository,
+  EnvironmentDaemonCursorRepository,
+  EnvironmentDaemonCommandRepository,
+} from "./environment-daemon-repositories.js";
 
 export { migrate } from "./migrate.js";

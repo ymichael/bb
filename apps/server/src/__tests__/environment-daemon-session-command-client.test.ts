@@ -3,17 +3,17 @@ import type { DbConnection } from "@bb/db";
 import {
   createConnection,
   migrate,
-  EnvironmentAgentCommandRepository,
-  EnvironmentAgentSessionRepository,
+  EnvironmentDaemonCommandRepository,
+  EnvironmentDaemonSessionRepository,
   EnvironmentRepository,
   ProjectRepository,
   ThreadEnvironmentAttachmentRepository,
   ThreadRepository,
 } from "@bb/db";
 import { createCodexProviderAdapter } from "@bb/provider-adapters";
-import { createEnvironmentAgentSessionCapabilities } from "@bb/environment-daemon";
-import { EnvironmentAgentCommandDispatcher } from "../environment-agent-command-dispatcher.js";
-import { EnvironmentAgentSessionCommandClient } from "../environment-agent-session-command-client.js";
+import { createEnvironmentDaemonSessionCapabilities } from "@bb/environment-daemon";
+import { EnvironmentDaemonCommandDispatcher } from "../environment-daemon-command-dispatcher.js";
+import { EnvironmentDaemonSessionCommandClient } from "../environment-daemon-session-command-client.js";
 import { ProviderSessionController } from "../provider-session-controller.js";
 
 interface SqliteClient { close(): void; }
@@ -23,16 +23,16 @@ function sqliteClient(db: DbConnection): SqliteClient {
 
 const TEST_LEASE_NOW = 20_000;
 
-describe("EnvironmentAgentSessionCommandClient", () => {
+describe("EnvironmentDaemonSessionCommandClient", () => {
   let db: DbConnection;
   let sqlite: SqliteClient;
   let projects: ProjectRepository;
   let envs: EnvironmentRepository;
   let threads: ThreadRepository;
   let envAttachments: ThreadEnvironmentAttachmentRepository;
-  let sessions: EnvironmentAgentSessionRepository;
-  let commands: EnvironmentAgentCommandRepository;
-  let dispatcher: EnvironmentAgentCommandDispatcher;
+  let sessions: EnvironmentDaemonSessionRepository;
+  let commands: EnvironmentDaemonCommandRepository;
+  let dispatcher: EnvironmentDaemonCommandDispatcher;
 
   beforeEach(() => {
     db = createConnection(":memory:");
@@ -42,9 +42,9 @@ describe("EnvironmentAgentSessionCommandClient", () => {
     envs = new EnvironmentRepository(db);
     threads = new ThreadRepository(db);
     envAttachments = new ThreadEnvironmentAttachmentRepository(db);
-    sessions = new EnvironmentAgentSessionRepository(db);
-    commands = new EnvironmentAgentCommandRepository(db);
-    dispatcher = new EnvironmentAgentCommandDispatcher(sessions, commands, {
+    sessions = new EnvironmentDaemonSessionRepository(db);
+    commands = new EnvironmentDaemonCommandRepository(db);
+    dispatcher = new EnvironmentDaemonCommandDispatcher(sessions, commands, {
       clock: () => TEST_LEASE_NOW,
       resolveEnvironmentId: (threadId) => envAttachments.getByThreadId(threadId)?.environmentId,
     });
@@ -87,7 +87,7 @@ describe("EnvironmentAgentSessionCommandClient", () => {
   function createSessionClient(args: {
     threadId: string;
     sessionId: string;
-  }): EnvironmentAgentSessionCommandClient {
+  }): EnvironmentDaemonSessionCommandClient {
     const environmentId = ensureEnvironmentForThread(args.threadId);
     sessions.create({
       id: args.sessionId,
@@ -95,11 +95,11 @@ describe("EnvironmentAgentSessionCommandClient", () => {
       agentId: "agent-1",
       agentInstanceId: `${args.sessionId}-instance`,
       protocolVersion: 1,
-      selectedCapabilities: createEnvironmentAgentSessionCapabilities({}),
+      selectedCapabilities: createEnvironmentDaemonSessionCapabilities({}),
       leaseExpiresAt: 30_000,
       now: 1_000,
     });
-    return new EnvironmentAgentSessionCommandClient({
+    return new EnvironmentDaemonSessionCommandClient({
       threadId: args.threadId,
       commandDispatcher: dispatcher,
       commandTimeoutMs: 1_000,
@@ -134,11 +134,11 @@ describe("EnvironmentAgentSessionCommandClient", () => {
       agentId: "agent-1",
       agentInstanceId: "instance-1",
       protocolVersion: 1,
-      selectedCapabilities: createEnvironmentAgentSessionCapabilities({}),
+      selectedCapabilities: createEnvironmentDaemonSessionCapabilities({}),
       leaseExpiresAt: 30_000,
       now: 1_000,
     });
-    const client = new EnvironmentAgentSessionCommandClient({
+    const client = new EnvironmentDaemonSessionCommandClient({
       threadId,
       commandDispatcher: dispatcher,
       commandTimeoutMs: 1_000,
@@ -192,11 +192,11 @@ describe("EnvironmentAgentSessionCommandClient", () => {
       agentId: "agent-1",
       agentInstanceId: "instance-2",
       protocolVersion: 1,
-      selectedCapabilities: createEnvironmentAgentSessionCapabilities({}),
+      selectedCapabilities: createEnvironmentDaemonSessionCapabilities({}),
       leaseExpiresAt: 30_000,
       now: 1_000,
     });
-    const client = new EnvironmentAgentSessionCommandClient({
+    const client = new EnvironmentDaemonSessionCommandClient({
       threadId,
       commandDispatcher: dispatcher,
       commandTimeoutMs: 1_000,
@@ -241,11 +241,11 @@ describe("EnvironmentAgentSessionCommandClient", () => {
       agentId: "agent-1",
       agentInstanceId: "instance-stale",
       protocolVersion: 1,
-      selectedCapabilities: createEnvironmentAgentSessionCapabilities({}),
+      selectedCapabilities: createEnvironmentDaemonSessionCapabilities({}),
       leaseExpiresAt: 30_000,
       now: 1_000,
     });
-    const client = new EnvironmentAgentSessionCommandClient({
+    const client = new EnvironmentDaemonSessionCommandClient({
       threadId,
       commandDispatcher: dispatcher,
       commandTimeoutMs: 120,
@@ -303,11 +303,11 @@ describe("EnvironmentAgentSessionCommandClient", () => {
       agentId: "agent-1",
       agentInstanceId: "instance-provider-1",
       protocolVersion: 1,
-      selectedCapabilities: createEnvironmentAgentSessionCapabilities({}),
+      selectedCapabilities: createEnvironmentDaemonSessionCapabilities({}),
       leaseExpiresAt: 30_000,
       now: 1_000,
     });
-    const client = new EnvironmentAgentSessionCommandClient({
+    const client = new EnvironmentDaemonSessionCommandClient({
       threadId,
       commandDispatcher: dispatcher,
       commandTimeoutMs: 1_000,

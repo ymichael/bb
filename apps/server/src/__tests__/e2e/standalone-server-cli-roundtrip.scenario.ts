@@ -11,13 +11,13 @@ import {
   sleep,
   waitForThreadCondition,
   waitForThreadStatus,
-} from "./environment-agent-api.js";
+} from "./environment-daemon-api.js";
 import { createFakeCodexBinDir } from "./fake-codex.js";
 import { bbTestTmpPrefix } from "./temp-root.js";
 import {
   runCliCommand,
   type CliRunResult,
-  withFakeE2eEnvironmentAgentTimingEnv,
+  withFakeE2eEnvironmentDaemonTimingEnv,
 } from "./harness.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -250,7 +250,7 @@ async function runEnvironmentBattery(
   const port = await allocatePort();
   const baseUrl = `http://127.0.0.1:${port}`;
   const wsUrl = `ws://127.0.0.1:${port}/ws`;
-  const serverEnv = withFakeE2eEnvironmentAgentTimingEnv({
+  const serverEnv = withFakeE2eEnvironmentDaemonTimingEnv({
     ...process.env,
     PATH: prependPathEntry(process.env.PATH, fakeCodexBinDir),
     BB_ROOT: bbRoot,

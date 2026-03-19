@@ -51,7 +51,7 @@ function hasDocker(): boolean {
   return result.status === 0;
 }
 
-function ensureEnvironmentAgentBundle(): void {
+function ensureEnvironmentDaemonBundle(): void {
   execFileSync("pnpm", ["--filter", "@bb/environment-daemon", "build"], {
     cwd: WORKSPACE_ROOT,
     stdio: "pipe",
@@ -59,7 +59,7 @@ function ensureEnvironmentAgentBundle(): void {
 }
 
 async function createDockerEnvironmentForTest() {
-  ensureEnvironmentAgentBundle();
+  ensureEnvironmentDaemonBundle();
 
   const repoRoot = makeTempDir("bb-docker-integration-repo-");
   git(repoRoot, "init", "-b", "main");
@@ -128,7 +128,7 @@ afterEach(async () => {
 
 describe.skipIf(!hasDocker())("DockerEnvironment integration", () => {
   it(
-    "starts an in-container environment-agent and exposes the baseline toolchain",
+    "starts an in-container environment-daemon and exposes the baseline toolchain",
     async () => {
       const environment = await createDockerEnvironmentForTest();
       const target = environment.getAgentConnectionTarget();

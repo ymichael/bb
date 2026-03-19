@@ -4,13 +4,13 @@ import {
   archiveThread,
   createProject,
   createThread,
-  listEnvironmentAgentSessions,
+  listEnvironmentDaemonSessions,
   listThreadEvents,
   readError,
   readJson,
   tellThread,
   waitForThreadCondition,
-} from "./environment-agent-api.js";
+} from "./environment-daemon-api.js";
 import { startServerE2eHarness } from "./harness.js";
 import { e2eTimeoutMs } from "./provider-mode.js";
 
@@ -134,7 +134,7 @@ async function waitForArchivedState(args: {
 }
 
 function getActiveSharedSessionId(
-  sessions: Awaited<ReturnType<typeof listEnvironmentAgentSessions>>["sessions"],
+  sessions: Awaited<ReturnType<typeof listEnvironmentDaemonSessions>>["sessions"],
 ): string | undefined {
   return sessions.find((session) => session.status === "active")?.id;
 }
@@ -202,8 +202,8 @@ export async function runThreadSharedEnvironmentRoundtripScenario(): Promise<voi
     expect(latestCompletedAgentText(secondInitialRoundTrip.events)).toBeTruthy();
 
     const sessionsBeforeFollowUps = await Promise.all([
-      listEnvironmentAgentSessions(harness.baseUrl, attachedEnvironmentId!),
-      listEnvironmentAgentSessions(harness.baseUrl, attachedEnvironmentId!),
+      listEnvironmentDaemonSessions(harness.baseUrl, attachedEnvironmentId!),
+      listEnvironmentDaemonSessions(harness.baseUrl, attachedEnvironmentId!),
     ]);
     const firstSharedSessionId = getActiveSharedSessionId(sessionsBeforeFollowUps[0].sessions);
     const secondSharedSessionId = getActiveSharedSessionId(sessionsBeforeFollowUps[1].sessions);
@@ -246,8 +246,8 @@ export async function runThreadSharedEnvironmentRoundtripScenario(): Promise<voi
     expect(latestCompletedAgentText(secondFollowUpRoundTrip.events)).toBeTruthy();
 
     const sessionsAfterFollowUps = await Promise.all([
-      listEnvironmentAgentSessions(harness.baseUrl, attachedEnvironmentId!),
-      listEnvironmentAgentSessions(harness.baseUrl, attachedEnvironmentId!),
+      listEnvironmentDaemonSessions(harness.baseUrl, attachedEnvironmentId!),
+      listEnvironmentDaemonSessions(harness.baseUrl, attachedEnvironmentId!),
     ]);
     expect(getActiveSharedSessionId(sessionsAfterFollowUps[0].sessions)).toBe(
       getActiveSharedSessionId(sessionsAfterFollowUps[1].sessions),

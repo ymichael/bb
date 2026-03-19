@@ -10,7 +10,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const WORKSPACE_ROOT = resolve(__dirname, "..", "..");
 const KNOWN_TEST_PROCESS_PATTERNS = [
-  resolve(WORKSPACE_ROOT, "packages", "environment-agent", "dist", "environment-agent.bundle.mjs"),
+  resolve(WORKSPACE_ROOT, "packages", "environment-daemon", "dist", "environment-daemon.bundle.mjs"),
   resolve(WORKSPACE_ROOT, "apps", "server", "dist", "index.js"),
   resolve(WORKSPACE_ROOT, "scripts", "qa", "run-fake-recovery-suite.mjs"),
   resolve(WORKSPACE_ROOT, "scripts", "qa", "cleanup-bb-test-processes.mjs"),

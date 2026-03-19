@@ -16,8 +16,8 @@ import {
   type IEnvironment,
 } from "@bb/environment";
 import {
-  removeEnvironmentAgentDefaultLogArtifacts,
-  type EnvironmentAgentConnectionTarget,
+  removeEnvironmentDaemonDefaultLogArtifacts,
+  type EnvironmentDaemonConnectionTarget,
 } from "@bb/environment-daemon";
 import type {
   EnvironmentRepository,
@@ -35,7 +35,7 @@ export interface ActiveEnvironmentRuntime {
   scopeKey: string;
   ownerThreadId: string;
   environment: IEnvironment;
-  agentConnectionTarget: EnvironmentAgentConnectionTarget;
+  agentConnectionTarget: EnvironmentDaemonConnectionTarget;
   stopWatchingWorkspaceStatus?: () => void;
 }
 
@@ -549,7 +549,7 @@ export class EnvironmentService {
   private installEnvironmentRuntime(
     threadId: string,
     environment: IEnvironment,
-    agentConnectionTarget: EnvironmentAgentConnectionTarget,
+    agentConnectionTarget: EnvironmentDaemonConnectionTarget,
   ): void {
     const scopeKey = this.getRuntimeScopeKey(threadId);
     const existingRuntime = this.detachEnvironmentRuntime(threadId);
@@ -835,7 +835,7 @@ export class EnvironmentService {
     }
 
     try {
-      removeEnvironmentAgentDefaultLogArtifacts({
+      removeEnvironmentDaemonDefaultLogArtifacts({
         projectId: thread.projectId,
         threadId: thread.id,
         environmentId,

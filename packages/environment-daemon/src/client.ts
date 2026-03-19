@@ -3,13 +3,13 @@ import type {
   JsonLineTransportHandlers,
 } from "./transport.js";
 import {
-  isEnvironmentAgentControlResponse,
-  type EnvironmentAgentCommandAck,
-  type EnvironmentAgentCommandEnvelope,
-  type EnvironmentAgentControlRequest,
-  type EnvironmentAgentProviderSpec,
-  type EnvironmentAgentProviderStatus,
-  type EnvironmentAgentStatusSnapshot,
+  isEnvironmentDaemonControlResponse,
+  type EnvironmentDaemonCommandAck,
+  type EnvironmentDaemonCommandEnvelope,
+  type EnvironmentDaemonControlRequest,
+  type EnvironmentDaemonProviderSpec,
+  type EnvironmentDaemonProviderStatus,
+  type EnvironmentDaemonStatusSnapshot,
 } from "./protocol.js";
 
 interface PendingControlRequest {
@@ -17,32 +17,32 @@ interface PendingControlRequest {
   reject: (reason: Error) => void;
 }
 
-type EnvironmentAgentRequestShape =
-  | { type: "command"; payload: EnvironmentAgentCommandEnvelope }
-  | { type: "provider.ensure"; payload: EnvironmentAgentProviderSpec }
+type EnvironmentDaemonRequestShape =
+  | { type: "command"; payload: EnvironmentDaemonCommandEnvelope }
+  | { type: "provider.ensure"; payload: EnvironmentDaemonProviderSpec }
   | { type: "status" };
 
-export interface EnvironmentAgentClient {
+export interface EnvironmentDaemonClient {
   readonly providerTransport: JsonLineTransport;
   sendCommand(
-    envelope: EnvironmentAgentCommandEnvelope,
-  ): Promise<EnvironmentAgentCommandAck>;
+    envelope: EnvironmentDaemonCommandEnvelope,
+  ): Promise<EnvironmentDaemonCommandAck>;
   ensureProviderRunning(
-    spec: EnvironmentAgentProviderSpec,
+    spec: EnvironmentDaemonProviderSpec,
     forThreadId?: string,
-  ): Promise<EnvironmentAgentProviderStatus>;
-  status(): Promise<EnvironmentAgentStatusSnapshot>;
+  ): Promise<EnvironmentDaemonProviderStatus>;
+  status(): Promise<EnvironmentDaemonStatusSnapshot>;
   close(reason?: Error): void;
 }
 
-export class EnvironmentAgentClientError extends Error {
+export class EnvironmentDaemonClientError extends Error {
   constructor(message: string) {
     super(message);
-    this.name = "EnvironmentAgentClientError";
+    this.name = "EnvironmentDaemonClientError";
   }
 }
 
-class EnvironmentAgentClientImpl implements EnvironmentAgentClient {
+class EnvironmentDaemonClientImpl implements EnvironmentDaemonClient {
   readonly providerTransport: JsonLineTransport;
   private providerHandlers: JsonLineTransportHandlers | undefined;
   private readonly pending = new Map<string, PendingControlRequest>();
@@ -76,26 +76,26 @@ class EnvironmentAgentClientImpl implements EnvironmentAgentClient {
   }
 
   ensureProviderRunning(
-    spec: EnvironmentAgentProviderSpec,
+    spec: EnvironmentDaemonProviderSpec,
     forThreadId?: string,
-  ): Promise<EnvironmentAgentProviderStatus> {
-    return this.request<EnvironmentAgentProviderStatus>({
+  ): Promise<EnvironmentDaemonProviderStatus> {
+    return this.request<EnvironmentDaemonProviderStatus>({
       type: "provider.ensure",
       payload: { ...spec, ...(forThreadId ? { forThreadId } : {}) },
     });
   }
 
   sendCommand(
-    envelope: EnvironmentAgentCommandEnvelope,
-  ): Promise<EnvironmentAgentCommandAck> {
-    return this.request<EnvironmentAgentCommandAck>({
+    envelope: EnvironmentDaemonCommandEnvelope,
+  ): Promise<EnvironmentDaemonCommandAck> {
+    return this.request<EnvironmentDaemonCommandAck>({
       type: "command",
       payload: envelope,
     });
   }
 
-  status(): Promise<EnvironmentAgentStatusSnapshot> {
-    return this.request<EnvironmentAgentStatusSnapshot>({
+  status(): Promise<EnvironmentDaemonStatusSnapshot> {
+    return this.request<EnvironmentDaemonStatusSnapshot>({
       type: "status",
     });
   }
@@ -105,7 +105,7 @@ class EnvironmentAgentClientImpl implements EnvironmentAgentClient {
     this.closed = true;
 
     const closeError =
-      reason ?? new EnvironmentAgentClientError("Environment agent transport closed");
+      reason ?? new EnvironmentDaemonClientError("Environment agent transport closed");
     for (const [requestId, pending] of this.pending) {
       pending.reject(closeError);
       this.pending.delete(requestId);
@@ -117,7 +117,7 @@ class EnvironmentAgentClientImpl implements EnvironmentAgentClient {
 
   private handleLine(line: string): void {
     const parsed = parseJson(line);
-    if (!parsed || !isEnvironmentAgentControlResponse(parsed)) {
+    if (!parsed || !isEnvironmentDaemonControlResponse(parsed)) {
       this.providerHandlers?.onLine(line);
       return;
     }
@@ -129,17 +129,17 @@ class EnvironmentAgentClientImpl implements EnvironmentAgentClient {
   }
 
   private request<TResponse>(
-    args: EnvironmentAgentRequestShape,
+    args: EnvironmentDaemonRequestShape,
   ): Promise<TResponse> {
     if (this.closed) {
       return Promise.reject(
-        new EnvironmentAgentClientError("Environment agent transport is closed"),
+        new EnvironmentDaemonClientError("Environment agent transport is closed"),
       );
     }
 
     const requestId = `env-agent-${++this.requestCounter}`;
-    const message: EnvironmentAgentControlRequest = {
-      environmentAgentMessage: true,
+    const message: EnvironmentDaemonControlRequest = {
+      environmentDaemonMessage: true,
       requestId,
       ...args,
     };
@@ -158,7 +158,7 @@ class EnvironmentAgentClientImpl implements EnvironmentAgentClient {
         reject(
           error instanceof Error
             ? error
-            : new EnvironmentAgentClientError(String(error)),
+            : new EnvironmentDaemonClientError(String(error)),
         );
       }
     });
@@ -175,8 +175,8 @@ function parseJson(line: string): unknown {
   }
 }
 
-export function createEnvironmentAgentClient(
+export function createEnvironmentDaemonClient(
   transport: JsonLineTransport,
-): EnvironmentAgentClient {
-  return new EnvironmentAgentClientImpl(transport);
+): EnvironmentDaemonClient {
+  return new EnvironmentDaemonClientImpl(transport);
 }

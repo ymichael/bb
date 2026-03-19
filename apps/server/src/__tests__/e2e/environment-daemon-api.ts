@@ -1,6 +1,6 @@
 import { createServer } from "node:net";
 import type {
-  EnvironmentAgentStatusSnapshot,
+  EnvironmentDaemonStatusSnapshot,
 } from "@bb/environment-daemon";
 import type {
   ChangedMessage,
@@ -10,21 +10,21 @@ import type {
   ThreadQueuedMessage,
 } from "@bb/core";
 import type {
-  EnvironmentAgentSessionCloseReason,
-  EnvironmentAgentSessionStatus,
+  EnvironmentDaemonSessionCloseReason,
+  EnvironmentDaemonSessionStatus,
 } from "@bb/db";
 
-export interface EnvironmentAgentSessionDebugView {
+export interface EnvironmentDaemonSessionDebugView {
   id: string;
   environmentId: string;
   agentId: string;
   agentInstanceId: string;
   protocolVersion: number;
-  status: EnvironmentAgentSessionStatus;
+  status: EnvironmentDaemonSessionStatus;
   leaseExpiresAt: number;
   lastHeartbeatAt?: number;
   closedAt?: number;
-  closeReason?: EnvironmentAgentSessionCloseReason;
+  closeReason?: EnvironmentDaemonSessionCloseReason;
   controlBaseUrl?: string;
   createdAt: number;
   updatedAt: number;
@@ -65,7 +65,7 @@ export async function createProject(
 export async function createThread(
   baseUrl: string,
   projectId: string,
-  inputText: string = "Prepare a thread for environment-agent e2e.",
+  inputText: string = "Prepare a thread for environment-daemon e2e.",
   opts?: { environmentKind?: string; environmentId?: string },
 ): Promise<Thread> {
   return readJson<Thread>(`${baseUrl}/api/v1/threads`, {
@@ -172,25 +172,25 @@ export async function listThreadEvents(
   return readJson<ThreadEvent[]>(`${baseUrl}/api/v1/threads/${threadId}/events`);
 }
 
-export async function getEnvironmentAgentStatus(
+export async function getEnvironmentDaemonStatus(
   baseUrl: string,
   threadId: string,
-): Promise<EnvironmentAgentStatusSnapshot> {
-  return readJson<EnvironmentAgentStatusSnapshot>(
-    `${baseUrl}/api/v1/threads/${threadId}/environment-agent/status`,
+): Promise<EnvironmentDaemonStatusSnapshot> {
+  return readJson<EnvironmentDaemonStatusSnapshot>(
+    `${baseUrl}/api/v1/threads/${threadId}/environment-daemon/status`,
   );
 }
 
-export async function listEnvironmentAgentSessions(
+export async function listEnvironmentDaemonSessions(
   baseUrl: string,
   environmentId: string,
 ): Promise<{
   environmentId: string;
-  sessions: EnvironmentAgentSessionDebugView[];
+  sessions: EnvironmentDaemonSessionDebugView[];
 }> {
   return readJson<{
     environmentId: string;
-    sessions: EnvironmentAgentSessionDebugView[];
+    sessions: EnvironmentDaemonSessionDebugView[];
   }>(`${baseUrl}/api/v1/environments/${environmentId}/env-daemon/sessions`);
 }
 

@@ -1,12 +1,12 @@
 import { randomUUID } from "node:crypto";
 import {
-  type EnvironmentAgentClient,
-  ENVIRONMENT_AGENT_PROTOCOL_VERSION,
-  type EnvironmentAgentCommand,
-  type EnvironmentAgentCommandAck,
-  type EnvironmentAgentCommandEnvelope,
-  type EnvironmentAgentEventEnvelope,
-  type EnvironmentAgentProviderLaunchWrapper,
+  type EnvironmentDaemonClient,
+  ENVIRONMENT_DAEMON_PROTOCOL_VERSION,
+  type EnvironmentDaemonCommand,
+  type EnvironmentDaemonCommandAck,
+  type EnvironmentDaemonCommandEnvelope,
+  type EnvironmentDaemonEventEnvelope,
+  type EnvironmentDaemonProviderLaunchWrapper,
 } from "@bb/environment-daemon";
 import {
   assertNever,
@@ -155,19 +155,19 @@ export class ProviderSessionController {
   }
 
   async startThreadCommand(args: {
-    client: EnvironmentAgentClient;
+    client: EnvironmentDaemonClient;
     threadId: string;
     projectId: string;
     request: SpawnThreadRequest;
     context: ProviderThreadContext;
-    providerLaunch?: EnvironmentAgentProviderLaunchWrapper;
+    providerLaunch?: EnvironmentDaemonProviderLaunchWrapper;
   }): Promise<{ providerThreadId: string }> {
     await this.ensureProviderRunningForCommand(
       args.client,
       args.context,
       args.providerLaunch,
     );
-    const ack = await this.sendEnvironmentAgentCommand(args.client, {
+    const ack = await this.sendEnvironmentDaemonCommand(args.client, {
       type: "thread.start",
       threadId: args.threadId,
       projectId: args.projectId,
@@ -190,21 +190,21 @@ export class ProviderSessionController {
   }
 
   async resumeThreadCommand(args: {
-    client: EnvironmentAgentClient;
+    client: EnvironmentDaemonClient;
     threadId: string;
     projectId: string;
     providerThreadId: string;
     context: ProviderThreadContext;
     options?: ProviderExecutionOptions;
     resumePath?: string;
-    providerLaunch?: EnvironmentAgentProviderLaunchWrapper;
+    providerLaunch?: EnvironmentDaemonProviderLaunchWrapper;
   }): Promise<{ providerThreadId: string }> {
     await this.ensureProviderRunningForCommand(
       args.client,
       args.context,
       args.providerLaunch,
     );
-    const ack = await this.sendEnvironmentAgentCommand(args.client, {
+    const ack = await this.sendEnvironmentDaemonCommand(args.client, {
       type: "thread.resume",
       threadId: args.threadId,
       projectId: args.projectId,
@@ -224,7 +224,7 @@ export class ProviderSessionController {
   }
 
   async sendTurnCommand(args: {
-    client: EnvironmentAgentClient;
+    client: EnvironmentDaemonClient;
     threadId: string;
     providerThreadId: string;
     activeTurnId?: string;
@@ -232,7 +232,7 @@ export class ProviderSessionController {
     options?: ProviderExecutionOptions;
     mode?: "auto" | "steer" | "start";
     context: ProviderThreadContext;
-    providerLaunch?: EnvironmentAgentProviderLaunchWrapper;
+    providerLaunch?: EnvironmentDaemonProviderLaunchWrapper;
   }): Promise<{ mode: "steer" | "start"; providerThreadId: string }> {
     const hasExecutionOverrides = Boolean(
       args.options?.model ||
@@ -274,7 +274,7 @@ export class ProviderSessionController {
       args.providerLaunch,
     );
 
-    const ack = await this.sendEnvironmentAgentCommand(args.client, {
+    const ack = await this.sendEnvironmentDaemonCommand(args.client, {
       type: "turn.run",
       threadId: args.threadId,
       providerThreadId: args.providerThreadId,
@@ -293,12 +293,12 @@ export class ProviderSessionController {
   }
 
   async renameThreadCommand(args: {
-    client: EnvironmentAgentClient;
+    client: EnvironmentDaemonClient;
     threadId: string;
     providerThreadId: string;
     title: string;
     context: ProviderThreadContext;
-    providerLaunch?: EnvironmentAgentProviderLaunchWrapper;
+    providerLaunch?: EnvironmentDaemonProviderLaunchWrapper;
   }): Promise<void> {
     if (!this.opts.provider.threadNameSetMethod) return;
     if (!this.opts.provider.createThreadNameSetParams) return;
@@ -308,7 +308,7 @@ export class ProviderSessionController {
       args.context,
       args.providerLaunch,
     );
-    await this.sendEnvironmentAgentCommand(args.client, {
+    await this.sendEnvironmentDaemonCommand(args.client, {
       type: "thread.rename",
       threadId: args.threadId,
       providerThreadId: args.providerThreadId,
@@ -361,13 +361,13 @@ export class ProviderSessionController {
     return this.opts.provider.encodeToolCallResponse(response);
   }
 
-  async ingestReplayedEnvironmentAgentEvents(args: {
+  async ingestReplayedEnvironmentDaemonEvents(args: {
     threadId: string;
-    events: EnvironmentAgentEventEnvelope[];
+    events: EnvironmentDaemonEventEnvelope[];
   }): Promise<void> {
     for (const envelope of args.events) {
       const replayThreadId = envelope.event.threadId || args.threadId;
-      this.handleEnvironmentAgentEvent(replayThreadId, envelope.event);
+      this.handleEnvironmentDaemonEvent(replayThreadId, envelope.event);
     }
   }
 
@@ -387,9 +387,9 @@ export class ProviderSessionController {
     );
   }
 
-  private handleEnvironmentAgentEvent(
+  private handleEnvironmentDaemonEvent(
     threadId: string,
-    event: EnvironmentAgentEventEnvelope["event"],
+    event: EnvironmentDaemonEventEnvelope["event"],
   ): void {
     switch (event.type) {
       case "provider.event":
@@ -477,11 +477,11 @@ export class ProviderSessionController {
   }
 
   private async ensureProviderRunningForCommand(
-    client: EnvironmentAgentClient,
+    client: EnvironmentDaemonClient,
     context: ProviderThreadContext,
-    providerLaunch?: EnvironmentAgentProviderLaunchWrapper,
+    providerLaunch?: EnvironmentDaemonProviderLaunchWrapper,
   ): Promise<void> {
-    await this.sendEnvironmentAgentCommand(client, {
+    await this.sendEnvironmentDaemonCommand(client, {
       type: "provider.ensure",
       providerId: this.opts.provider.id,
       context,
@@ -490,14 +490,14 @@ export class ProviderSessionController {
     });
   }
 
-  private async sendEnvironmentAgentCommand(
-    client: EnvironmentAgentClient,
-    command: EnvironmentAgentCommand,
-  ): Promise<EnvironmentAgentCommandAck> {
+  private async sendEnvironmentDaemonCommand(
+    client: EnvironmentDaemonClient,
+    command: EnvironmentDaemonCommand,
+  ): Promise<EnvironmentDaemonCommandAck> {
     const commandToken = `cmd-${this.rpcIdPrefix}-${++this.rpcIdCounter}`;
-    const envelope: EnvironmentAgentCommandEnvelope = {
+    const envelope: EnvironmentDaemonCommandEnvelope = {
       meta: {
-        protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+        protocolVersion: ENVIRONMENT_DAEMON_PROTOCOL_VERSION,
         commandId: commandToken,
         idempotencyKey: commandToken,
         sentAt: Date.now(),
@@ -511,8 +511,8 @@ export class ProviderSessionController {
     throw this.toCommandError(ack);
   }
 
-  private toCommandError(ack: EnvironmentAgentCommandAck): ProviderSessionError {
-    const message = ack.message ?? "Environment-agent command failed";
+  private toCommandError(ack: EnvironmentDaemonCommandAck): ProviderSessionError {
+    const message = ack.message ?? "Environment-daemon command failed";
     switch (ack.errorCode) {
       case "missing_provider_thread":
         return new ProviderSessionError("missing_provider_thread", message);

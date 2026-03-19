@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
-  recoverManagedEnvironmentAgentSessionsOnBoot,
-  scheduleManagedEnvironmentAgentSessionRecoveryOnBoot,
+  recoverManagedEnvironmentDaemonSessionsOnBoot,
+  scheduleManagedEnvironmentDaemonSessionRecoveryOnBoot,
   scheduleManagedArtifactReconciliation,
 } from "../startup-tasks.js";
 
@@ -105,7 +105,7 @@ describe("startup tasks", () => {
       ]),
     };
 
-    const result = await recoverManagedEnvironmentAgentSessionsOnBoot({
+    const result = await recoverManagedEnvironmentDaemonSessionsOnBoot({
       sessionRepo,
       logger: {
         log: vi.fn(),
@@ -130,7 +130,7 @@ describe("startup tasks", () => {
       warn: vi.fn(),
     };
 
-    scheduleManagedEnvironmentAgentSessionRecoveryOnBoot({
+    scheduleManagedEnvironmentDaemonSessionRecoveryOnBoot({
       sessionRepo,
       logger,
     });
@@ -141,7 +141,7 @@ describe("startup tasks", () => {
     await Promise.resolve();
 
     expect(logger.log).toHaveBeenCalledWith(
-      "Reconciling managed environment-agent sessions in background...",
+      "Reconciling managed environment-daemon sessions in background...",
     );
     expect(sessionRepo.listActive).toHaveBeenCalledTimes(1);
     expect(logger.warn).not.toHaveBeenCalled();
@@ -180,7 +180,7 @@ describe("startup tasks", () => {
       ]),
     };
 
-    const result = await recoverManagedEnvironmentAgentSessionsOnBoot({
+    const result = await recoverManagedEnvironmentDaemonSessionsOnBoot({
       sessionRepo,
       requestTimeoutMs: 10,
       logger: {
@@ -241,7 +241,7 @@ describe("startup tasks", () => {
       ]),
     };
 
-    const result = await recoverManagedEnvironmentAgentSessionsOnBoot({
+    const result = await recoverManagedEnvironmentDaemonSessionsOnBoot({
       sessionRepo,
       logger,
     });
@@ -254,7 +254,7 @@ describe("startup tasks", () => {
     });
     expect(fetchSpy).toHaveBeenCalledTimes(1);
     expect(logger.log).toHaveBeenCalledWith(
-      "Environment-agent startup recovery poked 1/1 reusable active sessions; left 0 unreachable and 1 replace-required sessions for lazy replacement.",
+      "Environment-daemon startup recovery poked 1/1 reusable active sessions; left 0 unreachable and 1 replace-required sessions for lazy replacement.",
     );
   });
 });

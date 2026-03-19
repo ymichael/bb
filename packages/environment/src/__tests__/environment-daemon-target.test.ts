@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { resolveEnvironmentAgentConnectionTarget } from "../environment-agent-target.js";
+import { resolveEnvironmentDaemonConnectionTarget } from "../environment-daemon-target.js";
 
-describe("resolveEnvironmentAgentConnectionTarget", () => {
+describe("resolveEnvironmentDaemonConnectionTarget", () => {
   it("returns the default target when no environment agent base URL is configured", () => {
     const defaultTarget = {
       transport: "http" as const,
@@ -9,7 +9,7 @@ describe("resolveEnvironmentAgentConnectionTarget", () => {
     };
 
     expect(
-      resolveEnvironmentAgentConnectionTarget({
+      resolveEnvironmentDaemonConnectionTarget({
         runtimeEnv: {},
         defaultTarget,
       }),
@@ -18,7 +18,7 @@ describe("resolveEnvironmentAgentConnectionTarget", () => {
 
   it("returns an http target when an external environment agent base URL is configured", () => {
     expect(
-      resolveEnvironmentAgentConnectionTarget({
+      resolveEnvironmentDaemonConnectionTarget({
         runtimeEnv: {
           BB_ENV_DAEMON_BASE_URL: "http://127.0.0.1:4312/",
           BB_ENV_DAEMON_AUTH_TOKEN: "secret-token",

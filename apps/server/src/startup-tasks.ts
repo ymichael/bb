@@ -1,6 +1,6 @@
-import type { EnvironmentAgentSessionRepository } from "@bb/db";
+import type { EnvironmentDaemonSessionRepository } from "@bb/db";
 import type { Orchestrator } from "./orchestrator.js";
-import { assessEnvironmentAgentSessionCompatibility } from "./environment-agent-session-compatibility.js";
+import { assessEnvironmentDaemonSessionCompatibility } from "./environment-daemon-session-compatibility.js";
 
 interface StartupTaskLogger {
   log(message: string): void;
@@ -28,7 +28,7 @@ export function scheduleManagedArtifactReconciliation(
   task.unref();
 }
 
-async function requestEnvironmentAgentSessionSync(
+async function requestEnvironmentDaemonSessionSync(
   record: { controlBaseUrl: string; controlAuthToken: string },
   timeoutMs: number,
 ): Promise<boolean> {
@@ -48,8 +48,8 @@ async function requestEnvironmentAgentSessionSync(
   }
 }
 
-export async function recoverManagedEnvironmentAgentSessionsOnBoot(args: {
-  sessionRepo: Pick<EnvironmentAgentSessionRepository, "listActive">;
+export async function recoverManagedEnvironmentDaemonSessionsOnBoot(args: {
+  sessionRepo: Pick<EnvironmentDaemonSessionRepository, "listActive">;
   logger?: StartupTaskLogger;
   requestTimeoutMs?: number;
 }): Promise<{
@@ -73,7 +73,7 @@ export async function recoverManagedEnvironmentAgentSessionsOnBoot(args: {
 
   const reusableSessions = activeSessions.filter(
     (session) =>
-      assessEnvironmentAgentSessionCompatibility(session).compatibility.disposition !==
+      assessEnvironmentDaemonSessionCompatibility(session).compatibility.disposition !==
       "replace",
   );
   const replaceRequiredCount = activeSessions.length - reusableSessions.length;
@@ -83,7 +83,7 @@ export async function recoverManagedEnvironmentAgentSessionsOnBoot(args: {
       if (!session.controlBaseUrl || !session.controlAuthToken) {
         return false;
       }
-      return requestEnvironmentAgentSessionSync(
+      return requestEnvironmentDaemonSessionSync(
         {
           controlBaseUrl: session.controlBaseUrl,
           controlAuthToken: session.controlAuthToken,
@@ -97,7 +97,7 @@ export async function recoverManagedEnvironmentAgentSessionsOnBoot(args: {
   const unreachableCount = unreachableSessions.length;
 
   logger.log(
-    `Environment-agent startup recovery poked ${pokedCount}/${reusableSessions.length} reusable active sessions; left ${unreachableCount} unreachable and ${replaceRequiredCount} replace-required sessions for lazy replacement.`,
+    `Environment-daemon startup recovery poked ${pokedCount}/${reusableSessions.length} reusable active sessions; left ${unreachableCount} unreachable and ${replaceRequiredCount} replace-required sessions for lazy replacement.`,
   );
   return {
     activeSessionCount: activeSessions.length,
@@ -107,17 +107,17 @@ export async function recoverManagedEnvironmentAgentSessionsOnBoot(args: {
   };
 }
 
-export function scheduleManagedEnvironmentAgentSessionRecoveryOnBoot(args: {
-  sessionRepo: Pick<EnvironmentAgentSessionRepository, "listActive">;
+export function scheduleManagedEnvironmentDaemonSessionRecoveryOnBoot(args: {
+  sessionRepo: Pick<EnvironmentDaemonSessionRepository, "listActive">;
   logger?: StartupTaskLogger;
   requestTimeoutMs?: number;
 }): void {
   const logger = args.logger ?? console;
   const task = setImmediate(() => {
-    logger.log("Reconciling managed environment-agent sessions in background...");
-    void recoverManagedEnvironmentAgentSessionsOnBoot(args).catch((error: unknown) => {
+    logger.log("Reconciling managed environment-daemon sessions in background...");
+    void recoverManagedEnvironmentDaemonSessionsOnBoot(args).catch((error: unknown) => {
       const message = error instanceof Error ? error.message : String(error);
-      logger.warn(`Managed environment-agent session recovery skipped: ${message}`);
+      logger.warn(`Managed environment-daemon session recovery skipped: ${message}`);
     });
   });
   task.unref();

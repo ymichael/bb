@@ -7,9 +7,9 @@ import {
   EventRepository,
   EnvironmentRepository,
   ThreadEnvironmentAttachmentRepository,
-  EnvironmentAgentSessionRepository,
-  EnvironmentAgentCursorRepository,
-  EnvironmentAgentCommandRepository,
+  EnvironmentDaemonSessionRepository,
+  EnvironmentDaemonCursorRepository,
+  EnvironmentDaemonCommandRepository,
 } from "@bb/db";
 import type { DbConnection } from "@bb/db";
 import { createServer } from "../server.js";
@@ -41,9 +41,9 @@ describe("createServer default provider", () => {
       threadEnvironmentAttachmentRepo: new ThreadEnvironmentAttachmentRepository(db),
       threadRepo: new ThreadRepository(db),
       eventRepo: new EventRepository(db),
-      environmentAgentSessionRepo: new EnvironmentAgentSessionRepository(db),
-      environmentAgentCursorRepo: new EnvironmentAgentCursorRepository(db),
-      environmentAgentCommandRepo: new EnvironmentAgentCommandRepository(db),
+      environmentDaemonSessionRepo: new EnvironmentDaemonSessionRepository(db),
+      environmentDaemonCursorRepo: new EnvironmentDaemonCursorRepository(db),
+      environmentDaemonCommandRepo: new EnvironmentDaemonCommandRepository(db),
       runtimeEnv: {
         ...process.env,
         BB_DEFAULT_PROVIDER: "pi",

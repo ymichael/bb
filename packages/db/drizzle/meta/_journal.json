@@ -43,6 +43,13 @@
       "when": 1779379200000,
       "tag": "0005_environment_scoped_sessions",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1779465600000,
+      "tag": "0006_rename_environment_agent_to_daemon",
+      "breakpoints": true
     }
   ]
 }

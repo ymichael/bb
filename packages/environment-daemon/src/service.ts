@@ -1,31 +1,31 @@
 import { spawnSync } from "node:child_process";
 import {
-  EnvironmentAgentRuntime,
-  type EnvironmentAgentRuntimeOptions,
+  EnvironmentDaemonRuntime,
+  type EnvironmentDaemonRuntimeOptions,
 } from "./runtime.js";
 import {
-  createEnvironmentAgentHttpServer,
-  type EnvironmentAgentHttpServer,
+  createEnvironmentDaemonHttpServer,
+  type EnvironmentDaemonHttpServer,
 } from "./http-server.js";
 import {
-  createEnvironmentAgentFileLogger,
-  resolveEnvironmentAgentLogFilePath,
+  createEnvironmentDaemonFileLogger,
+  resolveEnvironmentDaemonLogFilePath,
 } from "./file-logger.js";
-import { InMemoryEnvironmentAgentSessionStore } from "./in-memory-session-store.js";
-import { EnvironmentAgentSessionRuntime } from "./session-runtime.js";
-import { createEnvironmentAgentSessionHttpClientFromConnection } from "./session-http-client.js";
-import { EnvironmentAgentSessionSync } from "./session-sync.js";
-import { EnvironmentAgentSessionSupervisor } from "./session-supervisor.js";
+import { InMemoryEnvironmentDaemonSessionStore } from "./in-memory-session-store.js";
+import { EnvironmentDaemonSessionRuntime } from "./session-runtime.js";
+import { createEnvironmentDaemonSessionHttpClientFromConnection } from "./session-http-client.js";
+import { EnvironmentDaemonSessionSync } from "./session-sync.js";
+import { EnvironmentDaemonSessionSupervisor } from "./session-supervisor.js";
 import type {
-  EnvironmentAgentSessionCapabilities,
-  EnvironmentAgentSessionProviderMetadata,
-  EnvironmentAgentSessionWorkerMetadata,
+  EnvironmentDaemonSessionCapabilities,
+  EnvironmentDaemonSessionProviderMetadata,
+  EnvironmentDaemonSessionWorkerMetadata,
 } from "./session-protocol.js";
 import {
-  createEnvironmentAgentSessionCapabilities,
+  createEnvironmentDaemonSessionCapabilities,
 } from "./session-protocol.js";
 
-export interface EnvironmentAgentServiceCliOptions {
+export interface EnvironmentDaemonServiceCliOptions {
   providerCommand?: string;
   providerArgs?: string[];
   providerLaunchCommand?: string;
@@ -34,8 +34,8 @@ export interface EnvironmentAgentServiceCliOptions {
   httpHost?: string;
 }
 
-export interface EnvironmentAgentServiceOptions {
-  runtime: EnvironmentAgentRuntimeOptions;
+export interface EnvironmentDaemonServiceOptions {
+  runtime: EnvironmentDaemonRuntimeOptions;
   server: {
     host: string;
     port: number;
@@ -53,9 +53,9 @@ export interface EnvironmentAgentServiceOptions {
   session: {
     pollIntervalMs: number;
     commandBatchLimit: number;
-    capabilities: EnvironmentAgentSessionCapabilities;
-    worker: EnvironmentAgentSessionWorkerMetadata;
-    providers?: EnvironmentAgentSessionProviderMetadata[];
+    capabilities: EnvironmentDaemonSessionCapabilities;
+    worker: EnvironmentDaemonSessionWorkerMetadata;
+    providers?: EnvironmentDaemonSessionProviderMetadata[];
   };
 }
 
@@ -67,7 +67,7 @@ const BB_ENV_DAEMON_SESSION_POLL_INTERVAL_MS =
   "BB_ENV_DAEMON_SESSION_POLL_INTERVAL_MS";
 const BB_THREAD_PROVIDER_ID = "BB_THREAD_PROVIDER_ID";
 const BB_ENV_DAEMON_BUILD_ID = "BB_ENV_DAEMON_BUILD_ID";
-const ENVIRONMENT_AGENT_VERSION = "0.0.1";
+const ENVIRONMENT_DAEMON_VERSION = "0.0.1";
 
 function parsePositiveIntegerEnv(
   rawValue: string | undefined,
@@ -127,10 +127,10 @@ function detectProviderRuntimeVersion(args: {
   }
 }
 
-export function resolveEnvironmentAgentServiceOptions(args: {
-  cli: EnvironmentAgentServiceCliOptions;
+export function resolveEnvironmentDaemonServiceOptions(args: {
+  cli: EnvironmentDaemonServiceCliOptions;
   env: NodeJS.ProcessEnv;
-}): EnvironmentAgentServiceOptions {
+}): EnvironmentDaemonServiceOptions {
   const authToken = args.env[BB_ENV_DAEMON_AUTH_TOKEN]?.trim();
   if (!authToken) {
     throw new Error(`Missing required ${BB_ENV_DAEMON_AUTH_TOKEN}`);
@@ -145,9 +145,9 @@ export function resolveEnvironmentAgentServiceOptions(args: {
     throw new Error("Invalid --http-port");
   }
 
-  const worker: EnvironmentAgentSessionWorkerMetadata = {
+  const worker: EnvironmentDaemonSessionWorkerMetadata = {
     name: "environment-daemon",
-    version: ENVIRONMENT_AGENT_VERSION,
+    version: ENVIRONMENT_DAEMON_VERSION,
     ...(args.env[BB_ENV_DAEMON_BUILD_ID]?.trim()
       ? { buildId: args.env[BB_ENV_DAEMON_BUILD_ID]!.trim() }
       : {}),
@@ -167,7 +167,7 @@ export function resolveEnvironmentAgentServiceOptions(args: {
     ? [
         {
           providerId: args.env[BB_THREAD_PROVIDER_ID]!.trim(),
-          adapterVersion: ENVIRONMENT_AGENT_VERSION,
+          adapterVersion: ENVIRONMENT_DAEMON_VERSION,
           ...(providerRuntimeVersion ? { runtimeVersion: providerRuntimeVersion } : {}),
         },
       ]
@@ -197,7 +197,7 @@ export function resolveEnvironmentAgentServiceOptions(args: {
       bearerToken: authToken,
     },
     logging: {
-      filePath: resolveEnvironmentAgentLogFilePath(args.env),
+      filePath: resolveEnvironmentDaemonLogFilePath(args.env),
     },
     control: {
       endpoint: controlEndpoint,
@@ -210,7 +210,7 @@ export function resolveEnvironmentAgentServiceOptions(args: {
       commandBatchLimit: 50,
       worker,
       providers,
-      capabilities: createEnvironmentAgentSessionCapabilities({
+      capabilities: createEnvironmentDaemonSessionCapabilities({
         worker,
         providers,
         controlEndpoint,
@@ -219,27 +219,27 @@ export function resolveEnvironmentAgentServiceOptions(args: {
   };
 }
 
-export async function startEnvironmentAgentService(
-  options: EnvironmentAgentServiceOptions,
+export async function startEnvironmentDaemonService(
+  options: EnvironmentDaemonServiceOptions,
 ): Promise<{
-  runtime: EnvironmentAgentRuntime;
-  server: EnvironmentAgentHttpServer;
-  sessionSupervisor?: EnvironmentAgentSessionSupervisor;
+  runtime: EnvironmentDaemonRuntime;
+  server: EnvironmentDaemonHttpServer;
+  sessionSupervisor?: EnvironmentDaemonSessionSupervisor;
   close: () => Promise<void>;
 }> {
-  const logger = createEnvironmentAgentFileLogger(options.logging.filePath);
-  logger.log("info", "environment-agent starting", {
+  const logger = createEnvironmentDaemonFileLogger(options.logging.filePath);
+  logger.log("info", "environment-daemon starting", {
     threadId: options.runtime.threadId,
     projectId: options.runtime.projectId,
     environmentId: options.runtime.environmentId,
     serverUrl: options.runtime.serverConnection?.serverUrl,
   });
 
-  const runtime = new EnvironmentAgentRuntime({
+  const runtime = new EnvironmentDaemonRuntime({
     ...options.runtime,
     onProviderRequest: async (request) => {
       if (!sessionSupervisor || !options.runtime.threadId) {
-        throw new Error("Environment-agent session supervisor is unavailable");
+        throw new Error("Environment-daemon session supervisor is unavailable");
       }
       const response = await sessionSupervisor.forwardProviderRequest({
         ...request,
@@ -247,7 +247,7 @@ export async function startEnvironmentAgentService(
       });
       if (!response.ok) {
         throw new Error(
-          response.errorMessage ?? "Environment-agent provider request failed",
+          response.errorMessage ?? "Environment-daemon provider request failed",
         );
       }
       return response.toolCallResponse ?? response.result;
@@ -262,7 +262,7 @@ export async function startEnvironmentAgentService(
     },
   });
   runtime.subscribeToEvents((event) => {
-    logger.log("info", "environment-agent event", {
+    logger.log("info", "environment-daemon event", {
       sequence: event.sequence,
       type: event.event.type,
       threadId: event.threadId,
@@ -270,7 +270,7 @@ export async function startEnvironmentAgentService(
   });
   runtime.start();
 
-  const server = await createEnvironmentAgentHttpServer({
+  const server = await createEnvironmentDaemonHttpServer({
     runtime,
     host: options.server.host,
     port: options.server.port,
@@ -280,12 +280,12 @@ export async function startEnvironmentAgentService(
     },
     onShutdownRequested: () => close(),
   });
-  logger.log("info", "environment-agent http listening", {
+  logger.log("info", "environment-daemon http listening", {
     baseUrl: server.baseUrl,
     logFilePath: options.logging.filePath,
   });
 
-  let sessionSupervisor: EnvironmentAgentSessionSupervisor | undefined;
+  let sessionSupervisor: EnvironmentDaemonSessionSupervisor | undefined;
   let closePromise: Promise<void> | null = null;
   const close = async (): Promise<void> => {
     if (closePromise) {
@@ -300,16 +300,16 @@ export async function startEnvironmentAgentService(
   };
   try {
     if (options.runtime.serverConnection?.serverUrl && options.runtime.serverConnection.environmentId && options.runtime.threadId) {
-      const sessionStore = new InMemoryEnvironmentAgentSessionStore();
-      const sessionRuntime = new EnvironmentAgentSessionRuntime({ store: sessionStore });
-      const sessionClient = createEnvironmentAgentSessionHttpClientFromConnection(
+      const sessionStore = new InMemoryEnvironmentDaemonSessionStore();
+      const sessionRuntime = new EnvironmentDaemonSessionRuntime({ store: sessionStore });
+      const sessionClient = createEnvironmentDaemonSessionHttpClientFromConnection(
         options.runtime.serverConnection,
       );
-      const sessionSync = new EnvironmentAgentSessionSync({
+      const sessionSync = new EnvironmentDaemonSessionSync({
         runtime: sessionRuntime,
         client: sessionClient,
       });
-      sessionSupervisor = new EnvironmentAgentSessionSupervisor({
+      sessionSupervisor = new EnvironmentDaemonSessionSupervisor({
         threadId: options.runtime.threadId,
         runtime,
         sessionRuntime,
@@ -321,7 +321,7 @@ export async function startEnvironmentAgentService(
         pollIntervalMs: options.session.pollIntervalMs,
         commandBatchLimit: options.session.commandBatchLimit,
         onError: (error) => {
-          logger.log("warn", "environment-agent session sync error", {
+          logger.log("warn", "environment-daemon session sync error", {
             error: error instanceof Error ? error.message : String(error),
           });
         },

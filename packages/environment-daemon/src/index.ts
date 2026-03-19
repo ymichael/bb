@@ -1,152 +1,152 @@
 export type {
-  EnvironmentAgentConnectionTarget,
-  EnvironmentAgentTransportKind,
-  EnvironmentAgentServerConnectionConfig,
-  EnvironmentAgentProviderLaunchWrapper,
-  EnvironmentAgentProviderSpec,
-  EnvironmentAgentProviderFile,
-  EnvironmentAgentProviderFilePlacement,
-  EnvironmentAgentProviderStatus,
-  EnvironmentAgentCommand,
-  EnvironmentAgentCommandMetadata,
-  EnvironmentAgentInitializeRequest,
-  EnvironmentAgentCommandEnvelope,
-  EnvironmentAgentCommandAck,
-  EnvironmentAgentCommandDeliveryState,
-  EnvironmentAgentEvent,
-  EnvironmentAgentEventEnvelope,
-  EnvironmentAgentDeliveryReason,
-  EnvironmentAgentDeliveryRuntimeState,
-  EnvironmentAgentStatusSnapshot,
-  EnvironmentAgentControlRequest,
-  EnvironmentAgentControlResponse,
+  EnvironmentDaemonConnectionTarget,
+  EnvironmentDaemonTransportKind,
+  EnvironmentDaemonServerConnectionConfig,
+  EnvironmentDaemonProviderLaunchWrapper,
+  EnvironmentDaemonProviderSpec,
+  EnvironmentDaemonProviderFile,
+  EnvironmentDaemonProviderFilePlacement,
+  EnvironmentDaemonProviderStatus,
+  EnvironmentDaemonCommand,
+  EnvironmentDaemonCommandMetadata,
+  EnvironmentDaemonInitializeRequest,
+  EnvironmentDaemonCommandEnvelope,
+  EnvironmentDaemonCommandAck,
+  EnvironmentDaemonCommandDeliveryState,
+  EnvironmentDaemonEvent,
+  EnvironmentDaemonEventEnvelope,
+  EnvironmentDaemonDeliveryReason,
+  EnvironmentDaemonDeliveryRuntimeState,
+  EnvironmentDaemonStatusSnapshot,
+  EnvironmentDaemonControlRequest,
+  EnvironmentDaemonControlResponse,
 } from "./protocol.js";
-export { ENVIRONMENT_AGENT_PROTOCOL_VERSION } from "./protocol.js";
+export { ENVIRONMENT_DAEMON_PROTOCOL_VERSION } from "./protocol.js";
 export {
-  isEnvironmentAgentControlRequest,
-  isEnvironmentAgentControlResponse,
+  isEnvironmentDaemonControlRequest,
+  isEnvironmentDaemonControlResponse,
 } from "./protocol.js";
 
 export type {
-  EnvironmentAgentSessionCloseReason,
-  EnvironmentAgentSessionCursor,
-  EnvironmentAgentSessionCursorExclusive,
-  EnvironmentAgentSessionChannelBootstrap,
-  EnvironmentAgentSessionWorkerMetadata,
-  EnvironmentAgentSessionProviderMetadata,
-  EnvironmentAgentSessionCapabilityCommand,
-  EnvironmentAgentSessionCapabilityFeature,
-  EnvironmentAgentSessionCapabilities,
-  EnvironmentAgentSessionProtocolVersion,
-  EnvironmentAgentSessionOpenPayload,
-  EnvironmentAgentSessionWelcomeChannel,
-  EnvironmentAgentSessionWelcomePayload,
-  EnvironmentAgentSessionHeartbeatChannel,
-  EnvironmentAgentSessionHeartbeatPayload,
-  EnvironmentAgentSessionEventBatchItem,
-  EnvironmentAgentSessionEventBatchChannel,
-  EnvironmentAgentSessionEventBatchPayload,
-  EnvironmentAgentSessionEventAckChannel,
-  EnvironmentAgentSessionEventAckPayload,
-  EnvironmentAgentSessionCommandBatchItem,
-  EnvironmentAgentSessionCommandBatchPayload,
-  EnvironmentAgentSessionCommandAckState,
-  EnvironmentAgentSessionCommandAckItem,
-  EnvironmentAgentSessionCommandAckPayload,
-  EnvironmentAgentSessionCommandResultState,
-  EnvironmentAgentSessionCommandResultPayload,
-  EnvironmentAgentSessionProviderRequestPayload,
-  EnvironmentAgentSessionProviderResponsePayload,
-  EnvironmentAgentSessionClosePayload,
-  EnvironmentAgentSessionReplacedPayload,
-  EnvironmentAgentSessionOpenMessage,
-  EnvironmentAgentSessionWelcomeMessage,
-  EnvironmentAgentSessionHeartbeatMessage,
-  EnvironmentAgentSessionEventBatchMessage,
-  EnvironmentAgentSessionEventAckMessage,
-  EnvironmentAgentSessionCommandBatchMessage,
-  EnvironmentAgentSessionCommandAckMessage,
-  EnvironmentAgentSessionCommandResultMessage,
-  EnvironmentAgentSessionProviderRequestMessage,
-  EnvironmentAgentSessionProviderResponseMessage,
-  EnvironmentAgentSessionCloseMessage,
-  EnvironmentAgentSessionReplacedMessage,
-  EnvironmentAgentSessionClientMessage,
-  EnvironmentAgentSessionServerMessage,
-  EnvironmentAgentSessionSessionControlMessage,
-  EnvironmentAgentSessionMessage,
+  EnvironmentDaemonSessionCloseReason,
+  EnvironmentDaemonSessionCursor,
+  EnvironmentDaemonSessionCursorExclusive,
+  EnvironmentDaemonSessionChannelBootstrap,
+  EnvironmentDaemonSessionWorkerMetadata,
+  EnvironmentDaemonSessionProviderMetadata,
+  EnvironmentDaemonSessionCapabilityCommand,
+  EnvironmentDaemonSessionCapabilityFeature,
+  EnvironmentDaemonSessionCapabilities,
+  EnvironmentDaemonSessionProtocolVersion,
+  EnvironmentDaemonSessionOpenPayload,
+  EnvironmentDaemonSessionWelcomeChannel,
+  EnvironmentDaemonSessionWelcomePayload,
+  EnvironmentDaemonSessionHeartbeatChannel,
+  EnvironmentDaemonSessionHeartbeatPayload,
+  EnvironmentDaemonSessionEventBatchItem,
+  EnvironmentDaemonSessionEventBatchChannel,
+  EnvironmentDaemonSessionEventBatchPayload,
+  EnvironmentDaemonSessionEventAckChannel,
+  EnvironmentDaemonSessionEventAckPayload,
+  EnvironmentDaemonSessionCommandBatchItem,
+  EnvironmentDaemonSessionCommandBatchPayload,
+  EnvironmentDaemonSessionCommandAckState,
+  EnvironmentDaemonSessionCommandAckItem,
+  EnvironmentDaemonSessionCommandAckPayload,
+  EnvironmentDaemonSessionCommandResultState,
+  EnvironmentDaemonSessionCommandResultPayload,
+  EnvironmentDaemonSessionProviderRequestPayload,
+  EnvironmentDaemonSessionProviderResponsePayload,
+  EnvironmentDaemonSessionClosePayload,
+  EnvironmentDaemonSessionReplacedPayload,
+  EnvironmentDaemonSessionOpenMessage,
+  EnvironmentDaemonSessionWelcomeMessage,
+  EnvironmentDaemonSessionHeartbeatMessage,
+  EnvironmentDaemonSessionEventBatchMessage,
+  EnvironmentDaemonSessionEventAckMessage,
+  EnvironmentDaemonSessionCommandBatchMessage,
+  EnvironmentDaemonSessionCommandAckMessage,
+  EnvironmentDaemonSessionCommandResultMessage,
+  EnvironmentDaemonSessionProviderRequestMessage,
+  EnvironmentDaemonSessionProviderResponseMessage,
+  EnvironmentDaemonSessionCloseMessage,
+  EnvironmentDaemonSessionReplacedMessage,
+  EnvironmentDaemonSessionClientMessage,
+  EnvironmentDaemonSessionServerMessage,
+  EnvironmentDaemonSessionSessionControlMessage,
+  EnvironmentDaemonSessionMessage,
 } from "./session-protocol.js";
 export {
-  ENVIRONMENT_AGENT_SESSION_PROTOCOL,
-  ENVIRONMENT_AGENT_SESSION_PROTOCOL_VERSION,
-  ENVIRONMENT_AGENT_SESSION_SUPPORTED_PROTOCOL_VERSIONS,
+  ENVIRONMENT_DAEMON_SESSION_PROTOCOL,
+  ENVIRONMENT_DAEMON_SESSION_PROTOCOL_VERSION,
+  ENVIRONMENT_DAEMON_SESSION_SUPPORTED_PROTOCOL_VERSIONS,
   ENVIRONMENT_AGENT_SESSION_CAPABILITY_COMMANDS,
   ENVIRONMENT_AGENT_SESSION_CAPABILITY_FEATURES,
-  createEnvironmentAgentSessionCapabilities,
-  inferEnvironmentAgentSessionCapabilities,
-  normalizeEnvironmentAgentSessionCapabilities,
-  negotiateEnvironmentAgentSessionCapabilities,
-  selectEnvironmentAgentSessionProtocolVersion,
-  compareEnvironmentAgentSessionCursors,
-  isEnvironmentAgentSessionCursor,
-  isEnvironmentAgentSessionMessage,
-  isEnvironmentAgentSessionClientMessage,
-  isEnvironmentAgentSessionServerMessage,
+  createEnvironmentDaemonSessionCapabilities,
+  inferEnvironmentDaemonSessionCapabilities,
+  normalizeEnvironmentDaemonSessionCapabilities,
+  negotiateEnvironmentDaemonSessionCapabilities,
+  selectEnvironmentDaemonSessionProtocolVersion,
+  compareEnvironmentDaemonSessionCursors,
+  isEnvironmentDaemonSessionCursor,
+  isEnvironmentDaemonSessionMessage,
+  isEnvironmentDaemonSessionClientMessage,
+  isEnvironmentDaemonSessionServerMessage,
 } from "./session-protocol.js";
 
 export type {
-  EnvironmentAgentSessionStoreCommandReceiptState,
-  EnvironmentAgentSessionStoreSessionStatus,
-  EnvironmentAgentSessionStateRecord,
-  EnvironmentAgentOutboxEventRecord,
-  EnvironmentAgentCommandReceiptRecord,
-  EnvironmentAgentPersistedSessionRecord,
-  InitializeEnvironmentAgentThreadStateInput,
-  AppendEnvironmentAgentOutboxEventInput,
-  AckEnvironmentAgentOutboxThroughInput,
-  RecordEnvironmentAgentCommandReceivedInput,
-  CompleteEnvironmentAgentCommandReceiptInput,
-  FailEnvironmentAgentCommandReceiptInput,
-  BindEnvironmentAgentSessionInput,
-  SetEnvironmentAgentLastDeliveredCommandCursorInput,
-  EnvironmentAgentSessionStore,
+  EnvironmentDaemonSessionStoreCommandReceiptState,
+  EnvironmentDaemonSessionStoreSessionStatus,
+  EnvironmentDaemonSessionStateRecord,
+  EnvironmentDaemonOutboxEventRecord,
+  EnvironmentDaemonCommandReceiptRecord,
+  EnvironmentDaemonPersistedSessionRecord,
+  InitializeEnvironmentDaemonThreadStateInput,
+  AppendEnvironmentDaemonOutboxEventInput,
+  AckEnvironmentDaemonOutboxThroughInput,
+  RecordEnvironmentDaemonCommandReceivedInput,
+  CompleteEnvironmentDaemonCommandReceiptInput,
+  FailEnvironmentDaemonCommandReceiptInput,
+  BindEnvironmentDaemonSessionInput,
+  SetEnvironmentDaemonLastDeliveredCommandCursorInput,
+  EnvironmentDaemonSessionStore,
 } from "./session-store.js";
 export {
-  InMemoryEnvironmentAgentSessionStore,
+  InMemoryEnvironmentDaemonSessionStore,
 } from "./in-memory-session-store.js";
 export type {
-  EnvironmentAgentSessionRuntimeOptions,
-  RecordEnvironmentAgentSessionEventInput,
-  ReceiveEnvironmentAgentSessionCommandResult,
+  EnvironmentDaemonSessionRuntimeOptions,
+  RecordEnvironmentDaemonSessionEventInput,
+  ReceiveEnvironmentDaemonSessionCommandResult,
 } from "./session-runtime.js";
 export {
-  EnvironmentAgentSessionRuntime,
+  EnvironmentDaemonSessionRuntime,
 } from "./session-runtime.js";
 
 export type {
-  EnvironmentAgentSessionHttpClientOptions,
+  EnvironmentDaemonSessionHttpClientOptions,
 } from "./session-http-client.js";
 export {
-  EnvironmentAgentSessionHttpClient,
-  EnvironmentAgentSessionHttpClientError,
-  isEnvironmentAgentSessionInactiveError,
-  createEnvironmentAgentSessionHttpClientFromConnection,
+  EnvironmentDaemonSessionHttpClient,
+  EnvironmentDaemonSessionHttpClientError,
+  isEnvironmentDaemonSessionInactiveError,
+  createEnvironmentDaemonSessionHttpClientFromConnection,
 } from "./session-http-client.js";
 
 export type {
-  EnvironmentAgentSessionSyncOptions,
-  EnvironmentAgentPulledCommand,
-  FlushEnvironmentAgentEventBatchResult,
+  EnvironmentDaemonSessionSyncOptions,
+  EnvironmentDaemonPulledCommand,
+  FlushEnvironmentDaemonEventBatchResult,
 } from "./session-sync.js";
 export {
-  EnvironmentAgentSessionSync,
+  EnvironmentDaemonSessionSync,
 } from "./session-sync.js";
 
 export type {
-  EnvironmentAgentSessionSupervisorOptions,
+  EnvironmentDaemonSessionSupervisorOptions,
 } from "./session-supervisor.js";
 export {
-  EnvironmentAgentSessionSupervisor,
+  EnvironmentDaemonSessionSupervisor,
 } from "./session-supervisor.js";
 
 export type {
@@ -154,38 +154,38 @@ export type {
   JsonLineTransportHandlers,
 } from "./transport.js";
 
-export type { EnvironmentAgentRuntimeOptions } from "./runtime.js";
+export type { EnvironmentDaemonRuntimeOptions } from "./runtime.js";
 export {
-  EnvironmentAgentRuntime,
+  EnvironmentDaemonRuntime,
 } from "./runtime.js";
 
-export type { EnvironmentAgentClient } from "./client.js";
+export type { EnvironmentDaemonClient } from "./client.js";
 export {
-  EnvironmentAgentClientError,
-  createEnvironmentAgentClient,
+  EnvironmentDaemonClientError,
+  createEnvironmentDaemonClient,
 } from "./client.js";
 
-export type { EnvironmentAgentHttpServer } from "./http-server.js";
-export { createEnvironmentAgentHttpServer } from "./http-server.js";
+export type { EnvironmentDaemonHttpServer } from "./http-server.js";
+export { createEnvironmentDaemonHttpServer } from "./http-server.js";
 
 export type {
-  EnvironmentAgentServiceCliOptions,
-  EnvironmentAgentServiceOptions,
+  EnvironmentDaemonServiceCliOptions,
+  EnvironmentDaemonServiceOptions,
 } from "./service.js";
 export {
-  resolveEnvironmentAgentServiceOptions,
-  startEnvironmentAgentService,
+  resolveEnvironmentDaemonServiceOptions,
+  startEnvironmentDaemonService,
 } from "./service.js";
 
 export type {
-  EnvironmentAgentLogIdentity,
-  EnvironmentAgentFileLogger,
+  EnvironmentDaemonLogIdentity,
+  EnvironmentDaemonFileLogger,
 } from "./file-logger.js";
 export {
-  createEnvironmentAgentFileLogger,
-  removeEnvironmentAgentDefaultLogArtifacts,
-  resolveDefaultEnvironmentAgentLogFilePath,
-  resolveEnvironmentAgentLogFilePath,
+  createEnvironmentDaemonFileLogger,
+  removeEnvironmentDaemonDefaultLogArtifacts,
+  resolveDefaultEnvironmentDaemonLogFilePath,
+  resolveEnvironmentDaemonLogFilePath,
 } from "./file-logger.js";
 
 export type {

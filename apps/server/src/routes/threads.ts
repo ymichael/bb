@@ -18,7 +18,7 @@ import {
 import { z } from "zod";
 import { isAbsolute, relative, resolve, sep } from "node:path";
 import type {
-  EnvironmentAgentStatusSnapshot,
+  EnvironmentDaemonStatusSnapshot,
 } from "@bb/environment-daemon";
 import { invalidRequestError, threadNotFoundError } from "../domain-errors.js";
 import { sendRouteError } from "./error-response.js";
@@ -148,10 +148,10 @@ type OpenPathFn = (args: OpenPathRequest) => void;
 
 const MAX_PROMPT_ATTACHMENT_INPUTS = 12;
 
-type RouteEnvironmentAgentCapableOrchestrator = ThreadOrchestrator & {
-  getEnvironmentAgentStatus?: (
+type RouteEnvironmentDaemonCapableOrchestrator = ThreadOrchestrator & {
+  getEnvironmentDaemonStatus?: (
     threadId: string,
-  ) => Promise<EnvironmentAgentStatusSnapshot>;
+  ) => Promise<EnvironmentDaemonStatusSnapshot>;
 };
 
 function validatePromptInputAttachments(input: PromptInput[]): void {
@@ -197,8 +197,8 @@ export function createThreadRoutes(
   const environmentRepo = opts?.environmentRepo;
   const threadEnvironmentAttachmentRepo = opts?.threadEnvironmentAttachmentRepo;
   const runtimeEnv = opts?.runtimeEnv ?? process.env;
-  const environmentAgentAccessor =
-    threadManager as RouteEnvironmentAgentCapableOrchestrator;
+  const environmentDaemonAccessor =
+    threadManager as RouteEnvironmentDaemonCapableOrchestrator;
   const hydrateThread = <TThread extends Thread>(thread: TThread): TThread => {
     if (!environmentRepo || !threadEnvironmentAttachmentRepo) {
       return thread;
@@ -471,17 +471,17 @@ export function createThreadRoutes(
         }
       },
     )
-    .get("/:id/environment-agent/status", async (c) => {
+    .get("/:id/environment-daemon/status", async (c) => {
       try {
         const threadId = c.req.param("id");
         const thread = await getThreadForRouteLookup(threadManager, threadId);
         if (!thread) {
           return sendRouteError(c, threadNotFoundError(threadId));
         }
-        if (!environmentAgentAccessor.getEnvironmentAgentStatus) {
+        if (!environmentDaemonAccessor.getEnvironmentDaemonStatus) {
           throw invalidRequestError("Env-daemon status is unavailable");
         }
-        const status = await environmentAgentAccessor.getEnvironmentAgentStatus(
+        const status = await environmentDaemonAccessor.getEnvironmentDaemonStatus(
           threadId,
         );
         return c.json(status);

@@ -15,9 +15,9 @@ dotenv.config({ path: workspaceEnvPath });
 import {
   createConnection,
   migrate,
-  EnvironmentAgentCommandRepository,
-  EnvironmentAgentCursorRepository,
-  EnvironmentAgentSessionRepository,
+  EnvironmentDaemonCommandRepository,
+  EnvironmentDaemonCursorRepository,
+  EnvironmentDaemonSessionRepository,
   EnvironmentRepository,
   ProjectRepository,
   ThreadEnvironmentAttachmentRepository,
@@ -28,7 +28,7 @@ import { createServer } from "./server.js";
 import { installConsoleFileLogger } from "./file-logger.js";
 import { closeHttpServer } from "./http-server-close.js";
 import {
-  scheduleManagedEnvironmentAgentSessionRecoveryOnBoot,
+  scheduleManagedEnvironmentDaemonSessionRecoveryOnBoot,
   scheduleManagedArtifactReconciliation,
 } from "./startup-tasks.js";
 
@@ -133,9 +133,9 @@ async function main(): Promise<void> {
   const threadEnvironmentAttachmentRepo = new ThreadEnvironmentAttachmentRepository(db);
   const threadRepo = new ThreadRepository(db);
   const eventRepo = new EventRepository(db);
-  const environmentAgentSessionRepo = new EnvironmentAgentSessionRepository(db);
-  const environmentAgentCursorRepo = new EnvironmentAgentCursorRepository(db);
-  const environmentAgentCommandRepo = new EnvironmentAgentCommandRepository(db);
+  const environmentDaemonSessionRepo = new EnvironmentDaemonSessionRepository(db);
+  const environmentDaemonCursorRepo = new EnvironmentDaemonCursorRepository(db);
+  const environmentDaemonCommandRepo = new EnvironmentDaemonCommandRepository(db);
 
   try {
     const storageReclaim = eventRepo.reclaimStorageIfNeeded({
@@ -212,9 +212,9 @@ async function main(): Promise<void> {
       threadEnvironmentAttachmentRepo,
       threadRepo,
       eventRepo,
-      environmentAgentSessionRepo,
-      environmentAgentCursorRepo,
-      environmentAgentCommandRepo,
+      environmentDaemonSessionRepo,
+      environmentDaemonCursorRepo,
+      environmentDaemonCommandRepo,
       serverBaseUrl: `http://127.0.0.1:${port}/api/v1`,
       dbPath,
       serverLogFilePath: logFilePath,
@@ -265,9 +265,9 @@ async function main(): Promise<void> {
       console.log(`\nPress Ctrl+C to stop.\n`);
       console.log("Managed artifact reconciliation scheduled in background.");
       scheduleManagedArtifactReconciliation(threadManager);
-      console.log("Managed environment-agent session recovery scheduled in background.");
-      scheduleManagedEnvironmentAgentSessionRecoveryOnBoot({
-        sessionRepo: environmentAgentSessionRepo,
+      console.log("Managed environment-daemon session recovery scheduled in background.");
+      scheduleManagedEnvironmentDaemonSessionRecoveryOnBoot({
+        sessionRepo: environmentDaemonSessionRepo,
       });
       listeningResolve?.();
     },

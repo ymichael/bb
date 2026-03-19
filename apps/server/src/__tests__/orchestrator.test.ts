@@ -33,10 +33,10 @@ import {
   type IEnvironment,
 } from "@bb/environment";
 import {
-  ENVIRONMENT_AGENT_PROTOCOL_VERSION,
-  type EnvironmentAgentClient,
-  type EnvironmentAgentCommandAck,
-  type EnvironmentAgentEventEnvelope,
+  ENVIRONMENT_DAEMON_PROTOCOL_VERSION,
+  type EnvironmentDaemonClient,
+  type EnvironmentDaemonCommandAck,
+  type EnvironmentDaemonEventEnvelope,
 } from "@bb/environment-daemon";
 import {
   createConnection,
@@ -57,16 +57,16 @@ import {
 import { Orchestrator } from "../orchestrator.js";
 import { ProviderSessionController } from "../provider-session-controller.js";
 import type { EnvironmentService } from "../environment-service.js";
-import type { EnvironmentAgentSessionService } from "../environment-agent-session-service.js";
+import type { EnvironmentDaemonSessionService } from "../environment-daemon-session-service.js";
 import { WSManager } from "../ws.js";
 import {
   CODEX_THREAD_ID,
   createFakeChildProcess,
-  createFakeEnvironmentAgentClient,
+  createFakeEnvironmentDaemonClient,
   findRpcMessageByMethod,
   parseRpcMessage,
   type FakeChildProcess,
-} from "./helpers/environment-agent-test-harness.js";
+} from "./helpers/environment-daemon-test-harness.js";
 import {
   createTestDb,
   createTestRepos,
@@ -376,7 +376,7 @@ vi.mock("node:child_process", async (importOriginal) => {
 });
 
 import { spawn as spawnMock } from "node:child_process";
-const createHttpEnvironmentAgentClient = vi.fn();
+const createHttpEnvironmentDaemonClient = vi.fn();
 
 vi.mock("@bb/environment-daemon", async (importOriginal) => {
   return importOriginal<typeof import("@bb/environment-daemon")>();
@@ -474,11 +474,11 @@ function asOrchestratorHarness(manager: Orchestrator): OrchestratorTestHarness {
   const processes = new Map<string, unknown>() as Map<string, unknown>;
   processes.get = (threadId: string) => liveClients.get(threadId)?.__fakeChild;
   processes.set = (threadId: string, child: unknown) => {
-    let environmentAgentChild = child as FakeChildProcess;
+    let environmentDaemonChild = child as FakeChildProcess;
     if (
-      !environmentAgentChild ||
-      !environmentAgentChild.stdout ||
-      !environmentAgentChild.stderr
+      !environmentDaemonChild ||
+      !environmentDaemonChild.stdout ||
+      !environmentDaemonChild.stderr
     ) {
       const compatibleChild = createFakeChildProcess();
       const partialChild = child as {
@@ -506,13 +506,13 @@ function asOrchestratorHarness(manager: Orchestrator): OrchestratorTestHarness {
       if (partialChild.exitCode !== undefined) {
         compatibleChild.exitCode = partialChild.exitCode;
       }
-      environmentAgentChild = compatibleChild;
+      environmentDaemonChild = compatibleChild;
     }
     (spawnMock as unknown as ReturnType<typeof vi.fn>).mockReturnValue(
-      environmentAgentChild,
+      environmentDaemonChild,
     );
     liveClients.set(threadId, {
-      __fakeChild: environmentAgentChild,
+      __fakeChild: environmentDaemonChild,
       close: vi.fn(),
     });
     return processes;
@@ -804,7 +804,7 @@ describe("Orchestrator", () => {
       const updateSpy = vi.spyOn(threadRepo, "update");
       const createSpy = vi.spyOn(eventRepo, "create");
 
-      manager.handleEnvironmentAgentSessionInvalidated(thread.id, "newer_session");
+      manager.handleEnvironmentDaemonSessionInvalidated(thread.id, "newer_session");
 
       expect(updateSpy).not.toHaveBeenCalled();
       expect(createSpy).not.toHaveBeenCalled();
@@ -816,7 +816,7 @@ describe("Orchestrator", () => {
       const updateSpy = vi.spyOn(threadRepo, "update");
       const createSpy = vi.spyOn(eventRepo, "create");
 
-      manager.handleEnvironmentAgentSessionInvalidated(thread.id, "migration");
+      manager.handleEnvironmentDaemonSessionInvalidated(thread.id, "migration");
 
       expect(updateSpy).not.toHaveBeenCalled();
       expect(createSpy).not.toHaveBeenCalled();
@@ -851,7 +851,7 @@ describe("Orchestrator", () => {
       });
     });
 
-    it("does not reconnect to an expired shared environment-agent session target", () => {
+    it("does not reconnect to an expired shared environment-daemon session target", () => {
       const env = environmentRepo.create({
         projectId: project.id,
         descriptor: { type: "path", path: "/tmp/env" },
@@ -870,7 +870,7 @@ describe("Orchestrator", () => {
           id: "session-1",
           threadId: "thread-1",
           environmentId: env.id,
-          agentId: "environment-agent:thread-1",
+          agentId: "environment-daemon:thread-1",
           agentInstanceId: "instance-1",
           protocolVersion: 1,
           controlBaseUrl: "http://127.0.0.1:4315",
@@ -909,7 +909,7 @@ describe("Orchestrator", () => {
             threadId: string,
             projectRootPath: string,
           ) => {
-            managedEnvironmentAgentReconnectTarget?: {
+            managedEnvironmentDaemonReconnectTarget?: {
               baseUrl: string;
               authToken?: string;
             };
@@ -917,7 +917,7 @@ describe("Orchestrator", () => {
         }
       )._createEnvironmentContext(thread.id, "/tmp/proj-1");
 
-      expect(context.managedEnvironmentAgentReconnectTarget).toBeUndefined();
+      expect(context.managedEnvironmentDaemonReconnectTarget).toBeUndefined();
       expect(sessionRepo.getActiveByEnvironmentId).toHaveBeenCalledWith(env.id);
       expect(sessionRepo.getLatestByEnvironmentId).not.toHaveBeenCalled();
     });
@@ -932,7 +932,7 @@ describe("Orchestrator", () => {
       }>,
       opts?: {
         sessionService?: Pick<
-          EnvironmentAgentSessionService,
+          EnvironmentDaemonSessionService,
           "retireActiveSessionForEnvironment"
         >;
       },
@@ -980,7 +980,7 @@ describe("Orchestrator", () => {
         undefined,
         undefined,
         undefined,
-        opts?.sessionService as EnvironmentAgentSessionService | undefined,
+        opts?.sessionService as EnvironmentDaemonSessionService | undefined,
         undefined,
         undefined,
         repos.attachmentRepo,
@@ -1064,7 +1064,7 @@ describe("Orchestrator", () => {
 
       await bootManager.cleanupArchivedEnvironmentsOnBoot();
 
-      expect(createHttpEnvironmentAgentClient).not.toHaveBeenCalled();
+      expect(createHttpEnvironmentDaemonClient).not.toHaveBeenCalled();
     });
 
     it("does not use the broad thread listing path during boot", async () => {

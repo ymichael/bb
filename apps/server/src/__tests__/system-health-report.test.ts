@@ -4,7 +4,7 @@ import { dirname, join, resolve } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Project, Thread } from "@bb/core";
 import type {
-  EnvironmentAgentSessionRepository,
+  EnvironmentDaemonSessionRepository,
   ProjectRepository,
   ThreadRepository,
 } from "@bb/db";
@@ -72,7 +72,7 @@ describe("system health report", () => {
     writeBytes(`${dbPath}-shm`, "shm");
     writeBytes(serverLogPath, "server");
     writeBytes(`${serverLogPath}.1`, "archive");
-    writeBytes(resolve(bbRoot, "environment-agent-logs", "proj-1", "worktree-thread-1.log"), "envlog");
+    writeBytes(resolve(bbRoot, "environment-daemon-logs", "proj-1", "worktree-thread-1.log"), "envlog");
     writeBytes(resolve(bbRoot, "worktrees", "proj-1", "thread-1", "README.md"), "workspace");
     writeBytes(resolve(bbRoot, "attachments", "proj-1", "image.png"), "img");
     writeBytes(resolve(bbRoot, "backups", "daily.sql"), "backup");
@@ -90,12 +90,12 @@ describe("system health report", () => {
     const threadRepo = {
       list: () => threads,
     } as unknown as ThreadRepository;
-    const environmentAgentSessionRepo = {
+    const environmentDaemonSessionRepo = {
       listActive: () => [
         {
           id: "session-1",
           environmentId: "env-worktree-1",
-          agentId: "environment-agent:thread-1",
+          agentId: "environment-daemon:thread-1",
           agentInstanceId: "instance-1",
           protocolVersion: 1,
           workerName: "environment-daemon",
@@ -119,14 +119,14 @@ describe("system health report", () => {
           updatedAt: now - 1_000,
         },
       ],
-    } as unknown as EnvironmentAgentSessionRepository;
+    } as unknown as EnvironmentDaemonSessionRepository;
 
     vi.spyOn(Date, "now").mockReturnValue(now);
 
     const report = createSystemHealthReporter({
       projectRepo,
       threadRepo,
-      environmentAgentSessionRepo,
+      environmentDaemonSessionRepo,
       getRunningCount: () => 1,
       startTime: now - 3_600_000,
       dbPath,
@@ -148,13 +148,13 @@ describe("system health report", () => {
       active: 1,
       idle: 1,
     });
-    expect(report.environmentAgent).toEqual({
+    expect(report.environmentDaemon).toEqual({
       activeSessionCount: 1,
       activeSessions: [
         {
           sessionId: "session-1",
           environmentId: "env-worktree-1",
-          agentId: "environment-agent:thread-1",
+          agentId: "environment-daemon:thread-1",
           agentInstanceId: "instance-1",
           protocolVersion: 1,
           worker: {
@@ -222,10 +222,10 @@ describe("system health report", () => {
         paths: [serverLogPath, `${serverLogPath}.1`],
       },
       {
-        key: "environment_agent_logs",
+        key: "environment_daemon_logs",
         label: "Environment Agent Logs",
         bytes: 6,
-        paths: [resolve(bbRoot, "environment-agent-logs")],
+        paths: [resolve(bbRoot, "environment-daemon-logs")],
       },
       {
         key: "worktrees",

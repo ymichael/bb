@@ -149,8 +149,8 @@ export const events = sqliteTable(
   (table) => [index("events_thread_seq_idx").on(table.threadId, table.seq)]
 );
 
-export const environmentAgentSessions = sqliteTable(
-  "environment_agent_sessions",
+export const environmentDaemonSessions = sqliteTable(
+  "environment_daemon_sessions",
   {
     id: text("id").primaryKey(),
     environmentId: text("environment_id")
@@ -175,26 +175,26 @@ export const environmentAgentSessions = sqliteTable(
     updatedAt: integer("updated_at").notNull(),
   },
   (table) => [
-    index("environment_agent_sessions_environment_status_idx").on(
+    index("environment_daemon_sessions_environment_status_idx").on(
       table.environmentId,
       table.status,
     ),
-    index("environment_agent_sessions_agent_status_idx").on(
+    index("environment_daemon_sessions_agent_status_idx").on(
       table.agentId,
       table.status,
     ),
-    index("environment_agent_sessions_lease_expires_idx").on(
+    index("environment_daemon_sessions_lease_expires_idx").on(
       table.leaseExpiresAt,
     ),
-    index("environment_agent_sessions_status_lease_idx").on(
+    index("environment_daemon_sessions_status_lease_idx").on(
       table.status,
       table.leaseExpiresAt,
     ),
   ],
 );
 
-export const environmentAgentCursors = sqliteTable(
-  "environment_agent_cursors",
+export const environmentDaemonCursors = sqliteTable(
+  "environment_daemon_cursors",
   {
     threadId: text("thread_id")
       .primaryKey()
@@ -205,14 +205,14 @@ export const environmentAgentCursors = sqliteTable(
   },
 );
 
-export const environmentAgentCommands = sqliteTable(
-  "environment_agent_commands",
+export const environmentDaemonCommands = sqliteTable(
+  "environment_daemon_commands",
   {
     id: text("id").primaryKey(),
     threadId: text("thread_id")
       .notNull()
       .references(() => threads.id, { onDelete: "cascade" }),
-    sessionId: text("session_id").references(() => environmentAgentSessions.id, {
+    sessionId: text("session_id").references(() => environmentDaemonSessions.id, {
       onDelete: "set null",
     }),
     commandCursor: integer("command_cursor").notNull(),
@@ -226,16 +226,16 @@ export const environmentAgentCommands = sqliteTable(
     updatedAt: integer("updated_at").notNull(),
   },
   (table) => [
-    uniqueIndex("environment_agent_commands_thread_cursor_idx").on(
+    uniqueIndex("environment_daemon_commands_thread_cursor_idx").on(
       table.threadId,
       table.commandCursor,
     ),
-    index("environment_agent_commands_thread_state_updated_idx").on(
+    index("environment_daemon_commands_thread_state_updated_idx").on(
       table.threadId,
       table.state,
       table.updatedAt,
     ),
-    index("environment_agent_commands_session_state_idx").on(
+    index("environment_daemon_commands_session_state_idx").on(
       table.sessionId,
       table.state,
     ),

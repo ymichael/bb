@@ -1,39 +1,39 @@
 import type {
-  CompleteEnvironmentAgentCommandReceiptInput,
-  EnvironmentAgentCommandReceiptRecord,
-  EnvironmentAgentOutboxEventRecord,
-  EnvironmentAgentSessionStateRecord,
-  EnvironmentAgentSessionStore,
-  FailEnvironmentAgentCommandReceiptInput,
-  RecordEnvironmentAgentCommandReceivedInput,
+  CompleteEnvironmentDaemonCommandReceiptInput,
+  EnvironmentDaemonCommandReceiptRecord,
+  EnvironmentDaemonOutboxEventRecord,
+  EnvironmentDaemonSessionStateRecord,
+  EnvironmentDaemonSessionStore,
+  FailEnvironmentDaemonCommandReceiptInput,
+  RecordEnvironmentDaemonCommandReceivedInput,
 } from "./session-store.js";
 import type {
-  EnvironmentAgentEvent,
+  EnvironmentDaemonEvent,
 } from "./protocol.js";
 import type {
-  EnvironmentAgentSessionCommandAckState,
-  EnvironmentAgentSessionCursor,
-  EnvironmentAgentSessionEventBatchChannel,
+  EnvironmentDaemonSessionCommandAckState,
+  EnvironmentDaemonSessionCursor,
+  EnvironmentDaemonSessionEventBatchChannel,
 } from "./session-protocol.js";
 
-export interface EnvironmentAgentSessionRuntimeOptions {
-  store: EnvironmentAgentSessionStore;
+export interface EnvironmentDaemonSessionRuntimeOptions {
+  store: EnvironmentDaemonSessionStore;
   clock?: () => number;
 }
 
-export interface RecordEnvironmentAgentSessionEventInput {
+export interface RecordEnvironmentDaemonSessionEventInput {
   threadId: string;
-  event: EnvironmentAgentEvent;
+  event: EnvironmentDaemonEvent;
   eventId?: string;
   emittedAt?: number;
 }
 
-export interface ReceiveEnvironmentAgentSessionCommandResult {
-  ackState: EnvironmentAgentSessionCommandAckState;
-  receipt: EnvironmentAgentCommandReceiptRecord;
+export interface ReceiveEnvironmentDaemonSessionCommandResult {
+  ackState: EnvironmentDaemonSessionCommandAckState;
+  receipt: EnvironmentDaemonCommandReceiptRecord;
 }
 
-export interface EnvironmentAgentSessionDrainSnapshot {
+export interface EnvironmentDaemonSessionDrainSnapshot {
   hasBoundSession: boolean;
   pendingEventCount: number;
   pendingCommandAckCount: number;
@@ -46,7 +46,7 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
     : undefined;
 }
 
-function isEnvironmentAgentEvent(value: unknown): value is EnvironmentAgentEvent {
+function isEnvironmentDaemonEvent(value: unknown): value is EnvironmentDaemonEvent {
   const record = asRecord(value);
   if (!record) return false;
   if (typeof record.type !== "string" || typeof record.threadId !== "string") {
@@ -83,10 +83,10 @@ function isEnvironmentAgentEvent(value: unknown): value is EnvironmentAgentEvent
   }
 }
 
-export class EnvironmentAgentSessionRuntime {
+export class EnvironmentDaemonSessionRuntime {
   private readonly clock: () => number;
 
-  constructor(private readonly options: EnvironmentAgentSessionRuntimeOptions) {
+  constructor(private readonly options: EnvironmentDaemonSessionRuntimeOptions) {
     this.clock = options.clock ?? (() => Date.now());
   }
 
@@ -94,11 +94,11 @@ export class EnvironmentAgentSessionRuntime {
     return this.options.store.listThreadIds();
   }
 
-  loadThreadState(threadId: string): EnvironmentAgentSessionStateRecord | undefined {
+  loadThreadState(threadId: string): EnvironmentDaemonSessionStateRecord | undefined {
     return this.options.store.loadSessionState(threadId);
   }
 
-  getDrainSnapshot(threadId: string): EnvironmentAgentSessionDrainSnapshot {
+  getDrainSnapshot(threadId: string): EnvironmentDaemonSessionDrainSnapshot {
     const state = this.options.store.loadSessionState(threadId);
     return {
       hasBoundSession: Boolean(state?.sessionId),
@@ -114,7 +114,7 @@ export class EnvironmentAgentSessionRuntime {
     agentInstanceId: string;
     generation: number;
     now?: number;
-  }): EnvironmentAgentSessionStateRecord {
+  }): EnvironmentDaemonSessionStateRecord {
     return this.options.store.initializeThreadState({
       ...args,
       now: args.now ?? this.clock(),
@@ -125,7 +125,7 @@ export class EnvironmentAgentSessionRuntime {
     threadId: string;
     sessionId: string;
     now?: number;
-  }): EnvironmentAgentSessionStateRecord {
+  }): EnvironmentDaemonSessionStateRecord {
     return this.options.store.bindSession({
       ...args,
       now: args.now ?? this.clock(),
@@ -135,7 +135,7 @@ export class EnvironmentAgentSessionRuntime {
   clearSession(
     threadId: string,
     now: number = this.clock(),
-  ): EnvironmentAgentSessionStateRecord {
+  ): EnvironmentDaemonSessionStateRecord {
     return this.options.store.clearSession({
       threadId,
       now,
@@ -145,13 +145,13 @@ export class EnvironmentAgentSessionRuntime {
   bumpGeneration(
     threadId: string,
     now: number = this.clock(),
-  ): EnvironmentAgentSessionStateRecord {
+  ): EnvironmentDaemonSessionStateRecord {
     return this.options.store.bumpGeneration(threadId, now);
   }
 
   recordEvent(
-    input: RecordEnvironmentAgentSessionEventInput,
-  ): EnvironmentAgentOutboxEventRecord {
+    input: RecordEnvironmentDaemonSessionEventInput,
+  ): EnvironmentDaemonOutboxEventRecord {
     return this.options.store.appendOutboxEvent({
       threadId: input.threadId,
       payload: input.event,
@@ -163,7 +163,7 @@ export class EnvironmentAgentSessionRuntime {
   getPendingEventBatch(args: {
     threadId: string;
     limit?: number;
-  }): EnvironmentAgentSessionEventBatchChannel | undefined {
+  }): EnvironmentDaemonSessionEventBatchChannel | undefined {
     const pending = this.options.store.listUnackedOutbox({
       threadId: args.threadId,
       limit: args.limit,
@@ -176,9 +176,9 @@ export class EnvironmentAgentSessionRuntime {
     const events = pending
       .filter((event) => event.generation === generation)
       .map((event) => {
-        if (!isEnvironmentAgentEvent(event.payload)) {
+        if (!isEnvironmentDaemonEvent(event.payload)) {
           throw new Error(
-            `Invalid persisted environment-agent outbox payload for thread ${args.threadId}`,
+            `Invalid persisted environment-daemon outbox payload for thread ${args.threadId}`,
           );
         }
         return {
@@ -210,9 +210,9 @@ export class EnvironmentAgentSessionRuntime {
 
   alignEventCursor(
     threadId: string,
-    cursor: EnvironmentAgentSessionCursor,
+    cursor: EnvironmentDaemonSessionCursor,
     now: number = this.clock(),
-  ): EnvironmentAgentSessionStateRecord {
+  ): EnvironmentDaemonSessionStateRecord {
     return this.options.store.reconcileEventCursor({
       threadId,
       cursor,
@@ -221,8 +221,8 @@ export class EnvironmentAgentSessionRuntime {
   }
 
   receiveCommand(
-    input: RecordEnvironmentAgentCommandReceivedInput,
-  ): ReceiveEnvironmentAgentSessionCommandResult {
+    input: RecordEnvironmentDaemonCommandReceivedInput,
+  ): ReceiveEnvironmentDaemonSessionCommandResult {
     const existing = this.options.store.getCommandReceipt(input.commandId);
     if (existing) {
       return {
@@ -240,27 +240,27 @@ export class EnvironmentAgentSessionRuntime {
     };
   }
 
-  getPendingCommandAcks(threadId: string): EnvironmentAgentCommandReceiptRecord[] {
+  getPendingCommandAcks(threadId: string): EnvironmentDaemonCommandReceiptRecord[] {
     return this.options.store.listPendingCommandAcks(threadId);
   }
 
   markCommandAckReported(
     commandId: string,
     now: number = this.clock(),
-  ): EnvironmentAgentCommandReceiptRecord | undefined {
+  ): EnvironmentDaemonCommandReceiptRecord | undefined {
     return this.options.store.markCommandAckReported(commandId, now);
   }
 
   markCommandStarted(
     commandId: string,
     now: number = this.clock(),
-  ): EnvironmentAgentCommandReceiptRecord | undefined {
+  ): EnvironmentDaemonCommandReceiptRecord | undefined {
     return this.options.store.markCommandStarted(commandId, now);
   }
 
   markCommandCompleted(
-    input: CompleteEnvironmentAgentCommandReceiptInput,
-  ): EnvironmentAgentCommandReceiptRecord | undefined {
+    input: CompleteEnvironmentDaemonCommandReceiptInput,
+  ): EnvironmentDaemonCommandReceiptRecord | undefined {
     return this.options.store.markCommandCompleted({
       ...input,
       now: input.now ?? this.clock(),
@@ -268,23 +268,23 @@ export class EnvironmentAgentSessionRuntime {
   }
 
   markCommandFailed(
-    input: FailEnvironmentAgentCommandReceiptInput,
-  ): EnvironmentAgentCommandReceiptRecord | undefined {
+    input: FailEnvironmentDaemonCommandReceiptInput,
+  ): EnvironmentDaemonCommandReceiptRecord | undefined {
     return this.options.store.markCommandFailed({
       ...input,
       now: input.now ?? this.clock(),
     });
   }
 
-  getPendingCommandResults(threadId: string): EnvironmentAgentCommandReceiptRecord[] {
+  getPendingCommandResults(threadId: string): EnvironmentDaemonCommandReceiptRecord[] {
     return this.options.store.listPendingCommandResults(threadId);
   }
 
   markCommandResultReported(args: {
     commandId: string;
-    state: EnvironmentAgentCommandReceiptRecord["state"];
+    state: EnvironmentDaemonCommandReceiptRecord["state"];
     now?: number;
-  }): EnvironmentAgentCommandReceiptRecord | undefined {
+  }): EnvironmentDaemonCommandReceiptRecord | undefined {
     return this.options.store.markCommandResultReported({
       ...args,
       now: args.now ?? this.clock(),
@@ -295,7 +295,7 @@ export class EnvironmentAgentSessionRuntime {
     threadId: string;
     commandCursor: number;
     now?: number;
-  }): EnvironmentAgentSessionStateRecord {
+  }): EnvironmentDaemonSessionStateRecord {
     return this.options.store.setLastDeliveredCommandCursor({
       ...args,
       now: args.now ?? this.clock(),
@@ -306,7 +306,7 @@ export class EnvironmentAgentSessionRuntime {
     threadId: string,
     commandCursor: number,
     now: number = this.clock(),
-  ): EnvironmentAgentSessionStateRecord {
+  ): EnvironmentDaemonSessionStateRecord {
     return this.options.store.alignLastDeliveredCommandCursor({
       threadId,
       commandCursor,

@@ -13,7 +13,7 @@ import { createProjectRoutes } from "./projects.js";
 import { createThreadRoutes } from "./threads.js";
 import { createSystemRoutes } from "./system.js";
 import type { WSManager } from "../ws.js";
-import type { EnvironmentAgentSessionService } from "../environment-agent-session-service.js";
+import type { EnvironmentDaemonSessionService } from "../environment-daemon-session-service.js";
 import type { SystemHealthReport } from "@bb/core";
 
 export interface ApiRouteDeps {
@@ -23,7 +23,7 @@ export interface ApiRouteDeps {
   threadRepo: ThreadRepository;
   eventRepo: EventRepository;
   threadManager: ThreadOrchestrator;
-  environmentAgentSessionService?: EnvironmentAgentSessionService;
+  environmentDaemonSessionService?: EnvironmentDaemonSessionService;
   wsManager: WSManager;
   startTime: number;
   requestShutdown?: (reason: string) => void;
@@ -73,9 +73,9 @@ export function createApiRoutes(deps: ApiRouteDeps) {
     .route("/environments", createEnvironmentRoutes(deps.environmentRepo, deps.threadManager))
     .route(
       "/environments",
-      deps.environmentAgentSessionService && deps.environmentRepo
+      deps.environmentDaemonSessionService && deps.environmentRepo
         ? createEnvironmentDaemonRoutes({
-            environmentAgentSessionService: deps.environmentAgentSessionService,
+            environmentDaemonSessionService: deps.environmentDaemonSessionService,
             environmentRepo: deps.environmentRepo,
           })
         : new Hono(),

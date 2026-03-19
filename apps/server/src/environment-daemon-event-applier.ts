@@ -1,36 +1,36 @@
 import type {
-  EnvironmentAgentCursorPosition,
-  EnvironmentAgentCursorRepository,
+  EnvironmentDaemonCursorPosition,
+  EnvironmentDaemonCursorRepository,
 } from "@bb/db";
 import {
-  ENVIRONMENT_AGENT_PROTOCOL_VERSION,
-  compareEnvironmentAgentSessionCursors,
-  type EnvironmentAgentEventEnvelope,
-  type EnvironmentAgentSessionEventBatchChannel,
+  ENVIRONMENT_DAEMON_PROTOCOL_VERSION,
+  compareEnvironmentDaemonSessionCursors,
+  type EnvironmentDaemonEventEnvelope,
+  type EnvironmentDaemonSessionEventBatchChannel,
 } from "@bb/environment-daemon";
 
-export type EnvironmentAgentEventApplyBlockedReason =
+export type EnvironmentDaemonEventApplyBlockedReason =
   | "invalid_channel"
   | "gap";
 
-export interface EnvironmentAgentEventApplyResult {
-  acknowledgedCursor?: EnvironmentAgentCursorPosition;
+export interface EnvironmentDaemonEventApplyResult {
+  acknowledgedCursor?: EnvironmentDaemonCursorPosition;
   appliedCount: number;
   duplicateCount: number;
-  blockedReason?: EnvironmentAgentEventApplyBlockedReason;
-  blockedAt?: EnvironmentAgentCursorPosition;
+  blockedReason?: EnvironmentDaemonEventApplyBlockedReason;
+  blockedAt?: EnvironmentDaemonCursorPosition;
 }
 
-export interface EnvironmentAgentEventIngestor {
-  ingestReplayedEnvironmentAgentEvents(args: {
+export interface EnvironmentDaemonEventIngestor {
+  ingestReplayedEnvironmentDaemonEvents(args: {
     threadId: string;
-    events: EnvironmentAgentEventEnvelope[];
+    events: EnvironmentDaemonEventEnvelope[];
   }): Promise<void>;
 }
 
 function isNextCursor(
-  current: EnvironmentAgentCursorPosition | undefined,
-  next: EnvironmentAgentCursorPosition,
+  current: EnvironmentDaemonCursorPosition | undefined,
+  next: EnvironmentDaemonCursorPosition,
 ): boolean {
   if (!current) {
     return next.generation >= 0 && next.sequence >= 0;
@@ -42,17 +42,17 @@ function isNextCursor(
   return next.generation === current.generation + 1 && next.sequence >= 0;
 }
 
-export class EnvironmentAgentEventApplier {
+export class EnvironmentDaemonEventApplier {
   constructor(
-    private readonly cursors: EnvironmentAgentCursorRepository,
-    private readonly ingester: EnvironmentAgentEventIngestor,
+    private readonly cursors: EnvironmentDaemonCursorRepository,
+    private readonly ingester: EnvironmentDaemonEventIngestor,
   ) {}
 
   async applyChannelBatch(args: {
     threadId: string;
-    batch: EnvironmentAgentSessionEventBatchChannel;
+    batch: EnvironmentDaemonSessionEventBatchChannel;
     now?: number;
-  }): Promise<EnvironmentAgentEventApplyResult> {
+  }): Promise<EnvironmentDaemonEventApplyResult> {
     if (args.batch.channelId !== args.threadId) {
       const current = this.cursors.getByThreadId(args.threadId);
       return {
@@ -72,17 +72,17 @@ export class EnvironmentAgentEventApplier {
       : undefined;
     let acknowledgedCursor = startingCursor;
     let duplicateCount = 0;
-    const newEvents: EnvironmentAgentEventEnvelope[] = [];
+    const newEvents: EnvironmentDaemonEventEnvelope[] = [];
 
     for (const item of args.batch.events) {
       const nextCursor = {
         generation: args.batch.generation,
         sequence: item.sequence,
-      } satisfies EnvironmentAgentCursorPosition;
+      } satisfies EnvironmentDaemonCursorPosition;
 
       if (
         acknowledgedCursor &&
-        compareEnvironmentAgentSessionCursors(nextCursor, acknowledgedCursor) <= 0
+        compareEnvironmentDaemonSessionCursors(nextCursor, acknowledgedCursor) <= 0
       ) {
         duplicateCount += 1;
         continue;
@@ -100,7 +100,7 @@ export class EnvironmentAgentEventApplier {
 
       acknowledgedCursor = nextCursor;
       newEvents.push({
-        protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+        protocolVersion: ENVIRONMENT_DAEMON_PROTOCOL_VERSION,
         sequence: item.sequence,
         emittedAt: item.emittedAt,
         threadId: args.threadId,
@@ -116,7 +116,7 @@ export class EnvironmentAgentEventApplier {
       };
     }
 
-    await this.ingester.ingestReplayedEnvironmentAgentEvents({
+    await this.ingester.ingestReplayedEnvironmentDaemonEvents({
       threadId: args.threadId,
       events: newEvents,
     });

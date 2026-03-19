@@ -11,15 +11,15 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
-  __testOnly__getManagedDockerEnvironmentAgentRecord,
+  __testOnly__getManagedDockerEnvironmentDaemonRecord,
   __testOnly__resolveDockerServerUrl,
   DEFAULT_DOCKER_ENVIRONMENT_IMAGE,
   ensureDockerEnvironmentImageAvailable,
-  ensureManagedDockerEnvironmentAgent,
+  ensureManagedDockerEnvironmentDaemon,
   resolveDefaultDockerEnvironmentAssetsRoot,
-  resolveDockerEnvironmentAgentArtifactEntry,
+  resolveDockerEnvironmentDaemonArtifactEntry,
   resolveDockerEnvironmentImage,
-} from "../docker-environment-agent.js";
+} from "../docker-environment-daemon.js";
 
 const tempDirs: string[] = [];
 const originalBbRoot = process.env.BB_ROOT;
@@ -51,7 +51,7 @@ afterEach(() => {
   }
 });
 
-describe("docker environment-agent helper", () => {
+describe("docker environment-daemon helper", () => {
   it("resolves the repo docker assets root", () => {
     const assetsRoot = resolveDefaultDockerEnvironmentAssetsRoot();
 
@@ -66,17 +66,17 @@ describe("docker environment-agent helper", () => {
     expect(dockerfile).toContain("npm install -g @openai/codex@latest");
   });
 
-  it("resolves the built environment-agent artifact entry", () => {
+  it("resolves the built environment-daemon artifact entry", () => {
     const artifactEntry = fileURLToPath(
-      new URL("../../../environment-daemon/dist/environment-agent.bundle.mjs", import.meta.url),
+      new URL("../../../environment-daemon/dist/environment-daemon.bundle.mjs", import.meta.url),
     );
     mkdirSync(dirname(artifactEntry), { recursive: true });
     if (!existsSync(artifactEntry)) {
       writeFileSync(artifactEntry, "console.log('agent')\n", "utf8");
     }
-    const entry = resolveDockerEnvironmentAgentArtifactEntry();
+    const entry = resolveDockerEnvironmentDaemonArtifactEntry();
 
-    expect(entry.endsWith("/packages/environment-daemon/dist/environment-agent.bundle.mjs")).toBe(true);
+    expect(entry.endsWith("/packages/environment-daemon/dist/environment-daemon.bundle.mjs")).toBe(true);
     expect(existsSync(entry)).toBe(true);
   });
 
@@ -187,17 +187,17 @@ describe("docker environment-agent helper", () => {
     ).rejects.toThrow(/custom\/environment:dev/);
   });
 
-  it("installs and starts the environment-agent in the container", async () => {
+  it("installs and starts the environment-daemon in the container", async () => {
     const commands: Array<{ command: string; args: string[] }> = [];
     const bbRoot = makeTempDir("bb-docker-agent-root-");
     process.env.BB_ROOT = bbRoot;
     const workspaceRoot = makeTempDir("bb-docker-agent-workspace-");
     const artifactRoot = makeTempDir("bb-docker-agent-artifact-");
-    const artifactEntry = join(artifactRoot, "dist", "environment-agent.bundle.mjs");
+    const artifactEntry = join(artifactRoot, "dist", "environment-daemon.bundle.mjs");
     mkdirSync(dirname(artifactEntry), { recursive: true });
     writeFileSync(artifactEntry, "console.log('agent')\n", "utf8");
 
-    await ensureManagedDockerEnvironmentAgent(
+    await ensureManagedDockerEnvironmentDaemon(
       {
         workspaceRootPath: workspaceRoot,
         threadId: "thread-1",
@@ -242,7 +242,7 @@ describe("docker environment-agent helper", () => {
         args: [
           "cp",
           artifactEntry,
-          "bb-thread-thread-1:/opt/bb/environment-daemon/environment-agent.bundle.mjs",
+          "bb-thread-thread-1:/opt/bb/environment-daemon/environment-daemon.bundle.mjs",
         ],
       },
       {
@@ -266,7 +266,7 @@ describe("docker environment-agent helper", () => {
           "BB_SERVER_URL=http://host.docker.internal:9000",
           "bb-thread-thread-1",
           "node",
-          "/opt/bb/environment-daemon/environment-agent.bundle.mjs",
+          "/opt/bb/environment-daemon/environment-daemon.bundle.mjs",
           "--http-host",
           "0.0.0.0",
           "--http-port",
@@ -282,7 +282,7 @@ describe("docker environment-agent helper", () => {
     process.env.BB_ROOT = bbRoot;
     const workspaceRoot = makeTempDir("bb-docker-agent-lock-workspace-");
     const artifactRoot = makeTempDir("bb-docker-agent-lock-artifact-");
-    const artifactEntry = join(artifactRoot, "dist", "environment-agent.bundle.mjs");
+    const artifactEntry = join(artifactRoot, "dist", "environment-daemon.bundle.mjs");
     mkdirSync(dirname(artifactEntry), { recursive: true });
     writeFileSync(artifactEntry, "console.log('agent')\n", "utf8");
 
@@ -316,8 +316,8 @@ describe("docker environment-agent helper", () => {
       resolveArtifactEntry: () => artifactEntry,
     };
 
-    const first = ensureManagedDockerEnvironmentAgent(ensureArgs, deps);
-    const second = ensureManagedDockerEnvironmentAgent(ensureArgs, deps);
+    const first = ensureManagedDockerEnvironmentDaemon(ensureArgs, deps);
+    const second = ensureManagedDockerEnvironmentDaemon(ensureArgs, deps);
 
     await Promise.resolve();
     await Promise.resolve();
@@ -329,7 +329,7 @@ describe("docker environment-agent helper", () => {
     // for the first). The docker ensure action always replaces, so both
     // callers spawn — 3 commands each = 6 total.
     expect(commands).toHaveLength(6);
-    expect(__testOnly__getManagedDockerEnvironmentAgentRecord({
+    expect(__testOnly__getManagedDockerEnvironmentDaemonRecord({
       projectId: "project-lock",
       threadId: "thread-lock",
       environmentId: "docker",
@@ -347,13 +347,13 @@ describe("docker environment-agent helper", () => {
     });
   });
 
-  it("replaces an existing managed environment-agent for the same docker container", async () => {
+  it("replaces an existing managed environment-daemon for the same docker container", async () => {
     const bbRoot = makeTempDir("bb-docker-agent-existing-root-");
     process.env.BB_ROOT = bbRoot;
     const workspaceRoot = makeTempDir("bb-docker-agent-existing-workspace-");
 
     const artifactRoot = makeTempDir("bb-docker-agent-existing-artifact-");
-    const artifactEntry = join(artifactRoot, "dist", "environment-agent.bundle.mjs");
+    const artifactEntry = join(artifactRoot, "dist", "environment-daemon.bundle.mjs");
     mkdirSync(dirname(artifactEntry), { recursive: true });
     writeFileSync(artifactEntry, "console.log('agent')\n", "utf8");
 
@@ -363,7 +363,7 @@ describe("docker environment-agent helper", () => {
       stderr: "",
     }));
 
-    await ensureManagedDockerEnvironmentAgent({
+    await ensureManagedDockerEnvironmentDaemon({
       workspaceRootPath: workspaceRoot,
       threadId: "thread-existing",
       projectId: "project-existing",
@@ -379,7 +379,7 @@ describe("docker environment-agent helper", () => {
       resolveArtifactEntry: () => artifactEntry,
     });
 
-    await ensureManagedDockerEnvironmentAgent({
+    await ensureManagedDockerEnvironmentDaemon({
       workspaceRootPath: workspaceRoot,
       threadId: "thread-existing",
       projectId: "project-existing",

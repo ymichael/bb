@@ -4,23 +4,23 @@ import {
   createConnection,
   EnvironmentRepository,
   migrate,
-  EnvironmentAgentCommandRepository,
-  EnvironmentAgentCursorRepository,
-  EnvironmentAgentSessionRepository,
+  EnvironmentDaemonCommandRepository,
+  EnvironmentDaemonCursorRepository,
+  EnvironmentDaemonSessionRepository,
   ProjectRepository,
   ThreadEnvironmentAttachmentRepository,
   ThreadRepository,
 } from "@bb/db";
 import type {
-  EnvironmentAgentEventEnvelope,
-  EnvironmentAgentSessionEventBatchChannel,
+  EnvironmentDaemonEventEnvelope,
+  EnvironmentDaemonSessionEventBatchChannel,
 } from "@bb/environment-daemon";
-import { createEnvironmentAgentSessionCapabilities } from "@bb/environment-daemon";
+import { createEnvironmentDaemonSessionCapabilities } from "@bb/environment-daemon";
 import {
-  EnvironmentAgentCommandDispatcher,
-  EnvironmentAgentSessionUnavailableError,
-} from "../environment-agent-command-dispatcher.js";
-import { EnvironmentAgentEventApplier } from "../environment-agent-event-applier.js";
+  EnvironmentDaemonCommandDispatcher,
+  EnvironmentDaemonSessionUnavailableError,
+} from "../environment-daemon-command-dispatcher.js";
+import { EnvironmentDaemonEventApplier } from "../environment-daemon-event-applier.js";
 
 interface SqliteClient {
   close(): void;
@@ -32,16 +32,16 @@ function sqliteClient(db: DbConnection): SqliteClient {
 
 const TEST_LEASE_NOW = 20_000;
 
-describe("environment-agent delivery modules", () => {
+describe("environment-daemon delivery modules", () => {
   let db: DbConnection;
   let sqlite: SqliteClient;
   let projects: ProjectRepository;
   let environments: EnvironmentRepository;
   let threads: ThreadRepository;
   let attachments: ThreadEnvironmentAttachmentRepository;
-  let sessions: EnvironmentAgentSessionRepository;
-  let cursors: EnvironmentAgentCursorRepository;
-  let commands: EnvironmentAgentCommandRepository;
+  let sessions: EnvironmentDaemonSessionRepository;
+  let cursors: EnvironmentDaemonCursorRepository;
+  let commands: EnvironmentDaemonCommandRepository;
 
   beforeEach(() => {
     db = createConnection(":memory:");
@@ -51,9 +51,9 @@ describe("environment-agent delivery modules", () => {
     environments = new EnvironmentRepository(db);
     threads = new ThreadRepository(db);
     attachments = new ThreadEnvironmentAttachmentRepository(db);
-    sessions = new EnvironmentAgentSessionRepository(db);
-    cursors = new EnvironmentAgentCursorRepository(db);
-    commands = new EnvironmentAgentCommandRepository(db);
+    sessions = new EnvironmentDaemonSessionRepository(db);
+    cursors = new EnvironmentDaemonCursorRepository(db);
+    commands = new EnvironmentDaemonCommandRepository(db);
   });
 
   afterEach(() => {
@@ -109,7 +109,7 @@ describe("environment-agent delivery modules", () => {
       agentId: "agent-1",
       agentInstanceId: `${id}-instance`,
       protocolVersion: 1,
-      selectedCapabilities: createEnvironmentAgentSessionCapabilities({}),
+      selectedCapabilities: createEnvironmentDaemonSessionCapabilities({}),
       leaseExpiresAt: 30_000,
       now: 1_000,
     }).id;
@@ -118,7 +118,7 @@ describe("environment-agent delivery modules", () => {
   function makeEventBatch(
     threadId: string,
     args: { generation: number; sequences: number[] },
-  ): EnvironmentAgentSessionEventBatchChannel {
+  ): EnvironmentDaemonSessionEventBatchChannel {
     return {
       channelId: threadId,
       generation: args.generation,
@@ -137,9 +137,9 @@ describe("environment-agent delivery modules", () => {
 
   it("applies contiguous event batches and persists the acknowledged cursor", async () => {
     const threadId = createThreadId();
-    const ingested: EnvironmentAgentEventEnvelope[][] = [];
-    const applier = new EnvironmentAgentEventApplier(cursors, {
-      ingestReplayedEnvironmentAgentEvents: vi.fn(async ({ events }) => {
+    const ingested: EnvironmentDaemonEventEnvelope[][] = [];
+    const applier = new EnvironmentDaemonEventApplier(cursors, {
+      ingestReplayedEnvironmentDaemonEvents: vi.fn(async ({ events }) => {
         ingested.push(events);
       }),
     });
@@ -176,9 +176,9 @@ describe("environment-agent delivery modules", () => {
     const threadId = createThreadId();
     cursors.upsert(threadId, { generation: 1, sequence: 2 }, 2_000);
     const ingester = {
-      ingestReplayedEnvironmentAgentEvents: vi.fn(async () => undefined),
+      ingestReplayedEnvironmentDaemonEvents: vi.fn(async () => undefined),
     };
-    const applier = new EnvironmentAgentEventApplier(cursors, ingester);
+    const applier = new EnvironmentDaemonEventApplier(cursors, ingester);
 
     const result = await applier.applyChannelBatch({
       threadId,
@@ -196,7 +196,7 @@ describe("environment-agent delivery modules", () => {
       blockedReason: "gap",
       blockedAt: { generation: 1, sequence: 4 },
     });
-    expect(ingester.ingestReplayedEnvironmentAgentEvents).not.toHaveBeenCalled();
+    expect(ingester.ingestReplayedEnvironmentDaemonEvents).not.toHaveBeenCalled();
     expect(cursors.getByThreadId(threadId)).toMatchObject({
       generation: 1,
       sequence: 2,
@@ -207,8 +207,8 @@ describe("environment-agent delivery modules", () => {
   it("does not advance the stored cursor when ingestion fails", async () => {
     const threadId = createThreadId();
     cursors.upsert(threadId, { generation: 1, sequence: 1 }, 2_000);
-    const applier = new EnvironmentAgentEventApplier(cursors, {
-      ingestReplayedEnvironmentAgentEvents: vi.fn(async () => {
+    const applier = new EnvironmentDaemonEventApplier(cursors, {
+      ingestReplayedEnvironmentDaemonEvents: vi.fn(async () => {
         throw new Error("ingest failed");
       }),
     });
@@ -232,8 +232,8 @@ describe("environment-agent delivery modules", () => {
 
   it("rejects batches delivered for the wrong channel id", async () => {
     const threadId = createThreadId();
-    const applier = new EnvironmentAgentEventApplier(cursors, {
-      ingestReplayedEnvironmentAgentEvents: vi.fn(async () => undefined),
+    const applier = new EnvironmentDaemonEventApplier(cursors, {
+      ingestReplayedEnvironmentDaemonEvents: vi.fn(async () => undefined),
     });
 
     await expect(
@@ -255,7 +255,7 @@ describe("environment-agent delivery modules", () => {
   it("lists deliverable commands and records delivery acknowledgements", () => {
     const { threadId, environmentId } = createThreadWithEnvironment();
     const sessionId = createActiveSession(environmentId, "sess-deliver");
-    const dispatcher = new EnvironmentAgentCommandDispatcher(sessions, commands, {
+    const dispatcher = new EnvironmentDaemonCommandDispatcher(sessions, commands, {
       clock: () => TEST_LEASE_NOW,
       resolveEnvironmentId: resolveEnvId,
     });
@@ -316,11 +316,11 @@ describe("environment-agent delivery modules", () => {
       agentId: "agent-shared",
       agentInstanceId: "sess-shared-instance",
       protocolVersion: 1,
-      selectedCapabilities: createEnvironmentAgentSessionCapabilities({}),
+      selectedCapabilities: createEnvironmentDaemonSessionCapabilities({}),
       leaseExpiresAt: 30_000,
       now: 1_000,
     }).id;
-    const dispatcher = new EnvironmentAgentCommandDispatcher(sessions, commands, {
+    const dispatcher = new EnvironmentDaemonCommandDispatcher(sessions, commands, {
       clock: () => TEST_LEASE_NOW,
       resolveEnvironmentId: (threadId) =>
         attachments.getByThreadId(threadId)?.environmentId,
@@ -341,7 +341,7 @@ describe("environment-agent delivery modules", () => {
   it("waits for active sessions and terminal command states", async () => {
     const threadId = createThreadId();
     const environmentId = attachThreadToEnvironment(threadId);
-    const dispatcher = new EnvironmentAgentCommandDispatcher(sessions, commands, {
+    const dispatcher = new EnvironmentDaemonCommandDispatcher(sessions, commands, {
       clock: () => TEST_LEASE_NOW,
       resolveEnvironmentId: (tid) => tid === threadId ? environmentId : undefined,
     });
@@ -353,7 +353,7 @@ describe("environment-agent delivery modules", () => {
         agentId: "agent-1",
         agentInstanceId: "instance-await",
         protocolVersion: 1,
-        selectedCapabilities: createEnvironmentAgentSessionCapabilities({}),
+        selectedCapabilities: createEnvironmentDaemonSessionCapabilities({}),
         leaseExpiresAt: 30_000,
         now: 1_000,
       });
@@ -398,7 +398,7 @@ describe("environment-agent delivery modules", () => {
 
   it("does not treat elapsed leases as active sessions for command recovery", async () => {
     const { threadId, environmentId } = createThreadWithEnvironment();
-    const dispatcher = new EnvironmentAgentCommandDispatcher(sessions, commands, {
+    const dispatcher = new EnvironmentDaemonCommandDispatcher(sessions, commands, {
       clock: () => TEST_LEASE_NOW,
       resolveEnvironmentId: resolveEnvId,
     });
@@ -410,7 +410,7 @@ describe("environment-agent delivery modules", () => {
       agentId: "agent-1",
       agentInstanceId: "instance-expired",
       protocolVersion: 1,
-      selectedCapabilities: createEnvironmentAgentSessionCapabilities({}),
+      selectedCapabilities: createEnvironmentDaemonSessionCapabilities({}),
       leaseExpiresAt: now - 1_000,
       now: now - 2_000,
     });
@@ -430,12 +430,12 @@ describe("environment-agent delivery modules", () => {
         timeoutMs: 50,
         pollIntervalMs: 10,
       }),
-    ).rejects.toBeInstanceOf(EnvironmentAgentSessionUnavailableError);
+    ).rejects.toBeInstanceOf(EnvironmentDaemonSessionUnavailableError);
   });
 
   it("does not treat replace-required sessions as active for command recovery", async () => {
     const { threadId, environmentId } = createThreadWithEnvironment();
-    const dispatcher = new EnvironmentAgentCommandDispatcher(sessions, commands, {
+    const dispatcher = new EnvironmentDaemonCommandDispatcher(sessions, commands, {
       clock: () => TEST_LEASE_NOW,
       resolveEnvironmentId: resolveEnvId,
     });
@@ -461,13 +461,13 @@ describe("environment-agent delivery modules", () => {
         timeoutMs: 20,
         pollIntervalMs: 5,
       }),
-    ).rejects.toBeInstanceOf(EnvironmentAgentSessionUnavailableError);
+    ).rejects.toBeInstanceOf(EnvironmentDaemonSessionUnavailableError);
   });
 
   it("records command lifecycle results only for the matching active session", () => {
     const { threadId, environmentId } = createThreadWithEnvironment();
     const sessionId = createActiveSession(environmentId, "sess-results");
-    const dispatcher = new EnvironmentAgentCommandDispatcher(sessions, commands, {
+    const dispatcher = new EnvironmentDaemonCommandDispatcher(sessions, commands, {
       clock: () => TEST_LEASE_NOW,
       resolveEnvironmentId: resolveEnvId,
     });
@@ -559,7 +559,7 @@ describe("environment-agent delivery modules", () => {
   it("fails all pending commands bound to an invalidated session", () => {
     const { threadId, environmentId } = createThreadWithEnvironment();
     const sessionId = createActiveSession(environmentId, "sess-invalidated");
-    const dispatcher = new EnvironmentAgentCommandDispatcher(sessions, commands, {
+    const dispatcher = new EnvironmentDaemonCommandDispatcher(sessions, commands, {
       clock: () => TEST_LEASE_NOW,
       resolveEnvironmentId: resolveEnvId,
     });
@@ -610,7 +610,7 @@ describe("environment-agent delivery modules", () => {
       sessionId,
       state: "failed",
       errorMessage:
-        `Environment-agent session ${sessionId} closed (newer_session) while command execution was in progress`,
+        `Environment-daemon session ${sessionId} closed (newer_session) while command execution was in progress`,
     });
   });
 });

@@ -1,4 +1,4 @@
-import type { EnvironmentAgentConnectionTarget } from "@bb/environment-daemon";
+import type { EnvironmentDaemonConnectionTarget } from "@bb/environment-daemon";
 
 const BB_ENV_DAEMON_BASE_URL = "BB_ENV_DAEMON_BASE_URL";
 const BB_ENV_DAEMON_AUTH_TOKEN = "BB_ENV_DAEMON_AUTH_TOKEN";
@@ -7,10 +7,10 @@ function normalizeBaseUrl(value: string): string {
   return value.replace(/\/+$/, "");
 }
 
-export function resolveEnvironmentAgentConnectionTarget(args: {
+export function resolveEnvironmentDaemonConnectionTarget(args: {
   runtimeEnv: Record<string, string | undefined>;
-  defaultTarget: EnvironmentAgentConnectionTarget;
-}): EnvironmentAgentConnectionTarget {
+  defaultTarget: EnvironmentDaemonConnectionTarget;
+}): EnvironmentDaemonConnectionTarget {
   const baseUrl = args.runtimeEnv[BB_ENV_DAEMON_BASE_URL]?.trim();
   if (!baseUrl) {
     return args.defaultTarget;

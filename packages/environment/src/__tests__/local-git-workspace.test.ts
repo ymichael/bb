@@ -49,7 +49,7 @@ async function createRepoWithThreadAheadOfMain() {
   commitReadme(repoRoot, "initial\n", "initial");
 
   const environment = createLocalGitWorkspaceDefinition({
-    manageEnvironmentAgent: false,
+    manageEnvironmentDaemon: false,
   }).create({
     projectId: `project-${suffix}`,
     threadId: `thread-${suffix}`,

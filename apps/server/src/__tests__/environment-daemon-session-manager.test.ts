@@ -4,12 +4,12 @@ import {
   createConnection,
   EnvironmentRepository,
   migrate,
-  EnvironmentAgentSessionRepository,
+  EnvironmentDaemonSessionRepository,
   ProjectRepository,
   ThreadEnvironmentAttachmentRepository,
   ThreadRepository,
 } from "@bb/db";
-import { EnvironmentAgentSessionManager } from "../environment-agent-session-manager.js";
+import { EnvironmentDaemonSessionManager } from "../environment-daemon-session-manager.js";
 
 interface SqliteClient {
   close(): void;
@@ -19,15 +19,15 @@ function sqliteClient(db: DbConnection): SqliteClient {
   return (db as unknown as { $client: SqliteClient }).$client;
 }
 
-describe("EnvironmentAgentSessionManager", () => {
+describe("EnvironmentDaemonSessionManager", () => {
   let db: DbConnection;
   let sqlite: SqliteClient;
   let projects: ProjectRepository;
   let environments: EnvironmentRepository;
   let threads: ThreadRepository;
   let attachments: ThreadEnvironmentAttachmentRepository;
-  let sessions: EnvironmentAgentSessionRepository;
-  let manager: EnvironmentAgentSessionManager;
+  let sessions: EnvironmentDaemonSessionRepository;
+  let manager: EnvironmentDaemonSessionManager;
 
   beforeEach(() => {
     db = createConnection(":memory:");
@@ -37,8 +37,8 @@ describe("EnvironmentAgentSessionManager", () => {
     environments = new EnvironmentRepository(db);
     threads = new ThreadRepository(db);
     attachments = new ThreadEnvironmentAttachmentRepository(db);
-    sessions = new EnvironmentAgentSessionRepository(db);
-    manager = new EnvironmentAgentSessionManager(sessions);
+    sessions = new EnvironmentDaemonSessionRepository(db);
+    manager = new EnvironmentDaemonSessionManager(sessions);
   });
 
   afterEach(() => {

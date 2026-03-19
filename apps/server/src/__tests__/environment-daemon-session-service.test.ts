@@ -3,21 +3,21 @@ import type { DbConnection } from "@bb/db";
 import {
   createConnection,
   migrate,
-  EnvironmentAgentCommandRepository,
-  EnvironmentAgentCursorRepository,
+  EnvironmentDaemonCommandRepository,
+  EnvironmentDaemonCursorRepository,
   EnvironmentRepository,
-  type EnvironmentAgentSessionRecord,
-  EnvironmentAgentSessionRepository,
+  type EnvironmentDaemonSessionRecord,
+  EnvironmentDaemonSessionRepository,
   ProjectRepository,
   ThreadEnvironmentAttachmentRepository,
   ThreadRepository,
 } from "@bb/db";
 import { vi } from "vitest";
-import { createEnvironmentAgentSessionCapabilities } from "@bb/environment-daemon";
-import { EnvironmentAgentCommandDispatcher } from "../environment-agent-command-dispatcher.js";
-import { EnvironmentAgentEventApplier } from "../environment-agent-event-applier.js";
-import { EnvironmentAgentSessionManager } from "../environment-agent-session-manager.js";
-import { EnvironmentAgentSessionService } from "../environment-agent-session-service.js";
+import { createEnvironmentDaemonSessionCapabilities } from "@bb/environment-daemon";
+import { EnvironmentDaemonCommandDispatcher } from "../environment-daemon-command-dispatcher.js";
+import { EnvironmentDaemonEventApplier } from "../environment-daemon-event-applier.js";
+import { EnvironmentDaemonSessionManager } from "../environment-daemon-session-manager.js";
+import { EnvironmentDaemonSessionService } from "../environment-daemon-session-service.js";
 import { isDomainError } from "../domain-errors.js";
 
 interface SqliteClient {
@@ -30,18 +30,18 @@ function sqliteClient(db: DbConnection): SqliteClient {
 
 const TEST_LEASE_NOW = 20_000;
 
-describe("EnvironmentAgentSessionService", () => {
+describe("EnvironmentDaemonSessionService", () => {
   let db: DbConnection;
   let sqlite: SqliteClient;
   let projects: ProjectRepository;
   let threads: ThreadRepository;
   let environments: EnvironmentRepository;
-  let sessions: EnvironmentAgentSessionRepository;
-  let cursors: EnvironmentAgentCursorRepository;
-  let commands: EnvironmentAgentCommandRepository;
+  let sessions: EnvironmentDaemonSessionRepository;
+  let cursors: EnvironmentDaemonCursorRepository;
+  let commands: EnvironmentDaemonCommandRepository;
   let attachments: ThreadEnvironmentAttachmentRepository;
-  let service: EnvironmentAgentSessionService;
-  let onSessionInvalidated: (session: EnvironmentAgentSessionRecord) => void;
+  let service: EnvironmentDaemonSessionService;
+  let onSessionInvalidated: (session: EnvironmentDaemonSessionRecord) => void;
 
   beforeEach(() => {
     db = createConnection(":memory:");
@@ -50,24 +50,24 @@ describe("EnvironmentAgentSessionService", () => {
     projects = new ProjectRepository(db);
     threads = new ThreadRepository(db);
     environments = new EnvironmentRepository(db);
-    sessions = new EnvironmentAgentSessionRepository(db);
-    cursors = new EnvironmentAgentCursorRepository(db);
-    commands = new EnvironmentAgentCommandRepository(db);
+    sessions = new EnvironmentDaemonSessionRepository(db);
+    cursors = new EnvironmentDaemonCursorRepository(db);
+    commands = new EnvironmentDaemonCommandRepository(db);
     attachments = new ThreadEnvironmentAttachmentRepository(db);
-    onSessionInvalidated = vi.fn<(session: EnvironmentAgentSessionRecord) => void>();
-    service = new EnvironmentAgentSessionService(
-      new EnvironmentAgentSessionManager(sessions),
+    onSessionInvalidated = vi.fn<(session: EnvironmentDaemonSessionRecord) => void>();
+    service = new EnvironmentDaemonSessionService(
+      new EnvironmentDaemonSessionManager(sessions),
       cursors,
       {
         leaseTtlMs: 45_000,
         heartbeatIntervalMs: 15_000,
         clock: () => TEST_LEASE_NOW,
-        commandDispatcher: new EnvironmentAgentCommandDispatcher(sessions, commands, {
+        commandDispatcher: new EnvironmentDaemonCommandDispatcher(sessions, commands, {
           clock: () => TEST_LEASE_NOW,
           resolveEnvironmentId: (tid) => attachments.getByThreadId(tid)?.environmentId,
         }),
-        eventApplier: new EnvironmentAgentEventApplier(cursors, {
-          ingestReplayedEnvironmentAgentEvents: vi.fn(async () => undefined),
+        eventApplier: new EnvironmentDaemonEventApplier(cursors, {
+          ingestReplayedEnvironmentDaemonEvents: vi.fn(async () => undefined),
         }),
         listAttachedThreadIds: (eid) =>
           attachments.listByEnvironmentId(eid).map((a) => a.threadId),
@@ -106,7 +106,7 @@ describe("EnvironmentAgentSessionService", () => {
         agentId: "agent-1",
         agentInstanceId: "instance-1",
         supportedProtocolVersions: [1],
-        capabilities: createEnvironmentAgentSessionCapabilities({
+        capabilities: createEnvironmentDaemonSessionCapabilities({
           worker: {
             name: "environment-daemon",
             version: "0.0.1",
@@ -282,7 +282,7 @@ describe("EnvironmentAgentSessionService", () => {
           ],
         },
       }),
-    ).toThrow("No compatible environment-agent session protocol version");
+    ).toThrow("No compatible environment-daemon session protocol version");
   });
 
   it("lists only thread-owned history plus the active shared environment session", () => {
@@ -300,8 +300,8 @@ describe("EnvironmentAgentSessionService", () => {
       },
       managed: true,
     });
-    const sharedService = new EnvironmentAgentSessionService(
-      new EnvironmentAgentSessionManager(sessions),
+    const sharedService = new EnvironmentDaemonSessionService(
+      new EnvironmentDaemonSessionManager(sessions),
       cursors,
       {
         clock: () => TEST_LEASE_NOW,
@@ -361,8 +361,8 @@ describe("EnvironmentAgentSessionService", () => {
       [firstThreadId, environmentId],
       [secondThreadId, environmentId],
     ]);
-    const sharedService = new EnvironmentAgentSessionService(
-      new EnvironmentAgentSessionManager(sessions),
+    const sharedService = new EnvironmentDaemonSessionService(
+      new EnvironmentDaemonSessionManager(sessions),
       cursors,
       {
         listAttachedThreadIds: (candidateEnvironmentId) =>
@@ -417,12 +417,12 @@ describe("EnvironmentAgentSessionService", () => {
       },
       managed: true,
     });
-    const sharedService = new EnvironmentAgentSessionService(
-      new EnvironmentAgentSessionManager(sessions),
+    const sharedService = new EnvironmentDaemonSessionService(
+      new EnvironmentDaemonSessionManager(sessions),
       cursors,
       {
         clock: () => TEST_LEASE_NOW,
-        commandDispatcher: new EnvironmentAgentCommandDispatcher(sessions, commands, {
+        commandDispatcher: new EnvironmentDaemonCommandDispatcher(sessions, commands, {
           clock: () => TEST_LEASE_NOW,
           resolveEnvironmentId: (candidateThreadId) =>
             candidateThreadId === threadId || candidateThreadId === siblingThreadId
@@ -611,7 +611,7 @@ describe("EnvironmentAgentSessionService", () => {
           ],
         },
       }),
-    ).toThrow("No compatible environment-agent session protocol version");
+    ).toThrow("No compatible environment-daemon session protocol version");
 
   });
 
@@ -741,14 +741,14 @@ describe("EnvironmentAgentSessionService", () => {
       state: "failed",
       errorCode: "provider_unavailable",
       errorMessage:
-        `Environment-agent session ${first.session.id} closed (newer_session) while command execution was in progress`,
+        `Environment-daemon session ${first.session.id} closed (newer_session) while command execution was in progress`,
     });
   });
 
   it("handles provider requests through the configured handler", async () => {
     const { threadId, environmentId } = createTestIds();
-    const serviceWithProviderRequests = new EnvironmentAgentSessionService(
-      new EnvironmentAgentSessionManager(sessions),
+    const serviceWithProviderRequests = new EnvironmentDaemonSessionService(
+      new EnvironmentDaemonSessionManager(sessions),
       cursors,
       {
         leaseTtlMs: 45_000,
@@ -810,8 +810,8 @@ describe("EnvironmentAgentSessionService", () => {
 
   it("wraps thrown provider request errors into provider responses", async () => {
     const { threadId, environmentId } = createTestIds();
-    const serviceWithProviderRequests = new EnvironmentAgentSessionService(
-      new EnvironmentAgentSessionManager(sessions),
+    const serviceWithProviderRequests = new EnvironmentDaemonSessionService(
+      new EnvironmentDaemonSessionManager(sessions),
       cursors,
       {
         leaseTtlMs: 45_000,
@@ -864,8 +864,8 @@ describe("EnvironmentAgentSessionService", () => {
 
   it("returns typed tool-call responses from the provider request handler", async () => {
     const { threadId, environmentId } = createTestIds();
-    const serviceWithProviderRequests = new EnvironmentAgentSessionService(
-      new EnvironmentAgentSessionManager(sessions),
+    const serviceWithProviderRequests = new EnvironmentDaemonSessionService(
+      new EnvironmentDaemonSessionManager(sessions),
       cursors,
       {
         leaseTtlMs: 45_000,
@@ -1101,7 +1101,7 @@ describe("EnvironmentAgentSessionService", () => {
       state: "failed",
       errorCode: "provider_unavailable",
       errorMessage:
-        `Environment-agent session ${opened.session.id} closed (lease_expired) while command execution was in progress`,
+        `Environment-daemon session ${opened.session.id} closed (lease_expired) while command execution was in progress`,
     });
   });
 
@@ -1335,7 +1335,7 @@ describe("EnvironmentAgentSessionService", () => {
         },
       }),
     ).toThrow(
-      `Environment-agent session ${opened.session.id} does not belong to environment ${otherEnvironmentId}`,
+      `Environment-daemon session ${opened.session.id} does not belong to environment ${otherEnvironmentId}`,
     );
   });
 
@@ -1378,7 +1378,7 @@ describe("EnvironmentAgentSessionService", () => {
     expect(isDomainError(captured)).toBe(true);
     expect(captured).toMatchObject({
       code: "inactive_session",
-      message: `Environment-agent session ${opened.session.id} is not active`,
+      message: `Environment-daemon session ${opened.session.id} is not active`,
     });
   });
 
@@ -1420,7 +1420,7 @@ describe("EnvironmentAgentSessionService", () => {
     expect(isDomainError(captured)).toBe(true);
     expect(captured).toMatchObject({
       code: "inactive_session",
-      message: `Environment-agent session ${opened.session.id} is not active`,
+      message: `Environment-daemon session ${opened.session.id} is not active`,
     });
     expect(sessions.getById(opened.session.id)).toMatchObject({
       status: "active",
@@ -1605,15 +1605,15 @@ describe("EnvironmentAgentSessionService", () => {
       managed: true,
     }).id;
 
-    const sharedService = new EnvironmentAgentSessionService(
-      new EnvironmentAgentSessionManager(sessions),
+    const sharedService = new EnvironmentDaemonSessionService(
+      new EnvironmentDaemonSessionManager(sessions),
       cursors,
       {
         clock: () => TEST_LEASE_NOW,
         listAttachedThreadIds: (eid) =>
           eid === environmentId ? [ownerThreadId, siblingThreadId] : [],
-        eventApplier: new EnvironmentAgentEventApplier(cursors, {
-          ingestReplayedEnvironmentAgentEvents: vi.fn(async () => undefined),
+        eventApplier: new EnvironmentDaemonEventApplier(cursors, {
+          ingestReplayedEnvironmentDaemonEvents: vi.fn(async () => undefined),
         }),
       },
     );
@@ -1679,15 +1679,15 @@ describe("EnvironmentAgentSessionService", () => {
       managed: true,
     }).id;
 
-    const sharedService = new EnvironmentAgentSessionService(
-      new EnvironmentAgentSessionManager(sessions),
+    const sharedService = new EnvironmentDaemonSessionService(
+      new EnvironmentDaemonSessionManager(sessions),
       cursors,
       {
         clock: () => TEST_LEASE_NOW,
         listAttachedThreadIds: (eid) =>
           eid === environmentId ? [ownerThreadId] : [],
-        eventApplier: new EnvironmentAgentEventApplier(cursors, {
-          ingestReplayedEnvironmentAgentEvents: vi.fn(async () => undefined),
+        eventApplier: new EnvironmentDaemonEventApplier(cursors, {
+          ingestReplayedEnvironmentDaemonEvents: vi.fn(async () => undefined),
         }),
       },
     );

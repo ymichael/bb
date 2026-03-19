@@ -92,23 +92,23 @@ import {
   type IEnvironment,
 } from "@bb/environment";
 import type {
-  EnvironmentAgentClient,
-  EnvironmentAgentConnectionTarget,
+  EnvironmentDaemonClient,
+  EnvironmentDaemonConnectionTarget,
 } from "@bb/environment-daemon";
 import type {
-  EnvironmentAgentEventEnvelope,
-  EnvironmentAgentStatusSnapshot,
+  EnvironmentDaemonEventEnvelope,
+  EnvironmentDaemonStatusSnapshot,
 } from "@bb/environment-daemon";
-import { ENVIRONMENT_AGENT_PROTOCOL_VERSION } from "@bb/environment-daemon";
+import { ENVIRONMENT_DAEMON_PROTOCOL_VERSION } from "@bb/environment-daemon";
 import type {
   DbConnection,
-  EnvironmentAgentSessionCloseReason,
+  EnvironmentDaemonSessionCloseReason,
   EnvironmentRepository,
   ThreadRepository,
   ThreadEnvironmentAttachmentRepository,
   EventRepository,
   ProjectRepository,
-  EnvironmentAgentSessionRepository,
+  EnvironmentDaemonSessionRepository,
 } from "@bb/db";
 
 type DbExecutor = Pick<DbConnection, "select" | "insert" | "update" | "delete">;
@@ -148,14 +148,14 @@ import {
   resolveProvisioningSelection,
 } from "./environment-provisioning-systems.js";
 import {
-  EnvironmentAgentCommandDispatcher,
-  isEnvironmentAgentSessionUnavailableError,
-} from "./environment-agent-command-dispatcher.js";
-import type { EnvironmentAgentSessionService } from "./environment-agent-session-service.js";
-import { EnvironmentAgentSessionCommandClient } from "./environment-agent-session-command-client.js";
+  EnvironmentDaemonCommandDispatcher,
+  isEnvironmentDaemonSessionUnavailableError,
+} from "./environment-daemon-command-dispatcher.js";
+import type { EnvironmentDaemonSessionService } from "./environment-daemon-session-service.js";
+import { EnvironmentDaemonSessionCommandClient } from "./environment-daemon-session-command-client.js";
 import {
   reconcileManagedArtifactStorage,
-  resolveArchivedEnvironmentAgentLogRetentionMs,
+  resolveArchivedEnvironmentDaemonLogRetentionMs,
 } from "./managed-artifact-reconciler.js";
 import { canTransitionThreadStatus } from "./thread-status-machine.js";
 import {
@@ -705,7 +705,7 @@ export class Orchestrator implements ThreadOrchestrator {
   >();
   private threadShellPath: string | undefined;
   private environmentCatalog: SystemEnvironmentInfo[];
-  private environmentAgentCommandPollIntervalMs: number | undefined;
+  private environmentDaemonCommandPollIntervalMs: number | undefined;
 
   private get agentServer(): ProviderSessionController {
     const server = this.agentServerByProviderId.get(this.defaultProviderId);
@@ -727,9 +727,9 @@ export class Orchestrator implements ThreadOrchestrator {
     providerCatalog?: SystemProviderInfo[],
     environmentCatalog?: SystemEnvironmentInfo[],
     private scheduler: SchedulerService = new InMemorySchedulerService(),
-    private environmentAgentCommandDispatcher?: EnvironmentAgentCommandDispatcher,
-    private environmentAgentSessionService?: EnvironmentAgentSessionService,
-    private environmentAgentSessionRepo?: EnvironmentAgentSessionRepository,
+    private environmentDaemonCommandDispatcher?: EnvironmentDaemonCommandDispatcher,
+    private environmentDaemonSessionService?: EnvironmentDaemonSessionService,
+    private environmentDaemonSessionRepo?: EnvironmentDaemonSessionRepository,
     private environmentRepo?: EnvironmentRepository,
     private threadEnvironmentAttachmentRepo?: ThreadEnvironmentAttachmentRepository,
     providerToolHost?: ProviderToolHost,
@@ -739,7 +739,7 @@ export class Orchestrator implements ThreadOrchestrator {
       this.threadEnvironmentAttachmentRepo,
     );
     this.threadShellPath = resolveThreadShellPath(this.runtimeEnv.PATH);
-    this.environmentAgentCommandPollIntervalMs = parsePositiveIntegerEnv(
+    this.environmentDaemonCommandPollIntervalMs = parsePositiveIntegerEnv(
       this.runtimeEnv[BB_ENV_DAEMON_COMMAND_POLL_INTERVAL_MS],
     );
     this.environmentCatalog =
@@ -877,7 +877,7 @@ export class Orchestrator implements ThreadOrchestrator {
       if (thread.status === "provisioned") {
         const envIdForRetire = this.threadEnvironmentAttachmentRepo?.getByThreadId(threadId)?.environmentId;
         if (envIdForRetire && !this.environmentService.hasSharedAttachedEnvironment(threadId)) {
-          this.environmentAgentSessionService?.retireActiveSessionForEnvironment({
+          this.environmentDaemonSessionService?.retireActiveSessionForEnvironment({
             environmentId: envIdForRetire,
             reason: "migration",
           });
@@ -909,7 +909,7 @@ export class Orchestrator implements ThreadOrchestrator {
   private async _reconcileManagedArtifactsInternal(): Promise<void> {
     const now = Date.now();
     const archivedLogRetentionMs =
-      resolveArchivedEnvironmentAgentLogRetentionMs(this.runtimeEnv);
+      resolveArchivedEnvironmentDaemonLogRetentionMs(this.runtimeEnv);
     const threads = this.threadRepo.listManagedArtifactRetentionRecords({
       archivedLogCutoff: now - archivedLogRetentionMs,
     });
@@ -1714,7 +1714,7 @@ export class Orchestrator implements ThreadOrchestrator {
         );
       } catch (error) {
         if (this._getAgentServerForThread(thread).isMissingProviderThreadError(error)) {
-          this.handleEnvironmentAgentSessionInvalidated(threadId);
+          this.handleEnvironmentDaemonSessionInvalidated(threadId);
         }
         if (
           statusBeforeSend !== "active" &&
@@ -2087,15 +2087,15 @@ export class Orchestrator implements ThreadOrchestrator {
     this._scheduleQueuedFollowUpDispatch(threadId);
   }
 
-  handleEnvironmentAgentSessionInvalidated(
+  handleEnvironmentDaemonSessionInvalidated(
     threadId: string,
-    closeReason?: EnvironmentAgentSessionCloseReason,
+    closeReason?: EnvironmentDaemonSessionCloseReason,
   ): void {
     if (closeReason === "newer_session" || closeReason === "migration") {
       return;
     }
 
-    this._clearEnvironmentAgentRuntimeState(threadId);
+    this._clearEnvironmentDaemonRuntimeState(threadId);
 
     const thread = this.threadRepo.getById(threadId);
     if (!thread) return;
@@ -2107,7 +2107,7 @@ export class Orchestrator implements ThreadOrchestrator {
         "system/error",
         {
           code: "provider_unavailable",
-          message: "The live environment-agent was lost while the thread was active.",
+          message: "The live environment-daemon was lost while the thread was active.",
         },
         { broadcastChanges: false },
       );
@@ -2127,7 +2127,7 @@ export class Orchestrator implements ThreadOrchestrator {
         "system/error",
         {
           code: "provider_unavailable",
-          message: "The live environment-agent was lost before provider bootstrap completed.",
+          message: "The live environment-daemon was lost before provider bootstrap completed.",
         },
         { broadcastChanges: false },
       );
@@ -2140,7 +2140,7 @@ export class Orchestrator implements ThreadOrchestrator {
     }
   }
 
-  private _clearEnvironmentAgentRuntimeState(threadId: string): void {
+  private _clearEnvironmentDaemonRuntimeState(threadId: string): void {
     this.providerThreadIdByThreadId.delete(threadId);
     this._clearAgentServerSessionState(threadId);
     this._detachEnvironmentRuntime(threadId);
@@ -2283,7 +2283,7 @@ export class Orchestrator implements ThreadOrchestrator {
       this.lockedTitleThreadIds.add(threadId);
       const providerThreadId = this._resolvePersistedProviderThreadId(threadId);
       if (providerThreadId) {
-        void this._withEnvironmentAgentAccess(
+        void this._withEnvironmentDaemonAccess(
           threadId,
           async ({ client, thread: latestThread, providerLaunch }) => {
             await this._getAgentServerForThreadId(threadId).renameThreadCommand({
@@ -3128,7 +3128,7 @@ export class Orchestrator implements ThreadOrchestrator {
 
     const request = (async () => {
       const envDaemonModels =
-        await this._listProviderModelsFromEnvironmentAgent(resolvedProviderId);
+        await this._listProviderModelsFromEnvironmentDaemon(resolvedProviderId);
       const models =
         envDaemonModels ??
         await this._getProviderAdapterForProviderId(resolvedProviderId).listModels();
@@ -3174,7 +3174,7 @@ export class Orchestrator implements ThreadOrchestrator {
   }
 
   async listProviders(): Promise<SystemProviderInfo[]> {
-    const envDaemonCatalog = await this._listProviderCatalogFromEnvironmentAgent();
+    const envDaemonCatalog = await this._listProviderCatalogFromEnvironmentDaemon();
     if (envDaemonCatalog && envDaemonCatalog.length > 0) {
       return envDaemonCatalog;
     }
@@ -3191,14 +3191,14 @@ export class Orchestrator implements ThreadOrchestrator {
     return this.environmentCatalog.map((environment) => ({ ...environment }));
   }
 
-  async getEnvironmentAgentStatus(
+  async getEnvironmentDaemonStatus(
     threadId: string,
-  ): Promise<EnvironmentAgentStatusSnapshot> {
+  ): Promise<EnvironmentDaemonStatusSnapshot> {
     const thread = this.threadRepo.getById(threadId);
     if (!thread) {
       throw threadNotFoundError(threadId);
     }
-    if (!this.environmentAgentSessionService) {
+    if (!this.environmentDaemonSessionService) {
       throw inactiveSessionError(threadId);
     }
     const environmentId = this.threadEnvironmentAttachmentRepo?.getByThreadId(threadId)?.environmentId;
@@ -3206,22 +3206,22 @@ export class Orchestrator implements ThreadOrchestrator {
       throw inactiveSessionError(threadId);
     }
     try {
-      return this.environmentAgentSessionService.getEnvironmentStatus(environmentId, threadId);
+      return this.environmentDaemonSessionService.getEnvironmentStatus(environmentId, threadId);
     } catch {
       throw inactiveSessionError(threadId);
     }
   }
 
-  async ingestReplayedEnvironmentAgentEvents(args: {
+  async ingestReplayedEnvironmentDaemonEvents(args: {
     threadId: string;
-    events: EnvironmentAgentEventEnvelope[];
+    events: EnvironmentDaemonEventEnvelope[];
   }): Promise<void> {
     const thread = this.threadRepo.getById(args.threadId);
     if (!thread) {
       throw threadNotFoundError(args.threadId);
     }
 
-    const fallbackEvents: EnvironmentAgentEventEnvelope[] = [];
+    const fallbackEvents: EnvironmentDaemonEventEnvelope[] = [];
     for (const envelope of args.events) {
       const event = envelope.event;
       if (
@@ -3255,13 +3255,13 @@ export class Orchestrator implements ThreadOrchestrator {
       return;
     }
 
-    await this._getAgentServerForThread(thread).ingestReplayedEnvironmentAgentEvents({
+    await this._getAgentServerForThread(thread).ingestReplayedEnvironmentDaemonEvents({
       threadId: args.threadId,
       events: fallbackEvents,
     });
   }
 
-  async handleEnvironmentAgentProviderRequest(args: {
+  async handleEnvironmentDaemonProviderRequest(args: {
     threadId: string;
     requestId: string | number;
     method: string;
@@ -3592,7 +3592,7 @@ export class Orchestrator implements ThreadOrchestrator {
     const providerStartStartedAt = Date.now();
     let started: { providerThreadId: string };
     try {
-      started = await this._withEnvironmentAgentAccess(
+      started = await this._withEnvironmentDaemonAccess(
         threadId,
         async ({ client, providerLaunch }) =>
           this._getAgentServerForProviderId(providerId).startThreadCommand({
@@ -3706,7 +3706,7 @@ export class Orchestrator implements ThreadOrchestrator {
     if (opts?.retireActiveSession) {
       const envId = this.threadEnvironmentAttachmentRepo?.getByThreadId(threadId)?.environmentId;
       if (envId && !this.environmentService.hasSharedAttachedEnvironment(threadId)) {
-        this.environmentAgentSessionService?.retireActiveSessionForEnvironment({
+        this.environmentDaemonSessionService?.retireActiveSessionForEnvironment({
           environmentId: envId,
           reason: "migration",
         });
@@ -3736,7 +3736,7 @@ export class Orchestrator implements ThreadOrchestrator {
     if (opts?.retireActiveSession) {
       const envId = this.threadEnvironmentAttachmentRepo?.getByThreadId(threadId)?.environmentId;
       if (envId && !this.environmentService.hasSharedAttachedEnvironment(threadId)) {
-        this.environmentAgentSessionService?.retireActiveSessionForEnvironment({
+        this.environmentDaemonSessionService?.retireActiveSessionForEnvironment({
           environmentId: envId,
           reason: "migration",
         });
@@ -3747,40 +3747,40 @@ export class Orchestrator implements ThreadOrchestrator {
     }
   }
 
-  private async _recoverEnvironmentAgentAccess(threadId: string): Promise<void> {
+  private async _recoverEnvironmentDaemonAccess(threadId: string): Promise<void> {
     await this._cleanupThreadRuntimeAndWait(threadId, { retireActiveSession: true });
-    await this._ensureEnvironmentAgentAccess(threadId);
+    await this._ensureEnvironmentDaemonAccess(threadId);
   }
 
-  private async _withEnvironmentAgentClient<T>(
+  private async _withEnvironmentDaemonClient<T>(
     threadId: string,
-    action: (client: EnvironmentAgentClient) => Promise<T>,
+    action: (client: EnvironmentDaemonClient) => Promise<T>,
   ): Promise<T> {
-    return this._withEnvironmentAgentAccess(threadId, ({ client }) => action(client));
+    return this._withEnvironmentDaemonAccess(threadId, ({ client }) => action(client));
   }
 
-  private async _withEnvironmentAgentTarget<T>(args: {
+  private async _withEnvironmentDaemonTarget<T>(args: {
     thread: Thread;
     projectRootPath: string;
-    target: EnvironmentAgentConnectionTarget;
+    target: EnvironmentDaemonConnectionTarget;
     action: (input: {
-      client: EnvironmentAgentClient;
+      client: EnvironmentDaemonClient;
       thread: Thread;
       projectRootPath: string;
-      providerLaunch?: EnvironmentAgentConnectionTarget["providerLaunch"];
+      providerLaunch?: EnvironmentDaemonConnectionTarget["providerLaunch"];
     }) => Promise<T>;
   }): Promise<T> {
-    if (!this.environmentAgentCommandDispatcher) {
+    if (!this.environmentDaemonCommandDispatcher) {
       throw inactiveSessionError(args.thread.id);
     }
-    const client = new EnvironmentAgentSessionCommandClient({
+    const client = new EnvironmentDaemonSessionCommandClient({
       threadId: args.thread.id,
-      commandDispatcher: this.environmentAgentCommandDispatcher,
-      ...(this.environmentAgentCommandPollIntervalMs !== undefined
-        ? { pollIntervalMs: this.environmentAgentCommandPollIntervalMs }
+      commandDispatcher: this.environmentDaemonCommandDispatcher,
+      ...(this.environmentDaemonCommandPollIntervalMs !== undefined
+        ? { pollIntervalMs: this.environmentDaemonCommandPollIntervalMs }
         : {}),
       ensureSessionAccess: async () => {
-        await this._recoverEnvironmentAgentAccess(args.thread.id);
+        await this._recoverEnvironmentDaemonAccess(args.thread.id);
       },
     });
     try {
@@ -3795,13 +3795,13 @@ export class Orchestrator implements ThreadOrchestrator {
     }
   }
 
-  private async _listProviderModelsFromEnvironmentAgent(
+  private async _listProviderModelsFromEnvironmentDaemon(
     providerId: ThreadProviderId,
   ): Promise<AvailableModel[] | undefined> {
-    if (!this.environmentAgentCommandDispatcher || !this.environmentAgentSessionRepo) {
+    if (!this.environmentDaemonCommandDispatcher || !this.environmentDaemonSessionRepo) {
       return undefined;
     }
-    const matchingSession = this.environmentAgentSessionRepo.listActive().find((session) => {
+    const matchingSession = this.environmentDaemonSessionRepo.listActive().find((session) => {
       if (Array.isArray(session.providerMetadata)) {
         return session.providerMetadata.some((entry) => {
           const record = toRecord(entry);
@@ -3821,21 +3821,21 @@ export class Orchestrator implements ThreadOrchestrator {
       return undefined;
     }
 
-    const client = new EnvironmentAgentSessionCommandClient({
+    const client = new EnvironmentDaemonSessionCommandClient({
       threadId: representativeThreadId,
-      commandDispatcher: this.environmentAgentCommandDispatcher,
-      ...(this.environmentAgentCommandPollIntervalMs !== undefined
-        ? { pollIntervalMs: this.environmentAgentCommandPollIntervalMs }
+      commandDispatcher: this.environmentDaemonCommandDispatcher,
+      ...(this.environmentDaemonCommandPollIntervalMs !== undefined
+        ? { pollIntervalMs: this.environmentDaemonCommandPollIntervalMs }
         : {}),
       ensureSessionAccess: async () => {
-        await this._recoverEnvironmentAgentAccess(representativeThreadId);
+        await this._recoverEnvironmentDaemonAccess(representativeThreadId);
       },
     });
     try {
       const commandId = `provider-models-${providerId}-${Date.now()}`;
       const ack = await client.sendCommand({
         meta: {
-          protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+          protocolVersion: ENVIRONMENT_DAEMON_PROTOCOL_VERSION,
           commandId,
           idempotencyKey: commandId,
           sentAt: Date.now(),
@@ -3853,11 +3853,11 @@ export class Orchestrator implements ThreadOrchestrator {
     }
   }
 
-  private async _listProviderCatalogFromEnvironmentAgent(): Promise<SystemProviderInfo[] | undefined> {
-    if (!this.environmentAgentCommandDispatcher || !this.environmentAgentSessionRepo) {
+  private async _listProviderCatalogFromEnvironmentDaemon(): Promise<SystemProviderInfo[] | undefined> {
+    if (!this.environmentDaemonCommandDispatcher || !this.environmentDaemonSessionRepo) {
       return undefined;
     }
-    const matchingSession = this.environmentAgentSessionRepo.listActive().find((session) => {
+    const matchingSession = this.environmentDaemonSessionRepo.listActive().find((session) => {
       const capabilities = toRecord(session.selectedCapabilities);
       const commands = Array.isArray(capabilities?.commands)
         ? capabilities.commands
@@ -3875,21 +3875,21 @@ export class Orchestrator implements ThreadOrchestrator {
       return undefined;
     }
 
-    const client = new EnvironmentAgentSessionCommandClient({
+    const client = new EnvironmentDaemonSessionCommandClient({
       threadId: catalogRepThreadId,
-      commandDispatcher: this.environmentAgentCommandDispatcher,
-      ...(this.environmentAgentCommandPollIntervalMs !== undefined
-        ? { pollIntervalMs: this.environmentAgentCommandPollIntervalMs }
+      commandDispatcher: this.environmentDaemonCommandDispatcher,
+      ...(this.environmentDaemonCommandPollIntervalMs !== undefined
+        ? { pollIntervalMs: this.environmentDaemonCommandPollIntervalMs }
         : {}),
       ensureSessionAccess: async () => {
-        await this._recoverEnvironmentAgentAccess(catalogRepThreadId);
+        await this._recoverEnvironmentDaemonAccess(catalogRepThreadId);
       },
     });
     try {
       const commandId = `provider-catalog-${Date.now()}`;
       const ack = await client.sendCommand({
         meta: {
-          protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+          protocolVersion: ENVIRONMENT_DAEMON_PROTOCOL_VERSION,
           commandId,
           idempotencyKey: commandId,
           sentAt: Date.now(),
@@ -3906,20 +3906,20 @@ export class Orchestrator implements ThreadOrchestrator {
     }
   }
 
-  private async _ensureEnvironmentAgentAccess(threadId: string): Promise<{
+  private async _ensureEnvironmentDaemonAccess(threadId: string): Promise<{
     thread: Thread;
     projectRootPath: string;
-    target: EnvironmentAgentConnectionTarget;
+    target: EnvironmentDaemonConnectionTarget;
   }> {
     const thread = this.threadRepo.getById(threadId);
     if (!thread) {
       throw threadNotFoundError(threadId);
     }
 
-    const runtimeEnvTarget = this._resolveEnvironmentAgentConnectionTargetFromRuntimeEnv();
+    const runtimeEnvTarget = this._resolveEnvironmentDaemonConnectionTargetFromRuntimeEnv();
     if (runtimeEnvTarget) {
-      if (this.environmentAgentCommandDispatcher) {
-        await this.environmentAgentCommandDispatcher.awaitActiveSession({ threadId });
+      if (this.environmentDaemonCommandDispatcher) {
+        await this.environmentDaemonCommandDispatcher.awaitActiveSession({ threadId });
       }
       return {
         thread,
@@ -3933,7 +3933,7 @@ export class Orchestrator implements ThreadOrchestrator {
       throw projectNotFoundError(thread.projectId);
     }
 
-    const ensured = await this._ensureEnvironmentAgentRuntimeWithActiveSession(
+    const ensured = await this._ensureEnvironmentDaemonRuntimeWithActiveSession(
       thread,
       project.rootPath,
       "resume-existing-provider-session",
@@ -3946,17 +3946,17 @@ export class Orchestrator implements ThreadOrchestrator {
     };
   }
 
-  private async _withEnvironmentAgentAccess<T>(
+  private async _withEnvironmentDaemonAccess<T>(
     threadId: string,
     action: (args: {
-      client: EnvironmentAgentClient;
+      client: EnvironmentDaemonClient;
       thread: Thread;
       projectRootPath: string;
-      providerLaunch?: EnvironmentAgentConnectionTarget["providerLaunch"];
+      providerLaunch?: EnvironmentDaemonConnectionTarget["providerLaunch"];
     }) => Promise<T>,
   ): Promise<T> {
-    const resolved = await this._ensureEnvironmentAgentAccess(threadId);
-    return this._withEnvironmentAgentTarget({
+    const resolved = await this._ensureEnvironmentDaemonAccess(threadId);
+    return this._withEnvironmentDaemonTarget({
       thread: resolved.thread,
       projectRootPath: resolved.projectRootPath,
       target: resolved.target,
@@ -3970,7 +3970,7 @@ export class Orchestrator implements ThreadOrchestrator {
     });
   }
 
-  private async _ensureEnvironmentAgentRuntimeWithActiveSession(
+  private async _ensureEnvironmentDaemonRuntimeWithActiveSession(
     thread: Thread,
     projectRootPath: string,
     reason: ThreadEnvironmentStartReason,
@@ -3982,18 +3982,18 @@ export class Orchestrator implements ThreadOrchestrator {
       projectRootPath,
       reason,
     );
-    if (!this.environmentAgentCommandDispatcher) {
+    if (!this.environmentDaemonCommandDispatcher) {
       return ensured;
     }
 
     try {
-      await this.environmentAgentCommandDispatcher.awaitActiveSession({
+      await this.environmentDaemonCommandDispatcher.awaitActiveSession({
         threadId: thread.id,
         timeoutMs: ENVIRONMENT_AGENT_SESSION_RECOVERY_WAIT_MS,
       });
       return ensured;
     } catch (error) {
-      if (!isEnvironmentAgentSessionUnavailableError(error)) {
+      if (!isEnvironmentDaemonSessionUnavailableError(error)) {
         throw error;
       }
     }
@@ -4004,7 +4004,7 @@ export class Orchestrator implements ThreadOrchestrator {
       projectRootPath,
       reason,
     );
-    await this.environmentAgentCommandDispatcher.awaitActiveSession({
+    await this.environmentDaemonCommandDispatcher.awaitActiveSession({
       threadId: thread.id,
       timeoutMs: ENVIRONMENT_AGENT_SESSION_RECOVERY_RETRY_WAIT_MS,
     });
@@ -4124,9 +4124,9 @@ export class Orchestrator implements ThreadOrchestrator {
           ? { BB_ENVIRONMENT_ID: attachedEnvironmentId }
           : {}),
       },
-      managedEnvironmentAgentReconnectTarget: (() => {
+      managedEnvironmentDaemonReconnectTarget: (() => {
         const session = attachedEnvironmentId
-          ? this.environmentAgentSessionRepo?.getActiveByEnvironmentId(attachedEnvironmentId)
+          ? this.environmentDaemonSessionRepo?.getActiveByEnvironmentId(attachedEnvironmentId)
           : undefined;
         if (!session?.controlBaseUrl) {
           return undefined;
@@ -4296,8 +4296,8 @@ export class Orchestrator implements ThreadOrchestrator {
     );
   }
 
-  private _resolveEnvironmentAgentConnectionTargetFromRuntimeEnv():
-    | EnvironmentAgentConnectionTarget
+  private _resolveEnvironmentDaemonConnectionTargetFromRuntimeEnv():
+    | EnvironmentDaemonConnectionTarget
     | undefined {
     const baseUrl = this.runtimeEnv.BB_ENV_DAEMON_BASE_URL?.trim();
     if (!baseUrl) {
@@ -4394,8 +4394,8 @@ export class Orchestrator implements ThreadOrchestrator {
   ): Promise<string> {
     const inMemoryThreadId = this.providerThreadIdByThreadId.get(threadId);
     const persistedThreadId = this._resolvePersistedProviderThreadId(threadId);
-    const hasActiveEnvironmentAgentSession =
-      this.environmentAgentCommandDispatcher?.hasActiveSession(threadId) ?? false;
+    const hasActiveEnvironmentDaemonSession =
+      this.environmentDaemonCommandDispatcher?.hasActiveSession(threadId) ?? false;
 
     if (
       inMemoryThreadId &&
@@ -4408,11 +4408,11 @@ export class Orchestrator implements ThreadOrchestrator {
     if (
       inMemoryThreadId &&
       (!persistedThreadId || persistedThreadId === inMemoryThreadId) &&
-      (!this.environmentAgentCommandDispatcher || hasActiveEnvironmentAgentSession)
+      (!this.environmentDaemonCommandDispatcher || hasActiveEnvironmentDaemonSession)
     ) {
       return inMemoryThreadId;
     }
-    if (inMemoryThreadId && this.environmentAgentCommandDispatcher) {
+    if (inMemoryThreadId && this.environmentDaemonCommandDispatcher) {
       this.providerThreadIdByThreadId.delete(threadId);
     }
 
@@ -4438,7 +4438,7 @@ export class Orchestrator implements ThreadOrchestrator {
     let lastResumeError: unknown;
     for (let attempt = 0; attempt < 2; attempt += 1) {
       try {
-        const resumed = await this._withEnvironmentAgentAccess(
+        const resumed = await this._withEnvironmentDaemonAccess(
           threadId,
           async ({ client, thread: latestThread, providerLaunch }) =>
             this._getAgentServerForThread(latestThread).resumeThreadCommand({
@@ -4570,8 +4570,8 @@ export class Orchestrator implements ThreadOrchestrator {
       threadId,
       projectId: thread.projectId,
     });
-    const access = await this._ensureEnvironmentAgentAccess(threadId);
-    const started = await this._withEnvironmentAgentTarget({
+    const access = await this._ensureEnvironmentDaemonAccess(threadId);
+    const started = await this._withEnvironmentDaemonTarget({
       thread: access.thread,
       projectRootPath: access.projectRootPath,
       target: access.target,
@@ -4600,7 +4600,7 @@ export class Orchestrator implements ThreadOrchestrator {
   }): Promise<string> {
     const agentServer = this._getAgentServerForThreadId(args.threadId);
     const sendTurn = async (providerThreadId: string): Promise<void> => {
-      await this._withEnvironmentAgentAccess(args.threadId, async ({ client, providerLaunch }) => {
+      await this._withEnvironmentDaemonAccess(args.threadId, async ({ client, providerLaunch }) => {
         await agentServer.sendTurnCommand({
           client,
           threadId: args.threadId,
@@ -4627,7 +4627,7 @@ export class Orchestrator implements ThreadOrchestrator {
         (error.code === "inactive_session" || error.code === "provider_unavailable") &&
         !args.activeTurnId
       ) {
-        await this._recoverEnvironmentAgentAccess(args.threadId);
+        await this._recoverEnvironmentDaemonAccess(args.threadId);
         try {
           await sendTurn(args.providerThreadId);
           return args.providerThreadId;
@@ -4641,7 +4641,7 @@ export class Orchestrator implements ThreadOrchestrator {
       ) {
         throw error;
       }
-      this._clearEnvironmentAgentRuntimeState(args.threadId);
+      this._clearEnvironmentDaemonRuntimeState(args.threadId);
       const recoveredProviderThreadId =
         await this._restartProviderThreadAfterMissingTurnStart(
           args.threadId,
@@ -5096,7 +5096,7 @@ export class Orchestrator implements ThreadOrchestrator {
       case "provisioning_failed":
         return "Thread provisioning failed; reprovision the thread before requesting actions";
       case "error":
-        return "Thread execution failed because its live environment-agent was lost; send a follow-up to recover";
+        return "Thread execution failed because its live environment-daemon was lost; send a follow-up to recover";
       default:
         return assertNever(thread.status);
     }
@@ -5749,7 +5749,7 @@ export class Orchestrator implements ThreadOrchestrator {
         "system/error",
         {
           code: "provider_unavailable",
-          message: "The live environment-agent exited while the thread was active.",
+          message: "The live environment-daemon exited while the thread was active.",
         },
         { broadcastChanges: false },
       );
@@ -5764,7 +5764,7 @@ export class Orchestrator implements ThreadOrchestrator {
         "system/error",
         {
           code: "provider_unavailable",
-          message: "The live environment-agent exited before thread provisioning completed.",
+          message: "The live environment-daemon exited before thread provisioning completed.",
         },
         { broadcastChanges: false },
       );
@@ -6077,7 +6077,7 @@ export class Orchestrator implements ThreadOrchestrator {
     providerThreadId: string,
     title: string,
   ): void {
-    void this._withEnvironmentAgentAccess(
+    void this._withEnvironmentDaemonAccess(
       threadId,
       async ({ client, thread, providerLaunch }) => {
         await this._getAgentServerForThread(thread).renameThreadCommand({

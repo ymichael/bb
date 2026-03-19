@@ -1,10 +1,10 @@
 import { Command } from "commander";
 import {
-  resolveEnvironmentAgentServiceOptions,
-  startEnvironmentAgentService,
+  resolveEnvironmentDaemonServiceOptions,
+  startEnvironmentDaemonService,
 } from "@bb/environment-daemon";
 
-interface EnvironmentAgentOptions {
+interface EnvironmentDaemonOptions {
   providerCommand?: string;
   providerArg?: string[];
   providerLaunchCommand?: string;
@@ -13,10 +13,10 @@ interface EnvironmentAgentOptions {
   httpHost?: string;
 }
 
-export function registerEnvironmentAgentCommand(program: Command): void {
+export function registerEnvironmentDaemonCommand(program: Command): void {
   program
-    .command("environment-agent")
-    .description("Run the environment-agent HTTP service")
+    .command("environment-daemon")
+    .description("Run the environment-daemon HTTP service")
     .allowUnknownOption(false)
     .option(
       "--provider-command <command>",
@@ -38,11 +38,11 @@ export function registerEnvironmentAgentCommand(program: Command): void {
       collectRepeatableOption,
       [],
     )
-    .option("--http-port <port>", "Run as an HTTP environment-agent on the given port")
-    .option("--http-host <host>", "HTTP bind host for environment-agent", "127.0.0.1")
-    .action(async (opts: EnvironmentAgentOptions) => {
+    .option("--http-port <port>", "Run as an HTTP environment-daemon on the given port")
+    .option("--http-host <host>", "HTTP bind host for environment-daemon", "127.0.0.1")
+    .action(async (opts: EnvironmentDaemonOptions) => {
       try {
-        const options = resolveEnvironmentAgentServiceOptions({
+        const options = resolveEnvironmentDaemonServiceOptions({
           cli: {
             providerCommand: opts.providerCommand,
             providerArgs: opts.providerArg ?? [],
@@ -53,8 +53,8 @@ export function registerEnvironmentAgentCommand(program: Command): void {
           },
           env: process.env,
         });
-        const { server, close } = await startEnvironmentAgentService(options);
-        console.error(`environment-agent http listening on ${server.baseUrl}`);
+        const { server, close } = await startEnvironmentDaemonService(options);
+        console.error(`environment-daemon http listening on ${server.baseUrl}`);
         const shutdown = async () => {
           await close();
           process.exit(0);

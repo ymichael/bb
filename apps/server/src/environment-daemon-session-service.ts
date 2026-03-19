@@ -1,53 +1,53 @@
 import { randomUUID } from "node:crypto";
 import type { ProviderToolCallResponse } from "@bb/core";
 import type {
-  EnvironmentAgentCursorPosition,
-  EnvironmentAgentCursorRepository,
-  EnvironmentAgentSessionRecord,
+  EnvironmentDaemonCursorPosition,
+  EnvironmentDaemonCursorRepository,
+  EnvironmentDaemonSessionRecord,
 } from "@bb/db";
 import {
-  ENVIRONMENT_AGENT_SESSION_PROTOCOL,
-  ENVIRONMENT_AGENT_PROTOCOL_VERSION,
-  ENVIRONMENT_AGENT_SESSION_SUPPORTED_PROTOCOL_VERSIONS,
-  negotiateEnvironmentAgentSessionCapabilities,
-  selectEnvironmentAgentSessionProtocolVersion,
-  type EnvironmentAgentSessionCapabilities,
-  type EnvironmentAgentSessionCommandAckPayload,
-  type EnvironmentAgentSessionCommandBatchMessage,
-  type EnvironmentAgentSessionCommandResultPayload,
-  type EnvironmentAgentSessionEventAckMessage,
-  type EnvironmentAgentSessionEventBatchPayload,
-  type EnvironmentAgentSessionHeartbeatPayload,
-  type EnvironmentAgentSessionOpenPayload,
-  type EnvironmentAgentSessionProviderRequestPayload,
-  type EnvironmentAgentSessionProviderResponseMessage,
-  type EnvironmentAgentSessionWelcomeMessage,
-  type EnvironmentAgentStatusSnapshot,
+  ENVIRONMENT_DAEMON_SESSION_PROTOCOL,
+  ENVIRONMENT_DAEMON_PROTOCOL_VERSION,
+  ENVIRONMENT_DAEMON_SESSION_SUPPORTED_PROTOCOL_VERSIONS,
+  negotiateEnvironmentDaemonSessionCapabilities,
+  selectEnvironmentDaemonSessionProtocolVersion,
+  type EnvironmentDaemonSessionCapabilities,
+  type EnvironmentDaemonSessionCommandAckPayload,
+  type EnvironmentDaemonSessionCommandBatchMessage,
+  type EnvironmentDaemonSessionCommandResultPayload,
+  type EnvironmentDaemonSessionEventAckMessage,
+  type EnvironmentDaemonSessionEventBatchPayload,
+  type EnvironmentDaemonSessionHeartbeatPayload,
+  type EnvironmentDaemonSessionOpenPayload,
+  type EnvironmentDaemonSessionProviderRequestPayload,
+  type EnvironmentDaemonSessionProviderResponseMessage,
+  type EnvironmentDaemonSessionWelcomeMessage,
+  type EnvironmentDaemonStatusSnapshot,
 } from "@bb/environment-daemon";
-import type { EnvironmentAgentCommandDispatcher } from "./environment-agent-command-dispatcher.js";
-import type { EnvironmentAgentEventApplier } from "./environment-agent-event-applier.js";
+import type { EnvironmentDaemonCommandDispatcher } from "./environment-daemon-command-dispatcher.js";
+import type { EnvironmentDaemonEventApplier } from "./environment-daemon-event-applier.js";
 import { inactiveSessionError, invalidRequestError } from "./domain-errors.js";
-import { decodePersistedEnvironmentAgentCommand } from "./environment-agent-command-decoder.js";
-import { EnvironmentAgentSessionManager } from "./environment-agent-session-manager.js";
+import { decodePersistedEnvironmentDaemonCommand } from "./environment-daemon-command-decoder.js";
+import { EnvironmentDaemonSessionManager } from "./environment-daemon-session-manager.js";
 
-export interface EnvironmentAgentSessionServiceOptions {
+export interface EnvironmentDaemonSessionServiceOptions {
   leaseTtlMs?: number;
   heartbeatIntervalMs?: number;
   commandLongPollTimeoutMs?: number;
   commandLongPollIntervalMs?: number;
   clock?: () => number;
-  commandDispatcher?: EnvironmentAgentCommandDispatcher;
-  eventApplier?: EnvironmentAgentEventApplier;
+  commandDispatcher?: EnvironmentDaemonCommandDispatcher;
+  eventApplier?: EnvironmentDaemonEventApplier;
   providerRequestHandler?: (args: {
     threadId: string;
-    request: EnvironmentAgentSessionProviderRequestPayload;
+    request: EnvironmentDaemonSessionProviderRequestPayload;
   }) => Promise<
     | { result: unknown }
     | { toolCallResponse: ProviderToolCallResponse }
     | { errorCode?: string; errorMessage: string }
   >;
   listAttachedThreadIds?: (environmentId: string) => string[];
-  onSessionInvalidated?: (session: EnvironmentAgentSessionRecord) => void;
+  onSessionInvalidated?: (session: EnvironmentDaemonSessionRecord) => void;
 }
 
 const DEFAULT_LEASE_TTL_MS = 30_000;
@@ -57,9 +57,9 @@ const DEFAULT_COMMAND_LONG_POLL_INTERVAL_MS = 100;
 
 function cursorForReply(args: {
   batchGeneration: number;
-  acknowledgedCursor?: EnvironmentAgentCursorPosition;
-  serverCursor?: EnvironmentAgentCursorPosition;
-}): EnvironmentAgentCursorPosition {
+  acknowledgedCursor?: EnvironmentDaemonCursorPosition;
+  serverCursor?: EnvironmentDaemonCursorPosition;
+}): EnvironmentDaemonCursorPosition {
   if (args.acknowledgedCursor) {
     return args.acknowledgedCursor;
   }
@@ -72,12 +72,12 @@ function cursorForReply(args: {
   };
 }
 
-function inactiveEnvironmentAgentSessionError(sessionId: string): Error {
-  return inactiveSessionError(`Environment-agent session ${sessionId} is not active`);
+function inactiveEnvironmentDaemonSessionError(sessionId: string): Error {
+  return inactiveSessionError(`Environment-daemon session ${sessionId} is not active`);
 }
 
 function isSessionLeaseActive(
-  session: Pick<EnvironmentAgentSessionRecord, "status" | "leaseExpiresAt">,
+  session: Pick<EnvironmentDaemonSessionRecord, "status" | "leaseExpiresAt">,
   now: number,
 ): boolean {
   return session.status === "active" && session.leaseExpiresAt > now;
@@ -123,18 +123,18 @@ async function delay(ms: number, signal?: AbortSignal): Promise<void> {
   });
 }
 
-export class EnvironmentAgentSessionService {
+export class EnvironmentDaemonSessionService {
   private readonly clock: () => number;
   private readonly leaseTtlMs: number;
   private readonly heartbeatIntervalMs: number;
   private readonly commandLongPollTimeoutMs: number;
   private readonly commandLongPollIntervalMs: number;
-  private readonly commandDispatcher?: EnvironmentAgentCommandDispatcher;
-  private readonly eventApplier?: EnvironmentAgentEventApplier;
+  private readonly commandDispatcher?: EnvironmentDaemonCommandDispatcher;
+  private readonly eventApplier?: EnvironmentDaemonEventApplier;
   private readonly providerRequestHandler?: (
     args: {
       threadId: string;
-      request: EnvironmentAgentSessionProviderRequestPayload;
+      request: EnvironmentDaemonSessionProviderRequestPayload;
     },
   ) => Promise<
     | { result: unknown }
@@ -142,14 +142,14 @@ export class EnvironmentAgentSessionService {
     | { errorCode?: string; errorMessage: string }
   >;
   private readonly onSessionInvalidated?: (
-    session: EnvironmentAgentSessionRecord,
+    session: EnvironmentDaemonSessionRecord,
   ) => void;
   private readonly listAttachedThreadIds?: (environmentId: string) => string[];
 
   constructor(
-    private readonly sessions: EnvironmentAgentSessionManager,
-    private readonly cursors: EnvironmentAgentCursorRepository,
-    options: EnvironmentAgentSessionServiceOptions = {},
+    private readonly sessions: EnvironmentDaemonSessionManager,
+    private readonly cursors: EnvironmentDaemonCursorRepository,
+    options: EnvironmentDaemonSessionServiceOptions = {},
   ) {
     this.clock = options.clock ?? (() => Date.now());
     this.leaseTtlMs = options.leaseTtlMs ?? DEFAULT_LEASE_TTL_MS;
@@ -175,31 +175,31 @@ export class EnvironmentAgentSessionService {
     return this.listAllowedChannelIds(environmentId).includes(channelId);
   }
 
-  private invalidateSession(session: EnvironmentAgentSessionRecord): void {
+  private invalidateSession(session: EnvironmentDaemonSessionRecord): void {
     this.commandDispatcher?.invalidateCommandsForSession(session, this.clock());
     this.onSessionInvalidated?.(session);
   }
 
   openSession(args: {
     environmentId: string;
-    payload: EnvironmentAgentSessionOpenPayload;
+    payload: EnvironmentDaemonSessionOpenPayload;
     now?: number;
   }): {
-    session: EnvironmentAgentSessionRecord;
-    replaced?: EnvironmentAgentSessionRecord;
-    welcome: EnvironmentAgentSessionWelcomeMessage;
+    session: EnvironmentDaemonSessionRecord;
+    replaced?: EnvironmentDaemonSessionRecord;
+    welcome: EnvironmentDaemonSessionWelcomeMessage;
   } {
     const now = args.now ?? this.clock();
-    const selectedProtocolVersion = selectEnvironmentAgentSessionProtocolVersion({
-      supportedByServer: ENVIRONMENT_AGENT_SESSION_SUPPORTED_PROTOCOL_VERSIONS,
+    const selectedProtocolVersion = selectEnvironmentDaemonSessionProtocolVersion({
+      supportedByServer: ENVIRONMENT_DAEMON_SESSION_SUPPORTED_PROTOCOL_VERSIONS,
       supportedByAgent: args.payload.supportedProtocolVersions,
     });
     if (selectedProtocolVersion === undefined) {
-      throw new Error("No compatible environment-agent session protocol version");
+      throw new Error("No compatible environment-daemon session protocol version");
     }
 
-    const selectedCapabilities: EnvironmentAgentSessionCapabilities =
-      negotiateEnvironmentAgentSessionCapabilities({
+    const selectedCapabilities: EnvironmentDaemonSessionCapabilities =
+      negotiateEnvironmentDaemonSessionCapabilities({
         requested: args.payload.capabilities,
         fallback: {
           worker: args.payload.worker,
@@ -235,7 +235,7 @@ export class EnvironmentAgentSessionService {
       ...(opened.replaced ? { replaced: opened.replaced } : {}),
       session: opened.active,
       welcome: {
-        protocol: ENVIRONMENT_AGENT_SESSION_PROTOCOL,
+        protocol: ENVIRONMENT_DAEMON_SESSION_PROTOCOL,
         type: "session_welcome",
         messageId: randomUUID(),
         sessionId: opened.active.id,
@@ -268,9 +268,9 @@ export class EnvironmentAgentSessionService {
   recordHeartbeat(args: {
     environmentId: string;
     sessionId: string;
-    payload: EnvironmentAgentSessionHeartbeatPayload;
+    payload: EnvironmentDaemonSessionHeartbeatPayload;
     now?: number;
-  }): EnvironmentAgentSessionRecord {
+  }): EnvironmentDaemonSessionRecord {
     const now = args.now ?? this.clock();
     this.requireActiveSession(args.environmentId, args.sessionId, now);
     const heartbeat = this.sessions.recordHeartbeat({
@@ -279,10 +279,10 @@ export class EnvironmentAgentSessionService {
       now,
     });
     if (!heartbeat) {
-      throw inactiveEnvironmentAgentSessionError(args.sessionId);
+      throw inactiveEnvironmentDaemonSessionError(args.sessionId);
     }
     if (!isSessionLeaseActive(heartbeat, now)) {
-      throw inactiveEnvironmentAgentSessionError(args.sessionId);
+      throw inactiveEnvironmentDaemonSessionError(args.sessionId);
     }
 
     return heartbeat;
@@ -293,7 +293,7 @@ export class EnvironmentAgentSessionService {
     sessionId: string;
     reason: "agent_shutdown" | "server_shutdown" | "migration" | "internal_error";
     now?: number;
-  }): EnvironmentAgentSessionRecord {
+  }): EnvironmentDaemonSessionRecord {
     this.requireActiveSession(args.environmentId, args.sessionId);
     const closed = this.sessions.closeSession({
       sessionId: args.sessionId,
@@ -301,7 +301,7 @@ export class EnvironmentAgentSessionService {
       now: args.now,
     });
     if (!closed) {
-      throw new Error(`Unknown environment-agent session: ${args.sessionId}`);
+      throw new Error(`Unknown environment-daemon session: ${args.sessionId}`);
     }
     this.invalidateSession(closed);
     return closed;
@@ -311,7 +311,7 @@ export class EnvironmentAgentSessionService {
     environmentId: string;
     reason: "server_shutdown" | "migration" | "internal_error";
     now?: number;
-  }): EnvironmentAgentSessionRecord | undefined {
+  }): EnvironmentDaemonSessionRecord | undefined {
     const now = args.now ?? this.clock();
     const active = this.sessions.getActiveSessionByEnvironmentId(args.environmentId, now);
     if (!active) {
@@ -331,7 +331,7 @@ export class EnvironmentAgentSessionService {
     return closed;
   }
 
-  expireLeases(now?: number): EnvironmentAgentSessionRecord[] {
+  expireLeases(now?: number): EnvironmentDaemonSessionRecord[] {
     const expired = this.sessions.expireLeases(now);
     for (const session of expired) {
       this.invalidateSession(session);
@@ -339,19 +339,19 @@ export class EnvironmentAgentSessionService {
     return expired;
   }
 
-  listSessions(environmentId: string): EnvironmentAgentSessionRecord[] {
+  listSessions(environmentId: string): EnvironmentDaemonSessionRecord[] {
     return this.sessions.listSessionsByEnvironmentId(environmentId);
   }
 
-  getEnvironmentStatus(environmentId: string, threadId: string): EnvironmentAgentStatusSnapshot {
+  getEnvironmentStatus(environmentId: string, threadId: string): EnvironmentDaemonStatusSnapshot {
     const session = this.sessions.getActiveSessionByEnvironmentId(environmentId, this.clock());
     if (!session) {
-      throw new Error(`No active environment-agent session for environment ${environmentId}`);
+      throw new Error(`No active environment-daemon session for environment ${environmentId}`);
     }
 
     const cursor = this.cursors.getByThreadId(threadId);
     return {
-      protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+      protocolVersion: ENVIRONMENT_DAEMON_PROTOCOL_VERSION,
       threadId,
       latestSequence: cursor?.sequence ?? 0,
       ...(cursor ? { lastAckedSequence: cursor.sequence } : {}),
@@ -366,12 +366,12 @@ export class EnvironmentAgentSessionService {
   applyEventBatch(args: {
     environmentId: string;
     sessionId: string;
-    payload: EnvironmentAgentSessionEventBatchPayload;
+    payload: EnvironmentDaemonSessionEventBatchPayload;
     now?: number;
-  }): Promise<EnvironmentAgentSessionEventAckMessage> {
+  }): Promise<EnvironmentDaemonSessionEventAckMessage> {
     const eventApplier = this.eventApplier;
     if (!eventApplier) {
-      throw new Error("Environment-agent session event apply is unavailable");
+      throw new Error("Environment-daemon session event apply is unavailable");
     }
 
     const session = this.requireActiveSession(args.environmentId, args.sessionId);
@@ -380,7 +380,7 @@ export class EnvironmentAgentSessionService {
       args.payload.batches.map(async (batch) => {
         if (!this.isAllowedChannelId(args.environmentId, batch.channelId)) {
           throw invalidRequestError(
-            `Environment-agent batch channel mismatch for thread ${batch.channelId}`,
+            `Environment-daemon batch channel mismatch for thread ${batch.channelId}`,
           );
         }
         const serverCursor = this.cursors.getByThreadId(batch.channelId);
@@ -391,7 +391,7 @@ export class EnvironmentAgentSessionService {
         });
         if (result.blockedReason === "invalid_channel") {
           throw invalidRequestError(
-            `Environment-agent batch channel mismatch for thread ${batch.channelId}`,
+            `Environment-daemon batch channel mismatch for thread ${batch.channelId}`,
           );
         }
         return {
@@ -406,7 +406,7 @@ export class EnvironmentAgentSessionService {
         };
       }),
     ).then((channels) => ({
-      protocol: ENVIRONMENT_AGENT_SESSION_PROTOCOL,
+      protocol: ENVIRONMENT_DAEMON_SESSION_PROTOCOL,
       type: "event_ack",
       messageId: randomUUID(),
       sessionId: session.id,
@@ -423,9 +423,9 @@ export class EnvironmentAgentSessionService {
     afterCursor?: number;
     limit?: number;
     now?: number;
-  }): EnvironmentAgentSessionCommandBatchMessage {
+  }): EnvironmentDaemonSessionCommandBatchMessage {
     if (!this.commandDispatcher) {
-      throw new Error("Environment-agent session command dispatch is unavailable");
+      throw new Error("Environment-daemon session command dispatch is unavailable");
     }
 
     const session = this.requireActiveSession(args.environmentId, args.sessionId);
@@ -436,7 +436,7 @@ export class EnvironmentAgentSessionService {
     });
 
     return {
-      protocol: ENVIRONMENT_AGENT_SESSION_PROTOCOL,
+      protocol: ENVIRONMENT_DAEMON_SESSION_PROTOCOL,
       type: "command_batch",
       messageId: randomUUID(),
       sessionId: args.sessionId,
@@ -447,7 +447,7 @@ export class EnvironmentAgentSessionService {
           commandCursor: record.commandCursor,
           commandId: record.id,
           createdAt: record.createdAt,
-          command: decodePersistedEnvironmentAgentCommand({
+          command: decodePersistedEnvironmentDaemonCommand({
             commandType: record.commandType,
             payload: record.payload,
           }),
@@ -463,7 +463,7 @@ export class EnvironmentAgentSessionService {
     limit?: number;
     waitMs?: number;
     signal?: AbortSignal;
-  }): Promise<EnvironmentAgentSessionCommandBatchMessage> {
+  }): Promise<EnvironmentDaemonSessionCommandBatchMessage> {
     const waitMs = normalizeCommandLongPollWaitMs({
       requestedWaitMs: args.waitMs,
       maxWaitMs: this.commandLongPollTimeoutMs,
@@ -490,11 +490,11 @@ export class EnvironmentAgentSessionService {
   recordCommandAck(args: {
     environmentId: string;
     sessionId: string;
-    payload: EnvironmentAgentSessionCommandAckPayload;
+    payload: EnvironmentDaemonSessionCommandAckPayload;
     now?: number;
   }): void {
     if (!this.commandDispatcher) {
-      throw new Error("Environment-agent session command dispatch is unavailable");
+      throw new Error("Environment-daemon session command dispatch is unavailable");
     }
 
     const session = this.requireActiveSession(args.environmentId, args.sessionId);
@@ -508,11 +508,11 @@ export class EnvironmentAgentSessionService {
   recordCommandResult(args: {
     environmentId: string;
     sessionId: string;
-    payload: EnvironmentAgentSessionCommandResultPayload;
+    payload: EnvironmentDaemonSessionCommandResultPayload;
     now?: number;
   }): void {
     if (!this.commandDispatcher) {
-      throw new Error("Environment-agent session command dispatch is unavailable");
+      throw new Error("Environment-daemon session command dispatch is unavailable");
     }
 
     const session = this.requireSession(args.environmentId, args.sessionId);
@@ -526,11 +526,11 @@ export class EnvironmentAgentSessionService {
   async handleProviderRequest(args: {
     environmentId: string;
     sessionId: string;
-    payload: EnvironmentAgentSessionProviderRequestPayload;
+    payload: EnvironmentDaemonSessionProviderRequestPayload;
     now?: number;
-  }): Promise<EnvironmentAgentSessionProviderResponseMessage> {
+  }): Promise<EnvironmentDaemonSessionProviderResponseMessage> {
     if (!this.providerRequestHandler) {
-      throw new Error("Environment-agent provider request handling is unavailable");
+      throw new Error("Environment-daemon provider request handling is unavailable");
     }
 
     const session = this.requireActiveSession(args.environmentId, args.sessionId, args.now);
@@ -539,7 +539,7 @@ export class EnvironmentAgentSessionService {
     const channelId = args.payload.channelId;
     if (!channelId || !this.isAllowedChannelId(args.environmentId, channelId)) {
       throw invalidRequestError(
-        `Environment-agent provider request missing or invalid channelId`,
+        `Environment-daemon provider request missing or invalid channelId`,
       );
     }
 
@@ -549,7 +549,7 @@ export class EnvironmentAgentSessionService {
         request: args.payload,
       });
       return {
-        protocol: ENVIRONMENT_AGENT_SESSION_PROTOCOL,
+        protocol: ENVIRONMENT_DAEMON_SESSION_PROTOCOL,
         type: "provider_response",
         messageId: randomUUID(),
         sessionId: session.id,
@@ -575,7 +575,7 @@ export class EnvironmentAgentSessionService {
       };
     } catch (error) {
       return {
-        protocol: ENVIRONMENT_AGENT_SESSION_PROTOCOL,
+        protocol: ENVIRONMENT_DAEMON_SESSION_PROTOCOL,
         type: "provider_response",
         messageId: randomUUID(),
         sessionId: session.id,
@@ -592,14 +592,14 @@ export class EnvironmentAgentSessionService {
   private requireSession(
     environmentId: string,
     sessionId: string,
-  ): EnvironmentAgentSessionRecord {
+  ): EnvironmentDaemonSessionRecord {
     const session = this.sessions.getSession(sessionId);
     if (!session) {
-      throw inactiveEnvironmentAgentSessionError(sessionId);
+      throw inactiveEnvironmentDaemonSessionError(sessionId);
     }
     if (session.environmentId !== environmentId) {
       throw invalidRequestError(
-        `Environment-agent session ${sessionId} does not belong to environment ${environmentId}`,
+        `Environment-daemon session ${sessionId} does not belong to environment ${environmentId}`,
       );
     }
     return session;
@@ -609,10 +609,10 @@ export class EnvironmentAgentSessionService {
     environmentId: string,
     sessionId: string,
     now: number = this.clock(),
-  ): EnvironmentAgentSessionRecord {
+  ): EnvironmentDaemonSessionRecord {
     const session = this.requireSession(environmentId, sessionId);
     if (!isSessionLeaseActive(session, now)) {
-      throw inactiveEnvironmentAgentSessionError(sessionId);
+      throw inactiveEnvironmentDaemonSessionError(sessionId);
     }
     return session;
   }

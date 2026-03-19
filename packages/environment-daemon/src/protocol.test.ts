@@ -1,15 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
-  ENVIRONMENT_AGENT_PROTOCOL_VERSION,
-  type EnvironmentAgentCommandEnvelope,
-  type EnvironmentAgentEventEnvelope,
+  ENVIRONMENT_DAEMON_PROTOCOL_VERSION,
+  type EnvironmentDaemonCommandEnvelope,
+  type EnvironmentDaemonEventEnvelope,
 } from "./index.js";
 
-describe("environment-agent protocol", () => {
+describe("environment-daemon protocol", () => {
   it("uses a versioned command envelope shape", () => {
-    const envelope: EnvironmentAgentCommandEnvelope = {
+    const envelope: EnvironmentDaemonCommandEnvelope = {
       meta: {
-        protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+        protocolVersion: ENVIRONMENT_DAEMON_PROTOCOL_VERSION,
         commandId: "cmd-1",
         idempotencyKey: "idem-1",
         sentAt: 123,
@@ -36,8 +36,8 @@ describe("environment-agent protocol", () => {
   });
 
   it("uses a versioned event envelope shape", () => {
-    const event: EnvironmentAgentEventEnvelope = {
-      protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+    const event: EnvironmentDaemonEventEnvelope = {
+      protocolVersion: ENVIRONMENT_DAEMON_PROTOCOL_VERSION,
       sequence: 8,
       emittedAt: 456,
       threadId: "thread-1",

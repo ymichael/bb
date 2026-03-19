@@ -1,26 +1,26 @@
 import { randomUUID } from "node:crypto";
-import type { EnvironmentAgentServerConnectionConfig } from "./protocol.js";
+import type { EnvironmentDaemonServerConnectionConfig } from "./protocol.js";
 import type {
-  EnvironmentAgentSessionClientMessage,
-  EnvironmentAgentSessionCommandAckPayload,
-  EnvironmentAgentSessionCommandBatchMessage,
-  EnvironmentAgentSessionCommandResultPayload,
-  EnvironmentAgentSessionEventAckMessage,
-  EnvironmentAgentSessionEventBatchPayload,
-  EnvironmentAgentSessionHeartbeatPayload,
-  EnvironmentAgentSessionOpenPayload,
-  EnvironmentAgentSessionProviderRequestPayload,
-  EnvironmentAgentSessionProviderResponseMessage,
-  EnvironmentAgentSessionWelcomeMessage,
+  EnvironmentDaemonSessionClientMessage,
+  EnvironmentDaemonSessionCommandAckPayload,
+  EnvironmentDaemonSessionCommandBatchMessage,
+  EnvironmentDaemonSessionCommandResultPayload,
+  EnvironmentDaemonSessionEventAckMessage,
+  EnvironmentDaemonSessionEventBatchPayload,
+  EnvironmentDaemonSessionHeartbeatPayload,
+  EnvironmentDaemonSessionOpenPayload,
+  EnvironmentDaemonSessionProviderRequestPayload,
+  EnvironmentDaemonSessionProviderResponseMessage,
+  EnvironmentDaemonSessionWelcomeMessage,
 } from "./session-protocol.js";
-import { ENVIRONMENT_AGENT_SESSION_PROTOCOL } from "./session-protocol.js";
+import { ENVIRONMENT_DAEMON_SESSION_PROTOCOL } from "./session-protocol.js";
 
-type EnvironmentAgentSessionBoundClientMessage = Exclude<
-  EnvironmentAgentSessionClientMessage,
+type EnvironmentDaemonSessionBoundClientMessage = Exclude<
+  EnvironmentDaemonSessionClientMessage,
   { type: "session_open" }
 >;
 
-export interface EnvironmentAgentSessionHttpClientOptions {
+export interface EnvironmentDaemonSessionHttpClientOptions {
   serverUrl: string;
   environmentId: string;
   authToken?: string;
@@ -28,7 +28,7 @@ export interface EnvironmentAgentSessionHttpClientOptions {
   fetchImpl?: typeof fetch;
 }
 
-export class EnvironmentAgentSessionHttpClientError extends Error {
+export class EnvironmentDaemonSessionHttpClientError extends Error {
   readonly status?: number;
   readonly code?: string;
   readonly retryable: boolean;
@@ -42,7 +42,7 @@ export class EnvironmentAgentSessionHttpClientError extends Error {
     details?: unknown;
   }) {
     super(args.message);
-    this.name = "EnvironmentAgentSessionHttpClientError";
+    this.name = "EnvironmentDaemonSessionHttpClientError";
     this.status = args.status;
     this.code = args.code;
     this.retryable = args.retryable ?? false;
@@ -68,20 +68,20 @@ async function parseJsonResponse(response: Response): Promise<unknown> {
   try {
     return JSON.parse(text);
   } catch {
-    throw new EnvironmentAgentSessionHttpClientError({
+    throw new EnvironmentDaemonSessionHttpClientError({
       message: `Invalid JSON response: ${response.status}`,
       status: response.status,
     });
   }
 }
 
-export class EnvironmentAgentSessionHttpClient {
+export class EnvironmentDaemonSessionHttpClient {
   private readonly fetchImpl: typeof fetch;
   private readonly serverUrl: string;
   private readonly environmentId: string;
   private readonly defaultHeaders: Record<string, string>;
 
-  constructor(options: EnvironmentAgentSessionHttpClientOptions) {
+  constructor(options: EnvironmentDaemonSessionHttpClientOptions) {
     this.fetchImpl = options.fetchImpl ?? fetch;
     this.serverUrl = options.serverUrl;
     this.environmentId = options.environmentId;
@@ -94,18 +94,18 @@ export class EnvironmentAgentSessionHttpClient {
   }
 
   openSession(
-    payload: EnvironmentAgentSessionOpenPayload,
-  ): Promise<EnvironmentAgentSessionWelcomeMessage> {
+    payload: EnvironmentDaemonSessionOpenPayload,
+  ): Promise<EnvironmentDaemonSessionWelcomeMessage> {
     return this.postJson(
       `/environments/${this.environmentId}/env-daemon/session/open`,
       payload,
       201,
-    ) as Promise<EnvironmentAgentSessionWelcomeMessage>;
+    ) as Promise<EnvironmentDaemonSessionWelcomeMessage>;
   }
 
   async heartbeat(
     sessionId: string,
-    payload: EnvironmentAgentSessionHeartbeatPayload,
+    payload: EnvironmentDaemonSessionHeartbeatPayload,
   ): Promise<void> {
     await this.postClientMessage({
       type: "heartbeat",
@@ -116,14 +116,14 @@ export class EnvironmentAgentSessionHttpClient {
 
   pushEvents(args: {
     sessionId: string;
-    payload: EnvironmentAgentSessionEventBatchPayload;
-  }): Promise<EnvironmentAgentSessionEventAckMessage> {
+    payload: EnvironmentDaemonSessionEventBatchPayload;
+  }): Promise<EnvironmentDaemonSessionEventAckMessage> {
     return this.postClientMessage({
       type: "event_batch",
       sessionId: args.sessionId,
       payload: args.payload,
       responseStatus: 200,
-    }) as Promise<EnvironmentAgentSessionEventAckMessage>;
+    }) as Promise<EnvironmentDaemonSessionEventAckMessage>;
   }
 
   pullCommands(args: {
@@ -132,7 +132,7 @@ export class EnvironmentAgentSessionHttpClient {
     limit?: number;
     waitMs?: number;
     signal?: AbortSignal;
-  }): Promise<EnvironmentAgentSessionCommandBatchMessage> {
+  }): Promise<EnvironmentDaemonSessionCommandBatchMessage> {
     const search = new URLSearchParams({ sessionId: args.sessionId });
     if (args.afterCursor !== undefined) {
       search.set("afterCursor", String(args.afterCursor));
@@ -147,12 +147,12 @@ export class EnvironmentAgentSessionHttpClient {
       `/environments/${this.environmentId}/env-daemon/session/commands?${search.toString()}`,
       200,
       { signal: args.signal },
-    ) as Promise<EnvironmentAgentSessionCommandBatchMessage>;
+    ) as Promise<EnvironmentDaemonSessionCommandBatchMessage>;
   }
 
   async acknowledgeCommands(
     sessionId: string,
-    payload: EnvironmentAgentSessionCommandAckPayload,
+    payload: EnvironmentDaemonSessionCommandAckPayload,
   ): Promise<void> {
     await this.postClientMessage({
       type: "command_ack",
@@ -163,7 +163,7 @@ export class EnvironmentAgentSessionHttpClient {
 
   async sendCommandResult(
     sessionId: string,
-    payload: EnvironmentAgentSessionCommandResultPayload,
+    payload: EnvironmentDaemonSessionCommandResultPayload,
   ): Promise<void> {
     await this.postClientMessage({
       type: "command_result",
@@ -174,14 +174,14 @@ export class EnvironmentAgentSessionHttpClient {
 
   sendProviderRequest(args: {
     sessionId: string;
-    payload: EnvironmentAgentSessionProviderRequestPayload;
-  }): Promise<EnvironmentAgentSessionProviderResponseMessage> {
+    payload: EnvironmentDaemonSessionProviderRequestPayload;
+  }): Promise<EnvironmentDaemonSessionProviderResponseMessage> {
     return this.postClientMessage({
       type: "provider_request",
       sessionId: args.sessionId,
       payload: args.payload,
       responseStatus: 200,
-    }) as Promise<EnvironmentAgentSessionProviderResponseMessage>;
+    }) as Promise<EnvironmentDaemonSessionProviderResponseMessage>;
   }
 
   async closeSession(
@@ -196,21 +196,21 @@ export class EnvironmentAgentSessionHttpClient {
   }
 
   private async postClientMessage<
-    TType extends EnvironmentAgentSessionBoundClientMessage["type"],
+    TType extends EnvironmentDaemonSessionBoundClientMessage["type"],
   >(args: {
     type: TType;
     sessionId: string;
-    payload: Extract<EnvironmentAgentSessionBoundClientMessage, { type: TType }>["payload"];
+    payload: Extract<EnvironmentDaemonSessionBoundClientMessage, { type: TType }>["payload"];
     responseStatus?: 200 | 204;
   }): Promise<unknown> {
     const message = {
-      protocol: ENVIRONMENT_AGENT_SESSION_PROTOCOL,
+      protocol: ENVIRONMENT_DAEMON_SESSION_PROTOCOL,
       messageId: randomUUID(),
       sentAt: Date.now(),
       sessionId: args.sessionId,
       type: args.type,
       payload: args.payload,
-    } as Extract<EnvironmentAgentSessionBoundClientMessage, { type: TType }>;
+    } as Extract<EnvironmentDaemonSessionBoundClientMessage, { type: TType }>;
     if (args.responseStatus === 200) {
       return this.postJson(
         `/environments/${this.environmentId}/env-daemon/session/messages`,
@@ -236,7 +236,7 @@ export class EnvironmentAgentSessionHttpClient {
     } catch (error) {
       if (
         options?.signal?.aborted &&
-        error instanceof EnvironmentAgentSessionHttpClientError
+        error instanceof EnvironmentDaemonSessionHttpClientError
       ) {
         throw new DOMException("The operation was aborted.", "AbortError");
       }
@@ -284,7 +284,7 @@ export class EnvironmentAgentSessionHttpClient {
   private async buildHttpError(
     response: Response,
     expectedStatus: number,
-  ): Promise<EnvironmentAgentSessionHttpClientError> {
+  ): Promise<EnvironmentDaemonSessionHttpClientError> {
     const body = await response.text();
     let parsedBody: unknown;
     if (body.trim()) {
@@ -304,7 +304,7 @@ export class EnvironmentAgentSessionHttpClient {
     const retryable = parsedRecord?.retryable === true;
     const details = parsedRecord?.details;
     const suffix = message ? `: ${message}` : "";
-    return new EnvironmentAgentSessionHttpClientError({
+    return new EnvironmentDaemonSessionHttpClientError({
       message: `Unexpected daemon response ${response.status} (expected ${expectedStatus})${suffix}`,
       status: response.status,
       ...(code ? { code } : {}),
@@ -314,29 +314,29 @@ export class EnvironmentAgentSessionHttpClient {
   }
 }
 
-export function isEnvironmentAgentSessionInactiveError(
+export function isEnvironmentDaemonSessionInactiveError(
   error: unknown,
-): error is EnvironmentAgentSessionHttpClientError {
+): error is EnvironmentDaemonSessionHttpClientError {
   return (
-    error instanceof EnvironmentAgentSessionHttpClientError &&
+    error instanceof EnvironmentDaemonSessionHttpClientError &&
     error.status === 409 &&
     error.code === "inactive_session"
   );
 }
 
-export function createEnvironmentAgentSessionHttpClientFromConnection(
-  config: EnvironmentAgentServerConnectionConfig,
+export function createEnvironmentDaemonSessionHttpClientFromConnection(
+  config: EnvironmentDaemonServerConnectionConfig,
   args?: {
     headers?: Record<string, string>;
     fetchImpl?: typeof fetch;
   },
-): EnvironmentAgentSessionHttpClient {
+): EnvironmentDaemonSessionHttpClient {
   if (!config.serverUrl || !config.environmentId) {
-    throw new EnvironmentAgentSessionHttpClientError({
-      message: "Environment-agent daemon session connection requires serverUrl and environmentId",
+    throw new EnvironmentDaemonSessionHttpClientError({
+      message: "Environment-daemon daemon session connection requires serverUrl and environmentId",
     });
   }
-  return new EnvironmentAgentSessionHttpClient({
+  return new EnvironmentDaemonSessionHttpClient({
     serverUrl: config.serverUrl,
     environmentId: config.environmentId,
     authToken: config.authToken,

@@ -237,7 +237,7 @@ export function createSystemRoutes(
             active: threads.filter((thread) => thread.status === "active").length,
             idle: threads.filter((thread) => thread.status === "idle").length,
           },
-          environmentAgent: {
+          environmentDaemon: {
             activeSessionCount: 0,
             activeSessions: [],
           },

@@ -1,33 +1,33 @@
 import { randomUUID } from "node:crypto";
 import type {
-  AckEnvironmentAgentOutboxThroughInput,
-  AppendEnvironmentAgentOutboxEventInput,
-  BindEnvironmentAgentSessionInput,
-  ClearEnvironmentAgentSessionInput,
-  CompleteEnvironmentAgentCommandReceiptInput,
-  EnvironmentAgentCommandReceiptRecord,
-  EnvironmentAgentOutboxEventRecord,
-  EnvironmentAgentSessionStateRecord,
-  EnvironmentAgentSessionStore,
-  EnvironmentAgentSessionStoreCommandReceiptState,
-  FailEnvironmentAgentCommandReceiptInput,
-  InitializeEnvironmentAgentThreadStateInput,
-  ReconcileEnvironmentAgentEventCursorInput,
-  RecordEnvironmentAgentCommandReceivedInput,
-  SetEnvironmentAgentLastDeliveredCommandCursorInput,
+  AckEnvironmentDaemonOutboxThroughInput,
+  AppendEnvironmentDaemonOutboxEventInput,
+  BindEnvironmentDaemonSessionInput,
+  ClearEnvironmentDaemonSessionInput,
+  CompleteEnvironmentDaemonCommandReceiptInput,
+  EnvironmentDaemonCommandReceiptRecord,
+  EnvironmentDaemonOutboxEventRecord,
+  EnvironmentDaemonSessionStateRecord,
+  EnvironmentDaemonSessionStore,
+  EnvironmentDaemonSessionStoreCommandReceiptState,
+  FailEnvironmentDaemonCommandReceiptInput,
+  InitializeEnvironmentDaemonThreadStateInput,
+  ReconcileEnvironmentDaemonEventCursorInput,
+  RecordEnvironmentDaemonCommandReceivedInput,
+  SetEnvironmentDaemonLastDeliveredCommandCursorInput,
 } from "./session-store.js";
-import type { EnvironmentAgentSessionCursor } from "./session-protocol.js";
+import type { EnvironmentDaemonSessionCursor } from "./session-protocol.js";
 
 function cloneCursor(
-  cursor: EnvironmentAgentSessionCursor | undefined,
-): EnvironmentAgentSessionCursor | undefined {
+  cursor: EnvironmentDaemonSessionCursor | undefined,
+): EnvironmentDaemonSessionCursor | undefined {
   if (!cursor) return undefined;
   return { generation: cursor.generation, sequence: cursor.sequence };
 }
 
 function cloneSessionState(
-  record: EnvironmentAgentSessionStateRecord,
-): EnvironmentAgentSessionStateRecord {
+  record: EnvironmentDaemonSessionStateRecord,
+): EnvironmentDaemonSessionStateRecord {
   return {
     ...record,
     ...(record.lastAcked ? { lastAcked: cloneCursor(record.lastAcked)! } : {}),
@@ -35,14 +35,14 @@ function cloneSessionState(
 }
 
 function cloneOutboxRecord(
-  record: EnvironmentAgentOutboxEventRecord,
-): EnvironmentAgentOutboxEventRecord {
+  record: EnvironmentDaemonOutboxEventRecord,
+): EnvironmentDaemonOutboxEventRecord {
   return { ...record };
 }
 
 function cloneReceipt(
-  record: EnvironmentAgentCommandReceiptRecord,
-): EnvironmentAgentCommandReceiptRecord {
+  record: EnvironmentDaemonCommandReceiptRecord,
+): EnvironmentDaemonCommandReceiptRecord {
   return {
     ...record,
     ...(record.result !== undefined ? { result: record.result } : {}),
@@ -50,8 +50,8 @@ function cloneReceipt(
 }
 
 function compareCursors(
-  left: EnvironmentAgentSessionCursor,
-  right: EnvironmentAgentSessionCursor,
+  left: EnvironmentDaemonSessionCursor,
+  right: EnvironmentDaemonSessionCursor,
 ): number {
   if (left.generation !== right.generation) {
     return left.generation - right.generation;
@@ -60,8 +60,8 @@ function compareCursors(
 }
 
 function resolveCommandReceiptTransition(
-  current: EnvironmentAgentSessionStoreCommandReceiptState,
-  target: EnvironmentAgentSessionStoreCommandReceiptState,
+  current: EnvironmentDaemonSessionStoreCommandReceiptState,
+  target: EnvironmentDaemonSessionStoreCommandReceiptState,
 ): "apply" | "noop" | "conflict" {
   if (current === target) {
     return "noop";
@@ -81,27 +81,27 @@ function resolveCommandReceiptTransition(
   }
 }
 
-export class InMemoryEnvironmentAgentSessionStore
-  implements EnvironmentAgentSessionStore {
-  private readonly threadStates = new Map<string, EnvironmentAgentSessionStateRecord>();
-  private readonly outboxByThread = new Map<string, EnvironmentAgentOutboxEventRecord[]>();
-  private readonly commandReceipts = new Map<string, EnvironmentAgentCommandReceiptRecord>();
+export class InMemoryEnvironmentDaemonSessionStore
+  implements EnvironmentDaemonSessionStore {
+  private readonly threadStates = new Map<string, EnvironmentDaemonSessionStateRecord>();
+  private readonly outboxByThread = new Map<string, EnvironmentDaemonOutboxEventRecord[]>();
+  private readonly commandReceipts = new Map<string, EnvironmentDaemonCommandReceiptRecord>();
 
   listThreadIds(): string[] {
     return [...this.threadStates.keys()].sort();
   }
 
-  loadSessionState(threadId: string): EnvironmentAgentSessionStateRecord | undefined {
+  loadSessionState(threadId: string): EnvironmentDaemonSessionStateRecord | undefined {
     const state = this.threadStates.get(threadId);
     return state ? cloneSessionState(state) : undefined;
   }
 
   initializeThreadState(
-    input: InitializeEnvironmentAgentThreadStateInput,
-  ): EnvironmentAgentSessionStateRecord {
+    input: InitializeEnvironmentDaemonThreadStateInput,
+  ): EnvironmentDaemonSessionStateRecord {
     const now = input.now ?? Date.now();
     const existing = this.threadStates.get(input.threadId);
-    const next: EnvironmentAgentSessionStateRecord = {
+    const next: EnvironmentDaemonSessionStateRecord = {
       threadId: input.threadId,
       agentId: input.agentId,
       agentInstanceId: input.agentInstanceId,
@@ -119,7 +119,7 @@ export class InMemoryEnvironmentAgentSessionStore
     return cloneSessionState(next);
   }
 
-  bindSession(input: BindEnvironmentAgentSessionInput): EnvironmentAgentSessionStateRecord {
+  bindSession(input: BindEnvironmentDaemonSessionInput): EnvironmentDaemonSessionStateRecord {
     const existing = this.requireThreadState(input.threadId);
     const updated = {
       ...existing,
@@ -130,7 +130,7 @@ export class InMemoryEnvironmentAgentSessionStore
     return cloneSessionState(updated);
   }
 
-  clearSession(input: ClearEnvironmentAgentSessionInput): EnvironmentAgentSessionStateRecord {
+  clearSession(input: ClearEnvironmentDaemonSessionInput): EnvironmentDaemonSessionStateRecord {
     const existing = this.requireThreadState(input.threadId);
     const updated = {
       threadId: existing.threadId,
@@ -144,12 +144,12 @@ export class InMemoryEnvironmentAgentSessionStore
         : {}),
       createdAt: existing.createdAt,
       updatedAt: input.now ?? Date.now(),
-    } satisfies EnvironmentAgentSessionStateRecord;
+    } satisfies EnvironmentDaemonSessionStateRecord;
     this.threadStates.set(input.threadId, updated);
     return cloneSessionState(updated);
   }
 
-  bumpGeneration(threadId: string, now: number = Date.now()): EnvironmentAgentSessionStateRecord {
+  bumpGeneration(threadId: string, now: number = Date.now()): EnvironmentDaemonSessionStateRecord {
     const existing = this.requireThreadState(threadId);
     const updated = {
       ...existing,
@@ -162,11 +162,11 @@ export class InMemoryEnvironmentAgentSessionStore
   }
 
   appendOutboxEvent(
-    input: AppendEnvironmentAgentOutboxEventInput,
-  ): EnvironmentAgentOutboxEventRecord {
+    input: AppendEnvironmentDaemonOutboxEventInput,
+  ): EnvironmentDaemonOutboxEventRecord {
     const state = this.requireThreadState(input.threadId);
     const emittedAt = input.emittedAt ?? Date.now();
-    const record: EnvironmentAgentOutboxEventRecord = {
+    const record: EnvironmentDaemonOutboxEventRecord = {
       threadId: input.threadId,
       generation: state.generation,
       sequence: state.nextSequence,
@@ -188,7 +188,7 @@ export class InMemoryEnvironmentAgentSessionStore
   listUnackedOutbox(args: {
     threadId: string;
     limit?: number;
-  }): EnvironmentAgentOutboxEventRecord[] {
+  }): EnvironmentDaemonOutboxEventRecord[] {
     const outbox = (this.outboxByThread.get(args.threadId) ?? [])
       .filter((record) => record.ackedAt === undefined)
       .sort((left, right) => {
@@ -201,7 +201,7 @@ export class InMemoryEnvironmentAgentSessionStore
     return limited.map(cloneOutboxRecord);
   }
 
-  ackOutboxThrough(input: AckEnvironmentAgentOutboxThroughInput): number {
+  ackOutboxThrough(input: AckEnvironmentDaemonOutboxThroughInput): number {
     const state = this.requireThreadState(input.threadId);
     const ackedAt = input.ackedAt ?? Date.now();
     const ackCursor = { generation: input.generation, sequence: input.sequence };
@@ -228,15 +228,15 @@ export class InMemoryEnvironmentAgentSessionStore
   }
 
   reconcileEventCursor(
-    input: ReconcileEnvironmentAgentEventCursorInput,
-  ): EnvironmentAgentSessionStateRecord {
+    input: ReconcileEnvironmentDaemonEventCursorInput,
+  ): EnvironmentDaemonSessionStateRecord {
     const state = this.requireThreadState(input.threadId);
     const now = input.now ?? Date.now();
     const nextOutbox = (this.outboxByThread.get(input.threadId) ?? []).map((record) => {
       const recordCursor = {
         generation: record.generation,
         sequence: record.sequence,
-      } satisfies EnvironmentAgentSessionCursor;
+      } satisfies EnvironmentDaemonSessionCursor;
       if (compareCursors(recordCursor, input.cursor) <= 0) {
         return record.ackedAt !== undefined ? record : { ...record, ackedAt: now };
       }
@@ -257,10 +257,10 @@ export class InMemoryEnvironmentAgentSessionStore
   }
 
   recordCommandReceived(
-    input: RecordEnvironmentAgentCommandReceivedInput,
-  ): EnvironmentAgentCommandReceiptRecord {
+    input: RecordEnvironmentDaemonCommandReceivedInput,
+  ): EnvironmentDaemonCommandReceiptRecord {
     const now = input.now ?? Date.now();
-    const receipt: EnvironmentAgentCommandReceiptRecord = {
+    const receipt: EnvironmentDaemonCommandReceiptRecord = {
       commandId: input.commandId,
       threadId: input.threadId,
       commandCursor: input.commandCursor,
@@ -273,12 +273,12 @@ export class InMemoryEnvironmentAgentSessionStore
     return cloneReceipt(receipt);
   }
 
-  getCommandReceipt(commandId: string): EnvironmentAgentCommandReceiptRecord | undefined {
+  getCommandReceipt(commandId: string): EnvironmentDaemonCommandReceiptRecord | undefined {
     const receipt = this.commandReceipts.get(commandId);
     return receipt ? cloneReceipt(receipt) : undefined;
   }
 
-  listPendingCommandAcks(threadId: string): EnvironmentAgentCommandReceiptRecord[] {
+  listPendingCommandAcks(threadId: string): EnvironmentDaemonCommandReceiptRecord[] {
     return [...this.commandReceipts.values()]
       .filter((receipt) => receipt.threadId === threadId && receipt.ackReportedAt === undefined)
       .sort((left, right) => left.commandCursor - right.commandCursor)
@@ -288,7 +288,7 @@ export class InMemoryEnvironmentAgentSessionStore
   markCommandAckReported(
     commandId: string,
     now: number = Date.now(),
-  ): EnvironmentAgentCommandReceiptRecord | undefined {
+  ): EnvironmentDaemonCommandReceiptRecord | undefined {
     const receipt = this.commandReceipts.get(commandId);
     if (!receipt) return undefined;
     const updated = { ...receipt, ackReportedAt: now, updatedAt: now };
@@ -299,11 +299,11 @@ export class InMemoryEnvironmentAgentSessionStore
   markCommandStarted(
     commandId: string,
     now: number = Date.now(),
-  ): EnvironmentAgentCommandReceiptRecord | undefined {
+  ): EnvironmentDaemonCommandReceiptRecord | undefined {
     return this.transitionCommand(commandId, "started", { now });
   }
 
-  listPendingCommandResults(threadId: string): EnvironmentAgentCommandReceiptRecord[] {
+  listPendingCommandResults(threadId: string): EnvironmentDaemonCommandReceiptRecord[] {
     return [...this.commandReceipts.values()]
       .filter((receipt) => {
         if (receipt.threadId !== threadId) return false;
@@ -316,9 +316,9 @@ export class InMemoryEnvironmentAgentSessionStore
 
   markCommandResultReported(args: {
     commandId: string;
-    state: EnvironmentAgentSessionStoreCommandReceiptState;
+    state: EnvironmentDaemonSessionStoreCommandReceiptState;
     now?: number;
-  }): EnvironmentAgentCommandReceiptRecord | undefined {
+  }): EnvironmentDaemonCommandReceiptRecord | undefined {
     const receipt = this.commandReceipts.get(args.commandId);
     if (!receipt) return undefined;
     const now = args.now ?? Date.now();
@@ -333,8 +333,8 @@ export class InMemoryEnvironmentAgentSessionStore
   }
 
   markCommandCompleted(
-    input: CompleteEnvironmentAgentCommandReceiptInput,
-  ): EnvironmentAgentCommandReceiptRecord | undefined {
+    input: CompleteEnvironmentDaemonCommandReceiptInput,
+  ): EnvironmentDaemonCommandReceiptRecord | undefined {
     return this.transitionCommand(input.commandId, "completed", {
       now: input.now ?? Date.now(),
       ...(input.result !== undefined ? { result: input.result } : {}),
@@ -342,8 +342,8 @@ export class InMemoryEnvironmentAgentSessionStore
   }
 
   markCommandFailed(
-    input: FailEnvironmentAgentCommandReceiptInput,
-  ): EnvironmentAgentCommandReceiptRecord | undefined {
+    input: FailEnvironmentDaemonCommandReceiptInput,
+  ): EnvironmentDaemonCommandReceiptRecord | undefined {
     return this.transitionCommand(input.commandId, "failed", {
       now: input.now ?? Date.now(),
       ...(input.errorCode !== undefined ? { errorCode: input.errorCode } : {}),
@@ -352,8 +352,8 @@ export class InMemoryEnvironmentAgentSessionStore
   }
 
   setLastDeliveredCommandCursor(
-    input: SetEnvironmentAgentLastDeliveredCommandCursorInput,
-  ): EnvironmentAgentSessionStateRecord {
+    input: SetEnvironmentDaemonLastDeliveredCommandCursorInput,
+  ): EnvironmentDaemonSessionStateRecord {
     const state = this.requireThreadState(input.threadId);
     const nextCursor = state.lastDeliveredCommandCursor === undefined
       ? input.commandCursor
@@ -368,8 +368,8 @@ export class InMemoryEnvironmentAgentSessionStore
   }
 
   alignLastDeliveredCommandCursor(
-    input: SetEnvironmentAgentLastDeliveredCommandCursorInput,
-  ): EnvironmentAgentSessionStateRecord {
+    input: SetEnvironmentDaemonLastDeliveredCommandCursorInput,
+  ): EnvironmentDaemonSessionStateRecord {
     const state = this.requireThreadState(input.threadId);
     const commandCursor = Number.isFinite(input.commandCursor)
       ? Math.max(0, Math.floor(input.commandCursor))
@@ -383,24 +383,24 @@ export class InMemoryEnvironmentAgentSessionStore
     return cloneSessionState(updated);
   }
 
-  private requireThreadState(threadId: string): EnvironmentAgentSessionStateRecord {
+  private requireThreadState(threadId: string): EnvironmentDaemonSessionStateRecord {
     const state = this.threadStates.get(threadId);
     if (!state) {
-      throw new Error(`Missing environment-agent thread state for ${threadId}`);
+      throw new Error(`Missing environment-daemon thread state for ${threadId}`);
     }
     return state;
   }
 
   private transitionCommand(
     commandId: string,
-    target: EnvironmentAgentSessionStoreCommandReceiptState,
+    target: EnvironmentDaemonSessionStoreCommandReceiptState,
     args: {
       now: number;
       result?: unknown;
       errorCode?: string;
       errorMessage?: string;
     },
-  ): EnvironmentAgentCommandReceiptRecord | undefined {
+  ): EnvironmentDaemonCommandReceiptRecord | undefined {
     const existing = this.commandReceipts.get(commandId);
     if (!existing) return undefined;
     const transition = resolveCommandReceiptTransition(existing.state, target);
@@ -409,10 +409,10 @@ export class InMemoryEnvironmentAgentSessionStore
     }
     if (transition === "conflict") {
       throw new Error(
-        `Invalid environment-agent command receipt transition: ${existing.state} -> ${target}`,
+        `Invalid environment-daemon command receipt transition: ${existing.state} -> ${target}`,
       );
     }
-    const updated: EnvironmentAgentCommandReceiptRecord = {
+    const updated: EnvironmentDaemonCommandReceiptRecord = {
       ...existing,
       state: target,
       updatedAt: args.now,

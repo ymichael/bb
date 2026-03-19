@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
-import { EnvironmentAgentSessionRuntime } from "./session-runtime.js";
-import { InMemoryEnvironmentAgentSessionStore } from "./in-memory-session-store.js";
-import { EnvironmentAgentSessionSync } from "./session-sync.js";
-import type { EnvironmentAgentSessionHttpClient } from "./session-http-client.js";
+import { EnvironmentDaemonSessionRuntime } from "./session-runtime.js";
+import { InMemoryEnvironmentDaemonSessionStore } from "./in-memory-session-store.js";
+import { EnvironmentDaemonSessionSync } from "./session-sync.js";
+import type { EnvironmentDaemonSessionHttpClient } from "./session-http-client.js";
 
-function makeClientMock(): EnvironmentAgentSessionHttpClient {
+function makeClientMock(): EnvironmentDaemonSessionHttpClient {
   return {
     openSession: vi.fn(),
     heartbeat: vi.fn(),
@@ -13,13 +13,13 @@ function makeClientMock(): EnvironmentAgentSessionHttpClient {
     acknowledgeCommands: vi.fn(),
     sendCommandResult: vi.fn(),
     closeSession: vi.fn(),
-  } as unknown as EnvironmentAgentSessionHttpClient;
+  } as unknown as EnvironmentDaemonSessionHttpClient;
 }
 
-describe("EnvironmentAgentSessionSync", () => {
+describe("EnvironmentDaemonSessionSync", () => {
   it("opens and binds a session, flushes events, pulls commands, and reports results", async () => {
-    const store = new InMemoryEnvironmentAgentSessionStore();
-    const runtime = new EnvironmentAgentSessionRuntime({
+    const store = new InMemoryEnvironmentDaemonSessionStore();
+    const runtime = new EnvironmentDaemonSessionRuntime({
       store,
       clock: () => 10_000,
     });
@@ -84,7 +84,7 @@ describe("EnvironmentAgentSessionSync", () => {
     (client.acknowledgeCommands as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
     (client.sendCommandResult as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
 
-    const sync = new EnvironmentAgentSessionSync({ runtime, client });
+    const sync = new EnvironmentDaemonSessionSync({ runtime, client });
     const welcome = await sync.openSession({
       threadId: "thread-1",
       payload: {
@@ -154,8 +154,8 @@ describe("EnvironmentAgentSessionSync", () => {
   });
 
   it("returns reset cursors without acknowledging the local outbox", async () => {
-    const store = new InMemoryEnvironmentAgentSessionStore();
-    const runtime = new EnvironmentAgentSessionRuntime({ store, clock: () => 10_000 });
+    const store = new InMemoryEnvironmentDaemonSessionStore();
+    const runtime = new EnvironmentDaemonSessionRuntime({ store, clock: () => 10_000 });
     runtime.initializeThread({
       threadId: "thread-1",
       agentId: "agent-1",
@@ -194,7 +194,7 @@ describe("EnvironmentAgentSessionSync", () => {
       },
     });
 
-    const sync = new EnvironmentAgentSessionSync({ runtime, client });
+    const sync = new EnvironmentDaemonSessionSync({ runtime, client });
     await expect(sync.flushPendingEvents(["thread-1"])).resolves.toMatchObject({
       channelResults: [{
         threadId: "thread-1",
@@ -209,8 +209,8 @@ describe("EnvironmentAgentSessionSync", () => {
   });
 
   it("applies daemon-requested event reset cursors from session welcome", async () => {
-    const store = new InMemoryEnvironmentAgentSessionStore();
-    const runtime = new EnvironmentAgentSessionRuntime({ store, clock: () => 10_000 });
+    const store = new InMemoryEnvironmentDaemonSessionStore();
+    const runtime = new EnvironmentDaemonSessionRuntime({ store, clock: () => 10_000 });
     runtime.initializeThread({
       threadId: "thread-1",
       agentId: "agent-1",
@@ -262,7 +262,7 @@ describe("EnvironmentAgentSessionSync", () => {
       },
     });
 
-    const sync = new EnvironmentAgentSessionSync({ runtime, client });
+    const sync = new EnvironmentDaemonSessionSync({ runtime, client });
     await expect(sync.openSession({
       threadId: "thread-1",
       payload: {
@@ -288,8 +288,8 @@ describe("EnvironmentAgentSessionSync", () => {
   });
 
   it("initializes a newly attached shared channel from pulled commands", async () => {
-    const store = new InMemoryEnvironmentAgentSessionStore();
-    const runtime = new EnvironmentAgentSessionRuntime({
+    const store = new InMemoryEnvironmentDaemonSessionStore();
+    const runtime = new EnvironmentDaemonSessionRuntime({
       store,
       clock: () => 10_000,
     });
@@ -331,7 +331,7 @@ describe("EnvironmentAgentSessionSync", () => {
     });
     (client.acknowledgeCommands as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
 
-    const sync = new EnvironmentAgentSessionSync({ runtime, client });
+    const sync = new EnvironmentDaemonSessionSync({ runtime, client });
     await expect(sync.pullCommands({ threadIds: ["thread-1"] })).resolves.toEqual([
       {
         threadId: "thread-2",

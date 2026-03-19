@@ -2,7 +2,7 @@ import type { ChildProcess } from "node:child_process";
 import { createServer } from "node:net";
 import { access, readFile } from "node:fs/promises";
 import path from "node:path";
-import type { EnvironmentAgentConnectionTarget } from "@bb/environment-daemon";
+import type { EnvironmentDaemonConnectionTarget } from "@bb/environment-daemon";
 import { renderTemplate } from "@bb/templates";
 import type {
   CreateEnvironmentContext,
@@ -30,15 +30,15 @@ import type {
 } from "./contracts.js";
 import {
   DEFAULT_DOCKER_ENVIRONMENT_AGENT_CONTAINER_PORT,
-  disposeManagedDockerEnvironmentAgent,
+  disposeManagedDockerEnvironmentDaemon,
   ensureDockerEnvironmentImageAvailable,
-  ensureManagedDockerEnvironmentAgent,
+  ensureManagedDockerEnvironmentDaemon,
   resolveDockerEnvironmentImage,
-} from "./docker-environment-agent.js";
+} from "./docker-environment-daemon.js";
 import { runCommandAsync, spawnCommand } from "./process.js";
 import {
-  resolveEnvironmentAgentConnectionTarget,
-} from "./environment-agent-target.js";
+  resolveEnvironmentDaemonConnectionTarget,
+} from "./environment-daemon-target.js";
 import {
   createLocalGitWorkspaceDefinition,
   type CreateLocalGitWorkspaceOptions,
@@ -383,7 +383,7 @@ class DockerEnvironment implements IEnvironment {
   readonly kind = "docker";
   readonly info = { ...DOCKER_ENVIRONMENT_INFO };
   private readonly environmentId: string;
-  private managedAgentTarget?: EnvironmentAgentConnectionTarget;
+  private managedAgentTarget?: EnvironmentDaemonConnectionTarget;
 
   constructor(
     private readonly projectId: string,
@@ -415,7 +415,7 @@ class DockerEnvironment implements IEnvironment {
     await this.ensureContainerRunningAsync();
     await this.verifyGitRepositoryAccessibleInContainerAsync();
 
-    const managedAgentTarget = await ensureManagedDockerEnvironmentAgent({
+    const managedAgentTarget = await ensureManagedDockerEnvironmentDaemon({
       workspaceRootPath: this.getWorkspaceRootUnsafe(),
       threadId: this.threadId,
       projectId: this.projectId,
@@ -433,7 +433,7 @@ class DockerEnvironment implements IEnvironment {
 
   async suspend(): Promise<void> {
     this.managedAgentTarget = undefined;
-    await disposeManagedDockerEnvironmentAgent({
+    await disposeManagedDockerEnvironmentDaemon({
       projectId: this.projectId,
       threadId: this.threadId,
       environmentId: this.environmentId,
@@ -461,12 +461,12 @@ class DockerEnvironment implements IEnvironment {
     return true;
   }
 
-  getAgentConnectionTarget(): EnvironmentAgentConnectionTarget {
+  getAgentConnectionTarget(): EnvironmentDaemonConnectionTarget {
     const managedTarget = this.managedAgentTarget;
     if (!managedTarget && !this.runtimeEnv.BB_ENV_DAEMON_BASE_URL?.trim()) {
-      throw new Error("Missing managed environment-agent target for docker environment");
+      throw new Error("Missing managed environment-daemon target for docker environment");
     }
-    return resolveEnvironmentAgentConnectionTarget({
+    return resolveEnvironmentDaemonConnectionTarget({
       runtimeEnv: this.runtimeEnv,
       defaultTarget:
         managedTarget ?? {
@@ -753,7 +753,7 @@ async function allocatePort(): Promise<number> {
     server.listen(0, "127.0.0.1", () => {
       const address = server.address();
       if (!address || typeof address === "string") {
-        server.close(() => reject(new Error("Failed to allocate docker environment-agent port")));
+        server.close(() => reject(new Error("Failed to allocate docker environment-daemon port")));
         return;
       }
       server.close((error) => {
@@ -772,7 +772,7 @@ export function createDockerEnvironmentDefinition(
 ): EnvironmentDefinition<DockerEnvironmentState> {
   const localGitWorkspaceDefinition = createLocalGitWorkspaceDefinition({
     ...opts?.worktree,
-    manageEnvironmentAgent: false,
+    manageEnvironmentDaemon: false,
   });
   const dockerBin = opts?.dockerBin ?? "docker";
   const mountPath = opts?.mountPath ?? DEFAULT_MOUNT_PATH;

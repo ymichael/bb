@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Thread, ThreadEventDataForType } from "@bb/core";
-import type * as environmentAgent from "@bb/environment-daemon";
+import type * as environmentDaemon from "@bb/environment-daemon";
 import type { EnvironmentService } from "../environment-service.js";
 import {
-  EnvironmentAgentSessionUnavailableError,
-  type EnvironmentAgentCommandDispatcher,
-} from "../environment-agent-command-dispatcher.js";
+  EnvironmentDaemonSessionUnavailableError,
+  type EnvironmentDaemonCommandDispatcher,
+} from "../environment-daemon-command-dispatcher.js";
 import {
   ThreadRepository,
   EventRepository,
@@ -153,7 +153,7 @@ function createTestEnvironment(
   });
 }
 
-describe("Orchestrator environment-agent delivery and replay", () => {
+describe("Orchestrator environment-daemon delivery and replay", () => {
   let threadRepo: ThreadRepository;
   let eventRepo: EventRepository;
   let projectRepo: ProjectRepository;
@@ -231,7 +231,7 @@ describe("Orchestrator environment-agent delivery and replay", () => {
     );
   });
 
-  it("uses the session command client for environment-agent commands", async () => {
+  it("uses the session command client for environment-daemon commands", async () => {
     const thread = createTestThread(threadRepo, projectId);
 
     const sessionModeManager = new Orchestrator(
@@ -259,22 +259,22 @@ describe("Orchestrator environment-agent delivery and replay", () => {
           createdAt: 1_000,
           updatedAt: 1_100,
         }),
-      } as unknown as import("../environment-agent-command-dispatcher.js").EnvironmentAgentCommandDispatcher,
+      } as unknown as import("../environment-daemon-command-dispatcher.js").EnvironmentDaemonCommandDispatcher,
       sessionService as never,
     );
 
     const result = await (sessionModeManager as unknown as {
-      _withEnvironmentAgentTarget: (args: {
+      _withEnvironmentDaemonTarget: (args: {
         thread: Thread;
         projectRootPath: string;
         target: { baseUrl: string; transport: "http" };
         action: (input: {
-          client: environmentAgent.EnvironmentAgentClient;
+          client: environmentDaemon.EnvironmentDaemonClient;
           thread: Thread;
           projectRootPath: string;
         }) => Promise<string>;
       }) => Promise<string>;
-    })._withEnvironmentAgentTarget({
+    })._withEnvironmentDaemonTarget({
       thread,
       projectRootPath,
       target: {
@@ -301,7 +301,7 @@ describe("Orchestrator environment-agent delivery and replay", () => {
     expect(result).toBe("accepted");
   });
 
-  it("re-ensures environment-agent access before resuming a persisted provider thread", async () => {
+  it("re-ensures environment-daemon access before resuming a persisted provider thread", async () => {
     const env = createTestEnvironment(environmentRepo, projectId);
     const thread = createTestThread(threadRepo, projectId, {
       status: "idle",
@@ -344,7 +344,7 @@ describe("Orchestrator environment-agent delivery and replay", () => {
         createdAt: 1_000,
         updatedAt: 1_100,
       })),
-    } as unknown as EnvironmentAgentCommandDispatcher;
+    } as unknown as EnvironmentDaemonCommandDispatcher;
 
     const resumeManager = new Orchestrator(
       threadRepo,
@@ -396,7 +396,7 @@ describe("Orchestrator environment-agent delivery and replay", () => {
     });
 
     const resumeThreadCommand = vi.fn(
-      async ({ client }: { client: environmentAgent.EnvironmentAgentClient }) => {
+      async ({ client }: { client: environmentDaemon.EnvironmentDaemonClient }) => {
         const ack = await client.sendCommand({
           meta: {
             protocolVersion: 1,
@@ -471,7 +471,7 @@ describe("Orchestrator environment-agent delivery and replay", () => {
       enqueueForActiveSession: vi
         .fn()
         .mockRejectedValueOnce(
-          new EnvironmentAgentSessionUnavailableError(thread.id),
+          new EnvironmentDaemonSessionUnavailableError(thread.id),
         )
         .mockResolvedValueOnce({
           id: "cmd-resume",
@@ -489,7 +489,7 @@ describe("Orchestrator environment-agent delivery and replay", () => {
           createdAt: 1_000,
           updatedAt: 1_100,
         }),
-    } as unknown as EnvironmentAgentCommandDispatcher;
+    } as unknown as EnvironmentDaemonCommandDispatcher;
 
     const retryManager = new Orchestrator(
       threadRepo,
@@ -534,7 +534,7 @@ describe("Orchestrator environment-agent delivery and replay", () => {
     }));
 
     const resumeThreadCommand = vi.fn(
-      async ({ client }: { client: environmentAgent.EnvironmentAgentClient }) => {
+      async ({ client }: { client: environmentDaemon.EnvironmentDaemonClient }) => {
         const ack = await client.sendCommand({
           meta: {
             protocolVersion: 1,
@@ -585,10 +585,10 @@ describe("Orchestrator environment-agent delivery and replay", () => {
       awaitActiveSession: vi
         .fn()
         .mockRejectedValueOnce(
-          new EnvironmentAgentSessionUnavailableError(thread.id),
+          new EnvironmentDaemonSessionUnavailableError(thread.id),
         )
         .mockResolvedValueOnce({ id: "sess-2" }),
-    } as unknown as EnvironmentAgentCommandDispatcher;
+    } as unknown as EnvironmentDaemonCommandDispatcher;
 
     const localManager = new Orchestrator(
       threadRepo,
@@ -635,13 +635,13 @@ describe("Orchestrator environment-agent delivery and replay", () => {
 
     const access = await (
       localManager as unknown as {
-        _ensureEnvironmentAgentAccess: (threadId: string) => Promise<{
+        _ensureEnvironmentDaemonAccess: (threadId: string) => Promise<{
           thread: Thread;
           projectRootPath: string;
           target: { baseUrl: string; transport: "http" };
         }>;
       }
-    )._ensureEnvironmentAgentAccess(thread.id);
+    )._ensureEnvironmentDaemonAccess(thread.id);
 
     expect(access.projectRootPath).toBe(projectRootPath);
     expect(environmentService.ensureThreadEnvironmentRuntime).toHaveBeenCalledTimes(2);
@@ -688,7 +688,7 @@ describe("Orchestrator environment-agent delivery and replay", () => {
         createdAt: 1_000,
         updatedAt: 1_100,
       })),
-    } as unknown as EnvironmentAgentCommandDispatcher;
+    } as unknown as EnvironmentDaemonCommandDispatcher;
 
     const validateManager = new Orchestrator(
       threadRepo,
@@ -738,7 +738,7 @@ describe("Orchestrator environment-agent delivery and replay", () => {
     ).providerThreadIdByThreadId.set(thread.id, "provider-thread-stale");
 
     const resumeThreadCommand = vi.fn(
-      async ({ client }: { client: environmentAgent.EnvironmentAgentClient }) => {
+      async ({ client }: { client: environmentDaemon.EnvironmentDaemonClient }) => {
         const ack = await client.sendCommand({
           meta: {
             protocolVersion: 1,
@@ -806,7 +806,7 @@ describe("Orchestrator environment-agent delivery and replay", () => {
       hasActiveSession: vi.fn(() => true),
       awaitActiveSession: vi.fn().mockResolvedValue({ id: "sess-1" }),
       enqueueForActiveSession: vi.fn(),
-    } as unknown as EnvironmentAgentCommandDispatcher;
+    } as unknown as EnvironmentDaemonCommandDispatcher;
 
     const retryManager = new Orchestrator(
       threadRepo,
@@ -891,7 +891,7 @@ describe("Orchestrator environment-agent delivery and replay", () => {
       hasActiveSession: vi.fn(() => true),
       awaitActiveSession: vi.fn().mockResolvedValue({ id: "sess-1" }),
       enqueueForActiveSession: vi.fn(),
-    } as unknown as EnvironmentAgentCommandDispatcher;
+    } as unknown as EnvironmentDaemonCommandDispatcher;
 
     const retryManager = new Orchestrator(
       threadRepo,
@@ -976,7 +976,7 @@ describe("Orchestrator environment-agent delivery and replay", () => {
     );
   });
 
-  it("reads environment-agent status from the session service", async () => {
+  it("reads environment-daemon status from the session service", async () => {
     const env = createTestEnvironment(environmentRepo, projectId);
     const thread = createTestThread(threadRepo, projectId, {
       environmentId: env.id,
@@ -994,7 +994,7 @@ describe("Orchestrator environment-agent delivery and replay", () => {
       retryAttemptCount: 0,
     });
 
-    await expect(manager.getEnvironmentAgentStatus(thread.id)).resolves.toMatchObject({
+    await expect(manager.getEnvironmentDaemonStatus(thread.id)).resolves.toMatchObject({
       latestSequence: 3,
       pendingCommandCount: 1,
     });

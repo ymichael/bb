@@ -25,7 +25,7 @@ type LegacyThreadRouteMock = ThreadOrchestrator & {
   getWorkStatus: ReturnType<typeof vi.fn>;
   getWorkStatusAsync: ReturnType<typeof vi.fn>;
   getMergeBaseBranchesAsync: ReturnType<typeof vi.fn>;
-  getEnvironmentAgentStatus: ReturnType<typeof vi.fn>;
+  getEnvironmentDaemonStatus: ReturnType<typeof vi.fn>;
   listAsync: ReturnType<typeof vi.fn>;
   getGitDiff: ReturnType<typeof vi.fn>;
   getGitDiffAsync: ReturnType<typeof vi.fn>;
@@ -109,7 +109,7 @@ function mockOrchestrator(): LegacyThreadRouteMock {
     getMergeBaseBranchesAsync: vi.fn(),
     getPrimaryCheckoutStatus: vi.fn(),
     getDefaultExecutionOptions: vi.fn(),
-    getEnvironmentAgentStatus: vi.fn(),
+    getEnvironmentDaemonStatus: vi.fn(),
     list: vi.fn(),
     listAsync: vi.fn(),
     getTimeline: vi.fn(),

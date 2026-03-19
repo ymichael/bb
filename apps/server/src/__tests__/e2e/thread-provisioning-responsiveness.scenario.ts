@@ -10,7 +10,7 @@ import type {
 import {
   startServerE2eHarness,
 } from "./harness.js";
-import { waitForThreadCondition } from "./environment-agent-api.js";
+import { waitForThreadCondition } from "./environment-daemon-api.js";
 import { e2eTimeoutMs } from "./provider-mode.js";
 
 const TEST_GIT_ENV: NodeJS.ProcessEnv = {

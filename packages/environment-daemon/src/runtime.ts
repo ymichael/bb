@@ -13,47 +13,47 @@ import {
   listAvailableProviderInfos,
 } from "@bb/provider-adapters";
 import {
-  ENVIRONMENT_AGENT_PROTOCOL_VERSION,
-  type EnvironmentAgentCommand,
-  type EnvironmentAgentCommandEnvelope,
-  type EnvironmentAgentCommandAck,
-  type EnvironmentAgentServerConnectionConfig,
-  type EnvironmentAgentDeliveryReason,
-  type EnvironmentAgentDeliveryRuntimeState,
-  type EnvironmentAgentEvent,
-  type EnvironmentAgentEventEnvelope,
-  type EnvironmentAgentProviderFile,
-  type EnvironmentAgentProviderSpec,
-  type EnvironmentAgentProviderStatus,
-  type EnvironmentAgentStatusSnapshot,
+  ENVIRONMENT_DAEMON_PROTOCOL_VERSION,
+  type EnvironmentDaemonCommand,
+  type EnvironmentDaemonCommandEnvelope,
+  type EnvironmentDaemonCommandAck,
+  type EnvironmentDaemonServerConnectionConfig,
+  type EnvironmentDaemonDeliveryReason,
+  type EnvironmentDaemonDeliveryRuntimeState,
+  type EnvironmentDaemonEvent,
+  type EnvironmentDaemonEventEnvelope,
+  type EnvironmentDaemonProviderFile,
+  type EnvironmentDaemonProviderSpec,
+  type EnvironmentDaemonProviderStatus,
+  type EnvironmentDaemonStatusSnapshot,
 } from "./protocol.js";
-import { getEnvironmentAgentProviderSemantics } from "./provider-semantics.js";
+import { getEnvironmentDaemonProviderSemantics } from "./provider-semantics.js";
 
-type EnvironmentAgentProviderEnsureCommand = Extract<
-  EnvironmentAgentCommand,
+type EnvironmentDaemonProviderEnsureCommand = Extract<
+  EnvironmentDaemonCommand,
   { type: "provider.ensure" }
 >;
-type EnvironmentAgentProviderModelListCommand = Extract<
-  EnvironmentAgentCommand,
+type EnvironmentDaemonProviderModelListCommand = Extract<
+  EnvironmentDaemonCommand,
   { type: "provider.list_models" }
 >;
-type EnvironmentAgentProviderCatalogCommand = Extract<
-  EnvironmentAgentCommand,
+type EnvironmentDaemonProviderCatalogCommand = Extract<
+  EnvironmentDaemonCommand,
   { type: "provider.list_catalog" }
 >;
-type EnvironmentAgentRpcCommand = Exclude<
-  EnvironmentAgentCommand,
-  | EnvironmentAgentProviderEnsureCommand
-  | EnvironmentAgentProviderModelListCommand
-  | EnvironmentAgentProviderCatalogCommand
+type EnvironmentDaemonRpcCommand = Exclude<
+  EnvironmentDaemonCommand,
+  | EnvironmentDaemonProviderEnsureCommand
+  | EnvironmentDaemonProviderModelListCommand
+  | EnvironmentDaemonProviderCatalogCommand
 >;
 
-export interface EnvironmentAgentRuntimeOptions {
+export interface EnvironmentDaemonRuntimeOptions {
   threadId?: string;
   projectId?: string;
   environmentId?: string;
   providerId?: string;
-  serverConnection?: EnvironmentAgentServerConnectionConfig;
+  serverConnection?: EnvironmentDaemonServerConnectionConfig;
   providerCommand?: string;
   providerArgs?: string[];
   providerLaunchCommand?: string;
@@ -73,16 +73,16 @@ export interface EnvironmentAgentRuntimeOptions {
   listAvailableProviderInfos?: typeof listAvailableProviderInfos;
 }
 
-export type EnvironmentAgentRuntimeTurnState = "unknown" | "active" | "idle";
+export type EnvironmentDaemonRuntimeTurnState = "unknown" | "active" | "idle";
 
-export interface EnvironmentAgentRuntimeQuiescenceSnapshot {
+export interface EnvironmentDaemonRuntimeQuiescenceSnapshot {
   hasObservedWork: boolean;
   commandExecutionCount: number;
   pendingProviderRequestCount: number;
-  turnState: EnvironmentAgentRuntimeTurnState;
+  turnState: EnvironmentDaemonRuntimeTurnState;
 }
 
-export class EnvironmentAgentRuntime {
+export class EnvironmentDaemonRuntime {
   private readonly threadIdByProviderThreadKey = new Map<string, string>();
   private readonly threadIdToProviderId = new Map<string, string>();
   private readonly childToProviderId = new Map<ChildProcess, string>();
@@ -106,21 +106,21 @@ export class EnvironmentAgentRuntime {
   >();
   private readonly stdoutLineSubscribers = new Set<(line: string) => void>();
   private readonly stderrLineSubscribers = new Set<(line: string) => void>();
-  private readonly eventSubscribers = new Set<(event: EnvironmentAgentEventEnvelope) => void>();
+  private readonly eventSubscribers = new Set<(event: EnvironmentDaemonEventEnvelope) => void>();
   private shuttingDown = false;
   private shutdownPromise: Promise<void> | null = null;
   private commandExecutionCount = 0;
   private hasObservedWork = false;
-  private turnState: EnvironmentAgentRuntimeTurnState = "unknown";
-  private deliveryState: EnvironmentAgentDeliveryRuntimeState = "stopped";
+  private turnState: EnvironmentDaemonRuntimeTurnState = "unknown";
+  private deliveryState: EnvironmentDaemonDeliveryRuntimeState = "stopped";
   private connectedToServer = false;
   private retryAttemptCount = 0;
   private lastAckedSequence: number | undefined;
   private nextRetryAt: number | undefined;
-  private deliveryIssue: EnvironmentAgentDeliveryReason | undefined;
+  private deliveryIssue: EnvironmentDaemonDeliveryReason | undefined;
   private lastDeliveryError: string | undefined;
 
-  constructor(private readonly opts: EnvironmentAgentRuntimeOptions) {}
+  constructor(private readonly opts: EnvironmentDaemonRuntimeOptions) {}
 
   start(): ChildProcess | null {
     this.appendEvent({
@@ -144,10 +144,10 @@ export class EnvironmentAgentRuntime {
     return this.shutdownPromise;
   }
 
-  appendEvent(event: EnvironmentAgentEvent): EnvironmentAgentEventEnvelope {
+  appendEvent(event: EnvironmentDaemonEvent): EnvironmentDaemonEventEnvelope {
     this.applyEventToQuiescenceState(event);
-    const envelope: EnvironmentAgentEventEnvelope = {
-      protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+    const envelope: EnvironmentDaemonEventEnvelope = {
+      protocolVersion: ENVIRONMENT_DAEMON_PROTOCOL_VERSION,
       sequence: ++this.sequence,
       emittedAt: Date.now(),
       threadId: event.threadId,
@@ -162,7 +162,7 @@ export class EnvironmentAgentRuntime {
     this.providerChild?.stdin?.write(`${line}\n`);
   }
 
-  ensureProviderRunning(spec?: EnvironmentAgentProviderSpec): ChildProcess | null {
+  ensureProviderRunning(spec?: EnvironmentDaemonProviderSpec): ChildProcess | null {
     const resolvedSpec = this.resolveProviderSpec(spec);
     if (!resolvedSpec) {
       // No spec and no default command — return the active child if alive,
@@ -197,7 +197,7 @@ export class EnvironmentAgentRuntime {
     return child;
   }
 
-  getProviderStatus(): EnvironmentAgentProviderStatus {
+  getProviderStatus(): EnvironmentDaemonProviderStatus {
     // Report running if any provider child is alive.
     const child = this.providerChild;
     const running = Boolean(child && child.exitCode === null && !child.killed)
@@ -225,7 +225,7 @@ export class EnvironmentAgentRuntime {
     };
   }
 
-  subscribeToEvents(listener: (event: EnvironmentAgentEventEnvelope) => void): () => void {
+  subscribeToEvents(listener: (event: EnvironmentDaemonEventEnvelope) => void): () => void {
     this.eventSubscribers.add(listener);
     return () => {
       this.eventSubscribers.delete(listener);
@@ -235,13 +235,13 @@ export class EnvironmentAgentRuntime {
   createCommandAck(args: {
     commandId: string;
     idempotencyKey: string;
-    state: EnvironmentAgentCommandAck["state"];
+    state: EnvironmentDaemonCommandAck["state"];
     errorCode?: string;
     message?: string;
     result?: unknown;
-  }): EnvironmentAgentCommandAck {
+  }): EnvironmentDaemonCommandAck {
     return {
-      protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+      protocolVersion: ENVIRONMENT_DAEMON_PROTOCOL_VERSION,
       commandId: args.commandId,
       idempotencyKey: args.idempotencyKey,
       state: args.state,
@@ -253,13 +253,13 @@ export class EnvironmentAgentRuntime {
     };
   }
 
-  getStatusSnapshot(): EnvironmentAgentStatusSnapshot {
+  getStatusSnapshot(): EnvironmentDaemonStatusSnapshot {
     const pendingEventCount = Math.max(
       0,
       this.sequence - (this.lastAckedSequence ?? 0),
     );
     return {
-      protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+      protocolVersion: ENVIRONMENT_DAEMON_PROTOCOL_VERSION,
       ...(this.opts.threadId ? { threadId: this.opts.threadId } : {}),
       ...(this.opts.projectId ? { projectId: this.opts.projectId } : {}),
       ...(this.opts.environmentId ? { environmentId: this.opts.environmentId } : {}),
@@ -280,11 +280,11 @@ export class EnvironmentAgentRuntime {
 
   setDaemonDeliveryState(args: {
     connectedToServer: boolean;
-    deliveryState: EnvironmentAgentDeliveryRuntimeState;
+    deliveryState: EnvironmentDaemonDeliveryRuntimeState;
     retryAttemptCount: number;
     lastAckedSequence?: number;
     nextRetryAt?: number;
-    deliveryIssue?: EnvironmentAgentDeliveryReason;
+    deliveryIssue?: EnvironmentDaemonDeliveryReason;
     lastDeliveryError?: string;
   }): void {
     this.connectedToServer = args.connectedToServer;
@@ -296,7 +296,7 @@ export class EnvironmentAgentRuntime {
     this.lastDeliveryError = args.lastDeliveryError;
   }
 
-  getQuiescenceSnapshot(): EnvironmentAgentRuntimeQuiescenceSnapshot {
+  getQuiescenceSnapshot(): EnvironmentDaemonRuntimeQuiescenceSnapshot {
     return {
       hasObservedWork: this.hasObservedWork,
       commandExecutionCount: this.commandExecutionCount,
@@ -306,8 +306,8 @@ export class EnvironmentAgentRuntime {
   }
 
   async executeCommand(
-    envelope: EnvironmentAgentCommandEnvelope,
-  ): Promise<EnvironmentAgentCommandAck> {
+    envelope: EnvironmentDaemonCommandEnvelope,
+  ): Promise<EnvironmentDaemonCommandAck> {
     this.commandExecutionCount += 1;
     try {
       const result =
@@ -346,7 +346,7 @@ export class EnvironmentAgentRuntime {
   }
 
   private async executeRpcCommand(
-    command: EnvironmentAgentRpcCommand,
+    command: EnvironmentDaemonRpcCommand,
   ): Promise<unknown> {
     const child = await this.ensureProviderForCommand(command);
     return this.requestProviderCommand(command, child);
@@ -364,13 +364,13 @@ export class EnvironmentAgentRuntime {
     }
   }
 
-  private emitEvent(event: EnvironmentAgentEventEnvelope): void {
+  private emitEvent(event: EnvironmentDaemonEventEnvelope): void {
     for (const subscriber of this.eventSubscribers) {
       subscriber(event);
     }
   }
 
-  private trackAcceptedCommand(command: EnvironmentAgentCommand): void {
+  private trackAcceptedCommand(command: EnvironmentDaemonCommand): void {
     this.hasObservedWork = true;
     switch (command.type) {
       case "thread.start":
@@ -397,7 +397,7 @@ export class EnvironmentAgentRuntime {
     this.hasObservedWork = true;
   }
 
-  private applyEventToQuiescenceState(event: EnvironmentAgentEvent): void {
+  private applyEventToQuiescenceState(event: EnvironmentDaemonEvent): void {
     switch (event.type) {
       case "environment.ready":
         return;
@@ -440,10 +440,10 @@ export class EnvironmentAgentRuntime {
   }
 
   ensureProviderStatus(
-    spec?: EnvironmentAgentProviderSpec,
+    spec?: EnvironmentDaemonProviderSpec,
     forThreadId?: string,
     providerId?: string,
-  ): EnvironmentAgentProviderStatus {
+  ): EnvironmentDaemonProviderStatus {
     const launchedBefore = this.getProviderStatus().running;
     const child = this.ensureProviderRunning(spec);
     if (child && forThreadId) {
@@ -465,8 +465,8 @@ export class EnvironmentAgentRuntime {
   }
 
   private resolveProviderSpec(
-    spec?: EnvironmentAgentProviderSpec,
-  ): EnvironmentAgentProviderSpec | null {
+    spec?: EnvironmentDaemonProviderSpec,
+  ): EnvironmentDaemonProviderSpec | null {
     const command = spec?.command ?? this.opts.providerCommand;
     if (!command?.trim()) {
       return null;
@@ -481,7 +481,7 @@ export class EnvironmentAgentRuntime {
     };
   }
 
-  private spawnProvider(spec: EnvironmentAgentProviderSpec, specKey: string): ChildProcess {
+  private spawnProvider(spec: EnvironmentDaemonProviderSpec, specKey: string): ChildProcess {
     const command = spec.launchCommand?.trim() || spec.command;
     const args = spec.launchCommand?.trim()
       ? [...(spec.launchArgs ?? []), spec.command, ...spec.args]
@@ -570,7 +570,7 @@ export class EnvironmentAgentRuntime {
   }
 
   private resolveProviderEnvironment(
-    spec: EnvironmentAgentProviderSpec,
+    spec: EnvironmentDaemonProviderSpec,
   ): NodeJS.ProcessEnv {
     const explicitHome = spec.env?.HOME?.trim();
     const env: NodeJS.ProcessEnv = {
@@ -590,7 +590,7 @@ export class EnvironmentAgentRuntime {
 
   private materializeProviderFiles(
     homeDir: string,
-    files: EnvironmentAgentProviderFile[],
+    files: EnvironmentDaemonProviderFile[],
   ): void {
     for (const file of files) {
       const targetPath = this.resolveProviderFilePath(homeDir, file);
@@ -599,7 +599,7 @@ export class EnvironmentAgentRuntime {
     }
   }
 
-  private resolveManagedProviderHomeDir(spec: EnvironmentAgentProviderSpec): string {
+  private resolveManagedProviderHomeDir(spec: EnvironmentDaemonProviderSpec): string {
     // Each provider spec gets its own managed HOME so that concurrent
     // children with different auth files don't overwrite each other.
     const specHash = createHash("sha256")
@@ -616,7 +616,7 @@ export class EnvironmentAgentRuntime {
 
   private resolveProviderFilePath(
     homeDir: string,
-    file: EnvironmentAgentProviderFile,
+    file: EnvironmentDaemonProviderFile,
   ): string {
     switch (file.placement) {
       case "home":
@@ -643,7 +643,7 @@ export class EnvironmentAgentRuntime {
     this.threadIdToChild.clear();
     this.providerInitializedPids.clear();
     this.rejectPendingProviderRequests(
-      new Error("Provider runtime stopped during environment-agent shutdown"),
+      new Error("Provider runtime stopped during environment-daemon shutdown"),
     );
 
     if (children.size === 0) {
@@ -716,7 +716,7 @@ export class EnvironmentAgentRuntime {
   private toProviderEvent(
     line: string,
     sourceChild?: ChildProcess,
-  ): EnvironmentAgentEvent {
+  ): EnvironmentDaemonEvent {
     let parsed: unknown;
     const providerId = this.resolveProviderIdForChild(sourceChild);
     try {
@@ -771,7 +771,7 @@ export class EnvironmentAgentRuntime {
   }
 
   private learnProviderThreadMapping(
-    command: EnvironmentAgentCommand,
+    command: EnvironmentDaemonCommand,
     result: unknown,
   ): void {
     const providerId = this.resolveProviderIdForCommand(command);
@@ -867,8 +867,8 @@ export class EnvironmentAgentRuntime {
   }
 
   private async toProviderEnsureSpec(
-    command: EnvironmentAgentProviderEnsureCommand,
-  ): Promise<EnvironmentAgentProviderSpec> {
+    command: EnvironmentDaemonProviderEnsureCommand,
+  ): Promise<EnvironmentDaemonProviderSpec> {
     if (
       command.command === undefined ||
       command.args === undefined
@@ -909,7 +909,7 @@ export class EnvironmentAgentRuntime {
   }
 
   private async ensureProviderForCommand(
-    command: EnvironmentAgentRpcCommand,
+    command: EnvironmentDaemonRpcCommand,
   ): Promise<ChildProcess | undefined> {
     switch (command.type) {
       case "thread.start":
@@ -970,7 +970,7 @@ export class EnvironmentAgentRuntime {
   }
 
   private requestProviderCommand(
-    command: EnvironmentAgentRpcCommand,
+    command: EnvironmentDaemonRpcCommand,
     child?: ChildProcess,
   ): Promise<unknown> {
     if (command.type === "turn.run") {
@@ -1005,7 +1005,7 @@ export class EnvironmentAgentRuntime {
     }));
   }
 
-  private resolveTurnRunRequest(command: Extract<EnvironmentAgentRpcCommand, { type: "turn.run" }>): {
+  private resolveTurnRunRequest(command: Extract<EnvironmentDaemonRpcCommand, { type: "turn.run" }>): {
     method: string;
     params: unknown;
   } {
@@ -1048,7 +1048,7 @@ export class EnvironmentAgentRuntime {
   }
 
   private resolveTurnStartParams(
-    command: Extract<EnvironmentAgentRpcCommand, { type: "turn.run" }>,
+    command: Extract<EnvironmentDaemonRpcCommand, { type: "turn.run" }>,
   ): unknown {
     const provider = this.getProviderAdapterForThread(command.threadId);
     if (!provider || command.input === undefined) {
@@ -1062,7 +1062,7 @@ export class EnvironmentAgentRuntime {
   }
 
   private resolveTurnSteerParams(
-    command: Extract<EnvironmentAgentRpcCommand, { type: "turn.run" }>,
+    command: Extract<EnvironmentDaemonRpcCommand, { type: "turn.run" }>,
   ): unknown | undefined {
     const provider = this.getProviderAdapterForThread(command.threadId);
     if (
@@ -1080,7 +1080,7 @@ export class EnvironmentAgentRuntime {
     );
   }
 
-  private toProviderMethod(command: EnvironmentAgentRpcCommand): string {
+  private toProviderMethod(command: EnvironmentDaemonRpcCommand): string {
     const provider = this.getProviderAdapterForThread(command.threadId);
     switch (command.type) {
       case "thread.start":
@@ -1100,7 +1100,7 @@ export class EnvironmentAgentRuntime {
     }
   }
 
-  private toProviderParams(command: EnvironmentAgentRpcCommand): unknown {
+  private toProviderParams(command: EnvironmentDaemonRpcCommand): unknown {
     const provider = this.getProviderAdapterForThread(command.threadId);
     switch (command.type) {
       case "thread.start":
@@ -1381,7 +1381,7 @@ export class EnvironmentAgentRuntime {
   }
 
   private getProviderSemanticsForProviderId(providerId: string | undefined) {
-    return getEnvironmentAgentProviderSemantics(providerId);
+    return getEnvironmentDaemonProviderSemantics(providerId);
   }
 
   private getProviderAdapterForThread(threadId: string): ProviderAdapter | undefined {
@@ -1423,7 +1423,7 @@ export class EnvironmentAgentRuntime {
   }
 
   private resolveProviderIdForCommand(
-    command: EnvironmentAgentCommand,
+    command: EnvironmentDaemonCommand,
   ): string | undefined {
     switch (command.type) {
       case "provider.ensure":
@@ -1479,7 +1479,7 @@ function normalizeRuntimeEventMethod(method: string): string {
  * Produce a stable key for a provider spec so that children are only reused
  * when the full launch configuration matches — not just the command name.
  */
-function providerSpecKey(spec: EnvironmentAgentProviderSpec): string {
+function providerSpecKey(spec: EnvironmentDaemonProviderSpec): string {
   return JSON.stringify([
     spec.command,
     spec.args,

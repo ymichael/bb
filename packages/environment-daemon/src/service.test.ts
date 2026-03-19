@@ -1,16 +1,16 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
-  resolveEnvironmentAgentServiceOptions,
-  startEnvironmentAgentService,
+  resolveEnvironmentDaemonServiceOptions,
+  startEnvironmentDaemonService,
 } from "./service.js";
 
 afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe("environment-agent service config", () => {
+describe("environment-daemon service config", () => {
   it("maps CLI args and env vars into runtime and server config", () => {
-    const resolved = resolveEnvironmentAgentServiceOptions({
+    const resolved = resolveEnvironmentDaemonServiceOptions({
       cli: {
         providerCommand: "codex",
         providerArgs: ["app-server"],
@@ -55,7 +55,7 @@ describe("environment-agent service config", () => {
       },
       logging: {
         filePath: expect.stringContaining(
-          "/tmp/bb-root/environment-agent-logs/project-1/docker-thread-1.log",
+          "/tmp/bb-root/environment-daemon-logs/project-1/docker-thread-1.log",
         ),
       },
       control: {
@@ -95,7 +95,7 @@ describe("environment-agent service config", () => {
 
   it("rejects missing auth token", () => {
     expect(() =>
-      resolveEnvironmentAgentServiceOptions({
+      resolveEnvironmentDaemonServiceOptions({
         cli: {
           httpPort: "4123",
         },
@@ -106,7 +106,7 @@ describe("environment-agent service config", () => {
 
   it("rejects invalid http port", () => {
     expect(() =>
-      resolveEnvironmentAgentServiceOptions({
+      resolveEnvironmentDaemonServiceOptions({
         cli: {
           httpPort: "NaN",
         },
@@ -118,7 +118,7 @@ describe("environment-agent service config", () => {
   });
 
   it("captures provider runtime version when the provider reports one", () => {
-    const resolved = resolveEnvironmentAgentServiceOptions({
+    const resolved = resolveEnvironmentDaemonServiceOptions({
       cli: {
         providerCommand: "node",
         httpPort: "4123",
@@ -204,7 +204,7 @@ describe("environment-agent service config", () => {
       throw new Error(`Unexpected fetch: ${url}`);
     });
 
-    const started = await startEnvironmentAgentService({
+    const started = await startEnvironmentDaemonService({
       runtime: {
         threadId: "thread-1",
         projectId: "project-1",
@@ -323,7 +323,7 @@ describe("environment-agent service config", () => {
       throw new Error(`Unexpected fetch: ${url}`);
     });
 
-    const started = await startEnvironmentAgentService({
+    const started = await startEnvironmentDaemonService({
       runtime: {
         threadId: "thread-1",
         projectId: "project-1",

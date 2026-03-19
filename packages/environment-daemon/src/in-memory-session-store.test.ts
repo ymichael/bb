@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { InMemoryEnvironmentAgentSessionStore } from "./in-memory-session-store.js";
+import { InMemoryEnvironmentDaemonSessionStore } from "./in-memory-session-store.js";
 
-describe("InMemoryEnvironmentAgentSessionStore", () => {
-  let store: InMemoryEnvironmentAgentSessionStore;
+describe("InMemoryEnvironmentDaemonSessionStore", () => {
+  let store: InMemoryEnvironmentDaemonSessionStore;
 
   beforeEach(() => {
-    store = new InMemoryEnvironmentAgentSessionStore();
+    store = new InMemoryEnvironmentDaemonSessionStore();
   });
 
   it("initializes thread state, binds sessions, appends outbox events, and tracks acks", () => {
@@ -248,7 +248,7 @@ describe("InMemoryEnvironmentAgentSessionStore", () => {
         now: 3_000,
       }),
     ).toThrow(
-      "Invalid environment-agent command receipt transition: completed -> failed",
+      "Invalid environment-daemon command receipt transition: completed -> failed",
     );
   });
 

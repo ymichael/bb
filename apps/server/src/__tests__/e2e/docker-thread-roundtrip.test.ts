@@ -8,7 +8,7 @@ import {
 import {
   readJson,
   waitForThreadCondition,
-} from "./environment-agent-api.js";
+} from "./environment-daemon-api.js";
 import { supportsFakeCodexControl } from "./provider-mode.js";
 
 function hasDocker(): boolean {

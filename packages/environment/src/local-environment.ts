@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import type { EnvironmentAgentConnectionTarget } from "@bb/environment-daemon";
+import type { EnvironmentDaemonConnectionTarget } from "@bb/environment-daemon";
 import type {
   CreateEnvironmentContext,
   DemoteEnvironmentOptions,
@@ -36,12 +36,12 @@ import {
   watchGitWorkspaceStatus,
 } from "./git-workspace.js";
 import {
-  resolveEnvironmentAgentConnectionTarget,
-} from "./environment-agent-target.js";
+  resolveEnvironmentDaemonConnectionTarget,
+} from "./environment-daemon-target.js";
 import {
-  disposeManagedHostEnvironmentAgent,
-  ensureManagedHostEnvironmentAgent,
-} from "./host-environment-agent.js";
+  disposeManagedHostEnvironmentDaemon,
+  ensureManagedHostEnvironmentDaemon,
+} from "./host-environment-daemon.js";
 import { runCommandAsync, spawnCommand } from "./process.js";
 import { createLocalGitWorkspaceDefinition } from "./local-git-workspace.js";
 
@@ -76,8 +76,8 @@ class LocalEnvironment implements IEnvironment {
   private readonly rootPath: string;
   private readonly env: Record<string, string | undefined>;
   private readonly services: CreateEnvironmentContext["services"];
-  private readonly reconnectTarget: CreateEnvironmentContext["managedEnvironmentAgentReconnectTarget"];
-  private managedAgentTarget?: EnvironmentAgentConnectionTarget;
+  private readonly reconnectTarget: CreateEnvironmentContext["managedEnvironmentDaemonReconnectTarget"];
+  private managedAgentTarget?: EnvironmentDaemonConnectionTarget;
 
   constructor(context: CreateEnvironmentContext) {
     this.projectId = context.projectId;
@@ -86,7 +86,7 @@ class LocalEnvironment implements IEnvironment {
     this.rootPath = context.workspaceRootPath ?? context.projectRootPath;
     this.env = { ...context.runtimeEnv };
     this.services = context.services;
-    this.reconnectTarget = context.managedEnvironmentAgentReconnectTarget;
+    this.reconnectTarget = context.managedEnvironmentDaemonReconnectTarget;
   }
 
   serialize(): LocalEnvironmentState {
@@ -94,7 +94,7 @@ class LocalEnvironment implements IEnvironment {
   }
 
   async prepare(): Promise<void> {
-    const managedAgentTarget = await ensureManagedHostEnvironmentAgent({
+    const managedAgentTarget = await ensureManagedHostEnvironmentDaemon({
       workspaceRootPath: this.rootPath,
       threadId: this.threadId,
       projectId: this.projectId,
@@ -109,7 +109,7 @@ class LocalEnvironment implements IEnvironment {
 
   async suspend(): Promise<void> {
     this.managedAgentTarget = undefined;
-    await disposeManagedHostEnvironmentAgent({
+    await disposeManagedHostEnvironmentDaemon({
       projectId: this.projectId,
       threadId: this.threadId,
       environmentId: this.environmentId,
@@ -134,12 +134,12 @@ class LocalEnvironment implements IEnvironment {
     return false;
   }
 
-  getAgentConnectionTarget(): EnvironmentAgentConnectionTarget {
+  getAgentConnectionTarget(): EnvironmentDaemonConnectionTarget {
     const managedTarget = this.managedAgentTarget;
     if (!managedTarget && !this.env.BB_ENV_DAEMON_BASE_URL?.trim()) {
-      throw new Error("Missing managed environment-agent target for local environment");
+      throw new Error("Missing managed environment-daemon target for local environment");
     }
-    return resolveEnvironmentAgentConnectionTarget({
+    return resolveEnvironmentDaemonConnectionTarget({
       runtimeEnv: this.env,
       defaultTarget:
         managedTarget ?? {

@@ -1,46 +1,46 @@
 import { assertNever } from "@bb/core";
 import type {
-  EnvironmentAgentCommandRecord,
-  EnvironmentAgentCommandRepository,
-  EnvironmentAgentSessionRecord,
-  EnvironmentAgentSessionRepository,
+  EnvironmentDaemonCommandRecord,
+  EnvironmentDaemonCommandRepository,
+  EnvironmentDaemonSessionRecord,
+  EnvironmentDaemonSessionRepository,
 } from "@bb/db";
 import type {
-  EnvironmentAgentSessionCommandAckPayload,
-  EnvironmentAgentSessionCommandResultPayload,
+  EnvironmentDaemonSessionCommandAckPayload,
+  EnvironmentDaemonSessionCommandResultPayload,
 } from "@bb/environment-daemon";
-import { assessEnvironmentAgentSessionCompatibility } from "./environment-agent-session-compatibility.js";
+import { assessEnvironmentDaemonSessionCompatibility } from "./environment-daemon-session-compatibility.js";
 
-export interface RecordEnvironmentAgentCommandAckResult {
-  commands: EnvironmentAgentCommandRecord[];
+export interface RecordEnvironmentDaemonCommandAckResult {
+  commands: EnvironmentDaemonCommandRecord[];
 }
 
-export interface InvalidateEnvironmentAgentSessionCommandsResult {
-  failedCommands: EnvironmentAgentCommandRecord[];
+export interface InvalidateEnvironmentDaemonSessionCommandsResult {
+  failedCommands: EnvironmentDaemonCommandRecord[];
 }
 
-export class EnvironmentAgentSessionUnavailableError extends Error {
+export class EnvironmentDaemonSessionUnavailableError extends Error {
   constructor(readonly threadId: string) {
     super(
-      `Timed out waiting for active environment-agent session for thread ${threadId}`,
+      `Timed out waiting for active environment-daemon session for thread ${threadId}`,
     );
-    this.name = "EnvironmentAgentSessionUnavailableError";
+    this.name = "EnvironmentDaemonSessionUnavailableError";
   }
 }
 
-export function isEnvironmentAgentSessionUnavailableError(
+export function isEnvironmentDaemonSessionUnavailableError(
   error: unknown,
-): error is EnvironmentAgentSessionUnavailableError {
-  return error instanceof EnvironmentAgentSessionUnavailableError;
+): error is EnvironmentDaemonSessionUnavailableError {
+  return error instanceof EnvironmentDaemonSessionUnavailableError;
 }
 
-export class EnvironmentAgentCommandDispatcher {
+export class EnvironmentDaemonCommandDispatcher {
   private readonly clock: () => number;
   private readonly resolveEnvironmentId?: (threadId: string) => string | undefined;
 
   constructor(
-    private readonly sessions: EnvironmentAgentSessionRepository,
-    private readonly commands: EnvironmentAgentCommandRepository,
+    private readonly sessions: EnvironmentDaemonSessionRepository,
+    private readonly commands: EnvironmentDaemonCommandRepository,
     options: {
       clock?: () => number;
       resolveEnvironmentId?: (threadId: string) => string | undefined;
@@ -53,7 +53,7 @@ export class EnvironmentAgentCommandDispatcher {
   private getActiveSessionForThread(
     threadId: string,
     now: number = this.clock(),
-  ): EnvironmentAgentSessionRecord | undefined {
+  ): EnvironmentDaemonSessionRecord | undefined {
     const environmentId = this.resolveEnvironmentId?.(threadId);
     if (!environmentId) {
       return undefined;
@@ -62,7 +62,7 @@ export class EnvironmentAgentCommandDispatcher {
     if (!session) {
       return undefined;
     }
-    return assessEnvironmentAgentSessionCompatibility(session).compatibility
+    return assessEnvironmentDaemonSessionCompatibility(session).compatibility
       .disposition === "replace"
       ? undefined
       : session;
@@ -85,7 +85,7 @@ export class EnvironmentAgentCommandDispatcher {
       await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
     }
 
-    throw new EnvironmentAgentSessionUnavailableError(args.threadId);
+    throw new EnvironmentDaemonSessionUnavailableError(args.threadId);
   }
 
   hasActiveSession(threadId: string): boolean {
@@ -100,7 +100,7 @@ export class EnvironmentAgentCommandDispatcher {
     timeoutMs?: number;
     pollIntervalMs?: number;
     sentAt?: number;
-  }): Promise<EnvironmentAgentCommandRecord> {
+  }): Promise<EnvironmentDaemonCommandRecord> {
     const existing = this.commands.getById(args.commandId);
     if (existing) {
       return this.resumeExistingCommand(args, existing);
@@ -134,7 +134,7 @@ export class EnvironmentAgentCommandDispatcher {
     commandId: string;
     timeoutMs?: number;
     pollIntervalMs?: number;
-  }): Promise<EnvironmentAgentCommandRecord> {
+  }): Promise<EnvironmentDaemonCommandRecord> {
     const timeoutMs = args.timeoutMs ?? 30_000;
     const pollIntervalMs = args.pollIntervalMs ?? 50;
     const deadline = Date.now() + timeoutMs;
@@ -142,7 +142,7 @@ export class EnvironmentAgentCommandDispatcher {
     while (Date.now() <= deadline) {
       const command = this.commands.getById(args.commandId);
       if (!command) {
-        throw new Error(`Unknown environment-agent command ${args.commandId}`);
+        throw new Error(`Unknown environment-daemon command ${args.commandId}`);
       }
       switch (command.state) {
         case "completed":
@@ -153,24 +153,24 @@ export class EnvironmentAgentCommandDispatcher {
           break;
       }
       if (this.isPendingCommandStranded(command)) {
-        throw new EnvironmentAgentSessionUnavailableError(command.threadId);
+        throw new EnvironmentDaemonSessionUnavailableError(command.threadId);
       }
       await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
     }
 
     const command = this.commands.getById(args.commandId);
     if (command && this.isPendingCommandStranded(command)) {
-      throw new EnvironmentAgentSessionUnavailableError(command.threadId);
+      throw new EnvironmentDaemonSessionUnavailableError(command.threadId);
     }
 
-    throw new Error(`Timed out waiting for environment-agent command ${args.commandId}`);
+    throw new Error(`Timed out waiting for environment-daemon command ${args.commandId}`);
   }
 
   listDeliverableCommandRecords(args: {
     sessionId: string;
     afterCursor?: number;
     limit?: number;
-  }): EnvironmentAgentCommandRecord[] {
+  }): EnvironmentDaemonCommandRecord[] {
     const session = this.sessions.getById(args.sessionId);
     if (!session || session.status !== "active") {
       return [];
@@ -189,11 +189,11 @@ export class EnvironmentAgentCommandDispatcher {
 
   invalidateCommandsForSession(
     session: Pick<
-      EnvironmentAgentSessionRecord,
+      EnvironmentDaemonSessionRecord,
       "id" | "status" | "closeReason"
     >,
     now: number = Date.now(),
-  ): InvalidateEnvironmentAgentSessionCommandsResult {
+  ): InvalidateEnvironmentDaemonSessionCommandsResult {
     const failedCommands = this.commands
       .listPendingBySessionId(session.id)
       .filter(
@@ -218,16 +218,16 @@ export class EnvironmentAgentCommandDispatcher {
 
   recordDeliveryAck(args: {
     sessionId: string;
-    payload: EnvironmentAgentSessionCommandAckPayload;
+    payload: EnvironmentDaemonSessionCommandAckPayload;
     now?: number;
-  }): RecordEnvironmentAgentCommandAckResult {
+  }): RecordEnvironmentDaemonCommandAckResult {
     const session = this.sessions.getById(args.sessionId);
     if (!session || session.status !== "active") {
       return { commands: [] };
     }
 
     const now = args.now ?? Date.now();
-    const updatedCommands: EnvironmentAgentCommandRecord[] = [];
+    const updatedCommands: EnvironmentDaemonCommandRecord[] = [];
     for (const ack of args.payload.commands) {
       const existing = this.commands.getById(ack.commandId);
       if (
@@ -257,9 +257,9 @@ export class EnvironmentAgentCommandDispatcher {
 
   recordCommandResult(args: {
     sessionId: string;
-    payload: EnvironmentAgentSessionCommandResultPayload;
+    payload: EnvironmentDaemonSessionCommandResultPayload;
     now?: number;
-  }): EnvironmentAgentCommandRecord | undefined {
+  }): EnvironmentDaemonCommandRecord | undefined {
     const session = this.sessions.getById(args.sessionId);
     if (!session) {
       return undefined;
@@ -309,11 +309,11 @@ export class EnvironmentAgentCommandDispatcher {
       pollIntervalMs?: number;
       sentAt?: number;
     },
-    command: EnvironmentAgentCommandRecord,
-  ): Promise<EnvironmentAgentCommandRecord> {
+    command: EnvironmentDaemonCommandRecord,
+  ): Promise<EnvironmentDaemonCommandRecord> {
     if (command.threadId !== args.threadId) {
       throw new Error(
-        `Environment-agent command ${args.commandId} already belongs to thread ${command.threadId}`,
+        `Environment-daemon command ${args.commandId} already belongs to thread ${command.threadId}`,
       );
     }
 
@@ -342,7 +342,7 @@ export class EnvironmentAgentCommandDispatcher {
     }
   }
 
-  private isPendingCommandStranded(command: EnvironmentAgentCommandRecord): boolean {
+  private isPendingCommandStranded(command: EnvironmentDaemonCommandRecord): boolean {
     switch (command.state) {
       case "completed":
       case "failed":
@@ -364,9 +364,9 @@ export class EnvironmentAgentCommandDispatcher {
   }
 
   private buildInvalidatedSessionCommandMessage(
-    session: Pick<EnvironmentAgentSessionRecord, "id" | "closeReason">,
+    session: Pick<EnvironmentDaemonSessionRecord, "id" | "closeReason">,
   ): string {
     const reason = session.closeReason ?? "internal_error";
-    return `Environment-agent session ${session.id} closed (${reason}) while command execution was in progress`;
+    return `Environment-daemon session ${session.id} closed (${reason}) while command execution was in progress`;
   }
 }

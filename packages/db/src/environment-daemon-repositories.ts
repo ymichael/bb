@@ -12,18 +12,18 @@ import { nanoid } from "nanoid";
 import { assertNever } from "@bb/core";
 import type { DbConnection } from "./connection.js";
 import {
-  environmentAgentCommands,
-  environmentAgentCursors,
-  environmentAgentSessions,
+  environmentDaemonCommands,
+  environmentDaemonCursors,
+  environmentDaemonSessions,
 } from "./schema.js";
 
-export type EnvironmentAgentSessionStatus =
+export type EnvironmentDaemonSessionStatus =
   | "active"
   | "expired"
   | "closed"
   | "replaced";
 
-export type EnvironmentAgentSessionCloseReason =
+export type EnvironmentDaemonSessionCloseReason =
   | "agent_shutdown"
   | "server_shutdown"
   | "lease_expired"
@@ -31,12 +31,12 @@ export type EnvironmentAgentSessionCloseReason =
   | "migration"
   | "internal_error";
 
-export interface EnvironmentAgentCursorPosition {
+export interface EnvironmentDaemonCursorPosition {
   generation: number;
   sequence: number;
 }
 
-export interface EnvironmentAgentSessionRecord {
+export interface EnvironmentDaemonSessionRecord {
   id: string;
   environmentId: string;
   agentId: string;
@@ -49,32 +49,32 @@ export interface EnvironmentAgentSessionRecord {
   selectedCapabilities?: unknown;
   controlBaseUrl?: string;
   controlAuthToken?: string;
-  status: EnvironmentAgentSessionStatus;
+  status: EnvironmentDaemonSessionStatus;
   leaseExpiresAt: number;
   lastHeartbeatAt?: number;
   closedAt?: number;
-  closeReason?: EnvironmentAgentSessionCloseReason;
+  closeReason?: EnvironmentDaemonSessionCloseReason;
   createdAt: number;
   updatedAt: number;
 }
 
-export interface EnvironmentAgentCursorRecord
-  extends EnvironmentAgentCursorPosition {
+export interface EnvironmentDaemonCursorRecord
+  extends EnvironmentDaemonCursorPosition {
   threadId: string;
   updatedAt: number;
 }
 
-export type EnvironmentAgentCursorAdvanceResult =
+export type EnvironmentDaemonCursorAdvanceResult =
   | {
       advanced: true;
-      cursor: EnvironmentAgentCursorRecord;
+      cursor: EnvironmentDaemonCursorRecord;
     }
   | {
       advanced: false;
-      cursor?: EnvironmentAgentCursorRecord;
+      cursor?: EnvironmentDaemonCursorRecord;
     };
 
-export type EnvironmentAgentCommandState =
+export type EnvironmentDaemonCommandState =
   | "queued"
   | "sent"
   | "received"
@@ -83,14 +83,14 @@ export type EnvironmentAgentCommandState =
   | "failed"
   | "cancelled";
 
-export interface EnvironmentAgentCommandRecord {
+export interface EnvironmentDaemonCommandRecord {
   id: string;
   threadId: string;
   sessionId?: string;
   commandCursor: number;
   commandType: string;
   payload: unknown;
-  state: EnvironmentAgentCommandState;
+  state: EnvironmentDaemonCommandState;
   result?: unknown;
   errorCode?: string;
   errorMessage?: string;
@@ -98,7 +98,7 @@ export interface EnvironmentAgentCommandRecord {
   updatedAt: number;
 }
 
-export interface CreateEnvironmentAgentSessionInput {
+export interface CreateEnvironmentDaemonSessionInput {
   id?: string;
   environmentId: string;
   agentId: string;
@@ -115,10 +115,10 @@ export interface CreateEnvironmentAgentSessionInput {
   now?: number;
 }
 
-export interface ReplaceActiveEnvironmentAgentSessionInput
-  extends CreateEnvironmentAgentSessionInput {}
+export interface ReplaceActiveEnvironmentDaemonSessionInput
+  extends CreateEnvironmentDaemonSessionInput {}
 
-export interface EnqueueEnvironmentAgentCommandInput {
+export interface EnqueueEnvironmentDaemonCommandInput {
   id?: string;
   threadId: string;
   commandType: string;
@@ -127,16 +127,16 @@ export interface EnqueueEnvironmentAgentCommandInput {
   now?: number;
 }
 
-const PENDING_ENVIRONMENT_AGENT_COMMAND_STATES: readonly EnvironmentAgentCommandState[] = [
+const PENDING_ENVIRONMENT_DAEMON_COMMAND_STATES: readonly EnvironmentDaemonCommandState[] = [
   "queued",
   "sent",
   "received",
   "started",
 ];
 
-function isEnvironmentAgentSessionStatus(
+function isEnvironmentDaemonSessionStatus(
   value: string,
-): value is EnvironmentAgentSessionStatus {
+): value is EnvironmentDaemonSessionStatus {
   return (
     value === "active" ||
     value === "expired" ||
@@ -145,16 +145,16 @@ function isEnvironmentAgentSessionStatus(
   );
 }
 
-function normalizeEnvironmentAgentSessionStatus(
+function normalizeEnvironmentDaemonSessionStatus(
   value: string,
-): EnvironmentAgentSessionStatus {
-  if (isEnvironmentAgentSessionStatus(value)) return value;
-  throw new Error(`Invalid persisted environment-agent session status: ${value}`);
+): EnvironmentDaemonSessionStatus {
+  if (isEnvironmentDaemonSessionStatus(value)) return value;
+  throw new Error(`Invalid persisted environment-daemon session status: ${value}`);
 }
 
-function isEnvironmentAgentSessionCloseReason(
+function isEnvironmentDaemonSessionCloseReason(
   value: string,
-): value is EnvironmentAgentSessionCloseReason {
+): value is EnvironmentDaemonSessionCloseReason {
   return (
     value === "agent_shutdown" ||
     value === "server_shutdown" ||
@@ -165,17 +165,17 @@ function isEnvironmentAgentSessionCloseReason(
   );
 }
 
-function normalizeEnvironmentAgentSessionCloseReason(
+function normalizeEnvironmentDaemonSessionCloseReason(
   value: string | null | undefined,
-): EnvironmentAgentSessionCloseReason | undefined {
+): EnvironmentDaemonSessionCloseReason | undefined {
   if (!value) return undefined;
-  if (isEnvironmentAgentSessionCloseReason(value)) return value;
-  throw new Error(`Invalid persisted environment-agent session close reason: ${value}`);
+  if (isEnvironmentDaemonSessionCloseReason(value)) return value;
+  throw new Error(`Invalid persisted environment-daemon session close reason: ${value}`);
 }
 
-function isEnvironmentAgentCommandState(
+function isEnvironmentDaemonCommandState(
   value: string,
-): value is EnvironmentAgentCommandState {
+): value is EnvironmentDaemonCommandState {
   return (
     value === "queued" ||
     value === "sent" ||
@@ -187,11 +187,11 @@ function isEnvironmentAgentCommandState(
   );
 }
 
-function normalizeEnvironmentAgentCommandState(
+function normalizeEnvironmentDaemonCommandState(
   value: string,
-): EnvironmentAgentCommandState {
-  if (isEnvironmentAgentCommandState(value)) return value;
-  throw new Error(`Invalid persisted environment-agent command state: ${value}`);
+): EnvironmentDaemonCommandState {
+  if (isEnvironmentDaemonCommandState(value)) return value;
+  throw new Error(`Invalid persisted environment-daemon command state: ${value}`);
 }
 
 function parseJsonField(value: string, fieldName: string): unknown {
@@ -202,9 +202,9 @@ function parseJsonField(value: string, fieldName: string): unknown {
   }
 }
 
-function rowToEnvironmentAgentSessionRecord(
-  row: typeof environmentAgentSessions.$inferSelect,
-): EnvironmentAgentSessionRecord {
+function rowToEnvironmentDaemonSessionRecord(
+  row: typeof environmentDaemonSessions.$inferSelect,
+): EnvironmentDaemonSessionRecord {
   return {
     id: row.id,
     environmentId: row.environmentId,
@@ -215,40 +215,40 @@ function rowToEnvironmentAgentSessionRecord(
     ...(row.workerVersion !== null ? { workerVersion: row.workerVersion } : {}),
     ...(row.workerBuildId !== null ? { workerBuildId: row.workerBuildId } : {}),
     ...(row.providerMetadata !== null
-      ? { providerMetadata: parseJsonField(row.providerMetadata, "environment-agent provider metadata") }
+      ? { providerMetadata: parseJsonField(row.providerMetadata, "environment-daemon provider metadata") }
       : {}),
     ...(row.selectedCapabilities !== null
       ? {
           selectedCapabilities: parseJsonField(
             row.selectedCapabilities,
-            "environment-agent selected capabilities",
+            "environment-daemon selected capabilities",
           ),
         }
       : {}),
     ...(row.controlBaseUrl !== null ? { controlBaseUrl: row.controlBaseUrl } : {}),
     ...(row.controlAuthToken !== null ? { controlAuthToken: row.controlAuthToken } : {}),
-    status: normalizeEnvironmentAgentSessionStatus(row.status),
+    status: normalizeEnvironmentDaemonSessionStatus(row.status),
     leaseExpiresAt: row.leaseExpiresAt,
     ...(row.lastHeartbeatAt !== null ? { lastHeartbeatAt: row.lastHeartbeatAt } : {}),
     ...(row.closedAt !== null ? { closedAt: row.closedAt } : {}),
     ...(row.closeReason !== null
-      ? { closeReason: normalizeEnvironmentAgentSessionCloseReason(row.closeReason) }
+      ? { closeReason: normalizeEnvironmentDaemonSessionCloseReason(row.closeReason) }
       : {}),
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
 }
 
-function isEnvironmentAgentSessionLeaseActive(
-  session: Pick<EnvironmentAgentSessionRecord, "status" | "leaseExpiresAt">,
+function isEnvironmentDaemonSessionLeaseActive(
+  session: Pick<EnvironmentDaemonSessionRecord, "status" | "leaseExpiresAt">,
   now: number,
 ): boolean {
   return session.status === "active" && session.leaseExpiresAt > now;
 }
 
-function rowToEnvironmentAgentCursorRecord(
-  row: typeof environmentAgentCursors.$inferSelect,
-): EnvironmentAgentCursorRecord {
+function rowToEnvironmentDaemonCursorRecord(
+  row: typeof environmentDaemonCursors.$inferSelect,
+): EnvironmentDaemonCursorRecord {
   return {
     threadId: row.threadId,
     generation: row.generation,
@@ -257,19 +257,19 @@ function rowToEnvironmentAgentCursorRecord(
   };
 }
 
-function rowToEnvironmentAgentCommandRecord(
-  row: typeof environmentAgentCommands.$inferSelect,
-): EnvironmentAgentCommandRecord {
+function rowToEnvironmentDaemonCommandRecord(
+  row: typeof environmentDaemonCommands.$inferSelect,
+): EnvironmentDaemonCommandRecord {
   return {
     id: row.id,
     threadId: row.threadId,
     ...(row.sessionId !== null ? { sessionId: row.sessionId } : {}),
     commandCursor: row.commandCursor,
     commandType: row.commandType,
-    payload: parseJsonField(row.payload, "environment-agent command payload"),
-    state: normalizeEnvironmentAgentCommandState(row.state),
+    payload: parseJsonField(row.payload, "environment-daemon command payload"),
+    state: normalizeEnvironmentDaemonCommandState(row.state),
     ...(row.result !== null
-      ? { result: parseJsonField(row.result, "environment-agent command result") }
+      ? { result: parseJsonField(row.result, "environment-daemon command result") }
       : {}),
     ...(row.errorCode !== null ? { errorCode: row.errorCode } : {}),
     ...(row.errorMessage !== null ? { errorMessage: row.errorMessage } : {}),
@@ -279,16 +279,16 @@ function rowToEnvironmentAgentCommandRecord(
 }
 
 function sameCursor(
-  left: EnvironmentAgentCursorPosition | undefined,
-  right: EnvironmentAgentCursorPosition | undefined,
+  left: EnvironmentDaemonCursorPosition | undefined,
+  right: EnvironmentDaemonCursorPosition | undefined,
 ): boolean {
   if (!left || !right) return left === right;
   return left.generation === right.generation && left.sequence === right.sequence;
 }
 
 function canAdvanceCursorTo(
-  current: EnvironmentAgentCursorPosition | undefined,
-  next: EnvironmentAgentCursorPosition,
+  current: EnvironmentDaemonCursorPosition | undefined,
+  next: EnvironmentDaemonCursorPosition,
 ): boolean {
   if (!current) {
     return next.generation >= 0 && next.sequence >= 0;
@@ -300,9 +300,9 @@ function canAdvanceCursorTo(
   return next.generation === current.generation + 1 && next.sequence >= 0;
 }
 
-function resolveEnvironmentAgentCommandStateUpdate(
-  current: EnvironmentAgentCommandState,
-  target: EnvironmentAgentCommandState,
+function resolveEnvironmentDaemonCommandStateUpdate(
+  current: EnvironmentDaemonCommandState,
+  target: EnvironmentDaemonCommandState,
 ): "apply" | "noop" | "conflict" {
   if (current === target) {
     return "noop";
@@ -418,10 +418,10 @@ function resolveEnvironmentAgentCommandStateUpdate(
   }
 }
 
-export class EnvironmentAgentSessionRepository {
+export class EnvironmentDaemonSessionRepository {
   constructor(private db: DbConnection) {}
 
-  create(args: CreateEnvironmentAgentSessionInput): EnvironmentAgentSessionRecord {
+  create(args: CreateEnvironmentDaemonSessionInput): EnvironmentDaemonSessionRecord {
     const now = args.now ?? Date.now();
     const row = {
       id: args.id ?? nanoid(),
@@ -447,103 +447,103 @@ export class EnvironmentAgentSessionRepository {
       closeReason: null,
       createdAt: now,
       updatedAt: now,
-    } satisfies typeof environmentAgentSessions.$inferInsert;
-    this.db.insert(environmentAgentSessions).values(row).run();
-    return rowToEnvironmentAgentSessionRecord(row);
+    } satisfies typeof environmentDaemonSessions.$inferInsert;
+    this.db.insert(environmentDaemonSessions).values(row).run();
+    return rowToEnvironmentDaemonSessionRecord(row);
   }
 
-  getById(id: string): EnvironmentAgentSessionRecord | undefined {
+  getById(id: string): EnvironmentDaemonSessionRecord | undefined {
     const row = this.db
       .select()
-      .from(environmentAgentSessions)
-      .where(eq(environmentAgentSessions.id, id))
+      .from(environmentDaemonSessions)
+      .where(eq(environmentDaemonSessions.id, id))
       .get();
-    return row ? rowToEnvironmentAgentSessionRecord(row) : undefined;
+    return row ? rowToEnvironmentDaemonSessionRecord(row) : undefined;
   }
 
   getActiveByEnvironmentId(
     environmentId: string,
     now: number = Date.now(),
-  ): EnvironmentAgentSessionRecord | undefined {
+  ): EnvironmentDaemonSessionRecord | undefined {
     const row = this.db
       .select()
-      .from(environmentAgentSessions)
+      .from(environmentDaemonSessions)
       .where(
         and(
-          eq(environmentAgentSessions.environmentId, environmentId),
-          eq(environmentAgentSessions.status, "active"),
-          gt(environmentAgentSessions.leaseExpiresAt, now),
+          eq(environmentDaemonSessions.environmentId, environmentId),
+          eq(environmentDaemonSessions.status, "active"),
+          gt(environmentDaemonSessions.leaseExpiresAt, now),
         ),
       )
-      .orderBy(desc(environmentAgentSessions.updatedAt))
+      .orderBy(desc(environmentDaemonSessions.updatedAt))
       .get();
-    return row ? rowToEnvironmentAgentSessionRecord(row) : undefined;
+    return row ? rowToEnvironmentDaemonSessionRecord(row) : undefined;
   }
 
-  getLatestByEnvironmentId(environmentId: string): EnvironmentAgentSessionRecord | undefined {
+  getLatestByEnvironmentId(environmentId: string): EnvironmentDaemonSessionRecord | undefined {
     const row = this.db
       .select()
-      .from(environmentAgentSessions)
-      .where(eq(environmentAgentSessions.environmentId, environmentId))
-      .orderBy(desc(environmentAgentSessions.updatedAt))
+      .from(environmentDaemonSessions)
+      .where(eq(environmentDaemonSessions.environmentId, environmentId))
+      .orderBy(desc(environmentDaemonSessions.updatedAt))
       .get();
-    return row ? rowToEnvironmentAgentSessionRecord(row) : undefined;
+    return row ? rowToEnvironmentDaemonSessionRecord(row) : undefined;
   }
 
-  listByEnvironmentId(environmentId: string): EnvironmentAgentSessionRecord[] {
+  listByEnvironmentId(environmentId: string): EnvironmentDaemonSessionRecord[] {
     return this.db
       .select()
-      .from(environmentAgentSessions)
-      .where(eq(environmentAgentSessions.environmentId, environmentId))
-      .orderBy(desc(environmentAgentSessions.updatedAt), desc(environmentAgentSessions.createdAt))
+      .from(environmentDaemonSessions)
+      .where(eq(environmentDaemonSessions.environmentId, environmentId))
+      .orderBy(desc(environmentDaemonSessions.updatedAt), desc(environmentDaemonSessions.createdAt))
       .all()
-      .map(rowToEnvironmentAgentSessionRecord);
+      .map(rowToEnvironmentDaemonSessionRecord);
   }
 
-  listActive(now: number = Date.now()): EnvironmentAgentSessionRecord[] {
+  listActive(now: number = Date.now()): EnvironmentDaemonSessionRecord[] {
     return this.db
       .select()
-      .from(environmentAgentSessions)
+      .from(environmentDaemonSessions)
       .where(
         and(
-          eq(environmentAgentSessions.status, "active"),
-          gt(environmentAgentSessions.leaseExpiresAt, now),
+          eq(environmentDaemonSessions.status, "active"),
+          gt(environmentDaemonSessions.leaseExpiresAt, now),
         ),
       )
-      .orderBy(desc(environmentAgentSessions.updatedAt))
+      .orderBy(desc(environmentDaemonSessions.updatedAt))
       .all()
-      .map(rowToEnvironmentAgentSessionRecord);
+      .map(rowToEnvironmentDaemonSessionRecord);
   }
 
-  listExpiringBefore(timestamp: number): EnvironmentAgentSessionRecord[] {
+  listExpiringBefore(timestamp: number): EnvironmentDaemonSessionRecord[] {
     return this.db
       .select()
-      .from(environmentAgentSessions)
+      .from(environmentDaemonSessions)
       .where(
         and(
-          eq(environmentAgentSessions.status, "active"),
-          lte(environmentAgentSessions.leaseExpiresAt, timestamp),
+          eq(environmentDaemonSessions.status, "active"),
+          lte(environmentDaemonSessions.leaseExpiresAt, timestamp),
         ),
       )
-      .orderBy(asc(environmentAgentSessions.leaseExpiresAt))
+      .orderBy(asc(environmentDaemonSessions.leaseExpiresAt))
       .all()
-      .map(rowToEnvironmentAgentSessionRecord);
+      .map(rowToEnvironmentDaemonSessionRecord);
   }
 
   closeAllActive(args: {
-    reason: Exclude<EnvironmentAgentSessionCloseReason, "lease_expired" | "newer_session">;
+    reason: Exclude<EnvironmentDaemonSessionCloseReason, "lease_expired" | "newer_session">;
     now?: number;
   }): number {
     const now = args.now ?? Date.now();
     const result = this.db
-      .update(environmentAgentSessions)
+      .update(environmentDaemonSessions)
       .set({
         status: "closed",
         closedAt: now,
         closeReason: args.reason,
         updatedAt: now,
       })
-      .where(eq(environmentAgentSessions.status, "active"))
+      .where(eq(environmentDaemonSessions.status, "active"))
       .run();
     return Number(result.changes ?? 0);
   }
@@ -552,139 +552,139 @@ export class EnvironmentAgentSessionRepository {
     sessionId: string;
     leaseExpiresAt: number;
     heartbeatAt: number;
-  }): EnvironmentAgentSessionRecord | undefined {
+  }): EnvironmentDaemonSessionRecord | undefined {
     return this.db.transaction((tx) => {
-      const row = tx.select().from(environmentAgentSessions)
-        .where(eq(environmentAgentSessions.id, args.sessionId)).get();
+      const row = tx.select().from(environmentDaemonSessions)
+        .where(eq(environmentDaemonSessions.id, args.sessionId)).get();
       if (!row) return undefined;
-      const existing = rowToEnvironmentAgentSessionRecord(row);
-      if (!isEnvironmentAgentSessionLeaseActive(existing, args.heartbeatAt)) {
+      const existing = rowToEnvironmentDaemonSessionRecord(row);
+      if (!isEnvironmentDaemonSessionLeaseActive(existing, args.heartbeatAt)) {
         return existing;
       }
-      tx.update(environmentAgentSessions)
+      tx.update(environmentDaemonSessions)
         .set({
           leaseExpiresAt: args.leaseExpiresAt,
           lastHeartbeatAt: args.heartbeatAt,
           updatedAt: args.heartbeatAt,
         })
-        .where(eq(environmentAgentSessions.id, args.sessionId))
+        .where(eq(environmentDaemonSessions.id, args.sessionId))
         .run();
-      const updated = tx.select().from(environmentAgentSessions)
-        .where(eq(environmentAgentSessions.id, args.sessionId)).get();
-      return updated ? rowToEnvironmentAgentSessionRecord(updated) : undefined;
+      const updated = tx.select().from(environmentDaemonSessions)
+        .where(eq(environmentDaemonSessions.id, args.sessionId)).get();
+      return updated ? rowToEnvironmentDaemonSessionRecord(updated) : undefined;
     });
   }
 
-  markExpired(sessionId: string, now: number = Date.now()): EnvironmentAgentSessionRecord | undefined {
+  markExpired(sessionId: string, now: number = Date.now()): EnvironmentDaemonSessionRecord | undefined {
     return this.db.transaction((tx) => {
-      const row = tx.select().from(environmentAgentSessions)
-        .where(eq(environmentAgentSessions.id, sessionId)).get();
+      const row = tx.select().from(environmentDaemonSessions)
+        .where(eq(environmentDaemonSessions.id, sessionId)).get();
       if (!row) return undefined;
-      const existing = rowToEnvironmentAgentSessionRecord(row);
+      const existing = rowToEnvironmentDaemonSessionRecord(row);
       if (existing.status === "expired") return existing;
       if (existing.status !== "active") return existing;
-      tx.update(environmentAgentSessions)
+      tx.update(environmentDaemonSessions)
         .set({
           status: "expired",
           closedAt: now,
           closeReason: "lease_expired",
           updatedAt: now,
         })
-        .where(eq(environmentAgentSessions.id, sessionId))
+        .where(eq(environmentDaemonSessions.id, sessionId))
         .run();
-      const updated = tx.select().from(environmentAgentSessions)
-        .where(eq(environmentAgentSessions.id, sessionId)).get();
-      return updated ? rowToEnvironmentAgentSessionRecord(updated) : undefined;
+      const updated = tx.select().from(environmentDaemonSessions)
+        .where(eq(environmentDaemonSessions.id, sessionId)).get();
+      return updated ? rowToEnvironmentDaemonSessionRecord(updated) : undefined;
     });
   }
 
   markClosed(args: {
     sessionId: string;
-    reason: Exclude<EnvironmentAgentSessionCloseReason, "lease_expired" | "newer_session">;
+    reason: Exclude<EnvironmentDaemonSessionCloseReason, "lease_expired" | "newer_session">;
     now?: number;
-  }): EnvironmentAgentSessionRecord | undefined {
+  }): EnvironmentDaemonSessionRecord | undefined {
     return this.db.transaction((tx) => {
-      const row = tx.select().from(environmentAgentSessions)
-        .where(eq(environmentAgentSessions.id, args.sessionId)).get();
+      const row = tx.select().from(environmentDaemonSessions)
+        .where(eq(environmentDaemonSessions.id, args.sessionId)).get();
       if (!row) return undefined;
-      const existing = rowToEnvironmentAgentSessionRecord(row);
+      const existing = rowToEnvironmentDaemonSessionRecord(row);
       if (existing.status === "closed") return existing;
       if (existing.status === "replaced") return existing;
       const now = args.now ?? Date.now();
-      tx.update(environmentAgentSessions)
+      tx.update(environmentDaemonSessions)
         .set({
           status: "closed",
           closedAt: now,
           closeReason: args.reason,
           updatedAt: now,
         })
-        .where(eq(environmentAgentSessions.id, args.sessionId))
+        .where(eq(environmentDaemonSessions.id, args.sessionId))
         .run();
-      const updated = tx.select().from(environmentAgentSessions)
-        .where(eq(environmentAgentSessions.id, args.sessionId)).get();
-      return updated ? rowToEnvironmentAgentSessionRecord(updated) : undefined;
+      const updated = tx.select().from(environmentDaemonSessions)
+        .where(eq(environmentDaemonSessions.id, args.sessionId)).get();
+      return updated ? rowToEnvironmentDaemonSessionRecord(updated) : undefined;
     });
   }
 
   markReplaced(args: {
     sessionId: string;
     now?: number;
-  }): EnvironmentAgentSessionRecord | undefined {
+  }): EnvironmentDaemonSessionRecord | undefined {
     return this.db.transaction((tx) => {
-      const row = tx.select().from(environmentAgentSessions)
-        .where(eq(environmentAgentSessions.id, args.sessionId)).get();
+      const row = tx.select().from(environmentDaemonSessions)
+        .where(eq(environmentDaemonSessions.id, args.sessionId)).get();
       if (!row) return undefined;
-      const existing = rowToEnvironmentAgentSessionRecord(row);
+      const existing = rowToEnvironmentDaemonSessionRecord(row);
       if (existing.status === "replaced") return existing;
       if (existing.status === "closed") return existing;
       const now = args.now ?? Date.now();
-      tx.update(environmentAgentSessions)
+      tx.update(environmentDaemonSessions)
         .set({
           status: "replaced",
           closedAt: now,
           closeReason: "newer_session",
           updatedAt: now,
         })
-        .where(eq(environmentAgentSessions.id, args.sessionId))
+        .where(eq(environmentDaemonSessions.id, args.sessionId))
         .run();
-      const updated = tx.select().from(environmentAgentSessions)
-        .where(eq(environmentAgentSessions.id, args.sessionId)).get();
-      return updated ? rowToEnvironmentAgentSessionRecord(updated) : undefined;
+      const updated = tx.select().from(environmentDaemonSessions)
+        .where(eq(environmentDaemonSessions.id, args.sessionId)).get();
+      return updated ? rowToEnvironmentDaemonSessionRecord(updated) : undefined;
     });
   }
 
   replaceActiveForEnvironment(args: {
     environmentId: string;
-    nextSession: ReplaceActiveEnvironmentAgentSessionInput;
+    nextSession: ReplaceActiveEnvironmentDaemonSessionInput;
     now?: number;
-  }): { replaced?: EnvironmentAgentSessionRecord; active: EnvironmentAgentSessionRecord } {
+  }): { replaced?: EnvironmentDaemonSessionRecord; active: EnvironmentDaemonSessionRecord } {
     const now = args.now ?? args.nextSession.now ?? Date.now();
     return this.db.transaction((tx) => {
       const existingRow = tx
         .select()
-        .from(environmentAgentSessions)
+        .from(environmentDaemonSessions)
         .where(
           and(
-            eq(environmentAgentSessions.environmentId, args.environmentId),
-            eq(environmentAgentSessions.status, "active"),
+            eq(environmentDaemonSessions.environmentId, args.environmentId),
+            eq(environmentDaemonSessions.status, "active"),
           ),
         )
-        .orderBy(desc(environmentAgentSessions.updatedAt))
+        .orderBy(desc(environmentDaemonSessions.updatedAt))
         .get();
 
-      let replaced: EnvironmentAgentSessionRecord | undefined;
+      let replaced: EnvironmentDaemonSessionRecord | undefined;
       if (existingRow) {
         tx
-          .update(environmentAgentSessions)
+          .update(environmentDaemonSessions)
           .set({
             status: "replaced",
             closedAt: now,
             closeReason: "newer_session",
             updatedAt: now,
           })
-          .where(eq(environmentAgentSessions.id, existingRow.id))
+          .where(eq(environmentDaemonSessions.id, existingRow.id))
           .run();
-        replaced = rowToEnvironmentAgentSessionRecord({
+        replaced = rowToEnvironmentDaemonSessionRecord({
           ...existingRow,
           status: "replaced",
           closedAt: now,
@@ -719,80 +719,80 @@ export class EnvironmentAgentSessionRepository {
         closeReason: null,
         createdAt: now,
         updatedAt: now,
-      } satisfies typeof environmentAgentSessions.$inferInsert;
-      tx.insert(environmentAgentSessions).values(inserted).run();
+      } satisfies typeof environmentDaemonSessions.$inferInsert;
+      tx.insert(environmentDaemonSessions).values(inserted).run();
 
       return {
         ...(replaced ? { replaced } : {}),
-        active: rowToEnvironmentAgentSessionRecord(inserted),
+        active: rowToEnvironmentDaemonSessionRecord(inserted),
       };
     });
   }
 }
 
-export class EnvironmentAgentCursorRepository {
+export class EnvironmentDaemonCursorRepository {
   constructor(private db: DbConnection) {}
 
-  getByThreadId(threadId: string): EnvironmentAgentCursorRecord | undefined {
+  getByThreadId(threadId: string): EnvironmentDaemonCursorRecord | undefined {
     const row = this.db
       .select()
-      .from(environmentAgentCursors)
-      .where(eq(environmentAgentCursors.threadId, threadId))
+      .from(environmentDaemonCursors)
+      .where(eq(environmentDaemonCursors.threadId, threadId))
       .get();
-    return row ? rowToEnvironmentAgentCursorRecord(row) : undefined;
+    return row ? rowToEnvironmentDaemonCursorRecord(row) : undefined;
   }
 
   deleteByThreadId(threadId: string): void {
     this.db
-      .delete(environmentAgentCursors)
-      .where(eq(environmentAgentCursors.threadId, threadId))
+      .delete(environmentDaemonCursors)
+      .where(eq(environmentDaemonCursors.threadId, threadId))
       .run();
   }
 
   upsert(
     threadId: string,
-    cursor: EnvironmentAgentCursorPosition,
+    cursor: EnvironmentDaemonCursorPosition,
     now: number = Date.now(),
-  ): EnvironmentAgentCursorRecord {
+  ): EnvironmentDaemonCursorRecord {
     return this.db.transaction((tx) => {
-      const existing = tx.select().from(environmentAgentCursors)
-        .where(eq(environmentAgentCursors.threadId, threadId)).get();
+      const existing = tx.select().from(environmentDaemonCursors)
+        .where(eq(environmentDaemonCursors.threadId, threadId)).get();
       if (!existing) {
         const row = {
           threadId,
           generation: cursor.generation,
           sequence: cursor.sequence,
           updatedAt: now,
-        } satisfies typeof environmentAgentCursors.$inferInsert;
-        tx.insert(environmentAgentCursors).values(row).run();
-        return rowToEnvironmentAgentCursorRecord(row);
+        } satisfies typeof environmentDaemonCursors.$inferInsert;
+        tx.insert(environmentDaemonCursors).values(row).run();
+        return rowToEnvironmentDaemonCursorRecord(row);
       }
 
-      tx.update(environmentAgentCursors)
+      tx.update(environmentDaemonCursors)
         .set({
           generation: cursor.generation,
           sequence: cursor.sequence,
           updatedAt: now,
         })
-        .where(eq(environmentAgentCursors.threadId, threadId))
+        .where(eq(environmentDaemonCursors.threadId, threadId))
         .run();
-      const updated = tx.select().from(environmentAgentCursors)
-        .where(eq(environmentAgentCursors.threadId, threadId)).get();
-      return rowToEnvironmentAgentCursorRecord(updated!);
+      const updated = tx.select().from(environmentDaemonCursors)
+        .where(eq(environmentDaemonCursors.threadId, threadId)).get();
+      return rowToEnvironmentDaemonCursorRecord(updated!);
     });
   }
 
   advanceIfNext(args: {
     threadId: string;
-    expectedCurrent?: EnvironmentAgentCursorPosition;
-    next: EnvironmentAgentCursorPosition;
+    expectedCurrent?: EnvironmentDaemonCursorPosition;
+    next: EnvironmentDaemonCursorPosition;
     now?: number;
-  }): EnvironmentAgentCursorAdvanceResult {
+  }): EnvironmentDaemonCursorAdvanceResult {
     return this.db.transaction((tx) => {
       const now = args.now ?? Date.now();
-      const currentRow = tx.select().from(environmentAgentCursors)
-        .where(eq(environmentAgentCursors.threadId, args.threadId)).get();
-      const current = currentRow ? rowToEnvironmentAgentCursorRecord(currentRow) : undefined;
+      const currentRow = tx.select().from(environmentDaemonCursors)
+        .where(eq(environmentDaemonCursors.threadId, args.threadId)).get();
+      const current = currentRow ? rowToEnvironmentDaemonCursorRecord(currentRow) : undefined;
       const currentPosition = current
         ? { generation: current.generation, sequence: current.sequence }
         : undefined;
@@ -819,18 +819,18 @@ export class EnvironmentAgentCursorRepository {
   }
 }
 
-export class EnvironmentAgentCommandRepository {
+export class EnvironmentDaemonCommandRepository {
   constructor(private db: DbConnection) {}
 
-  enqueue(args: EnqueueEnvironmentAgentCommandInput): EnvironmentAgentCommandRecord {
+  enqueue(args: EnqueueEnvironmentDaemonCommandInput): EnvironmentDaemonCommandRecord {
     const now = args.now ?? Date.now();
     return this.db.transaction((tx) => {
       const maxRow = tx
         .select({
-          maxCursor: sql<number>`MAX(${environmentAgentCommands.commandCursor})`,
+          maxCursor: sql<number>`MAX(${environmentDaemonCommands.commandCursor})`,
         })
-        .from(environmentAgentCommands)
-        .where(eq(environmentAgentCommands.threadId, args.threadId))
+        .from(environmentDaemonCommands)
+        .where(eq(environmentDaemonCommands.threadId, args.threadId))
         .get();
       const nextCursor = (maxRow?.maxCursor ?? 0) + 1;
       const row = {
@@ -846,84 +846,84 @@ export class EnvironmentAgentCommandRepository {
         errorMessage: null,
         createdAt: now,
         updatedAt: now,
-      } satisfies typeof environmentAgentCommands.$inferInsert;
-      tx.insert(environmentAgentCommands).values(row).run();
-      return rowToEnvironmentAgentCommandRecord(row);
+      } satisfies typeof environmentDaemonCommands.$inferInsert;
+      tx.insert(environmentDaemonCommands).values(row).run();
+      return rowToEnvironmentDaemonCommandRecord(row);
     });
   }
 
-  getById(id: string): EnvironmentAgentCommandRecord | undefined {
+  getById(id: string): EnvironmentDaemonCommandRecord | undefined {
     const row = this.db
       .select()
-      .from(environmentAgentCommands)
-      .where(eq(environmentAgentCommands.id, id))
+      .from(environmentDaemonCommands)
+      .where(eq(environmentDaemonCommands.id, id))
       .get();
-    return row ? rowToEnvironmentAgentCommandRecord(row) : undefined;
+    return row ? rowToEnvironmentDaemonCommandRecord(row) : undefined;
   }
 
-  listPendingByThreadId(threadId: string): EnvironmentAgentCommandRecord[] {
+  listPendingByThreadId(threadId: string): EnvironmentDaemonCommandRecord[] {
     return this.db
       .select()
-      .from(environmentAgentCommands)
+      .from(environmentDaemonCommands)
       .where(
         and(
-          eq(environmentAgentCommands.threadId, threadId),
-          inArray(environmentAgentCommands.state, [...PENDING_ENVIRONMENT_AGENT_COMMAND_STATES]),
+          eq(environmentDaemonCommands.threadId, threadId),
+          inArray(environmentDaemonCommands.state, [...PENDING_ENVIRONMENT_DAEMON_COMMAND_STATES]),
         ),
       )
-      .orderBy(asc(environmentAgentCommands.commandCursor))
+      .orderBy(asc(environmentDaemonCommands.commandCursor))
       .all()
-      .map(rowToEnvironmentAgentCommandRecord);
+      .map(rowToEnvironmentDaemonCommandRecord);
   }
 
-  listPendingBySessionId(sessionId: string): EnvironmentAgentCommandRecord[] {
+  listPendingBySessionId(sessionId: string): EnvironmentDaemonCommandRecord[] {
     return this.db
       .select()
-      .from(environmentAgentCommands)
+      .from(environmentDaemonCommands)
       .where(
         and(
-          eq(environmentAgentCommands.sessionId, sessionId),
-          inArray(environmentAgentCommands.state, [...PENDING_ENVIRONMENT_AGENT_COMMAND_STATES]),
+          eq(environmentDaemonCommands.sessionId, sessionId),
+          inArray(environmentDaemonCommands.state, [...PENDING_ENVIRONMENT_DAEMON_COMMAND_STATES]),
         ),
       )
-      .orderBy(asc(environmentAgentCommands.commandCursor))
+      .orderBy(asc(environmentDaemonCommands.commandCursor))
       .all()
-      .map(rowToEnvironmentAgentCommandRecord);
+      .map(rowToEnvironmentDaemonCommandRecord);
   }
 
   listDeliverableBySessionId(
     sessionId: string,
     afterCursor: number = 0,
     limit?: number,
-  ): EnvironmentAgentCommandRecord[] {
+  ): EnvironmentDaemonCommandRecord[] {
     let query = this.db
       .select()
-      .from(environmentAgentCommands)
+      .from(environmentDaemonCommands)
       .where(
         and(
-          eq(environmentAgentCommands.sessionId, sessionId),
-          gt(environmentAgentCommands.commandCursor, afterCursor),
-          inArray(environmentAgentCommands.state, ["queued", "sent"]),
+          eq(environmentDaemonCommands.sessionId, sessionId),
+          gt(environmentDaemonCommands.commandCursor, afterCursor),
+          inArray(environmentDaemonCommands.state, ["queued", "sent"]),
         ),
       )
-      .orderBy(asc(environmentAgentCommands.commandCursor));
+      .orderBy(asc(environmentDaemonCommands.commandCursor));
 
     if (limit !== undefined) {
       query = query.limit(limit) as typeof query;
     }
 
-    return query.all().map(rowToEnvironmentAgentCommandRecord);
+    return query.all().map(rowToEnvironmentDaemonCommandRecord);
   }
 
-  markSent(commandId: string, now?: number): EnvironmentAgentCommandRecord | undefined {
+  markSent(commandId: string, now?: number): EnvironmentDaemonCommandRecord | undefined {
     return this.transitionCommand(commandId, "sent", { now });
   }
 
-  markReceived(commandId: string, now?: number): EnvironmentAgentCommandRecord | undefined {
+  markReceived(commandId: string, now?: number): EnvironmentDaemonCommandRecord | undefined {
     return this.transitionCommand(commandId, "received", { now });
   }
 
-  markStarted(commandId: string, now?: number): EnvironmentAgentCommandRecord | undefined {
+  markStarted(commandId: string, now?: number): EnvironmentDaemonCommandRecord | undefined {
     return this.transitionCommand(commandId, "started", { now });
   }
 
@@ -931,7 +931,7 @@ export class EnvironmentAgentCommandRepository {
     commandId: string;
     result?: unknown;
     now?: number;
-  }): EnvironmentAgentCommandRecord | undefined {
+  }): EnvironmentDaemonCommandRecord | undefined {
     return this.transitionCommand(args.commandId, "completed", {
       now: args.now,
       ...(args.result !== undefined ? { result: args.result } : {}),
@@ -943,7 +943,7 @@ export class EnvironmentAgentCommandRepository {
     errorCode?: string;
     errorMessage?: string;
     now?: number;
-  }): EnvironmentAgentCommandRecord | undefined {
+  }): EnvironmentDaemonCommandRecord | undefined {
     return this.transitionCommand(args.commandId, "failed", {
       now: args.now,
       ...(args.errorCode !== undefined ? { errorCode: args.errorCode } : {}),
@@ -951,35 +951,35 @@ export class EnvironmentAgentCommandRepository {
     });
   }
 
-  markCancelled(commandId: string, now?: number): EnvironmentAgentCommandRecord | undefined {
+  markCancelled(commandId: string, now?: number): EnvironmentDaemonCommandRecord | undefined {
     return this.transitionCommand(commandId, "cancelled", { now });
   }
 
   getNextCursorForThread(threadId: string): number {
     const row = this.db
       .select({
-        maxCursor: sql<number>`MAX(${environmentAgentCommands.commandCursor})`,
+        maxCursor: sql<number>`MAX(${environmentDaemonCommands.commandCursor})`,
       })
-      .from(environmentAgentCommands)
-      .where(eq(environmentAgentCommands.threadId, threadId))
+      .from(environmentDaemonCommands)
+      .where(eq(environmentDaemonCommands.threadId, threadId))
       .get();
     return (row?.maxCursor ?? 0) + 1;
   }
 
   private transitionCommand(
     commandId: string,
-    target: EnvironmentAgentCommandState,
+    target: EnvironmentDaemonCommandState,
     opts?: {
       result?: unknown;
       errorCode?: string;
       errorMessage?: string;
       now?: number;
     },
-  ): EnvironmentAgentCommandRecord | undefined {
+  ): EnvironmentDaemonCommandRecord | undefined {
     const existing = this.getById(commandId);
     if (!existing) return undefined;
 
-    const resolution = resolveEnvironmentAgentCommandStateUpdate(
+    const resolution = resolveEnvironmentDaemonCommandStateUpdate(
       existing.state,
       target,
     );
@@ -988,13 +988,13 @@ export class EnvironmentAgentCommandRepository {
     }
     if (resolution === "conflict") {
       throw new Error(
-        `Invalid environment-agent command transition: ${existing.state} -> ${target}`,
+        `Invalid environment-daemon command transition: ${existing.state} -> ${target}`,
       );
     }
 
     const now = opts?.now ?? Date.now();
     this.db
-      .update(environmentAgentCommands)
+      .update(environmentDaemonCommands)
       .set({
         state: target,
         updatedAt: now,
@@ -1017,7 +1017,7 @@ export class EnvironmentAgentCommandRepository {
             }
           : {}),
       })
-      .where(eq(environmentAgentCommands.id, commandId))
+      .where(eq(environmentDaemonCommands.id, commandId))
       .run();
     return this.getById(commandId);
   }

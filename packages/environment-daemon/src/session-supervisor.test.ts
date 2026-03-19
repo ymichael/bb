@@ -1,13 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
-import { EnvironmentAgentRuntime } from "./runtime.js";
-import { EnvironmentAgentSessionRuntime } from "./session-runtime.js";
-import { InMemoryEnvironmentAgentSessionStore } from "./in-memory-session-store.js";
-import { EnvironmentAgentSessionHttpClientError } from "./session-http-client.js";
-import { EnvironmentAgentSessionSync } from "./session-sync.js";
-import { EnvironmentAgentSessionSupervisor } from "./session-supervisor.js";
-import type { EnvironmentAgentSessionHttpClient } from "./session-http-client.js";
+import { EnvironmentDaemonRuntime } from "./runtime.js";
+import { EnvironmentDaemonSessionRuntime } from "./session-runtime.js";
+import { InMemoryEnvironmentDaemonSessionStore } from "./in-memory-session-store.js";
+import { EnvironmentDaemonSessionHttpClientError } from "./session-http-client.js";
+import { EnvironmentDaemonSessionSync } from "./session-sync.js";
+import { EnvironmentDaemonSessionSupervisor } from "./session-supervisor.js";
+import type { EnvironmentDaemonSessionHttpClient } from "./session-http-client.js";
 
-function makeClientMock(): EnvironmentAgentSessionHttpClient {
+function makeClientMock(): EnvironmentDaemonSessionHttpClient {
   return {
     openSession: vi.fn(),
     heartbeat: vi.fn(),
@@ -16,14 +16,14 @@ function makeClientMock(): EnvironmentAgentSessionHttpClient {
     acknowledgeCommands: vi.fn(),
     sendCommandResult: vi.fn(),
     closeSession: vi.fn(),
-  } as unknown as EnvironmentAgentSessionHttpClient;
+  } as unknown as EnvironmentDaemonSessionHttpClient;
 }
 
-describe("EnvironmentAgentSessionSupervisor", () => {
+describe("EnvironmentDaemonSessionSupervisor", () => {
   it("opens a session, persists runtime events, executes pulled commands, and reports results", async () => {
-    const store = new InMemoryEnvironmentAgentSessionStore();
-    const runtime = new EnvironmentAgentRuntime({ threadId: "thread-1" });
-    const sessionRuntime = new EnvironmentAgentSessionRuntime({
+    const store = new InMemoryEnvironmentDaemonSessionStore();
+    const runtime = new EnvironmentDaemonRuntime({ threadId: "thread-1" });
+    const sessionRuntime = new EnvironmentDaemonSessionRuntime({
       store,
       clock: () => 10_000,
     });
@@ -97,8 +97,8 @@ describe("EnvironmentAgentSessionSupervisor", () => {
       result: { ok: true },
     });
 
-    const sync = new EnvironmentAgentSessionSync({ runtime: sessionRuntime, client });
-    const supervisor = new EnvironmentAgentSessionSupervisor({
+    const sync = new EnvironmentDaemonSessionSync({ runtime: sessionRuntime, client });
+    const supervisor = new EnvironmentDaemonSessionSupervisor({
       threadId: "thread-1",
       runtime,
       sessionRuntime,
@@ -137,9 +137,9 @@ describe("EnvironmentAgentSessionSupervisor", () => {
   it("reopens the session after an inactive-session heartbeat failure", async () => {
     vi.useFakeTimers();
     try {
-      const store = new InMemoryEnvironmentAgentSessionStore();
-      const runtime = new EnvironmentAgentRuntime({ threadId: "thread-1" });
-      const sessionRuntime = new EnvironmentAgentSessionRuntime({
+      const store = new InMemoryEnvironmentDaemonSessionStore();
+      const runtime = new EnvironmentDaemonRuntime({ threadId: "thread-1" });
+      const sessionRuntime = new EnvironmentDaemonSessionRuntime({
         store,
         clock: () => 10_000,
       });
@@ -173,9 +173,9 @@ describe("EnvironmentAgentSessionSupervisor", () => {
         });
       (client.heartbeat as ReturnType<typeof vi.fn>)
         .mockResolvedValueOnce(undefined)
-        .mockRejectedValueOnce(new EnvironmentAgentSessionHttpClientError({
+        .mockRejectedValueOnce(new EnvironmentDaemonSessionHttpClientError({
           message:
-            "Unexpected daemon response 409 (expected 204): Environment-agent session sess-1 is not active",
+            "Unexpected daemon response 409 (expected 204): Environment-daemon session sess-1 is not active",
           status: 409,
           code: "inactive_session",
         }))
@@ -190,9 +190,9 @@ describe("EnvironmentAgentSessionSupervisor", () => {
       });
       (client.closeSession as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
 
-      const sync = new EnvironmentAgentSessionSync({ runtime: sessionRuntime, client });
+      const sync = new EnvironmentDaemonSessionSync({ runtime: sessionRuntime, client });
       const onError = vi.fn();
-      const supervisor = new EnvironmentAgentSessionSupervisor({
+      const supervisor = new EnvironmentDaemonSessionSupervisor({
         threadId: "thread-1",
         runtime,
         sessionRuntime,
@@ -221,9 +221,9 @@ describe("EnvironmentAgentSessionSupervisor", () => {
   it("uses the negotiated heartbeat interval instead of the poll interval", async () => {
     vi.useFakeTimers();
     try {
-      const store = new InMemoryEnvironmentAgentSessionStore();
-      const runtime = new EnvironmentAgentRuntime({ threadId: "thread-1" });
-      const sessionRuntime = new EnvironmentAgentSessionRuntime({
+      const store = new InMemoryEnvironmentDaemonSessionStore();
+      const runtime = new EnvironmentDaemonRuntime({ threadId: "thread-1" });
+      const sessionRuntime = new EnvironmentDaemonSessionRuntime({
         store,
         clock: () => 10_000,
       });
@@ -251,8 +251,8 @@ describe("EnvironmentAgentSessionSupervisor", () => {
         payload: { commands: [] },
       });
 
-      const sync = new EnvironmentAgentSessionSync({ runtime: sessionRuntime, client });
-      const supervisor = new EnvironmentAgentSessionSupervisor({
+      const sync = new EnvironmentDaemonSessionSync({ runtime: sessionRuntime, client });
+      const supervisor = new EnvironmentDaemonSessionSupervisor({
         threadId: "thread-1",
         runtime,
         sessionRuntime,
@@ -284,9 +284,9 @@ describe("EnvironmentAgentSessionSupervisor", () => {
   it("resets retry backoff when poked after a failed heartbeat", async () => {
     vi.useFakeTimers();
     try {
-      const store = new InMemoryEnvironmentAgentSessionStore();
-      const runtime = new EnvironmentAgentRuntime({ threadId: "thread-1" });
-      const sessionRuntime = new EnvironmentAgentSessionRuntime({
+      const store = new InMemoryEnvironmentDaemonSessionStore();
+      const runtime = new EnvironmentDaemonRuntime({ threadId: "thread-1" });
+      const sessionRuntime = new EnvironmentDaemonSessionRuntime({
         store,
         clock: () => 10_000,
       });
@@ -317,8 +317,8 @@ describe("EnvironmentAgentSessionSupervisor", () => {
       });
       (client.closeSession as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
 
-      const sync = new EnvironmentAgentSessionSync({ runtime: sessionRuntime, client });
-      const supervisor = new EnvironmentAgentSessionSupervisor({
+      const sync = new EnvironmentDaemonSessionSync({ runtime: sessionRuntime, client });
+      const supervisor = new EnvironmentDaemonSessionSupervisor({
         threadId: "thread-1",
         runtime,
         sessionRuntime,
@@ -357,9 +357,9 @@ describe("EnvironmentAgentSessionSupervisor", () => {
   it("aborts an in-flight command pull when runtime events arrive", async () => {
     vi.useFakeTimers();
     try {
-      const store = new InMemoryEnvironmentAgentSessionStore();
-      const runtime = new EnvironmentAgentRuntime({ threadId: "thread-1" });
-      const sessionRuntime = new EnvironmentAgentSessionRuntime({
+      const store = new InMemoryEnvironmentDaemonSessionStore();
+      const runtime = new EnvironmentDaemonRuntime({ threadId: "thread-1" });
+      const sessionRuntime = new EnvironmentDaemonSessionRuntime({
         store,
         clock: () => 10_000,
       });
@@ -425,8 +425,8 @@ describe("EnvironmentAgentSessionSupervisor", () => {
           payload: { commands: [] },
         });
 
-      const sync = new EnvironmentAgentSessionSync({ runtime: sessionRuntime, client });
-      const supervisor = new EnvironmentAgentSessionSupervisor({
+      const sync = new EnvironmentDaemonSessionSync({ runtime: sessionRuntime, client });
+      const supervisor = new EnvironmentDaemonSessionSupervisor({
         threadId: "thread-1",
         runtime,
         sessionRuntime,
@@ -480,9 +480,9 @@ describe("EnvironmentAgentSessionSupervisor", () => {
     vi.useFakeTimers();
     try {
       vi.setSystemTime(0);
-      const store = new InMemoryEnvironmentAgentSessionStore();
-      const runtime = new EnvironmentAgentRuntime({ threadId: "thread-1" });
-      const sessionRuntime = new EnvironmentAgentSessionRuntime({
+      const store = new InMemoryEnvironmentDaemonSessionStore();
+      const runtime = new EnvironmentDaemonRuntime({ threadId: "thread-1" });
+      const sessionRuntime = new EnvironmentDaemonSessionRuntime({
         store,
         clock: () => 10_000,
       });
@@ -539,8 +539,8 @@ describe("EnvironmentAgentSessionSupervisor", () => {
           payload: { commands: [] },
         });
 
-      const sync = new EnvironmentAgentSessionSync({ runtime: sessionRuntime, client });
-      const supervisor = new EnvironmentAgentSessionSupervisor({
+      const sync = new EnvironmentDaemonSessionSync({ runtime: sessionRuntime, client });
+      const supervisor = new EnvironmentDaemonSessionSupervisor({
         threadId: "thread-1",
         runtime,
         sessionRuntime,
@@ -604,9 +604,9 @@ describe("EnvironmentAgentSessionSupervisor", () => {
   });
 
   it("resends buffered events when the daemon acks an older cursor", async () => {
-    const store = new InMemoryEnvironmentAgentSessionStore();
-    const runtime = new EnvironmentAgentRuntime({ threadId: "thread-1" });
-    const sessionRuntime = new EnvironmentAgentSessionRuntime({
+    const store = new InMemoryEnvironmentDaemonSessionStore();
+    const runtime = new EnvironmentDaemonRuntime({ threadId: "thread-1" });
+    const sessionRuntime = new EnvironmentDaemonSessionRuntime({
       store,
       clock: () => 10_000,
     });
@@ -673,8 +673,8 @@ describe("EnvironmentAgentSessionSupervisor", () => {
     });
     (client.closeSession as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
 
-    const sync = new EnvironmentAgentSessionSync({ runtime: sessionRuntime, client });
-    const supervisor = new EnvironmentAgentSessionSupervisor({
+    const sync = new EnvironmentDaemonSessionSync({ runtime: sessionRuntime, client });
+    const supervisor = new EnvironmentDaemonSessionSupervisor({
       threadId: "thread-1",
       runtime,
       sessionRuntime,
@@ -745,9 +745,9 @@ describe("EnvironmentAgentSessionSupervisor", () => {
   });
 
   it("flushes buffered events and command results before closing the session", async () => {
-    const store = new InMemoryEnvironmentAgentSessionStore();
-    const runtime = new EnvironmentAgentRuntime({ threadId: "thread-1" });
-    const sessionRuntime = new EnvironmentAgentSessionRuntime({
+    const store = new InMemoryEnvironmentDaemonSessionStore();
+    const runtime = new EnvironmentDaemonRuntime({ threadId: "thread-1" });
+    const sessionRuntime = new EnvironmentDaemonSessionRuntime({
       store,
       clock: () => 10_000,
     });
@@ -799,8 +799,8 @@ describe("EnvironmentAgentSessionSupervisor", () => {
     (client.sendCommandResult as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
     (client.closeSession as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
 
-    const sync = new EnvironmentAgentSessionSync({ runtime: sessionRuntime, client });
-    const supervisor = new EnvironmentAgentSessionSupervisor({
+    const sync = new EnvironmentDaemonSessionSync({ runtime: sessionRuntime, client });
+    const supervisor = new EnvironmentDaemonSessionSupervisor({
       threadId: "thread-1",
       runtime,
       sessionRuntime,

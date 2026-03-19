@@ -3,7 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { expandHomeDirectory, resolveBbPath } from "@bb/core/storage-paths";
-import type { EnvironmentAgentConnectionTarget } from "@bb/environment-daemon";
+import type { EnvironmentDaemonConnectionTarget } from "@bb/environment-daemon";
 import { renderTemplate } from "@bb/templates";
 import {
   EnvironmentSquashMergeCommitFailureError,
@@ -38,12 +38,12 @@ import {
   watchGitWorkspaceStatus,
 } from "./git-workspace.js";
 import {
-  resolveEnvironmentAgentConnectionTarget,
-} from "./environment-agent-target.js";
+  resolveEnvironmentDaemonConnectionTarget,
+} from "./environment-daemon-target.js";
 import {
-  disposeManagedHostEnvironmentAgent,
-  ensureManagedHostEnvironmentAgent,
-} from "./host-environment-agent.js";
+  disposeManagedHostEnvironmentDaemon,
+  ensureManagedHostEnvironmentDaemon,
+} from "./host-environment-daemon.js";
 import { runCommandAsync, spawnCommand } from "./process.js";
 
 export interface LocalGitWorkspaceState {
@@ -53,7 +53,7 @@ export interface LocalGitWorkspaceState {
 
 export interface CreateLocalGitWorkspaceOptions {
   worktreeRootName?: string;
-  manageEnvironmentAgent?: boolean;
+  manageEnvironmentDaemon?: boolean;
 }
 
 export function isLocalGitWorkspaceState(value: unknown): value is LocalGitWorkspaceState {
@@ -259,10 +259,10 @@ class LocalGitWorkspaceEnvironment implements IEnvironment {
   private readonly rootPath: string;
   private readonly env: Record<string, string | undefined>;
   private readonly services: CreateEnvironmentContext["services"];
-  private readonly reconnectTarget: CreateEnvironmentContext["managedEnvironmentAgentReconnectTarget"];
-  private readonly manageEnvironmentAgent: boolean;
+  private readonly reconnectTarget: CreateEnvironmentContext["managedEnvironmentDaemonReconnectTarget"];
+  private readonly manageEnvironmentDaemon: boolean;
   private preparePromise: Promise<void> | null = null;
-  private managedAgentTarget?: EnvironmentAgentConnectionTarget;
+  private managedAgentTarget?: EnvironmentDaemonConnectionTarget;
 
   constructor(
     projectId: string,
@@ -270,9 +270,9 @@ class LocalGitWorkspaceEnvironment implements IEnvironment {
     private readonly projectRoot: string,
     private readonly state: LocalGitWorkspaceState,
     runtimeEnv: Record<string, string | undefined>,
-    reconnectTarget?: CreateEnvironmentContext["managedEnvironmentAgentReconnectTarget"],
+    reconnectTarget?: CreateEnvironmentContext["managedEnvironmentDaemonReconnectTarget"],
     services?: CreateEnvironmentContext["services"],
-    manageEnvironmentAgent = true,
+    manageEnvironmentDaemon = true,
   ) {
     this.projectId = projectId;
     this.threadId = threadId;
@@ -281,7 +281,7 @@ class LocalGitWorkspaceEnvironment implements IEnvironment {
     this.env = { ...runtimeEnv };
     this.reconnectTarget = reconnectTarget;
     this.services = services;
-    this.manageEnvironmentAgent = manageEnvironmentAgent;
+    this.manageEnvironmentDaemon = manageEnvironmentDaemon;
   }
 
   serialize(): LocalGitWorkspaceState {
@@ -292,13 +292,13 @@ class LocalGitWorkspaceEnvironment implements IEnvironment {
     if (!existsSync(this.state.workspaceRoot)) {
       throw new Error(`Local git workspace is unavailable: ${this.state.workspaceRoot}`);
     }
-    if (!this.manageEnvironmentAgent) {
+    if (!this.manageEnvironmentDaemon) {
       return;
     }
     if (this.preparePromise) {
       return this.preparePromise;
     }
-    this.preparePromise = ensureManagedHostEnvironmentAgent({
+    this.preparePromise = ensureManagedHostEnvironmentDaemon({
       workspaceRootPath: this.state.workspaceRoot,
       threadId: this.threadId,
       projectId: this.projectId,
@@ -317,8 +317,8 @@ class LocalGitWorkspaceEnvironment implements IEnvironment {
 
   async suspend(): Promise<void> {
     this.managedAgentTarget = undefined;
-    if (this.manageEnvironmentAgent) {
-      await disposeManagedHostEnvironmentAgent({
+    if (this.manageEnvironmentDaemon) {
+      await disposeManagedHostEnvironmentDaemon({
         projectId: this.projectId,
         threadId: this.threadId,
         environmentId: this.environmentId,
@@ -344,15 +344,15 @@ class LocalGitWorkspaceEnvironment implements IEnvironment {
     return true;
   }
 
-  getAgentConnectionTarget(): EnvironmentAgentConnectionTarget {
-    if (!this.manageEnvironmentAgent && !this.env.BB_ENV_DAEMON_BASE_URL?.trim()) {
-      throw new Error("Local git workspace environment-agent management is disabled");
+  getAgentConnectionTarget(): EnvironmentDaemonConnectionTarget {
+    if (!this.manageEnvironmentDaemon && !this.env.BB_ENV_DAEMON_BASE_URL?.trim()) {
+      throw new Error("Local git workspace environment-daemon management is disabled");
     }
     const managedTarget = this.managedAgentTarget;
     if (!managedTarget && !this.env.BB_ENV_DAEMON_BASE_URL?.trim()) {
-      throw new Error("Missing managed environment-agent target for local git workspace");
+      throw new Error("Missing managed environment-daemon target for local git workspace");
     }
-    return resolveEnvironmentAgentConnectionTarget({
+    return resolveEnvironmentDaemonConnectionTarget({
       runtimeEnv: this.env,
       defaultTarget:
         managedTarget ?? {
@@ -379,7 +379,7 @@ class LocalGitWorkspaceEnvironment implements IEnvironment {
   }
 
   buildAgentInstructions(): string | undefined {
-    return this.manageEnvironmentAgent ? WORKTREE_AGENT_INSTRUCTIONS : undefined;
+    return this.manageEnvironmentDaemon ? WORKTREE_AGENT_INSTRUCTIONS : undefined;
   }
 
   getWorkspaceStatus(args?: EnvironmentWorkspaceStatusOptions) {
@@ -772,7 +772,7 @@ class LocalGitWorkspaceEnvironment implements IEnvironment {
 export function createLocalGitWorkspaceDefinition(
   opts?: CreateLocalGitWorkspaceOptions,
 ): EnvironmentDefinition<LocalGitWorkspaceState> {
-  const manageEnvironmentAgent = opts?.manageEnvironmentAgent ?? true;
+  const manageEnvironmentDaemon = opts?.manageEnvironmentDaemon ?? true;
 
   return {
     kind: "local",
@@ -796,9 +796,9 @@ export function createLocalGitWorkspaceDefinition(
           ...(opts?.worktreeRootName ? { worktreeRootName: opts.worktreeRootName } : {}),
         }),
         context.runtimeEnv,
-        context.managedEnvironmentAgentReconnectTarget,
+        context.managedEnvironmentDaemonReconnectTarget,
         context.services,
-        manageEnvironmentAgent,
+        manageEnvironmentDaemon,
       );
     },
     restore(state: LocalGitWorkspaceState, context: CreateEnvironmentContext): IEnvironment {
@@ -811,9 +811,9 @@ export function createLocalGitWorkspaceDefinition(
         context.projectRootPath,
         state,
         context.runtimeEnv,
-        context.managedEnvironmentAgentReconnectTarget,
+        context.managedEnvironmentDaemonReconnectTarget,
         context.services,
-        manageEnvironmentAgent,
+        manageEnvironmentDaemon,
       );
     },
     isState: isLocalGitWorkspaceState,

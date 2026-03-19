@@ -9,8 +9,8 @@ import { basename, dirname, join, resolve } from "node:path";
 import { expandHomeDirectory, resolveBbRoot } from "@bb/core/storage-paths";
 import { type Project, type Thread } from "@bb/core";
 import type {
-  SystemHealthEnvironmentAgentProvider,
-  SystemHealthEnvironmentAgentSession,
+  SystemHealthEnvironmentDaemonProvider,
+  SystemHealthEnvironmentDaemonSession,
   SystemHealthDiskSummary,
   SystemHealthReport,
   SystemHealthStorageBucket,
@@ -18,8 +18,8 @@ import type {
   SystemHealthThreadCounts,
 } from "@bb/core";
 import type {
-  EnvironmentAgentSessionRecord,
-  EnvironmentAgentSessionRepository,
+  EnvironmentDaemonSessionRecord,
+  EnvironmentDaemonSessionRepository,
   ProjectRepository,
   ThreadRepository,
 } from "@bb/db";
@@ -27,12 +27,12 @@ import {
   resolveDefaultManagedWorktreeRoot,
   resolveManagedWorktreeRootForProject,
 } from "./managed-storage-paths.js";
-import { assessEnvironmentAgentSessionCompatibility } from "./environment-agent-session-compatibility.js";
+import { assessEnvironmentDaemonSessionCompatibility } from "./environment-daemon-session-compatibility.js";
 
 export interface CreateSystemHealthReporterArgs {
   projectRepo: ProjectRepository;
   threadRepo: ThreadRepository;
-  environmentAgentSessionRepo: EnvironmentAgentSessionRepository;
+  environmentDaemonSessionRepo: EnvironmentDaemonSessionRepository;
   getRunningCount: () => number;
   startTime: number;
   dbPath: string;
@@ -45,7 +45,7 @@ const STORAGE_BUCKET_LABELS: Record<SystemHealthStorageBucketKey, string> = {
   database_wal: "Database WAL",
   database_shm: "Database SHM",
   server_logs: "Server Logs",
-  environment_agent_logs: "Environment Agent Logs",
+  environment_daemon_logs: "Environment Agent Logs",
   worktrees: "Worktrees",
   attachments: "Attachments",
   backups: "Backups",
@@ -160,7 +160,7 @@ function buildThreadCounts(threads: readonly Thread[]): SystemHealthThreadCounts
 
 function isProviderMetadataArray(
   value: unknown,
-): value is SystemHealthEnvironmentAgentProvider[] {
+): value is SystemHealthEnvironmentDaemonProvider[] {
   return (
     Array.isArray(value) &&
     value.every(
@@ -174,10 +174,10 @@ function isProviderMetadataArray(
   );
 }
 
-function toEnvironmentAgentSessionSummary(
-  session: EnvironmentAgentSessionRecord,
-): SystemHealthEnvironmentAgentSession {
-  const assessment = assessEnvironmentAgentSessionCompatibility(session);
+function toEnvironmentDaemonSessionSummary(
+  session: EnvironmentDaemonSessionRecord,
+): SystemHealthEnvironmentDaemonSession {
+  const assessment = assessEnvironmentDaemonSessionCompatibility(session);
   return {
     sessionId: session.id,
     environmentId: session.environmentId,
@@ -234,14 +234,14 @@ export function createSystemHealthReporter(args: CreateSystemHealthReporterArgs)
   return (): SystemHealthReport => {
     const projects = args.projectRepo.list();
     const threads = args.threadRepo.list({ includeArchived: true });
-    const activeEnvironmentAgentSessions = args.environmentAgentSessionRepo.listActive();
+    const activeEnvironmentDaemonSessions = args.environmentDaemonSessionRepo.listActive();
     const bbRoot = resolveBbRoot(args.runtimeEnv);
     const buckets = [
       buildStorageBucket("database", [args.dbPath]),
       buildStorageBucket("database_wal", [`${args.dbPath}-wal`]),
       buildStorageBucket("database_shm", [`${args.dbPath}-shm`]),
       buildStorageBucket("server_logs", listRotatingLogArtifacts(args.serverLogFilePath)),
-      buildStorageBucket("environment_agent_logs", [join(bbRoot, "environment-agent-logs")]),
+      buildStorageBucket("environment_daemon_logs", [join(bbRoot, "environment-daemon-logs")]),
       buildStorageBucket("worktrees", resolveWorktreeBucketPaths(projects, args.runtimeEnv)),
       buildStorageBucket("attachments", [join(bbRoot, "attachments")]),
       buildStorageBucket("backups", [join(bbRoot, "backups")]),
@@ -256,10 +256,10 @@ export function createSystemHealthReporter(args: CreateSystemHealthReporterArgs)
       projectCount: projects.length,
       runningThreads: args.getRunningCount(),
       threadCounts: buildThreadCounts(threads),
-      environmentAgent: {
-        activeSessionCount: activeEnvironmentAgentSessions.length,
-        activeSessions: activeEnvironmentAgentSessions.map(
-          toEnvironmentAgentSessionSummary,
+      environmentDaemon: {
+        activeSessionCount: activeEnvironmentDaemonSessions.length,
+        activeSessions: activeEnvironmentDaemonSessions.map(
+          toEnvironmentDaemonSessionSummary,
         ),
       },
       storage: {

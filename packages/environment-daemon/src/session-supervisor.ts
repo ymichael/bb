@@ -1,32 +1,32 @@
 import { randomUUID } from "node:crypto";
-import type { EnvironmentAgentCommandAck } from "./protocol.js";
-import { type EnvironmentAgentRuntime } from "./runtime.js";
-import { isEnvironmentAgentSessionInactiveError } from "./session-http-client.js";
-import type { EnvironmentAgentSessionRuntime } from "./session-runtime.js";
+import type { EnvironmentDaemonCommandAck } from "./protocol.js";
+import { type EnvironmentDaemonRuntime } from "./runtime.js";
+import { isEnvironmentDaemonSessionInactiveError } from "./session-http-client.js";
+import type { EnvironmentDaemonSessionRuntime } from "./session-runtime.js";
 import type {
-  EnvironmentAgentPulledCommand,
-  EnvironmentAgentSessionSync,
+  EnvironmentDaemonPulledCommand,
+  EnvironmentDaemonSessionSync,
 } from "./session-sync.js";
-import type { EnvironmentAgentSessionControlEndpoint } from "./session-protocol.js";
-import type { EnvironmentAgentSessionProviderResponsePayload } from "./session-protocol.js";
+import type { EnvironmentDaemonSessionControlEndpoint } from "./session-protocol.js";
+import type { EnvironmentDaemonSessionProviderResponsePayload } from "./session-protocol.js";
 import type {
-  EnvironmentAgentSessionCapabilities,
-  EnvironmentAgentSessionProviderMetadata,
-  EnvironmentAgentSessionProtocolVersion,
-  EnvironmentAgentSessionWorkerMetadata,
+  EnvironmentDaemonSessionCapabilities,
+  EnvironmentDaemonSessionProviderMetadata,
+  EnvironmentDaemonSessionProtocolVersion,
+  EnvironmentDaemonSessionWorkerMetadata,
 } from "./session-protocol.js";
-import { ENVIRONMENT_AGENT_SESSION_SUPPORTED_PROTOCOL_VERSIONS } from "./session-protocol.js";
+import { ENVIRONMENT_DAEMON_SESSION_SUPPORTED_PROTOCOL_VERSIONS } from "./session-protocol.js";
 
-export interface EnvironmentAgentSessionSupervisorOptions {
+export interface EnvironmentDaemonSessionSupervisorOptions {
   threadId: string;
-  runtime: EnvironmentAgentRuntime;
-  sessionRuntime: EnvironmentAgentSessionRuntime;
-  sessionSync: EnvironmentAgentSessionSync;
-  supportedProtocolVersions?: readonly EnvironmentAgentSessionProtocolVersion[];
-  advertisedCapabilities?: EnvironmentAgentSessionCapabilities;
-  controlEndpoint?: EnvironmentAgentSessionControlEndpoint;
-  workerMetadata?: EnvironmentAgentSessionWorkerMetadata;
-  providerMetadata?: EnvironmentAgentSessionProviderMetadata[];
+  runtime: EnvironmentDaemonRuntime;
+  sessionRuntime: EnvironmentDaemonSessionRuntime;
+  sessionSync: EnvironmentDaemonSessionSync;
+  supportedProtocolVersions?: readonly EnvironmentDaemonSessionProtocolVersion[];
+  advertisedCapabilities?: EnvironmentDaemonSessionCapabilities;
+  controlEndpoint?: EnvironmentDaemonSessionControlEndpoint;
+  workerMetadata?: EnvironmentDaemonSessionWorkerMetadata;
+  providerMetadata?: EnvironmentDaemonSessionProviderMetadata[];
   agentId?: string;
   agentInstanceId?: string;
   pollIntervalMs?: number;
@@ -55,7 +55,7 @@ function isAbortError(error: unknown): error is Error {
 function toCommandEnvelope(args: {
   threadId: string;
   commandId: string;
-  command: import("./protocol.js").EnvironmentAgentCommand;
+  command: import("./protocol.js").EnvironmentDaemonCommand;
   sentAt: number;
 }) {
   return {
@@ -70,23 +70,23 @@ function toCommandEnvelope(args: {
   };
 }
 
-function normalizeRejectedCommandError(ack: EnvironmentAgentCommandAck): {
+function normalizeRejectedCommandError(ack: EnvironmentDaemonCommandAck): {
   errorCode?: string;
   errorMessage: string;
 } {
   return {
     ...(ack.errorCode ? { errorCode: ack.errorCode } : {}),
-    errorMessage: ack.message ?? "Environment-agent command rejected",
+    errorMessage: ack.message ?? "Environment-daemon command rejected",
   };
 }
 
-export class EnvironmentAgentSessionSupervisor {
+export class EnvironmentDaemonSessionSupervisor {
   private readonly agentId: string;
   private readonly agentInstanceId: string;
   private readonly pollIntervalMs: number;
   private readonly commandBatchLimit: number;
   private readonly eventFlushDebounceMs: number;
-  private readonly supportedProtocolVersions: readonly EnvironmentAgentSessionProtocolVersion[];
+  private readonly supportedProtocolVersions: readonly EnvironmentDaemonSessionProtocolVersion[];
   private readonly onError?: (error: unknown) => void;
   private pollTimer: ReturnType<typeof setTimeout> | undefined;
   private eventFlushTimer: ReturnType<typeof setTimeout> | undefined;
@@ -99,8 +99,8 @@ export class EnvironmentAgentSessionSupervisor {
   private lastCommandPullAbortAt = 0;
   private readonly unsubscribeRuntimeEvents: () => void;
 
-  constructor(private readonly options: EnvironmentAgentSessionSupervisorOptions) {
-    this.agentId = options.agentId ?? `environment-agent:${options.threadId}`;
+  constructor(private readonly options: EnvironmentDaemonSessionSupervisorOptions) {
+    this.agentId = options.agentId ?? `environment-daemon:${options.threadId}`;
     this.agentInstanceId = options.agentInstanceId ?? randomUUID();
     this.pollIntervalMs = options.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
     this.commandBatchLimit = options.commandBatchLimit ?? DEFAULT_COMMAND_BATCH_LIMIT;
@@ -108,7 +108,7 @@ export class EnvironmentAgentSessionSupervisor {
       options.eventFlushDebounceMs ?? DEFAULT_EVENT_FLUSH_DEBOUNCE_MS;
     this.supportedProtocolVersions =
       options.supportedProtocolVersions ??
-      ENVIRONMENT_AGENT_SESSION_SUPPORTED_PROTOCOL_VERSIONS;
+      ENVIRONMENT_DAEMON_SESSION_SUPPORTED_PROTOCOL_VERSIONS;
     this.onError = options.onError;
 
     this.options.sessionRuntime.initializeThread({
@@ -199,7 +199,7 @@ export class EnvironmentAgentSessionSupervisor {
     normalizedMethod?: string;
     toolCall?: import("@bb/core").ProviderToolCallRequest;
     threadId?: string;
-  }): Promise<EnvironmentAgentSessionProviderResponsePayload> {
+  }): Promise<EnvironmentDaemonSessionProviderResponsePayload> {
     await this.openSession();
     return this.options.sessionSync.forwardProviderRequest({
       threadId: args.threadId ?? this.options.threadId,
@@ -372,7 +372,7 @@ export class EnvironmentAgentSessionSupervisor {
   }
 
   private handleSessionError(error: unknown): boolean {
-    if (!isEnvironmentAgentSessionInactiveError(error)) {
+    if (!isEnvironmentDaemonSessionInactiveError(error)) {
       return false;
     }
     for (const threadId of this.getThreadIds()) {
@@ -465,7 +465,7 @@ export class EnvironmentAgentSessionSupervisor {
   private async pullCommands(args: {
     threadIds: readonly string[];
     afterCursor?: number;
-  }): Promise<EnvironmentAgentPulledCommand[]> {
+  }): Promise<EnvironmentDaemonPulledCommand[]> {
     const controller = new AbortController();
     this.commandPullController = controller;
     try {
@@ -512,7 +512,7 @@ export class EnvironmentAgentSessionSupervisor {
       }
     }
     throw new Error(
-      `Environment-agent event reset did not converge for thread ${this.options.threadId}`,
+      `Environment-daemon event reset did not converge for thread ${this.options.threadId}`,
     );
   }
 

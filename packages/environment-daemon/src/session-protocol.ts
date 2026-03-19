@@ -3,18 +3,18 @@ import type {
   ProviderToolCallResponse,
 } from "@bb/core";
 import type {
-  EnvironmentAgentCommand,
-  EnvironmentAgentEvent,
+  EnvironmentDaemonCommand,
+  EnvironmentDaemonEvent,
 } from "./protocol.js";
 
-export const ENVIRONMENT_AGENT_SESSION_PROTOCOL =
+export const ENVIRONMENT_DAEMON_SESSION_PROTOCOL =
   "bb.env-daemon.v1" as const;
-export const ENVIRONMENT_AGENT_SESSION_PROTOCOL_VERSION = 1 as const;
-export const ENVIRONMENT_AGENT_SESSION_SUPPORTED_PROTOCOL_VERSIONS = [
-  ENVIRONMENT_AGENT_SESSION_PROTOCOL_VERSION,
+export const ENVIRONMENT_DAEMON_SESSION_PROTOCOL_VERSION = 1 as const;
+export const ENVIRONMENT_DAEMON_SESSION_SUPPORTED_PROTOCOL_VERSIONS = [
+  ENVIRONMENT_DAEMON_SESSION_PROTOCOL_VERSION,
 ] as const;
-export type EnvironmentAgentSessionProtocolVersion =
-  (typeof ENVIRONMENT_AGENT_SESSION_SUPPORTED_PROTOCOL_VERSIONS)[number];
+export type EnvironmentDaemonSessionProtocolVersion =
+  (typeof ENVIRONMENT_DAEMON_SESSION_SUPPORTED_PROTOCOL_VERSIONS)[number];
 
 export const ENVIRONMENT_AGENT_SESSION_CAPABILITY_COMMANDS = [
   "provider.ensure",
@@ -27,8 +27,8 @@ export const ENVIRONMENT_AGENT_SESSION_CAPABILITY_COMMANDS = [
   "provider.list_catalog",
   "workspace.status",
   "workspace.diff",
-] as const satisfies readonly EnvironmentAgentCommand["type"][];
-export type EnvironmentAgentSessionCapabilityCommand =
+] as const satisfies readonly EnvironmentDaemonCommand["type"][];
+export type EnvironmentDaemonSessionCapabilityCommand =
   (typeof ENVIRONMENT_AGENT_SESSION_CAPABILITY_COMMANDS)[number];
 
 export const ENVIRONMENT_AGENT_SESSION_CAPABILITY_FEATURES = [
@@ -37,10 +37,10 @@ export const ENVIRONMENT_AGENT_SESSION_CAPABILITY_FEATURES = [
   "provider_runtime_version",
   "control_endpoint",
 ] as const;
-export type EnvironmentAgentSessionCapabilityFeature =
+export type EnvironmentDaemonSessionCapabilityFeature =
   (typeof ENVIRONMENT_AGENT_SESSION_CAPABILITY_FEATURES)[number];
 
-export type EnvironmentAgentSessionCloseReason =
+export type EnvironmentDaemonSessionCloseReason =
   | "agent_shutdown"
   | "server_shutdown"
   | "lease_expired"
@@ -48,42 +48,42 @@ export type EnvironmentAgentSessionCloseReason =
   | "migration"
   | "internal_error";
 
-export interface EnvironmentAgentSessionCursor {
+export interface EnvironmentDaemonSessionCursor {
   generation: number;
   sequence: number;
 }
 
-export interface EnvironmentAgentSessionCursorExclusive {
+export interface EnvironmentDaemonSessionCursorExclusive {
   generation: number;
   sequenceExclusive: number;
 }
 
-export interface EnvironmentAgentSessionChannelBootstrap {
+export interface EnvironmentDaemonSessionChannelBootstrap {
   channelId: string;
   generation: number;
-  lastServerAcked?: EnvironmentAgentSessionCursor;
+  lastServerAcked?: EnvironmentDaemonSessionCursor;
 }
 
-export interface EnvironmentAgentSessionControlEndpoint {
+export interface EnvironmentDaemonSessionControlEndpoint {
   baseUrl: string;
   authToken: string;
 }
 
-export interface EnvironmentAgentSessionWorkerMetadata {
+export interface EnvironmentDaemonSessionWorkerMetadata {
   name: string;
   version: string;
   buildId?: string;
 }
 
-export interface EnvironmentAgentSessionProviderMetadata {
+export interface EnvironmentDaemonSessionProviderMetadata {
   providerId: string;
   adapterVersion: string;
   runtimeVersion?: string;
 }
 
-export interface EnvironmentAgentSessionCapabilities {
-  commands: EnvironmentAgentSessionCapabilityCommand[];
-  features: EnvironmentAgentSessionCapabilityFeature[];
+export interface EnvironmentDaemonSessionCapabilities {
+  commands: EnvironmentDaemonSessionCapabilityCommand[];
+  features: EnvironmentDaemonSessionCapabilityFeature[];
 }
 
 const LEGACY_INFERRED_COMMANDS = [
@@ -97,36 +97,36 @@ const LEGACY_INFERRED_COMMANDS = [
   "provider.list_catalog",
   "workspace.status",
   "workspace.diff",
-] as const satisfies readonly EnvironmentAgentSessionCapabilityCommand[];
+] as const satisfies readonly EnvironmentDaemonSessionCapabilityCommand[];
 
-export interface EnvironmentAgentSessionOpenPayload {
+export interface EnvironmentDaemonSessionOpenPayload {
   agentId: string;
   agentInstanceId: string;
   supportedProtocolVersions: number[];
-  capabilities?: EnvironmentAgentSessionCapabilities;
-  worker?: EnvironmentAgentSessionWorkerMetadata;
-  providers?: EnvironmentAgentSessionProviderMetadata[];
-  controlEndpoint?: EnvironmentAgentSessionControlEndpoint;
-  channels: EnvironmentAgentSessionChannelBootstrap[];
+  capabilities?: EnvironmentDaemonSessionCapabilities;
+  worker?: EnvironmentDaemonSessionWorkerMetadata;
+  providers?: EnvironmentDaemonSessionProviderMetadata[];
+  controlEndpoint?: EnvironmentDaemonSessionControlEndpoint;
+  channels: EnvironmentDaemonSessionChannelBootstrap[];
 }
 
-export interface EnvironmentAgentSessionWelcomeChannel {
+export interface EnvironmentDaemonSessionWelcomeChannel {
   channelId: string;
-  applyFrom: EnvironmentAgentSessionCursorExclusive;
+  applyFrom: EnvironmentDaemonSessionCursorExclusive;
 }
 
-export interface EnvironmentAgentSessionWelcomePayload {
+export interface EnvironmentDaemonSessionWelcomePayload {
   leaseTtlMs: number;
   heartbeatIntervalMs: number;
-  protocolVersion: EnvironmentAgentSessionProtocolVersion;
-  selectedCapabilities?: EnvironmentAgentSessionCapabilities;
-  channels: EnvironmentAgentSessionWelcomeChannel[];
+  protocolVersion: EnvironmentDaemonSessionProtocolVersion;
+  selectedCapabilities?: EnvironmentDaemonSessionCapabilities;
+  channels: EnvironmentDaemonSessionWelcomeChannel[];
 }
 
-export function selectEnvironmentAgentSessionProtocolVersion(args: {
-  supportedByServer: readonly EnvironmentAgentSessionProtocolVersion[];
+export function selectEnvironmentDaemonSessionProtocolVersion(args: {
+  supportedByServer: readonly EnvironmentDaemonSessionProtocolVersion[];
   supportedByAgent: readonly number[];
-}): EnvironmentAgentSessionProtocolVersion | undefined {
+}): EnvironmentDaemonSessionProtocolVersion | undefined {
   const agentSupportedVersions = new Set(args.supportedByAgent);
   for (const version of [...args.supportedByServer].sort((a, b) => b - a)) {
     if (agentSupportedVersions.has(version)) {
@@ -142,26 +142,26 @@ function uniqueInOrder<T>(values: readonly T[]): T[] {
 
 function isKnownCommand(
   value: string,
-): value is EnvironmentAgentSessionCapabilityCommand {
+): value is EnvironmentDaemonSessionCapabilityCommand {
   return ENVIRONMENT_AGENT_SESSION_CAPABILITY_COMMANDS.includes(
-    value as EnvironmentAgentSessionCapabilityCommand,
+    value as EnvironmentDaemonSessionCapabilityCommand,
   );
 }
 
 function isKnownFeature(
   value: string,
-): value is EnvironmentAgentSessionCapabilityFeature {
+): value is EnvironmentDaemonSessionCapabilityFeature {
   return ENVIRONMENT_AGENT_SESSION_CAPABILITY_FEATURES.includes(
-    value as EnvironmentAgentSessionCapabilityFeature,
+    value as EnvironmentDaemonSessionCapabilityFeature,
   );
 }
 
-export function inferEnvironmentAgentSessionCapabilities(args: {
-  worker?: EnvironmentAgentSessionWorkerMetadata;
-  providers?: EnvironmentAgentSessionProviderMetadata[];
-  controlEndpoint?: EnvironmentAgentSessionControlEndpoint;
-}): EnvironmentAgentSessionCapabilities {
-  const features: EnvironmentAgentSessionCapabilityFeature[] = [];
+export function inferEnvironmentDaemonSessionCapabilities(args: {
+  worker?: EnvironmentDaemonSessionWorkerMetadata;
+  providers?: EnvironmentDaemonSessionProviderMetadata[];
+  controlEndpoint?: EnvironmentDaemonSessionControlEndpoint;
+}): EnvironmentDaemonSessionCapabilities {
+  const features: EnvironmentDaemonSessionCapabilityFeature[] = [];
   if (args.worker) {
     features.push("worker_metadata");
   }
@@ -180,46 +180,46 @@ export function inferEnvironmentAgentSessionCapabilities(args: {
   };
 }
 
-export function createEnvironmentAgentSessionCapabilities(args: {
-  worker?: EnvironmentAgentSessionWorkerMetadata;
-  providers?: EnvironmentAgentSessionProviderMetadata[];
-  controlEndpoint?: EnvironmentAgentSessionControlEndpoint;
-}): EnvironmentAgentSessionCapabilities {
-  const inferred = inferEnvironmentAgentSessionCapabilities(args);
+export function createEnvironmentDaemonSessionCapabilities(args: {
+  worker?: EnvironmentDaemonSessionWorkerMetadata;
+  providers?: EnvironmentDaemonSessionProviderMetadata[];
+  controlEndpoint?: EnvironmentDaemonSessionControlEndpoint;
+}): EnvironmentDaemonSessionCapabilities {
+  const inferred = inferEnvironmentDaemonSessionCapabilities(args);
   return {
     commands: [...ENVIRONMENT_AGENT_SESSION_CAPABILITY_COMMANDS],
     features: inferred.features,
   };
 }
 
-export function normalizeEnvironmentAgentSessionCapabilities(
-  capabilities: Partial<EnvironmentAgentSessionCapabilities> | undefined,
-): EnvironmentAgentSessionCapabilities {
+export function normalizeEnvironmentDaemonSessionCapabilities(
+  capabilities: Partial<EnvironmentDaemonSessionCapabilities> | undefined,
+): EnvironmentDaemonSessionCapabilities {
   return {
     commands: uniqueInOrder(
-      (capabilities?.commands ?? []).filter((value): value is EnvironmentAgentSessionCapabilityCommand =>
+      (capabilities?.commands ?? []).filter((value): value is EnvironmentDaemonSessionCapabilityCommand =>
         typeof value === "string" && isKnownCommand(value)
       ),
     ),
     features: uniqueInOrder(
-      (capabilities?.features ?? []).filter((value): value is EnvironmentAgentSessionCapabilityFeature =>
+      (capabilities?.features ?? []).filter((value): value is EnvironmentDaemonSessionCapabilityFeature =>
         typeof value === "string" && isKnownFeature(value)
       ),
     ),
   };
 }
 
-export function negotiateEnvironmentAgentSessionCapabilities(args: {
-  requested?: Partial<EnvironmentAgentSessionCapabilities>;
+export function negotiateEnvironmentDaemonSessionCapabilities(args: {
+  requested?: Partial<EnvironmentDaemonSessionCapabilities>;
   fallback: {
-    worker?: EnvironmentAgentSessionWorkerMetadata;
-    providers?: EnvironmentAgentSessionProviderMetadata[];
-    controlEndpoint?: EnvironmentAgentSessionControlEndpoint;
+    worker?: EnvironmentDaemonSessionWorkerMetadata;
+    providers?: EnvironmentDaemonSessionProviderMetadata[];
+    controlEndpoint?: EnvironmentDaemonSessionControlEndpoint;
   };
-}): EnvironmentAgentSessionCapabilities {
+}): EnvironmentDaemonSessionCapabilities {
   const advertised = args.requested
-    ? normalizeEnvironmentAgentSessionCapabilities(args.requested)
-    : inferEnvironmentAgentSessionCapabilities(args.fallback);
+    ? normalizeEnvironmentDaemonSessionCapabilities(args.requested)
+    : inferEnvironmentDaemonSessionCapabilities(args.fallback);
   return {
     commands: advertised.commands.filter((command) =>
       ENVIRONMENT_AGENT_SESSION_CAPABILITY_COMMANDS.includes(command),
@@ -230,20 +230,20 @@ export function negotiateEnvironmentAgentSessionCapabilities(args: {
   };
 }
 
-export interface EnvironmentAgentSessionHeartbeatChannel {
+export interface EnvironmentDaemonSessionHeartbeatChannel {
   channelId: string;
-  lastSent?: EnvironmentAgentSessionCursor;
-  lastAcked?: EnvironmentAgentSessionCursor;
+  lastSent?: EnvironmentDaemonSessionCursor;
+  lastAcked?: EnvironmentDaemonSessionCursor;
 }
 
-export interface EnvironmentAgentSessionHeartbeatPayload {
+export interface EnvironmentDaemonSessionHeartbeatPayload {
   agentObservedAt: number;
   outboxDepth: number;
-  channels: EnvironmentAgentSessionHeartbeatChannel[];
+  channels: EnvironmentDaemonSessionHeartbeatChannel[];
 }
 
-export interface EnvironmentAgentSessionEventBatchItem<
-  TEvent extends EnvironmentAgentEvent = EnvironmentAgentEvent,
+export interface EnvironmentDaemonSessionEventBatchItem<
+  TEvent extends EnvironmentDaemonEvent = EnvironmentDaemonEvent,
 > {
   sequence: number;
   eventId: string;
@@ -251,31 +251,31 @@ export interface EnvironmentAgentSessionEventBatchItem<
   event: TEvent;
 }
 
-export interface EnvironmentAgentSessionEventBatchChannel<
-  TEvent extends EnvironmentAgentEvent = EnvironmentAgentEvent,
+export interface EnvironmentDaemonSessionEventBatchChannel<
+  TEvent extends EnvironmentDaemonEvent = EnvironmentDaemonEvent,
 > {
   channelId: string;
   generation: number;
-  events: EnvironmentAgentSessionEventBatchItem<TEvent>[];
+  events: EnvironmentDaemonSessionEventBatchItem<TEvent>[];
 }
 
-export interface EnvironmentAgentSessionEventBatchPayload<
-  TEvent extends EnvironmentAgentEvent = EnvironmentAgentEvent,
+export interface EnvironmentDaemonSessionEventBatchPayload<
+  TEvent extends EnvironmentDaemonEvent = EnvironmentDaemonEvent,
 > {
-  batches: EnvironmentAgentSessionEventBatchChannel<TEvent>[];
+  batches: EnvironmentDaemonSessionEventBatchChannel<TEvent>[];
 }
 
-export interface EnvironmentAgentSessionEventAckChannel {
+export interface EnvironmentDaemonSessionEventAckChannel {
   channelId: string;
-  ackedThrough: EnvironmentAgentSessionCursor;
+  ackedThrough: EnvironmentDaemonSessionCursor;
 }
 
-export interface EnvironmentAgentSessionEventAckPayload {
-  channels: EnvironmentAgentSessionEventAckChannel[];
+export interface EnvironmentDaemonSessionEventAckPayload {
+  channels: EnvironmentDaemonSessionEventAckChannel[];
 }
 
-export interface EnvironmentAgentSessionCommandBatchItem<
-  TCommand extends EnvironmentAgentCommand = EnvironmentAgentCommand,
+export interface EnvironmentDaemonSessionCommandBatchItem<
+  TCommand extends EnvironmentDaemonCommand = EnvironmentDaemonCommand,
 > {
   channelId: string;
   commandCursor: number;
@@ -284,41 +284,41 @@ export interface EnvironmentAgentSessionCommandBatchItem<
   command: TCommand;
 }
 
-export interface EnvironmentAgentSessionCommandBatchPayload<
-  TCommand extends EnvironmentAgentCommand = EnvironmentAgentCommand,
+export interface EnvironmentDaemonSessionCommandBatchPayload<
+  TCommand extends EnvironmentDaemonCommand = EnvironmentDaemonCommand,
 > {
-  commands: EnvironmentAgentSessionCommandBatchItem<TCommand>[];
+  commands: EnvironmentDaemonSessionCommandBatchItem<TCommand>[];
 }
 
-export type EnvironmentAgentSessionCommandAckState =
+export type EnvironmentDaemonSessionCommandAckState =
   | "received"
   | "duplicate";
 
-export interface EnvironmentAgentSessionCommandAckItem {
+export interface EnvironmentDaemonSessionCommandAckItem {
   commandId: string;
   channelId: string;
-  state: EnvironmentAgentSessionCommandAckState;
+  state: EnvironmentDaemonSessionCommandAckState;
 }
 
-export interface EnvironmentAgentSessionCommandAckPayload {
-  commands: EnvironmentAgentSessionCommandAckItem[];
+export interface EnvironmentDaemonSessionCommandAckPayload {
+  commands: EnvironmentDaemonSessionCommandAckItem[];
 }
 
-export type EnvironmentAgentSessionCommandResultState =
+export type EnvironmentDaemonSessionCommandResultState =
   | "started"
   | "completed"
   | "failed";
 
-export interface EnvironmentAgentSessionCommandResultPayload {
+export interface EnvironmentDaemonSessionCommandResultPayload {
   commandId: string;
   channelId: string;
-  state: EnvironmentAgentSessionCommandResultState;
+  state: EnvironmentDaemonSessionCommandResultState;
   result?: unknown;
   errorCode?: string;
   errorMessage?: string;
 }
 
-export interface EnvironmentAgentSessionProviderRequestPayload {
+export interface EnvironmentDaemonSessionProviderRequestPayload {
   requestId: string | number;
   method: string;
   params?: unknown;
@@ -331,7 +331,7 @@ export interface EnvironmentAgentSessionProviderRequestPayload {
   channelId?: string;
 }
 
-export interface EnvironmentAgentSessionProviderResponsePayload {
+export interface EnvironmentDaemonSessionProviderResponsePayload {
   requestId: string | number;
   ok: boolean;
   result?: unknown;
@@ -340,122 +340,122 @@ export interface EnvironmentAgentSessionProviderResponsePayload {
   errorMessage?: string;
 }
 
-export interface EnvironmentAgentSessionClosePayload {
-  reason: EnvironmentAgentSessionCloseReason;
+export interface EnvironmentDaemonSessionClosePayload {
+  reason: EnvironmentDaemonSessionCloseReason;
 }
 
-export interface EnvironmentAgentSessionReplacedPayload {
+export interface EnvironmentDaemonSessionReplacedPayload {
   reason: "newer_session";
 }
 
-interface EnvironmentAgentSessionMessageBase {
-  protocol: typeof ENVIRONMENT_AGENT_SESSION_PROTOCOL;
+interface EnvironmentDaemonSessionMessageBase {
+  protocol: typeof ENVIRONMENT_DAEMON_SESSION_PROTOCOL;
   messageId: string;
   sentAt: number;
 }
 
-interface EnvironmentAgentSessionBoundMessageBase
-  extends EnvironmentAgentSessionMessageBase {
+interface EnvironmentDaemonSessionBoundMessageBase
+  extends EnvironmentDaemonSessionMessageBase {
   sessionId: string;
 }
 
-export interface EnvironmentAgentSessionOpenMessage
-  extends EnvironmentAgentSessionMessageBase {
+export interface EnvironmentDaemonSessionOpenMessage
+  extends EnvironmentDaemonSessionMessageBase {
   type: "session_open";
-  payload: EnvironmentAgentSessionOpenPayload;
+  payload: EnvironmentDaemonSessionOpenPayload;
 }
 
-export interface EnvironmentAgentSessionWelcomeMessage
-  extends EnvironmentAgentSessionBoundMessageBase {
+export interface EnvironmentDaemonSessionWelcomeMessage
+  extends EnvironmentDaemonSessionBoundMessageBase {
   type: "session_welcome";
-  payload: EnvironmentAgentSessionWelcomePayload;
+  payload: EnvironmentDaemonSessionWelcomePayload;
 }
 
-export interface EnvironmentAgentSessionHeartbeatMessage
-  extends EnvironmentAgentSessionBoundMessageBase {
+export interface EnvironmentDaemonSessionHeartbeatMessage
+  extends EnvironmentDaemonSessionBoundMessageBase {
   type: "heartbeat";
-  payload: EnvironmentAgentSessionHeartbeatPayload;
+  payload: EnvironmentDaemonSessionHeartbeatPayload;
 }
 
-export interface EnvironmentAgentSessionEventBatchMessage<
-  TEvent extends EnvironmentAgentEvent = EnvironmentAgentEvent,
-> extends EnvironmentAgentSessionBoundMessageBase {
+export interface EnvironmentDaemonSessionEventBatchMessage<
+  TEvent extends EnvironmentDaemonEvent = EnvironmentDaemonEvent,
+> extends EnvironmentDaemonSessionBoundMessageBase {
   type: "event_batch";
-  payload: EnvironmentAgentSessionEventBatchPayload<TEvent>;
+  payload: EnvironmentDaemonSessionEventBatchPayload<TEvent>;
 }
 
-export interface EnvironmentAgentSessionEventAckMessage
-  extends EnvironmentAgentSessionBoundMessageBase {
+export interface EnvironmentDaemonSessionEventAckMessage
+  extends EnvironmentDaemonSessionBoundMessageBase {
   type: "event_ack";
-  payload: EnvironmentAgentSessionEventAckPayload;
+  payload: EnvironmentDaemonSessionEventAckPayload;
 }
 
-export interface EnvironmentAgentSessionCommandBatchMessage<
-  TCommand extends EnvironmentAgentCommand = EnvironmentAgentCommand,
-> extends EnvironmentAgentSessionBoundMessageBase {
+export interface EnvironmentDaemonSessionCommandBatchMessage<
+  TCommand extends EnvironmentDaemonCommand = EnvironmentDaemonCommand,
+> extends EnvironmentDaemonSessionBoundMessageBase {
   type: "command_batch";
-  payload: EnvironmentAgentSessionCommandBatchPayload<TCommand>;
+  payload: EnvironmentDaemonSessionCommandBatchPayload<TCommand>;
 }
 
-export interface EnvironmentAgentSessionCommandAckMessage
-  extends EnvironmentAgentSessionBoundMessageBase {
+export interface EnvironmentDaemonSessionCommandAckMessage
+  extends EnvironmentDaemonSessionBoundMessageBase {
   type: "command_ack";
-  payload: EnvironmentAgentSessionCommandAckPayload;
+  payload: EnvironmentDaemonSessionCommandAckPayload;
 }
 
-export interface EnvironmentAgentSessionCommandResultMessage
-  extends EnvironmentAgentSessionBoundMessageBase {
+export interface EnvironmentDaemonSessionCommandResultMessage
+  extends EnvironmentDaemonSessionBoundMessageBase {
   type: "command_result";
-  payload: EnvironmentAgentSessionCommandResultPayload;
+  payload: EnvironmentDaemonSessionCommandResultPayload;
 }
 
-export interface EnvironmentAgentSessionProviderRequestMessage
-  extends EnvironmentAgentSessionBoundMessageBase {
+export interface EnvironmentDaemonSessionProviderRequestMessage
+  extends EnvironmentDaemonSessionBoundMessageBase {
   type: "provider_request";
-  payload: EnvironmentAgentSessionProviderRequestPayload;
+  payload: EnvironmentDaemonSessionProviderRequestPayload;
 }
 
-export interface EnvironmentAgentSessionProviderResponseMessage
-  extends EnvironmentAgentSessionBoundMessageBase {
+export interface EnvironmentDaemonSessionProviderResponseMessage
+  extends EnvironmentDaemonSessionBoundMessageBase {
   type: "provider_response";
-  payload: EnvironmentAgentSessionProviderResponsePayload;
+  payload: EnvironmentDaemonSessionProviderResponsePayload;
 }
 
-export interface EnvironmentAgentSessionCloseMessage
-  extends EnvironmentAgentSessionBoundMessageBase {
+export interface EnvironmentDaemonSessionCloseMessage
+  extends EnvironmentDaemonSessionBoundMessageBase {
   type: "session_close";
-  payload: EnvironmentAgentSessionClosePayload;
+  payload: EnvironmentDaemonSessionClosePayload;
 }
 
-export interface EnvironmentAgentSessionReplacedMessage
-  extends EnvironmentAgentSessionBoundMessageBase {
+export interface EnvironmentDaemonSessionReplacedMessage
+  extends EnvironmentDaemonSessionBoundMessageBase {
   type: "session_replaced";
-  payload: EnvironmentAgentSessionReplacedPayload;
+  payload: EnvironmentDaemonSessionReplacedPayload;
 }
 
-export type EnvironmentAgentSessionClientMessage =
-  | EnvironmentAgentSessionOpenMessage
-  | EnvironmentAgentSessionHeartbeatMessage
-  | EnvironmentAgentSessionEventBatchMessage
-  | EnvironmentAgentSessionCommandAckMessage
-  | EnvironmentAgentSessionCommandResultMessage
-  | EnvironmentAgentSessionProviderRequestMessage
-  | EnvironmentAgentSessionCloseMessage;
+export type EnvironmentDaemonSessionClientMessage =
+  | EnvironmentDaemonSessionOpenMessage
+  | EnvironmentDaemonSessionHeartbeatMessage
+  | EnvironmentDaemonSessionEventBatchMessage
+  | EnvironmentDaemonSessionCommandAckMessage
+  | EnvironmentDaemonSessionCommandResultMessage
+  | EnvironmentDaemonSessionProviderRequestMessage
+  | EnvironmentDaemonSessionCloseMessage;
 
-export type EnvironmentAgentSessionServerMessage =
-  | EnvironmentAgentSessionWelcomeMessage
-  | EnvironmentAgentSessionEventAckMessage
-  | EnvironmentAgentSessionCommandBatchMessage
-  | EnvironmentAgentSessionProviderResponseMessage
-  | EnvironmentAgentSessionSessionControlMessage;
+export type EnvironmentDaemonSessionServerMessage =
+  | EnvironmentDaemonSessionWelcomeMessage
+  | EnvironmentDaemonSessionEventAckMessage
+  | EnvironmentDaemonSessionCommandBatchMessage
+  | EnvironmentDaemonSessionProviderResponseMessage
+  | EnvironmentDaemonSessionSessionControlMessage;
 
-export type EnvironmentAgentSessionSessionControlMessage =
-  | EnvironmentAgentSessionCloseMessage
-  | EnvironmentAgentSessionReplacedMessage;
+export type EnvironmentDaemonSessionSessionControlMessage =
+  | EnvironmentDaemonSessionCloseMessage
+  | EnvironmentDaemonSessionReplacedMessage;
 
-export type EnvironmentAgentSessionMessage =
-  | EnvironmentAgentSessionClientMessage
-  | EnvironmentAgentSessionServerMessage;
+export type EnvironmentDaemonSessionMessage =
+  | EnvironmentDaemonSessionClientMessage
+  | EnvironmentDaemonSessionServerMessage;
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
@@ -465,7 +465,7 @@ function asRecord(value: unknown): Record<string, unknown> | null {
 function hasBaseMessageFields(
   value: unknown,
 ): value is Record<string, unknown> & {
-  protocol: typeof ENVIRONMENT_AGENT_SESSION_PROTOCOL;
+  protocol: typeof ENVIRONMENT_DAEMON_SESSION_PROTOCOL;
   messageId: string;
   sentAt: number;
   type: string;
@@ -473,7 +473,7 @@ function hasBaseMessageFields(
   const record = asRecord(value);
   if (!record) return false;
   return (
-    record.protocol === ENVIRONMENT_AGENT_SESSION_PROTOCOL &&
+    record.protocol === ENVIRONMENT_DAEMON_SESSION_PROTOCOL &&
     typeof record.messageId === "string" &&
     record.messageId.length > 0 &&
     typeof record.sentAt === "number" &&
@@ -482,9 +482,9 @@ function hasBaseMessageFields(
   );
 }
 
-export function isEnvironmentAgentSessionCursor(
+export function isEnvironmentDaemonSessionCursor(
   value: unknown,
-): value is EnvironmentAgentSessionCursor {
+): value is EnvironmentDaemonSessionCursor {
   const record = asRecord(value);
   if (!record) return false;
   return (
@@ -497,9 +497,9 @@ export function isEnvironmentAgentSessionCursor(
   );
 }
 
-export function compareEnvironmentAgentSessionCursors(
-  left: EnvironmentAgentSessionCursor,
-  right: EnvironmentAgentSessionCursor,
+export function compareEnvironmentDaemonSessionCursors(
+  left: EnvironmentDaemonSessionCursor,
+  right: EnvironmentDaemonSessionCursor,
 ): number {
   if (left.generation !== right.generation) {
     return left.generation - right.generation;
@@ -507,9 +507,9 @@ export function compareEnvironmentAgentSessionCursors(
   return left.sequence - right.sequence;
 }
 
-export function isEnvironmentAgentSessionMessage(
+export function isEnvironmentDaemonSessionMessage(
   value: unknown,
-): value is EnvironmentAgentSessionMessage {
+): value is EnvironmentDaemonSessionMessage {
   if (!hasBaseMessageFields(value)) return false;
 
   switch (value.type) {
@@ -531,10 +531,10 @@ export function isEnvironmentAgentSessionMessage(
   }
 }
 
-export function isEnvironmentAgentSessionClientMessage(
+export function isEnvironmentDaemonSessionClientMessage(
   value: unknown,
-): value is EnvironmentAgentSessionClientMessage {
-  if (!isEnvironmentAgentSessionMessage(value)) return false;
+): value is EnvironmentDaemonSessionClientMessage {
+  if (!isEnvironmentDaemonSessionMessage(value)) return false;
   switch (value.type) {
     case "session_open":
     case "heartbeat":
@@ -554,10 +554,10 @@ export function isEnvironmentAgentSessionClientMessage(
   }
 }
 
-export function isEnvironmentAgentSessionServerMessage(
+export function isEnvironmentDaemonSessionServerMessage(
   value: unknown,
-): value is EnvironmentAgentSessionServerMessage {
-  if (!isEnvironmentAgentSessionMessage(value)) return false;
+): value is EnvironmentDaemonSessionServerMessage {
+  if (!isEnvironmentDaemonSessionMessage(value)) return false;
   switch (value.type) {
     case "session_welcome":
     case "event_ack":

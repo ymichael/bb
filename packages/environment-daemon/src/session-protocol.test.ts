@@ -1,34 +1,34 @@
 import { describe, expect, it } from "vitest";
 import {
-  createEnvironmentAgentSessionCapabilities,
-  ENVIRONMENT_AGENT_SESSION_PROTOCOL,
-  inferEnvironmentAgentSessionCapabilities,
-  negotiateEnvironmentAgentSessionCapabilities,
-  normalizeEnvironmentAgentSessionCapabilities,
-  compareEnvironmentAgentSessionCursors,
-  isEnvironmentAgentSessionClientMessage,
-  isEnvironmentAgentSessionCursor,
-  isEnvironmentAgentSessionMessage,
-  isEnvironmentAgentSessionServerMessage,
-  selectEnvironmentAgentSessionProtocolVersion,
+  createEnvironmentDaemonSessionCapabilities,
+  ENVIRONMENT_DAEMON_SESSION_PROTOCOL,
+  inferEnvironmentDaemonSessionCapabilities,
+  negotiateEnvironmentDaemonSessionCapabilities,
+  normalizeEnvironmentDaemonSessionCapabilities,
+  compareEnvironmentDaemonSessionCursors,
+  isEnvironmentDaemonSessionClientMessage,
+  isEnvironmentDaemonSessionCursor,
+  isEnvironmentDaemonSessionMessage,
+  isEnvironmentDaemonSessionServerMessage,
+  selectEnvironmentDaemonSessionProtocolVersion,
 } from "./session-protocol.js";
 
 describe("session-protocol", () => {
   it("compares cursors by generation first, then sequence", () => {
     expect(
-      compareEnvironmentAgentSessionCursors(
+      compareEnvironmentDaemonSessionCursors(
         { generation: 1, sequence: 10 },
         { generation: 1, sequence: 12 },
       ),
     ).toBeLessThan(0);
     expect(
-      compareEnvironmentAgentSessionCursors(
+      compareEnvironmentDaemonSessionCursors(
         { generation: 2, sequence: 1 },
         { generation: 1, sequence: 999 },
       ),
     ).toBeGreaterThan(0);
     expect(
-      compareEnvironmentAgentSessionCursors(
+      compareEnvironmentDaemonSessionCursors(
         { generation: 3, sequence: 7 },
         { generation: 3, sequence: 7 },
       ),
@@ -36,20 +36,20 @@ describe("session-protocol", () => {
   });
 
   it("validates session cursors", () => {
-    expect(isEnvironmentAgentSessionCursor({ generation: 0, sequence: 0 })).toBe(
+    expect(isEnvironmentDaemonSessionCursor({ generation: 0, sequence: 0 })).toBe(
       true,
     );
-    expect(isEnvironmentAgentSessionCursor({ generation: -1, sequence: 0 })).toBe(
+    expect(isEnvironmentDaemonSessionCursor({ generation: -1, sequence: 0 })).toBe(
       false,
     );
-    expect(isEnvironmentAgentSessionCursor({ generation: 0, sequence: 1.5 })).toBe(
+    expect(isEnvironmentDaemonSessionCursor({ generation: 0, sequence: 1.5 })).toBe(
       false,
     );
   });
 
   it("recognizes open/resume messages without a session id", () => {
     const message = {
-      protocol: ENVIRONMENT_AGENT_SESSION_PROTOCOL,
+      protocol: ENVIRONMENT_DAEMON_SESSION_PROTOCOL,
       messageId: "msg-1",
       sentAt: Date.now(),
       type: "session_open",
@@ -65,26 +65,26 @@ describe("session-protocol", () => {
       },
     };
 
-    expect(isEnvironmentAgentSessionMessage(message)).toBe(true);
-    expect(isEnvironmentAgentSessionClientMessage(message)).toBe(true);
-    expect(isEnvironmentAgentSessionServerMessage(message)).toBe(false);
+    expect(isEnvironmentDaemonSessionMessage(message)).toBe(true);
+    expect(isEnvironmentDaemonSessionClientMessage(message)).toBe(true);
+    expect(isEnvironmentDaemonSessionServerMessage(message)).toBe(false);
   });
 
   it("requires session ids for bound messages", () => {
     const message = {
-      protocol: ENVIRONMENT_AGENT_SESSION_PROTOCOL,
+      protocol: ENVIRONMENT_DAEMON_SESSION_PROTOCOL,
       messageId: "msg-2",
       sentAt: Date.now(),
       type: "event_batch",
       payload: { batches: [] },
     };
 
-    expect(isEnvironmentAgentSessionMessage(message)).toBe(false);
+    expect(isEnvironmentDaemonSessionMessage(message)).toBe(false);
   });
 
   it("distinguishes server messages from client messages", () => {
     const serverMessage = {
-      protocol: ENVIRONMENT_AGENT_SESSION_PROTOCOL,
+      protocol: ENVIRONMENT_DAEMON_SESSION_PROTOCOL,
       messageId: "msg-3",
       sentAt: Date.now(),
       sessionId: "sess-1",
@@ -92,14 +92,14 @@ describe("session-protocol", () => {
       payload: { commands: [] },
     };
 
-    expect(isEnvironmentAgentSessionMessage(serverMessage)).toBe(true);
-    expect(isEnvironmentAgentSessionServerMessage(serverMessage)).toBe(true);
-    expect(isEnvironmentAgentSessionClientMessage(serverMessage)).toBe(false);
+    expect(isEnvironmentDaemonSessionMessage(serverMessage)).toBe(true);
+    expect(isEnvironmentDaemonSessionServerMessage(serverMessage)).toBe(true);
+    expect(isEnvironmentDaemonSessionClientMessage(serverMessage)).toBe(false);
   });
 
   it("selects the highest mutually supported session protocol version", () => {
     expect(
-      selectEnvironmentAgentSessionProtocolVersion({
+      selectEnvironmentDaemonSessionProtocolVersion({
         supportedByServer: [1],
         supportedByAgent: [3, 2, 1],
       }),
@@ -108,7 +108,7 @@ describe("session-protocol", () => {
 
   it("returns undefined when no mutually supported session protocol version exists", () => {
     expect(
-      selectEnvironmentAgentSessionProtocolVersion({
+      selectEnvironmentDaemonSessionProtocolVersion({
         supportedByServer: [1],
         supportedByAgent: [3, 2],
       }),
@@ -117,7 +117,7 @@ describe("session-protocol", () => {
 
   it("infers capabilities for older agents that only send metadata", () => {
     expect(
-      inferEnvironmentAgentSessionCapabilities({
+      inferEnvironmentDaemonSessionCapabilities({
         worker: { name: "environment-daemon", version: "0.0.1" },
         providers: [{ providerId: "codex", adapterVersion: "0.0.1" }],
       }),
@@ -140,7 +140,7 @@ describe("session-protocol", () => {
 
   it("creates explicit capabilities for current env-daemon sessions", () => {
     expect(
-      createEnvironmentAgentSessionCapabilities({
+      createEnvironmentDaemonSessionCapabilities({
         worker: { name: "environment-daemon", version: "0.0.1" },
         providers: [{ providerId: "codex", adapterVersion: "0.0.1" }],
       }),
@@ -163,7 +163,7 @@ describe("session-protocol", () => {
 
   it("normalizes and negotiates advertised capabilities", () => {
     expect(
-      negotiateEnvironmentAgentSessionCapabilities({
+      negotiateEnvironmentDaemonSessionCapabilities({
         requested: {
           commands: ["turn.run", "turn.run", "workspace.diff", "unknown"] as never,
           features: ["provider_metadata", "provider_metadata", "bogus"] as never,
@@ -176,7 +176,7 @@ describe("session-protocol", () => {
     });
 
     expect(
-      normalizeEnvironmentAgentSessionCapabilities({
+      normalizeEnvironmentDaemonSessionCapabilities({
         commands: ["thread.start", "unsupported"] as never,
         features: ["worker_metadata", "nope"] as never,
       }),

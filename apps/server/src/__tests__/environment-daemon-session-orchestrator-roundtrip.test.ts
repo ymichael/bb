@@ -8,28 +8,28 @@ import type { DbConnection } from "@bb/db";
 import {
   createConnection,
   migrate,
-  EnvironmentAgentCommandRepository,
-  EnvironmentAgentCursorRepository,
+  EnvironmentDaemonCommandRepository,
+  EnvironmentDaemonCursorRepository,
   EnvironmentRepository,
-  EnvironmentAgentSessionRepository,
+  EnvironmentDaemonSessionRepository,
   EventRepository,
   ProjectRepository,
   ThreadEnvironmentAttachmentRepository,
   ThreadRepository,
 } from "@bb/db";
 import {
-  createEnvironmentAgentSessionCapabilities,
-  EnvironmentAgentSessionEventBatchPayload,
-  EnvironmentAgentSessionOpenPayload,
+  createEnvironmentDaemonSessionCapabilities,
+  EnvironmentDaemonSessionEventBatchPayload,
+  EnvironmentDaemonSessionOpenPayload,
 } from "@bb/environment-daemon";
 import { createCodexProviderAdapter, type LlmCompletionService } from "@bb/provider-adapters";
 import type { IEnvironment } from "@bb/environment";
 import type { WSManager } from "../ws.js";
 import { Orchestrator } from "../orchestrator.js";
-import { EnvironmentAgentCommandDispatcher } from "../environment-agent-command-dispatcher.js";
-import { EnvironmentAgentEventApplier } from "../environment-agent-event-applier.js";
-import { EnvironmentAgentSessionManager } from "../environment-agent-session-manager.js";
-import { EnvironmentAgentSessionService } from "../environment-agent-session-service.js";
+import { EnvironmentDaemonCommandDispatcher } from "../environment-daemon-command-dispatcher.js";
+import { EnvironmentDaemonEventApplier } from "../environment-daemon-event-applier.js";
+import { EnvironmentDaemonSessionManager } from "../environment-daemon-session-manager.js";
+import { EnvironmentDaemonSessionService } from "../environment-daemon-session-service.js";
 
 interface SqliteClient {
   close(): void;
@@ -49,12 +49,12 @@ function createMockLlmCompletionService(): LlmCompletionService {
   };
 }
 
-function makeOpenPayload(threadId: string): EnvironmentAgentSessionOpenPayload {
+function makeOpenPayload(threadId: string): EnvironmentDaemonSessionOpenPayload {
   return {
     agentId: `agent:${threadId}`,
     agentInstanceId: `instance:${threadId}`,
     supportedProtocolVersions: [1],
-    capabilities: createEnvironmentAgentSessionCapabilities({}),
+    capabilities: createEnvironmentDaemonSessionCapabilities({}),
     channels: [
       {
         channelId: threadId,
@@ -66,8 +66,8 @@ function makeOpenPayload(threadId: string): EnvironmentAgentSessionOpenPayload {
 
 function makeEventBatch(
   threadId: string,
-  events: EnvironmentAgentSessionEventBatchPayload["batches"][number]["events"],
-): EnvironmentAgentSessionEventBatchPayload {
+  events: EnvironmentDaemonSessionEventBatchPayload["batches"][number]["events"],
+): EnvironmentDaemonSessionEventBatchPayload {
   return {
     batches: [
       {
@@ -187,7 +187,7 @@ function makeRuntimeEnvironment(rootPath: string): IEnvironment {
   };
 }
 
-describe("environment-agent session orchestrator roundtrip", () => {
+describe("environment-daemon session orchestrator roundtrip", () => {
   let db: DbConnection;
   let sqlite: SqliteClient;
   let projects: ProjectRepository;
@@ -195,10 +195,10 @@ describe("environment-agent session orchestrator roundtrip", () => {
   let events: EventRepository;
   let environments: EnvironmentRepository;
   let attachments: ThreadEnvironmentAttachmentRepository;
-  let sessions: EnvironmentAgentSessionRepository;
-  let cursors: EnvironmentAgentCursorRepository;
-  let commands: EnvironmentAgentCommandRepository;
-  let sessionService: EnvironmentAgentSessionService;
+  let sessions: EnvironmentDaemonSessionRepository;
+  let cursors: EnvironmentDaemonCursorRepository;
+  let commands: EnvironmentDaemonCommandRepository;
+  let sessionService: EnvironmentDaemonSessionService;
   let orchestrator: Orchestrator;
   let ws: WSManager;
 
@@ -211,9 +211,9 @@ describe("environment-agent session orchestrator roundtrip", () => {
     events = new EventRepository(db);
     environments = new EnvironmentRepository(db);
     attachments = new ThreadEnvironmentAttachmentRepository(db);
-    sessions = new EnvironmentAgentSessionRepository(db);
-    cursors = new EnvironmentAgentCursorRepository(db);
-    commands = new EnvironmentAgentCommandRepository(db);
+    sessions = new EnvironmentDaemonSessionRepository(db);
+    cursors = new EnvironmentDaemonCursorRepository(db);
+    commands = new EnvironmentDaemonCommandRepository(db);
     ws = {
       broadcast: vi.fn(),
       handleConnection: vi.fn(),
@@ -224,25 +224,25 @@ describe("environment-agent session orchestrator roundtrip", () => {
       attachments.getByThreadId(threadId)?.environmentId ??
       threads.getById(threadId)?.environmentId;
 
-    const sessionManager = new EnvironmentAgentSessionManager(sessions);
-    const commandDispatcher = new EnvironmentAgentCommandDispatcher(sessions, commands, {
+    const sessionManager = new EnvironmentDaemonSessionManager(sessions);
+    const commandDispatcher = new EnvironmentDaemonCommandDispatcher(sessions, commands, {
       clock: () => TEST_LEASE_NOW,
       resolveEnvironmentId,
     });
     let threadManager!: Orchestrator;
-    const eventApplier = new EnvironmentAgentEventApplier(cursors, {
-      ingestReplayedEnvironmentAgentEvents: ({ threadId, events: envelopes }) =>
-        threadManager.ingestReplayedEnvironmentAgentEvents({
+    const eventApplier = new EnvironmentDaemonEventApplier(cursors, {
+      ingestReplayedEnvironmentDaemonEvents: ({ threadId, events: envelopes }) =>
+        threadManager.ingestReplayedEnvironmentDaemonEvents({
           threadId,
           events: envelopes,
         }),
     });
-    sessionService = new EnvironmentAgentSessionService(sessionManager, cursors, {
+    sessionService = new EnvironmentDaemonSessionService(sessionManager, cursors, {
       clock: () => TEST_LEASE_NOW,
       commandDispatcher,
       eventApplier,
       onSessionInvalidated: (session) => {
-        threadManager.handleEnvironmentAgentSessionInvalidated(
+        threadManager.handleEnvironmentDaemonSessionInvalidated(
           session.environmentId,
           session.closeReason,
         );
@@ -884,7 +884,7 @@ describe("environment-agent session orchestrator roundtrip", () => {
       now: 2_100,
     });
 
-    await expect(orchestrator.getEnvironmentAgentStatus(threadId)).resolves.toMatchObject({
+    await expect(orchestrator.getEnvironmentDaemonStatus(threadId)).resolves.toMatchObject({
       threadId,
       latestSequence: 1,
       lastAckedSequence: 1,

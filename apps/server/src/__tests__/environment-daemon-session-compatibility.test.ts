@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { assessEnvironmentAgentSessionCompatibility } from "../environment-agent-session-compatibility.js";
+import { assessEnvironmentDaemonSessionCompatibility } from "../environment-daemon-session-compatibility.js";
 
-describe("environment-agent session compatibility", () => {
+describe("environment-daemon session compatibility", () => {
   it("marks sessions missing required commands for replacement", () => {
-    const assessment = assessEnvironmentAgentSessionCompatibility({
+    const assessment = assessEnvironmentDaemonSessionCompatibility({
       id: "sess-1",
       environmentId: "env-1",
       agentId: "agent-1",
@@ -30,7 +30,7 @@ describe("environment-agent session compatibility", () => {
   });
 
   it("marks sessions missing only optional commands/features as degraded", () => {
-    const assessment = assessEnvironmentAgentSessionCompatibility({
+    const assessment = assessEnvironmentDaemonSessionCompatibility({
       id: "sess-1",
       environmentId: "env-1",
       agentId: "agent-1",

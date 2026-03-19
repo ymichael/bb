@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import type { EnvironmentAgentConnectionTarget } from "@bb/environment-daemon";
+import type { EnvironmentDaemonConnectionTarget } from "@bb/environment-daemon";
 import { runCommandAsync } from "./process.js";
 
 const HOST = "127.0.0.1";
@@ -12,7 +12,7 @@ export const DEFAULT_DOCKER_ENVIRONMENT_AGENT_CONTAINER_PORT = 4310;
 export const DEFAULT_DOCKER_ENVIRONMENT_IMAGE = "bb/environment:local";
 const DEFAULT_DOCKER_ENVIRONMENT_AGENT_INSTALL_ROOT = "/opt/bb/environment-daemon";
 
-export interface ManagedDockerEnvironmentAgentRecord {
+export interface ManagedDockerEnvironmentDaemonRecord {
   baseUrl: string;
   authToken: string;
   threadId: string;
@@ -25,7 +25,7 @@ export interface ManagedDockerEnvironmentAgentRecord {
   installRoot: string;
 }
 
-interface ManagedDockerEnvironmentAgentIdentity {
+interface ManagedDockerEnvironmentDaemonIdentity {
   projectId: string;
   threadId: string;
   environmentId: string;
@@ -53,11 +53,11 @@ interface CommandExecutor {
   }>;
 }
 
-const dockerEnvironmentAgentLocks = new Map<string, Promise<void>>();
-const managedDockerEnvironmentAgents = new Map<string, ManagedDockerEnvironmentAgentRecord>();
+const dockerEnvironmentDaemonLocks = new Map<string, Promise<void>>();
+const managedDockerEnvironmentDaemons = new Map<string, ManagedDockerEnvironmentDaemonRecord>();
 
-function managedDockerEnvironmentAgentIdentityKey(
-  args: ManagedDockerEnvironmentAgentIdentity,
+function managedDockerEnvironmentDaemonIdentityKey(
+  args: ManagedDockerEnvironmentDaemonIdentity,
 ): string {
   // Intentionally excludes threadId — multiple threads can share one
   // docker environment and its agent process, matching the host pattern.
@@ -68,33 +68,33 @@ function managedDockerEnvironmentAgentIdentityKey(
   ].join("\0");
 }
 
-async function withManagedDockerEnvironmentAgentLock(
-  args: ManagedDockerEnvironmentAgentIdentity,
+async function withManagedDockerEnvironmentDaemonLock(
+  args: ManagedDockerEnvironmentDaemonIdentity,
   action: () => Promise<void>,
 ): Promise<void> {
-  const key = managedDockerEnvironmentAgentIdentityKey(args);
-  const existing = dockerEnvironmentAgentLocks.get(key);
+  const key = managedDockerEnvironmentDaemonIdentityKey(args);
+  const existing = dockerEnvironmentDaemonLocks.get(key);
   if (existing) {
     await existing;
   }
 
   let inFlight: Promise<void>;
   inFlight = action().finally(() => {
-    if (dockerEnvironmentAgentLocks.get(key) === inFlight) {
-      dockerEnvironmentAgentLocks.delete(key);
+    if (dockerEnvironmentDaemonLocks.get(key) === inFlight) {
+      dockerEnvironmentDaemonLocks.delete(key);
     }
   });
-  dockerEnvironmentAgentLocks.set(key, inFlight);
+  dockerEnvironmentDaemonLocks.set(key, inFlight);
   await inFlight;
 }
 
-function toManagedDockerEnvironmentAgentTarget(args: {
-  record: ManagedDockerEnvironmentAgentRecord;
+function toManagedDockerEnvironmentDaemonTarget(args: {
+  record: ManagedDockerEnvironmentDaemonRecord;
   providerLaunch?: {
     command: string;
     args: string[];
   };
-}): EnvironmentAgentConnectionTarget {
+}): EnvironmentDaemonConnectionTarget {
   return {
     transport: "http",
     baseUrl: args.record.baseUrl,
@@ -105,7 +105,7 @@ function toManagedDockerEnvironmentAgentTarget(args: {
   };
 }
 
-async function waitForEnvironmentAgent(baseUrl: string, authToken: string): Promise<void> {
+async function waitForEnvironmentDaemon(baseUrl: string, authToken: string): Promise<void> {
   const deadline = Date.now() + START_TIMEOUT_MS;
   while (Date.now() < deadline) {
     try {
@@ -125,16 +125,16 @@ async function waitForEnvironmentAgent(baseUrl: string, authToken: string): Prom
     }
     await new Promise((resolvePromise) => setTimeout(resolvePromise, 25));
   }
-  throw new Error(`Timed out waiting for docker environment-agent at ${baseUrl}`);
+  throw new Error(`Timed out waiting for docker environment-daemon at ${baseUrl}`);
 }
 
-export function resolveDockerEnvironmentAgentArtifactEntry(): string {
+export function resolveDockerEnvironmentDaemonArtifactEntry(): string {
   const entry = fileURLToPath(
-    new URL("../../environment-daemon/dist/environment-agent.bundle.mjs", import.meta.url),
+    new URL("../../environment-daemon/dist/environment-daemon.bundle.mjs", import.meta.url),
   );
   if (!existsSync(entry)) {
     throw new Error(
-      `Missing environment-agent artifact at ${entry}; build @bb/environment-daemon first`,
+      `Missing environment-daemon artifact at ${entry}; build @bb/environment-daemon first`,
     );
   }
   return entry;
@@ -248,7 +248,7 @@ export async function ensureDockerEnvironmentImageAvailable(
   });
 }
 
-export async function ensureManagedDockerEnvironmentAgent(
+export async function ensureManagedDockerEnvironmentDaemon(
   args: {
     workspaceRootPath: string;
     threadId: string;
@@ -267,29 +267,29 @@ export async function ensureManagedDockerEnvironmentAgent(
     generateAuthToken?: () => string;
     resolveArtifactEntry?: () => string;
   },
-): Promise<EnvironmentAgentConnectionTarget | undefined> {
+): Promise<EnvironmentDaemonConnectionTarget | undefined> {
   if (args.runtimeEnv.BB_ENV_DAEMON_BASE_URL?.trim()) {
     return undefined;
   }
 
-  const stateIdentity: ManagedDockerEnvironmentAgentIdentity = {
+  const stateIdentity: ManagedDockerEnvironmentDaemonIdentity = {
     projectId: args.projectId,
     threadId: args.threadId,
     environmentId: args.environmentId,
     workspaceRootPath: args.workspaceRootPath,
   };
-  let managedTarget: EnvironmentAgentConnectionTarget | undefined;
-  await withManagedDockerEnvironmentAgentLock(stateIdentity, async () => {
-    const identityKey = managedDockerEnvironmentAgentIdentityKey(stateIdentity);
-    const existing = managedDockerEnvironmentAgents.get(identityKey);
+  let managedTarget: EnvironmentDaemonConnectionTarget | undefined;
+  await withManagedDockerEnvironmentDaemonLock(stateIdentity, async () => {
+    const identityKey = managedDockerEnvironmentDaemonIdentityKey(stateIdentity);
+    const existing = managedDockerEnvironmentDaemons.get(identityKey);
     if (existing) {
-      managedDockerEnvironmentAgents.delete(identityKey);
+      managedDockerEnvironmentDaemons.delete(identityKey);
     }
 
     const executor = deps?.run ?? runCommandAsync;
-    const waitForAgent = deps?.waitForAgent ?? waitForEnvironmentAgent;
+    const waitForAgent = deps?.waitForAgent ?? waitForEnvironmentDaemon;
     const artifactEntry =
-      (deps?.resolveArtifactEntry ?? resolveDockerEnvironmentAgentArtifactEntry)();
+      (deps?.resolveArtifactEntry ?? resolveDockerEnvironmentDaemonArtifactEntry)();
     const authToken =
       (deps?.generateAuthToken ?? (() => randomBytes(24).toString("hex")))();
     const containerPort =
@@ -310,7 +310,7 @@ export async function ensureManagedDockerEnvironmentAgent(
       ],
       cwd: args.workspaceRootPath,
       env: args.runtimeEnv,
-      description: "create docker environment-agent install directory",
+      description: "create docker environment-daemon install directory",
     });
 
     await executeOrThrow({
@@ -319,11 +319,11 @@ export async function ensureManagedDockerEnvironmentAgent(
       commandArgs: [
         "cp",
         artifactEntry,
-        `${args.containerName}:${installRoot}/environment-agent.bundle.mjs`,
+        `${args.containerName}:${installRoot}/environment-daemon.bundle.mjs`,
       ],
       cwd: args.workspaceRootPath,
       env: args.runtimeEnv,
-      description: "copy environment-agent artifact into docker container",
+      description: "copy environment-daemon artifact into docker container",
     });
 
     await executeOrThrow({
@@ -353,7 +353,7 @@ export async function ensureManagedDockerEnvironmentAgent(
           : []),
         args.containerName,
         "node",
-        `${installRoot}/environment-agent.bundle.mjs`,
+        `${installRoot}/environment-daemon.bundle.mjs`,
         "--http-host",
         "0.0.0.0",
         "--http-port",
@@ -361,7 +361,7 @@ export async function ensureManagedDockerEnvironmentAgent(
       ],
       cwd: args.workspaceRootPath,
       env: args.runtimeEnv,
-      description: "start docker environment-agent",
+      description: "start docker environment-daemon",
     });
 
     const baseUrl = `http://${HOST}:${args.hostPort}`;
@@ -379,8 +379,8 @@ export async function ensureManagedDockerEnvironmentAgent(
       containerPort,
       installRoot,
     };
-    managedDockerEnvironmentAgents.set(identityKey, record);
-    managedTarget = toManagedDockerEnvironmentAgentTarget({
+    managedDockerEnvironmentDaemons.set(identityKey, record);
+    managedTarget = toManagedDockerEnvironmentDaemonTarget({
       record,
     });
   });
@@ -393,7 +393,7 @@ export function __testOnly__resolveDockerServerUrl(
   return resolveDockerServerUrl(runtimeEnv);
 }
 
-export async function disposeManagedDockerEnvironmentAgent(args: {
+export async function disposeManagedDockerEnvironmentDaemon(args: {
   projectId: string;
   threadId: string;
   environmentId: string;
@@ -402,7 +402,7 @@ export async function disposeManagedDockerEnvironmentAgent(args: {
   workspaceRootPath: string;
   runtimeEnv: Record<string, string | undefined>;
 }): Promise<void> {
-  await withManagedDockerEnvironmentAgentLock(args, async () => {
+  await withManagedDockerEnvironmentDaemonLock(args, async () => {
     if (!args.runtimeEnv.BB_ENV_DAEMON_BASE_URL?.trim()) {
       await runCommandAsync(
         args.dockerBin,
@@ -411,7 +411,7 @@ export async function disposeManagedDockerEnvironmentAgent(args: {
           args.containerName,
           "sh",
           "-lc",
-          "pkill -f 'environment-agent.bundle.mjs' || true",
+          "pkill -f 'environment-daemon.bundle.mjs' || true",
         ],
         {
           cwd: args.workspaceRootPath,
@@ -420,15 +420,15 @@ export async function disposeManagedDockerEnvironmentAgent(args: {
         },
       );
     }
-    managedDockerEnvironmentAgents.delete(managedDockerEnvironmentAgentIdentityKey(args));
+    managedDockerEnvironmentDaemons.delete(managedDockerEnvironmentDaemonIdentityKey(args));
   });
 }
 
-export function __testOnly__getManagedDockerEnvironmentAgentRecord(args: {
+export function __testOnly__getManagedDockerEnvironmentDaemonRecord(args: {
   projectId: string;
   threadId: string;
   environmentId: string;
   workspaceRootPath: string;
-}): ManagedDockerEnvironmentAgentRecord | undefined {
-  return managedDockerEnvironmentAgents.get(managedDockerEnvironmentAgentIdentityKey(args));
+}): ManagedDockerEnvironmentDaemonRecord | undefined {
+  return managedDockerEnvironmentDaemons.get(managedDockerEnvironmentDaemonIdentityKey(args));
 }

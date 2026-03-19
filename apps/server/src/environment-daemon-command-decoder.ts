@@ -7,9 +7,9 @@ import type {
   SpawnThreadRequest,
 } from "@bb/core";
 import type {
-  EnvironmentAgentCommand,
-  EnvironmentAgentInitializeRequest,
-  EnvironmentAgentProviderFile,
+  EnvironmentDaemonCommand,
+  EnvironmentDaemonInitializeRequest,
+  EnvironmentDaemonProviderFile,
 } from "@bb/environment-daemon";
 
 const ENVIRONMENT_AGENT_COMMAND_TYPES = [
@@ -23,11 +23,11 @@ const ENVIRONMENT_AGENT_COMMAND_TYPES = [
   "provider.list_catalog",
   "workspace.status",
   "workspace.diff",
-] as const satisfies readonly EnvironmentAgentCommand["type"][];
+] as const satisfies readonly EnvironmentDaemonCommand["type"][];
 
-function decodeEnvironmentAgentCommandType(
+function decodeEnvironmentDaemonCommandType(
   value: string,
-): EnvironmentAgentCommand["type"] | null {
+): EnvironmentDaemonCommand["type"] | null {
   return ENVIRONMENT_AGENT_COMMAND_TYPES.find((candidate) => candidate === value) ?? null;
 }
 
@@ -50,7 +50,7 @@ function decodeStringRecord(value: unknown): Record<string, string> | undefined 
   return Object.fromEntries(entries) as Record<string, string>;
 }
 
-function decodeProviderFile(value: unknown): EnvironmentAgentProviderFile | null {
+function decodeProviderFile(value: unknown): EnvironmentDaemonProviderFile | null {
   const record = toRecord(value);
   if (!record) return null;
 
@@ -68,18 +68,18 @@ function decodeProviderFile(value: unknown): EnvironmentAgentProviderFile | null
   };
 }
 
-function decodeProviderFiles(value: unknown): EnvironmentAgentProviderFile[] | undefined {
+function decodeProviderFiles(value: unknown): EnvironmentDaemonProviderFile[] | undefined {
   if (!Array.isArray(value)) return undefined;
 
   const files = value
     .map((entry) => decodeProviderFile(entry))
-    .filter((entry): entry is EnvironmentAgentProviderFile => entry !== null);
+    .filter((entry): entry is EnvironmentDaemonProviderFile => entry !== null);
   return files.length === value.length ? files : undefined;
 }
 
 function decodeInitializeRequest(
   value: unknown,
-): EnvironmentAgentInitializeRequest | undefined {
+): EnvironmentDaemonInitializeRequest | undefined {
   if (value === undefined) return undefined;
 
   const record = toRecord(value);
@@ -101,12 +101,12 @@ function decodeCommandRecord(
   const record = toRecord(payload);
   if (!record) {
     throw new Error(
-      `Invalid persisted environment-agent command payload for ${commandType}`,
+      `Invalid persisted environment-daemon command payload for ${commandType}`,
     );
   }
   if ("type" in record && record.type !== commandType) {
     throw new Error(
-      `Environment-agent command payload type mismatch for ${commandType}`,
+      `Environment-daemon command payload type mismatch for ${commandType}`,
     );
   }
   return record;
@@ -120,7 +120,7 @@ function requireStringField(
   const value = getStringField(record, key);
   if (!value) {
     throw new Error(
-      `Invalid persisted environment-agent command payload for ${commandType}`,
+      `Invalid persisted environment-daemon command payload for ${commandType}`,
     );
   }
   return value;
@@ -152,13 +152,13 @@ function decodeProviderId(value: unknown): string | undefined {
     : undefined;
 }
 
-export function decodePersistedEnvironmentAgentCommand(args: {
+export function decodePersistedEnvironmentDaemonCommand(args: {
   commandType: string;
   payload: unknown;
-}): EnvironmentAgentCommand {
-  const commandType = decodeEnvironmentAgentCommandType(args.commandType);
+}): EnvironmentDaemonCommand {
+  const commandType = decodeEnvironmentDaemonCommandType(args.commandType);
   if (!commandType) {
-    throw new Error(`Unsupported environment-agent command type ${args.commandType}`);
+    throw new Error(`Unsupported environment-daemon command type ${args.commandType}`);
   }
 
   const record = decodeCommandRecord(args.payload, commandType);
@@ -171,33 +171,33 @@ export function decodePersistedEnvironmentAgentCommand(args: {
         record.args === undefined ? undefined : decodeStringArray(record.args);
       if (record.args !== undefined && !providerArgs) {
         throw new Error(
-          `Invalid persisted environment-agent command payload for ${commandType}`,
+          `Invalid persisted environment-daemon command payload for ${commandType}`,
         );
       }
       const launchArgs =
         record.launchArgs === undefined ? undefined : decodeStringArray(record.launchArgs);
       if (record.launchArgs !== undefined && !launchArgs) {
         throw new Error(
-          `Invalid persisted environment-agent command payload for ${commandType}`
+          `Invalid persisted environment-daemon command payload for ${commandType}`
         );
       }
       const env = decodeStringRecord(record.env);
       if (record.env !== undefined && !env) {
         throw new Error(
-          `Invalid persisted environment-agent command payload for ${commandType}`
+          `Invalid persisted environment-daemon command payload for ${commandType}`
         );
       }
       const files = decodeProviderFiles(record.files);
       if (record.files !== undefined && !files) {
         throw new Error(
-          `Invalid persisted environment-agent command payload for ${commandType}`
+          `Invalid persisted environment-daemon command payload for ${commandType}`
         );
       }
       const launchCommand = getStringField(record, "launchCommand");
       const forThreadId = getStringField(record, "forThreadId");
       if (!command && !decodeProviderId(record.providerId)) {
         throw new Error(
-          `Invalid persisted environment-agent command payload for ${commandType}`,
+          `Invalid persisted environment-daemon command payload for ${commandType}`,
         );
       }
       return {
@@ -281,13 +281,13 @@ export function decodePersistedEnvironmentAgentCommand(args: {
         requestedMode !== "start"
       ) {
         throw new Error(
-          `Invalid persisted environment-agent command payload for ${commandType}`,
+          `Invalid persisted environment-daemon command payload for ${commandType}`,
         );
       }
       const activeTurnId = getStringField(record, "activeTurnId");
       if (!Array.isArray(record.input)) {
         throw new Error(
-          `Invalid persisted environment-agent command payload for ${commandType}`,
+          `Invalid persisted environment-daemon command payload for ${commandType}`,
         );
       }
       return {

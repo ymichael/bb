@@ -7,47 +7,47 @@ import type {
   Thread,
 } from "@bb/core";
 
-export type EnvironmentAgentTransportKind = "http";
-export const ENVIRONMENT_AGENT_PROTOCOL_VERSION = 1 as const;
+export type EnvironmentDaemonTransportKind = "http";
+export const ENVIRONMENT_DAEMON_PROTOCOL_VERSION = 1 as const;
 
-export interface EnvironmentAgentProviderLaunchWrapper {
+export interface EnvironmentDaemonProviderLaunchWrapper {
   command: string;
   args: string[];
 }
 
-export interface EnvironmentAgentProviderSpec {
+export interface EnvironmentDaemonProviderSpec {
   command: string;
   args: string[];
   launchCommand?: string;
   launchArgs?: string[];
   env?: Record<string, string>;
-  files?: EnvironmentAgentProviderFile[];
+  files?: EnvironmentDaemonProviderFile[];
 }
 
-export type EnvironmentAgentProviderFilePlacement = "home";
+export type EnvironmentDaemonProviderFilePlacement = "home";
 
-export interface EnvironmentAgentProviderFile {
+export interface EnvironmentDaemonProviderFile {
   path: string;
   content: string;
-  placement: EnvironmentAgentProviderFilePlacement;
+  placement: EnvironmentDaemonProviderFilePlacement;
 }
 
-export interface EnvironmentAgentProviderStatus {
+export interface EnvironmentDaemonProviderStatus {
   running: boolean;
   launched: boolean;
   pid?: number;
 }
 
-export type EnvironmentAgentConnectionTarget =
+export type EnvironmentDaemonConnectionTarget =
   {
     transport: "http";
     baseUrl: string;
     headers?: Record<string, string>;
-    serverConnection?: EnvironmentAgentServerConnectionConfig;
-    providerLaunch?: EnvironmentAgentProviderLaunchWrapper;
+    serverConnection?: EnvironmentDaemonServerConnectionConfig;
+    providerLaunch?: EnvironmentDaemonProviderLaunchWrapper;
   };
 
-export interface EnvironmentAgentServerConnectionConfig {
+export interface EnvironmentDaemonServerConnectionConfig {
   serverUrl?: string;
   authToken?: string;
   threadId?: string;
@@ -57,8 +57,8 @@ export interface EnvironmentAgentServerConnectionConfig {
 }
 
 
-export interface EnvironmentAgentCommandMetadata {
-  protocolVersion: typeof ENVIRONMENT_AGENT_PROTOCOL_VERSION;
+export interface EnvironmentDaemonCommandMetadata {
+  protocolVersion: typeof ENVIRONMENT_DAEMON_PROTOCOL_VERSION;
   commandId: string;
   idempotencyKey: string;
   sentAt: number;
@@ -67,24 +67,24 @@ export interface EnvironmentAgentCommandMetadata {
   expectedAfterSequence?: number;
 }
 
-export interface EnvironmentAgentInitializeRequest {
+export interface EnvironmentDaemonInitializeRequest {
   method: string;
   params: unknown;
 }
 
-export type EnvironmentAgentCommand =
+export type EnvironmentDaemonCommand =
   | {
       type: "provider.ensure";
       forThreadId?: string;
       providerId?: string;
       context?: ProviderThreadContext;
-      providerLaunch?: EnvironmentAgentProviderLaunchWrapper;
+      providerLaunch?: EnvironmentDaemonProviderLaunchWrapper;
       command?: string;
       args?: string[];
       launchCommand?: string;
       launchArgs?: string[];
       env?: Record<string, string>;
-      files?: EnvironmentAgentProviderFile[];
+      files?: EnvironmentDaemonProviderFile[];
     }
   | {
       type: "thread.start";
@@ -93,7 +93,7 @@ export type EnvironmentAgentCommand =
       request?: SpawnThreadRequest;
       context?: ProviderThreadContext;
       dynamicTools?: ProviderDynamicTool[];
-      initialize?: EnvironmentAgentInitializeRequest;
+      initialize?: EnvironmentDaemonInitializeRequest;
     }
   | {
       type: "thread.resume";
@@ -103,12 +103,12 @@ export type EnvironmentAgentCommand =
       context?: ProviderThreadContext;
       options?: ProviderExecutionOptions;
       resumePath?: string;
-      initialize?: EnvironmentAgentInitializeRequest;
+      initialize?: EnvironmentDaemonInitializeRequest;
     }
   | {
       type: "thread.stop";
       threadId: string;
-      initialize?: EnvironmentAgentInitializeRequest;
+      initialize?: EnvironmentDaemonInitializeRequest;
     }
   | {
       type: "turn.run";
@@ -118,14 +118,14 @@ export type EnvironmentAgentCommand =
       activeTurnId?: string;
       input?: PromptInput[];
       options?: ProviderExecutionOptions;
-      initialize?: EnvironmentAgentInitializeRequest;
+      initialize?: EnvironmentDaemonInitializeRequest;
     }
   | {
       type: "thread.rename";
       threadId: string;
       providerThreadId: string;
       title: string;
-      initialize?: EnvironmentAgentInitializeRequest;
+      initialize?: EnvironmentDaemonInitializeRequest;
     }
   | {
       type: "provider.list_models";
@@ -143,23 +143,23 @@ export type EnvironmentAgentCommand =
       threadId: string;
     };
 
-export interface EnvironmentAgentCommandEnvelope<
-  TCommand extends EnvironmentAgentCommand = EnvironmentAgentCommand,
+export interface EnvironmentDaemonCommandEnvelope<
+  TCommand extends EnvironmentDaemonCommand = EnvironmentDaemonCommand,
 > {
-  meta: EnvironmentAgentCommandMetadata;
+  meta: EnvironmentDaemonCommandMetadata;
   command: TCommand;
 }
 
-export type EnvironmentAgentCommandDeliveryState =
+export type EnvironmentDaemonCommandDeliveryState =
   | "accepted"
   | "duplicate"
   | "rejected";
 
-export interface EnvironmentAgentCommandAck {
-  protocolVersion: typeof ENVIRONMENT_AGENT_PROTOCOL_VERSION;
+export interface EnvironmentDaemonCommandAck {
+  protocolVersion: typeof ENVIRONMENT_DAEMON_PROTOCOL_VERSION;
   commandId: string;
   idempotencyKey: string;
-  state: EnvironmentAgentCommandDeliveryState;
+  state: EnvironmentDaemonCommandDeliveryState;
   acknowledgedAt: number;
   latestSequence: number;
   errorCode?: string;
@@ -167,7 +167,7 @@ export interface EnvironmentAgentCommandAck {
   result?: unknown;
 }
 
-export type EnvironmentAgentEvent =
+export type EnvironmentDaemonEvent =
   | {
       type: "environment.ready";
       threadId: string;
@@ -226,17 +226,17 @@ export type EnvironmentAgentEvent =
       threadId: string;
     };
 
-export interface EnvironmentAgentEventEnvelope<
-  TEvent extends EnvironmentAgentEvent = EnvironmentAgentEvent,
+export interface EnvironmentDaemonEventEnvelope<
+  TEvent extends EnvironmentDaemonEvent = EnvironmentDaemonEvent,
 > {
-  protocolVersion: typeof ENVIRONMENT_AGENT_PROTOCOL_VERSION;
+  protocolVersion: typeof ENVIRONMENT_DAEMON_PROTOCOL_VERSION;
   sequence: number;
   emittedAt: number;
   threadId: string;
   event: TEvent;
 }
 
-export type EnvironmentAgentDeliveryReason =
+export type EnvironmentDaemonDeliveryReason =
   | "accepted"
   | "duplicate"
   | "sequence_gap"
@@ -244,14 +244,14 @@ export type EnvironmentAgentDeliveryReason =
   | "thread_archived"
   | "thread_inactive";
 
-export type EnvironmentAgentDeliveryRuntimeState =
+export type EnvironmentDaemonDeliveryRuntimeState =
   | "healthy"
   | "retrying"
   | "stalled"
   | "stopped";
 
-export interface EnvironmentAgentStatusSnapshot {
-  protocolVersion: typeof ENVIRONMENT_AGENT_PROTOCOL_VERSION;
+export interface EnvironmentDaemonStatusSnapshot {
+  protocolVersion: typeof ENVIRONMENT_DAEMON_PROTOCOL_VERSION;
   threadId?: string;
   projectId?: string;
   environmentId?: string;
@@ -260,43 +260,43 @@ export interface EnvironmentAgentStatusSnapshot {
   connectedToServer: boolean;
   pendingEventCount: number;
   pendingCommandCount: number;
-  deliveryState: EnvironmentAgentDeliveryRuntimeState;
-  deliveryIssue?: EnvironmentAgentDeliveryReason;
+  deliveryState: EnvironmentDaemonDeliveryRuntimeState;
+  deliveryIssue?: EnvironmentDaemonDeliveryReason;
   retryAttemptCount: number;
   nextRetryAt?: number;
   lastDeliveryError?: string;
 }
 
-interface EnvironmentAgentControlMessageBase {
-  environmentAgentMessage: true;
+interface EnvironmentDaemonControlMessageBase {
+  environmentDaemonMessage: true;
   requestId: string;
 }
 
-export type EnvironmentAgentControlRequest =
-  | (EnvironmentAgentControlMessageBase & {
+export type EnvironmentDaemonControlRequest =
+  | (EnvironmentDaemonControlMessageBase & {
       type: "command";
-      payload: EnvironmentAgentCommandEnvelope;
+      payload: EnvironmentDaemonCommandEnvelope;
     })
-  | (EnvironmentAgentControlMessageBase & {
+  | (EnvironmentDaemonControlMessageBase & {
       type: "provider.ensure";
-      payload: EnvironmentAgentProviderSpec;
+      payload: EnvironmentDaemonProviderSpec;
     })
-  | (EnvironmentAgentControlMessageBase & {
+  | (EnvironmentDaemonControlMessageBase & {
       type: "status";
     });
 
-export type EnvironmentAgentControlResponse =
-  | (EnvironmentAgentControlMessageBase & {
+export type EnvironmentDaemonControlResponse =
+  | (EnvironmentDaemonControlMessageBase & {
       type: "command.response";
-      payload: EnvironmentAgentCommandAck;
+      payload: EnvironmentDaemonCommandAck;
     })
-  | (EnvironmentAgentControlMessageBase & {
+  | (EnvironmentDaemonControlMessageBase & {
       type: "provider.ensure.response";
-      payload: EnvironmentAgentProviderStatus;
+      payload: EnvironmentDaemonProviderStatus;
     })
-  | (EnvironmentAgentControlMessageBase & {
+  | (EnvironmentDaemonControlMessageBase & {
       type: "status.response";
-      payload: EnvironmentAgentStatusSnapshot;
+      payload: EnvironmentDaemonStatusSnapshot;
     });
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -304,12 +304,12 @@ function asRecord(value: unknown): Record<string, unknown> | null {
   return value as Record<string, unknown>;
 }
 
-export function isEnvironmentAgentControlRequest(
+export function isEnvironmentDaemonControlRequest(
   value: unknown,
-): value is EnvironmentAgentControlRequest {
+): value is EnvironmentDaemonControlRequest {
   const record = asRecord(value);
   if (!record) return false;
-  if (record.environmentAgentMessage !== true) return false;
+  if (record.environmentDaemonMessage !== true) return false;
   if (typeof record.requestId !== "string" || record.requestId.length === 0) return false;
   const type = record.type;
   return (
@@ -319,12 +319,12 @@ export function isEnvironmentAgentControlRequest(
   );
 }
 
-export function isEnvironmentAgentControlResponse(
+export function isEnvironmentDaemonControlResponse(
   value: unknown,
-): value is EnvironmentAgentControlResponse {
+): value is EnvironmentDaemonControlResponse {
   const record = asRecord(value);
   if (!record) return false;
-  if (record.environmentAgentMessage !== true) return false;
+  if (record.environmentDaemonMessage !== true) return false;
   if (typeof record.requestId !== "string" || record.requestId.length === 0) return false;
   const type = record.type;
   return (

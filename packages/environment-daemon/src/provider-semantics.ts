@@ -7,7 +7,7 @@ import type {
 import { assertNever, getStringField, isThreadProviderId, toRecord } from "@bb/core";
 import { createProviderAdapter } from "@bb/provider-adapters";
 
-export interface NormalizedEnvironmentAgentProviderEvent {
+export interface NormalizedEnvironmentDaemonProviderEvent {
   providerId: string;
   normalizedMethod: string;
   shouldPersist: boolean;
@@ -18,8 +18,8 @@ export interface NormalizedEnvironmentAgentProviderEvent {
   turnId?: string;
 }
 
-export interface EnvironmentAgentProviderSemantics {
-  normalizeEvent(method: string, payload: unknown): NormalizedEnvironmentAgentProviderEvent;
+export interface EnvironmentDaemonProviderSemantics {
+  normalizeEvent(method: string, payload: unknown): NormalizedEnvironmentDaemonProviderEvent;
   decodeToolCallRequest(
     requestId: string | number,
     method: string,
@@ -102,7 +102,7 @@ function normalizeCommonEvent(
   provider: ProviderAdapter,
   method: string,
   payload: unknown,
-): NormalizedEnvironmentAgentProviderEvent {
+): NormalizedEnvironmentDaemonProviderEvent {
   const normalizedMethod = provider.normalizeEventType(method);
   const turnState = toTurnState(normalizedMethod);
   const turnId = getStringField(toRecord(payload), "turnId") ?? undefined;
@@ -132,7 +132,7 @@ function isMissingProviderThreadMessage(provider: ProviderAdapter, message: stri
   return normalized.includes("thread not found");
 }
 
-function createProviderSemantics(provider: ProviderAdapter): EnvironmentAgentProviderSemantics {
+function createProviderSemantics(provider: ProviderAdapter): EnvironmentDaemonProviderSemantics {
   return {
     normalizeEvent(method, payload) {
       return normalizeCommonEvent(provider, method, payload);
@@ -153,9 +153,9 @@ function createProviderSemantics(provider: ProviderAdapter): EnvironmentAgentPro
   };
 }
 
-export function getEnvironmentAgentProviderSemantics(
+export function getEnvironmentDaemonProviderSemantics(
   providerId: string | undefined,
-): EnvironmentAgentProviderSemantics | undefined {
+): EnvironmentDaemonProviderSemantics | undefined {
   if (!providerId || !isThreadProviderId(providerId)) {
     return undefined;
   }

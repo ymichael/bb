@@ -1,26 +1,26 @@
 import { randomUUID } from "node:crypto";
 import type {
-  EnvironmentAgentClient,
-  EnvironmentAgentCommandAck,
-  EnvironmentAgentCommandEnvelope,
-  EnvironmentAgentProviderSpec,
-  EnvironmentAgentProviderStatus,
-  EnvironmentAgentStatusSnapshot,
+  EnvironmentDaemonClient,
+  EnvironmentDaemonCommandAck,
+  EnvironmentDaemonCommandEnvelope,
+  EnvironmentDaemonProviderSpec,
+  EnvironmentDaemonProviderStatus,
+  EnvironmentDaemonStatusSnapshot,
 } from "@bb/environment-daemon";
-import { ENVIRONMENT_AGENT_PROTOCOL_VERSION } from "@bb/environment-daemon";
+import { ENVIRONMENT_DAEMON_PROTOCOL_VERSION } from "@bb/environment-daemon";
 import type { JsonLineTransport } from "@bb/environment-daemon";
-import type { EnvironmentAgentCommandRecord } from "@bb/db";
+import type { EnvironmentDaemonCommandRecord } from "@bb/db";
 import {
-  EnvironmentAgentCommandDispatcher,
-  isEnvironmentAgentSessionUnavailableError,
-} from "./environment-agent-command-dispatcher.js";
+  EnvironmentDaemonCommandDispatcher,
+  isEnvironmentDaemonSessionUnavailableError,
+} from "./environment-daemon-command-dispatcher.js";
 
 const DEFAULT_COMMAND_TIMEOUT_MS = 30_000;
 const DEFAULT_POLL_INTERVAL_MS = 50;
 
-function isEnvironmentAgentProviderStatus(
+function isEnvironmentDaemonProviderStatus(
   value: unknown,
-): value is EnvironmentAgentProviderStatus {
+): value is EnvironmentDaemonProviderStatus {
   return (
     value !== null &&
     typeof value === "object" &&
@@ -30,19 +30,19 @@ function isEnvironmentAgentProviderStatus(
   );
 }
 
-export interface EnvironmentAgentSessionCommandClientOptions {
+export interface EnvironmentDaemonSessionCommandClientOptions {
   threadId: string;
-  commandDispatcher: EnvironmentAgentCommandDispatcher;
+  commandDispatcher: EnvironmentDaemonCommandDispatcher;
   commandTimeoutMs?: number;
   pollIntervalMs?: number;
   ensureSessionAccess?: () => Promise<void>;
 }
 
-export class EnvironmentAgentSessionCommandClient implements EnvironmentAgentClient {
+export class EnvironmentDaemonSessionCommandClient implements EnvironmentDaemonClient {
   readonly providerTransport: JsonLineTransport = {
     setHandlers: () => undefined,
     send: () => {
-      throw new Error("Session-backed environment-agent client does not expose provider transport");
+      throw new Error("Session-backed environment-daemon client does not expose provider transport");
     },
     close: () => undefined,
   };
@@ -52,15 +52,15 @@ export class EnvironmentAgentSessionCommandClient implements EnvironmentAgentCli
   private readonly ensureSessionAccess?: () => Promise<void>;
   private closed = false;
 
-  constructor(private readonly options: EnvironmentAgentSessionCommandClientOptions) {
+  constructor(private readonly options: EnvironmentDaemonSessionCommandClientOptions) {
     this.commandTimeoutMs = options.commandTimeoutMs ?? DEFAULT_COMMAND_TIMEOUT_MS;
     this.pollIntervalMs = options.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
     this.ensureSessionAccess = options.ensureSessionAccess;
   }
 
   async sendCommand(
-    envelope: EnvironmentAgentCommandEnvelope,
-  ): Promise<EnvironmentAgentCommandAck> {
+    envelope: EnvironmentDaemonCommandEnvelope,
+  ): Promise<EnvironmentDaemonCommandAck> {
     this.ensureOpen();
     const command = await this.enqueueCommand({
       commandId: envelope.meta.commandId,
@@ -72,7 +72,7 @@ export class EnvironmentAgentSessionCommandClient implements EnvironmentAgentCli
     switch (command.state) {
       case "completed":
         return {
-          protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+          protocolVersion: ENVIRONMENT_DAEMON_PROTOCOL_VERSION,
           commandId: envelope.meta.commandId,
           idempotencyKey: envelope.meta.idempotencyKey,
           state: "accepted",
@@ -83,7 +83,7 @@ export class EnvironmentAgentSessionCommandClient implements EnvironmentAgentCli
       case "failed":
       case "cancelled":
         return {
-          protocolVersion: ENVIRONMENT_AGENT_PROTOCOL_VERSION,
+          protocolVersion: ENVIRONMENT_DAEMON_PROTOCOL_VERSION,
           commandId: envelope.meta.commandId,
           idempotencyKey: envelope.meta.idempotencyKey,
           state: "rejected",
@@ -93,20 +93,20 @@ export class EnvironmentAgentSessionCommandClient implements EnvironmentAgentCli
           message:
             command.errorMessage ??
             (command.state === "cancelled"
-              ? "Environment-agent command was cancelled"
-              : "Environment-agent command failed"),
+              ? "Environment-daemon command was cancelled"
+              : "Environment-daemon command failed"),
         };
       default:
         throw new Error(
-          `Environment-agent command ${envelope.meta.commandId} did not reach terminal state`,
+          `Environment-daemon command ${envelope.meta.commandId} did not reach terminal state`,
         );
     }
   }
 
   async ensureProviderRunning(
-    spec: EnvironmentAgentProviderSpec,
+    spec: EnvironmentDaemonProviderSpec,
     forThreadId?: string,
-  ): Promise<EnvironmentAgentProviderStatus> {
+  ): Promise<EnvironmentDaemonProviderStatus> {
     this.ensureOpen();
     const command = await this.enqueueCommand({
       commandId: `provider-ensure-${randomUUID()}`,
@@ -116,8 +116,8 @@ export class EnvironmentAgentSessionCommandClient implements EnvironmentAgentCli
 
     switch (command.state) {
       case "completed":
-        if (!isEnvironmentAgentProviderStatus(command.result)) {
-          throw new Error("Environment-agent provider.ensure returned invalid status");
+        if (!isEnvironmentDaemonProviderStatus(command.result)) {
+          throw new Error("Environment-daemon provider.ensure returned invalid status");
         }
         return command.result;
       case "failed":
@@ -125,18 +125,18 @@ export class EnvironmentAgentSessionCommandClient implements EnvironmentAgentCli
         throw new Error(
           command.errorMessage ??
             (command.state === "cancelled"
-              ? "Environment-agent provider.ensure was cancelled"
-              : "Environment-agent provider.ensure failed"),
+              ? "Environment-daemon provider.ensure was cancelled"
+              : "Environment-daemon provider.ensure failed"),
         );
       default:
         throw new Error(
-          `Environment-agent provider.ensure ${command.id} did not reach terminal state`,
+          `Environment-daemon provider.ensure ${command.id} did not reach terminal state`,
         );
     }
   }
 
-  status(): Promise<EnvironmentAgentStatusSnapshot> {
-    throw new Error("Session-backed environment-agent client does not support status");
+  status(): Promise<EnvironmentDaemonStatusSnapshot> {
+    throw new Error("Session-backed environment-daemon client does not support status");
   }
 
   close(): void {
@@ -145,7 +145,7 @@ export class EnvironmentAgentSessionCommandClient implements EnvironmentAgentCli
 
   private ensureOpen(): void {
     if (this.closed) {
-      throw new Error("Environment-agent session command client is closed");
+      throw new Error("Environment-daemon session command client is closed");
     }
   }
 
@@ -154,7 +154,7 @@ export class EnvironmentAgentSessionCommandClient implements EnvironmentAgentCli
     commandType: string;
     payload: unknown;
     sentAt?: number;
-  }): Promise<EnvironmentAgentCommandRecord> {
+  }): Promise<EnvironmentDaemonCommandRecord> {
     return this.enqueueCommandWithRecovery(args);
   }
 
@@ -163,7 +163,7 @@ export class EnvironmentAgentSessionCommandClient implements EnvironmentAgentCli
     commandType: string;
     payload: unknown;
     sentAt?: number;
-  }): Promise<EnvironmentAgentCommandRecord> {
+  }): Promise<EnvironmentDaemonCommandRecord> {
     let recovered = false;
     while (true) {
       try {
@@ -180,7 +180,7 @@ export class EnvironmentAgentSessionCommandClient implements EnvironmentAgentCli
         if (
           recovered ||
           !this.ensureSessionAccess ||
-          !isEnvironmentAgentSessionUnavailableError(error)
+          !isEnvironmentDaemonSessionUnavailableError(error)
         ) {
           throw error;
         }

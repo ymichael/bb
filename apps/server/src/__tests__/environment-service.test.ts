@@ -11,7 +11,7 @@ import {
   type CreateEnvironmentContext,
   type IEnvironment,
 } from "@bb/environment";
-import { removeEnvironmentAgentDefaultLogArtifacts } from "@bb/environment-daemon";
+import { removeEnvironmentDaemonDefaultLogArtifacts } from "@bb/environment-daemon";
 import {
   createConnection,
   migrate,
@@ -30,7 +30,7 @@ vi.mock("@bb/environment-daemon", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@bb/environment-daemon")>();
   return {
     ...actual,
-    removeEnvironmentAgentDefaultLogArtifacts: vi.fn(),
+    removeEnvironmentDaemonDefaultLogArtifacts: vi.fn(),
   };
 });
 
@@ -304,7 +304,7 @@ function createDeferred() {
 
 describe("EnvironmentService", () => {
   beforeEach(() => {
-    vi.mocked(removeEnvironmentAgentDefaultLogArtifacts).mockClear();
+    vi.mocked(removeEnvironmentDaemonDefaultLogArtifacts).mockClear();
   });
 
   it("runs optional setup only when provisioning creates the environment", async () => {
@@ -353,7 +353,7 @@ describe("EnvironmentService", () => {
 
     expect(destroySpy).toHaveBeenCalledTimes(1);
     expect(attachmentRepo.getByThreadId(thread.id)).toBeUndefined();
-    expect(removeEnvironmentAgentDefaultLogArtifacts).not.toHaveBeenCalled();
+    expect(removeEnvironmentDaemonDefaultLogArtifacts).not.toHaveBeenCalled();
     // With real DB, deleting the managed environment record cascades to set thread.environmentId = null
     expect(threadRepo_getEnvId(service, thread.id)).toBeUndefined();
     expect(environmentRepo.getById(env.id)).toBeUndefined();
@@ -403,7 +403,7 @@ describe("EnvironmentService", () => {
     await expect(service.destroyPersistedEnvironment(thread.id)).resolves.toBeUndefined();
 
     expect(attachmentRepo.getByThreadId(thread.id)).toBeUndefined();
-    expect(removeEnvironmentAgentDefaultLogArtifacts).not.toHaveBeenCalled();
+    expect(removeEnvironmentDaemonDefaultLogArtifacts).not.toHaveBeenCalled();
     // With real DB, deleting the managed environment record cascades to set thread.environmentId = null
     expect(threadRepo_getEnvId(service, thread.id)).toBeUndefined();
   });
@@ -426,7 +426,7 @@ describe("EnvironmentService", () => {
 
     expect(destroySpy).toHaveBeenCalledTimes(1);
     expect(attachmentRepo.getByThreadId(thread.id)).toBeUndefined();
-    expect(removeEnvironmentAgentDefaultLogArtifacts).not.toHaveBeenCalled();
+    expect(removeEnvironmentDaemonDefaultLogArtifacts).not.toHaveBeenCalled();
     // With real DB, deleting the managed environment record cascades to set thread.environmentId = null
     expect(threadRepo_getEnvId(service, thread.id)).toBeUndefined();
   });
@@ -451,7 +451,7 @@ describe("EnvironmentService", () => {
 
     expect(destroySpy).toHaveBeenCalledTimes(1);
     expect(updateSpy).not.toHaveBeenCalled();
-    expect(removeEnvironmentAgentDefaultLogArtifacts).not.toHaveBeenCalled();
+    expect(removeEnvironmentDaemonDefaultLogArtifacts).not.toHaveBeenCalled();
     expect(threadRepo.getById(thread.id)?.environmentId).toBe(env.id);
   });
 
@@ -583,7 +583,7 @@ describe("EnvironmentService", () => {
         },
         getAgentConnectionTarget() {
           if (!targetAvailable) {
-            throw new Error("Missing managed environment-agent target for local environment");
+            throw new Error("Missing managed environment-daemon target for local environment");
           }
           return {
             transport: "http" as const,
@@ -603,7 +603,7 @@ describe("EnvironmentService", () => {
         "/project/root",
         "resume-existing-provider-session",
       ),
-    ).rejects.toThrow("Missing managed environment-agent target for local environment");
+    ).rejects.toThrow("Missing managed environment-daemon target for local environment");
     expect(prepareCalls).toBe(1);
     expect(service.getEnvironmentRuntime(thread.id)).toBeUndefined();
   });
@@ -645,7 +645,7 @@ describe("EnvironmentService", () => {
 
     expect(destroySpy).toHaveBeenCalledTimes(1);
     expect(updateSpy).not.toHaveBeenCalled();
-    expect(removeEnvironmentAgentDefaultLogArtifacts).not.toHaveBeenCalled();
+    expect(removeEnvironmentDaemonDefaultLogArtifacts).not.toHaveBeenCalled();
     expect(threadRepo.getById(thread.id)?.environmentId).toBe(env.id);
   });
 
@@ -660,7 +660,7 @@ describe("EnvironmentService", () => {
       environmentId: "worktree",
     });
 
-    expect(removeEnvironmentAgentDefaultLogArtifacts).toHaveBeenCalledWith({
+    expect(removeEnvironmentDaemonDefaultLogArtifacts).toHaveBeenCalledWith({
       projectId,
       threadId: thread.id,
       environmentId: "worktree",

@@ -1,13 +1,13 @@
 import type {
-  SystemHealthEnvironmentAgentCapabilities,
-  SystemHealthEnvironmentAgentCompatibility,
+  SystemHealthEnvironmentDaemonCapabilities,
+  SystemHealthEnvironmentDaemonCompatibility,
 } from "@bb/core";
-import type { EnvironmentAgentSessionRecord } from "@bb/db";
+import type { EnvironmentDaemonSessionRecord } from "@bb/db";
 import {
-  inferEnvironmentAgentSessionCapabilities,
-  normalizeEnvironmentAgentSessionCapabilities,
-  ENVIRONMENT_AGENT_SESSION_SUPPORTED_PROTOCOL_VERSIONS,
-  type EnvironmentAgentSessionCapabilities,
+  inferEnvironmentDaemonSessionCapabilities,
+  normalizeEnvironmentDaemonSessionCapabilities,
+  ENVIRONMENT_DAEMON_SESSION_SUPPORTED_PROTOCOL_VERSIONS,
+  type EnvironmentDaemonSessionCapabilities,
 } from "@bb/environment-daemon";
 
 const REQUIRED_COMMANDS = [
@@ -32,18 +32,18 @@ const OPTIONAL_FEATURES = [
 ] as const;
 
 function toCapabilities(
-  session: EnvironmentAgentSessionRecord,
-): SystemHealthEnvironmentAgentCapabilities {
+  session: EnvironmentDaemonSessionRecord,
+): SystemHealthEnvironmentDaemonCapabilities {
   const selected = session.selectedCapabilities;
   if (selected && typeof selected === "object") {
-    const normalized = normalizeEnvironmentAgentSessionCapabilities(
-      selected as Partial<EnvironmentAgentSessionCapabilities>,
+    const normalized = normalizeEnvironmentDaemonSessionCapabilities(
+      selected as Partial<EnvironmentDaemonSessionCapabilities>,
     );
     if (normalized.commands.length > 0 || normalized.features.length > 0) {
       return normalized;
     }
   }
-  return inferEnvironmentAgentSessionCapabilities({
+  return inferEnvironmentDaemonSessionCapabilities({
     ...(session.workerName && session.workerVersion
       ? {
           worker: {
@@ -62,11 +62,11 @@ function toCapabilities(
   });
 }
 
-export function assessEnvironmentAgentSessionCompatibility(
-  session: EnvironmentAgentSessionRecord,
+export function assessEnvironmentDaemonSessionCompatibility(
+  session: EnvironmentDaemonSessionRecord,
 ): {
-  capabilities: SystemHealthEnvironmentAgentCapabilities;
-  compatibility: SystemHealthEnvironmentAgentCompatibility;
+  capabilities: SystemHealthEnvironmentDaemonCapabilities;
+  compatibility: SystemHealthEnvironmentDaemonCompatibility;
 } {
   const capabilities = toCapabilities(session);
   const missingRequiredCommands = REQUIRED_COMMANDS.filter(
@@ -79,10 +79,10 @@ export function assessEnvironmentAgentSessionCompatibility(
     (feature) => !capabilities.features.includes(feature),
   );
   const protocolCompatible =
-    ENVIRONMENT_AGENT_SESSION_SUPPORTED_PROTOCOL_VERSIONS.includes(
-      session.protocolVersion as (typeof ENVIRONMENT_AGENT_SESSION_SUPPORTED_PROTOCOL_VERSIONS)[number],
+    ENVIRONMENT_DAEMON_SESSION_SUPPORTED_PROTOCOL_VERSIONS.includes(
+      session.protocolVersion as (typeof ENVIRONMENT_DAEMON_SESSION_SUPPORTED_PROTOCOL_VERSIONS)[number],
     );
-  const disposition: SystemHealthEnvironmentAgentCompatibility["disposition"] =
+  const disposition: SystemHealthEnvironmentDaemonCompatibility["disposition"] =
     !protocolCompatible || missingRequiredCommands.length > 0
       ? "replace"
       : missingOptionalCommands.length > 0 || missingOptionalFeatures.length > 0

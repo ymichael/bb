@@ -1,4 +1,4 @@
-export interface EnvironmentAgentSessionTimingOptions {
+export interface EnvironmentDaemonSessionTimingOptions {
   leaseTtlMs?: number;
   heartbeatIntervalMs?: number;
   commandLongPollTimeoutMs?: number;
@@ -30,9 +30,9 @@ function readPositiveIntegerEnv(
   return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
 }
 
-export function resolveEnvironmentAgentSessionTimingOptions(
+export function resolveEnvironmentDaemonSessionTimingOptions(
   env: NodeJS.ProcessEnv,
-): EnvironmentAgentSessionTimingOptions {
+): EnvironmentDaemonSessionTimingOptions {
   const leaseTtlMs = readPositiveIntegerEnv(env, ENVIRONMENT_AGENT_LEASE_TTL_MS_ENV);
   const heartbeatIntervalMs = readPositiveIntegerEnv(
     env,
@@ -59,7 +59,7 @@ export function resolveEnvironmentAgentSessionTimingOptions(
   };
 }
 
-export function resolveEnvironmentAgentStartupRecoveryRequestTimeoutMs(
+export function resolveEnvironmentDaemonStartupRecoveryRequestTimeoutMs(
   env: NodeJS.ProcessEnv,
 ): number | undefined {
   return readPositiveIntegerEnv(

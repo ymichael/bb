@@ -3,38 +3,38 @@ import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { assertNever } from "@bb/core";
 import type {
-  EnvironmentAgentEventEnvelope,
-  EnvironmentAgentSessionClientMessage,
-  EnvironmentAgentSessionCommandAckPayload,
-  EnvironmentAgentSessionCommandResultPayload,
-  EnvironmentAgentSessionEventBatchPayload,
-  EnvironmentAgentSessionHeartbeatPayload,
-  EnvironmentAgentSessionOpenPayload,
-  EnvironmentAgentSessionProviderRequestPayload,
+  EnvironmentDaemonEventEnvelope,
+  EnvironmentDaemonSessionClientMessage,
+  EnvironmentDaemonSessionCommandAckPayload,
+  EnvironmentDaemonSessionCommandResultPayload,
+  EnvironmentDaemonSessionEventBatchPayload,
+  EnvironmentDaemonSessionHeartbeatPayload,
+  EnvironmentDaemonSessionOpenPayload,
+  EnvironmentDaemonSessionProviderRequestPayload,
 } from "@bb/environment-daemon";
 import {
-  ENVIRONMENT_AGENT_SESSION_PROTOCOL,
+  ENVIRONMENT_DAEMON_SESSION_PROTOCOL,
 } from "@bb/environment-daemon";
 import { invalidRequestError } from "../domain-errors.js";
 import { sendRouteError } from "./error-response.js";
-import type { EnvironmentAgentSessionService } from "../environment-agent-session-service.js";
+import type { EnvironmentDaemonSessionService } from "../environment-daemon-session-service.js";
 import type {
-  EnvironmentAgentSessionRecord,
+  EnvironmentDaemonSessionRecord,
   EnvironmentRepository,
 } from "@bb/db";
 
-const environmentAgentSessionCursorSchema = z.object({
+const environmentDaemonSessionCursorSchema = z.object({
   generation: z.number().int().min(0),
   sequence: z.number().int().min(0),
 });
 
-const environmentAgentSessionChannelBootstrapSchema = z.object({
+const environmentDaemonSessionChannelBootstrapSchema = z.object({
   channelId: z.string().min(1),
   generation: z.number().int().min(0),
-  lastServerAcked: environmentAgentSessionCursorSchema.optional(),
+  lastServerAcked: environmentDaemonSessionCursorSchema.optional(),
 });
 
-const environmentAgentSessionCapabilitiesSchema = z.object({
+const environmentDaemonSessionCapabilitiesSchema = z.object({
   commands: z.array(z.enum([
     "provider.ensure",
     "thread.start",
@@ -55,11 +55,11 @@ const environmentAgentSessionCapabilitiesSchema = z.object({
   ])),
 });
 
-const environmentAgentSessionOpenBodySchema = z.object({
+const environmentDaemonSessionOpenBodySchema = z.object({
   agentId: z.string().min(1),
   agentInstanceId: z.string().min(1),
   supportedProtocolVersions: z.array(z.number().int()).min(1),
-  capabilities: environmentAgentSessionCapabilitiesSchema.optional(),
+  capabilities: environmentDaemonSessionCapabilitiesSchema.optional(),
   worker: z.object({
     name: z.string().min(1),
     version: z.string().min(1),
@@ -76,10 +76,10 @@ const environmentAgentSessionOpenBodySchema = z.object({
     baseUrl: z.string().url(),
     authToken: z.string().min(1),
   }).optional(),
-  channels: z.array(environmentAgentSessionChannelBootstrapSchema).min(1),
+  channels: z.array(environmentDaemonSessionChannelBootstrapSchema).min(1),
 });
 
-const environmentAgentSessionCommandsQuerySchema = z.object({
+const environmentDaemonSessionCommandsQuerySchema = z.object({
   sessionId: z.string().min(1),
   afterCursor: z
     .string()
@@ -129,27 +129,27 @@ function isAbortError(error: unknown): error is Error {
   return message.includes("aborted") || message.includes("aborterror");
 }
 
-const environmentAgentSessionMessageBaseSchema = z.object({
-  protocol: z.literal(ENVIRONMENT_AGENT_SESSION_PROTOCOL),
+const environmentDaemonSessionMessageBaseSchema = z.object({
+  protocol: z.literal(ENVIRONMENT_DAEMON_SESSION_PROTOCOL),
   messageId: z.string().min(1),
   sentAt: z.number().finite(),
   sessionId: z.string().min(1),
 });
 
-const environmentAgentSessionMessageBodySchema = z.discriminatedUnion("type", [
-  environmentAgentSessionMessageBaseSchema.extend({
+const environmentDaemonSessionMessageBodySchema = z.discriminatedUnion("type", [
+  environmentDaemonSessionMessageBaseSchema.extend({
     type: z.literal("heartbeat"),
     payload: z.object({
       agentObservedAt: z.number().int().nonnegative(),
       outboxDepth: z.number().int().nonnegative(),
       channels: z.array(z.object({
         channelId: z.string().min(1),
-        lastSent: environmentAgentSessionCursorSchema.optional(),
-        lastAcked: environmentAgentSessionCursorSchema.optional(),
+        lastSent: environmentDaemonSessionCursorSchema.optional(),
+        lastAcked: environmentDaemonSessionCursorSchema.optional(),
       })),
     }),
   }),
-  environmentAgentSessionMessageBaseSchema.extend({
+  environmentDaemonSessionMessageBaseSchema.extend({
     type: z.literal("event_batch"),
     payload: z.object({
       batches: z.array(z.object({
@@ -159,13 +159,13 @@ const environmentAgentSessionMessageBodySchema = z.discriminatedUnion("type", [
           sequence: z.number().int().min(0),
           eventId: z.string().min(1),
           emittedAt: z.number().int().nonnegative(),
-          event: z.custom<EnvironmentAgentEventEnvelope | Record<string, unknown>>((value) =>
+          event: z.custom<EnvironmentDaemonEventEnvelope | Record<string, unknown>>((value) =>
             Boolean(value) && typeof value === "object" && !Array.isArray(value)),
         })).min(1),
       })).min(1),
     }),
   }),
-  environmentAgentSessionMessageBaseSchema.extend({
+  environmentDaemonSessionMessageBaseSchema.extend({
     type: z.literal("command_ack"),
     payload: z.object({
       commands: z.array(z.object({
@@ -175,7 +175,7 @@ const environmentAgentSessionMessageBodySchema = z.discriminatedUnion("type", [
       })).min(1),
     }),
   }),
-  environmentAgentSessionMessageBaseSchema.extend({
+  environmentDaemonSessionMessageBaseSchema.extend({
     type: z.literal("command_result"),
     payload: z.object({
       commandId: z.string().min(1),
@@ -203,7 +203,7 @@ const environmentAgentSessionMessageBodySchema = z.discriminatedUnion("type", [
       }
     }),
   }),
-  environmentAgentSessionMessageBaseSchema.extend({
+  environmentDaemonSessionMessageBaseSchema.extend({
     type: z.literal("provider_request"),
     payload: z.object({
       requestId: z.union([z.string().min(1), z.number()]),
@@ -222,7 +222,7 @@ const environmentAgentSessionMessageBodySchema = z.discriminatedUnion("type", [
       }).optional(),
     }),
   }),
-  environmentAgentSessionMessageBaseSchema.extend({
+  environmentDaemonSessionMessageBaseSchema.extend({
     type: z.literal("session_close"),
     payload: z.object({
       reason: z.enum(["agent_shutdown", "server_shutdown", "migration", "internal_error"]),
@@ -230,8 +230,8 @@ const environmentAgentSessionMessageBodySchema = z.discriminatedUnion("type", [
   }),
 ]);
 
-function toEnvironmentAgentSessionDebugView(
-  session: EnvironmentAgentSessionRecord,
+function toEnvironmentDaemonSessionDebugView(
+  session: EnvironmentDaemonSessionRecord,
 ): Record<string, unknown> {
   return {
     id: session.id,
@@ -268,10 +268,10 @@ function environmentNotFoundError(environmentId: string): Error {
 }
 
 export function createEnvironmentDaemonRoutes(opts: {
-  environmentAgentSessionService: EnvironmentAgentSessionService;
+  environmentDaemonSessionService: EnvironmentDaemonSessionService;
   environmentRepo: EnvironmentRepository;
 }) {
-  const { environmentAgentSessionService, environmentRepo } = opts;
+  const { environmentDaemonSessionService, environmentRepo } = opts;
 
   return new Hono()
     .get("/:id/env-daemon/status", async (c) => {
@@ -281,7 +281,7 @@ export function createEnvironmentDaemonRoutes(opts: {
         if (!environment) {
           return sendRouteError(c, environmentNotFoundError(environmentId));
         }
-        const status = environmentAgentSessionService.getEnvironmentStatus(
+        const status = environmentDaemonSessionService.getEnvironmentStatus(
           environmentId,
           environmentId,
         );
@@ -297,9 +297,9 @@ export function createEnvironmentDaemonRoutes(opts: {
         if (!environment) {
           return sendRouteError(c, environmentNotFoundError(environmentId));
         }
-        const sessions = environmentAgentSessionService
+        const sessions = environmentDaemonSessionService
           .listSessions(environmentId)
-          .map(toEnvironmentAgentSessionDebugView);
+          .map(toEnvironmentDaemonSessionDebugView);
         return c.json({
           environmentId,
           sessions,
@@ -310,7 +310,7 @@ export function createEnvironmentDaemonRoutes(opts: {
     })
     .post(
       "/:id/env-daemon/session/open",
-      zValidator("json", environmentAgentSessionOpenBodySchema),
+      zValidator("json", environmentDaemonSessionOpenBodySchema),
       async (c) => {
         try {
           const environmentId = c.req.param("id");
@@ -318,8 +318,8 @@ export function createEnvironmentDaemonRoutes(opts: {
           if (!environment) {
             return sendRouteError(c, environmentNotFoundError(environmentId));
           }
-          const body = c.req.valid("json") as EnvironmentAgentSessionOpenPayload;
-          const opened = environmentAgentSessionService.openSession({
+          const body = c.req.valid("json") as EnvironmentDaemonSessionOpenPayload;
+          const opened = environmentDaemonSessionService.openSession({
             environmentId,
             payload: body,
           });
@@ -331,7 +331,7 @@ export function createEnvironmentDaemonRoutes(opts: {
     )
     .get(
       "/:id/env-daemon/session/commands",
-      zValidator("query", environmentAgentSessionCommandsQuerySchema),
+      zValidator("query", environmentDaemonSessionCommandsQuerySchema),
       async (c) => {
         try {
           const environmentId = c.req.param("id");
@@ -340,7 +340,7 @@ export function createEnvironmentDaemonRoutes(opts: {
             return sendRouteError(c, environmentNotFoundError(environmentId));
           }
           const query = c.req.valid("query");
-          const response = await environmentAgentSessionService.waitForCommands({
+          const response = await environmentDaemonSessionService.waitForCommands({
             environmentId,
             sessionId: query.sessionId,
             ...(query.afterCursor !== undefined
@@ -361,7 +361,7 @@ export function createEnvironmentDaemonRoutes(opts: {
     )
     .post(
       "/:id/env-daemon/session/messages",
-      zValidator("json", environmentAgentSessionMessageBodySchema),
+      zValidator("json", environmentDaemonSessionMessageBodySchema),
       async (c) => {
         try {
           const environmentId = c.req.param("id");
@@ -370,49 +370,49 @@ export function createEnvironmentDaemonRoutes(opts: {
             return sendRouteError(c, environmentNotFoundError(environmentId));
           }
           const body = c.req.valid("json") as Exclude<
-            EnvironmentAgentSessionClientMessage,
+            EnvironmentDaemonSessionClientMessage,
             { type: "session_open" }
           >;
           switch (body.type) {
             case "heartbeat":
-              environmentAgentSessionService.recordHeartbeat({
+              environmentDaemonSessionService.recordHeartbeat({
                 environmentId,
                 sessionId: body.sessionId,
-                payload: body.payload as EnvironmentAgentSessionHeartbeatPayload,
+                payload: body.payload as EnvironmentDaemonSessionHeartbeatPayload,
               });
               return c.body(null, 204);
             case "event_batch": {
-              const response = await environmentAgentSessionService.applyEventBatch({
+              const response = await environmentDaemonSessionService.applyEventBatch({
                 environmentId,
                 sessionId: body.sessionId,
-                payload: body.payload as EnvironmentAgentSessionEventBatchPayload,
+                payload: body.payload as EnvironmentDaemonSessionEventBatchPayload,
               });
               return c.json(response);
             }
             case "command_ack":
-              environmentAgentSessionService.recordCommandAck({
+              environmentDaemonSessionService.recordCommandAck({
                 environmentId,
                 sessionId: body.sessionId,
-                payload: body.payload as EnvironmentAgentSessionCommandAckPayload,
+                payload: body.payload as EnvironmentDaemonSessionCommandAckPayload,
               });
               return c.body(null, 204);
             case "command_result":
-              environmentAgentSessionService.recordCommandResult({
+              environmentDaemonSessionService.recordCommandResult({
                 environmentId,
                 sessionId: body.sessionId,
-                payload: body.payload as EnvironmentAgentSessionCommandResultPayload,
+                payload: body.payload as EnvironmentDaemonSessionCommandResultPayload,
               });
               return c.body(null, 204);
             case "provider_request": {
-              const response = await environmentAgentSessionService.handleProviderRequest({
+              const response = await environmentDaemonSessionService.handleProviderRequest({
                 environmentId,
                 sessionId: body.sessionId,
-                payload: body.payload as EnvironmentAgentSessionProviderRequestPayload,
+                payload: body.payload as EnvironmentDaemonSessionProviderRequestPayload,
               });
               return c.json(response);
             }
             case "session_close":
-              environmentAgentSessionService.closeSession({
+              environmentDaemonSessionService.closeSession({
                 environmentId,
                 sessionId: body.sessionId,
                 reason: (body.payload as { reason: "agent_shutdown" | "server_shutdown" | "migration" | "internal_error" }).reason,

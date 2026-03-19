@@ -1,9 +1,9 @@
 import { EventEmitter, Readable, Writable } from "node:stream";
 import type { ChildProcess } from "node:child_process";
 import {
-  ENVIRONMENT_AGENT_PROTOCOL_VERSION,
-  type EnvironmentAgentCommand,
-  type EnvironmentAgentClient,
+  ENVIRONMENT_DAEMON_PROTOCOL_VERSION,
+  type EnvironmentDaemonCommand,
+  type EnvironmentDaemonClient,
 } from "@bb/environment-daemon";
 import { assertNever, toRecord } from "@bb/core";
 import {
@@ -36,26 +36,26 @@ export type FakeChildProcess = Omit<
   _emitExit: (code: number | null, signal: string | null) => void;
 };
 
-type EnvironmentAgentProviderEnsureCommand = Extract<
-  EnvironmentAgentCommand,
+type EnvironmentDaemonProviderEnsureCommand = Extract<
+  EnvironmentDaemonCommand,
   { type: "provider.ensure" }
 >;
-type EnvironmentAgentProviderListModelsCommand = Extract<
-  EnvironmentAgentCommand,
+type EnvironmentDaemonProviderListModelsCommand = Extract<
+  EnvironmentDaemonCommand,
   { type: "provider.list_models" }
 >;
-type EnvironmentAgentProviderListCatalogCommand = Extract<
-  EnvironmentAgentCommand,
+type EnvironmentDaemonProviderListCatalogCommand = Extract<
+  EnvironmentDaemonCommand,
   { type: "provider.list_catalog" }
 >;
-type EnvironmentAgentRpcCommand = Exclude<
-  EnvironmentAgentCommand,
-  | EnvironmentAgentProviderEnsureCommand
-  | EnvironmentAgentProviderListModelsCommand
-  | EnvironmentAgentProviderListCatalogCommand
+type EnvironmentDaemonRpcCommand = Exclude<
+  EnvironmentDaemonCommand,
+  | EnvironmentDaemonProviderEnsureCommand
+  | EnvironmentDaemonProviderListModelsCommand
+  | EnvironmentDaemonProviderListCatalogCommand
 >;
 
-function toProviderMethod(command: EnvironmentAgentRpcCommand): string {
+function toProviderMethod(command: EnvironmentDaemonRpcCommand): string {
   const provider = createProviderAdapter({ providerId: "codex" });
   switch (command.type) {
     case "thread.start":
@@ -79,7 +79,7 @@ function toProviderMethod(command: EnvironmentAgentRpcCommand): string {
   return assertNever(command);
 }
 
-function toProviderParams(command: EnvironmentAgentRpcCommand): unknown {
+function toProviderParams(command: EnvironmentDaemonRpcCommand): unknown {
   const provider = createProviderAdapter({ providerId: "codex" });
   switch (command.type) {
     case "thread.start":
@@ -130,10 +130,10 @@ function toProviderParams(command: EnvironmentAgentRpcCommand): unknown {
   return assertNever(command);
 }
 
-export function respondToEnvironmentAgentControlMessage(
+export function respondToEnvironmentDaemonControlMessage(
   child: Pick<FakeChildProcess, "stdout">,
   msg: {
-    environmentAgentMessage?: boolean;
+    environmentDaemonMessage?: boolean;
     requestId?: string;
     type?: string;
     payload?: {
@@ -143,7 +143,7 @@ export function respondToEnvironmentAgentControlMessage(
     };
   },
 ): boolean {
-  if (msg.environmentAgentMessage !== true || !msg.requestId) {
+  if (msg.environmentDaemonMessage !== true || !msg.requestId) {
     return false;
   }
 
@@ -152,7 +152,7 @@ export function respondToEnvironmentAgentControlMessage(
       process.nextTick(() => {
         child.stdout.push(
           JSON.stringify({
-            environmentAgentMessage: true,
+            environmentDaemonMessage: true,
             requestId: msg.requestId,
             type: "provider.ensure.response",
             payload: {
@@ -168,7 +168,7 @@ export function respondToEnvironmentAgentControlMessage(
       process.nextTick(() => {
         child.stdout.push(
           JSON.stringify({
-            environmentAgentMessage: true,
+            environmentDaemonMessage: true,
             requestId: msg.requestId,
             type: "status.response",
             payload: {
@@ -287,7 +287,7 @@ export function createFakeChildProcess(opts?: {
       const data = chunk.toString();
       try {
         const msg = JSON.parse(data.trim());
-        if (respondToEnvironmentAgentControlMessage(child, msg)) {
+        if (respondToEnvironmentDaemonControlMessage(child, msg)) {
           callback();
           return;
         }
@@ -325,9 +325,9 @@ export function createFakeChildProcess(opts?: {
   return child;
 }
 
-export function createFakeEnvironmentAgentClient(
+export function createFakeEnvironmentDaemonClient(
   child: FakeChildProcess,
-): EnvironmentAgentClient & {
+): EnvironmentDaemonClient & {
   __fakeChild: FakeChildProcess;
   __ensureSpecs: Array<{
     command: string;

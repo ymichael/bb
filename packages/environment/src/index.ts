@@ -30,7 +30,7 @@ export type {
   PromoteEnvironmentResult,
 } from "./contracts.js";
 export { EnvironmentSquashMergeCommitFailureError } from "./contracts.js";
-export type { EnvironmentAgentConnectionTarget } from "@bb/environment-daemon";
+export type { EnvironmentDaemonConnectionTarget } from "@bb/environment-daemon";
 export {
   EnvironmentRegistry,
 } from "./contracts.js";
@@ -63,4 +63,4 @@ export {
   removeDockerEnvironmentArtifacts,
   resolveDockerEnvironmentState,
 } from "./docker-environment.js";
-export { listManagedHostEnvironmentAgentPids } from "./host-environment-agent.js";
+export { listManagedHostEnvironmentDaemonPids } from "./host-environment-daemon.js";

@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createEnvironmentAgentHttpServer } from "./http-server.js";
-import { EnvironmentAgentRuntime } from "./runtime.js";
+import { createEnvironmentDaemonHttpServer } from "./http-server.js";
+import { EnvironmentDaemonRuntime } from "./runtime.js";
 
-describe("environment-agent HTTP transport", () => {
+describe("environment-daemon HTTP transport", () => {
   const cleanup: Array<() => Promise<void> | void> = [];
 
   afterEach(async () => {
@@ -13,7 +13,7 @@ describe("environment-agent HTTP transport", () => {
   });
 
   it("serves status over HTTP", async () => {
-    const runtime = new EnvironmentAgentRuntime({
+    const runtime = new EnvironmentDaemonRuntime({
       threadId: "thread-1",
       providerCommand: "codex",
       providerArgs: ["app-server"],
@@ -22,7 +22,7 @@ describe("environment-agent HTTP transport", () => {
       type: "environment.ready",
       threadId: "thread-1",
     });
-    const server = await createEnvironmentAgentHttpServer({
+    const server = await createEnvironmentDaemonHttpServer({
       runtime,
       bearerToken: "test-token",
     });
@@ -43,11 +43,11 @@ describe("environment-agent HTTP transport", () => {
   });
 
   it("rejects unauthenticated requests", async () => {
-    const runtime = new EnvironmentAgentRuntime({
+    const runtime = new EnvironmentDaemonRuntime({
       threadId: "thread-1",
     });
     runtime.start();
-    const server = await createEnvironmentAgentHttpServer({
+    const server = await createEnvironmentDaemonHttpServer({
       runtime,
       bearerToken: "test-token",
     });
@@ -65,11 +65,11 @@ describe("environment-agent HTTP transport", () => {
   });
 
   it("accepts a session sync poke", async () => {
-    const runtime = new EnvironmentAgentRuntime({
+    const runtime = new EnvironmentDaemonRuntime({
       threadId: "thread-1",
     });
     const onSessionSyncRequested = vi.fn();
-    const server = await createEnvironmentAgentHttpServer({
+    const server = await createEnvironmentDaemonHttpServer({
       runtime,
       bearerToken: "test-token",
       onSessionSyncRequested,
@@ -97,11 +97,11 @@ describe("environment-agent HTTP transport", () => {
   });
 
   it("accepts a shutdown poke", async () => {
-    const runtime = new EnvironmentAgentRuntime({
+    const runtime = new EnvironmentDaemonRuntime({
       threadId: "thread-1",
     });
     const onShutdownRequested = vi.fn();
-    const server = await createEnvironmentAgentHttpServer({
+    const server = await createEnvironmentDaemonHttpServer({
       runtime,
       bearerToken: "test-token",
       onShutdownRequested,
