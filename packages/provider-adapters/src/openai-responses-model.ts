@@ -1,8 +1,3 @@
-import {
-  readCodexAuthFile,
-  resolveApiKeyFromCodexAuthFile,
-  type CodexAuthFile,
-} from "./codex-auth.js";
 import { extractErrorMessage } from "@bb/core";
 import { renderTemplate } from "@bb/templates";
 
@@ -27,8 +22,6 @@ interface ResolvedResponsesAuth {
   bearerToken: string;
   accountId?: string;
 }
-
-type KnownAuthMode = "apikey" | "apiKey" | "chatgpt" | "chatgptAuthTokens";
 
 interface OpenAIResponsesErrorPayload {
   error?: {
@@ -291,42 +284,7 @@ async function resolveResponsesAuth(): Promise<ResolvedResponsesAuth> {
     };
   }
 
-  const auth = await readCodexAuthFile();
-  const authMode = String(auth?.auth_mode ?? "").trim() as KnownAuthMode;
-  if (!authMode) {
-    throw new Error("OpenAI auth is missing");
-  }
-  if (authMode === "apikey" || authMode === "apiKey") {
-    const resolvedApiKey = resolveApiKeyFromCodexAuthFile(auth);
-    if (!resolvedApiKey) {
-      throw new Error("OpenAI API key is missing");
-    }
-    return {
-      mode: "apiKey",
-      bearerToken: resolvedApiKey,
-    };
-  }
-
-  const chatgptAuth = auth as CodexAuthFile & {
-    tokens?: {
-      id_token?: string;
-      access_token?: string;
-      account_id?: string;
-    };
-  };
-  const bearerToken =
-    chatgptAuth.tokens?.id_token?.trim() ||
-    chatgptAuth.tokens?.access_token?.trim();
-  if (!bearerToken) {
-    throw new Error("OpenAI auth is missing");
-  }
-  return {
-    mode: "chatgpt",
-    bearerToken,
-    ...(chatgptAuth.tokens?.account_id?.trim()
-      ? { accountId: chatgptAuth.tokens.account_id.trim() }
-      : {}),
-  };
+  throw new Error("OpenAI auth is missing");
 }
 
 export async function generateOpenAIResponsesText(
