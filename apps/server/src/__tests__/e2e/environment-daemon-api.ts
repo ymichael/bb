@@ -66,13 +66,14 @@ export async function createThread(
   baseUrl: string,
   projectId: string,
   inputText: string = "Prepare a thread for environment-daemon e2e.",
-  opts?: { environmentKind?: string; environmentId?: string },
+  opts?: { environmentKind?: string; environmentId?: string; providerId?: string },
 ): Promise<Thread> {
   return readJson<Thread>(`${baseUrl}/api/v1/threads`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       projectId,
+      ...(opts?.providerId ? { providerId: opts.providerId } : {}),
       ...(opts?.environmentKind
         ? {
             environmentCreationArgs: {

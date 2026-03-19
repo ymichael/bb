@@ -24,6 +24,7 @@ export default defineConfig({
       "src/__tests__/e2e/standalone-server-blocked-restart.test.ts",
       "src/__tests__/e2e/dynamic-tools-server-roundtrip.test.ts",
       "src/__tests__/e2e/thread-multi-thread-stress.test.ts",
+      "src/__tests__/e2e/thread-multi-provider-shared-environment.test.ts",
     ],
   },
 });
