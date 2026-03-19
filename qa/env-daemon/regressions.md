@@ -16,14 +16,14 @@ Make sure once an env-daemon recovery, session, or routing bug is fixed, it stay
 
 ## Automation today
 
-Current regression-oriented automation still flows through the older script names:
+Current regression-oriented automation is still partly transitional:
 
 ```bash
 pnpm qa:server:regression
 pnpm qa:env-daemon:recovery:fake
 ```
 
-Use the fake recovery suite when the repro needs deterministic worker-loss control.
+Use `qa:server:regression` for the current real-provider regression seed suite, and `qa:env-daemon:recovery:fake` when the repro needs deterministic worker-loss control.
 
 ## Seed areas
 

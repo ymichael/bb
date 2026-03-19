@@ -41,13 +41,13 @@ Use this pass when changing provider bridges, protocol handling, or request/resp
 Use the currently available provider-specific smoke entrypoints plus the deeper server/env-daemon flows when the change touches provider runtime integration:
 
 ```bash
-pnpm qa:server:smoke
-pnpm qa:server:smoke:claude-code
-pnpm qa:server:smoke:pi
+pnpm qa:providers:smoke
+pnpm qa:providers:smoke:claude-code
+pnpm qa:providers:smoke:pi
 ```
 
 If the provider change also touches daemon/tool-call runtime behavior, add:
 
 ```bash
-pnpm qa:server:stress
+pnpm qa:env-daemon:recovery
 ```
