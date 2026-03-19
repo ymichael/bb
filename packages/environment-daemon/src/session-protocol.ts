@@ -325,6 +325,10 @@ export interface EnvironmentAgentSessionProviderRequestPayload {
   providerId?: string;
   normalizedMethod?: string;
   toolCall?: ProviderToolCallRequest;
+  /** When set, the server routes this request to the specified thread
+   *  instead of the URL-path thread. Used for shared-environment sessions
+   *  where the originating provider child belongs to a sibling thread. */
+  channelId?: string;
 }
 
 export interface EnvironmentAgentSessionProviderResponsePayload {

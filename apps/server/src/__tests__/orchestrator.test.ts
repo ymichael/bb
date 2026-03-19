@@ -933,7 +933,7 @@ describe("Orchestrator", () => {
       opts?: {
         sessionService?: Pick<
           EnvironmentAgentSessionService,
-          "retireActiveSessionForThread"
+          "retireActiveSessionForEnvironment"
         >;
       },
     ) {
@@ -956,11 +956,15 @@ describe("Orchestrator", () => {
           });
           environmentId = env.id;
         }
-        return createTestThread(repos.threadRepo, project.id, {
+        const thread = createTestThread(repos.threadRepo, project.id, {
           status: desc.status,
           environmentId,
           archivedAt: desc.archivedAt,
         });
+        if (environmentId) {
+          repos.attachmentRepo.attachThread({ threadId: thread.id, environmentId });
+        }
+        return thread;
       });
 
       const bootManager = new Orchestrator(
@@ -977,6 +981,9 @@ describe("Orchestrator", () => {
         undefined,
         undefined,
         opts?.sessionService as EnvironmentAgentSessionService | undefined,
+        undefined,
+        undefined,
+        repos.attachmentRepo,
       );
 
       return {
@@ -1109,7 +1116,7 @@ describe("Orchestrator", () => {
 
     it("fails stranded provisioned threads during boot and retires their sessions", async () => {
       const sessionService = {
-        retireActiveSessionForThread: vi.fn(),
+        retireActiveSessionForEnvironment: vi.fn(),
       };
       const {
         bootManager,
@@ -1133,8 +1140,8 @@ describe("Orchestrator", () => {
 
       const updated = bootThreadRepo.getById(provisionedThread.id);
       expect(updated?.status).toBe("provisioning_failed");
-      expect(sessionService.retireActiveSessionForThread).toHaveBeenCalledWith({
-        threadId: provisionedThread.id,
+      expect(sessionService.retireActiveSessionForEnvironment).toHaveBeenCalledWith({
+        environmentId: provisionedThread.environmentId,
         reason: "migration",
       });
 

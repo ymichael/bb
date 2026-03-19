@@ -161,8 +161,8 @@ export async function runMultiThreadStressScenario(): Promise<void> {
 
     // --- Phase 4: Verify shared env-daemon sessions for local threads ---
     const [localSessions1, localSessions2] = await Promise.all([
-      listEnvironmentAgentSessions(harness.baseUrl, localThread1.id),
-      listEnvironmentAgentSessions(harness.baseUrl, localThread2.id),
+      listEnvironmentAgentSessions(harness.baseUrl, localEnv1!),
+      listEnvironmentAgentSessions(harness.baseUrl, localEnv2!),
     ]);
     const activeLocal1 = localSessions1.sessions.find((s) => s.status === "active")?.id;
     const activeLocal2 = localSessions2.sessions.find((s) => s.status === "active")?.id;
@@ -199,8 +199,8 @@ export async function runMultiThreadStressScenario(): Promise<void> {
 
     // --- Phase 6: Verify sessions still healthy after concurrent follow-ups ---
     const [postLocal1, postLocal2] = await Promise.all([
-      listEnvironmentAgentSessions(harness.baseUrl, localThread1.id),
-      listEnvironmentAgentSessions(harness.baseUrl, localThread2.id),
+      listEnvironmentAgentSessions(harness.baseUrl, localEnv1!),
+      listEnvironmentAgentSessions(harness.baseUrl, localEnv2!),
     ]);
     const postActiveLocal1 = postLocal1.sessions.find((s) => s.status === "active")?.id;
     const postActiveLocal2 = postLocal2.sessions.find((s) => s.status === "active")?.id;

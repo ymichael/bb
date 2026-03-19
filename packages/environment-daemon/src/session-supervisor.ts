@@ -198,10 +198,11 @@ export class EnvironmentAgentSessionSupervisor {
     providerId?: string;
     normalizedMethod?: string;
     toolCall?: import("@bb/core").ProviderToolCallRequest;
+    threadId?: string;
   }): Promise<EnvironmentAgentSessionProviderResponsePayload> {
     await this.openSession();
     return this.options.sessionSync.forwardProviderRequest({
-      threadId: this.options.threadId,
+      threadId: args.threadId ?? this.options.threadId,
       requestId: args.requestId,
       method: args.method,
       ...(args.params !== undefined ? { params: args.params } : {}),

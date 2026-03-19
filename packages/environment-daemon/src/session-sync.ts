@@ -292,6 +292,9 @@ export class EnvironmentAgentSessionSync {
     requestId: string | number;
     method: string;
     params?: unknown;
+    providerId?: string;
+    normalizedMethod?: string;
+    toolCall?: import("@bb/core").ProviderToolCallRequest;
   }): Promise<EnvironmentAgentSessionProviderResponsePayload> {
     const state = this.requireSessionState(args.threadId);
     const response = await this.options.client.sendProviderRequest({
@@ -300,6 +303,12 @@ export class EnvironmentAgentSessionSync {
         requestId: args.requestId,
         method: args.method,
         ...(args.params !== undefined ? { params: args.params } : {}),
+        ...(args.providerId ? { providerId: args.providerId } : {}),
+        ...(args.normalizedMethod
+          ? { normalizedMethod: args.normalizedMethod }
+          : {}),
+        ...(args.toolCall ? { toolCall: args.toolCall } : {}),
+        channelId: args.threadId,
       },
     });
     return response.payload;

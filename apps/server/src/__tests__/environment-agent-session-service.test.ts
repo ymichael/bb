@@ -9,6 +9,7 @@ import {
   type EnvironmentAgentSessionRecord,
   EnvironmentAgentSessionRepository,
   ProjectRepository,
+  ThreadEnvironmentAttachmentRepository,
   ThreadRepository,
 } from "@bb/db";
 import { vi } from "vitest";
@@ -38,6 +39,7 @@ describe("EnvironmentAgentSessionService", () => {
   let sessions: EnvironmentAgentSessionRepository;
   let cursors: EnvironmentAgentCursorRepository;
   let commands: EnvironmentAgentCommandRepository;
+  let attachments: ThreadEnvironmentAttachmentRepository;
   let service: EnvironmentAgentSessionService;
   let onSessionInvalidated: (session: EnvironmentAgentSessionRecord) => void;
 
@@ -51,6 +53,7 @@ describe("EnvironmentAgentSessionService", () => {
     sessions = new EnvironmentAgentSessionRepository(db);
     cursors = new EnvironmentAgentCursorRepository(db);
     commands = new EnvironmentAgentCommandRepository(db);
+    attachments = new ThreadEnvironmentAttachmentRepository(db);
     onSessionInvalidated = vi.fn<(session: EnvironmentAgentSessionRecord) => void>();
     service = new EnvironmentAgentSessionService(
       new EnvironmentAgentSessionManager(sessions),
@@ -61,10 +64,13 @@ describe("EnvironmentAgentSessionService", () => {
         clock: () => TEST_LEASE_NOW,
         commandDispatcher: new EnvironmentAgentCommandDispatcher(sessions, commands, {
           clock: () => TEST_LEASE_NOW,
+          resolveEnvironmentId: (tid) => attachments.getByThreadId(tid)?.environmentId,
         }),
         eventApplier: new EnvironmentAgentEventApplier(cursors, {
           ingestReplayedEnvironmentAgentEvents: vi.fn(async () => undefined),
         }),
+        listAttachedThreadIds: (eid) =>
+          attachments.listByEnvironmentId(eid).map((a) => a.threadId),
         onSessionInvalidated,
       },
     );
@@ -74,20 +80,27 @@ describe("EnvironmentAgentSessionService", () => {
     sqlite.close();
   });
 
-  function createThreadId(): string {
+  function createTestIds(): { threadId: string; environmentId: string } {
     const project = projects.create({
       name: "server-session-service-project",
       rootPath: "/tmp/server-session-service-project",
     });
-    return threads.create({ projectId: project.id }).id;
+    const threadId = threads.create({ projectId: project.id }).id;
+    const environmentId = environments.create({
+      projectId: project.id,
+      descriptor: { type: "path", path: `/tmp/server-session-service-project/.worktrees/${threadId}` },
+      managed: true,
+    }).id;
+    attachments.attachThread({ threadId, environmentId });
+    return { threadId, environmentId };
   }
 
   it("negotiates a session and returns a welcome payload from the server cursor", () => {
-    const threadId = createThreadId();
+    const { threadId, environmentId } = createTestIds();
     cursors.upsert(threadId, { generation: 3, sequence: 9 }, 1_000);
 
     const opened = service.openSession({
-      threadId,
+      environmentId,
       now: 2_000,
       payload: {
         agentId: "agent-1",
@@ -131,7 +144,7 @@ describe("EnvironmentAgentSessionService", () => {
     });
 
     expect(opened.session).toMatchObject({
-      threadId,
+      environmentId,
       agentId: "agent-1",
       agentInstanceId: "instance-1",
       workerName: "environment-daemon",
@@ -198,10 +211,10 @@ describe("EnvironmentAgentSessionService", () => {
   });
 
   it("falls back to the agent bootstrap generation when the server has no cursor yet", () => {
-    const threadId = createThreadId();
+    const { threadId, environmentId } = createTestIds();
 
     const opened = service.openSession({
-      threadId,
+      environmentId,
       now: 2_000,
       payload: {
         agentId: "agent-1",
@@ -228,10 +241,10 @@ describe("EnvironmentAgentSessionService", () => {
   });
 
   it("accepts a session when the agent offers additional newer protocol versions", () => {
-    const threadId = createThreadId();
+    const { threadId, environmentId } = createTestIds();
 
     const opened = service.openSession({
-      threadId,
+      environmentId,
       now: 2_000,
       payload: {
         agentId: "agent-1",
@@ -251,11 +264,11 @@ describe("EnvironmentAgentSessionService", () => {
   });
 
   it("rejects a session when there is no mutually supported protocol version", () => {
-    const threadId = createThreadId();
+    const { threadId, environmentId } = createTestIds();
 
     expect(() =>
       service.openSession({
-        threadId,
+        environmentId,
         now: 2_000,
         payload: {
           agentId: "agent-1",
@@ -273,8 +286,8 @@ describe("EnvironmentAgentSessionService", () => {
   });
 
   it("lists only thread-owned history plus the active shared environment session", () => {
-    const threadId = createThreadId();
-    const siblingThreadId = createThreadId();
+    const { threadId, environmentId } = createTestIds();
+    const { threadId: siblingThreadId } = createTestIds();
     const projectId = threads.getById(threadId)?.projectId;
     if (!projectId) {
       throw new Error("Missing project for thread");
@@ -292,15 +305,11 @@ describe("EnvironmentAgentSessionService", () => {
       cursors,
       {
         clock: () => TEST_LEASE_NOW,
-        resolveEnvironmentId: (candidateThreadId) =>
-          candidateThreadId === threadId || candidateThreadId === siblingThreadId
-            ? sharedEnvironment.id
-            : undefined,
       },
     );
 
     const ownedSession = sharedService.openSession({
-      threadId,
+      environmentId: sharedEnvironment.id,
       now: 1_000,
       payload: {
         agentId: "agent-1",
@@ -310,14 +319,14 @@ describe("EnvironmentAgentSessionService", () => {
       },
     }).session;
     sharedService.closeSession({
-      threadId,
+      environmentId: sharedEnvironment.id,
       sessionId: ownedSession.id,
       reason: "agent_shutdown",
       now: 2_000,
     });
 
     const siblingSession = sharedService.openSession({
-      threadId: siblingThreadId,
+      environmentId: sharedEnvironment.id,
       now: 3_000,
       payload: {
         agentId: "agent-2",
@@ -327,9 +336,9 @@ describe("EnvironmentAgentSessionService", () => {
       },
     }).session;
 
-    expect(sharedService.listSessions(threadId)).toMatchObject([
-      { id: siblingSession.id, threadId: siblingThreadId, status: "active" },
-      { id: ownedSession.id, threadId, status: "closed" },
+    expect(sharedService.listSessions(sharedEnvironment.id)).toMatchObject([
+      { id: siblingSession.id, environmentId: sharedEnvironment.id, status: "active" },
+      { id: ownedSession.id, environmentId: sharedEnvironment.id, status: "closed" },
     ]);
   });
 
@@ -356,7 +365,6 @@ describe("EnvironmentAgentSessionService", () => {
       new EnvironmentAgentSessionManager(sessions),
       cursors,
       {
-        resolveEnvironmentId: (candidateThreadId) => attachmentsByThreadId.get(candidateThreadId),
         listAttachedThreadIds: (candidateEnvironmentId) =>
           candidateEnvironmentId === environmentId
             ? [firstThreadId, secondThreadId]
@@ -365,7 +373,7 @@ describe("EnvironmentAgentSessionService", () => {
     );
 
     const opened = sharedService.openSession({
-      threadId: firstThreadId,
+      environmentId,
       payload: {
         agentId: "agent-shared",
         agentInstanceId: "instance-1",
@@ -377,7 +385,7 @@ describe("EnvironmentAgentSessionService", () => {
 
     expect(
       sharedService.recordHeartbeat({
-        threadId: secondThreadId,
+        environmentId,
         sessionId: opened.session.id,
         payload: {
           agentObservedAt: 2_000,
@@ -395,8 +403,8 @@ describe("EnvironmentAgentSessionService", () => {
   });
 
   it("does not apply a single-channel afterCursor to shared environment sessions", () => {
-    const threadId = createThreadId();
-    const siblingThreadId = createThreadId();
+    const { threadId, environmentId } = createTestIds();
+    const { threadId: siblingThreadId } = createTestIds();
     const projectId = threads.getById(threadId)?.projectId;
     if (!projectId) {
       throw new Error("Missing project for thread");
@@ -421,15 +429,11 @@ describe("EnvironmentAgentSessionService", () => {
               ? sharedEnvironment.id
               : undefined,
         }),
-        resolveEnvironmentId: (candidateThreadId) =>
-          candidateThreadId === threadId || candidateThreadId === siblingThreadId
-            ? sharedEnvironment.id
-            : undefined,
       },
     );
 
     const opened = sharedService.openSession({
-      threadId,
+      environmentId: sharedEnvironment.id,
       now: 1_000,
       payload: {
         agentId: "agent-1",
@@ -457,7 +461,7 @@ describe("EnvironmentAgentSessionService", () => {
     });
 
     const listed = sharedService.listCommands({
-      threadId,
+      environmentId: sharedEnvironment.id,
       sessionId: opened.id,
       afterCursor: 99,
       limit: 50,
@@ -477,11 +481,11 @@ describe("EnvironmentAgentSessionService", () => {
   });
 
   it("resets a stale server cursor when a fresh agent opens without lastServerAcked", async () => {
-    const threadId = createThreadId();
+    const { threadId, environmentId } = createTestIds();
     cursors.upsert(threadId, { generation: 3, sequence: 9 }, 1_000);
 
     const opened = service.openSession({
-      threadId,
+      environmentId,
       now: 2_000,
       payload: {
         agentId: "agent-1",
@@ -508,7 +512,7 @@ describe("EnvironmentAgentSessionService", () => {
     expect(cursors.getByThreadId(threadId)).toBeUndefined();
 
     const ack = await service.applyEventBatch({
-      threadId,
+      environmentId,
       sessionId: opened.session.id,
       now: 3_000,
       payload: {
@@ -554,9 +558,9 @@ describe("EnvironmentAgentSessionService", () => {
   });
 
   it("replaces active sessions and rejects unsupported opens", () => {
-    const threadId = createThreadId();
+    const { threadId, environmentId } = createTestIds();
     const first = service.openSession({
-      threadId,
+      environmentId,
       now: 1_000,
       payload: {
         agentId: "agent-1",
@@ -572,7 +576,7 @@ describe("EnvironmentAgentSessionService", () => {
     });
 
     const second = service.openSession({
-      threadId,
+      environmentId,
       now: 2_000,
       payload: {
         agentId: "agent-1",
@@ -594,7 +598,7 @@ describe("EnvironmentAgentSessionService", () => {
 
     expect(() =>
       service.openSession({
-        threadId,
+        environmentId,
         payload: {
           agentId: "agent-1",
           agentInstanceId: "instance-3",
@@ -609,30 +613,12 @@ describe("EnvironmentAgentSessionService", () => {
       }),
     ).toThrow("No compatible environment-agent session protocol version");
 
-    expect(() =>
-      service.openSession({
-        threadId,
-        payload: {
-          agentId: "agent-1",
-          agentInstanceId: "instance-4",
-          supportedProtocolVersions: [1],
-          channels: [
-            {
-              channelId: "other-thread",
-              generation: 1,
-            },
-          ],
-        },
-      }),
-    ).toThrow(
-      `Missing environment-agent channel bootstrap for thread ${threadId}`,
-    );
   });
 
   it("fails pending queued commands when a newer session replaces them", () => {
-    const threadId = createThreadId();
+    const { threadId, environmentId } = createTestIds();
     const first = service.openSession({
-      threadId,
+      environmentId,
       now: 1_000,
       payload: {
         agentId: "agent-1",
@@ -660,7 +646,7 @@ describe("EnvironmentAgentSessionService", () => {
     });
 
     const second = service.openSession({
-      threadId,
+      environmentId,
       now: 2_000,
       payload: {
         agentId: "agent-1",
@@ -684,9 +670,9 @@ describe("EnvironmentAgentSessionService", () => {
   });
 
   it("fails received and started commands when a newer session replaces them", () => {
-    const threadId = createThreadId();
+    const { threadId, environmentId } = createTestIds();
     const first = service.openSession({
-      threadId,
+      environmentId,
       now: 1_000,
       payload: {
         agentId: "agent-1",
@@ -729,7 +715,7 @@ describe("EnvironmentAgentSessionService", () => {
     commands.markStarted("cmd-started", 1_250);
 
     const second = service.openSession({
-      threadId,
+      environmentId,
       now: 2_000,
       payload: {
         agentId: "agent-1",
@@ -760,7 +746,7 @@ describe("EnvironmentAgentSessionService", () => {
   });
 
   it("handles provider requests through the configured handler", async () => {
-    const threadId = createThreadId();
+    const { threadId, environmentId } = createTestIds();
     const serviceWithProviderRequests = new EnvironmentAgentSessionService(
       new EnvironmentAgentSessionManager(sessions),
       cursors,
@@ -768,6 +754,8 @@ describe("EnvironmentAgentSessionService", () => {
         leaseTtlMs: 45_000,
         heartbeatIntervalMs: 15_000,
         clock: () => TEST_LEASE_NOW,
+        listAttachedThreadIds: (eid) =>
+          attachments.listByEnvironmentId(eid).map((a) => a.threadId),
         providerRequestHandler: vi.fn(async ({ threadId: requestThreadId, request }) => ({
           result: {
             threadId: requestThreadId,
@@ -778,7 +766,7 @@ describe("EnvironmentAgentSessionService", () => {
       },
     );
     const opened = serviceWithProviderRequests.openSession({
-      threadId,
+      environmentId,
       now: 1_000,
       payload: {
         agentId: "agent-1",
@@ -794,13 +782,14 @@ describe("EnvironmentAgentSessionService", () => {
     });
 
     const response = await serviceWithProviderRequests.handleProviderRequest({
-      threadId,
+      environmentId,
       sessionId: opened.session.id,
       now: 2_000,
       payload: {
         requestId: 61,
         method: "item/tool/call",
         params: { tool: "echo_test_tool" },
+        channelId: threadId,
       },
     });
 
@@ -820,7 +809,7 @@ describe("EnvironmentAgentSessionService", () => {
   });
 
   it("wraps thrown provider request errors into provider responses", async () => {
-    const threadId = createThreadId();
+    const { threadId, environmentId } = createTestIds();
     const serviceWithProviderRequests = new EnvironmentAgentSessionService(
       new EnvironmentAgentSessionManager(sessions),
       cursors,
@@ -828,13 +817,15 @@ describe("EnvironmentAgentSessionService", () => {
         leaseTtlMs: 45_000,
         heartbeatIntervalMs: 15_000,
         clock: () => TEST_LEASE_NOW,
+        listAttachedThreadIds: (eid) =>
+          attachments.listByEnvironmentId(eid).map((a) => a.threadId),
         providerRequestHandler: vi.fn(async () => {
           throw new Error("tool host unavailable");
         }),
       },
     );
     const opened = serviceWithProviderRequests.openSession({
-      threadId,
+      environmentId,
       now: 1_000,
       payload: {
         agentId: "agent-1",
@@ -850,12 +841,13 @@ describe("EnvironmentAgentSessionService", () => {
     });
 
     const response = await serviceWithProviderRequests.handleProviderRequest({
-      threadId,
+      environmentId,
       sessionId: opened.session.id,
       now: 2_000,
       payload: {
         requestId: "req-1",
         method: "item/tool/call",
+        channelId: threadId,
       },
     });
 
@@ -871,7 +863,7 @@ describe("EnvironmentAgentSessionService", () => {
   });
 
   it("returns typed tool-call responses from the provider request handler", async () => {
-    const threadId = createThreadId();
+    const { threadId, environmentId } = createTestIds();
     const serviceWithProviderRequests = new EnvironmentAgentSessionService(
       new EnvironmentAgentSessionManager(sessions),
       cursors,
@@ -879,6 +871,8 @@ describe("EnvironmentAgentSessionService", () => {
         leaseTtlMs: 45_000,
         heartbeatIntervalMs: 15_000,
         clock: () => TEST_LEASE_NOW,
+        listAttachedThreadIds: (eid) =>
+          attachments.listByEnvironmentId(eid).map((a) => a.threadId),
         providerRequestHandler: vi.fn(async () => ({
           toolCallResponse: {
             contentItems: [{ type: "inputText", text: "ok" } as const],
@@ -888,7 +882,7 @@ describe("EnvironmentAgentSessionService", () => {
       },
     );
     const opened = serviceWithProviderRequests.openSession({
-      threadId,
+      environmentId,
       now: 1_000,
       payload: {
         agentId: "agent-1",
@@ -899,12 +893,13 @@ describe("EnvironmentAgentSessionService", () => {
     });
 
     const response = await serviceWithProviderRequests.handleProviderRequest({
-      threadId,
+      environmentId,
       sessionId: opened.session.id,
       now: 2_000,
       payload: {
         requestId: 62,
         method: "item/tool/call",
+        channelId: threadId,
         toolCall: {
           requestId: 62,
           threadId,
@@ -931,9 +926,9 @@ describe("EnvironmentAgentSessionService", () => {
   });
 
   it("applies event batches and resets the agent cursor when the server detects a gap", async () => {
-    const threadId = createThreadId();
+    const { threadId, environmentId } = createTestIds();
     const opened = service.openSession({
-      threadId,
+      environmentId,
       now: 1_000,
       payload: {
         agentId: "agent-1",
@@ -949,7 +944,7 @@ describe("EnvironmentAgentSessionService", () => {
     });
 
     const ack = await service.applyEventBatch({
-      threadId,
+      environmentId,
       sessionId: opened.session.id,
       now: 2_000,
       payload: {
@@ -991,7 +986,7 @@ describe("EnvironmentAgentSessionService", () => {
     });
 
     const replayAck = await service.applyEventBatch({
-      threadId,
+      environmentId,
       sessionId: opened.session.id,
       now: 3_000,
       payload: {
@@ -1034,9 +1029,9 @@ describe("EnvironmentAgentSessionService", () => {
   });
 
   it("expires overdue leases", () => {
-    const threadId = createThreadId();
+    const { threadId, environmentId } = createTestIds();
     const opened = service.openSession({
-      threadId,
+      environmentId,
       now: 1_000,
       payload: {
         agentId: "agent-1",
@@ -1061,16 +1056,16 @@ describe("EnvironmentAgentSessionService", () => {
     expect(onSessionInvalidated).toHaveBeenCalledWith(
       expect.objectContaining({
         id: opened.session.id,
-        threadId,
+        environmentId,
         closeReason: "lease_expired",
       }),
     );
   });
 
   it("fails started commands when a lease expires", () => {
-    const threadId = createThreadId();
+    const { threadId, environmentId } = createTestIds();
     const opened = service.openSession({
-      threadId,
+      environmentId,
       now: 1_000,
       payload: {
         agentId: "agent-1",
@@ -1111,9 +1106,9 @@ describe("EnvironmentAgentSessionService", () => {
   });
 
   it("closes active sessions explicitly", () => {
-    const threadId = createThreadId();
+    const { threadId, environmentId } = createTestIds();
     const opened = service.openSession({
-      threadId,
+      environmentId,
       now: 1_000,
       payload: {
         agentId: "agent-1",
@@ -1130,7 +1125,7 @@ describe("EnvironmentAgentSessionService", () => {
 
     expect(
       service.closeSession({
-        threadId,
+        environmentId,
         sessionId: opened.session.id,
         reason: "agent_shutdown",
         now: 2_000,
@@ -1144,16 +1139,16 @@ describe("EnvironmentAgentSessionService", () => {
     expect(onSessionInvalidated).toHaveBeenCalledWith(
       expect.objectContaining({
         id: opened.session.id,
-        threadId,
+        environmentId,
         closeReason: "agent_shutdown",
       }),
     );
   });
 
   it("retires the active session without triggering invalidation callbacks", () => {
-    const threadId = createThreadId();
+    const { threadId, environmentId } = createTestIds();
     const opened = service.openSession({
-      threadId,
+      environmentId,
       now: 1_000,
       payload: {
         agentId: "agent-1",
@@ -1168,8 +1163,8 @@ describe("EnvironmentAgentSessionService", () => {
       },
     });
 
-    const retired = service.retireActiveSessionForThread({
-      threadId,
+    const retired = service.retireActiveSessionForEnvironment({
+      environmentId,
       reason: "migration",
       now: 2_000,
     });
@@ -1184,9 +1179,9 @@ describe("EnvironmentAgentSessionService", () => {
   });
 
   it("invalidates replaced sessions when a newer session opens", () => {
-    const threadId = createThreadId();
+    const { threadId, environmentId } = createTestIds();
     const first = service.openSession({
-      threadId,
+      environmentId,
       now: 1_000,
       payload: {
         agentId: "agent-1",
@@ -1202,7 +1197,7 @@ describe("EnvironmentAgentSessionService", () => {
     });
 
     const second = service.openSession({
-      threadId,
+      environmentId,
       now: 2_000,
       payload: {
         agentId: "agent-1",
@@ -1225,16 +1220,16 @@ describe("EnvironmentAgentSessionService", () => {
     expect(onSessionInvalidated).toHaveBeenCalledWith(
       expect.objectContaining({
         id: first.session.id,
-        threadId,
+        environmentId,
         closeReason: "newer_session",
       }),
     );
   });
 
   it("records command acknowledgements and command results for the active session", () => {
-    const threadId = createThreadId();
+    const { threadId, environmentId } = createTestIds();
     const opened = service.openSession({
-      threadId,
+      environmentId,
       now: 1_000,
       payload: {
         agentId: "agent-1",
@@ -1258,7 +1253,7 @@ describe("EnvironmentAgentSessionService", () => {
     });
 
     service.recordCommandAck({
-      threadId,
+      environmentId,
       sessionId: opened.session.id,
       now: 2_000,
       payload: {
@@ -1274,7 +1269,7 @@ describe("EnvironmentAgentSessionService", () => {
     expect(commands.getById("cmd-1")).toMatchObject({ state: "received" });
 
     service.recordCommandResult({
-      threadId,
+      environmentId,
       sessionId: opened.session.id,
       now: 3_000,
       payload: {
@@ -1291,9 +1286,9 @@ describe("EnvironmentAgentSessionService", () => {
   });
 
   it("extends active session leases on heartbeat and rejects mismatched sessions", () => {
-    const threadId = createThreadId();
+    const { threadId, environmentId } = createTestIds();
     const opened = service.openSession({
-      threadId,
+      environmentId,
       now: 1_000,
       payload: {
         agentId: "agent-1",
@@ -1310,7 +1305,7 @@ describe("EnvironmentAgentSessionService", () => {
 
     expect(
       service.recordHeartbeat({
-        threadId,
+        environmentId,
         sessionId: opened.session.id,
         now: 2_000,
         payload: {
@@ -1321,33 +1316,33 @@ describe("EnvironmentAgentSessionService", () => {
       }),
     ).toMatchObject({
       id: opened.session.id,
-      threadId,
+      environmentId,
       lastHeartbeatAt: 2_000,
       leaseExpiresAt: 47_000,
       status: "active",
     });
 
-    const otherThreadId = createThreadId();
+    const { environmentId: otherEnvironmentId } = createTestIds();
     expect(() =>
       service.recordHeartbeat({
-        threadId: otherThreadId,
+        environmentId: otherEnvironmentId,
         sessionId: opened.session.id,
         now: 3_000,
         payload: {
           agentObservedAt: 3_000,
           outboxDepth: 0,
-          channels: [{ channelId: otherThreadId }],
+          channels: [{ channelId: otherEnvironmentId }],
         },
       }),
     ).toThrow(
-      `Environment-agent session ${opened.session.id} does not belong to thread ${otherThreadId}`,
+      `Environment-agent session ${opened.session.id} does not belong to environment ${otherEnvironmentId}`,
     );
   });
 
   it("treats heartbeats for expired sessions as inactive-session domain errors", () => {
-    const threadId = createThreadId();
+    const { threadId, environmentId } = createTestIds();
     const opened = service.openSession({
-      threadId,
+      environmentId,
       now: 1_000,
       payload: {
         agentId: "agent-1",
@@ -1367,7 +1362,7 @@ describe("EnvironmentAgentSessionService", () => {
     let captured: unknown;
     try {
       service.recordHeartbeat({
-        threadId,
+        environmentId,
         sessionId: opened.session.id,
         now: 61_000,
         payload: {
@@ -1389,9 +1384,9 @@ describe("EnvironmentAgentSessionService", () => {
 
   it("treats elapsed leases as inactive before the lease sweeper runs", () => {
     const now = TEST_LEASE_NOW;
-    const threadId = createThreadId();
+    const { threadId, environmentId } = createTestIds();
     const opened = service.openSession({
-      threadId,
+      environmentId,
       now: now - 50_000,
       payload: {
         agentId: "agent-1",
@@ -1409,7 +1404,7 @@ describe("EnvironmentAgentSessionService", () => {
     let captured: unknown;
     try {
       service.recordHeartbeat({
-        threadId,
+        environmentId,
         sessionId: opened.session.id,
         now,
         payload: {
@@ -1434,9 +1429,9 @@ describe("EnvironmentAgentSessionService", () => {
   });
 
   it("lists deliverable commands as a command_batch protocol message", () => {
-    const threadId = createThreadId();
+    const { threadId, environmentId } = createTestIds();
     const opened = service.openSession({
-      threadId,
+      environmentId,
       now: 1_000,
       payload: {
         agentId: "agent-1",
@@ -1467,7 +1462,7 @@ describe("EnvironmentAgentSessionService", () => {
 
     expect(
       service.listCommands({
-        threadId,
+        environmentId,
         sessionId: opened.session.id,
         now: 3_000,
       }),
@@ -1498,9 +1493,9 @@ describe("EnvironmentAgentSessionService", () => {
   it("waits for commands before returning from long-poll", async () => {
     vi.useFakeTimers();
     try {
-      const threadId = createThreadId();
+      const { threadId, environmentId } = createTestIds();
       const opened = service.openSession({
-        threadId,
+        environmentId,
         now: 1_000,
         payload: {
           agentId: "agent-1",
@@ -1516,7 +1511,7 @@ describe("EnvironmentAgentSessionService", () => {
       });
 
       const waitPromise = service.waitForCommands({
-        threadId,
+        environmentId,
         sessionId: opened.session.id,
         waitMs: 100,
       });
@@ -1558,9 +1553,9 @@ describe("EnvironmentAgentSessionService", () => {
   it("returns an empty batch when the long-poll timeout expires", async () => {
     vi.useFakeTimers();
     try {
-      const threadId = createThreadId();
+      const { threadId, environmentId } = createTestIds();
       const opened = service.openSession({
-        threadId,
+        environmentId,
         now: 1_000,
         payload: {
           agentId: "agent-1",
@@ -1576,7 +1571,7 @@ describe("EnvironmentAgentSessionService", () => {
       });
 
       const waitPromise = service.waitForCommands({
-        threadId,
+        environmentId,
         sessionId: opened.session.id,
         waitMs: 75,
       });
@@ -1615,10 +1610,6 @@ describe("EnvironmentAgentSessionService", () => {
       cursors,
       {
         clock: () => TEST_LEASE_NOW,
-        resolveEnvironmentId: (tid) =>
-          tid === ownerThreadId || tid === siblingThreadId
-            ? environmentId
-            : undefined,
         listAttachedThreadIds: (eid) =>
           eid === environmentId ? [ownerThreadId, siblingThreadId] : [],
         eventApplier: new EnvironmentAgentEventApplier(cursors, {
@@ -1628,7 +1619,7 @@ describe("EnvironmentAgentSessionService", () => {
     );
 
     const opened = sharedService.openSession({
-      threadId: ownerThreadId,
+      environmentId,
       payload: {
         agentId: "agent-shared",
         agentInstanceId: "instance-1",
@@ -1644,7 +1635,7 @@ describe("EnvironmentAgentSessionService", () => {
     // Env-daemon routes events for the sibling thread via the owner's route.
     // This must succeed — the sibling is attached to the same environment.
     const ack = await sharedService.applyEventBatch({
-      threadId: ownerThreadId,
+      environmentId,
       sessionId: opened.session.id,
       payload: {
         batches: [
@@ -1693,8 +1684,6 @@ describe("EnvironmentAgentSessionService", () => {
       cursors,
       {
         clock: () => TEST_LEASE_NOW,
-        resolveEnvironmentId: (tid) =>
-          tid === ownerThreadId ? environmentId : undefined,
         listAttachedThreadIds: (eid) =>
           eid === environmentId ? [ownerThreadId] : [],
         eventApplier: new EnvironmentAgentEventApplier(cursors, {
@@ -1704,7 +1693,7 @@ describe("EnvironmentAgentSessionService", () => {
     );
 
     const opened = sharedService.openSession({
-      threadId: ownerThreadId,
+      environmentId,
       payload: {
         agentId: "agent-owner",
         agentInstanceId: "instance-1",
@@ -1718,7 +1707,7 @@ describe("EnvironmentAgentSessionService", () => {
     // not a plain Error (500).
     await expect(
       sharedService.applyEventBatch({
-        threadId: ownerThreadId,
+        environmentId,
         sessionId: opened.session.id,
         payload: {
           batches: [

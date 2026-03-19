@@ -151,6 +151,7 @@ export function createServer(deps: ServerDeps) {
     deps.threadEnvironmentAttachmentRepo?.listByEnvironmentId(environmentId).map((row) =>
       row.threadId
     ) ?? [];
+
   const environmentAgentCommandDispatcher = new EnvironmentAgentCommandDispatcher(
     deps.environmentAgentSessionRepo,
     deps.environmentAgentCommandRepo,
@@ -197,10 +198,9 @@ export function createServer(deps: ServerDeps) {
         .catch((error: unknown) => ({
           errorMessage: error instanceof Error ? error.message : String(error),
         })),
-      resolveEnvironmentId: resolveAttachedEnvironmentId,
       listAttachedThreadIds,
       onSessionInvalidated: (session) => {
-        if (session.environmentId && deps.threadEnvironmentAttachmentRepo) {
+        if (deps.threadEnvironmentAttachmentRepo) {
           for (
             const attachment of deps.threadEnvironmentAttachmentRepo.listByEnvironmentId(
               session.environmentId,
@@ -211,12 +211,7 @@ export function createServer(deps: ServerDeps) {
               session.closeReason,
             );
           }
-          return;
         }
-        threadManager.handleEnvironmentAgentSessionInvalidated(
-          session.threadId,
-          session.closeReason,
-        );
       },
     },
   );

@@ -56,6 +56,7 @@ export interface EnvironmentAgentServerConnectionConfig {
   lastAckedSequence?: number;
 }
 
+
 export interface EnvironmentAgentCommandMetadata {
   protocolVersion: typeof ENVIRONMENT_AGENT_PROTOCOL_VERSION;
   commandId: string;

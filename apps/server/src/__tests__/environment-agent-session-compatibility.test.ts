@@ -5,7 +5,7 @@ describe("environment-agent session compatibility", () => {
   it("marks sessions missing required commands for replacement", () => {
     const assessment = assessEnvironmentAgentSessionCompatibility({
       id: "sess-1",
-      threadId: "thread-1",
+      environmentId: "env-1",
       agentId: "agent-1",
       agentInstanceId: "instance-1",
       protocolVersion: 1,
@@ -32,7 +32,7 @@ describe("environment-agent session compatibility", () => {
   it("marks sessions missing only optional commands/features as degraded", () => {
     const assessment = assessEnvironmentAgentSessionCompatibility({
       id: "sess-1",
-      threadId: "thread-1",
+      environmentId: "env-1",
       agentId: "agent-1",
       agentInstanceId: "instance-1",
       protocolVersion: 1,

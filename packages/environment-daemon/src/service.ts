@@ -241,7 +241,10 @@ export async function startEnvironmentAgentService(
       if (!sessionSupervisor || !options.runtime.threadId) {
         throw new Error("Environment-agent session supervisor is unavailable");
       }
-      const response = await sessionSupervisor.forwardProviderRequest(request);
+      const response = await sessionSupervisor.forwardProviderRequest({
+        ...request,
+        threadId: request.resolvedThreadId ?? options.runtime.threadId,
+      });
       if (!response.ok) {
         throw new Error(
           response.errorMessage ?? "Environment-agent provider request failed",
@@ -296,7 +299,7 @@ export async function startEnvironmentAgentService(
     return closePromise;
   };
   try {
-    if (options.runtime.serverConnection?.serverUrl && options.runtime.threadId) {
+    if (options.runtime.serverConnection?.serverUrl && options.runtime.serverConnection.environmentId && options.runtime.threadId) {
       const sessionStore = new InMemoryEnvironmentAgentSessionStore();
       const sessionRuntime = new EnvironmentAgentSessionRuntime({ store: sessionStore });
       const sessionClient = createEnvironmentAgentSessionHttpClientFromConnection(

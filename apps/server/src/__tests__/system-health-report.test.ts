@@ -94,7 +94,6 @@ describe("system health report", () => {
       listActive: () => [
         {
           id: "session-1",
-          threadId: "thread-1",
           environmentId: "env-worktree-1",
           agentId: "environment-agent:thread-1",
           agentInstanceId: "instance-1",
@@ -154,7 +153,6 @@ describe("system health report", () => {
       activeSessions: [
         {
           sessionId: "session-1",
-          threadId: "thread-1",
           environmentId: "env-worktree-1",
           agentId: "environment-agent:thread-1",
           agentInstanceId: "instance-1",

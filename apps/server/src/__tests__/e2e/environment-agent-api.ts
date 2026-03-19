@@ -16,8 +16,7 @@ import type {
 
 export interface EnvironmentAgentSessionDebugView {
   id: string;
-  threadId: string;
-  environmentId?: string;
+  environmentId: string;
   agentId: string;
   agentInstanceId: string;
   protocolVersion: number;
@@ -178,21 +177,21 @@ export async function getEnvironmentAgentStatus(
   threadId: string,
 ): Promise<EnvironmentAgentStatusSnapshot> {
   return readJson<EnvironmentAgentStatusSnapshot>(
-    `${baseUrl}/api/v1/threads/${threadId}/env-daemon/status`,
+    `${baseUrl}/api/v1/threads/${threadId}/environment-agent/status`,
   );
 }
 
 export async function listEnvironmentAgentSessions(
   baseUrl: string,
-  threadId: string,
+  environmentId: string,
 ): Promise<{
-  threadId: string;
+  environmentId: string;
   sessions: EnvironmentAgentSessionDebugView[];
 }> {
   return readJson<{
-    threadId: string;
+    environmentId: string;
     sessions: EnvironmentAgentSessionDebugView[];
-  }>(`${baseUrl}/api/v1/threads/${threadId}/env-daemon/sessions`);
+  }>(`${baseUrl}/api/v1/environments/${environmentId}/env-daemon/sessions`);
 }
 
 export function sleep(ms: number): Promise<void> {

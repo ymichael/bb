@@ -65,6 +65,7 @@ export interface EnvironmentAgentRuntimeOptions {
     providerId?: string;
     normalizedMethod?: string;
     toolCall?: import("@bb/core").ProviderToolCallRequest;
+    resolvedThreadId?: string;
   }) => Promise<unknown> | unknown;
   onStdoutLine?: (line: string) => void;
   onStderrLine?: (line: string) => void;
@@ -1260,10 +1261,12 @@ export class EnvironmentAgentRuntime {
 
     const providerId = this.resolveProviderIdForChild(sourceChild);
     const providerSemantics = this.getProviderSemanticsForProviderId(providerId);
+    const resolvedThreadId = this.resolveProviderEventThreadId(args.params, providerId);
 
     try {
       const response = await this.opts.onProviderRequest({
         ...args,
+        resolvedThreadId,
         ...(providerSemantics
           ? {
               providerId,

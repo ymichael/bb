@@ -351,8 +351,7 @@ export interface SystemHealthEnvironmentAgentCompatibility {
 
 export interface SystemHealthEnvironmentAgentSession {
   sessionId: string;
-  threadId: string;
-  environmentId?: string;
+  environmentId: string;
   agentId: string;
   agentInstanceId: string;
   protocolVersion: number;

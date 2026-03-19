@@ -5,7 +5,9 @@ import {
   migrate,
   EnvironmentAgentCommandRepository,
   EnvironmentAgentSessionRepository,
+  EnvironmentRepository,
   ProjectRepository,
+  ThreadEnvironmentAttachmentRepository,
   ThreadRepository,
 } from "@bb/db";
 import { createCodexProviderAdapter } from "@bb/provider-adapters";
@@ -25,7 +27,9 @@ describe("EnvironmentAgentSessionCommandClient", () => {
   let db: DbConnection;
   let sqlite: SqliteClient;
   let projects: ProjectRepository;
+  let envs: EnvironmentRepository;
   let threads: ThreadRepository;
+  let envAttachments: ThreadEnvironmentAttachmentRepository;
   let sessions: EnvironmentAgentSessionRepository;
   let commands: EnvironmentAgentCommandRepository;
   let dispatcher: EnvironmentAgentCommandDispatcher;
@@ -35,11 +39,14 @@ describe("EnvironmentAgentSessionCommandClient", () => {
     migrate(db);
     sqlite = sqliteClient(db);
     projects = new ProjectRepository(db);
+    envs = new EnvironmentRepository(db);
     threads = new ThreadRepository(db);
+    envAttachments = new ThreadEnvironmentAttachmentRepository(db);
     sessions = new EnvironmentAgentSessionRepository(db);
     commands = new EnvironmentAgentCommandRepository(db);
     dispatcher = new EnvironmentAgentCommandDispatcher(sessions, commands, {
       clock: () => TEST_LEASE_NOW,
+      resolveEnvironmentId: (threadId) => envAttachments.getByThreadId(threadId)?.environmentId,
     });
   });
 
@@ -67,13 +74,24 @@ describe("EnvironmentAgentSessionCommandClient", () => {
     };
   }
 
+  function ensureEnvironmentForThread(threadId: string): string {
+    const existing = envAttachments.getByThreadId(threadId);
+    if (existing) return existing.environmentId;
+    const thread = threads.getById(threadId);
+    if (!thread) throw new Error(`Missing thread ${threadId}`);
+    const env = envs.create({ projectId: thread.projectId, managed: false });
+    envAttachments.attachThread({ threadId, environmentId: env.id });
+    return env.id;
+  }
+
   function createSessionClient(args: {
     threadId: string;
     sessionId: string;
   }): EnvironmentAgentSessionCommandClient {
+    const environmentId = ensureEnvironmentForThread(args.threadId);
     sessions.create({
       id: args.sessionId,
-      threadId: args.threadId,
+      environmentId,
       agentId: "agent-1",
       agentInstanceId: `${args.sessionId}-instance`,
       protocolVersion: 1,
@@ -109,9 +127,10 @@ describe("EnvironmentAgentSessionCommandClient", () => {
 
   it("enqueues commands onto the active session and waits for completion", async () => {
     const threadId = createThreadId();
+    const environmentId = ensureEnvironmentForThread(threadId);
     const session = sessions.create({
       id: "sess-1",
-      threadId,
+      environmentId,
       agentId: "agent-1",
       agentInstanceId: "instance-1",
       protocolVersion: 1,
@@ -166,9 +185,10 @@ describe("EnvironmentAgentSessionCommandClient", () => {
 
   it("surfaces failed queued commands as rejected command acks", async () => {
     const threadId = createThreadId();
+    const environmentId = ensureEnvironmentForThread(threadId);
     sessions.create({
       id: "sess-2",
-      threadId,
+      environmentId,
       agentId: "agent-1",
       agentInstanceId: "instance-2",
       protocolVersion: 1,
@@ -214,9 +234,10 @@ describe("EnvironmentAgentSessionCommandClient", () => {
 
   it("surfaces a started command stranded on a replaced session", async () => {
     const threadId = createThreadId();
+    const environmentId = ensureEnvironmentForThread(threadId);
     sessions.create({
       id: "sess-stale",
-      threadId,
+      environmentId,
       agentId: "agent-1",
       agentInstanceId: "instance-stale",
       protocolVersion: 1,
@@ -275,9 +296,10 @@ describe("EnvironmentAgentSessionCommandClient", () => {
 
   it("queues provider.ensure and returns the reported provider status", async () => {
     const threadId = createThreadId();
+    const environmentId = ensureEnvironmentForThread(threadId);
     sessions.create({
       id: "sess-provider-1",
-      threadId,
+      environmentId,
       agentId: "agent-1",
       agentInstanceId: "instance-provider-1",
       protocolVersion: 1,

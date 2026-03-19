@@ -253,7 +253,7 @@ describe("environment-agent service config", () => {
 
     expect(started.sessionSupervisor).toBeDefined();
     expect(fetchSpy.mock.calls).toContainEqual([
-      "http://127.0.0.1:9000/api/v1/threads/thread-1/env-daemon/session/open",
+      "http://127.0.0.1:9000/api/v1/environments/local/env-daemon/session/open",
       expect.objectContaining({ method: "POST" }),
     ]);
 
@@ -398,7 +398,7 @@ describe("environment-agent service config", () => {
     });
 
     expect(fetchSpy).toHaveBeenCalledWith(
-      "http://127.0.0.1:9000/api/v1/threads/thread-1/env-daemon/session/messages",
+      "http://127.0.0.1:9000/api/v1/environments/local/env-daemon/session/messages",
       expect.objectContaining({ method: "POST" }),
     );
 

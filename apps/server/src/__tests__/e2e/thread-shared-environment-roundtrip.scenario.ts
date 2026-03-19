@@ -202,8 +202,8 @@ export async function runThreadSharedEnvironmentRoundtripScenario(): Promise<voi
     expect(latestCompletedAgentText(secondInitialRoundTrip.events)).toBeTruthy();
 
     const sessionsBeforeFollowUps = await Promise.all([
-      listEnvironmentAgentSessions(harness.baseUrl, firstThread.id),
-      listEnvironmentAgentSessions(harness.baseUrl, secondThread.id),
+      listEnvironmentAgentSessions(harness.baseUrl, attachedEnvironmentId!),
+      listEnvironmentAgentSessions(harness.baseUrl, attachedEnvironmentId!),
     ]);
     const firstSharedSessionId = getActiveSharedSessionId(sessionsBeforeFollowUps[0].sessions);
     const secondSharedSessionId = getActiveSharedSessionId(sessionsBeforeFollowUps[1].sessions);
@@ -246,8 +246,8 @@ export async function runThreadSharedEnvironmentRoundtripScenario(): Promise<voi
     expect(latestCompletedAgentText(secondFollowUpRoundTrip.events)).toBeTruthy();
 
     const sessionsAfterFollowUps = await Promise.all([
-      listEnvironmentAgentSessions(harness.baseUrl, firstThread.id),
-      listEnvironmentAgentSessions(harness.baseUrl, secondThread.id),
+      listEnvironmentAgentSessions(harness.baseUrl, attachedEnvironmentId!),
+      listEnvironmentAgentSessions(harness.baseUrl, attachedEnvironmentId!),
     ]);
     expect(getActiveSharedSessionId(sessionsAfterFollowUps[0].sessions)).toBe(
       getActiveSharedSessionId(sessionsAfterFollowUps[1].sessions),

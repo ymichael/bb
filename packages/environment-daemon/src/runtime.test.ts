@@ -1246,6 +1246,7 @@ describe("EnvironmentAgentRuntime", () => {
       method: string;
       params?: unknown;
       providerId?: string;
+      resolvedThreadId?: string;
       normalizedMethod?: string;
       toolCall?: unknown;
     }> = [];
@@ -1302,6 +1303,7 @@ describe("EnvironmentAgentRuntime", () => {
           arguments: { text: "hi" },
         },
         providerId: "codex",
+        resolvedThreadId: "thread-1",
         normalizedMethod: "item/tool/call",
         toolCall: {
           requestId: 62,

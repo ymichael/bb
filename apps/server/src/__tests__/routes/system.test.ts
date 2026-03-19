@@ -177,7 +177,7 @@ describe("System routes", () => {
           activeSessions: [
             {
               sessionId: "session-1",
-              threadId: "thread-1",
+              environmentId: "env-1",
               agentId: "environment-agent:thread-1",
               agentInstanceId: "instance-1",
               protocolVersion: 1,
@@ -257,7 +257,7 @@ describe("System routes", () => {
           activeSessions: [
             {
               sessionId: "session-1",
-              threadId: "thread-1",
+              environmentId: "env-1",
               agentId: "environment-agent:thread-1",
               agentInstanceId: "instance-1",
               protocolVersion: 1,

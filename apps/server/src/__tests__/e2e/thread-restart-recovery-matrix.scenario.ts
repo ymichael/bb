@@ -101,6 +101,7 @@ async function waitForSessionCount(args: {
   baseUrl: string;
   wsUrl: string;
   threadId: string;
+  environmentId: string;
   expectedCount: number;
   timeoutMs: number;
 }): Promise<EnvironmentAgentSessionDebugView[]> {
@@ -108,7 +109,7 @@ async function waitForSessionCount(args: {
     threadId: args.threadId,
     timeoutMs: args.timeoutMs,
     wsUrl: args.wsUrl,
-    load: async () => listEnvironmentAgentSessions(args.baseUrl, args.threadId),
+    load: async () => listEnvironmentAgentSessions(args.baseUrl, args.environmentId),
     isReady: (payload) => payload.sessions.length === args.expectedCount,
     describeLast: (payload) =>
       `Thread ${args.threadId} never reached ${args.expectedCount} session rows (actual=${payload?.sessions.length ?? 0})`,
@@ -119,6 +120,7 @@ async function waitForMinimumSessionCount(args: {
   baseUrl: string;
   wsUrl: string;
   threadId: string;
+  environmentId: string;
   minimumCount: number;
   timeoutMs: number;
 }): Promise<EnvironmentAgentSessionDebugView[]> {
@@ -126,7 +128,7 @@ async function waitForMinimumSessionCount(args: {
     threadId: args.threadId,
     timeoutMs: args.timeoutMs,
     wsUrl: args.wsUrl,
-    load: async () => listEnvironmentAgentSessions(args.baseUrl, args.threadId),
+    load: async () => listEnvironmentAgentSessions(args.baseUrl, args.environmentId),
     isReady: (payload) => payload.sessions.length >= args.minimumCount,
     describeLast: (payload) =>
       `Thread ${args.threadId} never reached at least ${args.minimumCount} session rows (actual=${payload?.sessions.length ?? 0})`,
@@ -173,15 +175,16 @@ async function runMissingWorkerRestartRecoveryScenario(args: {
       { environmentKind: args.environmentKind },
     );
 
-    await waitForThreadStatus(
+    const activeThread = await waitForThreadStatus(
       harness.baseUrl,
       thread.id,
       "active",
       e2eTimeoutMs(8_000, 30_000),
       harness.wsUrl,
     );
+    const environmentId = activeThread.attachedEnvironment!.id;
 
-    const sessionsBeforeRestart = await listEnvironmentAgentSessions(harness.baseUrl, thread.id);
+    const sessionsBeforeRestart = await listEnvironmentAgentSessions(harness.baseUrl, environmentId);
     const activeSession = [...sessionsBeforeRestart.sessions]
       .reverse()
       .find((session) => session.status === "active");
@@ -210,7 +213,7 @@ async function runMissingWorkerRestartRecoveryScenario(args: {
       threadId: thread.id,
       timeoutMs: e2eTimeoutMs(45_000, 75_000),
       wsUrl: harness.wsUrl,
-      load: async () => listEnvironmentAgentSessions(harness.baseUrl, thread.id),
+      load: async () => listEnvironmentAgentSessions(harness.baseUrl, environmentId),
       isReady: (sessions) =>
         sessions.sessions.every((session) => session.status !== "active"),
       describeLast: (sessions) =>
@@ -221,7 +224,7 @@ async function runMissingWorkerRestartRecoveryScenario(args: {
     expect(countCompletedTurns(errorEvents)).toBe(completedTurnsBeforeRestart);
     const sessionsBeforeRecoveryFollowUp = await listEnvironmentAgentSessions(
       harness.baseUrl,
-      thread.id,
+      environmentId,
     );
 
     await tellThreadWithRetry({
@@ -236,7 +239,7 @@ async function runMissingWorkerRestartRecoveryScenario(args: {
       threadId: thread.id,
       timeoutMs: e2eTimeoutMs(12_000, 30_000),
       wsUrl: harness.wsUrl,
-      load: async () => listEnvironmentAgentSessions(harness.baseUrl, thread.id),
+      load: async () => listEnvironmentAgentSessions(harness.baseUrl, environmentId),
       isReady: (sessions) =>
         sessions.sessions.some(
           (session) => session.status === "active" && session.id !== activeSession!.id,
@@ -291,14 +294,15 @@ async function runIdleRestartFreshSessionScenario(args: {
       { environmentKind: args.environmentKind },
     );
 
-    await waitForThreadStatus(
+    const idleThread = await waitForThreadStatus(
       harness.baseUrl,
       thread.id,
       "idle",
       e2eTimeoutMs(12_000, 45_000),
       harness.wsUrl,
     );
-    const sessionsBeforeRestart = await listEnvironmentAgentSessions(harness.baseUrl, thread.id);
+    const environmentId = idleThread.attachedEnvironment!.id;
+    const sessionsBeforeRestart = await listEnvironmentAgentSessions(harness.baseUrl, environmentId);
     const previousSessionCount = sessionsBeforeRestart.sessions.length;
     const previousLatestSession = sessionsBeforeRestart.sessions.at(-1);
     expect(previousLatestSession).toBeDefined();
@@ -334,6 +338,7 @@ async function runIdleRestartFreshSessionScenario(args: {
       baseUrl: harness.baseUrl,
       wsUrl: harness.wsUrl,
       threadId: thread.id,
+      environmentId,
       minimumCount: previousSessionCount,
       timeoutMs: e2eTimeoutMs(10_000, 30_000),
     });
@@ -347,7 +352,7 @@ async function runIdleRestartFreshSessionScenario(args: {
     });
     expect(recoveredThread.status).toBe("idle");
 
-    const sessionsAfterRestart = await listEnvironmentAgentSessions(harness.baseUrl, thread.id);
+    const sessionsAfterRestart = await listEnvironmentAgentSessions(harness.baseUrl, environmentId);
     expect(sessionsAfterRestart.sessions.length).toBeGreaterThanOrEqual(previousSessionCount);
     expect(
       sessionsAfterRestart.sessions.filter((session) => session.status === "active").length,

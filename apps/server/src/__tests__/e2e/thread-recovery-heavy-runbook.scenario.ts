@@ -133,6 +133,7 @@ async function waitForMinimumSessionCount(args: {
   baseUrl: string;
   wsUrl: string;
   threadId: string;
+  environmentId: string;
   minimumCount: number;
   timeoutMs: number;
 }): Promise<EnvironmentAgentSessionDebugView[]> {
@@ -140,7 +141,7 @@ async function waitForMinimumSessionCount(args: {
     threadId: args.threadId,
     timeoutMs: args.timeoutMs,
     wsUrl: args.wsUrl,
-    load: async () => listEnvironmentAgentSessions(args.baseUrl, args.threadId),
+    load: async () => listEnvironmentAgentSessions(args.baseUrl, args.environmentId),
     isReady: (payload) => payload.sessions.length >= args.minimumCount,
     describeLast: (payload) =>
       `Thread ${args.threadId} never reached ${args.minimumCount} session rows (actual=${payload?.sessions.length ?? 0})`,
@@ -188,13 +189,14 @@ export async function runQueuedFollowUpWorkerLossScenario(
       { environmentKind },
     );
 
-    await waitForThreadStatus(
+    const activeThread = await waitForThreadStatus(
       harness.baseUrl,
       thread.id,
       "active",
       e2eTimeoutMs(8_000, 30_000),
       harness.wsUrl,
     );
+    const environmentId = activeThread.attachedEnvironment!.id;
     debugLog(`queued-followup/${environmentKind}: active`);
 
     const queued = await enqueueThreadFollowUp(
@@ -208,7 +210,7 @@ export async function runQueuedFollowUpWorkerLossScenario(
     const completedBeforeRestart = countCompletedTurns(
       await listThreadEvents(harness.baseUrl, thread.id),
     );
-    const sessionsBeforeRestart = await listEnvironmentAgentSessions(harness.baseUrl, thread.id);
+    const sessionsBeforeRestart = await listEnvironmentAgentSessions(harness.baseUrl, environmentId);
     const activeSession = sessionsBeforeRestart.sessions.find((session) => session.status === "active");
     expect(activeSession).toBeDefined();
 
@@ -232,7 +234,7 @@ export async function runQueuedFollowUpWorkerLossScenario(
       wsUrl: harness.wsUrl,
       threadId: thread.id,
       timeoutMs: e2eTimeoutMs(45_000, 75_000),
-      load: async () => listEnvironmentAgentSessions(harness.baseUrl, thread.id),
+      load: async () => listEnvironmentAgentSessions(harness.baseUrl, environmentId),
       isReady: (sessions) =>
         sessions.sessions.every((session) => session.status !== "active"),
       describeLast: (sessions) =>
@@ -251,7 +253,7 @@ export async function runQueuedFollowUpWorkerLossScenario(
       wsUrl: harness.wsUrl,
       threadId: thread.id,
       timeoutMs: e2eTimeoutMs(12_000, 30_000),
-      load: async () => listEnvironmentAgentSessions(harness.baseUrl, thread.id),
+      load: async () => listEnvironmentAgentSessions(harness.baseUrl, environmentId),
       isReady: (sessions) =>
         sessions.sessions.some(
           (session) => session.status === "active" && session.id !== activeSession!.id,
@@ -309,16 +311,17 @@ export async function runArchiveAfterWorkerLossRecoveryScenario(): Promise<void>
       { environmentKind: "worktree" },
     );
 
-    await waitForThreadStatus(
+    const activeThread = await waitForThreadStatus(
       harness.baseUrl,
       thread.id,
       "active",
       e2eTimeoutMs(8_000, 30_000),
       harness.wsUrl,
     );
+    const environmentId = activeThread.attachedEnvironment!.id;
     debugLog("archive-after-worker-loss: active");
 
-    const sessionsBeforeRestart = await listEnvironmentAgentSessions(harness.baseUrl, thread.id);
+    const sessionsBeforeRestart = await listEnvironmentAgentSessions(harness.baseUrl, environmentId);
     const activeSession = sessionsBeforeRestart.sessions.find((session) => session.status === "active");
     expect(activeSession).toBeDefined();
 
@@ -346,7 +349,7 @@ export async function runArchiveAfterWorkerLossRecoveryScenario(): Promise<void>
       wsUrl: harness.wsUrl,
       threadId: thread.id,
       timeoutMs: e2eTimeoutMs(45_000, 75_000),
-      load: async () => listEnvironmentAgentSessions(harness.baseUrl, thread.id),
+      load: async () => listEnvironmentAgentSessions(harness.baseUrl, environmentId),
       isReady: (sessions) =>
         sessions.sessions.every((session) => session.status !== "active"),
       describeLast: (sessions) =>
@@ -365,7 +368,7 @@ export async function runArchiveAfterWorkerLossRecoveryScenario(): Promise<void>
     expect(archivedThread.archivedAt).toBeTypeOf("number");
     debugLog("archive-after-worker-loss: archived");
 
-    const sessionsWhileArchived = await listEnvironmentAgentSessions(harness.baseUrl, thread.id);
+    const sessionsWhileArchived = await listEnvironmentAgentSessions(harness.baseUrl, environmentId);
     expect(sessionsWhileArchived.sessions.filter((session) => session.status === "active")).toHaveLength(0);
 
     const archivedTellError = await readError(
@@ -403,7 +406,7 @@ export async function runArchiveAfterWorkerLossRecoveryScenario(): Promise<void>
       wsUrl: harness.wsUrl,
       threadId: thread.id,
       timeoutMs: e2eTimeoutMs(12_000, 30_000),
-      load: async () => listEnvironmentAgentSessions(harness.baseUrl, thread.id),
+      load: async () => listEnvironmentAgentSessions(harness.baseUrl, environmentId),
       isReady: (sessions) =>
         sessions.sessions.some(
           (session) => session.status === "active" && session.id !== activeSession!.id,
@@ -434,11 +437,12 @@ export async function runArchiveAfterWorkerLossRecoveryScenario(): Promise<void>
 
 async function postStaleEventBatch(args: {
   baseUrl: string;
-  threadId: string;
+  environmentId: string;
+  channelId: string;
   sessionId: string;
   eventId: string;
 }): Promise<{ status: number; body: string }> {
-  return readError(`${args.baseUrl}/api/v1/threads/${args.threadId}/env-daemon/session/messages`, {
+  return readError(`${args.baseUrl}/api/v1/environments/${args.environmentId}/env-daemon/session/messages`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -450,7 +454,7 @@ async function postStaleEventBatch(args: {
       payload: {
         batches: [
           {
-            channelId: args.threadId,
+            channelId: args.channelId,
             generation: 1,
             events: [
               {
@@ -493,16 +497,17 @@ export async function runStaleOldSessionNoiseScenario(): Promise<void> {
       { environmentKind: "local" },
     );
 
-    await waitForThreadStatus(
+    const activeThread = await waitForThreadStatus(
       harness.baseUrl,
       thread.id,
       "active",
       e2eTimeoutMs(8_000, 30_000),
       harness.wsUrl,
     );
+    const environmentId = activeThread.attachedEnvironment!.id;
     debugLog("stale-old-session-noise: active");
 
-    const sessionsBeforeRestart = await listEnvironmentAgentSessions(harness.baseUrl, thread.id);
+    const sessionsBeforeRestart = await listEnvironmentAgentSessions(harness.baseUrl, environmentId);
     const oldSession = sessionsBeforeRestart.sessions.find((session) => session.status === "active");
     expect(oldSession).toBeDefined();
     const completedBeforeRestart = countCompletedTurns(
@@ -529,7 +534,7 @@ export async function runStaleOldSessionNoiseScenario(): Promise<void> {
       wsUrl: harness.wsUrl,
       threadId: thread.id,
       timeoutMs: e2eTimeoutMs(45_000, 75_000),
-      load: async () => listEnvironmentAgentSessions(harness.baseUrl, thread.id),
+      load: async () => listEnvironmentAgentSessions(harness.baseUrl, environmentId),
       isReady: (sessions) =>
         sessions.sessions.every((session) => session.status !== "active"),
       describeLast: (sessions) =>
@@ -547,6 +552,7 @@ export async function runStaleOldSessionNoiseScenario(): Promise<void> {
       baseUrl: harness.baseUrl,
       wsUrl: harness.wsUrl,
       threadId: thread.id,
+      environmentId,
       minimumCount: sessionsBeforeRestart.sessions.length + 1,
       timeoutMs: e2eTimeoutMs(12_000, 30_000),
     });
@@ -560,7 +566,8 @@ export async function runStaleOldSessionNoiseScenario(): Promise<void> {
 
     const staleResult = await postStaleEventBatch({
       baseUrl: harness.baseUrl,
-      threadId: thread.id,
+      environmentId,
+      channelId: thread.id,
       sessionId: oldSession!.id,
       eventId: "stale-event-1",
     });

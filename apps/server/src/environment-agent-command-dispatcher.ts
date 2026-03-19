@@ -55,9 +55,10 @@ export class EnvironmentAgentCommandDispatcher {
     now: number = this.clock(),
   ): EnvironmentAgentSessionRecord | undefined {
     const environmentId = this.resolveEnvironmentId?.(threadId);
-    const session = environmentId
-      ? this.sessions.getActiveByEnvironmentId(environmentId, now)
-      : this.sessions.getActiveByThreadId(threadId, now);
+    if (!environmentId) {
+      return undefined;
+    }
+    const session = this.sessions.getActiveByEnvironmentId(environmentId, now);
     if (!session) {
       return undefined;
     }
@@ -189,7 +190,7 @@ export class EnvironmentAgentCommandDispatcher {
   invalidateCommandsForSession(
     session: Pick<
       EnvironmentAgentSessionRecord,
-      "id" | "threadId" | "status" | "closeReason"
+      "id" | "status" | "closeReason"
     >,
     now: number = Date.now(),
   ): InvalidateEnvironmentAgentSessionCommandsResult {

@@ -36,6 +36,13 @@
       "when": 1779292800000,
       "tag": "0004_drop_primary_manager_thread_id",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1779379200000,
+      "tag": "0005_environment_scoped_sessions",
+      "breakpoints": true
     }
   ]
 }

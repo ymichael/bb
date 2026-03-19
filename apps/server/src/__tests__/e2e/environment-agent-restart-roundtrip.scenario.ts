@@ -35,7 +35,8 @@ export async function runEnvironmentAgentRestartRoundtripScenario(): Promise<voi
       "Start a long-running turn so the server can restart mid-flight.",
     );
 
-    await waitForThreadStatus(harness.baseUrl, thread.id, "active", 5_000, harness.wsUrl);
+    const activeThread = await waitForThreadStatus(harness.baseUrl, thread.id, "active", 5_000, harness.wsUrl);
+    const environmentId = activeThread.attachedEnvironment!.id;
     const cursorBeforeRestart = harness.getEnvironmentAgentCursor(thread.id);
     const tempDir = harness.tempDir;
 
@@ -56,7 +57,7 @@ export async function runEnvironmentAgentRestartRoundtripScenario(): Promise<voi
       threadId: thread.id,
       timeoutMs: 5_000,
       wsUrl: harness.wsUrl,
-      load: async () => listEnvironmentAgentSessions(harness.baseUrl, thread.id),
+      load: async () => listEnvironmentAgentSessions(harness.baseUrl, environmentId),
       isReady: (payload) => payload.sessions.some((session) => session.status === "active"),
       describeLast: (payload) =>
         `Thread ${thread.id} did not reopen an active env-daemon session ` +

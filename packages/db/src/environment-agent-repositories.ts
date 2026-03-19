@@ -38,8 +38,7 @@ export interface EnvironmentAgentCursorPosition {
 
 export interface EnvironmentAgentSessionRecord {
   id: string;
-  threadId: string;
-  environmentId?: string;
+  environmentId: string;
   agentId: string;
   agentInstanceId: string;
   protocolVersion: number;
@@ -101,8 +100,7 @@ export interface EnvironmentAgentCommandRecord {
 
 export interface CreateEnvironmentAgentSessionInput {
   id?: string;
-  threadId: string;
-  environmentId?: string;
+  environmentId: string;
   agentId: string;
   agentInstanceId: string;
   protocolVersion: number;
@@ -209,8 +207,7 @@ function rowToEnvironmentAgentSessionRecord(
 ): EnvironmentAgentSessionRecord {
   return {
     id: row.id,
-    threadId: row.threadId,
-    ...(row.environmentId !== null ? { environmentId: row.environmentId } : {}),
+    environmentId: row.environmentId,
     agentId: row.agentId,
     agentInstanceId: row.agentInstanceId,
     protocolVersion: row.protocolVersion,
@@ -428,8 +425,7 @@ export class EnvironmentAgentSessionRepository {
     const now = args.now ?? Date.now();
     const row = {
       id: args.id ?? nanoid(),
-      threadId: args.threadId,
-      environmentId: args.environmentId ?? null,
+      environmentId: args.environmentId,
       agentId: args.agentId,
       agentInstanceId: args.agentInstanceId,
       protocolVersion: args.protocolVersion,
@@ -465,25 +461,6 @@ export class EnvironmentAgentSessionRepository {
     return row ? rowToEnvironmentAgentSessionRecord(row) : undefined;
   }
 
-  getActiveByThreadId(
-    threadId: string,
-    now: number = Date.now(),
-  ): EnvironmentAgentSessionRecord | undefined {
-    const row = this.db
-      .select()
-      .from(environmentAgentSessions)
-      .where(
-        and(
-          eq(environmentAgentSessions.threadId, threadId),
-          eq(environmentAgentSessions.status, "active"),
-          gt(environmentAgentSessions.leaseExpiresAt, now),
-        ),
-      )
-      .orderBy(desc(environmentAgentSessions.updatedAt))
-      .get();
-    return row ? rowToEnvironmentAgentSessionRecord(row) : undefined;
-  }
-
   getActiveByEnvironmentId(
     environmentId: string,
     now: number = Date.now(),
@@ -503,16 +480,6 @@ export class EnvironmentAgentSessionRepository {
     return row ? rowToEnvironmentAgentSessionRecord(row) : undefined;
   }
 
-  getLatestByThreadId(threadId: string): EnvironmentAgentSessionRecord | undefined {
-    const row = this.db
-      .select()
-      .from(environmentAgentSessions)
-      .where(eq(environmentAgentSessions.threadId, threadId))
-      .orderBy(desc(environmentAgentSessions.updatedAt))
-      .get();
-    return row ? rowToEnvironmentAgentSessionRecord(row) : undefined;
-  }
-
   getLatestByEnvironmentId(environmentId: string): EnvironmentAgentSessionRecord | undefined {
     const row = this.db
       .select()
@@ -521,16 +488,6 @@ export class EnvironmentAgentSessionRepository {
       .orderBy(desc(environmentAgentSessions.updatedAt))
       .get();
     return row ? rowToEnvironmentAgentSessionRecord(row) : undefined;
-  }
-
-  listByThreadId(threadId: string): EnvironmentAgentSessionRecord[] {
-    return this.db
-      .select()
-      .from(environmentAgentSessions)
-      .where(eq(environmentAgentSessions.threadId, threadId))
-      .orderBy(desc(environmentAgentSessions.updatedAt), desc(environmentAgentSessions.createdAt))
-      .all()
-      .map(rowToEnvironmentAgentSessionRecord);
   }
 
   listByEnvironmentId(environmentId: string): EnvironmentAgentSessionRecord[] {
@@ -696,83 +653,6 @@ export class EnvironmentAgentSessionRepository {
     });
   }
 
-  replaceActiveForThread(args: {
-    threadId: string;
-    nextSession: ReplaceActiveEnvironmentAgentSessionInput;
-    now?: number;
-  }): { replaced?: EnvironmentAgentSessionRecord; active: EnvironmentAgentSessionRecord } {
-    const now = args.now ?? args.nextSession.now ?? Date.now();
-    return this.db.transaction((tx) => {
-      const existingRow = tx
-        .select()
-        .from(environmentAgentSessions)
-        .where(
-          and(
-            eq(environmentAgentSessions.threadId, args.threadId),
-            eq(environmentAgentSessions.status, "active"),
-          ),
-        )
-        .orderBy(desc(environmentAgentSessions.updatedAt))
-        .get();
-
-      let replaced: EnvironmentAgentSessionRecord | undefined;
-      if (existingRow) {
-        tx
-          .update(environmentAgentSessions)
-          .set({
-            status: "replaced",
-            closedAt: now,
-            closeReason: "newer_session",
-            updatedAt: now,
-          })
-          .where(eq(environmentAgentSessions.id, existingRow.id))
-          .run();
-        replaced = rowToEnvironmentAgentSessionRecord({
-          ...existingRow,
-          status: "replaced",
-          closedAt: now,
-          closeReason: "newer_session",
-          updatedAt: now,
-        });
-      }
-
-      const inserted = {
-        id: args.nextSession.id ?? nanoid(),
-        threadId: args.nextSession.threadId,
-        environmentId: args.nextSession.environmentId ?? null,
-        agentId: args.nextSession.agentId,
-        agentInstanceId: args.nextSession.agentInstanceId,
-        protocolVersion: args.nextSession.protocolVersion,
-        workerName: args.nextSession.workerName ?? null,
-        workerVersion: args.nextSession.workerVersion ?? null,
-        workerBuildId: args.nextSession.workerBuildId ?? null,
-        providerMetadata:
-          args.nextSession.providerMetadata !== undefined
-            ? JSON.stringify(args.nextSession.providerMetadata)
-            : null,
-        selectedCapabilities:
-          args.nextSession.selectedCapabilities !== undefined
-            ? JSON.stringify(args.nextSession.selectedCapabilities)
-            : null,
-        controlBaseUrl: args.nextSession.controlBaseUrl ?? null,
-        controlAuthToken: args.nextSession.controlAuthToken ?? null,
-        status: "active",
-        leaseExpiresAt: args.nextSession.leaseExpiresAt,
-        lastHeartbeatAt: null,
-        closedAt: null,
-        closeReason: null,
-        createdAt: now,
-        updatedAt: now,
-      } satisfies typeof environmentAgentSessions.$inferInsert;
-      tx.insert(environmentAgentSessions).values(inserted).run();
-
-      return {
-        ...(replaced ? { replaced } : {}),
-        active: rowToEnvironmentAgentSessionRecord(inserted),
-      };
-    });
-  }
-
   replaceActiveForEnvironment(args: {
     environmentId: string;
     nextSession: ReplaceActiveEnvironmentAgentSessionInput;
@@ -815,7 +695,6 @@ export class EnvironmentAgentSessionRepository {
 
       const inserted = {
         id: args.nextSession.id ?? nanoid(),
-        threadId: args.nextSession.threadId,
         environmentId: args.nextSession.environmentId ?? args.environmentId,
         agentId: args.nextSession.agentId,
         agentInstanceId: args.nextSession.agentInstanceId,

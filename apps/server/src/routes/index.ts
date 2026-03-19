@@ -8,6 +8,7 @@ import type {
   ThreadRepository,
 } from "@bb/db";
 import { createEnvironmentRoutes } from "./environments.js";
+import { createEnvironmentDaemonRoutes } from "./environment-daemon.js";
 import { createProjectRoutes } from "./projects.js";
 import { createThreadRoutes } from "./threads.js";
 import { createSystemRoutes } from "./system.js";
@@ -66,11 +67,19 @@ export function createApiRoutes(deps: ApiRouteDeps) {
       createThreadRoutes(deps.threadManager, {
         environmentRepo: deps.environmentRepo,
         threadEnvironmentAttachmentRepo: deps.threadEnvironmentAttachmentRepo,
-        environmentAgentSessionService: deps.environmentAgentSessionService,
         runtimeEnv: deps.runtimeEnv,
       }),
     )
     .route("/environments", createEnvironmentRoutes(deps.environmentRepo))
+    .route(
+      "/environments",
+      deps.environmentAgentSessionService && deps.environmentRepo
+        ? createEnvironmentDaemonRoutes({
+            environmentAgentSessionService: deps.environmentAgentSessionService,
+            environmentRepo: deps.environmentRepo,
+          })
+        : new Hono(),
+    )
     .route(
       "/system",
       createSystemRoutes(deps.threadManager, deps.startTime, {

@@ -1117,12 +1117,12 @@ describe("CLI JSON output contracts", () => {
   });
 
   it("bb thread sessions --json prints raw session inspection data", async () => {
-    const payload = {
-      threadId: "thread-sessions",
+    const sessionsPayload = {
+      environmentId: "env-1",
       sessions: [
         {
           id: "sess-1",
-          threadId: "thread-sessions",
+          environmentId: "env-1",
           agentId: "agent-1",
           agentInstanceId: "instance-1",
           protocolVersion: 1,
@@ -1135,11 +1135,25 @@ describe("CLI JSON output contracts", () => {
         },
       ],
     };
-    const sessionsGet = vi.fn(async () => payload);
+    const threadGet = vi.fn(async () => ({
+      id: "thread-sessions",
+      projectId: "project-1",
+      status: "idle",
+      type: "standard",
+      attachedEnvironment: { id: "env-1" },
+      createdAt: 1,
+      updatedAt: 1,
+    }));
+    const sessionsGet = vi.fn(async () => sessionsPayload);
     createClientMock.mockReturnValue(asServerClient({
       api: {
         v1: {
           threads: {
+            ":id": {
+              $get: threadGet,
+            },
+          },
+          environments: {
             ":id": {
               "env-daemon": {
                 sessions: {
@@ -1156,11 +1170,14 @@ describe("CLI JSON output contracts", () => {
       registerThreadCommands(program, () => "http://server"),
     );
 
-    expect(sessionsGet).toHaveBeenCalledWith({
+    expect(threadGet).toHaveBeenCalledWith({
       param: { id: "thread-sessions" },
     });
+    expect(sessionsGet).toHaveBeenCalledWith({
+      param: { id: "env-1" },
+    });
     expect(JSON.parse(String(vi.mocked(console.log).mock.calls[0]?.[0]))).toEqual(
-      payload,
+      sessionsPayload,
     );
   });
 

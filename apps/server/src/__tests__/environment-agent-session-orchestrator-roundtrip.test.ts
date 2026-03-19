@@ -243,11 +243,10 @@ describe("environment-agent session orchestrator roundtrip", () => {
       eventApplier,
       onSessionInvalidated: (session) => {
         threadManager.handleEnvironmentAgentSessionInvalidated(
-          session.threadId,
+          session.environmentId,
           session.closeReason,
         );
       },
-      resolveEnvironmentId,
       listAttachedThreadIds: (environmentId) =>
         attachments
           .listByEnvironmentId(environmentId)
@@ -313,20 +312,32 @@ describe("environment-agent session orchestrator roundtrip", () => {
     },
   ): string {
     const projectId = opts?.projectId ?? createProject().id;
+    const environmentId =
+      opts?.environmentId ??
+      environments.create({ projectId, managed: false }).id;
     const thread = threads.create({
       projectId,
       ...(opts?.providerId ? { providerId: opts.providerId } : {}),
-      ...(opts?.environmentId ? { environmentId: opts.environmentId } : {}),
+      environmentId,
     });
+    attachments.attachThread({ threadId: thread.id, environmentId });
     threads.update(thread.id, {
       status,
     });
     return thread.id;
   }
 
+  function resolveEnvironmentId(threadId: string): string {
+    return (
+      attachments.getByThreadId(threadId)?.environmentId ??
+      threads.getById(threadId)?.environmentId ??
+      threadId
+    );
+  }
+
   function openSession(threadId: string, channelIds: string[] = [threadId]): string {
     return sessionService.openSession({
-      threadId,
+      environmentId: resolveEnvironmentId(threadId),
       payload: {
         ...makeOpenPayload(threadId),
         channels: channelIds.map((channelId) => ({
@@ -380,7 +391,7 @@ describe("environment-agent session orchestrator roundtrip", () => {
     errorMessage?: string;
   }): { commandId: string; commandCursor: number; command: Record<string, unknown> } {
     const batch = sessionService.listCommands({
-      threadId: args.threadId,
+      environmentId: resolveEnvironmentId(args.threadId),
       sessionId: args.sessionId,
       afterCursor: args.afterCursor ?? 0,
       limit: 10,
@@ -390,7 +401,7 @@ describe("environment-agent session orchestrator roundtrip", () => {
     const commandEnvelope = batch.payload.commands[0]!;
 
     sessionService.recordCommandAck({
-      threadId: args.threadId,
+      environmentId: resolveEnvironmentId(args.threadId),
       sessionId: args.sessionId,
       payload: {
         commands: [
@@ -406,7 +417,7 @@ describe("environment-agent session orchestrator roundtrip", () => {
 
     const state = args.state ?? "completed";
     sessionService.recordCommandResult({
-      threadId: args.threadId,
+      environmentId: resolveEnvironmentId(args.threadId),
       sessionId: args.sessionId,
       payload:
         state === "completed"
@@ -441,7 +452,7 @@ describe("environment-agent session orchestrator roundtrip", () => {
     payload: Record<string, unknown>;
   }): Promise<void> {
     await sessionService.applyEventBatch({
-      threadId: args.threadId,
+      environmentId: resolveEnvironmentId(args.threadId),
       sessionId: args.sessionId,
       payload: makeEventBatch(args.threadId, [
         {
@@ -482,7 +493,7 @@ describe("environment-agent session orchestrator roundtrip", () => {
 
     await vi.waitFor(() => {
       const batch = sessionService.listCommands({
-        threadId: args.sessionThreadId,
+        environmentId: resolveEnvironmentId(args.sessionThreadId),
         sessionId: args.sessionId,
         afterCursor: args.afterCursor ?? 0,
         limit: 20,
@@ -502,7 +513,7 @@ describe("environment-agent session orchestrator roundtrip", () => {
 
     const envelope = commandEnvelope!;
     sessionService.recordCommandAck({
-      threadId: args.sessionThreadId,
+      environmentId: resolveEnvironmentId(args.sessionThreadId),
       sessionId: args.sessionId,
       payload: {
         commands: [
@@ -518,7 +529,7 @@ describe("environment-agent session orchestrator roundtrip", () => {
 
     const state = args.state ?? "completed";
     sessionService.recordCommandResult({
-      threadId: args.sessionThreadId,
+      environmentId: resolveEnvironmentId(args.sessionThreadId),
       sessionId: args.sessionId,
       payload:
         state === "completed"
@@ -567,7 +578,7 @@ describe("environment-agent session orchestrator roundtrip", () => {
     const sessionId = openSession(threadId);
 
     const ackStarted = await sessionService.applyEventBatch({
-      threadId,
+      environmentId: resolveEnvironmentId(threadId),
       sessionId,
       payload: makeEventBatch(threadId, [
         {
@@ -590,7 +601,7 @@ describe("environment-agent session orchestrator roundtrip", () => {
     expect(events.listByThread(threadId).map((event) => event.type)).toContain("turn/started");
 
     await sessionService.applyEventBatch({
-      threadId,
+      environmentId: resolveEnvironmentId(threadId),
       sessionId,
       payload: makeEventBatch(threadId, [
         {
@@ -844,7 +855,7 @@ describe("environment-agent session orchestrator roundtrip", () => {
     const sessionId = openSession(threadId);
 
     await sessionService.applyEventBatch({
-      threadId,
+      environmentId: resolveEnvironmentId(threadId),
       sessionId,
       payload: makeEventBatch(threadId, [
         {
@@ -1368,7 +1379,7 @@ describe("environment-agent session orchestrator roundtrip", () => {
     await firstTell;
 
     sessionService.closeSession({
-      threadId,
+      environmentId: resolveEnvironmentId(threadId),
       sessionId: firstSessionId,
       reason: "agent_shutdown",
       now: 3_000,
@@ -1639,7 +1650,7 @@ describe("environment-agent session orchestrator roundtrip", () => {
       "client/turn/start",
     );
     expect(sessionService.listCommands({
-      threadId,
+      environmentId: resolveEnvironmentId(threadId),
       sessionId,
       afterCursor: 0,
       limit: 10,

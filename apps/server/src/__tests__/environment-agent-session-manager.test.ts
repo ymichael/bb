@@ -78,7 +78,6 @@ describe("EnvironmentAgentSessionManager", () => {
     const environmentId = attachThreadToEnvironment(threadId);
 
     const first = manager.openSession({
-      threadId,
       environmentId,
       agentId: "agent-1",
       agentInstanceId: "instance-1",
@@ -87,14 +86,12 @@ describe("EnvironmentAgentSessionManager", () => {
       now: 1_000,
     });
     expect(first.active).toMatchObject({
-      threadId,
       environmentId,
       status: "active",
       leaseExpiresAt: 31_000,
     });
 
     const second = manager.openSession({
-      threadId,
       environmentId,
       agentId: "agent-1",
       agentInstanceId: "instance-2",
@@ -118,7 +115,6 @@ describe("EnvironmentAgentSessionManager", () => {
     const threadId = createThreadId();
     const environmentId = attachThreadToEnvironment(threadId);
     const opened = manager.openSession({
-      threadId,
       environmentId,
       agentId: "agent-heartbeat",
       agentInstanceId: "instance-heartbeat",
@@ -145,7 +141,6 @@ describe("EnvironmentAgentSessionManager", () => {
     const threadId = createThreadId();
     const environmentId = attachThreadToEnvironment(threadId);
     const overdue = manager.openSession({
-      threadId,
       environmentId,
       agentId: "agent-overdue",
       agentInstanceId: "instance-overdue",
@@ -186,7 +181,6 @@ describe("EnvironmentAgentSessionManager", () => {
     attachments.attachThread({ threadId: secondThreadId, environmentId });
 
     const first = manager.openSession({
-      threadId: firstThreadId,
       environmentId,
       agentId: "agent-shared",
       agentInstanceId: "instance-1",
@@ -196,7 +190,6 @@ describe("EnvironmentAgentSessionManager", () => {
     });
 
     const second = manager.openSession({
-      threadId: secondThreadId,
       environmentId,
       agentId: "agent-shared",
       agentInstanceId: "instance-2",
@@ -209,16 +202,13 @@ describe("EnvironmentAgentSessionManager", () => {
       id: first.active.id,
       status: "replaced",
       closeReason: "newer_session",
-      threadId: firstThreadId,
     });
     expect(manager.getActiveSessionByEnvironmentId(environmentId, 2_500)).toMatchObject({
       id: second.active.id,
-      threadId: secondThreadId,
       environmentId,
       status: "active",
     });
     expect(second.active).toMatchObject({
-      threadId: secondThreadId,
       environmentId,
       status: "active",
     });
@@ -232,7 +222,6 @@ describe("EnvironmentAgentSessionManager", () => {
     attachments.attachThread({ threadId: secondThreadId, environmentId });
 
     const first = manager.openSession({
-      threadId: firstThreadId,
       environmentId,
       agentId: "agent-shared",
       agentInstanceId: "instance-1",
@@ -242,7 +231,6 @@ describe("EnvironmentAgentSessionManager", () => {
     });
 
     const second = manager.openSession({
-      threadId: secondThreadId,
       environmentId,
       agentId: "agent-shared",
       agentInstanceId: "instance-1",
@@ -254,7 +242,6 @@ describe("EnvironmentAgentSessionManager", () => {
     expect(second.replaced).toBeUndefined();
     expect(second.active).toMatchObject({
       id: first.active.id,
-      threadId: firstThreadId,
       environmentId,
       status: "active",
     });

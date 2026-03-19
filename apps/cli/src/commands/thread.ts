@@ -39,13 +39,13 @@ type ThreadWaitTarget =
   | { kind: "event"; eventType: string };
 
 interface ThreadSessionsPayload {
-  threadId: string;
+  environmentId: string;
   sessions: ThreadSessionDebugView[];
 }
 
 interface ThreadSessionDebugView {
   id: string;
-  threadId: string;
+  environmentId: string;
   agentId: string;
   agentInstanceId: string;
   protocolVersion: number;
@@ -498,9 +498,17 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
         const threadId = resolved.id;
         printContextLabel(resolved, "Thread", "BB_THREAD_ID", opts);
         const client = createClient(getUrl());
+        const thread = await unwrap<Thread>(
+          client.api.v1.threads[":id"].$get({ param: { id: threadId } }),
+        );
+        const environmentId = (thread as Thread & { attachedEnvironment?: { id: string } }).attachedEnvironment?.id;
+        if (!environmentId) {
+          console.error("Thread has no attached environment");
+          process.exit(1);
+        }
         const response = await unwrap<ThreadSessionsPayload>(
-          client.api.v1.threads[":id"]["env-daemon"].sessions.$get({
-            param: { id: threadId },
+          client.api.v1.environments[":id"]["env-daemon"].sessions.$get({
+            param: { id: environmentId },
           }),
         );
         if (outputJson(opts, response)) return;
@@ -1365,7 +1373,7 @@ function printThreadStatus(payload: ThreadStatusPayload, projectRootPath?: strin
 }
 
 function printThreadSessions(payload: ThreadSessionsPayload): void {
-  console.log(`Thread ${payload.threadId} env-daemon sessions`);
+  console.log(`Environment ${payload.environmentId} env-daemon sessions`);
   if (payload.sessions.length === 0) {
     console.log("No sessions found");
     return;

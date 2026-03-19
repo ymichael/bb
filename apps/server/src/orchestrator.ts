@@ -931,10 +931,13 @@ export class Orchestrator implements ThreadOrchestrator {
         { broadcastChanges: false },
       );
       if (thread.status === "provisioned") {
-        this.environmentAgentSessionService?.retireActiveSessionForThread({
-          threadId,
-          reason: "migration",
-        });
+        const envIdForRetire = this.threadEnvironmentAttachmentRepo?.getByThreadId(threadId)?.environmentId;
+        if (envIdForRetire && !this.environmentService.hasSharedAttachedEnvironment(threadId)) {
+          this.environmentAgentSessionService?.retireActiveSessionForEnvironment({
+            environmentId: envIdForRetire,
+            reason: "migration",
+          });
+        }
       }
       this._broadcastThreadChanged(
         threadId,
@@ -3561,8 +3564,12 @@ export class Orchestrator implements ThreadOrchestrator {
     if (!this.environmentAgentSessionService) {
       throw inactiveSessionError(threadId);
     }
+    const environmentId = this.threadEnvironmentAttachmentRepo?.getByThreadId(threadId)?.environmentId;
+    if (!environmentId) {
+      throw inactiveSessionError(threadId);
+    }
     try {
-      return this.environmentAgentSessionService.getThreadStatus(threadId);
+      return this.environmentAgentSessionService.getEnvironmentStatus(environmentId, threadId);
     } catch {
       throw inactiveSessionError(threadId);
     }
@@ -4064,10 +4071,13 @@ export class Orchestrator implements ThreadOrchestrator {
   ): void {
     this._clearThreadRuntimeState(threadId);
     if (opts?.retireActiveSession) {
-      this.environmentAgentSessionService?.retireActiveSessionForThread({
-        threadId,
-        reason: "migration",
-      });
+      const envId = this.threadEnvironmentAttachmentRepo?.getByThreadId(threadId)?.environmentId;
+      if (envId && !this.environmentService.hasSharedAttachedEnvironment(threadId)) {
+        this.environmentAgentSessionService?.retireActiveSessionForEnvironment({
+          environmentId: envId,
+          reason: "migration",
+        });
+      }
     }
     if (!this.environmentService.hasSharedAttachedEnvironment(threadId)) {
       this.environmentService.suspendEnvironmentRuntime(threadId);
@@ -4094,10 +4104,13 @@ export class Orchestrator implements ThreadOrchestrator {
   ): Promise<void> {
     this._clearThreadRuntimeState(threadId);
     if (opts?.retireActiveSession) {
-      this.environmentAgentSessionService?.retireActiveSessionForThread({
-        threadId,
-        reason: "migration",
-      });
+      const envId = this.threadEnvironmentAttachmentRepo?.getByThreadId(threadId)?.environmentId;
+      if (envId && !this.environmentService.hasSharedAttachedEnvironment(threadId)) {
+        this.environmentAgentSessionService?.retireActiveSessionForEnvironment({
+          environmentId: envId,
+          reason: "migration",
+        });
+      }
     }
     if (!this.environmentService.hasSharedAttachedEnvironment(threadId)) {
       await this.environmentService.suspendEnvironmentRuntimeAndWait(threadId);
@@ -4165,21 +4178,27 @@ export class Orchestrator implements ThreadOrchestrator {
           return getStringField(record, "providerId") === providerId;
         });
       }
-      const sessionThread = this.threadRepo.getById(session.threadId);
-      return sessionThread?.providerId === providerId;
+      return false;
     });
     if (!matchingSession) {
       return undefined;
     }
 
+    const representativeThreadId = this.threadEnvironmentAttachmentRepo
+      ?.listByEnvironmentId(matchingSession.environmentId)
+      .map((row) => row.threadId)[0];
+    if (!representativeThreadId) {
+      return undefined;
+    }
+
     const client = new EnvironmentAgentSessionCommandClient({
-      threadId: matchingSession.threadId,
+      threadId: representativeThreadId,
       commandDispatcher: this.environmentAgentCommandDispatcher,
       ...(this.environmentAgentCommandPollIntervalMs !== undefined
         ? { pollIntervalMs: this.environmentAgentCommandPollIntervalMs }
         : {}),
       ensureSessionAccess: async () => {
-        await this._recoverEnvironmentAgentAccess(matchingSession.threadId);
+        await this._recoverEnvironmentAgentAccess(representativeThreadId);
       },
     });
     try {
@@ -4219,14 +4238,21 @@ export class Orchestrator implements ThreadOrchestrator {
       return undefined;
     }
 
+    const catalogRepThreadId = this.threadEnvironmentAttachmentRepo
+      ?.listByEnvironmentId(matchingSession.environmentId)
+      .map((row) => row.threadId)[0];
+    if (!catalogRepThreadId) {
+      return undefined;
+    }
+
     const client = new EnvironmentAgentSessionCommandClient({
-      threadId: matchingSession.threadId,
+      threadId: catalogRepThreadId,
       commandDispatcher: this.environmentAgentCommandDispatcher,
       ...(this.environmentAgentCommandPollIntervalMs !== undefined
         ? { pollIntervalMs: this.environmentAgentCommandPollIntervalMs }
         : {}),
       ensureSessionAccess: async () => {
-        await this._recoverEnvironmentAgentAccess(matchingSession.threadId);
+        await this._recoverEnvironmentAgentAccess(catalogRepThreadId);
       },
     });
     try {
@@ -4471,7 +4497,7 @@ export class Orchestrator implements ThreadOrchestrator {
       managedEnvironmentAgentReconnectTarget: (() => {
         const session = attachedEnvironmentId
           ? this.environmentAgentSessionRepo?.getActiveByEnvironmentId(attachedEnvironmentId)
-          : this.environmentAgentSessionRepo?.getActiveByThreadId(threadId);
+          : undefined;
         if (!session?.controlBaseUrl) {
           return undefined;
         }

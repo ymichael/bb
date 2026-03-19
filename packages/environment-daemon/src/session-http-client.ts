@@ -22,7 +22,7 @@ type EnvironmentAgentSessionBoundClientMessage = Exclude<
 
 export interface EnvironmentAgentSessionHttpClientOptions {
   serverUrl: string;
-  threadId: string;
+  environmentId: string;
   authToken?: string;
   headers?: Record<string, string>;
   fetchImpl?: typeof fetch;
@@ -78,13 +78,13 @@ async function parseJsonResponse(response: Response): Promise<unknown> {
 export class EnvironmentAgentSessionHttpClient {
   private readonly fetchImpl: typeof fetch;
   private readonly serverUrl: string;
-  private readonly threadId: string;
+  private readonly environmentId: string;
   private readonly defaultHeaders: Record<string, string>;
 
   constructor(options: EnvironmentAgentSessionHttpClientOptions) {
     this.fetchImpl = options.fetchImpl ?? fetch;
     this.serverUrl = options.serverUrl;
-    this.threadId = options.threadId;
+    this.environmentId = options.environmentId;
     this.defaultHeaders = {
       ...(options.authToken
         ? { authorization: `Bearer ${options.authToken}` }
@@ -97,7 +97,7 @@ export class EnvironmentAgentSessionHttpClient {
     payload: EnvironmentAgentSessionOpenPayload,
   ): Promise<EnvironmentAgentSessionWelcomeMessage> {
     return this.postJson(
-      `/threads/${this.threadId}/env-daemon/session/open`,
+      `/environments/${this.environmentId}/env-daemon/session/open`,
       payload,
       201,
     ) as Promise<EnvironmentAgentSessionWelcomeMessage>;
@@ -144,7 +144,7 @@ export class EnvironmentAgentSessionHttpClient {
       search.set("waitMs", String(Math.floor(args.waitMs ?? 0)));
     }
     return this.getJson(
-      `/threads/${this.threadId}/env-daemon/session/commands?${search.toString()}`,
+      `/environments/${this.environmentId}/env-daemon/session/commands?${search.toString()}`,
       200,
       { signal: args.signal },
     ) as Promise<EnvironmentAgentSessionCommandBatchMessage>;
@@ -213,12 +213,12 @@ export class EnvironmentAgentSessionHttpClient {
     } as Extract<EnvironmentAgentSessionBoundClientMessage, { type: TType }>;
     if (args.responseStatus === 200) {
       return this.postJson(
-        `/threads/${this.threadId}/env-daemon/session/messages`,
+        `/environments/${this.environmentId}/env-daemon/session/messages`,
         message,
         200,
       );
     }
-    return this.postNoContent(`/threads/${this.threadId}/env-daemon/session/messages`, message);
+    return this.postNoContent(`/environments/${this.environmentId}/env-daemon/session/messages`, message);
   }
 
   private async getJson(
@@ -331,14 +331,14 @@ export function createEnvironmentAgentSessionHttpClientFromConnection(
     fetchImpl?: typeof fetch;
   },
 ): EnvironmentAgentSessionHttpClient {
-  if (!config.serverUrl || !config.threadId) {
+  if (!config.serverUrl || !config.environmentId) {
     throw new EnvironmentAgentSessionHttpClientError({
-      message: "Environment-agent daemon session connection requires serverUrl and threadId",
+      message: "Environment-agent daemon session connection requires serverUrl and environmentId",
     });
   }
   return new EnvironmentAgentSessionHttpClient({
     serverUrl: config.serverUrl,
-    threadId: config.threadId,
+    environmentId: config.environmentId,
     authToken: config.authToken,
     ...(args?.headers ? { headers: args.headers } : {}),
     ...(args?.fetchImpl ? { fetchImpl: args.fetchImpl } : {}),

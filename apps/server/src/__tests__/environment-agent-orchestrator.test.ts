@@ -11,6 +11,7 @@ import {
   EventRepository,
   ProjectRepository,
   EnvironmentRepository,
+  ThreadEnvironmentAttachmentRepository,
 } from "@bb/db";
 import type { WSManager } from "../ws.js";
 import type { IEnvironment } from "@bb/environment";
@@ -157,11 +158,12 @@ describe("Orchestrator environment-agent delivery and replay", () => {
   let eventRepo: EventRepository;
   let projectRepo: ProjectRepository;
   let environmentRepo: EnvironmentRepository;
+  let attachmentRepo: ThreadEnvironmentAttachmentRepository;
   let ws: WSManager;
   let manager: Orchestrator;
   let sessionService: {
-    getThreadStatus: ReturnType<typeof vi.fn>;
-    retireActiveSessionForThread: ReturnType<typeof vi.fn>;
+    getEnvironmentStatus: ReturnType<typeof vi.fn>;
+    retireActiveSessionForEnvironment: ReturnType<typeof vi.fn>;
   };
 
   // Shared test data created in beforeEach
@@ -193,6 +195,7 @@ describe("Orchestrator environment-agent delivery and replay", () => {
     eventRepo = repos.eventRepo;
     projectRepo = repos.projectRepo;
     environmentRepo = repos.environmentRepo;
+    attachmentRepo = repos.attachmentRepo;
 
     ws = {
       broadcast: vi.fn(),
@@ -205,8 +208,8 @@ describe("Orchestrator environment-agent delivery and replay", () => {
     projectRootPath = project.rootPath;
 
     sessionService = {
-      getThreadStatus: vi.fn(),
-      retireActiveSessionForThread: vi.fn(),
+      getEnvironmentStatus: vi.fn(),
+      retireActiveSessionForEnvironment: vi.fn(),
     };
     manager = new Orchestrator(
       threadRepo,
@@ -222,6 +225,9 @@ describe("Orchestrator environment-agent delivery and replay", () => {
       undefined,
       undefined,
       sessionService as never,
+      undefined,
+      undefined,
+      attachmentRepo,
     );
   });
 
@@ -971,9 +977,13 @@ describe("Orchestrator environment-agent delivery and replay", () => {
   });
 
   it("reads environment-agent status from the session service", async () => {
-    const thread = createTestThread(threadRepo, projectId);
+    const env = createTestEnvironment(environmentRepo, projectId);
+    const thread = createTestThread(threadRepo, projectId, {
+      environmentId: env.id,
+    });
+    attachmentRepo.attachThread({ threadId: thread.id, environmentId: env.id });
 
-    sessionService.getThreadStatus.mockReturnValue({
+    sessionService.getEnvironmentStatus.mockReturnValue({
       protocolVersion: 1,
       threadId: thread.id,
       latestSequence: 3,
@@ -988,7 +998,7 @@ describe("Orchestrator environment-agent delivery and replay", () => {
       latestSequence: 3,
       pendingCommandCount: 1,
     });
-    expect(sessionService.getThreadStatus).toHaveBeenCalledWith(thread.id);
+    expect(sessionService.getEnvironmentStatus).toHaveBeenCalled();
   });
 
   it("recovers persisted provider thread ids from provisioning-completed events", () => {

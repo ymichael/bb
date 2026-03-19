@@ -71,6 +71,20 @@ describe("environment-agent delivery modules", () => {
     return threads.create({ projectId: projectId ?? createProject().id }).id;
   }
 
+  const threadEnvMap = new Map<string, string>();
+
+  function createThreadWithEnvironment(projectId?: string): { threadId: string; environmentId: string } {
+    const pid = projectId ?? createProject().id;
+    const threadId = threads.create({ projectId: pid }).id;
+    const environmentId = attachThreadToEnvironment(threadId);
+    threadEnvMap.set(threadId, environmentId);
+    return { threadId, environmentId };
+  }
+
+  function resolveEnvId(threadId: string): string | undefined {
+    return threadEnvMap.get(threadId) ?? attachments.getByThreadId(threadId)?.environmentId;
+  }
+
   function attachThreadToEnvironment(threadId: string): string {
     const thread = threads.getById(threadId);
     if (!thread) {
@@ -88,10 +102,10 @@ describe("environment-agent delivery modules", () => {
     return environment.id;
   }
 
-  function createActiveSession(threadId: string, id: string = "sess-1"): string {
+  function createActiveSession(environmentId: string, id: string = "sess-1"): string {
     return sessions.create({
       id,
-      threadId,
+      environmentId,
       agentId: "agent-1",
       agentInstanceId: `${id}-instance`,
       protocolVersion: 1,
@@ -239,10 +253,11 @@ describe("environment-agent delivery modules", () => {
   });
 
   it("lists deliverable commands and records delivery acknowledgements", () => {
-    const threadId = createThreadId();
-    const sessionId = createActiveSession(threadId, "sess-deliver");
+    const { threadId, environmentId } = createThreadWithEnvironment();
+    const sessionId = createActiveSession(environmentId, "sess-deliver");
     const dispatcher = new EnvironmentAgentCommandDispatcher(sessions, commands, {
       clock: () => TEST_LEASE_NOW,
+      resolveEnvironmentId: resolveEnvId,
     });
 
     commands.enqueue({
@@ -297,7 +312,6 @@ describe("environment-agent delivery modules", () => {
     attachments.attachThread({ threadId: secondThreadId, environmentId });
     const sessionId = sessions.create({
       id: "sess-shared",
-      threadId: firstThreadId,
       environmentId,
       agentId: "agent-shared",
       agentInstanceId: "sess-shared-instance",
@@ -320,21 +334,22 @@ describe("environment-agent delivery modules", () => {
 
     expect(active).toMatchObject({
       id: sessionId,
-      threadId: firstThreadId,
       environmentId,
     });
   });
 
   it("waits for active sessions and terminal command states", async () => {
     const threadId = createThreadId();
+    const environmentId = attachThreadToEnvironment(threadId);
     const dispatcher = new EnvironmentAgentCommandDispatcher(sessions, commands, {
       clock: () => TEST_LEASE_NOW,
+      resolveEnvironmentId: (tid) => tid === threadId ? environmentId : undefined,
     });
 
     setTimeout(() => {
       sessions.create({
         id: "sess-await",
-        threadId,
+        environmentId,
         agentId: "agent-1",
         agentInstanceId: "instance-await",
         protocolVersion: 1,
@@ -382,15 +397,16 @@ describe("environment-agent delivery modules", () => {
   });
 
   it("does not treat elapsed leases as active sessions for command recovery", async () => {
-    const threadId = createThreadId();
+    const { threadId, environmentId } = createThreadWithEnvironment();
     const dispatcher = new EnvironmentAgentCommandDispatcher(sessions, commands, {
       clock: () => TEST_LEASE_NOW,
+      resolveEnvironmentId: resolveEnvId,
     });
     const now = TEST_LEASE_NOW;
 
     sessions.create({
       id: "sess-expired",
-      threadId,
+      environmentId,
       agentId: "agent-1",
       agentInstanceId: "instance-expired",
       protocolVersion: 1,
@@ -418,14 +434,15 @@ describe("environment-agent delivery modules", () => {
   });
 
   it("does not treat replace-required sessions as active for command recovery", async () => {
-    const threadId = createThreadId();
+    const { threadId, environmentId } = createThreadWithEnvironment();
     const dispatcher = new EnvironmentAgentCommandDispatcher(sessions, commands, {
       clock: () => TEST_LEASE_NOW,
+      resolveEnvironmentId: resolveEnvId,
     });
 
     sessions.create({
       id: "sess-incompatible",
-      threadId,
+      environmentId,
       agentId: "agent-1",
       agentInstanceId: "instance-incompatible",
       protocolVersion: 1,
@@ -448,10 +465,11 @@ describe("environment-agent delivery modules", () => {
   });
 
   it("records command lifecycle results only for the matching active session", () => {
-    const threadId = createThreadId();
-    const sessionId = createActiveSession(threadId, "sess-results");
+    const { threadId, environmentId } = createThreadWithEnvironment();
+    const sessionId = createActiveSession(environmentId, "sess-results");
     const dispatcher = new EnvironmentAgentCommandDispatcher(sessions, commands, {
       clock: () => TEST_LEASE_NOW,
+      resolveEnvironmentId: resolveEnvId,
     });
 
     commands.enqueue({
@@ -539,10 +557,11 @@ describe("environment-agent delivery modules", () => {
   });
 
   it("fails all pending commands bound to an invalidated session", () => {
-    const threadId = createThreadId();
-    const sessionId = createActiveSession(threadId, "sess-invalidated");
+    const { threadId, environmentId } = createThreadWithEnvironment();
+    const sessionId = createActiveSession(environmentId, "sess-invalidated");
     const dispatcher = new EnvironmentAgentCommandDispatcher(sessions, commands, {
       clock: () => TEST_LEASE_NOW,
+      resolveEnvironmentId: resolveEnvId,
     });
 
     commands.enqueue({
@@ -567,7 +586,6 @@ describe("environment-agent delivery modules", () => {
 
     const result = dispatcher.invalidateCommandsForSession({
       id: sessionId,
-      threadId,
       status: "replaced",
       closeReason: "newer_session",
     }, 2_400);

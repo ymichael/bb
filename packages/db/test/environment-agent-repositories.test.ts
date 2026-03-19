@@ -5,6 +5,7 @@ import {
   EnvironmentAgentCommandRepository,
   EnvironmentAgentCursorRepository,
   EnvironmentAgentSessionRepository,
+  EnvironmentRepository,
   ProjectRepository,
   ThreadRepository,
 } from "../src/index.js";
@@ -23,6 +24,7 @@ describe("environment-agent repositories", () => {
   let db: DbConnection;
   let sqlite: SqliteClient;
   let projects: ProjectRepository;
+  let envs: EnvironmentRepository;
   let threads: ThreadRepository;
   let sessions: EnvironmentAgentSessionRepository;
   let cursors: EnvironmentAgentCursorRepository;
@@ -33,6 +35,7 @@ describe("environment-agent repositories", () => {
     migrate(db);
     sqlite = sqliteClient(db);
     projects = new ProjectRepository(db);
+    envs = new EnvironmentRepository(db);
     threads = new ThreadRepository(db);
     sessions = new EnvironmentAgentSessionRepository(db);
     cursors = new EnvironmentAgentCursorRepository(db);
@@ -43,19 +46,21 @@ describe("environment-agent repositories", () => {
     sqlite.close();
   });
 
-  function createThreadId(): string {
+  function createThreadAndEnvironmentId(): { threadId: string; environmentId: string } {
     const project = projects.create({
       name: "session-test-project",
       rootPath: "/tmp/session-test-project",
     });
-    return threads.create({ projectId: project.id }).id;
+    const environment = envs.create({ projectId: project.id, managed: false });
+    const threadId = threads.create({ projectId: project.id }).id;
+    return { threadId, environmentId: environment.id };
   }
 
   it("creates, replaces, and heartbeats environment-agent sessions", () => {
-    const threadId = createThreadId();
+    const { threadId, environmentId } = createThreadAndEnvironmentId();
     const created = sessions.create({
       id: "sess-1",
-      threadId,
+      environmentId,
       agentId: "agent-1",
       agentInstanceId: "instance-1",
       protocolVersion: 1,
@@ -73,7 +78,7 @@ describe("environment-agent repositories", () => {
       now: 1_000,
     });
 
-    expect(sessions.getActiveByThreadId(threadId, 1_000)).toMatchObject({
+    expect(sessions.getActiveByEnvironmentId(environmentId, 1_000)).toMatchObject({
       id: "sess-1",
       status: "active",
       workerName: "environment-daemon",
@@ -99,12 +104,12 @@ describe("environment-agent repositories", () => {
       lastHeartbeatAt: 2_000,
     });
 
-    const replaced = sessions.replaceActiveForThread({
-      threadId,
+    const replaced = sessions.replaceActiveForEnvironment({
+      environmentId,
       now: 3_000,
       nextSession: {
         id: "sess-2",
-        threadId,
+        environmentId,
         agentId: "agent-1",
         agentInstanceId: "instance-2",
         protocolVersion: 1,
@@ -140,17 +145,17 @@ describe("environment-agent repositories", () => {
       controlBaseUrl: "http://127.0.0.1:4311",
       controlAuthToken: "token-2",
     });
-    expect(sessions.getActiveByThreadId(threadId, 3_000)).toMatchObject({
+    expect(sessions.getActiveByEnvironmentId(environmentId, 3_000)).toMatchObject({
       id: "sess-2",
       status: "active",
     });
   });
 
   it("expires and closes sessions idempotently", () => {
-    const threadId = createThreadId();
+    const { environmentId } = createThreadAndEnvironmentId();
     const created = sessions.create({
       id: "sess-expire",
-      threadId,
+      environmentId,
       agentId: "agent-expire",
       agentInstanceId: "instance-expire",
       protocolVersion: 1,
@@ -181,11 +186,11 @@ describe("environment-agent repositories", () => {
   });
 
   it("closes all active sessions for server restart recovery", () => {
-    const firstThreadId = createThreadId();
-    const secondThreadId = createThreadId();
+    const { environmentId: firstEnvId } = createThreadAndEnvironmentId();
+    const { environmentId: secondEnvId } = createThreadAndEnvironmentId();
     sessions.create({
       id: "sess-active-1",
-      threadId: firstThreadId,
+      environmentId: firstEnvId,
       agentId: "agent-1",
       agentInstanceId: "instance-1",
       protocolVersion: 1,
@@ -195,7 +200,7 @@ describe("environment-agent repositories", () => {
     });
     sessions.create({
       id: "sess-active-2",
-      threadId: secondThreadId,
+      environmentId: secondEnvId,
       agentId: "agent-2",
       agentInstanceId: "instance-2",
       protocolVersion: 1,
@@ -223,10 +228,10 @@ describe("environment-agent repositories", () => {
   });
 
   it("throws for invalid persisted session transport/status values", () => {
-    const threadId = createThreadId();
+    const { environmentId } = createThreadAndEnvironmentId();
     sessions.create({
       id: "sess-invalid",
-      threadId,
+      environmentId,
       agentId: "agent-invalid",
       agentInstanceId: "instance-invalid",
       protocolVersion: 1,
@@ -243,7 +248,7 @@ describe("environment-agent repositories", () => {
   });
 
   it("upserts and advances environment-agent cursors only when contiguous", () => {
-    const threadId = createThreadId();
+    const { threadId } = createThreadAndEnvironmentId();
 
     const initial = cursors.upsert(
       threadId,
@@ -298,7 +303,7 @@ describe("environment-agent repositories", () => {
   });
 
   it("reports a missing stored cursor when expectedCurrent does not match", () => {
-    const threadId = createThreadId();
+    const { threadId } = createThreadAndEnvironmentId();
 
     expect(
       cursors.advanceIfNext({
@@ -314,10 +319,10 @@ describe("environment-agent repositories", () => {
   });
 
   it("enqueues commands with monotonic per-thread cursors and tracks deliverable state", () => {
-    const threadId = createThreadId();
+    const { threadId, environmentId } = createThreadAndEnvironmentId();
     sessions.create({
       id: "sess-cmd",
-      threadId,
+      environmentId,
       agentId: "agent-cmd",
       agentInstanceId: "instance-cmd",
       protocolVersion: 1,
@@ -371,10 +376,10 @@ describe("environment-agent repositories", () => {
   });
 
   it("keeps received commands bound to their original session", () => {
-    const threadId = createThreadId();
+    const { threadId, environmentId } = createThreadAndEnvironmentId();
     sessions.create({
       id: "sess-old",
-      threadId,
+      environmentId,
       agentId: "agent-cmd",
       agentInstanceId: "instance-old",
       protocolVersion: 1,
@@ -393,7 +398,7 @@ describe("environment-agent repositories", () => {
     commands.markReceived("cmd-received", 3_000);
     sessions.create({
       id: "sess-new",
-      threadId,
+      environmentId,
       agentId: "agent-cmd",
       agentInstanceId: "instance-new",
       protocolVersion: 1,
@@ -410,7 +415,7 @@ describe("environment-agent repositories", () => {
   });
 
   it("treats stale command transitions idempotently and rejects conflicting terminal transitions", () => {
-    const threadId = createThreadId();
+    const { threadId } = createThreadAndEnvironmentId();
     const command = commands.enqueue({
       id: "cmd-term",
       threadId,
@@ -455,7 +460,7 @@ describe("environment-agent repositories", () => {
   });
 
   it("throws for invalid persisted command state values", () => {
-    const threadId = createThreadId();
+    const { threadId } = createThreadAndEnvironmentId();
     commands.enqueue({
       id: "cmd-invalid",
       threadId,

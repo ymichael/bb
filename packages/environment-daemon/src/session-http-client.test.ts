@@ -65,7 +65,7 @@ describe("EnvironmentAgentSessionHttpClient", () => {
 
     const client = new EnvironmentAgentSessionHttpClient({
       serverUrl: "http://127.0.0.1:3333/api/v1",
-      threadId: "thread-1",
+      environmentId: "env-1",
       authToken: "token-1",
       fetchImpl,
     });
@@ -141,15 +141,15 @@ describe("EnvironmentAgentSessionHttpClient", () => {
     expect(requests).toEqual(
       expect.arrayContaining([
         {
-          url: "http://127.0.0.1:3333/api/v1/threads/thread-1/env-daemon/session/open",
+          url: "http://127.0.0.1:3333/api/v1/environments/env-1/env-daemon/session/open",
           method: "POST",
         },
         {
-          url: "http://127.0.0.1:3333/api/v1/threads/thread-1/env-daemon/session/commands?sessionId=sess-1&afterCursor=3&limit=5&waitMs=5000",
+          url: "http://127.0.0.1:3333/api/v1/environments/env-1/env-daemon/session/commands?sessionId=sess-1&afterCursor=3&limit=5&waitMs=5000",
           method: "GET",
         },
         {
-          url: "http://127.0.0.1:3333/api/v1/threads/thread-1/env-daemon/session/messages",
+          url: "http://127.0.0.1:3333/api/v1/environments/env-1/env-daemon/session/messages",
           method: "POST",
         },
       ]),
@@ -166,7 +166,7 @@ describe("EnvironmentAgentSessionHttpClient", () => {
     const client = createEnvironmentAgentSessionHttpClientFromConnection(
       {
         serverUrl: "http://127.0.0.1:3333/api/v1",
-        threadId: "thread-1",
+        environmentId: "env-1",
         authToken: "token-1",
       },
       { fetchImpl },
