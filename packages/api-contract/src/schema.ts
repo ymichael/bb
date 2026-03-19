@@ -1,18 +1,22 @@
 import type { Hono } from "hono";
 import type {
+  CommitEnvironmentOperationResponse,
   CreateProjectRequest,
-  DemotePrimaryResponse,
   EnqueueThreadMessageRequest,
+  EnvironmentOperationRequest,
+  EnvironmentOperationResponse,
   EnvironmentRecord,
+  DemotePrimaryCheckoutResponse,
   OpenPathRequest,
   OpenThreadPathRequest,
   PrimaryCheckoutStatus,
   Project,
   ProjectFileSuggestion,
-  PromoteThreadResponse,
+  PromotePrimaryCheckoutResponse,
   SendQueuedThreadMessageRequest,
   SendQueuedThreadMessageResponse,
   SpawnThreadRequest,
+  SquashMergeEnvironmentOperationResponse,
   SystemEnvironmentInfo,
   SystemHealthReport,
   SystemProviderInfo,
@@ -28,8 +32,6 @@ import type {
   ThreadEvent,
   ThreadExecutionOptions,
   ThreadGitDiffResponse,
-  ThreadOperationRequest,
-  ThreadOperationResponse,
   ThreadQueuedMessage,
   ThreadTimelineResponse,
   ThreadToolGroupMessagesResponse,
@@ -107,6 +109,41 @@ export type ApiSchema = {
   };
   "/environments": {
     $get: Endpoint<{ query?: { projectId?: string } }, EnvironmentRecord[]>;
+  };
+  "/environments/:id": {
+    $get: Endpoint<PathId, EnvironmentRecord | null, 200 | 404>;
+  };
+  "/environments/:id/operations": {
+    $post: Endpoint<
+      PathId & { json: EnvironmentOperationRequest },
+      EnvironmentOperationResponse | { error: string } | null,
+      200 | 404
+    >;
+  };
+  "/environments/:id/env-daemon/status": {
+    $get: Endpoint<PathId, unknown>;
+  };
+  "/environments/:id/env-daemon/sessions": {
+    $get: Endpoint<PathId, unknown>;
+  };
+  "/environments/:id/env-daemon/session/open": {
+    $post: Endpoint<{ param: { id: string }; json: unknown }, unknown, 201>;
+  };
+  "/environments/:id/env-daemon/session/commands": {
+    $get: Endpoint<
+      PathId & {
+        query: {
+          sessionId: string;
+          afterCursor?: string;
+          limit?: string;
+          waitMs?: string;
+        };
+      },
+      unknown
+    >;
+  };
+  "/environments/:id/env-daemon/session/messages": {
+    $post: Endpoint<{ param: { id: string }; json: unknown }, unknown, 200 | 204>;
   };
   "/threads": {
     $get: Endpoint<
@@ -221,15 +258,6 @@ export type ApiSchema = {
       },
       ThreadGitDiffResponse
     >;
-  };
-  "/threads/:id/promote": {
-    $post: Endpoint<PathId, PromoteThreadResponse>;
-  };
-  "/threads/:id/demote-primary": {
-    $post: Endpoint<PathId, DemotePrimaryResponse>;
-  };
-  "/threads/:id/operations": {
-    $post: Endpoint<PathId & { json: ThreadOperationRequest }, ThreadOperationResponse, 202>;
   };
   "/threads/:id/events": {
     $get: Endpoint<PathId & { query?: { afterSeq?: string; limit?: string } }, ThreadEvent[]>;
