@@ -1,5 +1,6 @@
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, readdirSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, statSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { resolve, join } from "node:path";
 import dotenv from "dotenv";
 
@@ -20,6 +21,14 @@ export default function globalSetup(): () => void {
   // Load .env from the workspace root so auth tokens are available for real-provider E2E runs.
   const workspaceRoot = resolve(process.cwd(), "../..");
   dotenv.config({ path: resolve(workspaceRoot, ".env") });
+
+  const configuredTmpRoot = process.env.BB_TEST_TMP_ROOT?.trim();
+  const tmpRoot =
+    configuredTmpRoot && configuredTmpRoot.length > 0
+      ? resolve(configuredTmpRoot)
+      : mkdtempSync(join(tmpdir(), "bb-test-runs-"));
+  mkdirSync(tmpRoot, { recursive: true });
+  process.env.BB_TEST_TMP_ROOT = tmpRoot;
 
   const environmentDaemonRoot = resolve(process.cwd(), "../../packages/environment-daemon");
   const bundlePath = resolve(environmentDaemonRoot, "dist/environment-daemon.bundle.mjs");
@@ -46,10 +55,10 @@ export default function globalSetup(): () => void {
       return;
     }
 
-    const tmpRoot = process.env.BB_TEST_TMP_ROOT?.trim();
     const args = [
       cleanupScript,
-      ...(tmpRoot ? ["--tmp-root", tmpRoot] : []),
+      "--tmp-root",
+      tmpRoot,
       "--quiet",
     ];
 
