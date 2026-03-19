@@ -421,58 +421,6 @@ export function createThreadRoutes(
         }
       },
     )
-    .get("/:id/manager-workspace/files", async (c) => {
-      try {
-        const threadId = c.req.param("id");
-        const thread = await getThreadForRouteLookup(threadManager, threadId);
-        if (!thread) {
-          return sendRouteError(c, threadNotFoundError(threadId));
-        }
-        if (thread.type !== "manager") {
-          throw invalidRequestError("Manager workspace is only available for manager threads");
-        }
-
-        const workspacePath = resolveManagerWorkspacePath(runtimeEnv, thread.id);
-        const files = existsSync(workspacePath)
-          ? listManagerWorkspaceFiles(workspacePath)
-          : [];
-        return c.json({ files });
-      } catch (err) {
-        return sendRouteError(c, err);
-      }
-    })
-    .get(
-      "/:id/manager-workspace/file",
-      zValidator("query", managerWorkspaceFileQuerySchema),
-      async (c) => {
-        try {
-          const threadId = c.req.param("id");
-          const thread = await getThreadForRouteLookup(threadManager, threadId);
-          if (!thread) {
-            return sendRouteError(c, threadNotFoundError(threadId));
-          }
-          if (thread.type !== "manager") {
-            throw invalidRequestError("Manager workspace is only available for manager threads");
-          }
-
-          const workspacePath = resolveManagerWorkspacePath(runtimeEnv, thread.id);
-          const { path } = c.req.valid("query");
-          const requestedPath = resolve(workspacePath, path);
-          if (!isPathWithinDirectory(requestedPath, workspacePath)) {
-            throw invalidRequestError("Manager workspace path is outside thread scope");
-          }
-          if (!existsSync(requestedPath)) {
-            throw invalidRequestError("Manager workspace file not found");
-          }
-          return c.json({
-            path,
-            content: readFileSync(requestedPath, "utf8"),
-          });
-        } catch (err) {
-          return sendRouteError(c, err);
-        }
-      },
-    )
     .get("/:id/environment-daemon/status", async (c) => {
       try {
         const threadId = c.req.param("id");

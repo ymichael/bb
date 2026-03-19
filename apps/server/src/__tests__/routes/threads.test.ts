@@ -157,6 +157,18 @@ function mockOrchestrator(): LegacyThreadRouteMock {
 }
 
 
+function listRouteSignatures(routes: ReturnType<typeof createThreadRoutes>): string[] {
+  return routes.routes.map((route) => `${route.method} ${route.path}`);
+}
+
+function countRouteSignatures(signatures: readonly string[]): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const signature of signatures) {
+    counts.set(signature, (counts.get(signature) ?? 0) + 1);
+  }
+  return counts;
+}
+
 describe("Thread routes", () => {
   let threadManager: ReturnType<typeof mockOrchestrator>;
   let environmentRepo: EnvironmentRepository;
@@ -177,6 +189,49 @@ describe("Thread routes", () => {
       threadEnvironmentAttachmentRepo,
     });
     app = new Hono().route("/threads", routes);
+  });
+
+  describe("route surface", () => {
+    it("registers manager workspace, environment-daemon, and thread action routes once", () => {
+      const routes = createThreadRoutes(threadManager, {
+        environmentRepo,
+        threadEnvironmentAttachmentRepo,
+      });
+      const signatures = listRouteSignatures(routes);
+      const counts = countRouteSignatures(signatures);
+      const expectedCounts = new Map<string, number>([
+        ["GET /:id/manager-workspace/files", 1],
+        ["GET /:id/manager-workspace/file", 2],
+        ["GET /:id/environment-daemon/status", 1],
+        ["POST /:id/stop", 1],
+        ["POST /:id/archive", 2],
+        ["POST /:id/unarchive", 1],
+        ["POST /:id/read", 1],
+        ["POST /:id/unread", 1],
+      ]);
+
+      expect(
+        [...expectedCounts.entries()].filter(
+          ([signature, expectedCount]) => (counts.get(signature) ?? 0) !== expectedCount,
+        ),
+      ).toEqual([]);
+
+      const targetedRoutes = signatures.filter((signature) => {
+        return (
+          signature.includes("/manager-workspace/") ||
+          signature.includes("/environment-daemon/") ||
+          signature === "POST /:id/stop" ||
+          signature === "POST /:id/archive" ||
+          signature === "POST /:id/unarchive" ||
+          signature === "POST /:id/read" ||
+          signature === "POST /:id/unread"
+        );
+      });
+
+      expect([...new Set(targetedRoutes)].sort()).toEqual(
+        [...expectedCounts.keys()].sort(),
+      );
+    });
   });
 
   describe("POST /threads", () => {
