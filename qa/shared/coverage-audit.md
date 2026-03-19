@@ -10,6 +10,7 @@ Reviewing the new QA system like a future tester surfaces these rough edges:
 - some surfaces still lack an exact scripted alias for their default pass
 - provider depth is easy to understand conceptually, but the automated slices are still named around the older server-centric history
 - CLI QA is now structurally clear, but still lighter on explicit automation than the other surfaces
+- a tester-style dry run found that one early CLI smoke alias was accidentally wired to a fake-only test; the process should keep favoring real-provider-compatible scripts for public entrypoints
 
 The sections below track the substantive depth gaps by surface, not just the usability gaps.
 
