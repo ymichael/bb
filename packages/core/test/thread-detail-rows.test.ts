@@ -761,6 +761,103 @@ describe("buildThreadDetailRows provisioning operation collapsing", () => {
     expect(rows[0]?.provisioning?.transcript?.[1]?.startedAt).toBe(3);
   });
 
+  it("keeps one provisioning row when user interruption lands mid-provisioning", () => {
+    const rows = buildThreadDetailRows([
+      provisioningOperation(
+        1,
+        "provisioning-started",
+        "Provisioning started",
+        undefined,
+        { environmentDisplayName: "Direct Workspace" },
+      ),
+      provisioningOperation(
+        2,
+        "provisioning-progress",
+        "Environment prepared",
+        undefined,
+        {
+          phases: {
+            prepare_environment: {
+              status: "completed",
+              startedAt: 2,
+              durationMs: 1200,
+            },
+          },
+        },
+      ),
+      provisioningOperation(
+        3,
+        "provisioning-progress",
+        "Starting provider session",
+        undefined,
+        {
+          phases: {
+            start_provider_session: {
+              status: "started",
+              startedAt: 3,
+            },
+          },
+        },
+      ),
+      {
+        kind: "operation",
+        id: "op-4",
+        threadId: "thread-1",
+        sourceSeqStart: 4,
+        sourceSeqEnd: 4,
+        createdAt: 4,
+        startedAt: 4,
+        opType: "thread-interrupted",
+        title: "Stopped by user",
+        status: "interrupted",
+      },
+      {
+        kind: "operation",
+        id: "provisioning-5",
+        threadId: "thread-1",
+        sourceSeqStart: 5,
+        sourceSeqEnd: 5,
+        createdAt: 5,
+        opType: "provisioning-progress",
+        title: "Provider session start failed",
+        status: "error",
+        provisioning: {
+          transcript: [
+            {
+              key: "phase:start_provider_session",
+              text: "provider session start failed",
+              startedAt: 3,
+            },
+          ],
+        },
+      },
+      {
+        kind: "error",
+        id: "error-6",
+        threadId: "thread-1",
+        sourceSeqStart: 6,
+        sourceSeqEnd: 6,
+        createdAt: 6,
+        rawType: "system/error",
+        message: "Thread provisioning failed",
+      },
+    ]).filter((row): row is Extract<ThreadDetailRow, { kind: "message" }> => row.kind === "message");
+
+    expect(rows).toHaveLength(3);
+    expect(rows[0]?.message.kind).toBe("operation");
+    if (rows[0]?.message.kind === "operation") {
+      expect(rows[0].message.opType).toBe("provisioning");
+      expect(rows[0].message.title).toBe("Provisioning environment failed");
+      expect(rows[0].message.sourceSeqStart).toBe(1);
+      expect(rows[0].message.sourceSeqEnd).toBe(5);
+    }
+    expect(rows[1]?.message.kind).toBe("operation");
+    if (rows[1]?.message.kind === "operation") {
+      expect(rows[1].message.opType).toBe("thread-interrupted");
+      expect(rows[1].message.title).toBe("Stopped by user");
+    }
+  });
+
   it("preserves ordered provisioning transcript items when collapsing rows", () => {
     const rows = getOperationRows([
       provisioningOperation(

@@ -75,6 +75,12 @@ function isProvisioningOperation(
   );
 }
 
+function isThreadInterruptedOperation(
+  message: UIMessage,
+): message is Extract<UIMessage, { kind: "operation" }> {
+  return message.kind === "operation" && message.opType === "thread-interrupted";
+}
+
 function appendProvisioningOutput(
   existing: string | undefined,
   incoming: string | undefined,
@@ -225,6 +231,7 @@ function shouldNormalizeProvisioningLifecycleOperation(
 function mergeProvisioningOperations(messages: UIMessage[]): UIMessage[] {
   const merged: UIMessage[] = [];
   let active: Array<Extract<UIMessage, { kind: "operation" }>> = [];
+  let bufferedInterruptions: UIMessage[] = [];
 
   const flush = () => {
     if (active.length === 0) return;
@@ -313,20 +320,33 @@ function mergeProvisioningOperations(messages: UIMessage[]): UIMessage[] {
     active = [];
   };
 
+  const flushBufferedInterruptions = () => {
+    if (bufferedInterruptions.length === 0) return;
+    merged.push(...bufferedInterruptions);
+    bufferedInterruptions = [];
+  };
+
   for (const message of messages) {
     if (!isProvisioningOperation(message)) {
+      if (active.length > 0 && isThreadInterruptedOperation(message)) {
+        bufferedInterruptions.push(message);
+        continue;
+      }
       flush();
+      flushBufferedInterruptions();
       merged.push(message);
       continue;
     }
 
     if (active.length === 0) {
+      flushBufferedInterruptions();
       active = [message];
       continue;
     }
 
     if (message.opType === "provisioning-started") {
       flush();
+      flushBufferedInterruptions();
       active = [message];
       continue;
     }
@@ -335,6 +355,7 @@ function mergeProvisioningOperations(messages: UIMessage[]): UIMessage[] {
   }
 
   flush();
+  flushBufferedInterruptions();
   return merged;
 }
 

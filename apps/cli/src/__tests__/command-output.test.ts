@@ -1333,6 +1333,15 @@ describe("CLI JSON output contracts", () => {
   });
 
   it("bb thread log --json prints raw events", async () => {
+    const thread = {
+      id: "thread-json-log",
+      projectId: "proj-1",
+      providerId: "provider-1",
+      type: "task",
+      status: "idle",
+      createdAt: 10,
+      updatedAt: 20,
+    };
     const events = [
       {
         id: "evt-1",
@@ -1343,12 +1352,14 @@ describe("CLI JSON output contracts", () => {
         sequence: 2,
       },
     ];
+    const getThread = vi.fn(async () => thread);
     const getEvents = vi.fn(async () => events);
     createClientMock.mockReturnValue(asServerClient({
       api: {
         v1: {
           threads: {
             ":id": {
+              $get: getThread,
               events: {
                 $get: getEvents,
               },
@@ -1365,6 +1376,83 @@ describe("CLI JSON output contracts", () => {
     expect(JSON.parse(String(vi.mocked(console.log).mock.calls[0]?.[0]))).toEqual(
       events,
     );
+  });
+
+  it("bb thread log renders merged timeline rows for human output", async () => {
+    const getEvents = vi.fn(async () => []);
+    const getTimeline = vi.fn(async () => ({
+      rows: [
+        {
+          kind: "message",
+          id: "msg-1",
+          message: {
+            kind: "user",
+            id: "user-1",
+            threadId: "thread-log",
+            sourceSeqStart: 1,
+            sourceSeqEnd: 1,
+            createdAt: 1,
+            startedAt: 1,
+            text: "Say hello",
+          },
+        },
+        {
+          kind: "message",
+          id: "msg-2",
+          message: {
+            kind: "operation",
+            id: "op-1",
+            threadId: "thread-log",
+            sourceSeqStart: 2,
+            sourceSeqEnd: 8,
+            createdAt: 8,
+            startedAt: 2,
+            opType: "provisioning",
+            title: "Provisioning ready",
+            status: "completed",
+          },
+        },
+        {
+          kind: "message",
+          id: "msg-3",
+          message: {
+            kind: "assistant-text",
+            id: "assistant-1",
+            threadId: "thread-log",
+            sourceSeqStart: 9,
+            sourceSeqEnd: 9,
+            createdAt: 9,
+            startedAt: 9,
+            text: "Hello!",
+            status: "completed",
+          },
+        },
+      ],
+    }));
+    createClientMock.mockReturnValue(asServerClient({
+      api: {
+        v1: {
+          threads: {
+            ":id": {
+              events: {
+                $get: getEvents,
+              },
+              timeline: {
+                $get: getTimeline,
+              },
+            },
+          },
+        },
+      },
+    }));
+
+    await runCommand(["thread", "log", "thread-log"], (program) =>
+      registerThreadCommands(program, () => "http://server"),
+    );
+
+    const output = String(vi.mocked(console.log).mock.calls[0]?.[0]);
+    expect(output).toContain("Provisioning ready");
+    expect(output).not.toContain("Provisioning interrupted");
   });
 
   it("bb thread output --json prints the raw output payload", async () => {
