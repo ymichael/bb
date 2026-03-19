@@ -151,6 +151,52 @@ describe("environment-daemon repositories", () => {
     });
   });
 
+  it("refreshes active session metadata without replacing the session row", () => {
+    const { environmentId } = createThreadAndEnvironmentId();
+    sessions.create({
+      id: "sess-refresh",
+      environmentId,
+      agentId: "agent-refresh",
+      agentInstanceId: "instance-refresh",
+      protocolVersion: 1,
+      providerMetadata: [{ providerId: "codex", adapterVersion: "0.0.1" }],
+      selectedCapabilities: { commands: ["turn.run"], features: ["provider_metadata"] },
+      leaseExpiresAt: 5_000,
+      now: 1_000,
+    });
+
+    const refreshed = sessions.refreshActiveSession({
+      sessionId: "sess-refresh",
+      leaseExpiresAt: 12_000,
+      updatedAt: 2_000,
+      providerMetadata: [
+        { providerId: "codex", adapterVersion: "0.0.1" },
+        { providerId: "pi", adapterVersion: "0.0.1" },
+      ],
+      selectedCapabilities: {
+        commands: ["turn.run", "provider.ensure"],
+        features: ["provider_metadata", "worker_metadata"],
+      },
+      controlBaseUrl: "http://127.0.0.1:4312",
+    });
+
+    expect(refreshed).toMatchObject({
+      id: "sess-refresh",
+      status: "active",
+      leaseExpiresAt: 12_000,
+      providerMetadata: [
+        { providerId: "codex", adapterVersion: "0.0.1" },
+        { providerId: "pi", adapterVersion: "0.0.1" },
+      ],
+      selectedCapabilities: {
+        commands: ["turn.run", "provider.ensure"],
+        features: ["provider_metadata", "worker_metadata"],
+      },
+      controlBaseUrl: "http://127.0.0.1:4312",
+    });
+    expect(sessions.listByEnvironmentId(environmentId)).toHaveLength(1);
+  });
+
   it("expires and closes sessions idempotently", () => {
     const { environmentId } = createThreadAndEnvironmentId();
     const created = sessions.create({

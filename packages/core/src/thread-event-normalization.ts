@@ -1,9 +1,14 @@
+import { assertNever } from "./assert-never.js";
 import {
   PROVIDER_EVENT_ENVELOPE_SCHEMA,
   PROVIDER_EVENT_ENVELOPE_VERSION,
   type PersistedThreadEventData,
   type ProviderEventEnvelope,
 } from "./types.js";
+import {
+  isThreadProviderId,
+  type ThreadProviderId,
+} from "./thread-provider.js";
 import { getStringField, toRecord } from "./unknown-helpers.js";
 
 export interface CreateProviderEventEnvelopeArgs<TPayload = unknown> {
@@ -168,34 +173,20 @@ function getNestedRecordCandidates(
   );
 }
 
-function decodeProviderThreadId(
-  candidates: Record<string, unknown>[],
-  providerId?: string,
-): string | undefined {
-  const explicitProviderThreadId = candidates
-    .map((candidate) => getStringField(candidate, "providerThreadId"))
-    .find((value): value is string => Boolean(value));
-  if (explicitProviderThreadId) {
-    return explicitProviderThreadId;
+function shouldUseLooseThreadIdAsProviderThreadId(
+  providerId: string | undefined,
+): boolean {
+  if (!providerId || !isThreadProviderId(providerId)) return false;
+  const normalizedProviderId: ThreadProviderId = providerId;
+  switch (normalizedProviderId) {
+    case "codex":
+    case "pi":
+      return true;
+    case "claude-code":
+      return false;
+    default:
+      return assertNever(normalizedProviderId);
   }
-
-  const normalizedProviderId = providerId?.trim().toLowerCase();
-  const allowThreadIdFallback = normalizedProviderId !== "claude-code";
-  return candidates
-    .map((candidate) => {
-      return (
-        (allowThreadIdFallback
-          ? (
-              getStringField(candidate, "threadId") ??
-              getStringField(candidate, "thread_id") ??
-              getStringField(toRecord(candidate.thread), "id")
-            )
-          : undefined) ??
-        getStringField(candidate, "conversationId") ??
-        getStringField(candidate, "conversation_id")
-      );
-    })
-    .find((value): value is string => Boolean(value)) ?? undefined;
 }
 
 function decodeItem(root: Record<string, unknown>): DecodedThreadEventItem | null {
@@ -233,7 +224,9 @@ export function decodeThreadEventData(
   }
 
   const candidates = getNestedRecordCandidates(payload);
-  const providerId = envelope?.__bb_provider_event.providerId;
+  const allowLooseThreadIdFallback = shouldUseLooseThreadIdAsProviderThreadId(
+    envelope?.__bb_provider_event.providerId,
+  );
   const turnId =
     candidates
       .map((candidate) => {
@@ -247,7 +240,23 @@ export function decodeThreadEventData(
     getStringField(payload, "id") ??
     undefined;
 
-  const providerThreadId = decodeProviderThreadId(candidates, providerId);
+  const providerThreadId =
+    candidates
+      .map((candidate) => {
+        return (
+          getStringField(candidate, "providerThreadId") ??
+          getStringField(candidate, "conversationId") ??
+          getStringField(candidate, "conversation_id") ??
+          (allowLooseThreadIdFallback
+            ? (
+                getStringField(candidate, "threadId") ??
+                getStringField(candidate, "thread_id")
+              )
+            : undefined) ??
+          getStringField(toRecord(candidate.thread), "id")
+        );
+      })
+      .find((value): value is string => Boolean(value)) ?? undefined;
 
   const item = decodeItem(payload);
   const itemId =

@@ -575,6 +575,50 @@ export class EnvironmentDaemonSessionRepository {
     });
   }
 
+  refreshActiveSession(args: {
+    sessionId: string;
+    leaseExpiresAt: number;
+    updatedAt: number;
+    workerName?: string;
+    workerVersion?: string;
+    workerBuildId?: string;
+    providerMetadata?: unknown;
+    selectedCapabilities?: unknown;
+    controlBaseUrl?: string;
+    controlAuthToken?: string;
+  }): EnvironmentDaemonSessionRecord | undefined {
+    return this.db.transaction((tx) => {
+      const row = tx.select().from(environmentDaemonSessions)
+        .where(eq(environmentDaemonSessions.id, args.sessionId)).get();
+      if (!row) return undefined;
+      const existing = rowToEnvironmentDaemonSessionRecord(row);
+      if (existing.status !== "active") {
+        return existing;
+      }
+      tx.update(environmentDaemonSessions)
+        .set({
+          leaseExpiresAt: args.leaseExpiresAt,
+          updatedAt: args.updatedAt,
+          workerName: args.workerName ?? null,
+          workerVersion: args.workerVersion ?? null,
+          workerBuildId: args.workerBuildId ?? null,
+          providerMetadata:
+            args.providerMetadata !== undefined ? JSON.stringify(args.providerMetadata) : null,
+          selectedCapabilities:
+            args.selectedCapabilities !== undefined
+              ? JSON.stringify(args.selectedCapabilities)
+              : null,
+          controlBaseUrl: args.controlBaseUrl ?? null,
+          controlAuthToken: args.controlAuthToken ?? null,
+        })
+        .where(eq(environmentDaemonSessions.id, args.sessionId))
+        .run();
+      const updated = tx.select().from(environmentDaemonSessions)
+        .where(eq(environmentDaemonSessions.id, args.sessionId)).get();
+      return updated ? rowToEnvironmentDaemonSessionRecord(updated) : undefined;
+    });
+  }
+
   markExpired(sessionId: string, now: number = Date.now()): EnvironmentDaemonSessionRecord | undefined {
     return this.db.transaction((tx) => {
       const row = tx.select().from(environmentDaemonSessions)

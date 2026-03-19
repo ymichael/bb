@@ -65,12 +65,26 @@ describe("thread event normalization", () => {
     ).toBe("thread-legacy");
   });
 
-  it("does not treat Claude routing thread ids as provider session ids", () => {
+  it("does not infer provider thread ids from non-provider client thread ids", () => {
+    expect(
+      extractProviderThreadIdFromPersistedEventData({
+        threadId: "thr_bb_local",
+        request: {
+          method: "turn/start",
+          params: {
+            threadId: "thr_bb_local",
+          },
+        },
+      }),
+    ).toBeUndefined();
+  });
+
+  it("does not treat claude routing thread ids as provider thread ids", () => {
     const envelope = createProviderEventEnvelope({
       providerId: "claude-code",
       method: "turn/completed",
       payload: {
-        threadId: "bb-thread-1",
+        threadId: "thr_bb_local",
         turnId: "turn-1",
       },
       observedAt: 1,
@@ -79,6 +93,21 @@ describe("thread event normalization", () => {
     expect(extractProviderThreadIdFromPersistedEventData(envelope)).toBeUndefined();
   });
 
+  it("still treats codex routing thread ids as provider thread ids", () => {
+    const envelope = createProviderEventEnvelope({
+      providerId: "codex",
+      method: "turn/started",
+      payload: {
+        threadId: "provider-thread-1",
+        turnId: "turn-1",
+      },
+      observedAt: 1,
+    });
+
+    expect(extractProviderThreadIdFromPersistedEventData(envelope)).toBe(
+      "provider-thread-1",
+    );
+  });
   it("decodes a normalized event view from mixed legacy/provider shapes", () => {
     const decoded = decodeThreadEventData({
       payload: {

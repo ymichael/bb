@@ -130,6 +130,7 @@ export class EnvironmentService {
   private resolveAttachedEnvironment(threadId: string): {
     environmentId: string;
     hasSiblingAttachments: boolean;
+    hasNonArchivedSiblingAttachments: boolean;
     preserveWorkspace: boolean;
     managed: boolean;
   } | undefined {
@@ -145,9 +146,14 @@ export class EnvironmentService {
       .filter((record) => record.threadId !== threadId);
     const environmentRecord = this.environmentRepo?.getById(attachment.environmentId);
     const hasSiblingAttachments = siblingAttachments.length > 0;
+    const hasNonArchivedSiblingAttachments = siblingAttachments.some((record) => {
+      const siblingThread = this.threadRepo.getById(record.threadId);
+      return siblingThread?.archivedAt === undefined;
+    });
     return {
       environmentId: attachment.environmentId,
       hasSiblingAttachments,
+      hasNonArchivedSiblingAttachments,
       preserveWorkspace: hasSiblingAttachments || !(environmentRecord?.managed ?? false),
       managed: environmentRecord?.managed ?? false,
     };
@@ -830,10 +836,13 @@ export class EnvironmentService {
     };
 
     try {
+      if (attachedEnvironment?.hasNonArchivedSiblingAttachments) {
+        return;
+      }
       await this.suspendEnvironmentRuntimeAndWait(threadId);
       if (
         attachedEnvironment?.managed &&
-        !attachedEnvironment.hasSiblingAttachments &&
+        !attachedEnvironment.hasNonArchivedSiblingAttachments &&
         projectRootPath
       ) {
         await this.callbacks.cleanupManagedEnvironmentArtifacts?.({

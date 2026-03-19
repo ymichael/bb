@@ -60,7 +60,19 @@ export class EnvironmentDaemonSessionManager {
     const now = args.now ?? Date.now();
     const existing = this.sessions.getActiveByEnvironmentId(args.environmentId, now);
     if (existing && existing.agentInstanceId === args.agentInstanceId) {
-      return { active: existing };
+      const refreshed = this.sessions.refreshActiveSession({
+        sessionId: existing.id,
+        leaseExpiresAt: now + args.leaseTtlMs,
+        updatedAt: now,
+        workerName: args.workerName,
+        workerVersion: args.workerVersion,
+        workerBuildId: args.workerBuildId,
+        providerMetadata: args.providerMetadata,
+        selectedCapabilities: args.selectedCapabilities,
+        controlBaseUrl: args.controlBaseUrl,
+        controlAuthToken: args.controlAuthToken,
+      });
+      return { active: refreshed ?? existing };
     }
     return this.sessions.replaceActiveForEnvironment({
       environmentId: args.environmentId,

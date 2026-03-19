@@ -83,7 +83,7 @@ export async function runThreadWorktreePrimaryCheckoutRoundtripScenario(): Promi
       baseUrl: harness.baseUrl,
       args: ["environment", "promote", environmentId, "--thread", thread.id],
     });
-    expect(promote.exitCode).toBe(0);
+    expect(promote.exitCode, `promote failed\nstdout:\n${promote.stdout}\nstderr:\n${promote.stderr}`).toBe(0);
     expect(promote.stderr).toBe("");
 
     await waitForPrimaryCheckoutState({
@@ -109,7 +109,7 @@ export async function runThreadWorktreePrimaryCheckoutRoundtripScenario(): Promi
       baseUrl: harness.baseUrl,
       args: ["environment", "demote", environmentId, "--thread", thread.id],
     });
-    expect(demote.exitCode).toBe(0);
+    expect(demote.exitCode, `demote failed\nstdout:\n${demote.stdout}\nstderr:\n${demote.stderr}`).toBe(0);
     expect(demote.stderr).toBe("");
 
     await waitForPrimaryCheckoutState({

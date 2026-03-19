@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { expect } from "vitest";
 import type { Thread, ThreadEvent } from "@bb/core";
 import {
@@ -73,6 +74,51 @@ function latestCompletedAgentText(events: ThreadEvent[]): string | undefined {
   return undefined;
 }
 
+function completedAgentTexts(events: ThreadEvent[]): string[] {
+  const texts: string[] = [];
+  for (const event of events) {
+    if (normalizeEventType(event.type) !== "item/completed") {
+      continue;
+    }
+    const data = event.data as {
+      item?: {
+        type?: string;
+        text?: string;
+      };
+      payload?: {
+        item?: {
+          type?: string;
+          text?: string;
+        };
+      };
+    };
+    const item = data.item ?? data.payload?.item;
+    if (
+      item?.type === "agentMessage" &&
+      typeof item.text === "string" &&
+      item.text.length > 0
+    ) {
+      texts.push(item.text);
+    }
+  }
+  return texts;
+}
+
+function expectThreadToContainOnlyProviderOutputs(args: {
+  events: ThreadEvent[];
+  expectedTokens: string[];
+  forbiddenTokens: string[];
+}): void {
+  const texts = completedAgentTexts(args.events);
+  expect(texts.length).toBeGreaterThan(0);
+  for (const token of args.expectedTokens) {
+    expect(texts.some((text) => text.includes(token))).toBe(true);
+  }
+  for (const token of args.forbiddenTokens) {
+    expect(texts.some((text) => text.includes(token))).toBe(false);
+  }
+}
+
 async function waitForIdleAfterTurnProgress(args: {
   baseUrl: string;
   wsUrl: string;
@@ -138,9 +184,22 @@ function requiredMultiProviderEnv(name: string): string {
   return value;
 }
 
+async function waitForPathRemoval(path: string, timeoutMs: number): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (!existsSync(path)) {
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  throw new Error(`Path ${path} still exists after ${timeoutMs}ms`);
+}
+
 export async function runThreadMultiProviderSharedEnvironmentScenario(): Promise<void> {
   const primaryProviderId = requiredMultiProviderEnv("BB_E2E_MULTI_PROVIDER_A");
   const secondaryProviderId = requiredMultiProviderEnv("BB_E2E_MULTI_PROVIDER_B");
+  const primaryTag = primaryProviderId.toUpperCase();
+  const secondaryTag = secondaryProviderId.toUpperCase();
 
   const harness = await startServerE2eHarness({
     providerMode: "real",
@@ -159,7 +218,7 @@ export async function runThreadMultiProviderSharedEnvironmentScenario(): Promise
       harness.baseUrl,
       project.id,
       `Reply with exactly ${primaryProviderId.toUpperCase()}-HELLO and finish.`,
-      { providerId: primaryProviderId },
+      { environmentKind: "worktree", providerId: primaryProviderId },
     );
 
     const primaryInitialRoundTrip = await waitForIdleAfterTurnProgress({
@@ -173,11 +232,21 @@ export async function runThreadMultiProviderSharedEnvironmentScenario(): Promise
 
     expect(primaryInitialRoundTrip.thread.providerId).toBe(primaryProviderId);
     expect(latestCompletedAgentText(primaryInitialRoundTrip.events)).toContain(
-      `${primaryProviderId.toUpperCase()}-HELLO`,
+      `${primaryTag}-HELLO`,
     );
+    expectThreadToContainOnlyProviderOutputs({
+      events: primaryInitialRoundTrip.events,
+      expectedTokens: [`${primaryTag}-HELLO`],
+      forbiddenTokens: [secondaryTag],
+    });
 
     const sharedEnvironmentId = primaryInitialRoundTrip.thread.attachedEnvironment?.id;
+    const sharedEnvironmentPath =
+      primaryInitialRoundTrip.thread.attachedEnvironment?.descriptor?.type === "path"
+        ? primaryInitialRoundTrip.thread.attachedEnvironment.descriptor.path
+        : undefined;
     expect(sharedEnvironmentId).toBeTruthy();
+    expect(sharedEnvironmentPath).toBeTruthy();
 
     const secondaryThread = await createThread(
       harness.baseUrl,
@@ -201,13 +270,18 @@ export async function runThreadMultiProviderSharedEnvironmentScenario(): Promise
     expect(secondaryInitialRoundTrip.thread.providerId).toBe(secondaryProviderId);
     expect(secondaryInitialRoundTrip.thread.attachedEnvironment?.id).toBe(sharedEnvironmentId);
     expect(latestCompletedAgentText(secondaryInitialRoundTrip.events)).toContain(
-      `${secondaryProviderId.toUpperCase()}-HELLO`,
+      `${secondaryTag}-HELLO`,
     );
+    expectThreadToContainOnlyProviderOutputs({
+      events: secondaryInitialRoundTrip.events,
+      expectedTokens: [`${secondaryTag}-HELLO`],
+      forbiddenTokens: [primaryTag],
+    });
 
     await tellThread(
       harness.baseUrl,
       primaryThread.id,
-      `Reply with exactly ${primaryProviderId.toUpperCase()}-FOLLOWUP-ONE and finish.`,
+      `Reply with exactly ${primaryTag}-FOLLOWUP-ONE and finish.`,
     );
     const primaryFollowUpRoundTrip = await waitForIdleAfterTurnProgress({
       baseUrl: harness.baseUrl,
@@ -218,13 +292,18 @@ export async function runThreadMultiProviderSharedEnvironmentScenario(): Promise
       timeoutMs: e2eTimeoutMs(30_000, 120_000),
     });
     expect(latestCompletedAgentText(primaryFollowUpRoundTrip.events)).toContain(
-      `${primaryProviderId.toUpperCase()}-FOLLOWUP-ONE`,
+      `${primaryTag}-FOLLOWUP-ONE`,
     );
+    expectThreadToContainOnlyProviderOutputs({
+      events: primaryFollowUpRoundTrip.events,
+      expectedTokens: [`${primaryTag}-HELLO`, `${primaryTag}-FOLLOWUP-ONE`],
+      forbiddenTokens: [secondaryTag],
+    });
 
     await tellThread(
       harness.baseUrl,
       secondaryThread.id,
-      `Reply with exactly ${secondaryProviderId.toUpperCase()}-FOLLOWUP-ONE and finish.`,
+      `Reply with exactly ${secondaryTag}-FOLLOWUP-ONE and finish.`,
     );
     const secondaryFollowUpRoundTrip = await waitForIdleAfterTurnProgress({
       baseUrl: harness.baseUrl,
@@ -235,19 +314,24 @@ export async function runThreadMultiProviderSharedEnvironmentScenario(): Promise
       timeoutMs: e2eTimeoutMs(30_000, 120_000),
     });
     expect(latestCompletedAgentText(secondaryFollowUpRoundTrip.events)).toContain(
-      `${secondaryProviderId.toUpperCase()}-FOLLOWUP-ONE`,
+      `${secondaryTag}-FOLLOWUP-ONE`,
     );
+    expectThreadToContainOnlyProviderOutputs({
+      events: secondaryFollowUpRoundTrip.events,
+      expectedTokens: [`${secondaryTag}-HELLO`, `${secondaryTag}-FOLLOWUP-ONE`],
+      forbiddenTokens: [primaryTag],
+    });
 
     await Promise.all([
       tellThread(
         harness.baseUrl,
         primaryThread.id,
-        `Reply with exactly ${primaryProviderId.toUpperCase()}-PARALLEL and finish.`,
+        `Reply with exactly ${primaryTag}-PARALLEL and finish.`,
       ),
       tellThread(
         harness.baseUrl,
         secondaryThread.id,
-        `Reply with exactly ${secondaryProviderId.toUpperCase()}-PARALLEL and finish.`,
+        `Reply with exactly ${secondaryTag}-PARALLEL and finish.`,
       ),
     ]);
 
@@ -271,11 +355,21 @@ export async function runThreadMultiProviderSharedEnvironmentScenario(): Promise
     ]);
 
     expect(latestCompletedAgentText(primaryParallelRoundTrip.events)).toContain(
-      `${primaryProviderId.toUpperCase()}-PARALLEL`,
+      `${primaryTag}-PARALLEL`,
     );
     expect(latestCompletedAgentText(secondaryParallelRoundTrip.events)).toContain(
-      `${secondaryProviderId.toUpperCase()}-PARALLEL`,
+      `${secondaryTag}-PARALLEL`,
     );
+    expectThreadToContainOnlyProviderOutputs({
+      events: primaryParallelRoundTrip.events,
+      expectedTokens: [`${primaryTag}-HELLO`, `${primaryTag}-FOLLOWUP-ONE`, `${primaryTag}-PARALLEL`],
+      forbiddenTokens: [secondaryTag],
+    });
+    expectThreadToContainOnlyProviderOutputs({
+      events: secondaryParallelRoundTrip.events,
+      expectedTokens: [`${secondaryTag}-HELLO`, `${secondaryTag}-FOLLOWUP-ONE`, `${secondaryTag}-PARALLEL`],
+      forbiddenTokens: [primaryTag],
+    });
 
     await archiveThread(harness.baseUrl, primaryThread.id);
     await waitForArchivedState({
@@ -301,7 +395,7 @@ export async function runThreadMultiProviderSharedEnvironmentScenario(): Promise
     await tellThread(
       harness.baseUrl,
       secondaryThread.id,
-      `Reply with exactly ${secondaryProviderId.toUpperCase()}-AFTER-ARCHIVE and finish.`,
+      `Reply with exactly ${secondaryTag}-AFTER-ARCHIVE and finish.`,
     );
     const secondaryAfterArchiveRoundTrip = await waitForIdleAfterTurnProgress({
       baseUrl: harness.baseUrl,
@@ -312,7 +406,30 @@ export async function runThreadMultiProviderSharedEnvironmentScenario(): Promise
       timeoutMs: e2eTimeoutMs(30_000, 120_000),
     });
     expect(latestCompletedAgentText(secondaryAfterArchiveRoundTrip.events)).toContain(
-      `${secondaryProviderId.toUpperCase()}-AFTER-ARCHIVE`,
+      `${secondaryTag}-AFTER-ARCHIVE`,
+    );
+    expectThreadToContainOnlyProviderOutputs({
+      events: secondaryAfterArchiveRoundTrip.events,
+      expectedTokens: [
+        `${secondaryTag}-HELLO`,
+        `${secondaryTag}-FOLLOWUP-ONE`,
+        `${secondaryTag}-PARALLEL`,
+        `${secondaryTag}-AFTER-ARCHIVE`,
+      ],
+      forbiddenTokens: [primaryTag],
+    });
+
+    await archiveThread(harness.baseUrl, secondaryThread.id);
+    await waitForArchivedState({
+      baseUrl: harness.baseUrl,
+      wsUrl: harness.wsUrl,
+      threadId: secondaryThread.id,
+      archived: true,
+      timeoutMs: e2eTimeoutMs(8_000, 30_000),
+    });
+    await waitForPathRemoval(
+      sharedEnvironmentPath!,
+      e2eTimeoutMs(8_000, 30_000),
     );
   } finally {
     await harness.cleanup();

@@ -239,11 +239,43 @@ describe("EnvironmentDaemonSessionManager", () => {
       now: 2_000,
     });
 
+    const refreshed = manager.openSession({
+      environmentId,
+      agentId: "agent-shared",
+      agentInstanceId: "instance-1",
+      protocolVersion: 1,
+      providerMetadata: [
+        { providerId: "codex", adapterVersion: "0.0.1" },
+        { providerId: "pi", adapterVersion: "0.0.1" },
+      ],
+      selectedCapabilities: {
+        commands: ["turn.run", "provider.ensure"],
+        features: ["provider_metadata", "worker_metadata"],
+      },
+      leaseTtlMs: 20_000,
+      now: 3_000,
+    });
+
     expect(second.replaced).toBeUndefined();
     expect(second.active).toMatchObject({
       id: first.active.id,
       environmentId,
       status: "active",
+    });
+    expect(refreshed.replaced).toBeUndefined();
+    expect(refreshed.active).toMatchObject({
+      id: first.active.id,
+      environmentId,
+      status: "active",
+      leaseExpiresAt: 23_000,
+      providerMetadata: [
+        { providerId: "codex", adapterVersion: "0.0.1" },
+        { providerId: "pi", adapterVersion: "0.0.1" },
+      ],
+      selectedCapabilities: {
+        commands: ["turn.run", "provider.ensure"],
+        features: ["provider_metadata", "worker_metadata"],
+      },
     });
   });
 });

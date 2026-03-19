@@ -172,6 +172,10 @@ function createService(args: {
   restoreImpl?: (state: unknown, context: CreateEnvironmentContext) => IEnvironment;
   managed?: boolean;
   siblingThreadIds?: string[];
+  siblingThreadOverrides?: Array<{
+    status?: Thread["status"];
+    archivedAt?: number;
+  }>;
   watchWorkspaceStatusImpl?: (callback: () => void) => () => void;
 }) {
   const environment = createTestEnvironment(args);
@@ -228,10 +232,12 @@ function createService(args: {
 
   // Create sibling threads and attach them to the same environment
   const siblingThreads: Thread[] = [];
-  for (const _siblingId of args.siblingThreadIds ?? []) {
+  for (const [index] of (args.siblingThreadIds ?? []).entries()) {
+    const siblingOverrides = args.siblingThreadOverrides?.[index];
     const siblingThread = createTestThread(threadRepo, projectId, {
-      status: "idle",
+      status: siblingOverrides?.status ?? "idle",
       environmentId: env.id,
+      archivedAt: siblingOverrides?.archivedAt,
     });
     attachmentRepo.attachThread({
       threadId: siblingThread.id,
@@ -250,6 +256,7 @@ function createService(args: {
   >().mockResolvedValue(undefined);
   const onCleanupFailure = vi.fn();
   const onThreadChanged = vi.fn();
+  const cleanupManagedEnvironmentArtifacts = vi.fn().mockResolvedValue(undefined);
 
   const service = new EnvironmentService(
     threadRepo,
@@ -267,6 +274,7 @@ function createService(args: {
       onCleanupFailure,
       onPrimaryCheckoutDemoted: vi.fn(),
       runOptionalSetup,
+      cleanupManagedEnvironmentArtifacts,
     },
     environmentRepo,
     attachmentRepo,
@@ -286,6 +294,7 @@ function createService(args: {
     siblingThreads,
     onCleanupFailure,
     onThreadChanged,
+    cleanupManagedEnvironmentArtifacts,
   };
 }
 
@@ -775,6 +784,67 @@ describe("EnvironmentService", () => {
     await service.teardownAllForTestsOnly();
 
     expect(destroySpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not suspend a shared managed runtime while a non-archived sibling remains attached", async () => {
+    const destroySpy = vi.fn();
+    const {
+      service,
+      thread,
+      env,
+      siblingThreads,
+      cleanupManagedEnvironmentArtifacts,
+    } = createService({
+      existsInitially: true,
+      destroySpy,
+      siblingThreadIds: ["thread-2"],
+    });
+    const runtimeEnvironment = createTestEnvironment({
+      existsInitially: true,
+      destroySpy,
+    });
+    service.setEnvironmentRuntime(thread.id, runtimeEnvironment);
+    destroySpy.mockClear();
+
+    await service.archiveThreadEnvironment(thread.id);
+
+    expect(destroySpy).not.toHaveBeenCalled();
+    expect(cleanupManagedEnvironmentArtifacts).not.toHaveBeenCalled();
+    expect(service.getEnvironmentRuntime(thread.id)).toMatchObject({
+      scopeKey: env.id,
+    });
+    expect(siblingThreads[0]).toBeDefined();
+  });
+
+  it("cleans up managed artifacts when only archived siblings remain attached", async () => {
+    const destroySpy = vi.fn();
+    const {
+      service,
+      thread,
+      env,
+      cleanupManagedEnvironmentArtifacts,
+    } = createService({
+      existsInitially: true,
+      destroySpy,
+      siblingThreadIds: ["thread-2"],
+      siblingThreadOverrides: [{ archivedAt: 1234 }],
+    });
+    const runtimeEnvironment = createTestEnvironment({
+      existsInitially: true,
+      destroySpy,
+    });
+    service.setEnvironmentRuntime(thread.id, runtimeEnvironment);
+    destroySpy.mockClear();
+
+    await service.archiveThreadEnvironment(thread.id);
+
+    expect(destroySpy).toHaveBeenCalledTimes(1);
+    expect(cleanupManagedEnvironmentArtifacts).toHaveBeenCalledWith({
+      threadId: thread.id,
+      environmentId: env.id,
+      projectRootPath: "/project/root",
+    });
+    expect(service.getEnvironmentRuntime(thread.id)).toBeUndefined();
   });
 
   it("does not report stale thread.environmentId when removeManagedThreadLogs receives a detached thread", () => {

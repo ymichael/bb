@@ -1223,6 +1223,24 @@ describe("Orchestrator environment-daemon delivery and replay", () => {
         },
       },
     });
+    eventRepo.create({
+      threadId: thread.id,
+      seq: 3,
+      type: "client/turn/start",
+      data: createEventData<"client/turn/start">({
+        direction: "outbound",
+        source: "tell",
+        initiator: "user",
+        input: [{ type: "text", text: "continue" }],
+        request: {
+          method: "turn/start",
+          params: {
+            threadId: thread.id,
+          },
+        },
+        execution: {},
+      }),
+    });
 
     const providerThreadId = (
       manager as unknown as {
