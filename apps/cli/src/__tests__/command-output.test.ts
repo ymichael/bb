@@ -1269,6 +1269,224 @@ describe("CLI JSON output contracts", () => {
     ).rejects.toThrow("process.exit:2");
   });
 
+  it("bb thread wait --status idle fails fast when the thread is stuck in provisioning_failed", async () => {
+    const get = vi.fn(async () => ({
+      id: "thread-wait-provisioning-failed",
+      projectId: "proj-1",
+      providerId: "codex",
+      type: "standard",
+      status: "provisioning_failed",
+      createdAt: 1,
+      updatedAt: 2,
+    } satisfies Thread));
+    createClientMock.mockReturnValue(asServerClient({
+      api: {
+        v1: {
+          threads: {
+            ":id": {
+              $get: get,
+            },
+          },
+        },
+      },
+    }));
+
+    await expect(
+      runCommand(
+        ["thread", "wait", "thread-wait-provisioning-failed", "--status", "idle"],
+        (program) => registerThreadCommands(program, () => "http://server"),
+      ),
+    ).rejects.toThrow("process.exit:4");
+
+    expect(collectLogLines(vi.mocked(console.error))).toContain(
+      "Error: Thread thread-wait-provisioning-failed is in status provisioning_failed and will not reach idle by waiting alone. Inspect it with 'bb thread show thread-wait-provisioning-failed' and recover by sending a follow-up to trigger reprovisioning.",
+    );
+    expect(get).toHaveBeenCalledTimes(1);
+  });
+
+  it("bb thread wait --status idle fails fast when the thread is stuck in error", async () => {
+    const get = vi.fn(async () => ({
+      id: "thread-wait-error",
+      projectId: "proj-1",
+      providerId: "codex",
+      type: "standard",
+      status: "error",
+      createdAt: 1,
+      updatedAt: 2,
+    } satisfies Thread));
+    createClientMock.mockReturnValue(asServerClient({
+      api: {
+        v1: {
+          threads: {
+            ":id": {
+              $get: get,
+            },
+          },
+        },
+      },
+    }));
+
+    await expect(
+      runCommand(
+        ["thread", "wait", "thread-wait-error", "--status", "idle"],
+        (program) => registerThreadCommands(program, () => "http://server"),
+      ),
+    ).rejects.toThrow("process.exit:4");
+
+    expect(collectLogLines(vi.mocked(console.error))).toContain(
+      "Error: Thread thread-wait-error is in status error and will not reach idle by waiting alone. Inspect it with 'bb thread show thread-wait-error' and recover by sending a follow-up.",
+    );
+    expect(get).toHaveBeenCalledTimes(1);
+  });
+
+  it("bb thread stop exits early when the thread is already idle", async () => {
+    const get = vi.fn(async () => ({
+      id: "thread-stop-idle",
+      projectId: "proj-1",
+      providerId: "codex",
+      type: "standard",
+      status: "idle",
+      createdAt: 1,
+      updatedAt: 2,
+    } satisfies Thread));
+    const stopPost = vi.fn();
+    createClientMock.mockReturnValue(asServerClient({
+      api: {
+        v1: {
+          threads: {
+            ":id": {
+              $get: get,
+              stop: {
+                $post: stopPost,
+              },
+            },
+          },
+        },
+      },
+    }));
+
+    await expect(
+      runCommand(["thread", "stop", "thread-stop-idle"], (program) =>
+        registerThreadCommands(program, () => "http://server"),
+      ),
+    ).rejects.toThrow("process.exit:1");
+
+    expect(collectLogLines(vi.mocked(console.error))).toContain(
+      "Error: Thread thread-stop-idle is already idle.",
+    );
+    expect(stopPost).not.toHaveBeenCalled();
+  });
+
+  it("bb thread stop refuses to clear provisioning_failed into idle", async () => {
+    const get = vi.fn(async () => ({
+      id: "thread-stop-provisioning-failed",
+      projectId: "proj-1",
+      providerId: "codex",
+      type: "standard",
+      status: "provisioning_failed",
+      createdAt: 1,
+      updatedAt: 2,
+    } satisfies Thread));
+    const stopPost = vi.fn();
+    createClientMock.mockReturnValue(asServerClient({
+      api: {
+        v1: {
+          threads: {
+            ":id": {
+              $get: get,
+              stop: {
+                $post: stopPost,
+              },
+            },
+          },
+        },
+      },
+    }));
+
+    await expect(
+      runCommand(["thread", "stop", "thread-stop-provisioning-failed"], (program) =>
+        registerThreadCommands(program, () => "http://server"),
+      ),
+    ).rejects.toThrow("process.exit:1");
+
+    expect(collectLogLines(vi.mocked(console.error))).toContain(
+      "Error: Thread thread-stop-provisioning-failed is in status provisioning_failed. Do not stop it to force idle; inspect it with 'bb thread show thread-stop-provisioning-failed' and recover by sending a follow-up to trigger reprovisioning.",
+    );
+    expect(stopPost).not.toHaveBeenCalled();
+  });
+
+  it("bb thread stop refuses to clear error into idle", async () => {
+    const get = vi.fn(async () => ({
+      id: "thread-stop-error",
+      projectId: "proj-1",
+      providerId: "codex",
+      type: "standard",
+      status: "error",
+      createdAt: 1,
+      updatedAt: 2,
+    } satisfies Thread));
+    const stopPost = vi.fn();
+    createClientMock.mockReturnValue(asServerClient({
+      api: {
+        v1: {
+          threads: {
+            ":id": {
+              $get: get,
+              stop: {
+                $post: stopPost,
+              },
+            },
+          },
+        },
+      },
+    }));
+
+    await expect(
+      runCommand(["thread", "stop", "thread-stop-error"], (program) =>
+        registerThreadCommands(program, () => "http://server"),
+      ),
+    ).rejects.toThrow("process.exit:1");
+
+    expect(collectLogLines(vi.mocked(console.error))).toContain(
+      "Error: Thread thread-stop-error is in status error. Do not stop it to force idle; inspect it with 'bb thread show thread-stop-error' and recover by sending a follow-up.",
+    );
+    expect(stopPost).not.toHaveBeenCalled();
+  });
+
+  it("bb thread stop still stops active threads", async () => {
+    const get = vi.fn(async () => ({
+      id: "thread-stop-active",
+      projectId: "proj-1",
+      providerId: "codex",
+      type: "standard",
+      status: "active",
+      createdAt: 1,
+      updatedAt: 2,
+    } satisfies Thread));
+    const stopPost = vi.fn(async () => ({ ok: true }));
+    createClientMock.mockReturnValue(asServerClient({
+      api: {
+        v1: {
+          threads: {
+            ":id": {
+              $get: get,
+              stop: {
+                $post: stopPost,
+              },
+            },
+          },
+        },
+      },
+    }));
+
+    await runCommand(["thread", "stop", "thread-stop-active"], (program) =>
+      registerThreadCommands(program, () => "http://server"),
+    );
+
+    expect(collectLogLines(vi.mocked(console.log))).toContain("Thread thread-stop-active stopped");
+    expect(stopPost).toHaveBeenCalledTimes(1);
+  });
+
   it("bb thread show --json with --recent-events prints thread and filtered recent events", async () => {
     const thread: Thread = {
       id: "thread-json-status",

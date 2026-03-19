@@ -66,10 +66,12 @@ interface ThreadSessionDebugView {
 
 const THREAD_WAIT_EXIT_CODE_TIMEOUT = 2;
 const THREAD_WAIT_EXIT_CODE_INVALID_REQUEST = 3;
+const THREAD_WAIT_EXIT_CODE_UNREACHABLE = 4;
 const DEFAULT_THREAD_WAIT_TIMEOUT_SECONDS = 30;
 const DEFAULT_THREAD_WAIT_POLL_INTERVAL_MS = 250;
 
 class ThreadWaitTimeoutError extends Error {}
+class ThreadWaitUnreachableError extends Error {}
 
 function looksLikePath(value: string): boolean {
   return value.includes("/") || value.startsWith(".") || value.startsWith("~");
@@ -197,6 +199,64 @@ function parseThreadWaitTarget(opts: {
   };
 }
 
+function getThreadWaitUnreachableReason(
+  threadId: string,
+  currentStatus: ThreadStatus,
+  targetStatus: ThreadStatus,
+): string | undefined {
+  if (currentStatus === targetStatus || targetStatus !== "idle") {
+    return undefined;
+  }
+
+  switch (currentStatus) {
+    case "provisioning_failed":
+      return (
+        `Thread ${threadId} is in status provisioning_failed and will not reach idle by waiting alone. ` +
+        `Inspect it with 'bb thread show ${threadId}' and recover by sending a follow-up to trigger reprovisioning.`
+      );
+    case "error":
+      return (
+        `Thread ${threadId} is in status error and will not reach idle by waiting alone. ` +
+        `Inspect it with 'bb thread show ${threadId}' and recover by sending a follow-up.`
+      );
+    case "created":
+    case "provisioning":
+    case "provisioned":
+    case "idle":
+    case "active":
+      return undefined;
+    default:
+      return assertNever(currentStatus);
+  }
+}
+
+function getThreadStopBlockedReason(
+  threadId: string,
+  status: ThreadStatus,
+): string | undefined {
+  switch (status) {
+    case "created":
+    case "provisioning":
+    case "provisioned":
+    case "active":
+      return undefined;
+    case "idle":
+      return `Thread ${threadId} is already idle.`;
+    case "provisioning_failed":
+      return (
+        `Thread ${threadId} is in status provisioning_failed. ` +
+        `Do not stop it to force idle; inspect it with 'bb thread show ${threadId}' and recover by sending a follow-up to trigger reprovisioning.`
+      );
+    case "error":
+      return (
+        `Thread ${threadId} is in status error. ` +
+        `Do not stop it to force idle; inspect it with 'bb thread show ${threadId}' and recover by sending a follow-up.`
+      );
+    default:
+      return assertNever(status);
+  }
+}
+
 async function sleep(ms: number): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -274,6 +334,14 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
                 );
                 return;
               }
+              const unreachableReason = getThreadWaitUnreachableReason(
+                threadId,
+                thread.status,
+                target.status,
+              );
+              if (unreachableReason) {
+                throw new ThreadWaitUnreachableError(unreachableReason);
+              }
             } else {
               const events = await unwrap<ThreadEvent[]>(
                 client.api.v1.threads[":id"].events.$get({
@@ -311,6 +379,11 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
           if (err instanceof ThreadWaitTimeoutError) {
             console.error(`Error: ${err.message}`);
             process.exit(THREAD_WAIT_EXIT_CODE_TIMEOUT);
+            return;
+          }
+          if (err instanceof ThreadWaitUnreachableError) {
+            console.error(`Error: ${err.message}`);
+            process.exit(THREAD_WAIT_EXIT_CODE_UNREACHABLE);
             return;
           }
           if (err instanceof Error && err.message.startsWith("Provide exactly one of")) {
@@ -906,6 +979,13 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
       const client = createClient(getUrl());
       try {
         const threadId = resolveThreadIdOrSelf(id, opts);
+        const thread = await unwrap<Thread>(
+          client.api.v1.threads[":id"].$get({ param: { id: threadId } }),
+        );
+        const blockedReason = getThreadStopBlockedReason(threadId, thread.status);
+        if (blockedReason) {
+          throw new Error(blockedReason);
+        }
         await unwrap<{ ok: boolean }>(
           client.api.v1.threads[":id"].stop.$post({ param: { id: threadId } }),
         );
