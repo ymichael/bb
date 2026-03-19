@@ -104,14 +104,6 @@ function ThreadRenameDialogContent({
           ) : null}
         </div>
         <DialogFooter>
-          <Button
-            type="button"
-            variant="outline"
-            disabled={pending}
-            onClick={() => onOpenChange(false)}
-          >
-            Cancel
-          </Button>
           <Button type="submit" disabled={pending}>
             Rename {label}
           </Button>
