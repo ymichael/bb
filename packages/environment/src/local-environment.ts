@@ -96,7 +96,6 @@ class LocalEnvironment implements IEnvironment {
   async prepare(): Promise<void> {
     const managedAgentTarget = await ensureManagedHostEnvironmentDaemon({
       workspaceRootPath: this.rootPath,
-      threadId: this.threadId,
       projectId: this.projectId,
       environmentId: this.environmentId,
       runtimeEnv: this.env,
@@ -111,7 +110,6 @@ class LocalEnvironment implements IEnvironment {
     this.managedAgentTarget = undefined;
     await disposeManagedHostEnvironmentDaemon({
       projectId: this.projectId,
-      threadId: this.threadId,
       environmentId: this.environmentId,
       workspaceRootPath: this.rootPath,
       runtimeEnv: this.env,

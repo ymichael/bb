@@ -15,7 +15,6 @@ const DEFAULT_DOCKER_ENVIRONMENT_DAEMON_INSTALL_ROOT = "/opt/bb/environment-daem
 export interface ManagedDockerEnvironmentDaemonRecord {
   baseUrl: string;
   authToken: string;
-  threadId: string;
   projectId: string;
   environmentId: string;
   workspaceRoot: string;
@@ -27,7 +26,6 @@ export interface ManagedDockerEnvironmentDaemonRecord {
 
 interface ManagedDockerEnvironmentDaemonIdentity {
   projectId: string;
-  threadId: string;
   environmentId: string;
   workspaceRootPath: string;
 }
@@ -251,7 +249,6 @@ export async function ensureDockerEnvironmentImageAvailable(
 export async function ensureManagedDockerEnvironmentDaemon(
   args: {
     workspaceRootPath: string;
-    threadId: string;
     projectId: string;
     environmentId: string;
     runtimeEnv: Record<string, string | undefined>;
@@ -274,7 +271,6 @@ export async function ensureManagedDockerEnvironmentDaemon(
 
   const stateIdentity: ManagedDockerEnvironmentDaemonIdentity = {
     projectId: args.projectId,
-    threadId: args.threadId,
     environmentId: args.environmentId,
     workspaceRootPath: args.workspaceRootPath,
   };
@@ -333,8 +329,6 @@ export async function ensureManagedDockerEnvironmentDaemon(
         "exec",
         "-d",
         "-e",
-        `BB_THREAD_ID=${args.threadId}`,
-        "-e",
         `BB_PROJECT_ID=${args.projectId}`,
         "-e",
         `BB_ENVIRONMENT_ID=${args.environmentId}`,
@@ -370,7 +364,6 @@ export async function ensureManagedDockerEnvironmentDaemon(
     const record = {
       baseUrl,
       authToken,
-      threadId: args.threadId,
       projectId: args.projectId,
       environmentId: args.environmentId,
       workspaceRoot: args.workspaceRootPath,
@@ -395,7 +388,6 @@ export function __testOnly__resolveDockerServerUrl(
 
 export async function disposeManagedDockerEnvironmentDaemon(args: {
   projectId: string;
-  threadId: string;
   environmentId: string;
   dockerBin: string;
   containerName: string;
@@ -426,7 +418,6 @@ export async function disposeManagedDockerEnvironmentDaemon(args: {
 
 export function __testOnly__getManagedDockerEnvironmentDaemonRecord(args: {
   projectId: string;
-  threadId: string;
   environmentId: string;
   workspaceRootPath: string;
 }): ManagedDockerEnvironmentDaemonRecord | undefined {

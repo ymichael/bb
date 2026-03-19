@@ -18,7 +18,6 @@ interface ManagedHostEnvironmentDaemonRecord {
   port: number;
   baseUrl: string;
   authToken: string;
-  threadId: string;
   projectId: string;
   environmentId: string;
   workspaceRoot: string;
@@ -26,7 +25,6 @@ interface ManagedHostEnvironmentDaemonRecord {
 
 interface ManagedHostEnvironmentDaemonIdentity {
   projectId: string;
-  threadId: string;
   environmentId: string;
   workspaceRootPath: string;
 }
@@ -286,7 +284,6 @@ export function resolveManagedHostEnvironmentDaemonLaunchCommand(): {
 
 export async function ensureManagedHostEnvironmentDaemon(args: {
   workspaceRootPath: string;
-  threadId: string;
   projectId: string;
   environmentId: string;
   runtimeEnv: Record<string, string | undefined>;
@@ -301,7 +298,6 @@ export async function ensureManagedHostEnvironmentDaemon(args: {
 
   const stateIdentity = {
     projectId: args.projectId,
-    threadId: args.threadId,
     environmentId: args.environmentId,
     workspaceRootPath: args.workspaceRootPath,
   };
@@ -353,7 +349,6 @@ export async function ensureManagedHostEnvironmentDaemon(args: {
           port: reconnectUrl.port ? Number.parseInt(reconnectUrl.port, 10) : 80,
           baseUrl: reconnectBaseUrl.replace(/\/+$/, ""),
           authToken: reconnectAuthToken,
-          threadId: args.threadId,
           projectId: args.projectId,
           environmentId: args.environmentId,
           workspaceRoot: args.workspaceRootPath,
@@ -384,7 +379,6 @@ export async function ensureManagedHostEnvironmentDaemon(args: {
         env: {
           ...process.env,
           ...args.runtimeEnv,
-          BB_THREAD_ID: args.threadId,
           BB_PROJECT_ID: args.projectId,
           BB_ENVIRONMENT_ID: args.environmentId,
           ...(args.runtimeEnv.BB_THREAD_PROVIDER_ID
@@ -405,7 +399,6 @@ export async function ensureManagedHostEnvironmentDaemon(args: {
       port,
       baseUrl,
       authToken,
-      threadId: args.threadId,
       projectId: args.projectId,
       environmentId: args.environmentId,
       workspaceRoot: args.workspaceRootPath,
@@ -420,7 +413,6 @@ export async function ensureManagedHostEnvironmentDaemon(args: {
 
 export async function disposeManagedHostEnvironmentDaemon(args: {
   projectId: string;
-  threadId: string;
   environmentId: string;
   workspaceRootPath: string;
   runtimeEnv: Record<string, string | undefined>;
@@ -433,7 +425,6 @@ export async function disposeManagedHostEnvironmentDaemon(args: {
   }
   const stateIdentity: ManagedHostEnvironmentDaemonIdentity = {
     projectId: args.projectId,
-    threadId: args.threadId,
     environmentId: args.environmentId,
     workspaceRootPath: args.workspaceRootPath,
   };
@@ -482,7 +473,6 @@ export async function disposeManagedHostEnvironmentDaemon(args: {
 
 export function __testOnly__getManagedHostEnvironmentDaemonRecord(args: {
   projectId: string;
-  threadId: string;
   environmentId: string;
   workspaceRootPath: string;
 }): ManagedHostEnvironmentDaemonRecord | undefined {

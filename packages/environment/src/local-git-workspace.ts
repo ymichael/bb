@@ -300,7 +300,6 @@ class LocalGitWorkspaceEnvironment implements IEnvironment {
     }
     this.preparePromise = ensureManagedHostEnvironmentDaemon({
       workspaceRootPath: this.state.workspaceRoot,
-      threadId: this.threadId,
       projectId: this.projectId,
       environmentId: this.environmentId,
       runtimeEnv: this.env,
@@ -320,7 +319,6 @@ class LocalGitWorkspaceEnvironment implements IEnvironment {
     if (this.manageEnvironmentDaemon) {
       await disposeManagedHostEnvironmentDaemon({
         projectId: this.projectId,
-        threadId: this.threadId,
         environmentId: this.environmentId,
         workspaceRootPath: this.rootPath,
         runtimeEnv: this.env,

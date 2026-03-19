@@ -417,7 +417,6 @@ class DockerEnvironment implements IEnvironment {
 
     const managedAgentTarget = await ensureManagedDockerEnvironmentDaemon({
       workspaceRootPath: this.getWorkspaceRootUnsafe(),
-      threadId: this.threadId,
       projectId: this.projectId,
       environmentId: this.environmentId,
       runtimeEnv: this.runtimeEnv,
@@ -435,7 +434,6 @@ class DockerEnvironment implements IEnvironment {
     this.managedAgentTarget = undefined;
     await disposeManagedDockerEnvironmentDaemon({
       projectId: this.projectId,
-      threadId: this.threadId,
       environmentId: this.environmentId,
       dockerBin: this.dockerBin,
       containerName: this.state.containerName,

@@ -200,7 +200,6 @@ describe("docker environment-daemon helper", () => {
     await ensureManagedDockerEnvironmentDaemon(
       {
         workspaceRootPath: workspaceRoot,
-        threadId: "thread-1",
         projectId: "project-1",
         environmentId: "docker",
         runtimeEnv: {
@@ -251,8 +250,6 @@ describe("docker environment-daemon helper", () => {
           "exec",
           "-d",
           "-e",
-          "BB_THREAD_ID=thread-1",
-          "-e",
           "BB_PROJECT_ID=project-1",
           "-e",
           "BB_ENVIRONMENT_ID=docker",
@@ -289,7 +286,6 @@ describe("docker environment-daemon helper", () => {
     const waitGate = createDeferred();
     const ensureArgs = {
       workspaceRootPath: workspaceRoot,
-      threadId: "thread-lock",
       projectId: "project-lock",
       environmentId: "docker",
       runtimeEnv: {
@@ -331,13 +327,11 @@ describe("docker environment-daemon helper", () => {
     expect(commands).toHaveLength(6);
     expect(__testOnly__getManagedDockerEnvironmentDaemonRecord({
       projectId: "project-lock",
-      threadId: "thread-lock",
       environmentId: "docker",
       workspaceRootPath: workspaceRoot,
     })).toMatchObject({
       baseUrl: "http://127.0.0.1:4311",
       authToken: "auth-token",
-      threadId: "thread-lock",
       projectId: "project-lock",
       environmentId: "docker",
       workspaceRoot,
@@ -365,7 +359,6 @@ describe("docker environment-daemon helper", () => {
 
     await ensureManagedDockerEnvironmentDaemon({
       workspaceRootPath: workspaceRoot,
-      threadId: "thread-existing",
       projectId: "project-existing",
       environmentId: "docker",
       runtimeEnv: { BB_ROOT: bbRoot },
@@ -381,7 +374,6 @@ describe("docker environment-daemon helper", () => {
 
     await ensureManagedDockerEnvironmentDaemon({
       workspaceRootPath: workspaceRoot,
-      threadId: "thread-existing",
       projectId: "project-existing",
       environmentId: "docker",
       runtimeEnv: { BB_ROOT: bbRoot },

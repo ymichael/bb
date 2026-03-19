@@ -70,7 +70,6 @@ describe("host environment-daemon helper", () => {
 
     const ensureArgs = {
       workspaceRootPath: workspaceRoot,
-      threadId: "thread-1",
       projectId,
       environmentId: "worktree",
       runtimeEnv: { BB_ROOT: bbRoot },
@@ -101,14 +100,12 @@ describe("host environment-daemon helper", () => {
 
     expect(__testOnly__getManagedHostEnvironmentDaemonRecord({
       projectId,
-      threadId: "thread-1",
       environmentId: "worktree",
       workspaceRootPath: workspaceRoot,
     })).toMatchObject({
       pid: 4321,
       port: 4123,
       authToken: "auth-token",
-      threadId: "thread-1",
       projectId,
       environmentId: "worktree",
       workspaceRoot,
@@ -125,7 +122,6 @@ describe("host environment-daemon helper", () => {
     const target = await ensureManagedHostEnvironmentDaemon(
       {
         workspaceRootPath: workspaceRoot,
-        threadId: "thread-1",
         projectId,
         environmentId: "local",
         runtimeEnv: { BB_ROOT: bbRoot },
@@ -152,7 +148,6 @@ describe("host environment-daemon helper", () => {
     });
     expect(__testOnly__getManagedHostEnvironmentDaemonRecord({
       projectId,
-      threadId: "thread-1",
       environmentId: "local",
       workspaceRootPath: workspaceRoot,
     })).toMatchObject({
@@ -171,7 +166,6 @@ describe("host environment-daemon helper", () => {
     const first = await ensureManagedHostEnvironmentDaemon(
       {
         workspaceRootPath: workspaceRoot,
-        threadId: "thread-1",
         projectId,
         environmentId: "local",
         runtimeEnv: { BB_ROOT: bbRoot },
@@ -197,7 +191,6 @@ describe("host environment-daemon helper", () => {
     const second = await ensureManagedHostEnvironmentDaemon(
       {
         workspaceRootPath: workspaceRoot,
-        threadId: "thread-1",
         projectId,
         environmentId: "local",
         runtimeEnv: { BB_ROOT: bbRoot },
@@ -229,7 +222,6 @@ describe("host environment-daemon helper", () => {
     const first = await ensureManagedHostEnvironmentDaemon(
       {
         workspaceRootPath: workspaceRoot,
-        threadId: "thread-1",
         projectId,
         environmentId: "env-1",
         runtimeEnv: { BB_ROOT: bbRoot },
@@ -250,7 +242,6 @@ describe("host environment-daemon helper", () => {
     const second = await ensureManagedHostEnvironmentDaemon(
       {
         workspaceRootPath: workspaceRoot,
-        threadId: "thread-2",
         projectId,
         environmentId: "env-1",
         runtimeEnv: { BB_ROOT: bbRoot },
@@ -278,7 +269,6 @@ describe("host environment-daemon helper", () => {
     await ensureManagedHostEnvironmentDaemon(
       {
         workspaceRootPath: workspaceRoot,
-        threadId: "thread-1",
         projectId,
         environmentId: "local",
         runtimeEnv,
@@ -308,7 +298,6 @@ describe("host environment-daemon helper", () => {
     await disposeManagedHostEnvironmentDaemon(
       {
         projectId,
-        threadId: "thread-1",
         environmentId: "local",
         workspaceRootPath: workspaceRoot,
         runtimeEnv,
@@ -326,7 +315,6 @@ describe("host environment-daemon helper", () => {
     expect(killProcess).toHaveBeenNthCalledWith(2, 4321, "SIGKILL");
     expect(__testOnly__getManagedHostEnvironmentDaemonRecord({
       projectId,
-      threadId: "thread-1",
       environmentId: "local",
       workspaceRootPath: workspaceRoot,
     })).toBeUndefined();
@@ -342,7 +330,6 @@ describe("host environment-daemon helper", () => {
     await ensureManagedHostEnvironmentDaemon(
       {
         workspaceRootPath: workspaceRoot,
-        threadId: "thread-1",
         projectId,
         environmentId: "local",
         runtimeEnv,
@@ -366,7 +353,6 @@ describe("host environment-daemon helper", () => {
     await disposeManagedHostEnvironmentDaemon(
       {
         projectId,
-        threadId: "thread-1",
         environmentId: "local",
         workspaceRootPath: workspaceRoot,
         runtimeEnv,
@@ -383,7 +369,6 @@ describe("host environment-daemon helper", () => {
     );
     expect(__testOnly__getManagedHostEnvironmentDaemonRecord({
       projectId,
-      threadId: "thread-1",
       environmentId: "local",
       workspaceRootPath: workspaceRoot,
     })).toMatchObject({
