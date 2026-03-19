@@ -83,12 +83,13 @@ describe("Environment routes", () => {
     const res = await app.request("/environments/env-2/operations", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ operation: "promote_primary" }),
+      body: JSON.stringify({ operation: "promote_primary", initiatingThreadId: "thread-1" }),
     });
 
     expect(res.status).toBe(200);
     expect(threadManager.requestEnvironmentOperation).toHaveBeenCalledWith("env-2", {
       operation: "promote_primary",
+      initiatingThreadId: "thread-1",
     });
   });
 

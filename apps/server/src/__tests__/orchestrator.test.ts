@@ -4712,9 +4712,37 @@ describe("Orchestrator", () => {
       await expect(
         manager.requestEnvironmentOperation(env.id, {
           operation: "demote_primary",
+          initiatingThreadId: archivedThread.id,
         }),
       ).rejects.toThrow(
-        `No active thread is attached to environment ${env.id}`,
+        `Thread ${archivedThread.id} is archived`,
+      );
+    });
+
+    it("rejects promote_primary when the initiating thread is attached to a different environment", async () => {
+      const env = environmentRepo.create({
+        projectId: project.id,
+        descriptor: { type: "path", path: "/tmp/env" },
+        managed: true,
+      });
+      const otherEnv = environmentRepo.create({
+        projectId: project.id,
+        descriptor: { type: "path", path: "/tmp/other-env" },
+        managed: true,
+      });
+      const thread = createTestThread(threadRepo, project.id, {
+        status: "idle",
+        environmentId: otherEnv.id,
+      });
+      attachmentRepo.attachThread({ threadId: thread.id, environmentId: otherEnv.id });
+
+      await expect(
+        manager.requestEnvironmentOperation(env.id, {
+          operation: "promote_primary",
+          initiatingThreadId: thread.id,
+        }),
+      ).rejects.toThrow(
+        `Thread ${thread.id} is not attached to environment ${env.id}`,
       );
     });
 

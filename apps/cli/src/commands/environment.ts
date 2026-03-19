@@ -119,14 +119,19 @@ export function registerEnvironmentCommands(
   environment
     .command("promote <id>")
     .description("Promote an environment into the primary checkout")
+    .option("--thread <id>", "Thread ID attached to the environment (defaults to BB_THREAD_ID)")
     .option("--json", "Print machine-readable JSON output")
-    .action(async (id: string, opts: { json?: boolean }) => {
+    .action(async (id: string, opts: { thread?: string; json?: boolean }) => {
       const client = createClient(getUrl());
       try {
+        const threadId = opts.thread ?? resolveThreadId();
+        if (!threadId) {
+          throw new Error("A thread id is required. Pass --thread or set BB_THREAD_ID.");
+        }
         const result = await unwrap<{ ok: true; promoted: boolean; message: string }>(
           client.api.v1.environments[":id"].operations.$post({
             param: { id },
-            json: { operation: "promote_primary" },
+            json: { operation: "promote_primary", initiatingThreadId: threadId },
           }),
         );
         if (outputJson(opts, result)) return;
@@ -141,13 +146,20 @@ export function registerEnvironmentCommands(
     .command("demote [id]")
     .description("Demote the currently promoted primary-checkout environment")
     .option("--project <id>", "Project ID (defaults to BB_PROJECT_ID when id is omitted)")
+    .option("--thread <id>", "Thread ID attached to the environment (defaults to BB_THREAD_ID)")
     .option("--json", "Print machine-readable JSON output")
-    .action(async (id: string | undefined, opts: { project?: string; json?: boolean }) => {
+    .action(async (id: string | undefined, opts: { project?: string; thread?: string; json?: boolean }) => {
       const client = createClient(getUrl());
       try {
-        const environmentId = (() => {
-          if (id) return Promise.resolve(id);
-          const threadIdFromContext = resolveThreadId();
+        const explicitThreadId = opts.thread ?? resolveThreadId();
+        const resolution = (() => {
+          if (id && explicitThreadId) {
+            return Promise.resolve({ environmentId: id, threadId: explicitThreadId });
+          }
+          if (id && !explicitThreadId) {
+            throw new Error("A thread id is required to demote an environment. Pass --thread or set BB_THREAD_ID.");
+          }
+          const threadIdFromContext = explicitThreadId;
           if (threadIdFromContext) {
             return unwrap<Thread>(
               client.api.v1.threads[":id"].$get({ param: { id: threadIdFromContext } }),
@@ -155,7 +167,10 @@ export function registerEnvironmentCommands(
               if (!thread.environmentId) {
                 throw new Error(`Thread ${thread.id} has no attached environment.`);
               }
-              return thread.environmentId;
+              return {
+                environmentId: thread.environmentId,
+                threadId: thread.id,
+              };
             });
           }
           const projectId = requireProjectId(opts.project);
@@ -165,18 +180,24 @@ export function registerEnvironmentCommands(
             }),
           ).then((threads) => {
             const active = threads.find((thread) => thread.primaryCheckout?.isActive);
-            const activeEnvironmentId = active?.environmentId;
-            if (!activeEnvironmentId) {
+            if (!active?.environmentId) {
               throw new Error("Primary checkout is already demoted.");
             }
-            return activeEnvironmentId;
+            return {
+              environmentId: active.environmentId,
+              threadId: active.id,
+            };
           });
         })();
 
+        const resolved = await resolution;
         const result = await unwrap<{ ok: true; demoted: boolean; message: string }>(
           client.api.v1.environments[":id"].operations.$post({
-            param: { id: await environmentId },
-            json: { operation: "demote_primary" },
+            param: { id: resolved.environmentId },
+            json: {
+              operation: "demote_primary",
+              initiatingThreadId: resolved.threadId,
+            },
           }),
         );
         if (outputJson(opts, result)) return;

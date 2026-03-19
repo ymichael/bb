@@ -81,7 +81,7 @@ export async function runThreadWorktreePrimaryCheckoutRoundtripScenario(): Promi
 
     const promote = await runCliCommand({
       baseUrl: harness.baseUrl,
-      args: ["environment", "promote", environmentId],
+      args: ["environment", "promote", environmentId, "--thread", thread.id],
     });
     expect(promote.exitCode).toBe(0);
     expect(promote.stderr).toBe("");
@@ -107,7 +107,7 @@ export async function runThreadWorktreePrimaryCheckoutRoundtripScenario(): Promi
 
     const demote = await runCliCommand({
       baseUrl: harness.baseUrl,
-      args: ["environment", "demote", environmentId],
+      args: ["environment", "demote", environmentId, "--thread", thread.id],
     });
     expect(demote.exitCode).toBe(0);
     expect(demote.stderr).toBe("");

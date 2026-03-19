@@ -1132,8 +1132,8 @@ export function useRequestEnvironmentOperation() {
     }: {
       id: string;
     } & (
-      | { operation: "promote_primary" }
-      | { operation: "demote_primary" }
+      | { operation: "promote_primary"; initiatingThreadId: string }
+      | { operation: "demote_primary"; initiatingThreadId: string }
       | { operation: "commit"; initiatingThreadId: string; options?: CommitOperationOptions }
       | { operation: "squash_merge"; initiatingThreadId: string; options?: SquashMergeOperationOptions }
     )): Promise<EnvironmentOperationResponse> =>

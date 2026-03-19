@@ -1171,10 +1171,12 @@ export function ThreadDetailView() {
       ? requestEnvironmentOperation.mutateAsync({
           id: thread.environmentId,
           operation: "demote_primary",
+          initiatingThreadId: thread.id,
         })
       : requestEnvironmentOperation.mutateAsync({
           id: thread.environmentId,
           operation: "promote_primary",
+          initiatingThreadId: thread.id,
         });
     void action.catch((err) => {
       window.alert(

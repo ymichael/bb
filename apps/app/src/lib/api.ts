@@ -506,8 +506,10 @@ export async function requestEnvironmentOperation(
   id: string,
   req: {
     operation: "promote_primary";
+    initiatingThreadId: string;
   } | {
     operation: "demote_primary";
+    initiatingThreadId: string;
   } | {
     operation: "commit";
     initiatingThreadId: string;

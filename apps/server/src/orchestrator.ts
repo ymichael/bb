@@ -2885,21 +2885,41 @@ export class Orchestrator implements ThreadOrchestrator {
 
     switch (request.operation) {
       case "promote_primary": {
-        const targetThread = this._getThreadsAttachedToEnvironment(environmentId)
-          .find((thread) => thread.projectId === environmentRecord.projectId && thread.archivedAt === undefined);
+        const targetThread = this.threadRepo.getById(request.initiatingThreadId);
         if (!targetThread) {
+          throw threadNotFoundError(request.initiatingThreadId);
+        }
+        if (targetThread.archivedAt !== undefined) {
+          throw threadArchivedError(targetThread.id);
+        }
+        if (targetThread.projectId !== environmentRecord.projectId) {
           throw invalidRequestError(
-            `No active thread is attached to environment ${environmentId}`,
+            `Thread ${targetThread.id} does not belong to environment project ${environmentRecord.projectId}`,
+          );
+        }
+        if (this._resolveThreadEnvironmentReference(targetThread.id) !== environmentId) {
+          throw invalidRequestError(
+            `Thread ${targetThread.id} is not attached to environment ${environmentId}`,
           );
         }
         return this.promoteThreadEnvironmentToPrimaryCheckout(targetThread.id);
       }
       case "demote_primary": {
-        const targetThread = this._getThreadsAttachedToEnvironment(environmentId)
-          .find((thread) => thread.projectId === environmentRecord.projectId && thread.archivedAt === undefined);
+        const targetThread = this.threadRepo.getById(request.initiatingThreadId);
         if (!targetThread) {
+          throw threadNotFoundError(request.initiatingThreadId);
+        }
+        if (targetThread.archivedAt !== undefined) {
+          throw threadArchivedError(targetThread.id);
+        }
+        if (targetThread.projectId !== environmentRecord.projectId) {
           throw invalidRequestError(
-            `No active thread is attached to environment ${environmentId}`,
+            `Thread ${targetThread.id} does not belong to environment project ${environmentRecord.projectId}`,
+          );
+        }
+        if (this._resolveThreadEnvironmentReference(targetThread.id) !== environmentId) {
+          throw invalidRequestError(
+            `Thread ${targetThread.id} is not attached to environment ${environmentId}`,
           );
         }
         return this.demoteThreadEnvironmentFromPrimaryCheckout(targetThread.id);

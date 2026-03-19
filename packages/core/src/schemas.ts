@@ -158,9 +158,11 @@ export const threadOperationSchema = z.discriminatedUnion("operation", [
 export const environmentOperationSchema = z.discriminatedUnion("operation", [
   z.object({
     operation: z.literal("promote_primary"),
+    initiatingThreadId: z.string().min(1),
   }),
   z.object({
     operation: z.literal("demote_primary"),
+    initiatingThreadId: z.string().min(1),
   }),
   z.object({
     operation: z.literal("commit"),

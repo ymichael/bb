@@ -210,9 +210,11 @@ export type EnvironmentOperationType =
 export type EnvironmentOperationRequest =
   | {
       operation: "promote_primary";
+      initiatingThreadId: string;
     }
   | {
       operation: "demote_primary";
+      initiatingThreadId: string;
     }
   | {
       operation: "commit";
