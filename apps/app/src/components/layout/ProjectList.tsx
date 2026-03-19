@@ -399,9 +399,10 @@ export function ProjectList({
     const isThreadActionsOpen = openThreadActionsThreadId === thread.id
     const isThreadActive = selectedThreadId === thread.id
     const threadTitle = getThreadDisplayTitle(thread)
-    const environmentInfo = thread.environmentId
-      ? environmentById.get(thread.environmentId)
-      : undefined
+    const environmentInfo = thread.attachedEnvironment
+      ?? (thread.environmentId
+        ? environmentById.get(thread.environmentId)
+        : undefined)
     const environmentIconInfo = getEnvironmentIconInfo(environmentInfo)
     const ThreadEnvironmentIcon = environmentIconInfo?.icon
     const isManager = options?.isManager === true

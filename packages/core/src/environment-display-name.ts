@@ -27,7 +27,7 @@ export function formatRuntimeKind(value?: string | null): string | undefined {
     case "local":
       return "Direct";
     case "worktree":
-      return "Worktree";
+      return "New Worktree";
     case "docker":
       return "Docker Sandbox";
     default:
@@ -49,7 +49,7 @@ export function formatEnvironmentDisplayName(
     case "Direct Workspace":
       return "Direct";
     case "Git Worktree Workspace":
-      return "Worktree";
+      return "New Worktree";
     default:
       // Environment ids/display names are open_external runtime values, so
       // unknown values intentionally preserve the server-provided label.

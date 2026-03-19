@@ -1,5 +1,5 @@
 import type { EnvironmentCapabilities } from "@bb/core"
-import { Container, FolderGit2, Laptop } from "lucide-react"
+import { Container, Laptop } from "lucide-react"
 import { describe, expect, it } from "vitest"
 import { getEnvironmentIconInfo } from "./environment-icon"
 
@@ -32,16 +32,14 @@ describe("getEnvironmentIconInfo", () => {
   })
 
   it("uses the worktree icon for isolated workspaces", () => {
-    expect(
-      getEnvironmentIconInfo({
-        capabilities: createCapabilities({
-          isolated_workspace: true,
-        }),
+    const info = getEnvironmentIconInfo({
+      capabilities: createCapabilities({
+        isolated_workspace: true,
       }),
-    ).toMatchObject({
-      icon: FolderGit2,
-      ariaLabel: "Worktree thread",
     })
+    expect(info).toBeDefined()
+    expect(info!.ariaLabel).toBe("Worktree thread")
+    expect(typeof info!.icon).toBe("object")
   })
 
   it("uses the direct icon for host filesystem environments", () => {

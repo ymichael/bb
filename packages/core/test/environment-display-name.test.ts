@@ -7,7 +7,7 @@ import {
 describe("formatEnvironmentDisplayName", () => {
   it("maps built-in environment ids to concise labels", () => {
     expect(formatEnvironmentDisplayName({ id: "local" })).toBe("Direct");
-    expect(formatEnvironmentDisplayName({ id: "worktree" })).toBe("Worktree");
+    expect(formatEnvironmentDisplayName({ id: "worktree" })).toBe("New Worktree");
     expect(formatEnvironmentDisplayName({ id: "docker" })).toBe("Docker Sandbox");
   });
 
@@ -20,7 +20,7 @@ describe("formatEnvironmentDisplayName", () => {
     ).toBe("Direct");
     expect(
       formatEnvironmentDisplayName({ displayName: "Git Worktree Workspace" }),
-    ).toBe("Worktree");
+    ).toBe("New Worktree");
   });
 
   it("preserves unknown runtime-provided names", () => {

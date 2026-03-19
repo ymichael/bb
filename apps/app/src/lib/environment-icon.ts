@@ -1,5 +1,6 @@
 import type { EnvironmentRecord, SystemEnvironmentInfo } from "@bb/core"
-import { Container, FolderGit2, Laptop, type LucideIcon } from "lucide-react"
+import { Container, Laptop, Split, type LucideIcon } from "lucide-react"
+import { createElement, forwardRef } from "react"
 
 interface EnvironmentIconInfo {
   icon: LucideIcon
@@ -9,6 +10,15 @@ interface EnvironmentIconInfo {
 type EnvironmentIconSource =
   | (Pick<SystemEnvironmentInfo, "capabilities"> & { id?: string })
   | Pick<EnvironmentRecord, "managed" | "properties">
+
+const WorktreeIcon = forwardRef<SVGSVGElement, React.ComponentPropsWithoutRef<typeof Split>>(
+  (props, ref) =>
+    createElement(Split, {
+      ...props,
+      ref,
+      className: `${props.className ?? ""} rotate-90`.trim(),
+    }),
+) as unknown as LucideIcon
 
 export function getEnvironmentIconInfo(
   environment?: EnvironmentIconSource | null,
@@ -30,7 +40,7 @@ export function getEnvironmentIconInfo(
     ("properties" in environment && environment.properties?.workspaceKind === "worktree")
   ) {
     return {
-      icon: FolderGit2,
+      icon: WorktreeIcon,
       ariaLabel: "Worktree thread",
     }
   }
