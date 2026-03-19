@@ -822,6 +822,58 @@ describe("EnvironmentDaemonRuntime", () => {
     expect((ackA2.result as Record<string, unknown>).role).toBe("provider-A");
   });
 
+  it("rejects unmapped thread commands once explicit thread routing is in use", async () => {
+    const echoProviderScript = [
+      "process.stdin.setEncoding('utf8');",
+      "let buffer='';",
+      "process.stdin.on('data',chunk=>{",
+      "buffer+=chunk;",
+      "const parts=buffer.split(/\\r\\n|\\n|\\r/g);",
+      "buffer=parts.pop() ?? '';",
+      "for (const line of parts) {",
+      "if (!line.trim()) continue;",
+      "const msg = JSON.parse(line);",
+      "console.log(JSON.stringify({ id: msg.id, result: { role: process.env.ROLE } }));",
+      "}",
+      "});",
+    ].join("");
+
+    const runtime = new EnvironmentDaemonRuntime({
+      threadId: "thread-1",
+      providerId: "codex",
+    });
+    cleanup.push(() => runtime.shutdown());
+
+    runtime.ensureProviderStatus({
+      command: "node",
+      args: ["-e", echoProviderScript],
+      env: { ROLE: "provider-A" },
+    }, "thread-a");
+    runtime.ensureProviderStatus({
+      command: "node",
+      args: ["-e", echoProviderScript],
+      env: { ROLE: "provider-B" },
+    }, "thread-b");
+
+    const ack = await runtime.executeCommand({
+      meta: {
+        protocolVersion: ENVIRONMENT_DAEMON_PROTOCOL_VERSION,
+        commandId: "cmd-unmapped",
+        idempotencyKey: "cmd-unmapped",
+        sentAt: 400,
+      },
+      command: {
+        type: "workspace.status",
+        threadId: "thread-c",
+      },
+    });
+
+    expect(ack).toMatchObject({
+      state: "rejected",
+      errorCode: "provider_unavailable",
+    });
+  });
+
   it("does not re-initialize a provider child that was already initialized by another thread", async () => {
     // When two threads share an environment but use different providers,
     // each child is initialized once. Switching back to an already-initialized

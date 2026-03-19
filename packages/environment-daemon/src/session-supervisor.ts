@@ -320,16 +320,17 @@ export class EnvironmentDaemonSessionSupervisor {
         this.nextHeartbeatAt = Date.now() + this.heartbeatIntervalMs;
       }
       await this.flushPendingEventsWithReplay();
-      const state = threadIds.length === 1
-        ? this.options.sessionRuntime.loadThreadState(threadIds[0]!)
-        : undefined;
+      const singleThreadState =
+        threadIds.length === 1
+          ? this.options.sessionRuntime.loadThreadState(threadIds[0]!)
+          : undefined;
       const commands = await this.pullCommands({
         sessionId,
         threadIds,
         agentId: this.agentId,
         agentInstanceId: this.agentInstanceId,
-        ...(threadIds.length === 1 && state?.lastDeliveredCommandCursor !== undefined
-          ? { afterCursor: state.lastDeliveredCommandCursor }
+        ...(singleThreadState?.lastDeliveredCommandCursor !== undefined
+          ? { afterCursor: singleThreadState.lastDeliveredCommandCursor }
           : {}),
       });
       if (!this.running) {

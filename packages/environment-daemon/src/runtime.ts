@@ -352,6 +352,9 @@ export class EnvironmentDaemonRuntime {
     command: EnvironmentDaemonRpcCommand,
   ): Promise<unknown> {
     const child = await this.ensureProviderForCommand(command);
+    if (!child) {
+      throw new Error("Provider runtime is unavailable");
+    }
     return this.requestProviderCommand(command, child);
   }
 
@@ -946,11 +949,7 @@ export class EnvironmentDaemonRuntime {
       case "thread.stop":
       case "turn.run":
       case "thread.rename": {
-        // Route per-thread commands to the child registered via
-        // provider.ensure(forThreadId). Single-provider runtimes may not
-        // have a per-thread mapping, so they fall back to the shared child.
-        const mapped = this.resolveChildForThread(command.threadId);
-        const child = mapped ?? this.ensureProviderRunning();
+        const child = this.resolveCommandChild(command.threadId);
         if (!child) {
           throw new Error("Provider runtime is unavailable");
         }
@@ -973,14 +972,24 @@ export class EnvironmentDaemonRuntime {
       }
       case "workspace.status":
       case "workspace.diff": {
-        // Workspace commands also need routing to the correct child so
-        // they reach the provider that owns the thread's workspace.
-        const mapped = this.resolveChildForThread(command.threadId);
-        return mapped ?? this.providerChild ?? this.ensureProviderRunning() ?? undefined;
+        return this.resolveCommandChild(command.threadId);
       }
       default:
         return command satisfies never;
     }
+  }
+
+  private resolveCommandChild(threadId: string): ChildProcess | undefined {
+    const mapped = this.resolveChildForThread(threadId);
+    if (mapped) {
+      return mapped;
+    }
+    const hasExplicitThreadRouting =
+      this.threadIdToChild.size > 0 || this.threadIdToProviderId.size > 0;
+    if (hasExplicitThreadRouting) {
+      return undefined;
+    }
+    return this.ensureProviderRunning() ?? undefined;
   }
 
   /**
@@ -1000,7 +1009,7 @@ export class EnvironmentDaemonRuntime {
 
   private requestProviderCommand(
     command: EnvironmentDaemonRpcCommand,
-    child?: ChildProcess,
+    child: ChildProcess,
   ): Promise<unknown> {
     if (command.type === "turn.run") {
       return this.requestProvider({
@@ -1180,9 +1189,9 @@ export class EnvironmentDaemonRuntime {
     method: string;
     params: unknown;
     timeoutMs?: number;
-    child?: ChildProcess;
+    child: ChildProcess;
   }): Promise<unknown> {
-    const child = args.child ?? this.providerChild;
+    const child = args.child;
     const stdin = child?.stdin;
     if (!stdin || child.killed || child.exitCode !== null) {
       return Promise.reject(new Error("Provider runtime is unavailable"));

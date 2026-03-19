@@ -233,6 +233,78 @@ describe("EnvironmentDaemonSessionSupervisor", () => {
     expect(client.closeSession).toHaveBeenCalledWith("sess-1", "agent_shutdown");
   });
 
+  it("does not derive afterCursor from the first thread in a multi-channel session", async () => {
+    const store = new InMemoryEnvironmentDaemonSessionStore();
+    const runtime = new EnvironmentDaemonRuntime({});
+    const sessionRuntime = new EnvironmentDaemonSessionRuntime({
+      store,
+      clock: () => 10_000,
+    });
+    sessionRuntime.initializeThread({
+      threadId: "thread-1",
+      agentId: "agent-1",
+      agentInstanceId: "instance-1",
+      generation: 3,
+    });
+    sessionRuntime.initializeThread({
+      threadId: "thread-2",
+      agentId: "agent-1",
+      agentInstanceId: "instance-1",
+      generation: 7,
+    });
+
+    const client = makeClientMock();
+    (client.openSession as ReturnType<typeof vi.fn>).mockResolvedValue({
+      protocol: "bb.env-daemon.v1",
+      type: "session_welcome",
+      messageId: "msg-open",
+      sessionId: "sess-1",
+      sentAt: 2_000,
+      payload: {
+        leaseTtlMs: 30_000,
+        heartbeatIntervalMs: 10_000,
+        protocolVersion: 1,
+        channels: [
+          {
+            channelId: "thread-1",
+            applyFrom: { generation: 3, sequenceExclusive: 0 },
+          },
+          {
+            channelId: "thread-2",
+            applyFrom: { generation: 7, sequenceExclusive: 0 },
+          },
+        ],
+      },
+    });
+    (client.pullCommands as ReturnType<typeof vi.fn>).mockResolvedValue({
+      protocol: "bb.env-daemon.v1",
+      type: "command_batch",
+      messageId: "msg-cmd-empty",
+      sessionId: "sess-1",
+      sentAt: 3_000,
+      payload: { commands: [] },
+    });
+    (client.closeSession as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
+
+    const sync = new EnvironmentDaemonSessionSync({ runtime: sessionRuntime, client });
+    const supervisor = new EnvironmentDaemonSessionSupervisor({
+      environmentId: "env-1",
+      runtime,
+      sessionRuntime,
+      sessionSync: sync,
+      pollIntervalMs: 5,
+    });
+
+    await supervisor.start();
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    await supervisor.close();
+
+    expect(client.pullCommands).toHaveBeenCalled();
+    for (const [args] of (client.pullCommands as ReturnType<typeof vi.fn>).mock.calls) {
+      expect(args).not.toHaveProperty("afterCursor");
+    }
+  });
+
   it("reopens the session after an inactive-session heartbeat failure", async () => {
     vi.useFakeTimers();
     try {
