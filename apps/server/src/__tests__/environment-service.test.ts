@@ -1244,6 +1244,81 @@ describe("EnvironmentService", () => {
     expect(service.getAttachedEnvironmentId(thread.id)).toBeUndefined();
     expect(threadRepo_getEnvId(service, thread.id)).toBe(env.id);
   });
+
+  it("rejects promotion when attachment-backed environment identity is missing", async () => {
+    const environment = createTestEnvironment({ existsInitially: true });
+    const environmentRegistry = new EnvironmentRegistry().register({
+      kind: "worktree",
+      info: WORKTREE_INFO,
+      create(_context: CreateEnvironmentContext): IEnvironment {
+        return environment;
+      },
+      restore(_state: unknown, _context: CreateEnvironmentContext): IEnvironment {
+        return environment;
+      },
+      isState(_value: unknown): _value is unknown {
+        return true;
+      },
+    });
+
+    const { db } = createTestDb();
+    const { threadRepo, projectRepo, environmentRepo, attachmentRepo } = createTestRepos(db);
+
+    const project = projectRepo.create({
+      name: "Project",
+      rootPath: "/project/root",
+    });
+    const env = environmentRepo.create({
+      projectId: project.id,
+      descriptor: {
+        type: "path",
+        path: "/project/root/.worktrees/thread-1",
+      },
+      managed: true,
+      properties: {
+        provisioningSystemKind: "worktree",
+        location: "localhost",
+        workspaceKind: "worktree",
+      },
+      runtimeState: {
+        kind: "worktree",
+        state: {},
+      },
+    });
+
+    const thread = createTestThread(threadRepo, project.id, {
+      status: "idle",
+      environmentId: env.id,
+    });
+
+    const service = new EnvironmentService(
+      threadRepo,
+      projectRepo,
+      environmentRegistry,
+      {
+        createContext: (tid, projectRootPath) => ({
+          projectId: project.id,
+          threadId: tid,
+          projectRootPath,
+          runtimeEnv: {},
+        }),
+        onProvisioningEvent: vi.fn(),
+        onThreadChanged: vi.fn(),
+        onCleanupFailure: vi.fn(),
+        onPrimaryCheckoutDemoted: vi.fn(),
+        runOptionalSetup: vi.fn().mockResolvedValue(undefined),
+      },
+      environmentRepo,
+      attachmentRepo,
+    );
+
+    await expect(
+      service.promoteThreadEnvironment({
+        thread,
+      }),
+    ).rejects.toThrow("Thread is not attached to an environment");
+    expect(service.getPrimaryCheckoutStatus(project.id)).toEqual({ projectId: project.id });
+  });
 });
 
 /**

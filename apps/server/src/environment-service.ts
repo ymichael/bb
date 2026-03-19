@@ -190,6 +190,17 @@ export class EnvironmentService {
     return this.threadRepo.getById(threadId)?.environmentId;
   }
 
+  private resolvePrimaryPromotionEnvironmentId(threadId: string): string | undefined {
+    const attachedEnvironmentId = this.getAttachedEnvironmentId(threadId);
+    if (attachedEnvironmentId) {
+      return attachedEnvironmentId;
+    }
+    if (this.threadEnvironmentAttachmentRepo) {
+      return undefined;
+    }
+    return threadId;
+  }
+
   getAttachedThreadIdsForEnvironment(environmentId: string): string[] {
     if (!this.threadEnvironmentAttachmentRepo) {
       return this.threadRepo.list()
@@ -1107,9 +1118,15 @@ export class EnvironmentService {
       this.primaryPromotionValidatedAtByProjectId.set(projectId, now);
       return;
     }
+    const promotionEnvironmentId = this.resolvePrimaryPromotionEnvironmentId(thread.id);
+    if (!promotionEnvironmentId) {
+      this.clearPrimaryPromotionState(projectId);
+      this.primaryPromotionValidatedAtByProjectId.set(projectId, now);
+      return;
+    }
     this.setPrimaryPromotionState(project.id, {
       projectId: project.id,
-      environmentId: this.getAttachedEnvironmentId(thread.id) ?? thread.id,
+      environmentId: promotionEnvironmentId,
       threadId: thread.id,
       promotedAt: Date.now(),
       promotedCheckout: workspaceCheckout,
@@ -1165,6 +1182,10 @@ export class EnvironmentService {
             : "already-promoted-other-thread",
       };
     }
+    const promotionEnvironmentId = this.resolvePrimaryPromotionEnvironmentId(args.thread.id);
+    if (!promotionEnvironmentId) {
+      throw new Error("Thread is not attached to an environment");
+    }
     const environment = this.restoreThreadEnvironment(args.thread, project.rootPath);
     if (!environment || !environment.supportsPromoteToActiveWorkspace()) {
       throw new Error("Promotion is not supported for this environment");
@@ -1177,7 +1198,7 @@ export class EnvironmentService {
     });
     const state: PrimaryPromotionState = {
       projectId: project.id,
-      environmentId: this.getAttachedEnvironmentId(args.thread.id) ?? args.thread.id,
+      environmentId: promotionEnvironmentId,
       threadId: args.thread.id,
       promotedAt: Date.now(),
       previousCheckout: promoted.previousCheckout,
