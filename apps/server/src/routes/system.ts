@@ -27,9 +27,12 @@ import {
 } from "../voice-transcription.js";
 
 type PickFolderFn = () => Promise<string | null>;
-type ListModelsFn = (providerId?: string) => Promise<AvailableModel[]>;
-type ProviderInfoFn = () => Promise<SystemProviderInfo>;
-type ProviderCatalogFn = () => Promise<SystemProviderInfo[]>;
+type ListModelsFn = (
+  providerId?: string,
+  environmentId?: string,
+) => Promise<AvailableModel[]>;
+type ProviderInfoFn = (environmentId?: string) => Promise<SystemProviderInfo>;
+type ProviderCatalogFn = (environmentId?: string) => Promise<SystemProviderInfo[]>;
 type EnvironmentCatalogFn = () => SystemEnvironmentInfo[];
 type TranscribeVoiceFn = (
   args: TranscribeVoiceInputArgs,
@@ -69,6 +72,11 @@ const shutdownRequestSchema = z.object({
 
 const modelsQuerySchema = z.object({
   providerId: z.string().min(1).optional(),
+  environmentId: z.string().min(1).optional(),
+});
+
+const providerCatalogQuerySchema = z.object({
+  environmentId: z.string().min(1).optional(),
 });
 
 const RESTART_POLICY_BY_STATUS: Record<Thread["status"], string> = {
@@ -183,9 +191,12 @@ export function createSystemRoutes(
   opts: CreateSystemRoutesOptions = {},
 ) {
   const pickFolder = opts.pickFolder ?? pickFolderPath;
-  const listModels = opts.listModels ?? ((providerId?: string) => threadManager.listModels(providerId));
-  const getProviderInfo = opts.getProviderInfo ?? (() => threadManager.getProviderInfo());
-  const listProviders = opts.listProviders ?? (() => threadManager.listProviders());
+  const listModels = opts.listModels ?? ((providerId?: string, environmentId?: string) =>
+    threadManager.listModels(providerId, environmentId));
+  const getProviderInfo = opts.getProviderInfo ?? ((environmentId?: string) =>
+    threadManager.getProviderInfo(environmentId));
+  const listProviders = opts.listProviders ?? ((environmentId?: string) =>
+    threadManager.listProviders(environmentId));
   const listEnvironments = opts.listEnvironments ?? (() => threadManager.listEnvironments());
   const transcribeVoice = opts.transcribeVoice ?? transcribeVoiceInput;
   const openPath = opts.openPath ?? openPathInEditor;
@@ -297,23 +308,25 @@ export function createSystemRoutes(
     })
     .get("/models", zValidator("query", modelsQuerySchema), async (c) => {
       try {
-        const { providerId } = c.req.valid("query");
-        const models = await listModels(providerId);
+        const { providerId, environmentId } = c.req.valid("query");
+        const models = await listModels(providerId, environmentId);
         return c.json(models);
       } catch (err) {
         return sendRouteError(c, err);
       }
     })
-    .get("/provider", async (c) => {
+    .get("/provider", zValidator("query", providerCatalogQuerySchema), async (c) => {
       try {
-        return c.json(await getProviderInfo());
+        const { environmentId } = c.req.valid("query");
+        return c.json(await getProviderInfo(environmentId));
       } catch (err) {
         return sendRouteError(c, err);
       }
     })
-    .get("/providers", async (c) => {
+    .get("/providers", zValidator("query", providerCatalogQuerySchema), async (c) => {
       try {
-        return c.json(await listProviders());
+        const { environmentId } = c.req.valid("query");
+        return c.json(await listProviders(environmentId));
       } catch (err) {
         return sendRouteError(c, err);
       }

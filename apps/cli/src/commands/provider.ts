@@ -14,7 +14,7 @@ export function registerProviderCommands(program: Command, getUrl: () => string)
       const client = createClient(getUrl());
       try {
         const providers = await unwrap<SystemProviderInfo[]>(
-          client.api.v1.system.providers.$get(),
+          client.api.v1.system.providers.$get({ query: {} }),
         );
         if (outputJson(opts, providers)) return;
         if (providers.length === 0) {

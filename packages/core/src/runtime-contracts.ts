@@ -285,9 +285,9 @@ export interface ThreadOrchestrator {
   isActive(threadId: string): boolean;
   getActiveCount(): number;
   getRunningCount(): number;
-  listModels(providerId?: string): Promise<AvailableModel[]>;
-  getProviderInfo(): Promise<SystemProviderInfo>;
-  listProviders(): Promise<SystemProviderInfo[]>;
+  listModels(providerId?: string, environmentId?: string): Promise<AvailableModel[]>;
+  getProviderInfo(environmentId?: string): Promise<SystemProviderInfo>;
+  listProviders(environmentId?: string): Promise<SystemProviderInfo[]>;
   listEnvironments(): SystemEnvironmentInfo[];
   cleanupArchivedEnvironmentsOnBoot(): Promise<void>;
   failInterruptedProvisioningOnBoot(): Promise<void>;

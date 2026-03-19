@@ -2884,6 +2884,31 @@ describe("Orchestrator", () => {
 
       expect(providerListModels).toHaveBeenCalledTimes(1);
     });
+
+    it("does not share model cache entries across environment-scoped queries", async () => {
+      const models = [
+        {
+          id: "model-a",
+          model: "model-a",
+          displayName: "Model A",
+          description: "",
+          supportedReasoningEfforts: [
+            { reasoningEffort: "low", description: "Low effort" },
+          ],
+          defaultReasoningEffort: "low",
+          isDefault: true,
+        },
+      ];
+
+      const providerListModels = vi.fn().mockResolvedValue(models);
+      asOrchestratorHarness(manager).provider.listModels = providerListModels;
+
+      await expect(manager.listModels(undefined, "env-1")).resolves.toEqual(models);
+      await expect(manager.listModels(undefined, "env-2")).resolves.toEqual(models);
+      await expect(manager.listModels()).resolves.toEqual(models);
+
+      expect(providerListModels).toHaveBeenCalledTimes(3);
+    });
   });
 
   describe("getOutput()", () => {

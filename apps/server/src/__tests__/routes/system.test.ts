@@ -515,6 +515,15 @@ describe("System routes", () => {
       expect(await res.json()).toEqual(models);
       expect(threadManager.listModels).toHaveBeenCalledTimes(1);
     });
+
+    it("passes environmentId through for environment-scoped model discovery", async () => {
+      listModels.mockResolvedValue([makeModel()]);
+
+      const res = await app.request("/system/models?providerId=pi&environmentId=env-1");
+
+      expect(res.status).toBe(200);
+      expect(listModels).toHaveBeenCalledWith("pi", "env-1");
+    });
   });
 
   describe("GET /system/provider", () => {
@@ -562,6 +571,22 @@ describe("System routes", () => {
       expect(await res.json()).toEqual(providerInfo);
       expect(threadManager.getProviderInfo).toHaveBeenCalledTimes(1);
     });
+
+    it("passes environmentId through for environment-scoped provider info", async () => {
+      getProviderInfo.mockResolvedValue({
+        id: "pi",
+        displayName: "Pi",
+        capabilities: {
+          supportsRename: false,
+          supportsServiceTier: false,
+        },
+      });
+
+      const res = await app.request("/system/provider?environmentId=env-1");
+
+      expect(res.status).toBe(200);
+      expect(getProviderInfo).toHaveBeenCalledWith("env-1");
+    });
   });
 
   describe("GET /system/providers", () => {
@@ -593,6 +618,17 @@ describe("System routes", () => {
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual(providers);
       expect(threadManager.listProviders).toHaveBeenCalledTimes(1);
+    });
+
+    it("passes environmentId through for environment-scoped provider discovery", async () => {
+      (
+        threadManager.listProviders as unknown as ReturnType<typeof vi.fn>
+      ).mockResolvedValue([]);
+
+      const res = await app.request("/system/providers?environmentId=env-1");
+
+      expect(res.status).toBe(200);
+      expect(threadManager.listProviders).toHaveBeenCalledWith("env-1");
     });
   });
 

@@ -695,12 +695,12 @@ export class Orchestrator implements ThreadOrchestrator {
   private readonly defaultProviderId: ThreadProviderId;
   private readonly providerCatalog: SystemProviderInfo[];
   private readonly providerToolHost?: ProviderToolHost;
-  private readonly cachedModelsByProviderId = new Map<
-    ThreadProviderId,
+  private readonly cachedModelsByRequestKey = new Map<
+    string,
     { expiresAt: number; value: AvailableModel[] }
   >();
-  private readonly pendingModelsRequestByProviderId = new Map<
-    ThreadProviderId,
+  private readonly pendingModelsRequestByRequestKey = new Map<
+    string,
     Promise<AvailableModel[]>
   >();
   private threadShellPath: string | undefined;
@@ -1163,6 +1163,17 @@ export class Orchestrator implements ThreadOrchestrator {
     return attachedThreadIds
       .map((threadId) => this.threadRepo.getById(threadId))
       .filter((thread): thread is Thread => Boolean(thread));
+  }
+
+  private _getNonArchivedThreadsAttachedToEnvironment(environmentId: string): Thread[] {
+    return this._getThreadsAttachedToEnvironment(environmentId)
+      .filter((thread) => thread.archivedAt === undefined);
+  }
+
+  private _resolveEnvironmentCommandTransportThread(
+    environmentId: string,
+  ): Thread | undefined {
+    return this._getNonArchivedThreadsAttachedToEnvironment(environmentId)[0];
   }
 
   private _isThreadAttachedToPromotedEnvironment(threadId: string): boolean {
@@ -3111,36 +3122,43 @@ export class Orchestrator implements ThreadOrchestrator {
    * List available models from a provider. When no providerId is given, uses
    * the default provider.
    */
-  async listModels(providerId?: string): Promise<AvailableModel[]> {
+  async listModels(providerId?: string, environmentId?: string): Promise<AvailableModel[]> {
     const resolvedProviderId = providerId && isThreadProviderId(providerId)
       ? providerId
       : this.defaultProviderId;
+    const cacheKey = environmentId
+      ? `${resolvedProviderId}\0${environmentId}`
+      : resolvedProviderId;
     const now = Date.now();
-    const cached = this.cachedModelsByProviderId.get(resolvedProviderId);
+    const cached = this.cachedModelsByRequestKey.get(cacheKey);
     if (cached && cached.expiresAt > now) {
       return cached.value;
     }
-    const pending = this.pendingModelsRequestByProviderId.get(resolvedProviderId);
+    const pending = this.pendingModelsRequestByRequestKey.get(cacheKey);
     if (pending) {
       return pending;
     }
 
     const request = (async () => {
-      const envDaemonModels =
-        await this._listProviderModelsFromEnvironmentDaemon(resolvedProviderId);
+      const envDaemonModels = environmentId
+        ? await this._listProviderModelsFromEnvironmentDaemon(
+            resolvedProviderId,
+            environmentId,
+          )
+        : undefined;
       const models =
         envDaemonModels ??
         await this._getProviderAdapterForProviderId(resolvedProviderId).listModels();
-      this.cachedModelsByProviderId.set(resolvedProviderId, {
+      this.cachedModelsByRequestKey.set(cacheKey, {
         value: models,
         expiresAt: Date.now() + MODEL_LIST_CACHE_TTL_MS,
       });
       return models;
     })().finally(() => {
-      this.pendingModelsRequestByProviderId.delete(resolvedProviderId);
+      this.pendingModelsRequestByRequestKey.delete(cacheKey);
     });
 
-    this.pendingModelsRequestByProviderId.set(resolvedProviderId, request);
+    this.pendingModelsRequestByRequestKey.set(cacheKey, request);
     return request;
   }
 
@@ -3161,8 +3179,8 @@ export class Orchestrator implements ThreadOrchestrator {
     };
   }
 
-  async getProviderInfo(): Promise<SystemProviderInfo> {
-    const providers = await this.listProviders();
+  async getProviderInfo(environmentId?: string): Promise<SystemProviderInfo> {
+    const providers = await this.listProviders(environmentId);
     const provider =
       providers.find((entry) => entry.id === this.defaultProviderId) ??
       this.getDefaultProviderInfoFromCatalog();
@@ -3172,10 +3190,14 @@ export class Orchestrator implements ThreadOrchestrator {
     };
   }
 
-  async listProviders(): Promise<SystemProviderInfo[]> {
-    const envDaemonCatalog = await this._listProviderCatalogFromEnvironmentDaemon();
-    if (envDaemonCatalog && envDaemonCatalog.length > 0) {
-      return envDaemonCatalog;
+  async listProviders(environmentId?: string): Promise<SystemProviderInfo[]> {
+    if (environmentId) {
+      const envDaemonCatalog = await this._listProviderCatalogFromEnvironmentDaemon(
+        environmentId,
+      );
+      if (envDaemonCatalog && envDaemonCatalog.length > 0) {
+        return envDaemonCatalog;
+      }
     }
     if (this.providerCatalog.length > 0) {
       return this.providerCatalog.map((provider) => ({
@@ -3796,38 +3818,33 @@ export class Orchestrator implements ThreadOrchestrator {
 
   private async _listProviderModelsFromEnvironmentDaemon(
     providerId: ThreadProviderId,
+    environmentId: string,
   ): Promise<AvailableModel[] | undefined> {
     if (!this.environmentDaemonCommandDispatcher || !this.environmentDaemonSessionRepo) {
       return undefined;
     }
-    const matchingSession = this.environmentDaemonSessionRepo.listActive().find((session) => {
-      if (Array.isArray(session.providerMetadata)) {
-        return session.providerMetadata.some((entry) => {
-          const record = toRecord(entry);
-          return getStringField(record, "providerId") === providerId;
-        });
-      }
-      return false;
-    });
+    const matchingSession = this.environmentDaemonSessionRepo
+      .listActive()
+      .find((session) => session.environmentId === environmentId);
     if (!matchingSession) {
       return undefined;
     }
 
-    const representativeThreadId = this.threadEnvironmentAttachmentRepo
-      ?.listByEnvironmentId(matchingSession.environmentId)
-      .map((row) => row.threadId)[0];
-    if (!representativeThreadId) {
-      return undefined;
+    const transportThread = this._resolveEnvironmentCommandTransportThread(environmentId);
+    if (!transportThread) {
+      throw invalidRequestError(
+        `No active thread is attached to environment ${environmentId}`,
+      );
     }
 
     const client = new EnvironmentDaemonSessionCommandClient({
-      threadId: representativeThreadId,
+      threadId: transportThread.id,
       commandDispatcher: this.environmentDaemonCommandDispatcher,
       ...(this.environmentDaemonCommandPollIntervalMs !== undefined
         ? { pollIntervalMs: this.environmentDaemonCommandPollIntervalMs }
         : {}),
       ensureSessionAccess: async () => {
-        await this._recoverEnvironmentDaemonAccess(representativeThreadId);
+        await this._recoverEnvironmentDaemonAccess(transportThread.id);
       },
     });
     try {
@@ -3852,36 +3869,42 @@ export class Orchestrator implements ThreadOrchestrator {
     }
   }
 
-  private async _listProviderCatalogFromEnvironmentDaemon(): Promise<SystemProviderInfo[] | undefined> {
+  private async _listProviderCatalogFromEnvironmentDaemon(
+    environmentId: string,
+  ): Promise<SystemProviderInfo[] | undefined> {
     if (!this.environmentDaemonCommandDispatcher || !this.environmentDaemonSessionRepo) {
       return undefined;
     }
-    const matchingSession = this.environmentDaemonSessionRepo.listActive().find((session) => {
-      const capabilities = toRecord(session.selectedCapabilities);
-      const commands = Array.isArray(capabilities?.commands)
-        ? capabilities.commands
-        : [];
-      return commands.includes("provider.list_catalog");
-    });
+    const matchingSession = this.environmentDaemonSessionRepo
+      .listActive()
+      .find((session) => session.environmentId === environmentId);
     if (!matchingSession) {
       return undefined;
     }
 
-    const catalogRepThreadId = this.threadEnvironmentAttachmentRepo
-      ?.listByEnvironmentId(matchingSession.environmentId)
-      .map((row) => row.threadId)[0];
-    if (!catalogRepThreadId) {
+    const capabilities = toRecord(matchingSession.selectedCapabilities);
+    const commands = Array.isArray(capabilities?.commands)
+      ? capabilities.commands
+      : [];
+    if (!commands.includes("provider.list_catalog")) {
       return undefined;
     }
 
+    const transportThread = this._resolveEnvironmentCommandTransportThread(environmentId);
+    if (!transportThread) {
+      throw invalidRequestError(
+        `No active thread is attached to environment ${environmentId}`,
+      );
+    }
+
     const client = new EnvironmentDaemonSessionCommandClient({
-      threadId: catalogRepThreadId,
+      threadId: transportThread.id,
       commandDispatcher: this.environmentDaemonCommandDispatcher,
       ...(this.environmentDaemonCommandPollIntervalMs !== undefined
         ? { pollIntervalMs: this.environmentDaemonCommandPollIntervalMs }
         : {}),
       ensureSessionAccess: async () => {
-        await this._recoverEnvironmentDaemonAccess(catalogRepThreadId);
+        await this._recoverEnvironmentDaemonAccess(transportThread.id);
       },
     });
     try {

@@ -600,11 +600,11 @@ export async function getAvailableModels(providerId?: string): Promise<Available
 }
 
 export async function getSystemProvider(): Promise<SystemProviderInfo> {
-  return request<SystemProviderInfo>(apiClient.system.provider.$get());
+  return request<SystemProviderInfo>(apiClient.system.provider.$get({ query: {} }));
 }
 
 export async function listSystemProviders(): Promise<SystemProviderInfo[]> {
-  return request<SystemProviderInfo[]>(apiClient.system.providers.$get());
+  return request<SystemProviderInfo[]>(apiClient.system.providers.$get({ query: {} }));
 }
 
 export async function listSystemEnvironments(): Promise<SystemEnvironmentInfo[]> {
