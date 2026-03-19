@@ -457,12 +457,15 @@ export class EnvironmentDaemonRuntime {
     );
     const child = this.ensureProviderRunning(effectiveSpec);
     if (child && forThreadId) {
-      this.threadIdToChild.set(forThreadId, child);
-      const resolvedProviderId = providerId?.trim() || this.opts.providerId?.trim();
-      if (resolvedProviderId) {
-        this.threadIdToProviderId.set(forThreadId, resolvedProviderId);
-        this.childToProviderId.set(child, resolvedProviderId);
+      const resolvedProviderId = providerId?.trim();
+      if (!resolvedProviderId) {
+        throw new Error(
+          `Provider id is required when binding provider runtime to thread ${forThreadId}`,
+        );
       }
+      this.threadIdToChild.set(forThreadId, child);
+      this.threadIdToProviderId.set(forThreadId, resolvedProviderId);
+      this.childToProviderId.set(child, resolvedProviderId);
     }
     const status = this.getProviderStatus();
     if (!launchedBefore && child) {
@@ -737,7 +740,7 @@ export class EnvironmentDaemonRuntime {
     sourceChild?: ChildProcess,
   ): string | undefined {
     const providerThreadId = this.extractProviderThreadId(params, providerId);
-    if (!providerThreadId) {
+    if (!providerThreadId || !providerId) {
       return this.resolveThreadIdForChild(sourceChild);
     }
     return (
@@ -873,6 +876,11 @@ export class EnvironmentDaemonRuntime {
     if (!providerThreadId) {
       return;
     }
+    if (!providerId) {
+      throw new Error(
+        `Provider id is required to map provider thread ${providerThreadId} for ${threadId}`,
+      );
+    }
     this.threadIdByProviderThreadKey.set(
       this.createProviderThreadKey(providerId, providerThreadId),
       threadId,
@@ -928,9 +936,7 @@ export class EnvironmentDaemonRuntime {
       command.command === undefined ||
       command.args === undefined
     ) {
-      const provider = this.getProviderAdapterForId(
-        command.providerId ?? this.opts.providerId ?? process.env.BB_THREAD_PROVIDER_ID,
-      );
+      const provider = this.getProviderAdapterForId(command.providerId);
       if (!provider || !command.context) {
         throw new Error("provider.ensure spec is unavailable");
       }
@@ -976,10 +982,17 @@ export class EnvironmentDaemonRuntime {
         if (!child) {
           throw new Error("Provider runtime is unavailable");
         }
-        const initialize = command.initialize ?? this.buildInitializeRequest();
-        if (!initialize) {
-          return child;
+        const providerId =
+          this.resolveProviderIdForChild(child) ??
+          this.resolveProviderIdForCommand(command);
+        if (!providerId) {
+          throw new Error(
+            `Provider id is required to initialize routed child for ${command.type}`,
+          );
         }
+        const initialize =
+          command.initialize ??
+          this.buildInitializeRequest(providerId);
         if (child.pid !== undefined && this.providerInitializedPids.has(child.pid)) {
           return child;
         }
@@ -1050,9 +1063,10 @@ export class EnvironmentDaemonRuntime {
   private async listProviderModels(
     providerId?: string,
   ): Promise<import("@bb/core").AvailableModel[]> {
-    const provider = this.getProviderAdapterForId(
-      providerId ?? this.opts.providerId ?? process.env.BB_THREAD_PROVIDER_ID,
-    );
+    if (!providerId) {
+      throw new Error("Provider id is required to list provider models");
+    }
+    const provider = this.getProviderAdapterForId(providerId);
     if (!provider) {
       throw new Error("Provider runtime is unavailable");
     }
@@ -1478,12 +1492,10 @@ export class EnvironmentDaemonRuntime {
     return createProviderAdapter({ providerId });
   }
 
-  private buildInitializeRequest() {
-    const provider = this.getProviderAdapterForId(
-      this.opts.providerId ?? process.env.BB_THREAD_PROVIDER_ID,
-    );
+  private buildInitializeRequest(providerId: string) {
+    const provider = this.getProviderAdapterForId(providerId);
     if (!provider) {
-      return undefined;
+      throw new Error(`Provider adapter not found for initialize: ${providerId}`);
     }
     return {
       method: provider.initializeMethod,
@@ -1495,11 +1507,7 @@ export class EnvironmentDaemonRuntime {
   }
 
   private resolveProviderIdForThread(threadId: string): string | undefined {
-    return (
-      this.threadIdToProviderId.get(threadId) ??
-      this.opts.providerId ??
-      process.env.BB_THREAD_PROVIDER_ID
-    );
+    return this.threadIdToProviderId.get(threadId);
   }
 
   private resolveProviderIdForCommand(
@@ -1507,9 +1515,9 @@ export class EnvironmentDaemonRuntime {
   ): string | undefined {
     switch (command.type) {
       case "provider.ensure":
-        return command.providerId ?? this.opts.providerId ?? process.env.BB_THREAD_PROVIDER_ID;
+        return command.providerId;
       case "provider.list_models":
-        return command.providerId ?? this.opts.providerId ?? process.env.BB_THREAD_PROVIDER_ID;
+        return command.providerId;
       case "thread.start":
       case "thread.resume":
       case "thread.stop":
@@ -1519,18 +1527,14 @@ export class EnvironmentDaemonRuntime {
       case "workspace.diff":
         return this.resolveProviderIdForThread(command.threadId);
       case "provider.list_catalog":
-        return this.opts.providerId ?? process.env.BB_THREAD_PROVIDER_ID;
+        return undefined;
       default:
         return command satisfies never;
     }
   }
 
   private resolveProviderIdForChild(child: ChildProcess | undefined): string | undefined {
-    return (
-      (child ? this.childToProviderId.get(child) : undefined) ??
-      this.opts.providerId ??
-      process.env.BB_THREAD_PROVIDER_ID
-    );
+    return child ? this.childToProviderId.get(child) : undefined;
   }
 
   private resolveThreadIdForChild(child: ChildProcess | undefined): string | undefined {
@@ -1562,11 +1566,8 @@ export class EnvironmentDaemonRuntime {
     return threadIds;
   }
 
-  private createProviderThreadKey(
-    providerId: string | undefined,
-    providerThreadId: string,
-  ): string {
-    return `${providerId ?? "__unknown__"}:${providerThreadId}`;
+  private createProviderThreadKey(providerId: string, providerThreadId: string): string {
+    return `${providerId}:${providerThreadId}`;
   }
 }
 

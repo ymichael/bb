@@ -318,6 +318,7 @@ describe("EnvironmentDaemonRuntime", () => {
         ].join(""),
       ],
     });
+    runtime.ensureProviderStatus(undefined, "thread-1", "codex");
 
     const ack = await runtime.executeCommand({
       meta: {
@@ -381,6 +382,42 @@ describe("EnvironmentDaemonRuntime", () => {
     });
   });
 
+  it("rejects thread-scoped provider.ensure without an explicit provider id", async () => {
+    const runtime = new EnvironmentDaemonRuntime({
+      threadId: "thread-1",
+    });
+
+    const ack = await runtime.executeCommand({
+      meta: {
+        protocolVersion: ENVIRONMENT_DAEMON_PROTOCOL_VERSION,
+        commandId: "cmd-provider-missing-id",
+        idempotencyKey: "cmd-provider-missing-id",
+        sentAt: 123,
+      },
+      command: {
+        type: "provider.ensure",
+        forThreadId: "thread-1",
+        command: "node",
+        args: [
+          "-e",
+          [
+            "process.stdin.resume();",
+            "setTimeout(() => process.exit(0), 250);",
+          ].join(""),
+        ],
+      },
+    });
+
+    expect(ack).toMatchObject({
+      commandId: "cmd-provider-missing-id",
+      state: "rejected",
+      errorCode: "provider_rpc_error",
+    });
+    expect(ack.message).toContain(
+      "Provider id is required when binding provider runtime to thread thread-1",
+    );
+  });
+
   it("routes provider notifications to the mapped shared thread channel", async () => {
     const runtime = new EnvironmentDaemonRuntime({
       threadId: "owner-thread",
@@ -426,6 +463,8 @@ describe("EnvironmentDaemonRuntime", () => {
       }
     });
     cleanup.push(unsubscribe);
+    runtime.ensureProviderStatus(undefined, "thread-1", "codex");
+    runtime.ensureProviderStatus(undefined, "thread-2", "codex");
 
     await runtime.executeCommand({
       meta: {
@@ -683,7 +722,7 @@ describe("EnvironmentDaemonRuntime", () => {
         "-e",
         "console.error('refresh token has already been used'); setTimeout(() => process.exit(0), 20);",
       ],
-    }, "thread-1");
+    }, "thread-1", "codex");
 
     await expect.poll(() => events).toContain("refresh token has already been used");
   });
@@ -728,7 +767,7 @@ describe("EnvironmentDaemonRuntime", () => {
         "-e",
         "console.log(JSON.stringify({ id: 999, error: { message: 'provider exploded' } })); setTimeout(() => process.exit(0), 20);",
       ],
-    }, "thread-1");
+    }, "thread-1", "codex");
 
     await expect.poll(() => errors).toContainEqual({
       requestId: 999,
@@ -807,7 +846,7 @@ describe("EnvironmentDaemonRuntime", () => {
     };
 
     // 1. Spawn child A via provider.ensure with forThreadId
-    runtime.ensureProviderStatus(specA, "thread-a");
+    runtime.ensureProviderStatus(specA, "thread-a", "codex");
 
     // 2. Send a command through child A to establish it works
     const ackA1 = await runtime.executeCommand({
@@ -833,7 +872,7 @@ describe("EnvironmentDaemonRuntime", () => {
     expect((ackA1.result as Record<string, unknown>).role).toBe("provider-A");
 
     // 3. Spawn child B with forThreadId — this clobbers this.providerChild
-    runtime.ensureProviderStatus(specB, "thread-b");
+    runtime.ensureProviderStatus(specB, "thread-b", "codex");
 
     // 4. Send a command through child B to confirm it uses provider-B
     const ackB = await runtime.executeCommand({
@@ -881,6 +920,86 @@ describe("EnvironmentDaemonRuntime", () => {
     expect((ackA2.result as Record<string, unknown>).role).toBe("provider-A");
   });
 
+  it("initializes a routed child with that child's provider adapter in mixed-provider runs", async () => {
+    const echoProviderScript = [
+      "process.stdin.setEncoding('utf8');",
+      "let buffer='';",
+      "let initializedProvider='uninitialized';",
+      "process.stdin.on('data',chunk=>{",
+      "buffer+=chunk;",
+      "const parts=buffer.split(/\\r\\n|\\n|\\r/g);",
+      "buffer=parts.pop() ?? '';",
+      "for (const line of parts) {",
+      "if (!line.trim()) continue;",
+      "const msg = JSON.parse(line);",
+      "if (msg.method === 'initialize') {",
+      "initializedProvider = msg.params?.providerMarker ?? 'missing';",
+      "console.log(JSON.stringify({ id: msg.id, result: { capabilities: {}, initializedProvider } }));",
+      "} else if (msg.method === 'thread/start') {",
+      "console.log(JSON.stringify({ id: msg.id, result: { threadId: `${initializedProvider}-thread`, initializedProvider } }));",
+      "}",
+      "}",
+      "});",
+    ].join("");
+
+    const baseAdapter = createCodexProviderAdapter();
+    const runtime = new EnvironmentDaemonRuntime({
+      threadId: "thread-1",
+      providerId: "pi",
+      createProviderAdapter: (providerId) => ({
+        ...baseAdapter,
+        id: providerId,
+        displayName: providerId,
+        createInitializeParams: () => ({
+          clientInfo: { name: "bb", version: "0.0.1" },
+          providerMarker: providerId,
+        }),
+      }),
+    });
+    cleanup.push(() => runtime.shutdown());
+
+    const ensureAck = await runtime.executeCommand({
+      meta: {
+        protocolVersion: ENVIRONMENT_DAEMON_PROTOCOL_VERSION,
+        commandId: "cmd-provider-ensure-codex",
+        idempotencyKey: "cmd-provider-ensure-codex",
+        sentAt: 100,
+      },
+      command: {
+        type: "provider.ensure",
+        providerId: "codex",
+        forThreadId: "thread-codex",
+        context: createThreadContext("proj-1", "thread-codex"),
+        providerLaunch: {
+          command: "node",
+          args: ["-e", echoProviderScript],
+        },
+      },
+    });
+    expect(ensureAck.state).toBe("accepted");
+
+    const startAck = await runtime.executeCommand({
+      meta: {
+        protocolVersion: ENVIRONMENT_DAEMON_PROTOCOL_VERSION,
+        commandId: "cmd-start-codex",
+        idempotencyKey: "cmd-start-codex",
+        sentAt: 200,
+      },
+      command: {
+        type: "thread.start",
+        threadId: "thread-codex",
+        projectId: "proj-1",
+        request: createStartRequest("proj-1"),
+        context: createThreadContext("proj-1", "thread-codex"),
+      },
+    });
+
+    expect(startAck.state).toBe("accepted");
+    expect((startAck.result as Record<string, unknown>).initializedProvider).toBe(
+      "codex",
+    );
+  });
+
   it("rejects unmapped thread commands once explicit thread routing is in use", async () => {
     const echoProviderScript = [
       "process.stdin.setEncoding('utf8');",
@@ -907,12 +1026,12 @@ describe("EnvironmentDaemonRuntime", () => {
       command: "node",
       args: ["-e", echoProviderScript],
       env: { ROLE: "provider-A" },
-    }, "thread-a");
+    }, "thread-a", "codex");
     runtime.ensureProviderStatus({
       command: "node",
       args: ["-e", echoProviderScript],
       env: { ROLE: "provider-B" },
-    }, "thread-b");
+    }, "thread-b", "codex");
 
     const ack = await runtime.executeCommand({
       meta: {
@@ -980,7 +1099,7 @@ describe("EnvironmentDaemonRuntime", () => {
     };
 
     // Initialize child A via thread.start (which sends initialize first)
-    runtime.ensureProviderStatus(specA, "thread-a");
+    runtime.ensureProviderStatus(specA, "thread-a", "codex");
     const ackA1 = await runtime.executeCommand({
       meta: {
         protocolVersion: ENVIRONMENT_DAEMON_PROTOCOL_VERSION,
@@ -1003,7 +1122,7 @@ describe("EnvironmentDaemonRuntime", () => {
     expect(ackA1.state).toBe("accepted");
 
     // Initialize child B
-    runtime.ensureProviderStatus(specB, "thread-b");
+    runtime.ensureProviderStatus(specB, "thread-b", "codex");
     const ackB = await runtime.executeCommand({
       meta: {
         protocolVersion: ENVIRONMENT_DAEMON_PROTOCOL_VERSION,
@@ -1226,7 +1345,7 @@ describe("EnvironmentDaemonRuntime", () => {
         ].join(""),
       ],
       env: { ROLE: "long-lived" },
-    });
+    }, "thread-1", "codex");
 
     // Start a command through child A — initialize completes immediately
     // but the thread/start response is delayed 500ms, keeping it in-flight.
@@ -1260,7 +1379,7 @@ describe("EnvironmentDaemonRuntime", () => {
       command: "node",
       args: ["-e", "process.exit(0);"],
       env: { ROLE: "short-lived" },
-    });
+    }, "thread-2", "codex");
 
     // Wait for child B to exit (it'll emit a degraded event).
     await expect.poll(() => {
@@ -1429,8 +1548,7 @@ describe("EnvironmentDaemonRuntime", () => {
       stdout.push(line);
     });
     cleanup.push(unsubscribe);
-
-    runtime.start();
+    runtime.ensureProviderStatus(undefined, "thread-1", "codex");
 
     await expect
       .poll(() =>
@@ -1449,7 +1567,7 @@ describe("EnvironmentDaemonRuntime", () => {
           arguments: { text: "hi" },
         },
         providerId: "codex",
-        resolvedThreadId: undefined,
+        resolvedThreadId: "thread-1",
         normalizedMethod: "item/tool/call",
         toolCall: {
           requestId: 62,

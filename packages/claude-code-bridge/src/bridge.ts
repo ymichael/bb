@@ -55,6 +55,13 @@ interface ThreadSession {
 
 const sessions = new Map<string, ThreadSession>();
 let toolCallRequestIdCounter = 0;
+const MANAGER_BUILTIN_TOOLS = [
+  "Bash",
+  "Read",
+  "Grep",
+  "Glob",
+  "LS",
+] as const;
 
 function send(msg: JsonRpcResponse | JsonRpcNotification): void {
   process.stdout.write(JSON.stringify(msg) + "\n");
@@ -181,7 +188,7 @@ function buildSessionEnv(envOverrides: Record<string, string>): NodeJS.ProcessEn
   };
 }
 
-function buildSessionOptions(
+export function buildSessionOptions(
   params: Record<string, unknown>,
   env: NodeJS.ProcessEnv,
 ): SdkSessionOptions {
@@ -193,8 +200,15 @@ function buildSessionOptions(
     typeof params.model === "string" ? params.model : undefined;
   const cwd =
     typeof params.cwd === "string" ? params.cwd : process.cwd();
+  const managerMode = params.managerMode === true;
 
-  return { cwd, systemPrompt, model, env };
+  return {
+    cwd,
+    systemPrompt,
+    model,
+    env,
+    ...(managerMode ? { tools: [...MANAGER_BUILTIN_TOOLS] } : {}),
+  };
 }
 
 function applyDynamicTools(

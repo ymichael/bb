@@ -507,6 +507,7 @@ export function createClaudeCodeProviderAdapter(
       return {
         ...params,
         threadId: context.threadId,
+        ...(req.type === "manager" ? { managerMode: true } : {}),
         ...(tools ? { dynamicTools: tools } : {}),
       };
     },

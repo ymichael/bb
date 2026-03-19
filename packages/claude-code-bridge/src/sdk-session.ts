@@ -15,6 +15,7 @@ export interface SdkSessionOptions {
   permissionMode?: string;
   mcpServers?: Record<string, McpSdkServerConfigWithInstance>;
   allowedTools?: string[];
+  tools?: string[];
   env?: NodeJS.ProcessEnv;
 }
 
@@ -75,6 +76,7 @@ export class SdkSession {
       ...(this.options.allowedTools
         ? { allowedTools: this.options.allowedTools }
         : {}),
+      ...(this.options.tools ? { tools: this.options.tools } : {}),
       ...(resumeSessionId ? { resume: resumeSessionId } : {}),
       ...(this.options.model ? { model: this.options.model } : {}),
     };

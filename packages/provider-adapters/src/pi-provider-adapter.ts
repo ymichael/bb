@@ -1,3 +1,5 @@
+import { readFile } from "node:fs/promises";
+import { homedir } from "node:os";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { supportsXhigh, type Model } from "@mariozechner/pi-ai";
@@ -62,6 +64,61 @@ type PiCatalogModel = Pick<
   Model<any>,
   "id" | "name" | "provider" | "reasoning" | "input"
 >;
+
+async function readPiAgentFile(path: string): Promise<string | null> {
+  try {
+    return await readFile(resolve(homedir(), ".pi", "agent", path), "utf8");
+  } catch {
+    return null;
+  }
+}
+
+async function resolvePiProviderLaunchConfiguration(
+  launchEnv?: Record<string, string>,
+): Promise<ProviderLaunchConfiguration | undefined> {
+  const env: Record<string, string> = {};
+  if (launchEnv) {
+    Object.assign(env, launchEnv);
+  }
+
+  const [authJson, settingsJson, modelsJson] = await Promise.all([
+    readPiAgentFile("auth.json"),
+    readPiAgentFile("settings.json"),
+    readPiAgentFile("models.json"),
+  ]);
+
+  const files: NonNullable<ProviderLaunchConfiguration["files"]> = [];
+  if (authJson) {
+    files.push({
+      placement: "home",
+      path: ".pi/agent/auth.json",
+      content: authJson,
+    });
+  }
+  if (settingsJson) {
+    files.push({
+      placement: "home",
+      path: ".pi/agent/settings.json",
+      content: settingsJson,
+    });
+  }
+  if (modelsJson) {
+    files.push({
+      placement: "home",
+      path: ".pi/agent/models.json",
+      content: modelsJson,
+    });
+  }
+
+  if (Object.keys(env).length === 0 && files.length === 0) {
+    return undefined;
+  }
+
+  return {
+    ...(Object.keys(env).length > 0 ? { env } : {}),
+    ...(files.length > 0 ? { files } : {}),
+  };
+}
 
 export function buildPiAvailableModels(args: {
   providers: string[];
@@ -279,14 +336,7 @@ export function createPiProviderAdapter(
     async resolveLaunchConfiguration(): Promise<
       ProviderLaunchConfiguration | undefined
     > {
-      const env: Record<string, string> = {};
-
-      if (opts?.launchEnv) {
-        Object.assign(env, opts.launchEnv);
-      }
-
-      if (Object.keys(env).length === 0) return undefined;
-      return { env };
+      return resolvePiProviderLaunchConfiguration(opts?.launchEnv);
     },
     async preflightSessionStart(): Promise<string | undefined> {
       const hasModels = await hasPiModelsAvailable(listModels);

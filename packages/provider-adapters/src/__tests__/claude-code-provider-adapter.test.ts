@@ -120,6 +120,19 @@ describe("claude-code provider adapter", () => {
     ).toMatchObject({
       threadId: "bb-thread-1",
     });
+    expect(
+      adapter.createThreadStartParams(
+        {
+          projectId: "proj-1",
+          type: "manager",
+          input: [{ type: "text", text: "hello" }],
+        },
+        context,
+      ),
+    ).toMatchObject({
+      threadId: "bb-thread-1",
+      managerMode: true,
+    });
 
     expect(
       adapter.createThreadResumeParams(undefined, context),

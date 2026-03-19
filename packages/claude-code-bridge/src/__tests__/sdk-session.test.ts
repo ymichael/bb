@@ -5,9 +5,12 @@ const mockQueryInstance = {
   interrupt: vi.fn(),
   [Symbol.asyncIterator]: vi.fn(),
 };
+const { queryMock } = vi.hoisted(() => ({
+  queryMock: vi.fn(),
+}));
 
 vi.mock("@anthropic-ai/claude-agent-sdk", () => ({
-  query: vi.fn(() => mockQueryInstance),
+  query: queryMock,
 }));
 
 import { SdkSession, type SdkSessionOptions } from "../sdk-session.js";
@@ -20,6 +23,7 @@ const defaultOptions: SdkSessionOptions = {
 describe("SdkSession", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    queryMock.mockImplementation(() => mockQueryInstance);
     // Make the query async iterable return immediately
     mockQueryInstance[Symbol.asyncIterator].mockReturnValue({
       next: vi.fn().mockResolvedValue({ value: undefined, done: true }),
@@ -51,5 +55,28 @@ describe("SdkSession", () => {
     session.stop();
     expect(mockQueryInstance.close).toHaveBeenCalled();
     expect(session.getIsProcessing()).toBe(false);
+  });
+
+  it("forwards restricted built-in tools to the SDK when configured", () => {
+    const onMessage = vi.fn();
+    const onDone = vi.fn();
+    const session = new SdkSession(
+      {
+        ...defaultOptions,
+        tools: ["Bash", "Read"],
+      },
+      onMessage,
+      onDone,
+    );
+
+    session.start();
+
+    expect(queryMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        options: expect.objectContaining({
+          tools: ["Bash", "Read"],
+        }),
+      }),
+    );
   });
 });
