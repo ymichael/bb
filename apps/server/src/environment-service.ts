@@ -184,8 +184,10 @@ export class EnvironmentService {
   }
 
   getAttachedEnvironmentId(threadId: string): string | undefined {
-    return this.resolveAttachedEnvironment(threadId)?.environmentId ??
-      this.threadRepo.getById(threadId)?.environmentId;
+    if (this.threadEnvironmentAttachmentRepo) {
+      return this.resolveAttachedEnvironment(threadId)?.environmentId;
+    }
+    return this.threadRepo.getById(threadId)?.environmentId;
   }
 
   getAttachedThreadIdsForEnvironment(environmentId: string): string[] {
@@ -1096,10 +1098,7 @@ export class EnvironmentService {
     }
     this.setPrimaryPromotionState(project.id, {
       projectId: project.id,
-      environmentId:
-        this.getAttachedEnvironmentId(thread.id) ??
-        thread.environmentId ??
-        thread.id,
+      environmentId: this.getAttachedEnvironmentId(thread.id) ?? thread.id,
       threadId: thread.id,
       promotedAt: Date.now(),
       promotedCheckout: workspaceCheckout,
@@ -1167,10 +1166,7 @@ export class EnvironmentService {
     });
     const state: PrimaryPromotionState = {
       projectId: project.id,
-      environmentId:
-        this.getAttachedEnvironmentId(args.thread.id) ??
-        args.thread.environmentId ??
-        args.thread.id,
+      environmentId: this.getAttachedEnvironmentId(args.thread.id) ?? args.thread.id,
       threadId: args.thread.id,
       promotedAt: Date.now(),
       previousCheckout: promoted.previousCheckout,

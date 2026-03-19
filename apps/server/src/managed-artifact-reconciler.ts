@@ -159,16 +159,6 @@ function environmentPathFromDescriptor(descriptor?: EnvironmentDescriptor): stri
   return descriptor ? resolve(descriptor.path) : undefined;
 }
 
-function isLegacyManagedEnvironmentReference(environmentId: string | undefined): boolean {
-  switch (environmentId?.trim()) {
-    case "worktree":
-    case "docker":
-      return true;
-    default:
-      return false;
-  }
-}
-
 export function resolveArchivedEnvironmentDaemonLogRetentionMs(
   env: NodeJS.ProcessEnv,
 ): number {
@@ -199,7 +189,6 @@ export function reconcileManagedArtifactStorage(
   const projectById = new Map(args.projects.map((project) => [project.id, project]));
 
   const keptLogPaths = new Set<string>();
-  const activeThreadIdsByProjectId = new Map<string, Set<string>>();
   const worktreeRootsByProjectId = new Map<string, string>();
   const globalWorktreeRoots = new Set<string>();
 
@@ -214,9 +203,20 @@ export function reconcileManagedArtifactStorage(
   const hasFirstClassManagedEnvironments =
     Array.isArray(args.environments) &&
     Array.isArray(args.environmentAttachments);
+  const attachedEnvironmentIdByThreadId = hasFirstClassManagedEnvironments
+    ? new Map(
+        args.environmentAttachments!.map((attachment) => [
+          attachment.threadId,
+          attachment.environmentId,
+        ] as const),
+      )
+    : undefined;
 
   for (const thread of args.threads) {
-    const environmentId = thread.environmentId?.trim();
+    const environmentId = (
+      attachedEnvironmentIdByThreadId?.get(thread.id) ??
+      thread.environmentId
+    )?.trim();
     if (environmentId) {
       const shouldKeepLogs =
         thread.archivedAt === undefined ||
@@ -227,21 +227,6 @@ export function reconcileManagedArtifactStorage(
           environmentId,
           runtimeEnv: args.runtimeEnv,
         }));
-      }
-    }
-
-    if (
-      !hasFirstClassManagedEnvironments &&
-      thread.archivedAt === undefined &&
-      // Legacy fallback for pre-attachment threads that persisted a runtime kind
-      // string in thread.environmentId instead of a first-class environment id.
-      isLegacyManagedEnvironmentReference(environmentId)
-    ) {
-      const activeThreadIds = activeThreadIdsByProjectId.get(thread.projectId);
-      if (activeThreadIds) {
-        activeThreadIds.add(thread.id);
-      } else {
-        activeThreadIdsByProjectId.set(thread.projectId, new Set([thread.id]));
       }
     }
   }
@@ -288,15 +273,12 @@ export function reconcileManagedArtifactStorage(
   for (const project of args.projects) {
     const worktreeRoot = worktreeRootsByProjectId.get(project.id);
     if (!worktreeRoot || !existsSync(worktreeRoot)) continue;
-    const keepThreadIds = activeThreadIdsByProjectId.get(project.id) ?? new Set<string>();
     const keepWorkspacePaths = activeManagedWorkspacePathsByProjectId.get(project.id) ?? new Set<string>();
     const entries = readdirSync(worktreeRoot, { withFileTypes: true });
     for (const entry of entries) {
       if (!entry.isDirectory()) continue;
       const workspacePath = resolve(join(worktreeRoot, entry.name));
-      const shouldKeep = hasFirstClassManagedEnvironments
-        ? keepWorkspacePaths.has(workspacePath)
-        : keepThreadIds.has(entry.name);
+      const shouldKeep = keepWorkspacePaths.has(workspacePath);
       if (shouldKeep) continue;
       removeManagedWorktreePath(project.rootPath, workspacePath);
       removedWorkspaceDirectories += 1;
