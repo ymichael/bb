@@ -1163,18 +1163,19 @@ export function ThreadDetailView() {
     }
   };
   const handleTogglePrimaryCheckout = () => {
-    if (!thread.environmentId) {
+    const attachedEnvironmentId = thread.attachedEnvironment?.id ?? thread.environmentId;
+    if (!attachedEnvironmentId) {
       window.alert("Thread has no attached environment");
       return;
     }
     const action = isPrimaryCheckoutActive
       ? requestEnvironmentOperation.mutateAsync({
-          id: thread.environmentId,
+          id: attachedEnvironmentId,
           operation: "demote_primary",
           initiatingThreadId: thread.id,
         })
       : requestEnvironmentOperation.mutateAsync({
-          id: thread.environmentId,
+          id: attachedEnvironmentId,
           operation: "promote_primary",
           initiatingThreadId: thread.id,
         });
@@ -1191,13 +1192,14 @@ export function ThreadDetailView() {
   }: {
     includeUnstaged: boolean;
   }) => {
-    if (!threadId || !thread?.environmentId) {
+    const attachedEnvironmentId = thread?.attachedEnvironment?.id ?? thread?.environmentId;
+    if (!threadId || !attachedEnvironmentId) {
       return;
     }
     const autoArchiveOnSuccess = getAutoArchivePreferences().autoArchiveThreadOnCommit;
     try {
       await requestEnvironmentOperation.mutateAsync({
-        id: thread.environmentId,
+        id: attachedEnvironmentId,
         operation: "commit",
         initiatingThreadId: threadId,
         options: {
@@ -1218,13 +1220,14 @@ export function ThreadDetailView() {
     includeUnstaged: boolean;
     mergeBaseBranch?: string;
   }) => {
-    if (!threadId || !thread?.environmentId) {
+    const attachedEnvironmentId = thread?.attachedEnvironment?.id ?? thread?.environmentId;
+    if (!threadId || !attachedEnvironmentId) {
       return;
     }
     const autoArchiveOnSuccess = getAutoArchivePreferences().autoArchiveThreadOnCommit;
     try {
       await requestEnvironmentOperation.mutateAsync({
-        id: thread.environmentId,
+        id: attachedEnvironmentId,
         operation: "squash_merge",
         initiatingThreadId: threadId,
         options: {

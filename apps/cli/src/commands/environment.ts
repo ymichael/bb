@@ -164,11 +164,12 @@ export function registerEnvironmentCommands(
             return unwrap<Thread>(
               client.api.v1.threads[":id"].$get({ param: { id: threadIdFromContext } }),
             ).then((thread) => {
-              if (!thread.environmentId) {
+              const attachedEnvironmentId = thread.attachedEnvironment?.id ?? thread.environmentId;
+              if (!attachedEnvironmentId) {
                 throw new Error(`Thread ${thread.id} has no attached environment.`);
               }
               return {
-                environmentId: thread.environmentId,
+                environmentId: attachedEnvironmentId,
                 threadId: thread.id,
               };
             });
@@ -180,11 +181,12 @@ export function registerEnvironmentCommands(
             }),
           ).then((threads) => {
             const active = threads.find((thread) => thread.primaryCheckout?.isActive);
-            if (!active?.environmentId) {
+            const activeEnvironmentId = active?.attachedEnvironment?.id ?? active?.environmentId;
+            if (!active || !activeEnvironmentId) {
               throw new Error("Primary checkout is already demoted.");
             }
             return {
-              environmentId: active.environmentId,
+              environmentId: activeEnvironmentId,
               threadId: active.id,
             };
           });
