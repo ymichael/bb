@@ -487,7 +487,10 @@ describe("ThreadDetailView", () => {
 
     const html = renderThreadDetailView();
 
-    expect(html).toContain("Ask for follow-up changes|1|Primary");
+    expect(html).toContain("Ask for follow-up changes|1|<span");
+    expect(html).toContain("<span>Direct</span>");
+    expect(html).toContain('aria-label="Open environment folder"');
+    expect(html).toContain('title="/tmp/project-one"');
   });
 
   it("shows Worktree with a useful suffix for localhost worktrees", () => {
@@ -513,7 +516,7 @@ describe("ThreadDetailView", () => {
     expect(html).toContain("Ask for follow-up changes|1|<span");
     expect(html).toContain("<span>Worktree</span>");
     expect(html).toContain('type="button"');
-    expect(html).toContain('aria-label="Open worktree folder"');
+    expect(html).toContain('aria-label="Open environment folder"');
     expect(html).toContain('title="/tmp/project-one/worktrees/feature-branch"');
     expect(html).not.toContain("Worktree (");
   });
@@ -615,7 +618,7 @@ describe("ThreadDetailView", () => {
     expect(html).toContain("Environment");
     expect(html).toContain("Worktree");
     expect(html).toContain('type="button"');
-    expect(html).toContain('aria-label="Open worktree folder"');
+    expect(html).toContain('aria-label="Open environment folder"');
     expect(html).toContain('title="/tmp/project-one/worktrees/feature-branch"');
     expect(html).not.toContain("Worktree (");
   });

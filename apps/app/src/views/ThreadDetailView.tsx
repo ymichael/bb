@@ -129,7 +129,7 @@ function formatThreadEnvironmentLabel(args: {
       attachedEnvironment.descriptor !== undefined &&
       attachedEnvironment.descriptor.path === args.projectRootPath;
     if (isPrimaryWorkspace) {
-      return "Primary";
+      return "Direct";
     }
     if (properties?.location === "docker") {
       return "Docker";
@@ -152,7 +152,7 @@ function formatThreadEnvironmentLabel(args: {
 interface ThreadEnvironmentDisplay {
   label: string;
   suffix?: string;
-  worktreeOpenPath?: {
+  openPath?: {
     relativePath: string;
     title: string;
   };
@@ -165,11 +165,11 @@ function ThreadEnvironmentValue({
   threadId?: string;
   display?: ThreadEnvironmentDisplay;
 }) {
-  const worktreeOpenPath = display?.worktreeOpenPath;
+  const openPath = display?.openPath;
   if (!display) {
     return null;
   }
-  if (!(display.suffix && worktreeOpenPath)) {
+  if (!openPath) {
     return display.label;
   }
   return (
@@ -178,12 +178,12 @@ function ThreadEnvironmentValue({
       <button
         type="button"
         className="inline-flex size-4 shrink-0 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:text-foreground"
-        title={worktreeOpenPath.title}
-        aria-label="Open worktree folder"
+        title={openPath.title}
+        aria-label="Open environment folder"
         onClick={() => {
           if (!threadId) return;
           void openThreadPathInEditor(threadId, {
-            relativePath: worktreeOpenPath.relativePath,
+            relativePath: openPath.relativePath,
             target: "directory",
             command: getPathCommandForTarget("directory"),
           });
@@ -205,12 +205,28 @@ function getThreadEnvironmentDisplay(args: {
     return label ? { label } : undefined;
   }
 
+  const descriptorPath = attachedEnvironment.descriptor?.path;
+  const isPrimary =
+    args.projectRootPath !== undefined &&
+    descriptorPath !== undefined &&
+    descriptorPath === args.projectRootPath;
+
+  if (isPrimary) {
+    return {
+      label,
+      openPath: {
+        relativePath: ".",
+        title: descriptorPath,
+      },
+    };
+  }
+
   if (attachedEnvironment.properties?.workspaceKind !== "worktree") {
     return { label };
   }
 
   const suffix = formatAttachedEnvironmentSuffix(
-    attachedEnvironment.descriptor?.path ?? "",
+    descriptorPath ?? "",
     args.projectRootPath,
   );
   if (!suffix) {
@@ -220,9 +236,9 @@ function getThreadEnvironmentDisplay(args: {
   return {
     label: "Worktree",
     suffix,
-    worktreeOpenPath: {
+    openPath: {
       relativePath: ".",
-      title: attachedEnvironment.descriptor?.path ?? suffix,
+      title: descriptorPath ?? suffix,
     },
   };
 }

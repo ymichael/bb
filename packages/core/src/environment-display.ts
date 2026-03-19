@@ -34,7 +34,7 @@ export function formatEnvironmentDisplay(
 
   if (isPrimary) {
     return {
-      label: "Primary",
+      label: "Direct",
       kind: "primary",
       id: environment.id,
       path: descriptorPath,
