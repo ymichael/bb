@@ -46,6 +46,7 @@ pnpm qa:server:regression
 ```
 
 Use the command that best matches the intended depth until the automation names are updated.
+For deterministic restart and worker-loss behavior, prefer `pnpm qa:server:recovery:fake` or the env-daemon recovery pass instead of assuming `qa:server:stress` is the default recovery path.
 
 ## Related docs
 

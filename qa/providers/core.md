@@ -50,8 +50,11 @@ pnpm qa:providers:smoke:pi
 If the provider change also touches daemon/tool-call runtime behavior, add:
 
 ```bash
+pnpm qa:env-daemon:core
 pnpm qa:env-daemon:recovery
 ```
+
+Use the recovery pass when you specifically need deterministic worker-loss or reconnect coverage.
 
 ## Related docs
 

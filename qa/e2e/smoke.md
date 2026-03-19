@@ -15,7 +15,7 @@ Use this pass for a thin cross-system sanity check after cross-cutting or user-v
 - send a follow-up after idle and confirm it settles cleanly
 - run one worktree or shared-environment path
 - run one richer provider-backed path such as dynamic tools
-- if the change is restart-sensitive, include one restart sanity check rather than the full recovery matrix
+- if the change is restart-sensitive, add `qa/env-daemon/recovery.md` or `qa/server/recovery.md` rather than trying to overload smoke
 
 ## Current automation
 
@@ -28,14 +28,13 @@ pnpm qa:providers:smoke:claude-code
 pnpm qa:providers:smoke:pi
 ```
 
-`qa:e2e:smoke` is now the top-level alias for the existing e2e smoke path. Provider-specific smoke aliases are available for Claude Code and Pi.
+`qa:e2e:smoke` is the top-level alias for the real-provider-compatible e2e smoke path. Provider-specific smoke aliases are available for Claude Code and Pi.
 
 Relevant automated slices include:
 
-- `apps/server/src/__tests__/e2e/standalone-server-cli-roundtrip.test.ts`
-- `apps/server/src/__tests__/e2e/standalone-server-blocked-restart.test.ts`
 - `apps/server/src/__tests__/e2e/thread-immediate-followups-roundtrip.test.ts`
 - `apps/server/src/__tests__/e2e/thread-worktree-followup-roundtrip.test.ts`
+- `apps/server/src/__tests__/e2e/thread-worktree-primary-checkout-roundtrip.test.ts`
 - `apps/server/src/__tests__/e2e/thread-shared-environment-roundtrip.test.ts`
 - `apps/server/src/__tests__/e2e/dynamic-tools-server-roundtrip.test.ts`
 

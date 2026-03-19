@@ -23,7 +23,7 @@ pnpm qa:server:regression
 pnpm qa:env-daemon:recovery:fake
 ```
 
-Use `qa:server:regression` for the current real-provider regression seed suite, and `qa:env-daemon:recovery:fake` when the repro needs deterministic worker-loss control.
+Use `qa:server:regression` for the current real-provider regression seed suite, and `qa:env-daemon:recovery:fake` when the repro needs deterministic worker-loss control or restart injection.
 
 ## Seed areas
 

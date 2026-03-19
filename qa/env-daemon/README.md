@@ -27,3 +27,4 @@ Fastest available scripts today:
 - `pnpm qa:env-daemon:recovery:fake`
 
 Use `core.md` when you need the shared-runtime checklist that is broader than restart-only recovery.
+The default recovery alias currently points at the deterministic fake-provider suite, because exact worker-loss injection is not yet a clean real-provider scripted pass.

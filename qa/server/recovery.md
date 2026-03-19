@@ -21,7 +21,7 @@ Use this pass when the change affects server restart, shutdown, or persisted res
 
 ## Notes
 
-- Many historical recovery scenarios are still documented in the legacy umbrella docs while ownership is being split.
+- Real-provider scripted recovery coverage is still thinner than the full written checklist.
 - If the scenario is fundamentally about env-daemon liveness, worker replacement, or multi-session runtime behavior, prefer `qa/env-daemon/recovery.md`.
 
 ## Related docs

@@ -29,7 +29,7 @@
     "qa:providers:dynamic-tools": "BB_E2E_PROVIDER_MODE=real pnpm --filter @bb/server exec vitest run --config vitest.e2e.fast.config.ts src/__tests__/e2e/dynamic-tools-server-roundtrip.test.ts",
     "qa:cli:smoke": "BB_E2E_PROVIDER_MODE=real pnpm --filter @bb/server exec vitest run --config vitest.e2e.fast.config.ts src/__tests__/e2e/thread-spawn-roundtrip.test.ts src/__tests__/e2e/thread-archive-unarchive-roundtrip.test.ts",
     "qa:env-daemon:core": "BB_E2E_PROVIDER_MODE=real pnpm --filter @bb/server exec vitest run --config vitest.e2e.fast.config.ts src/__tests__/e2e/thread-shared-environment-roundtrip.test.ts src/__tests__/e2e/thread-multi-thread-stress.test.ts",
-    "qa:env-daemon:recovery": "pnpm qa:server:stress",
+    "qa:env-daemon:recovery": "pnpm qa:server:recovery:fake",
     "qa:env-daemon:recovery:fake": "pnpm qa:server:recovery:fake",
     "qa:environments:core": "BB_E2E_PROVIDER_MODE=real pnpm --filter @bb/server exec vitest run --config vitest.e2e.fast.config.ts src/__tests__/e2e/thread-worktree-followup-roundtrip.test.ts src/__tests__/e2e/thread-worktree-primary-checkout-roundtrip.test.ts src/__tests__/e2e/thread-shared-environment-roundtrip.test.ts",
     "bb": "node apps/cli/dist/index.js",

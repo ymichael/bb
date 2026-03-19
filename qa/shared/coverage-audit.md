@@ -11,6 +11,8 @@ Reviewing the new QA system like a future tester surfaces these rough edges:
 - provider depth is easy to understand conceptually, but the automated slices are still named around the older server-centric history
 - CLI QA is now structurally clear, but still lighter on explicit automation than the other surfaces
 - a tester-style dry run found that one early CLI smoke alias was accidentally wired to a fake-only test; the process should keep favoring real-provider-compatible scripts for public entrypoints
+- a later tester-style dry run found that `qa:e2e:smoke` still included fake-only skipped tests and that the stress path had a broken restart filename; both are the kind of rough edge the public QA entrypoints should avoid
+- the env-daemon recovery alias also needed tightening so the named pass resolves to the deterministic fake-provider suite rather than a mostly-skipped transitional real-provider script
 
 The sections below track the substantive depth gaps by surface, not just the usability gaps.
 
@@ -20,26 +22,22 @@ The sections below track the substantive depth gaps by surface, not just the usa
 
 Already covered by checked-in automation:
 
-- standalone CLI roundtrip
-- blocked restart
 - immediate follow-ups
 - worktree follow-up
+- primary checkout coherence
 - shared environment roundtrip
 - dynamic tools roundtrip
 
 Representative files:
 
-- `apps/server/src/__tests__/e2e/standalone-server-cli-roundtrip.test.ts`
-- `apps/server/src/__tests__/e2e/standalone-server-blocked-restart.test.ts`
 - `apps/server/src/__tests__/e2e/thread-immediate-followups-roundtrip.test.ts`
+- `apps/server/src/__tests__/e2e/thread-worktree-primary-checkout-roundtrip.test.ts`
 
 ### Env-daemon recovery
 
 Already covered by checked-in automation:
 
-- reconnect after restart
-- restart recovery matrix
-- recovery-heavy runbook scenarios
+- deterministic reconnect-after-restart and worker-loss recovery through the fake-provider suite
 - provisioning responsiveness
 - concurrent multi-thread stress
 
@@ -84,11 +82,25 @@ What is weak today:
 
 - server docs are clear, but the default server pass still maps to older `qa:server:*` names rather than a dedicated `qa:server:core`
 - route/API contract checks and restart-visible-state checks are not clearly separated in automation
+- real-provider smoke does not yet include a server-restart sanity check, so restart confidence still comes from deeper or fake-only paths
 
 Recommended next depth increase:
 
 - add a dedicated server-core automation alias or slice once the intended checklist is stable
 - split route/API-focused checks from deeper restart-focused checks if the server surface grows further
+- add one honest real-provider restart sanity slice if the harness can support it cheaply
+
+### Env-daemon recovery still depends on fake-provider control hooks
+
+What is weak today:
+
+- the deterministic recovery path is now honestly exposed, but it still depends on fake-provider control hooks
+- the broader real-provider stress path is useful as supplemental signal, not as the primary recovery entrypoint
+
+Recommended next depth increase:
+
+- add one or two real-provider recovery scenarios that can survive as non-skipping public commands
+- keep the fake-provider recovery suite for exact worker-loss injection and stale-session control
 
 ### Provider depth is still too implicit
 
@@ -132,12 +144,12 @@ Recommended next depth increase:
 What is weak today:
 
 - owned regression docs now exist for `server` and `env-daemon`, but they are still seed catalogs rather than a full curated regression history
-- some older regression knowledge still only exists implicitly in e2e scenario files or the legacy standalone matrix
+- some older regression knowledge still only exists implicitly in e2e scenario files or the newer deterministic recovery suite instead of curated regression docs
 
 Recommended next depth increase:
 
 - add concrete regression entries to the owned docs as fixes land
-- lift high-value regression repros out of e2e scenario files into the owned regression catalogs when they become stable operator checks
+- lift high-value regression repros out of e2e scenario files and the fake recovery suite into the owned regression catalogs when they become stable operator checks
 
 ### Product QA is still detailed but not yet normalized
 

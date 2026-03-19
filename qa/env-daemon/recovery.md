@@ -31,7 +31,13 @@ pnpm qa:env-daemon:recovery
 pnpm qa:env-daemon:recovery:fake
 ```
 
-These aliases map to the current checked-in recovery suites. Use the fake recovery suite when deterministic worker-loss control is needed.
+`qa:env-daemon:recovery` currently points at the deterministic fake-provider recovery suite, because the exact worker-loss and reconnect paths still rely on fake-provider control hooks. Pair it with `pnpm qa:env-daemon:core` when you also want real-provider runtime signal.
+
+The broader transitional script below still exists, but it is not the default recovery entrypoint because several recovery scenarios are still fake-only:
+
+```bash
+pnpm qa:server:stress
+```
 
 Existing automated slices:
 
