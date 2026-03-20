@@ -3,7 +3,7 @@ import type {
   ProviderThreadContext,
   ProviderToolCallRequest,
   ProviderToolCallResponse,
-} from "@bb/core";
+} from "./provider-adapter.js";
 
 export interface ProviderToolDefinition extends ProviderDynamicTool {
   execute(args: {

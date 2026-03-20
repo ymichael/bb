@@ -1,11 +1,13 @@
 import { assertNever, getStringField, toRecord } from "@bb/core";
 import type {
   PromptInput,
+  SpawnThreadRequest,
+} from "@bb/core";
+import type {
   ProviderDynamicTool,
   ProviderExecutionOptions,
   ProviderThreadContext,
-  SpawnThreadRequest,
-} from "@bb/core";
+} from "@bb/provider-adapters";
 import type {
   EnvironmentDaemonCommand,
   EnvironmentDaemonInitializeRequest,

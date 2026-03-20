@@ -1,11 +1,13 @@
 import type {
   PromptInput,
-  ProviderDynamicTool,
-  ProviderExecutionOptions,
-  ProviderThreadContext,
   SpawnThreadRequest,
   Thread,
 } from "@bb/core";
+import type {
+  ProviderDynamicTool,
+  ProviderExecutionOptions,
+  ProviderThreadContext,
+} from "@bb/provider-adapters";
 
 export type EnvironmentDaemonTransportKind = "http";
 export const ENVIRONMENT_DAEMON_PROTOCOL_VERSION = 1 as const;

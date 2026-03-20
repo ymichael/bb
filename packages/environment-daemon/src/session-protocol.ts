@@ -1,7 +1,7 @@
 import type {
   ProviderToolCallRequest,
   ProviderToolCallResponse,
-} from "@bb/core";
+} from "@bb/provider-adapters";
 import type {
   EnvironmentDaemonCommand,
   EnvironmentDaemonEvent,

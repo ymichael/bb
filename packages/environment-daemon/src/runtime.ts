@@ -5,12 +5,13 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import {
   isThreadProviderId,
-  type ProviderAdapter,
-  type ProviderToolCallResponse,
 } from "@bb/core";
 import {
   createProviderAdapter,
   listAvailableProviderInfos,
+  type ProviderAdapter,
+  type ProviderToolCallRequest,
+  type ProviderToolCallResponse,
 } from "@bb/provider-adapters";
 import {
   ENVIRONMENT_DAEMON_PROTOCOL_VERSION,
@@ -62,7 +63,7 @@ export interface EnvironmentDaemonRuntimeOptions {
     params?: unknown;
     providerId?: string;
     normalizedMethod?: string;
-    toolCall?: import("@bb/core").ProviderToolCallRequest;
+    toolCall?: ProviderToolCallRequest;
     resolvedThreadId?: string;
   }) => Promise<unknown> | unknown;
   onStdoutLine?: (line: string) => void;

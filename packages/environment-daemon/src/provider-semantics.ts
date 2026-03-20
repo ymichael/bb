@@ -1,10 +1,12 @@
 import type {
-  ProviderAdapter,
-  ProviderToolCallRequest,
-  ProviderToolCallResponse,
   Thread,
 } from "@bb/core";
 import { assertNever, getStringField, isThreadProviderId, toRecord } from "@bb/core";
+import type {
+  ProviderAdapter,
+  ProviderToolCallRequest,
+  ProviderToolCallResponse,
+} from "@bb/provider-adapters";
 import { createProviderAdapter } from "@bb/provider-adapters";
 
 export interface NormalizedEnvironmentDaemonProviderEvent {

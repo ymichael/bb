@@ -17,6 +17,7 @@ import type {
 } from "./session-protocol.js";
 import { ENVIRONMENT_DAEMON_SESSION_SUPPORTED_PROTOCOL_VERSIONS } from "./session-protocol.js";
 import { getEnvironmentDaemonEnvironmentChannelId } from "./session-channels.js";
+import type { ProviderToolCallRequest } from "@bb/provider-adapters";
 
 export interface EnvironmentDaemonSessionSupervisorOptions {
   environmentId: string;
@@ -196,7 +197,7 @@ export class EnvironmentDaemonSessionSupervisor {
     params?: unknown;
     providerId?: string;
     normalizedMethod?: string;
-    toolCall?: import("@bb/core").ProviderToolCallRequest;
+    toolCall?: ProviderToolCallRequest;
     threadId?: string;
   }): Promise<EnvironmentDaemonSessionProviderResponsePayload> {
     await this.openSession();

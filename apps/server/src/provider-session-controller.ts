@@ -13,18 +13,20 @@ import {
   createProviderEventEnvelope,
   extractTurnIdFromPersistedEventData,
   type PromptInput,
-  type ProviderAdapter,
-  type ProviderDynamicTool,
-  type ProviderExecutionOptions,
-  type ProviderThreadContext,
-  type ProviderToolCallResponse,
   type SpawnThreadRequest,
   type Thread,
   type ThreadEvent,
   type ThreadEventData,
   type ThreadEventType,
 } from "@bb/core";
-import type { ProviderToolHost } from "@bb/provider-adapters";
+import type {
+  ProviderAdapter,
+  ProviderDynamicTool,
+  ProviderExecutionOptions,
+  ProviderThreadContext,
+  ProviderToolCallResponse,
+  ProviderToolHost,
+} from "@bb/provider-adapters";
 
 export type ProviderSessionErrorCode =
   | "inactive_session"

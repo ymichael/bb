@@ -12,6 +12,7 @@ import type {
 } from "./session-protocol.js";
 import { compareEnvironmentDaemonSessionCursors } from "./session-protocol.js";
 import type { EnvironmentDaemonSessionHttpClient } from "./session-http-client.js";
+import type { ProviderToolCallRequest } from "@bb/provider-adapters";
 
 export interface EnvironmentDaemonSessionSyncOptions {
   runtime: EnvironmentDaemonSessionRuntime;
@@ -285,7 +286,7 @@ export class EnvironmentDaemonSessionSync {
     params?: unknown;
     providerId?: string;
     normalizedMethod?: string;
-    toolCall?: import("@bb/core").ProviderToolCallRequest;
+    toolCall?: ProviderToolCallRequest;
   }): Promise<EnvironmentDaemonSessionProviderResponsePayload> {
     const response = await this.options.client.sendProviderRequest({
       sessionId: args.sessionId,

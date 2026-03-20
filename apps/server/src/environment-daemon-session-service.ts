@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { ProviderToolCallResponse } from "@bb/core";
+import type { ProviderToolCallResponse } from "@bb/provider-adapters";
 import type {
   EnvironmentDaemonCursorPosition,
   EnvironmentDaemonCursorRepository,

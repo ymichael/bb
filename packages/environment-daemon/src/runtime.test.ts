@@ -2,8 +2,11 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import type { ProviderThreadContext, SpawnThreadRequest } from "@bb/core";
-import { createCodexProviderAdapter } from "@bb/provider-adapters";
+import type { SpawnThreadRequest } from "@bb/core";
+import {
+  createCodexProviderAdapter,
+  type ProviderThreadContext,
+} from "@bb/provider-adapters";
 import { EnvironmentDaemonRuntime } from "./runtime.js";
 import { ENVIRONMENT_DAEMON_PROTOCOL_VERSION, type EnvironmentDaemonProviderSpec } from "./protocol.js";
 

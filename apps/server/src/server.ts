@@ -17,7 +17,6 @@ import type {
   EventRepository,
 } from "@bb/db";
 import type {
-  ProviderToolCallResponse,
   ServerRuntimeMode,
   SpawnThreadRequest,
 } from "@bb/core";
@@ -27,6 +26,7 @@ import {
   listAvailableProviderInfos,
   resolveDefaultProviderId,
   type ProviderAdapter,
+  type ProviderToolCallResponse,
   type ProviderToolHost,
 } from "@bb/provider-adapters";
 import {

@@ -28,11 +28,6 @@ import {
   type EnvironmentCreationArgs,
   type EnvironmentDescriptor,
   type EnvironmentProvisioningEvent,
-  type ProviderAdapter,
-  type ProviderExecutionOptions,
-  type ProviderThreadContext,
-  type ProviderToolCallRequest,
-  type ProviderToolCallResponse,
   type SchedulerService,
   type ServiceTier,
   type SystemProviderInfo,
@@ -81,6 +76,13 @@ import {
 } from "@bb/core";
 import { resolveBbPath } from "@bb/core/storage-paths";
 import { renderTemplate } from "@bb/templates";
+import type {
+  ProviderAdapter,
+  ProviderExecutionOptions,
+  ProviderThreadContext,
+  ProviderToolCallRequest,
+  ProviderToolCallResponse,
+} from "@bb/provider-adapters";
 import {
   EnvironmentRegistry,
   EnvironmentSquashMergeCommitFailureError,

@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { resolve } from "node:path";
-import type { ProviderLaunchConfiguration } from "@bb/core";
+import type { ProviderLaunchConfiguration } from "./provider-adapter.js";
 
 export interface CodexAuthFile {
   auth_mode?: unknown;
