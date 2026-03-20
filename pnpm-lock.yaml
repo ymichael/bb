@@ -343,6 +343,9 @@ importers:
       '@bb/provider-adapters':
         specifier: workspace:*
         version: link:../provider-adapters
+      zod:
+        specifier: ^3.24.0
+        version: 3.25.76
     devDependencies:
       '@bb/tsconfig':
         specifier: workspace:*

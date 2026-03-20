@@ -20,7 +20,8 @@
   },
   "dependencies": {
     "@bb/core": "workspace:*",
-    "@bb/provider-adapters": "workspace:*"
+    "@bb/provider-adapters": "workspace:*",
+    "zod": "^3.24.0"
   },
   "devDependencies": {
     "@bb/tsconfig": "workspace:*",

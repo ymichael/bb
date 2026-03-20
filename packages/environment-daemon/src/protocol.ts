@@ -3,12 +3,13 @@ import type {
   SpawnThreadRequest,
   Thread,
 } from "@bb/core";
-import { assertNever } from "@bb/core";
+import { promptInputSchema } from "@bb/core";
 import type {
   ProviderDynamicTool,
   ProviderExecutionOptions,
   ProviderThreadContext,
 } from "@bb/provider-adapters";
+import { z } from "zod";
 
 export type EnvironmentDaemonTransportKind = "http";
 export const ENVIRONMENT_DAEMON_PROTOCOL_VERSION = 1 as const;
@@ -357,106 +358,186 @@ function decodeEnvironmentDaemonCommandType(
   return ENVIRONMENT_DAEMON_COMMAND_TYPES.find((candidate) => candidate === value) ?? null;
 }
 
-function getStringField(record: Record<string, unknown> | null, key: string): string | undefined {
-  const value = record?.[key];
-  return typeof value === "string" && value.length > 0 ? value : undefined;
-}
+const nonEmptyStringSchema = z.string().min(1);
+const stringArraySchema = z.array(z.string());
+const stringRecordSchema = z.record(z.string());
+const providerFileSchema = z.object({
+  path: nonEmptyStringSchema,
+  content: nonEmptyStringSchema,
+  placement: z.literal("home"),
+});
+const providerLaunchSchema = z.object({
+  command: nonEmptyStringSchema,
+  args: stringArraySchema,
+});
+const initializeRequestSchema = z.object({
+  method: nonEmptyStringSchema,
+  params: z.unknown(),
+});
+const providerThreadContextSchema = z.object({
+  projectId: nonEmptyStringSchema,
+  threadId: nonEmptyStringSchema,
+  serverUrl: nonEmptyStringSchema.optional(),
+  path: nonEmptyStringSchema.optional(),
+});
+const providerDynamicToolSchema = z.object({
+  name: nonEmptyStringSchema,
+  description: z.string(),
+  inputSchema: z.unknown(),
+});
+const providerExecutionOptionsSchema = z.object({
+  model: z.string().optional(),
+  serviceTier: z.enum(["fast", "flex"]).optional(),
+  reasoningLevel: z.enum(["low", "medium", "high", "xhigh"]).optional(),
+  sandboxMode: z
+    .enum(["read-only", "workspace-write", "danger-full-access"])
+    .optional(),
+});
+const environmentDescriptorSchema = z.object({
+  type: z.literal("path"),
+  path: nonEmptyStringSchema,
+});
+const environmentCreationArgsSchema = z.object({
+  kind: nonEmptyStringSchema,
+});
+const spawnThreadRequestSchema = z
+  .object({
+    projectId: nonEmptyStringSchema,
+    providerId: nonEmptyStringSchema.optional(),
+    type: z.enum(["standard", "manager"]).optional(),
+    title: nonEmptyStringSchema.optional(),
+    input: z.array(promptInputSchema).min(1).optional(),
+    model: z.string().optional(),
+    serviceTier: z.enum(["fast", "flex"]).optional(),
+    reasoningLevel: z.enum(["low", "medium", "high", "xhigh"]).optional(),
+    sandboxMode: z
+      .enum(["read-only", "workspace-write", "danger-full-access"])
+      .optional(),
+    environmentId: nonEmptyStringSchema.optional(),
+    environmentDescriptor: environmentDescriptorSchema.optional(),
+    environmentCreationArgs: environmentCreationArgsSchema.optional(),
+    developerInstructions: z.string().optional(),
+    parentThreadId: z.string().optional(),
+    spawnInitiator: z.enum(["user", "agent", "system"]).optional(),
+  })
+  .superRefine((value, ctx) => {
+    const selectedCount = [
+      value.environmentId !== undefined,
+      value.environmentDescriptor !== undefined,
+      value.environmentCreationArgs !== undefined,
+    ].filter(Boolean).length;
+    if (selectedCount > 1) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          "Provide at most one of environmentId, environmentDescriptor, or environmentCreationArgs",
+        path: ["environmentId"],
+      });
+    }
+  });
 
-function decodeStringArray(value: unknown): string[] | null {
-  if (!Array.isArray(value)) return null;
-  const result = value.filter((entry): entry is string => typeof entry === "string");
-  return result.length === value.length ? result : null;
-}
+const providerEnsureCommandSchema = z
+  .object({
+    type: z.literal("provider.ensure"),
+    forThreadId: nonEmptyStringSchema.optional(),
+    providerId: nonEmptyStringSchema.optional(),
+    context: providerThreadContextSchema.optional(),
+    providerLaunch: providerLaunchSchema.optional(),
+    command: nonEmptyStringSchema.optional(),
+    args: stringArraySchema.optional(),
+    launchCommand: nonEmptyStringSchema.optional(),
+    launchArgs: stringArraySchema.optional(),
+    env: stringRecordSchema.optional(),
+    files: z.array(providerFileSchema).optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (!value.command && !value.providerId) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "provider.ensure requires command or providerId",
+        path: ["command"],
+      });
+    }
+  });
+const threadStartCommandSchema = z.object({
+  type: z.literal("thread.start"),
+  threadId: nonEmptyStringSchema,
+  projectId: nonEmptyStringSchema,
+  request: spawnThreadRequestSchema.optional(),
+  context: providerThreadContextSchema.optional(),
+  dynamicTools: z.array(providerDynamicToolSchema).optional(),
+  initialize: initializeRequestSchema.optional(),
+});
+const threadResumeCommandSchema = z.object({
+  type: z.literal("thread.resume"),
+  threadId: nonEmptyStringSchema,
+  projectId: nonEmptyStringSchema,
+  providerThreadId: nonEmptyStringSchema.optional(),
+  context: providerThreadContextSchema.optional(),
+  options: providerExecutionOptionsSchema.optional(),
+  resumePath: nonEmptyStringSchema.optional(),
+  dynamicTools: z.array(providerDynamicToolSchema).optional(),
+  initialize: initializeRequestSchema.optional(),
+});
+const threadStopCommandSchema = z.object({
+  type: z.literal("thread.stop"),
+  threadId: nonEmptyStringSchema,
+  initialize: initializeRequestSchema.optional(),
+});
+const turnRunCommandSchema = z.object({
+  type: z.literal("turn.run"),
+  threadId: nonEmptyStringSchema,
+  providerThreadId: nonEmptyStringSchema.optional(),
+  requestedMode: z.enum(["auto", "steer", "start"]).optional(),
+  activeTurnId: nonEmptyStringSchema.optional(),
+  input: z.array(promptInputSchema),
+  options: providerExecutionOptionsSchema.optional(),
+  initialize: initializeRequestSchema.optional(),
+});
+const threadRenameCommandSchema = z.object({
+  type: z.literal("thread.rename"),
+  threadId: nonEmptyStringSchema,
+  providerThreadId: nonEmptyStringSchema.optional(),
+  title: nonEmptyStringSchema,
+  initialize: initializeRequestSchema.optional(),
+});
+const providerListModelsCommandSchema = z.object({
+  type: z.literal("provider.list_models"),
+  providerId: nonEmptyStringSchema.optional(),
+});
+const providerListCatalogCommandSchema = z.object({
+  type: z.literal("provider.list_catalog"),
+});
+const workspaceStatusCommandSchema = z.object({
+  type: z.literal("workspace.status"),
+  threadId: nonEmptyStringSchema,
+});
+const workspaceDiffCommandSchema = z.object({
+  type: z.literal("workspace.diff"),
+  threadId: nonEmptyStringSchema,
+});
 
-function decodeStringRecord(value: unknown): Record<string, string> | undefined {
-  const record = asRecord(value);
-  if (!record) return undefined;
-  const entries = Object.entries(record);
-  if (entries.some(([, entry]) => typeof entry !== "string")) {
-    return undefined;
-  }
-  return Object.fromEntries(entries) as Record<string, string>;
-}
+const environmentDaemonCommandSchemas = {
+  "provider.ensure": providerEnsureCommandSchema,
+  "thread.start": threadStartCommandSchema,
+  "thread.resume": threadResumeCommandSchema,
+  "thread.stop": threadStopCommandSchema,
+  "turn.run": turnRunCommandSchema,
+  "thread.rename": threadRenameCommandSchema,
+  "provider.list_models": providerListModelsCommandSchema,
+  "provider.list_catalog": providerListCatalogCommandSchema,
+  "workspace.status": workspaceStatusCommandSchema,
+  "workspace.diff": workspaceDiffCommandSchema,
+} satisfies Record<EnvironmentDaemonCommand["type"], z.ZodTypeAny>;
 
-function decodeProviderFile(value: unknown): EnvironmentDaemonProviderFile | null {
-  const record = asRecord(value);
-  const path = getStringField(record, "path");
-  const content = getStringField(record, "content");
-  const placement = getStringField(record, "placement");
-  if (!path || !content || placement !== "home") {
-    return null;
-  }
-  return { path, content, placement };
-}
-
-function decodeProviderFiles(value: unknown): EnvironmentDaemonProviderFile[] | undefined {
-  if (!Array.isArray(value)) return undefined;
-  const files = value
-    .map((entry) => decodeProviderFile(entry))
-    .filter((entry): entry is EnvironmentDaemonProviderFile => entry !== null);
-  return files.length === value.length ? files : undefined;
-}
-
-function decodeInitializeRequest(
-  value: unknown,
-): EnvironmentDaemonInitializeRequest | undefined {
-  if (value === undefined) return undefined;
-  const record = asRecord(value);
-  const method = getStringField(record, "method");
-  if (!record || !method || !("params" in record)) {
-    return undefined;
-  }
-  return { method, params: record.params };
-}
-
-function decodeCommandRecord(
-  payload: unknown,
-  commandType: string,
-): Record<string, unknown> {
-  const record = asRecord(payload);
-  if (!record) {
-    throw new Error(`Invalid persisted environment-daemon command payload for ${commandType}`);
-  }
-  if ("type" in record && record.type !== commandType) {
-    throw new Error(`Environment-daemon command payload type mismatch for ${commandType}`);
-  }
-  return record;
-}
-
-function requireStringField(
-  record: Record<string, unknown>,
-  key: string,
-  commandType: string,
-): string {
-  const value = getStringField(record, key);
-  if (!value) {
-    throw new Error(`Invalid persisted environment-daemon command payload for ${commandType}`);
-  }
-  return value;
-}
-
-function decodeThreadContext(value: unknown): ProviderThreadContext | undefined {
-  return asRecord(value) as unknown as ProviderThreadContext | undefined;
-}
-
-function decodeSpawnThreadRequest(value: unknown): SpawnThreadRequest | undefined {
-  return asRecord(value) as unknown as SpawnThreadRequest | undefined;
-}
-
-function decodeDynamicTools(value: unknown): ProviderDynamicTool[] | undefined {
-  return Array.isArray(value) ? (value as ProviderDynamicTool[]) : undefined;
-}
-
-function decodeExecutionOptions(value: unknown): ProviderExecutionOptions | undefined {
-  return asRecord(value) as ProviderExecutionOptions | undefined;
-}
-
-function decodePromptInputArray(value: unknown): PromptInput[] | undefined {
-  return Array.isArray(value) ? (value as PromptInput[]) : undefined;
-}
-
-function decodeProviderId(value: unknown): string | undefined {
-  return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined;
+function formatSchemaError(commandType: string, error: z.ZodError): Error {
+  const issues = error.issues.map((issue) => {
+    const path = issue.path.length > 0 ? issue.path.join(".") : "payload";
+    return `${path}: ${issue.message}`;
+  });
+  return new Error(
+    `Invalid persisted environment-daemon command payload for ${commandType}: ${issues.join("; ")}`,
+  );
 }
 
 export function decodePersistedEnvironmentDaemonCommand(args: {
@@ -467,152 +548,20 @@ export function decodePersistedEnvironmentDaemonCommand(args: {
   if (!commandType) {
     throw new Error(`Unsupported environment-daemon command type ${args.commandType}`);
   }
-
-  const record = decodeCommandRecord(args.payload, commandType);
-  const initialize = decodeInitializeRequest(record.initialize);
-
-  switch (commandType) {
-    case "provider.ensure": {
-      const command = getStringField(record, "command");
-      const providerArgs =
-        record.args === undefined ? undefined : decodeStringArray(record.args);
-      const launchArgs =
-        record.launchArgs === undefined ? undefined : decodeStringArray(record.launchArgs);
-      const env = decodeStringRecord(record.env);
-      const files = decodeProviderFiles(record.files);
-      const launchCommand = getStringField(record, "launchCommand");
-      const forThreadId = getStringField(record, "forThreadId");
-      if (
-        (record.args !== undefined && !providerArgs) ||
-        (record.launchArgs !== undefined && !launchArgs) ||
-        (record.env !== undefined && !env) ||
-        (record.files !== undefined && !files) ||
-        (!command && !decodeProviderId(record.providerId))
-      ) {
-        throw new Error(`Invalid persisted environment-daemon command payload for ${commandType}`);
-      }
-      return {
-        type: commandType,
-        ...(command ? { command } : {}),
-        ...(providerArgs ? { args: providerArgs } : {}),
-        ...(launchCommand ? { launchCommand } : {}),
-        ...(launchArgs ? { launchArgs } : {}),
-        ...(env ? { env } : {}),
-        ...(files ? { files } : {}),
-        ...(forThreadId ? { forThreadId } : {}),
-        ...(decodeProviderId(record.providerId)
-          ? { providerId: decodeProviderId(record.providerId)! }
-          : {}),
-        ...(decodeThreadContext(record.context)
-          ? { context: decodeThreadContext(record.context)! }
-          : {}),
-        ...(asRecord(record.providerLaunch)
-          ? {
-              providerLaunch: {
-                command: requireStringField(asRecord(record.providerLaunch)!, "command", commandType),
-                args: decodeStringArray(asRecord(record.providerLaunch)!.args) ?? [],
-              },
-            }
-          : {}),
-      };
-    }
-    case "thread.start":
-      return {
-        type: commandType,
-        threadId: requireStringField(record, "threadId", commandType),
-        projectId: requireStringField(record, "projectId", commandType),
-        ...(decodeSpawnThreadRequest(record.request)
-          ? { request: decodeSpawnThreadRequest(record.request)! }
-          : {}),
-        ...(decodeThreadContext(record.context)
-          ? { context: decodeThreadContext(record.context)! }
-          : {}),
-        ...(decodeDynamicTools(record.dynamicTools)
-          ? { dynamicTools: decodeDynamicTools(record.dynamicTools)! }
-          : {}),
-        ...(initialize ? { initialize } : {}),
-      };
-    case "thread.resume":
-      return {
-        type: commandType,
-        threadId: requireStringField(record, "threadId", commandType),
-        projectId: requireStringField(record, "projectId", commandType),
-        ...(getStringField(record, "providerThreadId")
-          ? { providerThreadId: getStringField(record, "providerThreadId")! }
-          : {}),
-        ...(decodeThreadContext(record.context)
-          ? { context: decodeThreadContext(record.context)! }
-          : {}),
-        ...(decodeExecutionOptions(record.options)
-          ? { options: decodeExecutionOptions(record.options)! }
-          : {}),
-        ...(decodeDynamicTools(record.dynamicTools)
-          ? { dynamicTools: decodeDynamicTools(record.dynamicTools)! }
-          : {}),
-        ...(getStringField(record, "resumePath")
-          ? { resumePath: getStringField(record, "resumePath")! }
-          : {}),
-        ...(initialize ? { initialize } : {}),
-      };
-    case "thread.stop":
-      return {
-        type: commandType,
-        threadId: requireStringField(record, "threadId", commandType),
-        ...(initialize ? { initialize } : {}),
-      };
-    case "turn.run": {
-      const requestedMode = getStringField(record, "requestedMode");
-      const activeTurnId = getStringField(record, "activeTurnId");
-      if (
-        (requestedMode !== undefined &&
-          requestedMode !== "auto" &&
-          requestedMode !== "steer" &&
-          requestedMode !== "start") ||
-        !Array.isArray(record.input)
-      ) {
-        throw new Error(`Invalid persisted environment-daemon command payload for ${commandType}`);
-      }
-      return {
-        type: commandType,
-        threadId: requireStringField(record, "threadId", commandType),
-        ...(getStringField(record, "providerThreadId")
-          ? { providerThreadId: getStringField(record, "providerThreadId")! }
-          : {}),
-        ...(requestedMode ? { requestedMode } : {}),
-        ...(activeTurnId ? { activeTurnId } : {}),
-        input: decodePromptInputArray(record.input)!,
-        ...(decodeExecutionOptions(record.options)
-          ? { options: decodeExecutionOptions(record.options)! }
-          : {}),
-        ...(initialize ? { initialize } : {}),
-      };
-    }
-    case "thread.rename":
-      return {
-        type: commandType,
-        threadId: requireStringField(record, "threadId", commandType),
-        ...(getStringField(record, "providerThreadId")
-          ? { providerThreadId: getStringField(record, "providerThreadId")! }
-          : {}),
-        title: requireStringField(record, "title", commandType),
-        ...(initialize ? { initialize } : {}),
-      };
-    case "provider.list_models":
-      return {
-        type: commandType,
-        ...(decodeProviderId(record.providerId)
-          ? { providerId: decodeProviderId(record.providerId)! }
-          : {}),
-      };
-    case "provider.list_catalog":
-      return { type: commandType };
-    case "workspace.status":
-    case "workspace.diff":
-      return {
-        type: commandType,
-        threadId: requireStringField(record, "threadId", commandType),
-      };
-    default:
-      return assertNever(commandType);
+  const payload = asRecord(args.payload);
+  if (!payload) {
+    throw new Error(`Invalid persisted environment-daemon command payload for ${commandType}`);
   }
+  if ("type" in payload && payload.type !== commandType) {
+    throw new Error(`Environment-daemon command payload type mismatch for ${commandType}`);
+  }
+  const parseResult = environmentDaemonCommandSchemas[commandType].safeParse({
+    ...payload,
+    type: commandType,
+  });
+  if (!parseResult.success) {
+    throw formatSchemaError(commandType, parseResult.error);
+  }
+
+  return parseResult.data as EnvironmentDaemonCommand;
 }
