@@ -103,6 +103,7 @@ describe("host environment-daemon helper", () => {
       environmentId: "worktree",
       workspaceRootPath: workspaceRoot,
     })).toMatchObject({
+      ownership: "owned",
       pid: 4321,
       port: 4123,
       authToken: "auth-token",
@@ -151,9 +152,9 @@ describe("host environment-daemon helper", () => {
       environmentId: "local",
       workspaceRootPath: workspaceRoot,
     })).toMatchObject({
+      ownership: "adopted",
       baseUrl: "http://127.0.0.1:4310",
       authToken: "reconnect-token",
-      pid: undefined,
     });
   });
 
@@ -459,9 +460,9 @@ describe("host environment-daemon helper", () => {
       environmentId: "local",
       workspaceRootPath: workspaceRoot,
     })).toMatchObject({
+      ownership: "adopted",
       baseUrl: "http://127.0.0.1:4310",
       authToken: "reconnect-token",
-      pid: undefined,
     });
   });
 });

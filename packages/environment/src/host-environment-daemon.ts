@@ -13,8 +13,7 @@ const HEALTH_TIMEOUT_MS = 500;
 const STOP_TIMEOUT_MS = 1_000;
 const STOP_POLL_INTERVAL_MS = 25;
 
-interface ManagedHostEnvironmentDaemonRecord {
-  pid?: number;
+interface TrackedHostEnvironmentDaemonRecordBase {
   port: number;
   baseUrl: string;
   authToken: string;
@@ -22,6 +21,19 @@ interface ManagedHostEnvironmentDaemonRecord {
   environmentId: string;
   workspaceRoot: string;
 }
+
+interface OwnedHostEnvironmentDaemonRecord extends TrackedHostEnvironmentDaemonRecordBase {
+  ownership: "owned";
+  pid: number;
+}
+
+interface AdoptedHostEnvironmentDaemonRecord extends TrackedHostEnvironmentDaemonRecordBase {
+  ownership: "adopted";
+}
+
+type TrackedHostEnvironmentDaemonRecord =
+  | OwnedHostEnvironmentDaemonRecord
+  | AdoptedHostEnvironmentDaemonRecord;
 
 interface ManagedHostEnvironmentDaemonIdentity {
   projectId: string;
@@ -50,7 +62,7 @@ interface EnsureManagedHostEnvironmentDaemonDeps {
 }
 
 const hostEnvironmentDaemonLocks = new Map<string, Promise<void>>();
-const managedHostEnvironmentDaemons = new Map<string, ManagedHostEnvironmentDaemonRecord>();
+const trackedHostEnvironmentDaemons = new Map<string, TrackedHostEnvironmentDaemonRecord>();
 
 function managedHostEnvironmentDaemonIdentityKey(
   args: ManagedHostEnvironmentDaemonIdentity,
@@ -83,7 +95,7 @@ async function withManagedHostEnvironmentDaemonLock(
 }
 
 function toManagedHostEnvironmentDaemonTarget(args: {
-  record: ManagedHostEnvironmentDaemonRecord;
+  record: TrackedHostEnvironmentDaemonRecord;
   providerLaunch?: EnvironmentDaemonConnectionTarget["providerLaunch"];
 }): EnvironmentDaemonConnectionTarget {
   return {
@@ -321,9 +333,9 @@ export async function ensureManagedHostEnvironmentDaemon(args: {
   let managedTarget: EnvironmentDaemonConnectionTarget | undefined;
   await withManagedHostEnvironmentDaemonLock(stateIdentity, async () => {
     const identityKey = managedHostEnvironmentDaemonIdentityKey(stateIdentity);
-    const existing = managedHostEnvironmentDaemons.get(identityKey);
+    const existing = trackedHostEnvironmentDaemons.get(identityKey);
     if (existing) {
-      const existingHealthy = existing.pid
+      const existingHealthy = existing.ownership === "owned"
         ? checkProcessAlive(existing.pid)
         : await (deps.pingAgent ?? pingEnvironmentDaemon)(
             existing.baseUrl,
@@ -334,7 +346,7 @@ export async function ensureManagedHostEnvironmentDaemon(args: {
         managedTarget = toManagedHostEnvironmentDaemonTarget({ record: existing });
         return;
       }
-      if (existing.pid && checkProcessAlive(existing.pid)) {
+      if (existing.ownership === "owned" && checkProcessAlive(existing.pid)) {
         await terminateProcess({
           pid: existing.pid,
           isProcessAlive: checkProcessAlive,
@@ -342,7 +354,7 @@ export async function ensureManagedHostEnvironmentDaemon(args: {
           sleepMs,
         });
       }
-      managedHostEnvironmentDaemons.delete(identityKey);
+      trackedHostEnvironmentDaemons.delete(identityKey);
     }
 
     const reconnectBaseUrl = args.reconnectTarget?.baseUrl?.trim();
@@ -355,8 +367,8 @@ export async function ensureManagedHostEnvironmentDaemon(args: {
       );
       if (healthy) {
         const reconnectUrl = new URL(reconnectBaseUrl);
-        const record = {
-          pid: undefined,
+        const record: AdoptedHostEnvironmentDaemonRecord = {
+          ownership: "adopted",
           port: reconnectUrl.port ? Number.parseInt(reconnectUrl.port, 10) : 80,
           baseUrl: reconnectBaseUrl.replace(/\/+$/, ""),
           authToken: reconnectAuthToken,
@@ -364,7 +376,7 @@ export async function ensureManagedHostEnvironmentDaemon(args: {
           environmentId: args.environmentId,
           workspaceRoot: args.workspaceRootPath,
         };
-        managedHostEnvironmentDaemons.set(identityKey, record);
+        trackedHostEnvironmentDaemons.set(identityKey, record);
         managedTarget = toManagedHostEnvironmentDaemonTarget({ record });
         return;
       }
@@ -402,7 +414,8 @@ export async function ensureManagedHostEnvironmentDaemon(args: {
     child.unref?.();
 
     await (deps.waitForAgent ?? waitForEnvironmentDaemon)(baseUrl, authToken);
-    const record = {
+    const record: OwnedHostEnvironmentDaemonRecord = {
+      ownership: "owned",
       pid: child.pid!,
       port,
       baseUrl,
@@ -411,7 +424,7 @@ export async function ensureManagedHostEnvironmentDaemon(args: {
       environmentId: args.environmentId,
       workspaceRoot: args.workspaceRootPath,
     };
-    managedHostEnvironmentDaemons.set(identityKey, record);
+    trackedHostEnvironmentDaemons.set(identityKey, record);
     managedTarget = toManagedHostEnvironmentDaemonTarget({
       record,
     });
@@ -439,14 +452,14 @@ export async function disposeManagedHostEnvironmentDaemon(args: {
 
   await withManagedHostEnvironmentDaemonLock(stateIdentity, async () => {
     const identityKey = managedHostEnvironmentDaemonIdentityKey(stateIdentity);
-    const existing = managedHostEnvironmentDaemons.get(identityKey);
+    const existing = trackedHostEnvironmentDaemons.get(identityKey);
     if (existing) {
       const checkProcessAlive = deps.isProcessAlive ?? isProcessAlive;
       const killProcess =
         deps.killProcess ??
         ((pid: number, signal?: NodeJS.Signals | number) => process.kill(pid, signal));
       const sleepMs = deps.sleepMs ?? defaultSleepMs;
-      if (existing.pid && checkProcessAlive(existing.pid)) {
+      if (existing.ownership === "owned" && checkProcessAlive(existing.pid)) {
         await terminateProcess({
           pid: existing.pid,
           isProcessAlive: checkProcessAlive,
@@ -475,7 +488,7 @@ export async function disposeManagedHostEnvironmentDaemon(args: {
         }
       }
     }
-    managedHostEnvironmentDaemons.delete(identityKey);
+    trackedHostEnvironmentDaemons.delete(identityKey);
   });
 }
 
@@ -483,8 +496,8 @@ export function __testOnly__getManagedHostEnvironmentDaemonRecord(args: {
   projectId: string;
   environmentId: string;
   workspaceRootPath: string;
-}): ManagedHostEnvironmentDaemonRecord | undefined {
-  return managedHostEnvironmentDaemons.get(managedHostEnvironmentDaemonIdentityKey(args));
+}): TrackedHostEnvironmentDaemonRecord | undefined {
+  return trackedHostEnvironmentDaemons.get(managedHostEnvironmentDaemonIdentityKey(args));
 }
 
 /**
@@ -494,8 +507,8 @@ export function __testOnly__getManagedHostEnvironmentDaemonRecord(args: {
  */
 export function listManagedHostEnvironmentDaemonPids(): number[] {
   const pids: number[] = [];
-  for (const record of managedHostEnvironmentDaemons.values()) {
-    if (typeof record.pid === "number") {
+  for (const record of trackedHostEnvironmentDaemons.values()) {
+    if (record.ownership === "owned") {
       pids.push(record.pid);
     }
   }
