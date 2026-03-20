@@ -1542,7 +1542,7 @@ export class EnvironmentDaemonRuntime {
     if (mappedThreadIds.length === 1) {
       return mappedThreadIds[0];
     }
-    return this.resolveAnyRoutableThreadId();
+    return undefined;
   }
 
   private resolveAnyRoutableThreadId(): string | undefined {

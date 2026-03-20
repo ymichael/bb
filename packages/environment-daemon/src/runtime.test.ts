@@ -749,6 +749,38 @@ describe("EnvironmentDaemonRuntime", () => {
     expect(events).toEqual([]);
   });
 
+  it("does not attribute stderr from an unbound child to another routed thread", async () => {
+    const runtime = new EnvironmentDaemonRuntime({
+      providerId: "codex",
+    });
+    const events: string[] = [];
+    const unsubscribe = runtime.subscribeToEvents((event) => {
+      if (event.event.type === "provider.stderr") {
+        events.push(event.event.line);
+      }
+    });
+    cleanup.push(unsubscribe);
+
+    runtime.ensureProviderStatus({
+      command: "node",
+      args: [
+        "-e",
+        "setTimeout(() => process.exit(0), 20);",
+      ],
+    }, "thread-1", "codex");
+
+    runtime.ensureProviderStatus({
+      command: "node",
+      args: [
+        "-e",
+        "console.error('unbound child stderr'); setTimeout(() => process.exit(0), 20);",
+      ],
+    });
+
+    await expect.poll(() => runtime.getProviderStatus().running).toBe(false);
+    expect(events).not.toContain("unbound child stderr");
+  });
+
   it("captures unmatched provider rpc errors as events", async () => {
     const runtime = new EnvironmentDaemonRuntime({
       providerId: "codex",
@@ -795,6 +827,41 @@ describe("EnvironmentDaemonRuntime", () => {
 
     await expect.poll(() => runtime.getProviderStatus().running).toBe(false);
     expect(errors).toEqual([]);
+  });
+
+  it("does not attribute unmatched rpc errors from an unbound child to another routed thread", async () => {
+    const runtime = new EnvironmentDaemonRuntime({
+      providerId: "codex",
+    });
+    const errors: Array<{ requestId: string | number; message: string }> = [];
+    const unsubscribe = runtime.subscribeToEvents((event) => {
+      if (event.event.type === "provider.rpc_error") {
+        errors.push({ requestId: event.event.requestId, message: event.event.message });
+      }
+    });
+    cleanup.push(unsubscribe);
+
+    runtime.ensureProviderStatus({
+      command: "node",
+      args: [
+        "-e",
+        "setTimeout(() => process.exit(0), 20);",
+      ],
+    }, "thread-1", "codex");
+
+    runtime.ensureProviderStatus({
+      command: "node",
+      args: [
+        "-e",
+        "console.log(JSON.stringify({ id: 999, error: { message: 'unbound child exploded' } })); setTimeout(() => process.exit(0), 20);",
+      ],
+    });
+
+    await expect.poll(() => runtime.getProviderStatus().running).toBe(false);
+    expect(errors).not.toContainEqual({
+      requestId: 999,
+      message: "unbound child exploded",
+    });
   });
 
   it("routes RPC commands to the correct child when multiple providers are active", async () => {
