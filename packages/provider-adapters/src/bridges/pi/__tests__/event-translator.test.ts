@@ -1,9 +1,65 @@
 import { describe, expect, it, beforeEach } from "vitest";
+import type { AgentSessionEvent } from "@mariozechner/pi-coding-agent";
+import type {
+  AssistantMessage,
+  AssistantMessageEvent,
+  Usage,
+} from "@mariozechner/pi-ai";
 import {
   translatePiEvent,
   createTurnCounterState,
   type TurnCounterState,
 } from "../event-translator.js";
+
+function createUsage(overrides?: Partial<Usage>): Usage {
+  return {
+    input: 0,
+    output: 0,
+    cacheRead: 0,
+    cacheWrite: 0,
+    totalTokens: 0,
+    cost: {
+      input: 0,
+      output: 0,
+      cacheRead: 0,
+      cacheWrite: 0,
+      total: 0,
+    },
+    ...overrides,
+  };
+}
+
+function createAssistantMessage(args?: {
+  text?: string;
+  usage?: Partial<Usage>;
+}): AssistantMessage {
+  return {
+    role: "assistant",
+    content: [{ type: "text", text: args?.text ?? "Hello world" }],
+    api: "anthropic-messages",
+    provider: "anthropic",
+    model: "claude-sonnet-4-6",
+    usage: createUsage(args?.usage),
+    stopReason: "stop",
+    timestamp: 0,
+  };
+}
+
+function createTextDeltaEvent(
+  delta: string,
+  partial?: AssistantMessage,
+): AssistantMessageEvent {
+  return {
+    type: "text_delta",
+    contentIndex: 0,
+    delta,
+    partial: partial ?? createAssistantMessage({ text: "" }),
+  };
+}
+
+function createAgentStartEvent(): AgentSessionEvent {
+  return { type: "agent_start" };
+}
 
 describe("event-translator", () => {
   let counterState: TurnCounterState;
@@ -14,7 +70,7 @@ describe("event-translator", () => {
 
   it("emits turn/started on agent_start", () => {
     const { notifications, turnId } = translatePiEvent(
-      { type: "agent_start" },
+      createAgentStartEvent(),
       "thread-1",
       undefined,
       counterState,
@@ -31,19 +87,14 @@ describe("event-translator", () => {
     const { notifications, turnId } = translatePiEvent(
       {
         type: "agent_end",
-        messages: [
-          {
-            role: "assistant",
-            content: [{ type: "text", text: "Hello world" }],
-          },
-        ],
+        messages: [createAssistantMessage()],
       },
       "thread-1",
       "turn-1",
       counterState,
     );
     expect(turnId).toBeUndefined();
-    expect(notifications).toHaveLength(2);
+    expect(notifications).toHaveLength(3);
     expect(notifications[0]).toMatchObject({
       method: "item/completed",
       params: {
@@ -51,6 +102,10 @@ describe("event-translator", () => {
       },
     });
     expect(notifications[1]).toMatchObject({
+      method: "thread/tokenUsage/updated",
+      params: { threadId: "thread-1", turnId: "turn-1" },
+    });
+    expect(notifications[2]).toMatchObject({
       method: "turn/completed",
       params: { threadId: "thread-1", turnId: "turn-1" },
     });
@@ -61,9 +116,7 @@ describe("event-translator", () => {
       {
         type: "agent_end",
         messages: [
-          {
-            role: "assistant",
-            content: [{ type: "text", text: "Hello world" }],
+          createAssistantMessage({
             usage: {
               input: 100,
               output: 20,
@@ -71,7 +124,7 @@ describe("event-translator", () => {
               cacheWrite: 5,
               totalTokens: 135,
             },
-          },
+          }),
         ],
       },
       "thread-1",
@@ -138,10 +191,8 @@ describe("event-translator", () => {
     const { notifications } = translatePiEvent(
       {
         type: "message_update",
-        assistantMessageEvent: {
-          type: "text_delta",
-          delta: "chunk",
-        },
+        message: createAssistantMessage({ text: "" }),
+        assistantMessageEvent: createTextDeltaEvent("chunk"),
       },
       "thread-1",
       "turn-1",
@@ -286,7 +337,7 @@ describe("event-translator", () => {
 
   it("ignores unknown event types", () => {
     const { notifications } = translatePiEvent(
-      { type: "auto_compaction_start" },
+      { type: "auto_compaction_start", reason: "threshold" },
       "thread-1",
       "turn-1",
       counterState,
@@ -299,13 +350,13 @@ describe("event-translator", () => {
     const counterB = createTurnCounterState();
 
     const resultA = translatePiEvent(
-      { type: "agent_start" },
+      createAgentStartEvent(),
       "thread-A",
       undefined,
       counterA,
     );
     const resultB = translatePiEvent(
-      { type: "agent_start" },
+      createAgentStartEvent(),
       "thread-B",
       undefined,
       counterB,

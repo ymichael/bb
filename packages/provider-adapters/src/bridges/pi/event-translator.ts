@@ -1,4 +1,8 @@
-import type { ContextUsage, SessionStats } from "@mariozechner/pi-coding-agent";
+import type {
+  AgentSessionEvent,
+  ContextUsage,
+  SessionStats,
+} from "@mariozechner/pi-coding-agent";
 
 export interface JsonRpcNotification {
   jsonrpc: "2.0";
@@ -20,7 +24,7 @@ export function nextTurnId(state: TurnCounterState): string {
 }
 
 export function translatePiEvent(
-  event: Record<string, unknown>,
+  event: AgentSessionEvent,
   threadId: string,
   currentTurnId: string | undefined,
   counterState: TurnCounterState,
@@ -28,9 +32,8 @@ export function translatePiEvent(
 ): { notifications: JsonRpcNotification[]; turnId: string | undefined } {
   const notifications: JsonRpcNotification[] = [];
   let turnId = currentTurnId;
-  const eventType = event.type as string;
 
-  switch (eventType) {
+  switch (event.type) {
     case "agent_start":
       if (!turnId) {
         turnId = nextTurnId(counterState);
@@ -43,10 +46,7 @@ export function translatePiEvent(
       break;
 
     case "agent_end": {
-      const messages = event.messages as Array<Record<string, unknown>> | undefined;
-      const lastAssistant = messages
-        ?.filter((m) => m.role === "assistant")
-        .pop();
+      const lastAssistant = findLastAssistantMessage(event.messages);
       if (lastAssistant) {
         const text = extractAssistantText(lastAssistant);
         if (text) {
@@ -85,11 +85,9 @@ export function translatePiEvent(
     }
 
     case "message_update": {
-      const assistantEvent = event.assistantMessageEvent as
-        | Record<string, unknown>
-        | undefined;
-      if (assistantEvent?.type === "text_delta" && turnId) {
-        const delta = assistantEvent.delta as string | undefined;
+      const assistantEvent = event.assistantMessageEvent;
+      if (assistantEvent.type === "text_delta" && turnId) {
+        const delta = assistantEvent.delta;
         if (delta) {
           notifications.push({
             jsonrpc: "2.0",
@@ -103,7 +101,6 @@ export function translatePiEvent(
 
     case "tool_execution_start": {
       if (turnId) {
-        const toolName = event.toolName as string;
         notifications.push({
           jsonrpc: "2.0",
           method: "item/started",
@@ -111,8 +108,8 @@ export function translatePiEvent(
             threadId,
             turnId,
             item: translateToolCallToItem(
-              event.toolCallId as string,
-              toolName,
+              event.toolCallId,
+              event.toolName,
               event.args,
             ),
           },
@@ -123,7 +120,6 @@ export function translatePiEvent(
 
     case "tool_execution_end": {
       if (turnId) {
-        const toolName = event.toolName as string;
         notifications.push({
           jsonrpc: "2.0",
           method: "item/completed",
@@ -131,10 +127,10 @@ export function translatePiEvent(
             threadId,
             turnId: turnId,
             item: translateToolResultToItem(
-              event.toolCallId as string,
-              toolName,
+              event.toolCallId,
+              event.toolName,
               event.result,
-              (event.isError as boolean) ?? false,
+              event.isError,
             ),
           },
         });
@@ -154,8 +150,23 @@ export interface PiTokenUsageSnapshot {
   contextUsage?: ContextUsage;
 }
 
+type PiAgentEndEvent = Extract<AgentSessionEvent, { type: "agent_end" }>;
+type PiAssistantMessage = Extract<PiAgentEndEvent["messages"][number], { role: "assistant" }>;
+
+function findLastAssistantMessage(
+  messages: PiAgentEndEvent["messages"],
+): PiAssistantMessage | undefined {
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const message = messages[i];
+    if (message.role === "assistant") {
+      return message as PiAssistantMessage;
+    }
+  }
+  return undefined;
+}
+
 function extractPiTokenUsage(
-  lastAssistant: Record<string, unknown> | undefined,
+  lastAssistant: PiAssistantMessage | undefined,
   snapshot: PiTokenUsageSnapshot | undefined,
 ): Record<string, unknown> | undefined {
   const total = toSessionStatsBreakdown(snapshot?.sessionStats);
@@ -192,18 +203,10 @@ function toSessionStatsBreakdown(
 }
 
 function toAssistantUsageBreakdown(
-  lastAssistant: Record<string, unknown> | undefined,
+  lastAssistant: PiAssistantMessage | undefined,
 ): Record<string, unknown> | undefined {
-  const usage = lastAssistant?.usage;
-  if (!usage || typeof usage !== "object") return undefined;
-
-  const typedUsage = usage as {
-    input?: unknown;
-    output?: unknown;
-    cacheRead?: unknown;
-    cacheWrite?: unknown;
-    totalTokens?: unknown;
-  };
+  const typedUsage = lastAssistant?.usage;
+  if (!typedUsage) return undefined;
 
   const inputTokens = toNonNegativeNumber(typedUsage.input);
   const outputTokens = toNonNegativeNumber(typedUsage.output);
@@ -374,20 +377,14 @@ function translateToolResultToItem(
 }
 
 function extractAssistantText(
-  message: Record<string, unknown>,
+  message: PiAssistantMessage,
 ): string | undefined {
   const content = message.content;
-  if (!Array.isArray(content)) return undefined;
 
   const chunks: string[] = [];
   for (const block of content) {
-    if (
-      block &&
-      typeof block === "object" &&
-      (block as { type?: unknown }).type === "text" &&
-      typeof (block as { text?: unknown }).text === "string"
-    ) {
-      chunks.push((block as { text: string }).text);
+    if (block.type === "text") {
+      chunks.push(block.text);
     }
   }
 

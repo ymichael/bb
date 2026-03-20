@@ -1,8 +1,58 @@
 import { describe, expect, it } from "vitest";
+import type { AgentSessionEvent } from "@mariozechner/pi-coding-agent";
+import type {
+  AssistantMessage,
+  AssistantMessageEvent,
+  Usage,
+} from "@mariozechner/pi-ai";
 import {
   translatePiEvent,
   createTurnCounterState,
 } from "../event-translator.js";
+
+function createUsage(overrides?: Partial<Usage>): Usage {
+  return {
+    input: 0,
+    output: 0,
+    cacheRead: 0,
+    cacheWrite: 0,
+    totalTokens: 0,
+    cost: {
+      input: 0,
+      output: 0,
+      cacheRead: 0,
+      cacheWrite: 0,
+      total: 0,
+    },
+    ...overrides,
+  };
+}
+
+function createAssistantMessage(text: string): AssistantMessage {
+  return {
+    role: "assistant",
+    content: [{ type: "text", text }],
+    api: "anthropic-messages",
+    provider: "anthropic",
+    model: "claude-sonnet-4-6",
+    usage: createUsage(),
+    stopReason: "stop",
+    timestamp: 0,
+  };
+}
+
+function createTextDeltaEvent(delta: string): AssistantMessageEvent {
+  return {
+    type: "text_delta",
+    contentIndex: 0,
+    delta,
+    partial: createAssistantMessage(""),
+  };
+}
+
+function createAgentStartEvent(): AgentSessionEvent {
+  return { type: "agent_start" };
+}
 
 /**
  * Multi-thread isolation tests for the Pi bridge.
@@ -18,18 +68,18 @@ describe("multi-thread bridge isolation", () => {
     const counterB = createTurnCounterState();
 
     // Thread A: first turn
-    const a1 = translatePiEvent({ type: "agent_start" }, "thread-A", undefined, counterA);
+    const a1 = translatePiEvent(createAgentStartEvent(), "thread-A", undefined, counterA);
     expect(a1.turnId).toBe("turn-1");
 
     // Thread B: first turn (should also be turn-1, not turn-2)
-    const b1 = translatePiEvent({ type: "agent_start" }, "thread-B", undefined, counterB);
+    const b1 = translatePiEvent(createAgentStartEvent(), "thread-B", undefined, counterB);
     expect(b1.turnId).toBe("turn-1");
 
     // Thread A: complete turn, then start second turn
     const a1End = translatePiEvent(
       {
         type: "agent_end",
-        messages: [{ role: "assistant", content: [{ type: "text", text: "A done" }] }],
+        messages: [createAssistantMessage("A done")],
       },
       "thread-A",
       a1.turnId,
@@ -37,14 +87,15 @@ describe("multi-thread bridge isolation", () => {
     );
     expect(a1End.turnId).toBeUndefined();
 
-    const a2 = translatePiEvent({ type: "agent_start" }, "thread-A", undefined, counterA);
+    const a2 = translatePiEvent(createAgentStartEvent(), "thread-A", undefined, counterA);
     expect(a2.turnId).toBe("turn-2");
 
     // Thread B still on turn-1, unaffected by thread A's progress
     const b1Update = translatePiEvent(
       {
         type: "message_update",
-        assistantMessageEvent: { type: "text_delta", delta: "chunk" },
+        message: createAssistantMessage(""),
+        assistantMessageEvent: createTextDeltaEvent("chunk"),
       },
       "thread-B",
       b1.turnId,
@@ -58,14 +109,14 @@ describe("multi-thread bridge isolation", () => {
     const counterB = createTurnCounterState();
 
     // Both threads start their first turn
-    const a1 = translatePiEvent({ type: "agent_start" }, "thread-A", undefined, counterA);
-    const b1 = translatePiEvent({ type: "agent_start" }, "thread-B", undefined, counterB);
+    const a1 = translatePiEvent(createAgentStartEvent(), "thread-A", undefined, counterA);
+    const b1 = translatePiEvent(createAgentStartEvent(), "thread-B", undefined, counterB);
 
     // Complete thread A
     translatePiEvent(
       {
         type: "agent_end",
-        messages: [{ role: "assistant", content: [{ type: "text", text: "A done" }] }],
+        messages: [createAssistantMessage("A done")],
       },
       "thread-A",
       a1.turnId,
@@ -76,13 +127,13 @@ describe("multi-thread bridge isolation", () => {
     translatePiEvent(
       {
         type: "agent_end",
-        messages: [{ role: "assistant", content: [{ type: "text", text: "B done" }] }],
+        messages: [createAssistantMessage("B done")],
       },
       "thread-B",
       b1.turnId,
       counterB,
     );
-    const b2 = translatePiEvent({ type: "agent_start" }, "thread-B", undefined, counterB);
+    const b2 = translatePiEvent(createAgentStartEvent(), "thread-B", undefined, counterB);
     expect(b2.turnId).toBe("turn-2");
   });
 
@@ -90,8 +141,8 @@ describe("multi-thread bridge isolation", () => {
     const counterA = createTurnCounterState();
     const counterB = createTurnCounterState();
 
-    const resultA = translatePiEvent({ type: "agent_start" }, "thread-A", undefined, counterA);
-    const resultB = translatePiEvent({ type: "agent_start" }, "thread-B", undefined, counterB);
+    const resultA = translatePiEvent(createAgentStartEvent(), "thread-A", undefined, counterA);
+    const resultB = translatePiEvent(createAgentStartEvent(), "thread-B", undefined, counterB);
 
     for (const n of resultA.notifications) {
       expect(n.params.threadId).toBe("thread-A");

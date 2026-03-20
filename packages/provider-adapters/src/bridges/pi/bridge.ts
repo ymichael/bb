@@ -81,9 +81,6 @@ function createOnPiEvent(threadId: string): (event: AgentSessionEvent) => void {
     const threadSession = sessions.get(threadId);
     if (!threadSession) return;
 
-    // Convert AgentSessionEvent to the Record<string, unknown> shape
-    // that translatePiEvent expects
-    const eventRecord = event as unknown as Record<string, unknown>;
     const tokenUsageSnapshot: PiTokenUsageSnapshot | undefined =
       event.type === "agent_end"
         ? {
@@ -93,7 +90,7 @@ function createOnPiEvent(threadId: string): (event: AgentSessionEvent) => void {
         : undefined;
 
     const { notifications, turnId } = translatePiEvent(
-      eventRecord,
+      event,
       threadId,
       threadSession.turnId,
       threadSession.turnCounter,
