@@ -2,13 +2,12 @@ import type {
   SystemHealthEnvironmentDaemonCapabilities,
   SystemHealthEnvironmentDaemonCompatibility,
 } from "@bb/core";
-import type { EnvironmentDaemonSessionRecord } from "@bb/db";
 import {
   inferEnvironmentDaemonSessionCapabilities,
   normalizeEnvironmentDaemonSessionCapabilities,
   ENVIRONMENT_DAEMON_SESSION_SUPPORTED_PROTOCOL_VERSIONS,
   type EnvironmentDaemonSessionCapabilities,
-} from "@bb/environment-daemon";
+} from "./session-protocol.js";
 
 const REQUIRED_COMMANDS = [
   "provider.ensure",
@@ -31,8 +30,18 @@ const OPTIONAL_FEATURES = [
   "control_endpoint",
 ] as const;
 
+export interface EnvironmentDaemonSessionCompatibilityInput {
+  protocolVersion: number;
+  workerName?: string;
+  workerVersion?: string;
+  workerBuildId?: string;
+  providerMetadata?: unknown;
+  selectedCapabilities?: unknown;
+  controlBaseUrl?: string;
+}
+
 function toCapabilities(
-  session: EnvironmentDaemonSessionRecord,
+  session: EnvironmentDaemonSessionCompatibilityInput,
 ): SystemHealthEnvironmentDaemonCapabilities {
   const selected = session.selectedCapabilities;
   if (selected && typeof selected === "object") {
@@ -63,7 +72,7 @@ function toCapabilities(
 }
 
 export function assessEnvironmentDaemonSessionCompatibility(
-  session: EnvironmentDaemonSessionRecord,
+  session: EnvironmentDaemonSessionCompatibilityInput,
 ): {
   capabilities: SystemHealthEnvironmentDaemonCapabilities;
   compatibility: SystemHealthEnvironmentDaemonCompatibility;

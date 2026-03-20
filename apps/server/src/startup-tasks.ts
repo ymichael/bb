@@ -1,6 +1,6 @@
 import type { EnvironmentDaemonSessionRepository } from "@bb/db";
+import { assessEnvironmentDaemonSessionCompatibility } from "@bb/environment-daemon";
 import type { Orchestrator } from "./orchestrator.js";
-import { assessEnvironmentDaemonSessionCompatibility } from "./environment-daemon-session-compatibility.js";
 
 interface StartupTaskLogger {
   log(message: string): void;

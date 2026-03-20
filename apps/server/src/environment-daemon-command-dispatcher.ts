@@ -9,7 +9,7 @@ import type {
   EnvironmentDaemonSessionCommandAckPayload,
   EnvironmentDaemonSessionCommandResultPayload,
 } from "@bb/environment-daemon";
-import { assessEnvironmentDaemonSessionCompatibility } from "./environment-daemon-session-compatibility.js";
+import { assessEnvironmentDaemonSessionCompatibility } from "@bb/environment-daemon";
 
 export interface RecordEnvironmentDaemonCommandAckResult {
   commands: EnvironmentDaemonCommandRecord[];

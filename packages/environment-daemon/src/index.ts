@@ -97,6 +97,12 @@ export {
   isEnvironmentDaemonSessionClientMessage,
   isEnvironmentDaemonSessionServerMessage,
 } from "./session-protocol.js";
+export type {
+  EnvironmentDaemonSessionCompatibilityInput,
+} from "./session-compatibility.js";
+export {
+  assessEnvironmentDaemonSessionCompatibility,
+} from "./session-compatibility.js";
 export {
   getEnvironmentDaemonEnvironmentChannelId,
   resolveEnvironmentIdForEnvironmentDaemonChannel,

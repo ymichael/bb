@@ -1,22 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { assessEnvironmentDaemonSessionCompatibility } from "../environment-daemon-session-compatibility.js";
+import { assessEnvironmentDaemonSessionCompatibility } from "./session-compatibility.js";
 
 describe("environment-daemon session compatibility", () => {
   it("marks sessions missing required commands for replacement", () => {
     const assessment = assessEnvironmentDaemonSessionCompatibility({
-      id: "sess-1",
-      environmentId: "env-1",
-      agentId: "agent-1",
-      agentInstanceId: "instance-1",
       protocolVersion: 1,
       selectedCapabilities: {
         commands: ["thread.start"],
         features: ["worker_metadata"],
       },
-      status: "active",
-      leaseExpiresAt: 1_000,
-      createdAt: 1,
-      updatedAt: 1,
     });
 
     expect(assessment.compatibility).toMatchObject({
@@ -31,10 +23,6 @@ describe("environment-daemon session compatibility", () => {
 
   it("marks sessions missing only optional commands/features as degraded", () => {
     const assessment = assessEnvironmentDaemonSessionCompatibility({
-      id: "sess-1",
-      environmentId: "env-1",
-      agentId: "agent-1",
-      agentInstanceId: "instance-1",
       protocolVersion: 1,
       selectedCapabilities: {
         commands: [
@@ -45,10 +33,6 @@ describe("environment-daemon session compatibility", () => {
         ],
         features: ["worker_metadata", "provider_metadata"],
       },
-      status: "active",
-      leaseExpiresAt: 1_000,
-      createdAt: 1,
-      updatedAt: 1,
     });
 
     expect(assessment.compatibility.disposition).toBe("degrade");

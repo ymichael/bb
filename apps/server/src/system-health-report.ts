@@ -23,11 +23,11 @@ import type {
   ProjectRepository,
   ThreadRepository,
 } from "@bb/db";
+import { assessEnvironmentDaemonSessionCompatibility } from "@bb/environment-daemon";
 import {
   resolveDefaultManagedWorktreeRoot,
   resolveManagedWorktreeRootForProject,
 } from "./managed-storage-paths.js";
-import { assessEnvironmentDaemonSessionCompatibility } from "./environment-daemon-session-compatibility.js";
 
 export interface CreateSystemHealthReporterArgs {
   projectRepo: ProjectRepository;
