@@ -2,6 +2,7 @@ import type {
   ProviderToolCallRequest,
   ProviderToolCallResponse,
 } from "@bb/provider-adapters";
+import { z } from "zod";
 import type {
   EnvironmentDaemonCommand,
   EnvironmentDaemonEvent,
@@ -86,6 +87,46 @@ export interface EnvironmentDaemonSessionCapabilities {
   features: EnvironmentDaemonSessionCapabilityFeature[];
 }
 
+export const environmentDaemonSessionCursorSchema = z.object({
+  generation: z.number().int().min(0),
+  sequence: z.number().int().min(0),
+});
+
+export const environmentDaemonSessionChannelBootstrapSchema = z.object({
+  channelId: z.string().min(1),
+  generation: z.number().int().min(0),
+  lastServerAcked: environmentDaemonSessionCursorSchema.optional(),
+});
+
+export const environmentDaemonSessionCapabilitiesSchema = z.object({
+  commands: z.array(z.enum(ENVIRONMENT_DAEMON_SESSION_CAPABILITY_COMMANDS)).min(1),
+  features: z.array(z.enum(ENVIRONMENT_DAEMON_SESSION_CAPABILITY_FEATURES)),
+});
+
+export const environmentDaemonSessionOpenPayloadSchema = z.object({
+  agentId: z.string().min(1),
+  agentInstanceId: z.string().min(1),
+  supportedProtocolVersions: z.array(z.number().int()).min(1),
+  capabilities: environmentDaemonSessionCapabilitiesSchema.optional(),
+  worker: z.object({
+    name: z.string().min(1),
+    version: z.string().min(1),
+    buildId: z.string().min(1).optional(),
+  }).optional(),
+  providers: z.array(
+    z.object({
+      providerId: z.string().min(1),
+      adapterVersion: z.string().min(1),
+      runtimeVersion: z.string().min(1).optional(),
+    }),
+  ).optional(),
+  controlEndpoint: z.object({
+    baseUrl: z.string().url(),
+    authToken: z.string().min(1),
+  }).optional(),
+  channels: z.array(environmentDaemonSessionChannelBootstrapSchema),
+});
+
 const LEGACY_INFERRED_COMMANDS = [
   "provider.ensure",
   "thread.start",
@@ -122,6 +163,22 @@ export interface EnvironmentDaemonSessionWelcomePayload {
   selectedCapabilities?: EnvironmentDaemonSessionCapabilities;
   channels: EnvironmentDaemonSessionWelcomeChannel[];
 }
+
+const environmentDaemonSessionCursorExclusiveSchema = z.object({
+  generation: z.number().int().min(0),
+  sequenceExclusive: z.number().int().min(0),
+});
+
+export const environmentDaemonSessionWelcomePayloadSchema = z.object({
+  leaseTtlMs: z.number().int().positive(),
+  heartbeatIntervalMs: z.number().int().positive(),
+  protocolVersion: z.literal(ENVIRONMENT_DAEMON_SESSION_PROTOCOL_VERSION),
+  selectedCapabilities: environmentDaemonSessionCapabilitiesSchema.optional(),
+  channels: z.array(z.object({
+    channelId: z.string().min(1),
+    applyFrom: environmentDaemonSessionCursorExclusiveSchema,
+  })),
+});
 
 export function selectEnvironmentDaemonSessionProtocolVersion(args: {
   supportedByServer: readonly EnvironmentDaemonSessionProtocolVersion[];
@@ -242,6 +299,16 @@ export interface EnvironmentDaemonSessionHeartbeatPayload {
   channels: EnvironmentDaemonSessionHeartbeatChannel[];
 }
 
+export const environmentDaemonSessionHeartbeatPayloadSchema = z.object({
+  agentObservedAt: z.number().int().nonnegative(),
+  outboxDepth: z.number().int().nonnegative(),
+  channels: z.array(z.object({
+    channelId: z.string().min(1),
+    lastSent: environmentDaemonSessionCursorSchema.optional(),
+    lastAcked: environmentDaemonSessionCursorSchema.optional(),
+  })),
+});
+
 export interface EnvironmentDaemonSessionEventBatchItem<
   TEvent extends EnvironmentDaemonEvent = EnvironmentDaemonEvent,
 > {
@@ -265,6 +332,24 @@ export interface EnvironmentDaemonSessionEventBatchPayload<
   batches: EnvironmentDaemonSessionEventBatchChannel<TEvent>[];
 }
 
+const plainObjectSchema = z.custom<Record<string, unknown>>(
+  (value) => Boolean(value) && typeof value === "object" && !Array.isArray(value),
+  "Expected object",
+);
+
+export const environmentDaemonSessionEventBatchPayloadSchema = z.object({
+  batches: z.array(z.object({
+    channelId: z.string().min(1),
+    generation: z.number().int().min(0),
+    events: z.array(z.object({
+      sequence: z.number().int().min(0),
+      eventId: z.string().min(1),
+      emittedAt: z.number().int().nonnegative(),
+      event: plainObjectSchema,
+    })).min(1),
+  })).min(1),
+});
+
 export interface EnvironmentDaemonSessionEventAckChannel {
   channelId: string;
   ackedThrough: EnvironmentDaemonSessionCursor;
@@ -273,6 +358,13 @@ export interface EnvironmentDaemonSessionEventAckChannel {
 export interface EnvironmentDaemonSessionEventAckPayload {
   channels: EnvironmentDaemonSessionEventAckChannel[];
 }
+
+export const environmentDaemonSessionEventAckPayloadSchema = z.object({
+  channels: z.array(z.object({
+    channelId: z.string().min(1),
+    ackedThrough: environmentDaemonSessionCursorSchema,
+  })).min(1),
+});
 
 export interface EnvironmentDaemonSessionCommandBatchItem<
   TCommand extends EnvironmentDaemonCommand = EnvironmentDaemonCommand,
@@ -290,6 +382,16 @@ export interface EnvironmentDaemonSessionCommandBatchPayload<
   commands: EnvironmentDaemonSessionCommandBatchItem<TCommand>[];
 }
 
+export const environmentDaemonSessionCommandBatchPayloadSchema = z.object({
+  commands: z.array(z.object({
+    channelId: z.string().min(1),
+    commandCursor: z.number().int().min(0),
+    commandId: z.string().min(1),
+    createdAt: z.number().int().nonnegative(),
+    command: plainObjectSchema,
+  })).min(1),
+});
+
 export type EnvironmentDaemonSessionCommandAckState =
   | "received"
   | "duplicate";
@@ -303,6 +405,14 @@ export interface EnvironmentDaemonSessionCommandAckItem {
 export interface EnvironmentDaemonSessionCommandAckPayload {
   commands: EnvironmentDaemonSessionCommandAckItem[];
 }
+
+export const environmentDaemonSessionCommandAckPayloadSchema = z.object({
+  commands: z.array(z.object({
+    commandId: z.string().min(1),
+    channelId: z.string().min(1),
+    state: z.enum(["received", "duplicate"]),
+  })).min(1),
+});
 
 export type EnvironmentDaemonSessionCommandResultState =
   | "started"
@@ -318,6 +428,33 @@ export interface EnvironmentDaemonSessionCommandResultPayload {
   errorMessage?: string;
 }
 
+export const environmentDaemonSessionCommandResultPayloadSchema = z.object({
+  commandId: z.string().min(1),
+  channelId: z.string().min(1),
+  state: z.enum(["started", "completed", "failed"]),
+  result: z.unknown().optional(),
+  errorCode: z.string().min(1).optional(),
+  errorMessage: z.string().min(1).optional(),
+}).superRefine((payload, ctx) => {
+  if (payload.state !== "failed") {
+    return;
+  }
+  if (!payload.errorCode) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Failed command results must include errorCode",
+      path: ["errorCode"],
+    });
+  }
+  if (!payload.errorMessage) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Failed command results must include errorMessage",
+      path: ["errorMessage"],
+    });
+  }
+});
+
 export interface EnvironmentDaemonSessionProviderRequestPayload {
   requestId: string | number;
   method: string;
@@ -331,6 +468,23 @@ export interface EnvironmentDaemonSessionProviderRequestPayload {
   channelId?: string;
 }
 
+export const environmentDaemonSessionProviderRequestPayloadSchema = z.object({
+  requestId: z.union([z.string().min(1), z.number()]),
+  method: z.string().min(1),
+  params: z.unknown().optional(),
+  providerId: z.string().min(1).optional(),
+  normalizedMethod: z.string().min(1).optional(),
+  toolCall: z.object({
+    requestId: z.union([z.string().min(1), z.number()]),
+    threadId: z.string().min(1),
+    turnId: z.string().min(1),
+    callId: z.string().min(1),
+    tool: z.string().min(1),
+    arguments: z.unknown(),
+  }).optional(),
+  channelId: z.string().min(1).optional(),
+});
+
 export interface EnvironmentDaemonSessionProviderResponsePayload {
   requestId: string | number;
   ok: boolean;
@@ -340,13 +494,56 @@ export interface EnvironmentDaemonSessionProviderResponsePayload {
   errorMessage?: string;
 }
 
+export const environmentDaemonSessionProviderResponsePayloadSchema = z.object({
+  requestId: z.union([z.string().min(1), z.number()]),
+  ok: z.boolean(),
+  result: z.unknown().optional(),
+  toolCallResponse: z.object({
+    contentItems: z.array(z.union([
+      z.object({
+        type: z.literal("inputText"),
+        text: z.string(),
+      }),
+      z.object({
+        type: z.literal("inputImage"),
+        imageUrl: z.string(),
+      }),
+    ])),
+    success: z.boolean(),
+  }).optional(),
+  errorCode: z.string().min(1).optional(),
+  errorMessage: z.string().min(1).optional(),
+});
+
 export interface EnvironmentDaemonSessionClosePayload {
   reason: EnvironmentDaemonSessionCloseReason;
 }
 
+const environmentDaemonSessionClientCloseReasonSchema = z.enum([
+  "agent_shutdown",
+  "server_shutdown",
+  "migration",
+  "internal_error",
+]);
+
+export const environmentDaemonSessionClosePayloadSchema = z.object({
+  reason: z.enum([
+    "agent_shutdown",
+    "server_shutdown",
+    "lease_expired",
+    "newer_session",
+    "migration",
+    "internal_error",
+  ]),
+});
+
 export interface EnvironmentDaemonSessionReplacedPayload {
   reason: "newer_session";
 }
+
+export const environmentDaemonSessionReplacedPayloadSchema = z.object({
+  reason: z.literal("newer_session"),
+});
 
 interface EnvironmentDaemonSessionMessageBase {
   protocol: typeof ENVIRONMENT_DAEMON_SESSION_PROTOCOL;
@@ -456,6 +653,53 @@ export type EnvironmentDaemonSessionSessionControlMessage =
 export type EnvironmentDaemonSessionMessage =
   | EnvironmentDaemonSessionClientMessage
   | EnvironmentDaemonSessionServerMessage;
+
+const environmentDaemonSessionBaseMessageSchema = z.object({
+  protocol: z.literal(ENVIRONMENT_DAEMON_SESSION_PROTOCOL),
+  messageId: z.string().min(1),
+  sentAt: z.number().finite(),
+});
+
+const environmentDaemonSessionBoundMessageSchema =
+  environmentDaemonSessionBaseMessageSchema.extend({
+    sessionId: z.string().min(1),
+  });
+
+export const environmentDaemonSessionOpenMessageSchema =
+  environmentDaemonSessionBaseMessageSchema.extend({
+    type: z.literal("session_open"),
+    payload: environmentDaemonSessionOpenPayloadSchema,
+  });
+
+export const environmentDaemonSessionClientMessageSchema = z.discriminatedUnion("type", [
+  environmentDaemonSessionOpenMessageSchema,
+  environmentDaemonSessionBoundMessageSchema.extend({
+    type: z.literal("heartbeat"),
+    payload: environmentDaemonSessionHeartbeatPayloadSchema,
+  }),
+  environmentDaemonSessionBoundMessageSchema.extend({
+    type: z.literal("event_batch"),
+    payload: environmentDaemonSessionEventBatchPayloadSchema,
+  }),
+  environmentDaemonSessionBoundMessageSchema.extend({
+    type: z.literal("command_ack"),
+    payload: environmentDaemonSessionCommandAckPayloadSchema,
+  }),
+  environmentDaemonSessionBoundMessageSchema.extend({
+    type: z.literal("command_result"),
+    payload: environmentDaemonSessionCommandResultPayloadSchema,
+  }),
+  environmentDaemonSessionBoundMessageSchema.extend({
+    type: z.literal("provider_request"),
+    payload: environmentDaemonSessionProviderRequestPayloadSchema,
+  }),
+  environmentDaemonSessionBoundMessageSchema.extend({
+    type: z.literal("session_close"),
+    payload: z.object({
+      reason: environmentDaemonSessionClientCloseReasonSchema,
+    }),
+  }),
+]);
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;

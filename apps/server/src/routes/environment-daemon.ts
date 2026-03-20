@@ -3,7 +3,6 @@ import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { assertNever } from "@bb/core";
 import type {
-  EnvironmentDaemonEventEnvelope,
   EnvironmentDaemonSessionClientMessage,
   EnvironmentDaemonSessionCommandAckPayload,
   EnvironmentDaemonSessionCommandResultPayload,
@@ -13,7 +12,8 @@ import type {
   EnvironmentDaemonSessionProviderRequestPayload,
 } from "@bb/environment-daemon";
 import {
-  ENVIRONMENT_DAEMON_SESSION_PROTOCOL,
+  environmentDaemonSessionClientMessageSchema,
+  environmentDaemonSessionOpenPayloadSchema,
 } from "@bb/environment-daemon";
 import { invalidRequestError } from "../domain-errors.js";
 import { sendRouteError } from "./error-response.js";
@@ -22,62 +22,6 @@ import type {
   EnvironmentDaemonSessionRecord,
   EnvironmentRepository,
 } from "@bb/db";
-
-const environmentDaemonSessionCursorSchema = z.object({
-  generation: z.number().int().min(0),
-  sequence: z.number().int().min(0),
-});
-
-const environmentDaemonSessionChannelBootstrapSchema = z.object({
-  channelId: z.string().min(1),
-  generation: z.number().int().min(0),
-  lastServerAcked: environmentDaemonSessionCursorSchema.optional(),
-});
-
-const environmentDaemonSessionCapabilitiesSchema = z.object({
-  commands: z.array(z.enum([
-    "provider.ensure",
-    "thread.start",
-    "thread.resume",
-    "thread.stop",
-    "turn.run",
-    "thread.rename",
-    "provider.list_models",
-    "provider.list_catalog",
-    "workspace.status",
-    "workspace.diff",
-  ])).min(1),
-  features: z.array(z.enum([
-    "worker_metadata",
-    "provider_metadata",
-    "provider_runtime_version",
-    "control_endpoint",
-  ])),
-});
-
-const environmentDaemonSessionOpenBodySchema = z.object({
-  agentId: z.string().min(1),
-  agentInstanceId: z.string().min(1),
-  supportedProtocolVersions: z.array(z.number().int()).min(1),
-  capabilities: environmentDaemonSessionCapabilitiesSchema.optional(),
-  worker: z.object({
-    name: z.string().min(1),
-    version: z.string().min(1),
-    buildId: z.string().min(1).optional(),
-  }).optional(),
-  providers: z.array(
-    z.object({
-      providerId: z.string().min(1),
-      adapterVersion: z.string().min(1),
-      runtimeVersion: z.string().min(1).optional(),
-    }),
-  ).optional(),
-  controlEndpoint: z.object({
-    baseUrl: z.string().url(),
-    authToken: z.string().min(1),
-  }).optional(),
-  channels: z.array(environmentDaemonSessionChannelBootstrapSchema),
-});
 
 const environmentDaemonSessionCommandsQuerySchema = z.object({
   sessionId: z.string().min(1),
@@ -128,107 +72,6 @@ function isAbortError(error: unknown): error is Error {
   const message = error.message.toLowerCase();
   return message.includes("aborted") || message.includes("aborterror");
 }
-
-const environmentDaemonSessionMessageBaseSchema = z.object({
-  protocol: z.literal(ENVIRONMENT_DAEMON_SESSION_PROTOCOL),
-  messageId: z.string().min(1),
-  sentAt: z.number().finite(),
-  sessionId: z.string().min(1),
-});
-
-const environmentDaemonSessionMessageBodySchema = z.discriminatedUnion("type", [
-  environmentDaemonSessionMessageBaseSchema.extend({
-    type: z.literal("heartbeat"),
-    payload: z.object({
-      agentObservedAt: z.number().int().nonnegative(),
-      outboxDepth: z.number().int().nonnegative(),
-      channels: z.array(z.object({
-        channelId: z.string().min(1),
-        lastSent: environmentDaemonSessionCursorSchema.optional(),
-        lastAcked: environmentDaemonSessionCursorSchema.optional(),
-      })),
-    }),
-  }),
-  environmentDaemonSessionMessageBaseSchema.extend({
-    type: z.literal("event_batch"),
-    payload: z.object({
-      batches: z.array(z.object({
-        channelId: z.string().min(1),
-        generation: z.number().int().min(0),
-        events: z.array(z.object({
-          sequence: z.number().int().min(0),
-          eventId: z.string().min(1),
-          emittedAt: z.number().int().nonnegative(),
-          event: z.custom<EnvironmentDaemonEventEnvelope | Record<string, unknown>>((value) =>
-            Boolean(value) && typeof value === "object" && !Array.isArray(value)),
-        })).min(1),
-      })).min(1),
-    }),
-  }),
-  environmentDaemonSessionMessageBaseSchema.extend({
-    type: z.literal("command_ack"),
-    payload: z.object({
-      commands: z.array(z.object({
-        commandId: z.string().min(1),
-        channelId: z.string().min(1),
-        state: z.enum(["received", "duplicate"]),
-      })).min(1),
-    }),
-  }),
-  environmentDaemonSessionMessageBaseSchema.extend({
-    type: z.literal("command_result"),
-    payload: z.object({
-      commandId: z.string().min(1),
-      channelId: z.string().min(1),
-      state: z.enum(["started", "completed", "failed"]),
-      result: z.unknown().optional(),
-      errorCode: z.string().min(1).optional(),
-      errorMessage: z.string().min(1).optional(),
-    }).superRefine((payload, ctx) => {
-      if (payload.state === "failed") {
-        if (!payload.errorCode) {
-          ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            message: "Failed command results must include errorCode",
-            path: ["errorCode"],
-          });
-        }
-        if (!payload.errorMessage) {
-          ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            message: "Failed command results must include errorMessage",
-            path: ["errorMessage"],
-          });
-        }
-      }
-    }),
-  }),
-  environmentDaemonSessionMessageBaseSchema.extend({
-    type: z.literal("provider_request"),
-    payload: z.object({
-      requestId: z.union([z.string().min(1), z.number()]),
-      method: z.string().min(1),
-      params: z.unknown().optional(),
-      providerId: z.string().min(1).optional(),
-      normalizedMethod: z.string().min(1).optional(),
-      channelId: z.string().min(1).optional(),
-      toolCall: z.object({
-        requestId: z.union([z.string().min(1), z.number()]),
-        threadId: z.string().min(1),
-        turnId: z.string().min(1),
-        callId: z.string().min(1),
-        tool: z.string().min(1),
-        arguments: z.unknown(),
-      }).optional(),
-    }),
-  }),
-  environmentDaemonSessionMessageBaseSchema.extend({
-    type: z.literal("session_close"),
-    payload: z.object({
-      reason: z.enum(["agent_shutdown", "server_shutdown", "migration", "internal_error"]),
-    }),
-  }),
-]);
 
 function toEnvironmentDaemonSessionDebugView(
   session: EnvironmentDaemonSessionRecord,
@@ -310,7 +153,7 @@ export function createEnvironmentDaemonRoutes(opts: {
     })
     .post(
       "/:id/env-daemon/session/open",
-      zValidator("json", environmentDaemonSessionOpenBodySchema),
+      zValidator("json", environmentDaemonSessionOpenPayloadSchema),
       async (c) => {
         try {
           const environmentId = c.req.param("id");
@@ -361,7 +204,7 @@ export function createEnvironmentDaemonRoutes(opts: {
     )
     .post(
       "/:id/env-daemon/session/messages",
-      zValidator("json", environmentDaemonSessionMessageBodySchema),
+      zValidator("json", environmentDaemonSessionClientMessageSchema),
       async (c) => {
         try {
           const environmentId = c.req.param("id");
