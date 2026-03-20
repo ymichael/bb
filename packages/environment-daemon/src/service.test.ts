@@ -120,7 +120,6 @@ describe("environment-daemon service config", () => {
       },
     });
 
-    expect(resolved.runtime.providerId).toBeUndefined();
     expect(resolved.session.providers).toBeUndefined();
     expect(resolved.session.capabilities.features).not.toContain(
       "provider_metadata",
@@ -436,7 +435,6 @@ describe("environment-daemon service config", () => {
       runtime: {
         projectId: "project-1",
         environmentId: "local",
-        providerId: "codex",
         serverConnection: {
           serverUrl: "http://127.0.0.1:9000/api/v1",
           authToken: "secret-token",

@@ -1,4 +1,3 @@
-import { spawnSync } from "node:child_process";
 import {
   EnvironmentDaemonRuntime,
   type EnvironmentDaemonRuntimeOptions,
@@ -79,51 +78,6 @@ function parsePositiveIntegerEnv(
     return undefined;
   }
   return parsed;
-}
-
-function normalizeVersionOutput(rawValue: string | undefined): string | undefined {
-  const firstLine = rawValue
-    ?.split(/\r?\n/u)
-    .map((line) => line.trim())
-    .find((line) => line.length > 0);
-  return firstLine && firstLine.length > 0 ? firstLine : undefined;
-}
-
-function detectProviderRuntimeVersion(args: {
-  providerCommand?: string;
-  providerLaunchCommand?: string;
-  providerLaunchArgs?: string[];
-}): string | undefined {
-  const providerCommand = args.providerCommand?.trim();
-  if (!providerCommand) {
-    return undefined;
-  }
-
-  try {
-    const invocation = args.providerLaunchCommand?.trim()
-      ? {
-          command: args.providerLaunchCommand.trim(),
-          args: [...(args.providerLaunchArgs ?? []), providerCommand, "--version"],
-        }
-      : {
-          command: providerCommand,
-          args: ["--version"],
-        };
-    const result = spawnSync(invocation.command, invocation.args, {
-      encoding: "utf8",
-      timeout: 2_000,
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-    if (result.status !== 0 || result.error) {
-      return undefined;
-    }
-    return (
-      normalizeVersionOutput(result.stdout) ??
-      normalizeVersionOutput(result.stderr)
-    );
-  } catch {
-    return undefined;
-  }
 }
 
 export function resolveEnvironmentDaemonServiceOptions(args: {

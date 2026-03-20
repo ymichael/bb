@@ -36,7 +36,7 @@ function createThreadContext(
 
 describe("EnvironmentDaemonRuntime", () => {
   it("records sequenced events and reports basic status", () => {
-    const runtime = new EnvironmentDaemonRuntime({ providerId: "codex" });
+    const runtime = new EnvironmentDaemonRuntime({});
 
     runtime.appendEvent({ type: "environment.ready", threadId: "thread-1" });
     runtime.appendEvent({ type: "workspace.status.changed", threadId: "thread-1" });
@@ -53,7 +53,7 @@ describe("EnvironmentDaemonRuntime", () => {
   });
 
   it("updates daemon delivery status for retry visibility", () => {
-    const runtime = new EnvironmentDaemonRuntime({ providerId: "codex" });
+    const runtime = new EnvironmentDaemonRuntime({});
 
     runtime.appendEvent({ type: "environment.ready", threadId: "thread-1" });
     runtime.setDaemonDeliveryState({
@@ -80,7 +80,7 @@ describe("EnvironmentDaemonRuntime", () => {
   });
 
   it("publishes appended events to subscribers", () => {
-    const runtime = new EnvironmentDaemonRuntime({ providerId: "codex" });
+    const runtime = new EnvironmentDaemonRuntime({});
     const events: Array<{ sequence: number; type: string }> = [];
     const unsubscribe = runtime.subscribeToEvents((event) => {
       events.push({ sequence: event.sequence, type: event.event.type });
@@ -97,9 +97,7 @@ describe("EnvironmentDaemonRuntime", () => {
   });
 
   it("tracks quiescence lifecycle state from provider events and command failures", async () => {
-    const runtime = new EnvironmentDaemonRuntime({
-      providerId: "codex",
-    });
+    const runtime = new EnvironmentDaemonRuntime({});
 
     expect(runtime.getQuiescenceSnapshot()).toEqual({
       hasObservedWork: false,
@@ -170,7 +168,7 @@ describe("EnvironmentDaemonRuntime", () => {
   });
 
   it("does not emit a synthetic ready event without an explicitly routed thread", () => {
-    const runtime = new EnvironmentDaemonRuntime({ providerId: "codex" });
+    const runtime = new EnvironmentDaemonRuntime({});
     const events: string[] = [];
     const unsubscribe = runtime.subscribeToEvents((event) => {
       events.push(event.event.type);
@@ -244,7 +242,6 @@ describe("EnvironmentDaemonRuntime", () => {
       ],
     });
     const runtime = new EnvironmentDaemonRuntime({
-      providerId: "codex",
       createProviderAdapter: () => providerAdapter,
     });
 
@@ -267,9 +264,7 @@ describe("EnvironmentDaemonRuntime", () => {
   });
 
   it("lists provider catalog through a BB-native env-daemon command", async () => {
-    const runtime = new EnvironmentDaemonRuntime({
-      providerId: "codex",
-    });
+    const runtime = new EnvironmentDaemonRuntime({});
 
     const ack = await runtime.executeCommand({
       meta: {
@@ -290,7 +285,6 @@ describe("EnvironmentDaemonRuntime", () => {
 
   it("accepts explicit commands and forwards them to the provider transport", async () => {
     const runtime = new EnvironmentDaemonRuntime({
-      providerId: "codex",
       providerCommand: "node",
       providerArgs: [
         "-e",
@@ -528,7 +522,6 @@ describe("EnvironmentDaemonRuntime", () => {
 
   it("routes provider notifications to the mapped shared thread channel", async () => {
     const runtime = new EnvironmentDaemonRuntime({
-      providerId: "codex",
       providerCommand: "node",
       providerArgs: [
         "-e",
@@ -680,9 +673,7 @@ describe("EnvironmentDaemonRuntime", () => {
       "});",
     ].join("");
 
-    const runtime = new EnvironmentDaemonRuntime({
-      providerId: "codex",
-    });
+    const runtime = new EnvironmentDaemonRuntime({});
     cleanup.push(() => runtime.shutdown());
 
     const providerEvents: Array<{ threadId: string; providerId?: string; method: string }> = [];
@@ -811,9 +802,7 @@ describe("EnvironmentDaemonRuntime", () => {
   });
 
   it("captures provider stderr as events", async () => {
-    const runtime = new EnvironmentDaemonRuntime({
-      providerId: "codex",
-    });
+    const runtime = new EnvironmentDaemonRuntime({});
     const events: string[] = [];
     const unsubscribe = runtime.subscribeToEvents((event) => {
       if (event.event.type === "provider.stderr") {
@@ -856,9 +845,7 @@ describe("EnvironmentDaemonRuntime", () => {
   });
 
   it("emits an environment.degraded event when a routed provider child exits", async () => {
-    const runtime = new EnvironmentDaemonRuntime({
-      providerId: "codex",
-    });
+    const runtime = new EnvironmentDaemonRuntime({});
     const degradedThreadIds: string[] = [];
     const unsubscribe = runtime.subscribeToEvents((event) => {
       if (event.event.type === "environment.degraded") {
@@ -879,9 +866,7 @@ describe("EnvironmentDaemonRuntime", () => {
   });
 
   it("emits environment.degraded for each routed thread when a shared child exits", async () => {
-    const runtime = new EnvironmentDaemonRuntime({
-      providerId: "codex",
-    });
+    const runtime = new EnvironmentDaemonRuntime({});
     const degradedThreadIds: string[] = [];
     const unsubscribe = runtime.subscribeToEvents((event) => {
       if (event.event.type === "environment.degraded") {
@@ -906,9 +891,7 @@ describe("EnvironmentDaemonRuntime", () => {
   });
 
   it("does not attribute stderr from an unbound child to another routed thread", async () => {
-    const runtime = new EnvironmentDaemonRuntime({
-      providerId: "codex",
-    });
+    const runtime = new EnvironmentDaemonRuntime({});
     const events: string[] = [];
     const unsubscribe = runtime.subscribeToEvents((event) => {
       if (event.event.type === "provider.stderr") {
@@ -938,9 +921,7 @@ describe("EnvironmentDaemonRuntime", () => {
   });
 
   it("captures unmatched provider rpc errors as events", async () => {
-    const runtime = new EnvironmentDaemonRuntime({
-      providerId: "codex",
-    });
+    const runtime = new EnvironmentDaemonRuntime({});
     const errors: Array<{ requestId: string | number; message: string }> = [];
     const unsubscribe = runtime.subscribeToEvents((event) => {
       if (event.event.type === "provider.rpc_error") {
@@ -986,9 +967,7 @@ describe("EnvironmentDaemonRuntime", () => {
   });
 
   it("does not attribute unmatched rpc errors from an unbound child to another routed thread", async () => {
-    const runtime = new EnvironmentDaemonRuntime({
-      providerId: "codex",
-    });
+    const runtime = new EnvironmentDaemonRuntime({});
     const errors: Array<{ requestId: string | number; message: string }> = [];
     const unsubscribe = runtime.subscribeToEvents((event) => {
       if (event.event.type === "provider.rpc_error") {
@@ -1051,9 +1030,7 @@ describe("EnvironmentDaemonRuntime", () => {
       "});",
     ].join("");
 
-    const runtime = new EnvironmentDaemonRuntime({
-      providerId: "codex",
-    });
+    const runtime = new EnvironmentDaemonRuntime({});
     cleanup.push(() => runtime.shutdown());
 
     const specA: EnvironmentDaemonProviderSpec = {
@@ -1227,7 +1204,6 @@ describe("EnvironmentDaemonRuntime", () => {
 
     const baseAdapter = createCodexProviderAdapter();
     const runtime = new EnvironmentDaemonRuntime({
-      providerId: "pi",
       createProviderAdapter: (providerId) => ({
         ...baseAdapter,
         id: providerId,
@@ -1298,9 +1274,7 @@ describe("EnvironmentDaemonRuntime", () => {
       "});",
     ].join("");
 
-    const runtime = new EnvironmentDaemonRuntime({
-      providerId: "codex",
-    });
+    const runtime = new EnvironmentDaemonRuntime({});
     cleanup.push(() => runtime.shutdown());
 
     runtime.ensureProviderStatus({
@@ -1365,7 +1339,7 @@ describe("EnvironmentDaemonRuntime", () => {
       "});",
     ].join("");
 
-    const runtime = new EnvironmentDaemonRuntime({ providerId: "codex" });
+    const runtime = new EnvironmentDaemonRuntime({});
     cleanup.push(() => runtime.shutdown());
 
     const specA: EnvironmentDaemonProviderSpec = {
@@ -1560,13 +1534,57 @@ describe("EnvironmentDaemonRuntime", () => {
     expect(owners).toContain("thread-2");
   });
 
+  it("reuses the same managed HOME for pi bridge children that only differ by routing env", async () => {
+    const runtime = new EnvironmentDaemonRuntime({});
+    const lines: string[] = [];
+    const unsubscribe = runtime.subscribeToProviderStdout((line) => {
+      lines.push(line);
+    });
+    cleanup.push(unsubscribe);
+    cleanup.push(() => runtime.shutdown());
+
+    const spec: EnvironmentDaemonProviderSpec = {
+      command: "node",
+      args: [
+        "-e",
+        [
+          "console.log(JSON.stringify({ owner: process.env.BB_PI_BRIDGE_OWNER_THREAD_ID, home: process.env.HOME }));",
+          "process.stdin.resume();",
+        ].join(""),
+      ],
+      files: [{ placement: "home", path: ".pi/agent/auth.json", content: '{"provider":"pi"}' }],
+    };
+
+    runtime.ensureProviderStatus(spec, "thread-1", "pi");
+    runtime.ensureProviderStatus(spec, "thread-2", "pi");
+
+    await expect.poll(() => lines.length).toBeGreaterThanOrEqual(2);
+
+    const payloads = lines
+      .map((line) => {
+        try {
+          return JSON.parse(line) as { owner?: string; home?: string };
+        } catch {
+          return {};
+        }
+      })
+      .filter((payload): payload is { owner: string; home: string } =>
+        typeof payload.owner === "string" && typeof payload.home === "string",
+      );
+    expect(payloads).toHaveLength(2);
+    expect(new Set(payloads.map((payload) => payload.owner))).toEqual(
+      new Set(["thread-1", "thread-2"]),
+    );
+    expect(new Set(payloads.map((payload) => payload.home)).size).toBe(1);
+    expect(payloads[0]?.home).toContain("provider-home-");
+  });
+
   it("routes provider-initiated RPC responses back to the originating child", async () => {
     // Spawn two providers: child A sends a server request (tool call),
     // child B just idles. The RPC response must go to child A, not child B.
     const toolCalls: Array<{ requestId: string | number; method: string; toolCall?: unknown }> = [];
     const stdoutLines: string[] = [];
     const runtime = new EnvironmentDaemonRuntime({
-      providerId: "codex",
       onProviderRequest: async (request) => {
         toolCalls.push({
           requestId: request.requestId,
@@ -1641,7 +1659,7 @@ describe("EnvironmentDaemonRuntime", () => {
   });
 
   it("only rejects requests for the exiting child, not siblings", async () => {
-    const runtime = new EnvironmentDaemonRuntime({ providerId: "codex" });
+    const runtime = new EnvironmentDaemonRuntime({});
     cleanup.push(() => runtime.shutdown());
 
     // Child A: responds to initialize immediately, but delays thread/start
@@ -1842,7 +1860,6 @@ describe("EnvironmentDaemonRuntime", () => {
     }> = [];
     const stdout: string[] = [];
     const runtime = new EnvironmentDaemonRuntime({
-      providerId: "codex",
       providerCommand: "node",
       providerArgs: [
         "-e",
@@ -1927,7 +1944,6 @@ describe("EnvironmentDaemonRuntime", () => {
     ].join("");
 
     const runtime = new EnvironmentDaemonRuntime({
-      providerId: "codex",
       onProviderRequest: async (request) => {
         requests.push(request);
         return {

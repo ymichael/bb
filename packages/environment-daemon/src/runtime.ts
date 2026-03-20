@@ -51,7 +51,6 @@ type EnvironmentDaemonRpcCommand = Exclude<
 export interface EnvironmentDaemonRuntimeOptions {
   projectId?: string;
   environmentId?: string;
-  providerId?: string;
   serverConnection?: EnvironmentDaemonServerConnectionConfig;
   providerCommand?: string;
   providerArgs?: string[];
@@ -71,6 +70,11 @@ export interface EnvironmentDaemonRuntimeOptions {
   createProviderAdapter?: (providerId: import("@bb/core").ThreadProviderId) => ProviderAdapter;
   listAvailableProviderInfos?: typeof listAvailableProviderInfos;
 }
+
+const ROUTING_ONLY_PROVIDER_ENV_KEYS = new Set([
+  "BB_THREAD_PROVIDER_ID",
+  "BB_PI_BRIDGE_OWNER_THREAD_ID",
+]);
 
 export type EnvironmentDaemonRuntimeTurnState = "unknown" | "active" | "idle";
 
@@ -642,7 +646,7 @@ export class EnvironmentDaemonRuntime {
     // Each provider spec gets its own managed HOME so that concurrent
     // children with different auth files don't overwrite each other.
     const specHash = createHash("sha256")
-      .update(providerSpecKey(spec))
+      .update(providerHomeKey(spec))
       .digest("hex")
       .slice(0, 32);
     return path.join(
@@ -1458,9 +1462,7 @@ export class EnvironmentDaemonRuntime {
     const normalized = message.toLowerCase();
     const providerId =
       (command ? this.resolveProviderIdForCommand(command) : undefined) ??
-      this.resolveProviderIdForChild(this.resolveUniqueLiveProviderChild()) ??
-      this.opts.providerId ??
-      process.env.BB_THREAD_PROVIDER_ID;
+      this.resolveProviderIdForChild(this.resolveUniqueLiveProviderChild());
     if (normalized.includes("timed out waiting for provider response")) {
       return { code: "provider_timeout", message };
     }
@@ -1628,6 +1630,24 @@ function providerSpecKey(spec: EnvironmentDaemonProviderSpec): string {
     spec.launchCommand ?? null,
     spec.launchArgs ?? [],
     spec.env ?? null,
+    spec.files?.map((f) => [f.path, f.content, f.placement]) ?? null,
+  ]);
+}
+
+function providerHomeKey(spec: EnvironmentDaemonProviderSpec): string {
+  const env = spec.env
+    ? Object.fromEntries(
+        Object.entries(spec.env).filter(
+          ([key]) => !ROUTING_ONLY_PROVIDER_ENV_KEYS.has(key),
+        ),
+      )
+    : null;
+  return JSON.stringify([
+    spec.command,
+    spec.args,
+    spec.launchCommand ?? null,
+    spec.launchArgs ?? [],
+    env,
     spec.files?.map((f) => [f.path, f.content, f.placement]) ?? null,
   ]);
 }
