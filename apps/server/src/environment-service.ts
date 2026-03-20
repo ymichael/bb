@@ -66,14 +66,12 @@ interface EnvironmentServiceCallbacks {
   ) => Promise<void>;
   ensureManagedEnvironmentArtifacts?: (
     args: {
-      threadId: string;
       environmentId: string;
       projectRootPath: string;
     },
   ) => Promise<{ created: boolean }>;
   cleanupManagedEnvironmentArtifacts?: (
     args: {
-      threadId: string;
       environmentId: string;
       projectRootPath: string;
     },
@@ -265,7 +263,6 @@ export class EnvironmentService {
     threadId: string,
     projectRootPath: string,
   ): {
-    threadId: string;
     environmentId: string;
     projectRootPath: string;
   } | undefined {
@@ -274,7 +271,6 @@ export class EnvironmentService {
       return undefined;
     }
     return {
-      threadId,
       environmentId,
       projectRootPath,
     };
@@ -846,7 +842,6 @@ export class EnvironmentService {
         projectRootPath
       ) {
         await this.callbacks.cleanupManagedEnvironmentArtifacts?.({
-          threadId,
           environmentId: attachedEnvironment.environmentId,
           projectRootPath,
         });
