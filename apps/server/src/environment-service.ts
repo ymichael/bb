@@ -59,10 +59,13 @@ interface EnvironmentServiceCallbacks {
     currentCheckout: EnvironmentCheckoutSnapshot;
   }) => void;
   runOptionalSetup: (
-    threadId: string,
-    environment: IEnvironment,
-    projectRootPath: string,
-    reason: ThreadEnvironmentStartReason,
+    args: {
+      threadId: string;
+      environmentId?: string;
+      environment: IEnvironment;
+      projectRootPath: string;
+      reason: ThreadEnvironmentStartReason;
+    },
   ) => Promise<void>;
   ensureManagedEnvironmentArtifacts?: (
     args: {
@@ -428,7 +431,13 @@ export class EnvironmentService {
       await environment.prepare();
     }
     if (!existedBeforePrepare) {
-      await this.callbacks.runOptionalSetup(threadId, environment, projectRootPath, reason);
+      await this.callbacks.runOptionalSetup({
+        threadId,
+        environmentId: this.resolveAttachedEnvironment(threadId)?.environmentId,
+        environment,
+        projectRootPath,
+        reason,
+      });
     }
     return { existedBeforePrepare };
   }

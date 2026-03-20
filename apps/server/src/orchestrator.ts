@@ -783,9 +783,10 @@ export class Orchestrator implements ThreadOrchestrator {
         onPrimaryCheckoutDemoted: ({ projectId, threadId, currentCheckout }) => {
           this._broadcastThreadChanged(threadId, THREAD_STATUS_CHANGE_KINDS);
         },
-        runOptionalSetup: (threadId, environment, projectRootPath, reason) =>
+        runOptionalSetup: ({ threadId, environmentId, environment, projectRootPath, reason }) =>
           this._runOptionalEnvironmentSetup(
             threadId,
+            environmentId,
             environment,
             projectRootPath,
             reason,
@@ -4299,6 +4300,7 @@ export class Orchestrator implements ThreadOrchestrator {
 
   private async _runOptionalEnvironmentSetup(
     threadId: string,
+    environmentId: string | undefined,
     environment: IEnvironment,
     projectRootPath: string,
     reason: ThreadEnvironmentStartReason,
@@ -4318,7 +4320,22 @@ export class Orchestrator implements ThreadOrchestrator {
     const workspaceRoot = environment.getWorkspaceRootUnsafe();
     const { branchName, headSha } = await getEnvironmentCheckoutSummary(environment);
     const thread = this.threadRepo.getById(threadId);
-    this._appendEnvironmentProvisioningEvent(threadId, {
+    const recipientThreadIds = (() => {
+      if (!environmentId) {
+        return [threadId];
+      }
+      const attachedThreadIds = this._getNonArchivedThreadsAttachedToEnvironment(environmentId)
+        .map((attachedThread) => attachedThread.id);
+      return attachedThreadIds.length > 0 ? attachedThreadIds : [threadId];
+    })();
+    const appendSetupEvent = (
+      event: Parameters<typeof this._appendEnvironmentProvisioningEvent>[1],
+    ) => {
+      for (const recipientThreadId of recipientThreadIds) {
+        this._appendEnvironmentProvisioningEvent(recipientThreadId, event);
+      }
+    };
+    appendSetupEvent({
       type: "env-setup",
       status: "started",
       scriptPath: ENV_SETUP_SCRIPT_NAME,
@@ -4341,7 +4358,7 @@ export class Orchestrator implements ThreadOrchestrator {
         onStdoutLine: (line) => {
           if (line.length === 0) return;
           sawSetupOutput = true;
-          this._appendEnvironmentProvisioningEvent(threadId, {
+          appendSetupEvent({
             type: "env-setup",
             status: "running",
             scriptPath: ENV_SETUP_SCRIPT_NAME,
@@ -4355,7 +4372,7 @@ export class Orchestrator implements ThreadOrchestrator {
         onStderrLine: (line) => {
           if (line.length === 0) return;
           sawSetupOutput = true;
-          this._appendEnvironmentProvisioningEvent(threadId, {
+          appendSetupEvent({
             type: "env-setup",
             status: "running",
             scriptPath: ENV_SETUP_SCRIPT_NAME,
@@ -4370,7 +4387,7 @@ export class Orchestrator implements ThreadOrchestrator {
     );
     if (result.exitCode !== 0) {
       const detail = (result.stderr || result.stdout || "unknown error").trim();
-      this._appendEnvironmentProvisioningEvent(threadId, {
+      appendSetupEvent({
         type: "env-setup",
         status: "failed",
         scriptPath: ENV_SETUP_SCRIPT_NAME,
@@ -4383,7 +4400,7 @@ export class Orchestrator implements ThreadOrchestrator {
       });
       throw new Error(`${ENV_SETUP_SCRIPT_NAME} failed: ${detail}`);
     }
-    this._appendEnvironmentProvisioningEvent(threadId, {
+    appendSetupEvent({
       type: "env-setup",
       status: "completed",
       scriptPath: ENV_SETUP_SCRIPT_NAME,

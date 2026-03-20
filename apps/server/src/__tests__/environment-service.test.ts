@@ -247,12 +247,13 @@ function createService(args: {
   }
 
   const runOptionalSetup = vi.fn<
-    (
-      threadId: string,
-      environmentArg: IEnvironment,
-      projectRootPath: string,
-      reason: ThreadEnvironmentStartReason,
-    ) => Promise<void>
+    (args: {
+      threadId: string;
+      environmentId?: string;
+      environment: IEnvironment;
+      projectRootPath: string;
+      reason: ThreadEnvironmentStartReason;
+    }) => Promise<void>
   >().mockResolvedValue(undefined);
   const onCleanupFailure = vi.fn();
   const onThreadChanged = vi.fn();
@@ -329,10 +330,13 @@ describe("EnvironmentService", () => {
     );
 
     expect(runOptionalSetup).toHaveBeenCalledWith(
-      thread.id,
-      expect.objectContaining({ kind: "worktree" }),
-      "/project/root",
-      "thread-created",
+      expect.objectContaining({
+        threadId: thread.id,
+        environmentId: expect.any(String),
+        environment: expect.objectContaining({ kind: "worktree" }),
+        projectRootPath: "/project/root",
+        reason: "thread-created",
+      }),
     );
   });
 
@@ -840,7 +844,6 @@ describe("EnvironmentService", () => {
 
     expect(destroySpy).toHaveBeenCalledTimes(1);
     expect(cleanupManagedEnvironmentArtifacts).toHaveBeenCalledWith({
-      threadId: thread.id,
       environmentId: env.id,
       projectRootPath: "/project/root",
     });

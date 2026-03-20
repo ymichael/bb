@@ -24,6 +24,7 @@ import {
   type ThreadEvent,
   type ThreadEventDataForType,
   type ThreadEventType,
+  type ThreadEnvironmentStartReason,
   type ThreadWorkStatus,
 } from "@bb/core";
 import {
@@ -2132,6 +2133,125 @@ describe("Orchestrator", () => {
           );
         });
       } finally {
+        rmSync(tempRoot, { recursive: true, force: true });
+      }
+    });
+
+    it("broadcasts shared env-setup progress to all attached threads", async () => {
+      const tempRoot = mkdtempSync(join(tmpdir(), "bb-orchestrator-shared-env-setup-"));
+      const workspaceRoot = join(tempRoot, "workspace");
+      mkdirSync(workspaceRoot, { recursive: true });
+      writeFileSync(
+        join(workspaceRoot, ".bb-env-setup.sh"),
+        "#!/usr/bin/env sh\nsleep 0\n",
+        "utf8",
+      );
+
+      const testDb = createTestDb();
+      const repos = createTestRepos(testDb.db);
+      const localProject = createTestProject(repos.projectRepo, { rootPath: tempRoot });
+      const localManager = new Orchestrator(
+        repos.threadRepo,
+        repos.eventRepo,
+        repos.projectRepo,
+        ws,
+        llmCompletionService,
+        undefined,
+        createTestRuntimeEnv(),
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        repos.attachmentRepo as never,
+      );
+      const environment = repos.environmentRepo.create({
+        projectId: localProject.id,
+        descriptor: { type: "path", path: workspaceRoot },
+        managed: true,
+      });
+      const ownerThread = createTestThread(repos.threadRepo, localProject.id, {
+        status: "idle",
+        environmentId: environment.id,
+      });
+      const siblingThread = createTestThread(repos.threadRepo, localProject.id, {
+        status: "idle",
+        environmentId: environment.id,
+      });
+      repos.attachmentRepo.attachThread({ threadId: ownerThread.id, environmentId: environment.id });
+      repos.attachmentRepo.attachThread({ threadId: siblingThread.id, environmentId: environment.id });
+
+      const runtimeEnvironment = makeRuntimeEnvironment({
+        kind: "local",
+        rootPath: workspaceRoot,
+        overrides: {
+          run: vi.fn(async (_command: string, _args: string[], options?: {
+            onStdoutLine?: (line: string) => void;
+            onStderrLine?: (line: string) => void;
+          }) => {
+            options?.onStdoutLine?.("+ setup");
+            options?.onStderrLine?.("stderr setup");
+            return {
+              exitCode: 0,
+              stdout: "",
+              stderr: "",
+            };
+          }),
+        },
+      });
+
+      try {
+        await (
+          localManager as unknown as {
+            _runOptionalEnvironmentSetup: (
+              threadId: string,
+              environmentId: string | undefined,
+              environment: IEnvironment,
+              projectRootPath: string,
+              reason: ThreadEnvironmentStartReason,
+            ) => Promise<void>;
+          }
+        )._runOptionalEnvironmentSetup(
+          ownerThread.id,
+          environment.id,
+          runtimeEnvironment,
+          tempRoot,
+          "thread-created",
+        );
+
+        for (const threadId of [ownerThread.id, siblingThread.id]) {
+          const events = repos.eventRepo.listByThread(threadId)
+            .filter((event) => event.type === "system/provisioning/env_setup");
+          expect(events).toContainEqual(
+            expect.objectContaining({
+              threadId,
+              data: expect.objectContaining({
+                setup: expect.objectContaining({ status: "started" }),
+              }),
+            }),
+          );
+          expect(events).toContainEqual(
+            expect.objectContaining({
+              threadId,
+              data: expect.objectContaining({
+                setup: expect.objectContaining({ status: "running" }),
+              }),
+            }),
+          );
+          expect(events).toContainEqual(
+            expect.objectContaining({
+              threadId,
+              data: expect.objectContaining({
+                setup: expect.objectContaining({ status: "completed" }),
+              }),
+            }),
+          );
+        }
+      } finally {
+        testDb.sqlite.close();
         rmSync(tempRoot, { recursive: true, force: true });
       }
     });
