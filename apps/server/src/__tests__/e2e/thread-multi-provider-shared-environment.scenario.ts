@@ -155,6 +155,29 @@ async function waitForIdleAfterTurnProgress(args: {
   });
 }
 
+async function logThreadDebugSnapshot(args: {
+  baseUrl: string;
+  threadId: string;
+  label: string;
+}): Promise<void> {
+  if (process.env.BB_E2E_DEBUG_SHARED_MULTI_PROVIDER !== "1") {
+    return;
+  }
+  const [thread, events] = await Promise.all([
+    readJson<Thread>(`${args.baseUrl}/api/v1/threads/${args.threadId}`),
+    listThreadEvents(args.baseUrl, args.threadId),
+  ]);
+  console.error(
+    `[multi-provider-debug] ${args.label} thread=${args.threadId} snapshot=${JSON.stringify({
+      status: thread.status,
+      providerId: thread.providerId,
+      environmentId: thread.attachedEnvironment?.id,
+      eventTypes: events.slice(-20).map((event) => event.type),
+      lastEvents: events.slice(-10),
+    })}`,
+  );
+}
+
 async function waitForArchivedState(args: {
   baseUrl: string;
   wsUrl: string;
@@ -265,6 +288,13 @@ export async function runThreadMultiProviderSharedEnvironmentScenario(): Promise
       previousCounts: { clientTurnStarts: 0, completedTurns: 0 },
       additionalTurns: 1,
       timeoutMs: e2eTimeoutMs(20_000, 120_000),
+    }).catch(async (error) => {
+      await logThreadDebugSnapshot({
+        baseUrl: harness.baseUrl,
+        threadId: secondaryThread.id,
+        label: "secondary-initial",
+      });
+      throw error;
     });
 
     expect(secondaryInitialRoundTrip.thread.providerId).toBe(secondaryProviderId);
