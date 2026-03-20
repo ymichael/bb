@@ -1278,7 +1278,7 @@ describe("Orchestrator", () => {
       });
     });
 
-    it("does not inject BB_THREAD_ID into shared environment runtime env", () => {
+    it("does not inject thread-scoped routing env into shared environment runtime env", () => {
       const thread = createTestThread(threadRepo, project.id, {
         status: "idle",
         providerId: "codex",
@@ -1293,7 +1293,7 @@ describe("Orchestrator", () => {
       )._createEnvironmentContext(thread.id, "/tmp/proj-1");
 
       expect(capturedContext.runtimeEnv.BB_THREAD_ID).toBeUndefined();
-      expect(capturedContext.runtimeEnv.BB_THREAD_PROVIDER_ID).toBe("codex");
+      expect(capturedContext.runtimeEnv.BB_THREAD_PROVIDER_ID).toBeUndefined();
     });
 
     it("does not reconnect to an expired shared environment-daemon session target", () => {
