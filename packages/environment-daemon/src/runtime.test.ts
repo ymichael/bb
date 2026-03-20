@@ -480,6 +480,52 @@ describe("EnvironmentDaemonRuntime", () => {
     });
   });
 
+  it("injects routed provider env for provider children without daemon-global defaults", async () => {
+    const runtime = new EnvironmentDaemonRuntime({});
+    cleanup.push(() => runtime.shutdown());
+
+    const stdout: string[] = [];
+    const unsubscribe = runtime.subscribeToProviderStdout((line) => {
+      stdout.push(line);
+    });
+    cleanup.push(unsubscribe);
+
+    const ack = await runtime.executeCommand({
+      meta: {
+        protocolVersion: ENVIRONMENT_DAEMON_PROTOCOL_VERSION,
+        commandId: "ensure-pi-routed-env",
+        idempotencyKey: "ensure-pi-routed-env",
+        sentAt: 125,
+      },
+      command: {
+        type: "provider.ensure",
+        providerId: "pi",
+        forThreadId: "thread-pi",
+        command: "node",
+        args: [
+          "-e",
+          [
+            "console.log(JSON.stringify({ providerId: process.env.BB_THREAD_PROVIDER_ID, ownerThreadId: process.env.BB_PI_BRIDGE_OWNER_THREAD_ID }));",
+            "process.stdin.resume();",
+          ].join(""),
+        ],
+      },
+    });
+
+    expect(ack).toMatchObject({
+      state: "accepted",
+      result: {
+        running: true,
+        launched: true,
+      },
+    });
+    await expect.poll(() => stdout.length).toBeGreaterThanOrEqual(1);
+    expect(JSON.parse(stdout[0] ?? "{}")).toMatchObject({
+      providerId: "pi",
+      ownerThreadId: "thread-pi",
+    });
+  });
+
   it("routes provider notifications to the mapped shared thread channel", async () => {
     const runtime = new EnvironmentDaemonRuntime({
       providerId: "codex",

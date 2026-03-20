@@ -23,7 +23,6 @@ describe("environment-daemon service config", () => {
       env: {
         BB_PROJECT_ID: "project-1",
         BB_ENVIRONMENT_ID: "docker",
-        BB_THREAD_PROVIDER_ID: "codex",
         BB_ROOT: "/tmp/bb-root",
         BB_SERVER_URL: "http://127.0.0.1:9000",
         BB_ENV_DAEMON_AUTH_TOKEN: "secret-token",
@@ -34,7 +33,6 @@ describe("environment-daemon service config", () => {
       runtime: {
         projectId: "project-1",
         environmentId: "docker",
-        providerId: "codex",
         serverConnection: {
           serverUrl: "http://127.0.0.1:9000",
           authToken: "secret-token",
@@ -75,18 +73,12 @@ describe("environment-daemon service config", () => {
             "workspace.status",
             "workspace.diff",
           ],
-          features: ["worker_metadata", "provider_metadata"],
+          features: ["worker_metadata"],
         },
         worker: {
           name: "environment-daemon",
           version: "0.0.1",
         },
-        providers: [
-          {
-            providerId: "codex",
-            adapterVersion: "0.0.1",
-          },
-        ],
       },
     });
   });
@@ -115,7 +107,7 @@ describe("environment-daemon service config", () => {
     ).toThrow(/Invalid --http-port/);
   });
 
-  it("captures provider runtime version when the provider reports one", () => {
+  it("does not advertise startup provider metadata from BB_THREAD_PROVIDER_ID", () => {
     const resolved = resolveEnvironmentDaemonServiceOptions({
       cli: {
         providerCommand: "node",
@@ -128,14 +120,12 @@ describe("environment-daemon service config", () => {
       },
     });
 
-    expect(resolved.session.providers).toEqual([
-      {
-        providerId: "codex",
-        adapterVersion: "0.0.1",
-        runtimeVersion: expect.stringMatching(/^v\d+\./),
-      },
-    ]);
-    expect(resolved.session.capabilities.features).toContain(
+    expect(resolved.runtime.providerId).toBeUndefined();
+    expect(resolved.session.providers).toBeUndefined();
+    expect(resolved.session.capabilities.features).not.toContain(
+      "provider_metadata",
+    );
+    expect(resolved.session.capabilities.features).not.toContain(
       "provider_runtime_version",
     );
   });

@@ -257,6 +257,45 @@ describe("host environment-daemon helper", () => {
     ).not.toHaveProperty("BB_THREAD_ID");
   });
 
+  it("does not forward BB_THREAD_PROVIDER_ID to the managed environment-daemon process", async () => {
+    const bbRoot = makeTempDir();
+    process.env.BB_ROOT = bbRoot;
+    const projectId = `project-${Date.now()}`;
+    const workspaceRoot = makeTempDir();
+    const spawnProcess = vi.fn(() => ({
+      pid: 4321,
+      unref: vi.fn(),
+    })) as unknown as typeof import("node:child_process").spawn;
+
+    await ensureManagedHostEnvironmentDaemon(
+      {
+        workspaceRootPath: workspaceRoot,
+        projectId,
+        environmentId: "local",
+        runtimeEnv: {
+          BB_ROOT: bbRoot,
+          BB_THREAD_PROVIDER_ID: "codex",
+        },
+      },
+      {
+        allocatePort: async () => 4312,
+        generateAuthToken: () => "auth-token",
+        resolveLaunchCommand: () => ({
+          command: process.execPath,
+          args: ["agent.mjs"],
+        }),
+        spawnProcess,
+        waitForAgent: async () => {},
+        isProcessAlive: () => true,
+        killProcess: vi.fn(),
+      },
+    );
+
+    expect(
+      (spawnProcess as unknown as ReturnType<typeof vi.fn>).mock.calls[0]?.[2]?.env,
+    ).not.toHaveProperty("BB_THREAD_PROVIDER_ID");
+  });
+
   it("reuses the same managed agent across threads on one environment", async () => {
     const bbRoot = makeTempDir();
     process.env.BB_ROOT = bbRoot;

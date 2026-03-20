@@ -1278,6 +1278,24 @@ describe("Orchestrator", () => {
       });
     });
 
+    it("does not inject BB_THREAD_ID into shared environment runtime env", () => {
+      const thread = createTestThread(threadRepo, project.id, {
+        status: "idle",
+        providerId: "codex",
+      });
+      const capturedContext = (
+        manager as unknown as {
+          _createEnvironmentContext: (
+            threadId: string,
+            projectRootPath: string,
+          ) => CreateEnvironmentContext;
+        }
+      )._createEnvironmentContext(thread.id, "/tmp/proj-1");
+
+      expect(capturedContext.runtimeEnv.BB_THREAD_ID).toBeUndefined();
+      expect(capturedContext.runtimeEnv.BB_THREAD_PROVIDER_ID).toBe("codex");
+    });
+
     it("does not reconnect to an expired shared environment-daemon session target", () => {
       const env = environmentRepo.create({
         projectId: project.id,
@@ -1845,7 +1863,18 @@ describe("Orchestrator", () => {
               exists() {
                 return workspaceExists;
               },
-              run: vi.fn().mockImplementation(async () => setupResult),
+              run: vi.fn().mockImplementation(
+                async (
+                  _command: string,
+                  _args: string[],
+                  options?: {
+                    env?: Record<string, string | undefined>;
+                  },
+                ) => {
+                  expect(options?.env?.BB_THREAD_ID).toBeUndefined();
+                  return setupResult;
+                },
+              ),
             },
           });
         },
@@ -2006,10 +2035,12 @@ describe("Orchestrator", () => {
                   _command: string,
                   _args: string[],
                   options?: {
+                    env?: Record<string, string | undefined>;
                     onStdoutLine?: (line: string) => void;
                     onStderrLine?: (line: string) => void;
                   },
                 ) => {
+                  expect(options?.env?.BB_THREAD_ID).toBeUndefined();
                   options?.onStdoutLine?.("+ pnpm install");
                   options?.onStderrLine?.("warning: cache miss");
                   return setupResult;

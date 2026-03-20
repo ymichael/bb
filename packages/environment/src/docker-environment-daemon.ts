@@ -332,9 +332,6 @@ export async function ensureManagedDockerEnvironmentDaemon(
         `BB_PROJECT_ID=${args.projectId}`,
         "-e",
         `BB_ENVIRONMENT_ID=${args.environmentId}`,
-        ...(args.runtimeEnv.BB_THREAD_PROVIDER_ID?.trim()
-          ? ["-e", `BB_THREAD_PROVIDER_ID=${args.runtimeEnv.BB_THREAD_PROVIDER_ID.trim()}`]
-          : []),
         "-e",
         `BB_ENV_DAEMON_AUTH_TOKEN=${authToken}`,
         "-e",

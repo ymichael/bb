@@ -285,7 +285,11 @@ export function resolveManagedHostEnvironmentDaemonLaunchCommand(): {
 function toEnvironmentDaemonRuntimeEnv(
   runtimeEnv: Record<string, string | undefined>,
 ): Record<string, string | undefined> {
-  const { BB_THREAD_ID: _ignoredThreadId, ...daemonRuntimeEnv } = runtimeEnv;
+  const {
+    BB_THREAD_ID: _ignoredThreadId,
+    BB_THREAD_PROVIDER_ID: _ignoredProviderId,
+    ...daemonRuntimeEnv
+  } = runtimeEnv;
   return daemonRuntimeEnv;
 }
 
@@ -388,9 +392,6 @@ export async function ensureManagedHostEnvironmentDaemon(args: {
           ...toEnvironmentDaemonRuntimeEnv(args.runtimeEnv),
           BB_PROJECT_ID: args.projectId,
           BB_ENVIRONMENT_ID: args.environmentId,
-          ...(args.runtimeEnv.BB_THREAD_PROVIDER_ID
-            ? { BB_THREAD_PROVIDER_ID: args.runtimeEnv.BB_THREAD_PROVIDER_ID }
-            : {}),
           BB_ENV_DAEMON_AUTH_TOKEN: authToken,
           BB_ENV_DAEMON_CONTROL_BASE_URL: baseUrl,
         },

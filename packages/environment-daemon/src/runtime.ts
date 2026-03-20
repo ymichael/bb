@@ -470,15 +470,25 @@ export class EnvironmentDaemonRuntime {
     forThreadId: string | undefined,
     providerId: string | undefined,
   ): EnvironmentDaemonProviderSpec | undefined {
-    if (!spec || !forThreadId || providerId !== "pi") {
+    if (!spec) {
       return spec;
+    }
+    const routedEnv = {
+      ...(spec.env ?? {}),
+      ...(providerId ? { BB_THREAD_PROVIDER_ID: providerId } : {}),
+    };
+    if (!forThreadId || providerId !== "pi") {
+      return {
+        ...spec,
+        env: routedEnv,
+      };
     }
     // The Pi bridge mutates process.env per session, so each thread must get
     // its own bridge process until the upstream SDK supports per-session env.
     return {
       ...spec,
       env: {
-        ...(spec.env ?? {}),
+        ...routedEnv,
         BB_PI_BRIDGE_OWNER_THREAD_ID: forThreadId,
       },
     };

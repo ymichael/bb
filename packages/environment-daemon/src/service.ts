@@ -65,7 +65,6 @@ const BB_ENV_DAEMON_CONTROL_BASE_URL =
   "BB_ENV_DAEMON_CONTROL_BASE_URL";
 const BB_ENV_DAEMON_SESSION_POLL_INTERVAL_MS =
   "BB_ENV_DAEMON_SESSION_POLL_INTERVAL_MS";
-const BB_THREAD_PROVIDER_ID = "BB_THREAD_PROVIDER_ID";
 const BB_ENV_DAEMON_BUILD_ID = "BB_ENV_DAEMON_BUILD_ID";
 const ENVIRONMENT_DAEMON_VERSION = "0.0.1";
 
@@ -158,26 +157,10 @@ export function resolveEnvironmentDaemonServiceOptions(args: {
         authToken,
       }
     : undefined;
-  const providerRuntimeVersion = detectProviderRuntimeVersion({
-    providerCommand: args.cli.providerCommand?.trim(),
-    providerLaunchCommand: args.cli.providerLaunchCommand?.trim(),
-    providerLaunchArgs: args.cli.providerLaunchArgs ?? [],
-  });
-  const providers = args.env[BB_THREAD_PROVIDER_ID]?.trim()
-    ? [
-        {
-          providerId: args.env[BB_THREAD_PROVIDER_ID]!.trim(),
-          adapterVersion: ENVIRONMENT_DAEMON_VERSION,
-          ...(providerRuntimeVersion ? { runtimeVersion: providerRuntimeVersion } : {}),
-        },
-      ]
-    : undefined;
-
   return {
     runtime: {
       projectId: args.env.BB_PROJECT_ID,
       environmentId: args.env.BB_ENVIRONMENT_ID,
-      providerId: args.env[BB_THREAD_PROVIDER_ID]?.trim(),
       serverConnection: {
         serverUrl: args.env[BB_SERVER_URL],
         authToken,
@@ -207,10 +190,8 @@ export function resolveEnvironmentDaemonServiceOptions(args: {
         ) ?? 250,
       commandBatchLimit: 50,
       worker,
-      providers,
       capabilities: createEnvironmentDaemonSessionCapabilities({
         worker,
-        providers,
         controlEndpoint,
       }),
     },

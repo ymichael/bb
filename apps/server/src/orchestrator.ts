@@ -4263,7 +4263,6 @@ export class Orchestrator implements ThreadOrchestrator {
       ...(attachedEnvironmentId ? { environmentId: attachedEnvironmentId } : {}),
       runtimeEnv: {
         ...this.runtimeEnv,
-        BB_THREAD_ID: threadId,
         ...(thread?.providerId ? { BB_THREAD_PROVIDER_ID: thread.providerId } : {}),
         ...(attachedEnvironmentId
           ? { BB_ENVIRONMENT_ID: attachedEnvironmentId }
@@ -4338,7 +4337,6 @@ export class Orchestrator implements ThreadOrchestrator {
         timeoutMs: ENV_SETUP_TIMEOUT_MS,
         env: {
           ...(thread?.projectId ? { BB_PROJECT_ID: thread.projectId } : {}),
-          BB_THREAD_ID: threadId,
           BB_ENV_SETUP_TIMEOUT_MS: String(ENV_SETUP_TIMEOUT_MS),
         },
         onStdoutLine: (line) => {
