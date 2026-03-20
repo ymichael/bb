@@ -3862,6 +3862,13 @@ export class Orchestrator implements ThreadOrchestrator {
     return this.environmentService.getAttachedEnvironmentId(threadId) ?? `thread:${threadId}`;
   }
 
+  private _getEnvironmentDaemonSessionChannelId(threadId: string): string {
+    const environmentId = this.environmentService.getAttachedEnvironmentId(threadId);
+    return environmentId
+      ? getEnvironmentDaemonEnvironmentChannelId(environmentId)
+      : threadId;
+  }
+
   private async _awaitRecoverableEnvironmentDaemonSession(
     threadId: string,
     timeoutMs: number = ENVIRONMENT_DAEMON_SESSION_RECOVERY_WAIT_MS,
@@ -3871,7 +3878,7 @@ export class Orchestrator implements ThreadOrchestrator {
     }
     try {
       await this.environmentDaemonCommandDispatcher.awaitActiveSession({
-        threadId,
+        channelId: this._getEnvironmentDaemonSessionChannelId(threadId),
         timeoutMs,
       });
       return true;
@@ -4064,7 +4071,9 @@ export class Orchestrator implements ThreadOrchestrator {
     const runtimeEnvTarget = this._resolveEnvironmentDaemonConnectionTargetFromRuntimeEnv();
     if (runtimeEnvTarget) {
       if (this.environmentDaemonCommandDispatcher) {
-        await this.environmentDaemonCommandDispatcher.awaitActiveSession({ threadId });
+        await this.environmentDaemonCommandDispatcher.awaitActiveSession({
+          channelId: this._getEnvironmentDaemonSessionChannelId(threadId),
+        });
       }
       return {
         thread,
@@ -4133,7 +4142,7 @@ export class Orchestrator implements ThreadOrchestrator {
 
     try {
       await this.environmentDaemonCommandDispatcher.awaitActiveSession({
-        threadId: thread.id,
+        channelId: this._getEnvironmentDaemonSessionChannelId(thread.id),
         timeoutMs: ENVIRONMENT_DAEMON_SESSION_RECOVERY_WAIT_MS,
       });
       return ensured;
@@ -4150,7 +4159,7 @@ export class Orchestrator implements ThreadOrchestrator {
       reason,
     );
     await this.environmentDaemonCommandDispatcher.awaitActiveSession({
-      threadId: thread.id,
+      channelId: this._getEnvironmentDaemonSessionChannelId(thread.id),
       timeoutMs: ENVIRONMENT_DAEMON_SESSION_RECOVERY_RETRY_WAIT_MS,
     });
     return ensured;
@@ -4554,7 +4563,9 @@ export class Orchestrator implements ThreadOrchestrator {
     const inMemoryThreadId = this.providerThreadIdByThreadId.get(threadId);
     const persistedThreadId = this._resolvePersistedProviderThreadId(threadId);
     const hasActiveEnvironmentDaemonSession =
-      this.environmentDaemonCommandDispatcher?.hasActiveSession(threadId) ?? false;
+      this.environmentDaemonCommandDispatcher?.hasActiveSession(
+        this._getEnvironmentDaemonSessionChannelId(threadId),
+      ) ?? false;
 
     if (
       inMemoryThreadId &&

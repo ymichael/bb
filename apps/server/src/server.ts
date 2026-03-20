@@ -146,8 +146,9 @@ export function createServer(deps: ServerDeps) {
   const environmentDaemonSessionManager = new EnvironmentDaemonSessionManager(
     deps.environmentDaemonSessionRepo,
   );
-  const resolveEnvironmentCommandChannelId = (channelId: string): string | undefined =>
-    resolveEnvironmentIdForEnvironmentDaemonChannel(channelId);
+  const resolveAttachedEnvironmentId = (channelId: string): string | undefined =>
+    resolveEnvironmentIdForEnvironmentDaemonChannel(channelId) ??
+    deps.threadEnvironmentAttachmentRepo?.getByThreadId(channelId)?.environmentId;
   const listAttachedThreadIds = (environmentId: string): string[] =>
     deps.threadEnvironmentAttachmentRepo?.listByEnvironmentId(environmentId).map((row) =>
       row.threadId
@@ -157,7 +158,7 @@ export function createServer(deps: ServerDeps) {
     deps.environmentDaemonSessionRepo,
     deps.environmentDaemonCommandRepo,
     {
-      resolveEnvironmentId: resolveEnvironmentCommandChannelId,
+      resolveEnvironmentId: resolveAttachedEnvironmentId,
     },
   );
   const serverRuntimeEnv = {

@@ -327,7 +327,7 @@ describe("environment-daemon delivery modules", () => {
     });
 
     const active = await dispatcher.awaitActiveSession({
-      threadId: secondThreadId,
+      channelId: secondThreadId,
       timeoutMs: 20,
       pollIntervalMs: 1,
     });
@@ -361,7 +361,7 @@ describe("environment-daemon delivery modules", () => {
 
     await expect(
       dispatcher.awaitActiveSession({
-        threadId,
+        channelId: threadId,
         timeoutMs: 500,
         pollIntervalMs: 10,
       }),
@@ -457,7 +457,7 @@ describe("environment-daemon delivery modules", () => {
     expect(dispatcher.hasActiveSession(threadId)).toBe(false);
     await expect(
       dispatcher.awaitActiveSession({
-        threadId,
+        channelId: threadId,
         timeoutMs: 20,
         pollIntervalMs: 5,
       }),

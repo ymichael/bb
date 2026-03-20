@@ -1367,6 +1367,63 @@ describe("Orchestrator", () => {
       expect(sessionRepo.getActiveByEnvironmentId).toHaveBeenCalledWith(env.id);
       expect(sessionRepo.getLatestByEnvironmentId).not.toHaveBeenCalled();
     });
+
+    it("waits for shared environment-daemon sessions on the environment channel", async () => {
+      const env = environmentRepo.create({
+        projectId: project.id,
+        descriptor: { type: "path", path: "/tmp/env" },
+        managed: true,
+      });
+      const thread = createTestThread(threadRepo, project.id, {
+        status: "idle",
+        environmentId: env.id,
+      });
+      attachmentRepo.attachThread({ threadId: thread.id, environmentId: env.id });
+
+      const awaitActiveSession = vi.fn().mockResolvedValue({ id: "sess-1" });
+      const environmentService = (manager as unknown as {
+        environmentService: EnvironmentService;
+      }).environmentService;
+      vi.spyOn(environmentService, "ensureThreadEnvironmentRuntime").mockResolvedValue({
+        runtime: {
+          scopeKey: env.id,
+          environment: makeRuntimeEnvironment({ rootPath: "/tmp/env" }),
+          agentConnectionTarget: {
+            transport: "http",
+            baseUrl: "http://127.0.0.1:4310",
+          },
+        },
+      });
+      (
+        manager as unknown as {
+          environmentDaemonCommandDispatcher: {
+            awaitActiveSession: typeof awaitActiveSession;
+          };
+        }
+      ).environmentDaemonCommandDispatcher = {
+        awaitActiveSession,
+      };
+
+      await (
+        manager as unknown as {
+          _ensureEnvironmentDaemonRuntimeWithActiveSession: (
+            thread: Thread,
+            projectRootPath: string,
+            reason: ThreadEnvironmentStartReason,
+          ) => Promise<unknown>;
+        }
+      )._ensureEnvironmentDaemonRuntimeWithActiveSession(
+        thread,
+        "/tmp/project",
+        "resume-existing-provider-session",
+      );
+
+      expect(awaitActiveSession).toHaveBeenCalledWith(
+        expect.objectContaining({
+          channelId: getEnvironmentDaemonEnvironmentChannelId(env.id),
+        }),
+      );
+    });
   });
 
   describe("boot status healing", () => {

@@ -20,9 +20,9 @@ export interface InvalidateEnvironmentDaemonSessionCommandsResult {
 }
 
 export class EnvironmentDaemonSessionUnavailableError extends Error {
-  constructor(readonly threadId: string) {
+  constructor(readonly channelId: string) {
     super(
-      `Timed out waiting for active environment-daemon session for thread ${threadId}`,
+      `Timed out waiting for active environment-daemon session for channel ${channelId}`,
     );
     this.name = "EnvironmentDaemonSessionUnavailableError";
   }
@@ -36,25 +36,25 @@ export function isEnvironmentDaemonSessionUnavailableError(
 
 export class EnvironmentDaemonCommandDispatcher {
   private readonly clock: () => number;
-  private readonly resolveEnvironmentId?: (threadId: string) => string | undefined;
+  private readonly resolveEnvironmentId?: (channelId: string) => string | undefined;
 
   constructor(
     private readonly sessions: EnvironmentDaemonSessionRepository,
     private readonly commands: EnvironmentDaemonCommandRepository,
     options: {
       clock?: () => number;
-      resolveEnvironmentId?: (threadId: string) => string | undefined;
+      resolveEnvironmentId?: (channelId: string) => string | undefined;
     } = {},
   ) {
     this.clock = options.clock ?? (() => Date.now());
     this.resolveEnvironmentId = options.resolveEnvironmentId;
   }
 
-  private getActiveSessionForThread(
-    threadId: string,
+  private getActiveSessionForChannel(
+    channelId: string,
     now: number = this.clock(),
   ): EnvironmentDaemonSessionRecord | undefined {
-    const environmentId = this.resolveEnvironmentId?.(threadId);
+    const environmentId = this.resolveEnvironmentId?.(channelId);
     if (!environmentId) {
       return undefined;
     }
@@ -69,7 +69,7 @@ export class EnvironmentDaemonCommandDispatcher {
   }
 
   async awaitActiveSession(args: {
-    threadId: string;
+    channelId: string;
     timeoutMs?: number;
     pollIntervalMs?: number;
   }) {
@@ -78,22 +78,22 @@ export class EnvironmentDaemonCommandDispatcher {
     const deadline = Date.now() + timeoutMs;
 
     while (Date.now() <= deadline) {
-      const session = this.getActiveSessionForThread(args.threadId, this.clock());
+      const session = this.getActiveSessionForChannel(args.channelId, this.clock());
       if (session) {
         return session;
       }
       await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
     }
 
-    throw new EnvironmentDaemonSessionUnavailableError(args.threadId);
+    throw new EnvironmentDaemonSessionUnavailableError(args.channelId);
   }
 
-  hasActiveSession(threadId: string): boolean {
-    return this.getActiveSessionForThread(threadId, this.clock()) !== undefined;
+  hasActiveSession(channelId: string): boolean {
+    return this.getActiveSessionForChannel(channelId, this.clock()) !== undefined;
   }
 
   async enqueueForActiveSession(args: {
-    threadId: string;
+    channelId: string;
     commandId: string;
     commandType: string;
     payload: unknown;
@@ -107,7 +107,7 @@ export class EnvironmentDaemonCommandDispatcher {
     }
 
     const session = await this.awaitActiveSession({
-      threadId: args.threadId,
+      channelId: args.channelId,
       timeoutMs: args.timeoutMs,
       pollIntervalMs: args.pollIntervalMs,
     });
@@ -117,7 +117,7 @@ export class EnvironmentDaemonCommandDispatcher {
     }
     this.commands.enqueue({
       id: args.commandId,
-      threadId: args.threadId,
+      threadId: args.channelId,
       sessionId: session.id,
       commandType: args.commandType,
       payload: args.payload,
@@ -303,7 +303,7 @@ export class EnvironmentDaemonCommandDispatcher {
 
   private async resumeExistingCommand(
     args: {
-      threadId: string;
+      channelId: string;
       commandId: string;
       timeoutMs?: number;
       pollIntervalMs?: number;
@@ -311,9 +311,9 @@ export class EnvironmentDaemonCommandDispatcher {
     },
     command: EnvironmentDaemonCommandRecord,
   ): Promise<EnvironmentDaemonCommandRecord> {
-    if (command.threadId !== args.threadId) {
+    if (command.threadId !== args.channelId) {
       throw new Error(
-        `Environment-daemon command ${args.commandId} already belongs to thread ${command.threadId}`,
+        `Environment-daemon command ${args.commandId} already belongs to channel ${command.threadId}`,
       );
     }
 
@@ -352,7 +352,7 @@ export class EnvironmentDaemonCommandDispatcher {
       case "queued":
       case "sent":
       case "received": {
-        const activeSession = this.getActiveSessionForThread(command.threadId, this.clock());
+        const activeSession = this.getActiveSessionForChannel(command.threadId, this.clock());
         if (!activeSession) {
           return true;
         }
