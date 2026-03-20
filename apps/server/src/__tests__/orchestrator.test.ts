@@ -3490,7 +3490,10 @@ describe("Orchestrator", () => {
         agentId: "agent-1",
         agentInstanceId: "instance-1",
         protocolVersion: 1,
-        selectedCapabilities: createEnvironmentDaemonSessionCapabilities({}),
+        selectedCapabilities: {
+          commands: [],
+          features: [],
+        },
         leaseExpiresAt: Date.now() + 30_000,
         now: Date.now(),
       });
@@ -3579,7 +3582,10 @@ describe("Orchestrator", () => {
         agentId: "agent-1",
         agentInstanceId: "instance-1",
         protocolVersion: 1,
-        selectedCapabilities: createEnvironmentDaemonSessionCapabilities({}),
+        selectedCapabilities: {
+          commands: [],
+          features: [],
+        },
         leaseExpiresAt: Date.now() + 30_000,
         now: Date.now(),
       });
@@ -3714,6 +3720,67 @@ describe("Orchestrator", () => {
         { id: "pi" },
       ]);
       expect(sendCommand).toHaveBeenCalledTimes(1);
+    });
+
+    it("does not fall back to the server provider catalog when an active env-daemon cannot answer provider discovery", async () => {
+      const repos = createTestRepos(testDb.db);
+      const envRepo = repos.environmentRepo;
+      const attachmentRepo = repos.attachmentRepo;
+      const commandRepo = new EnvironmentDaemonCommandRepository(testDb.db);
+      const sessionRepo = new EnvironmentDaemonSessionRepository(testDb.db);
+      const dispatcher = new EnvironmentDaemonCommandDispatcher(sessionRepo, commandRepo, {
+        resolveEnvironmentId: (threadId) =>
+          attachmentRepo.getByThreadId(threadId)?.environmentId,
+      });
+      const environment = envRepo.create({ projectId: project.id, managed: false });
+      const codexThread = createTestThread(threadRepo, project.id, {
+        status: "idle",
+        providerId: "codex",
+        environmentId: environment.id,
+      });
+      attachmentRepo.attachThread({ threadId: codexThread.id, environmentId: environment.id });
+      sessionRepo.create({
+        id: "session-1",
+        environmentId: environment.id,
+        agentId: "agent-1",
+        agentInstanceId: "instance-1",
+        protocolVersion: 1,
+        selectedCapabilities: {
+          commands: [],
+          features: [],
+        },
+        leaseExpiresAt: Date.now() + 30_000,
+        now: Date.now(),
+      });
+
+      manager = new Orchestrator(
+        threadRepo,
+        eventRepo,
+        projectRepo,
+        ws,
+        llmCompletionService,
+        undefined,
+        createTestRuntimeEnv(),
+        new EnvironmentRegistry(),
+        undefined,
+        undefined,
+        undefined,
+        dispatcher,
+        undefined,
+        sessionRepo,
+        envRepo,
+        attachmentRepo,
+      );
+
+      const sendCommand = vi.spyOn(
+        EnvironmentDaemonSessionCommandClient.prototype,
+        "sendCommand",
+      );
+
+      await expect(manager.listProviders(environment.id)).rejects.toThrow(
+        `Environment ${environment.id} env-daemon could not provide a provider catalog`,
+      );
+      expect(sendCommand).not.toHaveBeenCalled();
     });
   });
 

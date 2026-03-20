@@ -3264,6 +3264,13 @@ export class Orchestrator implements ThreadOrchestrator {
     };
   }
 
+  private _hasActiveEnvironmentDaemonSession(environmentId: string): boolean {
+    return (
+      this.environmentDaemonSessionRepo?.getActiveByEnvironmentId(environmentId) !==
+      undefined
+    );
+  }
+
   async listProviders(environmentId?: string): Promise<SystemProviderInfo[]> {
     if (environmentId) {
       const envDaemonCatalog = await this._listProviderCatalogFromEnvironmentDaemon(
@@ -3271,6 +3278,11 @@ export class Orchestrator implements ThreadOrchestrator {
       );
       if (envDaemonCatalog && envDaemonCatalog.length > 0) {
         return envDaemonCatalog;
+      }
+      if (this._hasActiveEnvironmentDaemonSession(environmentId)) {
+        throw invalidRequestError(
+          `Environment ${environmentId} env-daemon could not provide a provider catalog`,
+        );
       }
     }
     if (this.providerCatalog.length > 0) {
