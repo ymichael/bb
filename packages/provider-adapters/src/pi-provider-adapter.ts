@@ -41,6 +41,7 @@ import type {
   ProviderLaunchConfiguration,
   ProviderThreadContext,
 } from "@bb/core";
+import type { PiCommand } from "./bridges/pi/bridge.js";
 import type { ProviderAdapter, ProviderRequest } from "./provider-adapter.js";
 
 // ---------------------------------------------------------------------------
@@ -50,10 +51,6 @@ import type { ProviderAdapter, ProviderRequest } from "./provider-adapter.js";
 /** The raw SDK event type from the Pi coding agent. */
 export type PiEvent = AgentSessionEvent;
 
-/** Re-export the command type defined by the bridge. */
-// Note: PiCommand will be imported from the bridge once it defines it.
-// For now, defined here since the pi bridge hasn't been simplified yet.
-export type { PiCommand } from "./bridges/pi/bridge.js";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -247,7 +244,7 @@ export interface CreatePiProviderAdapterOptions {
 
 export function createPiProviderAdapter(
   opts?: CreatePiProviderAdapterOptions,
-): ProviderAdapter<PiEvent, import("./bridges/pi/bridge.js").PiCommand> {
+): ProviderAdapter<PiEvent, PiCommand> {
   const capabilities: ProviderCapabilities = {
     supportsRename: false,
     supportsServiceTier: false,

@@ -23,8 +23,8 @@ export interface PiSdkSessionOptions {
   systemPrompt?: string;
 }
 
-export type PiSessionEventHandler = (event: AgentSessionEvent) => void;
-export type PiSessionDoneHandler = (error?: unknown) => void;
+type PiSessionEventHandler = (event: AgentSessionEvent) => void;
+type PiSessionDoneHandler = (error?: unknown) => void;
 
 /**
  * Wraps the Pi programmatic SDK (`@mariozechner/pi-coding-agent`) in a

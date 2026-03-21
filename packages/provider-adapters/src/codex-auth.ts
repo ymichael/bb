@@ -35,7 +35,7 @@ export async function readCodexAuthFile(): Promise<CodexAuthFile | null> {
   }
 }
 
-export function resolveApiKeyFromCodexAuthFile(authFile: CodexAuthFile | null): string | null {
+function resolveApiKeyFromCodexAuthFile(authFile: CodexAuthFile | null): string | null {
   if (!authFile) return null;
 
   const apiKey = authFile.OPENAI_API_KEY;

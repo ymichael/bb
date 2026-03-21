@@ -35,6 +35,7 @@ import type {
   BbProviderEventItem,
   BbProviderEventItemStatus,
   BbProviderEventTurnStatus,
+  PromptInput,
   ProviderExecutionOptions,
   ProviderLaunchConfiguration,
   ProviderThreadContext,
@@ -94,7 +95,7 @@ function toSandboxPolicy(sandboxMode?: SandboxMode): SandboxPolicy {
   }
 }
 
-function toCodexUserInput(input: import("@bb/core").PromptInput[]): CodexUserInput[] {
+function toCodexUserInput(input: PromptInput[]): CodexUserInput[] {
   return input.map((chunk): CodexUserInput => {
     switch (chunk.type) {
       case "text":

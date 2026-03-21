@@ -18,8 +18,8 @@ export interface SdkSessionOptions {
   env?: NodeJS.ProcessEnv;
 }
 
-export type SdkSessionMessageHandler = (message: SDKMessage) => void;
-export type SdkSessionDoneHandler = (error?: unknown) => void;
+type SdkSessionMessageHandler = (message: SDKMessage) => void;
+type SdkSessionDoneHandler = (error?: unknown) => void;
 
 export class SdkSession {
   private query: Query | undefined;

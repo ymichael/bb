@@ -40,7 +40,7 @@ export interface CollectedTurn {
  * The harness calls this for `sdk/message` notifications to expand them
  * into canonical notification methods for turn detection and assertions.
  */
-export type BridgeEventTranslator = (sdkMessage: unknown) => BbProviderEvent[];
+type BridgeEventTranslator = (sdkMessage: unknown) => BbProviderEvent[];
 
 export class BridgeTestHarness {
   private child: ChildProcess | null = null;
