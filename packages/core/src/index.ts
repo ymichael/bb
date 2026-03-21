@@ -26,7 +26,6 @@ export type {
   ThreadEventDataByAppType,
   ThreadEventData,
   ThreadEventDataForType,
-  PersistedThreadEventData,
   ThreadEventOfType,
   ThreadEventRow,
 } from "./types.js";

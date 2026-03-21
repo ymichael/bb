@@ -187,23 +187,6 @@ export type AppThreadEventType =
   | "system/provisioning/completed"
   | "system/provisioning/cleanup_failed";
 
-export const PROVIDER_EVENT_ENVELOPE_SCHEMA =
-  "bb/provider-event-envelope" as const;
-export const PROVIDER_EVENT_ENVELOPE_VERSION = 1 as const;
-
-export interface ProviderEventEnvelopeMetadata {
-  schema: typeof PROVIDER_EVENT_ENVELOPE_SCHEMA;
-  version: typeof PROVIDER_EVENT_ENVELOPE_VERSION;
-  providerId: string;
-  method: string;
-  observedAt: number;
-}
-
-export interface ProviderEventEnvelope<TPayload = unknown> {
-  __bb_provider_event: ProviderEventEnvelopeMetadata;
-  payload: TPayload;
-}
-
 export type ThreadTurnInitiator = "user" | "agent" | "system";
 
 export interface ClientExecutionOptionsSnapshot {
@@ -383,7 +366,6 @@ export type ThreadEventDataForType<TType extends string> =
     ? ThreadEventDataByAppType[TType]
     : Record<string, unknown>;
 
-export type PersistedThreadEventData = ThreadEventData;
 
 // ThreadEventRow — the hydrated DB row shape (not the app-level typed event)
 export interface ThreadEventRow<TType extends string = string> {

@@ -5089,7 +5089,6 @@ export class Orchestrator implements ThreadOrchestrator {
       if (event.shouldBroadcast) {
         changes.push("events-appended");
       }
-      // Store the translated event data directly (no ProviderEventEnvelope)
       const { type: eventType, threadId: _tid, ...eventData } = primary;
       persistedEvent = this._appendEvent(
         resolvedThreadId,

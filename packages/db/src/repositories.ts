@@ -30,7 +30,6 @@ import type {
   ThreadEventData,
   ThreadEventType,
   ThreadExecutionOptions,
-  PersistedThreadEventData,
 } from "@bb/core";
 import {
   DEFAULT_THREAD_PROVIDER_ID,
@@ -149,7 +148,7 @@ function readPragmaNumber(
 }
 
 function parseThreadExecutionOptions(
-  data: PersistedThreadEventData,
+  data: ThreadEventData,
 ): ThreadExecutionOptions | undefined {
   const root = toRecord(data);
   const execution = toRecord(root?.execution);
