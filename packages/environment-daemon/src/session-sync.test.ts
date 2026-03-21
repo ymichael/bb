@@ -2,9 +2,9 @@ import { describe, expect, it, vi } from "vitest";
 import { EnvironmentDaemonSessionRuntime } from "./session-runtime.js";
 import { InMemoryEnvironmentDaemonSessionStore } from "./in-memory-session-store.js";
 import { EnvironmentDaemonSessionSync } from "./session-sync.js";
-import type { EnvironmentDaemonSessionHttpClient } from "./session-http-client.js";
+import type { EnvironmentDaemonSessionClient } from "@bb/env-daemon-contract";
 
-function makeClientMock(): EnvironmentDaemonSessionHttpClient {
+function makeClientMock(): EnvironmentDaemonSessionClient {
   return {
     openSession: vi.fn(),
     heartbeat: vi.fn(),
@@ -13,7 +13,7 @@ function makeClientMock(): EnvironmentDaemonSessionHttpClient {
     acknowledgeCommands: vi.fn(),
     sendCommandResult: vi.fn(),
     closeSession: vi.fn(),
-  } as unknown as EnvironmentDaemonSessionHttpClient;
+  } as unknown as EnvironmentDaemonSessionClient;
 }
 
 describe("EnvironmentDaemonSessionSync", () => {

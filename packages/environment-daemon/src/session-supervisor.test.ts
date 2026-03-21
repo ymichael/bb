@@ -2,13 +2,13 @@ import { describe, expect, it, vi } from "vitest";
 import { EnvironmentDaemonRuntime } from "./runtime.js";
 import { EnvironmentDaemonSessionRuntime } from "./session-runtime.js";
 import { InMemoryEnvironmentDaemonSessionStore } from "./in-memory-session-store.js";
-import { EnvironmentDaemonSessionHttpClientError } from "./session-http-client.js";
+import { EnvironmentDaemonSessionClientError } from "@bb/env-daemon-contract";
+import type { EnvironmentDaemonSessionClient } from "@bb/env-daemon-contract";
 import { EnvironmentDaemonSessionSync } from "./session-sync.js";
 import { EnvironmentDaemonSessionSupervisor } from "./session-supervisor.js";
 import { getEnvironmentDaemonEnvironmentChannelId } from "./session-channels.js";
-import type { EnvironmentDaemonSessionHttpClient } from "./session-http-client.js";
 
-function makeClientMock(): EnvironmentDaemonSessionHttpClient {
+function makeClientMock(): EnvironmentDaemonSessionClient {
   return {
     openSession: vi.fn(),
     heartbeat: vi.fn(),
@@ -17,7 +17,7 @@ function makeClientMock(): EnvironmentDaemonSessionHttpClient {
     acknowledgeCommands: vi.fn(),
     sendCommandResult: vi.fn(),
     closeSession: vi.fn(),
-  } as unknown as EnvironmentDaemonSessionHttpClient;
+  } as unknown as EnvironmentDaemonSessionClient;
 }
 
 describe("EnvironmentDaemonSessionSupervisor", () => {
@@ -369,7 +369,7 @@ describe("EnvironmentDaemonSessionSupervisor", () => {
         });
       (client.heartbeat as ReturnType<typeof vi.fn>)
         .mockResolvedValueOnce(undefined)
-        .mockRejectedValueOnce(new EnvironmentDaemonSessionHttpClientError({
+        .mockRejectedValueOnce(new EnvironmentDaemonSessionClientError({
           message:
             "Unexpected daemon response 409 (expected 204): Environment-daemon session sess-1 is not active",
           status: 409,

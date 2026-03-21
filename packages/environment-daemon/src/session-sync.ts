@@ -6,17 +6,18 @@ import type {
 import type { EnvironmentDaemonSessionRuntime } from "./session-runtime.js";
 import type {
   EnvironmentDaemonSessionCommandAckItem,
+  EnvironmentDaemonSessionCommandBatchMessage,
   EnvironmentDaemonSessionOpenPayload,
   EnvironmentDaemonSessionProviderResponsePayload,
   EnvironmentDaemonSessionWelcomeMessage,
 } from "./session-protocol.js";
 import { compareEnvironmentDaemonSessionCursors } from "./session-protocol.js";
-import type { EnvironmentDaemonSessionHttpClient } from "./session-http-client.js";
+import type { EnvironmentDaemonSessionClient } from "@bb/env-daemon-contract";
 import type { ProviderToolCallRequest } from "@bb/core";
 
 export interface EnvironmentDaemonSessionSyncOptions {
   runtime: EnvironmentDaemonSessionRuntime;
-  client: EnvironmentDaemonSessionHttpClient;
+  client: EnvironmentDaemonSessionClient;
 }
 
 export interface EnvironmentDaemonPulledCommand {
@@ -181,6 +182,8 @@ export class EnvironmentDaemonSessionSync {
     waitMs?: number;
     signal?: AbortSignal;
   }): Promise<EnvironmentDaemonPulledCommand[]> {
+    // Cast from wire-level Record<string, unknown> to EnvironmentDaemonCommand —
+    // the server validates commands before delivery, so the cast is safe.
     const batch = await this.options.client.pullCommands({
       sessionId: args.sessionId,
       ...(args.afterCursor !== undefined && args.threadIds.length === 1
@@ -189,7 +192,7 @@ export class EnvironmentDaemonSessionSync {
       ...(args.limit !== undefined ? { limit: args.limit } : {}),
       ...(args.waitMs !== undefined ? { waitMs: args.waitMs } : {}),
       ...(args.signal ? { signal: args.signal } : {}),
-    });
+    }) as EnvironmentDaemonSessionCommandBatchMessage;
 
     const pulled = batch.payload.commands
       .map((command) => {

@@ -1,26 +1,25 @@
 import { randomUUID } from "node:crypto";
-import type { EnvironmentDaemonServerConnectionConfig } from "./protocol.js";
-import type {
-  EnvironmentDaemonSessionClientMessage,
-  EnvironmentDaemonSessionCommandAckPayload,
-  EnvironmentDaemonSessionCommandBatchMessage,
-  EnvironmentDaemonSessionCommandResultPayload,
-  EnvironmentDaemonSessionEventAckMessage,
-  EnvironmentDaemonSessionEventBatchPayload,
-  EnvironmentDaemonSessionHeartbeatPayload,
-  EnvironmentDaemonSessionOpenPayload,
-  EnvironmentDaemonSessionProviderRequestPayload,
-  EnvironmentDaemonSessionProviderResponseMessage,
-  EnvironmentDaemonSessionWelcomeMessage,
+import {
+  ENVIRONMENT_DAEMON_SESSION_PROTOCOL,
+  type EnvironmentDaemonSessionClientMessage,
+  type EnvironmentDaemonSessionCommandAckPayload,
+  type EnvironmentDaemonSessionCommandBatchMessage,
+  type EnvironmentDaemonSessionCommandResultPayload,
+  type EnvironmentDaemonSessionEventAckMessage,
+  type EnvironmentDaemonSessionEventBatchPayload,
+  type EnvironmentDaemonSessionHeartbeatPayload,
+  type EnvironmentDaemonSessionOpenPayload,
+  type EnvironmentDaemonSessionProviderRequestPayload,
+  type EnvironmentDaemonSessionProviderResponseMessage,
+  type EnvironmentDaemonSessionWelcomeMessage,
 } from "./session-protocol.js";
-import { ENVIRONMENT_DAEMON_SESSION_PROTOCOL } from "./session-protocol.js";
 
 type EnvironmentDaemonSessionBoundClientMessage = Exclude<
   EnvironmentDaemonSessionClientMessage,
   { type: "session_open" }
 >;
 
-export interface EnvironmentDaemonSessionHttpClientOptions {
+export interface EnvironmentDaemonSessionClientConfig {
   serverUrl: string;
   environmentId: string;
   authToken?: string;
@@ -28,7 +27,7 @@ export interface EnvironmentDaemonSessionHttpClientOptions {
   fetchImpl?: typeof fetch;
 }
 
-export class EnvironmentDaemonSessionHttpClientError extends Error {
+export class EnvironmentDaemonSessionClientError extends Error {
   readonly status?: number;
   readonly code?: string;
   readonly retryable: boolean;
@@ -42,7 +41,7 @@ export class EnvironmentDaemonSessionHttpClientError extends Error {
     details?: unknown;
   }) {
     super(args.message);
-    this.name = "EnvironmentDaemonSessionHttpClientError";
+    this.name = "EnvironmentDaemonSessionClientError";
     this.status = args.status;
     this.code = args.code;
     this.retryable = args.retryable ?? false;
@@ -68,28 +67,28 @@ async function parseJsonResponse(response: Response): Promise<unknown> {
   try {
     return JSON.parse(text);
   } catch {
-    throw new EnvironmentDaemonSessionHttpClientError({
+    throw new EnvironmentDaemonSessionClientError({
       message: `Invalid JSON response: ${response.status}`,
       status: response.status,
     });
   }
 }
 
-export class EnvironmentDaemonSessionHttpClient {
+export class EnvironmentDaemonSessionClient {
   private readonly fetchImpl: typeof fetch;
   private readonly serverUrl: string;
   private readonly environmentId: string;
   private readonly defaultHeaders: Record<string, string>;
 
-  constructor(options: EnvironmentDaemonSessionHttpClientOptions) {
-    this.fetchImpl = options.fetchImpl ?? fetch;
-    this.serverUrl = options.serverUrl;
-    this.environmentId = options.environmentId;
+  constructor(config: EnvironmentDaemonSessionClientConfig) {
+    this.fetchImpl = config.fetchImpl ?? fetch;
+    this.serverUrl = config.serverUrl;
+    this.environmentId = config.environmentId;
     this.defaultHeaders = {
-      ...(options.authToken
-        ? { authorization: `Bearer ${options.authToken}` }
+      ...(config.authToken
+        ? { authorization: `Bearer ${config.authToken}` }
         : {}),
-      ...(options.headers ?? {}),
+      ...(config.headers ?? {}),
     };
   }
 
@@ -236,7 +235,7 @@ export class EnvironmentDaemonSessionHttpClient {
     } catch (error) {
       if (
         options?.signal?.aborted &&
-        error instanceof EnvironmentDaemonSessionHttpClientError
+        error instanceof EnvironmentDaemonSessionClientError
       ) {
         throw new DOMException("The operation was aborted.", "AbortError");
       }
@@ -284,7 +283,7 @@ export class EnvironmentDaemonSessionHttpClient {
   private async buildHttpError(
     response: Response,
     expectedStatus: number,
-  ): Promise<EnvironmentDaemonSessionHttpClientError> {
+  ): Promise<EnvironmentDaemonSessionClientError> {
     const body = await response.text();
     let parsedBody: unknown;
     if (body.trim()) {
@@ -304,7 +303,7 @@ export class EnvironmentDaemonSessionHttpClient {
     const retryable = parsedRecord?.retryable === true;
     const details = parsedRecord?.details;
     const suffix = message ? `: ${message}` : "";
-    return new EnvironmentDaemonSessionHttpClientError({
+    return new EnvironmentDaemonSessionClientError({
       message: `Unexpected daemon response ${response.status} (expected ${expectedStatus})${suffix}`,
       status: response.status,
       ...(code ? { code } : {}),
@@ -316,27 +315,33 @@ export class EnvironmentDaemonSessionHttpClient {
 
 export function isEnvironmentDaemonSessionInactiveError(
   error: unknown,
-): error is EnvironmentDaemonSessionHttpClientError {
+): error is EnvironmentDaemonSessionClientError {
   return (
-    error instanceof EnvironmentDaemonSessionHttpClientError &&
+    error instanceof EnvironmentDaemonSessionClientError &&
     error.status === 409 &&
     error.code === "inactive_session"
   );
 }
 
-export function createEnvironmentDaemonSessionHttpClientFromConnection(
-  config: EnvironmentDaemonServerConnectionConfig,
+export interface EnvironmentDaemonSessionConnectionConfig {
+  serverUrl?: string;
+  environmentId?: string;
+  authToken?: string;
+}
+
+export function createEnvironmentDaemonSessionClient(
+  config: EnvironmentDaemonSessionConnectionConfig,
   args?: {
     headers?: Record<string, string>;
     fetchImpl?: typeof fetch;
   },
-): EnvironmentDaemonSessionHttpClient {
+): EnvironmentDaemonSessionClient {
   if (!config.serverUrl || !config.environmentId) {
-    throw new EnvironmentDaemonSessionHttpClientError({
-      message: "Environment-daemon daemon session connection requires serverUrl and environmentId",
+    throw new EnvironmentDaemonSessionClientError({
+      message: "Environment-daemon session connection requires serverUrl and environmentId",
     });
   }
-  return new EnvironmentDaemonSessionHttpClient({
+  return new EnvironmentDaemonSessionClient({
     serverUrl: config.serverUrl,
     environmentId: config.environmentId,
     authToken: config.authToken,

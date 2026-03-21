@@ -175,6 +175,9 @@ importers:
       '@bb/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@bb/env-daemon-contract':
+        specifier: workspace:*
+        version: link:../../packages/env-daemon-contract
       '@bb/environment':
         specifier: workspace:*
         version: link:../../packages/environment
@@ -288,6 +291,25 @@ importers:
         specifier: ^5.7.0
         version: 5.9.3
 
+  packages/env-daemon-contract:
+    dependencies:
+      '@bb/core':
+        specifier: workspace:*
+        version: link:../core
+      zod:
+        specifier: ^3.24.0
+        version: 3.25.76
+    devDependencies:
+      '@bb/tsconfig':
+        specifier: workspace:*
+        version: link:../tsconfig
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.19.10
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
+
   packages/environment:
     dependencies:
       '@bb/core':
@@ -318,6 +340,9 @@ importers:
       '@bb/core':
         specifier: workspace:*
         version: link:../core
+      '@bb/env-daemon-contract':
+        specifier: workspace:*
+        version: link:../env-daemon-contract
       '@bb/provider-adapters':
         specifier: workspace:*
         version: link:../provider-adapters

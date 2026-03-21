@@ -37,6 +37,7 @@
     "@bb/core": "workspace:*",
     "@bb/db": "workspace:*",
     "@bb/environment": "workspace:*",
+    "@bb/env-daemon-contract": "workspace:*",
     "@bb/environment-daemon": "workspace:*",
     "@bb/provider-adapters": "workspace:*",
     "@bb/templates": "workspace:*",

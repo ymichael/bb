@@ -20,6 +20,7 @@
   },
   "dependencies": {
     "@bb/core": "workspace:*",
+    "@bb/env-daemon-contract": "workspace:*",
     "@bb/provider-adapters": "workspace:*",
     "zod": "^3.24.0"
   },

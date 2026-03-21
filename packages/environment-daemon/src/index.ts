@@ -138,14 +138,26 @@ export {
 } from "./session-runtime.js";
 
 export type {
-  EnvironmentDaemonSessionHttpClientOptions,
-} from "./session-http-client.js";
+  EnvironmentDaemonSessionClientConfig,
+  EnvironmentDaemonSessionConnectionConfig,
+} from "@bb/env-daemon-contract";
 export {
-  EnvironmentDaemonSessionHttpClient,
-  EnvironmentDaemonSessionHttpClientError,
+  EnvironmentDaemonSessionClient,
+  EnvironmentDaemonSessionClientError,
   isEnvironmentDaemonSessionInactiveError,
-  createEnvironmentDaemonSessionHttpClientFromConnection,
-} from "./session-http-client.js";
+  createEnvironmentDaemonSessionClient,
+} from "@bb/env-daemon-contract";
+
+// Legacy aliases — kept so existing consumers of @bb/environment-daemon
+// continue to compile without changes.
+export {
+  EnvironmentDaemonSessionClient as EnvironmentDaemonSessionHttpClient,
+  EnvironmentDaemonSessionClientError as EnvironmentDaemonSessionHttpClientError,
+  createEnvironmentDaemonSessionClient as createEnvironmentDaemonSessionHttpClientFromConnection,
+} from "@bb/env-daemon-contract";
+export type {
+  EnvironmentDaemonSessionClientConfig as EnvironmentDaemonSessionHttpClientOptions,
+} from "@bb/env-daemon-contract";
 
 export type {
   EnvironmentDaemonSessionSyncOptions,

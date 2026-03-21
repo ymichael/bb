@@ -12,7 +12,7 @@ import {
 } from "./file-logger.js";
 import { InMemoryEnvironmentDaemonSessionStore } from "./in-memory-session-store.js";
 import { EnvironmentDaemonSessionRuntime } from "./session-runtime.js";
-import { createEnvironmentDaemonSessionHttpClientFromConnection } from "./session-http-client.js";
+import { createEnvironmentDaemonSessionClient } from "@bb/env-daemon-contract";
 import { EnvironmentDaemonSessionSync } from "./session-sync.js";
 import { EnvironmentDaemonSessionSupervisor } from "./session-supervisor.js";
 import type {
@@ -239,7 +239,7 @@ export async function startEnvironmentDaemonService(
     if (options.runtime.serverConnection?.serverUrl && options.runtime.serverConnection.environmentId) {
       const sessionStore = new InMemoryEnvironmentDaemonSessionStore();
       const sessionRuntime = new EnvironmentDaemonSessionRuntime({ store: sessionStore });
-      const sessionClient = createEnvironmentDaemonSessionHttpClientFromConnection(
+      const sessionClient = createEnvironmentDaemonSessionClient(
         options.runtime.serverConnection,
       );
       const sessionSync = new EnvironmentDaemonSessionSync({

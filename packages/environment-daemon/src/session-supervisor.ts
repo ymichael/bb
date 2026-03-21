@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { EnvironmentDaemonCommand, EnvironmentDaemonCommandAck } from "./protocol.js";
 import { type EnvironmentDaemonRuntime } from "./runtime.js";
-import { isEnvironmentDaemonSessionInactiveError } from "./session-http-client.js";
+import { isEnvironmentDaemonSessionInactiveError } from "@bb/env-daemon-contract";
 import type { EnvironmentDaemonSessionRuntime } from "./session-runtime.js";
 import type {
   EnvironmentDaemonPulledCommand,

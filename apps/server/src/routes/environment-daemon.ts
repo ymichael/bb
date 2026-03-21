@@ -2,6 +2,10 @@ import { Hono } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { assertNever } from "@bb/core";
+import {
+  environmentDaemonSessionClientMessageSchema,
+  environmentDaemonSessionOpenPayloadSchema,
+} from "@bb/env-daemon-contract";
 import type {
   EnvironmentDaemonSessionClientMessage,
   EnvironmentDaemonSessionCommandAckPayload,
@@ -10,10 +14,6 @@ import type {
   EnvironmentDaemonSessionHeartbeatPayload,
   EnvironmentDaemonSessionOpenPayload,
   EnvironmentDaemonSessionProviderRequestPayload,
-} from "@bb/environment-daemon";
-import {
-  environmentDaemonSessionClientMessageSchema,
-  environmentDaemonSessionOpenPayloadSchema,
 } from "@bb/environment-daemon";
 import { invalidRequestError } from "../domain-errors.js";
 import { sendRouteError } from "./error-response.js";
