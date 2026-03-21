@@ -15,7 +15,7 @@ import type {
   EnvironmentDaemonSessionOpenPayload,
   EnvironmentDaemonSessionProviderRequestPayload,
 } from "@bb/environment-daemon";
-import { invalidRequestError } from "../domain-errors.js";
+import { invalidRequestError, projectNotFoundError } from "../domain-errors.js";
 import { sendRouteError } from "./error-response.js";
 import type { EnvironmentDaemonSessionService } from "../environment-daemon-session-service.js";
 import type {
@@ -105,9 +105,7 @@ function toEnvironmentDaemonSessionDebugView(
 }
 
 function environmentNotFoundError(environmentId: string): Error {
-  const error = new Error(`Environment not found: ${environmentId}`);
-  (error as Error & { status?: number }).status = 404;
-  return error;
+  return invalidRequestError(`Environment not found: ${environmentId}`);
 }
 
 export function createEnvironmentDaemonDebugRoutes(opts: {

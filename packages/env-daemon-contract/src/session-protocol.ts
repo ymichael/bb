@@ -127,18 +127,6 @@ export const environmentDaemonSessionOpenPayloadSchema = z.object({
   channels: z.array(environmentDaemonSessionChannelBootstrapSchema),
 });
 
-const LEGACY_INFERRED_COMMANDS = [
-  "provider.ensure",
-  "thread.start",
-  "thread.resume",
-  "thread.stop",
-  "turn.run",
-  "thread.rename",
-  "provider.list_models",
-  "provider.list_catalog",
-  "workspace.status",
-  "workspace.diff",
-] as const satisfies readonly EnvironmentDaemonSessionCapabilityCommand[];
 
 export interface EnvironmentDaemonSessionOpenPayload {
   environmentDaemonId: string;
@@ -236,7 +224,7 @@ export function inferEnvironmentDaemonSessionCapabilities(args: {
     features.push("control_endpoint");
   }
   return {
-    commands: [...LEGACY_INFERRED_COMMANDS],
+    commands: [...ENVIRONMENT_DAEMON_SESSION_CAPABILITY_COMMANDS],
     features,
   };
 }
