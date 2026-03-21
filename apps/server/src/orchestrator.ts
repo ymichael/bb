@@ -80,6 +80,9 @@ import type {
   ProviderToolCallRequest,
   ProviderToolCallResponse,
 } from "@bb/provider-adapters";
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AnyProviderAdapter = ProviderAdapter<any, any>;
 import type {
   EnvironmentProvisioningEvent,
   SchedulerService,
@@ -698,14 +701,14 @@ export class Orchestrator implements ThreadOrchestrator {
   /** Tracks threads whose workspace deletion is in progress. */
   private workspaceCleanupInFlightThreadIds: Set<string>;
   private readonly agentServerByProviderId = new Map<
-    ThreadProviderId,
+    string,
     ProviderSessionController
   >();
   private readonly providerAdapterByProviderId = new Map<
-    ThreadProviderId,
+    string,
     ProviderAdapter
   >();
-  private readonly defaultProviderId: ThreadProviderId;
+  private readonly defaultProviderId: string;
   private readonly providerCatalog: SystemProviderInfo[];
   private readonly providerToolHost?: ProviderToolHost;
   private readonly cachedModelsByRequestKey = new Map<
@@ -734,7 +737,7 @@ export class Orchestrator implements ThreadOrchestrator {
     private projectRepo: ProjectRepository,
     private ws: WSManager,
     private llmCompletionService: LlmCompletionService,
-    agentServerOrProvider?: ProviderSessionController | ProviderAdapter,
+    agentServerOrProvider?: ProviderSessionController | AnyProviderAdapter,
     private runtimeEnv: NodeJS.ProcessEnv = process.env,
     private environmentRegistry: EnvironmentRegistry = createDefaultEnvironmentRegistry(),
     providerCatalog?: SystemProviderInfo[],
@@ -1032,7 +1035,7 @@ export class Orchestrator implements ThreadOrchestrator {
     return server;
   }
 
-  private _getProviderAdapterForProviderId(providerId: string): ProviderAdapter {
+  private _getProviderAdapterForProviderId(providerId: string): AnyProviderAdapter {
     const builtInProviderId = this._requireBuiltInProviderId(providerId);
     const existing = this.providerAdapterByProviderId.get(builtInProviderId);
     if (existing) {
@@ -1068,17 +1071,17 @@ export class Orchestrator implements ThreadOrchestrator {
     }
   }
 
-  private _resolveSpawnProviderId(req: SpawnThreadRequest): ThreadProviderId {
+  private _resolveSpawnProviderId(req: SpawnThreadRequest): string {
     // 1. Explicit providerId in request
-    if (req.providerId && isThreadProviderId(req.providerId)) {
+    if (req.providerId) {
       return req.providerId;
     }
     // 2. Project default
     const project = this.projectRepo.getById(req.projectId);
-    if (project?.defaultProviderId && isThreadProviderId(project.defaultProviderId)) {
+    if (project?.defaultProviderId) {
       return project.defaultProviderId;
     }
-    // 3. System default (first available in order: codex -> claude-code -> pi)
+    // 3. System default
     return this.defaultProviderId;
   }
 
@@ -3966,7 +3969,7 @@ export class Orchestrator implements ThreadOrchestrator {
   }
 
   private async _listProviderModelsFromEnvironmentDaemon(
-    providerId: ThreadProviderId,
+    providerId: string,
     environmentId: string,
   ): Promise<AvailableModel[] | undefined> {
     if (!this.environmentDaemonCommandDispatcher || !this.environmentDaemonSessionRepo) {

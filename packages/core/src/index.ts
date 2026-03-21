@@ -203,7 +203,6 @@ export type {
   ProviderToolCallResponse,
   ProviderTitleGeneratorArgs,
   ProviderTitleGenerator,
-  ProviderAdapter,
   EnvironmentProvisioningEvent,
   ThreadListFilters,
   ThreadOrchestrator,
@@ -211,6 +210,21 @@ export type {
   ScheduleRunRecord,
   SchedulerService,
 } from "./runtime-contracts.js";
+
+export type {
+  BbProviderEvent,
+  BbProviderEventItem,
+  BbProviderEventItemStatus,
+  BbProviderEventTurnStatus,
+  BbProviderEventFileChange,
+  BbProviderEventFileChangeKind,
+  BbProviderEventPlanStep,
+  BbProviderEventPlanStepStatus,
+  BbProviderEventUserContent,
+  BbProviderEventTokenUsage,
+  BbProviderEventTokenUsageBreakdown,
+  BbProviderEventWarningCategory,
+} from "./provider-event.js";
 
 export { toUIMessages } from "./to-ui-messages.js";
 export {

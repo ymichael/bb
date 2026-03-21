@@ -1,16 +1,98 @@
 import type {
   Thread,
 } from "@bb/core";
-import { assertNever, getStringField, isThreadProviderId, toRecord } from "@bb/core";
+import { assertNever, decodeThreadIdFromWireValue, getStringField, isThreadProviderId, toRecord } from "@bb/core";
 import type {
+  BbProviderEvent,
   ProviderAdapter,
   ProviderToolCallRequest,
   ProviderToolCallResponse,
 } from "@bb/provider-adapters";
 import { createProviderAdapter } from "@bb/provider-adapters";
 
+// ---------------------------------------------------------------------------
+// BbProviderEvent → bb-owned policy
+//
+// These functions derive persist/broadcast/status policy from the canonical
+// event type. The adapter translates SDK events into BbProviderEvent, and
+// bb decides what to do with them.
+// ---------------------------------------------------------------------------
+
+export function shouldPersistEvent(event: BbProviderEvent): boolean {
+  switch (event.type) {
+    case "item/agentMessage/delta":
+    case "item/commandExecution/outputDelta":
+    case "item/fileChange/outputDelta":
+    case "item/reasoning/summaryTextDelta":
+    case "item/reasoning/textDelta":
+    case "item/plan/delta":
+    case "item/mcpToolCall/progress":
+    case "thread/name/updated":
+    case "warning":
+      return false;
+    default:
+      return true;
+  }
+}
+
+export function shouldBroadcastEvent(event: BbProviderEvent): boolean {
+  switch (event.type) {
+    case "item/agentMessage/delta":
+    case "item/reasoning/summaryTextDelta":
+    case "item/reasoning/textDelta":
+      return false;
+    default:
+      return true;
+  }
+}
+
+export function statusFromEvent(event: BbProviderEvent): Thread["status"] | undefined {
+  switch (event.type) {
+    case "turn/started":
+      return "active";
+    case "turn/completed":
+      return event.status === "failed" ? "error" : "idle";
+    case "error":
+      return "error";
+    default:
+      return undefined;
+  }
+}
+
+export function turnStateFromEvent(event: BbProviderEvent): "active" | "idle" | undefined {
+  switch (event.type) {
+    case "turn/started":
+      return "active";
+    case "turn/completed":
+      return "idle";
+    default:
+      return undefined;
+  }
+}
+
+export function titleFromEvent(event: BbProviderEvent): string | undefined {
+  if (event.type === "thread/name/updated") return event.threadName;
+  return undefined;
+}
+
+export function turnIdFromEvent(event: BbProviderEvent): string | undefined {
+  if ("turnId" in event && typeof event.turnId === "string") return event.turnId;
+  return undefined;
+}
+
+export function providerThreadIdFromEvent(event: BbProviderEvent): string | undefined {
+  if (event.type === "thread/identity") return event.providerThreadId;
+  return undefined;
+}
+
+// ---------------------------------------------------------------------------
+// Provider semantics — wraps adapter for env-daemon use
+// ---------------------------------------------------------------------------
+
 export interface NormalizedEnvironmentDaemonProviderEvent {
   providerId: string;
+  bbEvents: BbProviderEvent[];
+  /** First event's type as a canonical method string. */
   normalizedMethod: string;
   shouldPersist: boolean;
   shouldBroadcast: boolean;
@@ -18,10 +100,11 @@ export interface NormalizedEnvironmentDaemonProviderEvent {
   title?: string;
   turnState?: "active" | "idle";
   turnId?: string;
+  providerThreadId?: string;
 }
 
 export interface EnvironmentDaemonProviderSemantics {
-  normalizeEvent(method: string, payload: unknown): NormalizedEnvironmentDaemonProviderEvent;
+  translateEvent(event: unknown): NormalizedEnvironmentDaemonProviderEvent;
   decodeToolCallRequest(
     requestId: string | number,
     method: string,
@@ -30,56 +113,6 @@ export interface EnvironmentDaemonProviderSemantics {
   encodeToolCallResponse(response: ProviderToolCallResponse): Record<string, unknown>;
   extractThreadId(value: unknown): string | undefined;
   isMissingProviderThreadMessage(message: string): boolean;
-}
-
-function normalizeTitle(value: unknown): string | undefined {
-  if (typeof value !== "string") return undefined;
-  const normalized = value.replace(/\s+/g, " ").trim();
-  if (!normalized) return undefined;
-  if (normalized.length <= 60) return normalized;
-  return `${normalized.slice(0, 57).trimEnd()}...`;
-}
-
-function toTurnState(
-  normalizedMethod: string,
-): "active" | "idle" | undefined {
-  if (normalizedMethod === "turn/start" || normalizedMethod === "turn/started") {
-    return "active";
-  }
-  if (normalizedMethod === "turn/completed" || normalizedMethod === "turn/end") {
-    return "idle";
-  }
-  return undefined;
-}
-
-function decodeSharedToolCallRequest(
-  requestId: string | number,
-  method: string,
-  params: unknown,
-): ProviderToolCallRequest | null {
-  if (method.toLowerCase().replaceAll(".", "/") !== "item/tool/call") {
-    return null;
-  }
-
-  const record = toRecord(params);
-  if (!record) return null;
-
-  const threadId = getStringField(record, "threadId");
-  const turnId = getStringField(record, "turnId");
-  const callId = getStringField(record, "callId");
-  const tool = getStringField(record, "tool");
-  if (!threadId || !turnId || !callId || !tool) {
-    return null;
-  }
-
-  return {
-    requestId,
-    threadId,
-    turnId,
-    callId,
-    tool,
-    arguments: record.arguments,
-  };
 }
 
 function encodeSharedToolCallResponse(
@@ -100,32 +133,9 @@ function encodeSharedToolCallResponse(
   };
 }
 
-function normalizeCommonEvent(
-  provider: ProviderAdapter,
-  method: string,
-  payload: unknown,
-): NormalizedEnvironmentDaemonProviderEvent {
-  const normalizedMethod = provider.normalizeEventType(method);
-  const turnState = toTurnState(normalizedMethod);
-  const turnId = getStringField(toRecord(payload), "turnId") ?? undefined;
-  const providerStatus = provider.statusForEvent(method, payload);
-  const providerTitle = provider.titleFromEvent(method, payload);
-
-  return {
-    providerId: provider.id,
-    normalizedMethod,
-    shouldPersist: provider.shouldPersistEvent?.(method, payload) ?? true,
-    shouldBroadcast: provider.shouldBroadcastForEvent(method),
-    ...(providerStatus ? { nextStatus: providerStatus } : {}),
-    ...(providerTitle ? { title: normalizeTitle(providerTitle) } : {}),
-    ...(turnState ? { turnState } : {}),
-    ...(turnId ? { turnId } : {}),
-  };
-}
-
-function isMissingProviderThreadMessage(provider: ProviderAdapter, message: string): boolean {
+function isMissingProviderThreadMessage(providerId: string, message: string): boolean {
   const normalized = message.toLowerCase();
-  if (provider.id === "codex") {
+  if (providerId === "codex") {
     return (
       normalized.includes("no rollout found for thread id") ||
       normalized.includes("thread not found")
@@ -134,23 +144,51 @@ function isMissingProviderThreadMessage(provider: ProviderAdapter, message: stri
   return normalized.includes("thread not found");
 }
 
-function createProviderSemantics(provider: ProviderAdapter): EnvironmentDaemonProviderSemantics {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function createProviderSemantics(provider: ProviderAdapter<any, any>): EnvironmentDaemonProviderSemantics {
   return {
-    normalizeEvent(method, payload) {
-      return normalizeCommonEvent(provider, method, payload);
+    translateEvent(event: unknown): NormalizedEnvironmentDaemonProviderEvent {
+      const bbEvents = provider.translateEvent(event);
+
+      // Derive policy from the first event (most events translate 1:1)
+      const primary = bbEvents[0];
+      const persist = primary ? shouldPersistEvent(primary) : true;
+      const broadcast = primary ? shouldBroadcastEvent(primary) : true;
+      const status = primary ? statusFromEvent(primary) : undefined;
+      const title = bbEvents.find((e) => titleFromEvent(e) !== undefined);
+      const turnState = primary ? turnStateFromEvent(primary) : undefined;
+
+      // Collect providerThreadId from any thread/identity event
+      let ptid: string | undefined;
+      for (const e of bbEvents) {
+        const id = providerThreadIdFromEvent(e);
+        if (id) { ptid = id; break; }
+      }
+
+      return {
+        providerId: provider.id,
+        bbEvents,
+        normalizedMethod: primary?.type ?? "",
+        shouldPersist: persist,
+        shouldBroadcast: broadcast,
+        ...(status ? { nextStatus: status } : {}),
+        ...(title ? { title: titleFromEvent(title) } : {}),
+        ...(turnState ? { turnState } : {}),
+        ...(primary ? { turnId: turnIdFromEvent(primary) } : {}),
+        ...(ptid ? { providerThreadId: ptid } : {}),
+      };
     },
-    decodeToolCallRequest:
-      provider.decodeToolCallRequest ?? decodeSharedToolCallRequest,
-    encodeToolCallResponse:
-      provider.encodeToolCallResponse ?? encodeSharedToolCallResponse,
+    decodeToolCallRequest(requestId, method, params) {
+      return provider.decodeToolCallRequest({ requestId, method, params: toRecord(params) ?? {} });
+    },
+    encodeToolCallResponse(response) {
+      return encodeSharedToolCallResponse(provider.encodeToolCallResponse(response));
+    },
     extractThreadId(value) {
-      return (
-        provider.extractThreadIdFromEventData(value) ??
-        provider.extractThreadIdFromResult(value)
-      );
+      return decodeThreadIdFromWireValue(value);
     },
     isMissingProviderThreadMessage(message) {
-      return isMissingProviderThreadMessage(provider, message);
+      return isMissingProviderThreadMessage(provider.id, message);
     },
   };
 }

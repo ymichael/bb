@@ -11,6 +11,7 @@ import {
 import {
   assertNever,
   createProviderEventEnvelope,
+  decodeThreadIdFromWireValue,
   extractTurnIdFromPersistedEventData,
   type PromptInput,
   type SpawnThreadRequest,
@@ -27,6 +28,9 @@ import type {
   ProviderToolCallResponse,
   ProviderToolHost,
 } from "@bb/provider-adapters";
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AnyProviderAdapter = ProviderAdapter<any, any>;
 
 export type ProviderSessionErrorCode =
   | "inactive_session"
@@ -58,10 +62,12 @@ export interface ProviderSessionNotification {
   title?: string;
   turnState?: "active" | "idle";
   turnId?: string;
+  /** Provider thread ID reported asynchronously (e.g. via thread/started). */
+  providerThreadId?: string;
 }
 
 export interface ProviderSessionControllerOptions {
-  provider: ProviderAdapter;
+  provider: AnyProviderAdapter;
   dynamicTools?: ProviderDynamicTool[];
   resolveDynamicTools?: (args: {
     request: SpawnThreadRequest;
@@ -110,7 +116,7 @@ export class ProviderSessionController {
 
   constructor(private readonly opts: ProviderSessionControllerOptions) {}
 
-  get provider(): ProviderAdapter {
+  get provider(): AnyProviderAdapter {
     return this.opts.provider;
   }
 
@@ -149,7 +155,7 @@ export class ProviderSessionController {
   }
 
   normalizeEventType(method: string): string {
-    return this.opts.provider.normalizeEventType(method);
+    return this.opts.provider.interpretNotification({ method, params: {} }).normalizedMethod;
   }
 
   outputFromEvent(event: ThreadEvent): string | undefined {
@@ -164,8 +170,9 @@ export class ProviderSessionController {
           ? record.providerThreadId
           : undefined;
       }
+      return decodeThreadIdFromWireValue(record);
     }
-    return this.opts.provider.extractThreadIdFromResult(result);
+    return undefined;
   }
 
   async startThreadCommand(args: {
@@ -255,7 +262,7 @@ export class ProviderSessionController {
     const requestedMode = args.mode ?? "auto";
     const activeTurnId = args.activeTurnId;
     const steerSupported = Boolean(
-      this.opts.provider.turnSteerMethod && this.opts.provider.createTurnSteerParams,
+      this.opts.provider.buildTurnSteerCommand,
     );
     const canAutoSteer =
       steerSupported &&
@@ -312,8 +319,7 @@ export class ProviderSessionController {
     context: ProviderThreadContext;
     providerLaunch?: EnvironmentDaemonProviderLaunchWrapper;
   }): Promise<void> {
-    if (!this.opts.provider.threadNameSetMethod) return;
-    if (!this.opts.provider.createThreadNameSetParams) return;
+    if (!this.opts.provider.buildThreadNameSetCommand) return;
     if (!args.providerThreadId) return;
 
     await this.ensureProviderRunningForCommand(
@@ -355,11 +361,11 @@ export class ProviderSessionController {
       );
     }
 
-    const call = this.opts.provider.decodeToolCallRequest(
-      args.requestId,
-      args.method,
-      args.params,
-    );
+    const call = this.opts.provider.decodeToolCallRequest({
+      requestId: args.requestId,
+      method: args.method,
+      params: (args.params ?? {}) as Record<string, unknown>,
+    });
     if (!call) {
       throw new ProviderSessionError(
         "unsupported_operation",
@@ -432,28 +438,32 @@ export class ProviderSessionController {
   ): void {
     if (typeof msg.method !== "string") return;
 
-    const normalizedMethod = this.opts.provider.normalizeEventType(msg.method);
-    const nextStatus = this.opts.provider.statusForEvent(msg.method, msg.params ?? {});
+    const params = (msg.params ?? {}) as Record<string, unknown>;
+    const result = this.opts.provider.interpretNotification({
+      method: msg.method,
+      params,
+    });
     const turnState =
-      toTurnLifecycleState(normalizedMethod) ??
-      (nextStatus === "error" ? "idle" : undefined);
+      toTurnLifecycleState(result.normalizedMethod) ??
+      (result.status === "error" ? "idle" : undefined);
     const turnId = extractTurnIdFromPersistedEventData(msg.params);
 
     this.opts.onNotification?.(threadId, {
       method: msg.method,
-      normalizedMethod,
+      normalizedMethod: result.normalizedMethod,
       eventType: toProviderEventType(msg.method),
       eventData: createProviderEventEnvelope({
         providerId: this.opts.provider.id,
         method: msg.method,
-        payload: msg.params ?? {},
+        payload: params,
       }),
-      shouldPersist: this.opts.provider.shouldPersistEvent?.(msg.method, msg.params) !== false,
-      shouldBroadcast: this.opts.provider.shouldBroadcastForEvent(msg.method),
-      nextStatus,
-      title: this.opts.provider.titleFromEvent(msg.method, msg.params ?? {}),
+      shouldPersist: result.shouldPersist,
+      shouldBroadcast: result.shouldBroadcast,
+      nextStatus: result.status,
+      title: result.title,
       ...(turnState ? { turnState } : {}),
       ...(turnId ? { turnId } : {}),
+      ...(result.providerThreadId ? { providerThreadId: result.providerThreadId } : {}),
     });
   }
 

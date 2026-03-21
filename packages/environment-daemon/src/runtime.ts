@@ -13,6 +13,9 @@ import {
   type ProviderToolCallRequest,
   type ProviderToolCallResponse,
 } from "@bb/provider-adapters";
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AnyProviderAdapter = ProviderAdapter<any, any>;
 import {
   ENVIRONMENT_DAEMON_PROTOCOL_VERSION,
   type EnvironmentDaemonCommand,
@@ -68,7 +71,7 @@ export interface EnvironmentDaemonRuntimeOptions {
   }) => Promise<unknown> | unknown;
   onStdoutLine?: (line: string) => void;
   onStderrLine?: (line: string) => void;
-  createProviderAdapter?: (providerId: import("@bb/core").ThreadProviderId) => ProviderAdapter;
+  createProviderAdapter?: (providerId: import("@bb/core").ThreadProviderId) => AnyProviderAdapter;
   listAvailableProviderInfos?: typeof listAvailableProviderInfos;
 }
 
@@ -802,9 +805,25 @@ export class EnvironmentDaemonRuntime {
       };
     }
 
-    const payload = record.params ?? {};
-    const normalized = this.getProviderSemanticsForProviderId(providerId)
-      ?.normalizeEvent(record.method, payload);
+    const semantics = this.getProviderSemanticsForProviderId(providerId);
+
+    // Determine what to pass to translateEvent:
+    // - sdk/message notifications: unwrap the inner SDK message
+    // - Direct notifications (codex): pass the full { method, params } object
+    let eventForTranslation: unknown;
+    let payload: unknown;
+    if (record.method === "sdk/message") {
+      const params = record.params as { threadId?: string; message?: unknown } | undefined;
+      eventForTranslation = params?.message;
+      payload = params;
+    } else {
+      eventForTranslation = record;
+      payload = record.params ?? {};
+    }
+
+    // Translate through the adapter
+    const normalized = semantics?.translateEvent(eventForTranslation);
+
     const threadId = this.resolveProviderEventThreadId(
       payload,
       providerId,
@@ -813,10 +832,18 @@ export class EnvironmentDaemonRuntime {
     if (!threadId) {
       return undefined;
     }
+
+    // Learn provider thread ID from thread/identity events
+    if (normalized?.providerThreadId) {
+      this.recordProviderThreadMapping(threadId, normalized.providerThreadId, providerId);
+    }
+
     return {
       type: "provider.event",
       threadId,
-      method: record.method,
+      method: record.method === "sdk/message"
+        ? (normalized?.normalizedMethod ?? "sdk/message")
+        : record.method,
       payload,
       ...(normalized?.providerId ? { providerId: normalized.providerId } : {}),
       ...(normalized?.normalizedMethod
@@ -945,8 +972,8 @@ export class EnvironmentDaemonRuntime {
       }
       const launchConfig = await provider.resolveLaunchConfiguration?.(command.context);
       return {
-        command: provider.processCommand,
-        args: [...provider.processArgs],
+        command: provider.process.command,
+        args: [...provider.process.args],
         ...(launchConfig?.env ? { env: { ...launchConfig.env } } : {}),
         ...(launchConfig?.files
           ? { files: launchConfig.files.map((file) => ({ ...file })) }
@@ -1058,8 +1085,7 @@ export class EnvironmentDaemonRuntime {
       });
     }
     return this.requestProvider({
-      method: this.toProviderMethod(command),
-      params: this.toProviderParams(command),
+      ...this.toProviderMethodAndParams(command),
       child,
     });
   }
@@ -1090,142 +1116,121 @@ export class EnvironmentDaemonRuntime {
   } {
     const provider = this.getProviderAdapterForThread(command.threadId);
     const requestedMode = command.requestedMode ?? "auto";
-    const canSteer = Boolean(command.activeTurnId) && Boolean(
-      provider?.turnSteerMethod &&
-      provider.createTurnSteerParams &&
-      command.input !== undefined,
-    );
+    const canSteer = Boolean(command.activeTurnId) && command.input !== undefined;
 
     if (requestedMode === "steer") {
       if (!command.activeTurnId) {
         throw new Error("No active turn");
       }
-      const steerParams = this.resolveTurnSteerParams(command);
-      if (steerParams === undefined) {
+      const steerCommand = this.resolveTurnSteerCommand(command);
+      if (steerCommand === undefined) {
         throw new Error("turn/steer is unsupported");
       }
-      return {
-        method: provider?.turnSteerMethod ?? "turn/steer",
-        params: steerParams,
-      };
+      return steerCommand;
     }
 
     if (requestedMode !== "start" && canSteer) {
-      const steerParams = this.resolveTurnSteerParams(command);
-      if (steerParams !== undefined) {
-        return {
-          method: provider?.turnSteerMethod ?? "turn/steer",
-          params: steerParams,
-        };
+      const steerCommand = this.resolveTurnSteerCommand(command);
+      if (steerCommand !== undefined) {
+        return steerCommand;
       }
     }
 
-    return {
-      method: provider?.turnStartMethod ?? "turn/start",
-      params: this.resolveTurnStartParams(command),
-    };
+    return this.resolveTurnStartCommand(command);
   }
 
-  private resolveTurnStartParams(
+  private resolveTurnStartCommand(
     command: Extract<EnvironmentDaemonRpcCommand, { type: "turn.run" }>,
-  ): unknown {
+  ): { method: string; params: unknown } {
     const provider = this.getProviderAdapterForThread(command.threadId);
     if (!provider || command.input === undefined) {
       throw new Error("turn/start params are unavailable");
     }
-    return provider.createTurnStartParams(
-      command.threadId,
-      command.providerThreadId,
-      command.input,
-      command.options,
-    );
+    const cmd = provider.buildCommand({
+      type: "turn/start",
+      threadId: command.threadId,
+      providerThreadId: command.providerThreadId,
+      input: command.input,
+      options: command.options,
+    });
+    if (!cmd) throw new Error("turn/start is unsupported");
+    return cmd;
   }
 
-  private resolveTurnSteerParams(
+  private resolveTurnSteerCommand(
     command: Extract<EnvironmentDaemonRpcCommand, { type: "turn.run" }>,
-  ): unknown | undefined {
+  ): { method: string; params: unknown } | undefined {
     const provider = this.getProviderAdapterForThread(command.threadId);
-    if (
-      !provider?.turnSteerMethod ||
-      !provider.createTurnSteerParams ||
-      !command.activeTurnId ||
-      command.input === undefined
-    ) {
+    if (!provider || !command.activeTurnId || command.input === undefined) {
       return undefined;
     }
-    return provider.createTurnSteerParams(
-      command.threadId,
-      command.providerThreadId,
-      command.activeTurnId,
-      command.input,
-    );
+    const cmd = provider.buildCommand({
+      type: "turn/steer",
+      threadId: command.threadId,
+      providerThreadId: command.providerThreadId,
+      expectedTurnId: command.activeTurnId,
+      input: command.input,
+    });
+    if (!cmd) return undefined;
+    return cmd;
   }
 
-  private toProviderMethod(command: EnvironmentDaemonRpcCommand): string {
+  private toProviderMethodAndParams(command: EnvironmentDaemonRpcCommand): {
+    method: string;
+    params: unknown;
+  } {
     const provider = this.getProviderAdapterForThread(command.threadId);
     switch (command.type) {
-      case "thread.start":
-        return provider?.threadStartMethod ?? "thread/start";
-      case "thread.resume":
-        return provider?.threadResumeMethod ?? "thread/resume";
-      case "thread.stop":
-        return "thread/stop";
-      case "turn.run":
-        return provider?.turnStartMethod ?? "turn/start";
-      case "thread.rename":
-        return provider?.threadNameSetMethod ?? "thread/name/set";
-      case "workspace.status":
-        return "workspace/status";
-      case "workspace.diff":
-        return "workspace/diff";
-    }
-  }
-
-  private toProviderParams(command: EnvironmentDaemonRpcCommand): unknown {
-    const provider = this.getProviderAdapterForThread(command.threadId);
-    switch (command.type) {
-      case "thread.start":
+      case "thread.start": {
         if (!provider || !command.request || !command.context) {
           throw new Error("thread/start params are unavailable");
         }
-        return provider.createThreadStartParams(
-          command.request,
-          command.context,
-          command.dynamicTools,
-        );
+        const cmd = provider.buildCommand({
+          type: "thread/start",
+          threadId: command.threadId,
+          req: command.request,
+          context: command.context,
+          dynamicTools: command.dynamicTools,
+        });
+        if (!cmd) throw new Error("thread/start is unsupported");
+        return cmd;
+      }
       case "thread.resume": {
         if (!provider || !command.context) {
           throw new Error("thread/resume params are unavailable");
         }
-        const resumeParams = provider.createThreadResumeParams(
-          command.providerThreadId,
-          command.context,
-          command.options,
-          command.resumePath,
-        );
-        // Pass dynamic tools so the bridge can re-register them on resume.
-        if (command.dynamicTools && command.dynamicTools.length > 0) {
-          (resumeParams as Record<string, unknown>).dynamicTools =
-            command.dynamicTools;
-        }
-        return resumeParams;
+        const cmd = provider.buildCommand({
+          type: "thread/resume",
+          threadId: command.threadId,
+          providerThreadId: command.providerThreadId,
+          context: command.context,
+          options: command.options,
+          resumePath: command.resumePath,
+        });
+        if (!cmd) throw new Error("thread/resume is unsupported");
+        return cmd;
       }
-      case "thread.rename":
-        if (!provider?.createThreadNameSetParams) {
+      case "thread.rename": {
+        if (!provider) {
           throw new Error("thread/name/set params are unavailable");
         }
-        return provider.createThreadNameSetParams(
-          command.threadId,
-          command.providerThreadId,
-          command.title,
-        );
+        const cmd = provider.buildCommand({
+          type: "thread/name/set",
+          threadId: command.threadId,
+          providerThreadId: command.providerThreadId,
+          title: command.title,
+        });
+        if (!cmd) throw new Error("thread/name/set is unsupported");
+        return cmd;
+      }
       case "turn.run":
-        return this.resolveTurnStartParams(command);
+        return this.resolveTurnStartCommand(command);
       case "thread.stop":
-        return {};
+        return { method: "thread/stop", params: {} };
       case "workspace.status":
+        return { method: "workspace/status", params: { threadId: command.threadId } };
       case "workspace.diff":
-        return { threadId: command.threadId };
+        return { method: "workspace/diff", params: { threadId: command.threadId } };
     }
   }
 
@@ -1486,11 +1491,11 @@ export class EnvironmentDaemonRuntime {
     return getEnvironmentDaemonProviderSemantics(providerId);
   }
 
-  private getProviderAdapterForThread(threadId: string): ProviderAdapter | undefined {
+  private getProviderAdapterForThread(threadId: string): AnyProviderAdapter | undefined {
     return this.getProviderAdapterForId(this.resolveProviderIdForThread(threadId));
   }
 
-  private getProviderAdapterForId(providerId: string | undefined): ProviderAdapter | undefined {
+  private getProviderAdapterForId(providerId: string | undefined): AnyProviderAdapter | undefined {
     if (!providerId || !isThreadProviderId(providerId)) {
       return undefined;
     }
@@ -1505,13 +1510,12 @@ export class EnvironmentDaemonRuntime {
     if (!provider) {
       throw new Error(`Provider adapter not found for initialize: ${providerId}`);
     }
-    return {
-      method: provider.initializeMethod,
-      params:
-        provider.createInitializeParams?.(provider.clientInfo) ?? {
-          clientInfo: provider.clientInfo,
-        },
-    };
+    const cmd = provider.buildCommand({
+      type: "initialize",
+      clientInfo: { name: "bb", version: "0.0.1" },
+    });
+    if (!cmd) throw new Error("initialize is unsupported");
+    return cmd;
   }
 
   private resolveProviderIdForThread(threadId: string): string | undefined {

@@ -55,80 +55,60 @@ type EnvironmentDaemonRpcCommand = Exclude<
   | EnvironmentDaemonProviderListCatalogCommand
 >;
 
-function toProviderMethod(command: EnvironmentDaemonRpcCommand): string {
+function toProviderMethodAndParams(command: EnvironmentDaemonRpcCommand): {
+  method: string;
+  params: unknown;
+} {
   const provider = createProviderAdapter({ providerId: "codex" });
   switch (command.type) {
     case "thread.start":
-      return provider.threadStartMethod;
+      return provider.buildCommand({
+        type: "thread/start",
+        threadId: command.threadId,
+        req: command.request!,
+        context: command.context!,
+        dynamicTools: command.dynamicTools,
+      })!;
     case "thread.resume":
-      return provider.threadResumeMethod;
-    case "thread.stop":
-      return "thread/stop";
-    case "turn.run":
-      return command.requestedMode === "steer"
-        ? provider.turnSteerMethod ?? provider.turnStartMethod
-        : provider.turnStartMethod;
-    case "thread.rename":
-      return provider.threadNameSetMethod ?? "thread/name/set";
-    case "workspace.status":
-      return "workspace/status";
-    case "workspace.diff":
-      return "workspace/diff";
-  }
-
-  return assertNever(command);
-}
-
-function toProviderParams(command: EnvironmentDaemonRpcCommand): unknown {
-  const provider = createProviderAdapter({ providerId: "codex" });
-  switch (command.type) {
-    case "thread.start":
-      return provider.createThreadStartParams(
-        command.request!,
-        command.context!,
-        command.dynamicTools,
-      );
-    case "thread.resume":
-      return provider.createThreadResumeParams(
-        command.providerThreadId,
-        command.context!,
-        command.options,
-        command.resumePath,
-      );
-    case "turn.run":
-      if (command.requestedMode === "steer") {
-        return provider.createTurnSteerParams!(
-          command.threadId,
-          command.providerThreadId,
-          command.activeTurnId!,
-          command.input!,
-        );
+      return provider.buildCommand({
+        type: "thread/resume",
+        threadId: command.threadId,
+        providerThreadId: command.providerThreadId,
+        context: command.context!,
+        options: command.options,
+        resumePath: command.resumePath,
+      })!;
+    case "turn.run": {
+      if (command.requestedMode === "steer" && command.activeTurnId && command.input) {
+        const steerCmd = provider.buildCommand({
+          type: "turn/steer",
+          threadId: command.threadId,
+          providerThreadId: command.providerThreadId,
+          expectedTurnId: command.activeTurnId,
+          input: command.input,
+        });
+        if (steerCmd) return steerCmd;
       }
-      if (command.requestedMode !== "start" && command.activeTurnId && command.input) {
-        return provider.createTurnSteerParams!(
-          command.threadId,
-          command.providerThreadId,
-          command.activeTurnId,
-          command.input,
-        );
-      }
-      return provider.createTurnStartParams(
-        command.threadId,
-        command.providerThreadId,
-        command.input!,
-        command.options,
-      );
+      return provider.buildCommand({
+        type: "turn/start",
+        threadId: command.threadId,
+        providerThreadId: command.providerThreadId,
+        input: command.input!,
+        options: command.options,
+      })!;
+    }
     case "thread.rename":
-      return provider.createThreadNameSetParams!(
-        command.threadId,
-        command.providerThreadId,
-        command.title,
-      );
+      return provider.buildCommand({
+        type: "thread/name/set",
+        threadId: command.threadId,
+        providerThreadId: command.providerThreadId,
+        title: command.title,
+      })!;
     case "thread.stop":
-      return {};
+      return { method: "thread/stop", params: {} };
     case "workspace.status":
     case "workspace.diff":
-      return { threadId: command.threadId };
+      return { method: command.type === "workspace.status" ? "workspace/status" : "workspace/diff", params: { threadId: command.threadId } };
   }
 
   return assertNever(command);
@@ -485,10 +465,8 @@ export function createFakeEnvironmentDaemonClient(
         } else if (command.type === "provider.list_catalog") {
           result = listAvailableProviderInfos();
         } else {
-        result = await sendRpcRequest(
-          toProviderMethod(command),
-          toProviderParams(command),
-        );
+        const { method, params } = toProviderMethodAndParams(command);
+        result = await sendRpcRequest(method, params);
         }
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
