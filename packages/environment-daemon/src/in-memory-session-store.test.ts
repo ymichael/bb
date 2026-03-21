@@ -12,15 +12,15 @@ describe("InMemoryEnvironmentDaemonSessionStore", () => {
     expect(
       store.initializeThreadState({
         threadId: "thread-1",
-        agentId: "agent-1",
-        agentInstanceId: "instance-1",
+        environmentDaemonId: "agent-1",
+        environmentDaemonInstanceId: "instance-1",
         generation: 2,
         now: 1_000,
       }),
     ).toEqual({
       threadId: "thread-1",
-      agentId: "agent-1",
-      agentInstanceId: "instance-1",
+      environmentDaemonId: "agent-1",
+      environmentDaemonInstanceId: "instance-1",
       generation: 2,
       nextSequence: 1,
       createdAt: 1_000,
@@ -90,8 +90,8 @@ describe("InMemoryEnvironmentDaemonSessionStore", () => {
   it("preserves existing thread state on reinitialize and bumps generation explicitly", () => {
     store.initializeThreadState({
       threadId: "thread-1",
-      agentId: "agent-1",
-      agentInstanceId: "instance-1",
+      environmentDaemonId: "agent-1",
+      environmentDaemonInstanceId: "instance-1",
       generation: 1,
       now: 1_000,
     });
@@ -111,15 +111,15 @@ describe("InMemoryEnvironmentDaemonSessionStore", () => {
     expect(
       store.initializeThreadState({
         threadId: "thread-1",
-        agentId: "agent-2",
-        agentInstanceId: "instance-2",
+        environmentDaemonId: "agent-2",
+        environmentDaemonInstanceId: "instance-2",
         generation: 99,
         now: 4_000,
       }),
     ).toMatchObject({
       threadId: "thread-1",
-      agentId: "agent-2",
-      agentInstanceId: "instance-2",
+      environmentDaemonId: "agent-2",
+      environmentDaemonInstanceId: "instance-2",
       generation: 99,
       nextSequence: 1,
       lastAcked: {
@@ -255,8 +255,8 @@ describe("InMemoryEnvironmentDaemonSessionStore", () => {
   it("only advances the last delivered command cursor forward", () => {
     store.initializeThreadState({
       threadId: "thread-1",
-      agentId: "agent-1",
-      agentInstanceId: "instance-1",
+      environmentDaemonId: "agent-1",
+      environmentDaemonInstanceId: "instance-1",
       generation: 1,
       now: 1_000,
     });

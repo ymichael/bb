@@ -185,7 +185,7 @@ export class EnvironmentDaemonSessionClient {
 
   async closeSession(
     sessionId: string,
-    reason: "agent_shutdown" | "server_shutdown" | "migration" | "internal_error",
+    reason: "daemon_shutdown" | "server_shutdown" | "migration" | "internal_error",
   ): Promise<void> {
     await this.postClientMessage({
       type: "session_close",

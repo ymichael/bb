@@ -48,8 +48,8 @@ export class EnvironmentDaemonSessionSync {
     const welcome = await this.options.client.openSession(args.payload);
     this.bindWelcomeChannels({
       welcome,
-      agentId: args.payload.agentId,
-      agentInstanceId: args.payload.agentInstanceId,
+      environmentDaemonId: args.payload.environmentDaemonId,
+      environmentDaemonInstanceId: args.payload.environmentDaemonInstanceId,
       now: welcome.sentAt,
     });
     return welcome;
@@ -57,8 +57,8 @@ export class EnvironmentDaemonSessionSync {
 
   bindWelcomeChannels(args: {
     welcome: EnvironmentDaemonSessionWelcomeMessage;
-    agentId: string;
-    agentInstanceId: string;
+    environmentDaemonId: string;
+    environmentDaemonInstanceId: string;
     now?: number;
   }): void {
     const now = args.now ?? args.welcome.sentAt;
@@ -67,8 +67,8 @@ export class EnvironmentDaemonSessionSync {
       if (!existing) {
         this.options.runtime.initializeThread({
           threadId: channel.channelId,
-          agentId: args.agentId,
-          agentInstanceId: args.agentInstanceId,
+          environmentDaemonId: args.environmentDaemonId,
+          environmentDaemonInstanceId: args.environmentDaemonInstanceId,
           generation: Math.max(1, channel.applyFrom.generation),
           now,
         });
@@ -94,7 +94,7 @@ export class EnvironmentDaemonSessionSync {
     threadIds: readonly string[];
   }): Promise<void> {
     await this.options.client.heartbeat(args.sessionId, {
-      agentObservedAt: Date.now(),
+      environmentDaemonObservedAt: Date.now(),
       outboxDepth: args.threadIds.reduce(
         (count, threadId) =>
           count + (this.options.runtime.getPendingEventBatch({ threadId })?.events.length ?? 0),
@@ -174,8 +174,8 @@ export class EnvironmentDaemonSessionSync {
   async pullCommands(args: {
     sessionId: string;
     threadIds: readonly string[];
-    agentId: string;
-    agentInstanceId: string;
+    environmentDaemonId: string;
+    environmentDaemonInstanceId: string;
     afterCursor?: number;
     limit?: number;
     waitMs?: number;
@@ -196,8 +196,8 @@ export class EnvironmentDaemonSessionSync {
         this.ensureChannelState({
           threadId: command.channelId,
           sessionId: args.sessionId,
-          agentId: args.agentId,
-          agentInstanceId: args.agentInstanceId,
+          environmentDaemonId: args.environmentDaemonId,
+          environmentDaemonInstanceId: args.environmentDaemonInstanceId,
           now: batch.sentAt,
         });
         const received = this.options.runtime.receiveCommand({
@@ -242,16 +242,16 @@ export class EnvironmentDaemonSessionSync {
   private ensureChannelState(args: {
     threadId: string;
     sessionId: string;
-    agentId: string;
-    agentInstanceId: string;
+    environmentDaemonId: string;
+    environmentDaemonInstanceId: string;
     now: number;
   }): void {
     const existing = this.options.runtime.loadThreadState(args.threadId);
     if (!existing) {
       this.options.runtime.initializeThread({
         threadId: args.threadId,
-        agentId: args.agentId,
-        agentInstanceId: args.agentInstanceId,
+        environmentDaemonId: args.environmentDaemonId,
+        environmentDaemonInstanceId: args.environmentDaemonInstanceId,
         generation: 1,
         now: args.now,
       });
@@ -273,7 +273,7 @@ export class EnvironmentDaemonSessionSync {
 
   async closeSession(
     sessionId: string,
-    reason: "agent_shutdown" | "server_shutdown" | "migration" | "internal_error",
+    reason: "daemon_shutdown" | "server_shutdown" | "migration" | "internal_error",
   ): Promise<void> {
     await this.options.client.closeSession(sessionId, reason);
   }

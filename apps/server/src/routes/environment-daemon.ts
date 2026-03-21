@@ -79,8 +79,8 @@ function toEnvironmentDaemonSessionDebugView(
   return {
     id: session.id,
     environmentId: session.environmentId,
-    agentId: session.agentId,
-    agentInstanceId: session.agentInstanceId,
+    environmentDaemonId: session.environmentDaemonId,
+    environmentDaemonInstanceId: session.environmentDaemonInstanceId,
     protocolVersion: session.protocolVersion,
     ...(session.workerName ? { workerName: session.workerName } : {}),
     ...(session.workerVersion ? { workerVersion: session.workerVersion } : {}),
@@ -267,7 +267,7 @@ export function createEnvironmentDaemonRoutes(opts: {
               environmentDaemonSessionService.closeSession({
                 environmentId,
                 sessionId: body.sessionId,
-                reason: (body.payload as { reason: "agent_shutdown" | "server_shutdown" | "migration" | "internal_error" }).reason,
+                reason: (body.payload as { reason: "daemon_shutdown" | "server_shutdown" | "migration" | "internal_error" }).reason,
               });
               return c.body(null, 204);
             default:

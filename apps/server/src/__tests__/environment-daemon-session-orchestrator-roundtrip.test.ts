@@ -51,8 +51,8 @@ function createMockLlmCompletionService(): LlmCompletionService {
 
 function makeOpenPayload(threadId: string): EnvironmentDaemonSessionOpenPayload {
   return {
-    agentId: `agent:${threadId}`,
-    agentInstanceId: `instance:${threadId}`,
+    environmentDaemonId: `agent:${threadId}`,
+    environmentDaemonInstanceId: `instance:${threadId}`,
     supportedProtocolVersions: [1],
     capabilities: createEnvironmentDaemonSessionCapabilities({}),
     channels: [
@@ -1442,7 +1442,7 @@ describe("environment-daemon session orchestrator roundtrip", () => {
     sessionService.closeSession({
       environmentId: resolveEnvironmentId(threadId),
       sessionId: firstSessionId,
-      reason: "agent_shutdown",
+      reason: "daemon_shutdown",
       now: 3_000,
     });
     const secondSessionId = openSession(threadId);

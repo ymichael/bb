@@ -1123,8 +1123,8 @@ describe("CLI JSON output contracts", () => {
         {
           id: "sess-1",
           environmentId: "env-1",
-          agentId: "agent-1",
-          agentInstanceId: "instance-1",
+          environmentDaemonId: "agent-1",
+          environmentDaemonInstanceId: "instance-1",
           protocolVersion: 1,
           status: "active",
           leaseExpiresAt: 10,

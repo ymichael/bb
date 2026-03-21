@@ -44,15 +44,15 @@ interface ThreadSessionsPayload {
 interface ThreadSessionDebugView {
   id: string;
   environmentId: string;
-  agentId: string;
-  agentInstanceId: string;
+  environmentDaemonId: string;
+  environmentDaemonInstanceId: string;
   protocolVersion: number;
   status: "active" | "expired" | "closed" | "replaced";
   leaseExpiresAt: number;
   lastHeartbeatAt?: number;
   closedAt?: number;
   closeReason?:
-    | "agent_shutdown"
+    | "daemon_shutdown"
     | "server_shutdown"
     | "lease_expired"
     | "newer_session"
@@ -1279,7 +1279,7 @@ function printThreadSessions(payload: ThreadSessionsPayload): void {
     console.log("");
     console.log(`- Session ${session.id}`);
     console.log(`  Status ${session.status}`);
-    console.log(`  Agent ${session.agentId} (${session.agentInstanceId})`);
+    console.log(`  Daemon ${session.environmentDaemonId} (${session.environmentDaemonInstanceId})`);
     console.log(`  Lease expires ${new Date(session.leaseExpiresAt).toLocaleString()}`);
     if (session.lastHeartbeatAt !== undefined) {
       console.log(`  Last heartbeat ${new Date(session.lastHeartbeatAt).toLocaleString()}`);

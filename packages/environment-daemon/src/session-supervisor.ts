@@ -29,8 +29,8 @@ export interface EnvironmentDaemonSessionSupervisorOptions {
   controlEndpoint?: EnvironmentDaemonSessionControlEndpoint;
   workerMetadata?: EnvironmentDaemonSessionWorkerMetadata;
   providerMetadata?: EnvironmentDaemonSessionProviderMetadata[];
-  agentId?: string;
-  agentInstanceId?: string;
+  environmentDaemonId?: string;
+  environmentDaemonInstanceId?: string;
   pollIntervalMs?: number;
   commandBatchLimit?: number;
   eventFlushDebounceMs?: number;
@@ -83,8 +83,8 @@ function normalizeRejectedCommandError(ack: EnvironmentDaemonCommandAck): {
 }
 
 export class EnvironmentDaemonSessionSupervisor {
-  private readonly agentId: string;
-  private readonly agentInstanceId: string;
+  private readonly environmentDaemonId: string;
+  private readonly environmentDaemonInstanceId: string;
   private readonly pollIntervalMs: number;
   private readonly commandBatchLimit: number;
   private readonly eventFlushDebounceMs: number;
@@ -103,8 +103,8 @@ export class EnvironmentDaemonSessionSupervisor {
   private readonly unsubscribeRuntimeEvents: () => void;
 
   constructor(private readonly options: EnvironmentDaemonSessionSupervisorOptions) {
-    this.agentId = options.agentId ?? `environment-daemon:${options.environmentId}`;
-    this.agentInstanceId = options.agentInstanceId ?? randomUUID();
+    this.environmentDaemonId = options.environmentDaemonId ?? `environment-daemon:${options.environmentId}`;
+    this.environmentDaemonInstanceId = options.environmentDaemonInstanceId ?? randomUUID();
     this.pollIntervalMs = options.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
     this.commandBatchLimit = options.commandBatchLimit ?? DEFAULT_COMMAND_BATCH_LIMIT;
     this.eventFlushDebounceMs =
@@ -182,7 +182,7 @@ export class EnvironmentDaemonSessionSupervisor {
         threadIds: this.getThreadIds(),
       });
       await this.flushPendingEventsWithReplay();
-      await this.options.sessionSync.closeSession(this.sessionId, "agent_shutdown");
+      await this.options.sessionSync.closeSession(this.sessionId, "daemon_shutdown");
     } catch (error) {
       const recovered = this.handleSessionError(error);
       if (!recovered) {
@@ -233,8 +233,8 @@ export class EnvironmentDaemonSessionSupervisor {
     });
     const welcome = await this.options.sessionSync.openSession({
       payload: {
-        agentId: this.agentId,
-        agentInstanceId: this.agentInstanceId,
+        environmentDaemonId: this.environmentDaemonId,
+        environmentDaemonInstanceId: this.environmentDaemonInstanceId,
         supportedProtocolVersions: [...this.supportedProtocolVersions],
         ...(this.options.advertisedCapabilities
           ? { capabilities: this.options.advertisedCapabilities }
@@ -253,8 +253,8 @@ export class EnvironmentDaemonSessionSupervisor {
     );
     this.options.sessionSync.bindWelcomeChannels({
       welcome,
-      agentId: this.agentId,
-      agentInstanceId: this.agentInstanceId,
+      environmentDaemonId: this.environmentDaemonId,
+      environmentDaemonInstanceId: this.environmentDaemonInstanceId,
     });
     this.nextHeartbeatAt = Date.now() + this.heartbeatIntervalMs;
     this.publishRuntimeDeliveryState();
@@ -332,8 +332,8 @@ export class EnvironmentDaemonSessionSupervisor {
       const commands = await this.pullCommands({
         sessionId,
         threadIds,
-        agentId: this.agentId,
-        agentInstanceId: this.agentInstanceId,
+        environmentDaemonId: this.environmentDaemonId,
+        environmentDaemonInstanceId: this.environmentDaemonInstanceId,
         ...(singleThreadState?.lastDeliveredCommandCursor !== undefined
           ? { afterCursor: singleThreadState.lastDeliveredCommandCursor }
           : {}),
@@ -494,8 +494,8 @@ export class EnvironmentDaemonSessionSupervisor {
   private async pullCommands(args: {
     sessionId: string;
     threadIds: readonly string[];
-    agentId: string;
-    agentInstanceId: string;
+    environmentDaemonId: string;
+    environmentDaemonInstanceId: string;
     afterCursor?: number;
   }): Promise<EnvironmentDaemonPulledCommand[]> {
     const controller = new AbortController();
@@ -504,8 +504,8 @@ export class EnvironmentDaemonSessionSupervisor {
       return await this.options.sessionSync.pullCommands({
         sessionId: args.sessionId,
         threadIds: args.threadIds,
-        agentId: args.agentId,
-        agentInstanceId: args.agentInstanceId,
+        environmentDaemonId: args.environmentDaemonId,
+        environmentDaemonInstanceId: args.environmentDaemonInstanceId,
         ...(args.afterCursor !== undefined ? { afterCursor: args.afterCursor } : {}),
         limit: this.commandBatchLimit,
         waitMs: this.getCommandPullWaitMs(),
@@ -559,8 +559,8 @@ export class EnvironmentDaemonSessionSupervisor {
     }
     this.options.sessionRuntime.initializeThread({
       threadId,
-      agentId: this.agentId,
-      agentInstanceId: this.agentInstanceId,
+      environmentDaemonId: this.environmentDaemonId,
+      environmentDaemonInstanceId: this.environmentDaemonInstanceId,
       generation: 1,
     });
   }

@@ -6,8 +6,8 @@ import type {
 
 export interface OpenEnvironmentDaemonSessionInput {
   environmentId: string;
-  agentId: string;
-  agentInstanceId: string;
+  environmentDaemonId: string;
+  environmentDaemonInstanceId: string;
   protocolVersion: number;
   workerName?: string;
   workerVersion?: string;
@@ -59,7 +59,7 @@ export class EnvironmentDaemonSessionManager {
   } {
     const now = args.now ?? Date.now();
     const existing = this.sessions.getActiveByEnvironmentId(args.environmentId, now);
-    if (existing && existing.agentInstanceId === args.agentInstanceId) {
+    if (existing && existing.environmentDaemonInstanceId === args.environmentDaemonInstanceId) {
       const refreshed = this.sessions.refreshActiveSession({
         sessionId: existing.id,
         leaseExpiresAt: now + args.leaseTtlMs,
@@ -79,8 +79,8 @@ export class EnvironmentDaemonSessionManager {
       now,
       nextSession: {
         environmentId: args.environmentId,
-        agentId: args.agentId,
-        agentInstanceId: args.agentInstanceId,
+        environmentDaemonId: args.environmentDaemonId,
+        environmentDaemonInstanceId: args.environmentDaemonInstanceId,
         protocolVersion: args.protocolVersion,
         workerName: args.workerName,
         workerVersion: args.workerVersion,

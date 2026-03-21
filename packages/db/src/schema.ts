@@ -156,8 +156,8 @@ export const environmentDaemonSessions = sqliteTable(
     environmentId: text("environment_id")
       .notNull()
       .references(() => environments.id, { onDelete: "cascade" }),
-    agentId: text("agent_id").notNull(),
-    agentInstanceId: text("agent_instance_id").notNull(),
+    environmentDaemonId: text("environment_daemon_id").notNull(),
+    environmentDaemonInstanceId: text("environment_daemon_instance_id").notNull(),
     protocolVersion: integer("protocol_version").notNull(),
     workerName: text("worker_name"),
     workerVersion: text("worker_version"),
@@ -179,8 +179,8 @@ export const environmentDaemonSessions = sqliteTable(
       table.environmentId,
       table.status,
     ),
-    index("environment_daemon_sessions_agent_status_idx").on(
-      table.agentId,
+    index("environment_daemon_sessions_daemon_status_idx").on(
+      table.environmentDaemonId,
       table.status,
     ),
     index("environment_daemon_sessions_lease_expires_idx").on(

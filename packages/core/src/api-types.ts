@@ -431,8 +431,8 @@ export interface SystemHealthEnvironmentDaemonCompatibility {
 export interface SystemHealthEnvironmentDaemonSession {
   sessionId: string;
   environmentId: string;
-  agentId: string;
-  agentInstanceId: string;
+  environmentDaemonId: string;
+  environmentDaemonInstanceId: string;
   protocolVersion: number;
   worker?: SystemHealthEnvironmentDaemonWorker;
   providers?: SystemHealthEnvironmentDaemonProvider[];

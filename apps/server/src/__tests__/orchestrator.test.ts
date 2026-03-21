@@ -1321,8 +1321,8 @@ describe("Orchestrator", () => {
           id: "session-1",
           threadId: "thread-1",
           environmentId: env.id,
-          agentId: "environment-daemon:thread-1",
-          agentInstanceId: "instance-1",
+          environmentDaemonId: "environment-daemon:thread-1",
+          environmentDaemonInstanceId: "instance-1",
           protocolVersion: 1,
           controlBaseUrl: "http://127.0.0.1:4315",
           controlAuthToken: "token-1",
@@ -3708,8 +3708,8 @@ describe("Orchestrator", () => {
       sessionRepo.create({
         id: "session-1",
         environmentId: environment.id,
-        agentId: "agent-1",
-        agentInstanceId: "instance-1",
+        environmentDaemonId: "agent-1",
+        environmentDaemonInstanceId: "instance-1",
         protocolVersion: 1,
         selectedCapabilities: {
           commands: [],
@@ -3815,8 +3815,8 @@ describe("Orchestrator", () => {
       sessionRepo.create({
         id: "session-1",
         environmentId: environment.id,
-        agentId: "agent-1",
-        agentInstanceId: "instance-1",
+        environmentDaemonId: "agent-1",
+        environmentDaemonInstanceId: "instance-1",
         protocolVersion: 1,
         selectedCapabilities: createEnvironmentDaemonSessionCapabilities({}),
         leaseExpiresAt: Date.now() + 30_000,
@@ -3882,8 +3882,8 @@ describe("Orchestrator", () => {
       sessionRepo.create({
         id: "session-1",
         environmentId: environment.id,
-        agentId: "agent-1",
-        agentInstanceId: "instance-1",
+        environmentDaemonId: "agent-1",
+        environmentDaemonInstanceId: "instance-1",
         protocolVersion: 1,
         selectedCapabilities: {
           commands: [],
@@ -3971,8 +3971,8 @@ describe("Orchestrator", () => {
       sessionRepo.create({
         id: "session-1",
         environmentId: environment.id,
-        agentId: "agent-1",
-        agentInstanceId: "instance-1",
+        environmentDaemonId: "agent-1",
+        environmentDaemonInstanceId: "instance-1",
         protocolVersion: 1,
         selectedCapabilities: createEnvironmentDaemonSessionCapabilities({}),
         leaseExpiresAt: Date.now() + 30_000,
@@ -4053,8 +4053,8 @@ describe("Orchestrator", () => {
       sessionRepo.create({
         id: "session-1",
         environmentId: environment.id,
-        agentId: "agent-1",
-        agentInstanceId: "instance-1",
+        environmentDaemonId: "agent-1",
+        environmentDaemonInstanceId: "instance-1",
         protocolVersion: 1,
         selectedCapabilities: {
           commands: [],

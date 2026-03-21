@@ -110,8 +110,8 @@ export class EnvironmentDaemonSessionRuntime {
 
   initializeThread(args: {
     threadId: string;
-    agentId: string;
-    agentInstanceId: string;
+    environmentDaemonId: string;
+    environmentDaemonInstanceId: string;
     generation: number;
     now?: number;
   }): EnvironmentDaemonSessionStateRecord {

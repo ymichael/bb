@@ -18,8 +18,8 @@ describe("EnvironmentDaemonSessionRuntime", () => {
     expect(
       runtime.initializeThread({
         threadId: "thread-1",
-        agentId: "agent-1",
-        agentInstanceId: "instance-1",
+        environmentDaemonId: "agent-1",
+        environmentDaemonInstanceId: "instance-1",
         generation: 1,
       }),
     ).toMatchObject({
@@ -99,8 +99,8 @@ describe("EnvironmentDaemonSessionRuntime", () => {
   it("prefers the oldest unacked generation when building batches", () => {
     runtime.initializeThread({
       threadId: "thread-1",
-      agentId: "agent-1",
-      agentInstanceId: "instance-1",
+      environmentDaemonId: "agent-1",
+      environmentDaemonInstanceId: "instance-1",
       generation: 1,
     });
     runtime.recordEvent({
@@ -143,8 +143,8 @@ describe("EnvironmentDaemonSessionRuntime", () => {
   it("realigns persisted event and command cursors to the daemon view", () => {
     runtime.initializeThread({
       threadId: "thread-1",
-      agentId: "agent-1",
-      agentInstanceId: "instance-1",
+      environmentDaemonId: "agent-1",
+      environmentDaemonInstanceId: "instance-1",
       generation: 1,
     });
     runtime.recordEvent({
@@ -300,8 +300,8 @@ describe("EnvironmentDaemonSessionRuntime", () => {
   it("throws when persisted outbox payloads are not valid environment-daemon events", () => {
     runtime.initializeThread({
       threadId: "thread-1",
-      agentId: "agent-1",
-      agentInstanceId: "instance-1",
+      environmentDaemonId: "agent-1",
+      environmentDaemonInstanceId: "instance-1",
       generation: 1,
     });
     runtime.recordEvent({

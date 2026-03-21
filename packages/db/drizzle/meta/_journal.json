@@ -50,6 +50,13 @@
       "when": 1779465600000,
       "tag": "0006_rename_environment_agent_to_daemon",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1779552000000,
+      "tag": "0007_rename_agent_to_daemon_columns",
+      "breakpoints": true
     }
   ]
 }

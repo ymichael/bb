@@ -24,7 +24,7 @@ export type EnvironmentDaemonSessionStatus =
   | "replaced";
 
 export type EnvironmentDaemonSessionCloseReason =
-  | "agent_shutdown"
+  | "daemon_shutdown"
   | "server_shutdown"
   | "lease_expired"
   | "newer_session"
@@ -39,8 +39,8 @@ export interface EnvironmentDaemonCursorPosition {
 export interface EnvironmentDaemonSessionRecord {
   id: string;
   environmentId: string;
-  agentId: string;
-  agentInstanceId: string;
+  environmentDaemonId: string;
+  environmentDaemonInstanceId: string;
   protocolVersion: number;
   workerName?: string;
   workerVersion?: string;
@@ -101,8 +101,8 @@ export interface EnvironmentDaemonCommandRecord {
 export interface CreateEnvironmentDaemonSessionInput {
   id?: string;
   environmentId: string;
-  agentId: string;
-  agentInstanceId: string;
+  environmentDaemonId: string;
+  environmentDaemonInstanceId: string;
   protocolVersion: number;
   workerName?: string;
   workerVersion?: string;
@@ -156,7 +156,7 @@ function isEnvironmentDaemonSessionCloseReason(
   value: string,
 ): value is EnvironmentDaemonSessionCloseReason {
   return (
-    value === "agent_shutdown" ||
+    value === "daemon_shutdown" ||
     value === "server_shutdown" ||
     value === "lease_expired" ||
     value === "newer_session" ||
@@ -208,8 +208,8 @@ function rowToEnvironmentDaemonSessionRecord(
   return {
     id: row.id,
     environmentId: row.environmentId,
-    agentId: row.agentId,
-    agentInstanceId: row.agentInstanceId,
+    environmentDaemonId: row.environmentDaemonId,
+    environmentDaemonInstanceId: row.environmentDaemonInstanceId,
     protocolVersion: row.protocolVersion,
     ...(row.workerName !== null ? { workerName: row.workerName } : {}),
     ...(row.workerVersion !== null ? { workerVersion: row.workerVersion } : {}),
@@ -426,8 +426,8 @@ export class EnvironmentDaemonSessionRepository {
     const row = {
       id: args.id ?? nanoid(),
       environmentId: args.environmentId,
-      agentId: args.agentId,
-      agentInstanceId: args.agentInstanceId,
+      environmentDaemonId: args.environmentDaemonId,
+      environmentDaemonInstanceId: args.environmentDaemonInstanceId,
       protocolVersion: args.protocolVersion,
       workerName: args.workerName ?? null,
       workerVersion: args.workerVersion ?? null,
@@ -740,8 +740,8 @@ export class EnvironmentDaemonSessionRepository {
       const inserted = {
         id: args.nextSession.id ?? nanoid(),
         environmentId: args.nextSession.environmentId ?? args.environmentId,
-        agentId: args.nextSession.agentId,
-        agentInstanceId: args.nextSession.agentInstanceId,
+        environmentDaemonId: args.nextSession.environmentDaemonId,
+        environmentDaemonInstanceId: args.nextSession.environmentDaemonInstanceId,
         protocolVersion: args.nextSession.protocolVersion,
         workerName: args.nextSession.workerName ?? null,
         workerVersion: args.nextSession.workerVersion ?? null,

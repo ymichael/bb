@@ -181,8 +181,8 @@ function toEnvironmentDaemonSessionSummary(
   return {
     sessionId: session.id,
     environmentId: session.environmentId,
-    agentId: session.agentId,
-    agentInstanceId: session.agentInstanceId,
+    environmentDaemonId: session.environmentDaemonId,
+    environmentDaemonInstanceId: session.environmentDaemonInstanceId,
     protocolVersion: session.protocolVersion,
     ...(session.workerName && session.workerVersion
       ? {

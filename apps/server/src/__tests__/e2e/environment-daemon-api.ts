@@ -17,8 +17,8 @@ import type {
 export interface EnvironmentDaemonSessionDebugView {
   id: string;
   environmentId: string;
-  agentId: string;
-  agentInstanceId: string;
+  environmentDaemonId: string;
+  environmentDaemonInstanceId: string;
   protocolVersion: number;
   status: EnvironmentDaemonSessionStatus;
   leaseExpiresAt: number;

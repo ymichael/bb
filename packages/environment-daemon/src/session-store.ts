@@ -18,8 +18,8 @@ export type EnvironmentDaemonSessionStoreSessionStatus =
 
 export interface EnvironmentDaemonSessionStateRecord {
   threadId: string;
-  agentId: string;
-  agentInstanceId: string;
+  environmentDaemonId: string;
+  environmentDaemonInstanceId: string;
   sessionId?: string;
   generation: number;
   nextSequence: number;
@@ -58,8 +58,8 @@ export interface EnvironmentDaemonCommandReceiptRecord {
 export interface EnvironmentDaemonPersistedSessionRecord {
   id: string;
   threadId: string;
-  agentId: string;
-  agentInstanceId: string;
+  environmentDaemonId: string;
+  environmentDaemonInstanceId: string;
   protocolVersion: number;
   status: EnvironmentDaemonSessionStoreSessionStatus;
   leaseExpiresAt: number;
@@ -72,8 +72,8 @@ export interface EnvironmentDaemonPersistedSessionRecord {
 
 export interface InitializeEnvironmentDaemonThreadStateInput {
   threadId: string;
-  agentId: string;
-  agentInstanceId: string;
+  environmentDaemonId: string;
+  environmentDaemonInstanceId: string;
   generation: number;
   now?: number;
 }

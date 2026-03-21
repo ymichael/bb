@@ -178,8 +178,8 @@ describe("System routes", () => {
             {
               sessionId: "session-1",
               environmentId: "env-1",
-              agentId: "environment-daemon:thread-1",
-              agentInstanceId: "instance-1",
+              environmentDaemonId: "environment-daemon:thread-1",
+              environmentDaemonInstanceId: "instance-1",
               protocolVersion: 1,
               worker: {
                 name: "environment-daemon",
@@ -258,8 +258,8 @@ describe("System routes", () => {
             {
               sessionId: "session-1",
               environmentId: "env-1",
-              agentId: "environment-daemon:thread-1",
-              agentInstanceId: "instance-1",
+              environmentDaemonId: "environment-daemon:thread-1",
+              environmentDaemonInstanceId: "instance-1",
               protocolVersion: 1,
               worker: {
                 name: "environment-daemon",

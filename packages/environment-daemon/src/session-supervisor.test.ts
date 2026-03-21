@@ -237,7 +237,7 @@ describe("EnvironmentDaemonSessionSupervisor", () => {
       "sess-1",
       expect.objectContaining({ commandId: "cmd-1", state: "completed" }),
     );
-    expect(client.closeSession).toHaveBeenCalledWith("sess-1", "agent_shutdown");
+    expect(client.closeSession).toHaveBeenCalledWith("sess-1", "daemon_shutdown");
   });
 
   it("does not derive afterCursor from the first thread in a multi-channel session", async () => {
@@ -249,14 +249,14 @@ describe("EnvironmentDaemonSessionSupervisor", () => {
     });
     sessionRuntime.initializeThread({
       threadId: "thread-1",
-      agentId: "agent-1",
-      agentInstanceId: "instance-1",
+      environmentDaemonId: "agent-1",
+      environmentDaemonInstanceId: "instance-1",
       generation: 3,
     });
     sessionRuntime.initializeThread({
       threadId: "thread-2",
-      agentId: "agent-1",
-      agentInstanceId: "instance-1",
+      environmentDaemonId: "agent-1",
+      environmentDaemonInstanceId: "instance-1",
       generation: 7,
     });
 
@@ -908,8 +908,8 @@ describe("EnvironmentDaemonSessionSupervisor", () => {
 
     sessionRuntime.initializeThread({
       threadId: "thread-1",
-      agentId: "agent-shared",
-      agentInstanceId: "instance-shared",
+      environmentDaemonId: "agent-shared",
+      environmentDaemonInstanceId: "instance-shared",
       generation: 1,
       now: 2_000,
     });

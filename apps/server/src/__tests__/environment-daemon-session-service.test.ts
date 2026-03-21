@@ -106,8 +106,8 @@ describe("EnvironmentDaemonSessionService", () => {
       environmentId,
       now: 2_000,
       payload: {
-        agentId: "agent-1",
-        agentInstanceId: "instance-1",
+        environmentDaemonId: "agent-1",
+        environmentDaemonInstanceId: "instance-1",
         supportedProtocolVersions: [1],
         capabilities: createEnvironmentDaemonSessionCapabilities({
           worker: {
@@ -148,8 +148,8 @@ describe("EnvironmentDaemonSessionService", () => {
 
     expect(opened.session).toMatchObject({
       environmentId,
-      agentId: "agent-1",
-      agentInstanceId: "instance-1",
+      environmentDaemonId: "agent-1",
+      environmentDaemonInstanceId: "instance-1",
       workerName: "environment-daemon",
       workerVersion: "0.0.1",
       workerBuildId: "build-1",
@@ -227,8 +227,8 @@ describe("EnvironmentDaemonSessionService", () => {
       environmentId,
       now: 2_000,
       payload: {
-        agentId: "agent-1",
-        agentInstanceId: "instance-1",
+        environmentDaemonId: "agent-1",
+        environmentDaemonInstanceId: "instance-1",
         supportedProtocolVersions: [1],
         channels: [
           {
@@ -268,8 +268,8 @@ describe("EnvironmentDaemonSessionService", () => {
         environmentId,
         now: 2_000,
         payload: {
-          agentId: "agent-1",
-          agentInstanceId: "instance-1",
+          environmentDaemonId: "agent-1",
+          environmentDaemonInstanceId: "instance-1",
           supportedProtocolVersions: [1],
           channels: [
             {
@@ -291,8 +291,8 @@ describe("EnvironmentDaemonSessionService", () => {
       environmentId,
       now: 2_000,
       payload: {
-        agentId: "agent-1",
-        agentInstanceId: "instance-1",
+        environmentDaemonId: "agent-1",
+        environmentDaemonInstanceId: "instance-1",
         supportedProtocolVersions: [1],
         channels: [
           {
@@ -331,8 +331,8 @@ describe("EnvironmentDaemonSessionService", () => {
         environmentId,
         now: 2_000,
         payload: {
-          agentId: "agent-1",
-          agentInstanceId: "instance-1",
+          environmentDaemonId: "agent-1",
+          environmentDaemonInstanceId: "instance-1",
           supportedProtocolVersions: [1],
           channels: [
             {
@@ -356,8 +356,8 @@ describe("EnvironmentDaemonSessionService", () => {
       environmentId,
       now: 2_000,
       payload: {
-        agentId: "agent-1",
-        agentInstanceId: "instance-1",
+        environmentDaemonId: "agent-1",
+        environmentDaemonInstanceId: "instance-1",
         supportedProtocolVersions: [3, 2, 1],
         channels: [
           {
@@ -380,8 +380,8 @@ describe("EnvironmentDaemonSessionService", () => {
         environmentId,
         now: 2_000,
         payload: {
-          agentId: "agent-1",
-          agentInstanceId: "instance-1",
+          environmentDaemonId: "agent-1",
+          environmentDaemonInstanceId: "instance-1",
           supportedProtocolVersions: [3, 2],
           channels: [
             {
@@ -425,8 +425,8 @@ describe("EnvironmentDaemonSessionService", () => {
       environmentId: sharedEnvironment.id,
       now: 1_000,
       payload: {
-        agentId: "agent-1",
-        agentInstanceId: "instance-1",
+        environmentDaemonId: "agent-1",
+        environmentDaemonInstanceId: "instance-1",
         supportedProtocolVersions: [1],
         channels: [{ channelId: threadId, generation: 1 }],
       },
@@ -434,7 +434,7 @@ describe("EnvironmentDaemonSessionService", () => {
     sharedService.closeSession({
       environmentId: sharedEnvironment.id,
       sessionId: ownedSession.id,
-      reason: "agent_shutdown",
+      reason: "daemon_shutdown",
       now: 2_000,
     });
 
@@ -442,8 +442,8 @@ describe("EnvironmentDaemonSessionService", () => {
       environmentId: sharedEnvironment.id,
       now: 3_000,
       payload: {
-        agentId: "agent-2",
-        agentInstanceId: "instance-2",
+        environmentDaemonId: "agent-2",
+        environmentDaemonInstanceId: "instance-2",
         supportedProtocolVersions: [1],
         channels: [{ channelId: siblingThreadId, generation: 1 }],
       },
@@ -488,8 +488,8 @@ describe("EnvironmentDaemonSessionService", () => {
     const opened = sharedService.openSession({
       environmentId,
       payload: {
-        agentId: "agent-shared",
-        agentInstanceId: "instance-1",
+        environmentDaemonId: "agent-shared",
+        environmentDaemonInstanceId: "instance-1",
         supportedProtocolVersions: [1],
         channels: [{ channelId: firstThreadId, generation: 1 }],
       },
@@ -501,7 +501,7 @@ describe("EnvironmentDaemonSessionService", () => {
         environmentId,
         sessionId: opened.session.id,
         payload: {
-          agentObservedAt: 2_000,
+          environmentDaemonObservedAt: 2_000,
           outboxDepth: 0,
           channels: [],
         },
@@ -553,8 +553,8 @@ describe("EnvironmentDaemonSessionService", () => {
       environmentId: sharedEnvironment.id,
       now: 1_000,
       payload: {
-        agentId: "agent-1",
-        agentInstanceId: "instance-1",
+        environmentDaemonId: "agent-1",
+        environmentDaemonInstanceId: "instance-1",
         supportedProtocolVersions: [1],
         channels: [{ channelId: threadId, generation: 1 }],
       },
@@ -603,8 +603,8 @@ describe("EnvironmentDaemonSessionService", () => {
       environmentId,
       now: 1_000,
       payload: {
-        agentId: "agent-1",
-        agentInstanceId: "instance-1",
+        environmentDaemonId: "agent-1",
+        environmentDaemonInstanceId: "instance-1",
         supportedProtocolVersions: [1],
         channels: [{ channelId: threadId, generation: 1 }],
       },
@@ -652,8 +652,8 @@ describe("EnvironmentDaemonSessionService", () => {
       environmentId,
       now: 2_000,
       payload: {
-        agentId: "agent-1",
-        agentInstanceId: "instance-1",
+        environmentDaemonId: "agent-1",
+        environmentDaemonInstanceId: "instance-1",
         supportedProtocolVersions: [1],
         channels: [
           {
@@ -736,8 +736,8 @@ describe("EnvironmentDaemonSessionService", () => {
       environmentId,
       now: 1_000,
       payload: {
-        agentId: "agent-1",
-        agentInstanceId: "instance-1",
+        environmentDaemonId: "agent-1",
+        environmentDaemonInstanceId: "instance-1",
         supportedProtocolVersions: [1],
         channels: [
           {
@@ -752,8 +752,8 @@ describe("EnvironmentDaemonSessionService", () => {
       environmentId,
       now: 2_000,
       payload: {
-        agentId: "agent-1",
-        agentInstanceId: "instance-2",
+        environmentDaemonId: "agent-1",
+        environmentDaemonInstanceId: "instance-2",
         supportedProtocolVersions: [1],
         channels: [
           {
@@ -773,8 +773,8 @@ describe("EnvironmentDaemonSessionService", () => {
       service.openSession({
         environmentId,
         payload: {
-          agentId: "agent-1",
-          agentInstanceId: "instance-3",
+          environmentDaemonId: "agent-1",
+          environmentDaemonInstanceId: "instance-3",
           supportedProtocolVersions: [99],
           channels: [
             {
@@ -794,8 +794,8 @@ describe("EnvironmentDaemonSessionService", () => {
       environmentId,
       now: 1_000,
       payload: {
-        agentId: "agent-1",
-        agentInstanceId: "instance-1",
+        environmentDaemonId: "agent-1",
+        environmentDaemonInstanceId: "instance-1",
         supportedProtocolVersions: [1],
         channels: [
           {
@@ -822,8 +822,8 @@ describe("EnvironmentDaemonSessionService", () => {
       environmentId,
       now: 2_000,
       payload: {
-        agentId: "agent-1",
-        agentInstanceId: "instance-2",
+        environmentDaemonId: "agent-1",
+        environmentDaemonInstanceId: "instance-2",
         supportedProtocolVersions: [1],
         channels: [
           {
@@ -848,8 +848,8 @@ describe("EnvironmentDaemonSessionService", () => {
       environmentId,
       now: 1_000,
       payload: {
-        agentId: "agent-1",
-        agentInstanceId: "instance-1",
+        environmentDaemonId: "agent-1",
+        environmentDaemonInstanceId: "instance-1",
         supportedProtocolVersions: [1],
         channels: [
           {
@@ -891,8 +891,8 @@ describe("EnvironmentDaemonSessionService", () => {
       environmentId,
       now: 2_000,
       payload: {
-        agentId: "agent-1",
-        agentInstanceId: "instance-2",
+        environmentDaemonId: "agent-1",
+        environmentDaemonInstanceId: "instance-2",
         supportedProtocolVersions: [1],
         channels: [
           {
@@ -942,8 +942,8 @@ describe("EnvironmentDaemonSessionService", () => {
       environmentId,
       now: 1_000,
       payload: {
-        agentId: "agent-1",
-        agentInstanceId: "instance-1",
+        environmentDaemonId: "agent-1",
+        environmentDaemonInstanceId: "instance-1",
         supportedProtocolVersions: [1],
         channels: [
           {
@@ -1001,8 +1001,8 @@ describe("EnvironmentDaemonSessionService", () => {
       environmentId,
       now: 1_000,
       payload: {
-        agentId: "agent-1",
-        agentInstanceId: "instance-1",
+        environmentDaemonId: "agent-1",
+        environmentDaemonInstanceId: "instance-1",
         supportedProtocolVersions: [1],
         channels: [
           {
@@ -1058,8 +1058,8 @@ describe("EnvironmentDaemonSessionService", () => {
       environmentId,
       now: 1_000,
       payload: {
-        agentId: "agent-1",
-        agentInstanceId: "instance-1",
+        environmentDaemonId: "agent-1",
+        environmentDaemonInstanceId: "instance-1",
         supportedProtocolVersions: [1],
         channels: [{ channelId: threadId, generation: 1 }],
       },
@@ -1104,8 +1104,8 @@ describe("EnvironmentDaemonSessionService", () => {
       environmentId,
       now: 1_000,
       payload: {
-        agentId: "agent-1",
-        agentInstanceId: "instance-1",
+        environmentDaemonId: "agent-1",
+        environmentDaemonInstanceId: "instance-1",
         supportedProtocolVersions: [1],
         channels: [
           {
@@ -1207,8 +1207,8 @@ describe("EnvironmentDaemonSessionService", () => {
       environmentId,
       now: 1_000,
       payload: {
-        agentId: "agent-1",
-        agentInstanceId: "instance-1",
+        environmentDaemonId: "agent-1",
+        environmentDaemonInstanceId: "instance-1",
         supportedProtocolVersions: [1],
         channels: [
           {
@@ -1241,8 +1241,8 @@ describe("EnvironmentDaemonSessionService", () => {
       environmentId,
       now: 1_000,
       payload: {
-        agentId: "agent-1",
-        agentInstanceId: "instance-1",
+        environmentDaemonId: "agent-1",
+        environmentDaemonInstanceId: "instance-1",
         supportedProtocolVersions: [1],
         channels: [
           {
@@ -1284,8 +1284,8 @@ describe("EnvironmentDaemonSessionService", () => {
       environmentId,
       now: 1_000,
       payload: {
-        agentId: "agent-1",
-        agentInstanceId: "instance-1",
+        environmentDaemonId: "agent-1",
+        environmentDaemonInstanceId: "instance-1",
         supportedProtocolVersions: [1],
         channels: [
           {
@@ -1300,20 +1300,20 @@ describe("EnvironmentDaemonSessionService", () => {
       service.closeSession({
         environmentId,
         sessionId: opened.session.id,
-        reason: "agent_shutdown",
+        reason: "daemon_shutdown",
         now: 2_000,
       }),
     ).toMatchObject({
       id: opened.session.id,
       status: "closed",
-      closeReason: "agent_shutdown",
+      closeReason: "daemon_shutdown",
       closedAt: 2_000,
     });
     expect(onSessionInvalidated).toHaveBeenCalledWith(
       expect.objectContaining({
         id: opened.session.id,
         environmentId,
-        closeReason: "agent_shutdown",
+        closeReason: "daemon_shutdown",
       }),
     );
   });
@@ -1324,8 +1324,8 @@ describe("EnvironmentDaemonSessionService", () => {
       environmentId,
       now: 1_000,
       payload: {
-        agentId: "agent-1",
-        agentInstanceId: "instance-1",
+        environmentDaemonId: "agent-1",
+        environmentDaemonInstanceId: "instance-1",
         supportedProtocolVersions: [1],
         channels: [
           {
@@ -1357,8 +1357,8 @@ describe("EnvironmentDaemonSessionService", () => {
       environmentId,
       now: 1_000,
       payload: {
-        agentId: "agent-1",
-        agentInstanceId: "instance-1",
+        environmentDaemonId: "agent-1",
+        environmentDaemonInstanceId: "instance-1",
         supportedProtocolVersions: [1],
         channels: [
           {
@@ -1373,8 +1373,8 @@ describe("EnvironmentDaemonSessionService", () => {
       environmentId,
       now: 2_000,
       payload: {
-        agentId: "agent-1",
-        agentInstanceId: "instance-2",
+        environmentDaemonId: "agent-1",
+        environmentDaemonInstanceId: "instance-2",
         supportedProtocolVersions: [1],
         channels: [
           {
@@ -1405,8 +1405,8 @@ describe("EnvironmentDaemonSessionService", () => {
       environmentId,
       now: 1_000,
       payload: {
-        agentId: "agent-1",
-        agentInstanceId: "instance-1",
+        environmentDaemonId: "agent-1",
+        environmentDaemonInstanceId: "instance-1",
         supportedProtocolVersions: [1],
         channels: [
           {
@@ -1464,8 +1464,8 @@ describe("EnvironmentDaemonSessionService", () => {
       environmentId,
       now: 1_000,
       payload: {
-        agentId: "agent-1",
-        agentInstanceId: "instance-1",
+        environmentDaemonId: "agent-1",
+        environmentDaemonInstanceId: "instance-1",
         supportedProtocolVersions: [1],
         channels: [
           {
@@ -1482,7 +1482,7 @@ describe("EnvironmentDaemonSessionService", () => {
         sessionId: opened.session.id,
         now: 2_000,
         payload: {
-          agentObservedAt: 2_000,
+          environmentDaemonObservedAt: 2_000,
           outboxDepth: 0,
           channels: [{ channelId: threadId }],
         },
@@ -1502,7 +1502,7 @@ describe("EnvironmentDaemonSessionService", () => {
         sessionId: opened.session.id,
         now: 3_000,
         payload: {
-          agentObservedAt: 3_000,
+          environmentDaemonObservedAt: 3_000,
           outboxDepth: 0,
           channels: [{ channelId: otherEnvironmentId }],
         },
@@ -1518,8 +1518,8 @@ describe("EnvironmentDaemonSessionService", () => {
       environmentId,
       now: 1_000,
       payload: {
-        agentId: "agent-1",
-        agentInstanceId: "instance-1",
+        environmentDaemonId: "agent-1",
+        environmentDaemonInstanceId: "instance-1",
         supportedProtocolVersions: [1],
         channels: [
           {
@@ -1539,7 +1539,7 @@ describe("EnvironmentDaemonSessionService", () => {
         sessionId: opened.session.id,
         now: 61_000,
         payload: {
-          agentObservedAt: 61_000,
+          environmentDaemonObservedAt: 61_000,
           outboxDepth: 0,
           channels: [{ channelId: threadId }],
         },
@@ -1562,8 +1562,8 @@ describe("EnvironmentDaemonSessionService", () => {
       environmentId,
       now: now - 50_000,
       payload: {
-        agentId: "agent-1",
-        agentInstanceId: "instance-1",
+        environmentDaemonId: "agent-1",
+        environmentDaemonInstanceId: "instance-1",
         supportedProtocolVersions: [1],
         channels: [
           {
@@ -1581,7 +1581,7 @@ describe("EnvironmentDaemonSessionService", () => {
         sessionId: opened.session.id,
         now,
         payload: {
-          agentObservedAt: now,
+          environmentDaemonObservedAt: now,
           outboxDepth: 0,
           channels: [{ channelId: threadId }],
         },
@@ -1607,8 +1607,8 @@ describe("EnvironmentDaemonSessionService", () => {
       environmentId,
       now: 1_000,
       payload: {
-        agentId: "agent-1",
-        agentInstanceId: "instance-1",
+        environmentDaemonId: "agent-1",
+        environmentDaemonInstanceId: "instance-1",
         supportedProtocolVersions: [1],
         channels: [
           {
@@ -1671,8 +1671,8 @@ describe("EnvironmentDaemonSessionService", () => {
         environmentId,
         now: 1_000,
         payload: {
-          agentId: "agent-1",
-          agentInstanceId: "instance-1",
+          environmentDaemonId: "agent-1",
+          environmentDaemonInstanceId: "instance-1",
           supportedProtocolVersions: [1],
           channels: [
             {
@@ -1731,8 +1731,8 @@ describe("EnvironmentDaemonSessionService", () => {
         environmentId,
         now: 1_000,
         payload: {
-          agentId: "agent-1",
-          agentInstanceId: "instance-1",
+          environmentDaemonId: "agent-1",
+          environmentDaemonInstanceId: "instance-1",
           supportedProtocolVersions: [1],
           channels: [
             {
@@ -1794,8 +1794,8 @@ describe("EnvironmentDaemonSessionService", () => {
     const opened = sharedService.openSession({
       environmentId,
       payload: {
-        agentId: "agent-shared",
-        agentInstanceId: "instance-1",
+        environmentDaemonId: "agent-shared",
+        environmentDaemonInstanceId: "instance-1",
         supportedProtocolVersions: [1],
         channels: [
           { channelId: ownerThreadId, generation: 1 },
@@ -1868,8 +1868,8 @@ describe("EnvironmentDaemonSessionService", () => {
     const opened = sharedService.openSession({
       environmentId,
       payload: {
-        agentId: "agent-owner",
-        agentInstanceId: "instance-1",
+        environmentDaemonId: "agent-owner",
+        environmentDaemonInstanceId: "instance-1",
         supportedProtocolVersions: [1],
         channels: [{ channelId: ownerThreadId, generation: 1 }],
       },

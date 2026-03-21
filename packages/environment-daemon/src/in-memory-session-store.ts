@@ -103,8 +103,8 @@ export class InMemoryEnvironmentDaemonSessionStore
     const existing = this.threadStates.get(input.threadId);
     const next: EnvironmentDaemonSessionStateRecord = {
       threadId: input.threadId,
-      agentId: input.agentId,
-      agentInstanceId: input.agentInstanceId,
+      environmentDaemonId: input.environmentDaemonId,
+      environmentDaemonInstanceId: input.environmentDaemonInstanceId,
       ...(existing?.sessionId ? { sessionId: existing.sessionId } : {}),
       generation: input.generation,
       nextSequence: 1,
@@ -134,8 +134,8 @@ export class InMemoryEnvironmentDaemonSessionStore
     const existing = this.requireThreadState(input.threadId);
     const updated = {
       threadId: existing.threadId,
-      agentId: existing.agentId,
-      agentInstanceId: existing.agentInstanceId,
+      environmentDaemonId: existing.environmentDaemonId,
+      environmentDaemonInstanceId: existing.environmentDaemonInstanceId,
       generation: existing.generation,
       nextSequence: existing.nextSequence,
       ...(existing.lastAcked ? { lastAcked: cloneCursor(existing.lastAcked)! } : {}),

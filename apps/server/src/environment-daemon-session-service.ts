@@ -203,7 +203,7 @@ export class EnvironmentDaemonSessionService {
     const now = args.now ?? this.clock();
     const selectedProtocolVersion = selectEnvironmentDaemonSessionProtocolVersion({
       supportedByServer: ENVIRONMENT_DAEMON_SESSION_SUPPORTED_PROTOCOL_VERSIONS,
-      supportedByAgent: args.payload.supportedProtocolVersions,
+      supportedByDaemon: args.payload.supportedProtocolVersions,
     });
     if (selectedProtocolVersion === undefined) {
       throw new Error("No compatible environment-daemon session protocol version");
@@ -234,8 +234,8 @@ export class EnvironmentDaemonSessionService {
       });
     const opened = this.sessions.openSession({
       environmentId: args.environmentId,
-      agentId: args.payload.agentId,
-      agentInstanceId: args.payload.agentInstanceId,
+      environmentDaemonId: args.payload.environmentDaemonId,
+      environmentDaemonInstanceId: args.payload.environmentDaemonInstanceId,
       protocolVersion: selectedProtocolVersion,
       workerName: args.payload.worker?.name,
       workerVersion: args.payload.worker?.version,
@@ -316,7 +316,7 @@ export class EnvironmentDaemonSessionService {
   closeSession(args: {
     environmentId: string;
     sessionId: string;
-    reason: "agent_shutdown" | "server_shutdown" | "migration" | "internal_error";
+    reason: "daemon_shutdown" | "server_shutdown" | "migration" | "internal_error";
     now?: number;
   }): EnvironmentDaemonSessionRecord {
     this.requireActiveSession(args.environmentId, args.sessionId);

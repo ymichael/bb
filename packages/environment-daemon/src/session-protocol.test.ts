@@ -54,8 +54,8 @@ describe("session-protocol", () => {
       sentAt: Date.now(),
       type: "session_open",
       payload: {
-        agentId: "agent-1",
-        agentInstanceId: "inst-1",
+        environmentDaemonId: "agent-1",
+        environmentDaemonInstanceId: "inst-1",
         supportedProtocolVersions: [1],
         worker: {
           name: "environment-daemon",
@@ -101,7 +101,7 @@ describe("session-protocol", () => {
     expect(
       selectEnvironmentDaemonSessionProtocolVersion({
         supportedByServer: [1],
-        supportedByAgent: [3, 2, 1],
+        supportedByDaemon: [3, 2, 1],
       }),
     ).toBe(1);
   });
@@ -110,7 +110,7 @@ describe("session-protocol", () => {
     expect(
       selectEnvironmentDaemonSessionProtocolVersion({
         supportedByServer: [1],
-        supportedByAgent: [3, 2],
+        supportedByDaemon: [3, 2],
       }),
     ).toBeUndefined();
   });

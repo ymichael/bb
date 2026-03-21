@@ -38,7 +38,7 @@ export type EnvironmentDaemonSessionCapabilityFeature =
   (typeof ENVIRONMENT_DAEMON_SESSION_CAPABILITY_FEATURES)[number];
 
 export type EnvironmentDaemonSessionCloseReason =
-  | "agent_shutdown"
+  | "daemon_shutdown"
   | "server_shutdown"
   | "lease_expired"
   | "newer_session"
@@ -104,8 +104,8 @@ export const environmentDaemonSessionCapabilitiesSchema = z.object({
 });
 
 export const environmentDaemonSessionOpenPayloadSchema = z.object({
-  agentId: z.string().min(1),
-  agentInstanceId: z.string().min(1),
+  environmentDaemonId: z.string().min(1),
+  environmentDaemonInstanceId: z.string().min(1),
   supportedProtocolVersions: z.array(z.number().int()).min(1),
   capabilities: environmentDaemonSessionCapabilitiesSchema.optional(),
   worker: z.object({
@@ -141,8 +141,8 @@ const LEGACY_INFERRED_COMMANDS = [
 ] as const satisfies readonly EnvironmentDaemonSessionCapabilityCommand[];
 
 export interface EnvironmentDaemonSessionOpenPayload {
-  agentId: string;
-  agentInstanceId: string;
+  environmentDaemonId: string;
+  environmentDaemonInstanceId: string;
   supportedProtocolVersions: number[];
   capabilities?: EnvironmentDaemonSessionCapabilities;
   worker?: EnvironmentDaemonSessionWorkerMetadata;
@@ -186,11 +186,11 @@ export const environmentDaemonSessionWelcomePayloadSchema = z.object({
 
 export function selectEnvironmentDaemonSessionProtocolVersion(args: {
   supportedByServer: readonly EnvironmentDaemonSessionProtocolVersion[];
-  supportedByAgent: readonly number[];
+  supportedByDaemon: readonly number[];
 }): EnvironmentDaemonSessionProtocolVersion | undefined {
-  const agentSupportedVersions = new Set(args.supportedByAgent);
+  const daemonSupportedVersions = new Set(args.supportedByDaemon);
   for (const version of [...args.supportedByServer].sort((a, b) => b - a)) {
-    if (agentSupportedVersions.has(version)) {
+    if (daemonSupportedVersions.has(version)) {
       return version;
     }
   }
@@ -302,13 +302,13 @@ export interface EnvironmentDaemonSessionHeartbeatChannel {
 }
 
 export interface EnvironmentDaemonSessionHeartbeatPayload {
-  agentObservedAt: number;
+  environmentDaemonObservedAt: number;
   outboxDepth: number;
   channels: EnvironmentDaemonSessionHeartbeatChannel[];
 }
 
 export const environmentDaemonSessionHeartbeatPayloadSchema = z.object({
-  agentObservedAt: z.number().int().nonnegative(),
+  environmentDaemonObservedAt: z.number().int().nonnegative(),
   outboxDepth: z.number().int().nonnegative(),
   channels: z.array(z.object({
     channelId: z.string().min(1),
@@ -553,7 +553,7 @@ export interface EnvironmentDaemonSessionClosePayload {
 }
 
 const environmentDaemonSessionClientCloseReasonSchema = z.enum([
-  "agent_shutdown",
+  "daemon_shutdown",
   "server_shutdown",
   "migration",
   "internal_error",
@@ -561,7 +561,7 @@ const environmentDaemonSessionClientCloseReasonSchema = z.enum([
 
 export const environmentDaemonSessionClosePayloadSchema = z.object({
   reason: z.enum([
-    "agent_shutdown",
+    "daemon_shutdown",
     "server_shutdown",
     "lease_expired",
     "newer_session",

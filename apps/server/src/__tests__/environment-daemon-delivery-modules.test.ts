@@ -106,8 +106,8 @@ describe("environment-daemon delivery modules", () => {
     return sessions.create({
       id,
       environmentId,
-      agentId: "agent-1",
-      agentInstanceId: `${id}-instance`,
+      environmentDaemonId: "agent-1",
+      environmentDaemonInstanceId: `${id}-instance`,
       protocolVersion: 1,
       selectedCapabilities: createEnvironmentDaemonSessionCapabilities({}),
       leaseExpiresAt: 30_000,
@@ -313,8 +313,8 @@ describe("environment-daemon delivery modules", () => {
     const sessionId = sessions.create({
       id: "sess-shared",
       environmentId,
-      agentId: "agent-shared",
-      agentInstanceId: "sess-shared-instance",
+      environmentDaemonId: "agent-shared",
+      environmentDaemonInstanceId: "sess-shared-instance",
       protocolVersion: 1,
       selectedCapabilities: createEnvironmentDaemonSessionCapabilities({}),
       leaseExpiresAt: 30_000,
@@ -350,8 +350,8 @@ describe("environment-daemon delivery modules", () => {
       sessions.create({
         id: "sess-await",
         environmentId,
-        agentId: "agent-1",
-        agentInstanceId: "instance-await",
+        environmentDaemonId: "agent-1",
+        environmentDaemonInstanceId: "instance-await",
         protocolVersion: 1,
         selectedCapabilities: createEnvironmentDaemonSessionCapabilities({}),
         leaseExpiresAt: 30_000,
@@ -407,8 +407,8 @@ describe("environment-daemon delivery modules", () => {
     sessions.create({
       id: "sess-expired",
       environmentId,
-      agentId: "agent-1",
-      agentInstanceId: "instance-expired",
+      environmentDaemonId: "agent-1",
+      environmentDaemonInstanceId: "instance-expired",
       protocolVersion: 1,
       selectedCapabilities: createEnvironmentDaemonSessionCapabilities({}),
       leaseExpiresAt: now - 1_000,
@@ -443,8 +443,8 @@ describe("environment-daemon delivery modules", () => {
     sessions.create({
       id: "sess-incompatible",
       environmentId,
-      agentId: "agent-1",
-      agentInstanceId: "instance-incompatible",
+      environmentDaemonId: "agent-1",
+      environmentDaemonInstanceId: "instance-incompatible",
       protocolVersion: 1,
       selectedCapabilities: {
         commands: ["thread.start"],

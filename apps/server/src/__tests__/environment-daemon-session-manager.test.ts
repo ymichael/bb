@@ -79,8 +79,8 @@ describe("EnvironmentDaemonSessionManager", () => {
 
     const first = manager.openSession({
       environmentId,
-      agentId: "agent-1",
-      agentInstanceId: "instance-1",
+      environmentDaemonId: "agent-1",
+      environmentDaemonInstanceId: "instance-1",
       protocolVersion: 1,
       leaseTtlMs: 30_000,
       now: 1_000,
@@ -93,8 +93,8 @@ describe("EnvironmentDaemonSessionManager", () => {
 
     const second = manager.openSession({
       environmentId,
-      agentId: "agent-1",
-      agentInstanceId: "instance-2",
+      environmentDaemonId: "agent-1",
+      environmentDaemonInstanceId: "instance-2",
       protocolVersion: 1,
       leaseTtlMs: 45_000,
       now: 2_000,
@@ -116,8 +116,8 @@ describe("EnvironmentDaemonSessionManager", () => {
     const environmentId = attachThreadToEnvironment(threadId);
     const opened = manager.openSession({
       environmentId,
-      agentId: "agent-heartbeat",
-      agentInstanceId: "instance-heartbeat",
+      environmentDaemonId: "agent-heartbeat",
+      environmentDaemonInstanceId: "instance-heartbeat",
       protocolVersion: 1,
       leaseTtlMs: 10_000,
       now: 1_000,
@@ -142,8 +142,8 @@ describe("EnvironmentDaemonSessionManager", () => {
     const environmentId = attachThreadToEnvironment(threadId);
     const overdue = manager.openSession({
       environmentId,
-      agentId: "agent-overdue",
-      agentInstanceId: "instance-overdue",
+      environmentDaemonId: "agent-overdue",
+      environmentDaemonInstanceId: "instance-overdue",
       protocolVersion: 1,
       leaseTtlMs: 1_000,
       now: 1_000,
@@ -182,8 +182,8 @@ describe("EnvironmentDaemonSessionManager", () => {
 
     const first = manager.openSession({
       environmentId,
-      agentId: "agent-shared",
-      agentInstanceId: "instance-1",
+      environmentDaemonId: "agent-shared",
+      environmentDaemonInstanceId: "instance-1",
       protocolVersion: 1,
       leaseTtlMs: 10_000,
       now: 1_000,
@@ -191,8 +191,8 @@ describe("EnvironmentDaemonSessionManager", () => {
 
     const second = manager.openSession({
       environmentId,
-      agentId: "agent-shared",
-      agentInstanceId: "instance-2",
+      environmentDaemonId: "agent-shared",
+      environmentDaemonInstanceId: "instance-2",
       protocolVersion: 1,
       leaseTtlMs: 10_000,
       now: 2_000,
@@ -223,8 +223,8 @@ describe("EnvironmentDaemonSessionManager", () => {
 
     const first = manager.openSession({
       environmentId,
-      agentId: "agent-shared",
-      agentInstanceId: "instance-1",
+      environmentDaemonId: "agent-shared",
+      environmentDaemonInstanceId: "instance-1",
       protocolVersion: 1,
       leaseTtlMs: 10_000,
       now: 1_000,
@@ -232,8 +232,8 @@ describe("EnvironmentDaemonSessionManager", () => {
 
     const second = manager.openSession({
       environmentId,
-      agentId: "agent-shared",
-      agentInstanceId: "instance-1",
+      environmentDaemonId: "agent-shared",
+      environmentDaemonInstanceId: "instance-1",
       protocolVersion: 1,
       leaseTtlMs: 10_000,
       now: 2_000,
@@ -241,8 +241,8 @@ describe("EnvironmentDaemonSessionManager", () => {
 
     const refreshed = manager.openSession({
       environmentId,
-      agentId: "agent-shared",
-      agentInstanceId: "instance-1",
+      environmentDaemonId: "agent-shared",
+      environmentDaemonInstanceId: "instance-1",
       protocolVersion: 1,
       providerMetadata: [
         { providerId: "codex", adapterVersion: "0.0.1" },

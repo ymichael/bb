@@ -25,8 +25,8 @@ describe("EnvironmentDaemonSessionSync", () => {
     });
     runtime.initializeThread({
       threadId: "thread-1",
-      agentId: "agent-1",
-      agentInstanceId: "instance-1",
+      environmentDaemonId: "agent-1",
+      environmentDaemonInstanceId: "instance-1",
       generation: 1,
       now: 1_000,
     });
@@ -95,8 +95,8 @@ describe("EnvironmentDaemonSessionSync", () => {
     const sync = new EnvironmentDaemonSessionSync({ runtime, client });
     const welcome = await sync.openSession({
       payload: {
-        agentId: "agent-1",
-        agentInstanceId: "instance-1",
+        environmentDaemonId: "agent-1",
+        environmentDaemonInstanceId: "instance-1",
         supportedProtocolVersions: [1],
         worker: {
           name: "environment-daemon",
@@ -135,8 +135,8 @@ describe("EnvironmentDaemonSessionSync", () => {
     const pulled = await sync.pullCommands({
       sessionId: "sess-1",
       threadIds: ["thread-1"],
-      agentId: "agent-1",
-      agentInstanceId: "instance-1",
+      environmentDaemonId: "agent-1",
+      environmentDaemonInstanceId: "instance-1",
     });
     expect(pulled).toEqual([
       {
@@ -167,8 +167,8 @@ describe("EnvironmentDaemonSessionSync", () => {
         lastResultReportedState: "completed",
       }),
     ]);
-    await expect(sync.closeSession("sess-1", "agent_shutdown")).resolves.toBeUndefined();
-    expect(client.closeSession).toHaveBeenCalledWith("sess-1", "agent_shutdown");
+    await expect(sync.closeSession("sess-1", "daemon_shutdown")).resolves.toBeUndefined();
+    expect(client.closeSession).toHaveBeenCalledWith("sess-1", "daemon_shutdown");
   });
 
   it("returns reset cursors without acknowledging the local outbox", async () => {
@@ -176,8 +176,8 @@ describe("EnvironmentDaemonSessionSync", () => {
     const runtime = new EnvironmentDaemonSessionRuntime({ store, clock: () => 10_000 });
     runtime.initializeThread({
       threadId: "thread-1",
-      agentId: "agent-1",
-      agentInstanceId: "instance-1",
+      environmentDaemonId: "agent-1",
+      environmentDaemonInstanceId: "instance-1",
       generation: 2,
       now: 1_000,
     });
@@ -234,8 +234,8 @@ describe("EnvironmentDaemonSessionSync", () => {
     const runtime = new EnvironmentDaemonSessionRuntime({ store, clock: () => 10_000 });
     runtime.initializeThread({
       threadId: "thread-1",
-      agentId: "agent-1",
-      agentInstanceId: "instance-1",
+      environmentDaemonId: "agent-1",
+      environmentDaemonInstanceId: "instance-1",
       generation: 1,
       now: 1_000,
     });
@@ -286,8 +286,8 @@ describe("EnvironmentDaemonSessionSync", () => {
     const sync = new EnvironmentDaemonSessionSync({ runtime, client });
     await expect(sync.openSession({
       payload: {
-        agentId: "agent-1",
-        agentInstanceId: "instance-1",
+        environmentDaemonId: "agent-1",
+        environmentDaemonInstanceId: "instance-1",
         supportedProtocolVersions: [1],
         channels: [{ channelId: "thread-1", generation: 1 }],
       },
@@ -315,8 +315,8 @@ describe("EnvironmentDaemonSessionSync", () => {
     });
     runtime.initializeThread({
       threadId: "thread-1",
-      agentId: "agent-1",
-      agentInstanceId: "instance-1",
+      environmentDaemonId: "agent-1",
+      environmentDaemonInstanceId: "instance-1",
       generation: 1,
       now: 1_000,
     });
@@ -355,8 +355,8 @@ describe("EnvironmentDaemonSessionSync", () => {
     await expect(sync.pullCommands({
       sessionId: "sess-1",
       threadIds: ["thread-1"],
-      agentId: "agent-1",
-      agentInstanceId: "instance-1",
+      environmentDaemonId: "agent-1",
+      environmentDaemonInstanceId: "instance-1",
     })).resolves.toEqual([
       {
         threadId: "thread-2",
@@ -373,8 +373,8 @@ describe("EnvironmentDaemonSessionSync", () => {
 
     expect(runtime.loadThreadState("thread-2")).toMatchObject({
       threadId: "thread-2",
-      agentId: "agent-1",
-      agentInstanceId: "instance-1",
+      environmentDaemonId: "agent-1",
+      environmentDaemonInstanceId: "instance-1",
       sessionId: "sess-1",
     });
     expect(client.acknowledgeCommands).toHaveBeenCalledWith("sess-1", {

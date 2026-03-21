@@ -95,8 +95,8 @@ describe("system health report", () => {
         {
           id: "session-1",
           environmentId: "env-worktree-1",
-          agentId: "environment-daemon:thread-1",
-          agentInstanceId: "instance-1",
+          environmentDaemonId: "environment-daemon:thread-1",
+          environmentDaemonInstanceId: "instance-1",
           protocolVersion: 1,
           workerName: "environment-daemon",
           workerVersion: "0.0.1",
@@ -154,8 +154,8 @@ describe("system health report", () => {
         {
           sessionId: "session-1",
           environmentId: "env-worktree-1",
-          agentId: "environment-daemon:thread-1",
-          agentInstanceId: "instance-1",
+          environmentDaemonId: "environment-daemon:thread-1",
+          environmentDaemonInstanceId: "instance-1",
           protocolVersion: 1,
           worker: {
             name: "environment-daemon",
