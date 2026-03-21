@@ -17,7 +17,7 @@ import { createProviderAdapter, type ProviderAdapter } from "@bb/provider-adapte
 // bb decides what to do with them.
 // ---------------------------------------------------------------------------
 
-export function shouldPersistEvent(event: BbProviderEvent): boolean {
+function shouldPersistEvent(event: BbProviderEvent): boolean {
   switch (event.type) {
     case "item/agentMessage/delta":
     case "item/commandExecution/outputDelta":
@@ -34,7 +34,7 @@ export function shouldPersistEvent(event: BbProviderEvent): boolean {
   }
 }
 
-export function shouldBroadcastEvent(event: BbProviderEvent): boolean {
+function shouldBroadcastEvent(event: BbProviderEvent): boolean {
   switch (event.type) {
     case "item/agentMessage/delta":
     case "item/reasoning/summaryTextDelta":
@@ -45,7 +45,7 @@ export function shouldBroadcastEvent(event: BbProviderEvent): boolean {
   }
 }
 
-export function statusFromEvent(event: BbProviderEvent): Thread["status"] | undefined {
+function statusFromEvent(event: BbProviderEvent): Thread["status"] | undefined {
   switch (event.type) {
     case "turn/started":
       return "active";
@@ -58,7 +58,7 @@ export function statusFromEvent(event: BbProviderEvent): Thread["status"] | unde
   }
 }
 
-export function turnStateFromEvent(event: BbProviderEvent): "active" | "idle" | undefined {
+function turnStateFromEvent(event: BbProviderEvent): "active" | "idle" | undefined {
   switch (event.type) {
     case "turn/started":
       return "active";
@@ -69,17 +69,17 @@ export function turnStateFromEvent(event: BbProviderEvent): "active" | "idle" | 
   }
 }
 
-export function titleFromEvent(event: BbProviderEvent): string | undefined {
+function titleFromEvent(event: BbProviderEvent): string | undefined {
   if (event.type === "thread/name/updated") return event.threadName;
   return undefined;
 }
 
-export function turnIdFromEvent(event: BbProviderEvent): string | undefined {
+function turnIdFromEvent(event: BbProviderEvent): string | undefined {
   if ("turnId" in event && typeof event.turnId === "string") return event.turnId;
   return undefined;
 }
 
-export function providerThreadIdFromEvent(event: BbProviderEvent): string | undefined {
+function providerThreadIdFromEvent(event: BbProviderEvent): string | undefined {
   if (event.type === "thread/identity") return event.providerThreadId;
   return undefined;
 }

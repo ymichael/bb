@@ -568,14 +568,3 @@ export class ProviderSessionController {
     return delta;
   }
 }
-
-export function isProviderSessionMissingThreadError(error: unknown): boolean {
-  return (
-    error instanceof ProviderSessionError &&
-    (
-      error.code === "missing_provider_thread" ||
-      (error.code === "provider_rpc_error" &&
-        isMissingProviderThreadMessage(error.message))
-    )
-  );
-}
