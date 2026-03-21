@@ -5,7 +5,7 @@
 
 import type { PromptInput } from "./shared-types.js";
 import type { ThreadEventRow } from "./types.js";
-import { toRecord } from "./unknown-helpers.js";
+import { isRecord } from "./unknown-helpers.js";
 
 /**
  * Derive a thread title from prompt input text.
@@ -32,9 +32,8 @@ export function deriveThreadTitleFromInput(
  */
 export function outputFromThreadEvent(event: ThreadEventRow): string | undefined {
   if (event.type !== "item/completed") return undefined;
-  const data = toRecord(event.data);
-  if (!data) return undefined;
-  const item = toRecord(data.item);
+  const data = event.data;
+  const item = isRecord(data.item) ? data.item : undefined;
   if (!item) return undefined;
   if (item.type !== "agentMessage") return undefined;
   const text = typeof item.text === "string" ? item.text : undefined;

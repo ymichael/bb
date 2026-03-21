@@ -12,11 +12,10 @@ import {
   assertNever,
   DEFAULT_THREAD_PROVIDER_ID,
   formatEnvironmentDisplayName,
-  getStringField,
+  isRecord,
   isThreadProviderId,
   buildThreadDetailRows,
   extractThreadContextWindowUsage,
-  toRecord,
   toUIMessages,
   type AvailableModel,
   type EnvironmentCreationArgs,
@@ -565,7 +564,7 @@ function toSandboxMode(
 function toSandboxModeFromPolicy(
   policy: Record<string, unknown> | null,
 ): ThreadExecutionOptions["sandboxMode"] | undefined {
-  const type = getStringField(policy, "type");
+  const type = typeof policy?.type === "string" ? policy.type : undefined;
   switch (type) {
     case "readOnly":
       return "read-only";
@@ -595,12 +594,10 @@ function toTurnLifecycleState(
 function extractFirstPromptText(input: unknown): string | undefined {
   if (!Array.isArray(input)) return undefined;
   for (const chunk of input) {
-    const promptChunk = toRecord(chunk);
-    if (!promptChunk) continue;
-    if (getStringField(promptChunk, "type") !== "text") continue;
-    const text = getStringField(promptChunk, "text");
-    if (!text) continue;
-    const trimmed = text.trim();
+    if (!isRecord(chunk)) continue;
+    if (chunk.type !== "text") continue;
+    if (typeof chunk.text !== "string") continue;
+    const trimmed = chunk.text.trim();
     if (trimmed.length > 0) return trimmed;
   }
   return undefined;
@@ -2727,7 +2724,7 @@ export class Orchestrator implements ThreadOrchestrator {
     // Walk backwards to find the last output event.
     for (let i = allEvents.length - 1; i >= 0; i--) {
       if (thread?.type === "manager" && allEvents[i].type === "system/manager/user_message") {
-        const text = getStringField(toRecord(allEvents[i].data), "text");
+        const text = allEvents[i].data.text;
         if (typeof text === "string" && text.length > 0) {
           return text;
         }
@@ -4026,7 +4023,9 @@ export class Orchestrator implements ThreadOrchestrator {
       return undefined;
     }
 
-    const capabilities = toRecord(matchingSession.selectedCapabilities);
+    const capabilities = isRecord(matchingSession.selectedCapabilities)
+      ? matchingSession.selectedCapabilities
+      : undefined;
     const commands = Array.isArray(capabilities?.commands)
       ? capabilities.commands
       : [];
@@ -4507,8 +4506,9 @@ export class Orchestrator implements ThreadOrchestrator {
   ): string | undefined {
     const startedEvent = this.eventRepo.getLatestByType(threadId, "thread/started");
     if (!startedEvent) return undefined;
-    const payload = toRecord(startedEvent.data);
-    return getStringField(toRecord(payload?.thread), "path") ?? undefined;
+    const payload = startedEvent.data;
+    const thread = isRecord(payload.thread) ? payload.thread : undefined;
+    return typeof thread?.path === "string" && thread.path.length > 0 ? thread.path : undefined;
   }
 
   private _resolvePersistedThreadStartBaseInstructions(
@@ -4516,10 +4516,10 @@ export class Orchestrator implements ThreadOrchestrator {
   ): string | undefined {
     const startEvent = this.eventRepo.getLatestByType(threadId, "client/thread/start");
     if (!startEvent) return undefined;
-    const startData = toRecord(startEvent.data);
-    const request = toRecord(startData?.request);
-    const params = toRecord(request?.params);
-    return getStringField(params, "baseInstructions") ?? undefined;
+    const startData = startEvent.data;
+    const request = isRecord(startData.request) ? startData.request : undefined;
+    const params = isRecord(request?.params) ? request.params : undefined;
+    return typeof params?.baseInstructions === "string" && params.baseInstructions.length > 0 ? params.baseInstructions : undefined;
   }
 
   private _resolvePersistedActiveTurnId(threadId: string): string | undefined {
@@ -5799,8 +5799,7 @@ export class Orchestrator implements ThreadOrchestrator {
   private _readThreadTitleFallback(threadId: string): string | undefined {
     const startEvent = this.eventRepo.getLatestByType(threadId, "client/thread/start");
     if (!startEvent) return undefined;
-    const startData = toRecord(startEvent.data);
-    return this._derivePromptFallbackTitle(startData?.input);
+    return this._derivePromptFallbackTitle(startEvent.data.input);
   }
 
   private _derivePromptFallbackTitle(input: unknown): string | undefined {
@@ -5838,15 +5837,14 @@ export class Orchestrator implements ThreadOrchestrator {
     data: ThreadEventData,
   ): void {
     if (type === "system/provisioning/completed") {
-      const eventData = toRecord(data);
       const fallbackReason = (() => {
-        const transcript = Array.isArray(eventData?.transcript) ? eventData.transcript : [];
+        const transcript = "transcript" in data && Array.isArray(data.transcript)
+          ? data.transcript
+          : [];
         for (const entry of transcript) {
-          const record = toRecord(entry);
-          if (getStringField(record, "key") !== "fallback") {
-            continue;
-          }
-          return getStringField(record, "text");
+          if (!isRecord(entry)) continue;
+          if (entry.key !== "fallback") continue;
+          return typeof entry.text === "string" ? entry.text : undefined;
         }
         return undefined;
       })();
@@ -5996,10 +5994,10 @@ export class Orchestrator implements ThreadOrchestrator {
     type: "client/thread/start" | "client/turn/requested" | "client/turn/start",
     params: Record<string, unknown>,
   ): ThreadExecutionOptions {
-    const model = getStringField(params, "model");
-    const serviceTier = toServiceTier(getStringField(params, "service_tier"));
-    const approvalPolicy = getStringField(params, "approvalPolicy");
-    const config = toRecord(params.config);
+    const model = typeof params.model === "string" && params.model.length > 0 ? params.model : undefined;
+    const serviceTier = toServiceTier(params.service_tier);
+    const approvalPolicy = typeof params.approvalPolicy === "string" && params.approvalPolicy.length > 0 ? params.approvalPolicy : undefined;
+    const config = isRecord(params.config) ? params.config : undefined;
     const reasoningLevel = toReasoningLevel(config?.model_reasoning_effort);
 
     let sandboxMode: ThreadExecutionOptions["sandboxMode"] | undefined;
@@ -6009,7 +6007,7 @@ export class Orchestrator implements ThreadOrchestrator {
         break;
       case "client/turn/requested":
       case "client/turn/start":
-        sandboxMode = toSandboxModeFromPolicy(toRecord(params.sandboxPolicy));
+        sandboxMode = toSandboxModeFromPolicy(isRecord(params.sandboxPolicy) ? params.sandboxPolicy : null);
         break;
       default:
         return assertNever(type);

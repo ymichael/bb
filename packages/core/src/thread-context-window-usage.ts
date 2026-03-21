@@ -1,6 +1,6 @@
 import type { ThreadContextWindowUsage } from "./api-types.js";
 import type { ThreadEventRow } from "./types.js";
-import { toRecord } from "./unknown-helpers.js";
+import { isRecord } from "./unknown-helpers.js";
 
 interface ThreadContextWindowSignal {
   totalTokens?: number;
@@ -22,13 +22,12 @@ function toPositiveNumber(value: unknown): number | undefined {
 }
 
 function decodeContextWindowSignal(event: ThreadEventRow): ThreadContextWindowSignal | null {
-  const payload = toRecord(event.data);
-  if (!payload) return null;
+  const payload = event.data;
 
   if (event.type === "thread/tokenUsage/updated") {
-    const tokenUsage = toRecord(payload.tokenUsage);
-    const totalUsage = toRecord(tokenUsage?.total);
-    const lastUsage = toRecord(tokenUsage?.last);
+    const tokenUsage = isRecord(payload.tokenUsage) ? payload.tokenUsage : undefined;
+    const totalUsage = isRecord(tokenUsage?.total) ? tokenUsage.total : undefined;
+    const lastUsage = isRecord(tokenUsage?.last) ? tokenUsage.last : undefined;
     const totalTokens =
       toNonNegativeNumber(lastUsage?.totalTokens) ??
       toNonNegativeNumber(totalUsage?.totalTokens);
