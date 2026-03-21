@@ -236,6 +236,3 @@ export {
 } from "./thread-operation-prompts.js";
 export { assertNever } from "./assert-never.js";
 export { isRecord, toRecord, getStringField, extractErrorMessage } from "./unknown-helpers.js";
-export {
-  decodeThreadIdFromWireValue,
-} from "./wire-decoders.js";

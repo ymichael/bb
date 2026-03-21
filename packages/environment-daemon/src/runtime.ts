@@ -920,11 +920,6 @@ export class EnvironmentDaemonRuntime {
     value: unknown,
     providerId?: string,
   ): string | undefined {
-    const normalizedThreadId =
-      this.getProviderSemanticsForProviderId(providerId)?.extractThreadId(value);
-    if (normalizedThreadId) {
-      return normalizedThreadId;
-    }
     const record = this.asRecord(value);
     if (!record) {
       return undefined;

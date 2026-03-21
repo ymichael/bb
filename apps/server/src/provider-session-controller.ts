@@ -10,7 +10,6 @@ import {
 } from "@bb/environment-daemon";
 import {
   assertNever,
-  decodeThreadIdFromWireValue,
   type PromptInput,
   type ProviderCapabilities,
   type ProviderDynamicTool,
@@ -137,12 +136,9 @@ export class ProviderSessionController {
   private extractProviderThreadIdFromResult(result: unknown): string | undefined {
     if (result && typeof result === "object" && !Array.isArray(result)) {
       const record = result as Record<string, unknown>;
-      if (Object.hasOwn(record, "providerThreadId")) {
-        return typeof record.providerThreadId === "string"
-          ? record.providerThreadId
-          : undefined;
-      }
-      return decodeThreadIdFromWireValue(record);
+      return typeof record.providerThreadId === "string"
+        ? record.providerThreadId
+        : undefined;
     }
     return undefined;
   }

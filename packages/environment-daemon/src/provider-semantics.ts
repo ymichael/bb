@@ -1,7 +1,7 @@
 import type {
   Thread,
 } from "@bb/core";
-import { assertNever, decodeThreadIdFromWireValue, getStringField, isThreadProviderId, toRecord } from "@bb/core";
+import { assertNever, getStringField, isThreadProviderId, toRecord } from "@bb/core";
 import type {
   ThreadEvent,
   ProviderToolCallRequest,
@@ -110,7 +110,6 @@ export interface EnvironmentDaemonProviderSemantics {
     params: unknown,
   ): ProviderToolCallRequest | null;
   encodeToolCallResponse(response: ProviderToolCallResponse): Record<string, unknown>;
-  extractThreadId(value: unknown): string | undefined;
   isMissingProviderThreadMessage(message: string): boolean;
 }
 
@@ -182,9 +181,6 @@ function createProviderSemantics(provider: ProviderAdapter<any, any>): Environme
     },
     encodeToolCallResponse(response) {
       return encodeSharedToolCallResponse(provider.encodeToolCallResponse(response));
-    },
-    extractThreadId(value) {
-      return decodeThreadIdFromWireValue(value);
     },
     isMissingProviderThreadMessage(message) {
       return isMissingProviderThreadMessage(provider.id, message);
