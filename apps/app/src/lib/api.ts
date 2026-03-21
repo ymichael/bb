@@ -24,6 +24,7 @@ import type {
   SystemRestartPolicy,
   SystemRestartRequest,
   SystemShutdownAcceptedResponse,
+  SystemShutdownBlockedResponse,
   SystemShutdownBlockingThread,
   SystemShutdownRequest,
   SystemStatus,
@@ -626,6 +627,12 @@ export async function getSystemRestartPolicy(): Promise<SystemRestartPolicy> {
   return request<SystemRestartPolicy>(apiClient.system["restart-policy"].$get());
 }
 
+function isShutdownBlocked(
+  body: SystemShutdownAcceptedResponse | SystemShutdownBlockedResponse | SystemRestartAcceptedResponse,
+): body is SystemShutdownBlockedResponse {
+  return "code" in body && body.code === "shutdown_blocked";
+}
+
 export async function shutdownServer(
   req: SystemShutdownRequest = {},
 ): Promise<SystemShutdownAcceptedResponse> {
@@ -634,13 +641,10 @@ export async function shutdownServer(
     await throwHttpError(res);
   }
   const body = await res.json();
-  if ("code" in body && body.code === "shutdown_blocked") {
-    throw new SystemShutdownBlockedError(
-      body.message,
-      body.blockingThreads,
-    );
+  if (isShutdownBlocked(body)) {
+    throw new SystemShutdownBlockedError(body.message, body.blockingThreads);
   }
-  return body as SystemShutdownAcceptedResponse;
+  return body;
 }
 
 export async function restartServer(
@@ -650,12 +654,15 @@ export async function restartServer(
   if (!res.ok && res.status !== 409) {
     await throwHttpError(res);
   }
-  const body = await res.json();
-  if ("code" in body && body.code === "shutdown_blocked") {
-    throw new SystemShutdownBlockedError(
-      body.message,
-      body.blockingThreads,
-    );
+  // Server may close the connection mid-response during restart
+  let body: Awaited<ReturnType<typeof res.json>>;
+  try {
+    body = await res.json();
+  } catch {
+    return { ok: true, forced: Boolean(req.force), blockingThreadsCount: 0, restarting: true };
   }
-  return body as SystemRestartAcceptedResponse;
+  if (isShutdownBlocked(body)) {
+    throw new SystemShutdownBlockedError(body.message, body.blockingThreads);
+  }
+  return body;
 }

@@ -24,6 +24,7 @@ export type {
 export { ENVIRONMENT_DAEMON_PROTOCOL_VERSION } from "./protocol.js";
 export {
   decodePersistedEnvironmentDaemonCommand,
+  getProviderThreadIdFromCommandResult,
   isEnvironmentDaemonControlRequest,
   isEnvironmentDaemonControlResponse,
 } from "./protocol.js";
@@ -148,16 +149,6 @@ export {
   createEnvironmentDaemonSessionClient,
 } from "@bb/env-daemon-contract";
 
-// Legacy aliases — kept so existing consumers of @bb/environment-daemon
-// continue to compile without changes.
-export {
-  EnvironmentDaemonSessionClient as EnvironmentDaemonSessionHttpClient,
-  EnvironmentDaemonSessionClientError as EnvironmentDaemonSessionHttpClientError,
-  createEnvironmentDaemonSessionClient as createEnvironmentDaemonSessionHttpClientFromConnection,
-} from "@bb/env-daemon-contract";
-export type {
-  EnvironmentDaemonSessionClientConfig as EnvironmentDaemonSessionHttpClientOptions,
-} from "@bb/env-daemon-contract";
 
 export type {
   EnvironmentDaemonSessionSyncOptions,

@@ -7,6 +7,7 @@ import {
   type EnvironmentDaemonCommandEnvelope,
   type EnvironmentDaemonEventEnvelope,
   type EnvironmentDaemonProviderLaunchWrapper,
+  getProviderThreadIdFromCommandResult,
 } from "@bb/environment-daemon";
 import {
   assertNever,
@@ -133,15 +134,6 @@ export class ProviderSessionController {
     return `Thread ${threadId} has no ${this.opts.provider.displayName} session`;
   }
 
-  private extractProviderThreadIdFromResult(result: unknown): string | undefined {
-    if (result && typeof result === "object" && !Array.isArray(result)) {
-      const record = result as Record<string, unknown>;
-      return typeof record.providerThreadId === "string"
-        ? record.providerThreadId
-        : undefined;
-    }
-    return undefined;
-  }
 
   async startThreadCommand(args: {
     client: EnvironmentDaemonClient;
@@ -168,7 +160,7 @@ export class ProviderSessionController {
           context: args.context,
         }) ?? this.opts.dynamicTools,
     });
-    const providerThreadId = this.extractProviderThreadIdFromResult(ack.result);
+    const providerThreadId = getProviderThreadIdFromCommandResult(ack);
     return { providerThreadId };
   }
 
@@ -198,7 +190,7 @@ export class ProviderSessionController {
       ...(args.resumePath ? { resumePath: args.resumePath } : {}),
       ...(args.dynamicTools ? { dynamicTools: args.dynamicTools } : {}),
     });
-    const providerThreadId = this.extractProviderThreadIdFromResult(ack.result);
+    const providerThreadId = getProviderThreadIdFromCommandResult(ack);
     return { providerThreadId };
   }
 

@@ -6,7 +6,6 @@ import type {
 import type { EnvironmentDaemonSessionRuntime } from "./session-runtime.js";
 import type {
   EnvironmentDaemonSessionCommandAckItem,
-  EnvironmentDaemonSessionCommandBatchMessage,
   EnvironmentDaemonSessionOpenPayload,
   EnvironmentDaemonSessionProviderResponsePayload,
   EnvironmentDaemonSessionWelcomeMessage,
@@ -182,9 +181,7 @@ export class EnvironmentDaemonSessionSync {
     waitMs?: number;
     signal?: AbortSignal;
   }): Promise<EnvironmentDaemonPulledCommand[]> {
-    // Cast from wire-level Record<string, unknown> to EnvironmentDaemonCommand —
-    // the server validates commands before delivery, so the cast is safe.
-    const batch = await this.options.client.pullCommands({
+    const batch = await this.options.client.pullCommands<EnvironmentDaemonCommand>({
       sessionId: args.sessionId,
       ...(args.afterCursor !== undefined && args.threadIds.length === 1
         ? { afterCursor: args.afterCursor }
@@ -192,7 +189,7 @@ export class EnvironmentDaemonSessionSync {
       ...(args.limit !== undefined ? { limit: args.limit } : {}),
       ...(args.waitMs !== undefined ? { waitMs: args.waitMs } : {}),
       ...(args.signal ? { signal: args.signal } : {}),
-    }) as EnvironmentDaemonSessionCommandBatchMessage;
+    });
 
     const pulled = batch.payload.commands
       .map((command) => {

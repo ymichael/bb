@@ -171,6 +171,19 @@ export interface EnvironmentDaemonCommandAck {
   result?: unknown;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+/** Extract the provider thread ID from a command ack result (thread.start / thread.resume). */
+export function getProviderThreadIdFromCommandResult(
+  ack: EnvironmentDaemonCommandAck,
+): string | undefined {
+  if (!isRecord(ack.result)) return undefined;
+  const ptid = ack.result.providerThreadId;
+  return typeof ptid === "string" ? ptid : undefined;
+}
+
 export type EnvironmentDaemonEvent =
   | {
       type: "environment.ready";

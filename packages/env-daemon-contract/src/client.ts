@@ -125,13 +125,13 @@ export class EnvironmentDaemonSessionClient {
     }) as Promise<EnvironmentDaemonSessionEventAckMessage>;
   }
 
-  pullCommands(args: {
+  pullCommands<TCommand = Record<string, unknown>>(args: {
     sessionId: string;
     afterCursor?: number;
     limit?: number;
     waitMs?: number;
     signal?: AbortSignal;
-  }): Promise<EnvironmentDaemonSessionCommandBatchMessage> {
+  }): Promise<EnvironmentDaemonSessionCommandBatchMessage<TCommand>> {
     const search = new URLSearchParams({ sessionId: args.sessionId });
     if (args.afterCursor !== undefined) {
       search.set("afterCursor", String(args.afterCursor));
@@ -146,7 +146,7 @@ export class EnvironmentDaemonSessionClient {
       `/environments/${this.environmentId}/env-daemon/session/commands?${search.toString()}`,
       200,
       { signal: args.signal },
-    ) as Promise<EnvironmentDaemonSessionCommandBatchMessage>;
+    ) as Promise<EnvironmentDaemonSessionCommandBatchMessage<TCommand>>;
   }
 
   async acknowledgeCommands(
