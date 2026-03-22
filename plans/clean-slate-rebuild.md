@@ -28,8 +28,8 @@ Contracts define the error response shape and domain error codes. Clients know e
 
 | Package | Notes |
 |---------|-------|
-| `apps/app` | Untouched |
-| `apps/cli` | Untouched |
+| `apps/app` | Code stays. Imports rewritten from `@bb/core` → `@bb/domain` + `@bb/core-ui`. Dependencies updated in package.json. |
+| `apps/cli` | Code stays. Imports rewritten from `@bb/core` → `@bb/domain` + `@bb/core-ui`. Also imports from `@bb/environment-daemon` — those need updating or removing. Dependencies updated in package.json. |
 | `packages/ui-core` | Untouched |
 | `packages/tsconfig` | Untouched |
 | `packages/provider-adapters` | Code stays, absorbed into `@bb/agent-runtime` later. See `plans/agent-runtime-package.md`. |
@@ -69,10 +69,12 @@ ThreadQueuedMessage, ThreadBuiltInAction, ThreadBuiltInActionId,
 ThreadTurnInitiator, ThreadExecutionOptions
 
 // Events (the canonical event type — used by agent-runtime, server, app)
+// Source: core/src/provider-event.ts AND core/src/types.ts
 ThreadEvent, ThreadEventType, ThreadEventItem, ThreadEventItemStatus,
 ThreadEventRow, ThreadEventData, ThreadEventDataForType,
 AppThreadEventType, ThreadEventDataByAppType,
-// ... all event data interfaces (SystemErrorEventData, etc.)
+// ... all event data interfaces (SystemErrorEventData,
+// ClientOutboundStartEventData, SystemProvisioningStartedEventData, etc.)
 
 // Execution vocabulary (with Zod schemas where needed)
 PromptInput (+ promptInputSchema), ReasoningLevel, SandboxMode, ServiceTier
@@ -87,19 +89,19 @@ ToolCallRequest, ToolCallResponse, DynamicTool
 // Environment
 EnvironmentDescriptor, EnvironmentProperties, EnvironmentCapabilities
 
-// Utilities
-assertNever
+// No utilities — assertNever is a one-liner, inline it where needed
 ```
 
 **What does NOT belong here:**
 
 - API request/response shapes (`SpawnThreadRequest`, `SystemHealthReport`, etc.) → `server-contract`
-- Daemon protocol types (`EnvironmentDaemonCommand`, `EnvironmentDaemonEvent`) → contracts
+- Session protocol types (`EnvironmentDaemonCommand`, `EnvironmentDaemonEvent`) → `server-contract`
+- Daemon control types (`DaemonStatusSnapshot`) → `env-daemon-contract`
 - View transforms (`toUIMessages`, `formatTimelineAsText`) → `core-ui` shim
 - WebSocket protocol types → `server-contract`
 - Runtime contracts (`ThreadOrchestrator`) → server concern
 
-**Note on `Thread`:** `Thread` has `defaultExecutionOptions?: ThreadExecutionOptions`. `ThreadExecutionOptions` lives in domain alongside `Thread` — it's shared vocabulary (used by server, daemon, agent-runtime).
+**Note on `Thread`:** `Thread` has `defaultExecutionOptions?: ThreadExecutionOptions`. `ThreadExecutionOptions` lives in domain alongside `Thread`. Note that `ThreadExecutionOptions` also has `approvalPolicy?: string` and `source?: string` — these stay as-is.
 
 **Note on renames:** Current `ProviderToolCallRequest`/`ProviderToolCallResponse`/`ProviderDynamicTool` become `ToolCallRequest`/`ToolCallResponse`/`DynamicTool`. The `Provider` prefix is dropped — these are domain concepts, not provider-specific.
 
@@ -131,27 +133,22 @@ export type PublicApiSchema = {
 ### Error responses
 
 ```typescript
+export const domainErrorCodeSchema = z.enum([
+  "invalid_request", "thread_not_found", "project_not_found",
+  "thread_archived", "inactive_session", "provider_unavailable",
+  "provider_timeout", "provider_rpc_error", "unsupported_operation",
+  "no_active_turn", "internal_error",
+]);
+export type DomainErrorCode = z.infer<typeof domainErrorCodeSchema>;
+
 export const apiErrorSchema = z.object({
-  code: z.string(),
+  code: domainErrorCodeSchema,
   message: z.string(),
   retryable: z.boolean().optional(),
   details: z.unknown().optional(),
 });
 export type ApiError = z.infer<typeof apiErrorSchema>;
 
-// Domain error codes — the closed set of error codes the server can return
-export type DomainErrorCode =
-  | "invalid_request"
-  | "thread_not_found"
-  | "project_not_found"
-  | "thread_archived"
-  | "inactive_session"
-  | "provider_unavailable"
-  | "provider_timeout"
-  | "provider_rpc_error"
-  | "unsupported_operation"
-  | "no_active_turn"
-  | "internal_error";
 ```
 
 ### Public API (`/api/v1/*`)
@@ -165,13 +162,16 @@ export function createPublicApiClient(baseUrl: string) {
 ```
 
 **Owns these types (currently in `@bb/core/api-types.ts`):**
-- All request types: `SpawnThreadRequest`, `TellThreadRequest`, `UpdateProjectRequest`, `CreateProjectRequest`, `UpdateThreadRequest`, `EnqueueThreadMessageRequest`, `SendQueuedThreadMessageRequest`, `ThreadOperationRequest`, `EnvironmentOperationRequest`, `SystemShutdownRequest`, `SystemRestartRequest`, `OpenPathRequest`, `OpenThreadPathRequest`
-- All response types: `SystemHealthReport`, `SystemStatus`, `SystemShutdownAcceptedResponse`, `SystemShutdownBlockedResponse`, `SystemRestartAcceptedResponse`, `ThreadTimelineResponse`, `ThreadGitDiffResponse`, `ThreadToolGroupMessagesResponse`, `SendQueuedThreadMessageResponse`, `EnvironmentOperationResponse`, `PrimaryCheckoutStatus`, `ProjectFileSuggestion`, `UploadedPromptAttachment`
-- Operation types: `CommitOperationOptions`, `SquashMergeOperationOptions`
+- Request types: `SpawnThreadRequest`, `TellThreadRequest`, `TellThreadMode`, `UpdateProjectRequest`, `CreateProjectRequest`, `UpdateThreadRequest`, `EnqueueThreadMessageRequest`, `SendQueuedThreadMessageRequest`, `ThreadOperationRequest`, `ThreadOperationType`, `EnvironmentOperationRequest`, `EnvironmentOperationType`, `EnvironmentCreationArgs`, `SystemShutdownRequest`, `SystemRestartRequest`, `SystemRestartAction`, `OpenPathRequest`, `OpenThreadPathRequest`
+- Response types: `SystemHealthReport` (and all `SystemHealth*` sub-types), `SystemStatus`, `SystemShutdownAcceptedResponse`, `SystemShutdownBlockedResponse`, `SystemShutdownBlockingThread`, `SystemRestartAcceptedResponse`, `SystemRestartPolicy`, `SystemProviderInfo`, `SystemEnvironmentInfo`, `ServerRuntimeMode`, `ThreadTimelineResponse`, `ThreadGitDiffResponse`, `ThreadGitDiffCommitSummary`, `ThreadGitDiffSelection`, `ThreadGitDiffMode`, `ThreadToolGroupMessagesRequest`, `ThreadToolGroupMessagesResponse`, `ThreadContextWindowUsage`, `SendQueuedThreadMessageResponse`, `EnvironmentOperationResponse`, `EnvironmentOperationFailureDetails`, `CommitEnvironmentOperationResponse`, `SquashMergeEnvironmentOperationResponse`, `PrimaryCheckoutStatus`, `PromotePrimaryCheckoutResponse`, `DemotePrimaryCheckoutResponse`, `ProjectFileSuggestion`, `PromptMentionSuggestion`, `UploadedPromptAttachment`
+- Operation options: `CommitOperationOptions`, `SquashMergeOperationOptions`
+- Open path: `OpenPathTarget`, `OpenPathEditor`
 
 ### Internal API (`/internal/*`)
 
 Consumed by env-daemon processes. Bearer token auth.
+
+The daemon depends on `server-contract` to know what the internal API accepts and returns — it's a client of these endpoints.
 
 ```typescript
 export function createInternalApiClient(baseUrl: string, authToken: string) {
@@ -184,7 +184,7 @@ export function createInternalApiClient(baseUrl: string, authToken: string) {
 **Owns the session protocol (currently in `env-daemon-contract/session-protocol.ts`):**
 - All session message Zod schemas and `z.infer<>` types
 - Session protocol constants, capability negotiation
-- `EnvironmentDaemonCommand` and `EnvironmentDaemonEvent` discriminated unions (these flow through the session protocol, not through the daemon's control endpoint)
+- `EnvironmentDaemonCommand` and `EnvironmentDaemonEvent` discriminated unions (these flow through the session protocol — the daemon depends on `server-contract` to know what commands it receives)
 - Command envelope, ack, delivery state types
 
 ### WebSocket protocol
@@ -214,10 +214,13 @@ export type DaemonControlSchema = {
     $post: Endpoint<EmptyInput, DaemonStatusSnapshot>;
   };
   "/control/session-sync": {
-    $post: Endpoint<{ json: SessionSyncRequest }, SessionSyncResponse>;
+    // No request body — triggers a session sync callback.
+    // Returns 202 with status snapshot.
+    $post: Endpoint<EmptyInput, { ok: true; status: DaemonStatusSnapshot }, 202>;
   };
   "/control/shutdown": {
-    $post: Endpoint<EmptyInput, { ok: true }>;
+    // Returns 202
+    $post: Endpoint<EmptyInput, { ok: true }, 202>;
   };
 };
 
@@ -229,12 +232,11 @@ export function createDaemonControlClient(baseUrl: string, authToken: string) {
 ```
 
 **Owns these types:**
-- `DaemonStatusSnapshot` — daemon health/status
-- Control request/response types for session-sync and shutdown
+- `DaemonStatusSnapshot` (currently `EnvironmentDaemonStatusSnapshot` in protocol.ts — renamed)
 - Provider spec and connection types (`EnvironmentDaemonProviderSpec`, `EnvironmentDaemonConnectionTarget`)
 
 **Does NOT own:**
-- `EnvironmentDaemonCommand` / `EnvironmentDaemonEvent` — these flow through the session protocol (server→daemon via command batches in the internal API), not through the daemon's control endpoint. They live in `server-contract`.
+- `EnvironmentDaemonCommand` / `EnvironmentDaemonEvent` — these flow through the session protocol (server→daemon via command batches in the internal API). They live in `server-contract`.
 
 ---
 
@@ -244,7 +246,7 @@ Temporary shim so `apps/app` and `apps/cli` keep working. Cleanup target.
 
 **Dependencies:** `@bb/domain`
 
-Note: if any view utility needs API request/response types (e.g. `buildCommitFailureFollowUpInstruction` referencing operation option types), those types should be pulled into domain or the utility should move to the consumer that owns those types. `core-ui` should NOT depend on `server-contract` — that would couple view formatting to the API surface.
+`core-ui` does NOT depend on `server-contract`. If a view utility needs API request/response types, either pull the type into domain (if it's truly shared vocabulary) or move the utility to the consumer that owns those types.
 
 **Contains (moved from `packages/core/src/`):**
 - `toUIMessages()`, `UIMessage` types
@@ -279,13 +281,19 @@ Small package. Shared entity types, enums, event types, execution vocabulary. Ha
 ### Step 3: Redefine `packages/env-daemon-contract`
 
 - Define the daemon's actual control endpoint routes (status, session-sync, shutdown)
-- Zod schemas for control requests/responses
+- Match real HTTP surface: no request body on session-sync, 202 status codes
+- Zod schemas for control responses
 - `createDaemonControlClient()` with `hc()`
 
 ### Step 4: Create `packages/core-ui` shim
 
 - Move view utilities from `packages/core`
 - Update `apps/app` and `apps/cli` imports from `@bb/core` to `@bb/domain` / `@bb/core-ui` / `@bb/server-contract`
+
+### Step 4.5: Update `packages/db`
+
+- Update `packages/db` dependency from `@bb/core` to `@bb/domain`
+- Rewrite imports in schema.ts. Must happen BEFORE deleting core.
 
 ### Step 5: Delete
 
@@ -294,7 +302,7 @@ Small package. Shared entity types, enums, event types, execution vocabulary. Ha
 - `packages/environment/` entirely
 - `packages/core/` entirely
 - `packages/api-contract/` entirely
-- Repository layer from `packages/db` (update db dependency from `@bb/core` to `@bb/domain`)
+- Repository layer from `packages/db` (`repositories.ts`, `environment-daemon-repositories.ts`, `test/`)
 
 ### Step 6 (later): Rebuild
 
@@ -364,12 +372,58 @@ const port = serverEnv.BB_SERVER_PORT; // number
          server-contract  |  env-daemon-contract
           (domain, zod,   |   (domain, zod, hono)
            hono)          |
-              |           |
-         core-ui          |
-    (domain, server-      |
-     contract)            |
-        /       \         |
-    apps/app  apps/cli    |
-                     agent-runtime (later)
-                      (domain, templates)
+           /    \         |
+      core-ui    \        |
+     (domain)     \       |
+      /    \       \      |
+  apps/app  apps/cli \    |
+                      \   |
+                   env-daemon (rebuilt later)
+                    (server-contract, env-daemon-contract,
+                     domain, agent-runtime)
+
+  agent-runtime (later)     db (kept)
+   (domain, templates)       (domain)
 ```
+
+Note: `core-ui` depends ONLY on `domain`. NOT on `server-contract`.
+
+Note: `provider-adapters` currently depends on `@bb/core`. During Step 5 (delete core),
+provider-adapters will break. It stays broken until Step 6 when it's absorbed into
+`agent-runtime` (which depends on `domain`, not `core`). This is expected.
+
+---
+
+## Scope
+
+This plan covers Steps 1-5 (create new packages, delete old ones). Step 6 (rebuild) is a separate effort.
+
+**In scope:**
+- Create `domain`, `server-contract`, `env-daemon-contract`, `core-ui`
+- Rewrite imports in `apps/app`, `apps/cli`, `packages/db`
+- Delete `core`, `environment-daemon`, `environment`, `api-contract`, `apps/server/src/`, db repositories
+
+**Out of scope:**
+- Rebuilding the server, env-daemon, or environment provisioning
+- Creating `agent-runtime`, `logger`, `env`
+- Fixing `provider-adapters` (stays broken until absorbed)
+
+## Validation
+
+**After Steps 1-5, these should be true:**
+- `packages/domain` typechecks with zero workspace dependencies (only `zod`)
+- `packages/server-contract` typechecks (depends on `domain`, `zod`, `hono`)
+- `packages/env-daemon-contract` typechecks (depends on `domain`, `zod`, `hono`)
+- `packages/core-ui` typechecks (depends on `domain`)
+- `packages/db` typechecks (depends on `domain`)
+
+**These will be broken (expected):**
+- `apps/server` — deleted, placeholder only
+- `packages/provider-adapters` — depends on deleted `@bb/core`
+- `apps/app` and `apps/cli` — may have residual import issues
+- All root workspace scripts (`pnpm build`, `pnpm dev`, etc.) — expected to fail
+
+## Open Questions
+
+- **`buildCommitFailureFollowUpInstruction`** references operation option types. Do those types move to domain, or does the utility move out of `core-ui`?
+- **CLI imports from `@bb/environment-daemon`** — what does it use? Needs auditing before Step 4.
