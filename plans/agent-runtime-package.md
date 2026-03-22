@@ -128,12 +128,87 @@ All from `@bb/domain`:
 - `ToolCallRequest` — tool invocation from provider (requestId, threadId, turnId, callId, tool, arguments)
 - `ToolCallResponse` — tool result back to provider (contentItems, success)
 
-## What stays internal
+## Internal: Provider Adapter Interface
 
-These exist inside the package but are NOT exported:
+The `ProviderAdapter` interface is internal — not exported. It's the extension point for adding new providers. Each adapter translates between the runtime's commands and the provider's wire format.
 
-- **`ProviderAdapter` interface** — the extension point for adding new providers. Each adapter implements `buildCommand`, `translateEvent`, `decodeToolCallRequest`, `encodeToolCallResponse`.
-- **`ProviderRequest`** — the discriminated union that adapters translate from.
+```typescript
+interface ProviderAdapter {
+  id: string;
+  displayName: string;
+  capabilities: ProviderCapabilities;
+
+  /** How to launch this provider's process */
+  resolveLaunch(): Promise<ProviderLaunch>;
+
+  /** Translate a runtime command into the provider's JSON-RPC wire format */
+  buildCommand(command: AdapterCommand): JsonRpcRequest | null;
+
+  /** Translate a raw provider event into canonical ThreadEvents */
+  translateEvent(event: unknown): ThreadEvent[];
+
+  /** Decode a provider's tool call request into a canonical ToolCallRequest */
+  decodeToolCallRequest(request: JsonRpcRequest): ToolCallRequest | null;
+
+  /** List available models */
+  listModels(): Promise<AvailableModel[]>;
+}
+
+interface ProviderLaunch {
+  command: string;
+  args: string[];
+  env?: Record<string, string>;
+}
+
+interface JsonRpcRequest {
+  method: string;
+  params?: unknown;
+}
+```
+
+### `AdapterCommand` — what the runtime asks the adapter to build
+
+Replaces the old `ProviderRequest`. Stripped of caller-layer types (`SpawnThreadRequest`, `ProviderThreadContext`). The runtime decomposes caller args into the flat fields the adapter actually needs.
+
+```typescript
+type AdapterCommand =
+  | { type: "initialize" }
+  | { type: "thread/start"; threadId: string; input?: PromptInput[];
+      options?: AdapterExecutionOptions; dynamicTools?: DynamicTool[] }
+  | { type: "thread/resume"; threadId: string; providerThreadId?: string;
+      options?: AdapterExecutionOptions }
+  | { type: "turn/start"; threadId: string; providerThreadId?: string;
+      input: PromptInput[]; options?: AdapterExecutionOptions }
+  | { type: "turn/steer"; threadId: string; providerThreadId?: string;
+      expectedTurnId: string; input: PromptInput[] }
+  | { type: "thread/stop"; threadId: string }
+  | { type: "thread/name/set"; threadId: string; providerThreadId?: string;
+      title: string };
+
+interface AdapterExecutionOptions {
+  model?: string;
+  serviceTier?: string;
+  reasoningLevel?: string;
+  sandboxMode?: string;
+  instructions?: string;
+  envVars?: Record<string, string>;
+}
+```
+
+### Changes from current `ProviderAdapter`
+
+| Current | New | Reason |
+|---------|-----|--------|
+| `ProviderRequest` with `SpawnThreadRequest`, `ProviderThreadContext` | `AdapterCommand` with flat fields | Adapter shouldn't know caller-layer types. Runtime decomposes. |
+| `process: { command, args }` property | `resolveLaunch()` method | Launch config may need async resolution (auth files). Static property was too rigid. |
+| `resolveLaunchConfiguration(context)` | `resolveLaunch()` (no args) | Adapter resolves its own launch config. Thread context is a runtime concern. |
+| `preflightSessionStart()` | Deleted | Never called in production. Auth errors should surface at thread start. |
+| `encodeToolCallResponse()` | Deleted | Identity in practice. If encoding is needed, handle in `decodeToolCallRequest`. |
+| `TProviderEvent`, `TProviderCommand` generics | None | Wire types are internal to each adapter file. No need to leak into interface. `translateEvent` takes `unknown`, `buildCommand` returns `JsonRpcRequest`. |
+| `buildCommand` returns `TProviderCommand` | Returns `JsonRpcRequest \| null` | Generic JSON-RPC — all providers use this format. |
+
+### What else stays internal
+
 - **Adapter implementations** — `codex-provider-adapter.ts`, `claude-code-provider-adapter.ts`, `pi-provider-adapter.ts`
 - **Process management** — spawning, stdio buffering, JSON-RPC framing, timeouts, crash detection
 - **Thread-to-process routing** — mapping thread IDs to child processes, provider thread ID extraction
@@ -145,18 +220,22 @@ These exist inside the package but are NOT exported:
 createAgentRuntime(options)
   │
   ├── ensureProvider({ providerId: "codex" })
-  │     └── spawns process, does initialize handshake
+  │     ├── adapter.resolveLaunch() → { command, args, env }
+  │     ├── spawns child process
+  │     └── adapter.buildCommand({ type: "initialize" }) → JSON-RPC → child
   │
-  ├── startThread({ threadId, projectId, input })
+  ├── startThread({ threadId, projectId, input, options })
   │     ├── ensures provider running
-  │     ├── adapter.buildCommand({ type: "thread/start", ... })
-  │     ├── sends JSON-RPC, waits for response
+  │     ├── runtime decomposes args into AdapterCommand:
+  │     │     { type: "thread/start", threadId, input, options: { model, sandboxMode, instructions } }
+  │     ├── adapter.buildCommand(command) → JSON-RPC
+  │     ├── sends to child stdin, waits for response
   │     ├── extracts providerThreadId from result
   │     └── returns { providerThreadId }
   │
   ├── runTurn({ threadId, input })
-  │     ├── adapter.buildCommand({ type: "turn/start", ... })
-  │     └── sends JSON-RPC, provider starts streaming events
+  │     ├── adapter.buildCommand({ type: "turn/start", ... }) → JSON-RPC
+  │     └── sends to child, provider starts streaming events
   │
   ├── [provider emits events via stdout]
   │     ├── runtime parses JSON lines
@@ -164,9 +243,8 @@ createAgentRuntime(options)
   │     └── calls options.onEvent(event) for each
   │
   ├── [provider requests tool call via JSON-RPC]
-  │     ├── adapter.decodeToolCallRequest(id, method, params)
+  │     ├── adapter.decodeToolCallRequest({ method, params })
   │     ├── calls options.onToolCall(request)
-  │     ├── adapter.encodeToolCallResponse(response)
   │     └── sends JSON-RPC response back to provider
   │
   ├── stopThread({ threadId })
