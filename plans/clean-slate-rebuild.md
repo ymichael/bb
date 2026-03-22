@@ -12,7 +12,7 @@ Delete the accumulated service code and rebuild from clean contract boundaries. 
 | `apps/cli` | Yes | CLI client, untouched |
 | `packages/ui-core` | Yes | Shared UI primitives |
 | `packages/tsconfig` | Yes | Build config |
-| `packages/provider-adapters` | Yes (code) | Recently rewritten. Package boundary needs work — consumers reach too deep into internals. Deferred to later. |
+| `packages/provider-adapters` | Absorbed into `@bb/agent-runtime` | Code stays, package boundary redesigned. See `plans/agent-runtime-package.md` for the new public API and adapter interface. |
 | `packages/templates` | Yes | Mostly markdown |
 | `packages/db` | Schema only | Keep drizzle schema + migrations + connection + ids. Delete repositories. |
 | `qa/` | Consolidate | Fold into single `qa/README.md` describing all features to QA |
@@ -36,8 +36,8 @@ packages/
 ├── core-ui/                 # Shim: view transforms from old core (cleanup target)
 ├── server-contract/         # What the server serves (HTTP contract)
 ├── env-daemon-contract/     # What the env-daemon serves (HTTP contract)
+├── agent-runtime/           # Provider process management (replaces provider-adapters)
 ├── db/                      # Drizzle schema + migrations (no repositories)
-├── provider-adapters/       # Provider integration (keep, fix boundary later)
 ├── templates/               # Markdown templates (keep)
 ├── ui-core/                 # Shared UI (keep)
 └── tsconfig/                # Build config (keep)
@@ -199,10 +199,10 @@ Move view utilities from `packages/core` into `packages/core-ui` using the file 
 ### Step 6 (later): Rebuild
 
 - Rebuild `apps/server` from contracts — small, focused services
-- Rebuild environment daemon runtime
+- Rebuild environment daemon runtime (uses `@bb/agent-runtime` for provider sessions)
 - Rebuild environment provisioning
+- Create `packages/agent-runtime` from `provider-adapters` code — see `plans/agent-runtime-package.md`
 - Create `packages/logger` and `packages/env`
-- Fix `packages/provider-adapters` package boundary
 - Clean up `packages/core-ui` shim — move view logic to proper homes
 
 ## Decisions
