@@ -143,8 +143,7 @@ interface AgentRuntime {
   listModels(args: { providerId: string }): Promise<AvailableModel[]>;
 
   /**
-   * Shut down all provider processes. Cleans up any temp files
-   * created during launch (auth files, etc.).
+   * Shut down all provider processes.
    */
   shutdown(): Promise<void>;
 }
@@ -192,14 +191,14 @@ interface ProviderAdapter {
 
   /**
    * How to launch this provider's process.
-   * Async — may write temp auth files, resolve API keys, etc.
-   * Return tempFiles so the runtime can clean them up on shutdown.
+   * Returns the command, args, and any provider-specific env vars.
+   * Auth is the caller's responsibility — passed via AgentRuntimeOptions.env.
    *
    * When requiresThreadIsolation is true, called once per thread.
    * The threadId is passed so the adapter can include thread-specific
    * env vars if needed.
    */
-  resolveLaunch(threadId?: string): Promise<ProviderLaunch>;
+  resolveLaunch(threadId?: string): ProviderLaunch;
 
   /** Translate a runtime command into the provider's JSON-RPC wire format.
    *  Returns null if the provider doesn't support this command
@@ -220,9 +219,8 @@ interface ProviderAdapter {
 interface ProviderLaunch {
   command: string;
   args: string[];
+  /** Provider-specific env vars (not auth — auth comes from AgentRuntimeOptions.env) */
   env?: Record<string, string>;
-  /** Temp files created for this launch. Cleaned up on shutdown. */
-  tempFiles?: string[];
 }
 
 
@@ -322,8 +320,7 @@ steerTurn({ threadId, expectedTurnId, input })
 | Current | New | Reason |
 |---------|-----|--------|
 | `ProviderRequest` with `SpawnThreadRequest`, `ProviderThreadContext` | `AdapterCommand` with flat fields | Adapter shouldn't know caller-layer types. Runtime decomposes. |
-| `process: { command, args }` property | `resolveLaunch()` method | Launch config may need async resolution (auth files). Static property was too rigid. |
-| `resolveLaunchConfiguration(context)` | `resolveLaunch()` (no args) | Adapter resolves its own launch config. Thread context is a runtime concern. |
+| `process: { command, args }` + `resolveLaunchConfiguration(context)` | `resolveLaunch(threadId?)` | Collapses two properties into one synchronous method. No auth resolution — auth is the caller's responsibility via env vars. |
 | `preflightSessionStart()` | Deleted | Never called in production. Auth errors should surface at thread start. |
 | `encodeToolCallResponse()` | Deleted | All providers accept `{ contentItems, success }` as JSON-RPC result. Add back if a provider ever needs custom encoding. |
 | `TProviderEvent`, `TProviderCommand` generics | None | Wire types are internal to each adapter file. `translateEvent` takes `unknown`, `buildCommand` returns `JsonRpcMessage`. |
@@ -331,7 +328,7 @@ steerTurn({ threadId, expectedTurnId, input })
 | `decodeToolCallRequest({ requestId, method, params })` | `decodeToolCallRequest(JsonRpcMessage)` | Takes raw JSON-RPC message instead of pre-parsed fields. Runtime no longer strips `id` before calling adapter. |
 | No `thread/stop` command | `AdapterCommand` has `thread/stop` | New — current code stops threads by killing the process. Gives providers a chance to clean up gracefully. |
 | `thread/resume` has no `dynamicTools` | `thread/resume` gains `dynamicTools` | New — current `ProviderRequest` already has `resumePath` on `thread/resume`, but `dynamicTools` was only on `thread/start`. |
-| `process` + `resolveLaunchConfiguration` coexist | Single `resolveLaunch(threadId?)` | Current adapter has both a static `process` property AND an optional async `resolveLaunchConfiguration`. New design collapses to one async method. Takes optional threadId for per-thread isolation. |
+| `process` + `resolveLaunchConfiguration` coexist | Single `resolveLaunch(threadId?)` | Collapses both into one synchronous method. Takes optional threadId for per-thread isolation. |
 | `EnvironmentDaemonProviderSpec.launchCommand/launchArgs` | Dropped | Launch wrappers (Docker exec, etc.) are not supported. If Docker support is needed, the env-daemon handles it at a higher level (different workspacePath/env), not by wrapping the provider command. |
 | Single child per provider assumed | `requiresThreadIsolation` flag | Pi needs per-thread process isolation. The adapter declares this; the runtime handles spawning/routing internally. |
 
@@ -341,7 +338,6 @@ steerTurn({ threadId, expectedTurnId, input })
 - **Process management** — spawning, stdio buffering, JSON-RPC framing, timeouts, crash detection
 - **Thread-to-process routing** — mapping thread IDs to child processes, provider thread ID extraction
 - **Provider initialization** — the `initialize` handshake with the provider process
-- **Temp file cleanup** — files created by `resolveLaunch()` are tracked and removed on `shutdown()`
 
 ## Lifecycle
 
@@ -352,7 +348,7 @@ createAgentRuntime(options)
   │     ├── checks adapter.requiresThreadIsolation
   │     │     false → reuse existing process for this providerId
   │     │     true  → spawn per-thread process
-  │     ├── adapter.resolveLaunch(threadId?) → { command, args, env, tempFiles }
+  │     ├── adapter.resolveLaunch(threadId?) → { command, args, env }
   │     ├── spawns child process, registers exit handler
   │     └── adapter.buildCommand({ type: "initialize" }) → JSON-RPC → child
   │
@@ -391,8 +387,7 @@ createAgentRuntime(options)
   ├── stopThread({ threadId })
   │
   └── shutdown()
-        ├── SIGTERM all children, wait, SIGKILL if needed
-        └── clean up tempFiles from resolveLaunch()
+        └── SIGTERM all children, wait, SIGKILL if needed
 ```
 
 ## Testing
