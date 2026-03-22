@@ -18,12 +18,12 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@bb/core": "workspace:*",
+    "@bb/domain": "workspace:*",
+    "hono": "^4.7.0",
     "zod": "^3.24.0"
   },
   "devDependencies": {
     "@bb/tsconfig": "workspace:*",
-    "@types/node": "^22.0.0",
     "typescript": "^5.7.0"
   }
 }

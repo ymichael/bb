@@ -309,9 +309,12 @@ importers:
 
   packages/env-daemon-contract:
     dependencies:
-      '@bb/core':
+      '@bb/domain':
         specifier: workspace:*
-        version: link:../core
+        version: link:../domain
+      hono:
+        specifier: ^4.7.0
+        version: 4.11.9
       zod:
         specifier: ^3.24.0
         version: 3.25.76
@@ -319,9 +322,6 @@ importers:
       '@bb/tsconfig':
         specifier: workspace:*
         version: link:../tsconfig
-      '@types/node':
-        specifier: ^22.0.0
-        version: 22.19.10
       typescript:
         specifier: ^5.7.0
         version: 5.9.3
