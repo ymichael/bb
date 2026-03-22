@@ -12,33 +12,32 @@ Delete the accumulated service code and rebuild from clean contract boundaries. 
 | `apps/cli` | Yes | CLI client, untouched |
 | `packages/ui-core` | Yes | Shared UI primitives |
 | `packages/tsconfig` | Yes | Build config |
-| `packages/provider-adapters` | Yes (code) | Recently rewritten. Package boundary needs work — consumers reach too deep into internals |
+| `packages/provider-adapters` | Yes (code) | Recently rewritten. Package boundary needs work — consumers reach too deep into internals. Deferred to later. |
 | `packages/templates` | Yes | Mostly markdown |
-| `packages/db` | Schema only | Keep drizzle schema + migrations + connection. Delete repository layer |
+| `packages/db` | Schema only | Keep drizzle schema + migrations + connection + ids. Delete repositories. |
 | `qa/` | Consolidate | Fold into single `qa/README.md` describing all features to QA |
 
 ## What We Delete
 
-| Package | Reason |
+| Package/Dir | Reason |
 |---------|--------|
-| `packages/core` | Replaced by `packages/domain`. Core mixes domain types, UI formatting, event rendering, Zod request schemas, runtime contracts, and helpers — too many concerns |
-| `packages/environment-daemon` | Rebuilt from contract. Protocol types move to contracts, runtime rebuilt |
-| `packages/environment` | Rebuilt. Provisioning strategies, git workspace management |
+| `packages/core` | Replaced by `packages/domain` + `packages/core-ui` shim. Core mixes domain types, UI formatting, event rendering, Zod request schemas, runtime contracts, and helpers. |
+| `packages/environment-daemon` | Rebuilt later. Protocol types move to contracts, runtime rebuilt from scratch. |
+| `packages/environment` | Rebuilt later. Provisioning strategies, git workspace management. |
 | `packages/api-contract` | Replaced by `packages/server-contract` |
-| `packages/env-daemon-contract` | Redefined — becomes the daemon's own server contract, not the session protocol |
-| `apps/server` | Rebuilt from contracts. The orchestrator, session services, event applier, command dispatcher — all of it |
+| `packages/env-daemon-contract` | Redefined — becomes the daemon's own HTTP server contract, not the session protocol (session protocol moves to `server-contract`) |
+| `apps/server/src/` | Rebuilt later from contracts |
 
 ## New Package Architecture
 
 ```
 packages/
 ├── domain/                  # Pure types — zero logic, zero dependencies
-├── logger/                  # Structured logging primitive
-├── env/                     # Declarative env var definitions (envsafe-style)
+├── core-ui/                 # Shim: view transforms from old core (cleanup target)
 ├── server-contract/         # What the server serves (HTTP contract)
 ├── env-daemon-contract/     # What the env-daemon serves (HTTP contract)
 ├── db/                      # Drizzle schema + migrations (no repositories)
-├── provider-adapters/       # Provider integration (keep, fix boundary)
+├── provider-adapters/       # Provider integration (keep, fix boundary later)
 ├── templates/               # Markdown templates (keep)
 ├── ui-core/                 # Shared UI (keep)
 └── tsconfig/                # Build config (keep)
@@ -46,200 +45,198 @@ packages/
 apps/
 ├── app/                     # Frontend (keep)
 ├── cli/                     # CLI (keep)
-└── server/                  # Rebuilt from contracts
+└── server/                  # Rebuilt later from contracts
 ```
+
+---
 
 ### `packages/domain`
 
 Pure domain types. No logic, no utilities, no formatting, no Zod schemas. Just TypeScript interfaces and type unions that describe the domain.
 
-**Contains:**
-- Entity types: `Project`, `Thread`, `EnvironmentRecord`
-- Thread state types: `ThreadStatus`, `ThreadWorkStatus`, `ThreadProvisioningState`
-- Event types: `ThreadEvent` (discriminated union), event data interfaces
-- Provider types: `ThreadProviderId`, `ProviderCapabilities`
-- Execution options: `ReasoningLevel`, `SandboxMode`, `ServiceTier`, `PromptInput`
-- Operation types: commit, squash-merge, promote/demote
-- System types: `SystemStatus`, `SystemHealthReport`, `SystemProviderInfo`
+**Zero dependencies.**
+
+**Source files to create (extracted from `packages/core/src/`):**
+
+| New file | Source | What moves |
+|----------|--------|-----------|
+| `src/project.ts` | `core/src/types.ts` | `Project` |
+| `src/environment.ts` | `core/src/types.ts` | `EnvironmentDescriptor`, `EnvironmentLocation`, `EnvironmentWorkspaceKind`, `EnvironmentProperties`, `EnvironmentRecord`, `PersistedEnvironmentRecord`, `EnvironmentCapability`, `EnvironmentCapabilities` |
+| `src/thread.ts` | `core/src/types.ts` | `Thread`, `ThreadStatus`, `ThreadType`, `ThreadWorkState`, `ThreadWorkStatus`, `ThreadWorkFileChange`, `ThreadPrimaryCheckoutState`, `ThreadProvisioningReadiness`, `ThreadProvisioningState`, `ThreadQueuedMessage`, `ThreadBuiltInAction`, `ThreadBuiltInActionId`, `ThreadTurnInitiator` |
+| `src/thread-event.ts` | `core/src/types.ts` + `core/src/provider-event.ts` | `ThreadEventRow`, `ThreadEventData`, `ThreadEventDataForType`, `ThreadEventDataByAppType`, `AppThreadEventType`, `ThreadEventOfType`, all event data interfaces (`SystemErrorEventData`, `ClientOutboundStartEventData`, etc.), `ThreadEvent`, `ThreadEventType`, `ThreadEventItem`, `ThreadEventItemStatus`, etc. |
+| `src/execution.ts` | `core/src/shared-types.ts` + `core/src/api-types.ts` | `ReasoningLevel`, `SandboxMode`, `ServiceTier`, `PromptInput`, `ModelReasoningEffort`, `ThreadExecutionOptions`, `ClientExecutionOptionsSnapshot` |
+| `src/operations.ts` | `core/src/api-types.ts` | `CommitOperationOptions`, `SquashMergeOperationOptions`, `ThreadOperationRequest`, `EnvironmentOperationRequest`, `CommitEnvironmentOperationResponse`, `SquashMergeEnvironmentOperationResponse`, `EnvironmentOperationFailureDetails`, `EnvironmentOperationResponse`, `PrimaryCheckoutStatus`, `PromotePrimaryCheckoutResponse`, `DemotePrimaryCheckoutResponse` |
+| `src/system.ts` | `core/src/api-types.ts` | `SystemStatus`, `SystemHealthReport`, `SystemHealthStorageBucket`, `SystemHealthDiskSummary`, `SystemHealthThreadCounts`, `SystemHealthEnvironmentDaemon*`, `ServerRuntimeMode`, `SystemProviderInfo`, `SystemEnvironmentInfo`, `SystemRestartPolicy`, `SystemRestartRequest`, `SystemRestartAcceptedResponse`, `SystemShutdownRequest`, `SystemShutdownAcceptedResponse`, `SystemShutdownBlockedResponse`, `SystemShutdownBlockingThread`, `AvailableModel` |
+| `src/api-requests.ts` | `core/src/api-types.ts` | `SpawnThreadRequest`, `TellThreadRequest`, `EnqueueThreadMessageRequest`, `SendQueuedThreadMessageRequest`, `SendQueuedThreadMessageResponse`, `UpdateThreadRequest`, `CreateProjectRequest`, `UpdateProjectRequest`, `EnvironmentCreationArgs`, `OpenPathTarget`, `OpenPathEditor`, `OpenPathRequest`, `OpenThreadPathRequest`, `ProjectFileSuggestion`, `PromptMentionSuggestion`, `UploadedPromptAttachment`, `ThreadToolGroupMessagesRequest`, `ThreadToolGroupMessagesResponse`, `ThreadContextWindowUsage`, `ThreadTimelineResponse`, `ThreadGitDiffCommitSummary`, `ThreadGitDiffSelection`, `ThreadGitDiffMode`, `ThreadGitDiffResponse` |
+| `src/provider.ts` | `core/src/thread-provider.ts` + `core/src/runtime-contracts.ts` | `ThreadProviderId`, `THREAD_PROVIDER_IDS`, `DEFAULT_THREAD_PROVIDER_ID`, `isThreadProviderId`, `ProviderCapabilities`, `ProviderToolCallRequest`, `ProviderToolCallResponse` |
+| `src/protocol.ts` | `core/src/protocol.ts` | `RealtimeEntity`, `ThreadChangeKind`, `SystemChangeKind`, `THREAD_CHANGE_KINDS`, `SYSTEM_CHANGE_KINDS`, `SubscribeMessage`, `UnsubscribeMessage`, `ClientMessage`, `ChangedMessage`, `ServerMessage` |
+| `src/assert-never.ts` | `core/src/assert-never.ts` | `assertNever` (pure utility, no deps) |
+| `src/index.ts` | — | Re-exports everything |
 
 **Does NOT contain:**
-- Zod schemas (those go in contract packages)
-- Formatting/display logic (UI rendering moves to `ui-core` or stays in `apps/app`)
-- `toUIMessages()`, `formatTimelineAsText()`, `buildThreadDetailRows()` — these are view concerns
-- `unknown-helpers.ts` — eliminated by proper boundaries
-- `wire-decoders.ts` — already deleted
-- Runtime contracts (`ThreadOrchestrator`) — that's a server concern
+- Zod schemas (go in contract packages)
+- `toUIMessages()`, `formatTimelineAsText()`, `buildThreadDetailRows()` (go in `core-ui` shim)
+- `unknown-helpers.ts` (eliminated)
+- `runtime-contracts.ts` `ThreadOrchestrator`, `SchedulerService` etc. (server concerns, rebuilt later)
+- `schemas.ts` (`promptInputSchema` etc. — go in `server-contract`)
+- `storage-paths.ts` (server concern)
 
-**Dependencies:** None. This package has zero dependencies.
+---
 
-**Open question:** Where do `toUIMessages` and `formatTimelineAsText` live? Options:
-- `packages/ui-core` — alongside other UI primitives
-- `apps/app/src/lib/` — app-specific concern
-- A new `packages/thread-ui` — if CLI also needs event rendering
+### `packages/core-ui`
 
-### `packages/logger`
+Temporary shim package so `apps/app` and `apps/cli` keep compiling after `packages/core` is deleted. This is a cleanup target, not a permanent home.
 
-Structured logging primitive designed for debuggability from day 1.
+**Dependencies:** `packages/domain`, `zod`
 
-**Goals:**
-- Structured JSON log entries with consistent fields (timestamp, level, component, correlationId)
-- Correlation IDs that flow across server ↔ daemon ↔ provider boundaries
-- Log levels: trace, debug, info, warn, error
-- Pluggable transports: console, file, rotating file
-- Zero-dependency core (no winston/pino — just a thin interface over structured output)
-- Child loggers with inherited context (`logger.child({ threadId, sessionId })`)
+**Files to move from `packages/core/src/`:**
 
-**Interface sketch:**
-```typescript
-interface Logger {
-  trace(message: string, data?: Record<string, unknown>): void;
-  debug(message: string, data?: Record<string, unknown>): void;
-  info(message: string, data?: Record<string, unknown>): void;
-  warn(message: string, data?: Record<string, unknown>): void;
-  error(message: string, data?: Record<string, unknown>): void;
-  child(context: Record<string, unknown>): Logger;
-}
+| File | What it provides | Used by |
+|------|-----------------|---------|
+| `ui-message.ts` | `UIMessage` and all subtypes (`UIUserMessage`, `UIAssistantTextMessage`, `UIToolCallMessage`, etc.) | app |
+| `to-ui-messages.ts` | `toUIMessages()` — transforms `ThreadEvent[]` → `UIMessage[]` | app |
+| `thread-detail-rows.ts` | `ThreadDetailRow`, `ThreadDetailMessageRow`, `ThreadDetailToolGroupRow`, `buildThreadDetailRows()` | app |
+| `format-timeline-text.ts` | `formatTimelineAsText()`, `TimelineFormat` | app, cli |
+| `thread-context-window-usage.ts` | `extractThreadContextWindowUsage()` | app |
+| `environment-display.ts` | `formatEnvironmentDisplay()`, `EnvironmentDisplayInfo` | app |
+| `environment-display-name.ts` | `formatEnvironmentDisplayName()`, `formatRuntimeKind()`, `isWorktreeEnvironmentReference()` | app |
+| `thread-operation-prompts.ts` | `buildCommitFailureFollowUpInstruction()`, `buildSquashMergeCommitFailureFollowUpInstruction()`, `buildSquashMergeConflictFollowUpInstruction()` | app |
+| `provider-event-utils.ts` | `deriveThreadTitleFromInput()`, `outputFromThreadEvent()` | app |
+| `unknown-helpers.ts` | `extractErrorMessage()`, `isRecord()`, `toRecord()` — still used by app and cli for error handling | app, cli |
+| `schemas.ts` | `promptInputSchema` — used by app for input validation | app |
 
-interface LogTransport {
-  write(entry: LogEntry): void;
-}
-
-interface LogEntry {
-  timestamp: number;
-  level: LogLevel;
-  message: string;
-  component?: string;
-  correlationId?: string;
-  data?: Record<string, unknown>;
-}
-```
-
-**Dependencies:** None.
-
-### `packages/env`
-
-Declarative environment variable definitions with validation and defaults.
-
-**Goals:**
-- Single source of truth for all env vars used across the system
-- Validation at startup — fail fast with clear error messages
-- Type-safe access — no `process.env.FOO?.trim()` scattered through code
-- Defaults documented in code, not in README
-
-**Interface sketch:**
-```typescript
-// Definition
-export const serverEnv = defineEnv({
-  BB_SERVER_PORT: { type: "number", default: 3334 },
-  BB_ROOT: { type: "string", default: "~/.bb" },
-  BB_RUNTIME_MODE: { type: "enum", values: ["development", "production"], default: "production" },
-  BB_ENV_DAEMON_AUTH_TOKEN: { type: "string", required: true },
-  BB_ENV_DAEMON_SESSION_URL: { type: "string", optional: true },
-  BB_SERVER_URL: { type: "string", optional: true },
-});
-
-// Usage — typed, validated
-const port = serverEnv.BB_SERVER_PORT; // number
-```
-
-**Dependencies:** None (or envsafe if we want to use it directly).
+---
 
 ### `packages/server-contract`
 
-The complete HTTP contract for the server. Defines every route the server exposes, with Zod schemas and typed hc() clients.
-
-**Two surfaces:**
-
-1. **Public API** (`/api/v1/*`) — consumed by `apps/app` and `apps/cli`
-   - Projects CRUD
-   - Threads CRUD + operations (tell, stop, archive, queue)
-   - Environments + operations
-   - System (status, health, models, shutdown, restart)
-   - Thread timeline, events, git-diff, work-status
-
-2. **Internal API** (`/internal/*`) — consumed by env-daemon processes
-   - Session open / welcome
-   - Session messages (heartbeat, event_batch, command_ack, command_result, provider_request, session_close)
-   - Session commands (long-poll)
-   - Bearer token auth
-
-**Contains:**
-- Zod schemas for all request and response payloads
-- Types derived from schemas via `z.infer<>`
-- Route type definitions (`ApiSchema`, `InternalSchema`)
-- `createPublicApiClient(baseUrl)` — hc() client for public API
-- `createInternalApiClient(baseUrl, authToken)` — hc() client for internal API
-- Session protocol types (what's currently in `env-daemon-contract/session-protocol.ts`)
-- WebSocket subscription protocol types
+The complete HTTP contract for the server. Two surfaces.
 
 **Dependencies:** `packages/domain`, `zod`, `hono`
+
+**Contains:**
+
+1. **Public API schema** (from current `packages/api-contract/src/schema.ts`)
+   - All route definitions: projects, threads, environments, system
+   - `createPublicApiClient(baseUrl)` using `hc()`
+
+2. **Internal session API schema** (from current `packages/env-daemon-contract/src/session-protocol.ts`)
+   - Session protocol Zod schemas (open, welcome, heartbeat, event batch, event ack, command batch, command ack, command result, provider request/response, close, replaced)
+   - Types derived from schemas via `z.infer<>`
+   - Session protocol constants, capability negotiation helpers, type guards
+   - Internal route definitions
+   - `createInternalApiClient(baseUrl, authToken)` using `hc()` or typed client class
+
+3. **Session HTTP client** (from current `packages/env-daemon-contract/src/client.ts`)
+   - `EnvironmentDaemonSessionClient` — typed HTTP client for daemon→server session communication
+   - Response validation via Zod schemas
+
+4. **WebSocket protocol** (from current `packages/core/src/protocol.ts`)
+   - `ClientMessage`, `ServerMessage`, `ChangedMessage` — realtime subscription types
+   - Note: types also in `domain/protocol.ts`, but Zod schemas for validation go here
+
+**Source material:**
+- `packages/api-contract/src/schema.ts` → public route types
+- `packages/api-contract/src/index.ts` → `createApiClient()` pattern
+- `packages/env-daemon-contract/src/session-protocol.ts` → session schemas + types
+- `packages/env-daemon-contract/src/client.ts` → session HTTP client
+- `packages/env-daemon-contract/src/index.ts` → exports
+
+---
 
 ### `packages/env-daemon-contract`
 
 The HTTP contract for the environment daemon's control endpoint. The server makes requests TO the daemon.
 
-**Surface:** The daemon's HTTP server that accepts control requests from the server.
-
-**Contains:**
-- Route type definitions for daemon control endpoint
-- Zod schemas for control requests/responses
-- `createDaemonControlClient(baseUrl, authToken)` — hc() client
-- Command types: `EnvironmentDaemonCommand` (discriminated union of provider.ensure, thread.start, thread.resume, etc.)
-- Event types: `EnvironmentDaemonEvent` (discriminated union)
-- Command envelope, ack, delivery state types
-- Status snapshot type
-
 **Dependencies:** `packages/domain`, `zod`, `hono`
+
+**Source material** (from current `packages/environment-daemon/src/protocol.ts`):
+
+| What | Source |
+|------|--------|
+| `EnvironmentDaemonCommand` | Discriminated union of all command types (provider.ensure, thread.start, thread.resume, thread.stop, turn.run, thread.rename, provider.list_models, provider.list_catalog, workspace.status, workspace.diff) |
+| `EnvironmentDaemonEvent` | Discriminated union of all event types (environment.ready/degraded, thread.started/stopped, turn.started/completed, provider.event/stderr/rpc_error, workspace.status.changed) |
+| `EnvironmentDaemonCommandEnvelope` | Command metadata wrapper |
+| `EnvironmentDaemonCommandAck` | Command delivery acknowledgement + `getProviderThreadIdFromCommandResult()` |
+| `EnvironmentDaemonStatusSnapshot` | Daemon status reporting |
+| `EnvironmentDaemonControlRequest` | Control message union (command, provider.ensure, status) |
+| `EnvironmentDaemonControlResponse` | Control response union |
+| Provider/connection types | `EnvironmentDaemonProviderSpec`, `EnvironmentDaemonConnectionTarget`, `EnvironmentDaemonServerConnectionConfig` |
+| Zod command schemas | All command validation schemas (currently in `protocol.ts`) |
+| `createDaemonControlClient()` | hc() client for control endpoint |
+
+---
 
 ## Migration Strategy
 
-### Phase 1: Foundation packages (no breaking changes)
+Broken codebase during migration is fine. Typecheck passing at the end is nice but not required.
 
-1. Create `packages/domain` — extract pure types from `packages/core`
-2. Create `packages/logger` — new package
-3. Create `packages/env` — new package
-4. Keep `packages/core` as a re-export shim so nothing breaks yet
+### Step 1: Create `packages/domain`
 
-### Phase 2: Contract packages
+Extract pure types from `packages/core` into `packages/domain` using the file mapping above. Create `package.json` (zero dependencies), `tsconfig.json`, and `src/index.ts` that re-exports all type files.
 
-5. Create `packages/server-contract` — merge public API + internal session contracts
-6. Redefine `packages/env-daemon-contract` — daemon control endpoint contract
-7. Update `apps/app` and `apps/cli` to import from `server-contract`
+### Step 2: Create `packages/server-contract`
 
-### Phase 3: Delete and rebuild
+Merge `packages/api-contract` and the session protocol from `packages/env-daemon-contract` into one package. Create public API + internal API route types, hc() clients, Zod schemas.
 
-8. Delete `packages/core` (replaced by `domain`)
-9. Delete `packages/environment-daemon` (protocol in contracts, runtime rebuilt)
-10. Delete `packages/environment` (rebuilt)
-11. Delete `packages/api-contract` (replaced by `server-contract`)
-12. Delete `apps/server/src/` (rebuilt from contracts)
-13. Delete repository layer from `packages/db`
+### Step 3: Create `packages/env-daemon-contract` (redefined)
 
-### Phase 4: Rebuild services
+Extract daemon control endpoint types from `packages/environment-daemon/src/protocol.ts`. Create Zod schemas for control requests/responses. Create hc() client.
 
-14. Rebuild `apps/server` from contracts — small, focused services
-15. Rebuild environment daemon runtime
-16. Rebuild environment provisioning
+### Step 4: Create `packages/core-ui` shim
 
-### Phase 5: Fix provider-adapters boundary
+Move view utilities from `packages/core` into `packages/core-ui` using the file list above. Update `apps/app` and `apps/cli` imports from `@bb/core` to `@bb/domain` (for types) and `@bb/core-ui` (for view utilities).
 
-17. Define clean public API for `packages/provider-adapters`
-18. Hide internal adapter implementations behind the public interface
+### Step 5: Delete
 
-## Consolidate QA
+- Delete `apps/server/src/` (keep `apps/server/package.json` as placeholder)
+- Delete `packages/environment-daemon/` entirely
+- Delete `packages/environment/` entirely
+- Delete `packages/core/` entirely
+- Delete `packages/api-contract/` entirely
+- Delete `packages/db/src/repositories.ts` and `packages/db/src/environment-daemon-repositories.ts` (keep `schema.ts`, `connection.ts`, `ids.ts`, `migrate.ts`, `index.ts`)
+- Delete `packages/db/test/` (repository tests)
 
-Fold `qa/` into `qa/README.md`:
-- Server lifecycle (startup, shutdown, restart)
-- Thread lifecycle (spawn, tell, stop, archive)
-- Environment provisioning (local, docker, worktree)
-- Env-daemon session protocol (open, heartbeat, commands, events)
-- Provider integration (codex, claude-code, pi)
-- E2E scenarios (multi-thread, shared environment, recovery)
+### Step 6 (later): Rebuild
 
-## Open Questions
+- Rebuild `apps/server` from contracts — small, focused services
+- Rebuild environment daemon runtime
+- Rebuild environment provisioning
+- Create `packages/logger` and `packages/env`
+- Fix `packages/provider-adapters` package boundary
+- Clean up `packages/core-ui` shim — move view logic to proper homes
 
-- **`toUIMessages` / `formatTimelineAsText` / `buildThreadDetailRows`**: These are view-layer transforms. Do they go in `ui-core`, `apps/app`, or a new `thread-ui` package? The CLI also uses `formatTimelineAsText`.
-- **Provider adapter boundary**: What should the clean public API look like? Current consumers reach into `createProviderAdapter`, adapter-specific types, generated schemas. What's the right abstraction?
-- **WebSocket protocol**: Currently in `packages/core/protocol.ts`. Moves to `server-contract` since it's a server concern? Or stays in `domain` since both app and server need the types?
-- **`PromptInput` Zod schema**: Currently in `packages/core/schemas.ts`, used by both route validation and command validation. Goes in `server-contract`? Or `domain` (as one of the few schemas that lives with types)?
-- **Phasing**: Do we do Phase 3 (delete) before Phase 4 (rebuild), leaving a broken codebase? Or interleave them — rebuild each service as we delete the old one?
+## Decisions
+
+- **`toUIMessages` / view transforms**: Shim package `core-ui` for now. Not worth designing the right home until services are rebuilt.
+- **WebSocket protocol types**: Live in `packages/domain/src/protocol.ts` (the types). Validation schemas go in `server-contract`.
+- **`PromptInput` Zod schema**: Goes in `server-contract` — schemas belong at contract boundaries.
+- **Logger / env packages**: Deferred to Step 6. Get boundaries in place first.
+- **Phasing**: Delete before rebuild. Broken codebase is acceptable.
+- **No backward compat**: No re-export shims, no legacy aliases. Clean break.
+
+## Dependency Graph
+
+```
+                    domain (zero deps)
+                   /      |          \
+         server-contract  |  env-daemon-contract
+          (domain, zod,   |   (domain, zod, hono)
+           hono)          |
+              |           |
+         core-ui          |
+      (domain, zod)       |
+        /       \         |
+    apps/app  apps/cli    |
+                     provider-adapters
+                      (domain)
+```
+
+## What `apps/app` and `apps/cli` Import from `@bb/core` Today
+
+These imports need to be redirected to `@bb/domain` or `@bb/core-ui`:
+
+**→ `@bb/domain` (pure types):**
+`Thread`, `ThreadStatus`, `ThreadType`, `ThreadWorkStatus`, `ThreadQueuedMessage`, `ThreadEventRow`, `EnvironmentRecord`, `EnvironmentCapabilities`, `Project`, `AvailableModel`, `ReasoningLevel`, `SandboxMode`, `ServiceTier`, `PromptInput`, `SystemProviderInfo`, `SystemEnvironmentInfo`, `SystemHealthReport`, `SystemStatus`, `SystemRestartPolicy`, `SystemRestartAcceptedResponse`, `SystemRestartRequest`, `SystemShutdownAcceptedResponse`, `SystemShutdownRequest`, `SystemShutdownBlockingThread`, `SystemShutdownBlockedResponse`, `ProjectFileSuggestion`, `ThreadExecutionOptions`, `EnvironmentOperationResponse`, `ThreadTimelineResponse`, `ThreadToolGroupMessagesResponse`, `ThreadGitDiffResponse`, `ThreadGitDiffSelection`, `UploadedPromptAttachment`, `OpenPathTarget`, `PrimaryCheckoutStatus`, `CommitOperationOptions`, `SquashMergeOperationOptions`, `CommitEnvironmentOperationResponse`, `SquashMergeEnvironmentOperationResponse`, `EnvironmentOperationFailureDetails`, `OpenThreadPathRequest`, `SendQueuedThreadMessageRequest`, `SendQueuedThreadMessageResponse`, `EnqueueThreadMessageRequest`, `TellThreadRequest`, `SpawnThreadRequest`, `UpdateProjectRequest`, `CreateProjectRequest`, `UpdateThreadRequest`, `ServerRuntimeMode`, `PromptMentionSuggestion`, `OpenPathEditor`, `ThreadEvent`, `ThreadEventType`, `RealtimeEntity`, `ServerMessage`, `ClientMessage`, `ChangedMessage`, `ThreadChangeKind`, `assertNever`, `ProviderToolCallRequest`, `ProviderToolCallResponse`
+
+**→ `@bb/core-ui` (view utilities):**
+`UIMessage`, `UIUserMessage`, `UIAssistantTextMessage`, `UIAssistantReasoningMessage`, `UIToolCallMessage`, `UIToolExploringMessage`, `UIWebSearchMessage`, `UIFileEditMessage`, `UIErrorMessage`, `UIDebugRawEventMessage`, `UIOperationMessage`, `UIProvisioningMetadata`, `UIProvisioningTranscriptEntry`, `ThreadDetailRow`, `ThreadDetailMessageRow`, `ThreadDetailToolGroupRow`, `toUIMessages`, `buildThreadDetailRows`, `formatTimelineAsText`, `TimelineFormat`, `extractThreadContextWindowUsage`, `ThreadContextWindowUsage`, `formatEnvironmentDisplay`, `EnvironmentDisplayInfo`, `formatEnvironmentDisplayName`, `buildCommitFailureFollowUpInstruction`, `buildSquashMergeCommitFailureFollowUpInstruction`, `buildSquashMergeConflictFollowUpInstruction`, `deriveThreadTitleFromInput`, `outputFromThreadEvent`, `extractErrorMessage`, `toRecord`, `isRecord`, `promptInputSchema`
