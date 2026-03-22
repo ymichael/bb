@@ -173,8 +173,6 @@ importers:
         specifier: ^5.7.0
         version: 5.9.3
 
-  apps/server: {}
-
   packages/core-ui:
     dependencies:
       '@bb/domain':
