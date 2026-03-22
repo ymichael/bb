@@ -254,7 +254,7 @@ Temporary shim so `apps/app` and `apps/cli` keep working. Cleanup target.
 - `toUIMessages()`, `UIMessage` types
 - `buildThreadDetailRows()`, detail row types
 - `formatTimelineAsText()`
-- `extractThreadContextWindowUsage()`, `ThreadContextWindowUsage` (move type to domain)
+- `extractThreadContextWindowUsage()`, `ThreadContextWindowUsage` (type stays in core-ui alongside its function)
 - `formatEnvironmentDisplay()`, `formatEnvironmentDisplayName()`
 - `deriveThreadTitleFromInput()`, `outputFromThreadEvent()`
 - `extractErrorMessage()`, `isRecord()` (still needed for error handling)
@@ -298,15 +298,16 @@ Small package. Shared entity types, enums, event types, execution vocabulary. Ha
 
 ### Step 4: Create `packages/core-ui` shim
 
-- Move view utilities from `packages/core`
+- Move view utilities and their tests from `packages/core`
+- Verify migrated tests pass
+
+### Step 5: Update consumers
+
 - Update `apps/app` and `apps/cli` imports from `@bb/core` to `@bb/domain` / `@bb/core-ui` / `@bb/server-contract`
+- Update `packages/db` dependency from `@bb/core` to `@bb/domain`, rewrite imports in schema.ts
+- Goal: all import paths point to new packages. Some files may still have type errors if the new packages don't export exactly the same shapes — that's acceptable.
 
-### Step 4.5: Update `packages/db`
-
-- Update `packages/db` dependency from `@bb/core` to `@bb/domain`
-- Rewrite imports in schema.ts. Must happen BEFORE deleting core.
-
-### Step 5: Delete
+### Step 6: Delete
 
 - `apps/server/src/` (keep `apps/server/package.json` as placeholder)
 - `packages/environment-daemon/` entirely
@@ -315,64 +316,7 @@ Small package. Shared entity types, enums, event types, execution vocabulary. Ha
 - `packages/api-contract/` entirely
 - Repository layer from `packages/db` (`repositories.ts`, `environment-daemon-repositories.ts`, `test/`)
 
-### Step 6: NOT part of this plan
-
-Rebuilding the server, env-daemon, agent-runtime, logger, and env packages is a separate effort. This plan ends at Step 5. For reference, the rebuild order would be:
-
-1. `packages/logger`, `packages/env`
-2. `packages/agent-runtime` — see `plans/agent-runtime-package.md`
-3. Environment daemon runtime
-4. `apps/server`
-5. Clean up `core-ui` shim
-
----
-
-## `packages/logger` (Step 6)
-
-Structured logging designed for debuggability. Created during rebuild, not during the contract setup phase.
-
-**Dependencies:** None.
-
-**Interface:**
-```typescript
-interface Logger {
-  trace(message: string, data?: Record<string, unknown>): void;
-  debug(message: string, data?: Record<string, unknown>): void;
-  info(message: string, data?: Record<string, unknown>): void;
-  warn(message: string, data?: Record<string, unknown>): void;
-  error(message: string, data?: Record<string, unknown>): void;
-  child(context: Record<string, unknown>): Logger;
-}
-```
-
-**Key properties:**
-- Structured JSON entries with timestamp, level, component, correlationId
-- Correlation IDs flow across server ↔ daemon ↔ provider boundaries
-- Pluggable transports (console, file, rotating file)
-- Child loggers with inherited context (`logger.child({ threadId, sessionId })`)
-- Zero dependencies — thin interface over structured output
-
----
-
-## `packages/env` (Step 6)
-
-Declarative env var definitions with validation and defaults. Uses something like envsafe. Created during rebuild.
-
-**Dependencies:** None (or envsafe).
-
-**Usage:**
-```typescript
-export const serverEnv = defineEnv({
-  BB_SERVER_PORT: { type: "number", default: 3334 },
-  BB_ROOT: { type: "string", default: "~/.bb" },
-  BB_RUNTIME_MODE: { type: "enum", values: ["development", "production"], default: "production" },
-  BB_ENV_DAEMON_AUTH_TOKEN: { type: "string", required: true },
-  BB_ENV_DAEMON_SESSION_URL: { type: "string", optional: true },
-});
-
-// Typed, validated at startup — no process.env.FOO?.trim() scattered through code
-const port = serverEnv.BB_SERVER_PORT; // number
-```
+This plan ends at Step 5. Rebuilding services (`server`, `env-daemon`, `agent-runtime`, `logger`, `env`) is a separate effort — see `plans/agent-runtime-package.md` for the agent-runtime spec.
 
 ---
 
@@ -409,21 +353,22 @@ provider-adapters will break. It stays broken until Step 6 when it's absorbed in
 
 ## Scope
 
-This plan covers Steps 1-5 only: create contract packages, migrate view utilities, delete old code. Rebuilding services is a separate plan.
+This plan covers Steps 1-6 only: create contract packages, migrate view utilities, update consumers, delete old code. Rebuilding services is a separate plan.
 
 **In scope:**
 - Create `domain`, `server-contract`, `env-daemon-contract`, `core-ui`
-- Rewrite imports in `apps/app`, `apps/cli`, `packages/db`
+- Update import paths in `apps/app`, `apps/cli`, `packages/db`
 - Delete `core`, `environment-daemon`, `environment`, `api-contract`, `apps/server/src/`, db repositories
 
 **Out of scope:**
 - Rebuilding the server, env-daemon, or environment provisioning
 - Creating `agent-runtime`, `logger`, `env`
 - Fixing `provider-adapters` (stays broken until absorbed)
+- Making `apps/app` and `apps/cli` fully typecheck (import paths correct, type errors acceptable)
 
 ## Validation
 
-**After Steps 1-5, these should be true:**
+**After Steps 1-6, these should be true:**
 - `packages/domain` typechecks (depends on `zod`)
 - `packages/server-contract` typechecks (depends on `domain`, `zod`, `hono`)
 - `packages/env-daemon-contract` typechecks (depends on `domain`, `zod`, `hono`)
@@ -432,11 +377,12 @@ This plan covers Steps 1-5 only: create contract packages, migrate view utilitie
   - `thread-detail-rows.test.ts` passes
   - `format-timeline-text.test.ts` passes
 - `packages/db` typechecks (depends on `domain`)
+- `apps/app` and `apps/cli` have all import paths updated (Step 5). Type errors from shape mismatches are acceptable; broken import paths are not.
 
 **These will be broken (expected):**
 - `apps/server` — deleted, placeholder only
 - `packages/provider-adapters` — depends on deleted `@bb/core`
-- `apps/app` and `apps/cli` — may have residual import issues
+- `apps/app` and `apps/cli` — type errors acceptable, import paths must be correct
 - All root workspace scripts (`pnpm build`, `pnpm dev`, etc.) — expected to fail
 
 ## Resolved Questions

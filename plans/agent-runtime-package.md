@@ -1,5 +1,7 @@
 # `@bb/agent-runtime`
 
+This is a **package spec**, not an implementation plan. It defines the public API, internal adapter interface, and migration mapping. Implementation steps and sequencing will be planned separately when this package is built.
+
 ## Purpose
 
 Manages agent provider processes (codex, claude-code, pi) and exposes a clean session interface. Handles process spawning, stdio framing, JSON-RPC dispatch, event translation, tool call routing, crash detection, and shutdown. Consumers say "start a thread, run a turn, give me events" — they never touch processes, adapters, or wire formats.
@@ -25,7 +27,8 @@ interface ProviderInfo {
   available: boolean;
 }
 
-/** What providers are available on this machine? */
+/** What providers are available on this machine? Checks the static
+ *  adapter registry — does not require a runtime instance. */
 function listAvailableProviders(): ProviderInfo[];
 
 /** Which provider should we use by default? */
@@ -182,7 +185,10 @@ interface ProviderAdapter {
    */
   resolveLaunch(): Promise<ProviderLaunch>;
 
-  /** Translate a runtime command into the provider's JSON-RPC wire format */
+  /** Translate a runtime command into the provider's JSON-RPC wire format.
+   *  Returns null if the provider doesn't support this command
+   *  (e.g., rename on a provider without supportsRename). The runtime
+   *  silently skips null — it is not an error. */
   buildCommand(command: AdapterCommand): JsonRpcMessage | null;
 
   /** Translate a raw provider event into canonical ThreadEvents */
