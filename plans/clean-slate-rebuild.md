@@ -89,7 +89,8 @@ ToolCallRequest, ToolCallResponse, DynamicTool
 // Environment
 EnvironmentDescriptor, EnvironmentProperties, EnvironmentCapabilities
 
-// No utilities — assertNever is a one-liner, inline it where needed
+// No utilities in domain. assertNever is used by core-ui code —
+// include it in core-ui or inline it in each file.
 ```
 
 **What does NOT belong here:**
@@ -148,7 +149,18 @@ export const apiErrorSchema = z.object({
   details: z.unknown().optional(),
 });
 export type ApiError = z.infer<typeof apiErrorSchema>;
+```
 
+### Error status typing for `hc()` clients
+
+For endpoints that return different response types by status code, model each status separately so `hc()` narrows `res.json()` correctly:
+
+```typescript
+// Good: hc() narrows by status
+"/system/shutdown": {
+  $post: Endpoint<{ json: SystemShutdownRequest }, SystemShutdownAcceptedResponse, 200>
+       | Endpoint<{ json: SystemShutdownRequest }, SystemShutdownBlockedResponse, 409>;
+};
 ```
 
 ### Public API (`/api/v1/*`)
@@ -388,11 +400,11 @@ This plan covers Steps 1-6 only: create contract packages, migrate view utilitie
 ## Resolved Questions
 
 - **`buildCommitFailureFollowUpInstruction`**: Moves to `apps/app` (not core-ui). Depends on `@bb/templates` and server operation types — too coupled for core-ui.
-- **CLI imports from `@bb/environment-daemon`**: Verified — CLI does NOT import from `@bb/environment-daemon` today. No action needed.
+- **CLI imports from `@bb/environment-daemon`**: CLI DOES import from it — `apps/cli/src/commands/environment-daemon.ts` imports `resolveEnvironmentDaemonServiceOptions` and `startEnvironmentDaemonService`. This file manages the daemon lifecycle from the CLI. After deletion, these imports break — the CLI command file will need to be stubbed or removed in Step 6.
 - **`ThreadContextWindowUsage`**: Moves to domain alongside `extractThreadContextWindowUsage` in core-ui.
 - **`ProviderCapabilities` / `AvailableModel`**: Stay in domain despite originating from `api-types.ts` — they're genuinely shared vocabulary used by agent-runtime.
 - **WebSocket types**: Plain TypeScript types in server-contract, no Zod schemas. WebSocket messages are simple enough that runtime validation isn't needed. This is an explicit exception to "Zod is source of truth."
-- **`@bb/templates` dependency chain**: `@bb/templates` has zero workspace dependencies (just `esbuild` dev dep). Safe to keep.
+- **`@bb/templates` dependency chain**: `@bb/templates` has zero workspace dependencies. Has `gray-matter` and `handlebars` as production deps, `esbuild` as dev dep. Safe to keep.
 
 ## Open Questions
 

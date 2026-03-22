@@ -313,7 +313,7 @@ steerTurn({ threadId, expectedTurnId, input })
 | `buildCommand` returns `TProviderCommand` | Returns `JsonRpcMessage \| null` | JSON-RPC 2.0 — all providers use this format. |
 | `decodeToolCallRequest({ requestId, method, params })` | `decodeToolCallRequest(JsonRpcMessage)` | Takes raw JSON-RPC message instead of pre-parsed fields. Runtime no longer strips `id` before calling adapter. |
 | No `thread/stop` command | `AdapterCommand` has `thread/stop` | New — current code stops threads by killing the process. Gives providers a chance to clean up gracefully. |
-| `thread/resume` has no `dynamicTools` | `thread/resume` gains `dynamicTools` and `resumePath` | New — current `ProviderRequest` only has these on `thread/start`. |
+| `thread/resume` has no `dynamicTools` | `thread/resume` gains `dynamicTools` | New — current `ProviderRequest` already has `resumePath` on `thread/resume`, but `dynamicTools` was only on `thread/start`. |
 | `process` + `resolveLaunchConfiguration` coexist | Single `resolveLaunch()` | Current adapter has both a static `process` property AND an optional async `resolveLaunchConfiguration`. New design collapses to one async method that returns the full launch config. |
 
 ### What else stays internal
