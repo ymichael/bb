@@ -8,10 +8,8 @@ import { registerProviderCommands } from "../commands/provider.js";
 import { registerManagerCommands } from "../commands/manager.js";
 import { registerThreadCommands } from "../commands/thread.js";
 import { registerServerCommands } from "../commands/server.js";
-import { registerEnvironmentDaemonCommand } from "../commands/environment-daemon.js";
-
 // Commands intentionally excluded from --json requirement
-const EXCLUDED_COMMANDS = new Set(["environment-daemon"]);
+const EXCLUDED_COMMANDS = new Set<string>();
 
 function collectLeafCommands(cmd: Command, prefix = ""): Array<{ path: string; cmd: Command }> {
   const results: Array<{ path: string; cmd: Command }> = [];
@@ -38,7 +36,6 @@ describe("CLI --json flag enforcement", () => {
     registerManagerCommands(program, getUrl);
     registerThreadCommands(program, getUrl);
     registerServerCommands(program, getUrl);
-    registerEnvironmentDaemonCommand(program);
 
     const commands = collectLeafCommands(program);
     const missing: string[] = [];
