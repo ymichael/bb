@@ -11,7 +11,7 @@ Replaces `packages/provider-adapters` (absorbed) and the provider management cod
 - `@bb/domain` — shared types (`ThreadEvent`, `PromptInput`, `ToolCallRequest`, etc.)
 - `@bb/templates` — markdown templates (used by provider adapters for base instructions)
 
-No other workspace dependencies. No `zod`, no `hono`.
+No other workspace dependencies. No `hono`. (Transitively depends on `zod` through `@bb/domain`.)
 
 ## Public API
 
@@ -305,6 +305,10 @@ steerTurn({ threadId, expectedTurnId, input })
 | `encodeToolCallResponse()` | Deleted | All providers accept `{ contentItems, success }` as JSON-RPC result. Add back if a provider ever needs custom encoding. |
 | `TProviderEvent`, `TProviderCommand` generics | None | Wire types are internal to each adapter file. `translateEvent` takes `unknown`, `buildCommand` returns `JsonRpcMessage`. |
 | `buildCommand` returns `TProviderCommand` | Returns `JsonRpcMessage \| null` | JSON-RPC 2.0 — all providers use this format. |
+| `decodeToolCallRequest({ requestId, method, params })` | `decodeToolCallRequest(JsonRpcMessage)` | Takes raw JSON-RPC message instead of pre-parsed fields. Runtime no longer strips `id` before calling adapter. |
+| No `thread/stop` command | `AdapterCommand` has `thread/stop` | New — current code stops threads by killing the process. Gives providers a chance to clean up gracefully. |
+| `thread/resume` has no `dynamicTools` | `thread/resume` gains `dynamicTools` and `resumePath` | New — current `ProviderRequest` only has these on `thread/start`. |
+| `process` + `resolveLaunchConfiguration` coexist | Single `resolveLaunch()` | Current adapter has both a static `process` property AND an optional async `resolveLaunchConfiguration`. New design collapses to one async method that returns the full launch config. |
 
 ### What else stays internal
 

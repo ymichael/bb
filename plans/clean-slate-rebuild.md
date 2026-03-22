@@ -244,19 +244,29 @@ export function createDaemonControlClient(baseUrl: string, authToken: string) {
 
 Temporary shim so `apps/app` and `apps/cli` keep working. Cleanup target.
 
-**Dependencies:** `@bb/domain`
+**Dependencies:** `@bb/domain`, `@bb/templates`
 
-`core-ui` does NOT depend on `server-contract`. If a view utility needs API request/response types, either pull the type into domain (if it's truly shared vocabulary) or move the utility to the consumer that owns those types.
+**Dependency note:** Some utilities need types that currently live in `api-types.ts`:
+- `extractThreadContextWindowUsage` needs `ThreadContextWindowUsage` — move this type to domain (it's a view-layer data shape, not an API request/response)
+- `thread-operation-prompts.ts` needs `ThreadOperationRequest` from `api-types.ts` AND `renderTemplate` from `@bb/templates` — these prompts are tightly coupled to server operations. **Move these helpers to `apps/app`** instead of core-ui, since they're only consumed by the app. If CLI also needs them, add `@bb/templates` as a core-ui dependency and move `ThreadOperationRequest` to domain.
 
 **Contains (moved from `packages/core/src/`):**
 - `toUIMessages()`, `UIMessage` types
 - `buildThreadDetailRows()`, detail row types
 - `formatTimelineAsText()`
-- `extractThreadContextWindowUsage()`
+- `extractThreadContextWindowUsage()`, `ThreadContextWindowUsage` (move type to domain)
 - `formatEnvironmentDisplay()`, `formatEnvironmentDisplayName()`
-- `buildCommitFailureFollowUpInstruction()`, squash-merge prompts
 - `deriveThreadTitleFromInput()`, `outputFromThreadEvent()`
 - `extractErrorMessage()`, `isRecord()` (still needed for error handling)
+
+**Does NOT contain:**
+- `buildCommitFailureFollowUpInstruction()`, squash-merge prompts — these depend on `@bb/templates` and server operation types. Move to `apps/app` directly.
+
+**Tests:** Migrate existing test suites alongside the code:
+- `to-ui-messages.test.ts` → `packages/core-ui/test/`
+- `thread-detail-rows.test.ts` → `packages/core-ui/test/`
+- `format-timeline-text.test.ts` → `packages/core-ui/test/`
+These are canonical view behavior tests. They must pass after migration.
 
 ---
 
@@ -273,7 +283,8 @@ Small package. Shared entity types, enums, event types, execution vocabulary. Ha
 - Define Zod schemas for all public API request/response payloads, derive types via `z.infer<>`
 - Define `PublicApiSchema` route type with Endpoint output types referencing `z.infer<>` / domain types
 - `createPublicApiClient()` with `hc()`
-- Move session protocol schemas from current `env-daemon-contract`, including `EnvironmentDaemonCommand`/`Event`
+- Move session protocol schemas from current `env-daemon-contract/session-protocol.ts`
+- Move `EnvironmentDaemonCommand`/`Event` from `environment-daemon/protocol.ts` (NOT from env-daemon-contract — they live in the daemon package)
 - Define `InternalApiSchema` route type, `createInternalApiClient()` with `hc()`
 - Define error response schema and domain error codes
 - Define WebSocket protocol types
@@ -306,12 +317,13 @@ Small package. Shared entity types, enums, event types, execution vocabulary. Ha
 
 ### Step 6 (later): Rebuild
 
-- `apps/server` from contracts
-- Environment daemon runtime (uses `@bb/agent-runtime`)
-- `packages/agent-runtime` from provider-adapters — see `plans/agent-runtime-package.md`
-- `packages/logger` — structured logging primitive (see below)
-- `packages/env` — declarative env var definitions (see below)
-- Clean up `core-ui` shim
+Build order matters — each layer depends on the one above:
+
+1. `packages/logger`, `packages/env` — foundation, no ordering constraint
+2. `packages/agent-runtime` from provider-adapters — see `plans/agent-runtime-package.md`
+3. Environment daemon runtime (depends on `agent-runtime`, `server-contract`, `env-daemon-contract`)
+4. `apps/server` from contracts (depends on everything above)
+5. Clean up `core-ui` shim — move view logic to proper homes
 
 ---
 
@@ -367,26 +379,27 @@ const port = serverEnv.BB_SERVER_PORT; // number
 ## Dependency Graph
 
 ```
-                    domain (zod)
-                   /      |          \
-         server-contract  |  env-daemon-contract
-          (domain, zod,   |   (domain, zod, hono)
-           hono)          |
-           /    \         |
-      core-ui    \        |
-     (domain)     \       |
-      /    \       \      |
-  apps/app  apps/cli \    |
-                      \   |
-                   env-daemon (rebuilt later)
-                    (server-contract, env-daemon-contract,
-                     domain, agent-runtime)
+                      domain (zod)
+                     /      |         \
+           server-contract  |  env-daemon-contract
+            (domain, zod,   |   (domain, zod, hono)
+             hono)          |
+            / |  \          |
+    core-ui  |   \          |
+ (domain,    |    \         |
+  templates) |     \        |
+    /    \   |      \       |
+apps/app  apps/cli   \      |
+  (domain, core-ui,   \     |
+   server-contract)    \    |
+                        \   |
+                     env-daemon (rebuilt later)
+                      (server-contract, env-daemon-contract,
+                       domain, agent-runtime)
 
   agent-runtime (later)     db (kept)
    (domain, templates)       (domain)
 ```
-
-Note: `core-ui` depends ONLY on `domain`. NOT on `server-contract`.
 
 Note: `provider-adapters` currently depends on `@bb/core`. During Step 5 (delete core),
 provider-adapters will break. It stays broken until Step 6 when it's absorbed into
@@ -411,10 +424,13 @@ This plan covers Steps 1-5 (create new packages, delete old ones). Step 6 (rebui
 ## Validation
 
 **After Steps 1-5, these should be true:**
-- `packages/domain` typechecks with zero workspace dependencies (only `zod`)
+- `packages/domain` typechecks (depends on `zod`)
 - `packages/server-contract` typechecks (depends on `domain`, `zod`, `hono`)
 - `packages/env-daemon-contract` typechecks (depends on `domain`, `zod`, `hono`)
-- `packages/core-ui` typechecks (depends on `domain`)
+- `packages/core-ui` typechecks AND tests pass (depends on `domain`, `templates`)
+  - `to-ui-messages.test.ts` passes
+  - `thread-detail-rows.test.ts` passes
+  - `format-timeline-text.test.ts` passes
 - `packages/db` typechecks (depends on `domain`)
 
 **These will be broken (expected):**
@@ -423,7 +439,16 @@ This plan covers Steps 1-5 (create new packages, delete old ones). Step 6 (rebui
 - `apps/app` and `apps/cli` — may have residual import issues
 - All root workspace scripts (`pnpm build`, `pnpm dev`, etc.) — expected to fail
 
+## Resolved Questions
+
+- **`buildCommitFailureFollowUpInstruction`**: Moves to `apps/app` (not core-ui). Depends on `@bb/templates` and server operation types — too coupled for core-ui.
+- **CLI imports from `@bb/environment-daemon`**: Verified — CLI does NOT import from `@bb/environment-daemon` today. No action needed.
+- **`ThreadContextWindowUsage`**: Moves to domain alongside `extractThreadContextWindowUsage` in core-ui.
+- **`ProviderCapabilities` / `AvailableModel`**: Stay in domain despite originating from `api-types.ts` — they're genuinely shared vocabulary used by agent-runtime.
+- **WebSocket types**: Plain TypeScript types in server-contract, no Zod schemas. WebSocket messages are simple enough that runtime validation isn't needed. This is an explicit exception to "Zod is source of truth."
+- **`@bb/templates` dependency chain**: `@bb/templates` has zero workspace dependencies (just `esbuild` dev dep). Safe to keep.
+
 ## Open Questions
 
-- **`buildCommitFailureFollowUpInstruction`** references operation option types. Do those types move to domain, or does the utility move out of `core-ui`?
-- **CLI imports from `@bb/environment-daemon`** — what does it use? Needs auditing before Step 4.
+- **`LlmCompletionService` replacement**: Title generation and commit message generation currently depend on `LlmCompletionService` in provider-adapters. Plan says "use `@pi/ai` directly." Where does this code live after the rebuild? In the server? In a new utility package?
+- **Daemon HTTP server rewrite**: The daemon currently uses raw `node:http`, not Hono. The `hc()` client works as a caller, but the daemon implementation needs Hono for route-type compile-time safety. Is this part of Step 3 or deferred to Step 6?
