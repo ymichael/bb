@@ -8,11 +8,42 @@ const generatePrettyIdSuffix = customAlphabet(
   PRETTY_ID_SUFFIX_LENGTH,
 );
 
+function createId(prefix: string): string {
+  return `${prefix}_${generatePrettyIdSuffix()}`;
+}
+
+export function createHostId(): string {
+  return createId("host");
+}
+
 export function createProjectId(): string {
-  return `proj_${generatePrettyIdSuffix()}`;
+  return createId("proj");
+}
+
+export function createProjectSourceId(): string {
+  return createId("src");
+}
+
+export function createEnvironmentId(): string {
+  return createId("env");
 }
 
 export function createThreadId(): string {
-  return `thr_${generatePrettyIdSuffix()}`;
+  return createId("thr");
 }
 
+export function createEventId(): string {
+  return createId("evt");
+}
+
+export function createDraftId(): string {
+  return createId("draft");
+}
+
+export function createHostDaemonSessionId(): string {
+  return createId("hses");
+}
+
+export function createHostDaemonCommandId(): string {
+  return createId("hcmd");
+}

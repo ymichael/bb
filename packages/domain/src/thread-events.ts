@@ -20,6 +20,10 @@ export const appThreadEventTypeValues = [
 export const appThreadEventTypeSchema = z.enum(appThreadEventTypeValues);
 export type AppThreadEventType = z.infer<typeof appThreadEventTypeSchema>;
 
+export const systemEventTypeValues = appThreadEventTypeValues;
+export const systemEventTypeSchema = appThreadEventTypeSchema;
+export type SystemEventType = AppThreadEventType;
+
 export const threadTurnInitiatorValues = ["user", "agent", "system"] as const;
 export const threadTurnInitiatorSchema = z.enum(threadTurnInitiatorValues);
 export type ThreadTurnInitiator = z.infer<typeof threadTurnInitiatorSchema>;
@@ -62,6 +66,9 @@ export type ClientExecutionOptionsSnapshot = z.infer<
   typeof clientExecutionOptionsSnapshotSchema
 >;
 
+export const turnRequestOptionsSchema = clientExecutionOptionsSnapshotSchema;
+export type TurnRequestOptions = ClientExecutionOptionsSnapshot;
+
 export const clientOutboundStartEventDataSchema = z.object({
   direction: z.literal("outbound"),
   source: z.enum(["spawn", "tell"]),
@@ -76,6 +83,9 @@ export const clientOutboundStartEventDataSchema = z.object({
 export type ClientOutboundStartEventData = z.infer<
   typeof clientOutboundStartEventDataSchema
 >;
+
+export const turnRequestEventDataSchema = clientOutboundStartEventDataSchema;
+export type TurnRequestEventData = ClientOutboundStartEventData;
 
 export const systemErrorEventDataSchema = z.object({
   code: z.string().optional(),

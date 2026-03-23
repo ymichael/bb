@@ -1,7 +1,7 @@
 import type {
-  ThreadDetailRow,
-  ThreadDetailToolGroupRow,
-  UIMessage,
+  TimelineRow,
+  TimelineToolGroupRow,
+  ViewMessage,
 } from "@bb/domain";
 import { assertNever } from "./assert-never.js";
 import { getMessageStartedAt } from "./format-helpers.js";
@@ -10,13 +10,15 @@ import {
   mergeThreadOperationMessages,
 } from "./thread-operation-helpers.js";
 
-type CollapsibleTurnMessage = UIMessage;
+type CollapsibleTurnMessage = ViewMessage;
 
 export interface BuildThreadDetailRowsOptions {
   includeToolGroupMessages?: boolean;
 }
 
-function isCollapsibleTurnMessage(message: UIMessage): message is CollapsibleTurnMessage {
+export type BuildTimelineRowsOptions = BuildThreadDetailRowsOptions;
+
+function isCollapsibleTurnMessage(message: ViewMessage): message is CollapsibleTurnMessage {
   if (
     message.kind === "operation" &&
     (message.opType === "compaction" || message.opType === "thread-title-updated")
@@ -31,17 +33,17 @@ function isCollapsibleTurnMessage(message: UIMessage): message is CollapsibleTur
 
 function isToolExploringMessage(
   message: CollapsibleTurnMessage,
-): message is Extract<UIMessage, { kind: "tool-exploring" }> {
+): message is Extract<ViewMessage, { kind: "tool-exploring" }> {
   return message.kind === "tool-exploring";
 }
 
 function isFileEditMessage(
   message: CollapsibleTurnMessage,
-): message is Extract<UIMessage, { kind: "file-edit" }> {
+): message is Extract<ViewMessage, { kind: "file-edit" }> {
   return message.kind === "file-edit";
 }
 
-function getGroupDurationMs(messages: readonly Pick<UIMessage, "createdAt" | "startedAt">[]): number | undefined {
+function getGroupDurationMs(messages: readonly Pick<ViewMessage, "createdAt" | "startedAt">[]): number | undefined {
   if (messages.length === 0) return undefined;
   const startedAt = Math.min(...messages.map((message) => getMessageStartedAt(message)));
   const endedAt = Math.max(...messages.map((message) => message.createdAt));
@@ -71,7 +73,7 @@ function mergeStatus<T extends TerminalStatus>(left: T, right: T): T {
 }
 
 function parseReconnectAttempt(
-  message: Extract<UIMessage, { kind: "error" }>,
+  message: Extract<ViewMessage, { kind: "error" }>,
 ): { attempt: number; total: number } | null {
   const match = message.message.trim().match(/^Reconnecting\.\.\.\s+(\d+)\/(\d+)$/);
   if (!match) return null;
@@ -88,9 +90,9 @@ function parseReconnectAttempt(
   return { attempt, total };
 }
 
-function mergeConsecutiveReconnectErrors(messages: UIMessage[]): UIMessage[] {
-  const merged: UIMessage[] = [];
-  let active: Extract<UIMessage, { kind: "error" }> | null = null;
+function mergeConsecutiveReconnectErrors(messages: ViewMessage[]): ViewMessage[] {
+  const merged: ViewMessage[] = [];
+  let active: Extract<ViewMessage, { kind: "error" }> | null = null;
   let activeReconnect: { attempt: number; total: number } | null = null;
 
   const flush = () => {
@@ -160,8 +162,8 @@ function mergeConsecutiveToolActivityMessages(
 ): CollapsibleTurnMessage[] {
   const merged: CollapsibleTurnMessage[] = [];
   let active:
-    | Extract<UIMessage, { kind: "tool-exploring" }>
-    | Extract<UIMessage, { kind: "file-edit" }>
+    | Extract<ViewMessage, { kind: "tool-exploring" }>
+    | Extract<ViewMessage, { kind: "file-edit" }>
     | null = null;
 
   const flush = () => {
@@ -281,7 +283,7 @@ function getSourceSeqRange(messages: CollapsibleTurnMessage[]): {
 
 function getCollapsibleTurnMessageStatus(
   message: CollapsibleTurnMessage,
-): ThreadDetailToolGroupRow["status"] {
+): TimelineToolGroupRow["status"] {
   switch (message.kind) {
     case "user":
       return "completed";
@@ -304,17 +306,17 @@ function getCollapsibleTurnMessageStatus(
   }
 }
 
-function getToolGroupStatus(messages: CollapsibleTurnMessage[]): ThreadDetailToolGroupRow["status"] {
-  return messages.reduce<ThreadDetailToolGroupRow["status"]>(
+function getToolGroupStatus(messages: CollapsibleTurnMessage[]): TimelineToolGroupRow["status"] {
+  return messages.reduce<TimelineToolGroupRow["status"]>(
     (status, message) => mergeStatus(status, getCollapsibleTurnMessageStatus(message)),
     "completed",
   );
 }
 
 export function buildThreadDetailRows(
-  messages: UIMessage[],
+  messages: ViewMessage[],
   options?: BuildThreadDetailRowsOptions,
-): ThreadDetailRow[] {
+): TimelineRow[] {
   // Timeline guardrail: keep one canonical row per user-visible operation whenever possible.
   // If new lifecycle/outcome events are added, update these collapse passes so thread timelines
   // stay familiar across projections instead of showing near-duplicate status updates.
@@ -387,7 +389,7 @@ export function buildThreadDetailRows(
     });
   }
 
-  const rows: ThreadDetailRow[] = [];
+  const rows: TimelineRow[] = [];
 
   for (const [index, message] of mergedMessages.entries()) {
     const collapseGroup = collapsedByFirstIndex.get(index);
@@ -424,4 +426,11 @@ export function buildThreadDetailRows(
   }
 
   return rows;
+}
+
+export function buildTimelineRows(
+  messages: ViewMessage[],
+  options?: BuildTimelineRowsOptions,
+): TimelineRow[] {
+  return buildThreadDetailRows(messages, options);
 }

@@ -28,12 +28,19 @@ export {
 export type {
   BuildThreadDetailRowsOptions,
 } from "./thread-detail-rows.js";
+export {
+  buildTimelineRows,
+} from "./thread-detail-rows.js";
+export type {
+  BuildTimelineRowsOptions,
+} from "./thread-detail-rows.js";
 
 export { decodeRow } from "./event-decode.js";
 export type { EventMeta } from "./event-decode.js";
 
 export { toUIMessages } from "./to-ui-messages.js";
 export type { ThreadEventWithMeta } from "./to-ui-messages.js";
+export { toViewMessages } from "./to-ui-messages.js";
 
 export {
   extractErrorMessage,

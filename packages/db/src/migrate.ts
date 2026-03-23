@@ -1,5 +1,5 @@
-import { migrate as drizzleMigrate } from "drizzle-orm/better-sqlite3/migrator";
-import { resolve, dirname } from "node:path";
+import fs from "node:fs";
+import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { DbConnection } from "./connection.js";
 
@@ -7,41 +7,19 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 type SqliteClient = {
-  pragma: (sql: string) => Array<Record<string, unknown>> | unknown;
+  exec: (sql: string) => unknown;
 };
 
-function getSqliteClient(db: DbConnection): SqliteClient | null {
+function getSqliteClient(db: DbConnection): SqliteClient {
   const sqlite = (db as { $client?: SqliteClient }).$client;
-  return sqlite ?? null;
+  if (!sqlite) {
+    throw new Error("Expected a better-sqlite3 client on DbConnection");
+  }
+  return sqlite;
 }
 
-/**
- * Run Drizzle migrations from the drizzle/ folder.
- * Resolves the migrations directory relative to this file so it works
- * from both src/ (via tsx) and dist/ (compiled).
- */
 export function migrate(db: DbConnection): void {
-  // From src/ or dist/, go up to packages/db/, then into drizzle/
-  const migrationsFolder = resolve(__dirname, "..", "drizzle");
-  const sqlite = getSqliteClient(db);
-
-  // Drizzle runs SQLite migrations in a transaction; toggle FK checks before it
-  // starts so table rebuild migrations can safely drop referenced tables.
-  sqlite?.pragma?.("foreign_keys = OFF");
-  try {
-    drizzleMigrate(db, { migrationsFolder });
-  } finally {
-    sqlite?.pragma?.("foreign_keys = ON");
-  }
-
-  // Detect broken references introduced during migration while FKs were off.
-  if (sqlite) {
-    const violations = sqlite.pragma("foreign_key_check");
-    if (Array.isArray(violations) && violations.length > 0) {
-      console.error(
-        `foreign_key_check found ${violations.length} violation(s) after migration`,
-        violations.slice(0, 10),
-      );
-    }
-  }
+  const migrationsFile = resolve(__dirname, "..", "drizzle", "0000_rebuild.sql");
+  const sql = fs.readFileSync(migrationsFile, "utf8");
+  getSqliteClient(db).exec(sql);
 }

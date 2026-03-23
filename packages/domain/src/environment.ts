@@ -59,17 +59,37 @@ export type PersistedEnvironmentRecord = z.infer<
   typeof persistedEnvironmentRecordSchema
 >;
 
-export const environmentRecordSchema = z.object({
+export const environmentStatusValues = [
+  "provisioning",
+  "ready",
+  "error",
+  "destroying",
+] as const;
+export const environmentStatusSchema = z.enum(environmentStatusValues);
+export type EnvironmentStatus = z.infer<typeof environmentStatusSchema>;
+
+export const environmentSchema = z.object({
   id: z.string(),
   projectId: z.string(),
+  hostId: z.string().optional(),
+  path: z.string().optional(),
   descriptor: environmentDescriptorSchema.optional(),
   managed: z.boolean(),
+  isGitRepo: z.boolean().optional(),
+  branchName: z.string().optional(),
+  provisionerId: z.string().optional(),
+  provisionerState: z.unknown().optional(),
+  status: environmentStatusSchema.optional(),
   properties: environmentPropertiesSchema.optional(),
   runtimeState: persistedEnvironmentRecordSchema.optional(),
   createdAt: z.number(),
   updatedAt: z.number(),
 });
-export type EnvironmentRecord = z.infer<typeof environmentRecordSchema>;
+export type Environment = z.infer<typeof environmentSchema>;
+
+// Compatibility alias while apps/cli still consume the old name.
+export const environmentRecordSchema = environmentSchema;
+export type EnvironmentRecord = Environment;
 
 export const environmentCapabilitiesSchema = z.object({
   host_filesystem: z.boolean(),

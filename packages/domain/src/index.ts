@@ -35,6 +35,7 @@ export type {
 } from "./provider-types.js";
 
 export {
+  environmentSchema,
   environmentCapabilitiesSchema,
   environmentCapabilitySchema,
   environmentCapabilityValues,
@@ -43,17 +44,21 @@ export {
   environmentLocationValues,
   environmentPropertiesSchema,
   environmentRecordSchema,
+  environmentStatusSchema,
+  environmentStatusValues,
   environmentWorkspaceKindSchema,
   environmentWorkspaceKindValues,
   persistedEnvironmentRecordSchema,
 } from "./environment.js";
 export type {
+  Environment,
   EnvironmentCapabilities,
   EnvironmentCapability,
   EnvironmentDescriptor,
   EnvironmentLocation,
   EnvironmentProperties,
   EnvironmentRecord,
+  EnvironmentStatus,
   EnvironmentWorkspaceKind,
   PersistedEnvironmentRecord,
 } from "./environment.js";
@@ -64,6 +69,41 @@ export {
 export type {
   Project,
 } from "./project.js";
+
+export {
+  projectSourceSchema,
+  projectSourceTypeSchema,
+  projectSourceTypeValues,
+} from "./project-source.js";
+export type {
+  ProjectSource,
+  ProjectSourceType,
+} from "./project-source.js";
+
+export {
+  hostSchema,
+  hostStatusSchema,
+  hostStatusValues,
+  hostTypeSchema,
+  hostTypeValues,
+} from "./host.js";
+export type {
+  Host,
+  HostStatus,
+  HostType,
+} from "./host.js";
+
+export {
+  workspaceFileChangeSchema,
+  workspaceStateSchema,
+  workspaceStateValues,
+  workspaceStatusSchema,
+} from "./workspace.js";
+export type {
+  WorkspaceFileChange,
+  WorkspaceState,
+  WorkspaceStatus,
+} from "./workspace.js";
 
 export {
   threadBuiltInActionIdSchema,
@@ -122,6 +162,8 @@ export {
   systemErrorEventDataSchema,
   systemManagerUserMessageEventDataSchema,
   systemOperationEventDataSchema,
+  systemEventTypeSchema,
+  systemEventTypeValues,
   systemProvisioningEventDataSchema,
   systemThreadInterruptedEventDataSchema,
   systemThreadTitleUpdatedEventDataSchema,
@@ -132,6 +174,8 @@ export {
   threadProvisioningReasonValues,
   threadTurnInitiatorSchema,
   threadTurnInitiatorValues,
+  turnRequestEventDataSchema,
+  turnRequestOptionsSchema,
   turnLifecycleEventDataSchema,
 } from "./thread-events.js";
 export type {
@@ -142,6 +186,7 @@ export type {
   SystemErrorEventData,
   SystemManagerUserMessageEventData,
   SystemOperationEventData,
+  SystemEventType,
   SystemProvisioningEventData,
   SystemThreadInterruptedEventData,
   SystemThreadTitleUpdatedEventData,
@@ -153,11 +198,15 @@ export type {
   ThreadEventRow,
   ThreadProvisioningReason,
   ThreadTurnInitiator,
+  TurnRequestEventData,
+  TurnRequestOptions,
   TurnLifecycleEventData,
 } from "./thread-events.js";
 
 export {
+  providerEventSchema,
   providerThreadEventSchema,
+  systemEventSchema,
   systemThreadEventSchema,
   threadEventFileChangeKindSchema,
   threadEventFileChangeSchema,
@@ -173,7 +222,9 @@ export {
   threadEventWarningCategorySchema,
 } from "./provider-event.js";
 export type {
+  ProviderEvent,
   ProviderThreadEvent,
+  SystemEvent,
   SystemThreadEvent,
   ThreadEvent,
   ThreadEventFileChange,
@@ -205,6 +256,20 @@ export type {
 } from "./thread-detail-rows.js";
 
 export {
+  timelineMessageRowSchema,
+  timelineRowSchema,
+  timelineToolGroupRowSchema,
+  timelineToolGroupStatusSchema,
+  timelineToolGroupStatusValues,
+} from "./timeline.js";
+export type {
+  TimelineMessageRow,
+  TimelineRow,
+  TimelineToolGroupRow,
+  TimelineToolGroupStatus,
+} from "./timeline.js";
+
+export {
   uiMessageSchema,
   uiMessageStatusSchema,
   uiMessageStatusValues,
@@ -231,3 +296,31 @@ export type {
   UIUserMessage,
   UIWebSearchMessage,
 } from "./ui-message.js";
+
+export {
+  viewMessageSchema,
+  viewMessageStatusSchema,
+  viewMessageStatusValues,
+} from "./view.js";
+export type {
+  ToViewMessagesOptions,
+  ViewAssistantReasoningMessage,
+  ViewAssistantTextMessage,
+  ViewDebugRawEventMessage,
+  ViewErrorMessage,
+  ViewFileEditChange,
+  ViewFileEditMessage,
+  ViewMessage,
+  ViewMessageBase,
+  ViewMessageStatus,
+  ViewOperationMessage,
+  ViewProvisioningMetadata,
+  ViewProvisioningTranscriptEntry,
+  ViewThreadOperationMetadata,
+  ViewToolCallMessage,
+  ViewToolCallSummary,
+  ViewToolExploringMessage,
+  ViewToolParsedIntent,
+  ViewUserMessage,
+  ViewWebSearchMessage,
+} from "./view.js";

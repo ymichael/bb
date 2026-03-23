@@ -6,7 +6,16 @@ import {
   serviceTierSchema,
   threadExecutionOptionsSchema,
 } from "./shared-types.js";
-import { environmentRecordSchema } from "./environment.js";
+import { environmentSchema } from "./environment.js";
+import {
+  workspaceFileChangeSchema,
+  workspaceStateSchema,
+  workspaceStatusSchema,
+  workspaceStateValues,
+  type WorkspaceFileChange,
+  type WorkspaceState,
+  type WorkspaceStatus,
+} from "./workspace.js";
 
 export const threadStatusValues = [
   "created",
@@ -37,16 +46,9 @@ export type ThreadBuiltInActionId = z.infer<
   typeof threadBuiltInActionIdSchema
 >;
 
-export const threadWorkStateValues = [
-  "clean",
-  "untracked",
-  "deleted",
-  "dirty_uncommitted",
-  "committed_unmerged",
-  "dirty_and_committed_unmerged",
-] as const;
-export const threadWorkStateSchema = z.enum(threadWorkStateValues);
-export type ThreadWorkState = z.infer<typeof threadWorkStateSchema>;
+export const threadWorkStateValues = workspaceStateValues;
+export const threadWorkStateSchema = workspaceStateSchema;
+export type ThreadWorkState = WorkspaceState;
 
 export const threadProvisioningReadinessValues = [
   "ready",
@@ -81,34 +83,11 @@ export const threadQueuedMessageSchema = z.object({
 });
 export type ThreadQueuedMessage = z.infer<typeof threadQueuedMessageSchema>;
 
-export const threadWorkFileChangeSchema = z.object({
-  path: z.string(),
-  status: z.string(),
-});
-export type ThreadWorkFileChange = z.infer<
-  typeof threadWorkFileChangeSchema
->;
+export const threadWorkFileChangeSchema = workspaceFileChangeSchema;
+export type ThreadWorkFileChange = WorkspaceFileChange;
 
-export const threadWorkStatusSchema = z.object({
-  state: threadWorkStateSchema,
-  changedFiles: z.number(),
-  insertions: z.number(),
-  deletions: z.number(),
-  workspaceChangedFiles: z.number(),
-  workspaceInsertions: z.number(),
-  workspaceDeletions: z.number(),
-  hasUncommittedChanges: z.boolean(),
-  hasCommittedUnmergedChanges: z.boolean(),
-  aheadCount: z.number(),
-  behindCount: z.number(),
-  currentBranch: z.string().optional(),
-  defaultBranch: z.string().optional(),
-  mergeBaseBranch: z.string().optional(),
-  mergeBaseBranches: z.array(z.string()).optional(),
-  baseRef: z.string().optional(),
-  files: z.array(threadWorkFileChangeSchema).optional(),
-});
-export type ThreadWorkStatus = z.infer<typeof threadWorkStatusSchema>;
+export const threadWorkStatusSchema = workspaceStatusSchema;
+export type ThreadWorkStatus = WorkspaceStatus;
 
 export const threadPrimaryCheckoutStateSchema = z.object({
   isActive: z.boolean(),
@@ -144,12 +123,12 @@ export const threadSchema = z.object({
   mergeBaseBranch: z.string().optional(),
   titleFallback: z.string().optional(),
   status: threadStatusSchema,
-  workStatus: threadWorkStatusSchema.optional(),
+  workStatus: workspaceStatusSchema.optional(),
   primaryCheckout: threadPrimaryCheckoutStateSchema.optional(),
   provisioningState: threadProvisioningStateSchema.optional(),
   queuedMessages: z.array(threadQueuedMessageSchema).optional(),
   environmentId: z.string().optional(),
-  attachedEnvironment: environmentRecordSchema.optional(),
+  attachedEnvironment: environmentSchema.optional(),
   builtInActions: z.array(threadBuiltInActionSchema).optional(),
   defaultExecutionOptions: threadExecutionOptionsSchema.optional(),
   parentThreadId: z.string().optional(),

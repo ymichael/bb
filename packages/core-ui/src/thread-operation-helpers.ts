@@ -1,5 +1,5 @@
 import { getMessageStartedAt } from "./format-helpers.js";
-import type { UIMessage } from "@bb/domain";
+import type { ViewMessage } from "@bb/domain";
 
 type ThreadOperationAction = string;
 type ThreadOperationStatus = string;
@@ -11,13 +11,13 @@ interface ClassifiedThreadOperation {
 }
 
 export function isThreadOperation(
-  message: UIMessage,
-): message is Extract<UIMessage, { kind: "operation" }> {
+  message: ViewMessage,
+): message is Extract<ViewMessage, { kind: "operation" }> {
   return message.kind === "operation" && message.opType === "operation";
 }
 
 function classifyThreadOperation(
-  message: Extract<UIMessage, { kind: "operation" }>,
+  message: Extract<ViewMessage, { kind: "operation" }>,
 ): ClassifiedThreadOperation | null {
   if (!message.threadOperation) {
     return null;
@@ -58,8 +58,8 @@ function isTerminalThreadOperationStatus(status: ThreadOperationStatus): boolean
   }
 }
 
-export function mergeThreadOperationMessages(messages: UIMessage[]): UIMessage[] {
-  const merged: UIMessage[] = [];
+export function mergeThreadOperationMessages(messages: ViewMessage[]): ViewMessage[] {
+  const merged: ViewMessage[] = [];
 
   for (let index = 0; index < messages.length; index += 1) {
     const initial = messages[index];
@@ -77,7 +77,7 @@ export function mergeThreadOperationMessages(messages: UIMessage[]): UIMessage[]
     }
 
     let cursor = index + 1;
-    let promptMessage: Extract<UIMessage, { kind: "user" }> | null = null;
+    let promptMessage: Extract<ViewMessage, { kind: "user" }> | null = null;
     const promptCandidate = messages[cursor];
     if (
       initialClass.operation === "squash_merge" &&
@@ -88,7 +88,7 @@ export function mergeThreadOperationMessages(messages: UIMessage[]): UIMessage[]
       cursor += 1;
     }
 
-    const lifecycleMessages: Array<Extract<UIMessage, { kind: "operation" }>> = [initial];
+    const lifecycleMessages: Array<Extract<ViewMessage, { kind: "operation" }>> = [initial];
     let sawTerminalStatus = isTerminalThreadOperationStatus(initialClass.status);
     while (!sawTerminalStatus) {
       const lifecycleCandidate = messages[cursor];
@@ -168,4 +168,3 @@ export function mergeThreadOperationMessages(messages: UIMessage[]): UIMessage[]
 
   return merged;
 }
-

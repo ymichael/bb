@@ -1,18 +1,18 @@
 import { getMessageStartedAt } from "./format-helpers.js";
 import type {
-  UIMessage,
-  UIProvisioningMetadata,
-  UIProvisioningTranscriptEntry,
+  ViewMessage,
+  ViewProvisioningMetadata,
+  ViewProvisioningTranscriptEntry,
 } from "@bb/domain";
 
 // --- Helpers used by to-ui-messages.ts (event → UI decoding) ---
 
 export function readProvisioningTranscript(
   entries: Array<{ type: string; key: string; text?: string; startedAt?: number; status?: string; metadata?: Record<string, unknown> }> | undefined,
-): UIProvisioningTranscriptEntry[] | undefined {
+): ViewProvisioningTranscriptEntry[] | undefined {
   if (!Array.isArray(entries) || entries.length === 0) return undefined;
 
-  const result: UIProvisioningTranscriptEntry[] = [];
+  const result: ViewProvisioningTranscriptEntry[] = [];
   for (const entry of entries) {
     const key = entry.key?.trim();
     if (!key) continue;
@@ -47,16 +47,16 @@ export function readProvisioningTranscript(
 // --- Helpers used by thread-detail-rows.ts (row-level merging) ---
 
 function isProvisioningOperation(
-  message: UIMessage,
-): message is Extract<UIMessage, { kind: "operation" }> {
+  message: ViewMessage,
+): message is Extract<ViewMessage, { kind: "operation" }> {
   if (message.kind !== "operation") return false;
   return message.opType === "provisioning";
 }
 
 function mergeProvisioningTranscriptEntry(
-  existing: UIProvisioningTranscriptEntry | undefined,
-  incoming: UIProvisioningTranscriptEntry,
-): UIProvisioningTranscriptEntry {
+  existing: ViewProvisioningTranscriptEntry | undefined,
+  incoming: ViewProvisioningTranscriptEntry,
+): ViewProvisioningTranscriptEntry {
   if (!existing) {
     return { ...incoming };
   }
@@ -82,9 +82,9 @@ function mergeProvisioningTranscriptEntry(
 }
 
 function mergeProvisioningTranscript(
-  existing: UIProvisioningTranscriptEntry[] | undefined,
-  incoming: UIProvisioningTranscriptEntry[] | undefined,
-): UIProvisioningTranscriptEntry[] | undefined {
+  existing: ViewProvisioningTranscriptEntry[] | undefined,
+  incoming: ViewProvisioningTranscriptEntry[] | undefined,
+): ViewProvisioningTranscriptEntry[] | undefined {
   if (!incoming) {
     return existing?.map((entry) => ({ ...entry }));
   }
@@ -92,7 +92,7 @@ function mergeProvisioningTranscript(
     return incoming.map((entry) => ({ ...entry }));
   }
 
-  const merged = new Map<string, UIProvisioningTranscriptEntry>();
+  const merged = new Map<string, ViewProvisioningTranscriptEntry>();
   const order: string[] = [];
   for (const entry of existing) {
     const key = entry.key;
@@ -108,13 +108,13 @@ function mergeProvisioningTranscript(
   }
   return order
     .map((key) => merged.get(key))
-    .filter((entry): entry is UIProvisioningTranscriptEntry => Boolean(entry));
+    .filter((entry): entry is ViewProvisioningTranscriptEntry => Boolean(entry));
 }
 
 function mergeProvisioningMetadata(
-  existing: UIProvisioningMetadata | undefined,
-  incoming: UIProvisioningMetadata | undefined,
-): UIProvisioningMetadata | undefined {
+  existing: ViewProvisioningMetadata | undefined,
+  incoming: ViewProvisioningMetadata | undefined,
+): ViewProvisioningMetadata | undefined {
   if (!incoming) {
     return existing ? { ...existing } : undefined;
   }
@@ -135,15 +135,15 @@ function mergeProvisioningMetadata(
 }
 
 function isThreadInterruptedOperation(
-  message: UIMessage,
-): message is Extract<UIMessage, { kind: "operation" }> {
+  message: ViewMessage,
+): message is Extract<ViewMessage, { kind: "operation" }> {
   return message.kind === "operation" && message.opType === "thread-interrupted";
 }
 
-export function mergeProvisioningOperations(messages: UIMessage[]): UIMessage[] {
-  const merged: UIMessage[] = [];
-  let active: Array<Extract<UIMessage, { kind: "operation" }>> = [];
-  let bufferedInterruptions: UIMessage[] = [];
+export function mergeProvisioningOperations(messages: ViewMessage[]): ViewMessage[] {
+  const merged: ViewMessage[] = [];
+  let active: Array<Extract<ViewMessage, { kind: "operation" }>> = [];
+  let bufferedInterruptions: ViewMessage[] = [];
 
   const flush = () => {
     if (active.length === 0) return;
@@ -175,7 +175,7 @@ export function mergeProvisioningOperations(messages: UIMessage[]): UIMessage[] 
       .map((message) => message.detail?.trim())
       .filter((value): value is string => Boolean(value));
     const uniqueDetailLines = [...new Set(details)];
-    const provisioning = active.reduce<UIProvisioningMetadata | undefined>(
+    const provisioning = active.reduce<ViewProvisioningMetadata | undefined>(
       (acc, message) => mergeProvisioningMetadata(acc, message.provisioning),
       undefined,
     );

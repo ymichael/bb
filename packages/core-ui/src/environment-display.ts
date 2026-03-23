@@ -1,4 +1,4 @@
-import type { EnvironmentRecord } from "@bb/domain";
+import type { Environment } from "@bb/domain";
 
 export interface EnvironmentDisplayInfo {
   /** Human-readable label: "Primary", "Worktree", "Docker", etc. */
@@ -20,10 +20,10 @@ export interface EnvironmentDisplayInfo {
  * `ThreadDetailView.tsx` so that CLI and UI show consistent terminology.
  */
 export function formatEnvironmentDisplay(
-  environment: EnvironmentRecord,
+  environment: Environment,
   projectRootPath?: string,
 ): EnvironmentDisplayInfo {
-  const descriptorPath = environment.descriptor?.path;
+  const descriptorPath = environment.path ?? environment.descriptor?.path;
   const properties = environment.properties;
 
   // Determine kind + label

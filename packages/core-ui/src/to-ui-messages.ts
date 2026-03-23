@@ -35,19 +35,19 @@ import type {
   UIAssistantTextMessage,
   UIFileEditChange,
   UIFileEditMessage,
-  UIMessage,
   UIOperationMessage,
   UIToolCallMessage,
   UIToolCallSummary,
   UIToolExploringMessage,
   UIToolParsedIntent,
   UIWebSearchMessage,
+  ViewMessage,
 } from "@bb/domain";
 
 // --- Projection state machine ---
 
 interface ProjectionState {
-  messages: UIMessage[];
+  messages: ViewMessage[];
   seenUserKeys: Set<string>;
   openAssistantByTurn: Map<string, UIAssistantTextMessage>;
   finalizedAssistantTurnKeys: Set<string>;
@@ -926,7 +926,7 @@ export interface ThreadEventWithMeta {
 export function toUIMessages(
   events: ThreadEventWithMeta[] | undefined,
   options?: ToUIMessagesOptions,
-): UIMessage[] {
+): ViewMessage[] {
   if (!events || events.length === 0) return [];
 
   const state = createProjectionState();
@@ -1382,3 +1382,5 @@ export function toUIMessages(
   finalizePendingMessages(state, options);
   return state.messages;
 }
+
+export const toViewMessages = toUIMessages;

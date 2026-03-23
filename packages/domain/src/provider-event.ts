@@ -306,6 +306,8 @@ export const providerThreadEventSchema = z.discriminatedUnion("type", [
   }),
 ]);
 export type ProviderThreadEvent = z.infer<typeof providerThreadEventSchema>;
+export const providerEventSchema = providerThreadEventSchema;
+export type ProviderEvent = ProviderThreadEvent;
 
 /**
  * Events originating from the server/system layer (not from a provider process).
@@ -350,6 +352,8 @@ export const systemThreadEventSchema = z.union([
   }).merge(systemProvisioningEventDataSchema),
 ]);
 export type SystemThreadEvent = z.infer<typeof systemThreadEventSchema>;
+export const systemEventSchema = systemThreadEventSchema;
+export type SystemEvent = SystemThreadEvent;
 
 /** All thread events — provider-originated or system-originated. */
 export const threadEventSchema = z.union([
