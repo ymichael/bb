@@ -97,113 +97,95 @@ export function removeDirectory(args: {
 
 ---
 
-## Promote — Server-Orchestrated, Not Workspace-Level
+## Promote / Demote
 
-Promote is not a workspace operation. It's a **server-orchestrated operation between two host-daemons** (which may be the same machine or different machines).
+Promote switches the user's primary checkout to the environment's branch so they can test the agent's work in their editor. Demote switches back to the default branch.
 
-### The model
+**Both workspaces must be clean.** Promote and demote fail loudly if either workspace has uncommitted changes. No stashing, no read-tree tricks. The user commits or discards first.
 
-When a user clicks "promote," the server coordinates between a **source** (the thread's environment) and a **target** (the user's primary checkout):
+### Same host (v1)
 
+Source and target share the same `.git` (worktree) or are on the same machine (clone). All branches are locally visible.
+
+**Promote:**
 ```
-1. User clicks "promote" on a thread
-2. Server identifies:
-   - Source: thread's environment on host A
-   - Target: user's primary checkout on host B (often same machine)
-3. Server asks source daemon: "export this workspace's changeset"
-   → Response: { type: "branch", branch: "bb/env-abc" }
-              or { type: "branch", branch: "bb/env-abc", remote: "origin" }  (if cross-machine)
-4. Server asks target daemon: "import this changeset into your primary checkout"
-   → Target daemon uses Workspace primitives to apply it
+Server → daemon: workspace.export { environmentId }
+Daemon:
+  1. Check source workspace is clean → fail if dirty
+  2. Record source branch name (e.g., "bb/env-abc")
+  3. Detach source HEAD (free the branch for primary to check out)
+  4. Return { branch: "bb/env-abc" }
+
+Server → daemon: workspace.import { primaryPath, branch: "bb/env-abc" }
+Daemon:
+  1. Check primary workspace is clean → fail if dirty
+  2. Checkout the branch: git checkout bb/env-abc
+  3. Return { ok: true }
 ```
 
-### Why this model?
+**Demote:**
+```
+Server → daemon: workspace.import { primaryPath, branch: "main" }  // project's default branch
+Daemon:
+  1. Check primary workspace is clean → fail if dirty
+  2. Checkout default branch: git checkout main
+  3. Return { ok: true }
 
-- **Same interface for local and cross-machine promote.** The server always does: export from source, import to target. When both daemons are on the same machine, the branch is already locally visible. When they're on different machines, the source pushes first.
-- **No special "promote" function in `@bb/workspace`.** The daemon composes `Workspace` primitives (stash, checkoutBranch, detachHead) to implement the import.
-- **Promoted state is derived.** The target daemon checks what branch the primary checkout is on. If it matches a known environment branch, that environment is "promoted."
+Server → daemon: workspace.reattach { environmentId, branch: "bb/env-abc" }
+Daemon:
+  1. Re-attach source worktree to its branch: git checkout bb/env-abc
+  2. Return { ok: true }
+```
+
+**Idempotent:** Running export twice when already detached is a no-op (already detached). Running import twice with the same branch is a no-op (already on that branch). Running reattach when already attached is a no-op.
+
+**Replay-safe:** No stash state. No mutable intermediate state. If daemon crashes between export and import, the source is detached but the primary hasn't changed — the server can retry or roll back by sending reattach.
+
+**Crash recovery:** If promote partially completes (export done, import not), the server detects the timeout, sends `workspace.reattach` to undo the export. The source gets its branch back. Primary was never modified.
+
+### Different host (E2B → local)
+
+Source and target don't share `.git`. The branch must be pushed to a remote first.
+
+**Promote:**
+```
+Server → source daemon: workspace.export { environmentId, pushToRemote: "origin" }
+Daemon:
+  1. Check source is clean → fail if dirty
+  2. Push branch to remote: git push origin bb/env-abc
+  3. Return { branch: "bb/env-abc", remote: "origin" }
+
+Server → target daemon: workspace.import { primaryPath, branch: "bb/env-abc", remote: "origin" }
+Daemon:
+  1. Check primary is clean → fail if dirty
+  2. Fetch: git fetch origin bb/env-abc
+  3. Checkout: git checkout -B bb/env-abc origin/bb/env-abc
+  4. Return { ok: true }
+```
+
+No detach needed (different repos, no branch conflict). Fail if no remote configured or push fails.
+
+**Demote:** Same as same-host — checkout the default branch. No reattach needed (source was never detached).
+
+### Promoted state is derived
+
+The daemon checks what branch the primary checkout is on. If it matches a known environment branch, that environment is promoted. If the user manually runs `git checkout main`, the environment is no longer promoted. No application state to track.
 
 ### Commands
 
-Two commands replace the old `workspace.promote` / `workspace.demote`:
+Three commands (replacing old `workspace.promote` / `workspace.demote`):
 
 ```
-workspace.export   // source daemon: get changeset description
-workspace.import   // target daemon: apply changeset to primary checkout
+workspace.export    // source daemon: detach (same host) or push (different host), return branch info
+workspace.import    // target daemon: checkout the branch in primary
+workspace.reattach  // source daemon: re-attach worktree to its branch (undo export, same host only)
 ```
-
-### Export response shape (same for all cases)
-
-```typescript
-type WorkspaceExport =
-  | { type: "branch"; branch: string }                      // local: branch visible via shared .git
-  | { type: "branch"; branch: string; remote: string }      // remote: branch pushed to this remote
-  // future: | { type: "patch"; diff: string }              // non-git or fallback
-```
-
-### Import flow (target daemon)
-
-The target daemon receives a `workspace.import` command with the export data. It uses `Workspace` primitives:
-
-```typescript
-async function handleImport(primary: Workspace, exportData: WorkspaceExport) {
-  // If branch needs fetching (cross-machine)
-  if (exportData.remote) {
-    await primary.fetch({ remote: exportData.remote, branch: exportData.branch });
-  }
-
-  // Stash any dirty work
-  const stashRef = await primary.stash("bb-promote");
-
-  // Switch to the source branch
-  await primary.checkoutBranch(exportData.branch);
-
-  return { previousBranch: original, stashRef };
-}
-```
-
-### Demote flow (target daemon)
-
-Server sends `workspace.import` with the original branch info to switch back:
-
-```typescript
-async function handleDemote(primary: Workspace, originalBranch: string, stashRef?: string) {
-  await primary.checkoutBranch(originalBranch);
-  if (stashRef) await primary.stashPop(stashRef);
-}
-```
-
-### Local promote (same machine, shared .git)
-
-```
-Server → source daemon: workspace.export { envId }
-Daemon → source workspace: detachHead() (free the branch)
-Daemon → returns { type: "branch", branch: "bb/env-abc" }
-
-Server → target daemon (same daemon): workspace.import { primaryPath, export: { type: "branch", branch: "bb/env-abc" } }
-Daemon → primary workspace: stash() → checkoutBranch("bb/env-abc")
-Daemon → returns { previousBranch: "main", stashRef: "abc123" }
-```
-
-### Cross-machine promote (E2B → local)
-
-```
-Server → source daemon (E2B): workspace.export { envId }
-Daemon → source workspace: checkpoint() (commit + push to origin)
-Daemon → returns { type: "branch", branch: "bb/env-abc", remote: "origin" }
-
-Server → target daemon (local): workspace.import { primaryPath, export: { type: "branch", branch: "bb/env-abc", remote: "origin" } }
-Daemon → primary workspace: fetch({ remote: "origin", branch: "bb/env-abc" }) → stash() → checkoutBranch("bb/env-abc")
-Daemon → returns { previousBranch: "main", stashRef: "abc123" }
-```
-
-Same shape, same commands, different transport for the changeset.
 
 ---
 
 ## Command Set
 
-17 commands total:
+18 commands total:
 
 ```
 // Thread/provider (via @bb/agent-runtime)
@@ -220,10 +202,10 @@ workspace.status, workspace.diff
 workspace.commit, workspace.squash_merge, workspace.reset, workspace.checkpoint
 
 // Workspace — promote (server-orchestrated between two daemons)
-workspace.export, workspace.import
+workspace.export, workspace.import, workspace.reattach
 ```
 
-All carry explicit parameters. Daemon never looks up metadata.
+18 commands total. All carry explicit parameters. Daemon never looks up metadata.
 
 ---
 
@@ -347,7 +329,7 @@ bb works with any directory. If the environment's `isGitRepo` is false:
 | Code | Package/Location |
 |---|---|
 | `Workspace` class, provisioning functions | `@bb/workspace` |
-| Promote/demote orchestration (export/import command handling) | `apps/host-daemon` (daemon composes Workspace primitives) |
+| Promote/demote orchestration (export/import/reattach) | `apps/host-daemon` (daemon composes Workspace primitives) |
 | E2B sandbox create/suspend/resume/destroy | `apps/server` |
 | Host registration, identity, heartbeat | `apps/host-daemon` |
 | Command routing, AgentRuntime management | `apps/host-daemon` |
