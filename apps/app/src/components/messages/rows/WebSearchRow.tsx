@@ -1,4 +1,4 @@
-import type { UIWebSearchMessage } from "@bb/core-ui";
+import type { UIWebSearchMessage } from "@bb/domain";
 import { COLLAPSIBLE_HEADER_STATIC_TONE_CLASS } from "@bb/ui-core";
 import { EventTitle } from "./shared";
 

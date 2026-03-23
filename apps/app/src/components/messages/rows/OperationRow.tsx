@@ -3,11 +3,7 @@ import {
   ExpandablePanel,
   EventCodeBlock,
 } from "@bb/ui-core";
-import {
-  type UIOperationMessage,
-  type UIProvisioningMetadata,
-  type UIProvisioningTranscriptEntry,
-} from "@bb/core-ui";
+import type { UIOperationMessage, UIProvisioningMetadata, UIProvisioningTranscriptEntry } from "@bb/domain";
 import { cn } from "@/lib/utils";
 import {
   EVENT_DETAIL_MAX_HEIGHT_CLASS,
@@ -18,8 +14,8 @@ import {
   getEventHeaderToneClass,
   getStaticEventToneClass,
   useLiveNow,
-  useLatestInitialExpanded,
 } from "./shared";
+import { useLatestInitialExpanded } from "@/lib/latestInitialExpanded";
 import { TerminalOutputBlock } from "./TerminalOutputBlock";
 
 function splitNonEmptyLines(value: string | undefined): string[] {

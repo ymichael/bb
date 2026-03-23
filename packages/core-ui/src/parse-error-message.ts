@@ -2,7 +2,7 @@ import type { ThreadEvent } from "@bb/domain";
 import type { EventMeta } from "./event-decode.js";
 import { getEventTurnId } from "./event-decode.js";
 import { messageId } from "./format-helpers.js";
-import type { UIDebugRawEventMessage, UIErrorMessage, UIMessage } from "./ui-message.js";
+import type { UIDebugRawEventMessage, UIErrorMessage, UIMessage } from "@bb/domain";
 
 function formatErrorDetail(message: string, detail: string | undefined): string {
   if (detail && detail !== message) return `${message} - ${detail}`;

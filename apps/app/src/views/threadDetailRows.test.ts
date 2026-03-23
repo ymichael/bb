@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { UIMessage } from "@bb/core-ui";
-import { buildThreadDetailRows } from "./threadDetailRows";
+import type { UIMessage } from "@bb/domain";
+import { buildThreadDetailRows } from "@bb/core-ui";
 
 function baseMessage(
   id: string,

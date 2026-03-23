@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { formatTimelineAsText } from "../src/format-timeline-text.js";
-import type { UIMessage } from "../src/ui-message.js";
+import type { UIMessage } from "@bb/domain";
 
 describe("formatTimelineAsText", () => {
   it("renders user + assistant + tool-call in minimal mode", () => {

@@ -5,9 +5,9 @@ import {
   useRef,
   useState,
 } from "react";
-import { type ThreadDetailRow, type UIMessage } from "@bb/core-ui";
+import type { UIMessage } from "@bb/domain";
+import { type ThreadDetailRow, type ThreadDetailToolGroupRow } from "@bb/domain";
 import { DEFAULT_SCROLL_STICK_THRESHOLD_PX } from "@bb/ui-core";
-import { type ThreadDetailToolGroupRow } from "./threadDetailRows";
 
 const TIMELINE_ROW_SELECTOR = "[data-thread-row-id]";
 

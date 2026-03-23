@@ -5,7 +5,7 @@ import type {
   UIProvisioningMetadata,
   UIProvisioningSetupMetadata,
   UIProvisioningTranscriptEntry,
-} from "./ui-message.js";
+} from "@bb/domain";
 
 // --- Helpers used by to-ui-messages.ts (event → UI decoding) ---
 

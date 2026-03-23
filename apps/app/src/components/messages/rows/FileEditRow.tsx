@@ -1,15 +1,15 @@
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { PatchDiff } from "@pierre/diffs/react";
-import type { UIFileEditMessage } from "@bb/core-ui";
+import type { UIFileEditMessage } from "@bb/domain";
 import {
   CollapsibleHeader,
   ExpandablePanel,
 } from "@bb/ui-core";
 import { usePreferredTheme } from "@/hooks/useTheme";
+import { useLatestInitialExpanded } from "@/lib/latestInitialExpanded";
 import {
   EventTitle,
   getEventHeaderToneClass,
-  useLatestInitialExpanded,
 } from "./shared";
 
 type FileChangeAction = "created" | "deleted" | "renamed" | "edited";

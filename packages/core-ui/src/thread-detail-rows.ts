@@ -11,11 +11,6 @@ import {
   mergeThreadOperationMessages,
   mergeThreadOperationOutcomeMessages,
 } from "./thread-operation-helpers.js";
-export type {
-  ThreadDetailMessageRow,
-  ThreadDetailRow,
-  ThreadDetailToolGroupRow,
-} from "@bb/domain";
 
 type CollapsibleTurnMessage = UIMessage;
 

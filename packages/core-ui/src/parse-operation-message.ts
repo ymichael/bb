@@ -16,7 +16,7 @@ import type {
   UIThreadOperationMetadata,
   UIWorktreeCommitMetadata,
   UIWorktreeSquashMergeMetadata,
-} from "./ui-message.js";
+} from "@bb/domain";
 
 export function threadOperationTitle(meta: UIThreadOperationMetadata | null): string {
   if (!meta) return "Operation update";

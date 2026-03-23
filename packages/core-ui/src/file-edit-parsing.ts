@@ -1,6 +1,6 @@
 import type { ThreadEvent, ThreadEventFileChange } from "@bb/domain";
 import { itemStatusToFileEditStatus } from "./exec-lifecycle.js";
-import type { UIFileEditChange, UIFileEditMessage } from "./ui-message.js";
+import type { UIFileEditChange, UIFileEditMessage } from "@bb/domain";
 
 export function mapFileChanges(changes: ThreadEventFileChange[]): UIFileEditChange[] {
   return changes.map((change) => ({

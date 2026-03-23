@@ -11,8 +11,6 @@ export { apiErrorSchema, domainErrorCodeSchema } from "./errors.js";
 export type { ApiError, DomainErrorCode } from "./errors.js";
 
 export {
-  createApiClient,
-  createPublicApiClient,
   commitEnvironmentOperationResponseSchema,
   commitFailureEnvironmentOperationDetailsSchema,
   commitOperationOptionsSchema,
@@ -65,10 +63,6 @@ export {
   systemVoiceTranscriptionResponseSchema,
   tellThreadModeSchema,
   tellThreadRequestSchema,
-  threadGitDiffCommitSummarySchema,
-  threadGitDiffModeSchema,
-  threadGitDiffResponseSchema,
-  threadGitDiffSelectionSchema,
   threadOperationRequestSchema,
   threadOperationTypeSchema,
   threadTimelineResponseSchema,
@@ -77,9 +71,8 @@ export {
   updateProjectRequestSchema,
   updateThreadRequestSchema,
   uploadedPromptAttachmentSchema,
-} from "./public-api.js";
+} from "./api-types.js";
 export type {
-  ApiClient,
   CommitEnvironmentOperationResponse,
   CommitFailureEnvironmentOperationDetails,
   CommitOperationOptions,
@@ -100,8 +93,6 @@ export type {
   ProjectFileSuggestion,
   PromotePrimaryCheckoutResponse,
   PromptMentionSuggestion,
-  PublicApiRoutes,
-  PublicApiSchema,
   SendQueuedThreadMessageRequest,
   SendQueuedThreadMessageResponse,
   ServerRuntimeMode,
@@ -134,10 +125,6 @@ export type {
   SystemVoiceTranscriptionResponse,
   TellThreadMode,
   TellThreadRequest,
-  ThreadGitDiffCommitSummary,
-  ThreadGitDiffMode,
-  ThreadGitDiffResponse,
-  ThreadGitDiffSelection,
   ThreadOperationRequest,
   ThreadOperationType,
   ThreadTimelineResponse,
@@ -146,6 +133,13 @@ export type {
   UpdateProjectRequest,
   UpdateThreadRequest,
   UploadedPromptAttachment,
+} from "./api-types.js";
+
+export { createApiClient, createPublicApiClient } from "./public-api.js";
+export type {
+  ApiClient,
+  PublicApiRoutes,
+  PublicApiSchema,
 } from "./public-api.js";
 
 export { createInternalApiClient } from "./internal-api.js";

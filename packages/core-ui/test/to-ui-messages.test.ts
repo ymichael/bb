@@ -7,7 +7,7 @@ import { decodeRow } from "../src/event-decode.js";
 import { toUIMessages } from "../src/to-ui-messages.js";
 import type { ThreadEventWithMeta } from "../src/to-ui-messages.js";
 import { buildThreadDetailRows } from "../src/thread-detail-rows.js";
-import type { UIMessage } from "../src/ui-message.js";
+import type { UIMessage } from "@bb/domain";
 
 function fixturePath(name: string): string {
   const __dirname = path.dirname(fileURLToPath(import.meta.url));

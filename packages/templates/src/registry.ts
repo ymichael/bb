@@ -1,7 +1,5 @@
 import { templateDefinitions } from "./generated/templates.generated.js";
-import type { TemplateId, TemplateVariables } from "./generated/templates.generated.js";
-
-export type { TemplateId, TemplateVariables };
+import type { TemplateId } from "./generated/templates.generated.js";
 
 export type TemplateKind = "instruction" | "prompt" | "skill_seed";
 

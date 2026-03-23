@@ -1,5 +1,5 @@
 import { type ReactNode, type RefObject } from "react";
-import { type ThreadDetailRow, type UIMessage } from "@bb/core-ui";
+import type { ThreadDetailRow, ThreadDetailToolGroupRow, UIMessage } from "@bb/domain";
 import {
   ConversationEmptyState,
   ConversationTimeline,
@@ -15,7 +15,6 @@ import {
 } from "@/components/messages/rows/shared";
 import { useLatestInitialExpanded } from "@/lib/latestInitialExpanded";
 import { shouldPreferOngoingLabelsForRow } from "./threadDetailActivity";
-import { type ThreadDetailToolGroupRow } from "./threadDetailRows";
 
 function ToolGroupEntry({
   projectId,

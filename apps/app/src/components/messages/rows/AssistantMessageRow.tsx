@@ -1,4 +1,4 @@
-import type { UIAssistantTextMessage } from "@bb/core-ui";
+import type { UIAssistantTextMessage } from "@bb/domain";
 import { ConversationMarkdown } from "../ConversationMarkdown";
 
 export function AssistantMessageRow({

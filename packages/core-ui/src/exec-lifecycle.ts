@@ -1,6 +1,6 @@
 import type { ThreadEvent, ThreadEventItemStatus } from "@bb/domain";
 import type { EventMeta } from "./event-decode.js";
-import type { UIFileEditMessage, UIToolCallMessage, UIToolCallSummary, UIToolParsedIntent } from "./ui-message.js";
+import type { UIFileEditMessage, UIToolCallMessage, UIToolCallSummary, UIToolParsedIntent } from "@bb/domain";
 import { durationToString } from "./format-helpers.js";
 import { extractShellCommandFromString, formatToolCallCommand, toolNameToParsedIntents } from "./tool-call-parsing.js";
 import { toRecord } from "./unknown-helpers.js";

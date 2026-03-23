@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildThreadDetailRows, type ThreadDetailRow } from "../src/thread-detail-rows.js";
-import type { UIMessage, UIProvisioningTranscriptEntry } from "../src/ui-message.js";
+import type { UIMessage, UIProvisioningTranscriptEntry } from "@bb/domain";
 
 function primaryCheckoutOperation(
   seq: number,

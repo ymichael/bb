@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest"
-import type { PromptInput } from "@bb/domain"
-import type { ThreadDetailRow } from "@bb/core-ui"
+import type { PromptInput, ThreadDetailRow } from "@bb/domain"
 import {
   buildFollowUpSignatureFromInput,
   buildFollowUpSignatureFromRow,

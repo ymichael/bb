@@ -4,7 +4,7 @@ import {
   ExpandablePanel,
   getCollapsibleHeaderToneClass,
 } from "@bb/ui-core";
-import type { UIAssistantReasoningMessage } from "@bb/core-ui";
+import type { UIAssistantReasoningMessage } from "@bb/domain";
 import { ConversationMarkdown } from "../ConversationMarkdown";
 import {
   EVENT_LARGE_DETAIL_MAX_HEIGHT_CLASS,

@@ -1,8 +1,5 @@
-import {
-  assertNever,
-  type UIMessage,
-} from "@bb/core-ui";
-import type { ThreadDetailRow } from "./threadDetailRows";
+import { assertNever } from "@bb/core-ui";
+import type { ThreadDetailRow, UIMessage } from "@bb/domain";
 
 function isProvisioningActivityOperation(
   message: Extract<UIMessage, { kind: "operation" }>,

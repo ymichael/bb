@@ -1,6 +1,6 @@
 import type { PromptInput, ThreadEvent, ThreadEventUserContent } from "@bb/domain";
 import type { EventMeta } from "./event-decode.js";
-import type { ToUIMessagesOptions, UIAssistantTextMessage, UIUserMessage } from "./ui-message.js";
+import type { ToUIMessagesOptions, UIAssistantTextMessage, UIUserMessage } from "@bb/domain";
 import { messageId } from "./format-helpers.js";
 import { assertNever } from "./assert-never.js";
 

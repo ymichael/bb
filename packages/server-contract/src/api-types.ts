@@ -8,19 +8,11 @@ import {
   sandboxModeSchema,
   serviceTierSchema,
   threadDetailRowSchema,
-  threadGitDiffCommitSummarySchema,
-  threadGitDiffModeSchema,
-  threadGitDiffResponseSchema,
-  threadGitDiffSelectionSchema,
   threadContextWindowUsageSchema,
   threadQueuedMessageSchema,
   threadStatusSchema,
   threadTypeSchema,
   uiMessageSchema,
-  type ThreadGitDiffCommitSummary,
-  type ThreadGitDiffMode,
-  type ThreadGitDiffResponse,
-  type ThreadGitDiffSelection,
 } from "@bb/domain";
 import { apiErrorSchema } from "./errors.js";
 
@@ -684,15 +676,3 @@ export const threadTimelineResponseSchema = z.object({
 export type ThreadTimelineResponse = z.infer<
   typeof threadTimelineResponseSchema
 >;
-export {
-  threadGitDiffCommitSummarySchema,
-  threadGitDiffModeSchema,
-  threadGitDiffResponseSchema,
-  threadGitDiffSelectionSchema,
-};
-export type {
-  ThreadGitDiffCommitSummary,
-  ThreadGitDiffMode,
-  ThreadGitDiffResponse,
-  ThreadGitDiffSelection,
-};

@@ -1,4 +1,4 @@
-import type { UIToolCallSummary, UIToolParsedIntent } from "./ui-message.js";
+import type { UIToolCallSummary, UIToolParsedIntent } from "@bb/domain";
 import { getFirstStringField } from "./format-helpers.js";
 
 const SHELL_WRAPPER_NAMES = new Set(["sh", "bash", "zsh"]);

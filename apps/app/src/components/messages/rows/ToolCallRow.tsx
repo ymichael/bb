@@ -1,10 +1,10 @@
 import { ExpandablePanel } from "@bb/ui-core";
-import type { UIToolCallMessage } from "@bb/core-ui";
+import type { UIToolCallMessage } from "@bb/domain";
+import { useLatestInitialExpanded } from "@/lib/latestInitialExpanded";
 import {
   EventTitle,
   formatSummaryDuration,
   getEventHeaderToneClass,
-  useLatestInitialExpanded,
 } from "./shared";
 import { TerminalOutputBlock } from "./TerminalOutputBlock";
 

@@ -1,10 +1,6 @@
 import Handlebars from "handlebars";
-import {
-  type TemplateId,
-  type TemplateMetadata,
-  type TemplateVariables,
-  templateRegistry,
-} from "./registry.js";
+import type { TemplateId, TemplateVariables } from "./generated/templates.generated.js";
+import { type TemplateMetadata, templateRegistry } from "./registry.js";
 
 let partialsRegistered = false;
 function ensurePartialsRegistered() {

@@ -1,16 +1,13 @@
 import { useMemo } from "react";
 import { ExpandablePanel } from "@bb/ui-core";
-import {
-  assertNever,
-  type UIToolExploringMessage,
-  type UIToolParsedIntent,
-} from "@bb/core-ui";
+import { assertNever } from "@bb/core-ui";
+import type { UIToolExploringMessage, UIToolParsedIntent } from "@bb/domain";
+import { useLatestInitialExpanded } from "@/lib/latestInitialExpanded";
 import {
   ExpandableDetailScrollArea,
   EventTitle,
   getEventHeaderToneClass,
   getStaticEventToneClass,
-  useLatestInitialExpanded,
   useStickyBottomAutoScroll,
 } from "./shared";
 

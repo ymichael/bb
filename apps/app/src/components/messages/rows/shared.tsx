@@ -10,9 +10,6 @@ import {
   getScrollAnimationBehavior,
 } from "@bb/ui-core";
 import { cn } from "@/lib/utils";
-import {
-  useLatestInitialExpanded,
-} from "@/lib/latestInitialExpanded";
 
 export const EVENT_DETAIL_MAX_HEIGHT_CLASS = "max-h-[220px]";
 export const EVENT_LARGE_DETAIL_MAX_HEIGHT_CLASS = "max-h-[320px]";
@@ -174,8 +171,6 @@ export function useLiveNow(enabled: boolean, intervalMs: number = 1_000): number
 
   return now;
 }
-
-export { useLatestInitialExpanded };
 
 function isScrolledNearBottom(
   element: Pick<HTMLElement, "scrollHeight" | "clientHeight" | "scrollTop">,

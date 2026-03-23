@@ -5,15 +5,17 @@ import {
   type QueryClient,
   type QueryKey,
 } from "@tanstack/react-query";
-import type { ThreadDetailRow } from "@bb/core-ui";
 import type {
   EnvironmentRecord,
   PromptInput,
   Project,
   ReasoningLevel,
   Thread,
+  ThreadDetailRow,
   AvailableModel,
   ThreadExecutionOptions,
+  ThreadGitDiffResponse,
+  ThreadGitDiffSelection,
   ThreadWorkStatus,
   ThreadQueuedMessage,
   ThreadType,
@@ -37,8 +39,6 @@ import type {
   SystemShutdownRequest,
   SystemStatus,
   TellThreadRequest,
-  ThreadGitDiffResponse,
-  ThreadGitDiffSelection,
   ThreadTimelineResponse,
   ThreadToolGroupMessagesResponse,
   UpdateProjectRequest,

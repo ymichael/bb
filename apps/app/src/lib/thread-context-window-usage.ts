@@ -3,8 +3,6 @@ import {
 } from "@bb/core-ui";
 import type { ThreadContextWindowUsage } from "@bb/domain";
 
-export type { ThreadContextWindowUsage };
-
 const TOKEN_COMPACT_FORMATTER = new Intl.NumberFormat("en-US", {
   notation: "compact",
   maximumFractionDigits: 0,

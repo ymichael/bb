@@ -42,7 +42,7 @@ import type {
   UIToolExploringMessage,
   UIToolParsedIntent,
   UIWebSearchMessage,
-} from "./ui-message.js";
+} from "@bb/domain";
 
 // --- Projection state machine ---
 

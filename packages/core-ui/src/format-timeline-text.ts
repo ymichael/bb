@@ -9,7 +9,7 @@ import type {
   UIWebSearchMessage,
   UIOperationMessage,
   UIErrorMessage,
-} from "./ui-message.js";
+} from "@bb/domain";
 
 export type TimelineFormat = "json" | "minimal" | "verbose";
 

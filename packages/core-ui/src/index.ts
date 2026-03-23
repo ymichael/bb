@@ -27,9 +27,6 @@ export {
 } from "./thread-detail-rows.js";
 export type {
   BuildThreadDetailRowsOptions,
-  ThreadDetailMessageRow,
-  ThreadDetailRow,
-  ThreadDetailToolGroupRow,
 } from "./thread-detail-rows.js";
 
 export { decodeRow } from "./event-decode.js";
@@ -37,32 +34,6 @@ export type { EventMeta } from "./event-decode.js";
 
 export { toUIMessages } from "./to-ui-messages.js";
 export type { ThreadEventWithMeta } from "./to-ui-messages.js";
-export type {
-  ToUIMessagesOptions,
-  UIAssistantReasoningMessage,
-  UIAssistantTextMessage,
-  UIDebugRawEventMessage,
-  UIErrorMessage,
-  UIFileEditChange,
-  UIFileEditMessage,
-  UIMessage,
-  UIMessageBase,
-  UIMessageStatus,
-  UIOperationMessage,
-  UIProvisioningMetadata,
-  UIProvisioningSetupMetadata,
-  UIProvisioningSetupStatus,
-  UIProvisioningTranscriptEntry,
-  UIThreadOperationMetadata,
-  UIToolCallMessage,
-  UIToolCallSummary,
-  UIToolExploringMessage,
-  UIToolParsedIntent,
-  UIUserMessage,
-  UIWebSearchMessage,
-  UIWorktreeCommitMetadata,
-  UIWorktreeSquashMergeMetadata,
-} from "./ui-message.js";
 
 export {
   extractErrorMessage,

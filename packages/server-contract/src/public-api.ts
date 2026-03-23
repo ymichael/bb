@@ -9,6 +9,7 @@ import type {
   ThreadEventRow,
   ThreadExecutionOptions,
   ThreadQueuedMessage,
+  ThreadGitDiffResponse,
   ThreadType,
   ThreadWorkStatus,
 } from "@bb/domain";
@@ -38,7 +39,6 @@ import type {
   SystemStatus,
   SystemVoiceTranscriptionResponse,
   TellThreadRequest,
-  ThreadGitDiffResponse,
   ThreadTimelineResponse,
   ThreadToolGroupMessagesResponse,
   UpdateProjectRequest,
@@ -46,9 +46,6 @@ import type {
   UploadedPromptAttachment,
 } from "./api-types.js";
 import type { ApiError } from "./errors.js";
-
-// Re-export all schemas and types from api-types
-export * from "./api-types.js";
 
 export type PublicApiSchema = {
   "/projects": {

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
-import type { UIMessage } from "@bb/core-ui";
+import type { UIMessage } from "@bb/domain";
 import { ConversationEntry } from "./ConversationEntry";
 
 function baseMessage(): Pick<

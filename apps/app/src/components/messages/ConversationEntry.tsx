@@ -1,5 +1,6 @@
 import { memo } from "react";
-import { assertNever, type UIMessage } from "@bb/core-ui";
+import { assertNever } from "@bb/core-ui";
+import type { UIMessage } from "@bb/domain";
 import { AssistantMessageRow } from "./rows/AssistantMessageRow";
 import { DebugEventRow } from "./rows/DebugEventRow";
 import { ErrorRow } from "./rows/ErrorRow";

@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type {
   Thread,
+  ThreadGitDiffResponse,
   ThreadWorkStatus,
 } from "@bb/domain";
 import type {
-  ThreadGitDiffResponse,
   ThreadTimelineResponse,
 } from "@bb/server-contract";
 import {

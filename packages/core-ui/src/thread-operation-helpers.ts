@@ -1,5 +1,5 @@
 import { getMessageStartedAt } from "./format-helpers.js";
-import type { UIMessage } from "./ui-message.js";
+import type { UIMessage } from "@bb/domain";
 
 type ThreadOperationAction = string;
 type ThreadOperationStatus = string;

@@ -3,6 +3,7 @@ import type { EnvironmentDaemonSessionListResponse } from "@bb/env-daemon-contra
 import {
   type Thread,
   type ThreadEventRow,
+  type ThreadGitDiffResponse,
   type ThreadStatus,
   type ThreadWorkStatus,
   type Project,
@@ -14,7 +15,6 @@ import {
 } from "@bb/core-ui";
 import type {
   SpawnThreadRequest,
-  ThreadGitDiffResponse,
   ThreadTimelineResponse,
 } from "@bb/server-contract";
 import { assertNever } from "../assert-never.js";
