@@ -44,7 +44,9 @@ export const projectSources = sqliteTable(
       .notNull()
       .references(() => projects.id, { onDelete: "cascade" }),
     type: text("type").notNull(),
-    hostId: text("host_id").references(() => hosts.id, { onDelete: "set null" }),
+    hostId: text("host_id")
+      .notNull()
+      .references(() => hosts.id, { onDelete: "cascade" }),
     path: text("path"),
     repoUrl: text("repo_url"),
     createdAt: integer("created_at").notNull(),

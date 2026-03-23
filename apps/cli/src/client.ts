@@ -1,7 +1,7 @@
-import { createApiClient } from "@bb/server-contract";
+import { createApiClient, type ApiClient } from "@bb/server-contract";
 import { extractErrorMessage } from "@bb/core-ui";
 
-export function createClient(baseUrl: string) {
+export function createClient(baseUrl: string): ApiClient {
   return createApiClient(baseUrl);
 }
 

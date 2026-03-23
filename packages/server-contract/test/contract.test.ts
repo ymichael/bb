@@ -1,9 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
-  createInternalApiClient,
   createPublicApiClient,
   createThreadRequestSchema,
-  environmentActionRequestSchema,
+  environmentOperationRequestSchema,
   sendMessageRequestSchema,
   timelineToolDetailsResponseSchema,
 } from "../src/index.js";
@@ -30,7 +29,7 @@ describe("server-contract renamed schemas", () => {
     });
 
     expect(
-      environmentActionRequestSchema.parse({
+      environmentOperationRequestSchema.parse({
         operation: "commit",
         initiatingThreadId: "thr_123",
         options: { message: "Checkpoint" },
@@ -46,12 +45,8 @@ describe("server-contract renamed schemas", () => {
 });
 
 describe("server-contract clients", () => {
-  it("builds renamed public and internal routes", () => {
+  it("builds renamed public routes", () => {
     const publicClient = createPublicApiClient("http://localhost:3334");
-    const internalClient = createInternalApiClient(
-      "http://localhost:3334",
-      "secret",
-    );
 
     expect(
       publicClient.threads[":id"].send.$url({ param: { id: "thr_123" } })
@@ -67,8 +62,5 @@ describe("server-contract clients", () => {
         },
       }).pathname,
     ).toBe("/api/v1/threads/thr_123/timeline/tool-details");
-    expect(internalClient.session.open.$url().pathname).toBe(
-      "/internal/session/open",
-    );
   });
 });

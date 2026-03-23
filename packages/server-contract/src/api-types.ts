@@ -1,7 +1,6 @@
 import { z } from "zod";
 import {
   environmentCapabilitiesSchema,
-  environmentDescriptorSchema,
   promptInputSchema,
   providerCapabilitiesSchema,
   reasoningLevelSchema,
@@ -16,100 +15,81 @@ import {
 } from "@bb/domain";
 import { apiErrorSchema } from "./errors.js";
 
-export const environmentCreationArgsSchema = z.object({
-  kind: z.string().min(1),
+// --- Thread creation & messaging (renamed per architecture) ---
+
+export const sendMessageModeSchema = z.enum(["auto", "start", "steer"]);
+export type SendMessageMode = z.infer<typeof sendMessageModeSchema>;
+
+export const createThreadRequestSchema = z.object({
+  projectId: z.string().min(1),
+  providerId: z.string().min(1).optional(),
+  type: threadTypeSchema.optional(),
+  title: z.string().min(1).optional(),
+  input: z.array(promptInputSchema).min(1).optional(),
+  model: z.string().optional(),
+  serviceTier: serviceTierSchema.optional(),
+  reasoningLevel: reasoningLevelSchema.optional(),
+  sandboxMode: sandboxModeSchema.optional(),
+  environmentId: z.string().min(1).optional(),
+  hostId: z.string().min(1).optional(),
+  path: z.string().optional(),
+  provisionerId: z.enum(["worktree", "e2b"]).optional(),
+  environmentDescriptor: z
+    .object({
+      type: z.string().min(1),
+      path: z.string().min(1),
+    })
+    .optional(),
+  environmentCreationArgs: z
+    .object({
+      kind: z.string().min(1),
+    })
+    .optional(),
+  parentThreadId: z.string().optional(),
+  spawnInitiator: z.enum(["user", "agent", "system"]).optional(),
 });
-export type EnvironmentCreationArgs = z.infer<
-  typeof environmentCreationArgsSchema
->;
+export type CreateThreadRequest = z.infer<typeof createThreadRequestSchema>;
+export const spawnThreadRequestSchema = createThreadRequestSchema;
+export type SpawnThreadRequest = CreateThreadRequest;
 
-export const tellThreadModeSchema = z.enum(["auto", "start", "steer"]);
-export type TellThreadMode = z.infer<typeof tellThreadModeSchema>;
-
-export const spawnThreadRequestSchema = z
-  .object({
-    projectId: z.string().min(1),
-    providerId: z.string().min(1).optional(),
-    type: threadTypeSchema.optional(),
-    title: z.string().min(1).optional(),
-    input: z.array(promptInputSchema).min(1).optional(),
-    model: z.string().optional(),
-    serviceTier: serviceTierSchema.optional(),
-    reasoningLevel: reasoningLevelSchema.optional(),
-    sandboxMode: sandboxModeSchema.optional(),
-    environmentId: z.string().min(1).optional(),
-    environmentDescriptor: environmentDescriptorSchema.optional(),
-    environmentCreationArgs: environmentCreationArgsSchema.optional(),
-    developerInstructions: z.string().optional(),
-    parentThreadId: z.string().optional(),
-    spawnInitiator: z.enum(["user", "agent", "system"]).optional(),
-  })
-  .superRefine((value, ctx) => {
-    const selectedCount = [
-      value.environmentId !== undefined,
-      value.environmentDescriptor !== undefined,
-      value.environmentCreationArgs !== undefined,
-    ].filter(Boolean).length;
-    if (selectedCount <= 1) {
-      return;
-    }
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message:
-        "Provide at most one of environmentId, environmentDescriptor, or environmentCreationArgs",
-      path: ["environmentId"],
-    });
-  });
-export type SpawnThreadRequest = z.infer<typeof spawnThreadRequestSchema>;
-export const createThreadRequestSchema = spawnThreadRequestSchema;
-export type CreateThreadRequest = SpawnThreadRequest;
-
-export const tellThreadRequestSchema = z.object({
+export const sendMessageRequestSchema = z.object({
   input: z.array(promptInputSchema).min(1),
   model: z.string().optional(),
   serviceTier: serviceTierSchema.optional(),
   reasoningLevel: reasoningLevelSchema.optional(),
   sandboxMode: sandboxModeSchema.optional(),
-  mode: tellThreadModeSchema.optional(),
+  mode: sendMessageModeSchema.optional(),
   demotePrimaryIfNeeded: z.boolean().optional(),
 });
-export type TellThreadRequest = z.infer<typeof tellThreadRequestSchema>;
-export const sendMessageModeSchema = tellThreadModeSchema;
-export type SendMessageMode = TellThreadMode;
-export const sendMessageRequestSchema = tellThreadRequestSchema;
-export type SendMessageRequest = TellThreadRequest;
+export type SendMessageRequest = z.infer<typeof sendMessageRequestSchema>;
+export const tellThreadRequestSchema = sendMessageRequestSchema;
+export type TellThreadRequest = SendMessageRequest;
 
-export const enqueueThreadMessageRequestSchema = z.object({
+export const createDraftRequestSchema = z.object({
   input: z.array(promptInputSchema).min(1),
   model: z.string().optional(),
   serviceTier: serviceTierSchema.optional(),
   reasoningLevel: reasoningLevelSchema.optional(),
   sandboxMode: sandboxModeSchema.optional(),
 });
-export type EnqueueThreadMessageRequest = z.infer<
-  typeof enqueueThreadMessageRequestSchema
->;
-export const createDraftRequestSchema = enqueueThreadMessageRequestSchema;
-export type CreateDraftRequest = EnqueueThreadMessageRequest;
+export type CreateDraftRequest = z.infer<typeof createDraftRequestSchema>;
+export const enqueueThreadMessageRequestSchema = createDraftRequestSchema;
+export type EnqueueThreadMessageRequest = CreateDraftRequest;
 
-export const sendQueuedThreadMessageRequestSchema = z.object({
+export const sendDraftRequestSchema = z.object({
   mode: z.enum(["auto", "steer-if-active", "steer"]).optional(),
 });
-export type SendQueuedThreadMessageRequest = z.infer<
-  typeof sendQueuedThreadMessageRequestSchema
->;
-export const sendDraftRequestSchema = sendQueuedThreadMessageRequestSchema;
-export type SendDraftRequest = SendQueuedThreadMessageRequest;
+export type SendDraftRequest = z.infer<typeof sendDraftRequestSchema>;
+export const sendQueuedThreadMessageRequestSchema = sendDraftRequestSchema;
+export type SendQueuedThreadMessageRequest = SendDraftRequest;
 
-export const sendQueuedThreadMessageResponseSchema = z.object({
+export const sendDraftResponseSchema = z.object({
   ok: z.literal(true),
   queuedMessage: threadQueuedMessageSchema,
 });
-export type SendQueuedThreadMessageResponse = z.infer<
-  typeof sendQueuedThreadMessageResponseSchema
->;
-export const sendDraftResponseSchema = sendQueuedThreadMessageResponseSchema;
-export type SendDraftResponse = SendQueuedThreadMessageResponse;
+export type SendDraftResponse = z.infer<typeof sendDraftResponseSchema>;
+export const sendQueuedThreadMessageResponseSchema = sendDraftResponseSchema;
+export type SendQueuedThreadMessageResponse = SendDraftResponse;
 
 export const updateThreadRequestSchema = z
   .object({
@@ -126,13 +106,29 @@ export const updateThreadRequestSchema = z
   );
 export type UpdateThreadRequest = z.infer<typeof updateThreadRequestSchema>;
 
-export const createProjectRequestSchema = z.object({
-  name: z.string(),
-  rootPath: z.string(),
-});
-export type CreateProjectRequest = z.infer<
-  typeof createProjectRequestSchema
->;
+// --- Projects ---
+
+export const createProjectRequestSchema = z
+  .object({
+    name: z.string(),
+    rootPath: z.string().optional(),
+    sourcePath: z.string().optional(),
+    hostId: z.string().optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (value.rootPath) {
+      return;
+    }
+    if (value.sourcePath && value.hostId) {
+      return;
+    }
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Provide rootPath or both sourcePath and hostId",
+      path: ["rootPath"],
+    });
+  });
+export type CreateProjectRequest = z.infer<typeof createProjectRequestSchema>;
 
 export const updateProjectRequestSchema = z
   .object({
@@ -149,23 +145,38 @@ export const updateProjectRequestSchema = z
       value.defaultProviderId !== undefined,
     "At least one field must be provided",
   );
-export type UpdateProjectRequest = z.infer<
-  typeof updateProjectRequestSchema
->;
+export type UpdateProjectRequest = z.infer<typeof updateProjectRequestSchema>;
 
-export const threadOperationTypeSchema = z.enum(["commit", "squash_merge"]);
-export type ThreadOperationType = z.infer<typeof threadOperationTypeSchema>;
+// --- Primary checkout ---
 
-export const commitOperationOptionsSchema = z.object({
+export const primaryCheckoutStatusSchema = z.object({
+  projectId: z.string(),
+  activeEnvironmentId: z.string().optional(),
+  activeThreadId: z.string().optional(),
+  promotedAt: z.number().optional(),
+});
+export type PrimaryCheckoutStatus = z.infer<typeof primaryCheckoutStatusSchema>;
+
+// --- Environment actions (renamed from operations) ---
+
+export const environmentActionTypeSchema = z.enum([
+  "promote",
+  "demote",
+  "commit",
+  "squash_merge",
+]);
+export type EnvironmentActionType = z.infer<typeof environmentActionTypeSchema>;
+
+export const commitOptionsSchema = z.object({
   message: z.string().min(1).optional(),
   includeUnstaged: z.boolean().optional(),
   autoArchiveOnSuccess: z.boolean().optional(),
 });
-export type CommitOperationOptions = z.infer<
-  typeof commitOperationOptionsSchema
->;
+export type CommitOptions = z.infer<typeof commitOptionsSchema>;
+export const commitOperationOptionsSchema = commitOptionsSchema;
+export type CommitOperationOptions = CommitOptions;
 
-export const squashMergeOperationOptionsSchema = z.object({
+export const squashMergeOptionsSchema = z.object({
   commitIfNeeded: z.boolean().optional(),
   includeUnstaged: z.boolean().optional(),
   commitMessage: z.string().min(1).optional(),
@@ -173,9 +184,9 @@ export const squashMergeOperationOptionsSchema = z.object({
   mergeBaseBranch: z.string().min(1).optional(),
   autoArchiveOnSuccess: z.boolean().optional(),
 });
-export type SquashMergeOperationOptions = z.infer<
-  typeof squashMergeOperationOptionsSchema
->;
+export type SquashMergeOptions = z.infer<typeof squashMergeOptionsSchema>;
+export const squashMergeOperationOptionsSchema = squashMergeOptionsSchema;
+export type SquashMergeOperationOptions = SquashMergeOptions;
 
 export const threadOperationRequestSchema = z.discriminatedUnion("operation", [
   z.object({
@@ -187,21 +198,29 @@ export const threadOperationRequestSchema = z.discriminatedUnion("operation", [
     options: squashMergeOperationOptionsSchema.optional(),
   }),
 ]);
-export type ThreadOperationRequest = z.infer<
-  typeof threadOperationRequestSchema
->;
+export type ThreadOperationRequest = z.infer<typeof threadOperationRequestSchema>;
 
-export const environmentOperationTypeSchema = z.enum([
-  "promote_primary",
-  "demote_primary",
-  "commit",
-  "squash_merge",
+export const environmentActionRequestSchema = z.discriminatedUnion("action", [
+  z.object({
+    action: z.literal("promote"),
+    initiatingThreadId: z.string().min(1),
+  }),
+  z.object({
+    action: z.literal("demote"),
+    initiatingThreadId: z.string().min(1),
+  }),
+  z.object({
+    action: z.literal("commit"),
+    initiatingThreadId: z.string().min(1),
+    options: commitOptionsSchema.optional(),
+  }),
+  z.object({
+    action: z.literal("squash_merge"),
+    initiatingThreadId: z.string().min(1),
+    options: squashMergeOptionsSchema.optional(),
+  }),
 ]);
-export type EnvironmentOperationType = z.infer<
-  typeof environmentOperationTypeSchema
->;
-export const environmentActionTypeSchema = environmentOperationTypeSchema;
-export type EnvironmentActionType = EnvironmentOperationType;
+export type EnvironmentActionRequest = z.infer<typeof environmentActionRequestSchema>;
 
 const promotePrimaryEnvironmentOperationRequestSchema = z.object({
   operation: z.literal("promote_primary"),
@@ -231,50 +250,116 @@ export const environmentOperationRequestSchema = z.discriminatedUnion("operation
   commitEnvironmentOperationRequestSchema,
   squashMergeEnvironmentOperationRequestSchema,
 ]);
-export type EnvironmentOperationRequest = z.infer<
-  typeof environmentOperationRequestSchema
->;
-export const environmentActionRequestSchema = environmentOperationRequestSchema;
-export type EnvironmentActionRequest = EnvironmentOperationRequest;
+export type EnvironmentOperationRequest = z.infer<typeof environmentOperationRequestSchema>;
 
-export const environmentOperationPrepCommitResultSchema = z.object({
-  message: z.string(),
-  commitSha: z.string().optional(),
-  commitSubject: z.string().optional(),
-  includeUnstaged: z.boolean().optional(),
-});
-export type EnvironmentOperationPrepCommitResult = z.infer<
-  typeof environmentOperationPrepCommitResultSchema
->;
-
-export const commitEnvironmentOperationResponseSchema = z.object({
+export const commitActionResponseSchema = z.object({
   ok: z.literal(true),
-  operation: z.literal("commit"),
+  action: z.literal("commit"),
   commitCreated: z.boolean(),
   message: z.string(),
   autoArchived: z.boolean(),
   commitSha: z.string().optional(),
   commitSubject: z.string().optional(),
-  includeUnstaged: z.boolean().optional(),
 });
+export type CommitActionResponse = z.infer<typeof commitActionResponseSchema>;
+export const commitEnvironmentOperationResponseSchema =
+  commitActionResponseSchema.extend({
+    operation: z.literal("commit"),
+  });
 export type CommitEnvironmentOperationResponse = z.infer<
   typeof commitEnvironmentOperationResponseSchema
 >;
 
-export const squashMergeEnvironmentOperationResponseSchema = z.object({
+export const squashMergeActionResponseSchema = z.object({
   ok: z.literal(true),
-  operation: z.literal("squash_merge"),
+  action: z.literal("squash_merge"),
   merged: z.boolean(),
   message: z.string(),
   autoArchived: z.boolean(),
-  committed: z.boolean().optional(),
   commitSha: z.string().optional(),
   commitSubject: z.string().optional(),
-  prepCommit: environmentOperationPrepCommitResultSchema.optional(),
 });
+export type SquashMergeActionResponse = z.infer<typeof squashMergeActionResponseSchema>;
+export const squashMergeEnvironmentOperationResponseSchema =
+  squashMergeActionResponseSchema.extend({
+    operation: z.literal("squash_merge"),
+  });
 export type SquashMergeEnvironmentOperationResponse = z.infer<
   typeof squashMergeEnvironmentOperationResponseSchema
 >;
+
+export const environmentActionResponseSchema = z.discriminatedUnion("action", [
+  commitActionResponseSchema,
+  squashMergeActionResponseSchema,
+  z.object({
+    action: z.literal("promote"),
+    ok: z.literal(true),
+    message: z.string(),
+  }),
+  z.object({
+    action: z.literal("demote"),
+    ok: z.literal(true),
+    message: z.string(),
+  }),
+]);
+export type EnvironmentActionResponse = z.infer<typeof environmentActionResponseSchema>;
+
+export const promotePrimaryCheckoutResponseSchema = z.object({
+  ok: z.literal(true),
+  operation: z.literal("promote_primary"),
+  promoted: z.boolean(),
+  message: z.string(),
+  primaryStatus: primaryCheckoutStatusSchema,
+});
+export type PromotePrimaryCheckoutResponse = z.infer<
+  typeof promotePrimaryCheckoutResponseSchema
+>;
+
+export const demotePrimaryCheckoutResponseSchema = z.object({
+  ok: z.literal(true),
+  operation: z.literal("demote_primary"),
+  demoted: z.boolean(),
+  message: z.string(),
+  primaryStatus: primaryCheckoutStatusSchema,
+});
+export type DemotePrimaryCheckoutResponse = z.infer<
+  typeof demotePrimaryCheckoutResponseSchema
+>;
+
+export const environmentOperationResponseSchema = z.discriminatedUnion(
+  "operation",
+  [
+    commitEnvironmentOperationResponseSchema,
+    squashMergeEnvironmentOperationResponseSchema,
+    promotePrimaryCheckoutResponseSchema,
+    demotePrimaryCheckoutResponseSchema,
+  ],
+);
+export type EnvironmentOperationResponse = z.infer<
+  typeof environmentOperationResponseSchema
+>;
+
+export const environmentActionFailureDetailsSchema = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("commit_failed"),
+    errorMessage: z.string(),
+  }),
+  z.object({
+    kind: z.literal("squash_merge_conflict"),
+    conflictFiles: z.array(z.string()),
+  }),
+  z.object({
+    kind: z.literal("squash_merge_commit_failed"),
+    stage: z.enum(["prep_commit", "squash_commit"]),
+    errorMessage: z.string(),
+  }),
+]);
+export type EnvironmentActionFailureDetails = z.infer<typeof environmentActionFailureDetailsSchema>;
+
+export const environmentActionApiErrorSchema = apiErrorSchema.extend({
+  details: environmentActionFailureDetailsSchema.optional(),
+});
+export type EnvironmentActionApiError = z.infer<typeof environmentActionApiErrorSchema>;
 
 export const commitFailureEnvironmentOperationDetailsSchema = z.object({
   operation: z.literal("commit"),
@@ -296,14 +381,13 @@ export type SquashMergeConflictEnvironmentOperationDetails = z.infer<
   typeof squashMergeConflictEnvironmentOperationDetailsSchema
 >;
 
-export const squashMergeCommitFailureEnvironmentOperationDetailsSchema =
-  z.object({
-    operation: z.literal("squash_merge"),
-    kind: z.literal("squash_merge_commit_failed"),
-    request: squashMergeEnvironmentOperationRequestSchema,
-    stage: z.enum(["prep_commit", "squash_commit"]),
-    errorMessage: z.string(),
-  });
+export const squashMergeCommitFailureEnvironmentOperationDetailsSchema = z.object({
+  operation: z.literal("squash_merge"),
+  kind: z.literal("squash_merge_commit_failed"),
+  request: squashMergeEnvironmentOperationRequestSchema,
+  stage: z.enum(["prep_commit", "squash_commit"]),
+  errorMessage: z.string(),
+});
 export type SquashMergeCommitFailureEnvironmentOperationDetails = z.infer<
   typeof squashMergeCommitFailureEnvironmentOperationDetailsSchema
 >;
@@ -319,9 +403,6 @@ export const environmentOperationFailureDetailsSchema = z.discriminatedUnion(
 export type EnvironmentOperationFailureDetails = z.infer<
   typeof environmentOperationFailureDetailsSchema
 >;
-export const environmentActionFailureDetailsSchema =
-  environmentOperationFailureDetailsSchema;
-export type EnvironmentActionFailureDetails = EnvironmentOperationFailureDetails;
 
 export const environmentOperationApiErrorSchema = apiErrorSchema.extend({
   details: environmentOperationFailureDetailsSchema.optional(),
@@ -329,64 +410,37 @@ export const environmentOperationApiErrorSchema = apiErrorSchema.extend({
 export type EnvironmentOperationApiError = z.infer<
   typeof environmentOperationApiErrorSchema
 >;
-export const environmentActionApiErrorSchema = environmentOperationApiErrorSchema;
-export type EnvironmentActionApiError = EnvironmentOperationApiError;
 
-export const primaryCheckoutStatusSchema = z.object({
-  projectId: z.string(),
-  activeEnvironmentId: z.string().optional(),
-  activeThreadId: z.string().optional(),
-  promotedAt: z.number().optional(),
+// --- Timeline (renamed from tool-group-messages) ---
+
+export const timelineToolDetailsRequestSchema = z.object({
+  turnId: z.string(),
+  sourceSeqStart: z.number(),
+  sourceSeqEnd: z.number(),
+  includeManagerDebugView: z.boolean().optional(),
 });
-export type PrimaryCheckoutStatus = z.infer<
-  typeof primaryCheckoutStatusSchema
->;
+export type TimelineToolDetailsRequest = z.infer<typeof timelineToolDetailsRequestSchema>;
 
-export const promotePrimaryCheckoutResponseSchema = z.object({
-  ok: z.literal(true),
-  promoted: z.boolean(),
-  message: z.string(),
-  primaryStatus: primaryCheckoutStatusSchema,
+export const timelineToolDetailsResponseSchema = z.object({
+  messages: z.array(viewMessageSchema),
 });
-export type PromotePrimaryCheckoutResponse = z.infer<
-  typeof promotePrimaryCheckoutResponseSchema
->;
+export type TimelineToolDetailsResponse = z.infer<typeof timelineToolDetailsResponseSchema>;
+export const threadToolGroupMessagesResponseSchema =
+  timelineToolDetailsResponseSchema;
+export type ThreadToolGroupMessagesResponse = TimelineToolDetailsResponse;
 
-export const demotePrimaryCheckoutResponseSchema = z.object({
-  ok: z.literal(true),
-  demoted: z.boolean(),
-  message: z.string(),
-  primaryStatus: primaryCheckoutStatusSchema,
+export const threadTimelineResponseSchema = z.object({
+  rows: z.array(timelineRowSchema),
+  contextWindowUsage: threadContextWindowUsageSchema.nullable().optional(),
 });
-export type DemotePrimaryCheckoutResponse = z.infer<
-  typeof demotePrimaryCheckoutResponseSchema
->;
+export type ThreadTimelineResponse = z.infer<typeof threadTimelineResponseSchema>;
 
-export const environmentOperationResponseSchema = z.discriminatedUnion(
-  "operation",
-  [
-    commitEnvironmentOperationResponseSchema,
-    squashMergeEnvironmentOperationResponseSchema,
-    promotePrimaryCheckoutResponseSchema.extend({
-      operation: z.literal("promote_primary"),
-    }),
-    demotePrimaryCheckoutResponseSchema.extend({
-      operation: z.literal("demote_primary"),
-    }),
-  ],
-);
-export type EnvironmentOperationResponse = z.infer<
-  typeof environmentOperationResponseSchema
->;
-export const environmentActionResponseSchema = environmentOperationResponseSchema;
-export type EnvironmentActionResponse = EnvironmentOperationResponse;
+// --- File suggestions ---
 
 export const projectFileSuggestionSchema = z.object({
   path: z.string(),
 });
-export type ProjectFileSuggestion = z.infer<
-  typeof projectFileSuggestionSchema
->;
+export type ProjectFileSuggestion = z.infer<typeof projectFileSuggestionSchema>;
 
 export const promptMentionSuggestionSchema = z.discriminatedUnion("kind", [
   z.object({
@@ -403,9 +457,9 @@ export const promptMentionSuggestionSchema = z.discriminatedUnion("kind", [
     threadType: threadTypeSchema,
   }),
 ]);
-export type PromptMentionSuggestion = z.infer<
-  typeof promptMentionSuggestionSchema
->;
+export type PromptMentionSuggestion = z.infer<typeof promptMentionSuggestionSchema>;
+
+// --- Upload ---
 
 export const uploadedPromptAttachmentSchema = z.object({
   type: z.enum(["localImage", "localFile"]),
@@ -414,9 +468,9 @@ export const uploadedPromptAttachmentSchema = z.object({
   mimeType: z.string().optional(),
   sizeBytes: z.number(),
 });
-export type UploadedPromptAttachment = z.infer<
-  typeof uploadedPromptAttachmentSchema
->;
+export type UploadedPromptAttachment = z.infer<typeof uploadedPromptAttachmentSchema>;
+
+// --- Open path ---
 
 export const openPathTargetSchema = z.enum(["file", "directory"]);
 export type OpenPathTarget = z.infer<typeof openPathTargetSchema>;
@@ -444,16 +498,14 @@ export const openThreadPathRequestSchema = z.object({
   editor: openPathEditorSchema.optional(),
   command: z.string().optional(),
 });
-export type OpenThreadPathRequest = z.infer<
-  typeof openThreadPathRequestSchema
->;
+export type OpenThreadPathRequest = z.infer<typeof openThreadPathRequestSchema>;
+
+// --- System ---
 
 export const systemVoiceTranscriptionResponseSchema = z.object({
   text: z.string(),
 });
-export type SystemVoiceTranscriptionResponse = z.infer<
-  typeof systemVoiceTranscriptionResponseSchema
->;
+export type SystemVoiceTranscriptionResponse = z.infer<typeof systemVoiceTranscriptionResponseSchema>;
 
 export const systemStatusSchema = z.object({
   runningThreads: z.number(),
@@ -462,14 +514,28 @@ export const systemStatusSchema = z.object({
 });
 export type SystemStatus = z.infer<typeof systemStatusSchema>;
 
+export const systemHealthThreadCountsSchema = z.object({
+  total: z.number(),
+  archived: z.number(),
+  created: z.number(),
+  provisioning: z.number(),
+  provisioned: z.number(),
+  provisioningFailed: z.number(),
+  error: z.number(),
+  active: z.number(),
+  idle: z.number(),
+});
+export type SystemHealthThreadCounts = z.infer<typeof systemHealthThreadCountsSchema>;
+
 export const systemHealthStorageBucketKeySchema = z.enum([
   "database",
   "database_wal",
   "database_shm",
-  "server_logs",
-  "environment_daemon_logs",
+  "logs",
+  "hosts",
+  "projects",
   "worktrees",
-  "attachments",
+  "archives",
   "backups",
 ]);
 export type SystemHealthStorageBucketKey = z.infer<
@@ -496,94 +562,16 @@ export type SystemHealthDiskSummary = z.infer<
   typeof systemHealthDiskSummarySchema
 >;
 
-export const systemHealthThreadCountsSchema = z.object({
-  total: z.number(),
-  archived: z.number(),
-  created: z.number(),
-  provisioning: z.number(),
-  provisioned: z.number(),
-  provisioningFailed: z.number(),
-  error: z.number(),
-  active: z.number(),
-  idle: z.number(),
-});
-export type SystemHealthThreadCounts = z.infer<
-  typeof systemHealthThreadCountsSchema
->;
-
-export const systemHealthEnvironmentDaemonWorkerSchema = z.object({
-  name: z.string(),
-  version: z.string(),
-  buildId: z.string().optional(),
-});
-export type SystemHealthEnvironmentDaemonWorker = z.infer<
-  typeof systemHealthEnvironmentDaemonWorkerSchema
->;
-export const systemHealthDaemonWorkerSchema =
-  systemHealthEnvironmentDaemonWorkerSchema;
-export type SystemHealthDaemonWorker = SystemHealthEnvironmentDaemonWorker;
-
-export const systemHealthEnvironmentDaemonProviderSchema = z.object({
-  providerId: z.string(),
-  adapterVersion: z.string(),
-  runtimeVersion: z.string().optional(),
-});
-export type SystemHealthEnvironmentDaemonProvider = z.infer<
-  typeof systemHealthEnvironmentDaemonProviderSchema
->;
-export const systemHealthDaemonProviderSchema =
-  systemHealthEnvironmentDaemonProviderSchema;
-export type SystemHealthDaemonProvider = SystemHealthEnvironmentDaemonProvider;
-
-export const systemHealthEnvironmentDaemonCapabilitiesSchema = z.object({
-  commands: z.array(z.string()),
-  features: z.array(z.string()),
-});
-export type SystemHealthEnvironmentDaemonCapabilities = z.infer<
-  typeof systemHealthEnvironmentDaemonCapabilitiesSchema
->;
-export const systemHealthDaemonCapabilitiesSchema =
-  systemHealthEnvironmentDaemonCapabilitiesSchema;
-export type SystemHealthDaemonCapabilities =
-  SystemHealthEnvironmentDaemonCapabilities;
-
-export const systemHealthEnvironmentDaemonCompatibilitySchema = z.object({
-  disposition: z.enum(["reuse", "degrade", "replace"]),
-  missingRequiredCommands: z.array(z.string()),
-  missingOptionalCommands: z.array(z.string()),
-  missingOptionalFeatures: z.array(z.string()),
-});
-export type SystemHealthEnvironmentDaemonCompatibility = z.infer<
-  typeof systemHealthEnvironmentDaemonCompatibilitySchema
->;
-export const systemHealthDaemonCompatibilitySchema =
-  systemHealthEnvironmentDaemonCompatibilitySchema;
-export type SystemHealthDaemonCompatibility =
-  SystemHealthEnvironmentDaemonCompatibility;
-
-export const systemHealthEnvironmentDaemonSessionSchema = z.object({
+export const systemHealthDaemonSessionSchema = z.object({
   sessionId: z.string(),
-  environmentId: z.string(),
-  environmentDaemonId: z.string(),
-  environmentDaemonInstanceId: z.string(),
+  hostId: z.string(),
+  instanceId: z.string(),
   protocolVersion: z.number(),
-  worker: systemHealthEnvironmentDaemonWorkerSchema.optional(),
-  providers: z.array(systemHealthEnvironmentDaemonProviderSchema).optional(),
-  selectedCapabilities:
-    systemHealthEnvironmentDaemonCapabilitiesSchema.optional(),
-  compatibility: systemHealthEnvironmentDaemonCompatibilitySchema.optional(),
-  controlBaseUrl: z.string().optional(),
   leaseExpiresAt: z.number(),
   lastHeartbeatAt: z.number().optional(),
   createdAt: z.number(),
-  updatedAt: z.number(),
 });
-export type SystemHealthEnvironmentDaemonSession = z.infer<
-  typeof systemHealthEnvironmentDaemonSessionSchema
->;
-export const systemHealthDaemonSessionSchema =
-  systemHealthEnvironmentDaemonSessionSchema;
-export type SystemHealthDaemonSession = SystemHealthEnvironmentDaemonSession;
+export type SystemHealthDaemonSession = z.infer<typeof systemHealthDaemonSessionSchema>;
 
 export const systemHealthReportSchema = z.object({
   generatedAt: z.number(),
@@ -591,9 +579,9 @@ export const systemHealthReportSchema = z.object({
   projectCount: z.number(),
   runningThreads: z.number(),
   threadCounts: systemHealthThreadCountsSchema,
-  environmentDaemon: z.object({
+  daemon: z.object({
     activeSessionCount: z.number(),
-    activeSessions: z.array(systemHealthEnvironmentDaemonSessionSchema),
+    activeSessions: z.array(systemHealthDaemonSessionSchema),
   }),
   storage: z.object({
     totalBytes: z.number(),
@@ -602,6 +590,20 @@ export const systemHealthReportSchema = z.object({
   }),
 });
 export type SystemHealthReport = z.infer<typeof systemHealthReportSchema>;
+
+export const systemProviderInfoSchema = z.object({
+  id: z.string(),
+  displayName: z.string(),
+  capabilities: providerCapabilitiesSchema,
+});
+export type SystemProviderInfo = z.infer<typeof systemProviderInfoSchema>;
+
+export const systemEnvironmentInfoSchema = z.object({
+  id: z.string(),
+  displayName: z.string(),
+  capabilities: environmentCapabilitiesSchema,
+});
+export type SystemEnvironmentInfo = z.infer<typeof systemEnvironmentInfoSchema>;
 
 export const systemRestartActionSchema = z.enum(["noop"]);
 export type SystemRestartAction = z.infer<typeof systemRestartActionSchema>;
@@ -623,32 +625,24 @@ export const systemRestartPolicySchema = z.object({
   shutdownBlockingStatuses: z.array(threadStatusSchema),
   shouldRestart: z.boolean(),
 });
-export type SystemRestartPolicy = z.infer<
-  typeof systemRestartPolicySchema
->;
-
-export const systemShutdownRequestSchema = z.object({
-  force: z.boolean().optional(),
-});
-export type SystemShutdownRequest = z.infer<
-  typeof systemShutdownRequestSchema
->;
+export type SystemRestartPolicy = z.infer<typeof systemRestartPolicySchema>;
 
 export const systemRestartRequestSchema = z.object({
   force: z.boolean().optional(),
 });
-export type SystemRestartRequest = z.infer<
-  typeof systemRestartRequestSchema
->;
+export type SystemRestartRequest = z.infer<typeof systemRestartRequestSchema>;
+
+export const systemShutdownRequestSchema = z.object({
+  force: z.boolean().optional(),
+});
+export type SystemShutdownRequest = z.infer<typeof systemShutdownRequestSchema>;
 
 export const systemShutdownAcceptedResponseSchema = z.object({
   ok: z.literal(true),
   forced: z.boolean(),
   blockingThreadsCount: z.number(),
 });
-export type SystemShutdownAcceptedResponse = z.infer<
-  typeof systemShutdownAcceptedResponseSchema
->;
+export type SystemShutdownAcceptedResponse = z.infer<typeof systemShutdownAcceptedResponseSchema>;
 
 export const systemRestartAcceptedResponseSchema =
   systemShutdownAcceptedResponseSchema.extend({
@@ -663,61 +657,11 @@ export const systemShutdownBlockingThreadSchema = z.object({
   projectId: z.string(),
   status: threadStatusSchema,
 });
-export type SystemShutdownBlockingThread = z.infer<
-  typeof systemShutdownBlockingThreadSchema
->;
+export type SystemShutdownBlockingThread = z.infer<typeof systemShutdownBlockingThreadSchema>;
 
 export const systemShutdownBlockedResponseSchema = z.object({
   code: z.literal("shutdown_blocked"),
   message: z.string(),
   blockingThreads: z.array(systemShutdownBlockingThreadSchema),
 });
-export type SystemShutdownBlockedResponse = z.infer<
-  typeof systemShutdownBlockedResponseSchema
->;
-
-export const systemProviderInfoSchema = z.object({
-  id: z.string(),
-  displayName: z.string(),
-  capabilities: providerCapabilitiesSchema,
-});
-export type SystemProviderInfo = z.infer<typeof systemProviderInfoSchema>;
-
-export const systemEnvironmentInfoSchema = z.object({
-  id: z.string(),
-  displayName: z.string(),
-  capabilities: environmentCapabilitiesSchema,
-});
-export type SystemEnvironmentInfo = z.infer<
-  typeof systemEnvironmentInfoSchema
->;
-
-export const threadToolGroupMessagesRequestSchema = z.object({
-  turnId: z.string(),
-  sourceSeqStart: z.number(),
-  sourceSeqEnd: z.number(),
-  includeManagerDebugView: z.boolean().optional(),
-});
-export type ThreadToolGroupMessagesRequest = z.infer<
-  typeof threadToolGroupMessagesRequestSchema
->;
-export const timelineToolDetailsRequestSchema = threadToolGroupMessagesRequestSchema;
-export type TimelineToolDetailsRequest = ThreadToolGroupMessagesRequest;
-
-export const threadToolGroupMessagesResponseSchema = z.object({
-  messages: z.array(viewMessageSchema),
-});
-export type ThreadToolGroupMessagesResponse = z.infer<
-  typeof threadToolGroupMessagesResponseSchema
->;
-export const timelineToolDetailsResponseSchema =
-  threadToolGroupMessagesResponseSchema;
-export type TimelineToolDetailsResponse = ThreadToolGroupMessagesResponse;
-
-export const threadTimelineResponseSchema = z.object({
-  rows: z.array(timelineRowSchema),
-  contextWindowUsage: threadContextWindowUsageSchema.nullable().optional(),
-});
-export type ThreadTimelineResponse = z.infer<
-  typeof threadTimelineResponseSchema
->;
+export type SystemShutdownBlockedResponse = z.infer<typeof systemShutdownBlockedResponseSchema>;

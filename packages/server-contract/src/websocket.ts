@@ -13,7 +13,9 @@ export const THREAD_CHANGE_KINDS = [
 ] as const;
 export type ThreadChangeKind = (typeof THREAD_CHANGE_KINDS)[number];
 
-export const SYSTEM_CHANGE_KINDS = ["restart-policy-changed"] as const;
+export const SYSTEM_CHANGE_KINDS = [
+  "restart-policy-changed",
+] as const;
 export type SystemChangeKind = (typeof SYSTEM_CHANGE_KINDS)[number];
 
 export interface SubscribeMessage {
