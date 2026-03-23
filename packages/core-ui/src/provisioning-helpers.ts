@@ -5,7 +5,7 @@ import type {
   ViewProvisioningTranscriptEntry,
 } from "@bb/domain";
 
-// --- Helpers used by to-ui-messages.ts (event → UI decoding) ---
+// --- Helpers used by to-view-messages.ts (event -> view decoding) ---
 
 export function readProvisioningTranscript(
   entries: Array<{ type: string; key: string; text?: string; startedAt?: number; status?: string; metadata?: Record<string, unknown> }> | undefined,

@@ -4,8 +4,8 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import type { ThreadEventRow } from "@bb/domain";
 import { decodeRow } from "../src/event-decode.js";
-import { toViewMessages } from "../src/to-ui-messages.js";
-import type { ThreadEventWithMeta } from "../src/to-ui-messages.js";
+import { toViewMessages } from "../src/to-view-messages.js";
+import type { ThreadEventWithMeta } from "../src/to-view-messages.js";
 import { buildTimelineRows } from "../src/thread-detail-rows.js";
 import type { ViewMessage } from "@bb/domain";
 

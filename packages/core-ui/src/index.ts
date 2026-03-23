@@ -32,8 +32,8 @@ export type {
 export { decodeRow } from "./event-decode.js";
 export type { EventMeta } from "./event-decode.js";
 
-export { toViewMessages } from "./to-ui-messages.js";
-export type { ThreadEventWithMeta } from "./to-ui-messages.js";
+export { toViewMessages } from "./to-view-messages.js";
+export type { ThreadEventWithMeta } from "./to-view-messages.js";
 
 export {
   extractErrorMessage,
