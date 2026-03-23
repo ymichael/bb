@@ -116,6 +116,22 @@ export type {
 export {
   appThreadEventTypeSchema,
   appThreadEventTypeValues,
+  clientExecutionOptionsSnapshotSchema,
+  clientOutboundStartEventDataSchema,
+  provisioningTranscriptEntrySchema,
+  systemErrorEventDataSchema,
+  systemManagerUserMessageEventDataSchema,
+  systemOperationEventDataSchema,
+  systemProvisioningCleanupFailedEventDataSchema,
+  systemProvisioningCompletedEventDataSchema,
+  systemProvisioningEnvSetupEventDataSchema,
+  systemProvisioningFallbackEventDataSchema,
+  systemProvisioningProgressEventDataSchema,
+  systemProvisioningStartedEventDataSchema,
+  systemThreadInterruptedEventDataSchema,
+  systemThreadTitleUpdatedEventDataSchema,
+  systemWorktreeCommitEventDataSchema,
+  systemWorktreeSquashMergeEventDataSchema,
   threadEnvironmentStartReasonSchema,
   threadEnvironmentStartReasonValues,
   threadEventRowSchema,
@@ -127,6 +143,7 @@ export {
   threadProvisioningReasonValues,
   threadTurnInitiatorSchema,
   threadTurnInitiatorValues,
+  turnLifecycleEventDataSchema,
 } from "./thread-events.js";
 export type {
   AppThreadEventType,
@@ -159,6 +176,22 @@ export type {
   TurnLifecycleEventData,
 } from "./thread-events.js";
 
+export {
+  providerThreadEventSchema,
+  systemThreadEventSchema,
+  threadEventFileChangeKindSchema,
+  threadEventFileChangeSchema,
+  threadEventItemSchema,
+  threadEventItemStatusSchema,
+  threadEventPlanStepSchema,
+  threadEventPlanStepStatusSchema,
+  threadEventSchema,
+  threadEventTokenUsageBreakdownSchema,
+  threadEventTokenUsageSchema,
+  threadEventTurnStatusSchema,
+  threadEventUserContentSchema,
+  threadEventWarningCategorySchema,
+} from "./provider-event.js";
 export type {
   ProviderThreadEvent,
   SystemThreadEvent,

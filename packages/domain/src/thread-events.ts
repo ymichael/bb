@@ -1,9 +1,9 @@
 import { z } from "zod";
-import type {
-  PromptInput,
-  ReasoningLevel,
-  SandboxMode,
-  ServiceTier,
+import {
+  promptInputSchema,
+  reasoningLevelSchema,
+  sandboxModeSchema,
+  serviceTierSchema,
 } from "./shared-types.js";
 
 export const appThreadEventTypeValues = [
@@ -80,133 +80,182 @@ export type ThreadProvisioningProgressStatus = z.infer<
   typeof threadProvisioningProgressStatusSchema
 >;
 
-export interface ClientExecutionOptionsSnapshot {
-  model?: string;
-  serviceTier?: ServiceTier;
-  reasoningLevel?: ReasoningLevel;
-  sandboxMode?: SandboxMode;
-  approvalPolicy?: string;
-}
+export const clientExecutionOptionsSnapshotSchema = z.object({
+  model: z.string().optional(),
+  serviceTier: serviceTierSchema.optional(),
+  reasoningLevel: reasoningLevelSchema.optional(),
+  sandboxMode: sandboxModeSchema.optional(),
+  approvalPolicy: z.string().optional(),
+});
+export type ClientExecutionOptionsSnapshot = z.infer<
+  typeof clientExecutionOptionsSnapshotSchema
+>;
 
-export interface ClientOutboundStartEventData {
-  direction: "outbound";
-  source: "spawn" | "tell";
-  initiator?: ThreadTurnInitiator;
-  input?: PromptInput[];
-  request: {
-    method: "thread/start" | "turn/start";
-    params: Record<string, unknown>;
-  };
-  execution: ClientExecutionOptionsSnapshot;
-}
+export const clientOutboundStartEventDataSchema = z.object({
+  direction: z.literal("outbound"),
+  source: z.enum(["spawn", "tell"]),
+  initiator: threadTurnInitiatorSchema.optional(),
+  input: z.array(promptInputSchema).optional(),
+  request: z.object({
+    method: z.enum(["thread/start", "turn/start"]),
+    params: z.record(z.string(), z.unknown()),
+  }),
+  execution: clientExecutionOptionsSnapshotSchema,
+});
+export type ClientOutboundStartEventData = z.infer<
+  typeof clientOutboundStartEventDataSchema
+>;
 
-export interface SystemErrorEventData {
-  code?: string;
-  message: string;
-  detail?: string;
-}
+export const systemErrorEventDataSchema = z.object({
+  code: z.string().optional(),
+  message: z.string(),
+  detail: z.string().optional(),
+});
+export type SystemErrorEventData = z.infer<typeof systemErrorEventDataSchema>;
 
-export interface SystemThreadTitleUpdatedEventData {
-  title: string;
-  previousTitle?: string;
-  source: "provider";
-  providerMethod?: string;
-}
+export const systemThreadTitleUpdatedEventDataSchema = z.object({
+  title: z.string(),
+  previousTitle: z.string().optional(),
+  source: z.literal("provider"),
+  providerMethod: z.string().optional(),
+});
+export type SystemThreadTitleUpdatedEventData = z.infer<
+  typeof systemThreadTitleUpdatedEventDataSchema
+>;
 
-export interface SystemOperationEventData {
-  operation: string;
-  status: string;
-  message: string;
-  operationId?: string;
-  metadata?: Record<string, unknown>;
-}
+export const systemOperationEventDataSchema = z.object({
+  operation: z.string(),
+  status: z.string(),
+  message: z.string(),
+  operationId: z.string().optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
+});
+export type SystemOperationEventData = z.infer<
+  typeof systemOperationEventDataSchema
+>;
 
-export interface SystemThreadInterruptedEventData {
-  reason: "user";
-  message?: string;
-}
+export const systemThreadInterruptedEventDataSchema = z.object({
+  reason: z.literal("user"),
+  message: z.string().optional(),
+});
+export type SystemThreadInterruptedEventData = z.infer<
+  typeof systemThreadInterruptedEventDataSchema
+>;
 
-export interface ProvisioningTranscriptEntry {
-  key: string;
-  text: string;
-  metadata?: Record<string, unknown>;
-  startedAt?: number;
-}
+export const provisioningTranscriptEntrySchema = z.object({
+  key: z.string(),
+  text: z.string(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
+  startedAt: z.number().optional(),
+});
+export type ProvisioningTranscriptEntry = z.infer<
+  typeof provisioningTranscriptEntrySchema
+>;
 
-export interface SystemProvisioningStartedEventData {
-  attachedEnvironmentId?: string;
-  reason?: ThreadProvisioningReason;
-  transcript: ProvisioningTranscriptEntry[];
-}
+export const systemProvisioningStartedEventDataSchema = z.object({
+  attachedEnvironmentId: z.string().optional(),
+  reason: threadProvisioningReasonSchema.optional(),
+  transcript: z.array(provisioningTranscriptEntrySchema),
+});
+export type SystemProvisioningStartedEventData = z.infer<
+  typeof systemProvisioningStartedEventDataSchema
+>;
 
-export interface SystemProvisioningProgressEventData {
-  phase: ThreadProvisioningProgressPhase;
-  status: ThreadProvisioningProgressStatus;
-  durationMs?: number;
-  transcript: ProvisioningTranscriptEntry[];
-}
+export const systemProvisioningProgressEventDataSchema = z.object({
+  phase: threadProvisioningProgressPhaseSchema,
+  status: threadProvisioningProgressStatusSchema,
+  durationMs: z.number().optional(),
+  transcript: z.array(provisioningTranscriptEntrySchema),
+});
+export type SystemProvisioningProgressEventData = z.infer<
+  typeof systemProvisioningProgressEventDataSchema
+>;
 
-export interface SystemProvisioningEnvSetupEventData {
-  setup: {
-    status: "started" | "running" | "completed" | "failed";
-    scriptPath: string;
-    timeoutMs?: number;
-    durationMs?: number;
-    output?: string;
-  };
-  workspaceRoot?: string;
-  reason?: ThreadEnvironmentStartReason;
-  transcript: ProvisioningTranscriptEntry[];
-}
+export const systemProvisioningEnvSetupEventDataSchema = z.object({
+  setup: z.object({
+    status: z.enum(["started", "running", "completed", "failed"]),
+    scriptPath: z.string(),
+    timeoutMs: z.number().optional(),
+    durationMs: z.number().optional(),
+    output: z.string().optional(),
+  }),
+  workspaceRoot: z.string().optional(),
+  reason: threadEnvironmentStartReasonSchema.optional(),
+  transcript: z.array(provisioningTranscriptEntrySchema),
+});
+export type SystemProvisioningEnvSetupEventData = z.infer<
+  typeof systemProvisioningEnvSetupEventDataSchema
+>;
 
-export interface SystemProvisioningFallbackEventData {
-  requestedEnvironmentId: string;
-  fallbackEnvironmentId: string;
-  detail?: string;
-  transcript: ProvisioningTranscriptEntry[];
-}
+export const systemProvisioningFallbackEventDataSchema = z.object({
+  requestedEnvironmentId: z.string(),
+  fallbackEnvironmentId: z.string(),
+  detail: z.string().optional(),
+  transcript: z.array(provisioningTranscriptEntrySchema),
+});
+export type SystemProvisioningFallbackEventData = z.infer<
+  typeof systemProvisioningFallbackEventDataSchema
+>;
 
-export interface SystemProvisioningCompletedEventData {
-  attachedEnvironmentId?: string;
-  providerThreadId?: string;
-  workspaceRoot?: string;
-  reason?: ThreadProvisioningReason;
-  transcript: ProvisioningTranscriptEntry[];
-}
+export const systemProvisioningCompletedEventDataSchema = z.object({
+  attachedEnvironmentId: z.string().optional(),
+  providerThreadId: z.string().optional(),
+  workspaceRoot: z.string().optional(),
+  reason: threadProvisioningReasonSchema.optional(),
+  transcript: z.array(provisioningTranscriptEntrySchema),
+});
+export type SystemProvisioningCompletedEventData = z.infer<
+  typeof systemProvisioningCompletedEventDataSchema
+>;
 
-export interface SystemProvisioningCleanupFailedEventData {
-  message: string;
-  detail?: string;
-}
+export const systemProvisioningCleanupFailedEventDataSchema = z.object({
+  message: z.string(),
+  detail: z.string().optional(),
+});
+export type SystemProvisioningCleanupFailedEventData = z.infer<
+  typeof systemProvisioningCleanupFailedEventDataSchema
+>;
 
-export interface SystemWorktreeCommitEventData {
-  status: "committed" | "noop";
-  message: string;
-  commitSha?: string;
-  commitSubject?: string;
-  includeUnstaged?: boolean;
-}
+export const systemWorktreeCommitEventDataSchema = z.object({
+  status: z.enum(["committed", "noop"]),
+  message: z.string(),
+  commitSha: z.string().optional(),
+  commitSubject: z.string().optional(),
+  includeUnstaged: z.boolean().optional(),
+});
+export type SystemWorktreeCommitEventData = z.infer<
+  typeof systemWorktreeCommitEventDataSchema
+>;
 
-export interface SystemWorktreeSquashMergeEventData {
-  status: "merged" | "noop" | "conflict";
-  message: string;
-  committed?: boolean;
-  commitSha?: string;
-  commitSubject?: string;
-  mergeBaseBranch?: string;
-  conflictFiles?: string[];
-}
+export const systemWorktreeSquashMergeEventDataSchema = z.object({
+  status: z.enum(["merged", "noop", "conflict"]),
+  message: z.string(),
+  committed: z.boolean().optional(),
+  commitSha: z.string().optional(),
+  commitSubject: z.string().optional(),
+  mergeBaseBranch: z.string().optional(),
+  conflictFiles: z.array(z.string()).optional(),
+});
+export type SystemWorktreeSquashMergeEventData = z.infer<
+  typeof systemWorktreeSquashMergeEventDataSchema
+>;
 
-export interface SystemManagerUserMessageEventData {
-  text: string;
-  toolCallId?: string;
-  turnId?: string;
-}
+export const systemManagerUserMessageEventDataSchema = z.object({
+  text: z.string(),
+  toolCallId: z.string().optional(),
+  turnId: z.string().optional(),
+});
+export type SystemManagerUserMessageEventData = z.infer<
+  typeof systemManagerUserMessageEventDataSchema
+>;
 
-export interface TurnLifecycleEventData {
-  turnId?: string;
-  input?: PromptInput[];
-}
+export const turnLifecycleEventDataSchema = z.object({
+  turnId: z.string().optional(),
+  input: z.array(promptInputSchema).optional(),
+});
+export type TurnLifecycleEventData = z.infer<
+  typeof turnLifecycleEventDataSchema
+>;
 
 export type ThreadEventDataByAppType = {
   "client/thread/start": ClientOutboundStartEventData;

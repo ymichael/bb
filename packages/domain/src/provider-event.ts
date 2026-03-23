@@ -1,238 +1,396 @@
-import type {
-  ClientOutboundStartEventData,
-  SystemErrorEventData,
-  SystemManagerUserMessageEventData,
-  SystemOperationEventData,
-  SystemProvisioningCleanupFailedEventData,
-  SystemProvisioningCompletedEventData,
-  SystemProvisioningEnvSetupEventData,
-  SystemProvisioningFallbackEventData,
-  SystemProvisioningProgressEventData,
-  SystemProvisioningStartedEventData,
-  SystemThreadInterruptedEventData,
-  SystemThreadTitleUpdatedEventData,
-  SystemWorktreeCommitEventData,
-  SystemWorktreeSquashMergeEventData,
+import { z } from "zod";
+import {
+  clientOutboundStartEventDataSchema,
+  systemErrorEventDataSchema,
+  systemManagerUserMessageEventDataSchema,
+  systemOperationEventDataSchema,
+  systemProvisioningCleanupFailedEventDataSchema,
+  systemProvisioningCompletedEventDataSchema,
+  systemProvisioningEnvSetupEventDataSchema,
+  systemProvisioningFallbackEventDataSchema,
+  systemProvisioningProgressEventDataSchema,
+  systemProvisioningStartedEventDataSchema,
+  systemThreadInterruptedEventDataSchema,
+  systemThreadTitleUpdatedEventDataSchema,
+  systemWorktreeCommitEventDataSchema,
+  systemWorktreeSquashMergeEventDataSchema,
 } from "./thread-events.js";
 
-export type ThreadEventItemStatus =
-  | "pending"
-  | "completed"
-  | "failed"
-  | "interrupted";
+export const threadEventItemStatusSchema = z.enum([
+  "pending",
+  "completed",
+  "failed",
+  "interrupted",
+]);
+export type ThreadEventItemStatus = z.infer<typeof threadEventItemStatusSchema>;
 
-export type ThreadEventTurnStatus = "completed" | "failed" | "interrupted";
+export const threadEventTurnStatusSchema = z.enum([
+  "completed",
+  "failed",
+  "interrupted",
+]);
+export type ThreadEventTurnStatus = z.infer<typeof threadEventTurnStatusSchema>;
 
-export type ThreadEventFileChangeKind = "add" | "delete" | "update";
+export const threadEventFileChangeKindSchema = z.enum([
+  "add",
+  "delete",
+  "update",
+]);
+export type ThreadEventFileChangeKind = z.infer<
+  typeof threadEventFileChangeKindSchema
+>;
 
-export interface ThreadEventFileChange {
-  path: string;
-  kind: ThreadEventFileChangeKind;
-  movePath?: string;
-  diff?: string;
-}
+export const threadEventFileChangeSchema = z.object({
+  path: z.string(),
+  kind: threadEventFileChangeKindSchema,
+  movePath: z.string().optional(),
+  diff: z.string().optional(),
+});
+export type ThreadEventFileChange = z.infer<typeof threadEventFileChangeSchema>;
 
-export type ThreadEventPlanStepStatus =
-  | "pending"
-  | "active"
-  | "completed"
-  | "failed";
+export const threadEventPlanStepStatusSchema = z.enum([
+  "pending",
+  "active",
+  "completed",
+  "failed",
+]);
+export type ThreadEventPlanStepStatus = z.infer<
+  typeof threadEventPlanStepStatusSchema
+>;
 
-export interface ThreadEventPlanStep {
-  step: string;
-  status?: ThreadEventPlanStepStatus;
-}
+export const threadEventPlanStepSchema = z.object({
+  step: z.string(),
+  status: threadEventPlanStepStatusSchema.optional(),
+});
+export type ThreadEventPlanStep = z.infer<typeof threadEventPlanStepSchema>;
 
-export type ThreadEventUserContent =
-  | { type: "text"; text: string }
-  | { type: "image"; url: string }
-  | { type: "localImage"; path: string }
-  | { type: "localFile"; path: string };
+export const threadEventUserContentSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("text"), text: z.string() }),
+  z.object({ type: z.literal("image"), url: z.string() }),
+  z.object({ type: z.literal("localImage"), path: z.string() }),
+  z.object({ type: z.literal("localFile"), path: z.string() }),
+]);
+export type ThreadEventUserContent = z.infer<
+  typeof threadEventUserContentSchema
+>;
 
-export interface ThreadEventTokenUsageBreakdown {
-  totalTokens: number;
-  inputTokens: number;
-  cachedInputTokens: number;
-  outputTokens: number;
-  reasoningOutputTokens: number;
-}
+export const threadEventTokenUsageBreakdownSchema = z.object({
+  totalTokens: z.number(),
+  inputTokens: z.number(),
+  cachedInputTokens: z.number(),
+  outputTokens: z.number(),
+  reasoningOutputTokens: z.number(),
+});
+export type ThreadEventTokenUsageBreakdown = z.infer<
+  typeof threadEventTokenUsageBreakdownSchema
+>;
 
-export interface ThreadEventTokenUsage {
-  total: ThreadEventTokenUsageBreakdown;
-  last: ThreadEventTokenUsageBreakdown;
-  modelContextWindow: number | null;
-}
+export const threadEventTokenUsageSchema = z.object({
+  total: threadEventTokenUsageBreakdownSchema,
+  last: threadEventTokenUsageBreakdownSchema,
+  modelContextWindow: z.number().nullable(),
+});
+export type ThreadEventTokenUsage = z.infer<typeof threadEventTokenUsageSchema>;
 
-export type ThreadEventWarningCategory = "deprecation" | "config" | "general";
+export const threadEventWarningCategorySchema = z.enum([
+  "deprecation",
+  "config",
+  "general",
+]);
+export type ThreadEventWarningCategory = z.infer<
+  typeof threadEventWarningCategorySchema
+>;
 
-export type ThreadEventItem =
-  | { type: "userMessage"; id: string; content: ThreadEventUserContent[] }
-  | { type: "agentMessage"; id: string; text: string }
-  | {
-      type: "commandExecution";
-      id: string;
-      command: string;
-      cwd: string;
-      status: ThreadEventItemStatus;
-      aggregatedOutput?: string;
-      exitCode?: number;
-      durationMs?: number;
-    }
-  | {
-      type: "fileChange";
-      id: string;
-      changes: ThreadEventFileChange[];
-      status: ThreadEventItemStatus;
-    }
-  | { type: "webSearch"; id: string; query: string; action?: string }
-  | {
-      type: "toolCall";
-      id: string;
-      server?: string;
-      tool: string;
-      arguments?: unknown;
-      status: ThreadEventItemStatus;
-      result?: unknown;
-      error?: string;
-      durationMs?: number;
-    }
-  | { type: "reasoning"; id: string; summary: string[]; content: string[] }
-  | { type: "plan"; id: string; text: string }
-  | { type: "contextCompaction"; id: string };
+export const threadEventItemSchema = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("userMessage"),
+    id: z.string(),
+    content: z.array(threadEventUserContentSchema),
+  }),
+  z.object({
+    type: z.literal("agentMessage"),
+    id: z.string(),
+    text: z.string(),
+  }),
+  z.object({
+    type: z.literal("commandExecution"),
+    id: z.string(),
+    command: z.string(),
+    cwd: z.string(),
+    status: threadEventItemStatusSchema,
+    aggregatedOutput: z.string().optional(),
+    exitCode: z.number().optional(),
+    durationMs: z.number().optional(),
+  }),
+  z.object({
+    type: z.literal("fileChange"),
+    id: z.string(),
+    changes: z.array(threadEventFileChangeSchema),
+    status: threadEventItemStatusSchema,
+  }),
+  z.object({
+    type: z.literal("webSearch"),
+    id: z.string(),
+    query: z.string(),
+    action: z.string().optional(),
+  }),
+  z.object({
+    type: z.literal("toolCall"),
+    id: z.string(),
+    server: z.string().optional(),
+    tool: z.string(),
+    arguments: z.unknown().optional(),
+    status: threadEventItemStatusSchema,
+    result: z.unknown().optional(),
+    error: z.string().optional(),
+    durationMs: z.number().optional(),
+  }),
+  z.object({
+    type: z.literal("reasoning"),
+    id: z.string(),
+    summary: z.array(z.string()),
+    content: z.array(z.string()),
+  }),
+  z.object({
+    type: z.literal("plan"),
+    id: z.string(),
+    text: z.string(),
+  }),
+  z.object({
+    type: z.literal("contextCompaction"),
+    id: z.string(),
+  }),
+]);
+export type ThreadEventItem = z.infer<typeof threadEventItemSchema>;
 
 /**
  * Events originating from a provider process via the agent runtime.
  * These carry `providerThreadId` — the provider's internal session/thread ID.
  */
-export type ProviderThreadEvent =
-  | { type: "thread/started"; threadId: string }
-  | { type: "thread/identity"; threadId: string; providerThreadId: string }
-  | { type: "turn/started"; threadId: string; providerThreadId: string; turnId: string }
-  | {
-      type: "turn/completed";
-      threadId: string;
-      providerThreadId: string;
-      turnId: string;
-      status: ThreadEventTurnStatus;
-      error?: { message: string };
-    }
-  | { type: "thread/name/updated"; threadId: string; providerThreadId: string; threadName: string }
-  | { type: "thread/compacted"; threadId: string; providerThreadId: string }
-  | { type: "item/started"; threadId: string; providerThreadId: string; turnId: string; item: ThreadEventItem }
-  | { type: "item/completed"; threadId: string; providerThreadId: string; turnId: string; item: ThreadEventItem }
-  | {
-      type: "item/agentMessage/delta";
-      threadId: string;
-      providerThreadId: string;
-      turnId: string;
-      itemId?: string;
-      delta: string;
-    }
-  | {
-      type: "item/commandExecution/outputDelta";
-      threadId: string;
-      providerThreadId: string;
-      turnId: string;
-      itemId: string;
-      delta: string;
-    }
-  | {
-      type: "item/fileChange/outputDelta";
-      threadId: string;
-      providerThreadId: string;
-      turnId: string;
-      itemId: string;
-      delta: string;
-    }
-  | {
-      type: "item/reasoning/summaryTextDelta";
-      threadId: string;
-      providerThreadId: string;
-      turnId: string;
-      itemId: string;
-      delta: string;
-    }
-  | {
-      type: "item/reasoning/textDelta";
-      threadId: string;
-      providerThreadId: string;
-      turnId: string;
-      itemId: string;
-      delta: string;
-    }
-  | {
-      type: "item/plan/delta";
-      threadId: string;
-      providerThreadId: string;
-      turnId: string;
-      itemId: string;
-      delta: string;
-    }
-  | {
-      type: "item/mcpToolCall/progress";
-      threadId: string;
-      providerThreadId: string;
-      turnId: string;
-      itemId: string;
-      message?: string;
-    }
-  | {
-      type: "thread/tokenUsage/updated";
-      threadId: string;
-      providerThreadId: string;
-      turnId: string;
-      tokenUsage: ThreadEventTokenUsage;
-    }
-  | {
-      type: "turn/plan/updated";
-      threadId: string;
-      providerThreadId: string;
-      turnId: string;
-      plan: ThreadEventPlanStep[];
-      explanation?: string;
-    }
-  | { type: "turn/diff/updated"; threadId: string; providerThreadId: string; turnId: string; diff?: string }
-  | {
-      type: "error";
-      threadId: string;
-      providerThreadId: string;
-      turnId?: string;
-      message: string;
-      detail?: string;
-      willRetry?: boolean;
-    }
-  | {
-      type: "warning";
-      threadId: string;
-      providerThreadId: string;
-      category: ThreadEventWarningCategory;
-      summary?: string;
-      details?: string;
-    };
+export const providerThreadEventSchema = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("thread/started"),
+    threadId: z.string(),
+  }),
+  z.object({
+    type: z.literal("thread/identity"),
+    threadId: z.string(),
+    providerThreadId: z.string(),
+  }),
+  z.object({
+    type: z.literal("turn/started"),
+    threadId: z.string(),
+    providerThreadId: z.string(),
+    turnId: z.string(),
+  }),
+  z.object({
+    type: z.literal("turn/completed"),
+    threadId: z.string(),
+    providerThreadId: z.string(),
+    turnId: z.string(),
+    status: threadEventTurnStatusSchema,
+    error: z.object({ message: z.string() }).optional(),
+  }),
+  z.object({
+    type: z.literal("thread/name/updated"),
+    threadId: z.string(),
+    providerThreadId: z.string(),
+    threadName: z.string(),
+  }),
+  z.object({
+    type: z.literal("thread/compacted"),
+    threadId: z.string(),
+    providerThreadId: z.string(),
+  }),
+  z.object({
+    type: z.literal("item/started"),
+    threadId: z.string(),
+    providerThreadId: z.string(),
+    turnId: z.string(),
+    item: threadEventItemSchema,
+  }),
+  z.object({
+    type: z.literal("item/completed"),
+    threadId: z.string(),
+    providerThreadId: z.string(),
+    turnId: z.string(),
+    item: threadEventItemSchema,
+  }),
+  z.object({
+    type: z.literal("item/agentMessage/delta"),
+    threadId: z.string(),
+    providerThreadId: z.string(),
+    turnId: z.string(),
+    itemId: z.string().optional(),
+    delta: z.string(),
+  }),
+  z.object({
+    type: z.literal("item/commandExecution/outputDelta"),
+    threadId: z.string(),
+    providerThreadId: z.string(),
+    turnId: z.string(),
+    itemId: z.string(),
+    delta: z.string(),
+  }),
+  z.object({
+    type: z.literal("item/fileChange/outputDelta"),
+    threadId: z.string(),
+    providerThreadId: z.string(),
+    turnId: z.string(),
+    itemId: z.string(),
+    delta: z.string(),
+  }),
+  z.object({
+    type: z.literal("item/reasoning/summaryTextDelta"),
+    threadId: z.string(),
+    providerThreadId: z.string(),
+    turnId: z.string(),
+    itemId: z.string(),
+    delta: z.string(),
+  }),
+  z.object({
+    type: z.literal("item/reasoning/textDelta"),
+    threadId: z.string(),
+    providerThreadId: z.string(),
+    turnId: z.string(),
+    itemId: z.string(),
+    delta: z.string(),
+  }),
+  z.object({
+    type: z.literal("item/plan/delta"),
+    threadId: z.string(),
+    providerThreadId: z.string(),
+    turnId: z.string(),
+    itemId: z.string(),
+    delta: z.string(),
+  }),
+  z.object({
+    type: z.literal("item/mcpToolCall/progress"),
+    threadId: z.string(),
+    providerThreadId: z.string(),
+    turnId: z.string(),
+    itemId: z.string(),
+    message: z.string().optional(),
+  }),
+  z.object({
+    type: z.literal("thread/tokenUsage/updated"),
+    threadId: z.string(),
+    providerThreadId: z.string(),
+    turnId: z.string(),
+    tokenUsage: threadEventTokenUsageSchema,
+  }),
+  z.object({
+    type: z.literal("turn/plan/updated"),
+    threadId: z.string(),
+    providerThreadId: z.string(),
+    turnId: z.string(),
+    plan: z.array(threadEventPlanStepSchema),
+    explanation: z.string().optional(),
+  }),
+  z.object({
+    type: z.literal("turn/diff/updated"),
+    threadId: z.string(),
+    providerThreadId: z.string(),
+    turnId: z.string(),
+    diff: z.string().optional(),
+  }),
+  z.object({
+    type: z.literal("error"),
+    threadId: z.string(),
+    providerThreadId: z.string(),
+    turnId: z.string().optional(),
+    message: z.string(),
+    detail: z.string().optional(),
+    willRetry: z.boolean().optional(),
+  }),
+  z.object({
+    type: z.literal("warning"),
+    threadId: z.string(),
+    providerThreadId: z.string(),
+    category: threadEventWarningCategorySchema,
+    summary: z.string().optional(),
+    details: z.string().optional(),
+  }),
+]);
+export type ProviderThreadEvent = z.infer<typeof providerThreadEventSchema>;
 
 /**
  * Events originating from the server/system layer (not from a provider process).
  * These do NOT carry `providerThreadId`.
  */
-export type SystemThreadEvent =
-  | ({ type: "client/thread/start"; threadId: string } & ClientOutboundStartEventData)
-  | ({ type: "client/turn/requested"; threadId: string } & ClientOutboundStartEventData)
-  | ({ type: "client/turn/start"; threadId: string } & ClientOutboundStartEventData)
-  | ({ type: "system/error"; threadId: string } & SystemErrorEventData)
-  | ({ type: "system/manager/user_message"; threadId: string } & SystemManagerUserMessageEventData)
-  | ({ type: "system/thread/interrupted"; threadId: string } & SystemThreadInterruptedEventData)
-  | ({ type: "system/thread-title/updated"; threadId: string } & SystemThreadTitleUpdatedEventData)
-  | ({ type: "system/operation"; threadId: string } & SystemOperationEventData)
-  | ({ type: "system/worktree/commit"; threadId: string } & SystemWorktreeCommitEventData)
-  | ({ type: "system/worktree/squash_merge"; threadId: string } & SystemWorktreeSquashMergeEventData)
-  | ({ type: "system/provisioning/started"; threadId: string } & SystemProvisioningStartedEventData)
-  | ({ type: "system/provisioning/progress"; threadId: string } & SystemProvisioningProgressEventData)
-  | ({ type: "system/provisioning/env_setup"; threadId: string } & SystemProvisioningEnvSetupEventData)
-  | ({ type: "system/provisioning/fallback"; threadId: string } & SystemProvisioningFallbackEventData)
-  | ({ type: "system/provisioning/completed"; threadId: string } & SystemProvisioningCompletedEventData)
-  | ({ type: "system/provisioning/cleanup_failed"; threadId: string } & SystemProvisioningCleanupFailedEventData);
+export const systemThreadEventSchema = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("client/thread/start"),
+    threadId: z.string(),
+  }).merge(clientOutboundStartEventDataSchema),
+  z.object({
+    type: z.literal("client/turn/requested"),
+    threadId: z.string(),
+  }).merge(clientOutboundStartEventDataSchema),
+  z.object({
+    type: z.literal("client/turn/start"),
+    threadId: z.string(),
+  }).merge(clientOutboundStartEventDataSchema),
+  z.object({
+    type: z.literal("system/error"),
+    threadId: z.string(),
+  }).merge(systemErrorEventDataSchema),
+  z.object({
+    type: z.literal("system/manager/user_message"),
+    threadId: z.string(),
+  }).merge(systemManagerUserMessageEventDataSchema),
+  z.object({
+    type: z.literal("system/thread/interrupted"),
+    threadId: z.string(),
+  }).merge(systemThreadInterruptedEventDataSchema),
+  z.object({
+    type: z.literal("system/thread-title/updated"),
+    threadId: z.string(),
+  }).merge(systemThreadTitleUpdatedEventDataSchema),
+  z.object({
+    type: z.literal("system/operation"),
+    threadId: z.string(),
+  }).merge(systemOperationEventDataSchema),
+  z.object({
+    type: z.literal("system/worktree/commit"),
+    threadId: z.string(),
+  }).merge(systemWorktreeCommitEventDataSchema),
+  z.object({
+    type: z.literal("system/worktree/squash_merge"),
+    threadId: z.string(),
+  }).merge(systemWorktreeSquashMergeEventDataSchema),
+  z.object({
+    type: z.literal("system/provisioning/started"),
+    threadId: z.string(),
+  }).merge(systemProvisioningStartedEventDataSchema),
+  z.object({
+    type: z.literal("system/provisioning/progress"),
+    threadId: z.string(),
+  }).merge(systemProvisioningProgressEventDataSchema),
+  z.object({
+    type: z.literal("system/provisioning/env_setup"),
+    threadId: z.string(),
+  }).merge(systemProvisioningEnvSetupEventDataSchema),
+  z.object({
+    type: z.literal("system/provisioning/fallback"),
+    threadId: z.string(),
+  }).merge(systemProvisioningFallbackEventDataSchema),
+  z.object({
+    type: z.literal("system/provisioning/completed"),
+    threadId: z.string(),
+  }).merge(systemProvisioningCompletedEventDataSchema),
+  z.object({
+    type: z.literal("system/provisioning/cleanup_failed"),
+    threadId: z.string(),
+  }).merge(systemProvisioningCleanupFailedEventDataSchema),
+]);
+export type SystemThreadEvent = z.infer<typeof systemThreadEventSchema>;
 
 /** All thread events — provider-originated or system-originated. */
-export type ThreadEvent = ProviderThreadEvent | SystemThreadEvent;
+export const threadEventSchema = z.union([
+  providerThreadEventSchema,
+  systemThreadEventSchema,
+]);
+export type ThreadEvent = z.infer<typeof threadEventSchema>;
 
 export type ThreadEventType = ThreadEvent["type"];

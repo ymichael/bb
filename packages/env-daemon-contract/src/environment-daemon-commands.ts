@@ -2,6 +2,7 @@ import {
   availableModelSchema,
   dynamicToolSchema,
   promptInputSchema,
+  threadEventSchema,
   threadGitDiffCommitSummarySchema,
   threadGitDiffModeSchema,
   threadGitDiffResponseSchema,
@@ -13,7 +14,6 @@ import {
   type ThreadGitDiffMode,
   type ThreadGitDiffResponse,
   type ThreadGitDiffSelection,
-  type ThreadEvent,
 } from "@bb/domain";
 import { z } from "zod";
 import {
@@ -22,10 +22,7 @@ import {
   daemonDeliveryRuntimeStateSchema,
 } from "./control.js";
 
-const environmentDaemonThreadEventListSchema = z.custom<ThreadEvent[]>(
-  (value) => Array.isArray(value),
-  "Expected translated thread events",
-);
+const environmentDaemonThreadEventListSchema = z.array(threadEventSchema);
 
 export const environmentDaemonExecutionOptionsSchema =
   threadExecutionOptionsSchema;
