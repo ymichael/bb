@@ -100,24 +100,30 @@ export type ThreadEventItem =
   | { type: "plan"; id: string; text: string }
   | { type: "contextCompaction"; id: string };
 
-export type ThreadEvent =
-  | { type: "turn/started"; threadId: string; turnId: string }
+/**
+ * Events originating from a provider process via the agent runtime.
+ * These carry `providerThreadId` — the provider's internal session/thread ID.
+ */
+export type ProviderThreadEvent =
+  | { type: "thread/started"; threadId: string }
+  | { type: "thread/identity"; threadId: string; providerThreadId: string }
+  | { type: "turn/started"; threadId: string; providerThreadId: string; turnId: string }
   | {
       type: "turn/completed";
       threadId: string;
+      providerThreadId: string;
       turnId: string;
       status: ThreadEventTurnStatus;
       error?: { message: string };
     }
-  | { type: "thread/started"; threadId: string }
-  | { type: "thread/identity"; threadId: string; providerThreadId: string }
-  | { type: "thread/name/updated"; threadId: string; threadName: string }
-  | { type: "thread/compacted"; threadId: string }
-  | { type: "item/started"; threadId: string; turnId: string; item: ThreadEventItem }
-  | { type: "item/completed"; threadId: string; turnId: string; item: ThreadEventItem }
+  | { type: "thread/name/updated"; threadId: string; providerThreadId: string; threadName: string }
+  | { type: "thread/compacted"; threadId: string; providerThreadId: string }
+  | { type: "item/started"; threadId: string; providerThreadId: string; turnId: string; item: ThreadEventItem }
+  | { type: "item/completed"; threadId: string; providerThreadId: string; turnId: string; item: ThreadEventItem }
   | {
       type: "item/agentMessage/delta";
       threadId: string;
+      providerThreadId: string;
       turnId: string;
       itemId?: string;
       delta: string;
@@ -125,6 +131,7 @@ export type ThreadEvent =
   | {
       type: "item/commandExecution/outputDelta";
       threadId: string;
+      providerThreadId: string;
       turnId: string;
       itemId: string;
       delta: string;
@@ -132,6 +139,7 @@ export type ThreadEvent =
   | {
       type: "item/fileChange/outputDelta";
       threadId: string;
+      providerThreadId: string;
       turnId: string;
       itemId: string;
       delta: string;
@@ -139,6 +147,7 @@ export type ThreadEvent =
   | {
       type: "item/reasoning/summaryTextDelta";
       threadId: string;
+      providerThreadId: string;
       turnId: string;
       itemId: string;
       delta: string;
@@ -146,6 +155,7 @@ export type ThreadEvent =
   | {
       type: "item/reasoning/textDelta";
       threadId: string;
+      providerThreadId: string;
       turnId: string;
       itemId: string;
       delta: string;
@@ -153,6 +163,7 @@ export type ThreadEvent =
   | {
       type: "item/plan/delta";
       threadId: string;
+      providerThreadId: string;
       turnId: string;
       itemId: string;
       delta: string;
@@ -160,6 +171,7 @@ export type ThreadEvent =
   | {
       type: "item/mcpToolCall/progress";
       threadId: string;
+      providerThreadId: string;
       turnId: string;
       itemId: string;
       message?: string;
@@ -167,20 +179,23 @@ export type ThreadEvent =
   | {
       type: "thread/tokenUsage/updated";
       threadId: string;
+      providerThreadId: string;
       turnId: string;
       tokenUsage: ThreadEventTokenUsage;
     }
   | {
       type: "turn/plan/updated";
       threadId: string;
+      providerThreadId: string;
       turnId: string;
       plan: ThreadEventPlanStep[];
       explanation?: string;
     }
-  | { type: "turn/diff/updated"; threadId: string; turnId: string; diff?: string }
+  | { type: "turn/diff/updated"; threadId: string; providerThreadId: string; turnId: string; diff?: string }
   | {
       type: "error";
       threadId: string;
+      providerThreadId: string;
       turnId?: string;
       message: string;
       detail?: string;
@@ -189,10 +204,17 @@ export type ThreadEvent =
   | {
       type: "warning";
       threadId: string;
+      providerThreadId: string;
       category: ThreadEventWarningCategory;
       summary?: string;
       details?: string;
-    }
+    };
+
+/**
+ * Events originating from the server/system layer (not from a provider process).
+ * These do NOT carry `providerThreadId`.
+ */
+export type SystemThreadEvent =
   | ({ type: "client/thread/start"; threadId: string } & ClientOutboundStartEventData)
   | ({ type: "client/turn/requested"; threadId: string } & ClientOutboundStartEventData)
   | ({ type: "client/turn/start"; threadId: string } & ClientOutboundStartEventData)
@@ -209,5 +231,8 @@ export type ThreadEvent =
   | ({ type: "system/provisioning/fallback"; threadId: string } & SystemProvisioningFallbackEventData)
   | ({ type: "system/provisioning/completed"; threadId: string } & SystemProvisioningCompletedEventData)
   | ({ type: "system/provisioning/cleanup_failed"; threadId: string } & SystemProvisioningCleanupFailedEventData);
+
+/** All thread events — provider-originated or system-originated. */
+export type ThreadEvent = ProviderThreadEvent | SystemThreadEvent;
 
 export type ThreadEventType = ThreadEvent["type"];

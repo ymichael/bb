@@ -173,14 +173,48 @@ importers:
         specifier: ^5.7.0
         version: 5.9.3
 
-  packages/core-ui:
+  packages/agent-runtime:
     dependencies:
+      '@anthropic-ai/claude-agent-sdk':
+        specifier: ^0.2.68
+        version: 0.2.76(zod@4.3.6)
+      '@anthropic-ai/sdk':
+        specifier: ^0.73.0
+        version: 0.73.0(zod@4.3.6)
       '@bb/domain':
         specifier: workspace:*
         version: link:../domain
       '@bb/templates':
         specifier: workspace:*
         version: link:../templates
+      '@mariozechner/pi-ai':
+        specifier: ^0.58.3
+        version: 0.58.3(ws@8.19.0)(zod@4.3.6)
+      '@mariozechner/pi-coding-agent':
+        specifier: ^0.58.3
+        version: 0.58.3(ws@8.19.0)(zod@4.3.6)
+      zod:
+        specifier: ^4.0.0
+        version: 4.3.6
+    devDependencies:
+      '@bb/tsconfig':
+        specifier: workspace:*
+        version: link:../tsconfig
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.19.10
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
+      vitest:
+        specifier: ^4.0.0
+        version: 4.0.18(@types/node@22.19.10)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.21.0)(yaml@2.8.2)
+
+  packages/core-ui:
+    dependencies:
+      '@bb/domain':
+        specifier: workspace:*
+        version: link:../domain
     devDependencies:
       '@bb/tsconfig':
         specifier: workspace:*
@@ -254,43 +288,6 @@ importers:
       typescript:
         specifier: ^5.7.0
         version: 5.9.3
-
-  packages/provider-adapters:
-    dependencies:
-      '@anthropic-ai/claude-agent-sdk':
-        specifier: ^0.2.68
-        version: 0.2.76(zod@4.3.6)
-      '@anthropic-ai/sdk':
-        specifier: ^0.73.0
-        version: 0.73.0(zod@4.3.6)
-      '@bb/domain':
-        specifier: workspace:*
-        version: link:../domain
-      '@bb/templates':
-        specifier: workspace:*
-        version: link:../templates
-      '@mariozechner/pi-ai':
-        specifier: ^0.58.3
-        version: 0.58.3(ws@8.19.0)(zod@4.3.6)
-      '@mariozechner/pi-coding-agent':
-        specifier: ^0.58.3
-        version: 0.58.3(ws@8.19.0)(zod@4.3.6)
-      zod:
-        specifier: ^4.0.0
-        version: 4.3.6
-    devDependencies:
-      '@bb/tsconfig':
-        specifier: workspace:*
-        version: link:../tsconfig
-      '@types/node':
-        specifier: ^22.0.0
-        version: 22.19.10
-      typescript:
-        specifier: ^5.7.0
-        version: 5.9.3
-      vitest:
-        specifier: ^4.0.0
-        version: 4.0.18(@types/node@22.19.10)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.21.0)(yaml@2.8.2)
 
   packages/server-contract:
     dependencies:

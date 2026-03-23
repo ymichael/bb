@@ -147,6 +147,8 @@ export type {
 } from "./thread-events.js";
 
 export type {
+  ProviderThreadEvent,
+  SystemThreadEvent,
   ThreadEvent,
   ThreadEventFileChange,
   ThreadEventFileChangeKind,

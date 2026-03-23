@@ -15,6 +15,10 @@ Replaces `packages/provider-adapters` (absorbed) and the provider management cod
 
 No other workspace dependencies. No `hono`. (Transitively depends on `zod` through `@bb/domain`.)
 
+External dependencies (carried over from `provider-adapters`):
+- `@anthropic-ai/sdk`, `@anthropic-ai/claude-agent-sdk` — Claude Code adapter + bridge
+- `@mariozechner/pi-ai`, `@mariozechner/pi-coding-agent` — Pi adapter + bridge
+
 ## Public API
 
 ```typescript
@@ -314,9 +318,16 @@ steerTurn({ threadId, expectedTurnId, input })
 ### What else stays internal
 
 - **Adapter implementations** — `codex-provider-adapter.ts`, `claude-code-provider-adapter.ts`, `pi-provider-adapter.ts`
+- **Bridge processes** — `bridges/claude-code/` and `bridges/pi/` are separate Node.js executables spawned as child processes. Each bridge contains a process entry point (`bridge.ts`), SDK session management (`sdk-session.ts`), and tool call forwarding (`tool-proxy-mcp.ts` / `tool-proxy.ts`). Codex doesn't use a bridge — it spawns `codex app-server` directly. Bridge processes stay as-is, moved into agent-runtime alongside their parent adapters.
+- **Generated Codex protocol types** — `generated/` directory containing TypeScript types for the Codex wire protocol (event/command schemas). Referenced by `codex-provider-adapter.ts`.
+- **Shared bridge utilities** — `bridges/shared/bridge-tool-calls.ts` (JSON-RPC tool call forwarding protocol)
 - **Process management** — spawning, stdio buffering, JSON-RPC framing, timeouts, crash detection
 - **Thread-to-process routing** — mapping thread IDs to child processes, provider thread ID extraction
 - **Provider initialization** — the `initialize` handshake with the provider process
+- **Codex auth** — `codex-auth.ts` reads `~/.codex/auth.json`. Auth is the caller's responsibility via env vars for the runtime API, but internally the Codex adapter still needs this to resolve its launch configuration.
+- **Codex model discovery** — `codex-models.ts` spawns a `codex app-server` process and sends JSON-RPC requests to discover available models. Used by `listModels()`.
+- **Tool arg schemas** — `tool-arg-schemas.ts` has Zod schemas for common tool arguments (bash, file edit, web search). Used by the tool call codec.
+- **Parse utilities** — `parse-utils.ts` (`asRecord`, `asNonEmptyString`) for loose JSON-RPC response parsing.
 
 ## Lifecycle
 
@@ -389,6 +400,37 @@ Use a fake provider process — a small script that speaks JSON-RPC over stdio. 
 
 Run with real codex/claude-code binaries. Gated behind `BB_E2E_PROVIDER_MODE=real`. Not part of default CI.
 
+### Migrated tests from `provider-adapters`
+
+The following tests migrate into agent-runtime alongside their source code:
+
+| Test | Covers |
+|------|--------|
+| `codex-provider-adapter.test.ts` | Event translation, command building for Codex |
+| `claude-code-provider-adapter.test.ts` | Event translation for Claude Code (reads JSON fixtures) |
+| `pi-provider-adapter.test.ts` | Event translation for Pi (reads JSON fixtures) |
+| `provider-registry.test.ts` | `listAvailableProviders`, `resolveDefaultProviderId` |
+| `codex-auth.test.ts` | Codex auth file parsing (real filesystem, tmpdir) |
+| `__fixtures__/claude-code/*.json` | 8 SDK message fixtures for Claude Code adapter tests |
+| `__fixtures__/pi/*.json` | 5 SDK event fixtures for Pi adapter tests |
+| `integration/provider-contract.integration.test.ts` | Full provider contract (needs real binaries) |
+| `integration/provider-bridge-harness.ts` | Test utility for integration tests |
+
+**Deleted** (LLM completion services are removed entirely):
+
+| Test | Why |
+|------|-----|
+| `llm-completion.test.ts` | Tests deleted `LlmCompletionService` |
+| `openai-responses-model.test.ts` | Tests deleted `generateOpenAIResponsesText` |
+| `codex-title-generator.test.ts` | Tests deleted title generation |
+| `codex-commit-message-generator.test.ts` | Tests deleted commit message generation |
+
+**Deleted** (tool host is dropped — callers implement tool dispatch via `onToolCall`):
+
+| Test | Why |
+|------|-----|
+| `provider-tool-host.test.ts` | `ProviderToolHost` is deleted, not moved |
+
 ## Migration from `packages/provider-adapters`
 
 | Current | New |
@@ -396,15 +438,32 @@ Run with real codex/claude-code binaries. Gated behind `BB_E2E_PROVIDER_MODE=rea
 | `createProviderAdapter()` | Internal — adapters are implementation details |
 | `ProviderAdapter<TEvent, TCommand>` | Internal — not exported |
 | `ProviderRequest` | Internal `AdapterCommand` — not exported |
-| `listAvailableProviderInfos()` | `listAvailableProviders()` |
-| `resolveDefaultProviderId()` | `resolveDefaultProviderId()` (same) |
-| `LlmCompletionService` / `createCodexLlmCompletionService` | Deleted — use `@pi/ai` directly |
-| `ProviderToolHost` | Moves to server (it's server-side tool execution) |
-| `codex-provider-adapter.ts` | Stays, but internal to agent-runtime |
-| `claude-code-provider-adapter.ts` | Stays, but internal to agent-runtime |
-| `pi-provider-adapter.ts` | Stays, but internal to agent-runtime |
+| `listAvailableProviderInfos()` | `listAvailableProviders()` (returns `ProviderInfo[]`, not `SystemProviderInfo[]`) |
+| `resolveDefaultProviderId()` | `resolveDefaultProviderId()` (same — default `"codex"` is a string literal internal to agent-runtime) |
+| `LlmCompletionService` / `createCodexLlmCompletionService` | Deleted entirely |
+| `codex-title-generator.ts` | Deleted entirely |
+| `codex-commit-message-generator.ts` | Deleted entirely |
+| `openai-responses-model.ts` | Deleted entirely |
+| `llm-completion.ts` | Deleted entirely |
+| `ProviderToolHost` | Deleted — callers implement tool dispatch via `onToolCall` callback |
+| `provider-tool-call-contract.ts` | Stays, internal to agent-runtime |
+| `codex-provider-adapter.ts` | Stays, internal to agent-runtime |
+| `claude-code-provider-adapter.ts` | Stays, internal to agent-runtime |
+| `pi-provider-adapter.ts` | Stays, internal to agent-runtime |
+| `bridges/claude-code/` | Stays as-is, internal to agent-runtime |
+| `bridges/pi/` | Stays as-is, internal to agent-runtime |
+| `bridges/shared/` | Stays as-is, internal to agent-runtime |
+| `generated/` (Codex protocol types) | Stays as-is, internal to agent-runtime |
+| `codex-auth.ts` | Stays, internal to agent-runtime (Codex adapter uses it for launch config) |
+| `codex-models.ts` | Stays, internal to agent-runtime (used by `listModels()`) |
+| `tool-arg-schemas.ts` | Stays, internal to agent-runtime |
+| `parse-utils.ts` | Stays, internal to agent-runtime |
 
 **Note on `SpawnThreadRequest`:** Provider adapters currently import `SpawnThreadRequest` from `@bb/core`. In the new architecture, adapters use `AdapterCommand` which has flat fields — no `SpawnThreadRequest`. The runtime decomposes the caller's args. Adapters never import from `server-contract`.
+
+**Note on `SystemProviderInfo` vs `ProviderInfo`:** The current `listAvailableProviderInfos()` returns `SystemProviderInfo` (from server-contract). The new `listAvailableProviders()` returns `ProviderInfo` (defined in agent-runtime, adds `available: boolean`). The server maps `ProviderInfo` → `SystemProviderInfo` at the API boundary — agent-runtime does not depend on server-contract.
+
+**Note on `DEFAULT_THREAD_PROVIDER_ID`:** Was a constant in `@bb/core`. In agent-runtime, the default provider ID (`"codex"`) is a string literal in `resolveDefaultProviderId()`. No shared constant needed — it's only used in one place.
 
 ## Migration from `packages/environment-daemon/src/runtime.ts`
 

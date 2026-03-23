@@ -4,19 +4,9 @@ import { fileURLToPath } from "node:url";
 const repoRoot = path.dirname(fileURLToPath(import.meta.url));
 
 export const workspaceTestAliases = {
-  "@bb/core/storage-paths": path.resolve(
+  "@bb/agent-runtime": path.resolve(
     repoRoot,
-    "packages/core/src/storage-paths.ts",
-  ),
-  "@bb/core": path.resolve(repoRoot, "packages/core/src/index.ts"),
-  "@bb/environment": path.resolve(repoRoot, "packages/environment/src/index.ts"),
-  "@bb/environment-daemon": path.resolve(
-    repoRoot,
-    "packages/environment-daemon/src/index.ts",
-  ),
-  "@bb/provider-adapters": path.resolve(
-    repoRoot,
-    "packages/provider-adapters/src/index.ts",
+    "packages/agent-runtime/src/index.ts",
   ),
   "@bb/templates": path.resolve(repoRoot, "packages/templates/src/index.ts"),
   "@bb/db": path.resolve(repoRoot, "packages/db/src/index.ts"),
