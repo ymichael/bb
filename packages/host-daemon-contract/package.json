@@ -1,5 +1,5 @@
 {
-  "name": "@bb/server-contract",
+  "name": "@bb/host-daemon-contract",
   "version": "0.0.1",
   "type": "module",
   "exports": {
@@ -20,8 +20,6 @@
   },
   "dependencies": {
     "@bb/domain": "workspace:*",
-    "@bb/env-daemon-contract": "workspace:*",
-    "@bb/host-daemon-contract": "workspace:*",
     "hono": "^4.7.0",
     "zod": "^3.24.0"
   },

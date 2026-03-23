@@ -1,15 +1,20 @@
 import type { Hono } from "hono";
 import { hc } from "hono/client";
 import type {
-  EnvironmentDaemonCommand,
-  EnvironmentDaemonSessionClientMessage,
-  EnvironmentDaemonSessionCommandBatchMessage,
-  EnvironmentDaemonSessionEventAckMessage,
-  EnvironmentDaemonSessionOpenPayload,
-  EnvironmentDaemonSessionToolCallResponseMessage,
-  EnvironmentDaemonSessionWelcomeMessage,
-} from "@bb/env-daemon-contract";
-import type { Endpoint, PathId } from "./common.js";
+  HostDaemonCommandBatch,
+  HostDaemonCommandResultReport,
+  HostDaemonEventBatchRequest,
+  HostDaemonEventBatchResponse,
+  HostDaemonHeartbeatRequest,
+  HostDaemonHeartbeatResponse,
+  HostDaemonSessionOpenRequest,
+  HostDaemonSessionOpenResponse,
+} from "@bb/host-daemon-contract";
+import type {
+  ToolCallRequest,
+  ToolCallResponse,
+} from "@bb/domain";
+import type { EmptyInput, Endpoint } from "./common.js";
 
 type InternalSessionCommandsQuery = {
   sessionId: string;
@@ -18,63 +23,42 @@ type InternalSessionCommandsQuery = {
   waitMs?: string;
 };
 
-type InternalSessionMessageWithAck = Extract<
-  EnvironmentDaemonSessionClientMessage,
-  { type: "event_batch" }
->;
-
-type InternalSessionMessageWithToolCallResponse = Extract<
-  EnvironmentDaemonSessionClientMessage,
-  { type: "tool_call_request" }
->;
-
-type InternalSessionMessageWithoutBody =
-  Exclude<
-    EnvironmentDaemonSessionClientMessage,
-    InternalSessionMessageWithAck | InternalSessionMessageWithToolCallResponse
-  >;
-
-/**
- * Internal API: server-implemented endpoints called by the env-daemon over HTTP.
- *
- * The daemon uses a polling loop:
- * 1. Open a session.
- * 2. Long-poll for commands.
- * 3. Push events, tool-call requests, and command results back to the server.
- */
 export type InternalApiSchema = {
-  /** Opens a new daemon session and returns lease and cursor bootstrap data. */
-  "/environments/:id/env-daemon/session/open": {
+  "/session/open": {
     $post: Endpoint<
-      PathId & { json: EnvironmentDaemonSessionOpenPayload },
-      EnvironmentDaemonSessionWelcomeMessage,
+      { json: HostDaemonSessionOpenRequest },
+      HostDaemonSessionOpenResponse,
       201
     >;
   };
-  /** Long-polls for queued daemon commands for the active session. */
-  "/environments/:id/env-daemon/session/commands": {
-    $get:
-      | Endpoint<
-          PathId & { query: InternalSessionCommandsQuery },
-          EnvironmentDaemonSessionCommandBatchMessage<EnvironmentDaemonCommand>,
-          200
-        >
-      | Endpoint<PathId & { query: InternalSessionCommandsQuery }, undefined, 204>;
+  "/session/heartbeat": {
+    $post: Endpoint<
+      { json: HostDaemonHeartbeatRequest },
+      HostDaemonHeartbeatResponse
+    >;
   };
-  /** Accepts daemon-originated events, tool-call requests, and command results. */
-  "/environments/:id/env-daemon/session/messages": {
-    $post:
-      | Endpoint<
-          PathId & { json: InternalSessionMessageWithAck },
-          EnvironmentDaemonSessionEventAckMessage,
-          200
-        >
-      | Endpoint<
-          PathId & { json: InternalSessionMessageWithToolCallResponse },
-          EnvironmentDaemonSessionToolCallResponseMessage,
-          200
-        >
-      | Endpoint<PathId & { json: InternalSessionMessageWithoutBody }, undefined, 204>;
+  "/session/commands": {
+    $get:
+      | Endpoint<{ query: InternalSessionCommandsQuery }, HostDaemonCommandBatch, 200>
+      | Endpoint<{ query: InternalSessionCommandsQuery }, undefined, 204>;
+  };
+  "/session/command-result": {
+    $post: Endpoint<{ json: HostDaemonCommandResultReport }, { ok: true }>;
+  };
+  "/session/events": {
+    $post: Endpoint<
+      { json: HostDaemonEventBatchRequest },
+      HostDaemonEventBatchResponse
+    >;
+  };
+  "/session/tool-call": {
+    $post: Endpoint<{ json: ToolCallRequest }, ToolCallResponse>;
+  };
+  "/session/close": {
+    $post: Endpoint<{ json: { sessionId: string } }, { ok: true }>;
+  };
+  "/session/status": {
+    $get: Endpoint<EmptyInput, { ok: true }>;
   };
 };
 

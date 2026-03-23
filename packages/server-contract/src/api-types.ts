@@ -61,6 +61,8 @@ export const spawnThreadRequestSchema = z
     });
   });
 export type SpawnThreadRequest = z.infer<typeof spawnThreadRequestSchema>;
+export const createThreadRequestSchema = spawnThreadRequestSchema;
+export type CreateThreadRequest = SpawnThreadRequest;
 
 export const tellThreadRequestSchema = z.object({
   input: z.array(promptInputSchema).min(1),
@@ -72,6 +74,10 @@ export const tellThreadRequestSchema = z.object({
   demotePrimaryIfNeeded: z.boolean().optional(),
 });
 export type TellThreadRequest = z.infer<typeof tellThreadRequestSchema>;
+export const sendMessageModeSchema = tellThreadModeSchema;
+export type SendMessageMode = TellThreadMode;
+export const sendMessageRequestSchema = tellThreadRequestSchema;
+export type SendMessageRequest = TellThreadRequest;
 
 export const enqueueThreadMessageRequestSchema = z.object({
   input: z.array(promptInputSchema).min(1),
@@ -83,6 +89,8 @@ export const enqueueThreadMessageRequestSchema = z.object({
 export type EnqueueThreadMessageRequest = z.infer<
   typeof enqueueThreadMessageRequestSchema
 >;
+export const createDraftRequestSchema = enqueueThreadMessageRequestSchema;
+export type CreateDraftRequest = EnqueueThreadMessageRequest;
 
 export const sendQueuedThreadMessageRequestSchema = z.object({
   mode: z.enum(["auto", "steer-if-active", "steer"]).optional(),
@@ -90,6 +98,8 @@ export const sendQueuedThreadMessageRequestSchema = z.object({
 export type SendQueuedThreadMessageRequest = z.infer<
   typeof sendQueuedThreadMessageRequestSchema
 >;
+export const sendDraftRequestSchema = sendQueuedThreadMessageRequestSchema;
+export type SendDraftRequest = SendQueuedThreadMessageRequest;
 
 export const sendQueuedThreadMessageResponseSchema = z.object({
   ok: z.literal(true),
@@ -98,6 +108,8 @@ export const sendQueuedThreadMessageResponseSchema = z.object({
 export type SendQueuedThreadMessageResponse = z.infer<
   typeof sendQueuedThreadMessageResponseSchema
 >;
+export const sendDraftResponseSchema = sendQueuedThreadMessageResponseSchema;
+export type SendDraftResponse = SendQueuedThreadMessageResponse;
 
 export const updateThreadRequestSchema = z
   .object({
@@ -188,6 +200,8 @@ export const environmentOperationTypeSchema = z.enum([
 export type EnvironmentOperationType = z.infer<
   typeof environmentOperationTypeSchema
 >;
+export const environmentActionTypeSchema = environmentOperationTypeSchema;
+export type EnvironmentActionType = EnvironmentOperationType;
 
 const promotePrimaryEnvironmentOperationRequestSchema = z.object({
   operation: z.literal("promote_primary"),
@@ -220,6 +234,8 @@ export const environmentOperationRequestSchema = z.discriminatedUnion("operation
 export type EnvironmentOperationRequest = z.infer<
   typeof environmentOperationRequestSchema
 >;
+export const environmentActionRequestSchema = environmentOperationRequestSchema;
+export type EnvironmentActionRequest = EnvironmentOperationRequest;
 
 export const environmentOperationPrepCommitResultSchema = z.object({
   message: z.string(),
@@ -303,6 +319,9 @@ export const environmentOperationFailureDetailsSchema = z.discriminatedUnion(
 export type EnvironmentOperationFailureDetails = z.infer<
   typeof environmentOperationFailureDetailsSchema
 >;
+export const environmentActionFailureDetailsSchema =
+  environmentOperationFailureDetailsSchema;
+export type EnvironmentActionFailureDetails = EnvironmentOperationFailureDetails;
 
 export const environmentOperationApiErrorSchema = apiErrorSchema.extend({
   details: environmentOperationFailureDetailsSchema.optional(),
@@ -310,6 +329,8 @@ export const environmentOperationApiErrorSchema = apiErrorSchema.extend({
 export type EnvironmentOperationApiError = z.infer<
   typeof environmentOperationApiErrorSchema
 >;
+export const environmentActionApiErrorSchema = environmentOperationApiErrorSchema;
+export type EnvironmentActionApiError = EnvironmentOperationApiError;
 
 export const primaryCheckoutStatusSchema = z.object({
   projectId: z.string(),
@@ -357,6 +378,8 @@ export const environmentOperationResponseSchema = z.discriminatedUnion(
 export type EnvironmentOperationResponse = z.infer<
   typeof environmentOperationResponseSchema
 >;
+export const environmentActionResponseSchema = environmentOperationResponseSchema;
+export type EnvironmentActionResponse = EnvironmentOperationResponse;
 
 export const projectFileSuggestionSchema = z.object({
   path: z.string(),
@@ -496,6 +519,9 @@ export const systemHealthEnvironmentDaemonWorkerSchema = z.object({
 export type SystemHealthEnvironmentDaemonWorker = z.infer<
   typeof systemHealthEnvironmentDaemonWorkerSchema
 >;
+export const systemHealthDaemonWorkerSchema =
+  systemHealthEnvironmentDaemonWorkerSchema;
+export type SystemHealthDaemonWorker = SystemHealthEnvironmentDaemonWorker;
 
 export const systemHealthEnvironmentDaemonProviderSchema = z.object({
   providerId: z.string(),
@@ -505,6 +531,9 @@ export const systemHealthEnvironmentDaemonProviderSchema = z.object({
 export type SystemHealthEnvironmentDaemonProvider = z.infer<
   typeof systemHealthEnvironmentDaemonProviderSchema
 >;
+export const systemHealthDaemonProviderSchema =
+  systemHealthEnvironmentDaemonProviderSchema;
+export type SystemHealthDaemonProvider = SystemHealthEnvironmentDaemonProvider;
 
 export const systemHealthEnvironmentDaemonCapabilitiesSchema = z.object({
   commands: z.array(z.string()),
@@ -513,6 +542,10 @@ export const systemHealthEnvironmentDaemonCapabilitiesSchema = z.object({
 export type SystemHealthEnvironmentDaemonCapabilities = z.infer<
   typeof systemHealthEnvironmentDaemonCapabilitiesSchema
 >;
+export const systemHealthDaemonCapabilitiesSchema =
+  systemHealthEnvironmentDaemonCapabilitiesSchema;
+export type SystemHealthDaemonCapabilities =
+  SystemHealthEnvironmentDaemonCapabilities;
 
 export const systemHealthEnvironmentDaemonCompatibilitySchema = z.object({
   disposition: z.enum(["reuse", "degrade", "replace"]),
@@ -523,6 +556,10 @@ export const systemHealthEnvironmentDaemonCompatibilitySchema = z.object({
 export type SystemHealthEnvironmentDaemonCompatibility = z.infer<
   typeof systemHealthEnvironmentDaemonCompatibilitySchema
 >;
+export const systemHealthDaemonCompatibilitySchema =
+  systemHealthEnvironmentDaemonCompatibilitySchema;
+export type SystemHealthDaemonCompatibility =
+  SystemHealthEnvironmentDaemonCompatibility;
 
 export const systemHealthEnvironmentDaemonSessionSchema = z.object({
   sessionId: z.string(),
@@ -544,6 +581,9 @@ export const systemHealthEnvironmentDaemonSessionSchema = z.object({
 export type SystemHealthEnvironmentDaemonSession = z.infer<
   typeof systemHealthEnvironmentDaemonSessionSchema
 >;
+export const systemHealthDaemonSessionSchema =
+  systemHealthEnvironmentDaemonSessionSchema;
+export type SystemHealthDaemonSession = SystemHealthEnvironmentDaemonSession;
 
 export const systemHealthReportSchema = z.object({
   generatedAt: z.number(),
@@ -661,6 +701,8 @@ export const threadToolGroupMessagesRequestSchema = z.object({
 export type ThreadToolGroupMessagesRequest = z.infer<
   typeof threadToolGroupMessagesRequestSchema
 >;
+export const timelineToolDetailsRequestSchema = threadToolGroupMessagesRequestSchema;
+export type TimelineToolDetailsRequest = ThreadToolGroupMessagesRequest;
 
 export const threadToolGroupMessagesResponseSchema = z.object({
   messages: z.array(uiMessageSchema),
@@ -668,6 +710,9 @@ export const threadToolGroupMessagesResponseSchema = z.object({
 export type ThreadToolGroupMessagesResponse = z.infer<
   typeof threadToolGroupMessagesResponseSchema
 >;
+export const timelineToolDetailsResponseSchema =
+  threadToolGroupMessagesResponseSchema;
+export type TimelineToolDetailsResponse = ThreadToolGroupMessagesResponse;
 
 export const threadTimelineResponseSchema = z.object({
   rows: z.array(threadDetailRowSchema),

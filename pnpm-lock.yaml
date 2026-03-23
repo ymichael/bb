@@ -308,6 +308,25 @@ importers:
         specifier: ^5.7.0
         version: 5.9.3
 
+  packages/host-daemon-contract:
+    dependencies:
+      '@bb/domain':
+        specifier: workspace:*
+        version: link:../domain
+      hono:
+        specifier: ^4.7.0
+        version: 4.11.9
+      zod:
+        specifier: ^3.24.0
+        version: 3.25.76
+    devDependencies:
+      '@bb/tsconfig':
+        specifier: workspace:*
+        version: link:../tsconfig
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
+
   packages/logger:
     dependencies:
       '@bb/config':
@@ -338,6 +357,9 @@ importers:
       '@bb/env-daemon-contract':
         specifier: workspace:*
         version: link:../env-daemon-contract
+      '@bb/host-daemon-contract':
+        specifier: workspace:*
+        version: link:../host-daemon-contract
       hono:
         specifier: ^4.7.0
         version: 4.11.9

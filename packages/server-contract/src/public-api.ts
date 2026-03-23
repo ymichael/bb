@@ -13,10 +13,22 @@ import type {
   ThreadType,
   ThreadWorkStatus,
 } from "@bb/domain";
-import type { EmptyInput, Endpoint, PathId, PathProjectId, PathThreadAndQueued } from "./common.js";
 import type {
+  EmptyInput,
+  Endpoint,
+  PathId,
+  PathProjectId,
+  PathThreadAndDraft,
+  PathThreadAndQueued,
+} from "./common.js";
+import type {
+  CreateDraftRequest,
   CreateProjectRequest,
+  CreateThreadRequest,
   EnqueueThreadMessageRequest,
+  EnvironmentActionApiError,
+  EnvironmentActionRequest,
+  EnvironmentActionResponse,
   EnvironmentOperationApiError,
   EnvironmentOperationRequest,
   EnvironmentOperationResponse,
@@ -24,9 +36,11 @@ import type {
   OpenThreadPathRequest,
   PrimaryCheckoutStatus,
   ProjectFileSuggestion,
+  SendDraftRequest,
+  SendDraftResponse,
+  SendMessageRequest,
   SendQueuedThreadMessageRequest,
   SendQueuedThreadMessageResponse,
-  SpawnThreadRequest,
   SystemEnvironmentInfo,
   SystemHealthReport,
   SystemProviderInfo,
@@ -39,6 +53,7 @@ import type {
   SystemStatus,
   SystemVoiceTranscriptionResponse,
   TellThreadRequest,
+  TimelineToolDetailsResponse,
   ThreadTimelineResponse,
   ThreadToolGroupMessagesResponse,
   UpdateProjectRequest,
@@ -74,6 +89,20 @@ export type PublicApiSchema = {
       201
     >;
   };
+  "/projects/:id/managers": {
+    $post: Endpoint<
+      PathProjectId & {
+        json: {
+          title?: string;
+          providerId?: string;
+          model?: string;
+          reasoningLevel?: "low" | "medium" | "high" | "xhigh";
+        };
+      },
+      Thread,
+      201
+    >;
+  };
   "/projects/:id/files": {
     $get: Endpoint<
       PathProjectId & { query: { query?: string; limit?: string } },
@@ -81,6 +110,9 @@ export type PublicApiSchema = {
     >;
   };
   "/projects/:id/workspace-status": {
+    $get: Endpoint<PathProjectId, ThreadWorkStatus>;
+  };
+  "/projects/:id/work-status": {
     $get: Endpoint<PathProjectId, ThreadWorkStatus>;
   };
   "/projects/:id/attachments": {
@@ -128,6 +160,20 @@ export type PublicApiSchema = {
           404
         >;
   };
+  "/environments/:id/actions": {
+    $post:
+      | Endpoint<
+          PathId & { json: EnvironmentActionRequest },
+          EnvironmentActionResponse,
+          200
+        >
+      | Endpoint<
+          PathId & { json: EnvironmentActionRequest },
+          EnvironmentActionApiError,
+          409
+        >
+      | Endpoint<PathId & { json: EnvironmentActionRequest }, ApiError, 404>;
+  };
   "/environments/:id/env-daemon/sessions": {
     $get: Endpoint<PathId, EnvironmentDaemonSessionListResponse>;
   };
@@ -144,7 +190,7 @@ export type PublicApiSchema = {
       },
       Thread[]
     >;
-    $post: Endpoint<{ json: SpawnThreadRequest }, Thread, 201>;
+    $post: Endpoint<{ json: CreateThreadRequest }, Thread, 201>;
   };
   "/threads/:id": {
     $get: Endpoint<PathId, Thread>;
@@ -178,11 +224,17 @@ export type PublicApiSchema = {
   "/threads/:id/tell": {
     $post: Endpoint<PathId & { json: TellThreadRequest }, { ok: true }>;
   };
+  "/threads/:id/send": {
+    $post: Endpoint<PathId & { json: SendMessageRequest }, { ok: true }>;
+  };
   /** Enqueues a message for later delivery. Used when composing a message while
    *  the thread is busy — the message is stored in the thread's queuedMessages
    *  array and can be sent later via the /send endpoint. */
   "/threads/:id/queue": {
     $post: Endpoint<PathId & { json: EnqueueThreadMessageRequest }, ThreadQueuedMessage, 201>;
+  };
+  "/threads/:id/drafts": {
+    $post: Endpoint<PathId & { json: CreateDraftRequest }, ThreadQueuedMessage, 201>;
   };
   /** Sends a previously queued message to the thread. Mode controls turn
    *  behavior: "auto" starts a new turn, "steer-if-active" steers only if a
@@ -193,8 +245,17 @@ export type PublicApiSchema = {
       SendQueuedThreadMessageResponse
     >;
   };
+  "/threads/:id/drafts/:draftId/send": {
+    $post: Endpoint<
+      PathThreadAndDraft & { json: SendDraftRequest },
+      SendDraftResponse
+    >;
+  };
   "/threads/:id/queue/:queuedMessageId": {
     $delete: Endpoint<PathThreadAndQueued, { ok: true }>;
+  };
+  "/threads/:id/drafts/:draftId": {
+    $delete: Endpoint<PathThreadAndDraft, { ok: true }>;
   };
   "/threads/:id/stop": {
     $post: Endpoint<PathId, { ok: true }>;
@@ -219,9 +280,15 @@ export type PublicApiSchema = {
   "/threads/:id/merge-base-branches": {
     $get: Endpoint<PathId, string[]>;
   };
+  "/threads/:id/diff/branches": {
+    $get: Endpoint<PathId, string[]>;
+  };
   /** Returns which thread/environment is the "primary checkout" for the project —
    *  the active working branch whose workspace is synced to the user's editor. */
   "/threads/:id/primary-status": {
+    $get: Endpoint<PathId, PrimaryCheckoutStatus>;
+  };
+  "/environments/:id/primary-status": {
     $get: Endpoint<PathId, PrimaryCheckoutStatus>;
   };
   "/threads/:id/timeline": {
@@ -252,7 +319,32 @@ export type PublicApiSchema = {
       ThreadToolGroupMessagesResponse
     >;
   };
+  "/threads/:id/timeline/tool-details": {
+    $get: Endpoint<
+      PathId & {
+        query: {
+          turnId: string;
+          sourceSeqStart: string;
+          sourceSeqEnd: string;
+          includeManagerDebugView?: "true" | "false";
+        };
+      },
+      TimelineToolDetailsResponse
+    >;
+  };
   "/threads/:id/git-diff": {
+    $get: Endpoint<
+      PathId & {
+        query?: {
+          selection?: "combined" | "commit";
+          commitSha?: string;
+          mergeBaseBranch?: string;
+        };
+      },
+      ThreadGitDiffResponse
+    >;
+  };
+  "/threads/:id/diff": {
     $get: Endpoint<
       PathId & {
         query?: {

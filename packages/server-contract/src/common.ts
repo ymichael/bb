@@ -21,3 +21,4 @@ export type EmptyInput = Record<never, never>;
 export type PathId = { param: { id: string } };
 export type PathProjectId = { param: { id: string } };
 export type PathThreadAndQueued = { param: { id: string; queuedMessageId: string } };
+export type PathThreadAndDraft = { param: { id: string; draftId: string } };
