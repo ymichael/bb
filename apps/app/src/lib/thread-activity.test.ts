@@ -15,33 +15,36 @@ describe("thread-activity", () => {
       {
         status: "active",
         updatedAt: 100,
-        archivedAt: undefined,
-        parentThreadId: undefined,
+        lastReadAt: null,
+        archivedAt: null,
+        parentThreadId: null,
       },
       {
         status: "idle",
         updatedAt: 200,
         lastReadAt: 100,
-        archivedAt: undefined,
-        parentThreadId: undefined,
+        archivedAt: null,
+        parentThreadId: null,
       },
       {
         status: "idle",
         updatedAt: 300,
         lastReadAt: 300,
-        archivedAt: undefined,
-        parentThreadId: undefined,
+        archivedAt: null,
+        parentThreadId: null,
       },
       {
         status: "idle",
         updatedAt: 400,
+        lastReadAt: null,
         archivedAt: 400,
-        parentThreadId: undefined,
+        parentThreadId: null,
       },
       {
         status: "created",
         updatedAt: 500,
-        archivedAt: undefined,
+        lastReadAt: null,
+        archivedAt: null,
         parentThreadId: "parent",
       },
     ])
@@ -84,6 +87,8 @@ describe("thread-activity", () => {
       getThreadStatusLabelForTitle({
         status: "active",
         updatedAt: 100,
+        lastReadAt: null,
+        parentThreadId: null,
       }),
     ).toBe("Running")
 
@@ -91,6 +96,8 @@ describe("thread-activity", () => {
       getThreadStatusLabelForTitle({
         status: "active",
         updatedAt: 100,
+        lastReadAt: null,
+        parentThreadId: null,
       }),
     ).toBe("Running")
 
@@ -99,6 +106,7 @@ describe("thread-activity", () => {
         status: "idle",
         updatedAt: 100,
         lastReadAt: 50,
+        parentThreadId: null,
       }),
     ).toBe("Unread done")
 
@@ -107,6 +115,7 @@ describe("thread-activity", () => {
         status: "idle",
         updatedAt: 100,
         lastReadAt: 100,
+        parentThreadId: null,
       }),
     ).toBe("Done")
 
@@ -114,15 +123,15 @@ describe("thread-activity", () => {
       getThreadStatusLabelForTitle({
         status: "error",
         updatedAt: 100,
+        lastReadAt: null,
+        parentThreadId: null,
       }),
     ).toBe("Error")
   })
 
   it("exposes shared visibility/running/unread helpers", () => {
-    expect(isVisibleProjectThread({ archivedAt: undefined, parentThreadId: undefined })).toBe(
-      true,
-    )
-    expect(isVisibleProjectThread({ archivedAt: 1, parentThreadId: undefined })).toBe(false)
+    expect(isVisibleProjectThread({ archivedAt: null, parentThreadId: null })).toBe(true)
+    expect(isVisibleProjectThread({ archivedAt: 1, parentThreadId: null })).toBe(false)
 
     expect(isRunningThreadStatus("created")).toBe(true)
     expect(isRunningThreadStatus("error")).toBe(false)
@@ -134,6 +143,7 @@ describe("thread-activity", () => {
         status: "idle",
         updatedAt: 20,
         lastReadAt: 10,
+        parentThreadId: null,
       }),
     ).toBe(true)
     expect(
@@ -148,6 +158,8 @@ describe("thread-activity", () => {
       isUnreadDoneThread({
         status: "active",
         updatedAt: 20,
+        lastReadAt: null,
+        parentThreadId: null,
       }),
     ).toBe(false)
   })
