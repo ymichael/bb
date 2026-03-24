@@ -615,7 +615,7 @@ export function ProjectList({
                           ? "bg-sidebar-border/80 text-sidebar-foreground"
                           : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
                     )}
-                    title={project.rootPath}
+                    title={project.name}
                   >
                     <NavLink
                       to={`/projects/${project.id}`}
