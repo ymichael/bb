@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "18f7cae7-0aaf-4452-9d59-d90e58632f52",
+  "id": "ef3891ec-8ab0-49c3-a004-151c6c658b5e",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "environments": {
@@ -32,7 +32,7 @@
           "name": "path",
           "type": "text",
           "primaryKey": false,
-          "notNull": true,
+          "notNull": false,
           "autoincrement": false
         },
         "managed": {
@@ -170,6 +170,20 @@
         },
         "environment_id": {
           "name": "environment_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "turn_id": {
+          "name": "turn_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "provider_thread_id": {
+          "name": "provider_thread_id",
           "type": "text",
           "primaryKey": false,
           "notNull": false,
@@ -516,8 +530,36 @@
           "notNull": true,
           "autoincrement": false
         },
+        "host_name": {
+          "name": "host_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "host_type": {
+          "name": "host_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
         "protocol_version": {
           "name": "protocol_version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "heartbeat_interval_ms": {
+          "name": "heartbeat_interval_ms",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "lease_timeout_ms": {
+          "name": "lease_timeout_ms",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
@@ -544,8 +586,15 @@
           "notNull": false,
           "autoincrement": false
         },
-        "active_threads": {
-          "name": "active_threads",
+        "closed_at": {
+          "name": "closed_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "close_reason": {
+          "name": "close_reason",
           "type": "text",
           "primaryKey": false,
           "notNull": false,
@@ -880,14 +929,14 @@
           "name": "reasoning_level",
           "type": "text",
           "primaryKey": false,
-          "notNull": false,
+          "notNull": true,
           "autoincrement": false
         },
         "sandbox_mode": {
           "name": "sandbox_mode",
           "type": "text",
           "primaryKey": false,
-          "notNull": false,
+          "notNull": true,
           "autoincrement": false
         },
         "created_at": {

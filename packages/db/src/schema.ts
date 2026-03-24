@@ -68,7 +68,7 @@ export const environments = sqliteTable(
     hostId: text("host_id")
       .notNull()
       .references(() => hosts.id, { onDelete: "cascade" }),
-    path: text("path").notNull(),
+    path: text("path"),
     managed: integer("managed", { mode: "boolean" }).notNull().default(false),
     isGitRepo: integer("is_git_repo", { mode: "boolean" })
       .notNull()
@@ -129,6 +129,8 @@ export const events = sqliteTable(
     environmentId: text("environment_id").references(() => environments.id, {
       onDelete: "set null",
     }),
+    turnId: text("turn_id"),
+    providerThreadId: text("provider_thread_id"),
     seq: integer("seq").notNull(),
     type: text("type").$type<ThreadEventType>().notNull(),
     data: text("data").notNull().default("{}"),
@@ -151,8 +153,8 @@ export const queuedThreadMessages = sqliteTable(
     input: text("input").notNull().default("[]"),
     model: text("model"),
     serviceTier: text("service_tier"),
-    reasoningLevel: text("reasoning_level"),
-    sandboxMode: text("sandbox_mode"),
+    reasoningLevel: text("reasoning_level").notNull(),
+    sandboxMode: text("sandbox_mode").notNull(),
     createdAt: integer("created_at").notNull(),
   },
   (table) => [
@@ -168,11 +170,16 @@ export const hostDaemonSessions = sqliteTable(
       .notNull()
       .references(() => hosts.id, { onDelete: "cascade" }),
     instanceId: text("instance_id").notNull(),
+    hostName: text("host_name").notNull(),
+    hostType: text("host_type").notNull(),
     protocolVersion: integer("protocol_version").notNull(),
+    heartbeatIntervalMs: integer("heartbeat_interval_ms").notNull(),
+    leaseTimeoutMs: integer("lease_timeout_ms").notNull(),
     status: text("status").notNull(),
     leaseExpiresAt: integer("lease_expires_at").notNull(),
     lastHeartbeatAt: integer("last_heartbeat_at"),
-    activeThreads: text("active_threads"),
+    closedAt: integer("closed_at"),
+    closeReason: text("close_reason"),
     createdAt: integer("created_at").notNull(),
     updatedAt: integer("updated_at").notNull(),
   },

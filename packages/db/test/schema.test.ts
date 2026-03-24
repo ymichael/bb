@@ -77,10 +77,12 @@ describe("db rebuild schema", () => {
       id: environmentId,
       projectId,
       hostId,
-      path: "/tmp/rebuild/.bb/env",
+      path: null,
       managed: true,
       isGitRepo: true,
       branchName: "bb/env-1",
+      provisionerId: null,
+      provisionerState: null,
       status: "ready",
       createdAt: now,
       updatedAt: now,
@@ -99,7 +101,11 @@ describe("db rebuild schema", () => {
       id: sessionId,
       hostId,
       instanceId: "instance-1",
+      hostName: "Local host",
+      hostType: "persistent",
       protocolVersion: 1,
+      heartbeatIntervalMs: 10_000,
+      leaseTimeoutMs: 30_000,
       status: "connected",
       leaseExpiresAt: now + 60_000,
       createdAt: now,
@@ -127,12 +133,16 @@ describe("db rebuild schema", () => {
       id: createDraftId(),
       threadId,
       input: "[]",
+      reasoningLevel: "medium",
+      sandboxMode: "danger-full-access",
       createdAt: now,
     }).run();
     db.insert(events).values({
       id: eventId,
       threadId,
       environmentId,
+      turnId: "turn_1",
+      providerThreadId: "provider-thread-1",
       seq: 1,
       type: "system/error",
       data: "{\"message\":\"boom\"}",
@@ -141,6 +151,10 @@ describe("db rebuild schema", () => {
 
     const insertedThread = db.select().from(threads).get();
     expect(insertedThread?.environmentId).toBe(environmentId);
+    expect(db.select().from(events).get()).toMatchObject({
+      turnId: "turn_1",
+      providerThreadId: "provider-thread-1",
+    });
 
     closeConnection(db);
   });
@@ -214,6 +228,8 @@ describe("db rebuild schema", () => {
       path: "/tmp/rebuild/.bb/env",
       managed: true,
       isGitRepo: true,
+      provisionerId: null,
+      provisionerState: null,
       status: "ready",
       createdAt: now,
       updatedAt: now,
@@ -233,6 +249,213 @@ describe("db rebuild schema", () => {
 
     expect(db.select().from(environments).all()).toHaveLength(0);
     expect(db.select().from(threads).all()).toHaveLength(0);
+
+    closeConnection(db);
+  });
+
+  it("cascades host deletion to host-scoped records", () => {
+    const db = createConnection(":memory:");
+    migrate(db);
+
+    const now = Date.now();
+    const hostId = createHostId();
+    const projectId = createProjectId();
+    const environmentId = createEnvironmentId();
+    const sessionId = createHostDaemonSessionId();
+    const commandId = createHostDaemonCommandId();
+
+    db.insert(hosts).values({
+      id: hostId,
+      name: "Local host",
+      type: "persistent",
+      createdAt: now,
+      updatedAt: now,
+    }).run();
+    db.insert(projects).values({
+      id: projectId,
+      name: "Rebuild",
+      createdAt: now,
+      updatedAt: now,
+    }).run();
+    db.insert(environments).values({
+      id: environmentId,
+      projectId,
+      hostId,
+      path: "/tmp/rebuild/.bb/env",
+      managed: true,
+      isGitRepo: true,
+      provisionerId: "worktree",
+      provisionerState: "{}",
+      branchName: "bb/env-1",
+      status: "ready",
+      createdAt: now,
+      updatedAt: now,
+    }).run();
+    db.insert(hostDaemonSessions).values({
+      id: sessionId,
+      hostId,
+      instanceId: "instance-1",
+      hostName: "Local host",
+      hostType: "persistent",
+      protocolVersion: 1,
+      heartbeatIntervalMs: 10_000,
+      leaseTimeoutMs: 30_000,
+      status: "connected",
+      leaseExpiresAt: now + 60_000,
+      createdAt: now,
+      updatedAt: now,
+    }).run();
+    db.insert(hostDaemonCommands).values({
+      id: commandId,
+      hostId,
+      sessionId,
+      environmentId,
+      cursor: 1,
+      commandType: "workspace.status",
+      payload: "{}",
+      state: "queued",
+      createdAt: now,
+      updatedAt: now,
+    }).run();
+    db.insert(hostDaemonCursors).values({
+      hostId,
+      cursor: 1,
+      updatedAt: now,
+    }).run();
+
+    db.delete(hosts).where(eq(hosts.id, hostId)).run();
+
+    expect(db.select().from(environments).all()).toHaveLength(0);
+    expect(db.select().from(hostDaemonSessions).all()).toHaveLength(0);
+    expect(db.select().from(hostDaemonCommands).all()).toHaveLength(0);
+    expect(db.select().from(hostDaemonCursors).all()).toHaveLength(0);
+
+    closeConnection(db);
+  });
+
+  it("sets nullable environment references to null when an environment is deleted", () => {
+    const db = createConnection(":memory:");
+    migrate(db);
+
+    const now = Date.now();
+    const hostId = createHostId();
+    const projectId = createProjectId();
+    const environmentId = createEnvironmentId();
+    const threadId = createThreadId();
+    const commandId = createHostDaemonCommandId();
+
+    db.insert(hosts).values({
+      id: hostId,
+      name: "Local host",
+      type: "persistent",
+      createdAt: now,
+      updatedAt: now,
+    }).run();
+    db.insert(projects).values({
+      id: projectId,
+      name: "Rebuild",
+      createdAt: now,
+      updatedAt: now,
+    }).run();
+    db.insert(environments).values({
+      id: environmentId,
+      projectId,
+      hostId,
+      path: "/tmp/rebuild/.bb/env",
+      managed: true,
+      isGitRepo: true,
+      provisionerId: "worktree",
+      provisionerState: "{}",
+      branchName: "bb/env-1",
+      status: "ready",
+      createdAt: now,
+      updatedAt: now,
+    }).run();
+    db.insert(threads).values({
+      id: threadId,
+      projectId,
+      environmentId,
+      providerId: "codex",
+      type: "standard",
+      status: "idle",
+      createdAt: now,
+      updatedAt: now,
+    }).run();
+    db.insert(hostDaemonCommands).values({
+      id: commandId,
+      hostId,
+      environmentId,
+      threadId,
+      cursor: 1,
+      commandType: "workspace.status",
+      payload: "{}",
+      state: "queued",
+      createdAt: now,
+      updatedAt: now,
+    }).run();
+    db.insert(events).values({
+      id: createEventId(),
+      threadId,
+      environmentId,
+      seq: 1,
+      type: "system/error",
+      data: "{}",
+      createdAt: now,
+    }).run();
+
+    db.delete(environments).where(eq(environments.id, environmentId)).run();
+
+    expect(db.select().from(threads).get()?.environmentId).toBeNull();
+    expect(db.select().from(hostDaemonCommands).get()?.environmentId).toBeNull();
+    expect(db.select().from(events).get()?.environmentId).toBeNull();
+
+    closeConnection(db);
+  });
+
+  it("cascades thread deletion to events and queued drafts", () => {
+    const db = createConnection(":memory:");
+    migrate(db);
+
+    const now = Date.now();
+    const projectId = createProjectId();
+    const threadId = createThreadId();
+
+    db.insert(projects).values({
+      id: projectId,
+      name: "Rebuild",
+      createdAt: now,
+      updatedAt: now,
+    }).run();
+    db.insert(threads).values({
+      id: threadId,
+      projectId,
+      providerId: "codex",
+      type: "standard",
+      status: "idle",
+      createdAt: now,
+      updatedAt: now,
+    }).run();
+    db.insert(queuedThreadMessages).values({
+      id: createDraftId(),
+      threadId,
+      input: "[]",
+      reasoningLevel: "medium",
+      sandboxMode: "danger-full-access",
+      createdAt: now,
+    }).run();
+    db.insert(events).values({
+      id: createEventId(),
+      threadId,
+      seq: 1,
+      type: "system/error",
+      data: "{}",
+      createdAt: now,
+    }).run();
+
+    db.delete(threads).where(eq(threads.id, threadId)).run();
+
+    expect(db.select().from(queuedThreadMessages).all()).toHaveLength(0);
+    expect(db.select().from(events).all()).toHaveLength(0);
 
     closeConnection(db);
   });
