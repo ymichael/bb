@@ -12,6 +12,7 @@ import {
   threadStatusSchema,
   threadTypeSchema,
   viewMessageSchema,
+  workspaceStatusSchema,
 } from "@bb/domain";
 import { apiErrorSchema } from "./errors.js";
 
@@ -283,9 +284,7 @@ export const projectResponseSchema = projectSchema.extend({
 });
 export type ProjectResponse = z.infer<typeof projectResponseSchema>;
 
-export const environmentPrimaryStatusResponseSchema = z.object({
-  isPromoted: z.boolean(),
-  currentBranch: z.string().optional(),
-  environmentBranch: z.string().optional(),
+export const environmentStatusResponseSchema = z.object({
+  workspace: workspaceStatusSchema.nullable(),  // null if daemon unreachable or non-git env
 });
-export type EnvironmentPrimaryStatusResponse = z.infer<typeof environmentPrimaryStatusResponseSchema>;
+export type EnvironmentStatusResponse = z.infer<typeof environmentStatusResponseSchema>;

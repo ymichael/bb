@@ -10,7 +10,6 @@ import type {
   ThreadGitDiffResponse,
   ThreadQueuedMessage,
   ThreadType,
-  WorkspaceStatus,
 } from "@bb/domain";
 import type {
   EmptyInput,
@@ -26,7 +25,7 @@ import type {
   EnvironmentActionApiError,
   EnvironmentActionRequest,
   EnvironmentActionResponse,
-  EnvironmentPrimaryStatusResponse,
+  EnvironmentStatusResponse,
   ProjectResponse,
   SendDraftRequest,
   SendDraftResponse,
@@ -69,9 +68,6 @@ export type PublicApiSchema = {
     >;
   };
 
-  "/projects/:id/work-status": {
-    $get: Endpoint<PathProjectId, WorkspaceStatus | null>;
-  };
 
   "/hosts": {
     $get: Endpoint<EmptyInput, Host[]>;
@@ -88,8 +84,11 @@ export type PublicApiSchema = {
       | Endpoint<PathId, Environment, 200>
       | Endpoint<PathId, ApiError, 404>;
   };
-  "/environments/:id/primary-status": {
-    $get: Endpoint<PathId, EnvironmentPrimaryStatusResponse>;
+  "/environments/:id/status": {
+    $get: Endpoint<
+      PathId & { query?: { mergeBaseBranch?: string } },
+      EnvironmentStatusResponse
+    >;
   };
   "/environments/:id/actions": {
     $post:
@@ -154,9 +153,6 @@ export type PublicApiSchema = {
   };
   "/threads/:id/unread": {
     $post: Endpoint<PathId, Thread>;
-  };
-  "/threads/:id/work-status": {
-    $get: Endpoint<PathId & { query?: { mergeBaseBranch?: string } }, WorkspaceStatus | null>;
   };
   "/threads/:id/timeline": {
     $get: Endpoint<
