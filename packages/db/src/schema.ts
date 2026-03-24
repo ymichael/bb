@@ -55,6 +55,7 @@ export const projectSources = sqliteTable(
   (table) => [
     index("project_sources_project_idx").on(table.projectId),
     index("project_sources_host_idx").on(table.hostId),
+    uniqueIndex("project_sources_project_host_idx").on(table.projectId, table.hostId),
   ],
 );
 
