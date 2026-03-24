@@ -194,9 +194,12 @@ export const hostDaemonCommands = sqliteTable(
   "host_daemon_commands",
   {
     id: text("id").primaryKey(),
-    sessionId: text("session_id")
+    hostId: text("host_id")
       .notNull()
-      .references(() => hostDaemonSessions.id, { onDelete: "cascade" }),
+      .references(() => hosts.id),
+    sessionId: text("session_id").references(() => hostDaemonSessions.id, {
+      onDelete: "set null",
+    }),
     cursor: integer("cursor").notNull(),
     type: text("type").notNull(),
     payload: text("payload").notNull(),
@@ -208,12 +211,12 @@ export const hostDaemonCommands = sqliteTable(
     completedAt: integer("completed_at"),
   },
   (table) => [
-    uniqueIndex("host_daemon_commands_session_cursor_idx").on(
-      table.sessionId,
+    uniqueIndex("host_daemon_commands_host_cursor_idx").on(
+      table.hostId,
       table.cursor,
     ),
-    index("host_daemon_commands_session_state_idx").on(
-      table.sessionId,
+    index("host_daemon_commands_host_state_idx").on(
+      table.hostId,
       table.state,
     ),
   ],

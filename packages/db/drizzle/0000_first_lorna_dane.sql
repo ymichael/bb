@@ -36,7 +36,8 @@ CREATE UNIQUE INDEX `events_thread_sequence_idx` ON `events` (`thread_id`,`seque
 CREATE INDEX `events_environment_idx` ON `events` (`environment_id`);--> statement-breakpoint
 CREATE TABLE `host_daemon_commands` (
 	`id` text PRIMARY KEY NOT NULL,
-	`session_id` text NOT NULL,
+	`host_id` text NOT NULL,
+	`session_id` text,
 	`cursor` integer NOT NULL,
 	`type` text NOT NULL,
 	`payload` text NOT NULL,
@@ -46,11 +47,12 @@ CREATE TABLE `host_daemon_commands` (
 	`created_at` integer NOT NULL,
 	`fetched_at` integer,
 	`completed_at` integer,
-	FOREIGN KEY (`session_id`) REFERENCES `host_daemon_sessions`(`id`) ON UPDATE no action ON DELETE cascade
+	FOREIGN KEY (`host_id`) REFERENCES `hosts`(`id`) ON UPDATE no action ON DELETE no action,
+	FOREIGN KEY (`session_id`) REFERENCES `host_daemon_sessions`(`id`) ON UPDATE no action ON DELETE set null
 );
 --> statement-breakpoint
-CREATE UNIQUE INDEX `host_daemon_commands_session_cursor_idx` ON `host_daemon_commands` (`session_id`,`cursor`);--> statement-breakpoint
-CREATE INDEX `host_daemon_commands_session_state_idx` ON `host_daemon_commands` (`session_id`,`state`);--> statement-breakpoint
+CREATE UNIQUE INDEX `host_daemon_commands_host_cursor_idx` ON `host_daemon_commands` (`host_id`,`cursor`);--> statement-breakpoint
+CREATE INDEX `host_daemon_commands_host_state_idx` ON `host_daemon_commands` (`host_id`,`state`);--> statement-breakpoint
 CREATE TABLE `host_daemon_cursors` (
 	`host_id` text PRIMARY KEY NOT NULL,
 	`cursor` integer NOT NULL,

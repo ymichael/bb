@@ -61,13 +61,77 @@ describe("host-daemon command schemas", () => {
     });
   });
 
-  it("keeps typed per-command result schemas", () => {
+  it("parses thread.start with workspacePath", () => {
     expect(
-      hostDaemonCommandResultSchemaByType["workspace.import"].parse({
-        previousBranch: "feature/demo",
+      hostDaemonCommandSchema.parse({
+        type: "thread.start",
+        environmentId: "env_123",
+        threadId: "thr_123",
+        workspacePath: "/tmp/workspace",
+        projectId: "proj_123",
       }),
     ).toMatchObject({
-      previousBranch: "feature/demo",
+      type: "thread.start",
+      workspacePath: "/tmp/workspace",
+    });
+  });
+
+  it("parses thread.resume with workspacePath", () => {
+    expect(
+      hostDaemonCommandSchema.parse({
+        type: "thread.resume",
+        environmentId: "env_123",
+        threadId: "thr_123",
+        workspacePath: "/tmp/workspace",
+      }),
+    ).toMatchObject({
+      type: "thread.resume",
+      workspacePath: "/tmp/workspace",
+    });
+  });
+
+  it("parses promote and demote commands", () => {
+    expect(
+      hostDaemonCommandSchema.parse({
+        type: "workspace.promote",
+        environmentId: "env_123",
+        threadId: "thr_123",
+        primaryPath: "/tmp/primary",
+      }),
+    ).toMatchObject({
+      type: "workspace.promote",
+      primaryPath: "/tmp/primary",
+    });
+
+    expect(
+      hostDaemonCommandSchema.parse({
+        type: "workspace.demote",
+        environmentId: "env_123",
+        threadId: "thr_123",
+        primaryPath: "/tmp/primary",
+        defaultBranch: "main",
+      }),
+    ).toMatchObject({
+      type: "workspace.demote",
+      defaultBranch: "main",
+    });
+  });
+
+  it("keeps typed per-command result schemas", () => {
+    expect(
+      hostDaemonCommandResultSchemaByType["workspace.promote"].parse({
+        ok: true,
+      }),
+    ).toMatchObject({
+      ok: true,
+    });
+
+    expect(
+      hostDaemonCommandResultSchemaByType["workspace.demote"].parse({
+        ok: true,
+      }),
+    ).toMatchObject({
+      ok: true,
     });
 
     expect(() =>
@@ -75,6 +139,18 @@ describe("host-daemon command schemas", () => {
         commitSha: "",
       }),
     ).toThrow();
+  });
+
+  it("includes isGitRepo in environment.provision result", () => {
+    expect(
+      hostDaemonCommandResultSchemaByType["environment.provision"].parse({
+        path: "/tmp/env",
+        ranSetup: true,
+        isGitRepo: true,
+      }),
+    ).toMatchObject({
+      isGitRepo: true,
+    });
   });
 });
 
@@ -114,9 +190,11 @@ describe("host-daemon session schemas", () => {
         sessionId: "session_123",
         heartbeatIntervalMs: 5_000,
         leaseTimeoutMs: 30_000,
+        threadHighWaterMarks: { thr_123: 10 },
       }),
     ).toMatchObject({
       sessionId: "session_123",
+      threadHighWaterMarks: { thr_123: 10 },
     });
 
     expect(

@@ -114,6 +114,7 @@ describe("db rebuild schema", () => {
     }).run();
     db.insert(hostDaemonCommands).values({
       id: commandId,
+      hostId,
       sessionId,
       cursor: 1,
       type: "workspace.status",
@@ -313,6 +314,7 @@ describe("db rebuild schema", () => {
     }).run();
     db.insert(hostDaemonCommands).values({
       id: commandId,
+      hostId,
       sessionId,
       cursor: 1,
       type: "workspace.status",
@@ -326,6 +328,8 @@ describe("db rebuild schema", () => {
       updatedAt: now,
     }).run();
 
+    // Commands reference host without cascade, so delete commands first
+    db.delete(hostDaemonCommands).run();
     db.delete(hosts).where(eq(hosts.id, hostId)).run();
 
     expect(db.select().from(environments).all()).toHaveLength(0);
@@ -336,7 +340,7 @@ describe("db rebuild schema", () => {
     closeConnection(db);
   });
 
-  it("cascades session deletion to host-daemon commands", () => {
+  it("nullifies session reference on host-daemon commands when session is deleted", () => {
     const db = createConnection(":memory:");
     migrate(db);
 
@@ -369,6 +373,7 @@ describe("db rebuild schema", () => {
     }).run();
     db.insert(hostDaemonCommands).values({
       id: commandId,
+      hostId,
       sessionId,
       cursor: 1,
       type: "workspace.status",
@@ -379,7 +384,9 @@ describe("db rebuild schema", () => {
 
     db.delete(hostDaemonSessions).where(eq(hostDaemonSessions.id, sessionId)).run();
 
-    expect(db.select().from(hostDaemonCommands).all()).toHaveLength(0);
+    const commands = db.select().from(hostDaemonCommands).all();
+    expect(commands).toHaveLength(1);
+    expect(commands[0]?.sessionId).toBeNull();
 
     closeConnection(db);
   });

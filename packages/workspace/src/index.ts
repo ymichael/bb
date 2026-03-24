@@ -21,12 +21,8 @@ export {
   runSetupScript,
 } from "./provisioning.js";
 export {
-  exportWorkspace,
-  importWorkspace,
-} from "./promote.js";
-export type {
-  ImportResult,
-  WorkspaceExport,
+  promoteWorkspace,
+  demoteWorkspace,
 } from "./promote.js";
 
 export {

@@ -27,9 +27,8 @@ export const HOST_DAEMON_COMMAND_TYPES = [
   "workspace.squash_merge",
   "workspace.reset",
   "workspace.checkpoint",
-  "workspace.export",
-  "workspace.import",
-  "workspace.reattach",
+  "workspace.promote",
+  "workspace.demote",
 ] as const;
 export const hostDaemonCommandTypeSchema = z.enum(HOST_DAEMON_COMMAND_TYPES);
 export type HostDaemonCommandType = z.infer<typeof hostDaemonCommandTypeSchema>;
@@ -50,6 +49,7 @@ const hostDaemonEnvironmentTargetSchema = z.object({
 
 export const threadStartCommandSchema = hostDaemonThreadTargetSchema.extend({
   type: z.literal("thread.start"),
+  workspacePath: z.string().min(1),
   projectId: z.string().min(1),
   providerId: z.string().min(1).optional(),
   input: z.array(promptInputSchema).min(1).optional(),
@@ -59,6 +59,7 @@ export const threadStartCommandSchema = hostDaemonThreadTargetSchema.extend({
 
 export const threadResumeCommandSchema = hostDaemonThreadTargetSchema.extend({
   type: z.literal("thread.resume"),
+  workspacePath: z.string().min(1),
   projectId: z.string().min(1).optional(),
   providerThreadId: z.string().min(1).optional(),
   providerId: z.string().min(1).optional(),
@@ -145,20 +146,17 @@ export const workspaceCheckpointCommandSchema = hostDaemonThreadTargetSchema.ext
   remoteName: z.string().min(1).optional(),
 });
 
-export const workspaceExportCommandSchema = hostDaemonThreadTargetSchema.extend({
-  type: z.literal("workspace.export"),
-  pushToRemote: z.string().min(1).optional(),
+export const workspacePromoteCommandSchema = hostDaemonEnvironmentTargetSchema.extend({
+  type: z.literal("workspace.promote"),
+  threadId: z.string().min(1),
+  primaryPath: z.string().min(1),
 });
 
-export const workspaceImportCommandSchema = hostDaemonThreadTargetSchema.extend({
-  type: z.literal("workspace.import"),
-  branch: z.string().min(1),
-  remote: z.string().min(1).optional(),
-});
-
-export const workspaceReattachCommandSchema = hostDaemonThreadTargetSchema.extend({
-  type: z.literal("workspace.reattach"),
-  branch: z.string().min(1),
+export const workspaceDemoteCommandSchema = hostDaemonEnvironmentTargetSchema.extend({
+  type: z.literal("workspace.demote"),
+  threadId: z.string().min(1),
+  primaryPath: z.string().min(1),
+  defaultBranch: z.string().min(1),
 });
 
 export const hostDaemonCommandSchema = z.discriminatedUnion("type", [
@@ -177,9 +175,8 @@ export const hostDaemonCommandSchema = z.discriminatedUnion("type", [
   workspaceSquashMergeCommandSchema,
   workspaceResetCommandSchema,
   workspaceCheckpointCommandSchema,
-  workspaceExportCommandSchema,
-  workspaceImportCommandSchema,
-  workspaceReattachCommandSchema,
+  workspacePromoteCommandSchema,
+  workspaceDemoteCommandSchema,
 ]);
 export type HostDaemonCommand = z.infer<typeof hostDaemonCommandSchema>;
 
@@ -201,6 +198,7 @@ export const hostDaemonCommandResultSchemaByType = {
     path: z.string().min(1),
     branchName: z.string().min(1).optional(),
     ranSetup: z.boolean(),
+    isGitRepo: z.boolean(),
   }),
   "environment.destroy": z.object({}),
   "workspace.status": z.object({
@@ -224,15 +222,12 @@ export const hostDaemonCommandResultSchemaByType = {
     remoteName: z.string().min(1),
     branchName: z.string().min(1).optional(),
   }),
-  "workspace.export": z.object({
-    type: z.literal("branch"),
-    branch: z.string().min(1),
-    remote: z.string().min(1).optional(),
+  "workspace.promote": z.object({
+    ok: z.boolean(),
   }),
-  "workspace.import": z.object({
-    previousBranch: z.string().min(1).optional(),
+  "workspace.demote": z.object({
+    ok: z.boolean(),
   }),
-  "workspace.reattach": z.object({}),
 } as const satisfies Record<HostDaemonCommandType, z.ZodTypeAny>;
 
 export type HostDaemonCommandResultByType = {

@@ -1,71 +1,61 @@
-import { hasUncommittedChanges, runGit, WorkspaceError } from "./git.js";
+import { hasUncommittedChanges, WorkspaceError } from "./git.js";
 import { Workspace } from "./workspace.js";
-
-export interface WorkspaceExport {
-  branch: string;
-  remote?: string;
-}
-
-export interface ImportResult {
-  previousBranch?: string;
-}
 
 async function assertWorkspaceClean(
   workspace: Workspace,
-  action: "export" | "import",
+  label: string,
 ): Promise<void> {
   if (!(await hasUncommittedChanges(workspace.path))) {
     return;
   }
 
   throw new WorkspaceError(
-    `Cannot ${action} a workspace with uncommitted changes`,
+    `Cannot proceed: ${label} has uncommitted changes`,
   );
 }
 
-export async function exportWorkspace(
-  workspace: Workspace,
-  pushToRemote?: string,
-): Promise<WorkspaceExport> {
-  const branch = await workspace.currentBranch;
-  if (!branch) {
-    throw new WorkspaceError("Cannot export a detached workspace");
+/**
+ * Promote: switch primary checkout to the environment's branch.
+ * Both workspaces must be clean. Fails loudly if either has uncommitted changes.
+ * Same-host: detach source HEAD, checkout branch on primary.
+ * Cross-host: fetch from remote if branch not locally available, checkout on primary.
+ */
+export async function promoteWorkspace(
+  source: Workspace,
+  primary: Workspace,
+  options?: { remote?: string },
+): Promise<void> {
+  await assertWorkspaceClean(source, "promote source");
+  await assertWorkspaceClean(primary, "promote primary");
+
+  const branch = await source.currentBranch;
+  if (!branch) throw new Error("source has no branch (detached HEAD)");
+
+  // Detach source HEAD to free the branch (same-host worktree constraint)
+  await source.detachHead();
+
+  // If remote specified, fetch first (cross-host)
+  if (options?.remote) {
+    await primary.fetch({ remote: options.remote, branch });
   }
 
-  await assertWorkspaceClean(workspace, "export");
-
-  if (pushToRemote) {
-    await workspace.fetch({ remote: pushToRemote });
-    await runGit(["push", pushToRemote, branch], { cwd: workspace.path });
-    return {
-      branch,
-      remote: pushToRemote,
-    };
-  }
-
-  await workspace.detachHead();
-  return { branch };
+  await primary.checkoutBranch(branch);
 }
 
-export async function importWorkspace(
+/**
+ * Demote: switch primary checkout back to default branch, reattach source.
+ * Primary must be clean. Fails loudly if dirty.
+ */
+export async function demoteWorkspace(
+  source: Workspace,
   primary: Workspace,
-  exportData: WorkspaceExport,
-): Promise<ImportResult> {
-  await assertWorkspaceClean(primary, "import");
+  defaultBranch: string,
+  envBranch: string,
+): Promise<void> {
+  await assertWorkspaceClean(primary, "demote primary");
 
-  if (exportData.remote) {
-    await primary.fetch({
-      remote: exportData.remote,
-      branch: exportData.branch,
-    });
-  }
+  await primary.checkoutBranch(defaultBranch);
 
-  const previousBranch = await primary.currentBranch;
-  if (previousBranch === exportData.branch) {
-    return { previousBranch };
-  }
-
-  await primary.checkoutBranch(exportData.branch);
-
-  return { previousBranch };
+  // Reattach source to its branch
+  await source.checkoutBranch(envBranch);
 }

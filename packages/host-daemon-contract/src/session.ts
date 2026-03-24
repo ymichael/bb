@@ -37,6 +37,7 @@ export const hostDaemonSessionOpenResponseSchema = z.object({
   sessionId: z.string().min(1),
   heartbeatIntervalMs: z.number().int().positive(),
   leaseTimeoutMs: z.number().int().positive(),
+  threadHighWaterMarks: z.record(z.string(), z.number().int().nonnegative()),
 });
 export type HostDaemonSessionOpenResponse = z.infer<
   typeof hostDaemonSessionOpenResponseSchema

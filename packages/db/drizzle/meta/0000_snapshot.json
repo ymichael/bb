@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "271f6b6b-1645-48d9-ac36-ed5e65b45bc3",
+  "id": "b95ba6f0-4ffd-4ac3-8aef-2e08d229849a",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "environments": {
@@ -278,11 +278,18 @@
           "notNull": true,
           "autoincrement": false
         },
+        "host_id": {
+          "name": "host_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
         "session_id": {
           "name": "session_id",
           "type": "text",
           "primaryKey": false,
-          "notNull": true,
+          "notNull": false,
           "autoincrement": false
         },
         "cursor": {
@@ -351,24 +358,37 @@
         }
       },
       "indexes": {
-        "host_daemon_commands_session_cursor_idx": {
-          "name": "host_daemon_commands_session_cursor_idx",
+        "host_daemon_commands_host_cursor_idx": {
+          "name": "host_daemon_commands_host_cursor_idx",
           "columns": [
-            "session_id",
+            "host_id",
             "cursor"
           ],
           "isUnique": true
         },
-        "host_daemon_commands_session_state_idx": {
-          "name": "host_daemon_commands_session_state_idx",
+        "host_daemon_commands_host_state_idx": {
+          "name": "host_daemon_commands_host_state_idx",
           "columns": [
-            "session_id",
+            "host_id",
             "state"
           ],
           "isUnique": false
         }
       },
       "foreignKeys": {
+        "host_daemon_commands_host_id_hosts_id_fk": {
+          "name": "host_daemon_commands_host_id_hosts_id_fk",
+          "tableFrom": "host_daemon_commands",
+          "tableTo": "hosts",
+          "columnsFrom": [
+            "host_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
         "host_daemon_commands_session_id_host_daemon_sessions_id_fk": {
           "name": "host_daemon_commands_session_id_host_daemon_sessions_id_fk",
           "tableFrom": "host_daemon_commands",
@@ -379,7 +399,7 @@
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
+          "onDelete": "set null",
           "onUpdate": "no action"
         }
       },
