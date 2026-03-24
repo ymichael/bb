@@ -19,38 +19,44 @@
 - `isPromoted` dropped from API
 - `provisioned` / `provisioning_failed` removed from switch statements
 - `titleFallback` added back to domain type
+- `PromptMentionSuggestion` moved to app-local type (assembled client-side from file search + thread list)
+- `UploadedPromptAttachment` and `ProjectFileSuggestion` re-added to server contract with routes
+- `SystemEnvironmentInfo` deleted — environment-icon deleted, useSystemEnvironments removed, thread-archive simplified to check `environment.managed` directly
+- `ThreadContextWindowUsage` exported from server contract
+- `usePromptFileMentions` renamed to `usePromptMentions` (returns file + thread mentions)
+- `ThreadStatusShape` / thread-activity test fixtures fixed (null not undefined, missing fields added)
+- Dead routes in api.ts: `manager-workspace` → `workspace`, `getThreadWorkStatus` → `getEnvironmentWorkStatus`, deleted `getProjectWorkspaceStatus`/`pickProjectFolder`/`openThreadPathInEditor`
+- `includeWorkStatus` removed from `listThreads` filter
+- `api-client.ts` renamed to `api-server.ts`
+- jotai + `@bb/host-daemon-contract` added as app dependencies
+- `systemConfigAtom`, `localHostIdAtom`, `hostDaemonPortAtom` created
+- `api-host-daemon.ts` created with `fetchHostId`, `openPath`, `pickFolder`
+- `useHostDaemon` hook created: `localHostId`, `hasDaemon`, `isLocalHost`, `openPath`, `pickFolder`
+- `/system/config` endpoint added to server contract (returns `hostDaemonPort`)
+- `/pick-folder` route added to host daemon local API contract
+- `open-path-preferences.ts` deleted (editor prefs will be per-host later)
+- `projectPathInput.ts` simplified: removed `requestProjectRootPath` fallback
+- `useEnvironment` and `useEnvironmentWorkStatus` hooks added
+- `getEnvironment` API function added
 
-## Remaining: ~120 type errors
+## In progress (agent running)
 
-### Needs hostId atom + source rework (~12 errors)
+- `attachedEnvironment` on Thread → fetch via `useEnvironment(thread.environmentId)`
+- `workStatus` on Thread → fetch via `useEnvironmentWorkStatus(thread.environmentId)`
+- `primaryCheckout` on Thread → code deleted (to be re-derived from environment later)
+- `builtInActions` on Thread → code deleted (derive from environment properties later)
+- `queuedMessages` on Thread → remove optimistic update, use query invalidation
+- Dead imports: `openThreadPathInEditor`, `getPathCommandForTarget` removed from views
+- Test fixtures updated to remove dead fields
 
-The app needs a `localHostIdAtom` (jotai) populated from daemon `GET /host-id` on startup. `null` when no local daemon.
+## Remaining after agent completes
 
-| Issue | Errors | What needs to happen |
+### Needs rootPath → sources rework (~12 errors)
+
+| Issue | Files | What needs to happen |
 |---|---|---|
-| `project.rootPath` references | 8 | Use `project.sources.find(s => s.hostId === localHostId)?.path` |
-| `useQuickCreateProject` passes `rootPath` | 1 | Pass `{ hostId, sourcePath }` from source lookup |
-| "Change/repair project path" in ProjectList | 2 | Update/add project source, not `rootPath` on project |
-| `rootPathExists` check | 1 | Keep stub for now — needs daemon local API to check |
-
-Environment creation args should NOT include the path — just `{ hostId, provisioningType }`. Server resolves the source path from project_sources.
-
-### Needs code rework (~44 errors)
-
-| Issue | Errors | What needs to happen |
-|---|---|---|
-| `attachedEnvironment` on Thread | 14 | Fetch environment separately via `GET /environments/:environmentId`. Thread only has `environmentId`. |
-| `primaryCheckout` on Thread | 6 | Derive from environment branchName vs primary source branch. No API field. |
-| `Environment.properties` (old shape) | 8 | Update to use new Environment fields (`path`, `hostId`, `managed`, `isGitRepo`, `branchName`, `status`) |
-| `SystemEnvironmentInfo` | 6 | Replace with `/environments` + `/hosts` queries |
-| `workStatus` on Thread | 2 | Fetch from `GET /environments/:id/status` |
-| `queuedMessages` on Thread | 2 | Separate fetch, not inlined on Thread |
-| `ThreadStatusShape` mismatches | 6 | Update helper types to match new Thread shape |
-
-### Needs decision (~10 errors)
-
-| Issue | Errors | Options |
-|---|---|---|
-| `PromptMentionSuggestion` | 4 | Add file mention type to contract, or remove @-mention feature for now |
-| `UploadedPromptAttachment` | 3 | Add attachment type to contract, or remove attachment upload for now |
-| `EnvironmentCapabilities` | 3 | Export from `@bb/domain`, or derive from environment properties |
+| `project.rootPath` references | ProjectMainView, ThreadDetailView, ProjectList | Use `project.sources.find(s => s.hostId === localHostId)?.path` |
+| `useQuickCreateProject` passes `rootPath` | useQuickCreateProject.ts | Pass `{ hostId, sourcePath }` from source lookup via `useHostDaemon` |
+| "Change/repair project path" in ProjectList | ProjectList.tsx | Update/add project source, not `rootPath` on project |
+| `rootPathExists` check | ProjectList.tsx | Derive from source availability or daemon local file check |
+| Test fixtures with `rootPath` | ThreadDetailView.test, ProjectList.test, AppLayout.test | Update to use sources array shape |
