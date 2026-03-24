@@ -1,6 +1,6 @@
 const AUTO_ARCHIVE_PREFERENCES_STORAGE_KEY = "bb.auto-archive.preferences";
 
-export interface AutoArchivePreferences {
+interface AutoArchivePreferences {
   autoArchiveThreadOnCommit: boolean;
 }
 

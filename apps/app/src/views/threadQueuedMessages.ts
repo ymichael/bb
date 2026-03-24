@@ -7,7 +7,7 @@ import { type PromptDraftState } from "@/lib/prompt-draft";
 
 const QUEUED_FOLLOW_UP_PREVIEW_MAX_CHARS = 220;
 
-export function getFileNameFromPath(path: string): string {
+function getFileNameFromPath(path: string): string {
   const trimmedPath = path.trim();
   if (trimmedPath.length === 0) return "Attachment";
   const segments = trimmedPath.split("/");
@@ -105,7 +105,7 @@ export function queuedInputToDraft(input: PromptInput[]): PromptDraftState {
   };
 }
 
-export function isPromptInputChunk(value: unknown): value is PromptInput {
+function isPromptInputChunk(value: unknown): value is PromptInput {
   const record = toRecord(value);
   if (!record) return false;
 
@@ -123,7 +123,7 @@ export function isPromptInputChunk(value: unknown): value is PromptInput {
   return false;
 }
 
-export function isThreadQueuedMessage(value: unknown): value is ThreadQueuedMessage {
+function isThreadQueuedMessage(value: unknown): value is ThreadQueuedMessage {
   const record = toRecord(value);
   if (!record || typeof record.id !== "string") return false;
   if (!Array.isArray(record.input)) return false;

@@ -20,9 +20,7 @@ import type {
   CreateProjectRequest,
   CreateDraftRequest,
   EnvironmentActionResponse,
-  OpenPathTarget,
   OpenThreadPathRequest,
-  EnvironmentPrimaryStatusResponse,
   ProjectFileSuggestion,
   SendDraftRequest,
   SendDraftResponse,
@@ -59,7 +57,7 @@ function requestOptions(signal?: AbortSignal) {
   return signal ? { init: { signal } } : undefined;
 }
 
-export class SystemShutdownBlockedError extends Error {
+class SystemShutdownBlockedError extends Error {
   code: "shutdown_blocked";
   blockingThreads: SystemShutdownBlockingThread[];
 
@@ -297,26 +295,6 @@ export async function pickProjectFolder(): Promise<{ path: string | null }> {
   return request<{ path: string | null }>(apiClient.system["pick-folder"].$post({}));
 }
 
-export async function openPathInEditor(
-  path: string,
-  options?: {
-    target?: OpenPathTarget;
-    editor?: "system_default" | "vscode" | "cursor" | "zed" | "windsurf";
-    command?: string;
-  },
-): Promise<void> {
-  await request<unknown>(
-    apiClient.system["open-path"].$post({
-      json: {
-        path,
-        ...(options?.target ? { target: options.target } : {}),
-        ...(options?.editor ? { editor: options.editor } : {}),
-        ...(options?.command ? { command: options.command } : {}),
-      },
-    }),
-  );
-}
-
 export async function openThreadPathInEditor(
   threadId: string,
   req: OpenThreadPathRequest,
@@ -493,14 +471,6 @@ export async function getThreadDiffBranches(id: string): Promise<string[]> {
   );
 }
 
-export async function getThreadPrimaryStatus(
-  id: string,
-): Promise<EnvironmentPrimaryStatusResponse> {
-  return request<EnvironmentPrimaryStatusResponse>(
-    apiClient.threads[":id"]["primary-status"].$get({ param: { id } }),
-  );
-}
-
 export async function requestEnvironmentAction(
   id: string,
   req: {
@@ -580,10 +550,6 @@ export async function getThreadDiff(
       },
     }),
   );
-}
-
-export async function getThreadOutput(id: string): Promise<{ output: string }> {
-  return request<{ output: string }>(apiClient.threads[":id"].output.$get({ param: { id } }));
 }
 
 export async function getAvailableModels(providerId?: string): Promise<AvailableModel[]> {

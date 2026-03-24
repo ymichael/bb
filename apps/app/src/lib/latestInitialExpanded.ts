@@ -1,13 +1,13 @@
 import { useEffect, useReducer } from "react";
 
-export interface LatestInitialExpandedState {
+interface LatestInitialExpandedState {
   isExpanded: boolean;
   isAutoExpanded: boolean;
   wasUserToggled: boolean;
   prevInitialExpanded: boolean;
 }
 
-export type LatestInitialExpandedAction =
+type LatestInitialExpandedAction =
   | {
       type: "sync";
       initialExpanded: boolean;

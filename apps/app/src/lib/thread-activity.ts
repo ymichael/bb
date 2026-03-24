@@ -1,7 +1,7 @@
 import { assertNever } from "@bb/core-ui"
 import type { Thread, ThreadStatus } from "@bb/domain"
 
-export interface ThreadActivitySummary {
+interface ThreadActivitySummary {
   running: number
   unreadDone: number
   done: number

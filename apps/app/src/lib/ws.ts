@@ -5,9 +5,9 @@ import type {
   ServerMessage,
 } from "@bb/server-contract";
 
-export type ChangeCallback = (message: ChangedMessage) => void;
-export type ConnectedCallback = (event: { reconnected: boolean }) => void;
-export type ConnectionStateCallback = () => void;
+type ChangeCallback = (message: ChangedMessage) => void;
+type ConnectedCallback = (event: { reconnected: boolean }) => void;
+type ConnectionStateCallback = () => void;
 export type WebSocketConnectionState =
   | "connecting"
   | "connected"

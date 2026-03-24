@@ -2,7 +2,7 @@ import { parsePatchFiles } from "@pierre/diffs";
 
 export type ParsedGitDiffFile = ReturnType<typeof parsePatchFiles>[number]["files"][number];
 
-export interface GitDiffStats {
+interface GitDiffStats {
   files: number;
   additions: number;
   deletions: number;
@@ -133,7 +133,7 @@ export function getParsedGitDiffFileKey(
   return `${file.name}:${file.prevName ?? ""}:${index}`;
 }
 
-export function getGitDiffPathAliases(path: string | undefined): string[] {
+function getGitDiffPathAliases(path: string | undefined): string[] {
   if (!path || path === "/dev/null") return [];
   const normalizedPath = path.startsWith("./") ? path.slice(2) : path;
   if (normalizedPath.length === 0) return [];

@@ -1,6 +1,6 @@
 import type { WebSocketConnectionState } from "./ws"
 
-export type ServerStatusIndicatorState =
+type ServerStatusIndicatorState =
   | "up-to-date"
   | "reconnecting"
   | "out-of-date"

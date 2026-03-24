@@ -23,7 +23,7 @@ export function threadWorktreeCleanLabel(
   return isUpToDate ? "Clean, Up to date" : "Clean";
 }
 
-export function threadWorkStatusLabel(
+function threadWorkStatusLabel(
   status: WorkspaceStatus | undefined,
   options?: { cleanLabel?: string },
 ): string {
@@ -46,7 +46,7 @@ export function threadWorkStatusLabel(
   }
 }
 
-export interface ThreadGitStatusDisplay {
+interface ThreadGitStatusDisplay {
   label:
     | "Unknown"
     | "Up to date"

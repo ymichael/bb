@@ -13,7 +13,7 @@ function isProvisioningActivityOperation(
   }
 }
 
-export function isActivityMessage(message: ViewMessage): boolean {
+function isActivityMessage(message: ViewMessage): boolean {
   return (
     message.kind === "tool-call" ||
     message.kind === "file-edit" ||
@@ -24,7 +24,7 @@ export function isActivityMessage(message: ViewMessage): boolean {
   );
 }
 
-export function isActivityRow(row: TimelineRow): boolean {
+function isActivityRow(row: TimelineRow): boolean {
   if (row.kind === "tool-group") return true;
   return isActivityMessage(row.message);
 }

@@ -140,7 +140,7 @@ function restorePromptDraftIfEmpty(
   return true;
 }
 
-export function getPromptDraftStorageKey({
+function getPromptDraftStorageKey({
   projectId,
   threadId,
 }: PromptDraftScope): string | null {

@@ -6,7 +6,6 @@ import {
   type QueryKey,
 } from "@tanstack/react-query";
 import type {
-  Environment,
   PromptInput,
   Project,
   ReasoningLevel,
@@ -32,8 +31,6 @@ import type {
   SquashMergeOptions,
   SystemEnvironmentInfo,
   SystemProviderInfo,
-  SystemShutdownAcceptedResponse,
-  SystemShutdownRequest,
   SendMessageRequest,
   ThreadTimelineResponse,
   TimelineToolDetailsResponse,
@@ -720,14 +717,6 @@ export function useSystemEnvironments() {
   });
 }
 
-export function useEnvironments(projectId?: string) {
-  return useQuery<Environment[]>({
-    queryKey: ["environments", projectId ?? ""],
-    queryFn: () => api.listEnvironments(projectId),
-    staleTime: 30_000,
-  });
-}
-
 // --- Mutation Hooks ---
 
 export function useCreateThread() {
@@ -1124,14 +1113,4 @@ export function useRequestEnvironmentAction() {
   });
 }
 
-export function useShutdownServer() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (req?: SystemShutdownRequest): Promise<SystemShutdownAcceptedResponse> =>
-      api.shutdownServer(req),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["status"] });
-    },
-  });
-}
 

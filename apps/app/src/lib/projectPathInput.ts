@@ -1,6 +1,6 @@
 import { pickProjectFolder } from "@/lib/api";
 
-export function normalizeProjectRootPath(rawPath: string): string {
+function normalizeProjectRootPath(rawPath: string): string {
   const trimmed = rawPath.trim().replace(/^['"]|['"]$/g, "");
   if (!trimmed) {
     return "";

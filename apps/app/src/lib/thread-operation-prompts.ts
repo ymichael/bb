@@ -2,8 +2,8 @@ import { assertNever } from "@bb/core-ui";
 import type { EnvironmentActionRequest } from "@bb/server-contract";
 import { renderTemplate } from "@bb/templates";
 
-export type ThreadOperationPromptTarget = "thread" | "project_main";
-export type SquashMergeCommitFailureStage = "prep_commit" | "squash_commit";
+type ThreadOperationPromptTarget = "thread" | "project_main";
+type SquashMergeCommitFailureStage = "prep_commit" | "squash_commit";
 
 function formatPromptTarget(target: ThreadOperationPromptTarget): string {
   switch (target) {
@@ -130,7 +130,7 @@ export function buildCommitFailureFollowUpInstruction(
   });
 }
 
-export function buildThreadOperationInstruction(
+function buildThreadOperationInstruction(
   request: EnvironmentActionRequest,
   options?: { target?: ThreadOperationPromptTarget },
 ): string {

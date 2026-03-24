@@ -2,7 +2,7 @@ import * as React from "react"
 
 export const THEME_STORAGE_KEY = "bb.theme"
 
-export type Theme = "light" | "dark"
+type Theme = "light" | "dark"
 
 function isTheme(value: string | null): value is Theme {
   return value === "light" || value === "dark"
@@ -13,7 +13,7 @@ function applyThemeClass(theme: Theme): void {
   document.documentElement.classList.toggle("dark", theme === "dark")
 }
 
-export function getPreferredTheme(): Theme {
+function getPreferredTheme(): Theme {
   if (typeof window === "undefined") return "light"
 
   const storedTheme = window.localStorage.getItem(THEME_STORAGE_KEY)

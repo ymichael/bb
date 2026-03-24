@@ -1,7 +1,7 @@
 import { assertNever } from "@bb/core-ui";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-export type VoiceInputState = "idle" | "recording" | "transcribing" | "error";
+type VoiceInputState = "idle" | "recording" | "transcribing" | "error";
 
 interface UseVoiceInputOptions {
   onTranscript: (transcript: string) => void;
