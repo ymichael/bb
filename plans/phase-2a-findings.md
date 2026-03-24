@@ -1,47 +1,37 @@
 # Phase 2a Findings: CLI Contract Mismatches
 
-Discovered during `apps/cli` cutover to new contracts (`@bb/domain`, `@bb/server-contract`).
+## Resolved
 
-## Missing routes in `@bb/server-contract`
+- All import path and type renames applied
+- Route renames applied (tell→send, queue→drafts, operations→actions)
+- `bb server health`, `bb project files`, `bb thread sessions` — commands deleted
+- `/threads/:id/diff`, `/threads/:id/diff/branches` — wired to contract routes
+- `/threads/:id/output` — added to contract, CLI wired up (requires explicit thread ID)
+- Thread statuses reduced to 5 (removed provisioned, provisioning_failed)
+- Environment action field/value renames fixed
+- `providerId` is required — CLI must pass it
 
-All missing routes resolved:
-- `/threads/:id/diff` and `/threads/:id/diff/branches` — routes existed in contract (added in Phase 1c), CLI wired up to use them.
-- `/threads/:id/output` — route added to contract, CLI wired up. Now requires explicit thread ID (no default to self).
-- `bb server health`, `bb project files`, `bb thread sessions` — commands deleted (not in new architecture).
+## Remaining
 
-## Missing fields on domain types
+### Domain shape changes (need code updates)
 
-| Type | Missing field | CLI usage | Notes |
-|---|---|---|---|
-| `Project` | `rootPath` | `bb project show/list/create/update`, `bb status`, `bb thread show` | Moved to `ProjectSource`. CLI needs either a denormalized field on Project or a way to resolve the primary source path. |
-| `Thread` | `titleFallback` | `bb thread delete`, `bb manager list`, `bb status` | Removed from domain. CLI now falls back to `thread.id` or `null`. |
-| `Thread` | `attachedEnvironment` | `bb status`, `bb thread show`, `bb environment demote` | Removed. CLI now uses `thread.environmentId` directly. Environment details (path, label) no longer available without a separate fetch. |
-| `Thread` | `primaryCheckout` | `bb environment demote`, `bb environment promote-status` | Removed. No way to determine which environment is currently promoted. Needs a new route or field. |
-| `Thread` | `workStatus` (inline on list response) | `bb thread list --include-work-status` | No `includeWorkStatus` query param on `/threads` route. Work status columns show "-" as placeholder. |
-
-## Missing query parameters
-
-| Route | Parameter | CLI usage |
+| Issue | CLI usage | Resolution |
 |---|---|---|
-| `GET /threads` | `includeWorkStatus` | `bb thread list --include-work-status` |
-| `GET /threads/:id/timeline` | `includeToolGroupMessages` | `bb thread log` (removed, using empty query now) |
+| `Project.rootPath` gone | `bb project show/list`, `bb status`, `bb thread show` | Use `project.sources` from `ProjectResponse`, filter by local hostId (from daemon `/host-id`) |
+| `Thread.attachedEnvironment` gone | `bb status`, `bb thread show`, `bb environment demote` | Fetch environment by `thread.environmentId` separately |
+| `Thread.primaryCheckout` gone | `bb environment demote`, `bb environment promote-status` | Derive from environment branchName vs primary source branch |
+| `Thread.workStatus` gone | `bb thread list --include-work-status` | Fetch via `GET /environments/:id/status`. List view shows "-" or omits. |
+| `Thread.titleFallback` gone | `bb thread delete`, `bb manager list` | CLI already falls back to `thread.id` |
 
-## Schema mismatches
+### Schema decisions
 
-| Area | CLI expects | Contract provides | Resolution |
-|---|---|---|---|
-| `CreateThreadRequest.providerId` | Optional (CLI allows omitting, server picks default) | Required (`z.string().min(1)`) | CLI now passes `""` as fallback. Contract should make `providerId` optional with server-side default resolution. |
-| `CreateProjectRequest` | `{ name, rootPath }` | `{ name, hostId, sourcePath }` | CLI updated to require `--host` flag. This is a UX regression — consider auto-detecting the local host ID. |
-| `UpdateProjectRequest` | `{ name?, rootPath?, projectInstructions?, defaultProviderId? }` | `{ name? }` | CLI options reduced to `--name` only. Other project settings need new routes or expanded schema. |
-| Thread statuses | 7 values including `provisioned`, `provisioning_failed` | 5 values: `created`, `provisioning`, `idle`, `active`, `error` | CLI updated. Tests for removed statuses deleted. |
-| Environment action request | `operation` discriminator field | `action` discriminator field | Fixed. |
-| Environment action values | `promote_primary`, `demote_primary` | `promote`, `demote` | Fixed. |
-| Environment action response | `CommitEnvironmentOperationResponse` with `operation` field | `CommitActionResponse` with `action` field | Fixed. |
-| Promote/demote response | `{ ok, promoted/demoted, message }` | `{ ok, action, message }` | Fixed. |
+| Issue | Current state | Decision needed |
+|---|---|---|
+| `CreateProjectRequest` requires `hostId` | CLI requires `--host` flag | Auto-detect local hostId from daemon `/host-id` |
+| `UpdateProjectRequest` reduced to `{ name? }` | CLI options reduced to `--name` only | Add source management (add/remove sources) |
+| `includeWorkStatus` query param | Not in contract | Workspace status is now per-environment, not per-thread |
 
-## Commands temporarily disabled
+### Commands still disabled
 
-These commands compile but print an error and exit because they depend on routes or fields not in the contract:
-
-- `bb environment promote-status` — exits with error
-- `bb environment demote` (without explicit env ID) — exits with error when falling back to project-level resolution
+- `bb environment promote-status` — needs to derive promoted state from environment + source data
+- `bb environment demote` (without explicit env ID) — needs environment lookup from thread
