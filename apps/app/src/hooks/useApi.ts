@@ -21,15 +21,15 @@ import type {
   ThreadType,
 } from "@bb/domain";
 import type {
-  CommitOperationOptions,
+  CommitOptions,
   CreateProjectRequest,
-  EnqueueThreadMessageRequest,
-  EnvironmentOperationResponse,
+  CreateDraftRequest,
+  EnvironmentActionResponse,
   ProjectFileSuggestion,
-  SendQueuedThreadMessageRequest,
-  SendQueuedThreadMessageResponse,
-  SpawnThreadRequest,
-  SquashMergeOperationOptions,
+  SendDraftRequest,
+  SendDraftResponse,
+  CreateThreadRequest,
+  SquashMergeOptions,
   SystemEnvironmentInfo,
   SystemProviderInfo,
   SystemRestartAcceptedResponse,
@@ -38,9 +38,9 @@ import type {
   SystemShutdownAcceptedResponse,
   SystemShutdownRequest,
   SystemStatus,
-  TellThreadRequest,
+  SendMessageRequest,
   ThreadTimelineResponse,
-  ThreadToolGroupMessagesResponse,
+  TimelineToolDetailsResponse,
   UpdateProjectRequest,
   UploadedPromptAttachment,
 } from "@bb/server-contract";
@@ -607,7 +607,7 @@ export function useThreadMergeBaseBranches(
 ) {
   return useQuery<string[]>({
     queryKey: [THREAD_MERGE_BASE_BRANCHES_QUERY_KEY, id],
-    queryFn: () => api.getThreadMergeBaseBranches(id),
+    queryFn: () => api.getThreadDiffBranches(id),
     enabled: (options?.enabled ?? true) && !!id,
     refetchOnWindowFocus: false,
   });
@@ -643,7 +643,7 @@ export function useThreadTimeline(
   });
 }
 
-export function useThreadToolGroupMessages() {
+export function useThreadTimelineToolDetails() {
   return useMutation({
     mutationFn: ({
       id,
@@ -657,8 +657,8 @@ export function useThreadToolGroupMessages() {
       sourceSeqStart: number;
       sourceSeqEnd: number;
       includeManagerDebugView?: boolean;
-    }): Promise<ThreadToolGroupMessagesResponse> =>
-      api.getThreadToolGroupMessages(
+    }): Promise<TimelineToolDetailsResponse> =>
+      api.getThreadTimelineToolDetails(
         id,
         turnId,
         sourceSeqStart,
@@ -688,7 +688,7 @@ export function useThreadGitDiff(
       selectionKey,
       options?.mergeBaseBranch ?? null,
     ],
-    queryFn: () => api.getThreadGitDiff(id, options?.selection, options?.mergeBaseBranch),
+    queryFn: () => api.getThreadDiff(id, options?.selection, options?.mergeBaseBranch),
     enabled: (options?.enabled ?? true) && !!id,
     placeholderData: (previousData, previousQuery) =>
       resolveThreadGitDiffPlaceholder(previousData, previousQuery?.queryKey, id),
@@ -754,10 +754,10 @@ export function useEnvironments(projectId?: string) {
 
 // --- Mutation Hooks ---
 
-export function useSpawnThread() {
+export function useCreateThread() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (req: SpawnThreadRequest) => api.spawnThread(req),
+    mutationFn: (req: CreateThreadRequest) => api.createThread(req),
     onMutate: async () => {
       await queryClient.cancelQueries({ queryKey: ["threads"] });
     },
@@ -793,7 +793,7 @@ export function useSpawnThread() {
   });
 }
 
-export function useTellThread() {
+export function useSendThreadMessage() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({
@@ -805,8 +805,8 @@ export function useTellThread() {
       sandboxMode,
       mode,
       demotePrimaryIfNeeded,
-    }: { id: string } & TellThreadRequest) =>
-      api.tellThread(id, {
+    }: { id: string } & SendMessageRequest) =>
+      api.sendThreadMessage(id, {
         input,
         model,
         serviceTier,
@@ -850,7 +850,7 @@ export function useTellThread() {
   });
 }
 
-export function useEnqueueThreadMessage() {
+export function useCreateThreadDraft() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({
@@ -860,8 +860,8 @@ export function useEnqueueThreadMessage() {
       serviceTier,
       reasoningLevel,
       sandboxMode,
-    }: { id: string } & EnqueueThreadMessageRequest): Promise<ThreadQueuedMessage> =>
-      api.enqueueThreadMessage(id, {
+    }: { id: string } & CreateDraftRequest): Promise<ThreadQueuedMessage> =>
+      api.createThreadDraft(id, {
         input,
         model,
         serviceTier,
@@ -876,7 +876,7 @@ export function useEnqueueThreadMessage() {
   });
 }
 
-export function useSendQueuedThreadMessage() {
+export function useSendThreadDraft() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({
@@ -886,8 +886,8 @@ export function useSendQueuedThreadMessage() {
     }: {
       id: string;
       queuedMessageId: string;
-    } & SendQueuedThreadMessageRequest): Promise<SendQueuedThreadMessageResponse> =>
-      api.sendQueuedThreadMessage(id, queuedMessageId, { mode }),
+    } & SendDraftRequest): Promise<SendDraftResponse> =>
+      api.sendThreadDraft(id, queuedMessageId, { mode }),
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["thread", variables.id] });
       queryClient.invalidateQueries({ queryKey: ["threadTimeline", variables.id] });
@@ -897,7 +897,7 @@ export function useSendQueuedThreadMessage() {
   });
 }
 
-export function useDeleteQueuedThreadMessage() {
+export function useDeleteThreadDraft() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({
@@ -906,7 +906,7 @@ export function useDeleteQueuedThreadMessage() {
     }: {
       id: string;
       queuedMessageId: string;
-    }) => api.deleteQueuedThreadMessage(id, queuedMessageId),
+    }) => api.deleteThreadDraft(id, queuedMessageId),
     onSuccess: (_data, variables) => {
       updateCachedThread(queryClient, variables.id, (thread) =>
         removeQueuedThreadMessage(thread, variables.queuedMessageId),
@@ -1125,7 +1125,7 @@ export function useMarkThreadUnread() {
   });
 }
 
-export function useRequestEnvironmentOperation() {
+export function useRequestEnvironmentAction() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({
@@ -1134,12 +1134,12 @@ export function useRequestEnvironmentOperation() {
     }: {
       id: string;
     } & (
-      | { operation: "promote_primary"; initiatingThreadId: string }
-      | { operation: "demote_primary"; initiatingThreadId: string }
-      | { operation: "commit"; initiatingThreadId: string; options?: CommitOperationOptions }
-      | { operation: "squash_merge"; initiatingThreadId: string; options?: SquashMergeOperationOptions }
-    )): Promise<EnvironmentOperationResponse> =>
-      api.requestEnvironmentOperation(id, req),
+      | { action: "promote"; initiatingThreadId: string }
+      | { action: "demote"; initiatingThreadId: string }
+      | { action: "commit"; initiatingThreadId: string; options?: CommitOptions }
+      | { action: "squash_merge"; initiatingThreadId: string; options?: SquashMergeOptions }
+    )): Promise<EnvironmentActionResponse> =>
+      api.requestEnvironmentAction(id, req),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["thread"] });
       queryClient.invalidateQueries({ queryKey: ["threads"] });

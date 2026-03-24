@@ -1,5 +1,5 @@
 import { assertNever } from "@bb/core-ui";
-import type { ThreadOperationRequest } from "@bb/server-contract";
+import type { EnvironmentActionRequest } from "@bb/server-contract";
 import { renderTemplate } from "@bb/templates";
 
 export type ThreadOperationPromptTarget = "thread" | "project_main";
@@ -17,7 +17,7 @@ function formatPromptTarget(target: ThreadOperationPromptTarget): string {
 }
 
 function buildCommitInstruction(
-  request: Extract<ThreadOperationRequest, { operation: "commit" }>,
+  request: Extract<EnvironmentActionRequest, { action: "commit" }>,
   target: ThreadOperationPromptTarget,
 ): string {
   const options = request.options;
@@ -36,7 +36,7 @@ function buildCommitInstruction(
 }
 
 function buildSquashMergeInstruction(
-  request: Extract<ThreadOperationRequest, { operation: "squash_merge" }>,
+  request: Extract<EnvironmentActionRequest, { action: "squash_merge" }>,
   target: ThreadOperationPromptTarget,
 ): string {
   const options = request.options;
@@ -68,7 +68,7 @@ function buildSquashMergeInstruction(
 }
 
 export function buildSquashMergeConflictFollowUpInstruction(
-  request: Extract<ThreadOperationRequest, { operation: "squash_merge" }>,
+  request: Extract<EnvironmentActionRequest, { action: "squash_merge" }>,
   options?: {
     target?: ThreadOperationPromptTarget;
     conflictFiles?: string[];
@@ -83,7 +83,7 @@ export function buildSquashMergeConflictFollowUpInstruction(
 }
 
 export function buildSquashMergeCommitFailureFollowUpInstruction(
-  request: Extract<ThreadOperationRequest, { operation: "squash_merge" }>,
+  request: Extract<EnvironmentActionRequest, { action: "squash_merge" }>,
   options: {
     stage: SquashMergeCommitFailureStage;
     errorMessage?: string;
@@ -112,7 +112,7 @@ export function buildSquashMergeCommitFailureFollowUpInstruction(
 }
 
 export function buildCommitFailureFollowUpInstruction(
-  request: Extract<ThreadOperationRequest, { operation: "commit" }>,
+  request: Extract<EnvironmentActionRequest, { action: "commit" }>,
   options?: {
     target?: ThreadOperationPromptTarget;
     errorMessage?: string;
@@ -131,15 +131,18 @@ export function buildCommitFailureFollowUpInstruction(
 }
 
 export function buildThreadOperationInstruction(
-  request: ThreadOperationRequest,
+  request: EnvironmentActionRequest,
   options?: { target?: ThreadOperationPromptTarget },
 ): string {
   const target = options?.target ?? "thread";
-  switch (request.operation) {
+  switch (request.action) {
     case "commit":
       return buildCommitInstruction(request, target);
     case "squash_merge":
       return buildSquashMergeInstruction(request, target);
+    case "promote":
+    case "demote":
+      return ""; // promote/demote don't have operation prompts
     default:
       return assertNever(request);
   }

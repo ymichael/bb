@@ -6,13 +6,13 @@ import {
   useThread,
   useThreadWorkStatus,
   useThreadTimeline,
-  useThreadToolGroupMessages,
-  useTellThread,
-  useEnqueueThreadMessage,
-  useSendQueuedThreadMessage,
-  useDeleteQueuedThreadMessage,
+  useThreadTimelineToolDetails,
+  useSendThreadMessage,
+  useCreateThreadDraft,
+  useSendThreadDraft,
+  useDeleteThreadDraft,
   useArchiveThread,
-  useRequestEnvironmentOperation,
+  useRequestEnvironmentAction,
   useStopThread,
   useMarkThreadRead,
   useMarkThreadUnread,
@@ -65,8 +65,8 @@ import {
 } from "@/lib/thread-operation-prompts";
 import type { PromptInput, ServiceTier, Thread } from "@bb/domain";
 import type {
-  EnvironmentOperationApiError,
-  EnvironmentOperationFailureDetails,
+  EnvironmentActionApiError,
+  EnvironmentActionFailureDetails,
 } from "@bb/server-contract";
 import { promptDraftToInput } from "@/lib/prompt-draft";
 import { HttpError, openThreadPathInEditor } from "@/lib/api";
@@ -100,34 +100,34 @@ import { useThreadTimelineController } from "./useThreadTimelineController";
 import { ThreadTimelinePane } from "./ThreadTimelinePane";
 import { toast } from "sonner";
 
-function toEnvironmentOperationFailureDetails(error: unknown): EnvironmentOperationFailureDetails | undefined {
+function toEnvironmentActionFailureDetails(error: unknown): EnvironmentActionFailureDetails | undefined {
   if (!(error instanceof HttpError) || typeof error.body !== "object" || error.body === null) {
     return undefined;
   }
-  const details = (error.body as Partial<EnvironmentOperationApiError>).details;
+  const details = (error.body as Partial<EnvironmentActionApiError>).details;
   if (typeof details !== "object" || details === null) {
     return undefined;
   }
-  const typedDetails = details as Partial<EnvironmentOperationFailureDetails>;
+  const typedDetails = details as Partial<EnvironmentActionFailureDetails>;
   switch (typedDetails.kind) {
     case "commit_failed":
       return typedDetails.operation === "commit" &&
           typedDetails.request !== undefined &&
           typeof typedDetails.errorMessage === "string"
-        ? typedDetails as EnvironmentOperationFailureDetails
+        ? typedDetails as EnvironmentActionFailureDetails
         : undefined;
     case "squash_merge_conflict":
       return typedDetails.operation === "squash_merge" &&
           typedDetails.request !== undefined &&
           Array.isArray(typedDetails.conflictFiles)
-        ? typedDetails as EnvironmentOperationFailureDetails
+        ? typedDetails as EnvironmentActionFailureDetails
         : undefined;
     case "squash_merge_commit_failed":
       return typedDetails.operation === "squash_merge" &&
           typedDetails.request !== undefined &&
           typeof typedDetails.errorMessage === "string" &&
           (typedDetails.stage === "prep_commit" || typedDetails.stage === "squash_commit")
-        ? typedDetails as EnvironmentOperationFailureDetails
+        ? typedDetails as EnvironmentActionFailureDetails
         : undefined;
     default:
       return undefined;
@@ -135,7 +135,7 @@ function toEnvironmentOperationFailureDetails(error: unknown): EnvironmentOperat
 }
 
 function buildAskAgentInputForGitOperation(error: unknown): PromptInput[] | undefined {
-  const details = toEnvironmentOperationFailureDetails(error);
+  const details = toEnvironmentActionFailureDetails(error);
   if (!details) {
     return undefined;
   }
@@ -146,7 +146,8 @@ function buildAskAgentInputForGitOperation(error: unknown): PromptInput[] | unde
           type: "text",
           text: buildCommitFailureFollowUpInstruction(
             {
-              operation: "commit",
+              action: "commit",
+              initiatingThreadId: "",
               options: details.request.options,
             },
             { errorMessage: details.errorMessage },
@@ -159,7 +160,8 @@ function buildAskAgentInputForGitOperation(error: unknown): PromptInput[] | unde
           type: "text",
           text: buildSquashMergeConflictFollowUpInstruction(
             {
-              operation: "squash_merge",
+              action: "squash_merge",
+              initiatingThreadId: "",
               options: details.request.options,
             },
             { conflictFiles: details.conflictFiles },
@@ -172,7 +174,8 @@ function buildAskAgentInputForGitOperation(error: unknown): PromptInput[] | unde
           type: "text",
           text: buildSquashMergeCommitFailureFollowUpInstruction(
             {
-              operation: "squash_merge",
+              action: "squash_merge",
+              initiatingThreadId: "",
               options: details.request.options,
             },
             {
@@ -390,13 +393,13 @@ export function ThreadDetailView() {
   } = useThreadManagerWorkspaceFiles(threadId ?? "", {
     enabled: thread?.type === "manager",
   });
-  const threadToolGroupMessages = useThreadToolGroupMessages();
-  const tellThread = useTellThread();
-  const enqueueThreadMessage = useEnqueueThreadMessage();
-  const sendQueuedThreadMessage = useSendQueuedThreadMessage();
-  const deleteQueuedThreadMessage = useDeleteQueuedThreadMessage();
+  const timelineToolDetails = useThreadTimelineToolDetails();
+  const sendMessage = useSendThreadMessage();
+  const createDraft = useCreateThreadDraft();
+  const sendDraft = useSendThreadDraft();
+  const deleteDraft = useDeleteThreadDraft();
   const archiveThread = useArchiveThread();
-  const requestEnvironmentOperation = useRequestEnvironmentOperation();
+  const requestEnvironmentAction = useRequestEnvironmentAction();
   const stopThread = useStopThread();
   const unarchiveThread = useUnarchiveThread();
   const markThreadRead = useMarkThreadRead();
@@ -591,7 +594,7 @@ export function ThreadDetailView() {
     threadDetailRows,
     isSecondaryPanelOpen,
     loadToolGroupMessages: (args) =>
-      threadToolGroupMessages.mutateAsync({
+      timelineToolDetails.mutateAsync({
         ...args,
         includeManagerDebugView: showManagerDebugView,
       }),
@@ -831,7 +834,7 @@ export function ThreadDetailView() {
       const shouldDemotePrimaryIfNeeded =
         mode !== "steer" && isThreadPrimaryCheckoutActive;
       scrollToBottom();
-      await tellThread.mutateAsync({
+      await sendMessage.mutateAsync({
         id: threadId,
         input,
         ...(mode ? { mode } : {}),
@@ -851,7 +854,7 @@ export function ThreadDetailView() {
     [
       isThreadPrimaryCheckoutActive,
       scrollToBottom,
-      tellThread,
+      sendMessage,
       threadId,
     ],
   );
@@ -955,14 +958,14 @@ export function ThreadDetailView() {
   const isRuntimeError = thread.status === "error";
   const queuedMessages = extractThreadQueuedMessages(thread);
   const isQueueMutationPending =
-    enqueueThreadMessage.isPending ||
-    sendQueuedThreadMessage.isPending ||
-    deleteQueuedThreadMessage.isPending;
+    createDraft.isPending ||
+    sendDraft.isPending ||
+    deleteDraft.isPending;
   const isFollowUpSubmitting =
-    tellThread.isPending ||
+    sendMessage.isPending ||
     pendingSubmittedFollowUp !== null ||
-    requestEnvironmentOperation.isPending ||
-    enqueueThreadMessage.isPending;
+    requestEnvironmentAction.isPending ||
+    createDraft.isPending;
   const canSendFollowUp = !isCreated && !isProvisioning;
   const promptPlaceholder =
     isCreated
@@ -985,12 +988,12 @@ export function ThreadDetailView() {
   const canTakeOverThread =
     thread.type === "standard" && Boolean(thread.parentThreadId);
   const isPrimaryCheckoutActive = thread.primaryCheckout?.isActive === true;
-  const isPrimaryCheckoutMutationPending = requestEnvironmentOperation.isPending;
+  const isPrimaryCheckoutMutationPending = requestEnvironmentAction.isPending;
   const primaryCheckoutActionLabel = isPrimaryCheckoutActive
-    ? requestEnvironmentOperation.isPending
+    ? requestEnvironmentAction.isPending
       ? "Demoting..."
       : "Demote"
-    : requestEnvironmentOperation.isPending
+    : requestEnvironmentAction.isPending
     ? "Promoting..."
     : "Promote";
   const isArchivedThread = thread.archivedAt !== undefined;
@@ -1043,7 +1046,7 @@ export function ThreadDetailView() {
 
     return null;
   })();
-  const isThreadGitActionPending = requestEnvironmentOperation.isPending;
+  const isThreadGitActionPending = requestEnvironmentAction.isPending;
   const environmentIconInfo = getEnvironmentIconInfo(environmentInfo);
   const projectRootPath = project?.rootPath;
   const threadEnvironmentDisplay = getThreadEnvironmentDisplay({
@@ -1170,14 +1173,14 @@ export function ThreadDetailView() {
       return;
     }
     const action = isPrimaryCheckoutActive
-      ? requestEnvironmentOperation.mutateAsync({
+      ? requestEnvironmentAction.mutateAsync({
           id: attachedEnvironmentId,
-          operation: "demote_primary",
+          action: "demote",
           initiatingThreadId: thread.id,
         })
-      : requestEnvironmentOperation.mutateAsync({
+      : requestEnvironmentAction.mutateAsync({
           id: attachedEnvironmentId,
-          operation: "promote_primary",
+          action: "promote",
           initiatingThreadId: thread.id,
         });
     void action.catch((err) => {
@@ -1199,9 +1202,9 @@ export function ThreadDetailView() {
     }
     const autoArchiveOnSuccess = getAutoArchivePreferences().autoArchiveThreadOnCommit;
     try {
-      await requestEnvironmentOperation.mutateAsync({
+      await requestEnvironmentAction.mutateAsync({
         id: attachedEnvironmentId,
-        operation: "commit",
+        action: "commit",
         initiatingThreadId: threadId,
         options: {
           includeUnstaged,
@@ -1227,9 +1230,9 @@ export function ThreadDetailView() {
     }
     const autoArchiveOnSuccess = getAutoArchivePreferences().autoArchiveThreadOnCommit;
     try {
-      await requestEnvironmentOperation.mutateAsync({
+      await requestEnvironmentAction.mutateAsync({
         id: attachedEnvironmentId,
-        operation: "squash_merge",
+        action: "squash_merge",
         initiatingThreadId: threadId,
         options: {
           commitIfNeeded,
@@ -1246,7 +1249,7 @@ export function ThreadDetailView() {
     if (!threadId) {
       return;
     }
-    await tellThread.mutateAsync({
+    await sendMessage.mutateAsync({
       id: threadId,
       input,
     });
@@ -1549,7 +1552,7 @@ export function ThreadDetailView() {
 
     if (thread.status === "active") {
       try {
-        await enqueueThreadMessage.mutateAsync({
+        await createDraft.mutateAsync({
           id: thread.id,
           input: promptInput,
           model: activeModel?.model ?? selectedModel,
@@ -1591,7 +1594,7 @@ export function ThreadDetailView() {
     if (!queuedMessage) return;
 
     setProcessingQueuedMessageId(messageId);
-    void sendQueuedThreadMessage
+    void sendDraft
       .mutateAsync({
         id: thread.id,
         queuedMessageId: messageId,
@@ -1617,7 +1620,7 @@ export function ThreadDetailView() {
     if (!queuedMessage) return;
 
     setProcessingQueuedMessageId(messageId);
-    void deleteQueuedThreadMessage
+    void deleteDraft
       .mutateAsync({
         id: thread.id,
         queuedMessageId: messageId,
@@ -1642,7 +1645,7 @@ export function ThreadDetailView() {
 
   const handleDeleteQueuedMessage = (messageId: string) => {
     setProcessingQueuedMessageId(messageId);
-    void deleteQueuedThreadMessage
+    void deleteDraft
       .mutateAsync({
         id: thread.id,
         queuedMessageId: messageId,
@@ -1942,8 +1945,8 @@ export function ThreadDetailView() {
       {canUseGitUi ? (
         <ThreadGitActionDialog
           target={threadGitActionTarget}
-          pending={requestEnvironmentOperation.isPending}
-          askAgentPending={tellThread.isPending}
+          pending={requestEnvironmentAction.isPending}
+          askAgentPending={sendMessage.isPending}
           branchName={threadBranchName}
           gitStatusLabel={threadGitStatusDisplay.label}
           gitStatusSummary={threadGitStatusDisplay.summary}

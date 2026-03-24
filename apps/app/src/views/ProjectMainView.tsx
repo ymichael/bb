@@ -9,7 +9,7 @@ import { type StatusPillVariant } from "@bb/ui-core";
 import {
   useProjectWorkspaceStatus,
   useProjects,
-  useSpawnThread,
+  useCreateThread,
   useSystemEnvironments,
   useUploadPromptAttachment,
 } from "@/hooks/useApi";
@@ -30,7 +30,7 @@ export function ProjectMainView() {
   const { data: projects, isLoading: projectsLoading } = useProjects();
   const { data: environments } = useSystemEnvironments();
   const { data: workspaceStatus, isLoading: threadsLoading } = useProjectWorkspaceStatus(projectId);
-  const spawnThread = useSpawnThread();
+  const createThread = useCreateThread();
   const uploadPromptAttachment = useUploadPromptAttachment();
   const promptDraft = usePromptDraftStorage({ projectId, threadId: null });
   const fileMentions = usePromptFileMentions(projectId);
@@ -258,7 +258,7 @@ export function ProjectMainView() {
       attachments: promptDraft.attachments,
     };
     const submittedInput = promptDraftToInput(submittedDraft);
-    if (submittedInput.length === 0 || spawnThread.isPending) return;
+    if (submittedInput.length === 0 || createThread.isPending) return;
 
     // Match thread follow-up behavior: clear immediately, then restore only if the
     // request fails and the user has not started a new draft in the meantime.
@@ -266,7 +266,7 @@ export function ProjectMainView() {
     setAttachmentError(null);
 
     try {
-      await spawnThread.mutateAsync({
+      await createThread.mutateAsync({
         input: submittedInput,
         projectId,
         ...(hasMultipleProviders && selectedProviderId ? { providerId: selectedProviderId } : {}),
@@ -290,7 +290,7 @@ export function ProjectMainView() {
     }
   };
 
-  const isSubmitDisabled = spawnThread.isPending || promptInput.length === 0;
+  const isSubmitDisabled = createThread.isPending || promptInput.length === 0;
 
   return (
     <PageShell contentClassName="pt-8 md:pt-10">
@@ -315,9 +315,9 @@ export function ProjectMainView() {
           onSubmit={submitPrompt}
           zenModeLayout="project-main"
           zenModeStorageKey={projectMainZenModeStorageKey}
-          isSubmitting={spawnThread.isPending}
+          isSubmitting={createThread.isPending}
           submitDisabled={isSubmitDisabled}
-          submitTitle={spawnThread.isPending ? "Submitting..." : "Submit (Enter)"}
+          submitTitle={createThread.isPending ? "Submitting..." : "Submit (Enter)"}
           mentionSuggestions={fileMentions.suggestions}
           mentionLoading={fileMentions.isLoading}
           mentionError={fileMentions.isError}

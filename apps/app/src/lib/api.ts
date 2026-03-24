@@ -16,18 +16,18 @@ import type {
   ReasoningLevel,
 } from "@bb/domain";
 import type {
-  CommitOperationOptions,
+  CommitOptions,
   CreateProjectRequest,
-  EnqueueThreadMessageRequest,
-  EnvironmentOperationResponse,
+  CreateDraftRequest,
+  EnvironmentActionResponse,
   OpenPathTarget,
   OpenThreadPathRequest,
-  PrimaryCheckoutStatus,
+  EnvironmentPrimaryStatusResponse,
   ProjectFileSuggestion,
-  SendQueuedThreadMessageRequest,
-  SendQueuedThreadMessageResponse,
-  SpawnThreadRequest,
-  SquashMergeOperationOptions,
+  SendDraftRequest,
+  SendDraftResponse,
+  CreateThreadRequest,
+  SquashMergeOptions,
   SystemEnvironmentInfo,
   SystemProviderInfo,
   SystemRestartAcceptedResponse,
@@ -39,9 +39,9 @@ import type {
   SystemShutdownRequest,
   SystemStatus,
   SystemVoiceTranscriptionResponse,
-  TellThreadRequest,
+  SendMessageRequest,
   ThreadTimelineResponse,
-  ThreadToolGroupMessagesResponse,
+  TimelineToolDetailsResponse,
   UpdateProjectRequest,
   UpdateThreadRequest,
   UploadedPromptAttachment,
@@ -232,7 +232,7 @@ export async function hireProjectManager(
   options?: { title?: string; providerId?: string; model?: string; reasoningLevel?: ReasoningLevel },
 ): Promise<Thread> {
   return request<Thread>(
-    apiClient.projects[":id"].manager.$post({
+    apiClient.projects[":id"].managers.$post({
       param: { id: projectId },
       json: options ?? {},
     }),
@@ -279,7 +279,7 @@ export async function uploadPromptAttachment(
 
 export async function getProjectWorkspaceStatus(projectId: string): Promise<WorkspaceStatus> {
   return request<WorkspaceStatus>(
-    apiClient.projects[":id"]["workspace-status"].$get({ param: { id: projectId } }),
+    apiClient.projects[":id"]["work-status"].$get({ param: { id: projectId } }),
   );
 }
 
@@ -333,7 +333,7 @@ export async function openThreadPathInEditor(
   );
 }
 
-export async function spawnThread(req: SpawnThreadRequest): Promise<Thread> {
+export async function createThread(req: CreateThreadRequest): Promise<Thread> {
   return request<Thread>(apiClient.threads.$post({ json: req }));
 }
 
@@ -408,39 +408,39 @@ export async function getThreadDefaultExecutionOptions(
   );
 }
 
-export async function tellThread(id: string, req: TellThreadRequest): Promise<void> {
-  await request<unknown>(apiClient.threads[":id"].tell.$post({ param: { id }, json: req }));
+export async function sendThreadMessage(id: string, req: SendMessageRequest): Promise<void> {
+  await request<unknown>(apiClient.threads[":id"].send.$post({ param: { id }, json: req }));
 }
 
-export async function enqueueThreadMessage(
+export async function createThreadDraft(
   id: string,
-  req: EnqueueThreadMessageRequest,
+  req: CreateDraftRequest,
 ): Promise<ThreadQueuedMessage> {
   return request<ThreadQueuedMessage>(
-    apiClient.threads[":id"].queue.$post({ param: { id }, json: req }),
+    apiClient.threads[":id"].drafts.$post({ param: { id }, json: req }),
   );
 }
 
-export async function sendQueuedThreadMessage(
+export async function sendThreadDraft(
   id: string,
   queuedMessageId: string,
-  req?: SendQueuedThreadMessageRequest,
-): Promise<SendQueuedThreadMessageResponse> {
-  return request<SendQueuedThreadMessageResponse>(
-    apiClient.threads[":id"].queue[":queuedMessageId"].send.$post({
-      param: { id, queuedMessageId },
+  req?: SendDraftRequest,
+): Promise<SendDraftResponse> {
+  return request<SendDraftResponse>(
+    apiClient.threads[":id"].drafts[":draftId"].send.$post({
+      param: { id, draftId: queuedMessageId },
       json: req ?? {},
     }),
   );
 }
 
-export async function deleteQueuedThreadMessage(
+export async function deleteThreadDraft(
   id: string,
   queuedMessageId: string,
 ): Promise<void> {
   await request<unknown>(
-    apiClient.threads[":id"].queue[":queuedMessageId"].$delete({
-      param: { id, queuedMessageId },
+    apiClient.threads[":id"].drafts[":draftId"].$delete({
+      param: { id, draftId: queuedMessageId },
     }),
   );
 }
@@ -491,40 +491,40 @@ export async function getThreadWorkStatus(
   );
 }
 
-export async function getThreadMergeBaseBranches(id: string): Promise<string[]> {
+export async function getThreadDiffBranches(id: string): Promise<string[]> {
   return request<string[]>(
-    apiClient.threads[":id"]["merge-base-branches"].$get({ param: { id } }),
+    apiClient.threads[":id"].diff.branches.$get({ param: { id } }),
   );
 }
 
 export async function getThreadPrimaryStatus(
   id: string,
-): Promise<PrimaryCheckoutStatus> {
-  return request<PrimaryCheckoutStatus>(
+): Promise<EnvironmentPrimaryStatusResponse> {
+  return request<EnvironmentPrimaryStatusResponse>(
     apiClient.threads[":id"]["primary-status"].$get({ param: { id } }),
   );
 }
 
-export async function requestEnvironmentOperation(
+export async function requestEnvironmentAction(
   id: string,
   req: {
-    operation: "promote_primary";
+    action: "promote";
     initiatingThreadId: string;
   } | {
-    operation: "demote_primary";
+    action: "demote";
     initiatingThreadId: string;
   } | {
-    operation: "commit";
+    action: "commit";
     initiatingThreadId: string;
-    options?: CommitOperationOptions;
+    options?: CommitOptions;
   } | {
-    operation: "squash_merge";
+    action: "squash_merge";
     initiatingThreadId: string;
-    options?: SquashMergeOperationOptions;
+    options?: SquashMergeOptions;
   },
-): Promise<EnvironmentOperationResponse> {
-  return request<EnvironmentOperationResponse>(
-    apiClient.environments[":id"].operations.$post({ param: { id }, json: req }),
+): Promise<EnvironmentActionResponse> {
+  return request<EnvironmentActionResponse>(
+    apiClient.environments[":id"].actions.$post({ param: { id }, json: req }),
   );
 }
 
@@ -546,15 +546,15 @@ export async function getThreadTimeline(
   );
 }
 
-export async function getThreadToolGroupMessages(
+export async function getThreadTimelineToolDetails(
   id: string,
   turnId: string,
   sourceSeqStart: number,
   sourceSeqEnd: number,
   includeManagerDebugView: boolean = false,
-): Promise<ThreadToolGroupMessagesResponse> {
-  return request<ThreadToolGroupMessagesResponse>(
-    apiClient.threads[":id"]["tool-group-messages"].$get({
+): Promise<TimelineToolDetailsResponse> {
+  return request<TimelineToolDetailsResponse>(
+    apiClient.threads[":id"].timeline["tool-details"].$get({
       param: { id },
       query: {
         turnId,
@@ -566,13 +566,13 @@ export async function getThreadToolGroupMessages(
   );
 }
 
-export async function getThreadGitDiff(
+export async function getThreadDiff(
   id: string,
   selection?: ThreadGitDiffSelection,
   mergeBaseBranch?: string,
 ): Promise<ThreadGitDiffResponse> {
   return request<ThreadGitDiffResponse>(
-    apiClient.threads[":id"]["git-diff"].$get({
+    apiClient.threads[":id"].diff.$get({
       param: { id },
       query: {
         ...(selection?.type === "commit"

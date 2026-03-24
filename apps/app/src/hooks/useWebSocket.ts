@@ -4,7 +4,7 @@ import {
   assertNever,
 } from "@bb/core-ui";
 import type { Thread } from "@bb/domain";
-import type { ThreadChangeKind } from "@bb/server-contract";
+import type { ThreadChangeKind } from "@bb/domain";
 import { wsManager } from "../lib/ws";
 
 const INVALIDATION_DEBOUNCE_MS = 250;

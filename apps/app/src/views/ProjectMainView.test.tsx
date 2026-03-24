@@ -55,7 +55,7 @@ vi.mock("@/hooks/useApi", () => ({
     data: apiState.workspaceStatus,
     isLoading: false,
   }),
-  useSpawnThread: () => apiState.pendingMutation,
+  useCreateThread: () => apiState.pendingMutation,
   useUploadPromptAttachment: () => apiState.pendingMutation,
 }));
 
