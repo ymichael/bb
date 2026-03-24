@@ -166,9 +166,7 @@ Routes the app uses that are not in the new `PublicApiSchema`:
 
 ### Send message mode mismatch
 
-| Value | Notes |
-|---|---|
-| `"steer-if-active"` | App uses this value but `SendMessageMode` only allows `"auto" \| "start" \| "steer"` |
+Resolved: `"steer-if-active"` replaced with `"auto"` (same semantics — start if idle, steer if active).
 
 ## `EnvironmentActionFailureDetails` shape mismatch
 
