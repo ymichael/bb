@@ -16,6 +16,7 @@ export const environmentSchema = z.object({
   path: z.string().nullable(),
   managed: z.boolean(),
   isGitRepo: z.boolean(),
+  isWorktree: z.boolean(),
   provisionerId: z.string().nullable(),
   provisionerState: z.unknown().nullable(),
   branchName: z.string().nullable(),

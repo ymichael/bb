@@ -1,12 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Check, ChevronDown, ChevronRight, Copy, ExternalLink, PanelRight, X } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, Copy, PanelRight, X } from "lucide-react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { Panel, PanelGroup } from "react-resizable-panels";
 import {
   useThread,
   useEnvironment,
   useEnvironmentWorkStatus,
-  useThreadWorkStatus,
   useThreadTimeline,
   useThreadTimelineToolDetails,
   useSendThreadMessage,
@@ -40,6 +39,7 @@ import { SidebarTrigger } from "@/components/ui/sidebar";
 import { usePromptModelReasoning } from "@/hooks/usePromptModelReasoning";
 import { usePromptDraftStorage } from "@/hooks/usePromptDraftStorage";
 import { usePromptMentions } from "@/hooks/usePromptMentions";
+import { useHostDaemon } from "@/hooks/useHostDaemon";
 import { usePreferredTheme } from "@/hooks/useTheme";
 import { PageShell } from "@/components/layout/PageShell";
 import { WorkspaceChangesList } from "@/components/shared/WorkspaceChangesList";
@@ -190,136 +190,16 @@ function toThreadGitActionDialogError(error: unknown): ThreadGitActionDialogErro
   });
 }
 
-function formatAttachedEnvironmentLabel(path: string): string {
-  const segments = path.split("/").filter(Boolean);
-  return segments.at(-1) ?? path;
-}
-
-function formatAttachedEnvironmentSuffix(path: string, projectRootPath?: string): string | undefined {
-  if (!projectRootPath) {
-    return formatAttachedEnvironmentLabel(path);
+function formatEnvironmentLabel(
+  environment: Environment | undefined,
+  isLocalHost: boolean,
+): string | undefined {
+  if (!environment) return undefined;
+  const location = isLocalHost ? "Local" : "Remote";
+  if (environment.isWorktree) {
+    return `${location} (Worktree)`;
   }
-  const normalizedProjectRoot = projectRootPath.replace(/\/+$/, "");
-  const normalizedPath = path.replace(/\/+$/, "");
-  if (normalizedPath === normalizedProjectRoot) {
-    return undefined;
-  }
-  if (normalizedPath.startsWith(`${normalizedProjectRoot}/`)) {
-    return normalizedPath.slice(normalizedProjectRoot.length + 1);
-  }
-  return formatAttachedEnvironmentLabel(path);
-}
-
-function formatThreadEnvironmentLabel(args: {
-  projectRootPath?: string;
-  environment?: Environment;
-}): string | undefined {
-  const environment = args.environment;
-  if (!environment) {
-    return undefined;
-  }
-  const isPrimaryWorkspace =
-    args.projectRootPath !== undefined &&
-    environment.path !== null &&
-    environment.path === args.projectRootPath;
-  if (isPrimaryWorkspace || !environment.managed) {
-    return "Direct";
-  }
-  if (environment.managed && environment.provisionerId === "docker-worktree") {
-    return "Docker";
-  }
-  if (environment.managed && environment.provisionerId === "worktree") {
-    const suffix = formatAttachedEnvironmentSuffix(
-      environment.path ?? "",
-      args.projectRootPath,
-    );
-    return suffix ? `Worktree (${suffix})` : "Worktree";
-  }
-  return "Unknown";
-}
-
-interface ThreadEnvironmentDisplay {
-  label: string;
-  suffix?: string;
-  openPath?: {
-    relativePath: string;
-    title: string;
-  };
-}
-
-function ThreadEnvironmentValue({
-  display,
-}: {
-  display?: ThreadEnvironmentDisplay;
-}) {
-  const openPath = display?.openPath;
-  if (!display) {
-    return null;
-  }
-  if (!openPath) {
-    return display.label;
-  }
-  return (
-    <span className="inline-flex items-center gap-1 align-baseline">
-      <span>{display.label}</span>
-      <button
-        type="button"
-        className="inline-flex size-4 shrink-0 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:text-foreground"
-        title={openPath.title}
-        aria-label="Open environment folder"
-      >
-        <ExternalLink className="size-3 shrink-0" />
-      </button>
-    </span>
-  );
-}
-
-function getThreadEnvironmentDisplay(args: {
-  projectRootPath?: string;
-  environment?: Environment;
-}): ThreadEnvironmentDisplay | undefined {
-  const environment = args.environment;
-  const label = formatThreadEnvironmentLabel(args);
-  if (!label || !environment) {
-    return label ? { label } : undefined;
-  }
-
-  const envPath = environment.path;
-  const isPrimary =
-    args.projectRootPath !== undefined &&
-    envPath !== null &&
-    envPath === args.projectRootPath;
-
-  if (isPrimary) {
-    return {
-      label,
-      openPath: {
-        relativePath: ".",
-        title: envPath,
-      },
-    };
-  }
-
-  if (!(environment.managed && environment.provisionerId === "worktree")) {
-    return { label };
-  }
-
-  const suffix = formatAttachedEnvironmentSuffix(
-    envPath ?? "",
-    args.projectRootPath,
-  );
-  if (!suffix) {
-    return { label };
-  }
-
-  return {
-    label: "Worktree",
-    suffix,
-    openPath: {
-      relativePath: ".",
-      title: envPath ?? suffix,
-    },
-  };
+  return location;
 }
 
 const THREAD_HEADER_ACTION_BUTTON_CLASS =
@@ -546,16 +426,17 @@ export function ThreadDetailView() {
     preferredTheme,
     threadId,
   });
-  const {
-    data: threadWorkStatus,
-    error: threadWorkStatusError,
-  } = useThreadWorkStatus(threadId ?? "", selectedMergeBaseBranch);
-  const resolvedThreadWorkStatus =
-    threadWorkStatusError ? undefined : (threadWorkStatus ?? undefined);
   const environmentQuery = useEnvironment(thread?.environmentId);
   const environment = environmentQuery.data;
-  const workStatusQuery = useEnvironmentWorkStatus(thread?.environmentId);
+  const workStatusQuery = useEnvironmentWorkStatus(
+    thread?.environmentId,
+    selectedMergeBaseBranch,
+  );
   const workStatus = workStatusQuery.data;
+  const threadWorkStatusError = workStatusQuery.error;
+  const resolvedThreadWorkStatus =
+    threadWorkStatusError ? undefined : (workStatus ?? undefined);
+  const { isLocalHost } = useHostDaemon();
   const isReasoningBlockActive = false;
   const isTimelineLoading = timelineLoading;
   const isThreadTimelinePending = isTimelineLoading && threadDetailRows.length === 0;
@@ -984,13 +865,10 @@ export function ThreadDetailView() {
     return null;
   })();
   const isThreadGitActionPending = requestEnvironmentAction.isPending;
-  // TODO: Project no longer has rootPath; source path will come from project sources API
-  const projectRootPath = undefined;
-  const threadEnvironmentDisplay = getThreadEnvironmentDisplay({
-    projectRootPath,
+  const threadEnvironmentLabel = formatEnvironmentLabel(
     environment,
-  });
-  const threadEnvironmentLabel = threadEnvironmentDisplay?.label;
+    isLocalHost(environment?.hostId),
+  );
   const provisioningStatusLabel =
     isCreated
       ? "Created..."
@@ -1030,9 +908,7 @@ export function ThreadDetailView() {
   const threadEnvironmentType =
     threadEnvironmentLabel ??
     (environment ? "environment" : undefined);
-  const threadEnvironmentValue: ReactNode | undefined = threadEnvironmentDisplay
-    ? <ThreadEnvironmentValue display={threadEnvironmentDisplay} />
-    : undefined;
+  const threadEnvironmentValue: ReactNode | undefined = threadEnvironmentLabel ?? undefined;
   const threadBranchName = resolvedThreadWorkStatus?.currentBranch;
   const threadMergeBaseBranch = effectiveMergeBaseBranch;
   const showThreadWorkspaceStatus =

@@ -4,20 +4,17 @@ import { PromptBox } from "@/components/promptbox/PromptBox";
 import { PromptExecutionControls } from "@/components/promptbox/PromptExecutionControls";
 import { PromptOptionPicker } from "@/components/promptbox/PromptOptionPicker";
 import { PageShell } from "@/components/layout/PageShell";
-import { WorkspaceStatusIndicator } from "@/components/shared/WorkspaceStatusIndicator";
-import { type StatusPillVariant } from "@bb/ui-core";
 import {
-  useProjectWorkspaceStatus,
   useProjects,
   useCreateThread,
   useUploadPromptAttachment,
 } from "@/hooks/useApi";
+import { useHostDaemon } from "@/hooks/useHostDaemon";
 import { usePromptDraftStorage } from "@/hooks/usePromptDraftStorage";
 import { usePromptMentions } from "@/hooks/usePromptMentions";
 import { usePromptModelReasoning } from "@/hooks/usePromptModelReasoning";
 import { getProjectScopedStorageKey } from "@/lib/project-scoped-storage";
 import { promptDraftToInput } from "@/lib/prompt-draft";
-import { formatDirtyWorkspaceLabel } from "@/lib/workspace-change-summary";
 
 const PROJECT_MAIN_ZEN_MODE_STORAGE_KEY = "bb.promptbox.zen-mode.project-main";
 
@@ -26,8 +23,8 @@ export function ProjectMainView() {
   const location = useLocation();
   const navigate = useNavigate();
   const { data: projects, isLoading: projectsLoading } = useProjects();
-  const { data: workspaceStatus, isLoading: threadsLoading } = useProjectWorkspaceStatus(projectId);
   const createThread = useCreateThread();
+  const { localHostId, hasDaemon } = useHostDaemon();
   const uploadPromptAttachment = useUploadPromptAttachment();
   const promptDraft = usePromptDraftStorage({ projectId, threadId: null });
   const promptMentions = usePromptMentions(projectId);
@@ -89,106 +86,30 @@ export function ProjectMainView() {
 
     return knownOptions;
   }, [projectId, projects, projectsLoading]);
-  const projectWorkspaceStatus = useMemo<{
-    label: string;
-    variant: StatusPillVariant;
-  }>(() => {
-    if (workspaceStatus?.state === "untracked") {
-      return {
-        label: "Untracked",
-        variant: "outline",
-      };
-    }
-
-    if (workspaceStatus?.hasUncommittedChanges) {
-      return {
-        label: formatDirtyWorkspaceLabel(workspaceStatus),
-        variant: "secondary",
-      };
-    }
-
-    if (workspaceStatus?.state === "deleted") {
-      return {
-        label: "Deleted",
-        variant: "destructive",
-      };
-    }
-
-    if (
-      workspaceStatus &&
-      workspaceStatus.aheadCount > 0 &&
-      workspaceStatus.behindCount > 0
-    ) {
-      return {
-        label: "Diverged",
-        variant: "outline",
-      };
-    }
-
-    if (workspaceStatus?.behindCount && workspaceStatus.behindCount > 0) {
-      return {
-        label: "Behind",
-        variant: "outline",
-      };
-    }
-
-    if (workspaceStatus?.hasCommittedUnmergedChanges) {
-      return {
-        label: "Ahead",
-        variant: "outline",
-      };
-    }
-
-    return {
-      label: "Clean",
-      variant: "outline",
-    };
-  }, [workspaceStatus]);
-  const projectBranchLabel = useMemo(() => {
-    const currentBranch = workspaceStatus?.currentBranch;
-    if (!currentBranch) {
-      return null;
-    }
-
-    if (workspaceStatus?.defaultBranch && currentBranch === workspaceStatus.defaultBranch) {
-      return null;
-    }
-
-    return currentBranch;
-  }, [workspaceStatus]);
-  const selectedEnvironment = undefined;
   const selectedProject = useMemo(
     () => projects?.find((project) => project.id === projectId),
     [projectId, projects],
   );
-  const selectedEnvironmentRequest = useMemo(() => {
+  const selectedEnvironmentRequest = useMemo((): {
+    hostId?: string;
+    provisionerId?: "worktree" | "e2b";
+    environmentId?: string;
+  } => {
     if (!projectId) {
       return {};
     }
     if (!environmentSelectionValue || environmentSelectionValue === "local") {
-      return selectedProject?.rootPath
-        ? {
-            environmentDescriptor: {
-              type: "path" as const,
-              path: selectedProject.rootPath,
-            },
-          }
-        : {};
+      return localHostId ? { hostId: localHostId } : {};
     }
-    if (
-      environmentSelectionValue === "worktree" ||
-      environmentSelectionValue === "docker"
-    ) {
-      return {
-        environmentCreationArgs: {
-          kind: environmentSelectionValue,
-        },
-      };
+    if (environmentSelectionValue === "worktree") {
+      return localHostId
+        ? { hostId: localHostId, provisionerId: "worktree" }
+        : {};
     }
     return {
       environmentId: environmentSelectionValue,
     };
-  }, [environmentSelectionValue, projectId, selectedProject?.rootPath]);
+  }, [environmentSelectionValue, localHostId, projectId]);
   const handleProjectChange = useCallback((nextProjectId: string) => {
     if (nextProjectId === projectId) return;
     navigate(`/projects/${nextProjectId}`);
@@ -257,20 +178,12 @@ export function ProjectMainView() {
       await createThread.mutateAsync({
         input: submittedInput,
         projectId,
-        ...(hasMultipleProviders && selectedProviderId ? { providerId: selectedProviderId } : {}),
+        providerId: selectedProviderId ?? "",
         model: activeModel?.model,
         ...(supportsServiceTier && serviceTier ? { serviceTier } : {}),
         reasoningLevel,
         sandboxMode,
-        ...(selectedEnvironmentRequest.environmentId
-          ? { environmentId: selectedEnvironmentRequest.environmentId }
-          : {}),
-        ...(selectedEnvironmentRequest.environmentDescriptor
-          ? { environmentDescriptor: selectedEnvironmentRequest.environmentDescriptor }
-          : {}),
-        ...(selectedEnvironmentRequest.environmentCreationArgs
-          ? { environmentCreationArgs: selectedEnvironmentRequest.environmentCreationArgs }
-          : {}),
+        ...selectedEnvironmentRequest,
       });
     } catch {
       promptDraft.restoreIfEmpty(submittedDraft);
@@ -347,25 +260,6 @@ export function ProjectMainView() {
                 options={environmentSelectorOptions}
                 onChange={setEnvironmentSelectionValue}
               />
-            ) : null}
-            {!threadsLoading &&
-            selectedEnvironment?.capabilities.host_filesystem === true &&
-            selectedEnvironment.capabilities.isolated_workspace === false ? (
-              <div className="flex items-center gap-2">
-                <WorkspaceStatusIndicator
-                  status={workspaceStatus}
-                  label={projectWorkspaceStatus.label}
-                  variant={projectWorkspaceStatus.variant}
-                />
-                {projectBranchLabel ? (
-                  <span
-                    className="max-w-[220px] truncate text-xs text-muted-foreground"
-                    title={projectBranchLabel}
-                  >
-                    {projectBranchLabel}
-                  </span>
-                ) : null}
-              </div>
             ) : null}
           </div>
         </div>

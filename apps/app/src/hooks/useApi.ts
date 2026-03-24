@@ -464,13 +464,8 @@ export function useProjectFileSuggestions(
   });
 }
 
-export function useProjectWorkspaceStatus(projectId: string | undefined) {
-  return useQuery<WorkspaceStatus>({
-    queryKey: ["projectWorkspaceStatus", projectId],
-    queryFn: () => api.getProjectWorkspaceStatus(projectId ?? ""),
-    enabled: Boolean(projectId),
-  });
-}
+
+
 
 export function useUploadPromptAttachment() {
   return useMutation({
@@ -557,20 +552,6 @@ export function useThreadManagerWorkspaceFile(
   });
 }
 
-export function useThreadWorkStatus(
-  id: string,
-  mergeBaseBranch?: string,
-  options?: { enabled?: boolean },
-) {
-  return useQuery<WorkspaceStatus | null>({
-    queryKey: [THREAD_WORK_STATUS_QUERY_KEY, id, mergeBaseBranch ?? null],
-    queryFn: () => api.getThreadWorkStatus(id, mergeBaseBranch),
-    enabled: (options?.enabled ?? true) && !!id,
-    placeholderData: (previousData, previousQuery) =>
-      resolveThreadWorkStatusPlaceholder(previousData, previousQuery?.queryKey, id),
-    refetchOnWindowFocus: false,
-  });
-}
 
 export function useEnvironment(environmentId: string | null | undefined) {
   return useQuery<Environment>({
@@ -960,7 +941,7 @@ export function useUnarchiveThread() {
         if (!thread) return thread;
         return {
           ...thread,
-          archivedAt: undefined,
+          archivedAt: null,
         };
       });
 
@@ -972,7 +953,7 @@ export function useUnarchiveThread() {
             thread.id === args.id
               ? {
                   ...thread,
-                  archivedAt: undefined,
+                  archivedAt: null,
                 }
               : thread,
           ),
