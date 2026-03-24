@@ -75,6 +75,7 @@ export const threadSchema = z.object({
   providerId: z.string(),
   type: threadTypeSchema,
   title: z.string().nullable(),
+  titleFallback: z.string().nullable(),
   status: threadStatusSchema,
   mergeBaseBranch: z.string().nullable(),
   parentThreadId: z.string().nullable(),

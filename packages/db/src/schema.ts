@@ -100,6 +100,7 @@ export const threads = sqliteTable(
     providerId: text("provider_id").notNull(),
     type: text("type").notNull().default("standard"),
     title: text("title"),
+    titleFallback: text("title_fallback"),
     status: text("status").notNull().default("created"),
     mergeBaseBranch: text("merge_base_branch"),
     parentThreadId: text("parent_thread_id").references(
