@@ -6,7 +6,6 @@ import {
   sandboxModeSchema,
   serviceTierSchema,
   timelineRowSchema,
-  threadContextWindowUsageSchema,
   threadQueuedMessageSchema,
   threadStatusSchema,
   threadTypeSchema,
@@ -17,9 +16,14 @@ import { apiErrorSchema } from "./errors.js";
 export const sendMessageModeSchema = z.enum(["auto", "start", "steer"]);
 export type SendMessageMode = z.infer<typeof sendMessageModeSchema>;
 
+const threadTimelineContextWindowUsageSchema = z.object({
+  totalTokens: z.number(),
+  modelContextWindow: z.number(),
+});
+
 export const createThreadRequestSchema = z.object({
   projectId: z.string().min(1),
-  providerId: z.string().min(1).optional(),
+  providerId: z.string().min(1),
   type: threadTypeSchema.optional(),
   title: z.string().min(1).optional(),
   input: z.array(promptInputSchema).min(1).optional(),
@@ -91,11 +95,9 @@ export type CreateProjectRequest = z.infer<typeof createProjectRequestSchema>;
 export const updateProjectRequestSchema = z
   .object({
     name: z.string().min(1).optional(),
-    defaultProviderId: z.string().min(1).nullable().optional(),
   })
   .refine(
-    (value) =>
-      value.name !== undefined || value.defaultProviderId !== undefined,
+    (value) => value.name !== undefined,
     "At least one field must be provided",
   );
 export type UpdateProjectRequest = z.infer<typeof updateProjectRequestSchema>;
@@ -226,7 +228,7 @@ export type TimelineToolDetailsResponse = z.infer<typeof timelineToolDetailsResp
 
 export const threadTimelineResponseSchema = z.object({
   rows: z.array(timelineRowSchema),
-  contextWindowUsage: threadContextWindowUsageSchema.nullable().optional(),
+  contextWindowUsage: threadTimelineContextWindowUsageSchema.nullable().optional(),
 });
 export type ThreadTimelineResponse = z.infer<typeof threadTimelineResponseSchema>;
 

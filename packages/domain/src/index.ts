@@ -58,19 +58,15 @@ export type {
 
 export {
   hostSchema,
-  hostStatusSchema,
-  hostStatusValues,
   hostTypeSchema,
   hostTypeValues,
 } from "./host.js";
 export type {
   Host,
-  HostStatus,
   HostType,
 } from "./host.js";
 
 export {
-  threadContextWindowUsageSchema,
   threadQueuedMessageSchema,
   threadSchema,
   threadStatusSchema,
@@ -84,7 +80,6 @@ export {
 } from "./thread.js";
 export type {
   Thread,
-  ThreadContextWindowUsage,
   ThreadQueuedMessage,
   ThreadStatus,
   ThreadType,
@@ -151,9 +146,7 @@ export type {
 
 export {
   providerEventSchema,
-  providerThreadEventSchema,
   systemEventSchema,
-  systemThreadEventSchema,
   threadEventFileChangeKindSchema,
   threadEventFileChangeSchema,
   threadEventItemSchema,
@@ -169,9 +162,7 @@ export {
 } from "./provider-event.js";
 export type {
   ProviderEvent,
-  ProviderThreadEvent,
   SystemEvent,
-  SystemThreadEvent,
   ThreadEvent,
   ThreadEventFileChange,
   ThreadEventFileChangeKind,

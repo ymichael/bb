@@ -3,7 +3,6 @@ import { z } from "zod";
 export const projectSchema = z.object({
   id: z.string(),
   name: z.string(),
-  defaultProviderId: z.string().nullable(),
   createdAt: z.number(),
   updatedAt: z.number(),
 });

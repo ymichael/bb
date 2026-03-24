@@ -69,14 +69,6 @@ export const threadQueuedMessageSchema = z.object({
 });
 export type ThreadQueuedMessage = z.infer<typeof threadQueuedMessageSchema>;
 
-export const threadContextWindowUsageSchema = z.object({
-  totalTokens: z.number(),
-  modelContextWindow: z.number(),
-});
-export type ThreadContextWindowUsage = z.infer<
-  typeof threadContextWindowUsageSchema
->;
-
 export const threadSchema = z.object({
   id: z.string(),
   projectId: z.string(),

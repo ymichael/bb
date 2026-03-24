@@ -1,9 +1,14 @@
-import type { ThreadContextWindowUsage, ThreadEventRow } from "@bb/domain";
+import type { ThreadEventRow } from "@bb/domain";
 import { isRecord } from "./unknown-helpers.js";
 
 interface ThreadContextWindowSignal {
   totalTokens?: number;
   modelContextWindow?: number;
+}
+
+interface ContextWindowUsage {
+  totalTokens: number;
+  modelContextWindow: number;
 }
 
 function toNonNegativeNumber(value: unknown): number | undefined {
@@ -46,7 +51,7 @@ function decodeContextWindowSignal(event: ThreadEventRow): ThreadContextWindowSi
 
 export function extractThreadContextWindowUsage(
   events: readonly ThreadEventRow[],
-): ThreadContextWindowUsage | null {
+): ContextWindowUsage | null {
   let totalTokens: number | undefined;
   let modelContextWindow: number | undefined;
 
