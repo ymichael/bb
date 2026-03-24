@@ -10,9 +10,9 @@ export interface CreateEnvironmentInput {
   path?: string | null;
   managed?: boolean;
   isGitRepo?: boolean;
+  isWorktree?: boolean;
   branchName?: string | null;
-  provisionerId?: string | null;
-  provisionerState?: string | null;
+  workspaceProvisionType?: "unmanaged" | "managed-worktree" | "managed-clone" | null;
   status?: string;
 }
 
@@ -31,9 +31,9 @@ export function createEnvironment(
       path: input.path ?? null,
       managed: input.managed ?? false,
       isGitRepo: input.isGitRepo ?? false,
+      isWorktree: input.isWorktree ?? false,
       branchName: input.branchName ?? null,
-      provisionerId: input.provisionerId ?? null,
-      provisionerState: input.provisionerState ?? null,
+      workspaceProvisionType: input.workspaceProvisionType ?? null,
       status: input.status ?? "provisioning",
       createdAt: now,
       updatedAt: now,
@@ -68,8 +68,8 @@ export interface UpdateEnvironmentInput {
   path?: string | null;
   status?: string;
   isGitRepo?: boolean;
+  isWorktree?: boolean;
   branchName?: string | null;
-  provisionerState?: string | null;
 }
 
 export function updateEnvironment(
@@ -78,6 +78,13 @@ export function updateEnvironment(
   id: string,
   input: UpdateEnvironmentInput,
 ) {
+  const existing = db
+    .select()
+    .from(environments)
+    .where(eq(environments.id, id))
+    .get();
+  if (!existing) return null;
+
   const now = Date.now();
   db.update(environments)
     .set({ ...input, updatedAt: now })
@@ -88,6 +95,11 @@ export function updateEnvironment(
     .from(environments)
     .where(eq(environments.id, id))
     .get();
+
+  if (updated && input.status && input.status !== existing.status) {
+    notifier.notifyEnvironment(id, ["status-changed"]);
+  }
+
   return updated ?? null;
 }
 

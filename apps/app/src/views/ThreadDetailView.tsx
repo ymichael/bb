@@ -36,7 +36,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Separator } from "@/components/ui/separator";
 import { SidebarTrigger } from "@/components/ui/sidebar";
-import { usePromptModelReasoning } from "@/hooks/usePromptModelReasoning";
+import { useThreadCreationOptions } from "@/hooks/useThreadCreationOptions";
 import { usePromptDraftStorage } from "@/hooks/usePromptDraftStorage";
 import { usePromptMentions } from "@/hooks/usePromptMentions";
 import { useHostDaemon } from "@/hooks/useHostDaemon";
@@ -64,6 +64,7 @@ import {
   buildSquashMergeCommitFailureFollowUpInstruction,
   buildSquashMergeConflictFollowUpInstruction,
 } from "@/lib/thread-operation-prompts";
+import { formatEnvironmentDisplay } from "@bb/core-ui";
 import type { Environment, PromptInput, ServiceTier, Thread } from "@bb/domain";
 import type {
   EnvironmentActionApiError,
@@ -190,17 +191,6 @@ function toThreadGitActionDialogError(error: unknown): ThreadGitActionDialogErro
   });
 }
 
-function formatEnvironmentLabel(
-  environment: Environment | undefined,
-  isLocalHost: boolean,
-): string | undefined {
-  if (!environment) return undefined;
-  const location = isLocalHost ? "Local" : "Remote";
-  if (environment.isWorktree) {
-    return `${location} (Worktree)`;
-  }
-  return location;
-}
 
 const THREAD_HEADER_ACTION_BUTTON_CLASS =
   "h-7 rounded-md border-border/70 bg-background/70 px-2 text-xs font-medium text-foreground/85 shadow-none hover:bg-muted/45 hover:text-foreground";
@@ -360,7 +350,7 @@ export function ThreadDetailView() {
     reasoningOptions,
     sandboxOptions,
     supportsServiceTier,
-  } = usePromptModelReasoning({
+  } = useThreadCreationOptions({
     scope: "thread",
     resetKey: threadId,
     initialProviderId: thread?.providerId,
@@ -594,7 +584,7 @@ export function ThreadDetailView() {
   const toggleArchiveThread = useCallback(() => {
     if (!thread) return;
     const label = threadTypeLabel(thread.type);
-    if (thread.archivedAt !== undefined) {
+    if (thread.archivedAt != null) {
       unarchiveThread.mutate({ id: thread.id });
       return;
     }
@@ -824,7 +814,7 @@ export function ThreadDetailView() {
     !managerThreads.some((m) => m.id === thread.id);
   const canTakeOverThread =
     thread.type === "standard" && Boolean(thread.parentThreadId);
-  const isArchivedThread = thread.archivedAt !== undefined;
+  const isArchivedThread = thread.archivedAt != null;
   const isDirectThreadEnvironment =
     environment?.managed === false;
   const threadHeaderGitAction: {
@@ -865,10 +855,9 @@ export function ThreadDetailView() {
     return null;
   })();
   const isThreadGitActionPending = requestEnvironmentAction.isPending;
-  const threadEnvironmentLabel = formatEnvironmentLabel(
-    environment,
-    isLocalHost(environment?.hostId),
-  );
+  const threadEnvironmentLabel = environment
+    ? formatEnvironmentDisplay(environment, isLocalHost(environment.hostId)).label
+    : undefined;
   const provisioningStatusLabel =
     isCreated
       ? "Created..."
@@ -914,7 +903,7 @@ export function ThreadDetailView() {
   const showThreadWorkspaceStatus =
     canUseGitUi &&
     (Boolean(resolvedThreadWorkStatus) || Boolean(threadWorkStatusError)) &&
-    !(thread.archivedAt !== undefined && environment?.managed !== true);
+    !(thread.archivedAt != null && environment?.managed !== true);
   const threadGitStatusDisplay = getThreadGitStatusDisplay(
     resolvedThreadWorkStatus,
     {
@@ -954,7 +943,7 @@ export function ThreadDetailView() {
       (!isManagerThread && showThreadMergeBase) ||
       showThreadWorkspaceStatus ||
       showThreadChangedFiles ||
-      thread.archivedAt !== undefined,
+      thread.archivedAt != null,
   );
   const threadTitle = getThreadDisplayTitle(thread);
   const threadActionsDisabled =
@@ -1195,7 +1184,7 @@ export function ThreadDetailView() {
           </div>
         </DetailRow>
       ) : null}
-      {thread.archivedAt !== undefined ? (
+      {thread.archivedAt != null ? (
         <DetailRow
           label="Archived"
           valueClassName="min-w-0 truncate"
@@ -1329,7 +1318,7 @@ export function ThreadDetailView() {
       onDebugToggleCheckedChange={
         isManagerThread ? handleManagerDebugViewChange : undefined
       }
-      isArchived={thread.archivedAt !== undefined}
+      isArchived={thread.archivedAt != null}
       threadType={thread.type}
     />
   );

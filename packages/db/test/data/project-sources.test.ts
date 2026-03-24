@@ -38,6 +38,10 @@ describe("project-sources", () => {
 
   it("lists sources by project", () => {
     const { db, host, project } = setup();
+    const host2 = upsertHost(db, noopNotifier, {
+      name: "test-host-2",
+      type: "persistent",
+    });
     createProjectSource(db, noopNotifier, {
       projectId: project.id,
       type: "local_path",
@@ -47,7 +51,7 @@ describe("project-sources", () => {
     createProjectSource(db, noopNotifier, {
       projectId: project.id,
       type: "local_path",
-      hostId: host.id,
+      hostId: host2.id,
       path: "/tmp/code2",
     });
 

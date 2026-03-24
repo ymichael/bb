@@ -105,13 +105,16 @@ export type {
 } from "./public-api.js";
 
 export {
+  ENVIRONMENT_CHANGE_KINDS,
   PROJECT_CHANGE_KINDS,
   SYSTEM_CHANGE_KINDS,
   THREAD_CHANGE_KINDS,
-} from "./websocket.js";
+} from "@bb/domain";
 export type {
   ChangedMessage,
   ClientMessage,
+  EnvironmentChangeKind,
+  EnvironmentChangedMessage,
   ProjectChangeKind,
   RealtimeEntity,
   ServerMessage,
@@ -119,4 +122,4 @@ export type {
   SystemChangeKind,
   ThreadChangeKind,
   UnsubscribeMessage,
-} from "./websocket.js";
+} from "@bb/domain";

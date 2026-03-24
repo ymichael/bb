@@ -101,7 +101,7 @@ export function usePromptMentions(
       return [];
     }
     return (threadsQuery.data ?? [])
-      .filter((thread) => thread.archivedAt === undefined)
+      .filter((thread) => thread.archivedAt == null)
       .filter((thread) => thread.id !== currentThreadId)
       .filter((thread) =>
         threadSuggestionMode === "managers" ? thread.type === "manager" : true,

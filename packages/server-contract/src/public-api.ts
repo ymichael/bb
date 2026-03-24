@@ -19,8 +19,6 @@ import type {
   PathProjectId,
   PathThreadAndDraft,
 } from "./common.js";
-
-type PathProjectSourceId = { param: { id: string; sourceId: string } };
 import type {
   CreateDraftRequest,
   CreateProjectRequest,
@@ -50,6 +48,8 @@ import type {
   WorkspaceFile,
 } from "./api-types.js";
 import type { ApiError } from "./errors.js";
+
+type PathProjectSourceId = { param: { id: string; sourceId: string } };
 
 export type PublicApiSchema = {
   "/projects": {
@@ -103,7 +103,6 @@ export type PublicApiSchema = {
       201
     >;
   };
-
 
   "/hosts": {
     $get: Endpoint<EmptyInput, Host[]>;

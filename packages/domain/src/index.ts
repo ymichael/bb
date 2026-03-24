@@ -223,18 +223,21 @@ export type {
 export {
   THREAD_CHANGE_KINDS,
   PROJECT_CHANGE_KINDS,
+  ENVIRONMENT_CHANGE_KINDS,
   SYSTEM_CHANGE_KINDS,
 } from "./change-kinds.js";
 export type {
   RealtimeEntity,
   ThreadChangeKind,
   ProjectChangeKind,
+  EnvironmentChangeKind,
   SystemChangeKind,
   SubscribeMessage,
   UnsubscribeMessage,
   ClientMessage,
   ThreadChangedMessage,
   ProjectChangedMessage,
+  EnvironmentChangedMessage,
   SystemChangedMessage,
   ChangedMessage,
   ServerMessage,

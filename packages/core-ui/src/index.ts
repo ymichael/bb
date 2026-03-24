@@ -1,11 +1,5 @@
 export { assertNever } from "./assert-never.js";
 
-export {
-  formatEnvironmentDisplayName,
-  formatRuntimeKind,
-  isWorktreeEnvironmentReference,
-} from "./environment-display-name.js";
-
 export { formatEnvironmentDisplay } from "./environment-display.js";
 export type { EnvironmentDisplayInfo } from "./environment-display.js";
 

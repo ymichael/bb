@@ -25,7 +25,7 @@ export function ProjectArchivedThreadsView() {
 
   const archivedThreads =
     threads
-      ?.filter((thread) => thread.archivedAt !== undefined && thread.parentThreadId === undefined)
+      ?.filter((thread) => thread.archivedAt != null && thread.parentThreadId == null)
       .sort((a, b) => (b.archivedAt ?? 0) - (a.archivedAt ?? 0)) ?? [];
 
   return (

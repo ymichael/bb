@@ -12,7 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAvailableModels, useSystemProviders, useHireProjectManager } from "@/hooks/useApi";
-import { formatModelLabel } from "@/hooks/usePromptModelReasoning";
+import { formatModelLabel } from "@/hooks/useThreadCreationOptions";
 import { getProviderIconInfo } from "@/lib/provider-icon";
 import { PromptProviderModelPicker } from "@/components/promptbox/PromptProviderModelPicker";
 import { PromptOptionPicker, type PromptOption } from "@/components/promptbox/PromptOptionPicker";

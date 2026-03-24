@@ -47,11 +47,15 @@ export function queueCommand(
       })
       .run();
 
-    return tx
+    const command = tx
       .select()
       .from(hostDaemonCommands)
       .where(eq(hostDaemonCommands.id, id))
       .get()!;
+
+    notifier.notifyCommand(input.hostId);
+
+    return command;
   });
 }
 
@@ -73,40 +77,42 @@ export function fetchCommands(
   const { hostId, afterCursor = 0, limit = 100 } = options;
   const now = Date.now();
 
-  const commands = db
-    .select()
-    .from(hostDaemonCommands)
-    .where(
-      and(
-        eq(hostDaemonCommands.hostId, hostId),
-        eq(hostDaemonCommands.state, "pending"),
-        gt(hostDaemonCommands.cursor, afterCursor),
-      ),
-    )
-    .orderBy(hostDaemonCommands.cursor)
-    .limit(limit)
-    .all();
+  return db.transaction((tx) => {
+    const commands = tx
+      .select()
+      .from(hostDaemonCommands)
+      .where(
+        and(
+          eq(hostDaemonCommands.hostId, hostId),
+          eq(hostDaemonCommands.state, "pending"),
+          gt(hostDaemonCommands.cursor, afterCursor),
+        ),
+      )
+      .orderBy(hostDaemonCommands.cursor)
+      .limit(limit)
+      .all();
 
-  if (commands.length === 0) return commands;
+    if (commands.length === 0) return commands;
 
-  // Mark as fetched
-  const ids = commands.map((cmd) => cmd.id);
-  for (const id of ids) {
-    db.update(hostDaemonCommands)
-      .set({ state: "fetched", fetchedAt: now })
-      .where(eq(hostDaemonCommands.id, id))
-      .run();
-  }
-
-  // Re-select to return up-to-date objects
-  return ids.map(
-    (id) =>
-      db
-        .select()
-        .from(hostDaemonCommands)
+    // Mark as fetched
+    const ids = commands.map((cmd) => cmd.id);
+    for (const id of ids) {
+      tx.update(hostDaemonCommands)
+        .set({ state: "fetched", fetchedAt: now })
         .where(eq(hostDaemonCommands.id, id))
-        .get()!,
-  );
+        .run();
+    }
+
+    // Re-select to return up-to-date objects
+    return ids.map(
+      (id) =>
+        tx
+          .select()
+          .from(hostDaemonCommands)
+          .where(eq(hostDaemonCommands.id, id))
+          .get()!,
+    );
+  });
 }
 
 export interface ReportCommandResultInput {

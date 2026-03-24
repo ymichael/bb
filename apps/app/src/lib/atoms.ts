@@ -8,11 +8,15 @@ import { fetchHostId } from "./api-host-daemon";
 // ---------------------------------------------------------------------------
 
 async function loadSystemConfig(): Promise<SystemConfigResponse> {
-  const res = await apiClient.system.config.$get();
-  if (!res.ok) {
+  try {
+    const res = await apiClient.system.config.$get();
+    if (!res.ok) {
+      return { hostDaemonPort: null };
+    }
+    return (await res.json()) as SystemConfigResponse;
+  } catch {
     return { hostDaemonPort: null };
   }
-  return (await res.json()) as SystemConfigResponse;
 }
 
 /** System config from the server. Resolves once on first read. */

@@ -16,7 +16,6 @@ interface ThreadChangeFlags {
   listChanged: boolean;
   threadChanged: boolean;
   timelineChanged: boolean;
-  workStatusChanged: boolean;
   statusChanged: boolean;
 }
 
@@ -25,7 +24,6 @@ function toThreadChangeFlags(changes: readonly ThreadChangeKind[]): ThreadChange
     listChanged: false,
     threadChanged: false,
     timelineChanged: false,
-    workStatusChanged: false,
     statusChanged: false,
   };
 
@@ -49,11 +47,7 @@ function toThreadChangeFlags(changes: readonly ThreadChangeKind[]): ThreadChange
         flags.listChanged = true;
         flags.threadChanged = true;
         flags.timelineChanged = true;
-        flags.workStatusChanged = true;
         flags.statusChanged = true;
-        break;
-      case "work-status-changed":
-        flags.workStatusChanged = true;
         break;
       case "events-appended":
         // Provider events (for example compaction) can update thread metadata
@@ -110,7 +104,6 @@ export function useWebSocket(): void {
     let shouldInvalidateStatus = false;
     let shouldInvalidateAllThreadTimeline = false;
     let shouldInvalidateAllThreadsById = false;
-    let shouldInvalidateAllThreadWorkStatus = false;
     let debounceTimer: ReturnType<typeof setTimeout> | null = null;
     let maxWaitTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -143,9 +136,6 @@ export function useWebSocket(): void {
       if (shouldInvalidateAllThreadsById) {
         queryClient.invalidateQueries({ queryKey: ["thread"] });
       }
-      if (shouldInvalidateAllThreadWorkStatus) {
-        queryClient.invalidateQueries({ queryKey: ["threadWorkStatus"] });
-      }
       if (shouldInvalidateAllThreadTimeline) {
         queryClient.invalidateQueries({ queryKey: ["threadTimeline"] });
       }
@@ -159,9 +149,6 @@ export function useWebSocket(): void {
 
         if (flags.threadChanged) {
           queryClient.invalidateQueries({ queryKey: ["thread", id] });
-        }
-        if (flags.workStatusChanged) {
-          queryClient.invalidateQueries({ queryKey: ["threadWorkStatus", id] });
         }
         if (flags.timelineChanged) {
           if (flags.statusChanged) {
@@ -191,7 +178,6 @@ export function useWebSocket(): void {
       shouldInvalidateStatus = false;
       shouldInvalidateAllThreadTimeline = false;
       shouldInvalidateAllThreadsById = false;
-      shouldInvalidateAllThreadWorkStatus = false;
     };
 
     const scheduleInvalidations = () => {
@@ -233,7 +219,6 @@ export function useWebSocket(): void {
               shouldInvalidateStatus = true;
             }
             shouldInvalidateAllThreadsById = globalFlags.threadChanged;
-            shouldInvalidateAllThreadWorkStatus = globalFlags.workStatusChanged;
             shouldInvalidateAllThreadTimeline = globalFlags.timelineChanged;
           }
           if (shouldFlushThreadChangesImmediately(message.changes)) {
@@ -242,8 +227,13 @@ export function useWebSocket(): void {
             scheduleInvalidations();
           }
           break;
+        case "environment":
+          if (message.id) {
+            queryClient.invalidateQueries({ queryKey: ["environment", message.id] });
+            queryClient.invalidateQueries({ queryKey: ["environmentWorkStatus", message.id] });
+          }
+          break;
         case "system":
-          queryClient.invalidateQueries({ queryKey: ["systemRestartPolicy"] });
           break;
         case "project":
           queryClient.invalidateQueries({ queryKey: ["projects"] });

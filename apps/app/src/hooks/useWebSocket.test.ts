@@ -7,7 +7,6 @@ describe("shouldFlushThreadChangesImmediately", () => {
       shouldFlushThreadChangesImmediately([
         "events-appended",
         "status-changed",
-        "work-status-changed",
       ]),
     ).toBe(true);
   });

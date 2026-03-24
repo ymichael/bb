@@ -23,6 +23,10 @@ vi.mock("node:readline/promises", () => ({
   })),
 }));
 
+vi.mock("../daemon.js", () => ({
+  fetchLocalHostId: vi.fn(async () => "host-test-001"),
+}));
+
 import { createClient, unwrap } from "../client.js";
 import { registerManagerCommands } from "../commands/manager.js";
 import { registerServerCommands } from "../commands/server.js";
@@ -358,6 +362,7 @@ describe("CLI command output contracts", () => {
         projectId: "proj-1",
         providerId: "codex",
         input: [{ type: "text", text: "hello" }],
+        environment: { type: "host", hostId: "host-test-001", workspace: { type: "unmanaged", path: null } },
       },
     });
   });
@@ -452,6 +457,7 @@ describe("CLI command output contracts", () => {
         providerId: "codex",
         input: undefined,
         parentThreadId: "thread-parent",
+        environment: { type: "host", hostId: "host-test-001", workspace: { type: "unmanaged", path: null } },
       },
     });
   });
@@ -488,7 +494,7 @@ describe("CLI command output contracts", () => {
         projectId: "proj-1",
         providerId: "codex",
         input: undefined,
-        environmentId: "env-worktree-001",
+        environment: { type: "reuse", environmentId: "env-worktree-001" },
       },
     });
   });
@@ -526,7 +532,7 @@ describe("CLI command output contracts", () => {
         projectId: "proj-1",
         providerId: "codex",
         input: undefined,
-        provisionerId: "worktree",
+        environment: { type: "host", hostId: "host-test-001", workspace: { type: "managed-worktree" } },
       },
     });
   });
@@ -564,6 +570,7 @@ describe("CLI command output contracts", () => {
         projectId: "proj-1",
         providerId: "codex",
         input: undefined,
+        environment: { type: "host", hostId: "host-test-001", workspace: { type: "unmanaged", path: null } },
       },
     });
   });

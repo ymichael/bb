@@ -51,10 +51,17 @@ function looksLikePath(value: string): boolean {
   return value.includes("/") || value.startsWith(".") || value.startsWith("~");
 }
 
+function requireHostId(hostId: string | null): string {
+  if (!hostId) {
+    throw new Error("Cannot reach local host daemon. Is it running?");
+  }
+  return hostId;
+}
+
 function buildSpawnEnvironment(args: {
   environmentValue?: string;
   newEnvironmentKind?: string;
-  hostId: string;
+  hostId: string | null;
 }): EnvironmentArgs {
   const environmentValue = args.environmentValue?.trim();
   const newEnvironmentKind = args.newEnvironmentKind?.trim();
@@ -66,23 +73,26 @@ function buildSpawnEnvironment(args: {
     if (newEnvironmentKind === "e2b") {
       return { type: "sandbox-host", sandboxType: "e2b" };
     }
-    return {
-      type: "host",
-      hostId: args.hostId,
-      workspace: { type: "managed-worktree" },
-    };
+    if (newEnvironmentKind === "worktree") {
+      return {
+        type: "host",
+        hostId: requireHostId(args.hostId),
+        workspace: { type: "managed-worktree" },
+      };
+    }
+    throw new Error(`Unknown environment kind '${newEnvironmentKind}'. Supported: worktree, e2b.`);
   }
   if (!environmentValue) {
     return {
       type: "host",
-      hostId: args.hostId,
+      hostId: requireHostId(args.hostId),
       workspace: { type: "unmanaged", path: null },
     };
   }
   if (looksLikePath(environmentValue)) {
     return {
       type: "host",
-      hostId: args.hostId,
+      hostId: requireHostId(args.hostId),
       workspace: { type: "unmanaged", path: environmentValue },
     };
   }
@@ -430,9 +440,6 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
         const projectId = requireProjectId(opts.project);
         const environmentValue = resolveEnvironmentId(opts.environment);
         const localHostId = await fetchLocalHostId();
-        if (!localHostId) {
-          throw new Error("Cannot reach local host daemon. Is it running?");
-        }
         const environment = buildSpawnEnvironment({
           environmentValue,
           newEnvironmentKind: opts.newEnvironment,
@@ -481,9 +488,9 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
     .description("List threads")
     .option("--project <id>", "Filter by project ID (defaults to BB_PROJECT_ID)")
     .option("--parent-thread <id>", "Filter by managing parent thread ID")
-    .option("--include-archived", "Include archived threads in the listing")
+    .option("--archived", "Show only archived threads")
     .option("--json", "Print machine-readable JSON output")
-    .action(async (opts: { project?: string; parentThread?: string; includeArchived?: boolean; json?: boolean }) => {
+    .action(async (opts: { project?: string; parentThread?: string; archived?: boolean; json?: boolean }) => {
       const client = createClient(getUrl());
       try {
         const resolvedProject = opts.project
@@ -501,7 +508,7 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
             query: {
               ...(projectId ? { projectId } : {}),
               ...(parentThreadId ? { parentThreadId } : {}),
-              ...(opts.includeArchived ? { includeArchived: "true" as const } : {}),
+              ...(opts.archived ? { archived: "true" as const } : {}),
             },
           }),
         );
@@ -849,7 +856,7 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
 
         if (!opts.yes) {
           const confirmed = await confirmDestructiveAction(
-            `Delete thread "${thread.title ?? thread.id}" permanently? This cannot be undone.`,
+            `Delete thread "${thread.title ?? thread.titleFallback ?? thread.id}" permanently? This cannot be undone.`,
           );
           if (!confirmed) {
             console.log(`Thread ${threadId} deletion cancelled`);

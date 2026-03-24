@@ -140,14 +140,14 @@ Do not add intermediate statuses like `provisioned` or `provisioning_failed` —
 An environment is where a thread runs — a filesystem path on a specific host.
 
 ```
-environments: id, projectId, hostId, path, managed, isGitRepo, provisionerId, provisionerState, branchName, status, timestamps
+environments: id, projectId, hostId, path, managed, isGitRepo, isWorktree, workspaceProvisionType, branchName, status, timestamps
 ```
 
 - `hostId` — FK to hosts, NOT NULL, CASCADE on delete
 - `path` — text, **nullable**. NULL during provisioning (daemon reports path in command result). Set when provisioning completes.
 - `managed` — integer (boolean), NOT NULL, default `0`
 - `isGitRepo` — integer (boolean), NOT NULL, default `0`
-- `provisionerState` — text (JSON), nullable
+- `workspaceProvisionType` — text, nullable (`unmanaged`, `managed-worktree`, `managed-clone`)
 - `branchName` — text, nullable (set for managed worktree environments)
 - Indexes: `environments(hostId, path)` UNIQUE (when path is not null), `environments(status)`, `environments(projectId)`
 
@@ -595,9 +595,10 @@ Subscribe/unsubscribe per entity, server pushes change-kind arrays. Notification
 
 | Entity | Change kinds |
 |---|---|
-| **Thread** (by ID) | thread-created, thread-deleted, events-appended, status-changed, title-changed, queue-changed, work-status-changed, archived-changed, read-state-changed |
-| **System** (global) | host-connected, host-disconnected, environment-created, environment-deleted |
+| **Thread** (by ID) | thread-created, thread-deleted, events-appended, status-changed, title-changed, queue-changed, archived-changed, read-state-changed |
+| **Environment** (by ID) | status-changed, work-status-changed |
 | **Project** (by ID) | sources-changed, threads-changed |
+| **System** (global) | host-connected, host-disconnected, environment-created, environment-deleted |
 
 Client and daemon WebSocket connections are handled by separate protocol handlers (different auth, different message schemas, different lifecycle).
 
@@ -610,6 +611,7 @@ The daemon exposes a small HTTP API on `BB_HOST_DAEMON_PORT` (bound to `127.0.0.
 ```
 GET  /host-id        → { hostId: string }
 POST /open           → { path: string }                     // open file/dir in editor
+POST /pick-folder    → { path: string | null }              // native folder picker dialog
 GET  /status         → { connected: boolean, serverUrl: string }
 POST /restart        → (dev only) triggers graceful restart
 ```

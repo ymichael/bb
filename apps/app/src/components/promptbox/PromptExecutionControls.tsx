@@ -1,5 +1,5 @@
 import type { ReasoningLevel, SandboxMode, ServiceTier } from "@bb/domain";
-import { formatModelLabel } from "@/hooks/usePromptModelReasoning";
+import { formatModelLabel } from "@/hooks/useThreadCreationOptions";
 import { PromptProviderModelPicker } from "./PromptProviderModelPicker";
 import { PromptOptionPicker, PromptOptionDisplay, type PromptOption } from "./PromptOptionPicker";
 

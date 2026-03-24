@@ -51,8 +51,6 @@ export function registerStatusCommand(
         try {
           const client = createClient(getUrl());
 
-          let projectRootPath: string | undefined;
-
           if (context.projectId) {
             try {
               const project = await unwrap<ProjectResponse>(
@@ -65,12 +63,6 @@ export function registerStatusCommand(
                 name: project.name,
               };
               serverAvailable = true;
-
-              const localHostId = await fetchLocalHostId();
-              const localSource = localHostId
-                ? project.sources.find((s) => s.hostId === localHostId)
-                : undefined;
-              projectRootPath = localSource?.path ?? undefined;
             } catch {
               // Project fetch failed; will fall back below
             }
@@ -92,7 +84,8 @@ export function registerStatusCommand(
                       param: { id: thread.environmentId },
                     }),
                   );
-                  environmentDisplay = formatEnvironmentDisplay(env, projectRootPath);
+                  const localHostId = await fetchLocalHostId();
+                  environmentDisplay = formatEnvironmentDisplay(env, env.hostId === localHostId);
                 } catch {
                   // Environment fetch failed; leave as null
                 }
@@ -159,11 +152,7 @@ export function registerStatusCommand(
           console.log(`  Parent: ${payload.thread.parentThreadId}`);
         }
         if (payload.thread.environment) {
-          console.log(`  Environment: ${payload.thread.environment.label}`);
-          console.log(`  Environment ID: ${payload.thread.environment.id}`);
-          if (payload.thread.environment.path) {
-            console.log(`  Path: ${payload.thread.environment.path}`);
-          }
+          console.log(`  Environment: ${payload.thread.environment.label} (${payload.thread.environment.id})`);
         }
 
         if (payload.managedThreads && payload.managedThreads.length > 0) {

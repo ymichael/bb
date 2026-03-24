@@ -259,7 +259,6 @@ export function appendOptimisticUserRowToTimeline(
   };
 }
 
-
 interface ThreadListFilters {
   projectId?: string;
   type?: ThreadType;
@@ -327,10 +326,10 @@ function threadMatchesListFilters(
   thread: Thread,
   filters: ThreadListFilters | undefined,
 ): boolean {
-  if (filters?.archived === true && thread.archivedAt === undefined) {
+  if (filters?.archived === true && thread.archivedAt == null) {
     return false;
   }
-  if (filters?.archived !== true && thread.archivedAt !== undefined) {
+  if (filters?.archived !== true && thread.archivedAt != null) {
     return false;
   }
   if (filters?.projectId && thread.projectId !== filters.projectId) {
@@ -464,9 +463,6 @@ export function useProjectFileSuggestions(
     refetchOnWindowFocus: false,
   });
 }
-
-
-
 
 export function useUploadPromptAttachment() {
   return useMutation({

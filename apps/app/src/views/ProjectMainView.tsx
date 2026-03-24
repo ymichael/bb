@@ -12,7 +12,7 @@ import {
 import { useHostDaemon } from "@/hooks/useHostDaemon";
 import { usePromptDraftStorage } from "@/hooks/usePromptDraftStorage";
 import { usePromptMentions } from "@/hooks/usePromptMentions";
-import { usePromptModelReasoning } from "@/hooks/usePromptModelReasoning";
+import { useThreadCreationOptions } from "@/hooks/useThreadCreationOptions";
 import { getProjectScopedStorageKey } from "@/lib/project-scoped-storage";
 import { promptDraftToInput } from "@/lib/prompt-draft";
 import type { CreateThreadRequest } from "@bb/server-contract";
@@ -64,7 +64,7 @@ export function ProjectMainView() {
     sandboxOptions,
     environmentOptions,
     supportsServiceTier,
-  } = usePromptModelReasoning({ scope: "new-thread", projectId });
+  } = useThreadCreationOptions({ scope: "new-thread", projectId });
   const environmentSelectorOptions = useMemo(
     () => environmentOptions.map((option) => ({
       ...option,
@@ -95,13 +95,6 @@ export function ProjectMainView() {
     if (!projectId || !localHostId) {
       return null;
     }
-    if (!environmentSelectionValue || environmentSelectionValue === "local") {
-      return {
-        type: "host",
-        hostId: localHostId,
-        workspace: { type: "unmanaged", path: null },
-      };
-    }
     if (environmentSelectionValue === "worktree") {
       return {
         type: "host",
@@ -109,7 +102,12 @@ export function ProjectMainView() {
         workspace: { type: "managed-worktree" },
       };
     }
-    return null;
+    // Default: unmanaged workspace on local host (project source path)
+    return {
+      type: "host",
+      hostId: localHostId,
+      workspace: { type: "unmanaged", path: null },
+    };
   }, [environmentSelectionValue, localHostId, projectId]);
   const handleProjectChange = useCallback((nextProjectId: string) => {
     if (nextProjectId === projectId) return;
@@ -168,7 +166,7 @@ export function ProjectMainView() {
       attachments: promptDraft.attachments,
     };
     const submittedInput = promptDraftToInput(submittedDraft);
-    if (submittedInput.length === 0 || createThread.isPending || !selectedEnvironment) return;
+    if (submittedInput.length === 0 || createThread.isPending || !selectedEnvironment || !selectedProviderId) return;
 
     // Match thread follow-up behavior: clear immediately, then restore only if the
     // request fails and the user has not started a new draft in the meantime.
@@ -179,7 +177,7 @@ export function ProjectMainView() {
       await createThread.mutateAsync({
         input: submittedInput,
         projectId,
-        providerId: selectedProviderId ?? "",
+        providerId: selectedProviderId,
         model: activeModel?.model,
         ...(supportsServiceTier && serviceTier ? { serviceTier } : {}),
         reasoningLevel,
@@ -192,7 +190,7 @@ export function ProjectMainView() {
     }
   };
 
-  const isSubmitDisabled = createThread.isPending || promptInput.length === 0 || !selectedEnvironment;
+  const isSubmitDisabled = createThread.isPending || promptInput.length === 0 || !selectedEnvironment || !selectedProviderId;
 
   return (
     <PageShell contentClassName="pt-8 md:pt-10">

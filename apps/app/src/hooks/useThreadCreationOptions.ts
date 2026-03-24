@@ -279,7 +279,7 @@ export function formatModelLabel(value: string, providerId?: string): string {
   return label;
 }
 
-export function usePromptModelReasoning(options?: UsePromptModelReasoningOptions) {
+export function useThreadCreationOptions(options?: UsePromptModelReasoningOptions) {
   const scope = options?.scope ?? "new-thread";
   const storageKeys = useMemo(
     () => getPromptModelReasoningStorageKeys(options?.projectId),
@@ -400,7 +400,10 @@ export function usePromptModelReasoning(options?: UsePromptModelReasoningOptions
   }, [activeModel]);
 
   const environmentOptions = useMemo(
-    (): PromptOption<string>[] => [],
+    (): PromptOption<string>[] => [
+      { value: "local", label: "Direct" },
+      { value: "worktree", label: "Worktree" },
+    ],
     [],
   );
 

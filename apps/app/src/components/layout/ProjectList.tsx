@@ -60,7 +60,6 @@ import {
 import { ThreadDeleteDialog } from "@/components/thread/ThreadDeleteDialog"
 import {
   isArchiveForceRequiredError,
-  requiresArchiveConfirmation,
 } from "@/lib/thread-archive"
 import {
   Dialog,
@@ -154,7 +153,7 @@ export function ProjectList({
     const grouped = new Map<string, Thread[]>()
 
     for (const thread of threads ?? []) {
-      if (thread.archivedAt !== undefined) continue
+      if (thread.archivedAt != null) continue
       const existing = grouped.get(thread.projectId)
       if (existing) {
         existing.push(thread)
@@ -190,7 +189,7 @@ export function ProjectList({
     if (!archiveConfirmationThread || !threads) return
 
     const nextThread = threads.find((thread) => thread.id === archiveConfirmationThread.id)
-    if (!nextThread || nextThread.archivedAt !== undefined) {
+    if (!nextThread || nextThread.archivedAt != null) {
       setArchiveConfirmationThread(null)
     }
   }, [archiveConfirmationThread, threads])
@@ -289,11 +288,8 @@ export function ProjectList({
   const requestArchiveThread = (thread: Thread) => {
     if (archiveThread.isPending) return
 
-    if (requiresArchiveConfirmation(null, null)) {
-      setArchiveConfirmationThread(thread)
-      return
-    }
-
+    // Client-side confirmation is deferred to the server — if the environment
+    // has uncommitted changes, the server returns 409 and we show the dialog.
     archiveThread.mutate({ id: thread.id }, {
       onError: (error) => {
         if (isArchiveForceRequiredError(error)) {
@@ -507,7 +503,7 @@ export function ProjectList({
                   requestRenameThread(thread)
                 }}
                 onToggleArchive={() => {
-                  if (thread.archivedAt !== undefined) {
+                  if (thread.archivedAt != null) {
                     unarchiveThread.mutate({ id: thread.id })
                     return
                   }
@@ -516,7 +512,7 @@ export function ProjectList({
                 onDelete={() => {
                   requestDeleteThread(thread)
                 }}
-                isArchived={thread.archivedAt !== undefined}
+                isArchived={thread.archivedAt != null}
                 threadType={thread.type}
               />
             </div>

@@ -74,9 +74,11 @@ export const environments = sqliteTable(
     isGitRepo: integer("is_git_repo", { mode: "boolean" })
       .notNull()
       .default(false),
+    isWorktree: integer("is_worktree", { mode: "boolean" })
+      .notNull()
+      .default(false),
     branchName: text("branch_name"),
-    provisionerId: text("provisioner_id"),
-    provisionerState: text("provisioner_state"),
+    workspaceProvisionType: text("workspace_provision_type"),
     status: text("status").notNull().default("provisioning"),
     createdAt: integer("created_at").notNull(),
     updatedAt: integer("updated_at").notNull(),

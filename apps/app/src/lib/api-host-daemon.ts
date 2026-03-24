@@ -1,14 +1,16 @@
 import { createHostDaemonLocalClient } from "@bb/host-daemon-contract";
 
 let client: ReturnType<typeof createHostDaemonLocalClient> | null = null;
+let clientPort: number | null = null;
 
 /**
  * Get or create the host daemon client.
- * Returns null if no daemon port is configured.
+ * Recreates the client if the port changes.
  */
 export function getHostDaemonClient(port: number) {
-  if (!client) {
+  if (!client || clientPort !== port) {
     client = createHostDaemonLocalClient(`http://localhost:${port}`);
+    clientPort = port;
   }
   return client;
 }
