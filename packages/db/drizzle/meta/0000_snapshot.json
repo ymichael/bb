@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "ef3891ec-8ab0-49c3-a004-151c6c658b5e",
+  "id": "271f6b6b-1645-48d9-ac36-ed5e65b45bc3",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "environments": {
@@ -189,8 +189,8 @@
           "notNull": false,
           "autoincrement": false
         },
-        "seq": {
-          "name": "seq",
+        "sequence": {
+          "name": "sequence",
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
@@ -220,11 +220,11 @@
         }
       },
       "indexes": {
-        "events_thread_seq_idx": {
-          "name": "events_thread_seq_idx",
+        "events_thread_sequence_idx": {
+          "name": "events_thread_sequence_idx",
           "columns": [
             "thread_id",
-            "seq"
+            "sequence"
           ],
           "isUnique": true
         },
@@ -278,32 +278,11 @@
           "notNull": true,
           "autoincrement": false
         },
-        "host_id": {
-          "name": "host_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
         "session_id": {
           "name": "session_id",
           "type": "text",
           "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "environment_id": {
-          "name": "environment_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "thread_id": {
-          "name": "thread_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
+          "notNull": true,
           "autoincrement": false
         },
         "cursor": {
@@ -313,8 +292,8 @@
           "notNull": true,
           "autoincrement": false
         },
-        "command_type": {
-          "name": "command_type",
+        "type": {
+          "name": "type",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
@@ -342,22 +321,8 @@
           "autoincrement": false,
           "default": 0
         },
-        "result": {
-          "name": "result",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "error_code": {
-          "name": "error_code",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
-        "error_message": {
-          "name": "error_message",
+        "result_payload": {
+          "name": "result_payload",
           "type": "text",
           "primaryKey": false,
           "notNull": false,
@@ -370,53 +335,40 @@
           "notNull": true,
           "autoincrement": false
         },
-        "updated_at": {
-          "name": "updated_at",
+        "fetched_at": {
+          "name": "fetched_at",
           "type": "integer",
           "primaryKey": false,
-          "notNull": true,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "completed_at": {
+          "name": "completed_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
           "autoincrement": false
         }
       },
       "indexes": {
-        "host_daemon_commands_host_cursor_idx": {
-          "name": "host_daemon_commands_host_cursor_idx",
+        "host_daemon_commands_session_cursor_idx": {
+          "name": "host_daemon_commands_session_cursor_idx",
           "columns": [
-            "host_id",
+            "session_id",
             "cursor"
           ],
           "isUnique": true
         },
-        "host_daemon_commands_host_state_idx": {
-          "name": "host_daemon_commands_host_state_idx",
+        "host_daemon_commands_session_state_idx": {
+          "name": "host_daemon_commands_session_state_idx",
           "columns": [
-            "host_id",
+            "session_id",
             "state"
-          ],
-          "isUnique": false
-        },
-        "host_daemon_commands_environment_idx": {
-          "name": "host_daemon_commands_environment_idx",
-          "columns": [
-            "environment_id"
           ],
           "isUnique": false
         }
       },
       "foreignKeys": {
-        "host_daemon_commands_host_id_hosts_id_fk": {
-          "name": "host_daemon_commands_host_id_hosts_id_fk",
-          "tableFrom": "host_daemon_commands",
-          "tableTo": "hosts",
-          "columnsFrom": [
-            "host_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
         "host_daemon_commands_session_id_host_daemon_sessions_id_fk": {
           "name": "host_daemon_commands_session_id_host_daemon_sessions_id_fk",
           "tableFrom": "host_daemon_commands",
@@ -427,33 +379,7 @@
           "columnsTo": [
             "id"
           ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "host_daemon_commands_environment_id_environments_id_fk": {
-          "name": "host_daemon_commands_environment_id_environments_id_fk",
-          "tableFrom": "host_daemon_commands",
-          "tableTo": "environments",
-          "columnsFrom": [
-            "environment_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "host_daemon_commands_thread_id_threads_id_fk": {
-          "name": "host_daemon_commands_thread_id_threads_id_fk",
-          "tableFrom": "host_daemon_commands",
-          "tableTo": "threads",
-          "columnsFrom": [
-            "thread_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
+          "onDelete": "cascade",
           "onUpdate": "no action"
         }
       },
@@ -623,13 +549,6 @@
             "status"
           ],
           "isUnique": false
-        },
-        "host_daemon_sessions_lease_idx": {
-          "name": "host_daemon_sessions_lease_idx",
-          "columns": [
-            "lease_expires_at"
-          ],
-          "isUnique": false
         }
       },
       "foreignKeys": {
@@ -693,7 +612,7 @@
           "name": "last_seen_at",
           "type": "integer",
           "primaryKey": false,
-          "notNull": false,
+          "notNull": true,
           "autoincrement": false
         },
         "created_at": {
@@ -882,17 +801,10 @@
     "queued_thread_messages": {
       "name": "queued_thread_messages",
       "columns": {
-        "seq": {
-          "name": "seq",
-          "type": "integer",
-          "primaryKey": true,
-          "notNull": true,
-          "autoincrement": true
-        },
         "id": {
           "name": "id",
           "type": "text",
-          "primaryKey": false,
+          "primaryKey": true,
           "notNull": true,
           "autoincrement": false
         },
@@ -903,26 +815,18 @@
           "notNull": true,
           "autoincrement": false
         },
-        "input": {
-          "name": "input",
+        "content": {
+          "name": "content",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
-          "autoincrement": false,
-          "default": "'[]'"
-        },
-        "model": {
-          "name": "model",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false,
           "autoincrement": false
         },
-        "service_tier": {
-          "name": "service_tier",
+        "mode": {
+          "name": "mode",
           "type": "text",
           "primaryKey": false,
-          "notNull": false,
+          "notNull": true,
           "autoincrement": false
         },
         "reasoning_level": {
@@ -945,21 +849,21 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
         }
       },
       "indexes": {
-        "queued_thread_messages_id_unique": {
-          "name": "queued_thread_messages_id_unique",
-          "columns": [
-            "id"
-          ],
-          "isUnique": true
-        },
-        "queued_thread_messages_thread_seq_idx": {
-          "name": "queued_thread_messages_thread_seq_idx",
+        "queued_thread_messages_thread_updated_idx": {
+          "name": "queued_thread_messages_thread_updated_idx",
           "columns": [
             "thread_id",
-            "seq"
+            "updated_at"
           ],
           "isUnique": false
         }
@@ -1081,10 +985,11 @@
         }
       },
       "indexes": {
-        "threads_project_idx": {
-          "name": "threads_project_idx",
+        "threads_project_updated_idx": {
+          "name": "threads_project_updated_idx",
           "columns": [
-            "project_id"
+            "project_id",
+            "updated_at"
           ],
           "isUnique": false
         },

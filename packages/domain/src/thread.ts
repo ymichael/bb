@@ -3,7 +3,6 @@ import {
   promptInputSchema,
   reasoningLevelSchema,
   sandboxModeSchema,
-  serviceTierSchema,
 } from "./shared-types.js";
 
 export const threadStatusValues = [
@@ -60,12 +59,12 @@ export type WorkspaceStatus = z.infer<typeof workspaceStatusSchema>;
 
 export const threadQueuedMessageSchema = z.object({
   id: z.string(),
-  input: z.array(promptInputSchema),
-  model: z.string().optional(),
-  serviceTier: serviceTierSchema.optional(),
+  content: z.array(promptInputSchema),
+  mode: z.enum(["auto", "start", "steer"]),
   reasoningLevel: reasoningLevelSchema,
   sandboxMode: sandboxModeSchema,
   createdAt: z.number(),
+  updatedAt: z.number(),
 });
 export type ThreadQueuedMessage = z.infer<typeof threadQueuedMessageSchema>;
 

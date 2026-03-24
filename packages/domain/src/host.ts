@@ -10,7 +10,7 @@ export const hostSchema = z.object({
   type: hostTypeSchema,
   provider: z.string().optional(),
   externalId: z.string().optional(),
-  lastSeenAt: z.number().optional(),
+  lastSeenAt: z.number(),
   createdAt: z.number(),
   updatedAt: z.number(),
 });

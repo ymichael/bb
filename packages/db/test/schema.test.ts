@@ -55,6 +55,7 @@ describe("db rebuild schema", () => {
       id: hostId,
       name: "Local host",
       type: "persistent",
+      lastSeenAt: now,
       createdAt: now,
       updatedAt: now,
     }).run();
@@ -113,16 +114,12 @@ describe("db rebuild schema", () => {
     }).run();
     db.insert(hostDaemonCommands).values({
       id: commandId,
-      hostId,
       sessionId,
-      environmentId,
-      threadId,
       cursor: 1,
-      commandType: "workspace.status",
+      type: "workspace.status",
       payload: "{}",
       state: "queued",
       createdAt: now,
-      updatedAt: now,
     }).run();
     db.insert(hostDaemonCursors).values({
       hostId,
@@ -132,10 +129,12 @@ describe("db rebuild schema", () => {
     db.insert(queuedThreadMessages).values({
       id: createDraftId(),
       threadId,
-      input: "[]",
+      content: "[]",
+      mode: "auto",
       reasoningLevel: "medium",
       sandboxMode: "danger-full-access",
       createdAt: now,
+      updatedAt: now,
     }).run();
     db.insert(events).values({
       id: eventId,
@@ -143,7 +142,7 @@ describe("db rebuild schema", () => {
       environmentId,
       turnId: "turn_1",
       providerThreadId: "provider-thread-1",
-      seq: 1,
+      sequence: 1,
       type: "system/error",
       data: "{\"message\":\"boom\"}",
       createdAt: now,
@@ -154,6 +153,10 @@ describe("db rebuild schema", () => {
     expect(db.select().from(events).get()).toMatchObject({
       turnId: "turn_1",
       providerThreadId: "provider-thread-1",
+    });
+    expect(db.select().from(hostDaemonCommands).get()).toMatchObject({
+      sessionId,
+      type: "workspace.status",
     });
 
     closeConnection(db);
@@ -172,6 +175,7 @@ describe("db rebuild schema", () => {
       id: hostId,
       name: "Local host",
       type: "persistent",
+      lastSeenAt: now,
       createdAt: now,
       updatedAt: now,
     }).run();
@@ -212,6 +216,7 @@ describe("db rebuild schema", () => {
       id: hostId,
       name: "Local host",
       type: "persistent",
+      lastSeenAt: now,
       createdAt: now,
       updatedAt: now,
     }).run();
@@ -268,6 +273,7 @@ describe("db rebuild schema", () => {
       id: hostId,
       name: "Local host",
       type: "persistent",
+      lastSeenAt: now,
       createdAt: now,
       updatedAt: now,
     }).run();
@@ -307,15 +313,12 @@ describe("db rebuild schema", () => {
     }).run();
     db.insert(hostDaemonCommands).values({
       id: commandId,
-      hostId,
       sessionId,
-      environmentId,
       cursor: 1,
-      commandType: "workspace.status",
+      type: "workspace.status",
       payload: "{}",
       state: "queued",
       createdAt: now,
-      updatedAt: now,
     }).run();
     db.insert(hostDaemonCursors).values({
       hostId,
@@ -333,6 +336,54 @@ describe("db rebuild schema", () => {
     closeConnection(db);
   });
 
+  it("cascades session deletion to host-daemon commands", () => {
+    const db = createConnection(":memory:");
+    migrate(db);
+
+    const now = Date.now();
+    const hostId = createHostId();
+    const sessionId = createHostDaemonSessionId();
+    const commandId = createHostDaemonCommandId();
+
+    db.insert(hosts).values({
+      id: hostId,
+      name: "Local host",
+      type: "persistent",
+      lastSeenAt: now,
+      createdAt: now,
+      updatedAt: now,
+    }).run();
+    db.insert(hostDaemonSessions).values({
+      id: sessionId,
+      hostId,
+      instanceId: "instance-1",
+      hostName: "Local host",
+      hostType: "persistent",
+      protocolVersion: 1,
+      heartbeatIntervalMs: 10_000,
+      leaseTimeoutMs: 30_000,
+      status: "connected",
+      leaseExpiresAt: now + 60_000,
+      createdAt: now,
+      updatedAt: now,
+    }).run();
+    db.insert(hostDaemonCommands).values({
+      id: commandId,
+      sessionId,
+      cursor: 1,
+      type: "workspace.status",
+      payload: "{}",
+      state: "queued",
+      createdAt: now,
+    }).run();
+
+    db.delete(hostDaemonSessions).where(eq(hostDaemonSessions.id, sessionId)).run();
+
+    expect(db.select().from(hostDaemonCommands).all()).toHaveLength(0);
+
+    closeConnection(db);
+  });
+
   it("sets nullable environment references to null when an environment is deleted", () => {
     const db = createConnection(":memory:");
     migrate(db);
@@ -342,12 +393,12 @@ describe("db rebuild schema", () => {
     const projectId = createProjectId();
     const environmentId = createEnvironmentId();
     const threadId = createThreadId();
-    const commandId = createHostDaemonCommandId();
 
     db.insert(hosts).values({
       id: hostId,
       name: "Local host",
       type: "persistent",
+      lastSeenAt: now,
       createdAt: now,
       updatedAt: now,
     }).run();
@@ -381,23 +432,11 @@ describe("db rebuild schema", () => {
       createdAt: now,
       updatedAt: now,
     }).run();
-    db.insert(hostDaemonCommands).values({
-      id: commandId,
-      hostId,
-      environmentId,
-      threadId,
-      cursor: 1,
-      commandType: "workspace.status",
-      payload: "{}",
-      state: "queued",
-      createdAt: now,
-      updatedAt: now,
-    }).run();
     db.insert(events).values({
       id: createEventId(),
       threadId,
       environmentId,
-      seq: 1,
+      sequence: 1,
       type: "system/error",
       data: "{}",
       createdAt: now,
@@ -406,7 +445,6 @@ describe("db rebuild schema", () => {
     db.delete(environments).where(eq(environments.id, environmentId)).run();
 
     expect(db.select().from(threads).get()?.environmentId).toBeNull();
-    expect(db.select().from(hostDaemonCommands).get()?.environmentId).toBeNull();
     expect(db.select().from(events).get()?.environmentId).toBeNull();
 
     closeConnection(db);
@@ -438,15 +476,17 @@ describe("db rebuild schema", () => {
     db.insert(queuedThreadMessages).values({
       id: createDraftId(),
       threadId,
-      input: "[]",
+      content: "[]",
+      mode: "auto",
       reasoningLevel: "medium",
       sandboxMode: "danger-full-access",
       createdAt: now,
+      updatedAt: now,
     }).run();
     db.insert(events).values({
       id: createEventId(),
       threadId,
-      seq: 1,
+      sequence: 1,
       type: "system/error",
       data: "{}",
       createdAt: now,
@@ -486,7 +526,7 @@ describe("db rebuild schema", () => {
     db.insert(events).values({
       id: createEventId(),
       threadId,
-      seq: 1,
+      sequence: 1,
       type: "system/error",
       data: "{}",
       createdAt: now,
@@ -496,7 +536,7 @@ describe("db rebuild schema", () => {
       db.insert(events).values({
         id: createEventId(),
         threadId,
-        seq: 1,
+        sequence: 1,
         type: "system/error",
         data: "{}",
         createdAt: now + 1,

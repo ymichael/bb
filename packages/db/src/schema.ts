@@ -16,7 +16,7 @@ export const hosts = sqliteTable(
     type: text("type").notNull(),
     provider: text("provider"),
     externalId: text("external_id"),
-    lastSeenAt: integer("last_seen_at"),
+    lastSeenAt: integer("last_seen_at").notNull(),
     createdAt: integer("created_at").notNull(),
     updatedAt: integer("updated_at").notNull(),
   },
@@ -112,7 +112,7 @@ export const threads = sqliteTable(
     updatedAt: integer("updated_at").notNull(),
   },
   (table) => [
-    index("threads_project_idx").on(table.projectId),
+    index("threads_project_updated_idx").on(table.projectId, table.updatedAt),
     index("threads_environment_idx").on(table.environmentId),
     index("threads_parent_idx").on(table.parentThreadId),
     index("threads_archived_status_idx").on(table.archivedAt, table.status),
@@ -131,13 +131,13 @@ export const events = sqliteTable(
     }),
     turnId: text("turn_id"),
     providerThreadId: text("provider_thread_id"),
-    seq: integer("seq").notNull(),
+    sequence: integer("sequence").notNull(),
     type: text("type").$type<ThreadEventType>().notNull(),
     data: text("data").notNull().default("{}"),
     createdAt: integer("created_at").notNull(),
   },
   (table) => [
-    uniqueIndex("events_thread_seq_idx").on(table.threadId, table.seq),
+    uniqueIndex("events_thread_sequence_idx").on(table.threadId, table.sequence),
     index("events_environment_idx").on(table.environmentId),
   ],
 );
@@ -145,20 +145,22 @@ export const events = sqliteTable(
 export const queuedThreadMessages = sqliteTable(
   "queued_thread_messages",
   {
-    seq: integer("seq").primaryKey({ autoIncrement: true }),
-    id: text("id").notNull().unique(),
+    id: text("id").primaryKey(),
     threadId: text("thread_id")
       .notNull()
       .references(() => threads.id, { onDelete: "cascade" }),
-    input: text("input").notNull().default("[]"),
-    model: text("model"),
-    serviceTier: text("service_tier"),
+    content: text("content").notNull(),
+    mode: text("mode").notNull(),
     reasoningLevel: text("reasoning_level").notNull(),
     sandboxMode: text("sandbox_mode").notNull(),
     createdAt: integer("created_at").notNull(),
+    updatedAt: integer("updated_at").notNull(),
   },
   (table) => [
-    index("queued_thread_messages_thread_seq_idx").on(table.threadId, table.seq),
+    index("queued_thread_messages_thread_updated_idx").on(
+      table.threadId,
+      table.updatedAt,
+    ),
   ],
 );
 
@@ -185,7 +187,6 @@ export const hostDaemonSessions = sqliteTable(
   },
   (table) => [
     index("host_daemon_sessions_host_status_idx").on(table.hostId, table.status),
-    index("host_daemon_sessions_lease_idx").on(table.leaseExpiresAt),
   ],
 );
 
@@ -193,36 +194,28 @@ export const hostDaemonCommands = sqliteTable(
   "host_daemon_commands",
   {
     id: text("id").primaryKey(),
-    hostId: text("host_id")
+    sessionId: text("session_id")
       .notNull()
-      .references(() => hosts.id, { onDelete: "cascade" }),
-    sessionId: text("session_id").references(() => hostDaemonSessions.id, {
-      onDelete: "set null",
-    }),
-    environmentId: text("environment_id").references(() => environments.id, {
-      onDelete: "set null",
-    }),
-    threadId: text("thread_id").references(() => threads.id, {
-      onDelete: "set null",
-    }),
+      .references(() => hostDaemonSessions.id, { onDelete: "cascade" }),
     cursor: integer("cursor").notNull(),
-    commandType: text("command_type").notNull(),
+    type: text("type").notNull(),
     payload: text("payload").notNull(),
     state: text("state").notNull(),
     retryCount: integer("retry_count").notNull().default(0),
-    result: text("result"),
-    errorCode: text("error_code"),
-    errorMessage: text("error_message"),
+    resultPayload: text("result_payload"),
     createdAt: integer("created_at").notNull(),
-    updatedAt: integer("updated_at").notNull(),
+    fetchedAt: integer("fetched_at"),
+    completedAt: integer("completed_at"),
   },
   (table) => [
-    uniqueIndex("host_daemon_commands_host_cursor_idx").on(
-      table.hostId,
+    uniqueIndex("host_daemon_commands_session_cursor_idx").on(
+      table.sessionId,
       table.cursor,
     ),
-    index("host_daemon_commands_host_state_idx").on(table.hostId, table.state),
-    index("host_daemon_commands_environment_idx").on(table.environmentId),
+    index("host_daemon_commands_session_state_idx").on(
+      table.sessionId,
+      table.state,
+    ),
   ],
 );
 
