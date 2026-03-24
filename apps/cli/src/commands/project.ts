@@ -140,17 +140,6 @@ export function registerProjectCommands(program: Command, getUrl: () => string):
       }
     });
 
-  project
-    .command("files <query>")
-    .description("Search files within a project")
-    .option("--project <id>", "Project ID (defaults to BB_PROJECT_ID)")
-    .option("--limit <n>", "Result limit", "8")
-    .option("--json", "Print machine-readable JSON output")
-    .action(async () => {
-      // TODO: /projects/:id/files route not in @bb/server-contract. See phase-2a-findings.md.
-      console.error("Error: project files search is not available (not in contract)");
-      process.exit(1);
-    });
 }
 
 function printProject(project: Project): void {

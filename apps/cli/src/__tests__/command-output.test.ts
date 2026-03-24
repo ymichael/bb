@@ -803,77 +803,6 @@ describe("CLI command output contracts", () => {
     expect(lines).toContain("Server shutdown requested.");
   });
 
-  it("bb server health prints storage and thread summary", async () => {
-    const healthGet = vi.fn(async () =>
-      new Response(
-        JSON.stringify({
-          generatedAt: 1_700_000_000_000,
-          uptime: 3661,
-          projectCount: 2,
-          runningThreads: 1,
-          threadCounts: {
-            total: 4,
-            archived: 1,
-            created: 0,
-            provisioning: 1,
-            provisioningFailed: 0,
-            active: 1,
-            idle: 2,
-          },
-          storage: {
-            totalBytes: 1536,
-            disk: {
-              path: "/Users/test/.bb",
-              availableBytes: 4096,
-              totalBytes: 8192,
-              usedBytes: 4096,
-            },
-            buckets: [
-              {
-                key: "worktrees",
-                label: "Worktrees",
-                bytes: 1024,
-                paths: ["/Users/test/.bb/worktrees"],
-              },
-            ],
-          },
-        }),
-        {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        },
-      ));
-    createClientMock.mockReturnValue(asServerClient({
-      api: {
-        v1: {
-          system: {
-            health: {
-              $get: healthGet,
-            },
-          },
-        },
-      },
-    }));
-    unwrapMock.mockImplementation(async (responsePromise: Promise<unknown>) => {
-      const response = await responsePromise as Response;
-      return response.json();
-    });
-
-    await runCommand(["server", "health"], (program) =>
-      registerServerCommands(program, () => "http://server"),
-    );
-
-    expect(healthGet).toHaveBeenCalledTimes(1);
-    const lines = collectLogLines(vi.mocked(console.log));
-    expect(lines).toContain("Server Health");
-    expect(lines).toContain("Projects: 2");
-    expect(lines).toContain("Running threads: 1");
-    expect(lines).toContain("Managed storage: 1.50 KiB");
-    expect(lines).toContain("Storage buckets:");
-    expect(lines).toContain("- Worktrees: 1.00 KiB");
-    expect(lines).toContain("  /Users/test/.bb/worktrees");
-  });
-
   it("bb thread show prints archived timestamp for archived threads", async () => {
     const thread: Thread = makeThread({
       id: "thread-archived-1",
@@ -969,58 +898,6 @@ describe("CLI JSON output contracts", () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
-  });
-
-  it("bb server health --json prints the raw report", async () => {
-    const report = {
-      generatedAt: 1_700_000_000_000,
-      uptime: 3661,
-      projectCount: 2,
-      runningThreads: 1,
-      threadCounts: {
-        total: 4,
-        archived: 1,
-        created: 0,
-        provisioning: 1,
-        provisioned: 0,
-        provisioningFailed: 0,
-        error: 0,
-        active: 1,
-        idle: 2,
-      },
-      storage: {
-        totalBytes: 1536,
-        buckets: [],
-      },
-    };
-    const healthGet = vi.fn(async () =>
-      new Response(JSON.stringify(report), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      }));
-    createClientMock.mockReturnValue(asServerClient({
-      api: {
-        v1: {
-          system: {
-            health: {
-              $get: healthGet,
-            },
-          },
-        },
-      },
-    }));
-    unwrapMock.mockImplementation(async (responsePromise: Promise<unknown>) => {
-      const response = await responsePromise as Response;
-      return response.json();
-    });
-
-    await runCommand(["server", "health", "--json"], (program) =>
-      registerServerCommands(program, () => "http://server"),
-    );
-
-    expect(JSON.parse(String(vi.mocked(console.log).mock.calls[0]?.[0]))).toEqual(
-      report,
-    );
   });
 
   it("bb thread show --json prints the thread in status payload format", async () => {

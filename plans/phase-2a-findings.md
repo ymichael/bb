@@ -6,18 +6,11 @@ Discovered during `apps/cli` cutover to new contracts (`@bb/domain`, `@bb/server
 
 | Route (old) | Route (new, per architecture) | Used by CLI command | Status |
 |---|---|---|---|
-| `/system/health` | `/system/health` | `bb server health` | Not in contract |
-| `/projects/:id/files` | `/projects/:id/files` | `bb project files` | Not in contract |
 | `/threads/:id/git-diff` | `/threads/:id/diff` | `bb thread show --git-diff` | Not in contract |
 | `/threads/:id/merge-base-branches` | `/threads/:id/diff/branches` | `bb thread show --merge-base-branches` | Not in contract |
 | `/threads/:id/output` | `/threads/:id/output` | `bb thread output` | Not in contract |
-| `/environments/:id/env-daemon/sessions` | removed | `bb thread sessions` (removed) | Correctly removed |
 
-## Missing types in `@bb/server-contract`
-
-| Type | Needed by | Notes |
-|---|---|---|
-| `SystemHealthReport` | `bb server health` | Response type for health endpoint. Defined locally in server.ts as stopgap. |
+Removed: `bb server health` (command deleted), `bb project files` (command deleted), `bb thread sessions` (command deleted).
 
 ## Missing fields on domain types
 
@@ -53,8 +46,6 @@ Discovered during `apps/cli` cutover to new contracts (`@bb/domain`, `@bb/server
 
 These commands compile but print an error and exit because they depend on routes or fields not in the contract:
 
-- `bb server health` — uses manual `fetch()` as fallback (route not in contract)
-- `bb project files` — exits with error
 - `bb thread show --git-diff` — prints warning, skips
 - `bb thread show --merge-base-branches` — prints warning, skips
 - `bb thread output` — exits with error
