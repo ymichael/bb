@@ -349,13 +349,14 @@ describe("CLI command output contracts", () => {
       },
     }));
 
-    await runCommand(["thread", "spawn", "--prompt", "hello"], (program) =>
+    await runCommand(["thread", "spawn", "--prompt", "hello", "--provider", "codex"], (program) =>
       registerThreadCommands(program, () => "http://server"),
     );
 
     expect(post).toHaveBeenCalledWith({
       json: {
         projectId: "proj-1",
+        providerId: "codex",
         input: [{ type: "text", text: "hello" }],
       },
     });
@@ -408,7 +409,7 @@ describe("CLI command output contracts", () => {
       },
     }));
 
-    await runCommand(["thread", "spawn", "--json"], (program) =>
+    await runCommand(["thread", "spawn", "--json", "--provider", "codex"], (program) =>
       registerThreadCommands(program, () => "http://server"),
     );
 
@@ -441,13 +442,14 @@ describe("CLI command output contracts", () => {
     }));
 
     await runCommand(
-      ["thread", "spawn", "--parent-thread", "thread-parent"],
+      ["thread", "spawn", "--parent-thread", "thread-parent", "--provider", "codex"],
       (program) => registerThreadCommands(program, () => "http://server"),
     );
 
     expect(post).toHaveBeenCalledWith({
       json: {
         projectId: "proj-1",
+        providerId: "codex",
         input: undefined,
         parentThreadId: "thread-parent",
       },
@@ -477,13 +479,14 @@ describe("CLI command output contracts", () => {
       },
     }));
 
-    await runCommand(["thread", "spawn", "--environment", "env-worktree-001"], (program) =>
+    await runCommand(["thread", "spawn", "--environment", "env-worktree-001", "--provider", "codex"], (program) =>
       registerThreadCommands(program, () => "http://server"),
     );
 
     expect(post).toHaveBeenCalledWith({
       json: {
         projectId: "proj-1",
+        providerId: "codex",
         input: undefined,
         environmentId: "env-worktree-001",
       },
@@ -514,17 +517,16 @@ describe("CLI command output contracts", () => {
     }));
 
     await runCommand(
-      ["thread", "spawn", "--new-environment", "worktree"],
+      ["thread", "spawn", "--new-environment", "worktree", "--provider", "codex"],
       (program) => registerThreadCommands(program, () => "http://server"),
     );
 
     expect(post).toHaveBeenCalledWith({
       json: {
         projectId: "proj-1",
+        providerId: "codex",
         input: undefined,
-        environmentCreationArgs: {
-          kind: "worktree",
-        },
+        provisionerId: "worktree",
       },
     });
   });
@@ -553,13 +555,14 @@ describe("CLI command output contracts", () => {
       },
     }));
 
-    await runCommand(["thread", "spawn"], (program) =>
+    await runCommand(["thread", "spawn", "--provider", "codex"], (program) =>
       registerThreadCommands(program, () => "http://server"),
     );
 
     expect(post).toHaveBeenCalledWith({
       json: {
         projectId: "proj-1",
+        providerId: "codex",
         input: undefined,
       },
     });
@@ -1015,7 +1018,7 @@ describe("CLI JSON output contracts", () => {
         v1: {
           threads: {
             ":id": {
-              tell: {
+              send: {
                 $post: post,
               },
             },

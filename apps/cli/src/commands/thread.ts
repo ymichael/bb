@@ -372,7 +372,7 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
       "--parent-thread <id>",
       "Parent thread ID for worker thread links (defaults to BB_THREAD_ID)",
     )
-    .option(
+    .requiredOption(
       "--provider <id>",
       "Provider ID for the thread (e.g. codex, claude-code, pi)",
     )
@@ -401,7 +401,7 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
       environment?: string;
       newEnvironment?: string;
       parentThread?: string;
-      provider?: string;
+      provider: string;
       model?: string;
       reasoningLevel?: string;
       title?: string;
@@ -432,9 +432,7 @@ export function registerThreadCommands(program: Command, getUrl: () => string): 
           client.api.v1.threads.$post({
             json: {
               projectId,
-              // TODO: providerId is required in CreateThreadRequest but CLI allows omitting it
-              // (server should resolve a default). See phase-2a-findings.md.
-              providerId: opts.provider ?? "",
+              providerId: opts.provider,
               input: opts.prompt
                 ? [{ type: "text", text: opts.prompt }]
                 : undefined,
