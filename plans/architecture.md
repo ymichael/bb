@@ -568,7 +568,7 @@ Three built-in: codex, claude-code, pi. Process-based via `@bb/agent-runtime` (m
 | Code | Location |
 |---|---|
 | `Workspace` class, provisioning functions | `@bb/workspace` |
-| Promote/demote orchestration (export/import/reattach) | `apps/host-daemon` (daemon composes Workspace primitives) |
+| Promote/demote commands | `apps/host-daemon` (single atomic command via `@bb/workspace`) |
 | E2B sandbox create/suspend/resume/destroy | `apps/server` (stubbed in v1) |
 | Host registration, identity, heartbeat | `apps/host-daemon` |
 | Command routing, AgentRuntime management | `apps/host-daemon` |

@@ -220,7 +220,7 @@ Route renames, type renames, new routes, WebSocket protocol changes. See `plans/
 
 **Build and test in isolation before integrating.** Same approach as `@bb/agent-runtime`.
 
-See `plans/environment-package.md` for the full design.
+See `plans/architecture.md` for the full design.
 
 ### 3a. Workspace class — core git operations
 
