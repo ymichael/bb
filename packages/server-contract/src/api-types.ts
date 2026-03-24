@@ -269,3 +269,10 @@ export const systemVoiceTranscriptionResponseSchema = z.object({
   text: z.string(),
 });
 export type SystemVoiceTranscriptionResponse = z.infer<typeof systemVoiceTranscriptionResponseSchema>;
+
+export const environmentPrimaryStatusResponseSchema = z.object({
+  isPromoted: z.boolean(),
+  currentBranch: z.string().optional(),
+  environmentBranch: z.string().optional(),
+});
+export type EnvironmentPrimaryStatusResponse = z.infer<typeof environmentPrimaryStatusResponseSchema>;

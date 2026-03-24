@@ -8,6 +8,7 @@ import type {
   ProjectSource,
   Thread,
   ThreadEventRow,
+  ThreadGitDiffResponse,
   ThreadQueuedMessage,
   ThreadType,
   WorkspaceStatus,
@@ -26,6 +27,7 @@ import type {
   EnvironmentActionApiError,
   EnvironmentActionRequest,
   EnvironmentActionResponse,
+  EnvironmentPrimaryStatusResponse,
   SendDraftRequest,
   SendDraftResponse,
   SendMessageRequest,
@@ -69,6 +71,10 @@ export type PublicApiSchema = {
     >;
   };
 
+  "/projects/:id/work-status": {
+    $get: Endpoint<PathProjectId, WorkspaceStatus | null>;
+  };
+
   "/hosts": {
     $get: Endpoint<EmptyInput, Host[]>;
   };
@@ -83,6 +89,9 @@ export type PublicApiSchema = {
     $get:
       | Endpoint<PathId, Environment, 200>
       | Endpoint<PathId, ApiError, 404>;
+  };
+  "/environments/:id/primary-status": {
+    $get: Endpoint<PathId, EnvironmentPrimaryStatusResponse>;
   };
   "/environments/:id/actions": {
     $post:
@@ -174,6 +183,20 @@ export type PublicApiSchema = {
       },
       TimelineToolDetailsResponse
     >;
+  };
+  "/threads/:id/diff": {
+    $get: Endpoint<
+      PathId & {
+        query?: {
+          selection?: string;
+          mergeBaseBranch?: string;
+        };
+      },
+      ThreadGitDiffResponse
+    >;
+  };
+  "/threads/:id/diff/branches": {
+    $get: Endpoint<PathId, string[]>;
   };
   "/threads/:id/events": {
     $get: Endpoint<PathId & { query?: { afterSeq?: string; limit?: string } }, ThreadEventRow[]>;
