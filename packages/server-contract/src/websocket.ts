@@ -14,7 +14,7 @@ export const THREAD_CHANGE_KINDS = [
 export type ThreadChangeKind = (typeof THREAD_CHANGE_KINDS)[number];
 
 export const SYSTEM_CHANGE_KINDS = [
-  "restart-policy-changed",
+  "status-changed",
 ] as const;
 export type SystemChangeKind = (typeof SYSTEM_CHANGE_KINDS)[number];
 
