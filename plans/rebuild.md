@@ -15,7 +15,7 @@ The old server, environment-daemon, environment, core, and api-contract packages
 | `@bb/domain` | **Done** (Phase 1c) — entity types, event types, Zod schemas. Renames complete, View* naming, slim types. |
 | `@bb/db` | **Done** (Phase 1d) — clean-slate schema, drizzle-kit migration, ID generation. |
 | `@bb/core-ui` | **Done** (Phase 1e) — view transforms updated for domain renames. |
-| `@bb/host-daemon-contract` | **Done** (Phase 2b) — 18 commands, session protocol, HostDaemon* naming, typed results. |
+| `@bb/host-daemon-contract` | **Done** (Phase 2b) — 16 commands, session protocol, HostDaemon* naming, typed results. Needs updates: add `workspacePath` to thread.start/resume, add `isGitRepo` to provision result, add `threadHighWaterMarks` to session open response, replace export/import/reattach with promote/demote. |
 | `@bb/server-contract` | **Done** (Phase 2a) — public API routes, WS protocol, type renames. |
 | `@bb/workspace` | **Done** (Phase 3) — Workspace class, provisioning, promote/export/import, tested with real git. |
 | `@bb/agent-runtime` | Done — provider adapters (codex, claude-code, pi), registry, runtime. Leave as-is. |
@@ -93,6 +93,7 @@ These apply to all code written during the rebuild. The previous codebase suffer
 - **Domain types are persisted records.** Types in `@bb/domain` represent the shape of data as stored in the DB or transmitted over the wire. Runtime-only view state (work status, provisioning readiness, attached environment details, built-in actions, default execution options) belongs in the consuming layer (server views, UI projections), not in the domain type.
 - **Ignore downstream consumers during package rebuilds.** Changes to `packages/*` will break `apps/server`, `apps/cli`, `apps/app`. That is expected — those consumers are rebuilt in later phases. Don't add shims, re-exports, or weakened types to keep them compiling. The passing bar for a package phase is: every package under `packages/` typechecks and its own tests pass.
 - **Simplest correct implementation.** Prefer module-level singletons over factory functions with injectable parameters unless testing genuinely requires it. Prefer standard library/framework patterns (e.g., `pino-roll` for log rotation) over custom implementations. Don't add configurability, error classes, or abstraction layers until a second use case demands them.
+- **No sync blocking in server or daemon.** All I/O must be async (`execFile` not `execFileSync`, `fs.promises` not `fs.*Sync`, `spawn` not `spawnSync`). The event loop must never block — heartbeats, event flushes, WS notifications, and command processing all share the same process. A single `execFileSync` call blocks everything. This was a source of bugs in the previous codebase.
 
 ---
 
@@ -197,7 +198,7 @@ Update imports for domain renames. Update provisioning helpers for new event mod
 
 ### 2b. Rewrite `@bb/host-daemon-contract` (first)
 
-Rename from `env-daemon-contract`. Simplified session protocol. 18 commands including workspace operations (`workspace.status`, `workspace.diff`, `workspace.commit`, `workspace.squash_merge`, `workspace.reset`, `workspace.checkpoint`, `workspace.export`, `workspace.import`, `workspace.reattach`).
+Rename from `env-daemon-contract`. Simplified session protocol. 16 commands including workspace operations (`workspace.status`, `workspace.diff`, `workspace.commit`, `workspace.squash_merge`, `workspace.reset`, `workspace.checkpoint`, `workspace.promote`, `workspace.demote`).
 
 See `plans/architecture.md` "Host-Daemon Protocol" for full spec.
 
@@ -370,7 +371,7 @@ apps/host-daemon/src/
 
 **ServerConnection** manages the full server relationship:
 
-**Session open:** `POST /internal/session/open` with `{ hostId, instanceId, hostName, hostType, protocolVersion, activeThreads }`. Server returns `{ sessionId, heartbeatIntervalMs, leaseTimeoutMs }`. Store sessionId for all subsequent requests. The `activeThreads` array is populated from the runtime manager (Phase 4c) if available, or `[]` on fresh startup (all provider processes died). ServerConnection accepts an optional `getActiveThreads` callback injected by the daemon lifecycle so 4b doesn't depend on 4c's data structures.
+**Session open:** `POST /internal/session/open` with `{ hostId, instanceId, hostName, hostType, protocolVersion, activeThreads }`. Server returns `{ sessionId, heartbeatIntervalMs, leaseTimeoutMs, threadHighWaterMarks }`. Store sessionId for all subsequent requests. The `threadHighWaterMarks` (per-thread max event sequence on the server) are used to initialize event sequence counters — new events start from `highWaterMark + 1`. The `activeThreads` array is populated from the runtime manager (Phase 4c) if available, or `[]` on fresh startup (all processes died). ServerConnection accepts an optional `getActiveThreads` callback injected by the daemon lifecycle so 4b doesn't depend on 4c's data structures.
 
 **WS connection:** `${BB_SERVER_URL.replace('http', 'ws')}/internal/ws?sessionId={sessionId}&token={BB_SECRET_TOKEN}`. Opened after successful session open. On message: if `commands-available`, trigger command fetch. If `session-close`, shut down (another instance took over).
 
@@ -381,6 +382,8 @@ apps/host-daemon/src/
 **Event buffer:** In-memory only (lost on crash). Flush triggered by: (a) 100ms debounce after last event, or (b) buffer reaching 50 events, whichever first. Each flush POSTs the full buffer to `/internal/session/events`. On success, discard events at or below per-thread high-water marks from ack. On HTTP failure, retain and retry on next flush. Max buffer: 1000 events; oldest dropped with warning log if exceeded.
 
 **Command cursor:** File `$BB_DATA_DIR/command-cursor` containing a single integer as UTF-8 text (e.g., `42\n`). Atomic write: `writeFile(path + '.tmp', ...)` then `rename(path + '.tmp', path)`. Read on startup: `parseInt(readFile(path))` or 0 if missing. Written after successfully reporting a command result (not after fetching).
+
+**Command result delivery:** After executing a command, the daemon POSTs the result to the server with retry (exponential backoff, same as reconnection). The cursor is advanced only after a successful POST. If the server is temporarily unreachable, the daemon retries until it succeeds. If the daemon crashes before the POST succeeds, the cursor wasn't advanced — the command is re-fetched and re-executed on restart (at-least-once, commands are idempotent).
 
 **Validation:**
 - [ ] Opens session, receives sessionId, starts WS + heartbeat
@@ -414,25 +417,37 @@ createAgentRuntime({
 })
 ```
 
-**Event sequence numbering:** The daemon assigns per-thread monotonically increasing sequence numbers. The daemon maintains `Map<threadId, number>` as the next sequence counter. On restart, the daemon requests high-water marks from the server as part of session open (the server returns these in the session open response or the daemon fetches them from the event ack endpoint). New events start from `highWaterMark + 1`. This prevents post-restart sequence collisions with the server's `(threadId, sequence)` dedup.
+**Event sequence numbering:** The daemon assigns per-thread monotonically increasing sequence numbers. The daemon maintains `Map<threadId, number>` as the next sequence counter. On startup, the daemon initializes these from `threadHighWaterMarks` in the session open response — new events start from `highWaterMark + 1`. During normal operation, the event ack response also returns high-water marks (used to prune the buffer). This prevents post-restart sequence collisions with the server's `(threadId, sequence)` dedup.
 
-**Command processing:** Commands are processed **sequentially per-environment** using a per-environment async queue. Commands for different environments may execute concurrently. This prevents races like `workspace.commit` during `turn.run`. Within a batch, commands execute in cursor order.
+**Command processing:**
+
+- **Workspace/environment commands** (`workspace.*`, `environment.*`): dispatched to a per-environment async queue (one at a time via `await`, never sync-blocking). These touch the filesystem and must not run concurrently with each other.
+- **Provider commands** (`thread.*`, `turn.*`, `provider.*`): dispatched directly to `AgentRuntime`, which manages concurrent threads internally. Multiple threads on the same environment can run turns concurrently — they're independent child processes.
+
+**No sync blocking anywhere.** All I/O in the daemon is async (`execFile` not `execFileSync`, `fs.promises` not `fs.*Sync`). The event loop must never block — session heartbeats, event buffer flushes, and command fetches all continue while commands execute.
 
 **Command dispatch:**
 ```
+# Provider lane (concurrent per-thread)
 thread.start       → runtimeManager.ensureRuntime(envId, workspacePath) → runtime.startThread(...)
 thread.resume      → runtimeManager.ensureRuntime(envId, workspacePath) → runtime.resumeThread(...)
-turn.run           → runtime.runTurn(...)
+turn.run           → runtimeManager.ensureRuntime(envId, workspacePath) → runtime.runTurn(...)
 turn.steer         → runtime.steerTurn(...)
 thread.stop        → runtime.stopThread(...)
 thread.rename      → runtime.renameThread(...)
-provider.list_models → runtime.listModels(...)
-workspace.*        → workspace.method(...)
+provider.list_models → listAvailableProviders() from @bb/agent-runtime (no runtime instance needed)
+
+# Workspace lane (serialized, blocks provider lane)
+workspace.*          → workspace.method(...)
+workspace.promote    → checks both clean, detachHead on source, checkoutBranch on primary
+workspace.demote     → checks primary clean, checkoutBranch(default) on primary, checkoutBranch(env) on source
 environment.provision → createWorktree()/createClone() + runSetupScript() → runtimeManager.register(envId, path)
 environment.destroy   → runtimeManager.destroy(envId) → removeWorktree()/removeDirectory()
 ```
 
-After each command completes, report the result via `POST /internal/session/command-result`, then persist the cursor to disk.
+`turn.run` also calls `ensureRuntime` — if the daemon restarted and this is the first command for a thread, the runtime is lazily created and `resumeThread` is called before running the turn. This handles idle thread recovery without requiring the server to proactively queue `thread.resume` for every idle thread.
+
+After each command completes, store result in pending buffer → POST to server → on success, remove from buffer and advance cursor on disk.
 
 **Validation:**
 - [ ] Commands routed to correct runtime/workspace by environmentId
@@ -498,7 +513,7 @@ apps/server/src/
 
 **Auth model:** Public routes are unauthenticated in v1 (single-user local server). Internal routes require Bearer token.
 
-**Startup:** `index.ts` calls `initDb()`, creates `NotificationHub`, creates logger, calls `createApp({ db, hub, logger })`, starts background sweeps (`setInterval`), calls `serve({ fetch: app.fetch, port: BB_SERVER_PORT })`.
+**Startup:** `index.ts` calls `initDb()`, creates `NotificationHub`, creates logger, calls `createApp({ db, hub, logger })`, runs sweeps immediately (clean up stale state from a previous crash), then starts background sweep intervals (`setInterval`), then calls `serve({ fetch: app.fetch, port: BB_SERVER_PORT })`.
 
 **Validation:**
 - [ ] Server starts, listens on configured port
@@ -620,13 +635,13 @@ apps/server/src/routes/
 8. Return thread
 ```
 
-**`POST /environments/:id/actions` (asynchronous orchestration):**
-Environment actions are **asynchronous**. The route handler queues the first command and returns immediately. The `reportCommandResult` handler in the data layer chains subsequent commands.
+**`POST /environments/:id/actions` (asynchronous, single command):**
+Environment actions queue a single command and return immediately. No multi-step chaining — each action is one atomic daemon command.
 
 - **commit:** queue `workspace.commit` → result creates system event, notifies app.
 - **squash_merge:** queue `workspace.squash_merge` → result creates system event.
-- **promote:** queue `workspace.export` → export result triggers `workspace.import` (chained in `reportCommandResult`) → import result stores `previousBranch` for demote.
-- **demote:** queue `workspace.import { branch: defaultBranch }` → result triggers `workspace.reattach` (chained).
+- **promote:** queue `workspace.promote { environmentId, primaryPath }` → daemon does full export+import atomically → result notifies app.
+- **demote:** queue `workspace.demote { environmentId, primaryPath, defaultBranch }` → daemon does full demote atomically → result notifies app.
 
 **`POST /threads/:id/send`:** If thread is `idle`, transition to `active`, queue `turn.run`. If thread is `active` and mode is `steer`, queue `turn.steer`. If thread is `provisioning` or `created`, queue the message as a draft for later. The `mode` field (`auto`, `start`, `steer`) determines the command type.
 
@@ -659,16 +674,16 @@ Auth: `Authorization: Bearer <BB_SECRET_TOKEN>` on all routes. Session validatio
 2. Upsert host record (create if new hostId, update name/type/lastSeenAt)
 3. Close existing active session for this hostId (status: `closed`, closeReason: `replaced`, send `session-close` over old WS via hub)
 4. Create new session record with server-assigned `heartbeatIntervalMs` (30s), `leaseTimeoutMs` (90s)
-5. Run reconciliation (compare `activeThreads` against DB state — see architecture doc)
-6. Return `{ sessionId, heartbeatIntervalMs, leaseTimeoutMs }`
+5. Run reconciliation (compare `activeThreads` + `provisioningEnvironments` against DB state — see architecture doc)
+6. Compute `threadHighWaterMarks`: query max event sequence per thread for all non-archived threads on this host
+7. Return `{ sessionId, heartbeatIntervalMs, leaseTimeoutMs, threadHighWaterMarks }`
 
 **`GET /internal/session/commands`:** Validate sessionId. Query pending commands for this session's host after `afterCursor`. If commands exist, mark as `fetched` (set `fetchedAt`), return them. If no commands and `waitMs > 0`, hold request open — register a resolver with the hub; when `commands-available` fires for this session, resolve. Return 200 with commands or 200 with empty array on timeout.
 
-**`POST /internal/session/command-result`:** Validate session. Update command state (`success`/`error`), set `resultPayload`, `completedAt`. Run side-effect handler by command type:
-- `environment.provision` success → update environment (set path, status: ready), transition thread to idle, queue `thread.start` if pending input
+**`POST /internal/session/command-result`:** Validate session (accept results from any authenticated request — match by commandId regardless of session, since the daemon may report results from a previous session after reconnect). Update command state (`success`/`error`), set `resultPayload`, `completedAt`. Run side-effect handler by command type:
+- `environment.provision` success → update environment (set path, isGitRepo, status: ready), transition thread to idle, queue `thread.start` if pending input
 - `environment.provision` error → transition environment to error, thread to error
-- `workspace.export` success → chain `workspace.import` command
-- `workspace.import` success → store promote state, chain complete
+- `workspace.promote` / `workspace.demote` success → create system event, notify app
 - `thread.start` success → store providerThreadId
 - Other results: create system events, notify WS as appropriate
 
@@ -678,8 +693,9 @@ Auth: `Authorization: Bearer <BB_SECRET_TOKEN>` on all routes. Session validatio
 
 **`reconciliation.ts`:** Called from session open handler. Compares daemon's `activeThreads` against DB state:
 - Thread in `error` (lease timeout) but daemon reports active → transition to `active`
-- Thread in `active` but daemon has no session → transition to `idle`, queue `thread.resume`
-- Environment in `provisioning` but daemon reports no provisioning → transition environment/thread to `error`
+- Thread in `active` but daemon has no session → transition to `idle`
+- Idle threads that lost provider sessions: no server-side action needed. The daemon lazily re-establishes provider sessions via `ensureRuntime` when the next command arrives.
+- Environments stuck in `provisioning`: handled by command TTL sweep (5 min), not reconciliation.
 
 **Validation:**
 - [ ] Session open upserts host, closes old session (WS `session-close` sent), creates new session

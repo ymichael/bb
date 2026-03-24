@@ -214,7 +214,7 @@ Server queues commands in DB (host-scoped), sends `{ type: "commands-available" 
 - `environment.destroy` — no-op if path doesn't exist
 - All others are naturally idempotent (sending input, querying status)
 
-18 command types:
+16 command types:
 ```
 // Thread/provider
 thread.start, thread.resume, turn.run, turn.steer, thread.stop, thread.rename,
@@ -225,10 +225,10 @@ environment.provision, environment.destroy
 
 // Workspace (git repos only)
 workspace.status, workspace.diff, workspace.commit, workspace.squash_merge,
-workspace.export, workspace.import, workspace.reattach, workspace.reset, workspace.checkpoint
+workspace.promote, workspace.demote, workspace.reset, workspace.checkpoint
 ```
 
-Each command carries `environmentId` and `threadId` inside its own payload (not in a wrapper/meta envelope), so each command is self-describing and can be validated in isolation. `environmentId` is nullable for `provider.list_models`. The command envelope is a flat `{ id, cursor, command }` structure.
+Each command carries `environmentId` and `threadId` inside its own payload (not in a wrapper/meta envelope), so each command is self-describing and can be validated in isolation. `environmentId` is nullable for `provider.list_models` (which the daemon handles without a runtime — it calls `listAvailableProviders()` / adapter-level model listing directly from `@bb/agent-runtime`, not through an environment-scoped `AgentRuntime` instance). The command envelope is a flat `{ id, cursor, command }` structure.
 
 `thread.start` and `thread.resume` must include `workspacePath` in their payload. The daemon needs this to create an `AgentRuntime` (which requires `workspacePath` at construction time). For environments created via provisioning, the server learns the path from the provision command result. For existing-path environments, the server knows the path from the creation request. The daemon caches the path per environment after the first command.
 
@@ -270,6 +270,7 @@ Daemon-driven, server never nudges. On WS drop:
 
 - **Event ingestion is idempotent** on `(threadId, sequence)`. Server silently accepts already-seen events.
 - **Command cursor persisted to disk.** Daemon writes to `$BB_DATA_DIR/command-cursor` after reporting command results (atomic write: write to temp, rename). On restart, reads from disk and re-fetches from that cursor.
+- **Command result delivery with retry.** After executing a command, the daemon POSTs the result to the server with retry (exponential backoff). The cursor is advanced only after successful POST. If the daemon crashes mid-retry, the cursor wasn't advanced — the command is re-fetched and re-executed on restart. Commands are idempotent.
 - **Command TTL.** Server tracks commands that were fetched but never got a `command-result`. Standard commands: 60s timeout. `environment.provision`: 5 minute timeout. Abandoned commands re-queue once, then error the thread.
 - **Protocol version mismatch** → 400 rejection with supported versions.
 - **File locking.** Daemon acquires an exclusive lock on `$BB_DATA_DIR/daemon.lock` at startup. If lock is held, another daemon instance is running — the new instance waits or exits.
@@ -278,12 +279,13 @@ Daemon-driven, server never nudges. On WS drop:
 
 When the daemon reconnects after a network partition or restart, the server and daemon may have diverged. Reconciliation happens during session open:
 
-1. **Daemon reports active provider sessions** as part of session open: `{ activeThreads: [{ environmentId, threadId, providerThreadId }] }`
+1. **Daemon reports active provider sessions** as part of session open: `{ activeThreads: [{ environmentId, threadId, providerThreadId }] }`. Empty on fresh restart (all processes died).
 2. **Server compares** against its DB state:
    - Thread in `error` (due to lease timeout) but daemon reports it active → server transitions thread back to `active`
-   - Thread in `active` but daemon has no session for it → server transitions thread to `idle` and re-queues `thread.resume`
-   - Environment in `provisioning` but daemon reports no provisioning in progress → server marks environment as `error`, thread as `error`
-3. **Server responds** with any commands the daemon should have (re-queued abandoned commands)
+   - Thread in `active` but daemon has no session for it → server transitions thread to `idle`
+   - **Idle threads without provider sessions** → the daemon handles this lazily: when a command arrives for a thread with no provider session, the daemon calls `ensureRuntime` + `resumeThread` before executing. No server-side action needed.
+   - Environment in `provisioning` with no in-flight provision command → handled by command TTL (5 min). No special reconciliation needed.
+3. **Server returns** `{ sessionId, heartbeatIntervalMs, leaseTimeoutMs, threadHighWaterMarks }` — the high-water marks allow the daemon to resume event sequence numbering without collisions.
 
 This ensures that after any failure, a single reconnect brings the system back to a consistent state.
 
@@ -335,35 +337,34 @@ Daemon → reports command-result with { sha, subject }
 Server → creates system event, notifies app via WS
 ```
 
-**Promote (same host):**
+**Promote (same host, single command):**
 ```
 App → POST /environments/:id/actions { type: "promote" }
-Server → identifies source env and primary checkout path on same host
-Server → queues workspace.export to daemon { environmentId }
-Daemon → checks source is clean, detaches HEAD, returns { branch: "bb/env-abc" }
-Server → queues workspace.import to daemon { primaryPath, branch: "bb/env-abc" }
-Daemon → checks primary is clean, checks out branch, returns { previousBranch }
-Server → stores previousBranch for demote
+Server → resolves source env path + project source (primary checkout) path on same host
+Server → queues workspace.promote command { environmentId, primaryPath }
+Daemon → checks both workspaces clean, detaches source HEAD, checks out env branch on primary
+Daemon → returns { ok: true }
 ```
 
-**Demote (same host):**
+**Demote (same host, single command):**
 ```
-Server → queues workspace.import { primaryPath, branch: "main" }
-Daemon → checks primary is clean, checks out default branch
-Server → queues workspace.reattach { environmentId, branch: "bb/env-abc" }
-Daemon → re-attaches worktree to its branch
+App → POST /environments/:id/actions { type: "demote" }
+Server → resolves source env path + primary path + project's default branch
+Server → queues workspace.demote command { environmentId, primaryPath, defaultBranch }
+Daemon → checks primary clean, checks out default branch, reattaches source to its branch
+Daemon → returns { ok: true }
 ```
 
-**Promote idempotency and crash recovery:**
-- Export twice when already detached → no-op
-- Import twice with same branch → no-op
-- Reattach when already attached → no-op
-- Crash between export and import → server detects timeout, sends `workspace.reattach` to undo export. Primary was never modified.
-- **Both workspaces must be clean.** Promote and demote fail loudly if either has uncommitted changes. No stashing.
+Promote and demote are **single daemon commands** — no multi-step chaining, no server-side state machine, no partial failure recovery. The daemon executes the full operation atomically. If any step fails (dirty workspace, git error), the command fails and nothing is modified (checks are upfront).
 
-**Promoted state is derived.** The daemon checks what branch the primary checkout is on. If it matches a known environment branch, that environment is promoted. No application state to track.
+**Idempotency:**
+- Promote when already promoted (primary already on env branch) → no-op success.
+- Demote when not promoted (primary already on default branch) → no-op success.
+- **Both workspaces must be clean.** Fail loudly if either has uncommitted changes. No stashing.
 
-**v1 scope: same-host promote only.** Cross-machine promote (push to remote, fetch on target) requires multi-machine support which is out of scope for v1. The `workspace.export` and `workspace.import` commands assume same-host (shared `.git` / worktree). The `remote` and `pushToRemote` parameters are reserved for v2 — the command schemas can include them as optional, but the implementation should reject cross-host promote with a clear error.
+**Promoted state is derived.** The daemon checks what branch the primary checkout is on. If it matches a known environment branch, that environment is promoted. No application state to track. Demote always restores the project's default branch.
+
+**Cross-host promote:** Works only if the branch is already available on the remote (from a prior `workspace.checkpoint`). The daemon fetches the branch and checks it out. No pushing as part of promote — if the branch isn't on the remote, the command fails with a clear error ("branch not available on remote — run checkpoint first"). This means promote/demote is the same command regardless of same-host vs cross-host — the daemon figures out the right approach based on whether the branch is locally visible or needs a fetch.
 
 ### Non-git environments
 
@@ -439,6 +440,8 @@ Transitions:
   disconnected → connected (daemon reconnects)
   suspended → connected (server resumes cloud host on command)
 ```
+
+**Host status is derived, not persisted.** The `hosts` table has no `status` column. The server derives status at query time by checking whether the host has an active, non-expired session. `connected` = active session with current heartbeat. `disconnected` = no active session or lease expired. `suspended` = server-initiated pause (cloud hosts only, v2).
 
 ---
 
