@@ -3,9 +3,8 @@ import type {
   CommitActionResponse,
   SquashMergeActionResponse,
 } from "@bb/server-contract";
-import type { Thread } from "@bb/domain";
 import { createClient, unwrap } from "../client.js";
-import { requireProjectId, resolveThreadId } from "../context-env.js";
+import { resolveThreadId } from "../context-env.js";
 import {
   getErrorMessage,
   outputJson,
@@ -141,74 +140,25 @@ export function registerEnvironmentCommands(
     });
 
   environment
-    .command("demote [id]")
-    .description("Demote the currently promoted primary-checkout environment")
-    .option("--project <id>", "Project ID (defaults to BB_PROJECT_ID when id is omitted)")
+    .command("demote <id>")
+    .description("Demote an environment from the primary checkout")
     .option("--thread <id>", "Thread ID attached to the environment (defaults to BB_THREAD_ID)")
     .option("--json", "Print machine-readable JSON output")
-    .action(async (id: string | undefined, opts: { project?: string; thread?: string; json?: boolean }) => {
+    .action(async (id: string, opts: { thread?: string; json?: boolean }) => {
       const client = createClient(getUrl());
       try {
-        const explicitThreadId = opts.thread ?? resolveThreadId();
-        const resolution = (() => {
-          if (id && explicitThreadId) {
-            return Promise.resolve({ environmentId: id, threadId: explicitThreadId });
-          }
-          if (id && !explicitThreadId) {
-            throw new Error("A thread id is required to demote an environment. Pass --thread or set BB_THREAD_ID.");
-          }
-          const threadIdFromContext = explicitThreadId;
-          if (threadIdFromContext) {
-            return unwrap<Thread>(
-              client.api.v1.threads[":id"].$get({ param: { id: threadIdFromContext } }),
-            ).then((thread) => {
-              if (!thread.environmentId) {
-                throw new Error(`Thread ${thread.id} has no attached environment.`);
-              }
-              return {
-                environmentId: thread.environmentId,
-                threadId: thread.id,
-              };
-            });
-          }
-          requireProjectId(opts.project); // validate project exists
-          // TODO: Thread no longer has primaryCheckout — need a different API
-          // to find the currently promoted environment. See phase-2a-findings.md.
-          throw new Error(
-            "Demoting by project requires a thread ID or environment ID. " +
-            "Pass --thread or set BB_THREAD_ID, or provide the environment ID directly.",
-          );
-        })();
-
-        const resolved = await resolution;
+        const threadId = opts.thread ?? resolveThreadId();
+        if (!threadId) {
+          throw new Error("A thread id is required. Pass --thread or set BB_THREAD_ID.");
+        }
         const result = await unwrap<{ ok: true; action: "demote"; message: string }>(
           client.api.v1.environments[":id"].actions.$post({
-            param: { id: resolved.environmentId },
-            json: {
-              action: "demote",
-              initiatingThreadId: resolved.threadId,
-            },
+            param: { id },
+            json: { action: "demote", initiatingThreadId: threadId },
           }),
         );
         if (outputJson(opts, result)) return;
         console.log(result.message);
-      } catch (err: unknown) {
-        console.error(`Error: ${getErrorMessage(err)}`);
-        process.exit(1);
-      }
-    });
-
-  environment
-    .command("promote-status")
-    .description("Show which environment is active in the primary checkout")
-    .option("--project <id>", "Project ID (defaults to BB_PROJECT_ID)")
-    .option("--json", "Print machine-readable JSON output")
-    .action(async (_opts: { project?: string; json?: boolean }) => {
-      try {
-        // TODO: Thread no longer has primaryCheckout — need /environments/:id/primary-status
-        // or similar route. See phase-2a-findings.md.
-        console.error("Error: promote-status is not available (primaryCheckout not in Thread type)");
-        process.exit(1);
       } catch (err: unknown) {
         console.error(`Error: ${getErrorMessage(err)}`);
         process.exit(1);

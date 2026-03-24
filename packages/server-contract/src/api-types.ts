@@ -106,6 +106,25 @@ export const updateProjectRequestSchema = z
   );
 export type UpdateProjectRequest = z.infer<typeof updateProjectRequestSchema>;
 
+export const createProjectSourceRequestSchema = z.object({
+  hostId: z.string().min(1),
+  type: z.enum(["local_path", "github_repo"]).optional(),
+  path: z.string().min(1).optional(),
+  repoUrl: z.string().url().optional(),
+});
+export type CreateProjectSourceRequest = z.infer<typeof createProjectSourceRequestSchema>;
+
+export const updateProjectSourceRequestSchema = z
+  .object({
+    path: z.string().min(1).optional(),
+    repoUrl: z.string().url().optional(),
+  })
+  .refine(
+    (value) => value.path !== undefined || value.repoUrl !== undefined,
+    "At least one field must be provided",
+  );
+export type UpdateProjectSourceRequest = z.infer<typeof updateProjectSourceRequestSchema>;
+
 export const environmentActionTypeSchema = z.enum([
   "promote",
   "demote",

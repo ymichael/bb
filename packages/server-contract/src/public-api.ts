@@ -8,6 +8,7 @@ import type {
   ThreadEventRow,
   ThreadExecutionOptions,
   ThreadGitDiffResponse,
+  ProjectSource,
   ThreadQueuedMessage,
   ThreadType,
 } from "@bb/domain";
@@ -18,9 +19,12 @@ import type {
   PathProjectId,
   PathThreadAndDraft,
 } from "./common.js";
+
+type PathProjectSourceId = { param: { id: string; sourceId: string } };
 import type {
   CreateDraftRequest,
   CreateProjectRequest,
+  CreateProjectSourceRequest,
   CreateThreadRequest,
   EnvironmentActionApiError,
   EnvironmentActionRequest,
@@ -40,6 +44,7 @@ import type {
   ThreadTimelineResponse,
   TimelineToolDetailsResponse,
   UpdateProjectRequest,
+  UpdateProjectSourceRequest,
   UpdateThreadRequest,
   UploadedPromptAttachment,
   WorkspaceFile,
@@ -55,6 +60,13 @@ export type PublicApiSchema = {
     $get: Endpoint<PathProjectId, ProjectResponse>;
     $patch: Endpoint<PathProjectId & { json: UpdateProjectRequest }, ProjectResponse>;
     $delete: Endpoint<PathProjectId, { ok: true }>;
+  };
+  "/projects/:id/sources": {
+    $post: Endpoint<PathProjectId & { json: CreateProjectSourceRequest }, ProjectSource, 201>;
+  };
+  "/projects/:id/sources/:sourceId": {
+    $patch: Endpoint<PathProjectSourceId & { json: UpdateProjectSourceRequest }, ProjectSource>;
+    $delete: Endpoint<PathProjectSourceId, { ok: true }>;
   };
   "/projects/:id/files": {
     $get: Endpoint<
