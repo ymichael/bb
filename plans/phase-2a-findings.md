@@ -6,8 +6,8 @@ Discovered during `apps/cli` cutover to new contracts (`@bb/domain`, `@bb/server
 
 All missing routes resolved:
 - `/threads/:id/diff` and `/threads/:id/diff/branches` — routes existed in contract (added in Phase 1c), CLI wired up to use them.
-- `bb thread output` — command deleted (not in architecture, data available from `/threads/:id/events`).
-- `bb server health`, `bb project files`, `bb thread sessions` — commands deleted.
+- `/threads/:id/output` — route added to contract, CLI wired up. Now requires explicit thread ID (no default to self).
+- `bb server health`, `bb project files`, `bb thread sessions` — commands deleted (not in new architecture).
 
 ## Missing fields on domain types
 

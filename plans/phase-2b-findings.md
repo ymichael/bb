@@ -141,7 +141,7 @@ Routes the app uses that are not in the new `PublicApiSchema`:
 | `/threads/:id/default-execution-options` | `getThreadDefaultExecutionOptions()` | Not in contract |
 | `/threads/:id/manager-workspace/files` | `listThreadManagerWorkspaceFiles()` | Not in contract |
 | `/threads/:id/manager-workspace/file` | `getThreadManagerWorkspaceFile()` | Not in contract |
-| `/threads/:id/output` | `getThreadOutput()` | Not in contract |
+| `/threads/:id/output` | `getThreadOutput()` | Added to contract — app callsite needs updating |
 | `/system/status` | `getSystemStatus()` | Not in contract |
 | `/system/provider` (singular) | `getSystemProvider()` | Removed; use `/system/providers` |
 | `/system/environments` | `listSystemEnvironments()` | Removed; use `/environments` |
