@@ -287,4 +287,35 @@ export type ProjectResponse = z.infer<typeof projectResponseSchema>;
 export const environmentStatusResponseSchema = z.object({
   workspace: workspaceStatusSchema.nullable(),  // null if daemon unreachable or non-git env
 });
+
+export const projectFileSuggestionSchema = z.object({
+  path: z.string(),
+});
+export type ProjectFileSuggestion = z.infer<typeof projectFileSuggestionSchema>;
+
+export const promptMentionSuggestionSchema = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("file"),
+    path: z.string(),
+    replacement: z.string(),
+  }),
+  z.object({
+    kind: z.literal("thread"),
+    path: z.string(),
+    replacement: z.string(),
+    threadId: z.string(),
+    title: z.string().optional(),
+    threadType: threadTypeSchema,
+  }),
+]);
+export type PromptMentionSuggestion = z.infer<typeof promptMentionSuggestionSchema>;
+
+export const uploadedPromptAttachmentSchema = z.object({
+  type: z.enum(["localImage", "localFile"]),
+  path: z.string(),
+  name: z.string(),
+  mimeType: z.string().optional(),
+  sizeBytes: z.number(),
+});
+export type UploadedPromptAttachment = z.infer<typeof uploadedPromptAttachmentSchema>;
 export type EnvironmentStatusResponse = z.infer<typeof environmentStatusResponseSchema>;

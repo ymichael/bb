@@ -26,6 +26,7 @@ import type {
   EnvironmentActionRequest,
   EnvironmentActionResponse,
   EnvironmentStatusResponse,
+  ProjectFileSuggestion,
   ProjectResponse,
   SendDraftRequest,
   SendDraftResponse,
@@ -39,6 +40,7 @@ import type {
   TimelineToolDetailsResponse,
   UpdateProjectRequest,
   UpdateThreadRequest,
+  UploadedPromptAttachment,
   WorkspaceFile,
 } from "./api-types.js";
 import type { ApiError } from "./errors.js";
@@ -52,6 +54,27 @@ export type PublicApiSchema = {
     $get: Endpoint<PathProjectId, ProjectResponse>;
     $patch: Endpoint<PathProjectId & { json: UpdateProjectRequest }, ProjectResponse>;
     $delete: Endpoint<PathProjectId, { ok: true }>;
+  };
+  "/projects/:id/files": {
+    $get: Endpoint<
+      PathProjectId & { query: { query?: string; limit?: string } },
+      ProjectFileSuggestion[]
+    >;
+  };
+  "/projects/:id/attachments": {
+    $post: Endpoint<
+      PathProjectId & { form: Record<string, string | Blob> },
+      UploadedPromptAttachment,
+      201
+    >;
+  };
+  "/projects/:id/attachments/content": {
+    $get: Endpoint<
+      PathProjectId & { query: { path: string } },
+      string,
+      200,
+      "text"
+    >;
   };
   "/projects/:id/managers": {
     $post: Endpoint<

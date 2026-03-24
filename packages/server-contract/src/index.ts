@@ -22,7 +22,9 @@ export {
   environmentActionResponseSchema,
   environmentActionTypeSchema,
   environmentStatusResponseSchema,
+  projectFileSuggestionSchema,
   projectResponseSchema,
+  promptMentionSuggestionSchema,
   sendDraftRequestSchema,
   sendDraftResponseSchema,
   sendMessageModeSchema,
@@ -40,6 +42,7 @@ export {
   timelineToolDetailsResponseSchema,
   updateProjectRequestSchema,
   updateThreadRequestSchema,
+  uploadedPromptAttachmentSchema,
   workspaceFileSchema,
 } from "./api-types.js";
 export type {
@@ -54,7 +57,9 @@ export type {
   EnvironmentActionResponse,
   EnvironmentActionType,
   EnvironmentStatusResponse,
+  ProjectFileSuggestion,
   ProjectResponse,
+  PromptMentionSuggestion,
   SendDraftRequest,
   SendDraftResponse,
   SendMessageMode,
@@ -72,6 +77,7 @@ export type {
   TimelineToolDetailsResponse,
   UpdateProjectRequest,
   UpdateThreadRequest,
+  UploadedPromptAttachment,
   WorkspaceFile,
 } from "./api-types.js";
 
