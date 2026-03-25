@@ -1,4 +1,5 @@
 import { eq } from "drizzle-orm";
+import type { WorkspaceProvisionType } from "@bb/domain";
 import type { DbConnection } from "../connection.js";
 import type { DbNotifier } from "../notifier.js";
 import { environments } from "../schema.js";
@@ -12,7 +13,7 @@ export interface CreateEnvironmentInput {
   isGitRepo?: boolean;
   isWorktree?: boolean;
   branchName?: string | null;
-  workspaceProvisionType?: "unmanaged" | "managed-worktree" | "managed-clone" | null;
+  workspaceProvisionType?: WorkspaceProvisionType | null;
   status?: string;
 }
 

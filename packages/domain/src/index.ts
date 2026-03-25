@@ -35,13 +35,18 @@ export type {
 } from "./provider-types.js";
 
 export {
+  WORKSPACE_PROVISION_TYPES,
+  discoveredWorkspacePropertiesSchema,
   environmentSchema,
   environmentStatusSchema,
   environmentStatusValues,
+  workspaceProvisionTypeSchema,
 } from "./environment.js";
 export type {
+  DiscoveredWorkspaceProperties,
   Environment,
   EnvironmentStatus,
+  WorkspaceProvisionType,
 } from "./environment.js";
 
 export {

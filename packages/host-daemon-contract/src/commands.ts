@@ -1,10 +1,12 @@
 import {
   availableModelSchema,
+  discoveredWorkspacePropertiesSchema,
   dynamicToolSchema,
   promptInputSchema,
   threadExecutionOptionsSchema,
   threadGitDiffResponseSchema,
   threadGitDiffSelectionSchema,
+  workspaceProvisionTypeSchema,
   workspaceStatusSchema,
 } from "@bb/domain";
 import { z } from "zod";
@@ -51,7 +53,7 @@ export const threadStartCommandSchema = hostDaemonThreadTargetSchema.extend({
   type: z.literal("thread.start"),
   workspacePath: z.string().min(1),
   projectId: z.string().min(1),
-  providerId: z.string().min(1).optional(),
+  providerId: z.string().min(1),
   input: z.array(promptInputSchema).min(1).optional(),
   options: hostDaemonExecutionOptionsSchema.optional(),
   dynamicTools: z.array(dynamicToolSchema).optional(),
@@ -96,21 +98,26 @@ export const providerListModelsCommandSchema = z.object({
 
 export const environmentProvisionCommandSchema = hostDaemonEnvironmentTargetSchema.extend({
   type: z.literal("environment.provision"),
-  threadId: z.string().min(1).optional(),
   projectId: z.string().min(1),
-  strategy: z.enum(["worktree", "clone", "existing_path"]),
+  workspaceProvisionType: workspaceProvisionTypeSchema,
+  /** Path to validate (unmanaged) or target path (managed) */
+  path: z.string().min(1).optional(),
+  /** Source repo path (managed-worktree, managed-clone) */
   sourcePath: z.string().min(1).optional(),
-  targetPath: z.string().min(1),
+  /** Target path for worktree/clone creation */
+  targetPath: z.string().min(1).optional(),
+  /** Branch name (managed-worktree, managed-clone) */
   branchName: z.string().min(1).optional(),
+  /** Setup script filename */
   scriptName: z.string().min(1).optional(),
+  /** Setup script timeout in ms */
   timeoutMs: z.number().int().positive().optional(),
 });
 
 export const environmentDestroyCommandSchema = hostDaemonEnvironmentTargetSchema.extend({
   type: z.literal("environment.destroy"),
   path: z.string().min(1),
-  kind: z.enum(["worktree", "directory"]),
-  force: z.boolean().optional(),
+  workspaceProvisionType: workspaceProvisionTypeSchema,
 });
 
 export const workspaceStatusCommandSchema = hostDaemonThreadTargetSchema.extend({
@@ -195,11 +202,8 @@ export const hostDaemonCommandResultSchemaByType = {
   "provider.list_models": z.object({
     models: z.array(availableModelSchema),
   }),
-  "environment.provision": z.object({
-    path: z.string().min(1),
-    branchName: z.string().min(1).optional(),
+  "environment.provision": discoveredWorkspacePropertiesSchema.extend({
     ranSetup: z.boolean(),
-    isGitRepo: z.boolean(),
   }),
   "environment.destroy": z.object({}),
   "workspace.status": z.object({

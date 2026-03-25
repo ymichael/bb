@@ -1,4 +1,7 @@
-import type { ProvisioningTranscriptEntry } from "@bb/domain";
+import type {
+  ProvisioningTranscriptEntry,
+  WorkspaceStatus,
+} from "@bb/domain";
 import type {
   CheckpointOptions,
   CheckpointResult,
@@ -10,7 +13,6 @@ import type {
   SquashMergeOptions,
   SquashMergeResult,
 } from "./workspace.js";
-import type { WorkspaceStatus } from "@bb/domain";
 import { Workspace } from "./workspace.js";
 import { promoteWorkspace, demoteWorkspace } from "./promote.js";
 import {
@@ -22,7 +24,7 @@ import {
 import { detectGitRepo, pathExists, runGit, WorkspaceError } from "./git.js";
 
 // ---------------------------------------------------------------------------
-// Options (discriminated union matching WorkspaceArgs in @bb/server-contract)
+// Options (discriminated union on workspaceProvisionType from @bb/domain)
 // ---------------------------------------------------------------------------
 
 type ProgressCallback = (entry: ProvisioningTranscriptEntry) => void;
@@ -33,13 +35,13 @@ interface ProvisionBase {
 }
 
 export interface UnmanagedWorkspaceOpts extends ProvisionBase {
-  type: "unmanaged";
+  workspaceProvisionType: "unmanaged";
   /** Path to validate. Must exist. */
   path: string;
 }
 
 export interface ManagedWorktreeOpts extends ProvisionBase {
-  type: "managed-worktree";
+  workspaceProvisionType: "managed-worktree";
   /** Source repo path (the primary checkout) */
   sourcePath: string;
   /** Where to create the worktree */
@@ -53,7 +55,7 @@ export interface ManagedWorktreeOpts extends ProvisionBase {
 }
 
 export interface ManagedCloneOpts extends ProvisionBase {
-  type: "managed-clone";
+  workspaceProvisionType: "managed-clone";
   /** Source repo path to clone from */
   sourcePath: string;
   /** Where to create the clone */
@@ -224,7 +226,7 @@ class WorkspaceImpl implements IWorkspace {
 export async function provisionWorkspace(
   opts: ProvisionWorkspaceOpts,
 ): Promise<IWorkspace> {
-  switch (opts.type) {
+  switch (opts.workspaceProvisionType) {
     case "unmanaged":
       return provisionUnmanaged(opts);
     case "managed-worktree":

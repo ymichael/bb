@@ -32,16 +32,15 @@ describe("host-daemon command schemas", () => {
       hostDaemonCommandSchema.parse({
         type: "environment.provision",
         environmentId: "env_123",
-        threadId: "thr_123",
         projectId: "proj_123",
-        strategy: "worktree",
+        workspaceProvisionType: "managed-worktree",
         sourcePath: "/tmp/project",
         targetPath: "/tmp/project/.bb/env",
         branchName: "bb/env-123",
       }),
     ).toMatchObject({
       type: "environment.provision",
-      strategy: "worktree",
+      workspaceProvisionType: "managed-worktree",
     });
 
     expect(
@@ -69,6 +68,7 @@ describe("host-daemon command schemas", () => {
         threadId: "thr_123",
         workspacePath: "/tmp/workspace",
         projectId: "proj_123",
+        providerId: "codex",
       }),
     ).toMatchObject({
       type: "thread.start",
@@ -143,15 +143,19 @@ describe("host-daemon command schemas", () => {
     ).toThrow();
   });
 
-  it("includes isGitRepo in environment.provision result", () => {
+  it("includes discovered workspace properties in environment.provision result", () => {
     expect(
       hostDaemonCommandResultSchemaByType["environment.provision"].parse({
         path: "/tmp/env",
-        ranSetup: true,
         isGitRepo: true,
+        isWorktree: true,
+        branchName: "bb/env-123",
+        ranSetup: true,
       }),
     ).toMatchObject({
       isGitRepo: true,
+      isWorktree: true,
+      branchName: "bb/env-123",
     });
   });
 });

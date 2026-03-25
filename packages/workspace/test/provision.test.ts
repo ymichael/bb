@@ -43,7 +43,7 @@ describe("provisionWorkspace", () => {
     it("provisions an unmanaged git repo and discovers properties", async () => {
       const repoPath = await initRepo();
 
-      const ws = await provisionWorkspace({ type: "unmanaged", path: repoPath });
+      const ws = await provisionWorkspace({ workspaceProvisionType: "unmanaged", path: repoPath });
 
       expect(ws.path).toBe(repoPath);
       expect(ws.managed).toBe(false);
@@ -55,7 +55,7 @@ describe("provisionWorkspace", () => {
     it("provisions an unmanaged non-git directory", async () => {
       const dirPath = await makeTempDir("bb-provision-nongit-");
 
-      const ws = await provisionWorkspace({ type: "unmanaged", path: dirPath });
+      const ws = await provisionWorkspace({ workspaceProvisionType: "unmanaged", path: dirPath });
 
       expect(ws.managed).toBe(false);
       expect(ws.isGitRepo).toBe(false);
@@ -68,7 +68,7 @@ describe("provisionWorkspace", () => {
       const wtPath = path.join(parentDir, "wt");
       await runGit(["worktree", "add", "-B", "feature", wtPath], { cwd: repoPath });
 
-      const ws = await provisionWorkspace({ type: "unmanaged", path: wtPath });
+      const ws = await provisionWorkspace({ workspaceProvisionType: "unmanaged", path: wtPath });
 
       expect(ws.isGitRepo).toBe(true);
       expect(ws.isWorktree).toBe(true);
@@ -76,13 +76,13 @@ describe("provisionWorkspace", () => {
 
     it("throws for non-existent path", async () => {
       await expect(
-        provisionWorkspace({ type: "unmanaged", path: "/tmp/does-not-exist-bb" }),
+        provisionWorkspace({ workspaceProvisionType: "unmanaged", path: "/tmp/does-not-exist-bb" }),
       ).rejects.toThrow(/does not exist/u);
     });
 
     it("destroy() is a no-op for unmanaged workspaces", async () => {
       const repoPath = await initRepo();
-      const ws = await provisionWorkspace({ type: "unmanaged", path: repoPath });
+      const ws = await provisionWorkspace({ workspaceProvisionType: "unmanaged", path: repoPath });
 
       await ws.destroy();
 
@@ -98,7 +98,7 @@ describe("provisionWorkspace", () => {
       const targetPath = path.join(parentDir, "env");
 
       const ws = await provisionWorkspace({
-        type: "managed-worktree",
+        workspaceProvisionType: "managed-worktree",
         sourcePath: repoPath,
         targetPath,
         branchName: "bb/env-test",
@@ -117,7 +117,7 @@ describe("provisionWorkspace", () => {
       const targetPath = path.join(parentDir, "env");
 
       const ws = await provisionWorkspace({
-        type: "managed-worktree",
+        workspaceProvisionType: "managed-worktree",
         sourcePath: repoPath,
         targetPath,
         branchName: "bb/env-destroy",
@@ -148,7 +148,7 @@ describe("provisionWorkspace", () => {
       const targetPath = path.join(parentDir, "env");
 
       const ws = await provisionWorkspace({
-        type: "managed-worktree",
+        workspaceProvisionType: "managed-worktree",
         sourcePath: repoPath,
         targetPath,
         branchName: "bb/env-script",
@@ -169,7 +169,7 @@ describe("provisionWorkspace", () => {
 
       await expect(
         provisionWorkspace({
-          type: "managed-worktree",
+          workspaceProvisionType: "managed-worktree",
           sourcePath: repoPath,
           targetPath,
           branchName: "bb/env-fail",
@@ -187,7 +187,7 @@ describe("provisionWorkspace", () => {
       const targetPath = path.join(parentDir, "clone");
 
       const ws = await provisionWorkspace({
-        type: "managed-clone",
+        workspaceProvisionType: "managed-clone",
         sourcePath: repoPath,
         targetPath,
         branchName: "bb/clone-branch",
@@ -206,7 +206,7 @@ describe("provisionWorkspace", () => {
       const targetPath = path.join(parentDir, "clone");
 
       const ws = await provisionWorkspace({
-        type: "managed-clone",
+        workspaceProvisionType: "managed-clone",
         sourcePath: repoPath,
         targetPath,
         branchName: "bb/clone-destroy",
@@ -231,7 +231,7 @@ describe("provisionWorkspace", () => {
       const targetPath = path.join(parentDir, "clone");
 
       const ws = await provisionWorkspace({
-        type: "managed-clone",
+        workspaceProvisionType: "managed-clone",
         sourcePath: repoPath,
         targetPath,
         branchName: "bb/clone-script",
@@ -253,7 +253,7 @@ describe("provisionWorkspace", () => {
 
       await expect(
         provisionWorkspace({
-          type: "managed-clone",
+          workspaceProvisionType: "managed-clone",
           sourcePath: repoPath,
           targetPath,
           branchName: "bb/clone-fail",
@@ -267,7 +267,7 @@ describe("provisionWorkspace", () => {
   describe("IWorkspace git operations", () => {
     it("delegates git operations to the underlying Workspace", async () => {
       const repoPath = await initRepo();
-      const ws = await provisionWorkspace({ type: "unmanaged", path: repoPath });
+      const ws = await provisionWorkspace({ workspaceProvisionType: "unmanaged", path: repoPath });
 
       // getStatus
       const status = await ws.getStatus();
@@ -301,7 +301,7 @@ describe("provisionWorkspace", () => {
       const targetPath = path.join(parentDir, "env");
 
       const primary = await provisionWorkspace({
-        type: "unmanaged",
+        workspaceProvisionType: "unmanaged",
         path: repoPath,
       });
 
@@ -310,7 +310,7 @@ describe("provisionWorkspace", () => {
         cwd: repoPath,
       });
       const env = await provisionWorkspace({
-        type: "unmanaged",
+        workspaceProvisionType: "unmanaged",
         path: targetPath,
       });
 
