@@ -38,6 +38,12 @@
 - Prefer server API, CLI, direct SQL queries, or log files over browser-based debugging. Use the browser only for browser-specific issues.
 - Work methodically. Everything in this app is traceable; there is no need to guess.
 
+## Contract Documentation
+
+- Every route in `@bb/server-contract` and `@bb/host-daemon-contract` must have a JSDoc comment explaining what it does, how it's implemented (DB read, queue daemon command, server-side, etc.), and any non-obvious business logic or edge cases.
+- When adding a new route or command type, add the documentation in the same commit. A route without documentation is incomplete.
+- When changing a route's behavior, update the documentation to match.
+
 ## Planning Workflow
 
 - When asked to "make a plan", create or update a Markdown file under `plans/`.
