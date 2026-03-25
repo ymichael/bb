@@ -10,6 +10,7 @@ import { createDaemon, type HostDaemon } from "./daemon.js";
 import { createEventBuffer, type EventBuffer } from "./event-buffer.js";
 import { loadHostIdentity } from "./identity.js";
 import { acquireDaemonLock } from "./lock.js";
+import { startLocalApiServer } from "./local-api.js";
 import { restartHostDaemon } from "./restart.js";
 import { RuntimeManager } from "./runtime-manager.js";
 import { ServerConnection } from "./server-connection.js";
@@ -20,6 +21,8 @@ export interface StartHostDaemonOptions {
   serverUrl?: string;
   authToken?: string;
   hostType?: HostType;
+  enableLocalApi?: boolean;
+  localApiPort?: number;
   createInstanceId?: () => string;
   acquireLock?: typeof acquireDaemonLock;
   loadIdentity?: typeof loadHostIdentity;
@@ -29,6 +32,8 @@ export interface StartHostDaemonOptions {
   writeCursor?: typeof writeCommandCursor;
   adapterFactory?: AgentRuntimeOptions["adapterFactory"];
   onToolCall?: (request: ToolCallRequest) => Promise<ToolCallResponse>;
+  openPath?: (path: string) => Promise<void>;
+  pickFolder?: () => Promise<string | null>;
 }
 
 export async function startHostDaemon(
@@ -38,6 +43,7 @@ export async function startHostDaemon(
   const serverUrl = options.serverUrl ?? hostDaemonConfig.BB_SERVER_URL;
   const authToken = options.authToken ?? commonConfig.BB_SECRET_TOKEN;
   const hostType = options.hostType ?? "persistent";
+  const enableLocalApi = options.enableLocalApi ?? hostType === "persistent";
   const releaseLock = await (options.acquireLock ?? acquireDaemonLock)(dataDir);
 
   try {
@@ -56,11 +62,30 @@ export async function startHostDaemon(
     };
     let daemonInstance: HostDaemon | null = null;
     let requestCommandFetch: () => Promise<void> = async () => undefined;
-    let connection!: ServerConnection;
+    let connection: ServerConnection | null = null;
+    const localApi =
+      enableLocalApi
+        ? await startLocalApiServer({
+            hostId: identity.hostId,
+            port: options.localApiPort ?? hostDaemonConfig.BB_HOST_DAEMON_PORT,
+            serverUrl,
+            getConnected: () => connection?.sessionId != null,
+            openPath: options.openPath,
+            pickFolder: options.pickFolder,
+            restart: () => {
+              process.kill(process.pid, "SIGUSR2");
+            },
+          })
+        : null;
     const onToolCall = options.onToolCall;
 
     const eventBuffer: EventBuffer = createEventBuffer({
-      postEvents: async (events) => connection.postEvents(events),
+      postEvents: async (events) => {
+        if (!connection) {
+          throw new Error("Server connection is not initialized");
+        }
+        return connection.postEvents(events);
+      },
     });
     const runtimeManager = new RuntimeManager({
       adapterFactory: options.adapterFactory,
@@ -73,7 +98,12 @@ export async function startHostDaemon(
       },
       onToolCall: onToolCall
         ? (request) => onToolCall(request)
-        : (request) => connection.callTool(request),
+        : (request) => {
+            if (!connection) {
+              throw new Error("Server connection is not initialized");
+            }
+            return connection.callTool(request);
+          },
     });
     connection = new ServerConnection({
       serverUrl,
@@ -105,6 +135,9 @@ export async function startHostDaemon(
       runtimeManager,
       initialCursor: currentCursor.value,
       reportResult: async (result) => {
+        if (!connection) {
+          throw new Error("Server connection is not initialized");
+        }
         await connection.reportCommandResult(result);
         currentCursor.value = result.cursor;
         await (options.writeCursor ?? writeCommandCursor)(dataDir, result.cursor);
@@ -125,6 +158,9 @@ export async function startHostDaemon(
             fetchRequested = false;
 
             while (true) {
+              if (!connection) {
+                throw new Error("Server connection is not initialized");
+              }
               const commands = await connection.fetchCommands({
                 afterCursor: currentCursor.value,
               });
@@ -157,8 +193,9 @@ export async function startHostDaemon(
       flushEventBuffer: () => eventBuffer.flush(),
       shutdownRuntimes: async () => {
         eventBuffer.dispose();
+        await localApi?.close();
         await runtimeManager.shutdownAll();
-        await connection.shutdown();
+        await connection?.shutdown();
       },
       restart: async () => {
         await (options.restartProcess ?? restartHostDaemon)({
@@ -166,6 +203,9 @@ export async function startHostDaemon(
         });
       },
       onStart: async () => {
+        if (!connection) {
+          throw new Error("Server connection is not initialized");
+        }
         await connection.start();
         await requestCommandFetch();
       },

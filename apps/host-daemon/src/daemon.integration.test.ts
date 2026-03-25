@@ -499,6 +499,7 @@ async function setupDaemonHarness() {
     dataDir,
     serverUrl: server.baseUrl,
     authToken: "secret",
+    enableLocalApi: false,
     createInstanceId: () => "instance-1",
     adapterFactory: () => createFakeAdapter(scriptPath),
   });
