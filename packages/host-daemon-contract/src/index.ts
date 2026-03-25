@@ -3,13 +3,17 @@ export type { EmptyInput, Endpoint, Untyped } from "./common.js";
 export {
   createHostDaemonLocalClient,
   hostIdResponseSchema,
+  openRequestSchema,
   pickFolderResponseSchema,
+  statusResponseSchema,
 } from "./local.js";
 export type {
   HostIdResponse,
   HostDaemonLocalRoutes,
   HostDaemonLocalSchema,
+  OpenRequest,
   PickFolderResponse,
+  StatusResponse,
 } from "./local.js";
 
 export {

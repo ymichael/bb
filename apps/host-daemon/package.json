@@ -1,0 +1,33 @@
+{
+  "name": "@bb/host-daemon",
+  "version": "0.0.1",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsc --watch --preserveWatchOutput",
+    "clean": "rm -rf dist",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --config vitest.config.ts"
+  },
+  "dependencies": {
+    "@bb/agent-runtime": "workspace:*",
+    "@bb/config": "workspace:*",
+    "@bb/domain": "workspace:*",
+    "@bb/host-daemon-contract": "workspace:*",
+    "@bb/logger": "workspace:*",
+    "@bb/workspace": "workspace:*",
+    "p-debounce": "^5.1.0",
+    "p-retry": "^6.2.1",
+    "partysocket": "^1.1.16",
+    "proper-lockfile": "^4.1.2",
+    "ws": "^8.19.0"
+  },
+  "devDependencies": {
+    "@bb/tsconfig": "workspace:*",
+    "@types/node": "^22.0.0",
+    "hono": "^4.7.0",
+    "typescript": "^5.7.0"
+  }
+}
