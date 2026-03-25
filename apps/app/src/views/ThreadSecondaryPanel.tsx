@@ -2,9 +2,6 @@ import {
   type CSSProperties,
   type ReactNode,
   type Ref,
-  useEffect,
-  useRef,
-  useState,
 } from "react";
 import {
   Check,
@@ -27,6 +24,7 @@ import {
   Panel,
   PanelResizeHandle,
 } from "react-resizable-panels";
+import { useIntersectionObserver } from "usehooks-ts";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -176,28 +174,21 @@ function GitDiffSelector({
   );
 }
 
-function useIsStuck(ref: { current: HTMLDivElement | null }) {
-  const [isStuck, setIsStuck] = useState(false);
+interface StuckState {
+  isStuck: boolean;
+  sentinelRef: (node?: Element | null) => void;
+}
 
-  useEffect(() => {
-    if (typeof IntersectionObserver === "undefined" || !ref.current) {
-      return;
-    }
+function useIsStuck(): StuckState {
+  const { ref: sentinelRef, isIntersecting } = useIntersectionObserver({
+    initialIsIntersecting: true,
+    threshold: 1,
+  });
 
-    const observer = new IntersectionObserver(
-      (entries) => {
-        setIsStuck(!(entries[0]?.isIntersecting ?? true));
-      },
-      { threshold: 1 },
-    );
-
-    observer.observe(ref.current);
-    return () => {
-      observer.disconnect();
-    };
-  }, [ref]);
-
-  return isStuck;
+  return {
+    isStuck: !isIntersecting,
+    sentinelRef,
+  };
 }
 
 function GitDiffFileCard({
@@ -221,8 +212,7 @@ function GitDiffFileCard({
   gitDiffViewOptions: Record<string, string | boolean>;
   onOpenFile?: (path: string) => void;
 }) {
-  const sentinelRef = useRef<HTMLDivElement>(null);
-  const isHeaderStuck = useIsStuck(sentinelRef);
+  const { isStuck: isHeaderStuck, sentinelRef } = useIsStuck();
   const fileDiffStats = summarizeGitDiffFile(fileDiff);
   const fileDiffLabel = formatGitDiffFileLabel(fileDiff);
   const openablePath = getOpenableGitDiffPath(fileDiff);

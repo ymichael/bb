@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { ImperativePanelHandle } from "react-resizable-panels";
+import { useResizeObserver } from "usehooks-ts";
 
 const TIMELINE_PANEL_DEFAULT_SIZE_PERCENT = 50;
 const GIT_DIFF_SPLIT_VIEW_MIN_WIDTH_PX = 760;
@@ -22,7 +23,7 @@ export function useResponsiveGitDiffPanelDisplay({
   const [hasExplicitGitDiffDisplayMode, setHasExplicitGitDiffDisplayMode] = useState(false);
   const [isSecondaryPanelResizing, setIsSecondaryPanelResizing] = useState(false);
   const [secondaryPanelWidth, setSecondaryPanelWidth] = useState<number | null>(null);
-  const secondaryPanelRef = useRef<HTMLElement | null>(null);
+  const secondaryPanelRef = useRef<HTMLElement>(null!);
   const secondaryResizablePanelRef = useRef<ImperativePanelHandle | null>(null);
   const lastSecondaryPanelSizeRef = useRef(TIMELINE_PANEL_DEFAULT_SIZE_PERCENT);
   const lastDiffViewWideEnoughRef = useRef<boolean | null>(null);
@@ -37,6 +38,16 @@ export function useResponsiveGitDiffPanelDisplay({
     }),
     [gitDiffDisplayMode, preferredTheme],
   );
+  const updateSecondaryPanelWidth = useCallback((nextWidth: number | undefined) => {
+    if (nextWidth === undefined) {
+      return;
+    }
+
+    const roundedWidth = Math.round(nextWidth);
+    setSecondaryPanelWidth((currentWidth) =>
+      currentWidth === roundedWidth ? currentWidth : roundedWidth,
+    );
+  }, []);
 
   useLayoutEffect(() => {
     const panel = secondaryResizablePanelRef.current;
@@ -57,33 +68,21 @@ export function useResponsiveGitDiffPanelDisplay({
       return;
     }
 
-    const panelElement = secondaryPanelRef.current;
-    if (!panelElement) {
-      return;
-    }
+    updateSecondaryPanelWidth(secondaryPanelRef.current?.getBoundingClientRect().width);
+  }, [isSecondaryPanelOpen, updateSecondaryPanelWidth]);
 
-    const updateWidth = (nextWidth: number) => {
-      const roundedWidth = Math.round(nextWidth);
-      setSecondaryPanelWidth((currentWidth) =>
-        currentWidth === roundedWidth ? currentWidth : roundedWidth,
+  useResizeObserver({
+    ref: secondaryPanelRef,
+    onResize: ({ width }) => {
+      if (!isSecondaryPanelOpen) {
+        return;
+      }
+
+      updateSecondaryPanelWidth(
+        width ?? secondaryPanelRef.current?.getBoundingClientRect().width,
       );
-    };
-
-    updateWidth(panelElement.getBoundingClientRect().width);
-
-    if (typeof ResizeObserver === "undefined") {
-      return;
-    }
-
-    const observer = new ResizeObserver((entries) => {
-      const width = entries[0]?.contentRect.width ?? panelElement.getBoundingClientRect().width;
-      updateWidth(width);
-    });
-    observer.observe(panelElement);
-    return () => {
-      observer.disconnect();
-    };
-  }, [isSecondaryPanelOpen]);
+    },
+  });
 
   useEffect(() => {
     if (!isSecondaryPanelOpen) {

@@ -8,6 +8,7 @@ import {
 import type { ViewMessage } from "@bb/domain";
 import { type TimelineRow, type TimelineToolGroupRow } from "@bb/domain";
 import { DEFAULT_SCROLL_STICK_THRESHOLD_PX } from "@bb/ui-core";
+import { useResizeObserver } from "usehooks-ts";
 
 const TIMELINE_ROW_SELECTOR = "[data-thread-row-id]";
 
@@ -132,7 +133,8 @@ export function useThreadTimelineController({
   );
   const [isStickingToBottom, setIsStickingToBottom] = useState(true);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
-  const promptComposerRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null!);
+  const promptComposerRef = useRef<HTMLDivElement>(null!);
   const bottomSentinelRef = useRef<HTMLDivElement | null>(null);
   const modeRef = useRef<TimelineScrollMode>("pinned_bottom");
   const timelineScrollAnchorRef = useRef<TimelineScrollAnchor | null>(null);
@@ -207,6 +209,9 @@ export function useThreadTimelineController({
   );
 
   const setContainerRef = useCallback((element: HTMLDivElement | null) => {
+    if (element) {
+      containerRef.current = element;
+    }
     setContainerElement((currentElement) =>
       currentElement === element ? currentElement : element,
     );
@@ -323,8 +328,9 @@ export function useThreadTimelineController({
   }, [containerElement, scheduleReconcile]);
 
   useLayoutEffect(() => {
-    const container = containerElement;
-    if (!container || typeof ResizeObserver === "undefined") {
+    const container = containerRef.current;
+    if (!container) {
+      previousContainerSizeRef.current = null;
       return;
     }
 
@@ -332,65 +338,58 @@ export function useThreadTimelineController({
       width: container.clientWidth,
       height: container.clientHeight,
     };
+  }, [containerElement]);
 
-    const observer = new ResizeObserver((entries) => {
-      const nextWidth =
-        entries[0]?.contentRect.width ?? container.getBoundingClientRect().width;
-      const nextHeight =
-        entries[0]?.contentRect.height ?? container.getBoundingClientRect().height;
+  useLayoutEffect(() => {
+    const composer = promptComposerRef.current;
+    if (!composer) {
+      previousComposerHeightRef.current = null;
+      return;
+    }
+
+    previousComposerHeightRef.current = composer.getBoundingClientRect().height;
+  }, [threadId]);
+
+  useResizeObserver({
+    ref: containerRef,
+    onResize: ({ width, height }) => {
+      const nextWidth = width ?? containerRef.current?.getBoundingClientRect().width;
+      const nextHeight = height ?? containerRef.current?.getBoundingClientRect().height;
+      if (nextWidth === undefined || nextHeight === undefined) {
+        return;
+      }
+
       const previous = previousContainerSizeRef.current;
       previousContainerSizeRef.current = {
         width: nextWidth,
         height: nextHeight,
       };
 
-      if (!previous) {
-        scheduleReconcile("container_resized");
-        return;
-      }
-
       if (
-        Math.abs(previous.width - nextWidth) >= 0.5 ||
-        Math.abs(previous.height - nextHeight) >= 0.5
+        previous &&
+        (Math.abs(previous.width - nextWidth) >= 0.5 ||
+          Math.abs(previous.height - nextHeight) >= 0.5)
       ) {
         scheduleReconcile("container_resized");
       }
-    });
+    },
+  });
 
-    observer.observe(container);
-    return () => {
-      observer.disconnect();
-      previousContainerSizeRef.current = null;
-    };
-  }, [containerElement, scheduleReconcile]);
-
-  useLayoutEffect(() => {
-    const composer = promptComposerRef.current;
-    if (!composer || typeof ResizeObserver === "undefined") {
-      return;
-    }
-
-    previousComposerHeightRef.current = composer.getBoundingClientRect().height;
-
-    const observer = new ResizeObserver((entries) => {
-      const nextHeight =
-        entries[0]?.contentRect.height ?? composer.getBoundingClientRect().height;
-      const previousHeight = previousComposerHeightRef.current;
-      previousComposerHeightRef.current = nextHeight;
-      if (previousHeight === null) {
+  useResizeObserver({
+    ref: promptComposerRef,
+    onResize: ({ height }) => {
+      const nextHeight = height ?? promptComposerRef.current?.getBoundingClientRect().height;
+      if (nextHeight === undefined) {
         return;
       }
-      if (Math.abs(previousHeight - nextHeight) >= 0.5) {
+
+      const previousHeight = previousComposerHeightRef.current;
+      previousComposerHeightRef.current = nextHeight;
+      if (previousHeight !== null && Math.abs(previousHeight - nextHeight) >= 0.5) {
         scheduleReconcile("composer_height_changed");
       }
-    });
-
-    observer.observe(composer);
-    return () => {
-      observer.disconnect();
-      previousComposerHeightRef.current = null;
-    };
-  }, [scheduleReconcile, threadId]);
+    },
+  });
 
   useEffect(() => {
     return () => {

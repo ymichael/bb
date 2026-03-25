@@ -1,5 +1,6 @@
 import type { ThreadType } from "@bb/domain";
 import { useEffect, useMemo, useState } from "react";
+import { useDebounceValue } from "usehooks-ts";
 import { useProjectFileSuggestions, useThreads } from "./useApi";
 
 export type PromptMentionSuggestion =
@@ -52,23 +53,8 @@ export function usePromptMentions(
   },
 ) {
   const [query, setQuery] = useState<string | null>(null);
-  const [debouncedQuery, setDebouncedQuery] = useState<string | null>(null);
+  const [debouncedQuery] = useDebounceValue(query, FILE_MENTION_DEBOUNCE_MS);
   const [staleSuggestions, setStaleSuggestions] = useState<PromptMentionSuggestion[]>([]);
-
-  useEffect(() => {
-    if (query === null) {
-      setDebouncedQuery(null);
-      return;
-    }
-
-    const timeout = window.setTimeout(() => {
-      setDebouncedQuery(query);
-    }, FILE_MENTION_DEBOUNCE_MS);
-
-    return () => {
-      window.clearTimeout(timeout);
-    };
-  }, [query]);
 
   const search = useProjectFileSuggestions(
     projectId,

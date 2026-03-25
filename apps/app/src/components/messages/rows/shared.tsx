@@ -4,6 +4,7 @@ import {
   type ReactNode,
   type UIEvent,
 } from "react";
+import { durationToCompactString } from "@bb/core-ui";
 import {
   DEFAULT_SCROLL_STICK_THRESHOLD_PX,
   getScrollAnimationBehavior,
@@ -120,16 +121,6 @@ export function ExpandableDetailScrollArea({
   );
 }
 
-export function formatCompactDuration(durationMs: number): string {
-  if (!Number.isFinite(durationMs) || durationMs < 0) return "0s";
-  if (durationMs < 1_000) return `${Math.round(durationMs)}ms`;
-  const totalSeconds = Math.round(durationMs / 1_000);
-  if (totalSeconds < 60) return `${totalSeconds}s`;
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  return `${minutes}m ${seconds}s`;
-}
-
 export function formatSummaryDuration(
   durationMs: number | undefined,
   minVisibleMs: number = 1_000,
@@ -137,7 +128,7 @@ export function formatSummaryDuration(
   if (durationMs === undefined || durationMs < minVisibleMs) {
     return undefined;
   }
-  return formatCompactDuration(durationMs);
+  return durationToCompactString(durationMs);
 }
 
 function isScrolledNearBottom(

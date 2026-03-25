@@ -8,6 +8,7 @@ export type {
   FormatTimelineOptions,
   TimelineFormat,
 } from "./format-timeline-text.js";
+export { durationToCompactString } from "./format-helpers.js";
 
 export {
   deriveThreadTitleFromInput,

@@ -30,6 +30,19 @@ export function durationToString(durationMs: number | undefined): string | undef
   return `${minutes}m ${remainingSeconds}s`;
 }
 
+export function durationToCompactString(durationMs: number): string;
+export function durationToCompactString(durationMs: undefined): undefined;
+export function durationToCompactString(durationMs: number | undefined): string | undefined {
+  if (durationMs === undefined) return undefined;
+  if (!Number.isFinite(durationMs) || durationMs < 0) return "0s";
+  if (durationMs < 1_000) return `${Math.round(durationMs)}ms`;
+  const totalSeconds = Math.round(durationMs / 1_000);
+  if (totalSeconds < 60) return `${totalSeconds}s`;
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}m ${seconds}s`;
+}
+
 export function messageId(threadId: string, kind: string, key: string): string {
   return `${threadId}:${kind}:${key}`;
 }

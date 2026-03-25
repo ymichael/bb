@@ -1,4 +1,5 @@
 import { type ReactNode } from "react";
+import { durationToCompactString } from "@bb/core-ui";
 import {
   ExpandablePanel,
   EventCodeBlock,
@@ -9,7 +10,6 @@ import {
   EVENT_DETAIL_MAX_HEIGHT_CLASS,
   ExpandableDetailScrollArea,
   EventTitle,
-  formatCompactDuration,
   getEventHeaderToneClass,
   getStaticEventToneClass,
 } from "./shared";
@@ -205,7 +205,9 @@ function buildProvisioningTranscript(
     .filter((line): line is string => Boolean(line));
   const lines = transcriptLines && transcriptLines.length > 0 ? transcriptLines : [];
   if (message.status !== "pending" && message.startedAt !== undefined && message.createdAt >= message.startedAt) {
-    lines.push(`provisioning took ${formatCompactDuration(message.createdAt - message.startedAt)}`);
+    lines.push(
+      `provisioning took ${durationToCompactString(message.createdAt - message.startedAt)}`,
+    );
   }
 
   return { lines };
