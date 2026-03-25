@@ -1,7 +1,4 @@
-export interface LoggerLike {
-  info: (...args: unknown[]) => void;
-  error: (...args: unknown[]) => void;
-}
+import type { HostDaemonLogger } from "./logger.js";
 
 export interface HostDaemonIdentity {
   hostId: string;
@@ -16,7 +13,7 @@ export interface SignalSource {
 
 export interface CreateDaemonOptions {
   identity: HostDaemonIdentity;
-  logger: LoggerLike;
+  logger: HostDaemonLogger;
   releaseLock: () => Promise<void>;
   flushEventBuffer?: () => Promise<void>;
   shutdownRuntimes?: () => Promise<void>;

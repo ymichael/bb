@@ -15,6 +15,16 @@ function createEvent(threadId: string) {
   };
 }
 
+function createDeferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((innerResolve, innerReject) => {
+    resolve = innerResolve;
+    reject = innerReject;
+  });
+  return { promise, resolve, reject };
+}
+
 describe("event buffer", () => {
   afterEach(() => {
     vi.useRealTimers();
@@ -90,6 +100,47 @@ describe("event buffer", () => {
     expect(postEvents).toHaveBeenCalledTimes(2);
     expect(buffer.depth()).toBe(0);
     expect(logger.warn).toHaveBeenCalledTimes(1);
+  });
+
+  it("coalesces concurrent flushes into a single in-flight post", async () => {
+    const firstFlush = createDeferred<Record<string, number> | void>();
+    const postEvents = vi
+      .fn<(_: unknown) => Promise<Record<string, number> | void>>()
+      .mockImplementationOnce(() => firstFlush.promise)
+      .mockResolvedValueOnce({ threadA: 2 });
+    const buffer = createEventBuffer({
+      logger: createLogger(),
+      postEvents,
+      flushAtCount: 1,
+      debounceMs: 1_000,
+    });
+
+    buffer.push({
+      environmentId: "env-1",
+      threadId: "threadA",
+      event: createEvent("threadA"),
+    });
+
+    await vi.waitFor(() => {
+      expect(postEvents).toHaveBeenCalledTimes(1);
+    });
+
+    const secondFlush = buffer.flush();
+    expect(postEvents).toHaveBeenCalledTimes(1);
+
+    firstFlush.resolve({ threadA: 1 });
+    await secondFlush;
+
+    buffer.push({
+      environmentId: "env-1",
+      threadId: "threadA",
+      event: createEvent("threadA"),
+    });
+
+    await vi.waitFor(() => {
+      expect(postEvents).toHaveBeenCalledTimes(2);
+    });
+    expect(buffer.depth()).toBe(0);
   });
 
   it("drops the oldest events when the buffer exceeds the max size", async () => {

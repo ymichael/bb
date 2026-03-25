@@ -1,3 +1,4 @@
+import pDebounce from "p-debounce";
 import type { ThreadEvent } from "@bb/domain";
 import type { HostDaemonLogger } from "./logger.js";
 
@@ -15,8 +16,6 @@ export interface BufferedEvent extends BufferedEventInput {
   createdAt: number;
 }
 
-type TimeoutHandle = ReturnType<typeof setTimeout>;
-
 export interface CreateEventBufferOptions {
   logger: Pick<HostDaemonLogger, "warn">;
   postEvents: (events: BufferedEvent[]) => Promise<Record<string, number> | void>;
@@ -26,8 +25,6 @@ export interface CreateEventBufferOptions {
   maxBufferedEvents?: number;
   now?: () => number;
   createId?: (event: Omit<BufferedEvent, "id">) => string;
-  setTimeoutFn?: typeof setTimeout;
-  clearTimeoutFn?: typeof clearTimeout;
 }
 
 export interface EventBuffer {
@@ -55,8 +52,6 @@ export function createEventBuffer(
     options.createId ??
     ((event: Omit<BufferedEvent, "id">) =>
       `${event.threadId}:${event.sequence}:${event.createdAt}`);
-  const setTimeoutFn = options.setTimeoutFn ?? setTimeout;
-  const clearTimeoutFn = options.clearTimeoutFn ?? clearTimeout;
 
   const nextSequenceByThread = new Map<string, number>();
   for (const [threadId, highWaterMark] of Object.entries(
@@ -66,18 +61,26 @@ export function createEventBuffer(
   }
 
   let buffer: BufferedEvent[] = [];
-  let flushTimer: TimeoutHandle | null = null;
   let flushPromise: Promise<void> | null = null;
+  const flushAbortController = new AbortController();
+  const debouncedFlush = pDebounce(
+    async () => {
+      await flush();
+    },
+    debounceMs,
+    { signal: flushAbortController.signal },
+  );
 
-  function scheduleFlush(delayMs: number): void {
-    if (flushTimer) {
-      clearTimeoutFn(flushTimer);
-    }
-
-    flushTimer = setTimeoutFn(() => {
-      flushTimer = null;
-      void flush();
-    }, delayMs);
+  function queueDebouncedFlush(): void {
+    void debouncedFlush().catch((error: unknown) => {
+      if (
+        error instanceof DOMException &&
+        error.name === "AbortError"
+      ) {
+        return;
+      }
+      throw error;
+    });
   }
 
   function nextSequence(threadId: string): number {
@@ -107,9 +110,9 @@ export function createEventBuffer(
     trimOverflow();
 
     if (buffer.length >= flushAtCount) {
-      scheduleFlush(0);
+      void flush();
     } else {
-      scheduleFlush(debounceMs);
+      queueDebouncedFlush();
     }
 
     return bufferedEvent;
@@ -139,11 +142,6 @@ export function createEventBuffer(
       return flushPromise;
     }
 
-    if (flushTimer) {
-      clearTimeoutFn(flushTimer);
-      flushTimer = null;
-    }
-
     if (buffer.length === 0) {
       return;
     }
@@ -163,11 +161,15 @@ export function createEventBuffer(
           },
           "event flush failed, will retry",
         );
-        scheduleFlush(debounceMs);
+        queueDebouncedFlush();
       } finally {
         flushPromise = null;
-        if (buffer.length > 0 && !flushTimer) {
-          scheduleFlush(buffer.length >= flushAtCount ? 0 : debounceMs);
+        if (buffer.length > 0) {
+          if (buffer.length >= flushAtCount) {
+            void flush();
+          } else {
+            queueDebouncedFlush();
+          }
         }
       }
     })();
@@ -176,10 +178,7 @@ export function createEventBuffer(
   }
 
   function dispose(): void {
-    if (flushTimer) {
-      clearTimeoutFn(flushTimer);
-      flushTimer = null;
-    }
+    flushAbortController.abort();
   }
 
   return {

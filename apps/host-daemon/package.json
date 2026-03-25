@@ -17,10 +17,11 @@
     "@bb/domain": "workspace:*",
     "@bb/host-daemon-contract": "workspace:*",
     "@bb/logger": "workspace:*",
-    "partysocket": "^1.1.16",
-    "p-retry": "^6.2.1",
-    "proper-lockfile": "^4.1.2",
     "@bb/workspace": "workspace:*",
+    "p-debounce": "^5.1.0",
+    "p-retry": "^6.2.1",
+    "partysocket": "^1.1.16",
+    "proper-lockfile": "^4.1.2",
     "ws": "^8.19.0"
   },
   "devDependencies": {

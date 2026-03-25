@@ -104,7 +104,10 @@ describe("CommandRouter", () => {
       workspacePath: "/tmp/env-1",
     });
 
-    const router = new CommandRouter({ runtimeManager: manager });
+    const router = new CommandRouter({
+      runtimeManager: manager,
+      logger: createLogger(),
+    });
     const handling = router.handleCommands([
       {
         id: "commit",
@@ -160,7 +163,10 @@ describe("CommandRouter", () => {
     manager.markThreadActive("env-1", "thread-a");
     manager.markThreadActive("env-1", "thread-b");
 
-    const router = new CommandRouter({ runtimeManager: manager });
+    const router = new CommandRouter({
+      runtimeManager: manager,
+      logger: createLogger(),
+    });
     const handling = router.handleCommands([
       {
         id: "run-a",
@@ -209,6 +215,7 @@ describe("CommandRouter", () => {
     const reported: number[] = [];
     const router = new CommandRouter({
       runtimeManager: manager,
+      logger: createLogger(),
       reportResult: async (result) => {
         reported.push(result.cursor);
       },
@@ -286,6 +293,7 @@ describe("CommandRouter", () => {
     const results: Array<{ cursor: number; completedAt: number; ok: boolean }> = [];
     const router = new CommandRouter({
       runtimeManager: manager,
+      logger: createLogger(),
       now: () => nowValue,
       reportResult: async (result) => {
         results.push({
@@ -351,7 +359,10 @@ describe("CommandRouter", () => {
       workspacePath: "/tmp/env-1",
     });
 
-    const router = new CommandRouter({ runtimeManager: manager });
+    const router = new CommandRouter({
+      runtimeManager: manager,
+      logger: createLogger(),
+    });
     await router.handleCommands([
       {
         id: "destroy",

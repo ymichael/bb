@@ -147,6 +147,7 @@ export async function createHostDaemonApp(
 
   const router = new CommandRouter({
     runtimeManager,
+    logger: options.logger,
     initialCursor: cursorState.value,
     reportResult: async (result) => {
       await serverClient.reportCommandResult(result);

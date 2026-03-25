@@ -17,14 +17,10 @@ export interface CommandRouterOptions {
   reportResult?: (result: RoutedCommandResult) => Promise<void>;
   resolveThreadRuntime?: CommandDispatchOptions["resolveThreadRuntime"];
   listModels?: CommandDispatchOptions["listModels"];
-  logger?: Pick<HostDaemonLogger, "warn">;
+  logger: Pick<HostDaemonLogger, "warn">;
   now?: () => number;
   initialCursor?: number;
 }
-
-const noopLogger = {
-  warn(): void {},
-};
 
 export class CommandRouter {
   private readonly reportResult;
@@ -37,7 +33,7 @@ export class CommandRouter {
 
   constructor(private readonly options: CommandRouterOptions) {
     this.reportResult = options.reportResult ?? (async () => undefined);
-    this.logger = options.logger ?? noopLogger;
+    this.logger = options.logger;
     this.now = options.now ?? Date.now;
     this.lastReportedCursor = options.initialCursor ?? 0;
   }

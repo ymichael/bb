@@ -16,6 +16,7 @@ async function makeTempDir(prefix: string): Promise<string> {
 function createLogger() {
   return {
     info: vi.fn(),
+    warn: vi.fn(),
     error: vi.fn(),
   };
 }
