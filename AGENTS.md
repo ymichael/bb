@@ -1,64 +1,45 @@
 # Codebase Guidelines
 
+## Type Safety
+
+- No `unknown`, no `as X` casts unless the type is genuinely unknowable (e.g., freeform tool input). Our boundaries validate and parse; everything inside the system is strongly typed.
+- Never inline types in function signatures. Define them in the appropriate shared package.
+- When renaming a domain type, search project-wide for the old name in variables, functions, files, query keys, and constants — not just type references. TypeScript only validates types; stale identifiers compile fine. Rename everything in the same commit.
+
+## Code Quality
+
+- Prefer maintainability and readability over speed. No one-off hacks — ask whether it would pass code review. We are never in a rush.
+- Reuse before duplicating. If a pattern exists N times, extract a shared component or utility so consistency is structural, not aspirational. When fixing a bug, check whether the same pattern is repeated elsewhere.
+- Separate concerns. When a concern is better handled by a well-known, battle-tested library, install and use it.
+- Prefer a single object argument over multiple positional arguments, especially when a function takes 3+ parameters of the same type.
+- No inline dynamic imports unless for genuine performance reasons. If it's working around a circular dependency, fix the dependency graph instead.
+
 ## UI Consistency
 
-- Reuse shared primitives before introducing view-local class bundles (for example: page shell, detail card/rows, collapsible headers, status pill).
-- Keep one canonical message rendering path; remove or clearly deprecate parallel/legacy surfaces.
-- Centralize repeated formatting behavior (for example relative time) in shared web utilities.
-- Avoid arbitrary `text-[Npx]` classes; prefer sanctioned typography tokens/utilities.
-- Keep theme typography tokens consistent across light/dark modes unless an intentional divergence is documented.
-
-## Debugging Data Flows
-
-- When investigating entity/state issues from a route like `http://localhost:5173/projects/<projectId>/threads/<threadId>`, prefer inspecting data through the server HTTP API or CLI first.
-- For data-only debugging, prefer server API/CLI over `curl` + browser workflows; it is faster to inspect entities directly without frontend/UI noise.
-- Use direct SQLite queries as an alternative fast path, especially when you need to validate persisted state or compare raw stored values against server/API responses.
-
-## Planning Workflow
-
-- When the user asks to "make a plan", create or update a Markdown file under `plans/` instead of only replying with plan text.
-- Use a descriptive kebab-case filename in `plans/` that matches the feature or subsystem being planned.
-- Structure plan docs with these sections: `Goal`, `Scope`, `Implementation Steps`, `Validation`, and `Open Questions/Risks`.
-- Delete plan files from `plans/` once they are completed, obsolete, or superseded by a newer plan.
+- Reuse shared primitives before introducing view-local class bundles (page shell, detail card/rows, collapsible headers, status pill).
+- Avoid arbitrary `text-[Npx]` classes; prefer sanctioned typography tokens.
+- Keep one canonical rendering path per concept; remove or deprecate parallel/legacy surfaces.
 
 ## Build and Typecheck
 
-- Prefer `pnpm exec turbo run typecheck --filter=@bb/<pkg>` for package-scoped typechecks instead of `pnpm --filter @bb/<pkg> typecheck`; Turbo preserves upstream `^build` dependencies and package-script runs do not.
-- Do not "fix" workspace typecheck issues by pointing package `types` at `src/**` unless that source is also shipped in the packed artifact; keep package metadata valid for packed consumers.
+- Always use Turbo: `pnpm exec turbo run <task> --filter=@bb/<pkg>`. Turbo ensures upstream `^build` dependencies run first. Running package scripts directly (e.g., `pnpm --filter @bb/foo test`) skips these and will often fail.
 
-## Testing / QA
+## Testing
 
-### Mocking Principles
+- Quality over quantity. Tests that pass when the package is broken are worse than no tests — they create false confidence. Every test should be able to catch a real bug.
+- Test real behavior and outcomes — resulting state, return values, persisted data, response bodies. Not call sequences.
+- Never mock the database. Use in-memory SQLite via `createConnection(":memory:")` + `migrate(db)`.
+- Almost never mock our own code. Mock only at true external boundaries: network calls to third-party providers, timers, and similar unpredictable externals.
+- Never mock the module under test or its private methods.
 
-Mock at boundaries, not inside the system.
+## Debugging
 
-**Run the real thing when it's cheap:**
-- SQLite/DB operations — use in-memory DB via `createConnection(":memory:")` + `migrate(db)`. This catches real FK violations, constraint issues, and schema mismatches that mock repos silently pass.
-- Pure functions, helpers, type transformations, validators, serializers.
+- Don't assume — instrument and observe. Add logging, read logs, inspect the database, repeat.
+- Prefer server API, CLI, direct SQL queries, or log files over browser-based debugging. Use the browser only for browser-specific issues.
+- Work methodically. Everything in this app is traceable; there is no need to guess.
 
-**Mock when the real thing is expensive, slow, or has side effects:**
-- External providers (Codex, OpenAI) — network calls, cost, flakiness.
-- File system operations that create/delete real files.
-- Process spawning (`child_process.spawn`).
-- Network listeners (HTTP servers, WebSocket).
-- Timers and delays (use `vi.useFakeTimers`).
+## Planning Workflow
 
-**Never mock:**
-- The module under test.
-- Private methods of the class being tested — test through the public API.
-- Database repositories — use real in-memory SQLite instead.
-
-**Assert outcomes, not call sequences:**
-- Good: check resulting state, return values, persisted data, HTTP response bodies.
-- Bad: check that internal method A called internal method B with args C.
-- Prefer `expect(repo.getById(id)?.status).toBe("idle")` over `expect(repo.update).toHaveBeenCalledWith(id, { status: "idle" })`.
-
-### QA Passes
-
-- For server or environment-daemon changes, run QA passes before wrapping up. Use the surface-based QA docs in `qa/` to pick the relevant pass instead of defaulting to one monolithic full-server checklist.
-- Start with `qa/README.md`; it is the canonical entrypoint for "what QA should I run for this change?" and for mapping informal requests like "run QA for the Pi provider" or "run e2e QA and any relevant QA for the code we touched."
-- Prefer the owning surface for the behavior you changed: `qa/server/`, `qa/env-daemon/`, `qa/providers/`, `qa/cli/`, `qa/environments/`, `qa/product/`, and `qa/e2e/`. Add `qa/e2e/smoke` for cross-cutting or user-visible changes.
-- Use the checked-in package scripts and aliases in `package.json` as the source of truth for current automation entrypoints, including `qa:e2e:smoke`, `qa:providers:smoke*`, and `qa:env-daemon:recovery*`. When asked to do provider-facing QA, default to the real provider unless the owning pass explicitly depends on fake-provider control hooks.
-- Use the fast e2e suite in `apps/server/src/__tests__/e2e/` for targeted scenario work. Treat real-provider coverage as the default QA path for provider-facing behavior; use fake-provider coverage only when you specifically need deterministic fake-codex control hooks.
-- Use `qa/shared/standalone-workflow.md` for the shared standalone setup and relaunch procedure that supports the owned surface docs.
-- For package-scoped validation, prefer `pnpm exec turbo run typecheck --filter=@bb/<pkg>`.
+- When asked to "make a plan", create or update a Markdown file under `plans/`.
+- Plans must have clear exit criteria and concrete validation instructions.
+- Delete plan files once completed or superseded.
