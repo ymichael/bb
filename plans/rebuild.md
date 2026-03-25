@@ -292,9 +292,13 @@ These are implementation requirements documented here so they're built correctly
 
 **Voice transcription proxy.** Simple proxy: receive multipart audio → forward to `POST https://api.openai.com/v1/audio/transcriptions` with model `gpt-4o-transcribe`, auth via `OPENAI_API_KEY` → return `{ text }`. No format conversion. 25MB limit.
 
-**Auto-title generation.** After thread creation with input, fire-and-forget: clean prompt text → render `codexRunMetadata` template from `@bb/templates` → call `complete()` from `@mariozechner/pi-ai` with a cheap/fast model (configured via `BB_INFERENCE_MODEL`, default `gpt-4o-mini`) → parse JSON `{ title, worktreeName }` → update thread title. `titleFallback` is derived synchronously from first prompt text (no LLM).
+**Auto-title generation.** After thread creation with input, fire-and-forget: clean prompt text → render `codexRunMetadata` template from `@bb/templates` → call `complete()` from `@mariozechner/pi-ai` with a cheap/fast model (configured via `BB_INFERENCE_MODEL`, default `gpt-4o-mini`) → parse JSON `{ title }` (ignore `worktreeName` if present in template output) → update thread title. `titleFallback` is derived synchronously from first prompt text (no LLM).
 
-**Timeline transformation.** `GET /threads/:id/timeline` and `/timeline/tool-details` use `toViewMessages()` and `buildTimelineRows()` from `@bb/core-ui`. These are pure functions: read events from DB → transform → return. No daemon involvement.
+**Timeline transformation.** `GET /threads/:id/timeline` and `/timeline/tool-details` use `toViewMessages()` and `buildTimelineRows()` from `@bb/core-ui`. These are pure functions: read events from DB → transform → return. No daemon involvement. Use `extractThreadContextWindowUsage()` from `@bb/core-ui` for the `contextWindowUsage` field in `ThreadTimelineResponse`.
+
+**Thread output.** `GET /threads/:id/output` returns the last assistant text output. Query the most recent event with assistant text content for the thread, ordered by sequence DESC with a limit — not a full scan of all events.
+
+**Default execution options.** `GET /threads/:id/default-execution-options` returns the last used execution options (model, reasoningLevel, sandboxMode) for the thread. Derived from the most recent `turn.run` command's options stored on the thread's events. Returns null if no turns have been run yet.
 
 ### Non-obvious requirements
 
@@ -306,7 +310,25 @@ These are behaviors that aren't obvious from the route definitions alone:
 - **Disconnected host error.** When a route needs to send a command to a host that is not connected, return a consistent error: `ApiError(502, "host_disconnected", "Host is not connected")`. All daemon-proxied routes should go through the same code path (`queueCommandAndWait`) so this check is centralized.
 - **Thread title generation.** When a thread is created with input and no explicit title, generate one asynchronously using `@mariozechner/pi-ai` + the `codexRunMetadata` template from `@bb/templates`. Set `titleFallback` synchronously from the first prompt text. Don't block thread creation on title generation.
 - **Pending input after provisioning.** When `environment.provision` succeeds and the thread has queued input, the server must queue `thread.start` as a follow-up. This happens in the command-result handler, not at thread creation time.
-- **Archive with cleanup.** Archiving checks workspace status first — rejects if work could be lost (uncommitted or unmerged changes) unless `force=true`. Stops the thread if active. If the thread's environment is managed and now has zero non-archived threads, queues `environment.destroy`.
+- **Thread creation flow.** Step-by-step:
+  1. Create thread record (status `created`), add input as a thread event if provided.
+  2. If environment type is `reuse`: attach to existing environment, queue `thread.start` immediately if input was provided.
+  3. If environment type is `host` (any workspace type): create environment record (status `provisioning`), queue `environment.provision` command to the daemon.
+  4. If environment type is `sandbox-host`: return 501.
+  5. On `environment.provision` success (in command-result handler): update environment to `ready`, queue `thread.start` with the input from the thread's input event.
+  6. Fire-and-forget: generate title asynchronously. Set `titleFallback` synchronously from first prompt text.
+- **Send message mode.** `mode` on `POST /threads/:id/send` controls turn behavior: `auto` (default) — server decides based on thread status (idle → `turn.run`, active → `turn.steer`). `start` — force a new turn (reject if thread is active). `steer` — force steer (reject if thread is idle). For `turn.steer`, the server resolves `expectedTurnId` from the thread's most recent event with a `turnId` — this is a safety guard against steering the wrong turn.
+- **Host status derivation.** To compute the `status` field on `Host` responses: query `host_daemon_sessions` for an active session for the hostId where `leaseExpiresAt > now()`. If found → `connected`, otherwise → `disconnected`. Ephemeral hosts (type `ephemeral`) may be `suspended` in Phase 8.
+- **Environment cleanup (`maybeCleanupEnvironment`).** After archiving or deleting a thread, check if the thread's environment is managed and now has zero non-archived threads. If so, queue `environment.destroy`. Extract this as a shared function used by both archive and delete flows.
+- **Archive guards.** Archiving checks workspace status first — rejects if work could be lost (uncommitted or unmerged changes) unless `force=true`. Stops the thread if active.
+- **Thread deletion.** Deleting a thread also calls `maybeCleanupEnvironment` for its environment.
+
+**DB functions to add in Phase 6.** These don't exist yet in `@bb/db` and must be added with tests:
+- `unarchiveThread(db, notifier, id)` — clears `archivedAt`
+- `updateProjectSource(db, notifier, id, input)` — updates path/repoUrl
+- `getDefaultProjectSource(db, projectId)` — returns the source with `isDefault = true`
+- Extend `listThreads` to support `type`, `parentThreadId`, `archived` query filters
+- `heartbeatSession(db, sessionId, leaseExpiresAt)` — updates `lastHeartbeatAt` and `leaseExpiresAt`
 
 ### 6a. Server skeleton + middleware
 
@@ -333,6 +355,10 @@ apps/server/src/
     hub.ts, client-protocol.ts, daemon-protocol.ts
 ```
 If `threads.ts` grows large, split into `threads/` sub-modules (list, create, actions, data).
+
+**Config additions.** Add to `@bb/config/server`:
+- `BB_INFERENCE_MODEL` — format `provider/model` (e.g., `openai/gpt-4o-mini`). Split on `/` for pi-ai's `getModel(provider, modelId)`. Default: `openai/gpt-4o-mini`.
+- `OPENAI_API_KEY` — required for voice transcription proxy (and for title generation if using an OpenAI model).
 
 **Tests:**
 - [ ] App responds to requests (use `app.request()`)
@@ -378,7 +404,7 @@ Thread creation with ephemeral hosts calls `provisionHost()` from `@bb/sandbox-h
 **DB read/write routes (implement with existing `@bb/db` functions):**
 - Projects: GET/POST/PATCH/DELETE `/projects`, `/projects/:id`, project source CRUD
 - Hosts: GET `/hosts`, `/hosts/:id`
-- Environments: GET `/environments`, `/environments/:id`
+- Environments: GET `/environments/:id`
 - Threads: GET/POST/PATCH/DELETE `/threads`, `/threads/:id`
 - Thread actions: POST archive, unarchive, read, unread (all DB writes via `archiveThread`, `unarchiveThread`, `updateThread`)
 - Thread data: GET events, timeline, timeline/tool-details, output (all via `listEvents` + transformation)
@@ -423,6 +449,15 @@ These "queue and wait" routes need a synchronous command pattern: queue the comm
 - [ ] `POST /environments/:id/actions` promote → workspace.promote command queued
 - [ ] CRUD for projects, project sources, hosts
 - [ ] 501 routes return structured error with `unsupported_operation` code
+- [ ] `GET /system/config` → returns server configuration
+- [ ] `PATCH /threads/:id` with title change → thread.rename command queued
+- [ ] `DELETE /threads/:id` with environment → environment.destroy queued (if managed + no other threads)
+- [ ] `POST /threads/:id/drafts/:draftId/send` → turn command queued, draft deleted
+- [ ] `POST /projects/:id/managers` → manager thread created with provisioning
+- [ ] `POST /environments/:id/actions` squash_merge → workspace.squash_merge queued
+- [ ] `POST /environments/:id/actions` demote → workspace.demote queued
+- [ ] `POST /threads/:id/send` with mode=auto on idle thread → turn.run queued
+- [ ] `POST /threads/:id/send` with mode=steer on active thread → turn.steer queued with expectedTurnId
 
 ### 6d. Internal API routes
 
