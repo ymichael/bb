@@ -14,6 +14,7 @@ function makeProvider(id: string): SystemProviderInfo {
       supportsRename: true,
       supportsServiceTier: true,
     },
+    available: true,
   };
 }
 

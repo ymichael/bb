@@ -124,6 +124,44 @@ describe("thread command dispatch", () => {
     expect(harness.runtimeState.ranTurnText).toBe("hello");
   });
 
+  it("covers provider.list", async () => {
+    const harness = createHarness();
+
+    const result = await dispatchCommand(
+      {
+        type: "provider.list",
+      },
+      {
+        runtimeManager: harness.manager,
+        listProviders: () => [
+          {
+            id: "fake",
+            displayName: "Fake Provider",
+            capabilities: {
+              supportsRename: false,
+              supportsServiceTier: false,
+            },
+            available: true,
+          },
+        ],
+      },
+    );
+
+    expect(result).toEqual({
+      providers: [
+        {
+          id: "fake",
+          displayName: "Fake Provider",
+          capabilities: {
+            supportsRename: false,
+            supportsServiceTier: false,
+          },
+          available: true,
+        },
+      ],
+    });
+  });
+
   it("covers provider.list_models", async () => {
     const harness = createHarness();
 

@@ -7,6 +7,7 @@ import {
   threadGitDiffResponseSchema,
   threadGitDiffSelectionSchema,
   workspaceProvisionTypeSchema,
+  providerInfoSchema,
   workspaceStatusSchema,
 } from "@bb/domain";
 import { z } from "zod";
@@ -20,6 +21,7 @@ export const HOST_DAEMON_COMMAND_TYPES = [
   "turn.steer",
   "thread.stop",
   "thread.rename",
+  "provider.list",
   "provider.list_models",
   "environment.provision",
   "environment.destroy",
@@ -91,6 +93,10 @@ export const threadStopCommandSchema = hostDaemonThreadTargetSchema.extend({
 export const threadRenameCommandSchema = hostDaemonThreadTargetSchema.extend({
   type: z.literal("thread.rename"),
   title: z.string().min(1),
+});
+
+export const providerListCommandSchema = z.object({
+  type: z.literal("provider.list"),
 });
 
 export const providerListModelsCommandSchema = z.object({
@@ -193,6 +199,7 @@ export const hostDaemonCommandSchema = z.discriminatedUnion("type", [
   turnSteerCommandSchema,
   threadStopCommandSchema,
   threadRenameCommandSchema,
+  providerListCommandSchema,
   providerListModelsCommandSchema,
   environmentProvisionCommandSchema,
   environmentDestroyCommandSchema,
@@ -221,6 +228,9 @@ export const hostDaemonCommandResultSchemaByType = {
   "turn.steer": z.object({}),
   "thread.stop": z.object({}),
   "thread.rename": z.object({}),
+  "provider.list": z.object({
+    providers: z.array(providerInfoSchema),
+  }),
   "provider.list_models": z.object({
     models: z.array(availableModelSchema),
   }),

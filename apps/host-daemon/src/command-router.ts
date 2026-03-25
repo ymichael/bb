@@ -48,8 +48,11 @@ export class CommandRouter {
     envelope: HostDaemonCommandEnvelope,
   ): Promise<void> {
     let task: Promise<RoutedCommandResult>;
-    if (this.requiresWorkspaceLane(envelope.command.type)) {
-      const environmentId = envelope.command.environmentId;
+    if (
+      this.requiresWorkspaceLane(envelope.command.type) &&
+      "environmentId" in envelope.command
+    ) {
+      const { environmentId } = envelope.command;
       if (!environmentId) {
         throw new Error(
           `Command ${envelope.command.type} is missing environmentId`,

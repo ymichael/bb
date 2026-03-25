@@ -28,6 +28,14 @@ export type ProviderCapabilities = z.infer<
   typeof providerCapabilitiesSchema
 >;
 
+export const providerInfoSchema = z.object({
+  id: z.string(),
+  displayName: z.string(),
+  capabilities: providerCapabilitiesSchema,
+  available: z.boolean(),
+});
+export type ProviderInfo = z.infer<typeof providerInfoSchema>;
+
 export const toolCallOutputItemSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("inputText"),

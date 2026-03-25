@@ -4,6 +4,7 @@ import {
 } from "@bb/core-ui";
 import type {
   Environment,
+  Host,
   Project,
   ProjectSource,
   Thread,
@@ -563,6 +564,10 @@ export async function getAvailableModels(providerId?: string): Promise<Available
 
 export async function listSystemProviders(): Promise<SystemProviderInfo[]> {
   return request<SystemProviderInfo[]>(apiClient.system.providers.$get({ query: {} }));
+}
+
+export async function listHosts(): Promise<Host[]> {
+  return request<Host[]>(apiClient.hosts.$get());
 }
 
 export async function listEnvironments(projectId?: string): Promise<Environment[]> {

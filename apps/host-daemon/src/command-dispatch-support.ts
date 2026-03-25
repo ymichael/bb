@@ -1,5 +1,5 @@
-import { createProviderForId } from "@bb/agent-runtime";
-import type { AvailableModel } from "@bb/domain";
+import { createProviderForId, listAvailableProviders } from "@bb/agent-runtime";
+import type { AvailableModel, ProviderInfo } from "@bb/domain";
 import type {
   HostDaemonCommand,
   HostDaemonExecutionOptions,
@@ -31,6 +31,7 @@ export interface CommandDispatchOptions {
     threadId: string;
   }) => Promise<ThreadRuntimeResolution | null>;
   listModels?: (providerId: string) => Promise<AvailableModel[]>;
+  listProviders?: () => ProviderInfo[];
 }
 
 export class CommandDispatchError extends Error {
@@ -65,6 +66,10 @@ export async function requireExistingEnvironment(
     );
   }
   return entry;
+}
+
+export function defaultListProviders(): ProviderInfo[] {
+  return listAvailableProviders();
 }
 
 export async function defaultListModels(

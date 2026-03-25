@@ -4,6 +4,7 @@ import type {
 } from "@bb/host-daemon-contract";
 import {
   defaultListModels,
+  defaultListProviders,
   requireExistingEnvironment,
   type CommandDispatchOptions,
 } from "./command-dispatch-support.js";
@@ -77,6 +78,10 @@ export async function dispatchCommand<TCommand extends HostDaemonCommand>(
       });
       return {} as HostDaemonCommandResult<TCommand["type"]>;
     }
+    case "provider.list":
+      return {
+        providers: (options.listProviders ?? defaultListProviders)(),
+      } as HostDaemonCommandResult<TCommand["type"]>;
     case "provider.list_models":
       return {
         models: await (options.listModels ?? defaultListModels)(command.providerId),

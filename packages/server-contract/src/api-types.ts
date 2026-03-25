@@ -3,7 +3,6 @@ import {
   projectSchema,
   projectSourceSchema,
   promptInputSchema,
-  providerCapabilitiesSchema,
   reasoningLevelSchema,
   sandboxModeSchema,
   serviceTierSchema,
@@ -296,12 +295,10 @@ export const threadTimelineResponseSchema = z.object({
 });
 export type ThreadTimelineResponse = z.infer<typeof threadTimelineResponseSchema>;
 
-export const systemProviderInfoSchema = z.object({
-  id: z.string(),
-  displayName: z.string(),
-  capabilities: providerCapabilitiesSchema,
-});
-export type SystemProviderInfo = z.infer<typeof systemProviderInfoSchema>;
+// SystemProviderInfo is the same shape as ProviderInfo from domain.
+// Re-export with the API-facing name for backward compatibility.
+export { providerInfoSchema as systemProviderInfoSchema } from "@bb/domain";
+export type { ProviderInfo as SystemProviderInfo } from "@bb/domain";
 
 export const systemVoiceTranscriptionResponseSchema = z.object({
   text: z.string(),

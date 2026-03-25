@@ -27,6 +27,7 @@ export {
   hostDaemonCommandSchema,
   hostDaemonCommandTypeSchema,
   hostDaemonExecutionOptionsSchema,
+  providerListCommandSchema,
   providerListModelsCommandSchema,
   threadRenameCommandSchema,
   threadResumeCommandSchema,

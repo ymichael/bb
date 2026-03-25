@@ -20,6 +20,7 @@ export {
   dynamicToolSchema,
   modelReasoningEffortSchema,
   providerCapabilitiesSchema,
+  providerInfoSchema,
   toolCallOutputItemSchema,
   toolCallRequestSchema,
   toolCallResponseSchema,
@@ -29,6 +30,7 @@ export type {
   DynamicTool,
   ModelReasoningEffort,
   ProviderCapabilities,
+  ProviderInfo,
   ToolCallOutputItem,
   ToolCallRequest,
   ToolCallResponse,
@@ -63,11 +65,14 @@ export type {
 
 export {
   hostSchema,
+  hostStatusSchema,
+  hostStatusValues,
   hostTypeSchema,
   hostTypeValues,
 } from "./host.js";
 export type {
   Host,
+  HostStatus,
   HostType,
 } from "./host.js";
 

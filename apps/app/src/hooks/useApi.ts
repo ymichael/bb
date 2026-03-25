@@ -7,6 +7,7 @@ import {
 } from "@tanstack/react-query";
 import type {
   Environment,
+  Host,
   PromptInput,
   Project,
   ReasoningLevel,
@@ -376,6 +377,16 @@ function appendThreadIfMissing(
     return list;
   }
   return [...list, thread];
+}
+
+// --- Hosts ---
+
+export function useHosts() {
+  return useQuery<Host[]>({
+    queryKey: ["hosts"],
+    queryFn: () => api.listHosts(),
+    staleTime: 30_000,
+  });
 }
 
 // --- Projects ---
