@@ -4,7 +4,7 @@
  * Claude Code bridge process.
  *
  * Thin JSON-RPC shell that manages Claude Agent SDK sessions and forwards
- * raw `SDKMessage` events to the parent process. The parent (env-daemon)
+ * raw `SDKMessage` events to the parent process. The parent (host-daemon)
  * passes these to the adapter's `translateEvent` for conversion to
  * `ThreadEvent[]`.
  *

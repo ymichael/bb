@@ -98,7 +98,7 @@ export class PiSdkSession {
 
     // The Pi SDK does not support per-session environment variables — its
     // built-in tools (bash, etc.) inherit from process.env. BB therefore
-    // isolates Pi bridge subprocesses per thread at the env-daemon layer.
+    // isolates Pi bridge subprocesses per thread at the host-daemon layer.
     if (this.options.env) {
       for (const [key, value] of Object.entries(this.options.env)) {
         if (value !== undefined) {

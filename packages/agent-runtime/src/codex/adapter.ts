@@ -59,7 +59,7 @@ export type CodexEvent = CodexServerNotification;
 /**
  * Codex command — a JSON-RPC request sent to the codex app-server.
  * Derived from the generated `ClientRequest` by stripping the `id` field
- * (the env-daemon assigns request IDs when sending).
+ * (the host-daemon assigns request IDs when sending).
  */
 export type CodexCommand = DistributiveOmit<CodexClientRequest, "id">;
 

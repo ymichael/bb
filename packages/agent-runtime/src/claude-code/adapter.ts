@@ -367,7 +367,7 @@ export function createClaudeCodeProviderAdapter(
       }
 
       const message = event as ClaudeCodeEvent;
-      // threadId is not available from SDKMessage — the bridge/env-daemon
+      // threadId is not available from SDKMessage — the bridge/host-daemon
       // supplies it from the session context. We use "" here; the caller
       // overrides it.
       const threadId = "";
@@ -671,4 +671,3 @@ function toPositiveNumber(value: unknown): number | null {
     ? value
     : null;
 }
-

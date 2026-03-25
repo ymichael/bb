@@ -184,7 +184,7 @@ Integration tests require a build first (bridge processes run from `dist/`).
 ## Architecture
 
 ```
-Consumer (env-daemon, server)
+Consumer (host-daemon, server)
   │
   └─ createAgentRuntime(options)
        │
