@@ -3,9 +3,9 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 import type { HostDaemonCommandResult } from "@bb/host-daemon-contract";
-import type { RuntimeManager } from "./runtime-manager.js";
-import { CommandDispatchError, requireExistingEnvironment } from "./command-dispatch-support.js";
-import type { CommandOf } from "./command-dispatch-support.js";
+import type { RuntimeManager } from "../runtime-manager.js";
+import { CommandDispatchError, requireExistingEnvironment } from "../command-dispatch-support.js";
+import type { CommandOf } from "../command-dispatch-support.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -80,4 +80,14 @@ export async function readWorkspaceFile(
     path: command.path,
     content,
   };
+}
+
+export async function listBranches(
+  command: CommandOf<"workspace.list_branches">,
+  runtimeManager: RuntimeManager,
+): Promise<HostDaemonCommandResult<"workspace.list_branches">> {
+  const entry = await requireExistingEnvironment(command.environmentId, runtimeManager);
+  const branches = await entry.workspace.getBranches();
+  const current = await entry.workspace.currentBranch();
+  return { branches, current };
 }

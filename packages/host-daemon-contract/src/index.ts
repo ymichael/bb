@@ -40,6 +40,7 @@ export {
   workspaceDemoteCommandSchema,
   workspacePromoteCommandSchema,
   workspaceResetCommandSchema,
+  workspaceListBranchesCommandSchema,
   workspaceListFilesCommandSchema,
   workspaceReadFileCommandSchema,
   workspaceSquashMergeCommandSchema,

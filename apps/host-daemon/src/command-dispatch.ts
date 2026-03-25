@@ -4,17 +4,13 @@ import type {
 } from "@bb/host-daemon-contract";
 import {
   defaultListModels,
-  demoteWorkspace,
-  ensureThreadRuntime,
-  promoteWorkspace,
-  provisionEnvironment,
   requireExistingEnvironment,
-  resumeThread,
-  squashMerge,
-  startThread,
   type CommandDispatchOptions,
 } from "./command-dispatch-support.js";
-import { listWorkspaceFiles, readWorkspaceFile } from "./workspace-files.js";
+import { provisionEnvironment } from "./command-handlers/environment.js";
+import { ensureThreadRuntime, resumeThread, startThread } from "./command-handlers/thread.js";
+import { demoteWorkspace, promoteWorkspace, squashMerge } from "./command-handlers/workspace.js";
+import { listBranches, listWorkspaceFiles, readWorkspaceFile } from "./command-handlers/workspace-files.js";
 
 export {
   CommandDispatchError,
@@ -163,6 +159,10 @@ export async function dispatchCommand<TCommand extends HostDaemonCommand>(
       >;
     case "workspace.read_file":
       return readWorkspaceFile(command, options.runtimeManager) as Promise<
+        HostDaemonCommandResult<TCommand["type"]>
+      >;
+    case "workspace.list_branches":
+      return listBranches(command, options.runtimeManager) as Promise<
         HostDaemonCommandResult<TCommand["type"]>
       >;
     default: {

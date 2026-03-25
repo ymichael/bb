@@ -1,0 +1,196 @@
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import type { AgentRuntime } from "@bb/agent-runtime";
+import type { IWorkspace, ProvisionWorkspaceOpts } from "@bb/workspace";
+import { RuntimeManager } from "../../src/runtime-manager.js";
+
+const tempDirs: string[] = [];
+
+export function createFakeWorkspace(pathname: string) {
+  const state = {
+    statusReads: 0,
+    lastDiffSelection: undefined as unknown,
+    lastCommitMessage: undefined as string | undefined,
+    resetCount: 0,
+    lastCheckpointMessage: undefined as string | undefined,
+    promotedPrimaryPath: undefined as string | undefined,
+    demotedPrimaryPath: undefined as string | undefined,
+    demotedDefaultBranch: undefined as string | undefined,
+    destroyed: false,
+  };
+  const workspace = {
+    path: pathname,
+    managed: false,
+    isGitRepo: true,
+    isWorktree: false,
+    async currentBranch() {
+      return "main";
+    },
+    async getStatus() {
+      state.statusReads += 1;
+      return {
+        state: "clean" as const,
+        changedFiles: 0,
+        insertions: 0,
+        deletions: 0,
+        workspaceChangedFiles: 0,
+        workspaceInsertions: 0,
+        workspaceDeletions: 0,
+        hasUncommittedChanges: false,
+        hasCommittedUnmergedChanges: false,
+        aheadCount: 0,
+        behindCount: 0,
+        currentBranch: "main",
+        defaultBranch: "main",
+        mergeBaseBranch: "main",
+        mergeBaseBranches: [],
+        baseRef: "main",
+        files: [],
+      };
+    },
+    async getDiff(options?: { selection?: unknown }) {
+      state.lastDiffSelection = options?.selection;
+      return {
+        mode: "combined" as const,
+        currentBranch: "main",
+        mergeBaseBranch: "main",
+        mergeBaseRef: "main",
+        commits: [],
+        selection: { type: "combined" as const },
+        diff: "",
+        truncated: false,
+      };
+    },
+    async getBranches() {
+      return ["main"];
+    },
+    async commit(options: { message: string }) {
+      state.lastCommitMessage = options.message;
+      return {
+        commitSha: "commit-1",
+        commitSubject: options.message,
+      };
+    },
+    async reset() {
+      state.resetCount += 1;
+    },
+    async fetch() {},
+    async checkpoint(options: { commitMessage: string; remoteName?: string }) {
+      state.lastCheckpointMessage = options.commitMessage;
+      return {
+        commitSha: "checkpoint-1",
+        branchName: "main",
+        remoteName: options.remoteName ?? "origin",
+      };
+    },
+    async squashMergeInto(options: { targetBranch: string }) {
+      return {
+        merged: true,
+        commitSha: `merge-${options.targetBranch}`,
+        targetBranch: options.targetBranch,
+      };
+    },
+    async promote(primary: IWorkspace) {
+      state.promotedPrimaryPath = primary.path;
+    },
+    async demote(primary: IWorkspace, defaultBranch: string) {
+      state.demotedPrimaryPath = primary.path;
+      state.demotedDefaultBranch = defaultBranch;
+    },
+    async destroy() {
+      state.destroyed = true;
+    },
+  } as unknown as IWorkspace;
+
+  return { workspace, state };
+}
+
+export function createFakeRuntime() {
+  const state = {
+    startedThreadId: undefined as string | undefined,
+    resumedThreadId: undefined as string | undefined,
+    resumedProviderThreadId: undefined as string | undefined,
+    ranTurnText: undefined as string | undefined,
+    steeredTurnId: undefined as string | undefined,
+    stoppedThreadId: undefined as string | undefined,
+    renamedTitle: undefined as string | undefined,
+    shutdownCount: 0,
+  };
+  const runtime = {
+    async ensureProvider() {},
+    async startThread(args: { threadId: string }) {
+      state.startedThreadId = args.threadId;
+      return { providerThreadId: `provider-${args.threadId}` };
+    },
+    async resumeThread(args: { threadId: string; providerThreadId?: string }) {
+      state.resumedThreadId = args.threadId;
+      state.resumedProviderThreadId = args.providerThreadId;
+      return { providerThreadId: args.providerThreadId };
+    },
+    async runTurn(args: { input: Array<{ type: string; text: string }> }) {
+      state.ranTurnText = args.input[0]?.text;
+    },
+    async steerTurn(args: { expectedTurnId: string }) {
+      state.steeredTurnId = args.expectedTurnId;
+    },
+    async stopThread(args: { threadId: string }) {
+      state.stoppedThreadId = args.threadId;
+    },
+    async renameThread(args: { title: string }) {
+      state.renamedTitle = args.title;
+    },
+    async shutdown() {
+      state.shutdownCount += 1;
+    },
+  };
+
+  return {
+    runtime: runtime as unknown as AgentRuntime,
+    state,
+  };
+}
+
+export function createHarness(args: {
+  workspacePath?: string;
+  currentBranch?: string;
+  isWorktree?: boolean;
+} = {}) {
+  const { workspace, state: workspaceState } = createFakeWorkspace(
+    args.workspacePath ?? "/tmp/env-1",
+  );
+  workspace.currentBranch = async () => args.currentBranch ?? "main";
+  (workspace as { isWorktree: boolean }).isWorktree = args.isWorktree ?? false;
+  const { runtime, state: runtimeState } = createFakeRuntime();
+  const provisions: ProvisionWorkspaceOpts[] = [];
+  const manager = new RuntimeManager({
+    provisionWorkspace: async (options) => {
+      provisions.push(options);
+      if ("path" in options && options.path !== workspace.path) {
+        return createFakeWorkspace(options.path).workspace;
+      }
+      return workspace;
+    },
+    createRuntime: () => runtime,
+  });
+
+  return {
+    manager,
+    provisions,
+    runtimeState,
+    workspaceState,
+    workspace,
+  };
+}
+
+export async function makeTempDir(prefix: string): Promise<string> {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), prefix));
+  tempDirs.push(dir);
+  return dir;
+}
+
+export async function cleanupTempDirs(): Promise<void> {
+  await Promise.all(
+    tempDirs.splice(0).map((dir) => fs.rm(dir, { recursive: true, force: true })),
+  );
+}
