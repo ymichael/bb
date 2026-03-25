@@ -20,6 +20,7 @@ export interface CreateDaemonOptions {
   releaseLock: () => Promise<void>;
   flushEventBuffer?: () => Promise<void>;
   shutdownRuntimes?: () => Promise<void>;
+  restart?: () => Promise<void>;
   onStart?: () => Promise<void>;
   signalSource?: SignalSource;
 }
@@ -32,10 +33,12 @@ export interface HostDaemon {
 }
 
 const TERMINATION_SIGNALS: NodeJS.Signals[] = ["SIGINT", "SIGTERM"];
+const RESTART_SIGNAL: NodeJS.Signals = "SIGUSR2";
+type StopMode = "shutdown" | "restart";
 
 export function createDaemon(options: CreateDaemonOptions): HostDaemon {
   let started = false;
-  let shutdownPromise: Promise<void> | null = null;
+  let stopPromise: Promise<void> | null = null;
 
   let resolveStopped: (() => void) | undefined;
   const stopped = new Promise<void>((resolve) => {
@@ -52,30 +55,49 @@ export function createDaemon(options: CreateDaemonOptions): HostDaemon {
     listeners.clear();
   }
 
-  async function shutdown(reason = "shutdown"): Promise<void> {
-    if (shutdownPromise) {
-      return shutdownPromise;
+  async function stop(mode: StopMode, reason: string): Promise<void> {
+    if (stopPromise) {
+      return stopPromise;
     }
 
-    shutdownPromise = (async () => {
+    stopPromise = (async () => {
       unregisterSignalHandlers();
-      options.logger.info({ reason }, "Shutting down host daemon");
+      options.logger.info(
+        { mode, reason },
+        mode === "restart" ? "Restarting host daemon" : "Shutting down host daemon",
+      );
 
       let failure: unknown;
-      const steps = [
-        {
-          name: "flushEventBuffer",
-          run: options.flushEventBuffer,
-        },
-        {
-          name: "shutdownRuntimes",
-          run: options.shutdownRuntimes,
-        },
-        {
-          name: "releaseLock",
-          run: options.releaseLock,
-        },
-      ] as const;
+      const steps =
+        mode === "restart"
+          ? ([
+              {
+                name: "flushEventBuffer",
+                run: options.flushEventBuffer,
+              },
+              {
+                name: "shutdownRuntimes",
+                run: options.shutdownRuntimes,
+              },
+              {
+                name: "restart",
+                run: options.restart,
+              },
+            ] as const)
+          : ([
+              {
+                name: "flushEventBuffer",
+                run: options.flushEventBuffer,
+              },
+              {
+                name: "shutdownRuntimes",
+                run: options.shutdownRuntimes,
+              },
+              {
+                name: "releaseLock",
+                run: options.releaseLock,
+              },
+            ] as const);
 
       for (const step of steps) {
         if (!step.run) {
@@ -97,7 +119,11 @@ export function createDaemon(options: CreateDaemonOptions): HostDaemon {
       }
     })();
 
-    return shutdownPromise;
+    return stopPromise;
+  }
+
+  async function shutdown(reason = "shutdown"): Promise<void> {
+    return stop("shutdown", reason);
   }
 
   return {
@@ -109,10 +135,18 @@ export function createDaemon(options: CreateDaemonOptions): HostDaemon {
 
       for (const signal of TERMINATION_SIGNALS) {
         const listener = () => {
-          void shutdown(signal);
+          void stop("shutdown", signal);
         };
         listeners.set(signal, listener);
         signalSource.on(signal, listener);
+      }
+
+      if (options.restart) {
+        const listener = () => {
+          void stop("restart", RESTART_SIGNAL);
+        };
+        listeners.set(RESTART_SIGNAL, listener);
+        signalSource.on(RESTART_SIGNAL, listener);
       }
 
       try {

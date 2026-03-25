@@ -5,6 +5,7 @@ import { createLogger } from "@bb/logger";
 import { createDaemon, type HostDaemon } from "./daemon.js";
 import { loadHostIdentity } from "./identity.js";
 import { acquireDaemonLock } from "./lock.js";
+import { restartHostDaemon } from "./restart.js";
 
 export interface StartHostDaemonOptions {
   dataDir?: string;
@@ -12,6 +13,7 @@ export interface StartHostDaemonOptions {
   acquireLock?: typeof acquireDaemonLock;
   loadIdentity?: typeof loadHostIdentity;
   createDaemonLifecycle?: typeof createDaemon;
+  restartProcess?: typeof restartHostDaemon;
 }
 
 export async function startHostDaemon(
@@ -37,6 +39,11 @@ export async function startHostDaemon(
       },
       logger,
       releaseLock,
+      restart: async () => {
+        await (options.restartProcess ?? restartHostDaemon)({
+          releaseLock,
+        });
+      },
     });
 
     await daemon.start();
