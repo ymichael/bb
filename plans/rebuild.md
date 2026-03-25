@@ -384,6 +384,8 @@ Thread creation with ephemeral hosts calls `provisionHost()` from `@bb/sandbox-h
 - Thread data: GET events, timeline, timeline/tool-details, output (all via `listEvents` + transformation)
 - Thread data: GET default-execution-options (derive from thread/project config)
 - Drafts: POST/DELETE `/threads/:id/drafts`, `/threads/:id/drafts/:draftId`, POST send
+- Attachments: POST `/projects/:id/attachments` (store file), GET `/projects/:id/attachments/content` (serve file)
+- Voice: POST `/system/voice-transcription` (proxy to OpenAI Whisper)
 
 **Routes that queue daemon commands (implement, command types exist):**
 - POST `/threads` (creates thread + queues `environment.provision` and/or `thread.start`)
@@ -395,18 +397,16 @@ Thread creation with ephemeral hosts calls `provisionHost()` from `@bb/sandbox-h
 - GET `/environments/:id/diff/branches` (queues `workspace.list_branches`, waits for result)
 - GET `/threads/:id/workspace/files` (queues `workspace.list_files`, waits for result)
 - GET `/threads/:id/workspace/file` (queues `workspace.read_file`, waits for result)
-- GET `/system/models`, `/system/providers` (queues `provider.list_models`)
+- GET `/system/models`, `/system/providers` (queues `provider.list_models` / `provider.list`)
+- GET `/projects/:id/files` (resolves default project source, queues `workspace.list_files`)
 - POST `/projects/:id/managers` (creates manager thread, same flow as thread creation)
 
 These "queue and wait" routes need a synchronous command pattern: queue the command, wait for the daemon to report the result (via the command result handler or a dedicated response channel), and return it to the HTTP client. This is the same pattern for all of them — implement the pattern once (e.g., `queueCommandAndWait(hub, db, command, timeoutMs)`) and reuse it.
 
 **Important: unmanaged workspace provisioning MUST go through the daemon.** The server queues `environment.provision` with mode `unmanaged` — the daemon validates the path exists and discovers git properties. The server must NOT do filesystem I/O directly.
 
-**Routes that return 501 (deferred features):**
-- GET `/projects/:id/files` — needs project-scoped file listing (deferred, different from thread workspace files)
-- POST `/projects/:id/attachments`, GET `/projects/:id/attachments/content` — file upload, deferred
-- POST `/system/voice-transcription` — deferred
-- POST `/system/shutdown` — implement in Phase 7 integration
+**Routes that return 501:**
+- POST `/threads` with `{ type: "sandbox-host" }` — real sandbox-host in Phase 8
 
 **Tests (use `app.request()` with in-memory DB + real hub):**
 - [ ] `POST /threads` with `{ type: "host", workspace: { type: "unmanaged" } }` → env(provisioning), provision command queued to daemon
