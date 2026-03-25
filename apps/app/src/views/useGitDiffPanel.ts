@@ -9,8 +9,7 @@ import type { Location, NavigateFunction } from "react-router-dom";
 import { useEnvironmentGitDiff, useEnvironmentMergeBaseBranches } from "../hooks/useApi";
 import {
   getThreadSecondaryPanel,
-  getStoredThreadSecondaryPanel,
-  setStoredThreadSecondaryPanel,
+  useStoredThreadSecondaryPanel,
   withThreadSecondaryPanel,
   type ThreadSecondaryPanel as ThreadSecondaryPanelTab,
 } from "@/lib/thread-secondary-panel";
@@ -53,7 +52,7 @@ export function useGitDiffPanel({
     [location.search],
   );
   const [persistedSecondaryPanel, setPersistedSecondaryPanel] =
-    useState<ThreadSecondaryPanelTab | null>(() => getStoredThreadSecondaryPanel());
+    useStoredThreadSecondaryPanel();
   const activeSecondaryPanel = searchSecondaryPanel ?? persistedSecondaryPanel;
   const isSecondaryPanelOpen = activeSecondaryPanel !== null;
   const isDiffPanelActive = activeSecondaryPanel === "git-diff";
@@ -142,8 +141,7 @@ export function useGitDiffPanel({
     setPersistedSecondaryPanel((currentPanel) =>
       currentPanel === searchSecondaryPanel ? currentPanel : searchSecondaryPanel,
     );
-    setStoredThreadSecondaryPanel(searchSecondaryPanel);
-  }, [searchSecondaryPanel]);
+  }, [searchSecondaryPanel, setPersistedSecondaryPanel]);
 
   useEffect(() => {
     const gitDiff = threadGitDiff?.diff ?? "";
@@ -257,7 +255,6 @@ export function useGitDiffPanel({
     (panel: ThreadSecondaryPanelTab | null) => {
       onBeforePanelChange?.();
       setPersistedSecondaryPanel(panel);
-      setStoredThreadSecondaryPanel(panel);
       const nextSearch = withThreadSecondaryPanel(location.search, panel);
       navigate(
         {

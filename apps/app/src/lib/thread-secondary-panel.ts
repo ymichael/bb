@@ -1,3 +1,7 @@
+import { useAtom } from "jotai";
+import { atomWithStorage } from "jotai/utils";
+import { createLocalStorageSyncStorage } from "./browser-storage";
+
 const THREAD_SECONDARY_PANEL_QUERY_KEY = "secondaryPanel";
 const THREAD_SECONDARY_PANEL_STORAGE_KEY = "bb.thread.secondaryPanel";
 const THREAD_DIFF_PANEL_QUERY_VALUE = "git-diff";
@@ -19,34 +23,41 @@ function decodeThreadSecondaryPanel(value: string | null): ThreadSecondaryPanel 
   }
 }
 
+const storedThreadSecondaryPanelBaseStorage =
+  createLocalStorageSyncStorage<ThreadSecondaryPanel | null>({
+    parse: (storedValue, initialValue) =>
+      decodeThreadSecondaryPanel(storedValue) ?? initialValue,
+    serialize: (value) => value ?? "",
+  });
+
+const storedThreadSecondaryPanelStorage = {
+  getItem: storedThreadSecondaryPanelBaseStorage.getItem,
+  setItem: (key: string, value: ThreadSecondaryPanel | null) => {
+    if (value === null) {
+      storedThreadSecondaryPanelBaseStorage.removeItem(key);
+      return;
+    }
+
+    storedThreadSecondaryPanelBaseStorage.setItem(key, value);
+  },
+  removeItem: storedThreadSecondaryPanelBaseStorage.removeItem,
+  subscribe: storedThreadSecondaryPanelBaseStorage.subscribe,
+};
+
+const storedThreadSecondaryPanelAtom = atomWithStorage<ThreadSecondaryPanel | null>(
+  THREAD_SECONDARY_PANEL_STORAGE_KEY,
+  null,
+  storedThreadSecondaryPanelStorage,
+  { getOnInit: true },
+);
+
 export function getThreadSecondaryPanel(search: string): ThreadSecondaryPanel | null {
   const params = new URLSearchParams(search);
   return decodeThreadSecondaryPanel(params.get(THREAD_SECONDARY_PANEL_QUERY_KEY));
 }
 
-export function getStoredThreadSecondaryPanel(): ThreadSecondaryPanel | null {
-  if (typeof window === "undefined") {
-    return null;
-  }
-
-  return decodeThreadSecondaryPanel(
-    window.localStorage.getItem(THREAD_SECONDARY_PANEL_STORAGE_KEY),
-  );
-}
-
-export function setStoredThreadSecondaryPanel(
-  panel: ThreadSecondaryPanel | null,
-): void {
-  if (typeof window === "undefined") {
-    return;
-  }
-
-  if (panel) {
-    window.localStorage.setItem(THREAD_SECONDARY_PANEL_STORAGE_KEY, panel);
-    return;
-  }
-
-  window.localStorage.removeItem(THREAD_SECONDARY_PANEL_STORAGE_KEY);
+export function useStoredThreadSecondaryPanel() {
+  return useAtom(storedThreadSecondaryPanelAtom);
 }
 
 export function withThreadSecondaryPanel(
