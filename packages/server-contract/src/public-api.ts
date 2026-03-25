@@ -230,7 +230,8 @@ export type PublicApiSchema = {
   };
   "/threads/:id/archive": {
     /**
-     * Archive a thread. Rejects if uncommitted work exists (unless force=true).
+     * Archive a thread. Rejects if work could be lost (unless force=true) —
+     * checks workspace status for uncommitted or unmerged changes.
      * Stops the thread if active. If its managed environment now has zero
      * non-archived threads, destroys the environment.
      */
@@ -279,7 +280,7 @@ export type PublicApiSchema = {
     $get: Endpoint<PathId & { query?: { afterSeq?: string; limit?: string } }, ThreadEventRow[]>;
   };
   "/threads/:id/default-execution-options": {
-    /** Returns the model, reasoning level, and sandbox mode to pre-fill for the next message. */
+    /** Returns the last used options for the thread for use as defaults in the UI. */
     $get: Endpoint<PathId, ThreadExecutionOptions | null>;
   };
   "/threads/:id/workspace/files": {

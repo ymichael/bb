@@ -306,7 +306,7 @@ These are behaviors that aren't obvious from the route definitions alone:
 - **Disconnected host error.** When a route needs to send a command to a host that is not connected, return a consistent error: `ApiError(502, "host_disconnected", "Host is not connected")`. All daemon-proxied routes should go through the same code path (`queueCommandAndWait`) so this check is centralized.
 - **Thread title generation.** When a thread is created with input and no explicit title, generate one asynchronously using `@mariozechner/pi-ai` + the `codexRunMetadata` template from `@bb/templates`. Set `titleFallback` synchronously from the first prompt text. Don't block thread creation on title generation.
 - **Pending input after provisioning.** When `environment.provision` succeeds and the thread has queued input, the server must queue `thread.start` as a follow-up. This happens in the command-result handler, not at thread creation time.
-- **Archive with cleanup.** Archiving a thread stops it if active. If the thread's environment is managed and now has zero non-archived threads, queues `environment.destroy`.
+- **Archive with cleanup.** Archiving checks workspace status first — rejects if work could be lost (uncommitted or unmerged changes) unless `force=true`. Stops the thread if active. If the thread's environment is managed and now has zero non-archived threads, queues `environment.destroy`.
 
 ### 6a. Server skeleton + middleware
 
