@@ -350,16 +350,7 @@ Triggered by SIGUSR2. SIGTERM/SIGINT → clean shutdown.
 - [ ] Spawns new process, old process exits cleanly
 - [ ] New process acquires lock after old releases it
 
-### 4f. Daemon bundle
-
-esbuild config that produces a single-file daemon binary (`.mjs`). This is required for `@bb/sandbox-host` to install the daemon into ephemeral sandboxes.
-
-**Tests:**
-- [ ] Bundle produces a single file
-- [ ] Bundle runs standalone (no node_modules required)
-- [ ] Bundle starts, acquires lock, reads identity — same behavior as unbundled
-
-### 4g. Daemon integration tests
+### 4f. Daemon integration tests
 
 Run the full daemon against a **minimal test fixture server** (in-process Hono app that implements the internal API contract: session open, command fetch, command result, event ingestion). This is NOT the real server — it's a lightweight test double that speaks the right protocol. Keeps Phase 4 independent of Phase 5.
 
@@ -378,7 +369,7 @@ Use fake provider adapter.
 
 Ephemeral host lifecycle — provision, suspend, resume, destroy. See `plans/host-package.md` for the interface design. Porting from [terragon-oss](https://github.com/terragon-labs/terragon-oss).
 
-The package provisions an E2B sandbox, installs the daemon bundle (from Phase 4f), starts it, and waits for it to connect back to the server. After that, the server talks to it through the normal daemon protocol. `@bb/sandbox-host` is only used for lifecycle management (suspend/resume/destroy).
+The package provisions an E2B sandbox, bundles and installs the daemon, starts it, and waits for it to connect back to the server. Daemon bundling (esbuild single-file + bridge bundling) is owned by this phase. After provisioning, the server talks to the daemon through the normal protocol. `@bb/sandbox-host` is only for lifecycle management (suspend/resume/destroy).
 
 Workspace provisioning inside the sandbox goes through the normal path: server sends `environment.provision` command → daemon calls `provisionWorkspace()` from `@bb/workspace`.
 
@@ -536,10 +527,10 @@ Phase 3 (@bb/workspace interface, after Phase 1):
 Phase 4 (host-daemon, after Phase 3 for 4d+):
   4a → 4b → 4c can start in parallel with Phase 3 (no IWorkspace needed yet)
   4d needs Phase 3 (command router uses IWorkspace)
-  4d → 4e → 4f → 4g
+  4d → 4e → 4f
 
-Phase 5 (@bb/sandbox-host, after Phase 4f — needs daemon bundle):
-  standalone — parallel with Phase 4g and Phase 6
+Phase 5 (@bb/sandbox-host, after Phase 4 — needs working daemon):
+  standalone — parallel with Phase 6. Owns daemon bundling.
 
 Phase 6 (server, after Phase 1b — needs data functions):
   6a → 6b → 6c + 6d (parallel) → 6e
@@ -553,7 +544,7 @@ Phase 7 (integration, after Phase 4 + 5 + 6):
 - Phase 1 → Phase 3 → Phase 4 → Phase 7
 - Phase 1 → Phase 6 → Phase 7
 
-Phase 7 waits for both. Phase 4a-4c can start before Phase 3 finishes. Phase 6 can start as soon as Phase 1b is done. Phase 5 slots in after daemon bundle (4f), and 6c needs it for ephemeral host routes.
+Phase 7 waits for both. Phase 4a-4c can start before Phase 3 finishes. Phase 6 can start as soon as Phase 1b is done. Phase 5 slots in after Phase 4 (needs a working daemon to bundle), and 6c needs it for ephemeral host routes.
 
 **Triage gate after Phase 2:** Phase 2 (consumer cutover) produces a findings doc of contract mismatches. Review findings before proceeding — if contracts need changes, fix them before Phases 4/6 build against them.
 
