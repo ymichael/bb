@@ -1,8 +1,8 @@
 import type { AgentRuntime } from "@bb/agent-runtime";
 import type { IWorkspace } from "@bb/workspace";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { CommandRouter } from "./command-router.js";
-import { RuntimeManager } from "./runtime-manager.js";
+import { CommandRouter } from "../../src/command-router.js";
+import { RuntimeManager } from "../../src/runtime-manager.js";
 
 function createDeferred<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void;
@@ -415,13 +415,13 @@ describe("CommandRouter", () => {
     ]);
 
     expect(reported).toEqual([1]);
-    expect(logger.warn).toHaveBeenCalledWith(
+    expect(logger.warn.mock.calls[0]).toEqual([
       expect.objectContaining({
         cursor: 3,
         lastReportedCursor: 0,
       }),
       "gap detected in command cursor sequence",
-    );
+    ]);
     expect(
       (
         router as unknown as { completedResults: Map<number, unknown> }

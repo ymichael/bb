@@ -4,16 +4,16 @@ import {
   hostDaemonCommandResultReportSchema,
   type HostDaemonActiveThread,
 } from "@bb/host-daemon-contract";
-import type { HostDaemonLogger } from "./logger.js";
-import { createServerClient } from "./server-client.js";
+import type { HostDaemonLogger } from "../../src/logger.js";
+import { createServerClient } from "../../src/server-client.js";
 import {
   ServerConnection,
   type ReconnectingWebSocketLike,
-} from "./server-connection.js";
+} from "../../src/server-connection.js";
 import {
   createTestServer,
   type TestServer,
-} from "./test/helpers/test-server.js";
+} from "../helpers/test-server.js";
 
 async function waitFor(
   predicate: () => boolean,
@@ -64,7 +64,7 @@ function createConnection(
     ...overrides,
   });
 
-  return { connection, logger };
+  return { connection, logger, serverClient };
 }
 
 class FakeReconnectingWebSocket implements ReconnectingWebSocketLike {
@@ -194,10 +194,10 @@ describe("ServerConnection", () => {
 
   it("retries command result delivery until the server accepts it", async () => {
     testServer = await createTestServer({ commandResultFailures: 1 });
-    const { connection } = createConnection(testServer);
+    const { connection, serverClient } = createConnection(testServer);
 
     await connection.start();
-    await connection.reportCommandResult({
+    await serverClient.reportCommandResult({
       commandId: "cmd-1",
       cursor: 7,
       completedAt: 1,
@@ -236,12 +236,12 @@ describe("ServerConnection", () => {
       commandResultFailures: 10,
       commandResultFailureStatus: 500,
     });
-    const { connection, logger } = createConnection(testServer);
+    const { connection, logger, serverClient } = createConnection(testServer);
 
     await connection.start();
 
     await expect(
-      connection.reportCommandResult({
+      serverClient.reportCommandResult({
         commandId: "cmd-1",
         cursor: 7,
         completedAt: 1,
@@ -261,12 +261,12 @@ describe("ServerConnection", () => {
       commandResultFailures: 1,
       commandResultFailureStatus: 400,
     });
-    const { connection, logger } = createConnection(testServer);
+    const { connection, logger, serverClient } = createConnection(testServer);
 
     await connection.start();
 
     await expect(
-      connection.reportCommandResult({
+      serverClient.reportCommandResult({
         commandId: "cmd-1",
         cursor: 7,
         completedAt: 1,
@@ -283,10 +283,10 @@ describe("ServerConnection", () => {
 
   it("posts tool calls through the session API", async () => {
     testServer = await createTestServer();
-    const { connection } = createConnection(testServer);
+    const { connection, serverClient } = createConnection(testServer);
 
     await connection.start();
-    const response = await connection.callTool({
+    const response = await serverClient.callTool({
       requestId: 1,
       threadId: "thread-1",
       turnId: "turn-1",

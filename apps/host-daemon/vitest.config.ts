@@ -8,7 +8,7 @@ export default defineConfig({
   test: {
     silent: "passed-only",
     name: "@bb/host-daemon",
-    include: ["src/**/*.test.ts"],
+    include: ["src/**/*.test.ts", "test/**/*.test.ts"],
     exclude: ["dist/**", "node_modules/**"],
   },
 });

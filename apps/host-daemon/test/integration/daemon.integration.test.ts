@@ -4,11 +4,11 @@ import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type { AgentRuntimeOptions } from "@bb/agent-runtime";
 import type { ThreadEvent } from "@bb/domain";
-import { readCommandCursor } from "./command-cursor.js";
-import { startHostDaemon } from "./index.js";
+import { readCommandCursor } from "../../src/command-cursor.js";
+import { startHostDaemon } from "../../src/index.js";
 import {
   createTestServer,
-} from "./test/helpers/test-server.js";
+} from "../helpers/test-server.js";
 
 type ProviderAdapter = ReturnType<NonNullable<AgentRuntimeOptions["adapterFactory"]>>;
 

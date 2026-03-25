@@ -4,8 +4,8 @@ import path from "node:path";
 import type { AgentRuntime } from "@bb/agent-runtime";
 import type { IWorkspace, ProvisionWorkspaceOpts } from "@bb/workspace";
 import { afterEach, describe, expect, it } from "vitest";
-import { dispatchCommand } from "./command-dispatch.js";
-import { RuntimeManager } from "./runtime-manager.js";
+import { dispatchCommand } from "../../src/command-dispatch.js";
+import { RuntimeManager } from "../../src/runtime-manager.js";
 
 const tempDirs: string[] = [];
 

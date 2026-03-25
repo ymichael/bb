@@ -2,90 +2,29 @@ import {
   HOST_DAEMON_PROTOCOL_VERSION,
   hostDaemonDaemonWsMessageSchema,
   hostDaemonServerWsMessageSchema,
-  type HostDaemonActiveThread,
-  type HostDaemonCommandEnvelope,
-  type HostDaemonCommandResultReport,
-  type HostDaemonEventEnvelope,
-  type HostDaemonSessionOpenRequest,
   type HostDaemonSessionOpenResponse,
-  type HostDaemonToolCallResponse,
 } from "@bb/host-daemon-contract";
-import type { ToolCallRequest } from "@bb/domain";
-import ReconnectingWebSocket from "partysocket/ws";
-import type { HostDaemonLogger } from "./logger.js";
-import type { ServerClient } from "./server-client.js";
+import {
+  DEFAULT_CONNECTION_TIMEOUT_MS,
+  DEFAULT_MAX_RECONNECTION_DELAY,
+  DEFAULT_MIN_RECONNECTION_DELAY,
+  DEFAULT_POLL_AFTER_DISCONNECT_MS,
+  DEFAULT_POLL_INTERVAL_MS,
+  DEFAULT_RECONNECTION_DELAY_GROW_FACTOR,
+  OPEN_READY_STATE,
+  createDefaultReconnectingWebSocket,
+  decodeWebSocketMessageData,
+  type CreateReconnectingWebSocket,
+  type IntervalHandle,
+  type ReconnectingWebSocketLike,
+  type ServerConnectionOptions,
+  type TimeoutHandle,
+} from "./server-connection-support.js";
 
-type TimeoutHandle = ReturnType<typeof setTimeout>;
-type IntervalHandle = ReturnType<typeof setInterval>;
-
-export interface ReconnectingWebSocketLike {
-  readonly readyState: number;
-  onopen: ((event: any) => void) | null;
-  onmessage: ((event: any) => void) | null;
-  onclose: ((event: any) => void) | null;
-  onerror: ((event: any) => void) | null;
-  send(data: string): void;
-  close(code?: number, reason?: string): void;
-}
-
-export interface ReconnectingWebSocketOptions {
-  minReconnectionDelay: number;
-  maxReconnectionDelay: number;
-  reconnectionDelayGrowFactor: number;
-  connectionTimeout: number;
-  maxRetries: number;
-}
-
-export type CreateReconnectingWebSocket = (
-  urlProvider: () => Promise<string>,
-  options: ReconnectingWebSocketOptions,
-) => ReconnectingWebSocketLike;
-
-export interface ServerConnectionOptions {
-  serverUrl: string;
-  authToken: string;
-  logger: HostDaemonLogger;
-  serverClient: ServerClient;
-  hostId: string;
-  hostName: string;
-  hostType: HostDaemonSessionOpenRequest["hostType"];
-  instanceId: string;
-  setSession?: (session: HostDaemonSessionOpenResponse | null) => void;
-  getActiveThreads?: () =>
-    | HostDaemonActiveThread[]
-    | Promise<HostDaemonActiveThread[]>;
-  getHeartbeatPayload?: () => {
-    bufferDepth: number;
-    lastCommandCursor?: number;
-  };
-  onCommandsAvailable?: () => void | Promise<void>;
-  onSessionClose?: (
-    reason: "replaced" | "expired" | "daemon-disconnect",
-  ) => void | Promise<void>;
-  onSessionOpened?: (
-    session: HostDaemonSessionOpenResponse,
-  ) => void | Promise<void>;
-  protocolVersion?: typeof HOST_DAEMON_PROTOCOL_VERSION;
-  createWebSocket?: CreateReconnectingWebSocket;
-  minReconnectionDelay?: number;
-  maxReconnectionDelay?: number;
-  reconnectionDelayGrowFactor?: number;
-  connectionTimeout?: number;
-  pollAfterDisconnectMs?: number;
-  pollIntervalMs?: number;
-  setTimeoutFn?: typeof setTimeout;
-  clearTimeoutFn?: typeof clearTimeout;
-  setIntervalFn?: typeof setInterval;
-  clearIntervalFn?: typeof clearInterval;
-}
-
-const DEFAULT_MIN_RECONNECTION_DELAY = 1_000;
-const DEFAULT_MAX_RECONNECTION_DELAY = 30_000;
-const DEFAULT_RECONNECTION_DELAY_GROW_FACTOR = 2;
-const DEFAULT_CONNECTION_TIMEOUT_MS = 10_000;
-const DEFAULT_POLL_AFTER_DISCONNECT_MS = 5_000;
-const DEFAULT_POLL_INTERVAL_MS = 10_000;
-const OPEN_READY_STATE = 1;
+export type {
+  CreateReconnectingWebSocket,
+  ServerConnectionOptions,
+} from "./server-connection-support.js";
 
 export class ServerConnection {
   private readonly createWebSocket: CreateReconnectingWebSocket;
@@ -110,10 +49,7 @@ export class ServerConnection {
 
   constructor(private readonly options: ServerConnectionOptions) {
     this.sessionCloseHandler = options.onSessionClose;
-    this.createWebSocket =
-      options.createWebSocket ??
-      ((urlProvider, reconnectOptions) =>
-        new ReconnectingWebSocket(urlProvider, [], reconnectOptions));
+    this.createWebSocket = options.createWebSocket ?? createDefaultReconnectingWebSocket;
     this.minReconnectionDelay =
       options.minReconnectionDelay ?? DEFAULT_MIN_RECONNECTION_DELAY;
     this.maxReconnectionDelay =
@@ -152,32 +88,6 @@ export class ServerConnection {
       this.websocket.close();
       this.websocket = null;
     }
-  }
-
-  async fetchCommands(options: {
-    afterCursor: number;
-    limit?: number;
-    waitMs?: number;
-  }): Promise<HostDaemonCommandEnvelope[]> {
-    return this.options.serverClient.fetchCommands(options);
-  }
-
-  async reportCommandResult(
-    report: Omit<HostDaemonCommandResultReport, "sessionId">,
-  ): Promise<void> {
-    return this.options.serverClient.reportCommandResult(report);
-  }
-
-  async callTool(
-    request: ToolCallRequest,
-  ): Promise<HostDaemonToolCallResponse> {
-    return this.options.serverClient.callTool(request);
-  }
-
-  async postEvents(
-    events: HostDaemonEventEnvelope[],
-  ): Promise<Record<string, number>> {
-    return this.options.serverClient.postEvents(events);
   }
 
   setSessionCloseHandler(
@@ -298,14 +208,7 @@ export class ServerConnection {
   }
 
   private handleWebSocketMessage(data: unknown): void {
-    const text =
-      typeof data === "string"
-        ? data
-        : Array.isArray(data)
-          ? Buffer.concat(data).toString("utf8")
-        : Buffer.isBuffer(data)
-          ? data.toString("utf8")
-          : String(data);
+    const text = decodeWebSocketMessageData(data);
     const message = hostDaemonServerWsMessageSchema.parse(JSON.parse(text));
 
     if (message.type === "commands-available") {
