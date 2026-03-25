@@ -105,6 +105,7 @@ export interface IWorkspace {
   demote(
     primary: IWorkspace,
     defaultBranch: string,
+    envBranch?: string,
   ): Promise<void>;
 
   // Lifecycle
@@ -203,15 +204,16 @@ class WorkspaceImpl implements IWorkspace {
   async demote(
     primary: IWorkspace,
     defaultBranch: string,
+    envBranch?: string,
   ): Promise<void> {
     const primaryWs = new Workspace(primary.path);
-    const envBranch = await this.ws.currentBranch;
-    if (!envBranch) {
+    const branch = envBranch ?? await this.ws.currentBranch;
+    if (!branch) {
       throw new WorkspaceError(
         "Cannot demote: workspace has no branch (detached HEAD)",
       );
     }
-    await demoteWorkspace(this.ws, primaryWs, defaultBranch, envBranch);
+    await demoteWorkspace(this.ws, primaryWs, defaultBranch, branch);
   }
 
   destroy(): Promise<void> {

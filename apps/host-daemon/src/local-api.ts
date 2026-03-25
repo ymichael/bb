@@ -41,7 +41,7 @@ export async function startLocalApiServer(
 
   await new Promise<void>((resolve, reject) => {
     server.once("error", reject);
-    server.listen(options.port, "127.0.0.1", () => {
+    server.listen(options.port, "localhost", () => {
       server.off("error", reject);
       resolve();
     });

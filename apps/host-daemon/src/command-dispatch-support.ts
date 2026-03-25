@@ -110,11 +110,17 @@ export async function provisionEnvironment(
   command: CommandOf<"environment.provision">,
   options: CommandDispatchOptions,
 ): Promise<HostDaemonCommandResult<"environment.provision">> {
-  const ranSetup = await detectSetupScript(command);
+  const alreadyExists = options.runtimeManager.get(command.environmentId) != null;
   const entry = await options.runtimeManager.ensureEnvironment({
     environmentId: command.environmentId,
     provision: toProvisionWorkspaceOptions(command),
   });
+  // Only report ranSetup when the workspace is managed (unmanaged never runs
+  // setup) AND was freshly provisioned (retry/idempotent path skips setup).
+  const ranSetup =
+    !alreadyExists && entry.workspace.managed
+      ? await detectSetupScript(command)
+      : false;
   return {
     path: entry.workspace.path,
     isGitRepo: entry.workspace.isGitRepo,
@@ -155,7 +161,7 @@ export async function demoteWorkspace(
 ): Promise<HostDaemonCommandResult<"workspace.demote">> {
   const entry = await requireExistingEnvironment(command.environmentId, runtimeManager);
   const primaryWorkspace = await runtimeManager.openWorkspace(command.primaryPath);
-  await entry.workspace.demote(primaryWorkspace, command.defaultBranch);
+  await entry.workspace.demote(primaryWorkspace, command.defaultBranch, command.envBranch);
   return { ok: true };
 }
 

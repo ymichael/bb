@@ -31,7 +31,7 @@ describe("local API server", () => {
       getConnected: () => true,
       restart: () => undefined,
     });
-    const client = createHostDaemonLocalClient(`http://127.0.0.1:${server.port}`);
+    const client = createHostDaemonLocalClient(`http://localhost:${server.port}`);
 
     const hostIdResponse = await client["host-id"].$get();
     const statusResponse = await client.status.$get();
@@ -55,7 +55,7 @@ describe("local API server", () => {
       pickFolder,
       restart: () => undefined,
     });
-    const client = createHostDaemonLocalClient(`http://127.0.0.1:${server.port}`);
+    const client = createHostDaemonLocalClient(`http://localhost:${server.port}`);
 
     await client.open.$post({ json: { path: "/tmp/file.ts" } });
     const pickFolderResponse = await client["pick-folder"].$post({});
@@ -77,7 +77,7 @@ describe("local API server", () => {
         setTimeout(callback, 0);
       },
     });
-    const client = createHostDaemonLocalClient(`http://127.0.0.1:${server.port}`);
+    const client = createHostDaemonLocalClient(`http://localhost:${server.port}`);
 
     const response = await client.restart.$post({});
     expect(response.ok).toBe(true);

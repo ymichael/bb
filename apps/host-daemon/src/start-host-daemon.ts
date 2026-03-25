@@ -39,10 +39,11 @@ export async function startHostDaemon(
   const enableLocalApi = options.enableLocalApi ?? hostType === "persistent";
   const releaseLock = await (options.acquireLock ?? acquireDaemonLock)(dataDir);
 
+  let app: Awaited<ReturnType<typeof createHostDaemonApp>> | undefined;
   try {
     const identity = await (options.loadIdentity ?? loadHostIdentity)({ dataDir });
     const instanceId = (options.createInstanceId ?? randomUUID)();
-    const app = await createHostDaemonApp({
+    app = await createHostDaemonApp({
       dataDir,
       serverUrl,
       authToken,
@@ -68,6 +69,7 @@ export async function startHostDaemon(
     await app.daemon.start();
     return app.daemon;
   } catch (error) {
+    await app?.localApi?.close().catch(() => undefined);
     await releaseLock().catch(() => undefined);
     throw error;
   }
