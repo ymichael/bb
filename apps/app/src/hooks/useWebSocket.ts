@@ -235,6 +235,7 @@ export function useWebSocket(): void {
           }
           break;
         case "system":
+          queryClient.invalidateQueries({ queryKey: ["hosts"] });
           break;
         case "project":
           queryClient.invalidateQueries({ queryKey: ["projects"] });

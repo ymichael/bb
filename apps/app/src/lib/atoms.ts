@@ -1,7 +1,8 @@
-import { atom } from "jotai";
+import { atom, getDefaultStore } from "jotai";
 import type { SystemConfigResponse } from "@bb/server-contract";
 import { apiClient } from "./api-server";
 import { fetchHostId } from "./api-host-daemon";
+import { wsManager } from "./ws";
 
 // ---------------------------------------------------------------------------
 // System config — fetched once from the server on app startup
@@ -23,14 +24,29 @@ async function loadSystemConfig(): Promise<SystemConfigResponse> {
 export const systemConfigAtom = atom<Promise<SystemConfigResponse>>(loadSystemConfig());
 
 // ---------------------------------------------------------------------------
-// Local host ID — fetched from the host daemon using the port from config
+// Local host ID — probed from the host daemon on startup.
+// Re-probes when a host-connected WS event arrives (daemon may have started
+// after the app). No-daemon is a normal state (e.g., mobile browser).
 // ---------------------------------------------------------------------------
+
+const localHostIdRefreshAtom = atom(0);
 
 /** The local machine's host ID, or null if no daemon is reachable. */
 export const localHostIdAtom = atom<Promise<string | null>>(async (get) => {
+  get(localHostIdRefreshAtom);
   const config = await get(systemConfigAtom);
   if (!config.hostDaemonPort) return null;
   return fetchHostId(config.hostDaemonPort);
+});
+
+// Re-probe the local daemon when a host connects to the server.
+wsManager.onChanged((message) => {
+  if (
+    message.entity === "system" &&
+    message.changes.includes("host-connected")
+  ) {
+    getDefaultStore().set(localHostIdRefreshAtom, (c) => c + 1);
+  }
 });
 
 // ---------------------------------------------------------------------------

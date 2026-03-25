@@ -637,7 +637,11 @@ POST /restart        → (dev only) triggers graceful restart
 
 **Server-side:** shutdown with blocking thread detection, voice transcription, file attachment upload.
 
-**Host status in UI:** derived from daemon local API (`GET /status`) for the local host, and from server session state for remote/ephemeral hosts.
+**Host status data flow:**
+
+All hosts: the server tracks host connection status via daemon sessions. The app fetches `GET /hosts` and stays updated via WS `system` channel (`host-connected`, `host-disconnected` → refetch hosts). Host status is derived at query time (active session + non-expired lease = connected).
+
+Local daemon: the app probes `GET /host-id` on the daemon's local API at startup. If reachable, `localHostId` is set and local operations (open-in-editor, pick-folder) are enabled. If unreachable (e.g., mobile browser, daemon not started), local operations are disabled gracefully. This is a one-shot probe — "no daemon" is a normal state, not an error. The local daemon's server connection status is derived from the server's hosts list (matching `localHostId`), not from polling the daemon.
 
 ---
 

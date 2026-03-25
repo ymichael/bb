@@ -17,7 +17,7 @@ export function useHostDaemon() {
   const localHostId = useAtomValue(localHostIdAtom);
   const daemonPort = useAtomValue(hostDaemonPortAtom);
 
-  const hasDaemon = localHostId != null && daemonPort != null;
+  const hasDaemon = localHostId != null;
 
   const isLocalHost = useCallback(
     (hostId: string | null | undefined) => {
@@ -28,16 +28,16 @@ export function useHostDaemon() {
   );
 
   const openPath = useMemo(() => {
-    if (!daemonPort) return null;
+    if (!localHostId || !daemonPort) return null;
     const port = daemonPort;
     return (path: string) => daemonOpenPath(port, path);
-  }, [daemonPort]);
+  }, [localHostId, daemonPort]);
 
   const pickFolder = useMemo(() => {
-    if (!daemonPort) return null;
+    if (!localHostId || !daemonPort) return null;
     const port = daemonPort;
     return () => daemonPickFolder(port);
-  }, [daemonPort]);
+  }, [localHostId, daemonPort]);
 
   return {
     localHostId,
