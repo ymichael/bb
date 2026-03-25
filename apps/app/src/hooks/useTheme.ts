@@ -1,11 +1,30 @@
 import * as React from "react"
+import { getDefaultStore } from "jotai"
+import { atomWithStorage } from "jotai/utils"
+import { createLocalStorageEnumStorage } from "@/lib/browser-storage"
 
 export const THEME_STORAGE_KEY = "bb.theme"
 
 type Theme = "light" | "dark"
+type StoredThemePreference = "" | Theme
+
+const themePreferenceStorage = createLocalStorageEnumStorage<StoredThemePreference>(
+  (value): value is StoredThemePreference =>
+    value === "" || value === "light" || value === "dark"
+)
+const themePreferenceAtom = atomWithStorage<StoredThemePreference>(
+  THEME_STORAGE_KEY,
+  "",
+  themePreferenceStorage,
+  { getOnInit: true },
+)
 
 function isTheme(value: string | null): value is Theme {
   return value === "light" || value === "dark"
+}
+
+function getStoredThemePreference(): StoredThemePreference {
+  return getDefaultStore().get(themePreferenceAtom)
 }
 
 function applyThemeClass(theme: Theme): void {
@@ -14,10 +33,9 @@ function applyThemeClass(theme: Theme): void {
 }
 
 function getPreferredTheme(): Theme {
-  if (typeof window === "undefined") return "light"
-
-  const storedTheme = window.localStorage.getItem(THEME_STORAGE_KEY)
+  const storedTheme = getStoredThemePreference()
   if (isTheme(storedTheme)) return storedTheme
+  if (typeof window === "undefined") return "light"
 
   if (document.documentElement.classList.contains("dark")) return "dark"
 
@@ -25,9 +43,8 @@ function getPreferredTheme(): Theme {
 }
 
 export function setPreferredTheme(theme: Theme): void {
-  if (typeof window === "undefined") return
+  getDefaultStore().set(themePreferenceAtom, theme)
   applyThemeClass(theme)
-  window.localStorage.setItem(THEME_STORAGE_KEY, theme)
   emitTheme()
 }
 
@@ -55,11 +72,7 @@ function ensureThemeObserver() {
   })
 
   mediaQuery.addEventListener("change", emitTheme)
-  window.addEventListener("storage", (event) => {
-    if (event.key === THEME_STORAGE_KEY) {
-      emitTheme()
-    }
-  })
+  getDefaultStore().sub(themePreferenceAtom, emitTheme)
   observer.observe(document.documentElement, {
     attributes: true,
     attributeFilter: ["class"],

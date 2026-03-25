@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
+import { useAtom } from "jotai"
 import { useQueryClient } from "@tanstack/react-query"
 import type { Thread } from "@bb/domain"
 import {
@@ -70,6 +71,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { toast } from "sonner"
+import { atomWithStorage } from "jotai/utils"
+import { createJsonLocalStorage } from "@/lib/browser-storage"
 
 interface ProjectListProps {
   onNewProject?: () => void
@@ -80,6 +83,18 @@ interface ProjectListProps {
 
 const COLLAPSED_PROJECTS_STORAGE_KEY = "bb.sidebar.collapsedProjects"
 const COLLAPSED_MANAGERS_STORAGE_KEY = "bb.sidebar.collapsedManagers"
+const collapsedProjectIdsAtom = atomWithStorage<string[]>(
+  COLLAPSED_PROJECTS_STORAGE_KEY,
+  [],
+  createJsonLocalStorage<string[]>(),
+  { getOnInit: true },
+)
+const collapsedManagerIdsAtom = atomWithStorage<string[]>(
+  COLLAPSED_MANAGERS_STORAGE_KEY,
+  [],
+  createJsonLocalStorage<string[]>(),
+  { getOnInit: true },
+)
 
 function ManagedThreadBranchGlyph() {
   return (
@@ -110,34 +125,8 @@ export function ProjectList({
   const { localHostId, pickFolder } = useHostDaemon()
   const location = useLocation()
   const navigate = useNavigate()
-  const [collapsedProjectIds, setCollapsedProjectIds] = useState<Set<string>>(
-    () => {
-      if (typeof window === "undefined") return new Set()
-
-      try {
-        const raw = window.localStorage.getItem(COLLAPSED_PROJECTS_STORAGE_KEY)
-        if (!raw) return new Set()
-        const parsed = JSON.parse(raw)
-        if (!Array.isArray(parsed)) return new Set()
-        return new Set(parsed.filter((value): value is string => typeof value === "string"))
-      } catch {
-        return new Set()
-      }
-    }
-  )
-  const [collapsedManagerIds, setCollapsedManagerIds] = useState<Set<string>>(() => {
-    if (typeof window === "undefined") return new Set()
-
-    try {
-      const raw = window.localStorage.getItem(COLLAPSED_MANAGERS_STORAGE_KEY)
-      if (!raw) return new Set()
-      const parsed = JSON.parse(raw)
-      if (!Array.isArray(parsed)) return new Set()
-      return new Set(parsed.filter((value): value is string => typeof value === "string"))
-    } catch {
-      return new Set()
-    }
-  })
+  const [collapsedProjectIdList, setCollapsedProjectIdList] = useAtom(collapsedProjectIdsAtom)
+  const [collapsedManagerIdList, setCollapsedManagerIdList] = useAtom(collapsedManagerIdsAtom)
   const [archiveConfirmationThread, setArchiveConfirmationThread] = useState<Thread | null>(null)
   const [openThreadActionsThreadId, setOpenThreadActionsThreadId] = useState<string | null>(null)
   const [threadRenameTarget, setThreadRenameTarget] = useState<ThreadRenameDialogTarget | null>(
@@ -148,6 +137,14 @@ export function ProjectList({
   const selectedThreadId = location.pathname.match(
     /^\/projects\/[^/]+\/threads\/([^/]+)/
   )?.[1]
+  const collapsedProjectIds = useMemo(
+    () => new Set(collapsedProjectIdList),
+    [collapsedProjectIdList],
+  )
+  const collapsedManagerIds = useMemo(
+    () => new Set(collapsedManagerIdList),
+    [collapsedManagerIdList],
+  )
 
   const threadsByProject = useMemo(() => {
     const grouped = new Map<string, Thread[]>()
@@ -170,22 +167,6 @@ export function ProjectList({
   }, [threads])
 
   useEffect(() => {
-    if (typeof window === "undefined") return
-    window.localStorage.setItem(
-      COLLAPSED_PROJECTS_STORAGE_KEY,
-      JSON.stringify(Array.from(collapsedProjectIds))
-    )
-  }, [collapsedProjectIds])
-
-  useEffect(() => {
-    if (typeof window === "undefined") return
-    window.localStorage.setItem(
-      COLLAPSED_MANAGERS_STORAGE_KEY,
-      JSON.stringify(Array.from(collapsedManagerIds))
-    )
-  }, [collapsedManagerIds])
-
-  useEffect(() => {
     if (!archiveConfirmationThread || !threads) return
 
     const nextThread = threads.find((thread) => thread.id === archiveConfirmationThread.id)
@@ -195,26 +176,26 @@ export function ProjectList({
   }, [archiveConfirmationThread, threads])
 
   const toggleProjectCollapsed = (projectId: string) => {
-    setCollapsedProjectIds((current) => {
+    setCollapsedProjectIdList((current) => {
       const next = new Set(current)
       if (next.has(projectId)) {
         next.delete(projectId)
       } else {
         next.add(projectId)
       }
-      return next
+      return Array.from(next)
     })
   }
 
   const toggleManagerCollapsed = (threadId: string) => {
-    setCollapsedManagerIds((current) => {
+    setCollapsedManagerIdList((current) => {
       const next = new Set(current)
       if (next.has(threadId)) {
         next.delete(threadId)
       } else {
         next.add(threadId)
       }
-      return next
+      return Array.from(next)
     })
   }
 
@@ -273,10 +254,10 @@ export function ProjectList({
 
     deleteProject.mutate(projectId, {
       onSuccess: () => {
-        setCollapsedProjectIds((current) => {
+        setCollapsedProjectIdList((current) => {
           const next = new Set(current)
           next.delete(projectId)
-          return next
+          return Array.from(next)
         })
         if (selectedProjectId === projectId) {
           navigate("/", { replace: true })

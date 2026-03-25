@@ -1,8 +1,7 @@
-import { type ReactNode, useState } from "react";
+import { type ReactNode } from "react";
 import { PageShell } from "@/components/layout/PageShell";
 import {
-  getAutoArchivePreferences,
-  setAutoArchivePreferences,
+  useAutoArchivePreferences,
 } from "@/lib/auto-archive-preferences";
 import { setPreferredTheme, usePreferredTheme } from "@/hooks/useTheme";
 import { toast } from "sonner";
@@ -30,13 +29,11 @@ function SettingsWithControl({
 }
 
 export function AppSettingsView() {
-  const [autoArchiveThreadOnCommit, setAutoArchiveThreadOnCommit] = useState(
-    () => getAutoArchivePreferences().autoArchiveThreadOnCommit,
-  );
+  const [autoArchivePreferences, setAutoArchivePreferences] = useAutoArchivePreferences();
+  const autoArchiveThreadOnCommit = autoArchivePreferences.autoArchiveThreadOnCommit;
   const theme = usePreferredTheme();
 
   const saveAutoArchiveSettings = (checked: boolean) => {
-    setAutoArchiveThreadOnCommit(checked);
     setAutoArchivePreferences({ autoArchiveThreadOnCommit: checked });
     toast.success("Auto-archive setting saved");
   };

@@ -1,10 +1,13 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ChangeEvent, type FormEvent, type KeyboardEvent, type ReactNode } from "react"
+import { atom, useAtom } from "jotai"
+import { RESET, atomWithStorage } from "jotai/utils"
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent, type KeyboardEvent, type ReactNode } from "react"
 import { ArrowUp, AudioLines, CornerDownLeft, Loader2, Maximize2, Mic, Minimize2, Paperclip, Square, X } from "lucide-react"
 import type { PromptMentionSuggestion } from "@/hooks/usePromptMentions"
 import { Button } from "@/components/ui/button"
 import { useAutoGrow } from "@/hooks/useAutoGrow"
 import { useVoiceInput } from "@/hooks/useVoiceInput"
 import { transcribeVoiceInput } from "@/lib/api"
+import { createJsonLocalStorage } from "@/lib/browser-storage"
 import type { PromptDraftAttachment } from "@/lib/prompt-draft"
 import { cn } from "@/lib/utils"
 import { PromptAttachmentPreview } from "./PromptAttachmentPreview"
@@ -63,6 +66,27 @@ interface DismissedMentionRange {
   start: number
   end: number
   hasLeftRange: boolean
+}
+
+type ZenModeUpdate =
+  | boolean
+  | typeof RESET
+  | ((previous: boolean) => boolean | typeof RESET)
+
+function createTransientZenModeAtom() {
+  const baseAtom = atom(false)
+  return atom(
+    (get) => get(baseAtom),
+    (get, set, update: ZenModeUpdate) => {
+      const currentValue = get(baseAtom)
+      const nextValue =
+        typeof update === "function"
+          ? update(currentValue)
+          : update
+
+      set(baseAtom, nextValue === RESET ? false : nextValue)
+    },
+  )
 }
 
 function summarizeVoiceErrorMessage(input: string): string {
@@ -124,7 +148,6 @@ export function PromptBox({
   resetZenModeOnSubmit = false,
   attachmentProjectId,
 }: PromptBoxProps) {
-  const [isZenMode, setIsZenMode] = useState(false)
   const formRef = useRef<HTMLFormElement>(null)
   const heightAnimationFromRef = useRef<number | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -141,6 +164,21 @@ export function PromptBox({
   const [selectedMentionIndex, setSelectedMentionIndex] = useState(0)
   const [expandedImageIndex, setExpandedImageIndex] = useState<number | null>(null)
   const resolvedZenModeStorageKey = zenModeStorageKey ?? ZEN_MODE_STORAGE_KEY[zenModeLayout]
+  const zenModeAtom = useMemo(
+    () =>
+      resolvedZenModeStorageKey
+        ? atomWithStorage<boolean>(
+            resolvedZenModeStorageKey,
+            false,
+            createJsonLocalStorage<boolean>(),
+            {
+              getOnInit: true,
+            },
+          )
+        : createTransientZenModeAtom(),
+    [resolvedZenModeStorageKey],
+  )
+  const [isZenMode, setIsZenMode] = useAtom(zenModeAtom)
 
   useEffect(() => {
     if (!textareaRef.current) return
@@ -156,21 +194,13 @@ export function PromptBox({
   }, [value])
 
   useEffect(() => {
-    if (!resolvedZenModeStorageKey) {
-      setIsZenMode(false)
+    if (zenModeResetKey === undefined) return
+    if (resolvedZenModeStorageKey) {
+      setIsZenMode(RESET)
       return
     }
-    if (typeof window === "undefined") return
-    const storedValue = window.localStorage.getItem(resolvedZenModeStorageKey)
-    setIsZenMode(storedValue === "true")
-  }, [resolvedZenModeStorageKey])
-
-  useEffect(() => {
-    if (zenModeResetKey === undefined) return
     setIsZenMode(false)
-    if (typeof window === "undefined" || !resolvedZenModeStorageKey) return
-    window.localStorage.removeItem(resolvedZenModeStorageKey)
-  }, [resolvedZenModeStorageKey, zenModeResetKey])
+  }, [resolvedZenModeStorageKey, setIsZenMode, zenModeResetKey])
 
   useLayoutEffect(() => {
     const fromHeight = heightAnimationFromRef.current
@@ -418,10 +448,12 @@ export function PromptBox({
     if (!canSubmit) return
     onSubmit()
     if (!resetZenModeOnSubmit || !isZenMode) return
+    if (resolvedZenModeStorageKey) {
+      setIsZenMode(RESET)
+      return
+    }
     setIsZenMode(false)
-    if (typeof window === "undefined" || !resolvedZenModeStorageKey) return
-    window.localStorage.removeItem(resolvedZenModeStorageKey)
-  }, [canSubmit, isZenMode, onSubmit, resetZenModeOnSubmit, resolvedZenModeStorageKey])
+  }, [canSubmit, isZenMode, onSubmit, resetZenModeOnSubmit, resolvedZenModeStorageKey, setIsZenMode])
 
   const toggleZenMode = useCallback(() => {
     const textarea = textareaRef.current
@@ -431,13 +463,7 @@ export function PromptBox({
     const scrollTop = textarea?.scrollTop ?? null
     heightAnimationFromRef.current = formElement?.getBoundingClientRect().height ?? null
 
-    setIsZenMode((previous) => {
-      const next = !previous
-      if (typeof window !== "undefined" && resolvedZenModeStorageKey) {
-        window.localStorage.setItem(resolvedZenModeStorageKey, String(next))
-      }
-      return next
-    })
+    setIsZenMode((previous) => !previous)
 
     requestAnimationFrame(() => {
       const nextTextarea = textareaRef.current
@@ -450,7 +476,7 @@ export function PromptBox({
         nextTextarea.scrollTop = scrollTop
       }
     })
-  }, [resolvedZenModeStorageKey])
+  }, [setIsZenMode])
 
   const handleAttachmentInputChange = useCallback(
     (event: ChangeEvent<HTMLInputElement>) => {
