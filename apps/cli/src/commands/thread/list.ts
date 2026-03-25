@@ -1,10 +1,10 @@
 import { Command } from "commander";
 import type { Thread } from "@bb/domain";
+import { action } from "../../action.js";
 import { createClient, unwrap } from "../../client.js";
 import { resolveThreadId } from "../../context-env.js";
 import { renderBorderlessTable } from "../../table.js";
 import {
-  getErrorMessage,
   outputJson,
   printContextLabel,
   type ResolvedId,
@@ -29,35 +29,30 @@ export function registerListCommand(
     .option("--parent-thread <id>", "Filter by managing parent thread ID")
     .option("--archived", "Show only archived threads")
     .option("--json", "Print machine-readable JSON output")
-    .action(async (opts: ThreadListCommandOptions) => {
+    .action(action(async (opts: ThreadListCommandOptions) => {
       const client = createClient(getUrl());
-      try {
-        const resolvedProject = resolveProjectContext(opts.project);
-        const projectId = resolvedProject?.id;
-        if (resolvedProject) {
-          printContextLabel(resolvedProject, "Project", "BB_PROJECT_ID", opts);
-        }
-        const parentThreadId = resolveThreadId(opts.parentThread);
-        const threads = await unwrap<Thread[]>(
-          client.api.v1.threads.$get({
-            query: {
-              ...(projectId ? { projectId } : {}),
-              ...(parentThreadId ? { parentThreadId } : {}),
-              ...(opts.archived ? { archived: "true" } : {}),
-            },
-          }),
-        );
-        if (outputJson(opts, threads)) return;
-        if (threads.length === 0) {
-          console.log("No threads found");
-          return;
-        }
-        printThreadTable(threads);
-      } catch (err: unknown) {
-        console.error(`Error: ${getErrorMessage(err)}`);
-        process.exit(1);
+      const resolvedProject = resolveProjectContext(opts.project);
+      const projectId = resolvedProject?.id;
+      if (resolvedProject) {
+        printContextLabel(resolvedProject, "Project", "BB_PROJECT_ID", opts);
       }
-    });
+      const parentThreadId = resolveThreadId(opts.parentThread);
+      const threads = await unwrap<Thread[]>(
+        client.api.v1.threads.$get({
+          query: {
+            ...(projectId ? { projectId } : {}),
+            ...(parentThreadId ? { parentThreadId } : {}),
+            ...(opts.archived ? { archived: "true" } : {}),
+          },
+        }),
+      );
+      if (outputJson(opts, threads)) return;
+      if (threads.length === 0) {
+        console.log("No threads found");
+        return;
+      }
+      printThreadTable(threads);
+    }));
 }
 
 function resolveProjectContext(

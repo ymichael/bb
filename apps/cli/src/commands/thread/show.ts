@@ -13,12 +13,12 @@ import type {
   EnvironmentStatusResponse,
   ThreadTimelineResponse,
 } from "@bb/server-contract";
+import { action } from "../../action.js";
 import { createClient, unwrap } from "../../client.js";
 import {
-  getErrorMessage,
   outputJson,
   printContextLabel,
-  resolveThreadIdWithLabel,
+  requireThreadIdWithLabel,
 } from "../helpers.js";
 import {
   parseRecentEventsCount,
@@ -93,153 +93,148 @@ export function registerShowCommand(
       "Merge base branch for diff (used with --git-diff)",
     )
     .option("--merge-base-branches", "Include available merge-base branches in output")
-    .action(async (id: string | undefined, opts: ThreadShowCommandOptions) => {
+    .action(action(async (id: string | undefined, opts: ThreadShowCommandOptions) => {
       const client = createClient(getUrl());
-      try {
-        const resolved = resolveThreadIdWithLabel(id);
-        const threadId = resolved.id;
-        printContextLabel(resolved, "Thread", "BB_THREAD_ID", opts);
-        const recentEvents =
-          opts.recentEvents === undefined
-            ? undefined
-            : parseRecentEventsCount(opts.recentEvents);
-        const eventMode = parseThreadStatusEventMode(opts.eventMode);
-        const thread = await unwrap<Thread>(
-          client.api.v1.threads[":id"].$get({ param: { id: threadId } }),
+      const resolved = requireThreadIdWithLabel(id);
+      const threadId = resolved.id;
+      printContextLabel(resolved, "Thread", "BB_THREAD_ID", opts);
+      const recentEvents =
+        opts.recentEvents === undefined
+          ? undefined
+          : parseRecentEventsCount(opts.recentEvents);
+      const eventMode = parseThreadStatusEventMode(opts.eventMode);
+      const thread = await unwrap<Thread>(
+        client.api.v1.threads[":id"].$get({ param: { id: threadId } }),
+      );
+
+      const events =
+        recentEvents === undefined
+          ? []
+          : await unwrap<ThreadEventRow[]>(
+              client.api.v1.threads[":id"].events.$get({
+                param: { id: threadId },
+                query: {},
+              }),
+            );
+      const statusPayload = buildThreadStatusPayload(thread, events, {
+        recentEvents,
+        eventMode,
+        includeLowSignal: Boolean(opts.includeLowSignal),
+      });
+
+      let workStatus: WorkspaceStatus | null | undefined;
+      if (opts.workStatus && thread.environmentId) {
+        const environmentStatus = await unwrap<EnvironmentStatusResponse>(
+          client.api.v1.environments[":id"].status.$get({
+            param: { id: thread.environmentId },
+            query: {},
+          }),
         );
-
-        const events =
-          recentEvents === undefined
-            ? []
-            : await unwrap<ThreadEventRow[]>(
-                client.api.v1.threads[":id"].events.$get({
-                  param: { id: threadId },
-                  query: {},
-                }),
-              );
-        const statusPayload = buildThreadStatusPayload(thread, events, {
-          recentEvents,
-          eventMode,
-          includeLowSignal: Boolean(opts.includeLowSignal),
-        });
-
-        let workStatus: WorkspaceStatus | null | undefined;
-        if (opts.workStatus && thread.environmentId) {
-          const environmentStatus = await unwrap<EnvironmentStatusResponse>(
-            client.api.v1.environments[":id"].status.$get({
-              param: { id: thread.environmentId },
-              query: {},
-            }),
-          );
-          workStatus = environmentStatus.workspace;
-        }
-
-        let gitDiff: ThreadGitDiffResponse | undefined;
-        if (opts.gitDiff && thread.environmentId) {
-          gitDiff = await unwrap<ThreadGitDiffResponse>(
-            client.api.v1.environments[":id"].diff.$get({
-              param: { id: thread.environmentId },
-              query: {
-                ...(opts.diffSelection ? { selection: opts.diffSelection } : {}),
-                ...(opts.diffMergeBase
-                  ? { mergeBaseBranch: opts.diffMergeBase }
-                  : {}),
-              },
-            }),
-          );
-        }
-
-        let mergeBaseBranches: string[] | undefined;
-        if (opts.mergeBaseBranches && thread.environmentId) {
-          mergeBaseBranches = await unwrap<string[]>(
-            client.api.v1.environments[":id"].diff.branches.$get({
-              param: { id: thread.environmentId },
-            }),
-          );
-        }
-
-        if (opts.json) {
-          const jsonPayload: ThreadShowJsonPayload = { ...statusPayload };
-          if (workStatus !== undefined) {
-            jsonPayload.workStatus = workStatus;
-          }
-          if (gitDiff !== undefined) {
-            jsonPayload.gitDiff = gitDiff;
-          }
-          if (mergeBaseBranches !== undefined) {
-            jsonPayload.mergeBaseBranches = mergeBaseBranches;
-          }
-          outputJson(opts, jsonPayload);
-          return;
-        }
-
-        printThreadStatus(statusPayload);
-
-        if (workStatus) {
-          console.log("");
-          console.log("Work status:");
-          console.log(`  State:    ${workStatus.state}`);
-          if (workStatus.currentBranch) {
-            console.log(`  Branch:   ${workStatus.currentBranch}`);
-          }
-          console.log(
-            `  Changed files: ${workStatus.changedFiles} (workspace: ${workStatus.workspaceChangedFiles})`,
-          );
-          console.log(
-            `  Insertions:    +${workStatus.insertions} (workspace: +${workStatus.workspaceInsertions})`,
-          );
-          console.log(
-            `  Deletions:     -${workStatus.deletions} (workspace: -${workStatus.workspaceDeletions})`,
-          );
-          console.log(
-            `  Ahead: ${workStatus.aheadCount}  Behind: ${workStatus.behindCount}`,
-          );
-        } else if (opts.workStatus && workStatus === null) {
-          console.log("");
-          console.log("Work status: unavailable");
-        }
-
-        if (gitDiff) {
-          console.log("");
-          console.log("Git diff:");
-          console.log(`  Mode: ${gitDiff.mode}`);
-          if (gitDiff.currentBranch) {
-            console.log(`  Branch: ${gitDiff.currentBranch}`);
-          }
-          if (gitDiff.mergeBaseBranch) {
-            console.log(`  Merge base branch: ${gitDiff.mergeBaseBranch}`);
-          }
-          if (gitDiff.commits.length > 0) {
-            console.log(`  Commits: ${gitDiff.commits.length}`);
-            for (const commit of gitDiff.commits) {
-              console.log(`    ${commit.shortSha} ${commit.subject}`);
-            }
-          }
-          if (gitDiff.diff) {
-            console.log("");
-            console.log(gitDiff.diff);
-          }
-          if (gitDiff.truncated) {
-            console.log("  (diff truncated)");
-          }
-        }
-
-        if (mergeBaseBranches !== undefined) {
-          console.log("");
-          if (mergeBaseBranches.length === 0) {
-            console.log("Merge-base branches: none");
-          } else {
-            console.log("Merge-base branches:");
-            for (const branch of mergeBaseBranches) {
-              console.log(`  ${branch}`);
-            }
-          }
-        }
-      } catch (err: unknown) {
-        console.error(`Error: ${getErrorMessage(err)}`);
-        process.exit(1);
+        workStatus = environmentStatus.workspace;
       }
-    });
+
+      let gitDiff: ThreadGitDiffResponse | undefined;
+      if (opts.gitDiff && thread.environmentId) {
+        gitDiff = await unwrap<ThreadGitDiffResponse>(
+          client.api.v1.environments[":id"].diff.$get({
+            param: { id: thread.environmentId },
+            query: {
+              ...(opts.diffSelection ? { selection: opts.diffSelection } : {}),
+              ...(opts.diffMergeBase
+                ? { mergeBaseBranch: opts.diffMergeBase }
+                : {}),
+            },
+          }),
+        );
+      }
+
+      let mergeBaseBranches: string[] | undefined;
+      if (opts.mergeBaseBranches && thread.environmentId) {
+        mergeBaseBranches = await unwrap<string[]>(
+          client.api.v1.environments[":id"].diff.branches.$get({
+            param: { id: thread.environmentId },
+          }),
+        );
+      }
+
+      if (opts.json) {
+        const jsonPayload: ThreadShowJsonPayload = { ...statusPayload };
+        if (workStatus !== undefined) {
+          jsonPayload.workStatus = workStatus;
+        }
+        if (gitDiff !== undefined) {
+          jsonPayload.gitDiff = gitDiff;
+        }
+        if (mergeBaseBranches !== undefined) {
+          jsonPayload.mergeBaseBranches = mergeBaseBranches;
+        }
+        outputJson(opts, jsonPayload);
+        return;
+      }
+
+      printThreadStatus(statusPayload);
+
+      if (workStatus) {
+        console.log("");
+        console.log("Work status:");
+        console.log(`  State:    ${workStatus.state}`);
+        if (workStatus.currentBranch) {
+          console.log(`  Branch:   ${workStatus.currentBranch}`);
+        }
+        console.log(
+          `  Changed files: ${workStatus.changedFiles} (workspace: ${workStatus.workspaceChangedFiles})`,
+        );
+        console.log(
+          `  Insertions:    +${workStatus.insertions} (workspace: +${workStatus.workspaceInsertions})`,
+        );
+        console.log(
+          `  Deletions:     -${workStatus.deletions} (workspace: -${workStatus.workspaceDeletions})`,
+        );
+        console.log(
+          `  Ahead: ${workStatus.aheadCount}  Behind: ${workStatus.behindCount}`,
+        );
+      } else if (opts.workStatus && workStatus === null) {
+        console.log("");
+        console.log("Work status: unavailable");
+      }
+
+      if (gitDiff) {
+        console.log("");
+        console.log("Git diff:");
+        console.log(`  Mode: ${gitDiff.mode}`);
+        if (gitDiff.currentBranch) {
+          console.log(`  Branch: ${gitDiff.currentBranch}`);
+        }
+        if (gitDiff.mergeBaseBranch) {
+          console.log(`  Merge base branch: ${gitDiff.mergeBaseBranch}`);
+        }
+        if (gitDiff.commits.length > 0) {
+          console.log(`  Commits: ${gitDiff.commits.length}`);
+          for (const commit of gitDiff.commits) {
+            console.log(`    ${commit.shortSha} ${commit.subject}`);
+          }
+        }
+        if (gitDiff.diff) {
+          console.log("");
+          console.log(gitDiff.diff);
+        }
+        if (gitDiff.truncated) {
+          console.log("  (diff truncated)");
+        }
+      }
+
+      if (mergeBaseBranches !== undefined) {
+        console.log("");
+        if (mergeBaseBranches.length === 0) {
+          console.log("Merge-base branches: none");
+        } else {
+          console.log("Merge-base branches:");
+          for (const branch of mergeBaseBranches) {
+            console.log(`  ${branch}`);
+          }
+        }
+      }
+    }));
 
   parent
     .command("log [id]")
@@ -250,72 +245,62 @@ export function registerShowCommand(
       "Output format: json (raw events), minimal (compact timeline), verbose (full timeline)",
       "minimal",
     )
-    .action(async (id: string | undefined, opts: ThreadLogCommandOptions) => {
+    .action(action(async (id: string | undefined, opts: ThreadLogCommandOptions) => {
       const client = createClient(getUrl());
-      try {
-        const resolved = resolveThreadIdWithLabel(id);
-        const threadId = resolved.id;
-        printContextLabel(resolved, "Thread", "BB_THREAD_ID", opts);
-        const format = resolveTimelineFormat(opts);
+      const resolved = requireThreadIdWithLabel(id);
+      const threadId = resolved.id;
+      printContextLabel(resolved, "Thread", "BB_THREAD_ID", opts);
+      const format = resolveTimelineFormat(opts);
 
-        const events = await unwrap<ThreadEventRow[]>(
-          client.api.v1.threads[":id"].events.$get({
-            param: { id: threadId },
-            query: {},
-          }),
-        );
+      const events = await unwrap<ThreadEventRow[]>(
+        client.api.v1.threads[":id"].events.$get({
+          param: { id: threadId },
+          query: {},
+        }),
+      );
 
-        if (format === "json") {
-          console.log(JSON.stringify(events, null, 2));
-          return;
-        }
-
-        const timeline = await unwrap<ThreadTimelineResponse>(
-          client.api.v1.threads[":id"].timeline.$get({
-            param: { id: threadId },
-            query: {},
-          }),
-        );
-        const messages = timeline.rows.flatMap((row) =>
-          row.kind === "message" ? [row.message] : row.messages,
-        );
-        const color =
-          process.stdout.isTTY === true &&
-          !process.env.NO_COLOR;
-        const text = formatTimelineAsText(messages, {
-          verbose: format === "verbose",
-          color,
-        });
-        console.log(text);
-      } catch (err: unknown) {
-        console.error(`Error: ${getErrorMessage(err)}`);
-        process.exit(1);
+      if (format === "json") {
+        console.log(JSON.stringify(events, null, 2));
+        return;
       }
-    });
+
+      const timeline = await unwrap<ThreadTimelineResponse>(
+        client.api.v1.threads[":id"].timeline.$get({
+          param: { id: threadId },
+          query: {},
+        }),
+      );
+      const messages = timeline.rows.flatMap((row) =>
+        row.kind === "message" ? [row.message] : row.messages,
+      );
+      const color =
+        process.stdout.isTTY === true &&
+        !process.env.NO_COLOR;
+      const text = formatTimelineAsText(messages, {
+        verbose: format === "verbose",
+        color,
+      });
+      console.log(text);
+    }));
 
   parent
     .command("output <id>")
     .description("Get the final output of a thread")
     .option("--json", "Print machine-readable JSON output")
-    .action(async (id: string, opts: ThreadOutputCommandOptions) => {
+    .action(action(async (id: string, opts: ThreadOutputCommandOptions) => {
       const client = createClient(getUrl());
-      try {
-        const result = await unwrap<{ output: string | null }>(
-          client.api.v1.threads[":id"].output.$get({
-            param: { id },
-          }),
-        );
-        if (outputJson(opts, result)) return;
-        if (result.output) {
-          console.log(result.output);
-        } else {
-          console.log("(no output)");
-        }
-      } catch (err: unknown) {
-        console.error(`Error: ${getErrorMessage(err)}`);
-        process.exit(1);
+      const result = await unwrap<{ output: string | null }>(
+        client.api.v1.threads[":id"].output.$get({
+          param: { id },
+        }),
+      );
+      if (outputJson(opts, result)) return;
+      if (result.output) {
+        console.log(result.output);
+      } else {
+        console.log("(no output)");
       }
-    });
+    }));
 }
 
 function isLowSignalThreadStatusEventType(type: string): boolean {

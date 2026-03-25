@@ -1,15 +1,39 @@
 import { Command } from "commander";
 import { type Thread } from "@bb/domain";
+import { action } from "../action.js";
 import { createClient, unwrap } from "../client.js";
 import { requireThreadId } from "../context-env.js";
 import { renderBorderlessTable } from "../table.js";
 import {
   confirmDestructiveAction,
-  getErrorMessage,
   outputJson,
-  resolveProjectIdWithLabel,
+  parseReasoningLevel,
   printContextLabel,
+  requireProjectIdWithLabel,
 } from "./helpers.js";
+
+interface ManagerHireCommandOptions {
+  json?: boolean;
+  project?: string;
+  title?: string;
+  provider?: string;
+  model?: string;
+  reasoningLevel?: string;
+}
+
+interface ManagerListCommandOptions {
+  json?: boolean;
+  project?: string;
+}
+
+interface ManagerStatusCommandOptions {
+  json?: boolean;
+}
+
+interface ManagerDeleteCommandOptions {
+  yes?: boolean;
+  json?: boolean;
+}
 
 export function registerManagerCommands(program: Command, getUrl: () => string): void {
   const manager = program.command("manager").description("Manage project managers");
@@ -23,116 +47,97 @@ export function registerManagerCommands(program: Command, getUrl: () => string):
     .option("--model <model>", "Model ID for the manager")
     .option("--reasoning-level <level>", "Reasoning level (low, medium, high, xhigh)")
     .option("--json", "Print machine-readable JSON output")
-    .action(async (
+    .action(action(async (
       projectIdArg: string | undefined,
-      opts: { json?: boolean; project?: string; title?: string; provider?: string; model?: string; reasoningLevel?: string },
+      opts: ManagerHireCommandOptions,
     ) => {
       const client = createClient(getUrl());
-      try {
-        const resolvedProject = resolveProjectIdWithLabel(projectIdArg ?? opts.project);
-        const projectId = resolvedProject.id;
-        printContextLabel(resolvedProject, "Project", "BB_PROJECT_ID", opts);
-        const thread = await unwrap<Thread>(
-          client.api.v1.projects[":id"].managers.$post({
-            param: { id: projectId },
-            json: {
-              ...(opts.title ? { title: opts.title } : {}),
-              ...(opts.provider ? { providerId: opts.provider } : {}),
-              ...(opts.model ? { model: opts.model } : {}),
-              ...(opts.reasoningLevel ? { reasoningLevel: opts.reasoningLevel as "low" | "medium" | "high" | "xhigh" } : {}),
-            },
-          }),
-        );
-        if (outputJson(opts, thread)) return;
-        console.log(`Manager hired: ${thread.id}`);
-        printManagerThread(thread);
-      } catch (err: unknown) {
-        console.error(`Error: ${getErrorMessage(err)}`);
-        process.exit(1);
-      }
-    });
+      const resolvedProject = requireProjectIdWithLabel(projectIdArg ?? opts.project);
+      const projectId = resolvedProject.id;
+      printContextLabel(resolvedProject, "Project", "BB_PROJECT_ID", opts);
+      const reasoningLevel = parseReasoningLevel(opts.reasoningLevel);
+      const thread = await unwrap<Thread>(
+        client.api.v1.projects[":id"].managers.$post({
+          param: { id: projectId },
+          json: {
+            ...(opts.title ? { title: opts.title } : {}),
+            ...(opts.provider ? { providerId: opts.provider } : {}),
+            ...(opts.model ? { model: opts.model } : {}),
+            ...(reasoningLevel ? { reasoningLevel } : {}),
+          },
+        }),
+      );
+      if (outputJson(opts, thread)) return;
+      console.log(`Manager hired: ${thread.id}`);
+      printManagerThread(thread);
+    }));
 
   manager
     .command("list [projectId]")
     .description("List managers for a project")
     .option("--project <id>", "Project ID (defaults to BB_PROJECT_ID)")
     .option("--json", "Print machine-readable JSON output")
-    .action(async (
+    .action(action(async (
       projectIdArg: string | undefined,
-      opts: { json?: boolean; project?: string },
+      opts: ManagerListCommandOptions,
     ) => {
       const client = createClient(getUrl());
-      try {
-        const resolvedProject = resolveProjectIdWithLabel(projectIdArg ?? opts.project);
-        const projectId = resolvedProject.id;
-        printContextLabel(resolvedProject, "Project", "BB_PROJECT_ID", opts);
-        const managers = await unwrap<Thread[]>(
-          client.api.v1.threads.$get({
-            query: { projectId, type: "manager" },
-          }),
-        );
-        if (outputJson(opts, managers)) return;
-        if (managers.length === 0) {
-          console.log("No managers hired");
-          return;
-        }
-        printManagerTable(managers);
-      } catch (err: unknown) {
-        console.error(`Error: ${getErrorMessage(err)}`);
-        process.exit(1);
+      const resolvedProject = requireProjectIdWithLabel(projectIdArg ?? opts.project);
+      const projectId = resolvedProject.id;
+      printContextLabel(resolvedProject, "Project", "BB_PROJECT_ID", opts);
+      const managers = await unwrap<Thread[]>(
+        client.api.v1.threads.$get({
+          query: { projectId, type: "manager" },
+        }),
+      );
+      if (outputJson(opts, managers)) return;
+      if (managers.length === 0) {
+        console.log("No managers hired");
+        return;
       }
-    });
+      printManagerTable(managers);
+    }));
 
   manager
     .command("status <id>")
     .description("Show manager status and managed threads")
     .option("--json", "Print machine-readable JSON output")
-    .action(async (id: string, opts: { json?: boolean }) => {
+    .action(action(async (id: string, opts: ManagerStatusCommandOptions) => {
       const client = createClient(getUrl());
-      try {
-        const managerThreadId = requireThreadId(id);
-        const managerThread = await getManagerThreadById(client, managerThreadId);
-        const managedThreads = await listManagedThreads(client, managerThreadId);
-        if (outputJson(opts, { manager: managerThread, managedThreads })) return;
-        printManagerThread(managerThread);
-        printManagedThreadTable(managedThreads);
-      } catch (err: unknown) {
-        console.error(`Error: ${getErrorMessage(err)}`);
-        process.exit(1);
-      }
-    });
+      const managerThreadId = requireThreadId(id);
+      const managerThread = await getManagerThreadById(client, managerThreadId);
+      const managedThreads = await listManagedThreads(client, managerThreadId);
+      if (outputJson(opts, { manager: managerThread, managedThreads })) return;
+      printManagerThread(managerThread);
+      printManagedThreadTable(managedThreads);
+    }));
 
   manager
     .command("delete <id>")
     .description("Delete a manager permanently")
     .option("--yes", "Skip the confirmation prompt")
     .option("--json", "Print machine-readable JSON output")
-    .action(async (id: string, opts: { yes?: boolean; json?: boolean }) => {
+    .action(action(async (id: string, opts: ManagerDeleteCommandOptions) => {
       const client = createClient(getUrl());
-      try {
-        const managerThreadId = requireThreadId(id);
-        const managerThread = await getManagerThreadById(client, managerThreadId);
-        if (!opts.yes) {
-          const confirmed = await confirmDestructiveAction(
-            `Delete manager "${managerThread.title ?? managerThread.id}" permanently? This cannot be undone.`,
-          );
-          if (!confirmed) {
-            console.log(`Manager ${managerThreadId} deletion cancelled`);
-            return;
-          }
-        }
-        await unwrap<{ ok: boolean }>(
-          client.api.v1.threads[":id"].$delete({
-            param: { id: managerThreadId },
-          }),
+      const managerThreadId = requireThreadId(id);
+      const managerThread = await getManagerThreadById(client, managerThreadId);
+      if (!opts.yes) {
+        const confirmed = await confirmDestructiveAction(
+          `Delete manager "${managerThread.title ?? managerThread.id}" permanently? This cannot be undone.`,
         );
-        if (outputJson(opts, { ok: true, managerId: managerThreadId })) return;
-        console.log(`Manager ${managerThreadId} deleted`);
-      } catch (err: unknown) {
-        console.error(`Error: ${getErrorMessage(err)}`);
-        process.exit(1);
+        if (!confirmed) {
+          console.log(`Manager ${managerThreadId} deletion cancelled`);
+          return;
+        }
       }
-    });
+      await unwrap<{ ok: boolean }>(
+        client.api.v1.threads[":id"].$delete({
+          param: { id: managerThreadId },
+        }),
+      );
+      if (outputJson(opts, { ok: true, managerId: managerThreadId })) return;
+      console.log(`Manager ${managerThreadId} deleted`);
+    }));
 }
 
 async function getThreadById(

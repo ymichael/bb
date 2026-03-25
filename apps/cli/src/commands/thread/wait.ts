@@ -12,7 +12,7 @@ import {
   getErrorMessage,
   outputJson,
   printContextLabel,
-  resolveThreadIdWithLabel,
+  requireThreadIdWithLabel,
 } from "../helpers.js";
 import {
   DEFAULT_THREAD_WAIT_POLL_INTERVAL_MS,
@@ -58,7 +58,7 @@ export function registerWaitCommand(
     .action(async (id: string | undefined, opts: ThreadWaitCommandOptions) => {
       const client = createClient(getUrl());
       try {
-        const resolved = resolveThreadIdWithLabel(id);
+        const resolved = requireThreadIdWithLabel(id);
         const threadId = resolved.id;
         printContextLabel(resolved, "Thread", "BB_THREAD_ID", opts);
         const target = parseThreadWaitTarget(opts);

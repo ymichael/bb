@@ -28,6 +28,7 @@ vi.mock("../daemon.js", () => ({
 }));
 
 import { createClient, unwrap } from "../client.js";
+import { registerEnvironmentCommands } from "../commands/environment.js";
 import { registerManagerCommands } from "../commands/manager.js";
 import { registerServerCommands } from "../commands/server.js";
 import { registerProjectCommands } from "../commands/project.js";
@@ -583,6 +584,32 @@ describe("CLI command output contracts", () => {
     );
   });
 
+  it("bb thread spawn prefixes create failures with context", async () => {
+    process.env.BB_PROJECT_ID = "proj-1";
+    const post = vi.fn(async () => {
+      throw new Error("HTTP 500: boom");
+    });
+    createClientMock.mockReturnValue(asServerClient({
+      api: {
+        v1: {
+          threads: {
+            $post: post,
+          },
+        },
+      },
+    }));
+
+    await expect(
+      runCommand(["thread", "spawn", "--provider", "codex"], (program) =>
+        registerThreadCommands(program, () => "http://server"),
+      ),
+    ).rejects.toThrow("process.exit:1");
+
+    expect(collectLogLines(vi.mocked(console.error))).toContain(
+      "Error: Failed to create thread: HTTP 500: boom",
+    );
+  });
+
   it("bb thread spawn with --parent-thread forwards parent thread id", async () => {
     process.env.BB_PROJECT_ID = "proj-1";
     const thread: Thread = makeThread({
@@ -791,6 +818,35 @@ describe("CLI command output contracts", () => {
     });
   });
 
+  it("bb thread archive prefixes failures with thread context", async () => {
+    const archivePost = vi.fn(async () => {
+      throw new Error("HTTP 404: missing");
+    });
+    createClientMock.mockReturnValue(asServerClient({
+      api: {
+        v1: {
+          threads: {
+            ":id": {
+              archive: {
+                $post: archivePost,
+              },
+            },
+          },
+        },
+      },
+    }));
+
+    await expect(
+      runCommand(["thread", "archive", "thread-archive-1"], (program) =>
+        registerThreadCommands(program, () => "http://server"),
+      ),
+    ).rejects.toThrow("process.exit:1");
+
+    expect(collectLogLines(vi.mocked(console.error))).toContain(
+      "Error: Failed to archive thread thread-archive-1: HTTP 404: missing",
+    );
+  });
+
   it("bb thread unarchive --self resolves from BB_THREAD_ID", async () => {
     process.env.BB_THREAD_ID = "thread-unarchive-1";
     const unarchivePost = vi.fn(async () => ({ ok: true }));
@@ -972,6 +1028,36 @@ describe("CLI command output contracts", () => {
     });
     const lines = collectLogLines(vi.mocked(console.log));
     expect(lines).toContain("Server shutdown requested.");
+  });
+
+  it("bb environment commit prefixes failures with environment context", async () => {
+    const post = vi.fn(async () => {
+      throw new Error("HTTP 500: boom");
+    });
+    createClientMock.mockReturnValue(asServerClient({
+      api: {
+        v1: {
+          environments: {
+            ":id": {
+              actions: {
+                $post: post,
+              },
+            },
+          },
+        },
+      },
+    }));
+
+    await expect(
+      runCommand(
+        ["environment", "commit", "env-1", "--thread", "thread-1"],
+        (program) => registerEnvironmentCommands(program, () => "http://server"),
+      ),
+    ).rejects.toThrow("process.exit:1");
+
+    expect(collectLogLines(vi.mocked(console.error))).toContain(
+      "Error: Failed to commit in environment env-1: HTTP 500: boom",
+    );
   });
 
   it("bb thread show prints archived timestamp for archived threads", async () => {

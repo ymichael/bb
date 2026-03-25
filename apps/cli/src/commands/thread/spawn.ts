@@ -1,6 +1,7 @@
 import { Command } from "commander";
 import type { Thread } from "@bb/domain";
 import type { EnvironmentArgs } from "@bb/server-contract";
+import { action } from "../../action.js";
 import { createClient, unwrap } from "../../client.js";
 import {
   requireProjectId,
@@ -8,9 +9,12 @@ import {
   resolveThreadId,
 } from "../../context-env.js";
 import { fetchLocalHostId } from "../../daemon.js";
-import { getErrorMessage, outputJson } from "../helpers.js";
 import {
+  outputJson,
   parseReasoningLevel,
+  prependErrorContext,
+} from "../helpers.js";
+import {
   parseSandboxMode,
   parseServiceTier,
   statusText,
@@ -130,31 +134,32 @@ export function registerSpawnCommand(
       "--no-context-parent-thread",
       "Do not default parent thread context to BB_THREAD_ID",
     )
-    .action(async (opts: ThreadSpawnCommandOptions) => {
+    .action(action(async (opts: ThreadSpawnCommandOptions) => {
       const client = createClient(getUrl());
+      if (opts.parentThread && opts.contextParentThread === false) {
+        throw new Error(
+          "Cannot combine --parent-thread with --no-context-parent-thread.",
+        );
+      }
+
+      const projectId = requireProjectId(opts.project);
+      const environmentValue = resolveEnvironmentId(opts.environment);
+      const localHostId = await fetchLocalHostId();
+      const environment = buildSpawnEnvironment({
+        environmentValue,
+        newEnvironmentKind: opts.newEnvironment,
+        hostId: localHostId,
+      });
+      const reasoningLevel = parseReasoningLevel(opts.reasoningLevel);
+      const serviceTier = parseServiceTier(opts.serviceTier);
+      const sandboxMode = parseSandboxMode(opts.sandboxMode);
+      const parentThreadId =
+        opts.parentThread ??
+        (opts.contextParentThread === false ? undefined : resolveThreadId());
+
+      let thread: Thread;
       try {
-        if (opts.parentThread && opts.contextParentThread === false) {
-          throw new Error(
-            "Cannot combine --parent-thread with --no-context-parent-thread.",
-          );
-        }
-
-        const projectId = requireProjectId(opts.project);
-        const environmentValue = resolveEnvironmentId(opts.environment);
-        const localHostId = await fetchLocalHostId();
-        const environment = buildSpawnEnvironment({
-          environmentValue,
-          newEnvironmentKind: opts.newEnvironment,
-          hostId: localHostId,
-        });
-        const reasoningLevel = parseReasoningLevel(opts.reasoningLevel);
-        const serviceTier = parseServiceTier(opts.serviceTier);
-        const sandboxMode = parseSandboxMode(opts.sandboxMode);
-        const parentThreadId =
-          opts.parentThread ??
-          (opts.contextParentThread === false ? undefined : resolveThreadId());
-
-        const thread = await unwrap<Thread>(
+        thread = await unwrap<Thread>(
           client.api.v1.threads.$post({
             json: {
               projectId,
@@ -172,20 +177,20 @@ export function registerSpawnCommand(
             },
           }),
         );
-        if (outputJson(opts, thread)) return;
-        console.log(`Thread spawned: ${thread.id}`);
-        if (
-          thread.parentThreadId &&
-          thread.parentThreadId === resolveThreadId()
-        ) {
-          console.log("You will be notified when this thread is done.");
-        }
-        printThread(thread);
       } catch (err: unknown) {
-        console.error(`Error: ${getErrorMessage(err)}`);
-        process.exit(1);
+        throw prependErrorContext("Failed to create thread", err);
       }
-    });
+
+      if (outputJson(opts, thread)) return;
+      console.log(`Thread spawned: ${thread.id}`);
+      if (
+        thread.parentThreadId &&
+        thread.parentThreadId === resolveThreadId()
+      ) {
+        console.log("You will be notified when this thread is done.");
+      }
+      printThread(thread);
+    }));
 }
 
 function printThread(thread: Thread): void {

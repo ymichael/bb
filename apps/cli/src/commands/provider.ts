@@ -1,9 +1,18 @@
 import { Command } from "commander";
 import type { AvailableModel } from "@bb/domain";
 import type { SystemProviderInfo } from "@bb/server-contract";
+import { action } from "../action.js";
 import { createClient, unwrap } from "../client.js";
 import { renderBorderlessTable } from "../table.js";
-import { getErrorMessage, outputJson } from "./helpers.js";
+import { outputJson } from "./helpers.js";
+
+interface ProviderListCommandOptions {
+  json?: boolean;
+}
+
+interface ProviderModelsCommandOptions {
+  json?: boolean;
+}
 
 export function registerProviderCommands(program: Command, getUrl: () => string): void {
   const provider = program.command("provider").description("Inspect available providers and models");
@@ -12,47 +21,40 @@ export function registerProviderCommands(program: Command, getUrl: () => string)
     .command("list")
     .description("List available providers")
     .option("--json", "Print machine-readable JSON output")
-    .action(async (opts: { json?: boolean }) => {
+    .action(action(async (opts: ProviderListCommandOptions) => {
       const client = createClient(getUrl());
-      try {
-        const providers = await unwrap<SystemProviderInfo[]>(
-          client.api.v1.system.providers.$get({ query: {} }),
-        );
-        if (outputJson(opts, providers)) return;
-        if (providers.length === 0) {
-          console.log("No providers available");
-          return;
-        }
-        printProviderTable(providers);
-      } catch (err: unknown) {
-        console.error(`Error: ${getErrorMessage(err)}`);
-        process.exit(1);
+      const providers = await unwrap<SystemProviderInfo[]>(
+        client.api.v1.system.providers.$get({ query: {} }),
+      );
+      if (outputJson(opts, providers)) return;
+      if (providers.length === 0) {
+        console.log("No providers available");
+        return;
       }
-    });
+      printProviderTable(providers);
+    }));
 
   provider
     .command("models [providerId]")
     .description("List available models for a provider")
     .option("--json", "Print machine-readable JSON output")
-    .action(async (providerId: string | undefined, opts: { json?: boolean }) => {
+    .action(action(async (
+      providerId: string | undefined,
+      opts: ProviderModelsCommandOptions,
+    ) => {
       const client = createClient(getUrl());
-      try {
-        const models = await unwrap<AvailableModel[]>(
-          client.api.v1.system.models.$get({
-            query: providerId ? { providerId } : {},
-          }),
-        );
-        if (outputJson(opts, models)) return;
-        if (models.length === 0) {
-          console.log("No models available");
-          return;
-        }
-        printModelTable(models, providerId);
-      } catch (err: unknown) {
-        console.error(`Error: ${getErrorMessage(err)}`);
-        process.exit(1);
+      const models = await unwrap<AvailableModel[]>(
+        client.api.v1.system.models.$get({
+          query: providerId ? { providerId } : {},
+        }),
+      );
+      if (outputJson(opts, models)) return;
+      if (models.length === 0) {
+        console.log("No models available");
+        return;
       }
-    });
+      printModelTable(models, providerId);
+    }));
 }
 
 function printProviderTable(providers: SystemProviderInfo[]): void {

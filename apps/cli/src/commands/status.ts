@@ -5,6 +5,7 @@ import {
   type EnvironmentDisplayInfo,
   formatEnvironmentDisplay,
 } from "@bb/core-ui";
+import { action } from "../action.js";
 import { resolveContextSnapshot } from "../context-env.js";
 import { createClient, unwrap } from "../client.js";
 import { fetchLocalHostId } from "../daemon.js";
@@ -27,6 +28,10 @@ interface StatusPayload {
   }> | null;
 }
 
+interface StatusCommandOptions {
+  json?: boolean;
+}
+
 export function registerStatusCommand(
   program: Command,
   getUrl: () => string,
@@ -35,7 +40,7 @@ export function registerStatusCommand(
     .command("status")
     .description("Show current context")
     .option("--json", "Print machine-readable JSON output")
-    .action(async (opts: { json?: boolean }) => {
+    .action(action(async (opts: StatusCommandOptions) => {
       const context = resolveContextSnapshot();
 
       const payload: StatusPayload = {
@@ -173,5 +178,5 @@ export function registerStatusCommand(
         console.log("");
         console.log("Tip: run bb guide for help getting started.");
       }
-    });
+    }));
 }

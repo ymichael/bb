@@ -1,6 +1,4 @@
 import {
-  reasoningLevelSchema,
-  type ReasoningLevel,
   sandboxModeSchema,
   type SandboxMode,
   type ThreadStatus,
@@ -21,7 +19,6 @@ export const DEFAULT_THREAD_WAIT_TIMEOUT_SECONDS = 30;
 export const DEFAULT_THREAD_WAIT_POLL_INTERVAL_MS = 250;
 
 const THREAD_STATUS_EVENT_MODES: ThreadStatusEventMode[] = ["summary", "raw"];
-const REASONING_LEVELS: ReasoningLevel[] = ["low", "medium", "high", "xhigh"];
 const SERVICE_TIERS: ServiceTier[] = ["fast", "flex"];
 const SANDBOX_MODES: SandboxMode[] = [
   "read-only",
@@ -88,19 +85,6 @@ export function parseThreadWaitPollIntervalMs(
     );
   }
   return parsed;
-}
-
-export function parseReasoningLevel(
-  value: string | undefined,
-): ReasoningLevel | undefined {
-  if (value === undefined) return undefined;
-  const parsed = reasoningLevelSchema.safeParse(value);
-  if (parsed.success) {
-    return parsed.data;
-  }
-  throw new Error(
-    `Invalid reasoning level '${value}'. Expected ${joinValues(REASONING_LEVELS)}.`,
-  );
 }
 
 export function parseServiceTier(

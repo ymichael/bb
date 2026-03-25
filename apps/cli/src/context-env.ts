@@ -1,6 +1,6 @@
 import { cliConfig } from "@bb/config/cli";
 
-function normalizeValue(value?: string): string | undefined {
+function trimToUndefined(value?: string): string | undefined {
   if (value === undefined) return undefined;
   const normalized = value.trim();
   return normalized.length > 0 ? normalized : undefined;
@@ -15,15 +15,15 @@ export function resolveHostDaemonUrl(): string {
 }
 
 export function resolveProjectId(flagValue?: string): string | undefined {
-  return normalizeValue(flagValue) ?? normalizeValue(process.env.BB_PROJECT_ID);
+  return trimToUndefined(flagValue) ?? trimToUndefined(process.env.BB_PROJECT_ID);
 }
 
 export function resolveThreadId(flagValue?: string): string | undefined {
-  return normalizeValue(flagValue) ?? normalizeValue(process.env.BB_THREAD_ID);
+  return trimToUndefined(flagValue) ?? trimToUndefined(process.env.BB_THREAD_ID);
 }
 
 export function resolveEnvironmentId(flagValue?: string): string | undefined {
-  return normalizeValue(flagValue);
+  return trimToUndefined(flagValue);
 }
 
 export function requireProjectId(flagValue?: string): string {

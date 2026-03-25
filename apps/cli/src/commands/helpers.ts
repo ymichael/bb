@@ -1,29 +1,43 @@
 import { createInterface } from "node:readline/promises";
+import {
+  reasoningLevelSchema,
+  type ReasoningLevel,
+} from "@bb/domain";
 import type {
   CommitActionResponse,
   SquashMergeActionResponse,
 } from "@bb/server-contract";
 
+const REASONING_LEVELS: ReasoningLevel[] = ["low", "medium", "high", "xhigh"];
+
+export interface JsonOutputOptions {
+  json?: boolean;
+}
+
+export interface SelfTargetOptions {
+  self?: boolean;
+}
+
 /**
  * Print data as formatted JSON and return true, or return false if --json was not requested.
  * Use this as the single JSON output path for all CLI commands.
  */
-export function outputJson(opts: { json?: boolean }, data: unknown): boolean {
+export function outputJson(opts: JsonOutputOptions, data: unknown): boolean {
   if (!opts.json) return false;
   console.log(JSON.stringify(data, null, 2));
   return true;
 }
 
 /**
- * Resolve a thread ID for mutating commands that support `--self`.
+ * Require a thread ID for mutating commands that support `--self`.
  *
  * - Positional `<id>` and `--self` are mutually exclusive.
  * - `--self` resolves from BB_THREAD_ID.
  * - If neither is provided, error with guidance.
  */
-export function resolveThreadIdOrSelf(
+export function requireThreadIdOrSelf(
   positionalId: string | undefined,
-  opts: { self?: boolean },
+  opts: SelfTargetOptions,
 ): string {
   if (opts.self && positionalId) {
     throw new Error("Cannot combine a thread ID argument with --self.");
@@ -50,11 +64,11 @@ export interface ResolvedId {
 }
 
 /**
- * Resolve a thread ID for read-only commands.  Returns the resolved ID and its
+ * Require a thread ID for read-only commands. Returns the resolved ID and its
  * source so the caller can print a context label when the value came from the
  * environment variable.
  */
-export function resolveThreadIdWithLabel(
+export function requireThreadIdWithLabel(
   positionalId: string | undefined,
 ): ResolvedId {
   if (positionalId) {
@@ -68,11 +82,11 @@ export function resolveThreadIdWithLabel(
 }
 
 /**
- * Resolve a project ID for read-only commands.  Returns the resolved ID and its
+ * Require a project ID for read-only commands. Returns the resolved ID and its
  * source so the caller can print a context label when the value came from the
  * environment variable.
  */
-export function resolveProjectIdWithLabel(
+export function requireProjectIdWithLabel(
   flagValue: string | undefined,
 ): ResolvedId {
   if (flagValue) {
@@ -94,7 +108,7 @@ export function printContextLabel(
   resolved: ResolvedId,
   kind: "Thread" | "Project",
   envVar: string,
-  opts: { json?: boolean },
+  opts: JsonOutputOptions,
 ): void {
   if (opts.json) return;
   if (resolved.source === "env") {
@@ -138,4 +152,25 @@ export async function confirmDestructiveAction(message: string): Promise<boolean
 export function getErrorMessage(err: unknown): string {
   if (err instanceof Error) return err.message;
   return String(err);
+}
+
+export function parseReasoningLevel(
+  value: string | undefined,
+): ReasoningLevel | undefined {
+  if (value === undefined) return undefined;
+  const parsed = reasoningLevelSchema.safeParse(value);
+  if (parsed.success) {
+    return parsed.data;
+  }
+  throw new Error(
+    `Invalid reasoning level '${value}'. Expected ${joinValues(REASONING_LEVELS)}.`,
+  );
+}
+
+export function prependErrorContext(context: string, err: unknown): Error {
+  return new Error(`${context}: ${getErrorMessage(err)}`);
+}
+
+function joinValues(values: readonly string[]): string {
+  return values.map((value) => `'${value}'`).join(" or ");
 }
