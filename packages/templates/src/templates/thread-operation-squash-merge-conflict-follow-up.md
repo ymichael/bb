@@ -8,7 +8,7 @@ variables:
   mergeBaseBranch: Merge base branch name shown to the agent.
   conflictFiles?: Optional comma-separated file list.
 ---
-Squash merge to {{mergeBaseBranch}} failed with conflicts. Please rebase this branch onto {{mergeBaseBranch}}, resolve the conflicts, and then retry the squash merge so the changes land on {{mergeBaseBranch}}.
+Squash merge into {{mergeBaseBranch}} stopped on conflicts. Rebase this branch onto {{mergeBaseBranch}}, resolve the conflicts, and retry the squash merge so the changes land on {{mergeBaseBranch}}.
 {{#if conflictFiles}}
 Conflicted files: {{conflictFiles}}.
 {{/if}}

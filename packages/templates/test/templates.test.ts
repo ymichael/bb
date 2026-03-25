@@ -22,13 +22,23 @@ describe("@bb/templates", () => {
 
   it("renders a template with variables", () => {
     const rendered = renderTemplate("threadOperationCommitFailureFollowUp", {
-      targetDescription: "this thread workspace",
-      exactCommitMessageInstruction: 'Use this commit message exactly: "feat: add tests".',
+      exactCommitMessage: "feat: add tests",
       errorMessage: "hooks/pre-commit exited with status 1",
     });
 
     expect(rendered).toContain("Commit in this thread workspace failed.");
     expect(rendered).toContain("feat: add tests");
+  });
+
+  it("renders squash merge commit failure follow-up from structured variables", () => {
+    const rendered = renderTemplate("threadOperationSquashMergeCommitFailureFollowUp", {
+      prepCommitMergeBaseBranch: "main",
+      errorMessage: "nothing to commit",
+    });
+
+    expect(rendered).toContain("could not create the prep commit");
+    expect(rendered).toContain("main");
+    expect(rendered).toContain("nothing to commit");
   });
 
   it("renders managerAgentInstructions with partial resolution", () => {

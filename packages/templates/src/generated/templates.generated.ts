@@ -146,7 +146,7 @@ export const templateDefinitions = [
   },
   {
     "id": "threadOperationCommitFailureFollowUp",
-    "body": "Commit in {{targetDescription}} failed. Please inspect the workspace, fix the commit blocker, and retry the commit.\n{{#if exactCommitMessageInstruction}}\n{{exactCommitMessageInstruction}}\n{{/if}}{{#if errorMessage}}\nGit reported: {{errorMessage}}.\n{{/if}}",
+    "body": "Commit in this thread workspace failed. Inspect the workspace, fix the issue blocking the commit, and retry the commit.\n{{#if exactCommitMessage}}\nUse this commit message exactly: \"{{exactCommitMessage}}\".\n{{/if}}{{#if errorMessage}}\nGit reported: {{errorMessage}}.\n{{/if}}",
     "fileName": "thread-operation-commit-failure-follow-up.md",
     "kind": "prompt",
     "title": "Commit Failure Follow-Up",
@@ -154,14 +154,13 @@ export const templateDefinitions = [
     "intent": "Keep the retry focused on diagnosing the blocker, preserving any exact commit message requirement, and trying again.",
     "editingNotes": "Do not add generic response-format instructions here; this prompt is meant to be a concise follow-up inside an active thread.",
     "variables": {
-      "targetDescription": "Human-readable description of the workspace target.",
-      "exactCommitMessageInstruction": "Optional exact commit message requirement.",
+      "exactCommitMessage": "Optional exact commit message requirement.",
       "errorMessage": "Optional git error surfaced to the agent."
     }
   },
   {
     "id": "threadOperationSquashMergeCommitFailureFollowUp",
-    "body": "{{failureInstruction}}\n{{#if errorMessage}}\nGit reported: {{errorMessage}}.\n{{/if}}",
+    "body": "{{#if prepCommitMergeBaseBranch}}\nSquash merge to {{prepCommitMergeBaseBranch}} could not create the prep commit. Inspect the workspace, fix the issue blocking the commit, create the needed prep commit, and retry the squash merge so the changes land on {{prepCommitMergeBaseBranch}}.\n{{/if}}\n{{#if squashCommitMergeBaseBranch}}\nSquash merge to {{squashCommitMergeBaseBranch}} applied changes but failed while creating the squash commit. Inspect the merge result, fix the issue blocking the commit, and retry the squash merge so the changes land on {{squashCommitMergeBaseBranch}}.\n{{/if}}\n{{#if errorMessage}}\nGit reported: {{errorMessage}}.\n{{/if}}",
     "fileName": "thread-operation-squash-merge-commit-failure-follow-up.md",
     "kind": "prompt",
     "title": "Squash Merge Commit Failure Follow-Up",
@@ -169,13 +168,14 @@ export const templateDefinitions = [
     "intent": "Direct the agent to fix the blocker in-place and retry the squash merge without broadening the task.",
     "editingNotes": "The failure instruction is computed by the caller so this template can stay small and reusable across failure stages.",
     "variables": {
-      "failureInstruction": "Stage-specific retry instruction.",
+      "prepCommitMergeBaseBranch": "Merge base branch name when the prep commit could not be created.",
+      "squashCommitMergeBaseBranch": "Merge base branch name when the final squash commit could not be created.",
       "errorMessage": "Optional git error surfaced to the agent."
     }
   },
   {
     "id": "threadOperationSquashMergeConflictFollowUp",
-    "body": "Squash merge to {{mergeBaseBranch}} failed with conflicts. Please rebase this branch onto {{mergeBaseBranch}}, resolve the conflicts, and then retry the squash merge so the changes land on {{mergeBaseBranch}}.\n{{#if conflictFiles}}\nConflicted files: {{conflictFiles}}.\n{{/if}}",
+    "body": "Squash merge into {{mergeBaseBranch}} stopped on conflicts. Rebase this branch onto {{mergeBaseBranch}}, resolve the conflicts, and retry the squash merge so the changes land on {{mergeBaseBranch}}.\n{{#if conflictFiles}}\nConflicted files: {{conflictFiles}}.\n{{/if}}",
     "fileName": "thread-operation-squash-merge-conflict-follow-up.md",
     "kind": "prompt",
     "title": "Squash Merge Conflict Follow-Up",
@@ -223,12 +223,12 @@ export interface TemplateVariables {
     threadLabel: string;
   };
   threadOperationCommitFailureFollowUp: {
-    targetDescription: string;
-    exactCommitMessageInstruction?: string;
+    exactCommitMessage?: string;
     errorMessage?: string;
   };
   threadOperationSquashMergeCommitFailureFollowUp: {
-    failureInstruction: string;
+    prepCommitMergeBaseBranch?: string;
+    squashCommitMergeBaseBranch?: string;
     errorMessage?: string;
   };
   threadOperationSquashMergeConflictFollowUp: {
