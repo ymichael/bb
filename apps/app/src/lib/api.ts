@@ -475,17 +475,13 @@ export async function requestEnvironmentAction(
   id: string,
   req: {
     action: "promote";
-    initiatingThreadId: string;
   } | {
     action: "demote";
-    initiatingThreadId: string;
   } | {
     action: "commit";
-    initiatingThreadId: string;
     options?: CommitOptions;
   } | {
     action: "squash_merge";
-    initiatingThreadId: string;
     options?: SquashMergeOptions;
   },
 ): Promise<EnvironmentActionResponse> {

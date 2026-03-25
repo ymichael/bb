@@ -154,7 +154,7 @@ export type PublicApiSchema = {
   "/environments/:id/actions": {
     /**
      * Execute an environment action (commit, squash_merge, promote, demote).
-     * Requires `initiatingThreadId`. Returns 409 if blocked by environment state.
+     * Returns 409 if blocked by environment state.
      */
     $post:
       | Endpoint<

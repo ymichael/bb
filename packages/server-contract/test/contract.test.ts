@@ -38,7 +38,6 @@ describe("server-contract canonical schemas", () => {
     expect(
       environmentActionRequestSchema.parse({
         action: "commit",
-        initiatingThreadId: "thr_123",
         options: { message: "Checkpoint" },
       }),
     ).toMatchObject({

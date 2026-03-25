@@ -261,7 +261,7 @@ export const environmentDestroyCommandSchema = hostDaemonEnvironmentTargetSchema
  *
  * Lane-serialized per environmentId (workspace command).
  */
-export const workspaceStatusCommandSchema = hostDaemonThreadTargetSchema.extend({
+export const workspaceStatusCommandSchema = hostDaemonEnvironmentTargetSchema.extend({
   type: z.literal("workspace.status"),
   mergeBaseBranch: z.string().min(1).optional(),
 });
@@ -277,7 +277,7 @@ export const workspaceStatusCommandSchema = hostDaemonThreadTargetSchema.extend(
  *
  * Lane-serialized per environmentId (workspace command).
  */
-export const workspaceDiffCommandSchema = hostDaemonThreadTargetSchema.extend({
+export const workspaceDiffCommandSchema = hostDaemonEnvironmentTargetSchema.extend({
   type: z.literal("workspace.diff"),
   selection: threadGitDiffSelectionSchema.optional(),
   mergeBaseBranch: z.string().min(1).optional(),
@@ -293,7 +293,7 @@ export const workspaceDiffCommandSchema = hostDaemonThreadTargetSchema.extend({
  *
  * Lane-serialized per environmentId (workspace command).
  */
-export const workspaceCommitCommandSchema = hostDaemonThreadTargetSchema.extend({
+export const workspaceCommitCommandSchema = hostDaemonEnvironmentTargetSchema.extend({
   type: z.literal("workspace.commit"),
   message: z.string().min(1),
   includeUnstaged: z.boolean().optional(),
@@ -309,7 +309,7 @@ export const workspaceCommitCommandSchema = hostDaemonThreadTargetSchema.extend(
  *
  * Lane-serialized per environmentId (workspace command).
  */
-export const workspaceSquashMergeCommandSchema = hostDaemonThreadTargetSchema.extend({
+export const workspaceSquashMergeCommandSchema = hostDaemonEnvironmentTargetSchema.extend({
   type: z.literal("workspace.squash_merge"),
   targetBranch: z.string().min(1),
   commitMessage: z.string().min(1),
@@ -325,7 +325,7 @@ export const workspaceSquashMergeCommandSchema = hostDaemonThreadTargetSchema.ex
  *
  * Lane-serialized per environmentId (workspace command).
  */
-export const workspaceResetCommandSchema = hostDaemonThreadTargetSchema.extend({
+export const workspaceResetCommandSchema = hostDaemonEnvironmentTargetSchema.extend({
   type: z.literal("workspace.reset"),
 });
 
@@ -339,7 +339,7 @@ export const workspaceResetCommandSchema = hostDaemonThreadTargetSchema.extend({
  *
  * Lane-serialized per environmentId (workspace command).
  */
-export const workspaceCheckpointCommandSchema = hostDaemonThreadTargetSchema.extend({
+export const workspaceCheckpointCommandSchema = hostDaemonEnvironmentTargetSchema.extend({
   type: z.literal("workspace.checkpoint"),
   commitMessage: z.string().min(1),
   remoteName: z.string().min(1).optional(),
