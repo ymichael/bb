@@ -4,11 +4,9 @@ Implementation plan for the bb server, host-daemon, and supporting infrastructur
 
 ## Start Here
 
-**Phases 1–4 are complete.** All foundation packages are built, contracts are validated, consumers (app + CLI) have zero type errors. The host-daemon is built with full test coverage.
+**Phases 1–5 are complete.** All foundation packages are built, contracts are validated, consumers (app + CLI) have zero type errors. The host-daemon is built with full test coverage. The sandbox-host stub is on main.
 
-**Next phase: Phase 5** — `@bb/sandbox-host` stub (interface only, throws not-implemented). Unblocks Phase 6.
-
-**Then: Phase 6** — Server (`apps/server`). The main build phase. Uses the sandbox-host stub for ephemeral host thread creation (compile-time contract satisfied, runtime throws until Phase 8).
+**Next phase: Phase 6** — Server (`apps/server`). The main build phase. Uses the sandbox-host stub for ephemeral host thread creation (compile-time contract satisfied, runtime throws until Phase 8).
 
 **Then: Phase 7** — Integration & QA for persistent-host workflows (server + daemon).
 
@@ -18,7 +16,7 @@ Implementation plan for the bb server, host-daemon, and supporting infrastructur
 
 ## Current State
 
-Phases 1–4 are complete. The host-daemon is built and merged. This plan covers what remains.
+Phases 1–5 are complete. The host-daemon and sandbox-host stub are built and merged. This plan covers what remains.
 
 ### What exists today
 
@@ -29,7 +27,7 @@ Phases 1–4 are complete. The host-daemon is built and merged. This plan covers
 | `@bb/domain` | **Done** — entity types, event types, Zod schemas, change kinds (thread/project/environment/system). |
 | `@bb/db` | **Done** — schema, migrations, data functions (one per entity), `DbNotifier` with `notifyThread`/`notifyProject`/`notifyEnvironment`/`notifyCommand`/`notifySystem`. 59 tests passing. |
 | `@bb/core-ui` | **Done** — view transforms, `formatEnvironmentDisplay(env, isLocalHost)`, timeline formatting. |
-| `@bb/host-daemon-contract` | **Done** — 17 commands, session protocol, local API contract (`/host-id`, `/open`, `/pick-folder`, `/status`, `/restart`). |
+| `@bb/host-daemon-contract` | **Done** — 20 commands (17 original + `workspace.list_files`, `workspace.read_file`, `workspace.list_branches`), session protocol, local API contract. Unknown command types handled gracefully (per-command parsing, error reported to server). |
 | `@bb/server-contract` | **Done** — public API routes, discriminated `EnvironmentArgs` union for thread creation, WS protocol. |
 | `@bb/workspace` | **Done** — Workspace class, `provisionWorkspace() → IWorkspace`, promote/demote, tested with real git. |
 | `@bb/agent-runtime` | Done — provider adapters (codex, claude-code, pi), registry, runtime. Leave as-is. |
@@ -39,8 +37,8 @@ Phases 1–4 are complete. The host-daemon is built and merged. This plan covers
 | `apps/app` | **Done** — cut over to new contracts, zero type errors, 116 tests passing. Environment selector with Direct/Worktree options. `useHostDaemon` hook for daemon operations. |
 | `apps/cli` | **Done** — cut over to new contracts, zero type errors, 67 tests passing. Fetches hostId from daemon, supports env reuse without daemon. |
 | `apps/server` | **Not yet a package** — directory placeholder only. Needs full package setup (package.json, tsconfig, src/index.ts). Built in Phase 6. |
-| `apps/host-daemon` | **Done** — daemon skeleton, session management, command routing, event buffering, runtime manager, local API. Uses `p-retry`, `partysocket/ws`, `p-debounce`. 18 source files, 58 tests. |
-| `@bb/sandbox-host` | **Does not exist** — E2B host lifecycle, daemon bootstrap. See `plans/host-package.md`. |
+| `apps/host-daemon` | **Done** — daemon skeleton, session management, command routing (20 types, domain-split handlers), event buffering, runtime manager, local API. Uses `p-retry`, `partysocket/ws`, `p-debounce`. 65 tests. |
+| `@bb/sandbox-host` | **Stub** — interface only (`provisionHost`, `SandboxHost`), all methods throw "Not implemented". Real implementation in Phase 8. |
 
 ### Key schema notes
 
@@ -60,7 +58,7 @@ Setup script params (`scriptName`, `timeoutMs`) — fixed in Phase 3.
 
 ### Cleanup
 
-- `@bb/env-daemon-contract` — dead package, nothing imports it. Delete when convenient.
+- `@bb/env-daemon-contract` — deleted (CLI quality merge).
 - `plans/extensions-system.md` — out of scope for rebuild, can be deleted or deferred.
 
 ### Architecture summary
@@ -262,17 +260,9 @@ The daemon is built with full test coverage (18 source files, 12 test files, 58 
 
 ## Phase 5: `@bb/sandbox-host` (stub)
 
-Create the package with the public interface but no real implementation. Every method throws `new Error("Not implemented")`. This unblocks Phase 6 — the server can import and call the interface, satisfying compile-time contracts, while the real E2B implementation comes later in Phase 7.
+**Status:** Complete ✅
 
-**Implementation:**
-- `packages/sandbox-host/package.json`, `tsconfig.json`
-- `src/index.ts` — export `provisionHost`, `SandboxHost` interface (suspend, resume, destroy)
-- All methods throw `Not implemented`
-
-**Validation:**
-- [ ] Package typechecks
-- [ ] `apps/server` can import `provisionHost` from `@bb/sandbox-host` without type errors
-- [ ] Calling any method throws `Not implemented`
+Stub package with `provisionHost` and `SandboxHost` interface. All methods throw "Not implemented". Real implementation in Phase 8.
 
 ---
 
@@ -292,6 +282,21 @@ Framework: **Hono** on `@hono/node-server`. WebSocket via `@hono/node-ws`. Data 
 
 Mount: `/api/v1/*` public, `/internal/*` daemon, `/ws` client WS, `/internal/ws` daemon WS.
 Middleware: CORS, Bearer token auth on `/internal/*`, global error handler.
+
+**File structure (no source file over 300 lines):**
+```
+apps/server/src/
+  index.ts              — config, DB init, create app, serve()
+  server.ts             — createApp(deps): mount routes, middleware, WS
+  errors.ts             — ApiError extends HTTPException
+  routes/
+    projects.ts, threads.ts, environments.ts, hosts.ts, system.ts
+  internal/
+    session.ts, commands.ts, events.ts, tool-calls.ts
+  ws/
+    hub.ts, client-protocol.ts, daemon-protocol.ts
+```
+If `threads.ts` grows large, split into `threads/` sub-modules (list, create, actions, data).
 
 **Tests:**
 - [ ] App responds to requests (use `app.request()`)
@@ -349,18 +354,20 @@ Thread creation with ephemeral hosts calls `provisionHost()` from `@bb/sandbox-h
 - POST `/threads/:id/send` (queues `turn.run` or `turn.steer`)
 - POST `/threads/:id/stop` (queues `thread.stop`)
 - POST `/environments/:id/actions` (queues `workspace.commit`, `workspace.promote`, etc.)
-- GET `/environments/:id/status` (queues `workspace.status`)
-- GET `/environments/:id/diff` (queues `workspace.diff`)
+- GET `/environments/:id/status` (queues `workspace.status`, waits for result)
+- GET `/environments/:id/diff` (queues `workspace.diff`, waits for result)
+- GET `/environments/:id/diff/branches` (queues `workspace.list_branches`, waits for result)
+- GET `/threads/:id/workspace/files` (queues `workspace.list_files`, waits for result)
+- GET `/threads/:id/workspace/file` (queues `workspace.read_file`, waits for result)
 - GET `/system/models`, `/system/providers` (queues `provider.list_models`)
 - POST `/projects/:id/managers` (creates manager thread, same flow as thread creation)
 
+These "queue and wait" routes need a synchronous command pattern: queue the command, wait for the daemon to report the result (via the command result handler or a dedicated response channel), and return it to the HTTP client. This is the same pattern for all of them — implement the pattern once (e.g., `queueCommandAndWait(hub, db, command, timeoutMs)`) and reuse it.
+
 **Important: unmanaged workspace provisioning MUST go through the daemon.** The server queues `environment.provision` with mode `unmanaged` — the daemon validates the path exists and discovers git properties. The server must NOT do filesystem I/O directly.
 
-**Routes that return 501 (need daemon commands that don't exist yet or deferred features):**
-- GET `/threads/:id/workspace/files` — needs `workspace.list_files` (exists in contract but server-side command queue/response flow needed)
-- GET `/threads/:id/workspace/file` — needs `workspace.read_file` (same)
-- GET `/environments/:id/diff/branches` — needs `workspace.list_branches` (not in contract yet)
-- GET `/projects/:id/files` — needs daemon file listing
+**Routes that return 501 (deferred features):**
+- GET `/projects/:id/files` — needs project-scoped file listing (deferred, different from thread workspace files)
 - POST `/projects/:id/attachments`, GET `/projects/:id/attachments/content` — file upload, deferred
 - POST `/system/voice-transcription` — deferred
 - POST `/system/shutdown` — implement in Phase 7 integration
@@ -487,12 +494,9 @@ Run persistent-host and ephemeral-host threads concurrently against the same ser
 ## Dependency Graph
 
 ```
-Phases 1–4: ✅ Complete
+Phases 1–5: ✅ Complete
 
-Phase 5 (sandbox-host stub):
-  Small — interface only, throws not-implemented. Unblocks Phase 6.
-
-Phase 6 (server, needs Phase 5 stub for imports):
+Phase 6 (server):
   6a → 6b → 6c + 6d (parallel) → 6e
 
 Phase 7 (integration & QA, persistent host):
@@ -505,9 +509,9 @@ Phase 9 (integration & QA, ephemeral host):
   Needs Phase 8. Validates sandbox-host end-to-end.
 ```
 
-**Critical path:** Phase 5 (stub, small) → Phase 6 (server) → Phase 7 (persistent QA) → Phase 8 (sandbox-host real) → Phase 9 (ephemeral QA).
+**Critical path:** Phase 6 (server) → Phase 7 (persistent QA) → Phase 8 (sandbox-host real) → Phase 9 (ephemeral QA).
 
-Phase 5 is a quick stub to unblock Phase 6. Phase 7 validates the server + daemon work together before we invest in sandbox-host. Phase 8 can begin before Phase 7 is fully complete if persistent-host smoke tests are passing.
+Phase 7 validates the server + daemon work together before we invest in sandbox-host. Phase 8 can begin before Phase 7 is fully complete if persistent-host smoke tests are passing.
 
 ---
 

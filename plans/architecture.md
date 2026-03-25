@@ -255,7 +255,7 @@ Server queues commands in DB (host-scoped), sends `{ type: "commands-available" 
 - `environment.destroy` — no-op if path doesn't exist
 - All others are naturally idempotent (sending input, querying status)
 
-17 command types:
+20 command types:
 ```
 // Thread/provider
 thread.start, thread.resume, turn.run, turn.steer, thread.stop, thread.rename,
@@ -266,8 +266,11 @@ environment.provision, environment.destroy
 
 // Workspace (git repos only)
 workspace.status, workspace.diff, workspace.commit, workspace.squash_merge,
-workspace.promote, workspace.demote, workspace.reset, workspace.checkpoint
+workspace.promote, workspace.demote, workspace.reset, workspace.checkpoint,
+workspace.list_files, workspace.read_file, workspace.list_branches
 ```
+
+**Protocol hardening:** The daemon parses commands individually, not as a batch. If any command has an unknown type (version mismatch), it is skipped and reported back to the server with `errorCode: "unknown_command"` so the server knows not to retry it. This allows the server and daemon to be upgraded independently.
 
 Each command carries `environmentId` and `threadId` inside its own payload (not in a wrapper/meta envelope), so each command is self-describing and can be validated in isolation. `environmentId` is nullable for `provider.list_models` (which the daemon handles without a runtime — it calls `listAvailableProviders()` / adapter-level model listing directly from `@bb/agent-runtime`, not through an environment-scoped `AgentRuntime` instance). The command envelope is a flat `{ id, cursor, command }` structure.
 
