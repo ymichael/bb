@@ -1,4 +1,4 @@
-import { inArray } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import {
   createProject,
   createProjectSource,
@@ -44,6 +44,24 @@ function buildProjectResponses(deps: AppDeps, projectId?: string): ProjectRespon
     ...project,
     sources: sources.filter((source) => source.projectId === project.id),
   }));
+}
+
+function requireProjectSource(
+  deps: Pick<AppDeps, "db">,
+  args: {
+    projectId: string;
+    sourceId: string;
+  },
+) {
+  const source = deps.db
+    .select()
+    .from(projectSources)
+    .where(eq(projectSources.id, args.sourceId))
+    .get();
+  if (!source || source.projectId !== args.projectId) {
+    throw new ApiError(404, "invalid_request", "Project source not found");
+  }
+  return source;
 }
 
 export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
@@ -103,13 +121,17 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
   app.patch("/projects/:id/sources/:sourceId", async (context) => {
     requireProject(deps.db, context.req.param("id"));
     const payload = await parseJsonBody(context, updateProjectSourceRequestSchema);
+    requireProjectSource(deps, {
+      projectId: context.req.param("id"),
+      sourceId: context.req.param("sourceId"),
+    });
     const source = updateProjectSource(
       deps.db,
       deps.hub,
       context.req.param("sourceId"),
       payload,
     );
-    if (!source || source.projectId !== context.req.param("id")) {
+    if (!source) {
       throw new ApiError(404, "invalid_request", "Project source not found");
     }
     return context.json(source);
@@ -117,6 +139,10 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
 
   app.delete("/projects/:id/sources/:sourceId", (context) => {
     requireProject(deps.db, context.req.param("id"));
+    requireProjectSource(deps, {
+      projectId: context.req.param("id"),
+      sourceId: context.req.param("sourceId"),
+    });
     const deleted = deleteProjectSource(deps.db, deps.hub, context.req.param("sourceId"));
     if (!deleted) {
       throw new ApiError(404, "invalid_request", "Project source not found");

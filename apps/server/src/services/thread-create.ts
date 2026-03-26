@@ -73,6 +73,13 @@ export async function createThreadFromRequest(
     if (!environment) {
       throw new ApiError(404, "invalid_request", "Environment not found");
     }
+    if (environment.projectId !== request.projectId) {
+      throw new ApiError(
+        409,
+        "invalid_request",
+        "Environment belongs to a different project",
+      );
+    }
 
     const thread = createThreadRecord(deps, request, environment.id);
     transitionThreadStatus(deps.db, deps.hub, thread.id, "idle");
@@ -102,12 +109,31 @@ export async function createThreadFromRequest(
 
   const hostId = request.environment.hostId;
   requireConnectedHost(deps, hostId);
+  const workspace = request.environment.workspace;
+  const defaultSource = requireDefaultSource(deps, request.projectId);
+  const unmanagedPath = workspace.type === "unmanaged"
+    ? workspace.path ?? defaultSource.path
+    : null;
+
+  if (workspace.type === "unmanaged" && !unmanagedPath) {
+    throw new ApiError(409, "invalid_request", "Workspace path is required");
+  }
+  if (
+    (workspace.type === "managed-worktree" || workspace.type === "managed-clone") &&
+    defaultSource.hostId !== hostId
+  ) {
+    throw new ApiError(
+      409,
+      "invalid_request",
+      "Managed workspaces must run on the default source host",
+    );
+  }
 
   const environment = createEnvironment(deps.db, deps.hub, {
     projectId: request.projectId,
     hostId,
-    managed: request.environment.workspace.type !== "unmanaged",
-    workspaceProvisionType: request.environment.workspace.type,
+    managed: workspace.type !== "unmanaged",
+    workspaceProvisionType: workspace.type,
     status: "provisioning",
   });
   const thread = createThreadRecord(deps, request, environment.id);
@@ -123,9 +149,9 @@ export async function createThreadFromRequest(
     });
   }
 
-  const provisioningLabel = request.environment.workspace.type === "unmanaged"
+  const provisioningLabel = workspace.type === "unmanaged"
     ? "Direct"
-    : request.environment.workspace.type === "managed-worktree"
+    : workspace.type === "managed-worktree"
       ? "Worktree"
       : "Clone";
   appendProvisioningEvent(deps, {
@@ -142,17 +168,12 @@ export async function createThreadFromRequest(
     ],
   });
 
-  const defaultSource = requireDefaultSource(deps, request.projectId);
-  switch (request.environment.workspace.type) {
+  switch (workspace.type) {
     case "unmanaged": {
-      const targetPath = request.environment.workspace.path ?? defaultSource.path;
-      if (!targetPath) {
-        throw new ApiError(409, "invalid_request", "Workspace path is required");
-      }
       queueEnvironmentProvision(deps, {
         environmentId: environment.id,
         hostId,
-        path: targetPath ?? undefined,
+        path: unmanagedPath ?? undefined,
         projectId: request.projectId,
         workspaceProvisionType: "unmanaged",
       });
@@ -160,18 +181,11 @@ export async function createThreadFromRequest(
     }
     case "managed-worktree":
     case "managed-clone": {
-      if (defaultSource.hostId !== hostId) {
-        throw new ApiError(
-          409,
-          "invalid_request",
-          "Managed workspaces must run on the default source host",
-        );
-      }
       queueEnvironmentProvision(deps, {
         environmentId: environment.id,
         hostId,
         projectId: request.projectId,
-        workspaceProvisionType: request.environment.workspace.type,
+        workspaceProvisionType: workspace.type,
         sourcePath: defaultSource.path,
         targetPath: buildManagedTargetPath(defaultSource.path, request.projectId, thread.id),
         branchName: buildManagedBranchName(request, thread.id),
@@ -179,7 +193,7 @@ export async function createThreadFromRequest(
       break;
     }
     default: {
-      const _exhaustive: never = request.environment.workspace;
+      const _exhaustive: never = workspace;
       throw new Error(`Unsupported workspace request: ${_exhaustive}`);
     }
   }

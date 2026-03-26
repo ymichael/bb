@@ -1,3 +1,5 @@
+import { eq } from "drizzle-orm";
+import { hostDaemonCommands } from "@bb/db";
 import { hostDaemonCommandResultReportSchema } from "@bb/host-daemon-contract";
 import type { Hono } from "hono";
 import type { AppDeps } from "../types.js";
@@ -16,9 +18,17 @@ export function registerInternalCommandResultRoutes(
       hostDaemonCommandResultReportSchema,
     );
     const session = requireActiveSession(deps.db, payload.sessionId);
+    const command = deps.db
+      .select()
+      .from(hostDaemonCommands)
+      .where(eq(hostDaemonCommands.id, payload.commandId))
+      .get();
+    if (!command || command.hostId !== session.hostId) {
+      throw new ApiError(404, "command_not_found", "Command not found");
+    }
     const updatedCommand = handleCommandResult(deps, payload);
 
-    if (!updatedCommand || updatedCommand.hostId !== session.hostId) {
+    if (!updatedCommand) {
       throw new ApiError(404, "command_not_found", "Command not found");
     }
 

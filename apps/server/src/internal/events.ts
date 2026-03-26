@@ -1,7 +1,10 @@
+import { and, eq, inArray } from "drizzle-orm";
 import {
+  environments,
   getHighWaterMarks,
   getThread,
   insertEvents,
+  threads,
   transitionThreadStatus,
   updateThread,
 } from "@bb/db";
@@ -10,6 +13,7 @@ import {
   type HostDaemonEventEnvelope,
 } from "@bb/host-daemon-contract";
 import type { Hono } from "hono";
+import { ApiError } from "../errors.js";
 import type { AppDeps } from "../types.js";
 import { parseJsonBody } from "../services/validation.js";
 import { applyTurnCompletedEvent } from "./turn-completed-events.js";
@@ -111,13 +115,50 @@ function applyEventEffects(
   }
 }
 
+function validateEventBatchOwnership(
+  deps: Pick<AppDeps, "db">,
+  args: {
+    hostId: string;
+    events: HostDaemonEventEnvelope[];
+  },
+): void {
+  const threadIds = [...new Set(args.events.map((entry) => entry.threadId))];
+  if (threadIds.length === 0) {
+    return;
+  }
+
+  const ownedThreadIds = deps.db
+    .select({ id: threads.id })
+    .from(threads)
+    .innerJoin(environments, eq(threads.environmentId, environments.id))
+    .where(
+      and(
+        inArray(threads.id, threadIds),
+        eq(environments.hostId, args.hostId),
+      ),
+    )
+    .all();
+
+  if (ownedThreadIds.length !== threadIds.length) {
+    throw new ApiError(
+      403,
+      "invalid_request",
+      "Event batch contains threads that do not belong to the session host",
+    );
+  }
+}
+
 export function registerInternalEventRoutes(app: Hono, deps: AppDeps): void {
   app.post("/session/events", async (context) => {
     const payload = await parseJsonBody(
       context,
       hostDaemonEventBatchRequestSchema,
     );
-    requireActiveSession(deps.db, payload.sessionId);
+    const session = requireActiveSession(deps.db, payload.sessionId);
+    validateEventBatchOwnership(deps, {
+      hostId: session.hostId,
+      events: payload.events,
+    });
 
     insertEvents(
       deps.db,

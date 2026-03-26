@@ -158,6 +158,10 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
   });
 
   app.delete("/threads/:id/drafts/:draftId", (context) => {
+    const draft = getDraft(deps.db, context.req.param("draftId"));
+    if (!draft || draft.threadId !== context.req.param("id")) {
+      throw new ApiError(404, "invalid_request", "Draft not found");
+    }
     const deleted = deleteDraft(deps.db, deps.hub, context.req.param("draftId"));
     if (!deleted) {
       throw new ApiError(404, "invalid_request", "Draft not found");
