@@ -668,14 +668,13 @@ waitForCommandsDrained(db, hostId, timeoutMs = 10_000): Promise<void>
 
 All poll at 100ms intervals. Timeouts throw with current vs expected state for debugging.
 
-**Standalone QA scripts** (for manual QA in 7g):
-
-Rebuild the standalone workflow from the old `scripts/qa/` with updates for the new architecture:
+**Standalone QA scripts** (for manual QA in 7f):
 
 - `scripts/qa/start-standalone.mjs` — allocates random port, creates temp dirs, initializes git repo, starts `node apps/server/dist/index.js`, waits for health check, starts `node apps/host-daemon/dist/index.js`, waits for daemon connection, creates project. Outputs JSON: `{ serverUrl, projectId, hostId, tmpRoot, bbRoot, projectRoot, serverPid, daemonPid, cleanupCommand }`.
 - `scripts/qa/stop-standalone.mjs` — kills server + daemon, removes temp dirs.
 
 For diagnostics during manual QA, use the CLI, server API, query the DB directly, and look at the log files for the server / host-daemon.
+
 **Manual QA runbook:**
 
 Write `qa/manual-runbook.md` consolidating the runbook content from 7f below into a standalone document. This is the file a human operator follows when running manual QA. It should include:
