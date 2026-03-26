@@ -7,14 +7,21 @@ import {
 } from "drizzle-orm/sqlite-core";
 import type { AnySQLiteColumn } from "drizzle-orm/sqlite-core";
 import { threadStatusValues } from "@bb/domain";
-import type { ThreadEventType } from "@bb/domain";
+import type {
+  EnvironmentStatus,
+  HostType,
+  ProjectSourceType,
+  ThreadEventType,
+  ThreadType,
+  WorkspaceProvisionType,
+} from "@bb/domain";
 
 export const hosts = sqliteTable(
   "hosts",
   {
     id: text("id").primaryKey(),
     name: text("name").notNull(),
-    type: text("type").notNull(),
+    type: text("type").$type<HostType>().notNull(),
     provider: text("provider"),
     externalId: text("external_id"),
     lastSeenAt: integer("last_seen_at").notNull(),
@@ -44,7 +51,7 @@ export const projectSources = sqliteTable(
     projectId: text("project_id")
       .notNull()
       .references(() => projects.id, { onDelete: "cascade" }),
-    type: text("type").notNull(),
+    type: text("type").$type<ProjectSourceType>().notNull(),
     hostId: text("host_id")
       .notNull()
       .references(() => hosts.id, { onDelete: "cascade" }),
@@ -83,8 +90,8 @@ export const environments = sqliteTable(
       .notNull()
       .default(false),
     branchName: text("branch_name"),
-    workspaceProvisionType: text("workspace_provision_type"),
-    status: text("status").notNull().default("provisioning"),
+    workspaceProvisionType: text("workspace_provision_type").$type<WorkspaceProvisionType>(),
+    status: text("status").$type<EnvironmentStatus>().notNull().default("provisioning"),
     createdAt: integer("created_at").notNull(),
     updatedAt: integer("updated_at").notNull(),
   },
@@ -106,7 +113,7 @@ export const threads = sqliteTable(
       onDelete: "set null",
     }),
     providerId: text("provider_id").notNull(),
-    type: text("type").notNull().default("standard"),
+    type: text("type").$type<ThreadType>().notNull().default("standard"),
     title: text("title"),
     titleFallback: text("title_fallback"),
     status: text("status", { enum: threadStatusValues }).notNull().default("created"),
@@ -182,7 +189,7 @@ export const hostDaemonSessions = sqliteTable(
       .references(() => hosts.id, { onDelete: "cascade" }),
     instanceId: text("instance_id").notNull(),
     hostName: text("host_name").notNull(),
-    hostType: text("host_type").notNull(),
+    hostType: text("host_type").$type<HostType>().notNull(),
     protocolVersion: integer("protocol_version").notNull(),
     heartbeatIntervalMs: integer("heartbeat_interval_ms").notNull(),
     leaseTimeoutMs: integer("lease_timeout_ms").notNull(),

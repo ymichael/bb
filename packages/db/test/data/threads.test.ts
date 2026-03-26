@@ -10,6 +10,7 @@ import {
   updateThread,
   deleteThread,
   archiveThread,
+  unarchiveThread,
   transitionThreadStatus,
   ALLOWED_TRANSITIONS,
 } from "../../src/data/threads.js";
@@ -48,8 +49,33 @@ describe("threads", () => {
     const { db, project } = setup();
     createThread(db, noopNotifier, { projectId: project.id, providerId: "codex" });
     createThread(db, noopNotifier, { projectId: project.id, providerId: "codex" });
-    expect(listThreads(db, project.id)).toHaveLength(2);
+    expect(listThreads(db, { projectId: project.id })).toHaveLength(2);
     expect(listThreads(db)).toHaveLength(2);
+  });
+
+  it("filters threads by type, parent thread, and archived state", () => {
+    const { db, project } = setup();
+    const parent = createThread(db, noopNotifier, {
+      projectId: project.id,
+      providerId: "codex",
+      type: "manager",
+    });
+    const child = createThread(db, noopNotifier, {
+      projectId: project.id,
+      providerId: "codex",
+      parentThreadId: parent.id,
+    });
+    createThread(db, noopNotifier, {
+      projectId: project.id,
+      providerId: "codex",
+      type: "manager",
+    });
+    archiveThread(db, noopNotifier, child.id);
+
+    expect(listThreads(db, { type: "manager" })).toHaveLength(2);
+    expect(listThreads(db, { parentThreadId: parent.id })).toHaveLength(1);
+    expect(listThreads(db, { archived: true })).toHaveLength(1);
+    expect(listThreads(db, { archived: false })).toHaveLength(2);
   });
 
   it("updates thread title", () => {
@@ -83,6 +109,18 @@ describe("threads", () => {
     });
     const archived = archiveThread(db, noopNotifier, thread.id);
     expect(archived?.archivedAt).toBeTypeOf("number");
+  });
+
+  it("unarchives a thread", () => {
+    const { db, project } = setup();
+    const thread = createThread(db, noopNotifier, {
+      projectId: project.id,
+      providerId: "codex",
+    });
+    archiveThread(db, noopNotifier, thread.id);
+
+    const unarchived = unarchiveThread(db, noopNotifier, thread.id);
+    expect(unarchived?.archivedAt).toBeNull();
   });
 });
 
@@ -155,6 +193,8 @@ describe("transitionThreadStatus", () => {
     const { db, project } = setup();
     const spy: DbNotifier = {
       notifyThread: vi.fn(),
+      notifyEnvironment: vi.fn(),
+      notifyCommand: vi.fn(),
       notifyProject: vi.fn(),
       notifySystem: vi.fn(),
     };

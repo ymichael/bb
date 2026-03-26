@@ -1,5 +1,8 @@
 import { and, eq } from "drizzle-orm";
-import type { WorkspaceProvisionType } from "@bb/domain";
+import type {
+  EnvironmentStatus,
+  WorkspaceProvisionType,
+} from "@bb/domain";
 import type { DbConnection } from "../connection.js";
 import type { DbNotifier } from "../notifier.js";
 import { environments } from "../schema.js";
@@ -14,7 +17,7 @@ export interface CreateEnvironmentInput {
   isWorktree?: boolean;
   branchName?: string | null;
   workspaceProvisionType?: WorkspaceProvisionType | null;
-  status?: string;
+  status?: EnvironmentStatus;
 }
 
 export function createEnvironment(
@@ -81,7 +84,7 @@ export function listEnvironments(db: DbConnection, projectId?: string) {
 
 export interface UpdateEnvironmentInput {
   path?: string | null;
-  status?: string;
+  status?: EnvironmentStatus;
   isGitRepo?: boolean;
   isWorktree?: boolean;
   branchName?: string | null;

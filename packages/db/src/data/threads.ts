@@ -1,5 +1,5 @@
-import { eq } from "drizzle-orm";
-import type { ThreadChangeKind, ThreadStatus } from "@bb/domain";
+import { and, eq, isNotNull, isNull } from "drizzle-orm";
+import type { ThreadChangeKind, ThreadStatus, ThreadType } from "@bb/domain";
 import type { DbConnection } from "../connection.js";
 import type { DbNotifier } from "../notifier.js";
 import { threads } from "../schema.js";
@@ -21,8 +21,9 @@ export interface CreateThreadInput {
   projectId: string;
   environmentId?: string | null;
   providerId: string;
-  type?: string;
+  type?: ThreadType;
   title?: string | null;
+  titleFallback?: string | null;
   status?: ThreadStatus;
   mergeBaseBranch?: string | null;
   parentThreadId?: string | null;
@@ -43,6 +44,7 @@ export function createThread(
       providerId: input.providerId,
       type: input.type ?? "standard",
       title: input.title ?? null,
+      titleFallback: input.titleFallback ?? null,
       status: input.status ?? "created",
       mergeBaseBranch: input.mergeBaseBranch ?? null,
       parentThreadId: input.parentThreadId ?? null,
@@ -60,21 +62,48 @@ export function getThread(db: DbConnection, id: string) {
   return db.select().from(threads).where(eq(threads.id, id)).get() ?? null;
 }
 
-export function listThreads(db: DbConnection, projectId?: string) {
-  if (projectId) {
-    return db
-      .select()
-      .from(threads)
-      .where(eq(threads.projectId, projectId))
-      .all();
+export interface ListThreadsOptions {
+  archived?: boolean;
+  parentThreadId?: string;
+  projectId?: string;
+  type?: ThreadType;
+}
+
+export function listThreads(
+  db: DbConnection,
+  options: ListThreadsOptions = {},
+) {
+  const filters = [
+    options.projectId ? eq(threads.projectId, options.projectId) : undefined,
+    options.type ? eq(threads.type, options.type) : undefined,
+    options.parentThreadId
+      ? eq(threads.parentThreadId, options.parentThreadId)
+      : undefined,
+    options.archived === true
+      ? isNotNull(threads.archivedAt)
+      : options.archived === false
+        ? isNull(threads.archivedAt)
+        : undefined,
+  ].filter((value) => value !== undefined);
+
+  if (filters.length === 0) {
+    return db.select().from(threads).all();
   }
-  return db.select().from(threads).all();
+
+  return db
+    .select()
+    .from(threads)
+    .where(and(...filters))
+    .all();
 }
 
 export interface UpdateThreadInput {
-  title?: string | null;
   environmentId?: string | null;
   lastReadAt?: number | null;
+  mergeBaseBranch?: string | null;
+  parentThreadId?: string | null;
+  title?: string | null;
+  titleFallback?: string | null;
 }
 
 export function updateThread(
@@ -90,8 +119,11 @@ export function updateThread(
 
   const set: Record<string, unknown> = { updatedAt: now };
   if ("title" in input) set.title = input.title;
+  if ("titleFallback" in input) set.titleFallback = input.titleFallback;
   if ("environmentId" in input) set.environmentId = input.environmentId;
   if ("lastReadAt" in input) set.lastReadAt = input.lastReadAt;
+  if ("mergeBaseBranch" in input) set.mergeBaseBranch = input.mergeBaseBranch;
+  if ("parentThreadId" in input) set.parentThreadId = input.parentThreadId;
 
   db.update(threads)
     .set(set)
@@ -125,6 +157,23 @@ export function archiveThread(
   const now = Date.now();
   db.update(threads)
     .set({ archivedAt: now, updatedAt: now })
+    .where(eq(threads.id, id))
+    .run();
+  const updated = db.select().from(threads).where(eq(threads.id, id)).get();
+  if (updated) {
+    notifier.notifyThread(id, ["archived-changed"]);
+  }
+  return updated ?? null;
+}
+
+export function unarchiveThread(
+  db: DbConnection,
+  notifier: DbNotifier,
+  id: string,
+) {
+  const now = Date.now();
+  db.update(threads)
+    .set({ archivedAt: null, updatedAt: now })
     .where(eq(threads.id, id))
     .run();
   const updated = db.select().from(threads).where(eq(threads.id, id)).get();
