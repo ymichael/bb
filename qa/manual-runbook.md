@@ -1,13 +1,13 @@
 # Manual QA Runbook
 
-This runbook covers the standalone persistent-host QA pass for Phase 7.
+This runbook covers the standalone persistent-host QA pass for Phase 7. It is written against the current CLI and API surface.
 
 ## Prerequisites
 
-Build the server, daemon, CLI, and integration-test dependencies:
+Build the server, daemon, and CLI:
 
 ```bash
-pnpm exec turbo run build --filter=@bb/server --filter=@bb/host-daemon --filter=@bb/cli --filter=@bb/integration-tests
+pnpm exec turbo run build --filter=@bb/server --filter=@bb/host-daemon --filter=@bb/cli
 ```
 
 Verify provider auth before running real-provider checks:
@@ -19,171 +19,333 @@ test -f "$HOME/.codex/auth.json"
 test -f "$HOME/.pi/agent/auth.json"
 test -x "$HOME/.bun/bin/codex"
 test -x "/opt/homebrew/bin/pi"
+command -v jq
 ```
 
 ## Standalone Setup
 
-Start an isolated server + daemon pair:
+Start an isolated server + daemon pair and capture the returned state:
 
 ```bash
-node scripts/qa/start-standalone.mjs
-```
+START_JSON=$(node scripts/qa/start-standalone.mjs)
+printf '%s\n' "$START_JSON" | jq
 
-The script prints JSON with:
+export BB_SERVER_URL=$(printf '%s' "$START_JSON" | jq -r '.serverUrl')
+export BB_HOST_DAEMON_PORT=$(printf '%s' "$START_JSON" | jq -r '.daemonPort')
+export BB_PROJECT_ID=$(printf '%s' "$START_JSON" | jq -r '.projectId')
 
-- `serverUrl`
-- `projectId`
-- `hostId`
-- `projectRoot`
-- `bbRoot`
-- `serverPid`
-- `daemonPid`
-- `cleanupCommand`
+STATE_PATH=$(printf '%s' "$START_JSON" | jq -r '.statePath')
+HOST_ID=$(printf '%s' "$START_JSON" | jq -r '.hostId')
+DAEMON_PID=$(printf '%s' "$START_JSON" | jq -r '.daemonPid')
+SERVER_PID=$(printf '%s' "$START_JSON" | jq -r '.serverPid')
+LOGS_DIR=$(printf '%s' "$START_JSON" | jq -r '.logsDir')
+RESTART_DAEMON_COMMAND=$(printf '%s' "$START_JSON" | jq -r '.restartDaemonCommand')
 
-Set up the CLI for the returned server URL:
-
-```bash
-export BB_SERVER_URL="http://127.0.0.1:<port>"
 alias bb="node apps/cli/dist/index.js"
 ```
 
 Basic health checks:
 
 ```bash
-curl -fsS "$BB_SERVER_URL/api/v1/system/config"
+curl -fsS "$BB_SERVER_URL/api/v1/system/config" | jq
+curl -fsS "$BB_SERVER_URL/api/v1/hosts" | jq
 bb status
+bb provider list
 ```
 
 Teardown:
 
 ```bash
-node scripts/qa/stop-standalone.mjs --state <state-path-from-start-output>
+node scripts/qa/stop-standalone.mjs --state "$STATE_PATH"
 ```
 
 ## Smoke Pass
 
-Spawn an unmanaged thread and wait for it to finish:
+Spawn an unmanaged Codex thread and wait for it to finish:
 
 ```bash
-bb thread spawn --project <projectId> --provider codex --prompt "Say hello"
-bb thread wait <threadId> --status idle --timeout 90
-bb thread show <threadId>
-bb thread output <threadId>
+SMOKE_THREAD_ID=$(bb thread spawn \
+  --project "$BB_PROJECT_ID" \
+  --provider codex \
+  --reasoning-level low \
+  --service-tier fast \
+  --prompt "Say hello from the smoke pass" \
+  --json | jq -r '.id')
+
+bb thread wait "$SMOKE_THREAD_ID" --status idle --timeout 120
+bb thread show "$SMOKE_THREAD_ID" --recent-events 10
+bb thread output "$SMOKE_THREAD_ID"
+bb thread log "$SMOKE_THREAD_ID" --format json | jq '.[-10:]'
 ```
 
 Send a follow-up after idle:
 
 ```bash
-bb thread tell <threadId> "Now say goodbye"
-bb thread wait <threadId> --status idle --timeout 90
-bb thread output <threadId>
+bb thread tell "$SMOKE_THREAD_ID" "Now say goodbye from the smoke pass"
+bb thread wait "$SMOKE_THREAD_ID" --status idle --timeout 120
+bb thread output "$SMOKE_THREAD_ID"
 ```
 
-Create a managed worktree thread:
+Create a managed worktree thread and inspect workspace status:
 
 ```bash
-bb thread spawn --project <projectId> --provider codex --new-environment worktree --prompt "Create a test file"
-bb thread wait <threadId> --status idle --timeout 120
-bb thread show <threadId>
+WORKTREE_THREAD_ID=$(bb thread spawn \
+  --project "$BB_PROJECT_ID" \
+  --provider codex \
+  --reasoning-level low \
+  --service-tier fast \
+  --new-environment worktree \
+  --prompt "Create a file named smoke.txt and briefly confirm it" \
+  --json | jq -r '.id')
+
+bb thread wait "$WORKTREE_THREAD_ID" --status idle --timeout 120
+WORKTREE_ENV_ID=$(curl -fsS "$BB_SERVER_URL/api/v1/threads/$WORKTREE_THREAD_ID" | jq -r '.environmentId')
+
+bb thread show "$WORKTREE_THREAD_ID"
+bb thread output "$WORKTREE_THREAD_ID"
+curl -fsS "$BB_SERVER_URL/api/v1/environments/$WORKTREE_ENV_ID" | jq
+curl -fsS "$BB_SERVER_URL/api/v1/environments/$WORKTREE_ENV_ID/status" | jq
+curl -fsS "$BB_SERVER_URL/api/v1/environments/$WORKTREE_ENV_ID/diff/branches" | jq
 ```
 
-Archive and unarchive:
+Archive and unarchive the smoke thread:
 
 ```bash
-bb thread archive <threadId>
-bb thread show <threadId>
-bb thread unarchive <threadId>
-bb thread tell <threadId> "Say something after unarchive"
-bb thread wait <threadId> --status idle --timeout 90
+bb thread archive "$SMOKE_THREAD_ID"
+curl -fsS "$BB_SERVER_URL/api/v1/threads/$SMOKE_THREAD_ID" | jq
+
+bb thread tell "$SMOKE_THREAD_ID" "This should fail while archived"
+
+bb thread unarchive "$SMOKE_THREAD_ID"
+bb thread tell "$SMOKE_THREAD_ID" "Say something after unarchive"
+bb thread wait "$SMOKE_THREAD_ID" --status idle --timeout 120
+bb thread output "$SMOKE_THREAD_ID"
 ```
+
+Expected result:
+
+- The unmanaged thread reaches `idle`, shows output, and accepts a follow-up.
+- The worktree thread reaches `idle`, the environment reports `isWorktree: true`, and workspace status/diff routes return data.
+- Archiving blocks `bb thread tell`; unarchiving restores normal operation.
 
 ## Multi-Thread and Shared Environment
 
-Create a first unmanaged thread:
+Create thread A and capture its environment:
 
 ```bash
-bb thread spawn --project <projectId> --provider codex --prompt "Thread A: say hello"
-bb thread wait <threadA> --status idle --timeout 90
-bb thread show <threadA>
+THREAD_A_ID=$(bb thread spawn \
+  --project "$BB_PROJECT_ID" \
+  --provider codex \
+  --reasoning-level low \
+  --service-tier fast \
+  --prompt "Thread A says hello" \
+  --json | jq -r '.id')
+
+bb thread wait "$THREAD_A_ID" --status idle --timeout 120
+THREAD_A_ENV_ID=$(curl -fsS "$BB_SERVER_URL/api/v1/threads/$THREAD_A_ID" | jq -r '.environmentId')
+bb thread output "$THREAD_A_ID"
 ```
 
-Reuse that environment for a sibling thread:
+Create thread B in the same project source path and let the server reuse the ready direct-workspace environment implicitly:
 
 ```bash
-bb thread spawn --project <projectId> --provider codex --environment <environmentId-from-threadA> --prompt "Thread B: say world"
-bb thread wait <threadB> --status idle --timeout 90
-bb thread show <threadB>
+THREAD_B_ID=$(bb thread spawn \
+  --project "$BB_PROJECT_ID" \
+  --provider codex \
+  --reasoning-level low \
+  --service-tier fast \
+  --prompt "Thread B says world" \
+  --json | jq -r '.id')
+
+bb thread wait "$THREAD_B_ID" --status idle --timeout 120
+THREAD_B_ENV_ID=$(curl -fsS "$BB_SERVER_URL/api/v1/threads/$THREAD_B_ID" | jq -r '.environmentId')
+
+printf 'thread A env: %s\nthread B env: %s\n' "$THREAD_A_ENV_ID" "$THREAD_B_ENV_ID"
+bb thread output "$THREAD_B_ID"
 ```
 
-Interleave follow-ups:
+Alternate follow-ups across the two sibling threads:
 
 ```bash
-bb thread tell <threadA> "Follow up for thread A"
-bb thread tell <threadB> "Follow up for thread B"
-bb thread wait <threadA> --status idle --timeout 90
-bb thread wait <threadB> --status idle --timeout 90
+bb thread tell "$THREAD_A_ID" "Follow up A"
+bb thread wait "$THREAD_A_ID" --status idle --timeout 120
+
+bb thread tell "$THREAD_B_ID" "Follow up B"
+bb thread wait "$THREAD_B_ID" --status idle --timeout 120
+
+bb thread output "$THREAD_A_ID"
+bb thread output "$THREAD_B_ID"
+bb thread log "$THREAD_A_ID" --format json | jq '.[-8:]'
+bb thread log "$THREAD_B_ID" --format json | jq '.[-8:]'
+```
+
+Archive thread A and verify thread B still works:
+
+```bash
+bb thread archive "$THREAD_A_ID"
+bb thread tell "$THREAD_B_ID" "Still working after sibling archive"
+bb thread wait "$THREAD_B_ID" --status idle --timeout 120
+bb thread output "$THREAD_B_ID"
+bb thread unarchive "$THREAD_A_ID"
 ```
 
 Run a mixed-provider pass in separate environments:
 
 ```bash
-bb thread spawn --project <projectId> --provider claude-code --prompt "Provider smoke"
-bb thread spawn --project <projectId> --provider pi --new-environment worktree --prompt "Provider smoke"
+CLAUDE_THREAD_ID=$(bb thread spawn \
+  --project "$BB_PROJECT_ID" \
+  --provider claude-code \
+  --reasoning-level low \
+  --model claude-haiku-4-5 \
+  --prompt "Claude thread" \
+  --json | jq -r '.id')
+
+PI_THREAD_ID=$(bb thread spawn \
+  --project "$BB_PROJECT_ID" \
+  --provider pi \
+  --reasoning-level low \
+  --model openai/codex-mini \
+  --new-environment worktree \
+  --prompt "Pi thread" \
+  --json | jq -r '.id')
+
+bb thread wait "$CLAUDE_THREAD_ID" --status idle --timeout 120
+bb thread wait "$PI_THREAD_ID" --status idle --timeout 120
+bb thread output "$CLAUDE_THREAD_ID"
+bb thread output "$PI_THREAD_ID"
 ```
 
-Validate no event or workspace cross-contamination by checking `bb thread show`, `bb thread output`, and the per-thread environment IDs.
+Promote and demote a managed worktree.
+
+Promotion requires both the managed worktree and the primary checkout to be clean. Commit the worktree change before promoting, and run this step from a clean primary checkout:
+
+```bash
+PROMOTE_THREAD_ID=$(bb thread spawn \
+  --project "$BB_PROJECT_ID" \
+  --provider codex \
+  --reasoning-level low \
+  --service-tier fast \
+  --new-environment worktree \
+  --prompt "Write a file named promote.txt" \
+  --json | jq -r '.id')
+
+bb thread wait "$PROMOTE_THREAD_ID" --status idle --timeout 120
+PROMOTE_ENV_ID=$(curl -fsS "$BB_SERVER_URL/api/v1/threads/$PROMOTE_THREAD_ID" | jq -r '.environmentId')
+
+curl -fsS "$BB_SERVER_URL/api/v1/environments/$PROMOTE_ENV_ID/status" | jq
+bb environment commit "$PROMOTE_ENV_ID" --message "Manual QA promote step"
+bb environment promote "$PROMOTE_ENV_ID"
+bb environment demote "$PROMOTE_ENV_ID"
+```
+
+Expected result:
+
+- Thread A and B share the same environment ID via implicit same-path reuse.
+- Alternating follow-ups complete and their outputs remain distinct.
+- Archiving one sibling does not break the other.
+- Mixed-provider threads succeed without event cross-contamination.
+- Promote/demote succeeds on the managed worktree environment.
 
 ## Recovery
 
 Graceful daemon restart:
 
 ```bash
-kill -TERM <daemonPid>
-node apps/host-daemon/dist/index.js
-bb thread tell <threadId> "Check recovery after daemon restart"
-bb thread wait <threadId> --status idle --timeout 90
+kill -TERM "$DAEMON_PID"
+curl -fsS "$BB_SERVER_URL/api/v1/hosts" | jq
+
+eval "$RESTART_DAEMON_COMMAND"
+DAEMON_PID=$!
+
+curl -fsS "$BB_SERVER_URL/api/v1/hosts" | jq
+bb thread tell "$SMOKE_THREAD_ID" "Check recovery after daemon restart"
+bb thread wait "$SMOKE_THREAD_ID" --status idle --timeout 120
+bb thread output "$SMOKE_THREAD_ID"
 ```
 
-Daemon death during active work:
+Kill the daemon during active work:
 
 ```bash
-bb thread tell <threadId> "Write a long detailed answer about computing history"
-bb thread wait <threadId> --status active --timeout 30
-kill -TERM <daemonPid>
-bb thread show <threadId>
-node apps/host-daemon/dist/index.js
-bb thread tell <threadId> "Recover after interruption"
-bb thread wait <threadId> --status idle --timeout 90
+bb thread tell "$SMOKE_THREAD_ID" "Write a very detailed history of computing with many sections"
+bb thread wait "$SMOKE_THREAD_ID" --status active --timeout 30
+
+kill -TERM "$DAEMON_PID"
+bb thread show "$SMOKE_THREAD_ID" --recent-events 10
+
+eval "$RESTART_DAEMON_COMMAND"
+DAEMON_PID=$!
+
+bb thread tell "$SMOKE_THREAD_ID" "Recover after interruption"
+bb thread wait "$SMOKE_THREAD_ID" --status idle --timeout 120
+bb thread output "$SMOKE_THREAD_ID"
+bb thread log "$SMOKE_THREAD_ID" --format json | jq '.[-12:]'
 ```
 
-Inspect recovery state with:
+Inspect logs and state:
 
 ```bash
-bb thread show <threadId>
-bb thread output <threadId>
-tail -n 200 <logsDir>/server.log
-tail -n 200 <logsDir>/host-daemon.log
+tail -n 200 "$LOGS_DIR/server.log"
+tail -n 200 "$LOGS_DIR/host-daemon.log"
+curl -fsS "$BB_SERVER_URL/api/v1/threads/$SMOKE_THREAD_ID" | jq
 ```
+
+Expected result:
+
+- The server stays up while the daemon is restarted.
+- Threads remain inspectable during and after daemon loss.
+- Follow-up work succeeds after restart, including after an interruption mid-turn.
 
 ## Provider-Specific Pass
 
-For each provider `codex`, `claude-code`, and `pi`, run:
+Repeat this section for `codex`, `claude-code`, and `pi`:
 
 ```bash
-bb thread spawn --project <projectId> --provider <provider> --prompt "Say exactly: hello world"
-bb thread wait <threadId> --status idle --timeout 120
-bb thread output <threadId>
-bb thread tell <threadId> "Repeat the previous answer in uppercase"
-bb thread wait <threadId> --status idle --timeout 120
-bb thread stop <threadId> # only after sending a long-running prompt
+PROVIDER_THREAD_ID=$(bb thread spawn \
+  --project "$BB_PROJECT_ID" \
+  --provider <provider-id> \
+  --reasoning-level low \
+  --prompt "Say exactly: hello world" \
+  --json | jq -r '.id')
+
+bb thread wait "$PROVIDER_THREAD_ID" --status idle --timeout 120
+bb thread output "$PROVIDER_THREAD_ID"
+
+bb thread tell "$PROVIDER_THREAD_ID" "Repeat the previous answer in uppercase"
+bb thread wait "$PROVIDER_THREAD_ID" --status idle --timeout 120
+bb thread output "$PROVIDER_THREAD_ID"
+
+bb thread tell "$PROVIDER_THREAD_ID" "Write a very long essay about computing history"
+bb thread wait "$PROVIDER_THREAD_ID" --status active --timeout 30
+bb thread stop "$PROVIDER_THREAD_ID"
+bb thread wait "$PROVIDER_THREAD_ID" --status idle --timeout 120
+bb thread show "$PROVIDER_THREAD_ID" --recent-events 10
 ```
 
 For workspace interaction, repeat on a worktree thread:
 
 ```bash
-bb thread spawn --project <projectId> --provider <provider> --new-environment worktree --prompt "Create hello.txt containing hello world"
-bb thread wait <threadId> --status idle --timeout 120
-bb thread show <threadId>
+PROVIDER_WORKTREE_THREAD_ID=$(bb thread spawn \
+  --project "$BB_PROJECT_ID" \
+  --provider <provider-id> \
+  --reasoning-level low \
+  --new-environment worktree \
+  --prompt "Create hello.txt containing hello world" \
+  --json | jq -r '.id')
+
+bb thread wait "$PROVIDER_WORKTREE_THREAD_ID" --status idle --timeout 120
+PROVIDER_WORKTREE_ENV_ID=$(curl -fsS "$BB_SERVER_URL/api/v1/threads/$PROVIDER_WORKTREE_THREAD_ID" | jq -r '.environmentId')
+
+bb thread output "$PROVIDER_WORKTREE_THREAD_ID"
+curl -fsS "$BB_SERVER_URL/api/v1/environments/$PROVIDER_WORKTREE_ENV_ID/status" | jq
 ```
 
-Record the provider, thread ID, environment ID, and observed result for each pass.
+## Recording Results
+
+Record each pass with:
+
+- Date and operator
+- Standalone state path
+- Provider(s) used
+- Thread IDs and environment IDs
+- Whether smoke, multi-thread, and recovery passed
+- Any unexpected output, missing events, or log findings
