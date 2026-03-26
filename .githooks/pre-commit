@@ -1,8 +1,0 @@
-#!/bin/sh
-set -eu
-
-# TEMPORARY: skipping build check during big codebase surgery to remove slop
-# Restore: uncomment the lines below when protocol-boundary-contracts work is done
-# printf '%s\n' 'Running pre-commit build check (pnpm build)...'
-# pnpm run precommit:build
-printf '%s\n' 'Pre-commit build check skipped (codebase surgery in progress)'
