@@ -8,6 +8,7 @@ import {
 } from "@bb/db";
 import type { ProjectSource } from "@bb/domain";
 import type { CreateThreadRequest } from "@bb/server-contract";
+import { readDefaultBranch } from "@bb/workspace";
 import type { AppDeps } from "../types.js";
 import { ApiError } from "../errors.js";
 import { requireConnectedHostSession } from "./entity-lookup.js";
@@ -120,6 +121,7 @@ export function createThreadRecord(
   deps: Pick<AppDeps, "db" | "hub">,
   request: CreateThreadRequest,
   environmentId: string | null,
+  mergeBaseBranch: string | null,
 ) {
   return createThread(deps.db, deps.hub, {
     projectId: request.projectId,
@@ -130,6 +132,7 @@ export function createThreadRecord(
     titleFallback: deriveTitleFallback(request.input),
     parentThreadId: request.parentThreadId ?? null,
     status: "created",
+    mergeBaseBranch,
   });
 }
 
@@ -142,4 +145,29 @@ export function getThreadSafe(
     throw new ApiError(500, "internal_error", "Thread was not created");
   }
   return thread;
+}
+
+interface ResolveThreadMergeBaseBranchArgs {
+  candidatePaths: Array<string | null | undefined>;
+}
+
+export async function resolveThreadMergeBaseBranch(
+  args: ResolveThreadMergeBaseBranchArgs,
+): Promise<string | null> {
+  for (const candidatePath of args.candidatePaths) {
+    if (!candidatePath) {
+      continue;
+    }
+
+    try {
+      const branch = await readDefaultBranch(candidatePath);
+      if (branch) {
+        return branch;
+      }
+    } catch {
+      continue;
+    }
+  }
+
+  return null;
 }

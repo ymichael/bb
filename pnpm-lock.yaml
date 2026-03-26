@@ -275,6 +275,9 @@ importers:
       '@bb/templates':
         specifier: workspace:*
         version: link:../../packages/templates
+      '@bb/workspace':
+        specifier: workspace:*
+        version: link:../../packages/workspace
       '@hono/node-server':
         specifier: ^1.19.11
         version: 1.19.11(hono@4.11.9)

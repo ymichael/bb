@@ -1,3 +1,8 @@
+import { execFile } from "node:child_process";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { promisify } from "node:util";
 import { eq } from "drizzle-orm";
 import {
   getDraft,
@@ -22,8 +27,48 @@ import {
 } from "./helpers/seed.js";
 import { createTestAppHarness } from "./helpers/test-app.js";
 
+const execFileAsync = promisify(execFile);
+
 async function readJson(response: Response): Promise<unknown> {
   return response.json();
+}
+
+interface GitCommandArgs {
+  args: string[];
+  cwd: string;
+}
+
+interface TestGitRepo {
+  cleanup: () => Promise<void>;
+  path: string;
+}
+
+async function runGitCommand(args: GitCommandArgs): Promise<void> {
+  await execFileAsync("git", args.args, {
+    cwd: args.cwd,
+    env: {
+      ...process.env,
+      GIT_AUTHOR_EMAIL: "bb-tests@example.com",
+      GIT_AUTHOR_NAME: "bb tests",
+      GIT_COMMITTER_EMAIL: "bb-tests@example.com",
+      GIT_COMMITTER_NAME: "bb tests",
+    },
+  });
+}
+
+async function createTestGitRepo(): Promise<TestGitRepo> {
+  const repoPath = await mkdtemp(path.join(tmpdir(), "bb-server-thread-repo-"));
+  await runGitCommand({ cwd: repoPath, args: ["init", "--initial-branch=main"] });
+  await writeFile(path.join(repoPath, "README.md"), "# thread test repo\n", "utf8");
+  await runGitCommand({ cwd: repoPath, args: ["add", "README.md"] });
+  await runGitCommand({ cwd: repoPath, args: ["commit", "-m", "Initial commit"] });
+
+  return {
+    path: repoPath,
+    cleanup: async () => {
+      await rm(repoPath, { recursive: true, force: true });
+    },
+  };
 }
 
 function cleanWorkspaceStatus() {
@@ -103,11 +148,12 @@ describe("public thread routes", () => {
 
   it("creates managed-worktree threads and queues managed provisioning", async () => {
     const harness = await createTestAppHarness();
+    const repo = await createTestGitRepo();
     try {
       const { host } = seedHostSession(harness.deps);
       const { project, source } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
-        path: "/tmp/managed-project",
+        path: repo.path,
       });
 
       const response = await harness.app.request("/api/v1/threads", {
@@ -133,6 +179,7 @@ describe("public thread routes", () => {
       expect(response.status).toBe(201);
       const createdThread = await readJson(response) as {
         environmentId: string;
+        id: string;
         status: string;
       };
       expect(createdThread.status).toBe("provisioning");
@@ -148,7 +195,11 @@ describe("public thread routes", () => {
       });
       expect(queued.command).toHaveProperty("targetPath");
       expect(queued.command).toHaveProperty("branchName");
+
+      const thread = getThread(harness.db, createdThread.id);
+      expect(thread?.mergeBaseBranch).toBe("main");
     } finally {
+      await repo.cleanup();
       await harness.cleanup();
     }
   });

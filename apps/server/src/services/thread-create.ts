@@ -3,6 +3,7 @@ import {
   createThread,
   deleteThread,
   findEnvironmentByHostPath,
+  getDefaultProjectSource,
   getEnvironment,
   transitionThreadStatus,
   updateEnvironment,
@@ -26,16 +27,19 @@ import {
   queueEnvironmentProvision,
   requireDefaultSource,
   requireProjectExists,
+  resolveThreadMergeBaseBranch,
 } from "./thread-create-helpers.js";
 
 interface CreateThreadInEnvironmentArgs {
   environment: Environment;
+  mergeBaseBranch: string | null;
   request: CreateThreadRequest;
   threadStatus: "idle" | "provisioning";
 }
 
 interface ReuseUnmanagedEnvironmentArgs {
   hostId: string;
+  mergeBaseBranch: string | null;
   path: string;
   request: CreateThreadRequest;
 }
@@ -44,7 +48,12 @@ function createThreadInEnvironment(
   deps: Pick<AppDeps, "config" | "db" | "hub" | "logger">,
   args: CreateThreadInEnvironmentArgs,
 ) {
-  const thread = createThreadRecord(deps, args.request, args.environment.id);
+  const thread = createThreadRecord(
+    deps,
+    args.request,
+    args.environment.id,
+    args.mergeBaseBranch,
+  );
   transitionThreadStatus(deps.db, deps.hub, thread.id, args.threadStatus);
 
   let eventSequence: number | undefined;
@@ -124,6 +133,7 @@ function maybeReuseUnmanagedEnvironment(
   if (existing.status === "ready") {
     return createThreadInEnvironment(deps, {
       environment: existing,
+      mergeBaseBranch: args.mergeBaseBranch,
       request: args.request,
       threadStatus: "idle",
     });
@@ -132,6 +142,7 @@ function maybeReuseUnmanagedEnvironment(
   if (existing.status === "provisioning") {
     return createThreadInEnvironment(deps, {
       environment: existing,
+      mergeBaseBranch: args.mergeBaseBranch,
       request: args.request,
       threadStatus: "provisioning",
     });
@@ -200,8 +211,13 @@ export async function createThreadFromRequest(
         "Environment belongs to a different project",
       );
     }
+    const defaultSource = getDefaultProjectSource(deps.db, request.projectId);
+    const mergeBaseBranch = await resolveThreadMergeBaseBranch({
+      candidatePaths: [environment.path, defaultSource?.path],
+    });
     return createThreadInEnvironment(deps, {
       environment,
+      mergeBaseBranch,
       request,
       threadStatus: "idle",
     });
@@ -214,6 +230,11 @@ export async function createThreadFromRequest(
   const unmanagedPath = workspace.type === "unmanaged"
     ? workspace.path ?? defaultSource.path
     : null;
+  const mergeBaseBranch = await resolveThreadMergeBaseBranch({
+    candidatePaths: workspace.type === "unmanaged"
+      ? [unmanagedPath]
+      : [defaultSource.path],
+  });
 
   if (workspace.type === "unmanaged" && !unmanagedPath) {
     throw new ApiError(409, "invalid_request", "Workspace path is required");
@@ -221,6 +242,7 @@ export async function createThreadFromRequest(
   if (workspace.type === "unmanaged" && unmanagedPath) {
     const reusedThread = maybeReuseUnmanagedEnvironment(deps, {
       hostId,
+      mergeBaseBranch,
       path: unmanagedPath,
       request,
     });
@@ -246,7 +268,12 @@ export async function createThreadFromRequest(
     workspaceProvisionType: workspace.type,
     status: "provisioning",
   });
-  const thread = createThreadRecord(deps, request, environment.id);
+  const thread = createThreadRecord(
+    deps,
+    request,
+    environment.id,
+    mergeBaseBranch,
+  );
   transitionThreadStatus(deps.db, deps.hub, thread.id, "provisioning");
 
   if (request.input && request.input.length > 0) {

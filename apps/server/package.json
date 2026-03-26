@@ -21,6 +21,7 @@
     "@bb/sandbox-host": "workspace:*",
     "@bb/server-contract": "workspace:*",
     "@bb/templates": "workspace:*",
+    "@bb/workspace": "workspace:*",
     "@hono/node-server": "^1.19.11",
     "@hono/node-ws": "^1.3.0",
     "@mariozechner/pi-ai": "^0.58.3",
