@@ -1,323 +1,14 @@
-import { writeFileSync, mkdtempSync, rmSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ThreadEvent } from "@bb/domain";
+import {
+  createFakeAdapter as createSharedFakeAdapter,
+  fakeProviderScriptPath,
+} from "./test/index.js";
 import type { ProviderAdapter } from "./provider-adapter.js";
 import { createAgentRuntime } from "./runtime.js";
-
-// ---------------------------------------------------------------------------
-// Fake provider script — full-featured JSON-RPC server over stdio
-//
-// Supports: initialize, thread/start, thread/resume, turn/start, turn/steer,
-// thread/stop, thread/name/set, and tool call requests back to the runtime.
-// ---------------------------------------------------------------------------
-
-const FAKE_PROVIDER_SCRIPT = `
-const readline = require("readline");
-const rl = readline.createInterface({ input: process.stdin });
-
-const threads = new Map(); // threadId -> { providerThreadId, turnCount }
-let nextProviderThreadId = 1;
-
-rl.on("line", (line) => {
-  let msg;
-  try { msg = JSON.parse(line); } catch { return; }
-
-  // JSON-RPC response (from runtime, e.g. tool call response)
-  if (msg.id !== undefined && !msg.method) {
-    // Tool call response — just consume it
-    return;
-  }
-
-  if (msg.method === "initialize") {
-    process.stdout.write(JSON.stringify({
-      jsonrpc: "2.0", id: msg.id, result: { ok: true }
-    }) + "\\n");
-    return;
-  }
-
-  if (msg.method === "thread/start") {
-    const threadId = msg.params?.threadId ?? "unknown";
-    const providerThreadId = "prov-" + (nextProviderThreadId++);
-    threads.set(threadId, { providerThreadId, turnCount: 0 });
-
-    // Respond with providerThreadId
-    process.stdout.write(JSON.stringify({
-      jsonrpc: "2.0", id: msg.id,
-      result: { providerThreadId }
-    }) + "\\n");
-
-    // Emit thread/identity notification
-    process.stdout.write(JSON.stringify({
-      jsonrpc: "2.0", method: "thread/identity",
-      params: { threadId, providerThreadId }
-    }) + "\\n");
-    return;
-  }
-
-  if (msg.method === "thread/resume") {
-    const threadId = msg.params?.threadId ?? "unknown";
-    const providerThreadId = msg.params?.providerThreadId ?? "resumed-" + (nextProviderThreadId++);
-    threads.set(threadId, { providerThreadId, turnCount: 0 });
-
-    process.stdout.write(JSON.stringify({
-      jsonrpc: "2.0", id: msg.id,
-      result: { providerThreadId }
-    }) + "\\n");
-    return;
-  }
-
-  if (msg.method === "turn/start") {
-    const threadId = msg.params?.threadId ?? "unknown";
-    const thread = threads.get(threadId);
-    if (!thread) {
-      process.stdout.write(JSON.stringify({
-        jsonrpc: "2.0", id: msg.id,
-        error: { code: -32000, message: "Unknown thread: " + threadId }
-      }) + "\\n");
-      return;
-    }
-    thread.turnCount++;
-    const turnId = "turn-" + thread.turnCount;
-
-    // Respond to the request
-    process.stdout.write(JSON.stringify({
-      jsonrpc: "2.0", id: msg.id, result: { ok: true }
-    }) + "\\n");
-
-    // Emit turn/started
-    process.stdout.write(JSON.stringify({
-      jsonrpc: "2.0", method: "turn/started",
-      params: { threadId, turnId }
-    }) + "\\n");
-
-    // Check if input asks to call a tool
-    const inputText = (msg.params?.input || [])
-      .filter(i => i.type === "text")
-      .map(i => i.text)
-      .join(" ");
-
-    if (inputText.includes("call_tool:")) {
-      const toolName = inputText.split("call_tool:")[1].trim().split(" ")[0];
-      // Send a tool call request back to the runtime
-      const toolCallId = Date.now();
-      process.stdout.write(JSON.stringify({
-        jsonrpc: "2.0",
-        id: toolCallId,
-        method: "item/tool/call",
-        params: {
-          threadId,
-          turnId,
-          callId: "call-" + toolCallId,
-          tool: toolName,
-          arguments: {}
-        }
-      }) + "\\n");
-
-      // Wait for tool response then complete
-      // The response will arrive as a JSON-RPC response with matching id
-      // For simplicity, emit turn/completed after a short delay
-      setTimeout(() => {
-        process.stdout.write(JSON.stringify({
-          jsonrpc: "2.0", method: "item/completed",
-          params: { threadId, turnId, item: { type: "agentMessage", id: "msg-1", text: "Tool called" } }
-        }) + "\\n");
-        process.stdout.write(JSON.stringify({
-          jsonrpc: "2.0", method: "turn/completed",
-          params: { threadId, turnId }
-        }) + "\\n");
-      }, 100);
-      return;
-    }
-
-    // Normal turn — emit events
-    process.stdout.write(JSON.stringify({
-      jsonrpc: "2.0", method: "item/completed",
-      params: { threadId, turnId, item: { type: "agentMessage", id: "msg-" + thread.turnCount, text: "Response to: " + inputText } }
-    }) + "\\n");
-
-    process.stdout.write(JSON.stringify({
-      jsonrpc: "2.0", method: "turn/completed",
-      params: { threadId, turnId }
-    }) + "\\n");
-    return;
-  }
-
-  if (msg.method === "turn/steer") {
-    // Fire-and-forget acknowledgement
-    if (msg.id !== undefined) {
-      process.stdout.write(JSON.stringify({
-        jsonrpc: "2.0", id: msg.id, result: { ok: true }
-      }) + "\\n");
-    }
-    return;
-  }
-
-  if (msg.method === "thread/stop") {
-    if (msg.id !== undefined) {
-      process.stdout.write(JSON.stringify({
-        jsonrpc: "2.0", id: msg.id, result: { ok: true }
-      }) + "\\n");
-    }
-    return;
-  }
-
-  if (msg.method === "thread/name/set") {
-    process.stdout.write(JSON.stringify({
-      jsonrpc: "2.0", id: msg.id, result: { ok: true }
-    }) + "\\n");
-    return;
-  }
-
-  // Unknown method
-  if (msg.id !== undefined) {
-    process.stdout.write(JSON.stringify({
-      jsonrpc: "2.0", id: msg.id,
-      error: { code: -32601, message: "Method not found: " + msg.method }
-    }) + "\\n");
-  }
-});
-`;
-
-// ---------------------------------------------------------------------------
-// Fake adapter
-// ---------------------------------------------------------------------------
-
-function createFakeAdapter(scriptPath: string): ProviderAdapter {
-  return {
-    id: "fake",
-    displayName: "Fake Provider",
-    capabilities: { supportsRename: true, supportsServiceTier: false },
-    process: { command: "node", args: [scriptPath] },
-
-    buildCommand(command) {
-      switch (command.type) {
-        case "initialize":
-          return { jsonrpc: "2.0", method: "initialize", params: {} };
-        case "thread/start":
-          return {
-            jsonrpc: "2.0",
-            method: "thread/start",
-            params: { threadId: command.threadId, input: command.input },
-          };
-        case "thread/resume":
-          return {
-            jsonrpc: "2.0",
-            method: "thread/resume",
-            params: {
-              threadId: command.threadId,
-              providerThreadId: command.providerThreadId,
-            },
-          };
-        case "turn/start":
-          return {
-            jsonrpc: "2.0",
-            method: "turn/start",
-            params: { threadId: command.threadId, input: command.input },
-          };
-        case "turn/steer":
-          return {
-            jsonrpc: "2.0",
-            method: "turn/steer",
-            params: {
-              threadId: command.threadId,
-              expectedTurnId: command.expectedTurnId,
-              input: command.input,
-            },
-          };
-        case "thread/stop":
-          return {
-            jsonrpc: "2.0",
-            method: "thread/stop",
-            params: { threadId: command.threadId },
-          };
-        case "thread/name/set":
-          return {
-            jsonrpc: "2.0",
-            method: "thread/name/set",
-            params: { threadId: command.threadId, title: command.title },
-          };
-        default:
-          return null;
-      }
-    },
-
-    translateEvent(event, _context) {
-      const e = event as { method?: string; params?: Record<string, unknown> };
-      if (!e.method || !e.params) return [];
-
-      const threadId = (e.params.threadId as string) ?? "";
-      const turnId = (e.params.turnId as string) ?? "";
-
-      switch (e.method) {
-        case "thread/identity":
-          return [
-            {
-              type: "thread/identity",
-              threadId,
-              providerThreadId: e.params.providerThreadId as string,
-            } as ThreadEvent,
-          ];
-        case "turn/started":
-          return [{ type: "turn/started", threadId, providerThreadId: threadId, turnId } as ThreadEvent];
-        case "turn/completed":
-          return [{ type: "turn/completed", threadId, providerThreadId: threadId, turnId } as ThreadEvent];
-        case "item/completed":
-          return [
-            {
-              type: "item/completed",
-              threadId,
-              providerThreadId: threadId,
-              turnId,
-              item: e.params.item,
-            } as ThreadEvent,
-          ];
-        case "error":
-          return [
-            {
-              type: "error",
-              threadId,
-              providerThreadId: threadId,
-              message: (e.params.message as string) ?? "unknown",
-            } as ThreadEvent,
-          ];
-        default:
-          return [];
-      }
-    },
-
-    decodeToolCallRequest(request) {
-      if (request.method !== "item/tool/call") return null;
-      const params = request.params as Record<string, unknown> | undefined;
-      if (!params) return null;
-      return {
-        requestId: request.id ?? 0,
-        threadId: (params.threadId as string) ?? "",
-        turnId: (params.turnId as string) ?? "",
-        callId: (params.callId as string) ?? "",
-        tool: (params.tool as string) ?? "",
-        arguments: params.arguments,
-      };
-    },
-
-    async listModels() {
-      return [
-        {
-          id: "fake-model",
-          model: "fake-model-v1",
-          displayName: "Fake Model",
-          description: "A fake model for testing",
-          supportedReasoningEfforts: [
-            { reasoningEffort: "medium" as const, description: "Medium" },
-          ],
-          defaultReasoningEffort: "medium" as const,
-          isDefault: true,
-        },
-      ];
-    },
-  };
-}
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -335,10 +26,13 @@ describe("createAgentRuntime", () => {
   let tmpDir: string;
   let scriptPath: string;
 
+  function createFakeAdapter(scriptPath: string): ProviderAdapter {
+    return createSharedFakeAdapter({ scriptPath });
+  }
+
   beforeEach(() => {
     tmpDir = mkdtempSync(join(tmpdir(), "bb-runtime-test-"));
-    scriptPath = join(tmpDir, "fake-provider.cjs");
-    writeFileSync(scriptPath, FAKE_PROVIDER_SCRIPT);
+    scriptPath = fakeProviderScriptPath;
   });
 
   afterEach(() => {
@@ -953,7 +647,7 @@ describe("createAgentRuntime", () => {
     const events: ThreadEvent[] = [];
     // Create two different fake provider scripts with distinct responses
     const script2 = join(tmpDir, "fake-provider-2.cjs");
-    writeFileSync(script2, FAKE_PROVIDER_SCRIPT);
+    writeFileSync(script2, readFileSync(fakeProviderScriptPath, "utf8"));
 
     let adapterCallCount = 0;
     const runtime = createAgentRuntime({

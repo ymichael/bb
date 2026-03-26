@@ -2,131 +2,14 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import type { AgentRuntimeOptions } from "@bb/agent-runtime";
-import type { ThreadEvent } from "@bb/domain";
+import { createFakeAdapter } from "@bb/agent-runtime/test";
 import { readCommandCursor } from "../../src/command-cursor.js";
 import { startHostDaemon } from "../../src/index.js";
 import {
   createTestServer,
 } from "../helpers/test-server.js";
 
-type ProviderAdapter = ReturnType<NonNullable<AgentRuntimeOptions["adapterFactory"]>>;
-
 const tempDirs: string[] = [];
-
-const FAKE_PROVIDER_SCRIPT = `
-const readline = require("readline");
-const rl = readline.createInterface({ input: process.stdin });
-const threads = new Map();
-let nextProviderThreadId = 1;
-
-function send(message) {
-  process.stdout.write(JSON.stringify(message) + "\\n");
-}
-
-rl.on("line", (line) => {
-  let message;
-  try {
-    message = JSON.parse(line);
-  } catch {
-    return;
-  }
-
-  if (message.id !== undefined && !message.method) {
-    return;
-  }
-
-  if (message.method === "initialize") {
-    send({ jsonrpc: "2.0", id: message.id, result: { ok: true } });
-    return;
-  }
-
-  if (message.method === "thread/start") {
-    const threadId = message.params?.threadId ?? "unknown";
-    const providerThreadId = "prov-" + nextProviderThreadId++;
-    threads.set(threadId, { providerThreadId, turnCount: 0 });
-    send({
-      jsonrpc: "2.0",
-      id: message.id,
-      result: { providerThreadId },
-    });
-    send({
-      jsonrpc: "2.0",
-      method: "thread/identity",
-      params: { threadId, providerThreadId },
-    });
-    return;
-  }
-
-  if (message.method === "thread/resume") {
-    const threadId = message.params?.threadId ?? "unknown";
-    const providerThreadId =
-      message.params?.providerThreadId ?? "prov-" + nextProviderThreadId++;
-    threads.set(threadId, { providerThreadId, turnCount: 0 });
-    send({
-      jsonrpc: "2.0",
-      id: message.id,
-      result: { providerThreadId },
-    });
-    return;
-  }
-
-  if (message.method === "turn/start") {
-    const threadId = message.params?.threadId ?? "unknown";
-    const thread = threads.get(threadId);
-    if (!thread) {
-      send({
-        jsonrpc: "2.0",
-        id: message.id,
-        error: { code: -32000, message: "Unknown thread: " + threadId },
-      });
-      return;
-    }
-
-    thread.turnCount += 1;
-    const turnId = "turn-" + thread.turnCount;
-    const inputText = (message.params?.input ?? [])
-      .filter((item) => item.type === "text")
-      .map((item) => item.text)
-      .join(" ");
-    const delayMatch = /delay:(\\d+)/.exec(inputText);
-    const delayMs = delayMatch ? Number(delayMatch[1]) : 0;
-
-    send({ jsonrpc: "2.0", id: message.id, result: { ok: true } });
-    send({
-      jsonrpc: "2.0",
-      method: "turn/started",
-      params: {
-        threadId,
-        turnId,
-        providerThreadId: thread.providerThreadId,
-      },
-    });
-
-    setTimeout(() => {
-      send({
-        jsonrpc: "2.0",
-        method: "turn/completed",
-        params: {
-          threadId,
-          turnId,
-          providerThreadId: thread.providerThreadId,
-          status: "completed",
-        },
-      });
-    }, delayMs);
-    return;
-  }
-
-  if (message.method === "thread/name/set" || message.method === "thread/stop") {
-    if (message.method === "thread/stop") {
-      threads.delete(message.params?.threadId ?? "unknown");
-    }
-    send({ jsonrpc: "2.0", id: message.id, result: { ok: true } });
-    return;
-  }
-});
-`;
 
 async function makeTempDir(prefix: string): Promise<string> {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), prefix));
@@ -161,123 +44,9 @@ async function waitForCursor(
   }
 }
 
-function createFakeAdapter(scriptPath: string): ProviderAdapter {
-  return {
-    id: "fake",
-    displayName: "Fake Provider",
-    capabilities: { supportsRename: true, supportsServiceTier: false },
-    process: { command: "node", args: [scriptPath] },
-    buildCommand(command) {
-      switch (command.type) {
-        case "initialize":
-          return { jsonrpc: "2.0", method: "initialize", params: {} };
-        case "thread/start":
-          return {
-            jsonrpc: "2.0",
-            method: "thread/start",
-            params: { threadId: command.threadId, input: command.input },
-          };
-        case "thread/resume":
-          return {
-            jsonrpc: "2.0",
-            method: "thread/resume",
-            params: {
-              threadId: command.threadId,
-              providerThreadId: command.providerThreadId,
-            },
-          };
-        case "turn/start":
-          return {
-            jsonrpc: "2.0",
-            method: "turn/start",
-            params: { threadId: command.threadId, input: command.input },
-          };
-        case "thread/name/set":
-          return {
-            jsonrpc: "2.0",
-            method: "thread/name/set",
-            params: { threadId: command.threadId, title: command.title },
-          };
-        case "thread/stop":
-          return {
-            jsonrpc: "2.0",
-            method: "thread/stop",
-            params: { threadId: command.threadId },
-          };
-        default:
-          return null;
-      }
-    },
-    translateEvent(event): ThreadEvent[] {
-      const message = event as { method?: string; params?: Record<string, unknown> };
-      if (!message.method || !message.params) {
-        return [];
-      }
-
-      const threadId = String(message.params.threadId ?? "");
-      const providerThreadId = String(message.params.providerThreadId ?? "");
-
-      switch (message.method) {
-        case "thread/identity":
-          return [
-            {
-              type: "thread/identity",
-              threadId,
-              providerThreadId,
-            } satisfies ThreadEvent,
-          ];
-        case "turn/started":
-          return [
-            {
-              type: "turn/started",
-              threadId,
-              turnId: String(message.params.turnId ?? ""),
-              providerThreadId,
-            } satisfies ThreadEvent,
-          ];
-        case "turn/completed":
-          return [
-            {
-              type: "turn/completed",
-              threadId,
-              turnId: String(message.params.turnId ?? ""),
-              providerThreadId,
-              status: "completed",
-            } satisfies ThreadEvent,
-          ];
-        default:
-          return [];
-      }
-    },
-    decodeToolCallRequest() {
-      return null;
-    },
-    async listModels() {
-      return [
-        {
-          id: "fake-model",
-          model: "fake-model",
-          displayName: "Fake Model",
-          description: "Fake model for daemon integration tests",
-          supportedReasoningEfforts: [
-            {
-              reasoningEffort: "medium" as const,
-              description: "Medium",
-            },
-          ],
-          defaultReasoningEffort: "medium" as const,
-          isDefault: true,
-        },
-      ];
-    },
-  };
-}
-
 async function setupDaemonHarness() {
   const dataDir = await makeTempDir("bb-host-daemon-data-");
   const workspaceRoot = await makeTempDir("bb-host-daemon-workspaces-");
-  const scriptPath = path.join(workspaceRoot, "fake-provider.cjs");
-  await fs.writeFile(scriptPath, FAKE_PROVIDER_SCRIPT, "utf8");
 
   const envAPath = path.join(workspaceRoot, "env-a");
   const envBPath = path.join(workspaceRoot, "env-b");
@@ -293,7 +62,7 @@ async function setupDaemonHarness() {
     authToken: "secret",
     enableLocalApi: false,
     createInstanceId: () => "instance-1",
-    adapterFactory: () => createFakeAdapter(scriptPath),
+    adapterFactory: () => createFakeAdapter(),
   });
 
   await waitFor(() => server.sessionOpenCalls.length === 1);
