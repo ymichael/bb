@@ -55,4 +55,27 @@ export function reconcileSessionThreads(
       // Ignore invalid transitions caused by concurrent lifecycle updates.
     }
   }
+
+  if (activeThreadIds.length > 0) {
+    const idleButActive = deps.db
+      .select({ id: threads.id })
+      .from(threads)
+      .innerJoin(environments, eq(threads.environmentId, environments.id))
+      .where(
+        and(
+          eq(environments.hostId, hostId),
+          eq(threads.status, "idle"),
+          inArray(threads.id, activeThreadIds),
+        ),
+      )
+      .all();
+
+    for (const thread of idleButActive) {
+      try {
+        transitionThreadStatus(deps.db, deps.hub, thread.id, "active");
+      } catch {
+        // Ignore invalid transitions caused by concurrent lifecycle updates.
+      }
+    }
+  }
 }

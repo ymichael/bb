@@ -89,7 +89,7 @@ function applyEventEffects(
     try {
       const event = entry.event;
       if (event.type === "turn/started") {
-        const thread = getThread(deps.db, event.threadId);
+        const thread = getThread(deps.db, entry.threadId);
         if (!thread) {
           continue;
         }
@@ -100,12 +100,15 @@ function applyEventEffects(
       }
 
       if (event.type === "turn/completed") {
-        applyTurnCompletedEvent(deps, event);
+        applyTurnCompletedEvent(deps, {
+          ...event,
+          threadId: entry.threadId,
+        });
         continue;
       }
 
       if (event.type === "thread/name/updated") {
-        updateThread(deps.db, deps.hub, event.threadId, {
+        updateThread(deps.db, deps.hub, entry.threadId, {
           title: event.threadName,
         });
       }

@@ -24,6 +24,10 @@ export function handleCommandResult(
     return null;
   }
 
+  if (command.state === "success" || command.state === "error") {
+    return command;
+  }
+
   const resultPayload = report.ok
     ? JSON.stringify(report.result)
     : JSON.stringify({
