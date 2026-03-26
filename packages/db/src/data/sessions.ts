@@ -106,22 +106,6 @@ export function closeSession(
   );
 }
 
-export function heartbeatSession(
-  db: DbConnection,
-  sessionId: string,
-  leaseExpiresAt: number,
-) {
-  const now = Date.now();
-  db.update(hostDaemonSessions)
-    .set({
-      lastHeartbeatAt: now,
-      leaseExpiresAt,
-      updatedAt: now,
-    })
-    .where(eq(hostDaemonSessions.id, sessionId))
-    .run();
-}
-
 export function getActiveSession(db: DbConnection, hostId: string) {
   return (
     db

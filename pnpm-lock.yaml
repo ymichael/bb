@@ -246,64 +246,6 @@ importers:
         specifier: ^5.7.0
         version: 5.9.3
 
-  apps/server:
-    dependencies:
-      '@bb/config':
-        specifier: workspace:*
-        version: link:../../packages/config
-      '@bb/core-ui':
-        specifier: workspace:*
-        version: link:../../packages/core-ui
-      '@bb/db':
-        specifier: workspace:*
-        version: link:../../packages/db
-      '@bb/domain':
-        specifier: workspace:*
-        version: link:../../packages/domain
-      '@bb/host-daemon-contract':
-        specifier: workspace:*
-        version: link:../../packages/host-daemon-contract
-      '@bb/logger':
-        specifier: workspace:*
-        version: link:../../packages/logger
-      '@bb/sandbox-host':
-        specifier: workspace:*
-        version: link:../../packages/sandbox-host
-      '@bb/server-contract':
-        specifier: workspace:*
-        version: link:../../packages/server-contract
-      '@bb/templates':
-        specifier: workspace:*
-        version: link:../../packages/templates
-      '@hono/node-server':
-        specifier: ^1.13.0
-        version: 1.19.11(hono@4.11.9)
-      '@hono/node-ws':
-        specifier: ^1.1.0
-        version: 1.3.0(@hono/node-server@1.19.11(hono@4.11.9))(hono@4.11.9)
-      '@mariozechner/pi-ai':
-        specifier: ^0.62.0
-        version: 0.62.0(ws@8.19.0)(zod@4.3.6)
-      hono:
-        specifier: ^4.7.0
-        version: 4.11.9
-      ws:
-        specifier: ^8.19.0
-        version: 8.19.0
-    devDependencies:
-      '@bb/tsconfig':
-        specifier: workspace:*
-        version: link:../../packages/tsconfig
-      '@types/node':
-        specifier: ^22.0.0
-        version: 22.19.10
-      '@types/ws':
-        specifier: ^8.5.0
-        version: 8.18.1
-      typescript:
-        specifier: ^5.7.0
-        version: 5.9.3
-
   packages/agent-runtime:
     dependencies:
       '@anthropic-ai/claude-agent-sdk':
@@ -1460,19 +1402,6 @@ packages:
       '@modelcontextprotocol/sdk':
         optional: true
 
-  '@hono/node-server@1.19.11':
-    resolution: {integrity: sha512-dr8/3zEaB+p0D2n/IUrlPF1HZm586qgJNXK1a9fhg/PzdtkK7Ksd5l312tJX2yBuALqDYBlG20QEbayqPyxn+g==}
-    engines: {node: '>=18.14.1'}
-    peerDependencies:
-      hono: ^4
-
-  '@hono/node-ws@1.3.0':
-    resolution: {integrity: sha512-ju25YbbvLuXdqBCmLZLqnNYu1nbHIQjoyUqA8ApZOeL1k4skuiTcw5SW77/5SUYo2Xi2NVBJoVlfQurnKEp03Q==}
-    engines: {node: '>=18.14.1'}
-    peerDependencies:
-      '@hono/node-server': ^1.19.2
-      hono: ^4.6.0
-
   '@humanfs/core@0.19.1':
     resolution: {integrity: sha512-5DyQ4+1JEUzejeK1JGICcideyfUbGixgS9jNgex5nqkW+cY7WZhxBigmieN5Qnw9ZosSNVC9KQKyb+GUaGyKUA==}
     engines: {node: '>=18.18.0'}
@@ -1671,11 +1600,6 @@ packages:
 
   '@mariozechner/pi-ai@0.58.3':
     resolution: {integrity: sha512-jdj6+Us94Ayrf4/rdSs7b7yCon8qMHAgU1qVQT/IIGHPgAktilD2Fkb4dv2LtgGr0Z5YKY2CAj9hyESKA6VbHw==}
-    engines: {node: '>=20.0.0'}
-    hasBin: true
-
-  '@mariozechner/pi-ai@0.62.0':
-    resolution: {integrity: sha512-mJgryZ5RgBQG++tiETMtCQQJoH2MAhKetCfqI98NMvGydu7L9x2qC2JekQlRaAgIlTgv4MRH1UXHMEs4UweE/Q==}
     engines: {node: '>=20.0.0'}
     hasBin: true
 
@@ -2678,9 +2602,6 @@ packages:
 
   '@types/unist@3.0.3':
     resolution: {integrity: sha512-ko/gIFJRv177XgZsZcBwnqJN5x/Gien8qNOn0D5bQU/zAzVf9Zt3BlcUiLqhV9y4ARk0GbT3tnUiPNgnTXzc/Q==}
-
-  '@types/ws@8.18.1':
-    resolution: {integrity: sha512-ThVF6DCVhA8kUGy+aazFQ4kXQ7E1Ty7A3ypFOe0IcJV8O/M511G99AW24irKrW56Wt44yG9+ij8FaqoBGkuBXg==}
 
   '@types/yauzl@2.10.3':
     resolution: {integrity: sha512-oJoftv0LSuaDZE3Le4DbKX+KS9G36NzOeSap90UIK0yMA/NhKJhqlSGtNDORNRaIbQfzjXDrQa0ytJ6mNRGz/Q==}
@@ -5869,19 +5790,6 @@ snapshots:
       - supports-color
       - utf-8-validate
 
-  '@hono/node-server@1.19.11(hono@4.11.9)':
-    dependencies:
-      hono: 4.11.9
-
-  '@hono/node-ws@1.3.0(@hono/node-server@1.19.11(hono@4.11.9))(hono@4.11.9)':
-    dependencies:
-      '@hono/node-server': 1.19.11(hono@4.11.9)
-      hono: 4.11.9
-      ws: 8.19.0
-    transitivePeerDependencies:
-      - bufferutil
-      - utf-8-validate
-
   '@humanfs/core@0.19.1': {}
 
   '@humanfs/node@0.16.7':
@@ -6045,30 +5953,6 @@ snapshots:
       - zod
 
   '@mariozechner/pi-ai@0.58.3(ws@8.19.0)(zod@4.3.6)':
-    dependencies:
-      '@anthropic-ai/sdk': 0.73.0(zod@4.3.6)
-      '@aws-sdk/client-bedrock-runtime': 3.1009.0
-      '@google/genai': 1.45.0
-      '@mistralai/mistralai': 1.14.1
-      '@sinclair/typebox': 0.34.48
-      ajv: 8.18.0
-      ajv-formats: 3.0.1(ajv@8.18.0)
-      chalk: 5.6.2
-      openai: 6.26.0(ws@8.19.0)(zod@4.3.6)
-      partial-json: 0.1.7
-      proxy-agent: 6.5.0
-      undici: 7.24.4
-      zod-to-json-schema: 3.25.1(zod@4.3.6)
-    transitivePeerDependencies:
-      - '@modelcontextprotocol/sdk'
-      - aws-crt
-      - bufferutil
-      - supports-color
-      - utf-8-validate
-      - ws
-      - zod
-
-  '@mariozechner/pi-ai@0.62.0(ws@8.19.0)(zod@4.3.6)':
     dependencies:
       '@anthropic-ai/sdk': 0.73.0(zod@4.3.6)
       '@aws-sdk/client-bedrock-runtime': 3.1009.0
@@ -7172,10 +7056,6 @@ snapshots:
   '@types/unist@2.0.11': {}
 
   '@types/unist@3.0.3': {}
-
-  '@types/ws@8.18.1':
-    dependencies:
-      '@types/node': 22.19.10
 
   '@types/yauzl@2.10.3':
     dependencies:

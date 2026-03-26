@@ -10,14 +10,9 @@ export type { CreateProjectInput, UpdateProjectInput } from "./projects.js";
 export {
   createProjectSource,
   listProjectSources,
-  updateProjectSource,
-  getDefaultProjectSource,
   deleteProjectSource,
 } from "./project-sources.js";
-export type {
-  CreateProjectSourceInput,
-  UpdateProjectSourceInput,
-} from "./project-sources.js";
+export type { CreateProjectSourceInput } from "./project-sources.js";
 
 export {
   createThread,
@@ -26,15 +21,10 @@ export {
   updateThread,
   deleteThread,
   archiveThread,
-  unarchiveThread,
   transitionThreadStatus,
   ALLOWED_TRANSITIONS,
 } from "./threads.js";
-export type {
-  CreateThreadInput,
-  UpdateThreadInput,
-  ListThreadsOptions,
-} from "./threads.js";
+export type { CreateThreadInput, UpdateThreadInput } from "./threads.js";
 
 export {
   createEnvironment,
@@ -66,12 +56,7 @@ export type {
   ReportCommandResultInput,
 } from "./commands.js";
 
-export {
-  openSession,
-  closeSession,
-  getActiveSession,
-  heartbeatSession,
-} from "./sessions.js";
+export { openSession, closeSession, getActiveSession } from "./sessions.js";
 export type { OpenSessionInput } from "./sessions.js";
 
 export { getCursor, setCursor } from "./cursors.js";

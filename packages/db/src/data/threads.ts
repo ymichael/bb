@@ -1,5 +1,5 @@
-import { eq, and, isNull, isNotNull } from "drizzle-orm";
-import type { ThreadChangeKind, ThreadStatus, ThreadType } from "@bb/domain";
+import { eq } from "drizzle-orm";
+import type { ThreadChangeKind, ThreadStatus } from "@bb/domain";
 import type { DbConnection } from "../connection.js";
 import type { DbNotifier } from "../notifier.js";
 import { threads } from "../schema.js";
@@ -60,33 +60,15 @@ export function getThread(db: DbConnection, id: string) {
   return db.select().from(threads).where(eq(threads.id, id)).get() ?? null;
 }
 
-export interface ListThreadsOptions {
-  projectId?: string;
-  type?: ThreadType;
-  parentThreadId?: string;
-  archived?: boolean;
-}
-
-export function listThreads(db: DbConnection, filterOrProjectId?: string | ListThreadsOptions) {
-  const opts: ListThreadsOptions =
-    typeof filterOrProjectId === "string"
-      ? { projectId: filterOrProjectId }
-      : filterOrProjectId ?? {};
-
-  const conditions = [];
-  if (opts.projectId) conditions.push(eq(threads.projectId, opts.projectId));
-  if (opts.type) conditions.push(eq(threads.type, opts.type));
-  if (opts.parentThreadId) conditions.push(eq(threads.parentThreadId, opts.parentThreadId));
-  if (opts.archived === true) conditions.push(isNotNull(threads.archivedAt));
-  if (opts.archived === false) conditions.push(isNull(threads.archivedAt));
-
-  if (conditions.length === 0) {
-    return db.select().from(threads).all();
+export function listThreads(db: DbConnection, projectId?: string) {
+  if (projectId) {
+    return db
+      .select()
+      .from(threads)
+      .where(eq(threads.projectId, projectId))
+      .all();
   }
-  if (conditions.length === 1) {
-    return db.select().from(threads).where(conditions[0]).all();
-  }
-  return db.select().from(threads).where(and(...conditions)).all();
+  return db.select().from(threads).all();
 }
 
 export interface UpdateThreadInput {
@@ -143,23 +125,6 @@ export function archiveThread(
   const now = Date.now();
   db.update(threads)
     .set({ archivedAt: now, updatedAt: now })
-    .where(eq(threads.id, id))
-    .run();
-  const updated = db.select().from(threads).where(eq(threads.id, id)).get();
-  if (updated) {
-    notifier.notifyThread(id, ["archived-changed"]);
-  }
-  return updated ?? null;
-}
-
-export function unarchiveThread(
-  db: DbConnection,
-  notifier: DbNotifier,
-  id: string,
-) {
-  const now = Date.now();
-  db.update(threads)
-    .set({ archivedAt: null, updatedAt: now })
     .where(eq(threads.id, id))
     .run();
   const updated = db.select().from(threads).where(eq(threads.id, id)).get();

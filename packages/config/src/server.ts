@@ -24,13 +24,4 @@ export const serverConfig = envsafe({
     default: "",
     allowEmpty: true,
   }),
-  BB_INFERENCE_MODEL: str({
-    desc: "Model for title generation in provider/model format (e.g., openai/gpt-4o-mini)",
-    default: "openai/gpt-4o-mini",
-  }),
-  OPENAI_API_KEY: str({
-    desc: "OpenAI API key for voice transcription and inference",
-    default: "",
-    allowEmpty: true,
-  }),
 });
