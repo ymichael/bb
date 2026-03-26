@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   PROJECT_CHANGE_KINDS,
   SYSTEM_CHANGE_KINDS,
+  createManagerThreadRequestSchema,
   createPublicApiClient,
   createThreadRequestSchema,
   environmentActionRequestSchema,
@@ -42,6 +43,16 @@ describe("server-contract canonical schemas", () => {
       }),
     ).toMatchObject({
       action: "commit",
+    });
+
+    expect(
+      createManagerThreadRequestSchema.parse({
+        providerId: "codex",
+        reasoningLevel: "high",
+        title: "Manager",
+      }),
+    ).toMatchObject({
+      providerId: "codex",
     });
 
     expect(

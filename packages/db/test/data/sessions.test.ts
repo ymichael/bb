@@ -7,6 +7,7 @@ import {
   openSession,
   closeSession,
   getActiveSession,
+  heartbeatSession,
 } from "../../src/data/sessions.js";
 import { upsertHost } from "../../src/data/hosts.js";
 import { hostDaemonSessions } from "../../src/schema.js";
@@ -102,5 +103,71 @@ describe("sessions", () => {
       .get();
     expect(old?.status).toBe("closed");
     expect(old?.closeReason).toBe("replaced");
+  });
+
+  it("updates heartbeat timestamps for an active session", () => {
+    const { db, host } = setup();
+    const session = openSession(db, noopNotifier, {
+      hostId: host.id,
+      instanceId: "inst-1",
+      hostName: "test-host",
+      hostType: "persistent",
+      protocolVersion: 1,
+      heartbeatIntervalMs: 10_000,
+      leaseTimeoutMs: 30_000,
+    });
+
+    const updated = heartbeatSession(
+      db,
+      session.id,
+      Date.now() + 45_000,
+    );
+    expect(updated?.lastHeartbeatAt).toBeTypeOf("number");
+    expect(updated?.leaseExpiresAt).toBeGreaterThan(Date.now());
+  });
+
+  it("does not return expired sessions as active", () => {
+    const { db, host } = setup();
+    const session = openSession(db, noopNotifier, {
+      hostId: host.id,
+      instanceId: "inst-1",
+      hostName: "test-host",
+      hostType: "persistent",
+      protocolVersion: 1,
+      heartbeatIntervalMs: 10_000,
+      leaseTimeoutMs: 30_000,
+    });
+
+    db.update(hostDaemonSessions)
+      .set({
+        leaseExpiresAt: Date.now() - 1,
+      })
+      .where(eq(hostDaemonSessions.id, session.id))
+      .run();
+
+    expect(getActiveSession(db, host.id)).toBeNull();
+  });
+
+  it("does not overwrite an already closed session", () => {
+    const { db, host } = setup();
+    const session = openSession(db, noopNotifier, {
+      hostId: host.id,
+      instanceId: "inst-1",
+      hostName: "test-host",
+      hostType: "persistent",
+      protocolVersion: 1,
+      heartbeatIntervalMs: 10_000,
+      leaseTimeoutMs: 30_000,
+    });
+
+    closeSession(db, noopNotifier, session.id, "replaced");
+    const closedAgain = closeSession(
+      db,
+      noopNotifier,
+      session.id,
+      "daemon-disconnect",
+    );
+
+    expect(closedAgain?.closeReason).toBe("replaced");
   });
 });

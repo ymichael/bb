@@ -1,4 +1,5 @@
 import { eq } from "drizzle-orm";
+import type { HostType } from "@bb/domain";
 import type { DbConnection } from "../connection.js";
 import type { DbNotifier } from "../notifier.js";
 import { hosts } from "../schema.js";
@@ -7,7 +8,7 @@ import { createHostId } from "../ids.js";
 export interface UpsertHostInput {
   id?: string;
   name: string;
-  type: string;
+  type: HostType;
   provider?: string | null;
   externalId?: string | null;
 }

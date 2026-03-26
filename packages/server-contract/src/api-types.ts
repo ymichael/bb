@@ -136,6 +136,16 @@ export const createProjectRequestSchema = z.object({
 });
 export type CreateProjectRequest = z.infer<typeof createProjectRequestSchema>;
 
+export const createManagerThreadRequestSchema = z.object({
+  title: z.string().min(1).optional(),
+  providerId: z.string().min(1).optional(),
+  model: z.string().min(1).optional(),
+  reasoningLevel: reasoningLevelSchema.optional(),
+});
+export type CreateManagerThreadRequest = z.infer<
+  typeof createManagerThreadRequestSchema
+>;
+
 export const updateProjectRequestSchema = z
   .object({
     name: z.string().min(1).optional(),

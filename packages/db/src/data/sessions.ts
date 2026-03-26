@@ -1,4 +1,5 @@
-import { eq, and } from "drizzle-orm";
+import { eq, and, gt } from "drizzle-orm";
+import type { HostType } from "@bb/domain";
 import type { DbConnection } from "../connection.js";
 import type { DbNotifier } from "../notifier.js";
 import { hostDaemonSessions } from "../schema.js";
@@ -8,7 +9,7 @@ export interface OpenSessionInput {
   hostId: string;
   instanceId: string;
   hostName: string;
-  hostType: string;
+  hostType: HostType;
   protocolVersion: number;
   heartbeatIntervalMs: number;
   leaseTimeoutMs: number;
@@ -84,6 +85,18 @@ export function closeSession(
   sessionId: string,
   closeReason: string,
 ) {
+  const existing = db
+    .select()
+    .from(hostDaemonSessions)
+    .where(eq(hostDaemonSessions.id, sessionId))
+    .get();
+  if (!existing) {
+    return null;
+  }
+  if (existing.status !== "active") {
+    return existing;
+  }
+
   const now = Date.now();
   db.update(hostDaemonSessions)
     .set({
@@ -115,8 +128,33 @@ export function getActiveSession(db: DbConnection, hostId: string) {
         and(
           eq(hostDaemonSessions.hostId, hostId),
           eq(hostDaemonSessions.status, "active"),
+          gt(hostDaemonSessions.leaseExpiresAt, Date.now()),
         ),
       )
+      .get() ?? null
+  );
+}
+
+export function heartbeatSession(
+  db: DbConnection,
+  sessionId: string,
+  leaseExpiresAt: number,
+) {
+  const now = Date.now();
+  db.update(hostDaemonSessions)
+    .set({
+      lastHeartbeatAt: now,
+      leaseExpiresAt,
+      updatedAt: now,
+    })
+    .where(eq(hostDaemonSessions.id, sessionId))
+    .run();
+
+  return (
+    db
+      .select()
+      .from(hostDaemonSessions)
+      .where(eq(hostDaemonSessions.id, sessionId))
       .get() ?? null
   );
 }

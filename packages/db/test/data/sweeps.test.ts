@@ -85,6 +85,8 @@ describe("sweepExpiredCommands", () => {
 
     const spy: DbNotifier = {
       notifyThread: vi.fn(),
+      notifyEnvironment: vi.fn(),
+      notifyCommand: vi.fn(),
       notifyProject: vi.fn(),
       notifySystem: vi.fn(),
     };
@@ -179,6 +181,8 @@ describe("sweepExpiredLeases", () => {
 
     const spy: DbNotifier = {
       notifyThread: vi.fn(),
+      notifyEnvironment: vi.fn(),
+      notifyCommand: vi.fn(),
       notifyProject: vi.fn(),
       notifySystem: vi.fn(),
     };

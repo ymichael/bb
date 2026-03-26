@@ -59,6 +59,8 @@ describe("consumer-specific config", () => {
     vi.stubEnv("BB_DATABASE_URL", undefined);
     vi.stubEnv("BB_E2B_API_KEY", undefined);
     vi.stubEnv("BB_E2B_TEMPLATE", undefined);
+    vi.stubEnv("BB_INFERENCE_MODEL", undefined);
+    vi.stubEnv("OPENAI_API_KEY", "test-openai-key");
 
     const { serverConfig } = await importFresh<typeof import("../src/server.js")>(
       "../src/server.js",
@@ -68,6 +70,18 @@ describe("consumer-specific config", () => {
     expect(serverConfig.BB_DATABASE_URL).toBe("/tmp/bb-data/bb.db");
     expect(serverConfig.BB_E2B_API_KEY).toBe("");
     expect(serverConfig.BB_E2B_TEMPLATE).toBe("");
+    expect(serverConfig.BB_INFERENCE_MODEL).toBe("openai/gpt-4o-mini");
+    expect(serverConfig.OPENAI_API_KEY).toBe("test-openai-key");
+  });
+
+  it("requires provider/model format for BB_INFERENCE_MODEL", async () => {
+    vi.stubEnv("NODE_ENV", "development");
+    vi.stubEnv("OPENAI_API_KEY", "test-openai-key");
+    vi.stubEnv("BB_INFERENCE_MODEL", "gpt-4o-mini");
+
+    await expect(
+      importFresh<typeof import("../src/server.js")>("../src/server.js"),
+    ).rejects.toThrow(/BB_INFERENCE_MODEL/u);
   });
 
   it("requires a valid server URL for the daemon and CLI", async () => {
