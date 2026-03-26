@@ -5,6 +5,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 import { eq } from "drizzle-orm";
 import {
+  createEnvironment,
   getDraft,
   getEnvironment,
   getThread,
@@ -677,6 +678,41 @@ describe("public thread routes", () => {
         path: "/tmp/delete-managed",
         workspaceProvisionType: "managed-worktree",
       });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("marks provisioning managed environments as destroying without queueing an invalid destroy", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps);
+      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const environment = createEnvironment(harness.db, harness.hub, {
+        projectId: project.id,
+        hostId: host.id,
+        path: null,
+        managed: true,
+        status: "provisioning",
+        workspaceProvisionType: "managed-worktree",
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+      });
+
+      const response = await harness.app.request(`/api/v1/threads/${thread.id}`, {
+        method: "DELETE",
+      });
+      expect(response.status).toBe(200);
+      expect(getEnvironment(harness.db, environment.id)?.status).toBe("destroying");
+
+      const destroyCommands = harness.db
+        .select()
+        .from(hostDaemonCommands)
+        .where(eq(hostDaemonCommands.type, "environment.destroy"))
+        .all();
+      expect(destroyCommands).toHaveLength(0);
     } finally {
       await harness.cleanup();
     }

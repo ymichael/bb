@@ -2,6 +2,7 @@ import { hostDaemonCommandResultSchemaByType } from "@bb/host-daemon-contract";
 import type { Hono } from "hono";
 import type { AppDeps } from "../../types.js";
 import { COMMAND_TIMEOUT_MS } from "../../constants.js";
+import { ApiError } from "../../errors.js";
 import {
   requireThread,
   requireThreadEnvironment,
@@ -14,6 +15,13 @@ import {
 } from "../../services/thread-data.js";
 import { getLastExecutionOptions } from "../../services/thread-events.js";
 import { parseOptionalInteger } from "../../services/validation.js";
+
+function requireWorkspacePath(environment: { path: string | null }): string {
+  if (!environment.path) {
+    throw new ApiError(409, "invalid_request", "Environment is not ready");
+  }
+  return environment.path;
+}
 
 export function registerThreadDataRoutes(app: Hono, deps: AppDeps): void {
   app.get("/threads/:id/timeline", (context) =>
@@ -60,12 +68,14 @@ export function registerThreadDataRoutes(app: Hono, deps: AppDeps): void {
 
   app.get("/threads/:id/workspace/files", async (context) => {
     const { environment } = requireThreadEnvironment(deps.db, context.req.param("id"));
+    const workspacePath = requireWorkspacePath(environment);
     const rawResult = await queueCommandAndWait(deps, {
       hostId: environment.hostId,
       timeoutMs: COMMAND_TIMEOUT_MS,
       command: {
         type: "workspace.list_files",
         environmentId: environment.id,
+        workspacePath,
         ...(context.req.query("query") ? { query: context.req.query("query") } : {}),
       },
     });
@@ -76,12 +86,14 @@ export function registerThreadDataRoutes(app: Hono, deps: AppDeps): void {
 
   app.get("/threads/:id/workspace/file", async (context) => {
     const { environment } = requireThreadEnvironment(deps.db, context.req.param("id"));
+    const workspacePath = requireWorkspacePath(environment);
     const rawResult = await queueCommandAndWait(deps, {
       hostId: environment.hostId,
       timeoutMs: COMMAND_TIMEOUT_MS,
       command: {
         type: "workspace.read_file",
         environmentId: environment.id,
+        workspacePath,
         path: context.req.query("path") ?? "",
       },
     });

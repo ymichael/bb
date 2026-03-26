@@ -7,6 +7,7 @@ import type {
   ThreadExecutionOptions,
   ThreadTurnInitiator,
 } from "@bb/domain";
+import { turnRequestEventDataSchema } from "@bb/domain";
 import type { AppDeps } from "../types.js";
 
 export interface AppendThreadEventArgs {
@@ -19,11 +20,14 @@ export interface AppendThreadEventArgs {
 }
 
 export interface ClientTurnEventArgs {
+  environmentId: string | null;
   execution: ThreadExecutionOptions;
   initiator: ThreadTurnInitiator;
   input: PromptInput[];
   requestMethod: "thread/start" | "turn/start";
   source: "spawn" | "tell";
+  threadId: string;
+  type: "client/thread/start" | "client/turn/requested" | "client/turn/start";
 }
 
 export function appendThreadEvent(
@@ -54,15 +58,12 @@ export function appendThreadEvent(
 
 export function appendClientTurnEvent(
   deps: Pick<AppDeps, "db" | "hub">,
-  threadId: string,
-  environmentId: string | null,
-  type: "client/thread/start" | "client/turn/requested" | "client/turn/start",
   args: ClientTurnEventArgs,
 ): number {
   return appendThreadEvent(deps, {
-    threadId,
-    environmentId,
-    type,
+    threadId: args.threadId,
+    environmentId: args.environmentId,
+    type: args.type,
     data: {
       direction: "outbound",
       source: args.source,
@@ -209,6 +210,17 @@ export function getLastExecutionOptions(
     return null;
   }
 
-  const parsed = JSON.parse(row.data) as { execution?: ThreadExecutionOptions };
-  return parsed.execution ?? null;
+  let eventData: unknown;
+  try {
+    eventData = JSON.parse(row.data);
+  } catch {
+    return null;
+  }
+
+  const parsed = turnRequestEventDataSchema.safeParse(eventData);
+  if (!parsed.success) {
+    return null;
+  }
+
+  return parsed.data.execution;
 }

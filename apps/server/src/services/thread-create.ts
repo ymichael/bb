@@ -44,7 +44,7 @@ interface ReuseUnmanagedEnvironmentArgs {
   request: CreateThreadRequest;
 }
 
-function createThreadInEnvironment(
+async function createThreadInEnvironment(
   deps: Pick<AppDeps, "config" | "db" | "hub" | "logger">,
   args: CreateThreadInEnvironmentArgs,
 ) {
@@ -60,10 +60,10 @@ function createThreadInEnvironment(
   if (args.request.input && args.request.input.length > 0) {
     eventSequence = appendClientTurnEvent(
       deps,
-      thread.id,
-      args.environment.id,
-      "client/thread/start",
       {
+        threadId: thread.id,
+        environmentId: args.environment.id,
+        type: "client/thread/start",
         input: args.request.input,
         execution: buildExecutionOptions(args.request, "client/thread/start"),
         initiator: args.request.spawnInitiator ?? "user",
@@ -91,7 +91,7 @@ function createThreadInEnvironment(
 
   if (eventSequence !== undefined && args.threadStatus === "idle") {
     try {
-      startQueuedThreadIfNeeded(deps, {
+      await startQueuedThreadIfNeeded(deps, {
         thread,
         environment: args.environment,
         eventSequence,
@@ -113,10 +113,10 @@ function createThreadInEnvironment(
   return getThreadSafe(deps, thread.id);
 }
 
-function maybeReuseUnmanagedEnvironment(
+async function maybeReuseUnmanagedEnvironment(
   deps: Pick<AppDeps, "config" | "db" | "hub" | "logger">,
   args: ReuseUnmanagedEnvironmentArgs,
-) {
+): Promise<ReturnType<typeof getThreadSafe> | null> {
   const existing = findEnvironmentByHostPath(deps.db, args.hostId, args.path);
   if (!existing) {
     return null;
@@ -155,7 +155,7 @@ function maybeReuseUnmanagedEnvironment(
   );
 }
 
-function startQueuedThreadIfNeeded(
+async function startQueuedThreadIfNeeded(
   deps: Pick<AppDeps, "db" | "hub">,
   args: {
     environment: Environment;
@@ -163,12 +163,12 @@ function startQueuedThreadIfNeeded(
     request: CreateThreadRequest;
     thread: ReturnType<typeof createThread>;
   },
-): void {
+): Promise<void> {
   if (!args.request.input || args.request.input.length === 0) {
     return;
   }
 
-  queueThreadStartCommand(deps, {
+  await queueThreadStartCommand(deps, {
     thread: args.thread,
     environment: {
       id: args.environment.id,
@@ -254,7 +254,7 @@ export async function createThreadFromRequest(
     throw new ApiError(409, "invalid_request", "Workspace path is required");
   }
   if (workspace.type === "unmanaged" && unmanagedPath) {
-    const reusedThread = maybeReuseUnmanagedEnvironment(deps, {
+    const reusedThread = await maybeReuseUnmanagedEnvironment(deps, {
       hostId,
       mergeBaseBranch,
       path: unmanagedPath,
@@ -291,7 +291,10 @@ export async function createThreadFromRequest(
   transitionThreadStatus(deps.db, deps.hub, thread.id, "provisioning");
 
   if (request.input && request.input.length > 0) {
-    appendClientTurnEvent(deps, thread.id, environment.id, "client/thread/start", {
+    appendClientTurnEvent(deps, {
+      threadId: thread.id,
+      environmentId: environment.id,
+      type: "client/thread/start",
       input: request.input,
       execution: buildExecutionOptions(request, "client/thread/start"),
       initiator: request.spawnInitiator ?? "user",

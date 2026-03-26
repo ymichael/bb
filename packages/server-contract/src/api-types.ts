@@ -200,18 +200,22 @@ export const squashMergeOptionsSchema = z.object({
 });
 export type SquashMergeOptions = z.infer<typeof squashMergeOptionsSchema>;
 
+const environmentActionTargetSchema = z.object({
+  threadId: z.string().min(1),
+});
+
 export const environmentActionRequestSchema = z.discriminatedUnion("action", [
-  z.object({
+  environmentActionTargetSchema.extend({
     action: z.literal("promote"),
   }),
-  z.object({
+  environmentActionTargetSchema.extend({
     action: z.literal("demote"),
   }),
-  z.object({
+  environmentActionTargetSchema.extend({
     action: z.literal("commit"),
     options: commitOptionsSchema.optional(),
   }),
-  z.object({
+  environmentActionTargetSchema.extend({
     action: z.literal("squash_merge"),
     options: squashMergeOptionsSchema.optional(),
   }),

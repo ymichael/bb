@@ -8,6 +8,29 @@ import {
 import { threads } from "@bb/db";
 import type { AppDeps } from "../types.js";
 
+export function queueEnvironmentDestroyCommand(
+  deps: Pick<AppDeps, "db" | "hub">,
+  environment: {
+    hostId: string;
+    id: string;
+    path: string;
+    workspaceProvisionType: "unmanaged" | "managed-worktree" | "managed-clone" | null;
+  },
+): void {
+  const session = getActiveSession(deps.db, environment.hostId);
+  queueCommand(deps.db, deps.hub, {
+    hostId: environment.hostId,
+    sessionId: session?.id ?? null,
+    type: "environment.destroy",
+    payload: JSON.stringify({
+      type: "environment.destroy",
+      environmentId: environment.id,
+      path: environment.path,
+      workspaceProvisionType: environment.workspaceProvisionType ?? "unmanaged",
+    }),
+  });
+}
+
 export async function maybeCleanupEnvironment(
   deps: Pick<AppDeps, "db" | "hub">,
   environmentId: string | null | undefined,
@@ -42,16 +65,14 @@ export async function maybeCleanupEnvironment(
     status: "destroying",
   });
 
-  const session = getActiveSession(deps.db, environment.hostId);
-  queueCommand(deps.db, deps.hub, {
+  if (!environment.path) {
+    return;
+  }
+
+  queueEnvironmentDestroyCommand(deps, {
     hostId: environment.hostId,
-    sessionId: session?.id ?? null,
-    type: "environment.destroy",
-    payload: JSON.stringify({
-      type: "environment.destroy",
-      environmentId: environment.id,
-      path: environment.path ?? "",
-      workspaceProvisionType: environment.workspaceProvisionType ?? "unmanaged",
-    }),
+    id: environment.id,
+    path: environment.path,
+    workspaceProvisionType: environment.workspaceProvisionType,
   });
 }

@@ -18,17 +18,16 @@ import type {
   ReasoningLevel,
 } from "@bb/domain";
 import type {
-  CommitOptions,
   CreateProjectSourceRequest,
   CreateProjectRequest,
   CreateDraftRequest,
+  EnvironmentActionRequest,
   EnvironmentActionResponse,
   EnvironmentStatusResponse,
   ProjectFileSuggestion,
   SendDraftRequest,
   SendDraftResponse,
   CreateThreadRequest,
-  SquashMergeOptions,
   SystemProviderInfo,
   SystemVoiceTranscriptionResponse,
   SendMessageRequest,
@@ -473,17 +472,7 @@ export async function getEnvironmentDiffBranches(id: string): Promise<string[]> 
 
 export async function requestEnvironmentAction(
   id: string,
-  req: {
-    action: "promote";
-  } | {
-    action: "demote";
-  } | {
-    action: "commit";
-    options?: CommitOptions;
-  } | {
-    action: "squash_merge";
-    options?: SquashMergeOptions;
-  },
+  req: EnvironmentActionRequest,
 ): Promise<EnvironmentActionResponse> {
   return request<EnvironmentActionResponse>(
     apiClient.environments[":id"].actions.$post({ param: { id }, json: req }),
@@ -565,4 +554,3 @@ export async function listSystemProviders(): Promise<SystemProviderInfo[]> {
 export async function listHosts(): Promise<Host[]> {
   return request<Host[]>(apiClient.hosts.$get());
 }
-

@@ -118,6 +118,7 @@ function buildAskAgentInputForGitOperation(error: unknown): PromptInput[] | unde
           text: buildCommitFailureFollowUpInstruction(
             {
               action: "commit",
+              threadId: "thread",
               options: {},
             },
             { errorMessage: details.errorMessage },
@@ -131,6 +132,7 @@ function buildAskAgentInputForGitOperation(error: unknown): PromptInput[] | unde
           text: buildSquashMergeConflictFollowUpInstruction(
             {
               action: "squash_merge",
+              threadId: "thread",
               options: {},
             },
             { conflictFiles: details.conflictFiles },
@@ -144,6 +146,7 @@ function buildAskAgentInputForGitOperation(error: unknown): PromptInput[] | unde
           text: buildSquashMergeCommitFailureFollowUpInstruction(
             {
               action: "squash_merge",
+              threadId: "thread",
               options: {},
             },
             {
@@ -810,6 +813,7 @@ export function ThreadDetailView() {
     try {
       await requestEnvironmentAction.mutateAsync({
         id: attachedEnvironmentId,
+        threadId,
         action: "commit",
         options: {
           includeUnstaged,
@@ -837,6 +841,7 @@ export function ThreadDetailView() {
     try {
       await requestEnvironmentAction.mutateAsync({
         id: attachedEnvironmentId,
+        threadId,
         action: "squash_merge",
         options: {
           commitIfNeeded,

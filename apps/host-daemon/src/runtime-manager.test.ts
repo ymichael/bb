@@ -188,6 +188,43 @@ describe("RuntimeManager", () => {
     ]);
   });
 
+  it("removes stale entries when the provider process exits", async () => {
+    const workspace = createFakeWorkspace("/tmp/env-exit");
+    const runtime = createFakeRuntime();
+    let onProcessExit:
+      | ((info: {
+          code: number | null;
+          providerId: string;
+          signal: string | null;
+          threadIds: string[];
+        }) => void)
+      | undefined;
+    const manager = new RuntimeManager({
+      provisionWorkspace: vi.fn(async () => workspace),
+      createRuntime: vi.fn((options) => {
+        onProcessExit = options.onProcessExit;
+        return runtime as unknown as AgentRuntime;
+      }),
+    });
+
+    await manager.ensureEnvironment({
+      environmentId: "env-exit",
+      workspacePath: "/tmp/env-exit",
+    });
+    manager.markThreadActive("env-exit", "thread-1", "provider-1");
+
+    onProcessExit?.({
+      providerId: "fake",
+      threadIds: ["thread-1"],
+      code: 1,
+      signal: null,
+    });
+
+    expect(manager.get("env-exit")).toBeUndefined();
+    expect(manager.hasThread("env-exit", "thread-1")).toBe(false);
+    expect(runtime.shutdown).toHaveBeenCalledTimes(1);
+  });
+
   it("shuts down all tracked environments", async () => {
     const workspaceA = createFakeWorkspace("/tmp/env-a");
     const workspaceB = createFakeWorkspace("/tmp/env-b");

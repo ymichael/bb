@@ -87,40 +87,34 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
         if (reprovisionResult !== MANAGED_REPROVISION_QUEUED) {
           throw new ApiError(409, "invalid_request", "Environment is already provisioning");
         }
-        appendClientTurnEvent(
-          deps,
-          thread.id,
-          environment.id,
-          "client/turn/requested",
-          {
-            input: payload.input,
-            execution,
-            initiator: "user",
-            requestMethod: "turn/start",
-            source: "tell",
-          },
-        );
+        appendClientTurnEvent(deps, {
+          threadId: thread.id,
+          environmentId: environment.id,
+          type: "client/turn/requested",
+          input: payload.input,
+          execution,
+          initiator: "user",
+          requestMethod: "turn/start",
+          source: "tell",
+        });
         return context.json({ ok: true });
       }
       throw new ApiError(409, "invalid_request", "Environment is not ready");
     }
 
-    const eventSequence = appendClientTurnEvent(
-      deps,
-      thread.id,
-      environment.id,
-      "client/turn/requested",
-      {
-        input: payload.input,
-        execution,
-        initiator: "user",
-        requestMethod: "turn/start",
-        source: "tell",
-      },
-    );
+    const eventSequence = appendClientTurnEvent(deps, {
+      threadId: thread.id,
+      environmentId: environment.id,
+      type: "client/turn/requested",
+      input: payload.input,
+      execution,
+      initiator: "user",
+      requestMethod: "turn/start",
+      source: "tell",
+    });
 
     if (mode === "start") {
-      queueReadyThreadTurnCommand(deps, {
+      await queueReadyThreadTurnCommand(deps, {
         thread,
         input: payload.input,
         eventSequence,
@@ -137,7 +131,7 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
       if (!expectedTurnId) {
         throw new ApiError(409, "invalid_request", "No active turn to steer");
       }
-      queueTurnSteerCommand(deps, {
+      await queueTurnSteerCommand(deps, {
         thread,
         input: payload.input,
         eventSequence,
@@ -201,41 +195,35 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
         if (reprovisionResult !== MANAGED_REPROVISION_QUEUED) {
           throw new ApiError(409, "invalid_request", "Environment is already provisioning");
         }
-        appendClientTurnEvent(
-          deps,
-          thread.id,
-          environment.id,
-          "client/turn/requested",
-          {
-            input: queuedMessage.content,
-            execution,
-            initiator: "user",
-            requestMethod: "turn/start",
-            source: "tell",
-          },
-        );
+        appendClientTurnEvent(deps, {
+          threadId: thread.id,
+          environmentId: environment.id,
+          type: "client/turn/requested",
+          input: queuedMessage.content,
+          execution,
+          initiator: "user",
+          requestMethod: "turn/start",
+          source: "tell",
+        });
         deleteDraft(deps.db, deps.hub, draft.id);
         return context.json({ ok: true, queuedMessage });
       }
       throw new ApiError(409, "invalid_request", "Environment is not ready");
     }
 
-    const eventSequence = appendClientTurnEvent(
-      deps,
-      thread.id,
-      environment.id,
-      "client/turn/requested",
-      {
-        input: queuedMessage.content,
-        execution,
-        initiator: "user",
-        requestMethod: "turn/start",
-        source: "tell",
-      },
-    );
+    const eventSequence = appendClientTurnEvent(deps, {
+      threadId: thread.id,
+      environmentId: environment.id,
+      type: "client/turn/requested",
+      input: queuedMessage.content,
+      execution,
+      initiator: "user",
+      requestMethod: "turn/start",
+      source: "tell",
+    });
 
     if (mode === "start") {
-      queueReadyThreadTurnCommand(deps, {
+      await queueReadyThreadTurnCommand(deps, {
         thread,
         input: queuedMessage.content,
         eventSequence,
@@ -252,7 +240,7 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
       if (!expectedTurnId) {
         throw new ApiError(409, "invalid_request", "No active turn to steer");
       }
-      queueTurnSteerCommand(deps, {
+      await queueTurnSteerCommand(deps, {
         thread,
         input: queuedMessage.content,
         eventSequence,
@@ -312,6 +300,7 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
           command: {
             type: "workspace.status",
             environmentId: environment.id,
+            workspacePath: environment.path,
             ...(thread.mergeBaseBranch
               ? { mergeBaseBranch: thread.mergeBaseBranch }
               : {}),

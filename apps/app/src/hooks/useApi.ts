@@ -1087,10 +1087,10 @@ export function useRequestEnvironmentAction() {
     }: {
       id: string;
     } & (
-      | { action: "promote" }
-      | { action: "demote" }
-      | { action: "commit"; options?: CommitOptions }
-      | { action: "squash_merge"; options?: SquashMergeOptions }
+      | { action: "promote"; threadId: string }
+      | { action: "demote"; threadId: string }
+      | { action: "commit"; threadId: string; options?: CommitOptions }
+      | { action: "squash_merge"; threadId: string; options?: SquashMergeOptions }
     )): Promise<EnvironmentActionResponse> =>
       api.requestEnvironmentAction(id, req),
     onSuccess: (_response, variables) => {

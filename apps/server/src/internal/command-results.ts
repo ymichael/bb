@@ -10,10 +10,10 @@ import {
   handleCommandResultSideEffects,
 } from "./command-result-handlers.js";
 
-export function handleCommandResult(
+export async function handleCommandResult(
   deps: Pick<AppDeps, "db" | "hub">,
   report: HostDaemonCommandResultReport,
-) {
+): Promise<typeof hostDaemonCommands.$inferSelect | null> {
   const command = deps.db
     .select()
     .from(hostDaemonCommands)
@@ -44,7 +44,7 @@ export function handleCommandResult(
     return null;
   }
 
-  handleCommandResultSideEffects(deps, report, updated);
+  await handleCommandResultSideEffects(deps, report, updated);
 
   advanceHostCursor(deps, command.hostId);
   const response = report.ok

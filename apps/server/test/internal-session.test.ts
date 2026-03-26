@@ -177,19 +177,16 @@ describe("internal session routes", () => {
         environmentId: successEnvironment.id,
         status: "provisioning",
       });
-      appendClientTurnEvent(
-        harness.deps,
-        successThread.id,
-        successEnvironment.id,
-        "client/thread/start",
-        {
-          input: [{ type: "text", text: "Start when ready" }],
-          execution: { source: "client/thread/start" },
-          initiator: "user",
-          requestMethod: "thread/start",
-          source: "spawn",
-        },
-      );
+      appendClientTurnEvent(harness.deps, {
+        threadId: successThread.id,
+        environmentId: successEnvironment.id,
+        type: "client/thread/start",
+        input: [{ type: "text", text: "Start when ready" }],
+        execution: { source: "client/thread/start" },
+        initiator: "user",
+        requestMethod: "thread/start",
+        source: "spawn",
+      });
       const successCommand = queueCommand(harness.db, harness.hub, {
         hostId: host.id,
         sessionId: session.id,
@@ -324,19 +321,16 @@ describe("internal session routes", () => {
         type: "thread/identity",
         data: {},
       });
-      appendClientTurnEvent(
-        harness.deps,
-        thread.id,
-        environment.id,
-        "client/turn/requested",
-        {
-          input: [{ type: "text", text: "Resume after reprovision" }],
-          execution: { source: "client/turn/requested" },
-          initiator: "user",
-          requestMethod: "turn/start",
-          source: "tell",
-        },
-      );
+      appendClientTurnEvent(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        type: "client/turn/requested",
+        input: [{ type: "text", text: "Resume after reprovision" }],
+        execution: { source: "client/turn/requested" },
+        initiator: "user",
+        requestMethod: "turn/start",
+        source: "tell",
+      });
       const provisionCommand = queueCommand(harness.db, harness.hub, {
         hostId: host.id,
         sessionId: session.id,

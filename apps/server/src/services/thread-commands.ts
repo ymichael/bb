@@ -4,6 +4,7 @@ import type {
   PromptInput,
   Thread,
   ThreadExecutionOptions,
+  ThreadRuntimeExecutionOptions,
 } from "@bb/domain";
 import type { HostDaemonExecutionOptions } from "@bb/host-daemon-contract";
 import type {
@@ -31,7 +32,7 @@ export function buildExecutionOptions(
   };
 }
 
-export function queueThreadStartCommand(
+export async function queueThreadStartCommand(
   deps: Pick<AppDeps, "db" | "hub">,
   args: {
     eventSequence?: number;
@@ -46,8 +47,8 @@ export function queueThreadStartCommand(
     providerId: string;
     thread: Thread;
   },
-): void {
-  const runtimeContext = buildThreadRuntimeContext(deps, {
+): Promise<void> {
+  const runtimeContext = await buildThreadRuntimeContext(deps, {
     thread: args.thread,
     environment: args.environment,
     execution: args.execution,
@@ -107,17 +108,17 @@ function requireEnvironmentPath(
   return environment.path;
 }
 
-function buildThreadRuntimeContext(
+async function buildThreadRuntimeContext(
   deps: Pick<AppDeps, "db">,
   args: {
     environment: ThreadCommandEnvironment;
-    execution?: HostDaemonExecutionOptions;
+    execution?: ThreadRuntimeExecutionOptions;
     providerThreadId?: string;
     thread: Thread;
   },
-): ThreadRuntimeContext {
+): Promise<ThreadRuntimeContext> {
   const workspacePath = requireEnvironmentPath(args.environment);
-  const runtimeConfig = resolveThreadRuntimeConfig(deps, {
+  const runtimeConfig = await resolveThreadRuntimeConfig(deps, {
     environment: { path: workspacePath },
     thread: {
       id: args.thread.id,
@@ -149,7 +150,7 @@ function buildThreadRuntimeContext(
   };
 }
 
-export function queueReadyThreadTurnCommand(
+export async function queueReadyThreadTurnCommand(
   deps: Pick<AppDeps, "db" | "hub">,
   args: {
     environment: ReadyThreadCommandEnvironment;
@@ -158,10 +159,10 @@ export function queueReadyThreadTurnCommand(
     input: PromptInput[];
     thread: Thread;
   },
-): void {
+): Promise<void> {
   const providerThreadId = getLastProviderThreadId(deps, args.thread.id);
   if (providerThreadId) {
-    queueTurnRunCommand(deps, {
+    await queueTurnRunCommand(deps, {
       thread: args.thread,
       input: args.input,
       eventSequence: args.eventSequence,
@@ -176,7 +177,7 @@ export function queueReadyThreadTurnCommand(
     return;
   }
 
-  queueThreadStartCommand(deps, {
+  await queueThreadStartCommand(deps, {
     thread: args.thread,
     environment: {
       id: args.environment.id,
@@ -191,7 +192,7 @@ export function queueReadyThreadTurnCommand(
   });
 }
 
-export function queueTurnRunCommand(
+export async function queueTurnRunCommand(
   deps: Pick<AppDeps, "db" | "hub">,
   args: {
     eventSequence: number;
@@ -201,11 +202,11 @@ export function queueTurnRunCommand(
     providerThreadId?: string;
     thread: Thread;
   },
-): void {
+): Promise<void> {
   const session = requireConnectedHostSession(deps, args.environment.hostId);
   const providerThreadId =
     args.providerThreadId ?? getLastProviderThreadId(deps, args.thread.id) ?? undefined;
-  const runtimeContext = buildThreadRuntimeContext(deps, {
+  const runtimeContext = await buildThreadRuntimeContext(deps, {
     thread: args.thread,
     environment: args.environment,
     execution: args.execution,
@@ -239,7 +240,7 @@ export function queueTurnRunCommand(
   }
 }
 
-export function queueTurnSteerCommand(
+export async function queueTurnSteerCommand(
   deps: Pick<AppDeps, "db" | "hub">,
   args: {
     eventSequence: number;
@@ -250,11 +251,11 @@ export function queueTurnSteerCommand(
     providerThreadId?: string;
     thread: Thread;
   },
-): void {
+): Promise<void> {
   const session = requireConnectedHostSession(deps, args.environment.hostId);
   const providerThreadId =
     args.providerThreadId ?? getLastProviderThreadId(deps, args.thread.id) ?? undefined;
-  const runtimeContext = buildThreadRuntimeContext(deps, {
+  const runtimeContext = await buildThreadRuntimeContext(deps, {
     thread: args.thread,
     environment: args.environment,
     execution: args.execution,

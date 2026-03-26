@@ -5,6 +5,7 @@ export {
   promptInputSchema,
   threadExecutionSourceSchema,
   threadExecutionOptionsSchema,
+  threadRuntimeExecutionOptionsSchema,
 } from "./shared-types.js";
 export type {
   PromptInput,
@@ -13,6 +14,7 @@ export type {
   ServiceTier,
   ThreadExecutionOptions,
   ThreadExecutionSource,
+  ThreadRuntimeExecutionOptions,
 } from "./shared-types.js";
 
 export {

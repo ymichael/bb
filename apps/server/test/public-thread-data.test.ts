@@ -97,16 +97,20 @@ describe("public thread data routes", () => {
         sequence: 1,
         type: "client/turn/requested",
         data: {
+          direction: "outbound",
           input: [{ type: "text", text: "Explain the result" }],
           execution: {
             model: "gpt-4o-mini",
             reasoningLevel: "medium",
             sandboxMode: "danger-full-access",
-            serviceTier: "standard",
+            serviceTier: "fast",
             source: "client/turn/requested",
           },
           initiator: "user",
-          requestMethod: "turn/start",
+          request: {
+            method: "turn/start",
+            params: {},
+          },
           source: "tell",
         },
       });
@@ -157,7 +161,7 @@ describe("public thread data routes", () => {
         model: "gpt-4o-mini",
         reasoningLevel: "medium",
         sandboxMode: "danger-full-access",
-        serviceTier: "standard",
+        serviceTier: "fast",
         source: "client/turn/requested",
       });
     } finally {
@@ -373,6 +377,7 @@ describe("public thread data routes", () => {
           command.environmentId === environment.id,
       );
       expect(filesCommand.command).toMatchObject({
+        workspacePath: "/tmp/thread-workspace",
         query: "src",
       });
       await reportQueuedCommandSuccess(harness, filesCommand, {
@@ -399,6 +404,7 @@ describe("public thread data routes", () => {
           command.environmentId === environment.id,
       );
       expect(fileCommand.command).toMatchObject({
+        workspacePath: "/tmp/thread-workspace",
         path: "src/index.ts",
       });
       await reportQueuedCommandSuccess(harness, fileCommand, {

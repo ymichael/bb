@@ -1,6 +1,7 @@
 import { and, desc, eq, or } from "drizzle-orm";
 import {
   events,
+  getEnvironment,
   getThread,
   hostDaemonCursors,
   hostDaemonCommands,
@@ -19,6 +20,7 @@ import {
   appendThreadInterruptedEvent,
 } from "../services/thread-events.js";
 import { queueThreadStartCommand } from "../services/thread-commands.js";
+import { queueEnvironmentDestroyCommand } from "../services/environment-cleanup.js";
 import { tryTransition } from "../services/thread-transitions.js";
 
 function parseCommand(
@@ -87,16 +89,17 @@ export function advanceHostCursor(
   });
 }
 
-function handleProvisionCommandResult(
+async function handleProvisionCommandResult(
   deps: Pick<AppDeps, "db" | "hub">,
   report: Extract<HostDaemonCommandResultReport, { type: "environment.provision" }>,
   commandRow: typeof hostDaemonCommands.$inferSelect,
-): void {
+): Promise<void> {
   const command = parseCommand(commandRow);
   if (command.type !== "environment.provision") {
     return;
   }
 
+  const environment = getEnvironment(deps.db, command.environmentId);
   const boundThreads = deps.db
     .select()
     .from(threads)
@@ -104,13 +107,24 @@ function handleProvisionCommandResult(
     .all();
 
   if (report.ok) {
+    const shouldDestroyAfterProvision = environment?.status === "destroying";
     updateEnvironment(deps.db, deps.hub, command.environmentId, {
       path: report.result.path,
-      status: "ready",
+      status: shouldDestroyAfterProvision ? "destroying" : "ready",
       isGitRepo: report.result.isGitRepo,
       isWorktree: report.result.isWorktree,
       branchName: report.result.branchName,
     });
+
+    if (shouldDestroyAfterProvision) {
+      queueEnvironmentDestroyCommand(deps, {
+        hostId: commandRow.hostId,
+        id: command.environmentId,
+        path: report.result.path,
+        workspaceProvisionType: command.workspaceProvisionType,
+      });
+      return;
+    }
 
     for (const thread of boundThreads) {
       appendProvisioningEvent(deps, {
@@ -165,7 +179,7 @@ function handleProvisionCommandResult(
         continue;
       }
 
-      queueThreadStartCommand(deps, {
+      await queueThreadStartCommand(deps, {
         thread,
         environment: {
           id: command.environmentId,
@@ -258,14 +272,14 @@ function handleThreadStopResult(
   });
 }
 
-export function handleCommandResultSideEffects(
+export async function handleCommandResultSideEffects(
   deps: Pick<AppDeps, "db" | "hub">,
   report: HostDaemonCommandResultReport,
   commandRow: typeof hostDaemonCommands.$inferSelect,
-): void {
+): Promise<void> {
   switch (report.type) {
     case "environment.provision":
-      handleProvisionCommandResult(deps, report, commandRow);
+      await handleProvisionCommandResult(deps, report, commandRow);
       return;
     case "environment.destroy":
       handleEnvironmentDestroyResult(deps, report, commandRow);

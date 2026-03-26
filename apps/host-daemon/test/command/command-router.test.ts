@@ -115,6 +115,7 @@ describe("CommandRouter", () => {
         command: {
           type: "workspace.commit",
           environmentId: "env-1",
+          workspacePath: "/tmp/env-1",
           threadId: "thread-1",
           message: "Commit",
         },
@@ -125,6 +126,7 @@ describe("CommandRouter", () => {
         command: {
           type: "workspace.reset",
           environmentId: "env-1",
+          workspacePath: "/tmp/env-1",
           threadId: "thread-1",
         },
       },

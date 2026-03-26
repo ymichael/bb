@@ -195,7 +195,8 @@ export class RuntimeManager {
         status: "active" | "idle";
       }
     >();
-    const runtime = this.createRuntime({
+    let runtime: AgentRuntime | null = null;
+    runtime = this.createRuntime({
       workspacePath: workspace.path,
       adapterFactory: this.options.adapterFactory,
       onEvent: (event) => {
@@ -222,6 +223,13 @@ export class RuntimeManager {
       onStderr: this.options.onStderr,
       onProcessExit: (info) => {
         threads.clear();
+        const current = this.entries.get(args.environmentId);
+        if (current?.runtime === runtime) {
+          this.entries.delete(args.environmentId);
+        }
+        if (runtime) {
+          void runtime.shutdown().catch(() => {});
+        }
         this.options.onProcessExit?.(info);
       },
     });

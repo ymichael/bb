@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import path from "node:path";
 import {
   getDefaultProjectSource,
@@ -97,26 +97,22 @@ export interface ThreadRuntimeConfig {
   instructions?: string;
 }
 
-function readManagerPreferences(managerWorkspacePath: string): string {
+async function readManagerPreferences(managerWorkspacePath: string): Promise<string> {
   const preferencesPath = path.join(
     managerWorkspacePath,
     MANAGER_PREFERENCES_FILE_NAME,
   );
-  if (!existsSync(preferencesPath)) {
-    return NO_MANAGER_PREFERENCES;
-  }
-
   try {
-    return readFileSync(preferencesPath, "utf8");
+    return await readFile(preferencesPath, "utf8");
   } catch {
     return NO_MANAGER_PREFERENCES;
   }
 }
 
-function buildManagerRuntimeConfig(
+async function buildManagerRuntimeConfig(
   deps: Pick<AppDeps, "db">,
   args: ResolveThreadRuntimeConfigArgs,
-): ThreadRuntimeConfig {
+): Promise<ThreadRuntimeConfig> {
   const project = getProject(deps.db, args.thread.projectId);
   if (!project) {
     throw new Error(`Project ${args.thread.projectId} was not found`);
@@ -130,7 +126,7 @@ function buildManagerRuntimeConfig(
     dynamicTools: MANAGER_DYNAMIC_TOOLS,
     instructions: renderTemplate("managerAgentInstructions", {
       managerPreferencesContent: managerWorkspacePath
-        ? readManagerPreferences(managerWorkspacePath)
+        ? await readManagerPreferences(managerWorkspacePath)
         : NO_MANAGER_PREFERENCES,
       managerThreadId: args.thread.id,
       managerWorkspacePath,
@@ -141,10 +137,10 @@ function buildManagerRuntimeConfig(
   };
 }
 
-export function resolveThreadRuntimeConfig(
+export async function resolveThreadRuntimeConfig(
   deps: Pick<AppDeps, "db">,
   args: ResolveThreadRuntimeConfigArgs,
-): ThreadRuntimeConfig {
+): Promise<ThreadRuntimeConfig> {
   if (args.thread.type !== "manager") {
     return {};
   }

@@ -4,7 +4,7 @@ import type {
   PromptInput,
   ProviderCapabilities,
   ThreadEvent,
-  ThreadExecutionOptions,
+  ThreadRuntimeExecutionOptions,
   ToolCallRequest,
   ToolCallResponse,
 } from "@bb/domain";
@@ -72,7 +72,7 @@ export interface AgentRuntime {
     projectId: string;
     providerId?: string;
     input?: PromptInput[];
-    options?: ThreadExecutionOptions & { instructions?: string };
+    options?: ThreadRuntimeExecutionOptions;
     dynamicTools?: DynamicTool[];
   }): Promise<{ providerThreadId: string }>;
 
@@ -81,7 +81,7 @@ export interface AgentRuntime {
     projectId?: string;
     providerThreadId?: string;
     providerId?: string;
-    options?: ThreadExecutionOptions;
+    options?: ThreadRuntimeExecutionOptions;
     resumePath?: string;
     dynamicTools?: DynamicTool[];
   }): Promise<{ providerThreadId?: string }>;
@@ -89,7 +89,7 @@ export interface AgentRuntime {
   runTurn(args: {
     threadId: string;
     input: PromptInput[];
-    options?: ThreadExecutionOptions;
+    options?: ThreadRuntimeExecutionOptions;
   }): Promise<void>;
 
   steerTurn(args: {

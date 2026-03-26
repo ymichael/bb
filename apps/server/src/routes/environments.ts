@@ -8,7 +8,7 @@ import { maybeCleanupEnvironment } from "../services/environment-cleanup.js";
 import {
   requireEnvironment,
   requireReadyEnvironment,
-  selectPrimaryThreadForEnvironment,
+  requireThreadInEnvironment,
 } from "../services/entity-lookup.js";
 import { queueCommandAndWait } from "../services/command-wait.js";
 import { parseJsonBody } from "../services/validation.js";
@@ -40,6 +40,7 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
       command: {
         type: "workspace.status",
         environmentId: environment.id,
+        workspacePath: environment.path,
         ...(context.req.query("mergeBaseBranch")
           ? { mergeBaseBranch: context.req.query("mergeBaseBranch") }
           : {}),
@@ -57,6 +58,7 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
       command: {
         type: "workspace.diff",
         environmentId: environment.id,
+        workspacePath: environment.path,
         ...(resolveDiffSelection(context.req.query()) ? { selection: resolveDiffSelection(context.req.query()) } : {}),
         ...(context.req.query("mergeBaseBranch")
           ? { mergeBaseBranch: context.req.query("mergeBaseBranch") }
@@ -76,6 +78,7 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
       command: {
         type: "workspace.list_branches",
         environmentId: environment.id,
+        workspacePath: environment.path,
       },
     });
     return context.json(
@@ -86,7 +89,11 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
   app.post("/environments/:id/actions", async (context) => {
     const environment = requireReadyEnvironment(deps.db, context.req.param("id"));
     const payload = await parseJsonBody(context, environmentActionRequestSchema);
-    const primaryThread = selectPrimaryThreadForEnvironment(deps.db, environment.id);
+    const actingThread = requireThreadInEnvironment(
+      deps.db,
+      environment.id,
+      payload.threadId,
+    );
 
     switch (payload.action) {
       case "commit": {
@@ -96,6 +103,7 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
           command: {
             type: "workspace.commit",
             environmentId: environment.id,
+            workspacePath: environment.path,
             message: payload.options?.message ?? "Checkpoint changes",
             ...(payload.options?.includeUnstaged !== undefined
               ? { includeUnstaged: payload.options.includeUnstaged }
@@ -103,9 +111,9 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
           },
         });
         const result = hostDaemonCommandResultSchemaByType["workspace.commit"].parse(rawResult);
-        const autoArchiveRequested = Boolean(payload.options?.autoArchiveOnSuccess && primaryThread);
-        const archivedThread = autoArchiveRequested && primaryThread
-          ? archiveThread(deps.db, deps.hub, primaryThread.id)
+        const autoArchiveRequested = Boolean(payload.options?.autoArchiveOnSuccess);
+        const archivedThread = autoArchiveRequested
+          ? archiveThread(deps.db, deps.hub, actingThread.id)
           : null;
         if (archivedThread) {
           await maybeCleanupEnvironment(deps, archivedThread.environmentId);
@@ -121,7 +129,7 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
         });
       }
       case "squash_merge": {
-        if (!primaryThread?.mergeBaseBranch) {
+        if (!actingThread.mergeBaseBranch) {
           throw new ApiError(409, "invalid_request", "Environment has no merge base branch");
         }
         const rawResult = await queueCommandAndWait(deps, {
@@ -130,7 +138,8 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
           command: {
             type: "workspace.squash_merge",
             environmentId: environment.id,
-            targetBranch: payload.options?.mergeBaseBranch ?? primaryThread.mergeBaseBranch,
+            workspacePath: environment.path,
+            targetBranch: payload.options?.mergeBaseBranch ?? actingThread.mergeBaseBranch,
             commitMessage:
               payload.options?.squashMessage ??
               payload.options?.commitMessage ??
@@ -138,9 +147,9 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
           },
         });
         const result = hostDaemonCommandResultSchemaByType["workspace.squash_merge"].parse(rawResult);
-        const autoArchiveRequested = Boolean(payload.options?.autoArchiveOnSuccess && primaryThread);
-        const archivedThread = autoArchiveRequested && primaryThread
-          ? archiveThread(deps.db, deps.hub, primaryThread.id)
+        const autoArchiveRequested = Boolean(payload.options?.autoArchiveOnSuccess);
+        const archivedThread = autoArchiveRequested
+          ? archiveThread(deps.db, deps.hub, actingThread.id)
           : null;
         if (archivedThread) {
           await maybeCleanupEnvironment(deps, archivedThread.environmentId);
@@ -156,7 +165,7 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
       }
       case "promote": {
         const source = getDefaultProjectSource(deps.db, environment.projectId);
-        if (!source?.path || source.hostId !== environment.hostId || !primaryThread) {
+        if (!source?.path || source.hostId !== environment.hostId) {
           throw new ApiError(409, "invalid_request", "Environment cannot be promoted");
         }
         await queueCommandAndWait(deps, {
@@ -165,7 +174,8 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
           command: {
             type: "workspace.promote",
             environmentId: environment.id,
-            threadId: primaryThread.id,
+            workspacePath: environment.path,
+            threadId: actingThread.id,
             primaryPath: source.path,
           },
         });
@@ -180,9 +190,8 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
         if (
           !source?.path ||
           source.hostId !== environment.hostId ||
-          !primaryThread ||
           !environment.branchName ||
-          !primaryThread.mergeBaseBranch
+          !actingThread.mergeBaseBranch
         ) {
           throw new ApiError(409, "invalid_request", "Environment cannot be demoted");
         }
@@ -192,9 +201,10 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
           command: {
             type: "workspace.demote",
             environmentId: environment.id,
-            threadId: primaryThread.id,
+            workspacePath: environment.path,
+            threadId: actingThread.id,
             primaryPath: source.path,
-            defaultBranch: primaryThread.mergeBaseBranch,
+            defaultBranch: actingThread.mergeBaseBranch,
             envBranch: environment.branchName,
           },
         });

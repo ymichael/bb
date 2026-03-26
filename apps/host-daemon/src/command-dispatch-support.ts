@@ -57,6 +57,24 @@ export async function requireExistingEnvironment(
   return entry;
 }
 
+export async function requireWorkspaceEnvironment(
+  args: {
+    environmentId: string;
+    workspacePath: string;
+  },
+  runtimeManager: RuntimeManager,
+): Promise<RuntimeEntry> {
+  const existing = await runtimeManager.getOrAwait(args.environmentId);
+  if (existing) {
+    return existing;
+  }
+
+  return runtimeManager.ensureEnvironment({
+    environmentId: args.environmentId,
+    workspacePath: args.workspacePath,
+  });
+}
+
 export function defaultListProviders(): ProviderInfo[] {
   return listAvailableProviders();
 }

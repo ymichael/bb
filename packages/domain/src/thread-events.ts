@@ -1,5 +1,8 @@
 import { z } from "zod";
-import { promptInputSchema, reasoningLevelSchema, sandboxModeSchema, serviceTierSchema } from "./shared-types.js";
+import {
+  promptInputSchema,
+  threadExecutionOptionsSchema,
+} from "./shared-types.js";
 
 export const systemEventTypeValues = [
   "client/thread/start",
@@ -45,13 +48,7 @@ export type ThreadEnvironmentStartReason = z.infer<
   typeof threadEnvironmentStartReasonSchema
 >;
 
-export const turnRequestOptionsSchema = z.object({
-  model: z.string().optional(),
-  serviceTier: serviceTierSchema.optional(),
-  reasoningLevel: reasoningLevelSchema.optional(),
-  sandboxMode: sandboxModeSchema.optional(),
-  approvalPolicy: z.string().optional(),
-});
+export const turnRequestOptionsSchema = threadExecutionOptionsSchema;
 export type TurnRequestOptions = z.infer<typeof turnRequestOptionsSchema>;
 
 export const turnRequestEventDataSchema = z.object({

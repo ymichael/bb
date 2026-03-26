@@ -57,6 +57,7 @@ describe("public environment and system routes", () => {
           command.environmentId === environment.id,
       );
       expect(statusCommand.command).toMatchObject({
+        workspacePath: "/tmp/environment-details/worktree",
         mergeBaseBranch: "main",
       });
       await reportQueuedCommandSuccess(harness, statusCommand, {
@@ -94,6 +95,7 @@ describe("public environment and system routes", () => {
           command.environmentId === environment.id,
       );
       expect(diffCommand.command).toMatchObject({
+        workspacePath: "/tmp/environment-details/worktree",
         selection: { type: "combined" },
       });
       await reportQueuedCommandSuccess(harness, diffCommand, {
@@ -130,6 +132,9 @@ describe("public environment and system routes", () => {
           command.type === "workspace.list_branches" &&
           command.environmentId === environment.id,
       );
+      expect(branchesCommand.command).toMatchObject({
+        workspacePath: "/tmp/environment-details/worktree",
+      });
       await reportQueuedCommandSuccess(harness, branchesCommand, {
         branches: ["main", "bb/details"],
         current: "bb/details",
@@ -154,6 +159,10 @@ describe("public environment and system routes", () => {
         hostId: host.id,
         projectId: project.id,
       });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+      });
 
       const responsePromise = harness.app.request(
         `/api/v1/environments/${environment.id}/actions`,
@@ -164,6 +173,7 @@ describe("public environment and system routes", () => {
           },
           body: JSON.stringify({
             action: "commit",
+            threadId: thread.id,
             options: {
               message: "Checkpoint changes",
             },
@@ -178,6 +188,7 @@ describe("public environment and system routes", () => {
           command.environmentId === environment.id,
       );
       expect(queued.command).toMatchObject({
+        workspacePath: "/tmp/test-environment",
         message: "Checkpoint changes",
       });
 
@@ -230,6 +241,7 @@ describe("public environment and system routes", () => {
           },
           body: JSON.stringify({
             action: "promote",
+            threadId: primaryThread.id,
           }),
         },
       );
@@ -241,6 +253,7 @@ describe("public environment and system routes", () => {
           command.environmentId === environment.id,
       );
       expect(promoteCommand.command).toMatchObject({
+        workspacePath: "/tmp/promote-project/.bb-worktrees/thread",
         threadId: primaryThread.id,
         primaryPath: source.path,
       });
@@ -262,6 +275,7 @@ describe("public environment and system routes", () => {
           },
           body: JSON.stringify({
             action: "demote",
+            threadId: primaryThread.id,
           }),
         },
       );
@@ -273,6 +287,7 @@ describe("public environment and system routes", () => {
           command.environmentId === environment.id,
       );
       expect(demoteCommand.command).toMatchObject({
+        workspacePath: "/tmp/promote-project/.bb-worktrees/thread",
         threadId: primaryThread.id,
         primaryPath: source.path,
         defaultBranch: "main",
@@ -302,7 +317,7 @@ describe("public environment and system routes", () => {
         managed: true,
         workspaceProvisionType: "managed-worktree",
       });
-      seedThread(harness.deps, {
+      const thread = seedThread(harness.deps, {
         projectId: project.id,
         environmentId: environment.id,
         mergeBaseBranch: "main",
@@ -317,6 +332,7 @@ describe("public environment and system routes", () => {
           },
           body: JSON.stringify({
             action: "squash_merge",
+            threadId: thread.id,
             options: {
               squashMessage: "Squash merge from tests",
             },
@@ -331,6 +347,7 @@ describe("public environment and system routes", () => {
           command.environmentId === environment.id,
       );
       expect(queued.command).toMatchObject({
+        workspacePath: "/tmp/test-environment",
         targetBranch: "main",
         commitMessage: "Squash merge from tests",
       });

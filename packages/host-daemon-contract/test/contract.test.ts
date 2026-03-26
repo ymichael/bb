@@ -19,6 +19,7 @@ describe("host-daemon command schemas", () => {
       hostDaemonCommandSchema.parse({
         type: "workspace.commit",
         environmentId: "env_123",
+        workspacePath: "/tmp/workspace",
         threadId: "thr_123",
         message: "Checkpoint work",
         includeUnstaged: true,
@@ -50,6 +51,7 @@ describe("host-daemon command schemas", () => {
         command: {
           type: "workspace.commit",
           environmentId: "env_123",
+          workspacePath: "/tmp/workspace",
           threadId: "thr_123",
           message: "Checkpoint work",
         },
@@ -161,6 +163,7 @@ describe("host-daemon command schemas", () => {
       hostDaemonCommandSchema.parse({
         type: "workspace.promote",
         environmentId: "env_123",
+        workspacePath: "/tmp/workspace",
         threadId: "thr_123",
         primaryPath: "/tmp/primary",
       }),
@@ -173,6 +176,7 @@ describe("host-daemon command schemas", () => {
       hostDaemonCommandSchema.parse({
         type: "workspace.demote",
         environmentId: "env_123",
+        workspacePath: "/tmp/workspace",
         threadId: "thr_123",
         primaryPath: "/tmp/primary",
         defaultBranch: "main",

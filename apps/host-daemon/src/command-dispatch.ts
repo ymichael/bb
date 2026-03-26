@@ -6,6 +6,7 @@ import {
   defaultListModels,
   defaultListProviders,
   requireExistingEnvironment,
+  requireWorkspaceEnvironment,
   type CommandDispatchOptions,
 } from "./command-dispatch-support.js";
 import { provisionEnvironment } from "./command-handlers/environment.js";
@@ -108,19 +109,13 @@ export async function dispatchCommand<TCommand extends HostDaemonCommand>(
       return {} as HostDaemonCommandResult<TCommand["type"]>;
     }
     case "workspace.status": {
-      const entry = await requireExistingEnvironment(
-        command.environmentId,
-        options.runtimeManager,
-      );
+      const entry = await requireWorkspaceEnvironment(command, options.runtimeManager);
       return {
         workspaceStatus: await entry.workspace.getStatus(),
       } as HostDaemonCommandResult<TCommand["type"]>;
     }
     case "workspace.diff": {
-      const entry = await requireExistingEnvironment(
-        command.environmentId,
-        options.runtimeManager,
-      );
+      const entry = await requireWorkspaceEnvironment(command, options.runtimeManager);
       return {
         diff: await entry.workspace.getDiff({
           mergeBaseBranch: command.mergeBaseBranch,
@@ -129,10 +124,7 @@ export async function dispatchCommand<TCommand extends HostDaemonCommand>(
       } as HostDaemonCommandResult<TCommand["type"]>;
     }
     case "workspace.commit": {
-      const entry = await requireExistingEnvironment(
-        command.environmentId,
-        options.runtimeManager,
-      );
+      const entry = await requireWorkspaceEnvironment(command, options.runtimeManager);
       return entry.workspace.commit({
         message: command.message,
         includeUnstaged: command.includeUnstaged,
@@ -143,18 +135,12 @@ export async function dispatchCommand<TCommand extends HostDaemonCommand>(
         HostDaemonCommandResult<TCommand["type"]>
       >;
     case "workspace.reset": {
-      const entry = await requireExistingEnvironment(
-        command.environmentId,
-        options.runtimeManager,
-      );
+      const entry = await requireWorkspaceEnvironment(command, options.runtimeManager);
       await entry.workspace.reset();
       return {} as HostDaemonCommandResult<TCommand["type"]>;
     }
     case "workspace.checkpoint": {
-      const entry = await requireExistingEnvironment(
-        command.environmentId,
-        options.runtimeManager,
-      );
+      const entry = await requireWorkspaceEnvironment(command, options.runtimeManager);
       return entry.workspace.checkpoint({
         commitMessage: command.commitMessage,
         remoteName: command.remoteName,

@@ -1,6 +1,6 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { createInterface } from "node:readline";
-import type { ThreadExecutionOptions } from "@bb/domain";
+import type { ThreadRuntimeExecutionOptions } from "@bb/domain";
 import type {
   AdapterOptions,
   JsonRpcMessage,
@@ -59,7 +59,7 @@ function sendRequest(
 // ---------------------------------------------------------------------------
 
 function toAdapterOptions(
-  execOpts: (ThreadExecutionOptions & { instructions?: string }) | undefined,
+  execOpts: ThreadRuntimeExecutionOptions | undefined,
   envVars: Record<string, string>,
 ): AdapterOptions | undefined {
   if (!execOpts && Object.keys(envVars).length === 0) return undefined;

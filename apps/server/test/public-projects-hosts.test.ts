@@ -248,6 +248,7 @@ describe("public project and host routes", () => {
           command.environmentId === environment.id,
       );
       expect(queued.command).toMatchObject({
+        workspacePath: "/tmp/project-files",
         query: "src",
       });
       await reportQueuedCommandSuccess(harness, queued, {

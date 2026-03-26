@@ -349,7 +349,7 @@ describe.sequential("fake provider smoke integration", () => {
 
     try {
       const project = await createProjectFixture(harness, "Workspace Commit Smoke");
-      const { environment } = await createReadyThread(harness, {
+      const { environment, thread } = await createReadyThread(harness, {
         projectId: project.id,
         workspace: {
           type: "unmanaged",
@@ -368,6 +368,7 @@ describe.sequential("fake provider smoke integration", () => {
 
       const result = await runEnvironmentAction(harness.api, environment.id, {
         action: "commit",
+        threadId: thread.id,
         options: {
           includeUnstaged: true,
           message: "smoke commit",
@@ -414,6 +415,7 @@ describe.sequential("fake provider smoke integration", () => {
 
       await runEnvironmentAction(harness.api, environment.id, {
         action: "commit",
+        threadId: thread.id,
         options: {
           includeUnstaged: true,
           message: "feature work",
@@ -421,6 +423,7 @@ describe.sequential("fake provider smoke integration", () => {
       });
       await runEnvironmentAction(harness.api, environment.id, {
         action: "promote",
+        threadId: thread.id,
       });
 
       const promotedHead = await runGit({
@@ -431,6 +434,7 @@ describe.sequential("fake provider smoke integration", () => {
 
       await runEnvironmentAction(harness.api, environment.id, {
         action: "demote",
+        threadId: thread.id,
       });
 
       const sourceBranch = await runGit({

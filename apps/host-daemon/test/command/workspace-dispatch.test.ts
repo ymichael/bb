@@ -15,35 +15,83 @@ describe("workspace command dispatch", () => {
     });
 
     const statusResult = await dispatchCommand(
-      { type: "workspace.status", environmentId: "env-1", threadId: "thread-1" },
+      {
+        type: "workspace.status",
+        environmentId: "env-1",
+        workspacePath: "/tmp/env-1",
+        threadId: "thread-1",
+      },
       { runtimeManager: harness.manager },
     );
     const diffResult = await dispatchCommand(
-      { type: "workspace.diff", environmentId: "env-1", threadId: "thread-1" },
+      {
+        type: "workspace.diff",
+        environmentId: "env-1",
+        workspacePath: "/tmp/env-1",
+        threadId: "thread-1",
+      },
       { runtimeManager: harness.manager },
     );
     const commitResult = await dispatchCommand(
-      { type: "workspace.commit", environmentId: "env-1", threadId: "thread-1", message: "Commit message" },
+      {
+        type: "workspace.commit",
+        environmentId: "env-1",
+        workspacePath: "/tmp/env-1",
+        threadId: "thread-1",
+        message: "Commit message",
+      },
       { runtimeManager: harness.manager },
     );
     const squashResult = await dispatchCommand(
-      { type: "workspace.squash_merge", environmentId: "env-1", threadId: "thread-1", targetBranch: "main", commitMessage: "Squash" },
+      {
+        type: "workspace.squash_merge",
+        environmentId: "env-1",
+        workspacePath: "/tmp/env-1",
+        threadId: "thread-1",
+        targetBranch: "main",
+        commitMessage: "Squash",
+      },
       { runtimeManager: harness.manager },
     );
     const resetResult = await dispatchCommand(
-      { type: "workspace.reset", environmentId: "env-1", threadId: "thread-1" },
+      {
+        type: "workspace.reset",
+        environmentId: "env-1",
+        workspacePath: "/tmp/env-1",
+        threadId: "thread-1",
+      },
       { runtimeManager: harness.manager },
     );
     const checkpointResult = await dispatchCommand(
-      { type: "workspace.checkpoint", environmentId: "env-1", threadId: "thread-1", commitMessage: "Checkpoint" },
+      {
+        type: "workspace.checkpoint",
+        environmentId: "env-1",
+        workspacePath: "/tmp/env-1",
+        threadId: "thread-1",
+        commitMessage: "Checkpoint",
+      },
       { runtimeManager: harness.manager },
     );
     const promoteResult = await dispatchCommand(
-      { type: "workspace.promote", environmentId: "env-1", threadId: "thread-1", primaryPath: "/tmp/primary" },
+      {
+        type: "workspace.promote",
+        environmentId: "env-1",
+        workspacePath: "/tmp/env-1",
+        threadId: "thread-1",
+        primaryPath: "/tmp/primary",
+      },
       { runtimeManager: harness.manager },
     );
     const demoteResult = await dispatchCommand(
-      { type: "workspace.demote", environmentId: "env-1", threadId: "thread-1", primaryPath: "/tmp/primary", defaultBranch: "main", envBranch: "feature" },
+      {
+        type: "workspace.demote",
+        environmentId: "env-1",
+        workspacePath: "/tmp/env-1",
+        threadId: "thread-1",
+        primaryPath: "/tmp/primary",
+        defaultBranch: "main",
+        envBranch: "feature",
+      },
       { runtimeManager: harness.manager },
     );
 
@@ -62,6 +110,28 @@ describe("workspace command dispatch", () => {
     expect(harness.workspaceState.demotedPrimaryPath).toBe("/tmp/primary");
   });
 
+  it("rehydrates a missing workspace runtime from workspacePath", async () => {
+    const harness = createHarness({ workspacePath: "/tmp/env-rehydrate" });
+
+    const result = await dispatchCommand(
+      {
+        type: "workspace.status",
+        environmentId: "env-rehydrate",
+        workspacePath: "/tmp/env-rehydrate",
+        threadId: "thread-1",
+      },
+      { runtimeManager: harness.manager },
+    );
+
+    expect(result.workspaceStatus?.state).toBe("clean");
+    expect(harness.provisions).toEqual([
+      {
+        workspaceProvisionType: "unmanaged",
+        path: "/tmp/env-rehydrate",
+      },
+    ]);
+  });
+
   it("covers workspace.list_files", async () => {
     const tempDir = await makeTempDir("bb-dispatch-list-files-");
     await fs.writeFile(path.join(tempDir, "file-a.txt"), "hello");
@@ -75,7 +145,7 @@ describe("workspace command dispatch", () => {
     });
 
     const result = await dispatchCommand(
-      { type: "workspace.list_files", environmentId: "env-1" },
+      { type: "workspace.list_files", environmentId: "env-1", workspacePath: tempDir },
       { runtimeManager: harness.manager },
     );
 
@@ -84,7 +154,12 @@ describe("workspace command dispatch", () => {
     expect(paths).toContain(path.join("sub", "file-b.ts"));
 
     const filtered = await dispatchCommand(
-      { type: "workspace.list_files", environmentId: "env-1", query: "file-b" },
+      {
+        type: "workspace.list_files",
+        environmentId: "env-1",
+        workspacePath: tempDir,
+        query: "file-b",
+      },
       { runtimeManager: harness.manager },
     );
     expect(filtered.files).toHaveLength(1);
@@ -102,7 +177,12 @@ describe("workspace command dispatch", () => {
     });
 
     const result = await dispatchCommand(
-      { type: "workspace.read_file", environmentId: "env-1", path: "readme.txt" },
+      {
+        type: "workspace.read_file",
+        environmentId: "env-1",
+        workspacePath: tempDir,
+        path: "readme.txt",
+      },
       { runtimeManager: harness.manager },
     );
 
@@ -120,7 +200,12 @@ describe("workspace command dispatch", () => {
 
     await expect(
       dispatchCommand(
-        { type: "workspace.read_file", environmentId: "env-1", path: "../../../etc/passwd" },
+        {
+          type: "workspace.read_file",
+          environmentId: "env-1",
+          workspacePath: tempDir,
+          path: "../../../etc/passwd",
+        },
         { runtimeManager: harness.manager },
       ),
     ).rejects.toThrow("escapes workspace root");
@@ -134,7 +219,11 @@ describe("workspace command dispatch", () => {
     });
 
     const result = await dispatchCommand(
-      { type: "workspace.list_branches", environmentId: "env-1" },
+      {
+        type: "workspace.list_branches",
+        environmentId: "env-1",
+        workspacePath: "/tmp/env-1",
+      },
       { runtimeManager: harness.manager },
     );
 

@@ -365,6 +365,7 @@ describe.sequential("fake provider multi-thread integration", () => {
       await Promise.all([
         runEnvironmentAction(harness.api, threadA.environment.id, {
           action: "commit",
+          threadId: threadA.thread.id,
           options: {
             includeUnstaged: true,
             message: "env-a commit",
@@ -372,6 +373,7 @@ describe.sequential("fake provider multi-thread integration", () => {
         }),
         runEnvironmentAction(harness.api, threadB.environment.id, {
           action: "commit",
+          threadId: threadB.thread.id,
           options: {
             includeUnstaged: true,
             message: "env-b commit",
@@ -584,6 +586,7 @@ describe.sequential("fake provider multi-thread integration", () => {
       await Promise.all([
         runEnvironmentAction(harnessA.api, threadA.environment.id, {
           action: "commit",
+          threadId: threadA.thread.id,
           options: {
             includeUnstaged: true,
             message: "instance-a commit",
@@ -591,6 +594,7 @@ describe.sequential("fake provider multi-thread integration", () => {
         }),
         runEnvironmentAction(harnessB.api, threadB.environment.id, {
           action: "commit",
+          threadId: threadB.thread.id,
           options: {
             includeUnstaged: true,
             message: "instance-b commit",

@@ -180,7 +180,7 @@ describe("host daemon integration", () => {
       });
       harness.server.sendWebSocketMessage({ type: "commands-available" });
       await waitFor(() => harness.server.commandResults.length === 1);
-      expect(await readCommandCursor(harness.dataDir)).toBe(1);
+      await waitForCursor(harness.dataDir, 1);
 
       harness.server.closeWebSockets();
       await waitFor(() => harness.server.sessionOpenCalls.length === 2);
@@ -201,7 +201,7 @@ describe("host daemon integration", () => {
           (fetch) => fetch.sessionId === "session-2" && fetch.afterCursor === 1,
         ),
       ).toBe(true);
-      expect(await readCommandCursor(harness.dataDir)).toBe(2);
+      await waitForCursor(harness.dataDir, 2);
     } finally {
       await harness.daemon.shutdown("test");
       await harness.server.close();

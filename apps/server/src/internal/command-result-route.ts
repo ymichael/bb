@@ -26,7 +26,7 @@ export function registerInternalCommandResultRoutes(
     if (!command || command.hostId !== session.hostId) {
       throw new ApiError(404, "command_not_found", "Command not found");
     }
-    const updatedCommand = handleCommandResult(deps, payload);
+    const updatedCommand = await handleCommandResult(deps, payload);
 
     if (!updatedCommand) {
       throw new ApiError(404, "command_not_found", "Command not found");

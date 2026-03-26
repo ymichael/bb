@@ -1,4 +1,4 @@
-import { and, desc, eq, gt, isNull } from "drizzle-orm";
+import { and, desc, eq, gt } from "drizzle-orm";
 import {
   environments,
   getActiveSession,
@@ -119,12 +119,16 @@ export function requireEnvironment(
 export function requireReadyEnvironment(
   db: DbConnection,
   environmentId: string,
-): Environment {
+): Environment & { path: string; status: "ready" } {
   const environment = requireEnvironment(db, environmentId);
   if (environment.status !== "ready" || !environment.path) {
     throw new ApiError(409, "invalid_request", "Environment is not ready");
   }
-  return environment;
+  return {
+    ...environment,
+    path: environment.path,
+    status: "ready",
+  };
 }
 
 export function requireThreadEnvironment(
@@ -141,24 +145,20 @@ export function requireThreadEnvironment(
   };
 }
 
-export function selectPrimaryThreadForEnvironment(
+export function requireThreadInEnvironment(
   db: DbConnection,
   environmentId: string,
-): Thread | null {
-  return (
-    db
-      .select()
-      .from(threads)
-      .where(
-        and(
-          eq(threads.environmentId, environmentId),
-          isNull(threads.archivedAt),
-        ),
-      )
-      .orderBy(desc(threads.updatedAt))
-      .limit(1)
-      .get() ?? null
-  );
+  threadId: string,
+): Thread {
+  const thread = requireThread(db, threadId);
+  if (thread.environmentId !== environmentId) {
+    throw new ApiError(
+      409,
+      "invalid_request",
+      "Thread does not belong to this environment",
+    );
+  }
+  return thread;
 }
 
 export function requireDefaultConnectedHostId(db: DbConnection): string {

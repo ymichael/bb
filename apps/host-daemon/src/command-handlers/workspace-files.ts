@@ -4,7 +4,10 @@ import path from "node:path";
 import { promisify } from "node:util";
 import type { HostDaemonCommandResult } from "@bb/host-daemon-contract";
 import type { RuntimeManager } from "../runtime-manager.js";
-import { CommandDispatchError, requireExistingEnvironment } from "../command-dispatch-support.js";
+import {
+  CommandDispatchError,
+  requireWorkspaceEnvironment,
+} from "../command-dispatch-support.js";
 import type { CommandOf } from "../command-dispatch-support.js";
 
 const execFileAsync = promisify(execFile);
@@ -13,7 +16,7 @@ export async function listWorkspaceFiles(
   command: CommandOf<"workspace.list_files">,
   runtimeManager: RuntimeManager,
 ): Promise<HostDaemonCommandResult<"workspace.list_files">> {
-  const entry = await requireExistingEnvironment(command.environmentId, runtimeManager);
+  const entry = await requireWorkspaceEnvironment(command, runtimeManager);
   const workspacePath = entry.workspace.path;
 
   let filePaths: string[];
@@ -64,7 +67,7 @@ export async function readWorkspaceFile(
   command: CommandOf<"workspace.read_file">,
   runtimeManager: RuntimeManager,
 ): Promise<HostDaemonCommandResult<"workspace.read_file">> {
-  const entry = await requireExistingEnvironment(command.environmentId, runtimeManager);
+  const entry = await requireWorkspaceEnvironment(command, runtimeManager);
   const workspacePath = entry.workspace.path;
 
   const resolved = path.resolve(workspacePath, command.path);
@@ -86,7 +89,7 @@ export async function listBranches(
   command: CommandOf<"workspace.list_branches">,
   runtimeManager: RuntimeManager,
 ): Promise<HostDaemonCommandResult<"workspace.list_branches">> {
-  const entry = await requireExistingEnvironment(command.environmentId, runtimeManager);
+  const entry = await requireWorkspaceEnvironment(command, runtimeManager);
   const branches = await entry.workspace.getBranches();
   const current = await entry.workspace.currentBranch();
   return { branches, current };

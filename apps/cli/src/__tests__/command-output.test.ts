@@ -1009,7 +1009,7 @@ describe("CLI command output contracts", () => {
 
     await expect(
       runCommand(
-        ["environment", "commit", "env-1"],
+        ["environment", "commit", "env-1", "--thread", "thread-1"],
         (program) => registerEnvironmentCommands(program, () => "http://server"),
       ),
     ).rejects.toThrow("process.exit:1");

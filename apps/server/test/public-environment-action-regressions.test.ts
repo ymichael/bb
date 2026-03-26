@@ -42,6 +42,7 @@ describe("public environment action regressions", () => {
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
             action: "commit",
+            threadId: thread.id,
             options: {
               message: "Archive after commit",
               autoArchiveOnSuccess: true,
@@ -113,6 +114,7 @@ describe("public environment action regressions", () => {
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
             action: "squash_merge",
+            threadId: thread.id,
             options: {
               squashMessage: "Squash and archive",
               autoArchiveOnSuccess: true,
@@ -155,6 +157,89 @@ describe("public environment action regressions", () => {
         path: "/tmp/squash-auto-archive",
       });
       expect(getEnvironment(harness.db, environment.id)?.status).toBe("destroying");
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("uses the requested thread for auto-archive and rejects mismatched thread ids", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, { id: "host-thread-target" });
+      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        managed: true,
+        workspaceProvisionType: "managed-worktree",
+        path: "/tmp/thread-target",
+      });
+      const olderThread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        title: "Older sibling",
+      });
+      const actingThread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        title: "Acting thread",
+      });
+      const otherEnvironment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/other-environment",
+      });
+      const mismatchedThread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: otherEnvironment.id,
+      });
+
+      const responsePromise = harness.app.request(
+        `/api/v1/environments/${environment.id}/actions`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            action: "commit",
+            threadId: actingThread.id,
+            options: {
+              autoArchiveOnSuccess: true,
+            },
+          }),
+        },
+      );
+
+      const commitCommand = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "workspace.commit" &&
+          command.environmentId === environment.id,
+      );
+      await reportQueuedCommandSuccess(harness, commitCommand, {
+        commitSha: "targeted-thread-commit",
+        commitSubject: "Checkpoint changes",
+      });
+
+      const response = await responsePromise;
+      expect(response.status).toBe(200);
+      expect(getThread(harness.db, olderThread.id)?.archivedAt).toBeNull();
+      expect(getThread(harness.db, actingThread.id)?.archivedAt).toBeTypeOf("number");
+
+      const mismatchedResponse = await harness.app.request(
+        `/api/v1/environments/${environment.id}/actions`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            action: "commit",
+            threadId: mismatchedThread.id,
+          }),
+        },
+      );
+      expect(mismatchedResponse.status).toBe(409);
+      await expect(readJson(mismatchedResponse)).resolves.toMatchObject({
+        code: "invalid_request",
+      });
     } finally {
       await harness.cleanup();
     }
