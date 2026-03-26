@@ -689,10 +689,11 @@ Write `qa/manual-runbook.md` consolidating the runbook content from 7f below int
 The runbook should be self-contained — someone reading only that file can execute the full manual QA pass.
 
 **Validation:**
-- [ ] `createIntegrationHarness()` starts server + daemon, daemon connects, `waitForHostConnected()` succeeds
-- [ ] `cleanup()` stops everything, temp dir removed
-- [ ] `start-standalone.mjs` provisions a working standalone instance, `stop-standalone.mjs` cleans it up
-- [ ] `qa/manual-runbook.md` exists and covers all manual QA scenarios from 7f
+- [x] `createIntegrationHarness()` starts server + daemon, daemon connects, `waitForHostConnected()` succeeds
+- [x] `cleanup()` stops everything, temp dir removed
+- [x] `start-standalone.mjs` provisions a working standalone instance, `stop-standalone.mjs` cleans it up
+- [x] `qa/manual-runbook.md` exists and covers all manual QA scenarios from 7f
+- [x] Smoke, multi-thread, and recovery passes are documented in `qa/manual-pass-log.md`
 
 ### 7b. Fake provider — basic lifecycle (smoke + core)
 

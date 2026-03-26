@@ -138,7 +138,7 @@ THREAD_A_ID=$(bb thread spawn \
   --provider codex \
   --reasoning-level low \
   --service-tier fast \
-  --prompt "Thread A says hello" \
+  --prompt "Reply only in chat with the exact text THREAD A HELLO. Do not modify any files." \
   --json | jq -r '.id')
 
 bb thread wait "$THREAD_A_ID" --status idle --timeout 120
@@ -154,7 +154,7 @@ THREAD_B_ID=$(bb thread spawn \
   --provider codex \
   --reasoning-level low \
   --service-tier fast \
-  --prompt "Thread B says world" \
+  --prompt "Reply only in chat with the exact text THREAD B WORLD. Do not modify any files." \
   --json | jq -r '.id')
 
 bb thread wait "$THREAD_B_ID" --status idle --timeout 120
@@ -167,10 +167,10 @@ bb thread output "$THREAD_B_ID"
 Alternate follow-ups across the two sibling threads:
 
 ```bash
-bb thread tell "$THREAD_A_ID" "Follow up A"
+bb thread tell "$THREAD_A_ID" "Reply only in chat with FOLLOW UP A. Do not modify files."
 bb thread wait "$THREAD_A_ID" --status idle --timeout 120
 
-bb thread tell "$THREAD_B_ID" "Follow up B"
+bb thread tell "$THREAD_B_ID" "Reply only in chat with FOLLOW UP B. Do not modify files."
 bb thread wait "$THREAD_B_ID" --status idle --timeout 120
 
 bb thread output "$THREAD_A_ID"
@@ -183,7 +183,7 @@ Archive thread A and verify thread B still works:
 
 ```bash
 bb thread archive "$THREAD_A_ID"
-bb thread tell "$THREAD_B_ID" "Still working after sibling archive"
+bb thread tell "$THREAD_B_ID" "Reply only in chat with STILL WORKING. Do not modify files."
 bb thread wait "$THREAD_B_ID" --status idle --timeout 120
 bb thread output "$THREAD_B_ID"
 bb thread unarchive "$THREAD_A_ID"
@@ -197,7 +197,8 @@ CLAUDE_THREAD_ID=$(bb thread spawn \
   --provider claude-code \
   --reasoning-level low \
   --model claude-haiku-4-5 \
-  --prompt "Claude thread" \
+  --new-environment worktree \
+  --prompt "Reply only in chat with CLAUDE THREAD. Do not modify files." \
   --json | jq -r '.id')
 
 PI_THREAD_ID=$(bb thread spawn \
@@ -206,11 +207,15 @@ PI_THREAD_ID=$(bb thread spawn \
   --reasoning-level low \
   --model openai/codex-mini \
   --new-environment worktree \
-  --prompt "Pi thread" \
+  --prompt "Reply only in chat with PI THREAD. Do not modify files." \
   --json | jq -r '.id')
 
 bb thread wait "$CLAUDE_THREAD_ID" --status idle --timeout 120
 bb thread wait "$PI_THREAD_ID" --status idle --timeout 120
+CLAUDE_ENV_ID=$(curl -fsS "$BB_SERVER_URL/api/v1/threads/$CLAUDE_THREAD_ID" | jq -r '.environmentId')
+PI_ENV_ID=$(curl -fsS "$BB_SERVER_URL/api/v1/threads/$PI_THREAD_ID" | jq -r '.environmentId')
+
+printf 'claude env: %s\npi env: %s\n' "$CLAUDE_ENV_ID" "$PI_ENV_ID"
 bb thread output "$CLAUDE_THREAD_ID"
 bb thread output "$PI_THREAD_ID"
 ```
@@ -252,6 +257,7 @@ Graceful daemon restart:
 
 ```bash
 kill -TERM "$DAEMON_PID"
+curl -fsS "$BB_SERVER_URL/api/v1/system/config" | jq
 curl -fsS "$BB_SERVER_URL/api/v1/hosts" | jq
 
 eval "$RESTART_DAEMON_COMMAND"
@@ -266,7 +272,7 @@ bb thread output "$SMOKE_THREAD_ID"
 Kill the daemon during active work:
 
 ```bash
-bb thread tell "$SMOKE_THREAD_ID" "Write a very detailed history of computing with many sections"
+bb thread tell "$SMOKE_THREAD_ID" "Write 80 detailed bullet points about the history of computing."
 bb thread wait "$SMOKE_THREAD_ID" --status active --timeout 30
 
 kill -TERM "$DAEMON_PID"
@@ -275,8 +281,15 @@ bb thread show "$SMOKE_THREAD_ID" --recent-events 10
 eval "$RESTART_DAEMON_COMMAND"
 DAEMON_PID=$!
 
-bb thread tell "$SMOKE_THREAD_ID" "Recover after interruption"
-bb thread wait "$SMOKE_THREAD_ID" --status idle --timeout 120
+THREAD_STATE=$(curl -fsS "$BB_SERVER_URL/api/v1/threads/$SMOKE_THREAD_ID" | jq -r '.status')
+
+if [ "$THREAD_STATE" = "active" ]; then
+  bb thread wait "$SMOKE_THREAD_ID" --status idle --timeout 180
+else
+  bb thread tell "$SMOKE_THREAD_ID" "Say exactly: recovery ok"
+  bb thread wait "$SMOKE_THREAD_ID" --status idle --timeout 120
+fi
+
 bb thread output "$SMOKE_THREAD_ID"
 bb thread log "$SMOKE_THREAD_ID" --format json | jq '.[-12:]'
 ```
@@ -293,7 +306,7 @@ Expected result:
 
 - The server stays up while the daemon is restarted.
 - Threads remain inspectable during and after daemon loss.
-- Follow-up work succeeds after restart, including after an interruption mid-turn.
+- After an interruption mid-turn, the thread either resumes active work and settles to `idle`, or reaches `idle`/`error` and accepts a short new turn after restart.
 
 ## Provider-Specific Pass
 
