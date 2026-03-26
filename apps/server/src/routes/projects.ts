@@ -11,6 +11,7 @@ import {
   updateProjectSource,
 } from "@bb/db";
 import {
+  createManagerThreadRequestSchema,
   createProjectRequestSchema,
   createProjectSourceRequestSchema,
   updateProjectRequestSchema,
@@ -180,32 +181,18 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
 
   app.post("/projects/:id/managers", async (context) => {
     requireProject(deps.db, context.req.param("id"));
-    const payload = await context.req.json();
+    const payload = await parseJsonBody(context, createManagerThreadRequestSchema);
     const source = getDefaultProjectSource(deps.db, context.req.param("id"));
     if (!source) {
       throw new ApiError(409, "invalid_request", "Project has no default source");
     }
     const thread = await createThreadFromRequest(deps, {
       projectId: context.req.param("id"),
-      providerId:
-        payload && typeof payload === "object" && "providerId" in payload && typeof payload.providerId === "string"
-          ? payload.providerId
-          : "claude-code",
+      providerId: payload.providerId ?? "claude-code",
       type: "manager",
-      ...(payload && typeof payload === "object" && "title" in payload && typeof payload.title === "string"
-        ? { title: payload.title }
-        : {}),
-      ...(payload && typeof payload === "object" && "model" in payload && typeof payload.model === "string"
-        ? { model: payload.model }
-        : {}),
-      ...(payload && typeof payload === "object" && "reasoningLevel" in payload && (
-        payload.reasoningLevel === "low" ||
-        payload.reasoningLevel === "medium" ||
-        payload.reasoningLevel === "high" ||
-        payload.reasoningLevel === "xhigh"
-      )
-        ? { reasoningLevel: payload.reasoningLevel }
-        : {}),
+      ...(payload.title ? { title: payload.title } : {}),
+      ...(payload.model ? { model: payload.model } : {}),
+      ...(payload.reasoningLevel ? { reasoningLevel: payload.reasoningLevel } : {}),
       environment: {
         type: "host",
         hostId: source.hostId,

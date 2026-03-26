@@ -1,5 +1,5 @@
 import type { Context } from "hono";
-import type { ZodType } from "zod";
+import type { ZodType, ZodTypeAny } from "zod";
 import { ZodError } from "zod";
 import { ApiError } from "../errors.js";
 
@@ -19,6 +19,24 @@ export async function parseJsonBody<T>(
   } catch (error) {
     if (error instanceof ZodError) {
       throw new ApiError(400, "invalid_request", error.issues[0]?.message ?? "Invalid request");
+    }
+    throw error;
+  }
+}
+
+export function parseValue<TSchema extends ZodTypeAny>(
+  value: unknown,
+  schema: TSchema,
+): ReturnType<TSchema["parse"]> {
+  try {
+    return schema.parse(value);
+  } catch (error) {
+    if (error instanceof ZodError) {
+      throw new ApiError(
+        400,
+        "invalid_request",
+        error.issues[0]?.message ?? "Invalid request",
+      );
     }
     throw error;
   }

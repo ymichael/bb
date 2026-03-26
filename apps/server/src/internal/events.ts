@@ -1,10 +1,115 @@
-import { getHighWaterMarks, insertEvents } from "@bb/db";
-import { hostDaemonEventBatchRequestSchema } from "@bb/host-daemon-contract";
+import {
+  getHighWaterMarks,
+  getThread,
+  insertEvents,
+  transitionThreadStatus,
+  updateThread,
+} from "@bb/db";
+import {
+  hostDaemonEventBatchRequestSchema,
+  type HostDaemonEventEnvelope,
+} from "@bb/host-daemon-contract";
 import type { Hono } from "hono";
 import type { AppDeps } from "../types.js";
 import { parseJsonBody } from "../services/validation.js";
-import { handleTurnCompletedEvents } from "./turn-completed-events.js";
+import { applyTurnCompletedEvent } from "./turn-completed-events.js";
 import { requireActiveSession } from "./session-state.js";
+
+function resolveProviderIdentifiers(
+  event: HostDaemonEventEnvelope["event"],
+): { providerThreadId: string | null; turnId: string | null } {
+  switch (event.type) {
+    case "thread/started":
+    case "client/thread/start":
+    case "client/turn/requested":
+    case "client/turn/start":
+    case "system/error":
+    case "system/manager/user_message":
+    case "system/thread/interrupted":
+    case "system/thread-title/updated":
+    case "system/operation":
+    case "system/provisioning":
+      return { providerThreadId: null, turnId: null };
+    case "thread/identity":
+    case "thread/name/updated":
+    case "thread/compacted":
+    case "warning":
+      return { providerThreadId: event.providerThreadId, turnId: null };
+    case "turn/started":
+    case "turn/completed":
+    case "item/started":
+    case "item/completed":
+    case "item/agentMessage/delta":
+    case "item/commandExecution/outputDelta":
+    case "item/fileChange/outputDelta":
+    case "item/reasoning/summaryTextDelta":
+    case "item/reasoning/textDelta":
+    case "item/plan/delta":
+    case "item/mcpToolCall/progress":
+    case "thread/tokenUsage/updated":
+    case "turn/plan/updated":
+    case "turn/diff/updated":
+      return {
+        providerThreadId: event.providerThreadId,
+        turnId: event.turnId,
+      };
+    case "error":
+      return {
+        providerThreadId: event.providerThreadId,
+        turnId: event.turnId ?? null,
+      };
+    default: {
+      const _exhaustive: never = event;
+      throw new Error(`Unsupported event type: ${_exhaustive}`);
+    }
+  }
+}
+
+function toStoredEvent(envelope: HostDaemonEventEnvelope) {
+  const { type, threadId, ...data } = envelope.event;
+  return {
+    threadId: envelope.threadId,
+    environmentId: envelope.environmentId,
+    ...resolveProviderIdentifiers(envelope.event),
+    sequence: envelope.sequence,
+    type,
+    data: JSON.stringify(data),
+  };
+}
+
+function applyEventEffects(
+  deps: Pick<AppDeps, "db" | "hub">,
+  events: HostDaemonEventEnvelope[],
+): void {
+  for (const entry of events) {
+    const event = entry.event;
+    if (event.type === "turn/started") {
+      const thread = getThread(deps.db, event.threadId);
+      if (!thread) {
+        continue;
+      }
+      try {
+        if (thread.status === "idle" || thread.status === "error") {
+          transitionThreadStatus(deps.db, deps.hub, thread.id, "active");
+        }
+      } catch {
+        // Ignore invalid transitions caused by concurrent lifecycle changes.
+      }
+      continue;
+    }
+
+    if (event.type === "turn/completed") {
+      applyTurnCompletedEvent(deps, event);
+      continue;
+    }
+
+    if (event.type === "thread/name/updated") {
+      updateThread(deps.db, deps.hub, event.threadId, {
+        title: event.threadName,
+      });
+    }
+  }
+}
 
 export function registerInternalEventRoutes(app: Hono, deps: AppDeps): void {
   app.post("/session/events", async (context) => {
@@ -17,31 +122,10 @@ export function registerInternalEventRoutes(app: Hono, deps: AppDeps): void {
     insertEvents(
       deps.db,
       deps.hub,
-      payload.events.map((entry) => {
-        const { type, threadId, ...data } = entry.event;
-        return {
-          threadId: entry.threadId,
-          environmentId: entry.environmentId,
-          providerThreadId:
-            "providerThreadId" in entry.event &&
-            typeof entry.event.providerThreadId === "string"
-              ? entry.event.providerThreadId
-              : null,
-          turnId:
-            "turnId" in entry.event && typeof entry.event.turnId === "string"
-              ? entry.event.turnId
-              : null,
-          sequence: entry.sequence,
-          type,
-          data: JSON.stringify(data),
-        };
-      }),
+      payload.events.map((entry) => toStoredEvent(entry)),
     );
 
-    handleTurnCompletedEvents(
-      deps,
-      [...new Set(payload.events.map((event) => event.threadId))],
-    );
+    applyEventEffects(deps, payload.events);
 
     return context.json({
       threadHighWaterMarks: getHighWaterMarks(

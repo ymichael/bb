@@ -74,7 +74,7 @@ export function createApp(deps: AppDeps): ServerApp {
     upgradeWebSocket(() => ({
       onOpen: (_event, socket) => onClientSocketOpen(deps.hub, socket),
       onMessage: (event, socket) =>
-        onClientSocketMessage(deps.hub, socket, String(event.data)),
+        onClientSocketMessage(deps.hub, socket, event.data),
       onClose: (_event, socket) => onClientSocketClose(deps.hub, socket),
     })),
   );
@@ -93,7 +93,7 @@ export function createApp(deps: AppDeps): ServerApp {
             socket,
           }),
         onMessage: (event) =>
-          onDaemonSocketMessage(deps, websocketContext.sessionId, String(event.data)),
+          onDaemonSocketMessage(deps, websocketContext.sessionId, event.data),
         onClose: () =>
           onDaemonSocketClose(deps, websocketContext.sessionId),
       };

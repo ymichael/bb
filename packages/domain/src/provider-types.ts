@@ -1,5 +1,10 @@
 import { z } from "zod";
-import { reasoningLevelSchema } from "./shared-types.js";
+import {
+  promptInputSchema,
+  reasoningLevelSchema,
+  sandboxModeSchema,
+} from "./shared-types.js";
+import { threadTypeSchema } from "./thread.js";
 
 export const modelReasoningEffortSchema = z.object({
   reasoningEffort: reasoningLevelSchema,
@@ -63,6 +68,45 @@ export const toolCallResponseSchema = z.object({
   success: z.boolean(),
 });
 export type ToolCallResponse = z.infer<typeof toolCallResponseSchema>;
+
+export const messageUserToolArgumentsSchema = z
+  .object({
+    text: z.string().trim().min(1).optional(),
+    message: z.string().trim().min(1).optional(),
+  })
+  .refine(
+    (value) => value.text !== undefined || value.message !== undefined,
+    "message_user requires text",
+  )
+  .transform((value) => ({
+    text: value.text ?? value.message ?? "",
+  }));
+export type MessageUserToolArguments = z.infer<
+  typeof messageUserToolArgumentsSchema
+>;
+
+export const spawnThreadToolArgumentsSchema = z
+  .object({
+    prompt: z.string().trim().min(1).optional(),
+    input: z.array(promptInputSchema).min(1).optional(),
+    environmentId: z.string().min(1).optional(),
+    hostId: z.string().min(1).optional(),
+    providerId: z.string().min(1).optional(),
+    type: threadTypeSchema.optional(),
+    title: z.string().trim().min(1).optional(),
+    model: z.string().min(1).optional(),
+    reasoningLevel: reasoningLevelSchema.optional(),
+    sandboxMode: sandboxModeSchema.optional(),
+  })
+  .transform((value) => ({
+    ...value,
+    input: value.prompt
+      ? [{ type: "text" as const, text: value.prompt }]
+      : value.input,
+  }));
+export type SpawnThreadToolArguments = z.infer<
+  typeof spawnThreadToolArgumentsSchema
+>;
 
 export const dynamicToolSchema = z.object({
   name: z.string(),

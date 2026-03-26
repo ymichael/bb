@@ -6,6 +6,21 @@ interface ClientSocket {
   send(data: string): void;
 }
 
+function decodeSocketPayload(raw: unknown): string {
+  if (typeof raw === "string") {
+    return raw;
+  }
+  if (raw instanceof ArrayBuffer) {
+    return Buffer.from(raw).toString("utf8");
+  }
+  if (ArrayBuffer.isView(raw)) {
+    return Buffer.from(raw.buffer, raw.byteOffset, raw.byteLength).toString(
+      "utf8",
+    );
+  }
+  return String(raw);
+}
+
 function isClientMessage(value: unknown): value is ClientMessage {
   if (!value || typeof value !== "object" || !("type" in value)) {
     return false;
@@ -34,9 +49,9 @@ export function onClientSocketOpen(
 export function onClientSocketMessage(
   hub: NotificationHub,
   socket: ClientSocket,
-  raw: string,
+  raw: unknown,
 ): void {
-  const parsed = JSON.parse(raw) as unknown;
+  const parsed = JSON.parse(decodeSocketPayload(raw)) as unknown;
   if (!isClientMessage(parsed)) {
     socket.close(1008, "invalid-message");
     return;

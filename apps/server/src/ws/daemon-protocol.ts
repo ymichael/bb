@@ -9,6 +9,21 @@ interface DaemonSocket {
   send(data: string): void;
 }
 
+function decodeSocketPayload(raw: unknown): string {
+  if (typeof raw === "string") {
+    return raw;
+  }
+  if (raw instanceof ArrayBuffer) {
+    return Buffer.from(raw).toString("utf8");
+  }
+  if (ArrayBuffer.isView(raw)) {
+    return Buffer.from(raw.buffer, raw.byteOffset, raw.byteLength).toString(
+      "utf8",
+    );
+  }
+  return String(raw);
+}
+
 export function validateDaemonWebSocket(
   deps: Pick<AppDeps, "config" | "db">,
   args: { sessionId: string | null; token: string | null },
@@ -33,9 +48,9 @@ export function onDaemonSocketOpen(
 export function onDaemonSocketMessage(
   deps: Pick<AppDeps, "db">,
   sessionId: string,
-  raw: string,
+  raw: unknown,
 ): void {
-  hostDaemonDaemonWsMessageSchema.parse(JSON.parse(raw));
+  hostDaemonDaemonWsMessageSchema.parse(JSON.parse(decodeSocketPayload(raw)));
   const session = requireActiveSession(deps.db, sessionId);
   heartbeatSession(
     deps.db,

@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, gt } from "drizzle-orm";
 import { hostDaemonSessions } from "@bb/db";
 import type { DbConnection } from "@bb/db";
 import { ApiError } from "../errors.js";
@@ -22,6 +22,7 @@ export function requireActiveSession(db: DbConnection, sessionId: string) {
         and(
           eq(hostDaemonSessions.id, sessionId),
           eq(hostDaemonSessions.status, "active"),
+          gt(hostDaemonSessions.leaseExpiresAt, Date.now()),
         ),
       )
       .get() ?? null;

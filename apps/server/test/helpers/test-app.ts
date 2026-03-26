@@ -10,6 +10,8 @@ import type { AppDeps, ServerRuntimeConfig } from "../../src/types.js";
 import type { NotificationHub } from "../../src/ws/hub.js";
 import { NotificationHub as NotificationHubImpl } from "../../src/ws/hub.js";
 
+export const TEST_AUTH_TOKEN = "test-secret-token";
+
 export interface TestAppHarness {
   app: ReturnType<typeof createApp>["app"];
   config: ServerRuntimeConfig;
@@ -37,7 +39,7 @@ export async function createTestAppHarness(
   const db = initDb(":memory:");
   const hub = new NotificationHubImpl();
   const config: ServerRuntimeConfig = {
-    authToken: "test-secret-token",
+    authToken: TEST_AUTH_TOKEN,
     dataDir,
     hostDaemonPort: 3001,
     inferenceModel: "test/mock-model",

@@ -21,6 +21,7 @@ import type {
 } from "./common.js";
 import type {
   CreateDraftRequest,
+  CreateManagerThreadRequest,
   CreateProjectRequest,
   CreateProjectSourceRequest,
   CreateThreadRequest,
@@ -98,14 +99,7 @@ export type PublicApiSchema = {
   "/projects/:id/managers": {
     /** Create a manager thread for the project. Same flow as POST /threads with type="manager". */
     $post: Endpoint<
-      PathProjectId & {
-        json: {
-          title?: string;
-          providerId?: string;
-          model?: string;
-          reasoningLevel?: "low" | "medium" | "high" | "xhigh";
-        };
-      },
+      PathProjectId & { json: CreateManagerThreadRequest },
       Thread,
       201
     >;

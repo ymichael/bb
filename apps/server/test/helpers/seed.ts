@@ -1,11 +1,14 @@
 import {
   createEnvironment,
+  createDraft,
+  insertEvents,
   createProject,
   createProjectSource,
   createThread,
   openSession,
   upsertHost,
 } from "@bb/db";
+import type { ThreadEventType } from "@bb/domain";
 import type { AppDeps } from "../../src/types.js";
 
 export function seedHost(
@@ -17,6 +20,15 @@ export function seedHost(
     name: args.name ?? "Test Host",
     type: args.type ?? "persistent",
   });
+}
+
+export function seedHostSession(
+  deps: Pick<AppDeps, "db" | "hub">,
+  args: { id?: string; name?: string; type?: "persistent" | "ephemeral" } = {},
+) {
+  const host = seedHost(deps, args);
+  const session = seedSession(deps, host.id);
+  return { host, session };
 }
 
 export function seedSession(
@@ -87,6 +99,7 @@ export function seedThread(
     title?: string | null;
     mergeBaseBranch?: string | null;
     parentThreadId?: string | null;
+    titleFallback?: string | null;
   },
 ) {
   return createThread(deps.db, deps.hub, {
@@ -96,7 +109,52 @@ export function seedThread(
     status: args.status ?? "idle",
     type: args.type ?? "standard",
     title: args.title ?? "Test Thread",
+    titleFallback: args.titleFallback ?? "Test Thread",
     mergeBaseBranch: args.mergeBaseBranch ?? "main",
     parentThreadId: args.parentThreadId ?? null,
   });
+}
+
+export function seedDraft(
+  deps: Pick<AppDeps, "db" | "hub">,
+  args: {
+    content: string;
+    threadId: string;
+    mode?: string;
+    reasoningLevel?: string;
+    sandboxMode?: string;
+  },
+) {
+  return createDraft(deps.db, deps.hub, {
+    threadId: args.threadId,
+    content: args.content,
+    mode: args.mode ?? "auto",
+    reasoningLevel: args.reasoningLevel ?? "medium",
+    sandboxMode: args.sandboxMode ?? "danger-full-access",
+  });
+}
+
+export function seedEvent(
+  deps: Pick<AppDeps, "db" | "hub">,
+  args: {
+    data: Record<string, unknown>;
+    environmentId?: string | null;
+    providerThreadId?: string | null;
+    sequence: number;
+    threadId: string;
+    turnId?: string | null;
+    type: ThreadEventType;
+  },
+) {
+  insertEvents(deps.db, deps.hub, [
+    {
+      threadId: args.threadId,
+      environmentId: args.environmentId ?? null,
+      providerThreadId: args.providerThreadId ?? null,
+      sequence: args.sequence,
+      turnId: args.turnId ?? null,
+      type: args.type,
+      data: JSON.stringify(args.data),
+    },
+  ]);
 }

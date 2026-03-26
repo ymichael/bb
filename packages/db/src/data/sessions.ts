@@ -1,4 +1,4 @@
-import { eq, and } from "drizzle-orm";
+import { eq, and, gt } from "drizzle-orm";
 import type { HostType } from "@bb/domain";
 import type { DbConnection } from "../connection.js";
 import type { DbNotifier } from "../notifier.js";
@@ -85,6 +85,18 @@ export function closeSession(
   sessionId: string,
   closeReason: string,
 ) {
+  const existing = db
+    .select()
+    .from(hostDaemonSessions)
+    .where(eq(hostDaemonSessions.id, sessionId))
+    .get();
+  if (!existing) {
+    return null;
+  }
+  if (existing.status !== "active") {
+    return existing;
+  }
+
   const now = Date.now();
   db.update(hostDaemonSessions)
     .set({
@@ -116,6 +128,7 @@ export function getActiveSession(db: DbConnection, hostId: string) {
         and(
           eq(hostDaemonSessions.hostId, hostId),
           eq(hostDaemonSessions.status, "active"),
+          gt(hostDaemonSessions.leaseExpiresAt, Date.now()),
         ),
       )
       .get() ?? null

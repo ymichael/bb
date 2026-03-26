@@ -1,5 +1,9 @@
 import { and, desc, eq, gt, gte, inArray, lte } from "drizzle-orm";
 import { events } from "@bb/db";
+import {
+  providerEventSchema,
+  systemManagerUserMessageEventDataSchema,
+} from "@bb/domain";
 import type { ThreadEventRow } from "@bb/domain";
 import type { DbConnection } from "@bb/db";
 
@@ -107,29 +111,33 @@ export function getLastThreadOutput(
     .all();
 
   for (const row of rows) {
-    const parsed = JSON.parse(row.data) as Record<string, unknown>;
-    if (
-      row.type === "system/manager/user_message" &&
-      typeof parsed.text === "string" &&
-      parsed.text.length > 0
-    ) {
-      return parsed.text;
-    }
-
-    const item =
-      "item" in parsed && parsed.item && typeof parsed.item === "object"
-        ? parsed.item
-        : null;
-    if (!item) {
+    if (row.type === "system/manager/user_message") {
+      const parsedMessage = systemManagerUserMessageEventDataSchema.safeParse(
+        JSON.parse(row.data),
+      );
+      if (parsedMessage.success && parsedMessage.data.text.length > 0) {
+        return parsedMessage.data.text;
+      }
       continue;
     }
 
-    const type =
-      "type" in item && typeof item.type === "string" ? item.type : null;
-    const text =
-      "text" in item && typeof item.text === "string" ? item.text : null;
-    if (type === "agentMessage" && text && text.length > 0) {
-      return text;
+    if (!row.providerThreadId || !row.turnId) {
+      continue;
+    }
+    const parsedEvent = providerEventSchema.safeParse({
+      ...JSON.parse(row.data),
+      type: row.type,
+      threadId: row.threadId,
+      providerThreadId: row.providerThreadId,
+      turnId: row.turnId,
+    });
+    if (
+      parsedEvent.success &&
+      parsedEvent.data.type === "item/completed" &&
+      parsedEvent.data.item.type === "agentMessage" &&
+      parsedEvent.data.item.text.length > 0
+    ) {
+      return parsedEvent.data.item.text;
     }
   }
 

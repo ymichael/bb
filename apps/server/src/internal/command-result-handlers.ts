@@ -2,16 +2,18 @@ import { and, desc, eq } from "drizzle-orm";
 import {
   deleteEnvironment,
   events,
-  getCursor,
-  getThread,
+  hostDaemonCursors,
   hostDaemonCommands,
-  setCursor,
+  getThread,
   threads,
   transitionThreadStatus,
   updateEnvironment,
 } from "@bb/db";
 import { turnRequestEventDataSchema } from "@bb/domain";
-import type { HostDaemonCommandResultReport } from "@bb/host-daemon-contract";
+import {
+  hostDaemonCommandSchema,
+  type HostDaemonCommandResultReport,
+} from "@bb/host-daemon-contract";
 import type { AppDeps } from "../types.js";
 import {
   appendProvisioningEvent,
@@ -20,44 +22,70 @@ import {
 } from "../services/thread-events.js";
 import { queueThreadStartCommand } from "../services/thread-commands.js";
 
-interface CommandPayloadRecord {
-  environmentId?: string;
-  threadId?: string;
-}
-
-function parsePayload(payload: string): CommandPayloadRecord {
-  return JSON.parse(payload) as CommandPayloadRecord;
+function parseCommand(
+  commandRow: typeof hostDaemonCommands.$inferSelect,
+) {
+  return hostDaemonCommandSchema.parse(JSON.parse(commandRow.payload));
 }
 
 export function advanceHostCursor(
   deps: Pick<AppDeps, "db" | "hub">,
   hostId: string,
 ): void {
-  const currentCursor = getCursor(deps.db, deps.hub, hostId);
-  const rows = deps.db
-    .select({
-      cursor: hostDaemonCommands.cursor,
-      state: hostDaemonCommands.state,
-    })
-    .from(hostDaemonCommands)
-    .where(eq(hostDaemonCommands.hostId, hostId))
-    .orderBy(hostDaemonCommands.cursor)
-    .all();
+  deps.db.transaction((tx) => {
+    const currentCursor =
+      tx
+        .select({ cursor: hostDaemonCursors.cursor })
+        .from(hostDaemonCursors)
+        .where(eq(hostDaemonCursors.hostId, hostId))
+        .get()?.cursor ?? 0;
+    const rows = tx
+      .select({
+        cursor: hostDaemonCommands.cursor,
+        state: hostDaemonCommands.state,
+      })
+      .from(hostDaemonCommands)
+      .where(eq(hostDaemonCommands.hostId, hostId))
+      .orderBy(hostDaemonCommands.cursor)
+      .all();
 
-  let nextCursor = currentCursor;
-  for (const row of rows) {
-    if (row.cursor !== nextCursor + 1) {
-      continue;
+    let nextCursor = currentCursor;
+    for (const row of rows) {
+      if (row.cursor !== nextCursor + 1) {
+        continue;
+      }
+      if (row.state !== "success" && row.state !== "error") {
+        break;
+      }
+      nextCursor = row.cursor;
     }
-    if (row.state !== "success" && row.state !== "error") {
-      break;
-    }
-    nextCursor = row.cursor;
-  }
 
-  if (nextCursor !== currentCursor) {
-    setCursor(deps.db, deps.hub, hostId, nextCursor);
-  }
+    if (nextCursor === currentCursor) {
+      return;
+    }
+
+    const now = Date.now();
+    const existing = tx
+      .select({ hostId: hostDaemonCursors.hostId })
+      .from(hostDaemonCursors)
+      .where(eq(hostDaemonCursors.hostId, hostId))
+      .get();
+    if (existing) {
+      tx.update(hostDaemonCursors)
+        .set({ cursor: nextCursor, updatedAt: now })
+        .where(eq(hostDaemonCursors.hostId, hostId))
+        .run();
+      return;
+    }
+
+    tx.insert(hostDaemonCursors)
+      .values({
+        hostId,
+        cursor: nextCursor,
+        updatedAt: now,
+      })
+      .run();
+  });
 }
 
 function handleProvisionCommandResult(
@@ -65,19 +93,19 @@ function handleProvisionCommandResult(
   report: Extract<HostDaemonCommandResultReport, { type: "environment.provision" }>,
   commandRow: typeof hostDaemonCommands.$inferSelect,
 ): void {
-  const payload = parsePayload(commandRow.payload);
-  if (!payload.environmentId) {
+  const command = parseCommand(commandRow);
+  if (command.type !== "environment.provision") {
     return;
   }
 
   const boundThreads = deps.db
     .select()
     .from(threads)
-    .where(eq(threads.environmentId, payload.environmentId))
+    .where(eq(threads.environmentId, command.environmentId))
     .all();
 
   if (report.ok) {
-    updateEnvironment(deps.db, deps.hub, payload.environmentId, {
+    updateEnvironment(deps.db, deps.hub, command.environmentId, {
       path: report.result.path,
       status: "ready",
       isGitRepo: report.result.isGitRepo,
@@ -88,7 +116,7 @@ function handleProvisionCommandResult(
     for (const thread of boundThreads) {
       appendProvisioningEvent(deps, {
         threadId: thread.id,
-        environmentId: payload.environmentId,
+        environmentId: command.environmentId,
         status: "completed",
         entries: [
           {
@@ -143,7 +171,7 @@ function handleProvisionCommandResult(
       queueThreadStartCommand(deps, {
         thread: refreshedThread,
         environment: {
-          id: payload.environmentId,
+          id: command.environmentId,
           hostId: commandRow.hostId,
           path: report.result.path,
         },
@@ -162,14 +190,14 @@ function handleProvisionCommandResult(
     return;
   }
 
-  updateEnvironment(deps.db, deps.hub, payload.environmentId, {
+  updateEnvironment(deps.db, deps.hub, command.environmentId, {
     status: "error",
   });
 
   for (const thread of boundThreads) {
     appendProvisioningEvent(deps, {
       threadId: thread.id,
-      environmentId: payload.environmentId,
+      environmentId: command.environmentId,
       status: "failed",
       entries: [
         {
@@ -182,7 +210,7 @@ function handleProvisionCommandResult(
     });
     appendSystemErrorEvent(deps, {
       threadId: thread.id,
-      environmentId: payload.environmentId,
+      environmentId: command.environmentId,
       code: "thread_provisioning_failed",
       message: `Thread provisioning failed for project ${thread.projectId}`,
       detail: report.errorMessage,
@@ -206,11 +234,11 @@ function handleEnvironmentDestroyResult(
   if (!report.ok) {
     return;
   }
-  const payload = parsePayload(commandRow.payload);
-  if (!payload.environmentId) {
+  const command = parseCommand(commandRow);
+  if (command.type !== "environment.destroy") {
     return;
   }
-  deleteEnvironment(deps.db, deps.hub, payload.environmentId);
+  deleteEnvironment(deps.db, deps.hub, command.environmentId);
 }
 
 function handleThreadStopResult(
@@ -221,11 +249,11 @@ function handleThreadStopResult(
   if (!report.ok) {
     return;
   }
-  const payload = parsePayload(commandRow.payload);
-  if (!payload.threadId) {
+  const command = parseCommand(commandRow);
+  if (command.type !== "thread.stop") {
     return;
   }
-  const thread = getThread(deps.db, payload.threadId);
+  const thread = getThread(deps.db, command.threadId);
   if (!thread) {
     return;
   }
