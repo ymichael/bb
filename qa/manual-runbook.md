@@ -24,6 +24,12 @@ command -v jq
 
 ## Standalone Setup
 
+Before starting, clear any leftover standalone QA processes or temp roots from a prior run:
+
+```bash
+node scripts/qa/cleanup-standalone.mjs
+```
+
 Start an isolated server + daemon pair and capture the returned state:
 
 ```bash
@@ -57,6 +63,7 @@ Teardown:
 
 ```bash
 node scripts/qa/stop-standalone.mjs --state "$STATE_PATH"
+node scripts/qa/cleanup-standalone.mjs
 ```
 
 ## Smoke Pass

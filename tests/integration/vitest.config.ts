@@ -13,6 +13,7 @@ export default defineConfig({
   },
   test: {
     fileParallelism: false,
+    globalSetup: ["./global-setup.ts"],
     hookTimeout: Math.ceil(60_000 * timeoutScale),
     include: ["fake/**/*.test.ts"],
     name: "@bb/integration-tests",

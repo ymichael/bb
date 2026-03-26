@@ -1,3 +1,4 @@
+// Phase 7d: Fake provider recovery scenarios (plans/rebuild.md)
 import { and, desc, eq, isNotNull } from "drizzle-orm";
 import {
   events,
@@ -5,8 +6,8 @@ import {
   queueCommand,
   transitionThreadStatus,
 } from "@bb/db";
+import { readCommandCursor } from "@bb/host-daemon/test";
 import { hostDaemonCommandSchema } from "@bb/host-daemon-contract";
-import { readCommandCursor } from "../../../apps/host-daemon/src/command-cursor.js";
 import { describe, expect, it } from "vitest";
 import {
   getThread,
@@ -31,9 +32,13 @@ import {
 } from "../helpers/harness.js";
 import { scaleTimeoutMs } from "../helpers/time.js";
 
+// Setup waits: create the thread and observe the first ready/idle state.
 const DEFAULT_TIMEOUT_MS = scaleTimeoutMs(10_000);
+// Whole-turn waits: standard provider turns should settle within this budget.
 const TURN_TIMEOUT_MS = scaleTimeoutMs(15_000);
+// Recovery waits: allow for disconnect detection plus daemon restart and reconciliation.
 const RECOVERY_TIMEOUT_MS = scaleTimeoutMs(30_000);
+// Active-turn waits: only long enough to catch a turn in flight before the crash/restart step.
 const ACTIVE_TIMEOUT_MS = scaleTimeoutMs(5_000);
 const STOP_DELAY_TEXT = "delay:5000 recovery turn";
 

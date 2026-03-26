@@ -1,5 +1,5 @@
 import fs from "node:fs/promises";
-import { killProcess } from "./shared.mjs";
+import { cleanupStandaloneInstance, killProcess } from "./shared.mjs";
 
 function parseStatePath() {
   const stateFlagIndex = process.argv.indexOf("--state");
@@ -16,10 +16,10 @@ async function main() {
 
   await killProcess(state.daemonPid).catch(() => undefined);
   await killProcess(state.serverPid).catch(() => undefined);
-  await fs.rm(state.tmpRoot, { recursive: true, force: true });
+  const cleanupResult = await cleanupStandaloneInstance(state);
 
   process.stdout.write(
-    `${JSON.stringify({ ok: true, tmpRoot: state.tmpRoot }, null, 2)}\n`,
+    `${JSON.stringify({ ok: true, ...cleanupResult }, null, 2)}\n`,
   );
 }
 

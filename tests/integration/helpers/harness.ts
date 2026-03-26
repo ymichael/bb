@@ -7,16 +7,21 @@ import { serve } from "@hono/node-server";
 import { createFakeAdapter } from "@bb/agent-runtime/test";
 import type { AgentRuntimeOptions } from "@bb/agent-runtime";
 import type { DbConnection } from "@bb/db";
+import {
+  acquireDaemonLock,
+  createHostDaemonApp,
+  loadHostIdentity,
+  type HostDaemon,
+  type HostDaemonApp,
+} from "@bb/host-daemon/test";
 import { createHostDaemonClient } from "@bb/host-daemon-contract";
+import {
+  createApp,
+  initDb,
+  NotificationHub,
+  type ServerRuntimeConfig,
+} from "@bb/server/test";
 import { createPublicApiClient } from "@bb/server-contract";
-import { createHostDaemonApp, type HostDaemonApp } from "../../../apps/host-daemon/src/app.js";
-import type { HostDaemon } from "../../../apps/host-daemon/src/daemon.js";
-import { loadHostIdentity } from "../../../apps/host-daemon/src/identity.js";
-import { acquireDaemonLock } from "../../../apps/host-daemon/src/lock.js";
-import { initDb } from "../../../apps/server/src/db.js";
-import { createApp } from "../../../apps/server/src/server.js";
-import type { ServerRuntimeConfig } from "../../../apps/server/src/types.js";
-import { NotificationHub } from "../../../apps/server/src/ws/hub.js";
 import { waitForHostConnected } from "./assertions.js";
 import { createTestGitRepo } from "./seed.js";
 
@@ -260,6 +265,7 @@ export async function createIntegrationHarness(
 ): Promise<IntegrationHarness> {
   await loadProjectEnvFile();
   const tmpRoot = await fs.mkdtemp(path.join(tmpdir(), "bb-integration-"));
+  await fs.writeFile(path.join(tmpRoot, "parent.pid"), `${process.pid}\n`, "utf8");
   const reposRoot = path.join(tmpRoot, "repos");
   const daemonDataDir = path.join(tmpRoot, "daemon-data");
   const repoDir = await createTestGitRepo({

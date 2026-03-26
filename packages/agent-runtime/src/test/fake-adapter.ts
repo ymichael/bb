@@ -235,6 +235,12 @@ function listModels(options: CreateFakeAdapterOptions): Promise<AvailableModel[]
 export function createFakeAdapter(
   options: CreateFakeAdapterOptions = {},
 ): ProviderAdapter {
+  /*
+   * Fake provider input control tokens:
+   * - `delay:<ms>` delays turn completion by the requested duration.
+   * - `call_tool:<name>` emits a tool call before the turn completes.
+   * - remaining text is echoed back as `Response to: ...`.
+   */
   return {
     buildCommand,
     capabilities: { supportsRename: true, supportsServiceTier: false },

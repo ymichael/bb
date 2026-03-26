@@ -5,6 +5,7 @@ export const environmentStatusValues = [
   "ready",
   "error",
   "destroying",
+  "destroyed",
 ] as const;
 export const environmentStatusSchema = z.enum(environmentStatusValues);
 export type EnvironmentStatus = z.infer<typeof environmentStatusSchema>;

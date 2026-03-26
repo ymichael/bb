@@ -1,3 +1,4 @@
+// Phase 7b: Fake provider basic lifecycle (plans/rebuild.md)
 import fs from "node:fs/promises";
 import path from "node:path";
 import { eq } from "drizzle-orm";
@@ -60,8 +61,11 @@ interface StoredTurnEventRow {
   type: string;
 }
 
+// Setup and provisioning waits: project creation, environment readiness, and archive cleanup.
 const DEFAULT_TIMEOUT_MS = scaleTimeoutMs(10_000);
+// Whole-turn waits: allow the fake provider enough time to start and finish a normal turn.
 const TURN_TIMEOUT_MS = scaleTimeoutMs(15_000);
+// Active-turn waits: only long enough to observe the thread leave idle.
 const ACTIVE_TURN_TIMEOUT_MS = scaleTimeoutMs(5_000);
 const STOP_DELAY_TEXT = "delay:5000 stop me";
 
@@ -114,12 +118,12 @@ async function expectThreadMissing(
   expect(response.status).toBe(404);
 }
 
-async function expectEnvironmentMissing(
+async function expectEnvironmentDestroyed(
   harness: IntegrationHarness,
   environmentId: string,
 ): Promise<void> {
   const environment = await getEnvironment(harness.api, environmentId);
-  expect(environment.status).toBe("destroying");
+  expect(environment.status).toBe("destroyed");
 }
 
 describe.sequential("fake provider smoke integration", () => {
@@ -508,7 +512,7 @@ describe.sequential("fake provider smoke integration", () => {
         DEFAULT_TIMEOUT_MS,
       );
       await waitForPathRemoval(workspacePath, DEFAULT_TIMEOUT_MS);
-      await expectEnvironmentMissing(harness, environment.id);
+      await expectEnvironmentDestroyed(harness, environment.id);
     } finally {
       await harness.cleanup();
     }

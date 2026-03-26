@@ -1,4 +1,4 @@
-import { eq, and, sql, lt, ne, inArray } from "drizzle-orm";
+import { eq, and, sql, lt, ne, inArray, or } from "drizzle-orm";
 import type { DbConnection } from "../connection.js";
 import type { DbNotifier } from "../notifier.js";
 import {
@@ -15,7 +15,7 @@ const STANDARD_COMMAND_TTL_MS = 60_000;
 /** Provision command TTL: 5 minutes */
 const PROVISION_COMMAND_TTL_MS = 5 * 60_000;
 
-/** Destroying environments are hard-deleted after 7 days. */
+/** Destroyed environments are hard-deleted after 7 days. */
 const DESTROYING_ENVIRONMENT_TTL_MS = 7 * 24 * 60 * 60_000;
 
 /**
@@ -203,7 +203,10 @@ export function sweepDestroyingEnvironments(
     .from(environments)
     .where(
       and(
-        eq(environments.status, "destroying"),
+        or(
+          eq(environments.status, "destroying"),
+          eq(environments.status, "destroyed"),
+        ),
         lt(environments.updatedAt, currentTime - DESTROYING_ENVIRONMENT_TTL_MS),
       ),
     )

@@ -433,7 +433,7 @@ describe("internal session routes", () => {
     }
   });
 
-  it("deletes environments after a successful destroy result", async () => {
+  it("marks environments destroyed after a successful destroy result", async () => {
     const harness = await createTestAppHarness();
     try {
       const { host, session } = seedHostSession(harness.deps, {
@@ -476,7 +476,7 @@ describe("internal session routes", () => {
       });
 
       expect(response.status).toBe(200);
-      expect(getEnvironment(harness.db, environment.id)).toBeNull();
+      expect(getEnvironment(harness.db, environment.id)?.status).toBe("destroyed");
     } finally {
       await harness.cleanup();
     }

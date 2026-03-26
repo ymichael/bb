@@ -1,7 +1,8 @@
+// Phase 7e: Real provider end-to-end coverage (plans/rebuild.md)
 import fs from "node:fs/promises";
-import { homedir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import path from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type {
   ThreadEventRow,
   ThreadExecutionOptions,
@@ -37,11 +38,23 @@ type RealProviderExecutionOptions = Pick<
   "model" | "reasoningLevel" | "serviceTier"
 >;
 
+const REAL_PROVIDER_LOCK_PATH = path.join(
+  tmpdir(),
+  "bb-real-provider-tests.lock",
+);
+let realProviderLock: fs.FileHandle | null = null;
+
+// Active-turn waits: enough time to confirm the provider has started a long-running turn.
 const ACTIVE_TIMEOUT_MS = scaleTimeoutMs(15_000);
 const REAL_POLL_INTERVAL_MS = 200;
+// Whole-turn waits: real providers can take much longer than the fake adapter to respond.
 const TURN_TIMEOUT_MS = scaleTimeoutMs(60_000);
+// Stop waits: give the daemon time to interrupt an in-flight real-provider turn cleanly.
 const STOP_TIMEOUT_MS = scaleTimeoutMs(30_000);
+// Per-test budget: end-to-end provider checks include real network and provider startup latency.
 const TEST_TIMEOUT_MS = scaleTimeoutMs(120_000);
+// Mixed-provider budget: the all-provider pass runs multiple real-provider turns in one test.
+const MIXED_PROVIDER_TIMEOUT_MS = scaleTimeoutMs(240_000);
 
 const FAST_EXECUTION_BY_PROVIDER: Record<
   RealProviderId,
@@ -114,6 +127,72 @@ function getExecutionOptions(
   providerId: RealProviderId,
 ): RealProviderExecutionOptions {
   return FAST_EXECUTION_BY_PROVIDER[providerId];
+}
+
+function isNodeError(error: unknown): error is NodeJS.ErrnoException {
+  return error instanceof Error;
+}
+
+function isProcessAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    if (isNodeError(error) && error.code === "ESRCH") {
+      return false;
+    }
+    throw error;
+  }
+}
+
+async function acquireRealProviderLock(): Promise<void> {
+  while (true) {
+    try {
+      realProviderLock = await fs.open(REAL_PROVIDER_LOCK_PATH, "wx");
+      await realProviderLock.writeFile(
+        JSON.stringify(
+          {
+            cwd: process.cwd(),
+            pid: process.pid,
+            startedAt: Date.now(),
+          },
+          null,
+          2,
+        ),
+        "utf8",
+      );
+      return;
+    } catch (error) {
+      if (!isNodeError(error) || error.code !== "EEXIST") {
+        throw error;
+      }
+
+      const existingLock = await fs
+        .readFile(REAL_PROVIDER_LOCK_PATH, "utf8")
+        .then((raw) => JSON.parse(raw))
+        .catch(() => null);
+      const lockPid =
+        existingLock &&
+        typeof existingLock === "object" &&
+        typeof existingLock.pid === "number"
+          ? existingLock.pid
+          : null;
+
+      if (lockPid && isProcessAlive(lockPid)) {
+        throw new Error(
+          `Real provider integration tests are already running under pid ${lockPid}. Release ${REAL_PROVIDER_LOCK_PATH} before starting another worktree run.`,
+        );
+      }
+
+      await fs.rm(REAL_PROVIDER_LOCK_PATH, { force: true });
+    }
+  }
+}
+
+async function releaseRealProviderLock(): Promise<void> {
+  await realProviderLock?.close().catch(() => undefined);
+  realProviderLock = null;
+  await fs.rm(REAL_PROVIDER_LOCK_PATH, { force: true }).catch(() => undefined);
 }
 
 function expectNonEmptyOutput(
@@ -229,6 +308,14 @@ async function sendAndWaitForIdle(args: {
 }
 
 describe.sequential("real provider end-to-end integration", () => {
+  beforeAll(async () => {
+    await acquireRealProviderLock();
+  }, TEST_TIMEOUT_MS);
+
+  afterAll(async () => {
+    await releaseRealProviderLock();
+  });
+
   for (const providerId of REAL_PROVIDER_IDS) {
     it(
       `${providerId} completes a single turn end-to-end`,
@@ -522,6 +609,6 @@ describe.sequential("real provider end-to-end integration", () => {
         await harness.cleanup();
       }
     },
-    scaleTimeoutMs(240_000),
+    MIXED_PROVIDER_TIMEOUT_MS,
   );
 });

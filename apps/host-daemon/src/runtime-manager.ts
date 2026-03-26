@@ -16,8 +16,13 @@ export interface RuntimeEntry {
   runtime: AgentRuntime;
   workspace: IWorkspace;
   path: string;
-  activeThreads: Map<string, { providerThreadId?: string }>;
-  knownThreads: Map<string, { providerThreadId?: string }>;
+  threads: Map<
+    string,
+    {
+      providerThreadId?: string;
+      status: "active" | "idle";
+    }
+  >;
 }
 
 export interface EnsureEnvironmentArgs {
@@ -66,7 +71,7 @@ export class RuntimeManager {
   }
 
   hasThread(environmentId: string, threadId: string): boolean {
-    return this.entries.get(environmentId)?.knownThreads.has(threadId) ?? false;
+    return this.entries.get(environmentId)?.threads.has(threadId) ?? false;
   }
 
   markThreadActive(
@@ -79,24 +84,32 @@ export class RuntimeManager {
       return;
     }
 
-    const current =
-      entry.knownThreads.get(threadId) ?? entry.activeThreads.get(threadId) ?? {};
-    entry.activeThreads.set(threadId, {
-      providerThreadId: providerThreadId ?? current.providerThreadId,
-    });
-    entry.knownThreads.set(threadId, {
-      providerThreadId: providerThreadId ?? current.providerThreadId,
+    const current = entry.threads.get(threadId);
+    entry.threads.set(threadId, {
+      providerThreadId: providerThreadId ?? current?.providerThreadId,
+      status: "active",
     });
   }
 
   markThreadInactive(environmentId: string, threadId: string): void {
-    this.entries.get(environmentId)?.activeThreads.delete(threadId);
+    const current = this.entries.get(environmentId)?.threads.get(threadId);
+    if (!current) {
+      return;
+    }
+
+    this.entries.get(environmentId)?.threads.set(threadId, {
+      ...current,
+      status: "idle",
+    });
   }
 
   listActiveThreads(): HostDaemonActiveThread[] {
     const activeThreads: HostDaemonActiveThread[] = [];
     for (const [environmentId, entry] of this.entries) {
-      for (const [threadId, thread] of entry.activeThreads) {
+      for (const [threadId, thread] of entry.threads) {
+        if (thread.status !== "active") {
+          continue;
+        }
         activeThreads.push({
           environmentId,
           threadId,
@@ -175,8 +188,13 @@ export class RuntimeManager {
     }
 
     const workspace = await this.provisionWorkspace(provision);
-    const activeThreads = new Map<string, { providerThreadId?: string }>();
-    const knownThreads = new Map<string, { providerThreadId?: string }>();
+    const threads = new Map<
+      string,
+      {
+        providerThreadId?: string;
+        status: "active" | "idle";
+      }
+    >();
     const runtime = this.createRuntime({
       workspacePath: workspace.path,
       adapterFactory: this.options.adapterFactory,
@@ -203,8 +221,7 @@ export class RuntimeManager {
         })),
       onStderr: this.options.onStderr,
       onProcessExit: (info) => {
-        activeThreads.clear();
-        knownThreads.clear();
+        threads.clear();
         this.options.onProcessExit?.(info);
       },
     });
@@ -214,8 +231,7 @@ export class RuntimeManager {
       runtime,
       workspace,
       path: workspace.path,
-      activeThreads,
-      knownThreads,
+      threads,
     };
   }
 }

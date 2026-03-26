@@ -1,6 +1,5 @@
 import { and, desc, eq, or } from "drizzle-orm";
 import {
-  deleteEnvironment,
   events,
   getThread,
   hostDaemonCursors,
@@ -229,7 +228,9 @@ function handleEnvironmentDestroyResult(
   if (command.type !== "environment.destroy") {
     return;
   }
-  deleteEnvironment(deps.db, deps.hub, command.environmentId);
+  updateEnvironment(deps.db, deps.hub, command.environmentId, {
+    status: "destroyed",
+  });
 }
 
 function handleThreadStopResult(

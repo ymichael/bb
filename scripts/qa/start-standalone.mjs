@@ -1,14 +1,17 @@
 import fs from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { randomUUID } from "node:crypto";
 import {
   buildDaemonRestartCommand,
+  cleanupStandaloneOrphans,
   createProject,
   createTestGitRepo,
   killProcess,
   loadDotEnv,
   repoRoot,
   reservePort,
+  STANDALONE_INSTANCE_ENV,
   spawnLoggedProcess,
   waitForConnectedHost,
   waitForServerReady,
@@ -17,7 +20,9 @@ import {
 const token = "standalone-qa-token";
 
 async function main() {
+  await cleanupStandaloneOrphans();
   const envFile = await loadDotEnv();
+  const instanceId = randomUUID();
 
   const tmpRoot = await fs.mkdtemp(path.join(tmpdir(), "bb-standalone-"));
   const logsDir = path.join(tmpRoot, "logs");
@@ -49,6 +54,7 @@ async function main() {
         BB_SECRET_TOKEN: token,
         BB_SERVER_PORT: String(serverPort),
         BB_SERVER_URL: serverUrl,
+        [STANDALONE_INSTANCE_ENV]: instanceId,
         OPENAI_API_KEY: process.env.OPENAI_API_KEY ?? "test-openai-key",
       },
       logPath: serverLogPath,
@@ -66,6 +72,7 @@ async function main() {
         BB_HOST_DAEMON_PORT: String(daemonPort),
         BB_SECRET_TOKEN: token,
         BB_SERVER_URL: serverUrl,
+        [STANDALONE_INSTANCE_ENV]: instanceId,
       },
       logPath: daemonLogPath,
     });
@@ -79,7 +86,8 @@ async function main() {
 
     const cleanupCommand =
       `node ${path.join(repoRoot, "scripts/qa/stop-standalone.mjs")} ` +
-      `--state ${statePath}`;
+      `--state ${statePath} && ` +
+      `node ${path.join(repoRoot, "scripts/qa/cleanup-standalone.mjs")}`;
     const restartDaemonCommand = buildDaemonRestartCommand({
       authToken: token,
       daemonPort,
@@ -103,6 +111,7 @@ async function main() {
       daemonUrl: `http://127.0.0.1:${daemonPort}`,
       envFilePath: envFile.path,
       hostId: host.id,
+      instanceId,
       logsDir,
       projectId: project.id,
       projectRoot,

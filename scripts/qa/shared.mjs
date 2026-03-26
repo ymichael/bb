@@ -2,11 +2,16 @@ import { execFile as execFileCallback, spawn } from "node:child_process";
 import { closeSync, openSync } from "node:fs";
 import fs from "node:fs/promises";
 import { createServer } from "node:net";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 
 const execFile = promisify(execFileCallback);
+
+export const STANDALONE_INSTANCE_ENV = "BB_STANDALONE_INSTANCE";
+const STANDALONE_TMP_PREFIX = "bb-standalone-";
+const PROCESS_SCAN_MAX_BUFFER = 10 * 1024 * 1024;
 
 export const repoRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -185,6 +190,157 @@ export function spawnLoggedProcess(options) {
   } finally {
     closeSync(logFd);
   }
+}
+
+async function readJsonIfExists(filePath) {
+  try {
+    const raw = await fs.readFile(filePath, "utf8");
+    return JSON.parse(raw);
+  } catch (error) {
+    if (isNodeError(error) && error.code === "ENOENT") {
+      return null;
+    }
+    throw error;
+  }
+}
+
+async function listStandaloneTmpRoots() {
+  const entries = await fs.readdir(tmpdir(), { withFileTypes: true });
+  return entries
+    .filter(
+      (entry) =>
+        entry.isDirectory() && entry.name.startsWith(STANDALONE_TMP_PREFIX),
+    )
+    .map((entry) => path.join(tmpdir(), entry.name));
+}
+
+async function listOpenFilePids(targetPath) {
+  try {
+    const { stdout } = await execFile("lsof", ["-t", "+D", targetPath], {
+      encoding: "utf8",
+    });
+    return stdout
+      .split("\n")
+      .map((value) => Number.parseInt(value.trim(), 10))
+      .filter((value) => Number.isInteger(value) && value > 0);
+  } catch (error) {
+    if (isNodeError(error) && (error.code === "ENOENT" || error.code === 1)) {
+      return [];
+    }
+    throw error;
+  }
+}
+
+async function listProcessesByInstance(instanceId) {
+  const { stdout } = await execFile(
+    "ps",
+    ["eww", "-Ao", "pid=,command="],
+    { encoding: "utf8", maxBuffer: PROCESS_SCAN_MAX_BUFFER },
+  );
+  return stdout
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const match = /^(\d+)\s+(.*)$/u.exec(line);
+      if (!match) {
+        return null;
+      }
+      return {
+        command: match[2],
+        pid: Number.parseInt(match[1], 10),
+      };
+    })
+    .filter((entry) => entry && entry.command.includes(`${STANDALONE_INSTANCE_ENV}=${instanceId}`))
+    .map((entry) => entry.pid);
+}
+
+async function listStandaloneProcessPids() {
+  const { stdout } = await execFile(
+    "ps",
+    ["eww", "-Ao", "pid=,command="],
+    { encoding: "utf8", maxBuffer: PROCESS_SCAN_MAX_BUFFER },
+  );
+  return stdout
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const match = /^(\d+)\s+(.*)$/u.exec(line);
+      if (!match) {
+        return null;
+      }
+      return {
+        command: match[2],
+        pid: Number.parseInt(match[1], 10),
+      };
+    })
+    .filter((entry) => entry && entry.command.includes(`${STANDALONE_INSTANCE_ENV}=`))
+    .map((entry) => entry.pid);
+}
+
+export async function cleanupStandaloneInstance(state) {
+  const killedPids = new Set();
+  const pidsToKill = new Set([
+    state?.daemonPid,
+    state?.serverPid,
+    ...(state?.instanceId ? await listProcessesByInstance(state.instanceId) : []),
+    ...(state?.tmpRoot ? await listOpenFilePids(state.tmpRoot) : []),
+  ]);
+
+  for (const pid of pidsToKill) {
+    if (!pid || killedPids.has(pid)) {
+      continue;
+    }
+    await killProcess(pid).catch(() => undefined);
+    killedPids.add(pid);
+  }
+
+  if (state?.tmpRoot) {
+    await fs.rm(state.tmpRoot, { recursive: true, force: true });
+  }
+
+  return {
+    instanceId: state?.instanceId ?? null,
+    killedPids: [...killedPids].sort((left, right) => left - right),
+    removedRoot: state?.tmpRoot ?? null,
+  };
+}
+
+export async function cleanupStandaloneOrphans() {
+  const killedPids = new Set();
+  const removedRoots = new Set();
+  const roots = await listStandaloneTmpRoots();
+
+  for (const tmpRoot of roots) {
+    const state = await readJsonIfExists(path.join(tmpRoot, "standalone-state.json"));
+    const cleanupResult = await cleanupStandaloneInstance({
+      ...state,
+      tmpRoot,
+    }).catch(() => ({
+      killedPids: [],
+      removedRoot: null,
+    }));
+    for (const pid of cleanupResult.killedPids) {
+      killedPids.add(pid);
+    }
+    if (cleanupResult.removedRoot) {
+      removedRoots.add(cleanupResult.removedRoot);
+    }
+  }
+
+  for (const pid of await listStandaloneProcessPids()) {
+    if (killedPids.has(pid)) {
+      continue;
+    }
+    await killProcess(pid).catch(() => undefined);
+    killedPids.add(pid);
+  }
+
+  return {
+    killedPids: [...killedPids].sort((left, right) => left - right),
+    removedRoots: [...removedRoots].sort(),
+  };
 }
 
 export function buildDaemonRestartCommand(args) {

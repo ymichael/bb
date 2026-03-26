@@ -14,8 +14,10 @@
     "@bb/core-ui": "workspace:*",
     "@bb/db": "workspace:*",
     "@bb/domain": "workspace:*",
+    "@bb/host-daemon": "workspace:*",
     "@bb/host-daemon-contract": "workspace:*",
     "@bb/logger": "workspace:*",
+    "@bb/server": "workspace:*",
     "@bb/server-contract": "workspace:*",
     "@hono/node-server": "^1.19.11",
     "drizzle-orm": "^0.38.4"

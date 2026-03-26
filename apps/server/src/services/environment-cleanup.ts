@@ -17,7 +17,12 @@ export async function maybeCleanupEnvironment(
   }
 
   const environment = getEnvironment(deps.db, environmentId);
-  if (!environment || !environment.managed || environment.status === "destroying") {
+  if (
+    !environment ||
+    !environment.managed ||
+    environment.status === "destroying" ||
+    environment.status === "destroyed"
+  ) {
     return;
   }
 

@@ -1,3 +1,4 @@
+// Phase 7c: Fake provider multi-thread scenarios (plans/rebuild.md)
 import fs from "node:fs/promises";
 import path from "node:path";
 import {
@@ -40,9 +41,14 @@ import {
 } from "../helpers/seed.js";
 import { scaleTimeoutMs } from "../helpers/time.js";
 
+// Setup and reprovision waits: environment creation, cleanup, and shared-workspace reloads.
 const DEFAULT_TIMEOUT_MS = scaleTimeoutMs(10_000);
+// Whole-turn waits: sibling threads should finish a standard turn inside this window.
 const TURN_TIMEOUT_MS = scaleTimeoutMs(15_000);
+// Active-turn waits: enough time to observe concurrent threads become active.
 const ACTIVE_TIMEOUT_MS = scaleTimeoutMs(5_000);
+// Reprovision waits: managed cleanup plus a fresh start can take longer than a normal turn.
+const REPROVISION_TIMEOUT_MS = scaleTimeoutMs(25_000);
 const CONCURRENT_DELAY_TEXT = "delay:800";
 
 function countTurnEvents(
@@ -279,7 +285,7 @@ describe.sequential("fake provider multi-thread integration", () => {
         harness.api,
         threadA.thread.id,
         "idle",
-        scaleTimeoutMs(25_000),
+        REPROVISION_TIMEOUT_MS,
       );
 
       const reloadedThread = await waitForThreadStatus(
