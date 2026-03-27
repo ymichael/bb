@@ -1,6 +1,12 @@
 import type { GlobalProvider } from "@ladle/react";
-import "../../../apps/app/src/app.css";
+import { ThemeState } from "@ladle/react";
+import "./ladle.css";
 
-export const Provider: GlobalProvider = ({ children }) => {
-  return <div className="dark min-h-screen bg-background text-foreground">{children}</div>;
+export const Provider: GlobalProvider = ({ globalState, children }) => {
+  const isDark = globalState.theme === ThemeState.Dark;
+  return (
+    <div className={`${isDark ? "dark" : ""} min-h-screen bg-background text-foreground`}>
+      {children}
+    </div>
+  );
 };

@@ -11,7 +11,9 @@
   "bin": {
     "bb-provider-audit": "./dist/cli.js"
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "rm -rf dist tsconfig.tsbuildinfo && tsc",
     "dev": "tsc --watch --preserveWatchOutput",
@@ -29,14 +31,17 @@
     "@bb/ui-core": "workspace:*"
   },
   "devDependencies": {
-    "@ladle/react": "^5.0.3",
     "@bb/tsconfig": "workspace:*",
+    "@ladle/react": "^5.0.3",
+    "@tailwindcss/vite": "^4.0.0",
     "@types/node": "^22.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "tailwindcss": "^4.0.0",
     "typescript": "^5.7.0",
+    "vite": "^7.3.1",
     "vitest": "^4.0.18"
   }
 }
