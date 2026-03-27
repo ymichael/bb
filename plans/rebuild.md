@@ -4,17 +4,15 @@ Implementation plan for the bb server, host-daemon, and supporting infrastructur
 
 ## Start Here
 
-**Phases 1–6 are complete.** All foundation packages, contracts, consumers, host-daemon, sandbox-host stub, and the server are built and merged with full test coverage.
+**Phases 1–7 are complete.** All foundation packages, contracts, consumers, host-daemon, sandbox-host stub, server, and persistent-host integration QA are built and merged.
 
-**Next phase: Phase 7** — Integration & QA for persistent-host workflows (server + daemon).
+**Next phase: Phase 8** — Flesh out `@bb/sandbox-host` (real E2B implementation, daemon bundling). See `plans/phase-8.md` for the detailed plan.
 
-**Then: Phase 8** — Flesh out `@bb/sandbox-host` (real E2B implementation, daemon bundling).
-
-**Phase 9** — Integration & QA for ephemeral-host workflows.
+**Then: Phase 9** — Integration & QA for ephemeral-host workflows.
 
 ## Current State
 
-Phases 1–6 are complete. The server is built with services layer architecture, authorization hardening, 128 tests, and all Phase 6 plan requirements met. This plan covers what remains.
+Phases 1–7 are complete. The persistent-host workflow (server + daemon) is validated end-to-end with automated integration tests and manual QA. This plan covers what remains.
 
 ### What exists today
 
