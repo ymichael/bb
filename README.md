@@ -100,17 +100,12 @@ These reset commands prompt for confirmation before deleting anything.
 | Standard thread | A coding thread that does the work directly in an environment and exposes git, diff, and workspace-oriented behavior.                                                       |
 | Manager thread | A coordinator thread for a project. It can plan, delegate, and publish user-facing output, and it uses a separate BB-managed workspace instead of a coding worktree flow.   |
 | Thread ownership | Threads can be user-created or managed by another thread. Delegation and handoff are first-class parts of the model.                                                     |
-| Environment    | The execution context a thread runs in, such as `local`, `worktree`, or `docker`. Environments are first-class and may be managed by bb or attached separately.            |
+| Environment    | The execution context a thread runs in — a workspace on a specific host.                                                                                                     |
 | Agent provider | The model/runtime behind a thread, such as `codex`, `claude-code`, or `pi`.                                                                                                  |
 
 ### Runtime Components
 
-| Part               | What it does                                                                                                                      |
-| ------------------ | --------------------------------------------------------------------------------------------------------------------------------- |
-| Server             | The durable coordinator. It owns persisted state, orchestration, route handling, realtime invalidation, and environment-daemon session state. |
-| Environments       | The runtime layer where threads execute. Built-in environments currently include `local`, `worktree`, and `docker`.              |
-| Environment daemon | The per-environment daemon that runs inside the environment, talks to the server, and brokers command and event flow with the provider runtime. |
-| Agent providers    | The provider runtimes that power threads and models.                                                                              |
+> TODO: rebuild in progress — see `plans/architecture.md` for the current architecture.
 
 ### System Surfaces
 
@@ -132,10 +127,9 @@ Local state defaults to `~/.bb/`. `pnpm dev` uses `~/.bb-dev/` by default so it 
 
 ## Further Reading
 
-- [Architecture](ARCHITECTURE.md)
-- [Contracts](docs/contracts/README.md)
-- [QA docs](qa/README.md)
+- [Architecture](plans/architecture.md)
 - [Vision](docs/VISION.md)
+
 ## Contributing
 
 While bb is still pre-alpha, the most useful contributions are feature requests and bug reports. If you run into something broken, confusing, or missing, open an issue with the workflow you were trying to accomplish and what happened instead.

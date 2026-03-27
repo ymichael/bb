@@ -69,12 +69,12 @@ projects:       id, name, createdAt, updatedAt
 project_sources: id, projectId, type, hostId, path, repoUrl, timestamps
 ```
 
-- `project_sources.hostId` — FK to hosts, NOT NULL, CASCADE on delete (source is meaningless without its host)
-- `project_sources.path` — text, NOT NULL for `local_path` type
+- `project_sources.hostId` — FK to hosts, CASCADE on delete. Currently NOT NULL, but Phase 8 will make this nullable for `github_repo` sources (which aren't tied to a specific host).
+- `project_sources.path` — text, nullable (NULL for `github_repo` sources, set for `local_path`)
 - `project_sources.repoUrl` — text, nullable (set for `github_repo` type)
 - Index: `project_sources(projectId)`
 
-Source types: `local_path` (v1), `github_repo` (future). In v1, a project has exactly one source. All code paths needing "the project root" resolve this single source. Multi-source support adds a `primary` flag later.
+Source types: `local_path` (working) and `github_repo` (schema ready, server/UI support in Phase 8). In v1, a project has one source. All code paths needing "the project root" resolve this single source.
 
 ### Hosts
 
@@ -543,7 +543,7 @@ The server runs periodic sweeps:
 | Scope | Import | Key vars |
 |---|---|---|
 | Common | `@bb/config/common` | `BB_DATA_DIR`, `BB_LOG_LEVEL`, `BB_SECRET_TOKEN` |
-| Server | `@bb/config/server` | `BB_SERVER_PORT`, `BB_DATABASE_URL`, `BB_E2B_API_KEY` (optional), `BB_E2B_TEMPLATE` (optional) |
+| Server | `@bb/config/server` | `BB_SERVER_PORT`, `BB_DATABASE_URL`, `BB_PUBLIC_URL`, `E2B_API_KEY` (optional), `E2B_TEMPLATE` (optional), `BB_GITHUB_PAT` (optional) |
 | Host-daemon | `@bb/config/host-daemon` | `BB_SERVER_URL`, `BB_HOST_DAEMON_PORT` |
 | CLI | `@bb/config/cli` | `BB_SERVER_URL`, `BB_HOST_DAEMON_PORT` |
 
@@ -826,11 +826,11 @@ Event ack format: `Record<string, number>` (threadId → high-water mark), not a
 
 ## Stubs and Not-Implemented Boundaries
 
-| Feature | Where it's stubbed | What the stub does |
+| Feature | Where it's stubbed | Status |
 |---|---|---|
-| **GitHub repo source** | `project_sources.type = "github_repo"` | Server rejects with 400 "not implemented" |
-| **E2B provisioner** | `apps/server` | Host strategy returns "not available" unless `BB_E2B_API_KEY` is set |
-| **Ephemeral hosts** | `hosts.type = "ephemeral"` | Server rejects creating ephemeral hosts |
+| **GitHub repo source** | `project_sources.type = "github_repo"` | Schema ready, server/UI support in Phase 8 |
+| **E2B sandbox host** | `@bb/sandbox-host` | Stub (throws "Not implemented"). Real implementation in Phase 8 — see `plans/phase-8.md` |
+| **Ephemeral hosts** | `hosts.type = "ephemeral"` | Server returns 501 for `sandbox-host` thread creation. Real implementation in Phase 8 |
 | **Multi-machine** | `project_sources` with different `hostId` | Only one host in v1, data model is ready |
 | **Remote host open-path** | `apps/app` | Disabled state with clear message |
 
@@ -838,8 +838,7 @@ Event ack format: `Record<string, number>` (threadId → high-water mark), not a
 
 ## Out of scope (v1)
 
-- GitHub repo project sources
 - Multi-machine (data model ready, only local host in v1)
-- Docker environments
+- Docker environments (cut)
 - Extensions system
 - Per-project DB settings
