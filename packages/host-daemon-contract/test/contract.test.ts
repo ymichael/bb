@@ -208,7 +208,6 @@ describe("host-daemon command schemas", () => {
       "hostDaemonCommandSchema.options.source",
       "hostDaemonCommandSchema.query",
       "threadResumeResultSchema.providerThreadId",
-      "workspaceCheckpointResultSchema.branchName",
       "workspaceCommitResultSchema.commitSubject",
       "workspaceSquashMergeResultSchema.commitSha",
       "workspaceSquashMergeResultSchema.message",

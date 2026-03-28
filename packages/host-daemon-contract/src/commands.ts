@@ -329,7 +329,7 @@ export const hostDaemonCommandResultSchemaByType = {
   "workspace.checkpoint": z.object({
     commitSha: z.string().min(1),
     remoteName: z.string().min(1),
-    branchName: z.string().min(1).optional(),
+    branchName: z.string().min(1),
   }),
   "workspace.promote": z.object({
     ok: z.boolean(),
