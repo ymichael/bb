@@ -122,7 +122,6 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
         return context.json({
           ok: true,
           action: "commit",
-          commitCreated: true,
           message: `Created commit ${result.commitSha}`,
           autoArchived: Boolean(archivedThread),
           commitSha: result.commitSha,

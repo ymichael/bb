@@ -277,8 +277,6 @@ describe("server-contract clients", () => {
 
     expect(optionalFieldPaths).toEqual([
       "apiErrorSchema.retryable",
-      "commitActionResponseSchema.commitSha",
-      "commitActionResponseSchema.commitSubject",
       "commitOptionsSchema.message",
       "createDraftRequestSchema.model",
       "createDraftRequestSchema.reasoningLevel",

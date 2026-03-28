@@ -337,11 +337,10 @@ export type EnvironmentActionRequest = z.infer<typeof environmentActionRequestSc
 export const commitActionResponseSchema = z.object({
   ok: z.literal(true),
   action: z.literal("commit"),
-  commitCreated: z.boolean(),
   message: z.string(),
   autoArchived: z.boolean(),
-  commitSha: z.string().optional(),
-  commitSubject: z.string().optional(),
+  commitSha: z.string().min(1),
+  commitSubject: z.string().min(1),
 });
 export type CommitActionResponse = z.infer<typeof commitActionResponseSchema>;
 

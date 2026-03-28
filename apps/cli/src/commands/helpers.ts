@@ -121,7 +121,7 @@ export function printEnvironmentGitOperationResult(
 ): void {
   const flags = [
     ...(result.action === "commit"
-      ? [result.commitCreated ? "committed" : "noop"]
+      ? ["committed"]
       : [result.merged ? "merged" : "noop"]),
     ...(result.autoArchived ? ["archived"] : []),
   ];
