@@ -71,7 +71,7 @@ export type EnvironmentArgs = z.infer<typeof environmentArgsSchema>;
 export const createThreadRequestSchema = z.object({
   projectId: z.string().min(1),
   providerId: z.string().min(1),
-  type: threadTypeSchema.optional(),
+  type: threadTypeSchema,
   title: z.string().min(1).optional(),
   input: z.array(promptInputSchema).min(1),
   model: z.string().min(1),

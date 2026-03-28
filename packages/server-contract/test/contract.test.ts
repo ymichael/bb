@@ -21,6 +21,7 @@ describe("server-contract canonical schemas", () => {
       createThreadRequestSchema.parse({
         projectId: "proj_123",
         providerId: "codex",
+        type: "standard",
         model: "gpt-5",
         input: [{ type: "text", text: "Ship it" }],
         environment: {
@@ -107,6 +108,7 @@ describe("server-contract canonical schemas", () => {
       createThreadRequestSchema.parse({
         projectId: "proj_123",
         providerId: "codex",
+        type: "standard",
         model: "gpt-5",
         input: [{ type: "text", text: "Ship it" }],
         environment: {
@@ -201,7 +203,6 @@ describe("server-contract clients", () => {
     });
 
     expect(optionalLines).toEqual([
-      "type: threadTypeSchema.optional(),",
       "title: z.string().min(1).optional(),",
       "serviceTier: serviceTierSchema.optional(),",
       "reasoningLevel: reasoningLevelSchema.optional(),",
