@@ -235,6 +235,8 @@ describe("CLI command output contracts", () => {
         "manager",
         "hire",
         "project-123",
+        "--name",
+        "Manager",
         "--provider",
         "claude-code",
         "--model",
@@ -250,6 +252,7 @@ describe("CLI command output contracts", () => {
       param: { id: "project-123" },
       json: {
         model: "claude-opus-4-6",
+        name: "Manager",
         providerId: "claude-code",
         reasoningLevel: "high",
       },

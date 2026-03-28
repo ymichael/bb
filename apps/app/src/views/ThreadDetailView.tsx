@@ -105,7 +105,11 @@ function toEnvironmentActionFailureDetails(error: unknown): EnvironmentActionFai
   }
 }
 
-function buildAskAgentInputForGitOperation(error: unknown): PromptInput[] | undefined {
+function buildAskAgentInputForGitOperation(args: {
+  error: unknown;
+  mergeBaseBranch?: string;
+}): PromptInput[] | undefined {
+  const { error, mergeBaseBranch } = args;
   const details = toEnvironmentActionFailureDetails(error);
   if (!details) {
     return undefined;
@@ -129,6 +133,9 @@ function buildAskAgentInputForGitOperation(error: unknown): PromptInput[] | unde
         },
       ];
     case "squash_merge_conflict":
+      if (!mergeBaseBranch) {
+        return undefined;
+      }
       return [
         {
           type: "text",
@@ -137,7 +144,7 @@ function buildAskAgentInputForGitOperation(error: unknown): PromptInput[] | unde
               action: "squash_merge",
               threadId: "thread",
               options: {
-                mergeBaseBranch: "main",
+                mergeBaseBranch,
                 autoArchiveOnSuccess: false,
               },
             },
@@ -146,6 +153,9 @@ function buildAskAgentInputForGitOperation(error: unknown): PromptInput[] | unde
         },
       ];
     case "squash_merge_commit_failed":
+      if (!mergeBaseBranch) {
+        return undefined;
+      }
       return [
         {
           type: "text",
@@ -154,7 +164,7 @@ function buildAskAgentInputForGitOperation(error: unknown): PromptInput[] | unde
               action: "squash_merge",
               threadId: "thread",
               options: {
-                mergeBaseBranch: "main",
+                mergeBaseBranch,
                 autoArchiveOnSuccess: false,
               },
             },
@@ -170,11 +180,18 @@ function buildAskAgentInputForGitOperation(error: unknown): PromptInput[] | unde
   }
 }
 
-function toThreadGitActionDialogError(error: unknown): ThreadGitActionDialogError {
+function toThreadGitActionDialogError(args: {
+  error: unknown;
+  mergeBaseBranch?: string;
+}): ThreadGitActionDialogError {
+  const { error, mergeBaseBranch } = args;
   const message =
     error instanceof Error ? error.message : "Failed to start git action";
   return new ThreadGitActionDialogError(message, {
-    askAgentInput: buildAskAgentInputForGitOperation(error),
+    askAgentInput: buildAskAgentInputForGitOperation({
+      error,
+      mergeBaseBranch,
+    }),
   });
 }
 
@@ -832,7 +849,7 @@ export function ThreadDetailView() {
         },
       });
     } catch (nextError) {
-      throw toThreadGitActionDialogError(nextError);
+      throw toThreadGitActionDialogError({ error: nextError });
     }
   };
   const handleSquashMergeThread = async ({
@@ -856,7 +873,10 @@ export function ThreadDetailView() {
         },
       });
     } catch (nextError) {
-      throw toThreadGitActionDialogError(nextError);
+      throw toThreadGitActionDialogError({
+        error: nextError,
+        mergeBaseBranch,
+      });
     }
   };
   const handleAskAgentToFixGitAction = async (input: PromptInput[]) => {

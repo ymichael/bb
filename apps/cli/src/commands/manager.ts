@@ -15,7 +15,7 @@ import {
 interface ManagerHireCommandOptions {
   json?: boolean;
   project?: string;
-  title?: string;
+  name?: string;
   provider: string;
   model: string;
   reasoningLevel: string;
@@ -42,7 +42,7 @@ export function registerManagerCommands(program: Command, getUrl: () => string):
     .command("hire [projectId]")
     .description("Hire a new manager for a project")
     .option("--project <id>", "Project ID (defaults to BB_PROJECT_ID)")
-    .option("--title <title>", "Manager name")
+    .option("--name <name>", "Manager name")
     .requiredOption("--provider <id>", "Provider ID for the manager (e.g. claude-code, codex)")
     .requiredOption("--model <model>", "Model ID for the manager")
     .requiredOption("--reasoning-level <level>", "Reasoning level (low, medium, high, xhigh)")
@@ -63,7 +63,7 @@ export function registerManagerCommands(program: Command, getUrl: () => string):
         client.api.v1.projects[":id"].managers.$post({
           param: { id: projectId },
           json: {
-            ...(opts.title ? { title: opts.title } : {}),
+            ...(opts.name ? { name: opts.name } : {}),
             providerId: opts.provider,
             model: opts.model,
             reasoningLevel,
