@@ -130,7 +130,6 @@ describe("Workspace", () => {
     const workspace = new Workspace(repoPath);
     const checkpoint = await workspace.checkpoint({
       commitMessage: "Checkpoint feature",
-      remoteName: "origin",
     });
 
     const remoteHead = (

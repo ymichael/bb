@@ -78,12 +78,12 @@ export function createFakeWorkspace(pathname: string) {
       state.resetCount += 1;
     },
     async fetch() {},
-    async checkpoint(options: { commitMessage: string; remoteName?: string }) {
+    async checkpoint(options: { commitMessage: string }) {
       state.lastCheckpointMessage = options.commitMessage;
       return {
         commitSha: "checkpoint-1",
         branchName: "main",
-        remoteName: options.remoteName ?? "origin",
+        remoteName: "origin",
       };
     },
     async squashMergeInto(options: { targetBranch: string }) {

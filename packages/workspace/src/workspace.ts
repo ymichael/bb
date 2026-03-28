@@ -48,7 +48,6 @@ export interface FetchOptions {
 
 export interface CheckpointOptions {
   commitMessage: string;
-  remoteName?: string;
 }
 
 export interface CheckpointResult {
@@ -252,7 +251,7 @@ export class Workspace {
       commitSha = await revParse(this.path, "HEAD");
     }
 
-    const remoteName = options.remoteName ?? "origin";
+    const remoteName = "origin";
     await runGit(["push", remoteName, branchName], { cwd: this.path });
 
     return {

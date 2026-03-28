@@ -221,7 +221,6 @@ export const workspaceResetCommandSchema = hostDaemonWorkspaceTargetSchema.exten
 export const workspaceCheckpointCommandSchema = hostDaemonWorkspaceTargetSchema.extend({
   type: z.literal("workspace.checkpoint"),
   commitMessage: z.string().min(1),
-  remoteName: z.string().min(1).optional(),
 });
 
 /** Switch the project's primary checkout to the environment's branch so the user can work with the changes directly. */

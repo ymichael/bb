@@ -145,7 +145,6 @@ export async function dispatchCommand<TCommand extends HostDaemonCommand>(
       const entry = await requireWorkspaceEnvironment(command, options.runtimeManager);
       return entry.workspace.checkpoint({
         commitMessage: command.commitMessage,
-        remoteName: command.remoteName,
       }) as Promise<HostDaemonCommandResult<TCommand["type"]>>;
     }
     case "workspace.promote":
