@@ -90,7 +90,7 @@ export interface AgentRuntime {
     instructions?: string;
     resumePath?: string;
     dynamicTools?: DynamicTool[];
-  }): Promise<{ providerThreadId?: string }>;
+  }): Promise<{ providerThreadId: string }>;
 
   runTurn(args: {
     threadId: string;

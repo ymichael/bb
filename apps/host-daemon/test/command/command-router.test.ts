@@ -66,7 +66,7 @@ function createFakeRuntime() {
       providerThreadId: `provider-${threadId}`,
     })),
     resumeThread: vi.fn(async ({ providerThreadId }: { providerThreadId?: string }) => ({
-      providerThreadId,
+      providerThreadId: providerThreadId ?? "provider-resumed",
     })),
     runTurn: vi.fn(async (_args: { threadId: string }) => undefined),
     steerTurn: vi.fn(async (_args: unknown) => undefined),

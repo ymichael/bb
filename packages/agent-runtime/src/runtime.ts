@@ -719,14 +719,26 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
         dynamicTools,
       });
 
-      if (!cmd) return { providerThreadId: undefined };
+      if (!cmd) {
+        const currentProviderThreadId =
+          providerThreadId ?? threadToProviderThread.get(threadId);
+        if (!currentProviderThreadId) {
+          throw new Error(`No provider thread id available for ${threadId}`);
+        }
+        return { providerThreadId: currentProviderThreadId };
+      }
 
       const result = await sendRequest(proc.child, cmd, proc.pending, () => nextRequestId++);
       const res = result as { threadId?: string; providerThreadId?: string } | undefined;
-      const resolvedId = res?.providerThreadId ?? res?.threadId;
-      if (resolvedId) {
-        threadToProviderThread.set(threadId, resolvedId);
+      const resolvedId =
+        res?.providerThreadId ??
+        res?.threadId ??
+        providerThreadId ??
+        threadToProviderThread.get(threadId);
+      if (!resolvedId) {
+        throw new Error(`Provider resume did not return a thread id for ${threadId}`);
       }
+      threadToProviderThread.set(threadId, resolvedId);
 
       return { providerThreadId: resolvedId };
     },

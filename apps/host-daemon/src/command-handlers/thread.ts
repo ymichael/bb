@@ -48,7 +48,7 @@ export async function resumeThread(
   options.runtimeManager.markThreadActive(
     command.environmentId,
     command.threadId,
-    result.providerThreadId ?? command.providerThreadId,
+    result.providerThreadId,
   );
   return result;
 }
@@ -85,7 +85,7 @@ export async function ensureThreadRuntime(
     options.runtimeManager.markThreadActive(
       command.environmentId,
       command.threadId,
-      result.providerThreadId ?? command.providerThreadId,
+      result.providerThreadId,
     );
   }
   return entry;

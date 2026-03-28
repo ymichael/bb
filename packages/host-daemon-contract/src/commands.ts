@@ -294,7 +294,7 @@ export const hostDaemonCommandResultSchemaByType = {
     providerThreadId: z.string().min(1),
   }),
   "thread.resume": z.object({
-    providerThreadId: z.string().min(1).optional(),
+    providerThreadId: z.string().min(1),
   }),
   "turn.run": z.object({}),
   "turn.steer": z.object({}),

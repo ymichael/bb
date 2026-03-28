@@ -158,7 +158,7 @@ export function createFakeRuntime() {
       state.resumedOptions = args.options;
       state.resumedInstructions = args.instructions;
       state.resumedProviderThreadId = args.providerThreadId;
-      return { providerThreadId: args.providerThreadId };
+      return { providerThreadId: args.providerThreadId ?? `provider-${args.threadId}` };
     },
     async runTurn(args: {
       input: Array<{ text?: string; type: string }>;

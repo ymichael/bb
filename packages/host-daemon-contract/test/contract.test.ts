@@ -207,7 +207,6 @@ describe("host-daemon command schemas", () => {
       "hostDaemonCommandSchema.options.seq",
       "hostDaemonCommandSchema.options.source",
       "hostDaemonCommandSchema.query",
-      "threadResumeResultSchema.providerThreadId",
     ]);
   });
 
