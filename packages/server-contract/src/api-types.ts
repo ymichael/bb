@@ -74,7 +74,7 @@ export const createThreadRequestSchema = z.object({
   type: threadTypeSchema.optional(),
   title: z.string().min(1).optional(),
   input: z.array(promptInputSchema).min(1),
-  model: z.string().optional(),
+  model: z.string().min(1),
   serviceTier: serviceTierSchema.optional(),
   reasoningLevel: reasoningLevelSchema.optional(),
   sandboxMode: sandboxModeSchema.optional(),

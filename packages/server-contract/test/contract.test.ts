@@ -16,6 +16,7 @@ describe("server-contract canonical schemas", () => {
       createThreadRequestSchema.parse({
         projectId: "proj_123",
         providerId: "codex",
+        model: "gpt-5",
         input: [{ type: "text", text: "Ship it" }],
         environment: {
           type: "host",

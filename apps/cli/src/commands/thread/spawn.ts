@@ -28,7 +28,7 @@ interface ThreadSpawnCommandOptions {
   newEnvironment?: string;
   parentThread?: string;
   provider: string;
-  model?: string;
+  model: string;
   reasoningLevel?: string;
   title?: string;
   serviceTier?: string;
@@ -119,7 +119,7 @@ export function registerSpawnCommand(
       "--provider <id>",
       "Provider ID for the thread (e.g. codex, claude-code, pi)",
     )
-    .option("--model <model>", "Model ID for the thread")
+    .requiredOption("--model <model>", "Model ID for the thread")
     .option(
       "--reasoning-level <level>",
       "Reasoning level: low, medium, high, xhigh",
@@ -164,8 +164,8 @@ export function registerSpawnCommand(
             json: {
               projectId,
               providerId: opts.provider,
+              model: opts.model,
               input: [{ type: "text", text: opts.prompt }],
-              ...(opts.model ? { model: opts.model } : {}),
               ...(reasoningLevel ? { reasoningLevel } : {}),
               ...(opts.title ? { title: opts.title } : {}),
               ...(serviceTier ? { serviceTier } : {}),

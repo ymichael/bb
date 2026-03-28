@@ -106,6 +106,7 @@ describe("public thread routes", () => {
         body: JSON.stringify({
           projectId: project.id,
           providerId: "codex",
+          model: "gpt-5",
           input: [{ type: "text", text: "Inspect the default source workspace" }],
           environment: {
             type: "host",
@@ -166,6 +167,7 @@ describe("public thread routes", () => {
         body: JSON.stringify({
           projectId: project.id,
           providerId: "codex",
+          model: "gpt-5",
           title: "Managed thread",
           input: [{ type: "text", text: "Build it" }],
           environment: {
@@ -229,6 +231,7 @@ describe("public thread routes", () => {
         body: JSON.stringify({
           projectId: project.id,
           providerId: "codex",
+          model: "gpt-5",
           input: [{ type: "text", text: "Reuse the existing direct workspace" }],
           environment: {
             type: "host",
@@ -297,6 +300,7 @@ describe("public thread routes", () => {
         body: JSON.stringify({
           projectId: project.id,
           providerId: "codex",
+          model: "gpt-5",
           input: [{ type: "text", text: "Wait for the existing provisioning flow" }],
           environment: {
             type: "host",
@@ -338,6 +342,7 @@ describe("public thread routes", () => {
         body: JSON.stringify({
           projectId: project.id,
           providerId: "codex",
+          model: "gpt-5",
           input: [{ type: "text", text: "Use the sandbox host" }],
           environment: {
             type: "sandbox-host",
@@ -374,6 +379,7 @@ describe("public thread routes", () => {
         body: JSON.stringify({
           projectId: project.id,
           providerId: "codex",
+          model: "gpt-5",
           input: [{ type: "text", text: "Reuse the environment" }],
           environment: {
             type: "reuse",

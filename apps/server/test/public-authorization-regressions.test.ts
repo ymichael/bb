@@ -113,6 +113,7 @@ describe("public authorization regressions", () => {
         body: JSON.stringify({
           projectId: project.id,
           providerId: "codex",
+          model: "gpt-5",
           input: [{ type: "text", text: "Create the managed thread" }],
           environment: {
             type: "host",

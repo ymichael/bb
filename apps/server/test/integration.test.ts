@@ -145,6 +145,7 @@ describe("server integration", () => {
         json: {
           projectId: project.id,
           providerId: "codex",
+          model: "gpt-5",
           input: [{ type: "text", text: "Build the feature" }],
           environment: {
             type: "host",
@@ -230,6 +231,7 @@ describe("server integration", () => {
           json: {
             projectId: project.id,
             providerId: "codex",
+            model: "gpt-5",
             input: [{ type: "text", text: "Start the event thread" }],
             environment: {
               type: "host",
@@ -366,6 +368,7 @@ describe("server integration", () => {
           json: {
             projectId: project.id,
             providerId: "codex",
+            model: "gpt-5",
             input: [{ type: "text", text: "Start the lifecycle thread" }],
             environment: {
               type: "host",

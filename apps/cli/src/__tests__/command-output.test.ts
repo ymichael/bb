@@ -423,7 +423,7 @@ describe("CLI command output contracts", () => {
       },
     }));
 
-    await runCommand(["thread", "spawn", "--prompt", "hello", "--provider", "codex"], (program) =>
+    await runCommand(["thread", "spawn", "--prompt", "hello", "--provider", "codex", "--model", "gpt-5"], (program) =>
       registerThreadCommands(program, () => "http://server"),
     );
 
@@ -431,6 +431,7 @@ describe("CLI command output contracts", () => {
       json: {
         projectId: "proj-1",
         providerId: "codex",
+        model: "gpt-5",
         input: [{ type: "text", text: "hello" }],
         environment: { type: "host", hostId: "host-test-001", workspace: { type: "unmanaged", path: null } },
       },
@@ -573,7 +574,7 @@ describe("CLI command output contracts", () => {
       },
     }));
 
-    await runCommand(["thread", "spawn", "--json", "--prompt", "hello", "--provider", "codex"], (program) =>
+    await runCommand(["thread", "spawn", "--json", "--prompt", "hello", "--provider", "codex", "--model", "gpt-5"], (program) =>
       registerThreadCommands(program, () => "http://server"),
     );
 
@@ -598,7 +599,7 @@ describe("CLI command output contracts", () => {
     }));
 
     await expect(
-      runCommand(["thread", "spawn", "--prompt", "hello", "--provider", "codex"], (program) =>
+      runCommand(["thread", "spawn", "--prompt", "hello", "--provider", "codex", "--model", "gpt-5"], (program) =>
         registerThreadCommands(program, () => "http://server"),
       ),
     ).rejects.toThrow("process.exit:1");
@@ -632,7 +633,7 @@ describe("CLI command output contracts", () => {
     }));
 
     await runCommand(
-      ["thread", "spawn", "--parent-thread", "thread-parent", "--prompt", "hello", "--provider", "codex"],
+      ["thread", "spawn", "--parent-thread", "thread-parent", "--prompt", "hello", "--provider", "codex", "--model", "gpt-5"],
       (program) => registerThreadCommands(program, () => "http://server"),
     );
 
@@ -640,6 +641,7 @@ describe("CLI command output contracts", () => {
       json: {
         projectId: "proj-1",
         providerId: "codex",
+        model: "gpt-5",
         input: [{ type: "text", text: "hello" }],
         parentThreadId: "thread-parent",
         environment: { type: "host", hostId: "host-test-001", workspace: { type: "unmanaged", path: null } },
@@ -670,7 +672,7 @@ describe("CLI command output contracts", () => {
       },
     }));
 
-    await runCommand(["thread", "spawn", "--environment", "env-worktree-001", "--prompt", "hello", "--provider", "codex"], (program) =>
+    await runCommand(["thread", "spawn", "--environment", "env-worktree-001", "--prompt", "hello", "--provider", "codex", "--model", "gpt-5"], (program) =>
       registerThreadCommands(program, () => "http://server"),
     );
 
@@ -678,6 +680,7 @@ describe("CLI command output contracts", () => {
       json: {
         projectId: "proj-1",
         providerId: "codex",
+        model: "gpt-5",
         input: [{ type: "text", text: "hello" }],
         environment: { type: "reuse", environmentId: "env-worktree-001" },
       },
@@ -708,7 +711,7 @@ describe("CLI command output contracts", () => {
     }));
 
     await runCommand(
-      ["thread", "spawn", "--new-environment", "worktree", "--prompt", "hello", "--provider", "codex"],
+      ["thread", "spawn", "--new-environment", "worktree", "--prompt", "hello", "--provider", "codex", "--model", "gpt-5"],
       (program) => registerThreadCommands(program, () => "http://server"),
     );
 
@@ -716,6 +719,7 @@ describe("CLI command output contracts", () => {
       json: {
         projectId: "proj-1",
         providerId: "codex",
+        model: "gpt-5",
         input: [{ type: "text", text: "hello" }],
         environment: { type: "host", hostId: "host-test-001", workspace: { type: "managed-worktree" } },
       },

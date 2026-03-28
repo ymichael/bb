@@ -33,6 +33,7 @@ describe("public thread lifecycle regressions", () => {
         body: JSON.stringify({
           projectId: project.id,
           providerId: "codex",
+          model: "gpt-5",
           title: "Worker Thread",
           input: [{ type: "text", text: "Implement the worker task" }],
           environment: {
@@ -57,6 +58,7 @@ describe("public thread lifecycle regressions", () => {
         body: JSON.stringify({
           projectId: project.id,
           providerId: "codex",
+          model: "gpt-5",
           title: "Worker Thread",
           input: [{ type: "text", text: "Implement the worker task again" }],
           environment: {
@@ -119,6 +121,7 @@ describe("public thread lifecycle regressions", () => {
         body: JSON.stringify({
           projectId: project.id,
           providerId: "codex",
+          model: "gpt-5",
           input: [{ type: "text", text: "Start immediately" }],
           environment: {
             type: "reuse",
@@ -155,6 +158,7 @@ describe("public thread lifecycle regressions", () => {
         body: JSON.stringify({
           projectId: project.id,
           providerId: "codex",
+          model: "gpt-5",
           input: [{ type: "text", text: "First reused thread" }],
           environment: {
             type: "reuse",
@@ -168,6 +172,7 @@ describe("public thread lifecycle regressions", () => {
         body: JSON.stringify({
           projectId: project.id,
           providerId: "codex",
+          model: "gpt-5",
           input: [{ type: "text", text: "Second reused thread" }],
           environment: {
             type: "reuse",
@@ -248,6 +253,7 @@ describe("public thread lifecycle regressions", () => {
         body: JSON.stringify({
           projectId: project.id,
           providerId: "codex",
+          model: "gpt-5",
           input: [{ type: "text", text: "Wait for provisioning" }],
           environment: {
             type: "reuse",

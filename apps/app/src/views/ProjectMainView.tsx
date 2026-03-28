@@ -162,7 +162,16 @@ export function ProjectMainView() {
       attachments: promptDraft.attachments,
     };
     const submittedInput = promptDraftToInput(submittedDraft);
-    if (submittedInput.length === 0 || createThread.isPending || !selectedEnvironment || !selectedProviderId) return;
+    const selectedThreadModel = activeModel?.model ?? selectedModel;
+    if (
+      submittedInput.length === 0 ||
+      createThread.isPending ||
+      !selectedEnvironment ||
+      !selectedProviderId ||
+      !selectedThreadModel
+    ) {
+      return;
+    }
 
     // Match thread follow-up behavior: clear immediately, then restore only if the
     // request fails and the user has not started a new draft in the meantime.
@@ -174,7 +183,7 @@ export function ProjectMainView() {
         input: submittedInput,
         projectId,
         providerId: selectedProviderId,
-        model: activeModel?.model,
+        model: selectedThreadModel,
         ...(supportsServiceTier && serviceTier ? { serviceTier } : {}),
         reasoningLevel,
         sandboxMode,
@@ -186,7 +195,12 @@ export function ProjectMainView() {
     }
   };
 
-  const isSubmitDisabled = createThread.isPending || promptInput.length === 0 || !selectedEnvironment || !selectedProviderId;
+  const isSubmitDisabled =
+    createThread.isPending ||
+    promptInput.length === 0 ||
+    !selectedEnvironment ||
+    !selectedProviderId ||
+    !selectedModel;
 
   return (
     <PageShell contentClassName="pt-8 md:pt-10">
