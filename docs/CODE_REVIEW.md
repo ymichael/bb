@@ -7,6 +7,7 @@ This document defines the dimensions of a thorough code review. Each section is 
 A code review must be unbiased. Do not prime the reviewer with known issues, hints, or narrowed scope. Specifically:
 
 - **Full branch scope.** Review all commits on the branch, not just the latest. A bug introduced in commit 2 and masked by a workaround in commit 9 is still a design problem — the workaround should be removed and the root cause fixed.
+- **Use the correct merge base.** Don't naively diff the branch against the current tip of main — main may have moved since the branch was created. Use `git merge-base main <branch>` to find the actual fork point, then diff against that. Otherwise you'll review unrelated changes that landed on main after the branch diverged, or miss context about what the branch was built on top of.
 - **No leading the witness.** Do not tell the reviewer what bugs were previously found or where to look. Let them discover issues independently.
 - **Separate verification from discovery.** If you need to confirm a specific fix *and* do a general review, use two agents: one scoped to verify the fix, one with zero prior context doing a fresh review. Mixing the two biases the reviewer toward the known issue and away from finding new ones.
 
