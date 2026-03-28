@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { createDraft, events, getDraft, getThread } from "@bb/db";
 import { describe, expect, it } from "vitest";
 import {
@@ -658,6 +658,18 @@ describe("public thread data routes", () => {
           serviceTier: "flex",
         },
       });
+      expect(
+        harness.db
+          .select({ id: events.id })
+          .from(events)
+          .where(
+            and(
+              eq(events.threadId, thread.id),
+              eq(events.type, "client/turn/requested"),
+            ),
+          )
+          .all(),
+      ).toHaveLength(1);
     } finally {
       await harness.cleanup();
     }

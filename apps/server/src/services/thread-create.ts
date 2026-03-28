@@ -26,7 +26,11 @@ import {
   requireDefaultSource,
   requireProjectExists,
 } from "./thread-create-helpers.js";
-import type { ThreadCreateServiceRequest } from "./thread-create-request.js";
+import {
+  hasThreadStartInput,
+  type PublicThreadCreateServiceRequest,
+  type ThreadCreateServiceRequest,
+} from "./thread-create-request.js";
 
 interface CreateThreadInEnvironmentArgs {
   environment: Environment;
@@ -63,22 +67,19 @@ async function createThreadInEnvironment(
     "client/thread/start",
   );
 
-  let eventSequence: number | undefined;
-  if (execution) {
-    eventSequence = appendClientTurnEvent(
-      deps,
-      {
-        threadId: thread.id,
-        environmentId: args.environment.id,
-        type: "client/thread/start",
-        ...(args.request.input ? { input: args.request.input } : {}),
-        execution,
-        initiator: args.request.spawnInitiator ?? "user",
-        requestMethod: "thread/start",
-        source: "spawn",
-      },
-    );
-  }
+  const eventSequence = appendClientTurnEvent(
+    deps,
+    {
+      threadId: thread.id,
+      environmentId: args.environment.id,
+      type: "client/thread/start",
+      ...(hasThreadStartInput(args.request) ? { input: args.request.input } : {}),
+      execution,
+      initiator: args.request.spawnInitiator ?? "user",
+      requestMethod: "thread/start",
+      source: "spawn",
+    },
+  );
 
   if (args.threadStatus === "provisioning") {
     appendProvisioningEvent(deps, {
@@ -96,7 +97,7 @@ async function createThreadInEnvironment(
     });
   }
 
-  if (eventSequence !== undefined && args.threadStatus === "idle") {
+  if (hasThreadStartInput(args.request) && args.threadStatus === "idle") {
     try {
       await startQueuedThreadIfNeeded(deps, {
         thread,
@@ -111,7 +112,7 @@ async function createThreadInEnvironment(
     }
   }
 
-  if (!args.request.title && args.request.input && args.request.input.length > 0) {
+  if (!args.request.title && hasThreadStartInput(args.request)) {
     void generateThreadTitle(deps, {
       threadId: thread.id,
       input: args.request.input,
@@ -167,20 +168,12 @@ async function startQueuedThreadIfNeeded(
   deps: Pick<AppDeps, "db" | "hub">,
   args: {
     environment: Environment;
-    execution: Awaited<ReturnType<typeof buildExecutionOptions>> | null;
+    execution: Awaited<ReturnType<typeof buildExecutionOptions>>;
     eventSequence: number;
-    request: ThreadCreateServiceRequest;
+    request: PublicThreadCreateServiceRequest;
     thread: ReturnType<typeof createThread>;
   },
 ): Promise<void> {
-  const input = args.request.input;
-  if (!input || input.length === 0) {
-    throw new ApiError(500, "invalid_request", "Thread start requires input");
-  }
-  if (!args.execution) {
-    throw new ApiError(500, "invalid_request", "Thread start requires execution options");
-  }
-
   await queueThreadStartCommand(deps, {
     thread: args.thread,
     environment: {
@@ -188,7 +181,7 @@ async function startQueuedThreadIfNeeded(
       hostId: args.environment.hostId,
       path: args.environment.path,
     },
-    input,
+    input: args.request.input,
     eventSequence: args.eventSequence,
     execution: args.execution,
     projectId: args.thread.projectId,
@@ -308,7 +301,7 @@ export async function createThreadFromRequest(
     threadId: thread.id,
     environmentId: environment.id,
     type: "client/thread/start",
-    ...(request.input ? { input: request.input } : {}),
+    ...(hasThreadStartInput(request) ? { input: request.input } : {}),
     execution,
     initiator: request.spawnInitiator ?? "user",
     requestMethod: "thread/start",
@@ -364,7 +357,7 @@ export async function createThreadFromRequest(
     }
   }
 
-  if (!request.title && request.input && request.input.length > 0) {
+  if (!request.title && hasThreadStartInput(request)) {
     void generateThreadTitle(deps, {
       threadId: thread.id,
       input: request.input,
