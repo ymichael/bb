@@ -14,7 +14,8 @@
   "scripts": {
     "build": "rm -rf dist tsconfig.tsbuildinfo && tsc",
     "dev": "tsc --watch --preserveWatchOutput",
-    "clean": "rm -rf dist tsconfig.tsbuildinfo"
+    "clean": "rm -rf dist tsconfig.tsbuildinfo",
+    "test": "vitest run --config vitest.config.ts"
   },
   "dependencies": {
     "hono": "^4.7.0",
