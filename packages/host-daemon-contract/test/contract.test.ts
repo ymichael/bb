@@ -208,8 +208,6 @@ describe("host-daemon command schemas", () => {
       "hostDaemonCommandSchema.options.source",
       "hostDaemonCommandSchema.query",
       "threadResumeResultSchema.providerThreadId",
-      "workspaceSquashMergeResultSchema.commitSha",
-      "workspaceSquashMergeResultSchema.message",
     ]);
   });
 

@@ -351,8 +351,7 @@ export const squashMergeActionResponseSchema = z.object({
   merged: z.boolean(),
   message: z.string(),
   autoArchived: z.boolean(),
-  commitSha: z.string().optional(),
-  commitSubject: z.string().optional(),
+  commitSha: z.string().min(1),
 });
 export type SquashMergeActionResponse = z.infer<typeof squashMergeActionResponseSchema>;
 

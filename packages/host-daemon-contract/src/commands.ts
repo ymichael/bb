@@ -322,8 +322,7 @@ export const hostDaemonCommandResultSchemaByType = {
   }),
   "workspace.squash_merge": z.object({
     merged: z.boolean(),
-    commitSha: z.string().min(1).optional(),
-    message: z.string().optional(),
+    commitSha: z.string().min(1),
   }),
   "workspace.reset": z.object({}),
   "workspace.checkpoint": z.object({

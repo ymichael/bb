@@ -306,8 +306,6 @@ describe("server-contract clients", () => {
       "sendMessageRequestSchema.reasoningLevel",
       "sendMessageRequestSchema.sandboxMode",
       "sendMessageRequestSchema.serviceTier",
-      "squashMergeActionResponseSchema.commitSha",
-      "squashMergeActionResponseSchema.commitSubject",
       "systemModelsQuerySchema.environmentId",
       "systemModelsQuerySchema.hostId",
       "systemModelsQuerySchema.providerId",
