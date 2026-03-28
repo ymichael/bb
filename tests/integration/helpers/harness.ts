@@ -23,11 +23,12 @@ import {
 } from "@bb/server/test";
 import { createPublicApiClient } from "@bb/server-contract";
 import { waitForHostConnected } from "./assertions.js";
+import { removePathWithRetry } from "./remove-path.js";
 import { createTestGitRepo } from "./seed.js";
 
-export const TEST_AUTH_TOKEN = "test-secret-token";
-
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
+const TEST_SERVER_HOST = "127.0.0.1";
+const DEFAULT_TEST_AUTH_TOKEN = "test-integration-token";
 
 let loadedProjectEnvPath: string | null | undefined;
 
@@ -167,6 +168,7 @@ export async function loadProjectEnvFile(): Promise<string | null> {
 
 async function startIntegrationServer(
   tmpRoot: string,
+  authToken: string,
 ): Promise<RunningTestServer> {
   const serverDataDir = path.join(tmpRoot, "server-data");
   await fs.mkdir(serverDataDir, { recursive: true });
@@ -174,7 +176,7 @@ async function startIntegrationServer(
   const db = initDb(":memory:");
   const hub = new NotificationHub();
   const config: ServerRuntimeConfig = {
-    authToken: TEST_AUTH_TOKEN,
+    authToken,
     dataDir: serverDataDir,
     hostDaemonPort: 3001,
     inferenceModel: "test/mock-model",
@@ -190,6 +192,11 @@ async function startIntegrationServer(
   let addressInfo: ListeningAddress | null = null;
   const server = serve(
     {
+      // The client connects to 127.0.0.1 (IPv4), so bind the test server to
+      // 127.0.0.1 too. Otherwise the server can listen on a different loopback
+      // address family, and another local IPv4 process on the same port can
+      // receive the request instead.
+      hostname: TEST_SERVER_HOST,
       port: 0,
       fetch: app.fetch,
     },
@@ -203,7 +210,7 @@ async function startIntegrationServer(
     await new Promise((resolve) => setTimeout(resolve, 5));
   }
 
-  const baseUrl = `http://127.0.0.1:${requireListeningAddress(addressInfo).port}`;
+  const baseUrl = `http://${TEST_SERVER_HOST}:${requireListeningAddress(addressInfo).port}`;
 
   return {
     baseUrl,
@@ -227,6 +234,7 @@ async function startIntegrationServer(
 async function startHarnessDaemon(
   dataDir: string,
   serverUrl: string,
+  authToken: string,
   options: CreateHarnessOptions,
 ): Promise<HarnessDaemonResources> {
   const releaseLock = await acquireDaemonLock(dataDir);
@@ -235,7 +243,7 @@ async function startHarnessDaemon(
     const identity = await loadHostIdentity({ dataDir });
     const daemonApp = await createHostDaemonApp({
       adapterFactory: resolveAdapterFactory(options),
-      authToken: TEST_AUTH_TOKEN,
+      authToken,
       dataDir,
       enableLocalApi: false,
       hostId: identity.hostId,
@@ -265,6 +273,7 @@ export async function createIntegrationHarness(
   options: CreateHarnessOptions = {},
 ): Promise<IntegrationHarness> {
   await loadProjectEnvFile();
+  const authToken = process.env.BB_SECRET_TOKEN ?? DEFAULT_TEST_AUTH_TOKEN;
   const tmpRoot = await fs.mkdtemp(path.join(tmpdir(), "bb-integration-"));
   await fs.writeFile(path.join(tmpRoot, "parent.pid"), `${process.pid}\n`, "utf8");
   const reposRoot = path.join(tmpRoot, "repos");
@@ -292,6 +301,7 @@ export async function createIntegrationHarness(
     daemonResources = await startHarnessDaemon(
       daemonDataDir,
       server.baseUrl,
+      authToken,
       options,
     );
     harness.daemon = daemonResources.daemon;
@@ -337,15 +347,16 @@ export async function createIntegrationHarness(
 
     await shutdownDaemon("integration-cleanup").catch(() => undefined);
     await server?.close().catch(() => undefined);
-    await fs.rm(tmpRoot, { recursive: true, force: true });
+    await removePathWithRetry(tmpRoot);
   }
 
   try {
-    server = await startIntegrationServer(tmpRoot);
+    server = await startIntegrationServer(tmpRoot, authToken);
     const api = createPublicApiClient(server.baseUrl);
     daemonResources = await startHarnessDaemon(
       daemonDataDir,
       server.baseUrl,
+      authToken,
       options,
     );
     await waitForHostConnected(api);
@@ -360,7 +371,7 @@ export async function createIntegrationHarness(
       db: server.db,
       hostId: daemonResources.hostId,
       hub: server.hub,
-      internal: createHostDaemonClient(server.baseUrl, TEST_AUTH_TOKEN),
+      internal: createHostDaemonClient(server.baseUrl, authToken),
       repoDir,
       restartDaemon,
       server,

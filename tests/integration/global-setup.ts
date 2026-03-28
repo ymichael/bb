@@ -3,6 +3,7 @@ import fs from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
+import { removePathWithRetry } from "./helpers/remove-path.js";
 
 const execFile = promisify(execFileCallback);
 
@@ -92,7 +93,7 @@ async function cleanupTmpRoot(tmpRoot: string): Promise<void> {
   for (const pid of openFilePids) {
     await killProcess(pid).catch(() => undefined);
   }
-  await fs.rm(tmpRoot, { recursive: true, force: true });
+  await removePathWithRetry(tmpRoot);
 }
 
 async function listIntegrationTmpRoots(): Promise<string[]> {
