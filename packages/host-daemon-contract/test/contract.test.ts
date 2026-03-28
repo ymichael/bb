@@ -1,7 +1,6 @@
-import { readFileSync } from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { z } from "zod";
+import * as contract from "../src/index.js";
 import {
   createHostDaemonClient,
   hostDaemonCommandEnvelopeSchema,
@@ -15,6 +14,63 @@ import {
   hostDaemonSessionOpenRequestSchema,
   hostDaemonSessionOpenResponseSchema,
 } from "../src/index.js";
+
+function unwrapSchema(schema: z.ZodTypeAny): z.ZodTypeAny {
+  if (
+    schema instanceof z.ZodOptional ||
+    schema instanceof z.ZodNullable ||
+    schema instanceof z.ZodDefault
+  ) {
+    return unwrapSchema(schema._def.innerType);
+  }
+  if (schema instanceof z.ZodEffects) {
+    return unwrapSchema(schema._def.schema);
+  }
+  return schema;
+}
+
+function collectOptionalFieldPaths(
+  schemas: Record<string, z.ZodTypeAny>,
+): string[] {
+  const paths = new Set<string>();
+
+  function walk(schema: z.ZodTypeAny, prefix: string): void {
+    const unwrapped = unwrapSchema(schema);
+    if (unwrapped instanceof z.ZodObject) {
+      const shape = unwrapped._def.shape();
+      for (const [key, value] of Object.entries(shape)) {
+        const path = `${prefix}.${key}`;
+        if (value instanceof z.ZodOptional) {
+          paths.add(path);
+        }
+        walk(value, path);
+      }
+      return;
+    }
+    if (unwrapped instanceof z.ZodDiscriminatedUnion) {
+      for (const option of unwrapped.options.values()) {
+        walk(option, prefix);
+      }
+      return;
+    }
+    if (unwrapped instanceof z.ZodUnion) {
+      for (const option of unwrapped._def.options) {
+        walk(option, prefix);
+      }
+      return;
+    }
+    if (unwrapped instanceof z.ZodIntersection) {
+      walk(unwrapped._def.left, prefix);
+      walk(unwrapped._def.right, prefix);
+    }
+  }
+
+  for (const [name, schema] of Object.entries(schemas)) {
+    walk(schema, name);
+  }
+
+  return [...paths].sort();
+}
 
 describe("host-daemon command schemas", () => {
   it("parses valid workspace and provisioning commands", () => {
@@ -133,28 +189,30 @@ describe("host-daemon command schemas", () => {
   });
 
   it("keeps contract optional fields on an explicit allowlist", () => {
-    const contractDir = path.dirname(fileURLToPath(import.meta.url));
-    const files = [
-      "../src/commands.ts",
-      "../src/session.ts",
-    ];
-
-    const optionalLines = files.flatMap((relativePath) => {
-      const absolutePath = path.resolve(contractDir, relativePath);
-      return readFileSync(absolutePath, "utf8")
-        .split("\n")
-        .map((line) => line.trim())
-        .filter((line) => line.includes(".optional()"));
+    const optionalFieldPaths = collectOptionalFieldPaths({
+      hostDaemonActiveThreadSchema: contract.hostDaemonActiveThreadSchema,
+      hostDaemonCommandSchema: contract.hostDaemonCommandSchema,
+      threadResumeResultSchema:
+        contract.hostDaemonCommandResultSchemaByType["thread.resume"],
+      workspaceCommitResultSchema:
+        contract.hostDaemonCommandResultSchemaByType["workspace.commit"],
+      workspaceCheckpointResultSchema:
+        contract.hostDaemonCommandResultSchemaByType["workspace.checkpoint"],
+      workspaceSquashMergeResultSchema:
+        contract.hostDaemonCommandResultSchemaByType["workspace.squash_merge"],
     });
 
-    expect(optionalLines).toEqual([
-      "query: z.string().optional(),",
-      "providerThreadId: z.string().min(1).optional(),",
-      "commitSubject: z.string().min(1).optional(),",
-      "commitSha: z.string().min(1).optional(),",
-      "message: z.string().optional(),",
-      "branchName: z.string().min(1).optional(),",
-      "providerThreadId: z.string().min(1).optional(),",
+    expect(optionalFieldPaths).toEqual([
+      "hostDaemonActiveThreadSchema.providerThreadId",
+      "hostDaemonCommandSchema.options.approvalPolicy",
+      "hostDaemonCommandSchema.options.seq",
+      "hostDaemonCommandSchema.options.source",
+      "hostDaemonCommandSchema.query",
+      "threadResumeResultSchema.providerThreadId",
+      "workspaceCheckpointResultSchema.branchName",
+      "workspaceCommitResultSchema.commitSubject",
+      "workspaceSquashMergeResultSchema.commitSha",
+      "workspaceSquashMergeResultSchema.message",
     ]);
   });
 

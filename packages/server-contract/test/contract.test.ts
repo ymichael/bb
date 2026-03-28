@@ -2,6 +2,8 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { z } from "zod";
+import * as contract from "../src/index.js";
 import {
   PROJECT_CHANGE_KINDS,
   SYSTEM_CHANGE_KINDS,
@@ -14,6 +16,63 @@ import {
   sendMessageRequestSchema,
   timelineToolDetailsResponseSchema,
 } from "../src/index.js";
+
+function unwrapSchema(schema: z.ZodTypeAny): z.ZodTypeAny {
+  if (
+    schema instanceof z.ZodOptional ||
+    schema instanceof z.ZodNullable ||
+    schema instanceof z.ZodDefault
+  ) {
+    return unwrapSchema(schema._def.innerType);
+  }
+  if (schema instanceof z.ZodEffects) {
+    return unwrapSchema(schema._def.schema);
+  }
+  return schema;
+}
+
+function collectOptionalFieldPaths(
+  schemas: Record<string, z.ZodTypeAny>,
+): string[] {
+  const paths = new Set<string>();
+
+  function walk(schema: z.ZodTypeAny, prefix: string): void {
+    const unwrapped = unwrapSchema(schema);
+    if (unwrapped instanceof z.ZodObject) {
+      const shape = unwrapped._def.shape();
+      for (const [key, value] of Object.entries(shape)) {
+        const path = `${prefix}.${key}`;
+        if (value instanceof z.ZodOptional) {
+          paths.add(path);
+        }
+        walk(value, path);
+      }
+      return;
+    }
+    if (unwrapped instanceof z.ZodDiscriminatedUnion) {
+      for (const option of unwrapped.options.values()) {
+        walk(option, prefix);
+      }
+      return;
+    }
+    if (unwrapped instanceof z.ZodUnion) {
+      for (const option of unwrapped._def.options) {
+        walk(option, prefix);
+      }
+      return;
+    }
+    if (unwrapped instanceof z.ZodIntersection) {
+      walk(unwrapped._def.left, prefix);
+      walk(unwrapped._def.right, prefix);
+    }
+  }
+
+  for (const [name, schema] of Object.entries(schemas)) {
+    walk(schema, name);
+  }
+
+  return [...paths].sort();
+}
 
 describe("server-contract canonical schemas", () => {
   it("parses request contracts", () => {
@@ -188,46 +247,93 @@ describe("server-contract clients", () => {
   });
 
   it("keeps contract optional fields on an explicit allowlist", () => {
-    const contractDir = path.dirname(fileURLToPath(import.meta.url));
-    const files = [
-      "../src/api-types.ts",
-      "../src/errors.ts",
-    ];
-
-    const optionalLines = files.flatMap((relativePath) => {
-      const absolutePath = path.resolve(contractDir, relativePath);
-      return readFileSync(absolutePath, "utf8")
-        .split("\n")
-        .map((line) => line.trim())
-        .filter((line) => line.includes(".optional()"));
+    const optionalFieldPaths = collectOptionalFieldPaths({
+      apiErrorSchema: contract.apiErrorSchema,
+      commitActionResponseSchema: contract.commitActionResponseSchema,
+      commitOptionsSchema: contract.commitOptionsSchema,
+      createDraftRequestSchema: contract.createDraftRequestSchema,
+      createManagerThreadRequestSchema: contract.createManagerThreadRequestSchema,
+      createThreadRequestSchema: contract.createThreadRequestSchema,
+      environmentActionApiErrorSchema: contract.environmentActionApiErrorSchema,
+      environmentStatusResponseSchema: contract.environmentStatusResponseSchema,
+      projectFilesQuerySchema: contract.projectFilesQuerySchema,
+      sendDraftResponseSchema: contract.sendDraftResponseSchema,
+      sendMessageRequestSchema: contract.sendMessageRequestSchema,
+      squashMergeActionResponseSchema: contract.squashMergeActionResponseSchema,
+      systemModelsQuerySchema: contract.systemModelsQuerySchema,
+      systemProvidersQuerySchema: contract.systemProvidersQuerySchema,
+      threadEventsQuerySchema: contract.threadEventsQuerySchema,
+      threadListQuerySchema: contract.threadListQuerySchema,
+      threadTimelineQuerySchema: contract.threadTimelineQuerySchema,
+      threadTimelineResponseSchema: contract.threadTimelineResponseSchema,
+      threadWorkspaceFilesQuerySchema: contract.threadWorkspaceFilesQuerySchema,
+      timelineToolDetailsQuerySchema: contract.timelineToolDetailsQuerySchema,
+      timelineToolDetailsRequestSchema: contract.timelineToolDetailsRequestSchema,
+      updateProjectRequestSchema: contract.updateProjectRequestSchema,
+      updateProjectSourceRequestSchema: contract.updateProjectSourceRequestSchema,
+      updateThreadRequestSchema: contract.updateThreadRequestSchema,
+      uploadedPromptAttachmentSchema: contract.uploadedPromptAttachmentSchema,
     });
 
-    expect(optionalLines).toEqual([
-      "title: z.string().min(1).optional(),",
-      "serviceTier: serviceTierSchema.optional(),",
-      "reasoningLevel: reasoningLevelSchema.optional(),",
-      "sandboxMode: sandboxModeSchema.optional(),",
-      "parentThreadId: z.string().min(1).optional(),",
-      "model: z.string().optional(),",
-      "serviceTier: serviceTierSchema.optional(),",
-      "reasoningLevel: reasoningLevelSchema.optional(),",
-      "sandboxMode: sandboxModeSchema.optional(),",
-      "model: z.string().optional(),",
-      "serviceTier: serviceTierSchema.optional(),",
-      "reasoningLevel: reasoningLevelSchema.optional(),",
-      "sandboxMode: sandboxModeSchema.optional(),",
-      "title: z.string().min(1).optional(),",
-      "includeManagerDebugView: z.enum([\"true\", \"false\"]).optional(),",
-      "message: z.string().min(1).optional(),",
-      "commitSha: z.string().optional(),",
-      "commitSubject: z.string().optional(),",
-      "commitSha: z.string().optional(),",
-      "commitSubject: z.string().optional(),",
-      "details: environmentActionFailureDetailsSchema.optional(),",
-      "includeManagerDebugView: z.boolean().optional(),",
-      "contextWindowUsage: threadContextWindowUsageSchema.nullable().optional(),",
-      "mimeType: z.string().optional(),",
-      "retryable: z.boolean().optional(),",
+    expect(optionalFieldPaths).toEqual([
+      "apiErrorSchema.retryable",
+      "commitActionResponseSchema.commitSha",
+      "commitActionResponseSchema.commitSubject",
+      "commitOptionsSchema.message",
+      "createDraftRequestSchema.model",
+      "createDraftRequestSchema.reasoningLevel",
+      "createDraftRequestSchema.sandboxMode",
+      "createDraftRequestSchema.serviceTier",
+      "createManagerThreadRequestSchema.title",
+      "createThreadRequestSchema.parentThreadId",
+      "createThreadRequestSchema.reasoningLevel",
+      "createThreadRequestSchema.sandboxMode",
+      "createThreadRequestSchema.serviceTier",
+      "createThreadRequestSchema.title",
+      "environmentActionApiErrorSchema.details",
+      "environmentActionApiErrorSchema.retryable",
+      "environmentStatusResponseSchema.workspace.baseRef",
+      "environmentStatusResponseSchema.workspace.currentBranch",
+      "environmentStatusResponseSchema.workspace.defaultBranch",
+      "environmentStatusResponseSchema.workspace.files",
+      "environmentStatusResponseSchema.workspace.mergeBaseBranch",
+      "environmentStatusResponseSchema.workspace.mergeBaseBranches",
+      "projectFilesQuerySchema.limit",
+      "projectFilesQuerySchema.query",
+      "sendDraftResponseSchema.queuedMessage.model",
+      "sendDraftResponseSchema.queuedMessage.serviceTier",
+      "sendMessageRequestSchema.model",
+      "sendMessageRequestSchema.reasoningLevel",
+      "sendMessageRequestSchema.sandboxMode",
+      "sendMessageRequestSchema.serviceTier",
+      "squashMergeActionResponseSchema.commitSha",
+      "squashMergeActionResponseSchema.commitSubject",
+      "systemModelsQuerySchema.environmentId",
+      "systemModelsQuerySchema.hostId",
+      "systemModelsQuerySchema.providerId",
+      "systemProvidersQuerySchema.environmentId",
+      "systemProvidersQuerySchema.hostId",
+      "threadEventsQuerySchema.afterSeq",
+      "threadEventsQuerySchema.limit",
+      "threadListQuerySchema.archived",
+      "threadListQuerySchema.parentThreadId",
+      "threadListQuerySchema.projectId",
+      "threadListQuerySchema.type",
+      "threadTimelineQuerySchema.includeManagerDebugView",
+      "threadTimelineQuerySchema.includeToolGroupMessages",
+      "threadTimelineQuerySchema.limit",
+      "threadTimelineResponseSchema.contextWindowUsage",
+      "threadWorkspaceFilesQuerySchema.limit",
+      "threadWorkspaceFilesQuerySchema.query",
+      "timelineToolDetailsQuerySchema.includeManagerDebugView",
+      "timelineToolDetailsRequestSchema.includeManagerDebugView",
+      "updateProjectRequestSchema.name",
+      "updateProjectSourceRequestSchema.path",
+      "updateProjectSourceRequestSchema.repoUrl",
+      "updateThreadRequestSchema.mergeBaseBranch",
+      "updateThreadRequestSchema.parentThreadId",
+      "updateThreadRequestSchema.title",
+      "uploadedPromptAttachmentSchema.mimeType",
     ]);
   });
 });
