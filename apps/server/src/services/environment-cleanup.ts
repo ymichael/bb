@@ -6,6 +6,7 @@ import {
   updateEnvironment,
 } from "@bb/db";
 import { threads } from "@bb/db";
+import type { WorkspaceProvisionType } from "@bb/domain";
 import type { AppDeps } from "../types.js";
 
 export function queueEnvironmentDestroyCommand(
@@ -14,7 +15,7 @@ export function queueEnvironmentDestroyCommand(
     hostId: string;
     id: string;
     path: string;
-    workspaceProvisionType: "unmanaged" | "managed-worktree" | "managed-clone" | null;
+    workspaceProvisionType: WorkspaceProvisionType;
   },
 ): void {
   const session = getActiveSession(deps.db, environment.hostId);
@@ -26,7 +27,7 @@ export function queueEnvironmentDestroyCommand(
       type: "environment.destroy",
       environmentId: environment.id,
       path: environment.path,
-      workspaceProvisionType: environment.workspaceProvisionType ?? "unmanaged",
+      workspaceProvisionType: environment.workspaceProvisionType,
     }),
   });
 }

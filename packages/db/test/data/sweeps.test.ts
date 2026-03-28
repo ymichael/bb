@@ -159,6 +159,7 @@ describe("sweepExpiredLeases", () => {
       projectId: project.id,
       hostId: host.id,
       path: "/tmp/env",
+      workspaceProvisionType: "unmanaged",
       status: "ready",
     });
 
@@ -228,6 +229,7 @@ describe("sweepManagedEnvironments", () => {
       hostId: host.id,
       path: "/tmp/env",
       managed: true,
+      workspaceProvisionType: "managed-worktree",
       status: "ready",
     });
 
@@ -245,6 +247,7 @@ describe("sweepManagedEnvironments", () => {
       hostId: host.id,
       path: "/tmp/env",
       managed: true,
+      workspaceProvisionType: "managed-worktree",
       status: "ready",
     });
 
@@ -267,6 +270,7 @@ describe("sweepManagedEnvironments", () => {
       hostId: host.id,
       path: "/tmp/env",
       managed: true,
+      workspaceProvisionType: "managed-worktree",
       status: "ready",
     });
 
@@ -297,6 +301,7 @@ describe("sweepManagedEnvironments", () => {
       hostId: host.id,
       path: "/tmp/env",
       managed: false,
+      workspaceProvisionType: "unmanaged",
       status: "ready",
     });
 
@@ -312,6 +317,7 @@ describe("sweepManagedEnvironments", () => {
       hostId: host.id,
       path: "/tmp/env",
       managed: true,
+      workspaceProvisionType: "managed-worktree",
       status: "destroying",
     });
 
@@ -330,6 +336,7 @@ describe("sweepDestroyingEnvironments", () => {
       hostId: host.id,
       path: "/tmp/stale-destroying",
       managed: true,
+      workspaceProvisionType: "managed-worktree",
       status: "destroying",
     });
     const freshEnvironment = createEnvironment(db, noopNotifier, {
@@ -337,6 +344,7 @@ describe("sweepDestroyingEnvironments", () => {
       hostId: host.id,
       path: "/tmp/fresh-destroying",
       managed: true,
+      workspaceProvisionType: "managed-worktree",
       status: "destroying",
     });
 

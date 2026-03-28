@@ -21,12 +21,12 @@ function toProvisioningLabel(
   workspaceProvisionType: Environment["workspaceProvisionType"],
 ): string {
   switch (workspaceProvisionType) {
+    case "unmanaged":
+      return "Environment";
     case "managed-worktree":
       return "Worktree";
     case "managed-clone":
       return "Clone";
-    default:
-      return "Environment";
   }
 }
 
@@ -45,7 +45,6 @@ export function queueManagedEnvironmentReprovision(
 ): ManagedReprovisionResult {
   if (
     !args.environment.managed ||
-    !args.environment.workspaceProvisionType ||
     args.environment.workspaceProvisionType === "unmanaged"
   ) {
     throw new ApiError(

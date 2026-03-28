@@ -39,7 +39,7 @@ export const environmentSchema = z.object({
   managed: z.boolean(),
   isGitRepo: z.boolean(),
   isWorktree: z.boolean(),
-  workspaceProvisionType: workspaceProvisionTypeSchema.nullable(),
+  workspaceProvisionType: workspaceProvisionTypeSchema,
   branchName: z.string().nullable(),
   defaultBranch: z.string().nullable(),
   status: environmentStatusSchema,

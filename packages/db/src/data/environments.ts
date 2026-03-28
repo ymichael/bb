@@ -11,13 +11,13 @@ import { createEnvironmentId } from "../ids.js";
 export interface CreateEnvironmentInput {
   projectId: string;
   hostId: string;
+  workspaceProvisionType: WorkspaceProvisionType;
   path?: string | null;
   managed?: boolean;
   isGitRepo?: boolean;
   isWorktree?: boolean;
   branchName?: string | null;
   defaultBranch?: string | null;
-  workspaceProvisionType?: WorkspaceProvisionType | null;
   status?: EnvironmentStatus;
 }
 
@@ -39,7 +39,7 @@ export function createEnvironment(
       isWorktree: input.isWorktree ?? false,
       branchName: input.branchName ?? null,
       defaultBranch: input.defaultBranch ?? null,
-      workspaceProvisionType: input.workspaceProvisionType ?? null,
+      workspaceProvisionType: input.workspaceProvisionType,
       status: input.status ?? "provisioning",
       createdAt: now,
       updatedAt: now,

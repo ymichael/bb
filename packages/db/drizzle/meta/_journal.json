@@ -64,6 +64,13 @@
       "when": 1779699600000,
       "tag": "0008_nice_chimera",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1779701400000,
+      "tag": "0009_nimble_hercules",
+      "breakpoints": true
     }
   ]
 }

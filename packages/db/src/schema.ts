@@ -91,7 +91,9 @@ export const environments = sqliteTable(
       .default(false),
     branchName: text("branch_name"),
     defaultBranch: text("default_branch"),
-    workspaceProvisionType: text("workspace_provision_type").$type<WorkspaceProvisionType>(),
+    workspaceProvisionType: text("workspace_provision_type")
+      .$type<WorkspaceProvisionType>()
+      .notNull(),
     status: text("status").$type<EnvironmentStatus>().notNull().default("provisioning"),
     createdAt: integer("created_at").notNull(),
     updatedAt: integer("updated_at").notNull(),

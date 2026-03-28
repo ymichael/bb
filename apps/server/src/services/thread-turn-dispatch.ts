@@ -47,7 +47,6 @@ export function queueTurnDuringReprovision(
 
   if (
     !args.environment.managed ||
-    !args.environment.workspaceProvisionType ||
     args.environment.status === "provisioning"
   ) {
     throw new ApiError(409, "invalid_request", "Environment is not ready");
