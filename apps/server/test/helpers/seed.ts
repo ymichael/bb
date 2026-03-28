@@ -131,10 +131,10 @@ export function seedDraft(
   return createDraft(deps.db, deps.hub, {
     threadId: args.threadId,
     content: args.content,
-    ...(args.model ? { model: args.model } : {}),
+    model: args.model ?? "gpt-5",
     reasoningLevel: args.reasoningLevel ?? "medium",
     sandboxMode: args.sandboxMode ?? "danger-full-access",
-    ...(args.serviceTier ? { serviceTier: args.serviceTier } : {}),
+    serviceTier: args.serviceTier ?? "flex",
   });
 }
 

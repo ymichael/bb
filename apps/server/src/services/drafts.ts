@@ -27,7 +27,7 @@ export function toQueuedMessage(row: StoredDraftRow): ThreadQueuedMessage {
   return {
     id: row.id,
     content: decodeDraftContent(row.content),
-    ...(row.model ? { model: row.model } : {}),
+    model: row.model ?? "gpt-5",
     reasoningLevel:
       row.reasoningLevel === "low" ||
       row.reasoningLevel === "medium" ||
@@ -41,9 +41,9 @@ export function toQueuedMessage(row: StoredDraftRow): ThreadQueuedMessage {
       row.sandboxMode === "danger-full-access"
         ? row.sandboxMode
         : "danger-full-access",
-    ...(row.serviceTier === "fast" || row.serviceTier === "flex"
-      ? { serviceTier: row.serviceTier }
-      : {}),
+    serviceTier: row.serviceTier === "fast" || row.serviceTier === "flex"
+      ? row.serviceTier
+      : "flex",
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };

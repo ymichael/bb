@@ -7,10 +7,10 @@ import { createDraftId } from "../ids.js";
 export interface CreateDraftInput {
   threadId: string;
   content: string;
-  model?: string;
+  model: string;
   reasoningLevel: string;
   sandboxMode: string;
-  serviceTier?: string;
+  serviceTier: string;
 }
 
 export function createDraft(
@@ -25,10 +25,10 @@ export function createDraft(
       id,
       threadId: input.threadId,
       content: input.content,
-      model: input.model ?? null,
+      model: input.model,
       reasoningLevel: input.reasoningLevel,
       sandboxMode: input.sandboxMode,
-      serviceTier: input.serviceTier ?? null,
+      serviceTier: input.serviceTier,
       createdAt: now,
       updatedAt: now,
     })

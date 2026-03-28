@@ -298,8 +298,6 @@ describe("server-contract clients", () => {
       "environmentStatusResponseSchema.workspace.mergeBaseBranches",
       "projectFilesQuerySchema.limit",
       "projectFilesQuerySchema.query",
-      "sendDraftResponseSchema.queuedMessage.model",
-      "sendDraftResponseSchema.queuedMessage.serviceTier",
       "sendMessageRequestSchema.model",
       "sendMessageRequestSchema.reasoningLevel",
       "sendMessageRequestSchema.sandboxMode",
