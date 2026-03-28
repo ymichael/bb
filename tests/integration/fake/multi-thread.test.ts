@@ -362,6 +362,7 @@ describe.sequential("fake provider multi-thread integration", () => {
           action: "commit",
           threadId: threadA.thread.id,
           options: {
+            autoArchiveOnSuccess: false,
             message: "env-a commit",
           },
         }),
@@ -369,6 +370,7 @@ describe.sequential("fake provider multi-thread integration", () => {
           action: "commit",
           threadId: threadB.thread.id,
           options: {
+            autoArchiveOnSuccess: false,
             message: "env-b commit",
           },
         }),
@@ -589,6 +591,7 @@ describe.sequential("fake provider multi-thread integration", () => {
           action: "commit",
           threadId: threadA.thread.id,
           options: {
+            autoArchiveOnSuccess: false,
             message: "instance-a commit",
           },
         }),
@@ -596,6 +599,7 @@ describe.sequential("fake provider multi-thread integration", () => {
           action: "commit",
           threadId: threadB.thread.id,
           options: {
+            autoArchiveOnSuccess: false,
             message: "instance-b commit",
           },
         }),

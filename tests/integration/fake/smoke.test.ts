@@ -199,7 +199,7 @@ describe.sequential("fake provider smoke integration", () => {
           model: "fake-model",
           providerId: "fake",
           reasoningLevel: "high",
-          title: "Project manager",
+          name: "Project manager",
         });
         expect(managerThread.type).toBe("manager");
 
@@ -432,6 +432,7 @@ describe.sequential("fake provider smoke integration", () => {
         action: "commit",
         threadId: thread.id,
         options: {
+          autoArchiveOnSuccess: false,
           message: "smoke commit",
         },
       });
@@ -439,7 +440,6 @@ describe.sequential("fake provider smoke integration", () => {
       if (result.action !== "commit") {
         throw new Error(`Expected commit action result, received ${result.action}`);
       }
-      expect(result.commitCreated).toBe(true);
       expect(result.commitSha).toBeTruthy();
 
       const cleanStatus = await getEnvironmentStatus(harness.api, environment.id);
@@ -473,6 +473,7 @@ describe.sequential("fake provider smoke integration", () => {
         action: "commit",
         threadId: thread.id,
         options: {
+          autoArchiveOnSuccess: false,
           message: "feature work",
         },
       });
