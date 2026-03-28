@@ -62,10 +62,10 @@ Everything else should be deleted, made required, or filled in by the server bef
 - [x] Implement `workspace.status.mergeBaseBranch` end-to-end and make it required for status requests.
   Purpose: request workspace status relative to a selected merge-base branch instead of the repo default.
   Current: the app status query can send it in [apps/app/src/lib/api.ts](/Users/michael/.codex/worktrees/93ba/bb/apps/app/src/lib/api.ts#L452), the server forwards it in [apps/server/src/routes/environments.ts](/Users/michael/.codex/worktrees/93ba/bb/apps/server/src/routes/environments.ts#L36), and archive safety checks already pass `thread.mergeBaseBranch` in [apps/server/src/routes/threads/actions.ts](/Users/michael/.codex/worktrees/93ba/bb/apps/server/src/routes/threads/actions.ts#L323). The daemon ignores it and `getStatus()` always uses the default branch in [packages/workspace/src/workspace.ts](/Users/michael/.codex/worktrees/93ba/bb/packages/workspace/src/workspace.ts#L112). Cleanup should update callers to always provide an explicit merge-base branch and make the daemon/workspace honor it.
-- [ ] Delete `SquashMergeOptions.commitIfNeeded` from the public contract, callers, and UI/CLI copy.
+- [x] Delete `SquashMergeOptions.commitIfNeeded` from the public contract, callers, and UI/CLI copy.
   Purpose: remove a fake behavior toggle. The chosen product behavior is that squash merge always snapshots the source workspace into a real source-branch commit before the squash step.
   Current: the app sends it from the git action dialog in [apps/app/src/components/thread/ThreadGitActionDialog.tsx](/Users/michael/.codex/worktrees/93ba/bb/apps/app/src/components/thread/ThreadGitActionDialog.tsx#L210), and the CLI sends it in [apps/cli/src/commands/environment.ts](/Users/michael/.codex/worktrees/93ba/bb/apps/cli/src/commands/environment.ts#L90). The server route never forwards it in [apps/server/src/routes/environments.ts](/Users/michael/.codex/worktrees/93ba/bb/apps/server/src/routes/environments.ts#L135).
-- [ ] Delete `SquashMergeOptions.includeUnstaged` from the public contract, callers, and UI/CLI copy.
+- [x] Delete `SquashMergeOptions.includeUnstaged` from the public contract, callers, and UI/CLI copy.
   Purpose: remove a fake staging-scope toggle. The chosen product behavior is that squash merge always includes all source workspace changes, not just staged files.
   Current: the app and CLI both send it in the same call paths as `commitIfNeeded`, but the server ignores it on squash-merge and only forwards `targetBranch` and one message field in [apps/server/src/routes/environments.ts](/Users/michael/.codex/worktrees/93ba/bb/apps/server/src/routes/environments.ts#L143).
 - [ ] Plumb `turn.steer.options` through daemon dispatch, runtime, and provider adapters. Do not leave it accepted-and-ignored.
@@ -77,7 +77,7 @@ Everything else should be deleted, made required, or filled in by the server bef
 - [x] Delete `CreateThreadRequest.spawnInitiator` from the public contract.
   Purpose: label the initiator recorded on `client/thread/start` events.
   Current: the public contract exposes it in [packages/server-contract/src/api-types.ts](/Users/michael/.codex/worktrees/93ba/bb/packages/server-contract/src/api-types.ts#L71), but the only in-tree caller that sets it is the internal tool-call path in [apps/server/src/internal/tool-calls.ts](/Users/michael/.codex/worktrees/93ba/bb/apps/server/src/internal/tool-calls.ts#L80). App and CLI thread creation do not send it.
-- [ ] Delete all user-configurable squash-merge message fields and flags.
+- [x] Delete all user-configurable squash-merge message fields and flags.
   Purpose: remove message customization entirely from squash merge so the API does not expose fake or ambiguous knobs. The prep commit message and final squash commit message should be implementation-owned, not caller-specified.
   Current: the public contract exposes both `commitMessage` and `squashMessage` in [packages/server-contract/src/api-types.ts](/Users/michael/.codex/worktrees/93ba/bb/packages/server-contract/src/api-types.ts#L198), the CLI can send both in [apps/cli/src/commands/environment.ts](/Users/michael/.codex/worktrees/93ba/bb/apps/cli/src/commands/environment.ts#L90), the app sends neither in [apps/app/src/views/ThreadDetailView.tsx](/Users/michael/.codex/worktrees/93ba/bb/apps/app/src/views/ThreadDetailView.tsx#L827), and the server currently collapses them to one daemon `commitMessage`, preferring `squashMessage` over `commitMessage`, in [apps/server/src/routes/environments.ts](/Users/michael/.codex/worktrees/93ba/bb/apps/server/src/routes/environments.ts#L148).
 
@@ -182,10 +182,10 @@ Everything else should be deleted, made required, or filled in by the server bef
 - [ ] Fix `turn.steer.options` behavior so steer-time execution overrides are honored end-to-end and go through the same server helper that fills in defaults for other turn entry points.
   Purpose: treat active follow-up execution choices as real product behavior rather than silently ignored input.
   Current: active follow-ups can carry different execution choices, but steer ignores them downstream and does not go through the same default-filling path as other entry points.
-- [ ] Implement and require `workspace.status.mergeBaseBranch` instead of silently ignoring it.
+- [x] Implement and require `workspace.status.mergeBaseBranch` instead of silently ignoring it.
   Purpose: status and archive checks should operate relative to the explicit merge-base branch the caller asked for.
   Current: callers think they can request non-default merge-base status; they cannot.
-- [ ] Delete the squash-merge option knobs and change workspace squash-merge behavior to always commit all source workspace changes first, using implementation-owned commit messages.
+- [x] Delete the squash-merge option knobs and change workspace squash-merge behavior to always commit all source workspace changes first, using implementation-owned commit messages.
   Purpose: make squash merge one intentional operation instead of a bag of caller-controlled toggles. The desired behavior is: commit all staged and unstaged source changes onto the source branch, then squash merge that source branch into the target branch and create the final squash commit there, without exposing prep or squash message customization to callers.
   Current: `commitIfNeeded`, squash `includeUnstaged`, and squash message fields are UI-visible / CLI-visible or public-contract-visible, but the server no-ops some of them and collapses the message fields before the workspace layer. The workspace implementation currently skips any source-branch commit and only creates the final squash commit on the target branch.
 

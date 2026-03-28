@@ -61,7 +61,6 @@ export interface CheckpointResult {
 
 export interface SquashMergeOptions {
   targetBranch: string;
-  commitMessage: string;
 }
 
 export interface SquashMergeResult {
@@ -77,6 +76,9 @@ type DiffSummary = {
   selection: ThreadGitDiffSelection;
   truncated: boolean;
 };
+
+const SQUASH_MERGE_PREP_COMMIT_MESSAGE = "bb squash merge prep";
+const SQUASH_MERGE_COMMIT_MESSAGE = "bb squash merge";
 
 function countWorktrees(porcelainOutput: string): number {
   return porcelainOutput
@@ -345,6 +347,10 @@ export class Workspace {
       throw new WorkspaceError("Cannot squash merge from a detached workspace");
     }
 
+    if (await hasUncommittedChanges(this.path)) {
+      await this.commit({ message: SQUASH_MERGE_PREP_COMMIT_MESSAGE });
+    }
+
     await this.fetch({ remote: "origin", branch: options.targetBranch }).catch(
       () => undefined,
     );
@@ -378,7 +384,7 @@ export class Workspace {
       }
 
       await runGit(["merge", "--squash", sourceBranch], { cwd: tempDir });
-      await runGit(["commit", "-m", options.commitMessage], { cwd: tempDir });
+      await runGit(["commit", "-m", SQUASH_MERGE_COMMIT_MESSAGE], { cwd: tempDir });
       const commitSha = await revParse(tempDir, "HEAD");
 
       return {

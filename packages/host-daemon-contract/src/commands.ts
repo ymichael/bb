@@ -209,7 +209,6 @@ export const workspaceCommitCommandSchema = hostDaemonWorkspaceTargetSchema.exte
 export const workspaceSquashMergeCommandSchema = hostDaemonWorkspaceTargetSchema.extend({
   type: z.literal("workspace.squash_merge"),
   targetBranch: z.string().min(1),
-  commitMessage: z.string().min(1),
 });
 
 /** Discard all uncommitted changes. Internal use only — not exposed via public API. */

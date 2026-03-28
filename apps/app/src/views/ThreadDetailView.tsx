@@ -826,12 +826,8 @@ export function ThreadDetailView() {
     }
   };
   const handleSquashMergeThread = async ({
-    commitIfNeeded,
-    includeUnstaged,
     mergeBaseBranch,
   }: {
-    commitIfNeeded: boolean;
-    includeUnstaged: boolean;
     mergeBaseBranch?: string;
   }) => {
     const attachedEnvironmentId = thread.environmentId;
@@ -845,8 +841,6 @@ export function ThreadDetailView() {
         threadId,
         action: "squash_merge",
         options: {
-          commitIfNeeded,
-          includeUnstaged,
           ...(mergeBaseBranch ? { mergeBaseBranch } : {}),
           autoArchiveOnSuccess,
         },

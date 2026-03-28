@@ -18,10 +18,6 @@ interface EnvironmentCommitCommandOptions {
 }
 
 interface EnvironmentSquashMergeCommandOptions {
-  commitIfNeeded?: boolean;
-  stagedOnly?: boolean;
-  commitMessage?: string;
-  squashMessage?: string;
   mergeBaseBranch?: string;
   json?: boolean;
   thread: string;
@@ -78,10 +74,6 @@ export function registerEnvironmentCommands(
     .command("squash-merge <id>")
     .description("Squash-merge changes in an environment")
     .requiredOption("--thread <threadId>", "Thread to act on")
-    .option("--commit-if-needed", "Allow a prep commit before squash merge")
-    .option("--staged-only", "Use only staged changes for the prep commit")
-    .option("--commit-message <message>", "Prep commit message hint")
-    .option("--squash-message <message>", "Squash commit message hint")
     .option("--merge-base-branch <branch>", "Merge-base branch hint")
     .option("--json", "Print machine-readable JSON output")
     .action(action(async (
@@ -96,10 +88,6 @@ export function registerEnvironmentCommands(
             action: "squash_merge",
             threadId: opts.thread,
             options: {
-              commitIfNeeded: opts.commitIfNeeded === true,
-              includeUnstaged: opts.stagedOnly ? false : true,
-              ...(opts.commitMessage ? { commitMessage: opts.commitMessage } : {}),
-              ...(opts.squashMessage ? { squashMessage: opts.squashMessage } : {}),
               ...(opts.mergeBaseBranch ? { mergeBaseBranch: opts.mergeBaseBranch } : {}),
             },
           },

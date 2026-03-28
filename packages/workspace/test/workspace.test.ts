@@ -152,19 +152,25 @@ describe("Workspace", () => {
     await fs.writeFile(path.join(repoPath, "README.md"), "squash\n", "utf8");
     await runGit(["add", "README.md"], { cwd: repoPath });
     await runGit(["commit", "-m", "Feature work"], { cwd: repoPath });
+    await fs.writeFile(path.join(repoPath, "README.md"), "squash plus local changes\n", "utf8");
     await runGit(["branch", "-D", "main"], { cwd: repoPath });
 
     const workspace = new Workspace(repoPath);
     const result = await workspace.squashMergeInto({
       targetBranch: "main",
-      commitMessage: "Squash feature",
     });
 
-    const subject = (
+    const sourceBranchSubject = (
+      await runGit(["log", "-1", "--pretty=%s", "feature"], { cwd: repoPath })
+    ).stdout.trim();
+    const targetBranchSubject = (
       await runGit(["log", "-1", "--pretty=%s", "main"], { cwd: repoPath })
     ).stdout.trim();
+    const mergedReadme = await fs.readFile(path.join(repoPath, "README.md"), "utf8");
     expect(result.merged).toBe(true);
-    expect(subject).toBe("Squash feature");
+    expect(sourceBranchSubject).toBe("bb squash merge prep");
+    expect(targetBranchSubject).toBe("bb squash merge");
+    expect(mergedReadme).toBe("squash plus local changes\n");
   });
 
   it("rejects git mutations for non-git directories", async () => {

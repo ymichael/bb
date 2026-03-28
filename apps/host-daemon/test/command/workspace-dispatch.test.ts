@@ -56,7 +56,6 @@ describe("workspace command dispatch", () => {
         workspacePath: "/tmp/env-1",
         threadId: "thread-1",
         targetBranch: "main",
-        commitMessage: "Squash",
       },
       { runtimeManager: harness.manager },
     );

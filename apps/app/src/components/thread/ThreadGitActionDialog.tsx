@@ -52,11 +52,7 @@ interface ThreadGitActionDialogProps {
   onMergeBaseBranchPickerOpenChange?: (open: boolean) => void;
   onOpenChange: (open: boolean) => void;
   onCommit: () => Promise<void>;
-  onSquashMerge: (args: {
-    commitIfNeeded: boolean;
-    includeUnstaged: boolean;
-    mergeBaseBranch?: string;
-  }) => Promise<void>;
+  onSquashMerge: (args: { mergeBaseBranch?: string }) => Promise<void>;
   onAskAgentToFix?: (input: PromptInput[]) => Promise<void>;
 }
 
@@ -211,15 +207,11 @@ function ThreadGitActionDialogContent({
           break;
         case "commit_and_squash_merge":
           await onSquashMerge({
-            commitIfNeeded: true,
-            includeUnstaged: true,
             mergeBaseBranch: selectedMergeBaseBranch,
           });
           break;
         case "squash_merge":
           await onSquashMerge({
-            commitIfNeeded: false,
-            includeUnstaged: false,
             mergeBaseBranch: selectedMergeBaseBranch,
           });
           break;

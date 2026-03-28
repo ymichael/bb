@@ -204,10 +204,6 @@ export const commitOptionsSchema = z.object({
 export type CommitOptions = z.infer<typeof commitOptionsSchema>;
 
 export const squashMergeOptionsSchema = z.object({
-  commitIfNeeded: z.boolean().optional(),
-  includeUnstaged: z.boolean().optional(),
-  commitMessage: z.string().min(1).optional(),
-  squashMessage: z.string().min(1).optional(),
   mergeBaseBranch: z.string().min(1).optional(),
   autoArchiveOnSuccess: z.boolean().optional(),
 });

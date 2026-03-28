@@ -116,7 +116,6 @@ describe("public environment action regressions", () => {
             action: "squash_merge",
             threadId: thread.id,
             options: {
-              squashMessage: "Squash and archive",
               autoArchiveOnSuccess: true,
             },
           }),
@@ -132,7 +131,6 @@ describe("public environment action regressions", () => {
       await reportQueuedCommandSuccess(harness, mergeCommand, {
         merged: true,
         commitSha: "squash-archive-sha",
-        message: "Squash merge complete",
       });
 
       const response = await responsePromise;

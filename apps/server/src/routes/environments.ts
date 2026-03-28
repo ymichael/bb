@@ -157,10 +157,6 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
             environmentStatus: environment.status,
             workspacePath: environment.path,
             targetBranch: payload.options?.mergeBaseBranch ?? actingThread.mergeBaseBranch,
-            commitMessage:
-              payload.options?.squashMessage ??
-              payload.options?.commitMessage ??
-              "bb squash merge",
           },
         });
         const result = hostDaemonCommandResultSchemaByType["workspace.squash_merge"].parse(rawResult);
@@ -175,7 +171,7 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
           ok: true,
           action: "squash_merge",
           merged: result.merged,
-          message: result.message ?? "Squash merge completed",
+          message: "Squash merge completed",
           autoArchived: Boolean(archivedThread),
           commitSha: result.commitSha,
         });

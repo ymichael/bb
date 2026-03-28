@@ -373,9 +373,7 @@ describe("public environment and system routes", () => {
           body: JSON.stringify({
             action: "squash_merge",
             threadId: thread.id,
-            options: {
-              squashMessage: "Squash merge from tests",
-            },
+            options: {},
           }),
         },
       );
@@ -389,12 +387,10 @@ describe("public environment and system routes", () => {
       expect(queued.command).toMatchObject({
         workspacePath: "/tmp/test-environment",
         targetBranch: "main",
-        commitMessage: "Squash merge from tests",
       });
       await reportQueuedCommandSuccess(harness, queued, {
         merged: true,
         commitSha: "merge123",
-        message: "Merge complete",
       });
 
       const response = await responsePromise;
