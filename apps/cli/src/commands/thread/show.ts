@@ -4,6 +4,7 @@ import {
   type TimelineFormat,
 } from "@bb/core-ui";
 import {
+  type Environment,
   type Thread,
   type ThreadEventRow,
   type ThreadGitDiffResponse,
@@ -121,13 +122,40 @@ export function registerShowCommand(
         eventMode,
         includeLowSignal: Boolean(opts.includeLowSignal),
       });
+      let environment: Environment | null | undefined;
+      const getEnvironment = async () => {
+        if (!thread.environmentId) {
+          return null;
+        }
+        if (environment !== undefined) {
+          return environment;
+        }
+        environment = await unwrap<Environment>(
+          client.api.v1.environments[":id"].$get({
+            param: { id: thread.environmentId },
+          }),
+        );
+        return environment;
+      };
+      const requireMergeBaseBranch = async (override?: string) => {
+        const mergeBaseBranch =
+          override ??
+          thread.mergeBaseBranch ??
+          (await getEnvironment())?.defaultBranch ??
+          undefined;
+        if (!mergeBaseBranch) {
+          throw new Error("Thread environment does not have a merge base branch");
+        }
+        return mergeBaseBranch;
+      };
 
       let workStatus: WorkspaceStatus | null | undefined;
       if (opts.workStatus && thread.environmentId) {
+        const mergeBaseBranch = await requireMergeBaseBranch();
         const environmentStatus = await unwrap<EnvironmentStatusResponse>(
           client.api.v1.environments[":id"].status.$get({
             param: { id: thread.environmentId },
-            query: {},
+            query: { mergeBaseBranch },
           }),
         );
         workStatus = environmentStatus.workspace;
@@ -135,14 +163,13 @@ export function registerShowCommand(
 
       let gitDiff: ThreadGitDiffResponse | undefined;
       if (opts.gitDiff && thread.environmentId) {
+        const mergeBaseBranch = await requireMergeBaseBranch(opts.diffMergeBase);
         gitDiff = await unwrap<ThreadGitDiffResponse>(
           client.api.v1.environments[":id"].diff.$get({
             param: { id: thread.environmentId },
             query: {
               selection: opts.diffSelection ?? "combined",
-              ...(opts.diffMergeBase
-                ? { mergeBaseBranch: opts.diffMergeBase }
-                : {}),
+              mergeBaseBranch,
             },
           }),
         );

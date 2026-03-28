@@ -12,7 +12,6 @@ import {
   hasRef,
   hasUncommittedChanges,
   listBranches,
-  parseBranchStatus,
   parsePorcelainEntries,
   pathExists,
   readDefaultBranch,
@@ -28,6 +27,10 @@ export interface DiffOptions {
   mergeBaseBranch?: string;
   selection?: ThreadGitDiffSelection;
   maxBytes?: number;
+}
+
+export interface StatusOptions {
+  mergeBaseBranch?: string;
 }
 
 export type DiffResult = ThreadGitDiffResponse;
@@ -101,9 +104,10 @@ export class Workspace {
     return getCurrentBranch(this.path);
   }
 
-  async getStatus(): Promise<WorkspaceStatus> {
+  async getStatus(options: StatusOptions = {}): Promise<WorkspaceStatus> {
     await ensureGitRepo(this.path);
 
+    const mergeBaseBranch = options.mergeBaseBranch ?? await readDefaultBranch(this.path);
     const [statusOutput, diffOutput, currentBranch, defaultBranch, branches] =
       await Promise.all([
         runGit(
@@ -116,7 +120,6 @@ export class Workspace {
         listBranches(this.path),
       ]);
 
-    const branchInfo = parseBranchStatus(statusOutput.stdout.split("\n")[0]);
     const entries = parsePorcelainEntries(statusOutput.stdout);
     const workingTreeSummary = summarizeNumstat(diffOutput.stdout);
     const hasUntracked = entries.some((entry) => entry.status === "??");
@@ -124,10 +127,21 @@ export class Workspace {
       (entry) => entry.indexStatus === "D" || entry.worktreeStatus === "D",
     );
     const hasDirtyEntries = entries.length > 0;
-    const hasCommittedChanges = branchInfo.aheadCount > 0;
-    const mergeBaseRef = defaultBranch
-      ? await readMergeBaseRef(this.path, defaultBranch)
+    const mergeBaseRef = mergeBaseBranch
+      ? await readMergeBaseRef(this.path, mergeBaseBranch)
       : undefined;
+    const aheadBehindCounts = mergeBaseBranch
+      ? await runGit(
+        ["rev-list", "--left-right", "--count", `${mergeBaseBranch}...HEAD`],
+        { cwd: this.path },
+      )
+      : undefined;
+    const [behindCount, aheadCount] =
+      aheadBehindCounts?.stdout.trim().split(/\s+/).map((value) => Number.parseInt(value, 10)) ??
+      [0, 0];
+    const normalizedAheadCount = Number.isFinite(aheadCount) ? aheadCount : 0;
+    const normalizedBehindCount = Number.isFinite(behindCount) ? behindCount : 0;
+    const hasCommittedChanges = normalizedAheadCount > 0;
 
     const state = (() => {
       if (!hasDirtyEntries && !hasCommittedChanges) {
@@ -155,13 +169,13 @@ export class Workspace {
       workspaceDeletions: workingTreeSummary.deletions,
       hasUncommittedChanges: hasDirtyEntries,
       hasCommittedUnmergedChanges: hasCommittedChanges,
-      aheadCount: branchInfo.aheadCount,
-      behindCount: branchInfo.behindCount,
+      aheadCount: normalizedAheadCount,
+      behindCount: normalizedBehindCount,
       currentBranch,
       defaultBranch,
-      mergeBaseBranch: defaultBranch,
+      mergeBaseBranch,
       mergeBaseBranches: branches.filter((branch) => branch !== currentBranch),
-      baseRef: mergeBaseRef ?? defaultBranch,
+      baseRef: mergeBaseRef ?? mergeBaseBranch,
       files: entries.map((entry) => ({
         path: entry.path,
         status: entry.status,

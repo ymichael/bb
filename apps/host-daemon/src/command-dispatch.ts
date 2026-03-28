@@ -114,7 +114,9 @@ export async function dispatchCommand<TCommand extends HostDaemonCommand>(
     case "workspace.status": {
       const entry = await requireWorkspaceEnvironment(command, options.runtimeManager);
       return {
-        workspaceStatus: await entry.workspace.getStatus(),
+        workspaceStatus: await entry.workspace.getStatus({
+          mergeBaseBranch: command.mergeBaseBranch,
+        }),
       } as HostDaemonCommandResult<TCommand["type"]>;
     }
     case "workspace.diff": {

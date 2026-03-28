@@ -67,6 +67,11 @@ describe("Workspace", () => {
     await runGit(["commit", "-m", "Feature commit"], { cwd: repoPath });
 
     const workspace = new Workspace(repoPath);
+    const status = await workspace.getStatus({ mergeBaseBranch: "main" });
+    expect(status.mergeBaseBranch).toBe("main");
+    expect(status.aheadCount).toBe(1);
+    expect(status.behindCount).toBe(0);
+
     const combined = await workspace.getDiff({ mergeBaseBranch: "main" });
     expect(combined.mode).toBe("worktree_commits");
     expect(combined.commits[0]?.subject).toBe("Feature commit");

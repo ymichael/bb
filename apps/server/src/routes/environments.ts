@@ -34,6 +34,14 @@ function requireDiffSelection(query: Record<string, string | undefined>) {
   return selection;
 }
 
+function requireMergeBaseBranch(value: string | undefined) {
+  const mergeBaseBranch = value?.trim();
+  if (!mergeBaseBranch) {
+    throw new ApiError(400, "invalid_request", "A merge base branch is required");
+  }
+  return mergeBaseBranch;
+}
+
 export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
   const { get, post } = typedRoutes<PublicApiSchema>(app, { onValidationError: (msg) => new ApiError(400, "invalid_request", msg) });
 
@@ -43,6 +51,7 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
 
   get("/environments/:id/status", async (context) => {
     const environment = requireReadyEnvironment(deps.db, context.req.param("id"));
+    const mergeBaseBranch = requireMergeBaseBranch(context.req.query("mergeBaseBranch"));
     const rawResult = await queueCommandAndWait(deps, {
       hostId: environment.hostId,
       timeoutMs: COMMAND_TIMEOUT_MS,
@@ -51,9 +60,7 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
         environmentId: environment.id,
         environmentStatus: environment.status,
         workspacePath: environment.path,
-        ...(context.req.query("mergeBaseBranch")
-          ? { mergeBaseBranch: context.req.query("mergeBaseBranch") }
-          : {}),
+        mergeBaseBranch,
       },
     });
     const result = hostDaemonCommandResultSchemaByType["workspace.status"].parse(rawResult);
@@ -63,6 +70,7 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
   get("/environments/:id/diff", async (context) => {
     const environment = requireReadyEnvironment(deps.db, context.req.param("id"));
     const selection = requireDiffSelection(context.req.query());
+    const mergeBaseBranch = requireMergeBaseBranch(context.req.query("mergeBaseBranch"));
     const rawResult = await queueCommandAndWait(deps, {
       hostId: environment.hostId,
       timeoutMs: COMMAND_TIMEOUT_MS,
@@ -72,9 +80,7 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
         environmentStatus: environment.status,
         workspacePath: environment.path,
         selection,
-        ...(context.req.query("mergeBaseBranch")
-          ? { mergeBaseBranch: context.req.query("mergeBaseBranch") }
-          : {}),
+        mergeBaseBranch,
       },
     });
     return context.json(

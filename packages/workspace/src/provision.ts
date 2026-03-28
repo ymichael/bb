@@ -10,6 +10,7 @@ import type {
   DiffOptions,
   DiffResult,
   FetchOptions,
+  StatusOptions,
   SquashMergeOptions,
   SquashMergeResult,
 } from "./workspace.js";
@@ -89,7 +90,7 @@ export interface IWorkspace {
 
   // Git queries
   currentBranch(): Promise<string | null>;
-  getStatus(): Promise<WorkspaceStatus>;
+  getStatus(options?: StatusOptions): Promise<WorkspaceStatus>;
   getDiff(options?: DiffOptions): Promise<DiffResult>;
   getBranches(): Promise<string[]>;
 

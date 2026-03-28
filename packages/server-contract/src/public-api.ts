@@ -125,7 +125,7 @@ export type PublicApiSchema = {
   "/environments/:id/status": {
     /** Get workspace status (git state) for an environment. Proxies to `workspace.status`. */
     $get: Endpoint<
-      PathId & { query?: { mergeBaseBranch?: string } },
+      PathId & { query: { mergeBaseBranch: string } },
       EnvironmentStatusResponse
     >;
   };
@@ -135,7 +135,7 @@ export type PublicApiSchema = {
       PathId & {
         query: {
           selection: string;
-          mergeBaseBranch?: string;
+          mergeBaseBranch: string;
         };
       },
       ThreadGitDiffResponse

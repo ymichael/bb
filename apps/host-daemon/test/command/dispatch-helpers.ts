@@ -29,8 +29,9 @@ export function createFakeWorkspace(pathname: string) {
     async currentBranch() {
       return "main";
     },
-    async getStatus() {
+    async getStatus(options?: { mergeBaseBranch?: string }) {
       state.statusReads += 1;
+      const mergeBaseBranch = options?.mergeBaseBranch ?? "main";
       return {
         state: "clean" as const,
         changedFiles: 0,
@@ -45,19 +46,20 @@ export function createFakeWorkspace(pathname: string) {
         behindCount: 0,
         currentBranch: "main",
         defaultBranch: "main",
-        mergeBaseBranch: "main",
+        mergeBaseBranch,
         mergeBaseBranches: [],
-        baseRef: "main",
+        baseRef: mergeBaseBranch,
         files: [],
       };
     },
-    async getDiff(options?: { selection?: unknown }) {
+    async getDiff(options?: { mergeBaseBranch?: string; selection?: unknown }) {
       state.lastDiffSelection = options?.selection;
+      const mergeBaseBranch = options?.mergeBaseBranch ?? "main";
       return {
         mode: "combined" as const,
         currentBranch: "main",
-        mergeBaseBranch: "main",
-        mergeBaseRef: "main",
+        mergeBaseBranch,
+        mergeBaseRef: mergeBaseBranch,
         commits: [],
         selection: { type: "combined" as const },
         diff: "",

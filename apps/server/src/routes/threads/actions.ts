@@ -324,6 +324,10 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
     const force = payload.force === true;
     const { environment, thread } = requireThreadEnvironment(deps.db, context.req.param("id"));
     if (!force && environment.status === "ready" && environment.path) {
+      const mergeBaseBranch = thread.mergeBaseBranch ?? environment.defaultBranch;
+      if (!mergeBaseBranch) {
+        throw new ApiError(409, "invalid_request", "Thread archive requires a merge base branch");
+      }
       const status = hostDaemonCommandResultSchemaByType["workspace.status"].parse(
         await queueCommandAndWait(deps, {
           hostId: environment.hostId,
@@ -333,9 +337,7 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
             environmentId: environment.id,
             environmentStatus: environment.status,
             workspacePath: environment.path,
-            ...(thread.mergeBaseBranch
-              ? { mergeBaseBranch: thread.mergeBaseBranch }
-              : {}),
+            mergeBaseBranch,
           },
         }),
       );

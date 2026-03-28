@@ -451,14 +451,12 @@ export async function getEnvironment(id: string): Promise<Environment> {
 
 export async function getEnvironmentWorkStatus(
   environmentId: string,
-  mergeBaseBranch?: string,
+  mergeBaseBranch: string,
 ): Promise<WorkspaceStatus | null> {
   const res = await request<EnvironmentStatusResponse>(
     apiClient.environments[":id"].status.$get({
       param: { id: environmentId },
-      query: {
-        ...(mergeBaseBranch ? { mergeBaseBranch } : {}),
-      },
+      query: { mergeBaseBranch },
     }),
   );
   return res.workspace;
@@ -520,18 +518,18 @@ export async function getThreadTimelineToolDetails(
 export async function getEnvironmentDiff(
   id: string,
   selection: ThreadGitDiffSelection,
-  mergeBaseBranch?: string,
+  mergeBaseBranch: string,
 ): Promise<ThreadGitDiffResponse> {
   const query =
     selection.type === "commit"
       ? {
           selection: "commit",
           commitSha: selection.sha,
-          ...(mergeBaseBranch ? { mergeBaseBranch } : {}),
+          mergeBaseBranch,
         }
       : {
           selection: "combined",
-          ...(mergeBaseBranch ? { mergeBaseBranch } : {}),
+          mergeBaseBranch,
         };
 
   return request<ThreadGitDiffResponse>(

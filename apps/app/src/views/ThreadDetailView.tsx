@@ -282,6 +282,8 @@ export function ThreadDetailView() {
     () => findLatestActivityRowId(threadDetailRows),
     [threadDetailRows],
   );
+  const environmentQuery = useEnvironment(thread?.environmentId);
+  const environment = environmentQuery.data;
   const {
     activeSecondaryPanel,
     areAllGitDiffFilesCollapsed,
@@ -329,13 +331,17 @@ export function ThreadDetailView() {
       captureTimelineScrollPositionRef.current();
     },
     preferredTheme,
+    defaultMergeBaseBranch: thread?.mergeBaseBranch ?? environment?.defaultBranch ?? undefined,
     environmentId: thread?.environmentId ?? undefined,
   });
-  const environmentQuery = useEnvironment(thread?.environmentId);
-  const environment = environmentQuery.data;
+  const requestedMergeBaseBranch =
+    selectedMergeBaseBranch ??
+    thread?.mergeBaseBranch ??
+    environment?.defaultBranch ??
+    undefined;
   const workStatusQuery = useEnvironmentWorkStatus(
     thread?.environmentId,
-    selectedMergeBaseBranch,
+    requestedMergeBaseBranch,
   );
   const workStatus = workStatusQuery.data;
   const workspaceStatusError = workStatusQuery.error;

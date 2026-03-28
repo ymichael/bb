@@ -192,13 +192,13 @@ export const environmentDestroyCommandSchema = hostDaemonEnvironmentTargetSchema
 
 export const workspaceStatusCommandSchema = hostDaemonWorkspaceTargetSchema.extend({
   type: z.literal("workspace.status"),
-  mergeBaseBranch: z.string().min(1).optional(),
+  mergeBaseBranch: z.string().min(1),
 });
 
 export const workspaceDiffCommandSchema = hostDaemonWorkspaceTargetSchema.extend({
   type: z.literal("workspace.diff"),
   selection: threadGitDiffSelectionSchema,
-  mergeBaseBranch: z.string().min(1).optional(),
+  mergeBaseBranch: z.string().min(1),
 });
 
 export const workspaceCommitCommandSchema = hostDaemonWorkspaceTargetSchema.extend({

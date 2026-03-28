@@ -592,8 +592,8 @@ export function useEnvironmentWorkStatus(
 ) {
   return useQuery<WorkspaceStatus | null>({
     queryKey: [ENVIRONMENT_WORK_STATUS_QUERY_KEY, environmentId, mergeBaseBranch ?? null],
-    queryFn: () => api.getEnvironmentWorkStatus(environmentId!, mergeBaseBranch),
-    enabled: (options?.enabled ?? true) && !!environmentId,
+    queryFn: () => api.getEnvironmentWorkStatus(environmentId!, mergeBaseBranch!),
+    enabled: (options?.enabled ?? true) && !!environmentId && !!mergeBaseBranch,
     refetchOnWindowFocus: false,
   });
 }
@@ -685,8 +685,8 @@ export function useEnvironmentGitDiff(
       selectionKey,
       options.mergeBaseBranch ?? null,
     ],
-    queryFn: () => api.getEnvironmentDiff(id, options.selection, options.mergeBaseBranch),
-    enabled: (options?.enabled ?? true) && !!id,
+    queryFn: () => api.getEnvironmentDiff(id, options.selection, options.mergeBaseBranch!),
+    enabled: (options?.enabled ?? true) && !!id && !!options.mergeBaseBranch,
     placeholderData: (previousData, previousQuery) =>
       resolveEnvironmentGitDiffPlaceholder(previousData, previousQuery?.queryKey, id),
     refetchOnWindowFocus: false,

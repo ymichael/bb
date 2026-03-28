@@ -36,6 +36,7 @@ interface UseGitDiffPanelParams {
   navigate: NavigateFunction;
   onBeforePanelChange?: () => void;
   preferredTheme: string;
+  defaultMergeBaseBranch?: string;
   environmentId?: string;
 }
 
@@ -44,6 +45,7 @@ export function useGitDiffPanel({
   navigate,
   onBeforePanelChange,
   preferredTheme,
+  defaultMergeBaseBranch,
   environmentId,
 }: UseGitDiffPanelParams) {
   const searchSecondaryPanel = useMemo(
@@ -105,7 +107,7 @@ export function useGitDiffPanel({
   } = useEnvironmentGitDiff(environmentId ?? "", {
     enabled: Boolean(environmentId) && isDiffPanelActive,
     selection: gitDiffSelection,
-    mergeBaseBranch: selectedMergeBaseBranch,
+    mergeBaseBranch: selectedMergeBaseBranch ?? defaultMergeBaseBranch,
   });
   const parsedGitDiffFileEntries = useMemo(
     () =>
