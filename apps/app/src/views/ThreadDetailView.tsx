@@ -934,7 +934,6 @@ export function ThreadDetailView() {
       .mutateAsync({
         id: thread.id,
         queuedMessageId: messageId,
-        mode: "auto",
       })
       .then(() => {
         setAttachmentError(null);

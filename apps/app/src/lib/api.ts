@@ -25,7 +25,6 @@ import type {
   EnvironmentActionResponse,
   EnvironmentStatusResponse,
   ProjectFileSuggestion,
-  SendDraftRequest,
   SendDraftResponse,
   CreateThreadRequest,
   SystemProviderInfo,
@@ -392,12 +391,11 @@ export async function createThreadDraft(
 export async function sendThreadDraft(
   id: string,
   queuedMessageId: string,
-  req?: SendDraftRequest,
 ): Promise<SendDraftResponse> {
   return request<SendDraftResponse>(
     apiClient.threads[":id"].drafts[":draftId"].send.$post({
       param: { id, draftId: queuedMessageId },
-      json: req ?? {},
+      json: {},
     }),
   );
 }

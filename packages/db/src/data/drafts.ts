@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { asc, eq } from "drizzle-orm";
 import type { DbConnection } from "../connection.js";
 import type { DbNotifier } from "../notifier.js";
 import { queuedThreadMessages } from "../schema.js";
@@ -7,7 +7,6 @@ import { createDraftId } from "../ids.js";
 export interface CreateDraftInput {
   threadId: string;
   content: string;
-  mode: string;
   model?: string;
   reasoningLevel: string;
   sandboxMode: string;
@@ -26,7 +25,6 @@ export function createDraft(
       id,
       threadId: input.threadId,
       content: input.content,
-      mode: input.mode,
       model: input.model ?? null,
       reasoningLevel: input.reasoningLevel,
       sandboxMode: input.sandboxMode,
@@ -58,6 +56,10 @@ export function listDrafts(db: DbConnection, threadId: string) {
     .select()
     .from(queuedThreadMessages)
     .where(eq(queuedThreadMessages.threadId, threadId))
+    .orderBy(
+      asc(queuedThreadMessages.createdAt),
+      asc(queuedThreadMessages.id),
+    )
     .all();
 }
 

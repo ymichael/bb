@@ -7,7 +7,6 @@ interface StoredDraftRow {
   createdAt: number;
   id: string;
   model: string | null;
-  mode: string;
   reasoningLevel: string;
   sandboxMode: string;
   serviceTier: string | null;
@@ -28,7 +27,6 @@ export function toQueuedMessage(row: StoredDraftRow): ThreadQueuedMessage {
   return {
     id: row.id,
     content: decodeDraftContent(row.content),
-    mode: row.mode === "start" || row.mode === "steer" ? row.mode : "auto",
     ...(row.model ? { model: row.model } : {}),
     reasoningLevel:
       row.reasoningLevel === "low" ||

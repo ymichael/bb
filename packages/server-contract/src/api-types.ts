@@ -102,9 +102,7 @@ export const createDraftRequestSchema = z.object({
 });
 export type CreateDraftRequest = z.infer<typeof createDraftRequestSchema>;
 
-export const sendDraftRequestSchema = z.object({
-  mode: sendMessageModeSchema.optional(),
-});
+export const sendDraftRequestSchema = z.object({});
 export type SendDraftRequest = z.infer<typeof sendDraftRequestSchema>;
 
 export const sendDraftResponseSchema = z.object({

@@ -122,7 +122,6 @@ export function seedDraft(
   args: {
     content: string;
     threadId: string;
-    mode?: string;
     model?: string;
     reasoningLevel?: string;
     sandboxMode?: string;
@@ -132,7 +131,6 @@ export function seedDraft(
   return createDraft(deps.db, deps.hub, {
     threadId: args.threadId,
     content: args.content,
-    mode: args.mode ?? "auto",
     ...(args.model ? { model: args.model } : {}),
     reasoningLevel: args.reasoningLevel ?? "medium",
     sandboxMode: args.sandboxMode ?? "danger-full-access",

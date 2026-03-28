@@ -28,7 +28,6 @@ describe("drafts", () => {
     const draft = createDraft(db, noopNotifier, {
       threadId: thread.id,
       content: "[]",
-      mode: "auto",
       model: "gpt-5",
       reasoningLevel: "medium",
       sandboxMode: "danger-full-access",
@@ -47,7 +46,6 @@ describe("drafts", () => {
     const draft = createDraft(db, noopNotifier, {
       threadId: thread.id,
       content: "[]",
-      mode: "auto",
       reasoningLevel: "medium",
       sandboxMode: "danger-full-access",
     });
@@ -62,14 +60,12 @@ describe("drafts", () => {
     createDraft(db, noopNotifier, {
       threadId: thread.id,
       content: "[]",
-      mode: "auto",
       reasoningLevel: "medium",
       sandboxMode: "danger-full-access",
     });
     createDraft(db, noopNotifier, {
       threadId: thread.id,
       content: "[{}]",
-      mode: "steer",
       reasoningLevel: "high",
       sandboxMode: "danger-full-access",
     });
@@ -82,7 +78,6 @@ describe("drafts", () => {
     const draft = createDraft(db, noopNotifier, {
       threadId: thread.id,
       content: "[]",
-      mode: "auto",
       reasoningLevel: "medium",
       sandboxMode: "danger-full-access",
     });

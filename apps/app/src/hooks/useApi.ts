@@ -28,7 +28,6 @@ import type {
   EnvironmentActionResponse,
   ProjectFileSuggestion,
   ProjectResponse,
-  SendDraftRequest,
   SendDraftResponse,
   CreateThreadRequest,
   SystemProviderInfo,
@@ -836,12 +835,11 @@ export function useSendThreadDraft() {
     mutationFn: ({
       id,
       queuedMessageId,
-      mode,
     }: {
       id: string;
       queuedMessageId: string;
-    } & SendDraftRequest): Promise<SendDraftResponse> =>
-      api.sendThreadDraft(id, queuedMessageId, { mode }),
+    }): Promise<SendDraftResponse> =>
+      api.sendThreadDraft(id, queuedMessageId),
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["thread", variables.id] });
       queryClient.invalidateQueries({ queryKey: ["threadTimeline", variables.id] });

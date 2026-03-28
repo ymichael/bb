@@ -173,10 +173,10 @@ Everything else should be deleted, made required, or filled in by the server bef
 
 ### 6. Fix Product Bugs Exposed By Optionality
 
-- [ ] Implement auto-send of the next queued draft when the current turn completes.
+- [x] Implement auto-send of the next queued draft when the current turn completes.
   Purpose: match the intended queued-follow-up model instead of the current accidental hybrid.
   Current: the app only creates drafts while the thread is `active` in [apps/app/src/views/ThreadDetailView.tsx](/Users/michael/.codex/worktrees/93ba/bb/apps/app/src/views/ThreadDetailView.tsx#L895), but `turn/completed` only transitions thread status in [apps/server/src/internal/turn-completed-events.ts](/Users/michael/.codex/worktrees/93ba/bb/apps/server/src/internal/turn-completed-events.ts#L7), so drafts persist and require manual send in [apps/server/src/routes/threads/actions.ts](/Users/michael/.codex/worktrees/93ba/bb/apps/server/src/routes/threads/actions.ts#L215).
-- [ ] Delete `SendDraftRequest.mode` and delete stored draft `mode`.
+- [x] Delete `SendDraftRequest.mode` and delete stored draft `mode`.
   Purpose: remove redundant state about whether a queued draft should start or steer. With auto-send in place, queued drafts should follow the normal turn lifecycle automatically.
   Current: draft creation hard-codes stored `mode: "auto"` in [apps/server/src/routes/threads/actions.ts](/Users/michael/.codex/worktrees/93ba/bb/apps/server/src/routes/threads/actions.ts#L202), the app also sends `mode: "auto"` when manually sending a queued draft in [apps/app/src/views/ThreadDetailView.tsx](/Users/michael/.codex/worktrees/93ba/bb/apps/app/src/views/ThreadDetailView.tsx#L936), tests often omit the field entirely in [apps/server/test/public-threads.test.ts](/Users/michael/.codex/worktrees/93ba/bb/apps/server/test/public-threads.test.ts#L792), and only seeded tests manufacture non-`auto` stored modes.
 - [ ] Fix `turn.steer.options` behavior so steer-time execution overrides are honored end-to-end and go through the same server helper that fills in defaults for other turn entry points.

@@ -61,7 +61,6 @@ export type WorkspaceStatus = z.infer<typeof workspaceStatusSchema>;
 export const threadQueuedMessageSchema = z.object({
   id: z.string(),
   content: z.array(promptInputSchema),
-  mode: z.enum(["auto", "start", "steer"]),
   model: z.string().optional(),
   reasoningLevel: reasoningLevelSchema,
   sandboxMode: sandboxModeSchema,

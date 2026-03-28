@@ -16,6 +16,7 @@ import {
 import type { Hono } from "hono";
 import { ApiError } from "../errors.js";
 import type { AppDeps } from "../types.js";
+import { sendNextQueuedDraftIfPresent } from "../services/queued-drafts.js";
 import { tryTransition } from "../services/thread-transitions.js";
 import { applyTurnCompletedEvent } from "./turn-completed-events.js";
 import { requireActiveSession } from "./session-state.js";
@@ -82,10 +83,10 @@ function toStoredEvent(envelope: HostDaemonEventEnvelope) {
   };
 }
 
-function applyEventEffects(
+async function applyEventEffects(
   deps: Pick<AppDeps, "db" | "hub" | "logger">,
   events: HostDaemonEventEnvelope[],
-): void {
+): Promise<void> {
   for (const entry of events) {
     try {
       const event = entry.event;
@@ -105,6 +106,11 @@ function applyEventEffects(
           ...event,
           threadId: entry.threadId,
         });
+        if (event.status === "completed") {
+          await sendNextQueuedDraftIfPresent(deps, {
+            threadId: entry.threadId,
+          });
+        }
         continue;
       }
 
@@ -178,7 +184,7 @@ export function registerInternalEventRoutes(app: Hono, deps: AppDeps): void {
       payload.events.map((entry) => toStoredEvent(entry)),
     );
 
-    applyEventEffects(deps, payload.events);
+    await applyEventEffects(deps, payload.events);
 
     return context.json({
       threadHighWaterMarks: getHighWaterMarks(

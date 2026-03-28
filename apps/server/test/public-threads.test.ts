@@ -1006,4 +1006,76 @@ describe("public thread routes", () => {
       await harness.cleanup();
     }
   });
+
+  it("steers queued drafts for active threads without a mode field", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps);
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/thread-draft-steer-project",
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/thread-draft-steer-project",
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "active",
+      });
+      seedEvent(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        providerThreadId: "provider-draft-steer",
+        sequence: 1,
+        type: "thread/identity",
+        data: {},
+      });
+      seedEvent(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        providerThreadId: "provider-draft-steer",
+        sequence: 2,
+        type: "turn/started",
+        data: {},
+        turnId: "turn-draft-steer",
+      });
+      const draft = seedDraft(harness.deps, {
+        threadId: thread.id,
+        content: JSON.stringify([{ type: "text", text: "Queue a correction" }]),
+        model: "gpt-5",
+      });
+
+      const response = await harness.app.request(
+        `/api/v1/threads/${thread.id}/drafts/${draft.id}/send`,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({}),
+        },
+      );
+
+      expect(response.status).toBe(200);
+      const steerCommand = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "turn.steer" && command.threadId === thread.id,
+      );
+      expect(steerCommand.command).toMatchObject({
+        expectedTurnId: "turn-draft-steer",
+        providerThreadId: "provider-draft-steer",
+        input: [{ type: "text", text: "Queue a correction" }],
+        options: {
+          model: "gpt-5",
+        },
+      });
+      expect(getDraft(harness.db, draft.id)).toBeNull();
+    } finally {
+      await harness.cleanup();
+    }
+  });
 });
