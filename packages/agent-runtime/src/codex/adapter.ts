@@ -22,6 +22,9 @@ import type {
 import type { ClientRequest as CodexClientRequest } from "./generated/codex-app-server/schema/ClientRequest.js";
 import type { ServerNotification as CodexServerNotification } from "./generated/codex-app-server/schema/ServerNotification.js";
 import type { SandboxPolicy } from "./generated/codex-app-server/schema/v2/SandboxPolicy.js";
+import type { DynamicToolSpec } from "./generated/codex-app-server/schema/v2/DynamicToolSpec.js";
+import type { ThreadResumeParams } from "./generated/codex-app-server/schema/v2/ThreadResumeParams.js";
+import type { ThreadStartParams } from "./generated/codex-app-server/schema/v2/ThreadStartParams.js";
 import type { UserInput as CodexUserInput } from "./generated/codex-app-server/schema/v2/UserInput.js";
 import type { JsonValue } from "./generated/codex-app-server/schema/serde_json/JsonValue.js";
 import { listCodexModels } from "./models.js";
@@ -111,6 +114,29 @@ function buildCodexConfig(
   return Object.keys(config).length > 0 ? config : undefined;
 }
 
+type ThreadStartParamsWithDynamicTools = ThreadStartParams & {
+  dynamicTools?: DynamicToolSpec[];
+};
+
+type ThreadResumeParamsWithDynamicTools = ThreadResumeParams & {
+  dynamicTools?: DynamicToolSpec[];
+};
+
+type CodexDynamicToolCommand = Extract<
+  AdapterCommand,
+  { type: "thread/start" | "thread/resume" }
+>;
+
+function toCodexDynamicTools(
+  dynamicTools: CodexDynamicToolCommand["dynamicTools"],
+): DynamicToolSpec[] | undefined {
+  return dynamicTools?.map((tool) => ({
+    name: tool.name,
+    description: tool.description,
+    inputSchema: JSON.parse(JSON.stringify(tool.inputSchema)),
+  }));
+}
+
 // ---------------------------------------------------------------------------
 // Adapter factory
 // ---------------------------------------------------------------------------
@@ -161,55 +187,43 @@ export function createCodexProviderAdapter(
             },
           };
         case "thread/start": {
-          const dynamicTools = command.dynamicTools?.map((t) => ({
-            name: t.name,
-            description: t.description,
-            inputSchema: JSON.parse(JSON.stringify(t.inputSchema)),
-          }));
+          const dynamicTools = toCodexDynamicTools(command.dynamicTools);
+          const params: ThreadStartParamsWithDynamicTools = {
+            approvalPolicy: "never",
+            sandbox: command.options?.sandboxMode ?? "danger-full-access",
+            baseInstructions: command.options?.instructions ?? "",
+            model: command.options?.model ?? undefined,
+            serviceTier: command.options?.serviceTier ?? undefined,
+            config: buildCodexConfig(command.threadId, command.options) ?? undefined,
+            experimentalRawEvents: false,
+            persistExtendedHistory: false,
+            ...(dynamicTools && dynamicTools.length > 0 ? { dynamicTools } : {}),
+          };
           return {
             jsonrpc: "2.0",
             method: "thread/start",
-            params: {
-              approvalPolicy: "never",
-              sandbox: command.options?.sandboxMode ?? "danger-full-access",
-              baseInstructions: command.options?.instructions ?? "",
-              model: command.options?.model ?? undefined,
-              serviceTier: command.options?.serviceTier ?? undefined,
-              config: buildCodexConfig(command.threadId, command.options) ?? undefined,
-              experimentalRawEvents: false,
-              persistExtendedHistory: false,
-              // dynamicTools is accepted by the codex wire protocol but not yet
-              // declared in the generated ThreadStartParams schema.
-              ...(dynamicTools && dynamicTools.length > 0 ? { dynamicTools } : {}),
-            },
-          } as JsonRpcMessage;
+            params,
+          };
         }
-        case "thread/resume":
+        case "thread/resume": {
+          const dynamicTools = toCodexDynamicTools(command.dynamicTools);
+          const params: ThreadResumeParamsWithDynamicTools = {
+            threadId: command.providerThreadId ?? command.threadId,
+            approvalPolicy: "never",
+            sandbox: command.options?.sandboxMode ?? "danger-full-access",
+            baseInstructions: command.options?.instructions ?? "",
+            model: command.options?.model ?? undefined,
+            serviceTier: command.options?.serviceTier ?? undefined,
+            config: buildCodexConfig(command.threadId, command.options) ?? undefined,
+            persistExtendedHistory: false,
+            ...(dynamicTools && dynamicTools.length > 0 ? { dynamicTools } : {}),
+          };
           return {
             jsonrpc: "2.0",
             method: "thread/resume",
-            params: {
-              threadId: command.providerThreadId ?? command.threadId,
-              approvalPolicy: "never",
-              sandbox: command.options?.sandboxMode ?? "danger-full-access",
-              baseInstructions: command.options?.instructions ?? "",
-              model: command.options?.model ?? undefined,
-              serviceTier: command.options?.serviceTier ?? undefined,
-              config: buildCodexConfig(command.threadId, command.options) ?? undefined,
-              persistExtendedHistory: false,
-              // dynamicTools is accepted by the codex wire protocol but not yet
-              // declared in the generated ThreadResumeParams schema.
-              ...(command.dynamicTools && command.dynamicTools.length > 0
-                ? {
-                    dynamicTools: command.dynamicTools.map((tool) => ({
-                      name: tool.name,
-                      description: tool.description,
-                      inputSchema: JSON.parse(JSON.stringify(tool.inputSchema)),
-                    })),
-                  }
-                : {}),
-            },
-          } as JsonRpcMessage;
+            params,
+          };
+        }
         case "turn/start":
           return {
             jsonrpc: "2.0",

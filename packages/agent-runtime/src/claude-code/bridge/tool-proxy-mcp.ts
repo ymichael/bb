@@ -3,15 +3,12 @@ import {
   tool,
   type McpSdkServerConfigWithInstance,
 } from "@anthropic-ai/claude-agent-sdk";
+import type { DynamicTool } from "@bb/domain";
 import { z } from "zod/v4";
 
 export const BRIDGE_MCP_SERVER_NAME = "bb-bridge";
 
-export interface DynamicToolDefinition {
-  name: string;
-  description: string;
-  inputSchema: unknown;
-}
+export type DynamicToolDefinition = DynamicTool;
 
 export type ToolCallForwarder = (
   toolName: string,
