@@ -227,6 +227,7 @@ describe("server-contract clients", () => {
       "archived: z.enum([\"true\", \"false\"]).optional(),",
       "limit: z.string().regex(/^\\d+$/).optional(),",
       "includeManagerDebugView: z.enum([\"true\", \"false\"]).optional(),",
+      "includeToolGroupMessages: z.enum([\"true\", \"false\"]).optional(),",
       "includeManagerDebugView: z.enum([\"true\", \"false\"]).optional(),",
       "afterSeq: z.string().regex(/^\\d+$/).optional(),",
       "limit: z.string().regex(/^\\d+$/).optional(),",

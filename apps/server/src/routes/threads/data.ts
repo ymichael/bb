@@ -1,7 +1,15 @@
 import type { Environment } from "@bb/domain";
 import { hostDaemonCommandResultSchemaByType } from "@bb/host-daemon-contract";
 import type { Hono } from "hono";
-import { typedRoutes, type PublicApiSchema } from "@bb/server-contract";
+import {
+  threadEventsQuerySchema,
+  threadTimelineQuerySchema,
+  threadWorkspaceFileQuerySchema,
+  threadWorkspaceFilesQuerySchema,
+  timelineToolDetailsQuerySchema,
+  typedRoutes,
+  type PublicApiSchema,
+} from "@bb/server-contract";
 import type { AppDeps } from "../../types.js";
 import { COMMAND_TIMEOUT_MS } from "../../constants.js";
 import { ApiError } from "../../errors.js";
@@ -34,27 +42,29 @@ function requireReadyWorkspaceEnvironment(environment: Environment): Environment
 }
 
 export function registerThreadDataRoutes(app: Hono, deps: AppDeps): void {
-  const { get } = typedRoutes<PublicApiSchema>(app);
+  const { get } = typedRoutes<PublicApiSchema>(app, {
+    onValidationError: (msg) => new ApiError(400, "invalid_request", msg),
+  });
 
-  get("/threads/:id/timeline", (context) =>
+  get("/threads/:id/timeline", threadTimelineQuerySchema, (context, query) =>
     context.json(
       buildThreadTimeline(deps.db, requireThread(deps.db, context.req.param("id")), {
-        limit: parseOptionalInteger(context.req.query("limit"), "limit"),
-        includeManagerDebugView: context.req.query("includeManagerDebugView") === "true",
-        includeToolGroupMessages: context.req.query("includeToolGroupMessages") === "true",
+        limit: parseOptionalInteger(query.limit, "limit"),
+        includeManagerDebugView: query.includeManagerDebugView === "true",
+        includeToolGroupMessages: query.includeToolGroupMessages === "true",
       }),
     ),
   );
 
-  get("/threads/:id/timeline/tool-details", (context) =>
+  get("/threads/:id/timeline/tool-details", timelineToolDetailsQuerySchema, (context, query) =>
     context.json(
       buildTimelineToolDetails(
         deps.db,
         requireThread(deps.db, context.req.param("id")),
         {
-          sourceSeqStart: parseOptionalInteger(context.req.query("sourceSeqStart"), "sourceSeqStart") ?? 0,
-          sourceSeqEnd: parseOptionalInteger(context.req.query("sourceSeqEnd"), "sourceSeqEnd") ?? 0,
-          includeManagerDebugView: context.req.query("includeManagerDebugView") === "true",
+          sourceSeqStart: parseOptionalInteger(query.sourceSeqStart, "sourceSeqStart") ?? 0,
+          sourceSeqEnd: parseOptionalInteger(query.sourceSeqEnd, "sourceSeqEnd") ?? 0,
+          includeManagerDebugView: query.includeManagerDebugView === "true",
         },
       ),
     ),
@@ -64,12 +74,12 @@ export function registerThreadDataRoutes(app: Hono, deps: AppDeps): void {
     context.json({ output: getLastThreadOutput(deps.db, context.req.param("id")) }),
   );
 
-  get("/threads/:id/events", (context) =>
+  get("/threads/:id/events", threadEventsQuerySchema, (context, query) =>
     context.json(
       listThreadEventRows(deps.db, {
         threadId: context.req.param("id"),
-        afterSeq: parseOptionalInteger(context.req.query("afterSeq"), "afterSeq"),
-        limit: parseOptionalInteger(context.req.query("limit"), "limit"),
+        afterSeq: parseOptionalInteger(query.afterSeq, "afterSeq"),
+        limit: parseOptionalInteger(query.limit, "limit"),
       }),
     ),
   );
@@ -78,7 +88,7 @@ export function registerThreadDataRoutes(app: Hono, deps: AppDeps): void {
     context.json(getLastExecutionOptions(deps, context.req.param("id"))),
   );
 
-  get("/threads/:id/workspace/files", async (context) => {
+  get("/threads/:id/workspace/files", threadWorkspaceFilesQuerySchema, async (context, query) => {
     const { environment } = requireThreadEnvironment(deps.db, context.req.param("id"));
     const readyEnvironment = requireReadyWorkspaceEnvironment(environment);
     const rawResult = await queueCommandAndWait(deps, {
@@ -89,7 +99,7 @@ export function registerThreadDataRoutes(app: Hono, deps: AppDeps): void {
         environmentId: readyEnvironment.id,
         environmentStatus: readyEnvironment.status,
         workspacePath: readyEnvironment.path,
-        ...(context.req.query("query") ? { query: context.req.query("query") } : {}),
+        ...(query.query ? { query: query.query } : {}),
       },
     });
     return context.json(
@@ -97,7 +107,7 @@ export function registerThreadDataRoutes(app: Hono, deps: AppDeps): void {
     );
   });
 
-  get("/threads/:id/workspace/file", async (context) => {
+  get("/threads/:id/workspace/file", threadWorkspaceFileQuerySchema, async (context, query) => {
     const { environment } = requireThreadEnvironment(deps.db, context.req.param("id"));
     const readyEnvironment = requireReadyWorkspaceEnvironment(environment);
     const rawResult = await queueCommandAndWait(deps, {
@@ -108,7 +118,7 @@ export function registerThreadDataRoutes(app: Hono, deps: AppDeps): void {
         environmentId: readyEnvironment.id,
         environmentStatus: readyEnvironment.status,
         workspacePath: readyEnvironment.path,
-        path: context.req.query("path") ?? "",
+        path: query.path,
       },
     });
     return context.json(

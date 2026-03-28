@@ -161,20 +161,24 @@ export type ProjectAttachmentContentQuery = z.infer<
   typeof projectAttachmentContentQuerySchema
 >;
 
+const mergeBaseBranchQuerySchema = z
+  .string({ required_error: "A merge base branch is required" })
+  .min(1, "A merge base branch is required");
+
 export const environmentStatusQuerySchema = z.object({
-  mergeBaseBranch: z.string().min(1),
+  mergeBaseBranch: mergeBaseBranchQuerySchema,
 });
 export type EnvironmentStatusQuery = z.infer<typeof environmentStatusQuerySchema>;
 
 export const environmentDiffQuerySchema = z.discriminatedUnion("selection", [
   z.object({
     selection: z.literal("combined"),
-    mergeBaseBranch: z.string().min(1),
+    mergeBaseBranch: mergeBaseBranchQuerySchema,
   }),
   z.object({
     selection: z.literal("commit"),
     commitSha: z.string().min(1),
-    mergeBaseBranch: z.string().min(1),
+    mergeBaseBranch: mergeBaseBranchQuerySchema,
   }),
 ]);
 export type EnvironmentDiffQuery = z.infer<typeof environmentDiffQuerySchema>;
@@ -190,6 +194,7 @@ export type ThreadListQuery = z.infer<typeof threadListQuerySchema>;
 export const threadTimelineQuerySchema = z.object({
   limit: z.string().regex(/^\d+$/).optional(),
   includeManagerDebugView: z.enum(["true", "false"]).optional(),
+  includeToolGroupMessages: z.enum(["true", "false"]).optional(),
 });
 export type ThreadTimelineQuery = z.infer<typeof threadTimelineQuerySchema>;
 

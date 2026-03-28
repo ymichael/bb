@@ -10,17 +10,20 @@
  * **Output**: the handler's `c.json()` argument must match the contract's
  * declared Output type.
  *
- * **Input**: if the contract declares `{ json: T }`, the registration call
- * requires a `ZodType<T>` schema. The wrapper validates the request body
- * automatically and passes the parsed value to the handler — the handler
- * never touches raw input.
+ * **Input**:
+ * - if the contract declares `{ json: T }`, the registration call requires a
+ *   `ZodType<T>` schema. The wrapper validates the request body automatically
+ *   and passes the parsed value to the handler.
+ * - if the contract declares `{ query: T }`, the registration call requires a
+ *   `ZodType<T>` schema. The wrapper validates the query parameters and passes
+ *   the parsed value to the handler.
  *
  * @example
  * ```ts
  * const { get, post } = typedRoutes<PublicApiSchema>(app);
  *
- * // GET — no body, output is type-checked:
- * get("/system/config", (c) => c.json({ hostDaemonPort: 1234 }));
+ * // GET with query validation:
+ * get("/threads", threadListQuerySchema, (c, query) => c.json([]));
  *
  * // POST — schema required, body pre-validated, output type-checked:
  * post("/projects", createProjectRequestSchema, async (c, body) => {
@@ -41,7 +44,16 @@ import type { Endpoint } from "./endpoint.js";
 type EndpointInput<E> = E extends Endpoint<infer I, any, any, any> ? I : never;
 
 /** Extract `T` from `{ json: T }` in the Endpoint's Input, or `never`. */
-type JsonBody<I> = I extends { json: infer J } ? J : never;
+type JsonBody<I> = "json" extends keyof I
+  ? I extends { json: infer J } ? J : never
+  : never;
+
+/** Extract `T` from `{ query: T }` in the Endpoint's Input, or `never`. */
+type QueryInput<I> = "query" extends keyof I
+  ? I extends { query?: infer Q } ? Q : never
+  : never;
+
+type RouteInput<I> = [JsonBody<I>] extends [never] ? QueryInput<I> : JsonBody<I>;
 
 // ---------------------------------------------------------------------------
 // Constrained context & handler types
@@ -79,10 +91,10 @@ type NoBodyHandler<E, Path extends string> = (
   c: TypedContext<E, Path>,
 ) => HandlerReturn;
 
-/** Handler that receives context + pre-validated body. */
-type WithBodyHandler<E, Body, Path extends string> = (
+/** Handler that receives context + pre-validated request input. */
+type WithInputHandler<E, Input, Path extends string> = (
   c: TypedContext<E, Path>,
-  body: Body,
+  input: Input,
 ) => HandlerReturn;
 
 // ---------------------------------------------------------------------------
@@ -91,21 +103,23 @@ type WithBodyHandler<E, Body, Path extends string> = (
 
 type MethodKey = "$get" | "$post" | "$patch" | "$delete" | "$put";
 type HttpMethod = "get" | "post" | "patch" | "delete" | "put";
+type InputSource = "json" | "query";
 
 /**
  * Typed route registration.
  *
- * - If the endpoint declares `{ json: T }` input → requires `(path, schema, handler)`
+ * - If the endpoint declares `{ json: T }` or `{ query: T }` input
+ *   → requires `(path, schema, handler)`
  * - Otherwise → requires `(path, handler)`
  */
 type TypedRegister<Schema, MKey extends MethodKey> = <
   Path extends string & keyof Schema,
   E extends MKey extends keyof Schema[Path] ? Schema[Path][MKey] : never,
-  Body extends JsonBody<EndpointInput<E>>,
+  Input extends RouteInput<EndpointInput<E>>,
 >(
-  ...args: [Body] extends [never]
+  ...args: [Input] extends [never]
     ? [path: Path, handler: NoBodyHandler<E, Path>]
-    : [path: Path, schema: ZodType<Body>, handler: WithBodyHandler<E, Body, Path>]
+    : [path: Path, schema: ZodType<Input>, handler: WithInputHandler<E, Input, Path>]
 ) => void;
 
 // ---------------------------------------------------------------------------
@@ -125,6 +139,7 @@ export function typedRoutes<Schema>(
 
   function register(
     method: HttpMethod,
+    inputSource: InputSource,
     path: string,
     schemaOrHandler: ZodType | Function,
     maybeHandler?: Function,
@@ -133,19 +148,23 @@ export function typedRoutes<Schema>(
       // No body — just (path, handler)
       (app as any)[method](path, schemaOrHandler);
     } else {
-      // With body — (path, schema, handler)
+      // With validated input — (path, schema, handler)
       const schema = schemaOrHandler;
       const handler = maybeHandler!;
       (app as any)[method](path, async (c: Context) => {
-        let payload: unknown;
-        try {
-          payload = await c.req.json();
-        } catch {
-          throw makeError("Invalid JSON request body");
+        let input: unknown;
+        if (inputSource === "query") {
+          input = c.req.query();
+        } else {
+          try {
+            input = await c.req.json();
+          } catch {
+            throw makeError("Invalid JSON request body");
+          }
         }
         let parsed: unknown;
         try {
-          parsed = schema.parse(payload);
+          parsed = schema.parse(input);
         } catch (error) {
           if (error instanceof ZodError) {
             throw makeError(error.issues[0]?.message ?? "Invalid request");
@@ -158,10 +177,10 @@ export function typedRoutes<Schema>(
   }
 
   return {
-    get: ((...args: [string, ...any[]]) => register("get", args[0], args[1], args[2])) as TypedRegister<Schema, "$get">,
-    post: ((...args: [string, ...any[]]) => register("post", args[0], args[1], args[2])) as TypedRegister<Schema, "$post">,
-    patch: ((...args: [string, ...any[]]) => register("patch", args[0], args[1], args[2])) as TypedRegister<Schema, "$patch">,
-    del: ((...args: [string, ...any[]]) => register("delete", args[0], args[1], args[2])) as TypedRegister<Schema, "$delete">,
-    put: ((...args: [string, ...any[]]) => register("put", args[0], args[1], args[2])) as TypedRegister<Schema, "$put">,
+    get: ((...args: [string, ...any[]]) => register("get", "query", args[0], args[1], args[2])) as TypedRegister<Schema, "$get">,
+    post: ((...args: [string, ...any[]]) => register("post", "json", args[0], args[1], args[2])) as TypedRegister<Schema, "$post">,
+    patch: ((...args: [string, ...any[]]) => register("patch", "json", args[0], args[1], args[2])) as TypedRegister<Schema, "$patch">,
+    del: ((...args: [string, ...any[]]) => register("delete", "json", args[0], args[1], args[2])) as TypedRegister<Schema, "$delete">,
+    put: ((...args: [string, ...any[]]) => register("put", "json", args[0], args[1], args[2])) as TypedRegister<Schema, "$put">,
   };
 }

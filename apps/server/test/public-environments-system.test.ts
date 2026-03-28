@@ -503,6 +503,21 @@ describe("public environment and system routes", () => {
     }
   });
 
+  it("rejects invalid system query params with a 400", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const response = await harness.app.request(
+        "/api/v1/system/models?providerId=",
+      );
+      expect(response.status).toBe(400);
+      await expect(readJson(response)).resolves.toMatchObject({
+        code: "invalid_request",
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("rejects voice transcription requests when the API key is not configured", async () => {
     const harness = await createTestAppHarness({
       openAiApiKey: "",

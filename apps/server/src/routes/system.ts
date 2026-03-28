@@ -1,5 +1,11 @@
 import { hostDaemonCommandResultSchemaByType } from "@bb/host-daemon-contract";
-import { typedRoutes, type PublicApiSchema } from "@bb/server-contract";
+import {
+  systemModelsQuerySchema,
+  systemProvidersQuerySchema,
+  typedRoutes,
+  type PublicApiSchema,
+  type SystemProvidersQuery,
+} from "@bb/server-contract";
 import type { Hono } from "hono";
 import type { AppDeps } from "../types.js";
 import { COMMAND_TIMEOUT_MS } from "../constants.js";
@@ -8,7 +14,9 @@ import { requireEnvironment, requireDefaultConnectedHostId } from "../services/e
 import { queueCommandAndWait } from "../services/command-wait.js";
 import { transcribeVoiceInput } from "../services/voice-transcription.js";
 
-function resolveHostId(deps: AppDeps, query: Record<string, string | undefined>): string {
+type HostLookupQuery = Pick<SystemProvidersQuery, "environmentId" | "hostId">;
+
+function resolveHostId(deps: AppDeps, query: HostLookupQuery): string {
   if (query.environmentId) {
     return requireEnvironment(deps.db, query.environmentId).hostId;
   }
@@ -30,8 +38,8 @@ export function registerSystemRoutes(app: Hono, deps: AppDeps): void {
     }),
   );
 
-  get("/system/providers", async (context) => {
-    const hostId = resolveHostId(deps, context.req.query());
+  get("/system/providers", systemProvidersQuerySchema, async (context, query) => {
+    const hostId = resolveHostId(deps, query);
     const rawResult = await queueCommandAndWait(deps, {
       hostId,
       timeoutMs: COMMAND_TIMEOUT_MS,
@@ -42,16 +50,15 @@ export function registerSystemRoutes(app: Hono, deps: AppDeps): void {
     );
   });
 
-  get("/system/models", async (context) => {
-    const hostId = resolveHostId(deps, context.req.query());
-    const providerId = context.req.query("providerId");
-    if (providerId) {
+  get("/system/models", systemModelsQuerySchema, async (context, query) => {
+    const hostId = resolveHostId(deps, query);
+    if (query.providerId) {
       const rawResult = await queueCommandAndWait(deps, {
         hostId,
         timeoutMs: COMMAND_TIMEOUT_MS,
         command: {
           type: "provider.list_models",
-          providerId,
+          providerId: query.providerId,
         },
       });
       return context.json(

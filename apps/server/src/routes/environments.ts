@@ -1,6 +1,13 @@
 import { archiveThread, getDefaultProjectSource } from "@bb/db";
 import { hostDaemonCommandResultSchemaByType } from "@bb/host-daemon-contract";
-import { typedRoutes, environmentActionRequestSchema, type PublicApiSchema } from "@bb/server-contract";
+import {
+  environmentActionRequestSchema,
+  environmentDiffQuerySchema,
+  environmentStatusQuerySchema,
+  typedRoutes,
+  type EnvironmentDiffQuery,
+  type PublicApiSchema,
+} from "@bb/server-contract";
 import type { Hono } from "hono";
 import type { AppDeps } from "../types.js";
 import { COMMAND_TIMEOUT_MS } from "../constants.js";
@@ -13,33 +20,14 @@ import {
 } from "../services/entity-lookup.js";
 import { queueCommandAndWait } from "../services/command-wait.js";
 
-function resolveDiffSelection(query: Record<string, string | undefined>) {
-  if (query.selection === "commit" && query.commitSha) {
+function toWorkspaceDiffSelection(query: EnvironmentDiffQuery) {
+  if (query.selection === "commit") {
     return {
       type: "commit" as const,
       sha: query.commitSha,
     };
   }
-  if (query.selection === "combined") {
-    return { type: "combined" as const };
-  }
-  return undefined;
-}
-
-function requireDiffSelection(query: Record<string, string | undefined>) {
-  const selection = resolveDiffSelection(query);
-  if (!selection) {
-    throw new ApiError(400, "invalid_request", "A valid diff selection is required");
-  }
-  return selection;
-}
-
-function requireMergeBaseBranch(value: string | undefined) {
-  const mergeBaseBranch = value?.trim();
-  if (!mergeBaseBranch) {
-    throw new ApiError(400, "invalid_request", "A merge base branch is required");
-  }
-  return mergeBaseBranch;
+  return { type: "combined" as const };
 }
 
 export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
@@ -49,9 +37,8 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
     context.json(requireEnvironment(deps.db, context.req.param("id"))),
   );
 
-  get("/environments/:id/status", async (context) => {
+  get("/environments/:id/status", environmentStatusQuerySchema, async (context, query) => {
     const environment = requireReadyEnvironment(deps.db, context.req.param("id"));
-    const mergeBaseBranch = requireMergeBaseBranch(context.req.query("mergeBaseBranch"));
     const rawResult = await queueCommandAndWait(deps, {
       hostId: environment.hostId,
       timeoutMs: COMMAND_TIMEOUT_MS,
@@ -60,17 +47,15 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
         environmentId: environment.id,
         environmentStatus: environment.status,
         workspacePath: environment.path,
-        mergeBaseBranch,
+        mergeBaseBranch: query.mergeBaseBranch,
       },
     });
     const result = hostDaemonCommandResultSchemaByType["workspace.status"].parse(rawResult);
     return context.json({ workspace: result.workspaceStatus });
   });
 
-  get("/environments/:id/diff", async (context) => {
+  get("/environments/:id/diff", environmentDiffQuerySchema, async (context, query) => {
     const environment = requireReadyEnvironment(deps.db, context.req.param("id"));
-    const selection = requireDiffSelection(context.req.query());
-    const mergeBaseBranch = requireMergeBaseBranch(context.req.query("mergeBaseBranch"));
     const rawResult = await queueCommandAndWait(deps, {
       hostId: environment.hostId,
       timeoutMs: COMMAND_TIMEOUT_MS,
@@ -79,8 +64,8 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
         environmentId: environment.id,
         environmentStatus: environment.status,
         workspacePath: environment.path,
-        selection,
-        mergeBaseBranch,
+        selection: toWorkspaceDiffSelection(query),
+        mergeBaseBranch: query.mergeBaseBranch,
       },
     });
     return context.json(

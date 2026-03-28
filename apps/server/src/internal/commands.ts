@@ -20,8 +20,7 @@ function parseInteger(value: string): number {
 export function registerInternalCommandRoutes(app: Hono, deps: AppDeps): void {
   const { get } = typedRoutes<HostDaemonInternalSchema>(app);
 
-  get("/session/commands", async (context) => {
-    const query = hostDaemonCommandsQuerySchema.parse(context.req.query());
+  get("/session/commands", hostDaemonCommandsQuerySchema, async (context, query) => {
     const session = requireActiveSession(deps.db, query.sessionId);
     const waitMs = parseInteger(query.waitMs);
     const fetchPending = () =>

@@ -77,6 +77,32 @@ describe("public thread data routes", () => {
     }
   });
 
+  it("rejects invalid thread data query params with a 400", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps);
+      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+      });
+
+      const response = await harness.app.request(
+        `/api/v1/threads/${thread.id}/timeline/tool-details?turnId=turn-1&sourceSeqStart=oops&sourceSeqEnd=2`,
+      );
+      expect(response.status).toBe(400);
+      await expect(readJson(response)).resolves.toMatchObject({
+        code: "invalid_request",
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("returns thread output and default execution options from stored events", async () => {
     const harness = await createTestAppHarness();
     try {

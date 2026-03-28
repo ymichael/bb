@@ -5,6 +5,7 @@ import {
 } from "@bb/db";
 import {
   createThreadRequestSchema,
+  threadListQuerySchema,
   updateThreadRequestSchema,
   typedRoutes,
   type PublicApiSchema,
@@ -19,29 +20,18 @@ import {
 } from "../../services/entity-lookup.js";
 import { queueThreadRenameCommand } from "../../services/thread-commands.js";
 import { createThreadFromRequest } from "../../services/thread-create.js";
-import { parseOptionalBoolean } from "../../services/validation.js";
-
 export function registerThreadBaseRoutes(app: Hono, deps: AppDeps): void {
   const { get, post, patch, del } = typedRoutes<PublicApiSchema>(app, {
     onValidationError: (msg) => new ApiError(400, "invalid_request", msg),
   });
 
-  get("/threads", (context) => {
-    const queryType = context.req.query("type");
-    const threadType =
-      queryType === "manager" || queryType === "standard"
-        ? queryType
-        : undefined;
+  get("/threads", threadListQuerySchema, (context, query) => {
     return context.json(
       listThreads(deps.db, {
-        ...(context.req.query("projectId")
-          ? { projectId: context.req.query("projectId") }
-          : {}),
-        ...(threadType ? { type: threadType } : {}),
-        ...(context.req.query("parentThreadId")
-          ? { parentThreadId: context.req.query("parentThreadId") }
-          : {}),
-        archived: parseOptionalBoolean(context.req.query("archived")),
+        ...(query.projectId ? { projectId: query.projectId } : {}),
+        ...(query.type ? { type: query.type } : {}),
+        ...(query.parentThreadId ? { parentThreadId: query.parentThreadId } : {}),
+        archived: query.archived === undefined ? undefined : query.archived === "true",
       }),
     );
   });
