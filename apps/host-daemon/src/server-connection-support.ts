@@ -49,7 +49,7 @@ export interface ServerConnectionOptions {
     | Promise<HostDaemonActiveThread[]>;
   getHeartbeatPayload?: () => {
     bufferDepth: number;
-    lastCommandCursor?: number;
+    lastCommandCursor: number | null;
   };
   onCommandsAvailable?: () => void | Promise<void>;
   onSessionClose?: (

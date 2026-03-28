@@ -238,7 +238,7 @@ export class ServerConnection {
 
       const payload = hostDaemonDaemonWsMessageSchema.parse({
         type: "heartbeat",
-        ...(this.options.getHeartbeatPayload?.() ?? { bufferDepth: 0 }),
+        ...(this.options.getHeartbeatPayload?.() ?? { bufferDepth: 0, lastCommandCursor: null }),
       });
       this.websocket.send(JSON.stringify(payload));
     }, this.session.heartbeatIntervalMs);

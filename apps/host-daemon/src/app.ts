@@ -187,7 +187,7 @@ export async function createHostDaemonApp(
     createWebSocket: options.createWebSocket,
     getHeartbeatPayload: () => ({
       bufferDepth: eventBuffer.depth(),
-      lastCommandCursor: cursorState.value || undefined,
+      lastCommandCursor: cursorState.value,
     }),
     getActiveThreads: () => runtimeManager.listActiveThreads(),
     onCommandsAvailable: () => commandFetchLoop.request(),

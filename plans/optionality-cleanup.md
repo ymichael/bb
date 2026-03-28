@@ -191,7 +191,7 @@ Everything else should be deleted, made required, or filled in by the server bef
 
 ### 7. Tighten Session And Polling Semantics
 
-- [ ] Make `hostDaemonHeartbeat.lastCommandCursor` required and nullable.
+- [x] Make `hostDaemonHeartbeat.lastCommandCursor` required and nullable.
   Purpose: make heartbeat state explicit without using an optional field. Use a number when known and `null` when unknown.
   Current: the contract makes it optional in [packages/host-daemon-contract/src/session.ts](/Users/michael/.codex/worktrees/93ba/bb/packages/host-daemon-contract/src/session.ts#L88), the daemon sends `cursorState.value || undefined` in [apps/host-daemon/src/app.ts](/Users/michael/.codex/worktrees/93ba/bb/apps/host-daemon/src/app.ts#L188), and I found no current server-side consumer of the field.
 - [ ] Fill in defaults for `commandsQuery.afterCursor`, `limit`, and `waitMs` at the boundary so downstream code does not invent defaults ad hoc.
