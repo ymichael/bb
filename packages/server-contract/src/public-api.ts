@@ -4,9 +4,9 @@ import type {
   AvailableModel,
   Environment,
   Host,
+  ResolvedThreadExecutionOptions,
   Thread,
   ThreadEventRow,
-  ThreadExecutionOptions,
   ThreadGitDiffResponse,
   ProjectSource,
   ThreadQueuedMessage,
@@ -247,7 +247,7 @@ export type PublicApiSchema = {
   };
   "/threads/:id/default-execution-options": {
     /** Returns the last used options for the thread for use as defaults in the UI. */
-    $get: Endpoint<PathId, ThreadExecutionOptions | null>;
+    $get: Endpoint<PathId, ResolvedThreadExecutionOptions | null>;
   };
   "/threads/:id/workspace/files": {
     /**

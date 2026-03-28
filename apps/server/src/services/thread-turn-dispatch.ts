@@ -1,5 +1,9 @@
-import type { Environment, PromptInput, Thread } from "@bb/domain";
-import type { HostDaemonExecutionOptions } from "@bb/host-daemon-contract";
+import type {
+  Environment,
+  PromptInput,
+  ResolvedThreadExecutionOptions,
+  Thread,
+} from "@bb/domain";
 import type { AppDeps } from "../types.js";
 import { ApiError } from "../errors.js";
 import { queueManagedEnvironmentReprovision } from "./environment-provisioning.js";
@@ -14,7 +18,7 @@ export interface ReadyThreadEnvironment extends Environment {
 export interface QueueTurnDuringReprovisionArgs {
   deps: Pick<AppDeps, "db" | "hub">;
   environment: Environment;
-  execution: HostDaemonExecutionOptions;
+  execution: ResolvedThreadExecutionOptions;
   input: PromptInput[];
   onQueued?: () => void;
   thread: Thread;

@@ -5,13 +5,14 @@ import {
 import type {
   DynamicTool,
   ReasoningLevel,
+  ResolvedThreadExecutionOptions,
   SandboxMode,
   ServiceTier,
   Thread,
   ThreadExecutionOptions,
+  ThreadExecutionSource,
 } from "@bb/domain";
 import { hostDaemonCommandResultSchemaByType } from "@bb/host-daemon-contract";
-import type { HostDaemonExecutionOptions } from "@bb/host-daemon-contract";
 import { renderTemplate } from "@bb/templates";
 import { COMMAND_TIMEOUT_MS } from "../constants.js";
 import { ApiError } from "../errors.js";
@@ -56,20 +57,22 @@ export interface ThreadRuntimeCommandEnvironment {
 export interface ResolveExecutionOptionsArgs {
   hostId: string;
   providerId: string;
-  requestedExecution: ThreadExecutionOptions;
+  requestedExecution: RequestedExecutionOptions;
   threadId: string;
+}
+
+export interface RequestedExecutionOptions extends ThreadExecutionOptions {
+  source: ThreadExecutionSource;
 }
 
 export interface ResolveThreadRuntimeCommandConfigArgs {
   environment: ThreadRuntimeCommandEnvironment;
-  execution: ThreadExecutionOptions;
   thread: Thread;
 }
 
 export interface ResolvedThreadRuntimeCommandConfig {
   dynamicTools: DynamicTool[];
   instructions: string;
-  options: HostDaemonExecutionOptions;
   projectId: string;
   providerId: string;
   workspacePath: string;
@@ -144,7 +147,7 @@ async function readManagerPreferences(
 export async function resolveExecutionOptions(
   deps: Pick<AppDeps, "db" | "hub">,
   args: ResolveExecutionOptionsArgs,
-): Promise<HostDaemonExecutionOptions> {
+): Promise<ResolvedThreadExecutionOptions> {
   const lastExecution = getLastExecutionOptions(deps, args.threadId);
   const model =
     args.requestedExecution.model ??
@@ -168,9 +171,7 @@ export async function resolveExecutionOptions(
       args.requestedExecution.sandboxMode ??
       lastExecution?.sandboxMode ??
       DEFAULT_SANDBOX_MODE,
-    ...(args.requestedExecution.source
-      ? { source: args.requestedExecution.source }
-      : {}),
+    source: args.requestedExecution.source,
   };
 }
 
@@ -186,18 +187,11 @@ export async function resolveThreadRuntimeCommandConfig(
 
   const defaultSource = getDefaultProjectSource(deps.db, args.thread.projectId);
   const projectRootPath = defaultSource?.path ?? workspacePath;
-  const options = await resolveExecutionOptions(deps, {
-    hostId: args.environment.hostId,
-    providerId: args.thread.providerId,
-    requestedExecution: args.execution,
-    threadId: args.thread.id,
-  });
 
   if (args.thread.type !== "manager") {
     return {
       dynamicTools: [],
       instructions: STANDARD_AGENT_INSTRUCTIONS,
-      options,
       projectId: args.thread.projectId,
       providerId: args.thread.providerId,
       workspacePath,
@@ -219,7 +213,6 @@ export async function resolveThreadRuntimeCommandConfig(
       projectName: project.name,
       projectRootPath,
     }),
-    options,
     projectId: args.thread.projectId,
     providerId: args.thread.providerId,
     workspacePath,

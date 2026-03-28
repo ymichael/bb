@@ -6,7 +6,7 @@ import {
 import type {
   PromptInput,
   ThreadEventType,
-  ThreadExecutionOptions,
+  ResolvedThreadExecutionOptions,
   ThreadTurnInitiator,
 } from "@bb/domain";
 import { turnRequestEventDataSchema } from "@bb/domain";
@@ -23,7 +23,7 @@ export interface AppendThreadEventArgs {
 
 export interface ClientTurnEventArgs {
   environmentId: string | null;
-  execution: ThreadExecutionOptions;
+  execution: ResolvedThreadExecutionOptions;
   initiator: ThreadTurnInitiator;
   input: PromptInput[];
   requestMethod: "thread/start" | "turn/start";
@@ -209,8 +209,8 @@ export function getLastProviderThreadId(
 export function getLastExecutionOptions(
   deps: Pick<AppDeps, "db">,
   threadId: string,
-): ThreadExecutionOptions | null {
-  const row = deps.db
+): ResolvedThreadExecutionOptions | null {
+  const rows = deps.db
     .select({ data: events.data })
     .from(events)
     .where(
@@ -218,24 +218,23 @@ export function getLastExecutionOptions(
         AND ${events.type} IN ('client/thread/start', 'client/turn/requested', 'client/turn/start')`,
     )
     .orderBy(sql`${events.sequence} DESC`)
-    .limit(1)
-    .get();
+    .all();
 
-  if (!row) {
-    return null;
+  for (const row of rows) {
+    let eventData: unknown;
+    try {
+      eventData = JSON.parse(row.data);
+    } catch {
+      continue;
+    }
+
+    const parsed = turnRequestEventDataSchema.safeParse(eventData);
+    if (!parsed.success) {
+      continue;
+    }
+
+    return parsed.data.execution;
   }
 
-  let eventData: unknown;
-  try {
-    eventData = JSON.parse(row.data);
-  } catch {
-    return null;
-  }
-
-  const parsed = turnRequestEventDataSchema.safeParse(eventData);
-  if (!parsed.success) {
-    return null;
-  }
-
-  return parsed.data.execution;
+  return null;
 }

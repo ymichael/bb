@@ -5,10 +5,12 @@ export {
   promptInputSchema,
   threadExecutionSourceSchema,
   threadExecutionOptionsSchema,
+  resolvedThreadExecutionOptionsSchema,
 } from "./shared-types.js";
 export type {
   PromptInput,
   ReasoningLevel,
+  ResolvedThreadExecutionOptions,
   SandboxMode,
   ServiceTier,
   ThreadExecutionOptions,

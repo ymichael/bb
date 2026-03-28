@@ -11,10 +11,10 @@ import type {
   PromptInput,
   Project,
   ReasoningLevel,
+  ResolvedThreadExecutionOptions,
   Thread,
   TimelineRow,
   AvailableModel,
-  ThreadExecutionOptions,
   ThreadGitDiffResponse,
   ThreadGitDiffSelection,
   WorkspaceStatus,
@@ -542,7 +542,7 @@ export function useThreadDefaultExecutionOptions(
   id: string,
   options?: { enabled?: boolean },
 ) {
-  return useQuery<ThreadExecutionOptions | null>({
+  return useQuery<ResolvedThreadExecutionOptions | null>({
     queryKey: ["threadDefaultExecutionOptions", id],
     queryFn: () => api.getThreadDefaultExecutionOptions(id),
     enabled: (options?.enabled ?? true) && !!id,

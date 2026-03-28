@@ -56,3 +56,14 @@ export type ThreadExecutionOptions = z.infer<
   typeof threadExecutionOptionsSchema
 >;
 
+export const resolvedThreadExecutionOptionsSchema =
+  threadExecutionOptionsSchema.extend({
+    model: z.string().min(1),
+    serviceTier: serviceTierSchema,
+    reasoningLevel: reasoningLevelSchema,
+    sandboxMode: sandboxModeSchema,
+    source: threadExecutionSourceSchema,
+  });
+export type ResolvedThreadExecutionOptions = z.infer<
+  typeof resolvedThreadExecutionOptionsSchema
+>;

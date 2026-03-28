@@ -1,7 +1,7 @@
 import { z } from "zod";
 import {
   promptInputSchema,
-  threadExecutionOptionsSchema,
+  resolvedThreadExecutionOptionsSchema,
 } from "./shared-types.js";
 
 export const systemEventTypeValues = [
@@ -48,7 +48,7 @@ export type ThreadEnvironmentStartReason = z.infer<
   typeof threadEnvironmentStartReasonSchema
 >;
 
-export const turnRequestOptionsSchema = threadExecutionOptionsSchema;
+export const turnRequestOptionsSchema = resolvedThreadExecutionOptionsSchema;
 export type TurnRequestOptions = z.infer<typeof turnRequestOptionsSchema>;
 
 export const turnRequestEventDataSchema = z.object({

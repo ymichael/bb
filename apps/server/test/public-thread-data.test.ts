@@ -169,6 +169,83 @@ describe("public thread data routes", () => {
     }
   });
 
+  it("returns the latest stored execution options from request events", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps);
+      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+      });
+
+      seedEvent(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        sequence: 1,
+        type: "client/thread/start",
+        data: {
+          direction: "outbound",
+          input: [{ type: "text", text: "Initial request" }],
+          execution: {
+            model: "gpt-5",
+            reasoningLevel: "medium",
+            sandboxMode: "danger-full-access",
+            serviceTier: "flex",
+            source: "client/thread/start",
+          },
+          initiator: "user",
+          request: {
+            method: "thread/start",
+            params: {},
+          },
+          source: "spawn",
+        },
+      });
+      seedEvent(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        sequence: 2,
+        type: "client/turn/requested",
+        data: {
+          direction: "outbound",
+          input: [{ type: "text", text: "Follow up request" }],
+          execution: {
+            model: "gpt-5-mini",
+            reasoningLevel: "high",
+            sandboxMode: "read-only",
+            serviceTier: "fast",
+            source: "client/turn/requested",
+          },
+          initiator: "user",
+          request: {
+            method: "turn/start",
+            params: {},
+          },
+          source: "tell",
+        },
+      });
+
+      const defaultsResponse = await harness.app.request(
+        `/api/v1/threads/${thread.id}/default-execution-options`,
+      );
+      expect(defaultsResponse.status).toBe(200);
+      await expect(readJson(defaultsResponse)).resolves.toEqual({
+        model: "gpt-5-mini",
+        reasoningLevel: "high",
+        sandboxMode: "read-only",
+        serviceTier: "fast",
+        source: "client/turn/requested",
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("marks threads as read and unread", async () => {
     const harness = await createTestAppHarness();
     try {

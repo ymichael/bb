@@ -391,6 +391,22 @@ describe("internal session routes", () => {
         ({ command }) => command.threadId === thread.id,
       );
       expect(queuedRestart.command.type).toBe("thread.start");
+      const followupCommands = harness.db
+        .select({
+          cursor: hostDaemonCommands.cursor,
+          payload: hostDaemonCommands.payload,
+        })
+        .from(hostDaemonCommands)
+        .where(eq(hostDaemonCommands.hostId, host.id))
+        .all()
+        .filter((row) => row.cursor > provisionCommand.cursor)
+        .map((row) => hostDaemonCommandSchema.parse(JSON.parse(row.payload)));
+      expect(followupCommands).toEqual([
+        expect.objectContaining({
+          type: "thread.start",
+          threadId: thread.id,
+        }),
+      ]);
     } finally {
       await harness.cleanup();
     }

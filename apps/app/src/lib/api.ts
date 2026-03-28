@@ -7,9 +7,9 @@ import type {
   Host,
   Project,
   ProjectSource,
+  ResolvedThreadExecutionOptions,
   Thread,
   ThreadType,
-  ThreadExecutionOptions,
   ThreadGitDiffResponse,
   ThreadGitDiffSelection,
   ThreadQueuedMessage,
@@ -369,8 +369,8 @@ export async function updateThread(
 
 export async function getThreadDefaultExecutionOptions(
   id: string,
-): Promise<ThreadExecutionOptions | null> {
-  return request<ThreadExecutionOptions | null>(
+): Promise<ResolvedThreadExecutionOptions | null> {
+  return request<ResolvedThreadExecutionOptions | null>(
     apiClient.threads[":id"]["default-execution-options"].$get({ param: { id } }),
   );
 }

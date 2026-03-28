@@ -5,10 +5,9 @@ import {
 } from "@bb/db";
 import type {
   PromptInput,
+  ResolvedThreadExecutionOptions,
   Thread,
-  ThreadExecutionOptions,
 } from "@bb/domain";
-import type { HostDaemonExecutionOptions } from "@bb/host-daemon-contract";
 import type {
   CreateThreadRequest,
 } from "@bb/server-contract";
@@ -38,7 +37,7 @@ export async function buildExecutionOptions(
     threadId: string;
   },
   source: "client/thread/start" | "client/turn/requested" | "client/turn/start",
-): Promise<HostDaemonExecutionOptions> {
+): Promise<ResolvedThreadExecutionOptions> {
   return resolveExecutionOptions(deps, {
     hostId: args.hostId,
     providerId: args.providerId,
@@ -62,7 +61,7 @@ export async function queueThreadStartCommand(
       id: string;
       path: string | null;
     };
-    execution: ThreadExecutionOptions;
+    execution: ResolvedThreadExecutionOptions;
     input: PromptInput[];
     projectId: string;
     providerId: string;
@@ -72,7 +71,6 @@ export async function queueThreadStartCommand(
   const runtimeContext = await resolveThreadRuntimeCommandConfig(deps, {
     thread: args.thread,
     environment: args.environment,
-    execution: args.execution,
   });
   const session = requireConnectedHostSession(deps, args.environment.hostId);
   queueCommand(deps.db, deps.hub, {
@@ -88,7 +86,7 @@ export async function queueThreadStartCommand(
       providerId: args.providerId,
       eventSequence: args.eventSequence,
       input: args.input,
-      options: runtimeContext.options,
+      options: args.execution,
       instructions: runtimeContext.instructions,
       dynamicTools: runtimeContext.dynamicTools,
     }),
@@ -100,7 +98,7 @@ export async function queueReadyThreadTurnCommand(
   args: {
     environment: ThreadRuntimeCommandEnvironment & { path: string };
     eventSequence: number;
-    execution: ThreadExecutionOptions;
+    execution: ResolvedThreadExecutionOptions;
     input: PromptInput[];
     thread: Thread;
   },
@@ -142,7 +140,7 @@ export async function queueTurnRunCommand(
   args: {
     eventSequence: number;
     environment: ThreadRuntimeCommandEnvironment;
-    execution: ThreadExecutionOptions;
+    execution: ResolvedThreadExecutionOptions;
     input: PromptInput[];
     providerThreadId?: string;
     thread: Thread;
@@ -156,7 +154,6 @@ export async function queueTurnRunCommand(
   const runtimeContext = await resolveThreadRuntimeCommandConfig(deps, {
     thread: args.thread,
     environment: args.environment,
-    execution: args.execution,
   });
   queueCommand(deps.db, deps.hub, {
     hostId: args.environment.hostId,
@@ -172,7 +169,7 @@ export async function queueTurnRunCommand(
       providerId: runtimeContext.providerId,
       providerThreadId,
       input: args.input,
-      options: runtimeContext.options,
+      options: args.execution,
       instructions: runtimeContext.instructions,
       dynamicTools: runtimeContext.dynamicTools,
     }),
@@ -188,7 +185,7 @@ export async function queueTurnSteerCommand(
   args: {
     eventSequence: number;
     environment: ThreadRuntimeCommandEnvironment;
-    execution: ThreadExecutionOptions;
+    execution: ResolvedThreadExecutionOptions;
     expectedTurnId: string;
     input: PromptInput[];
     providerThreadId?: string;
@@ -203,7 +200,6 @@ export async function queueTurnSteerCommand(
   const runtimeContext = await resolveThreadRuntimeCommandConfig(deps, {
     thread: args.thread,
     environment: args.environment,
-    execution: args.execution,
   });
   queueCommand(deps.db, deps.hub, {
     hostId: args.environment.hostId,
@@ -220,7 +216,7 @@ export async function queueTurnSteerCommand(
       providerThreadId,
       expectedTurnId: args.expectedTurnId,
       input: args.input,
-      options: runtimeContext.options,
+      options: args.execution,
       instructions: runtimeContext.instructions,
       dynamicTools: runtimeContext.dynamicTools,
     }),

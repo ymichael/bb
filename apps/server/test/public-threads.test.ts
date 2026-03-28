@@ -907,6 +907,8 @@ describe("public thread routes", () => {
           body: JSON.stringify({
             title: "Project manager",
             providerId: "codex",
+            model: "gpt-5",
+            reasoningLevel: "medium",
           }),
         },
       );
