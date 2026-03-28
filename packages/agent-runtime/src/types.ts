@@ -103,6 +103,8 @@ export interface AgentRuntime {
     threadId: string;
     expectedTurnId: string;
     input: PromptInput[];
+    options?: ThreadExecutionOptions;
+    instructions?: string;
   }): Promise<void>;
 
   stopThread(args: { threadId: string }): Promise<void>;

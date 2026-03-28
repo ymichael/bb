@@ -54,8 +54,22 @@ async function createThreadInEnvironment(
   );
   transitionThreadStatus(deps.db, deps.hub, thread.id, args.threadStatus);
 
+  const execution =
+    args.request.input && args.request.input.length > 0
+      ? await buildExecutionOptions(
+        deps,
+        args.request,
+        {
+          hostId: args.environment.hostId,
+          providerId: thread.providerId,
+          threadId: thread.id,
+        },
+        "client/thread/start",
+      )
+      : null;
+
   let eventSequence: number | undefined;
-  if (args.request.input && args.request.input.length > 0) {
+  if (args.request.input && args.request.input.length > 0 && execution) {
     eventSequence = appendClientTurnEvent(
       deps,
       {
@@ -63,7 +77,7 @@ async function createThreadInEnvironment(
         environmentId: args.environment.id,
         type: "client/thread/start",
         input: args.request.input,
-        execution: buildExecutionOptions(args.request, "client/thread/start"),
+        execution,
         initiator: args.request.spawnInitiator ?? "user",
         requestMethod: "thread/start",
         source: "spawn",
@@ -92,6 +106,7 @@ async function createThreadInEnvironment(
       await startQueuedThreadIfNeeded(deps, {
         thread,
         environment: args.environment,
+        execution,
         eventSequence,
         request: args.request,
       });
@@ -157,6 +172,7 @@ async function startQueuedThreadIfNeeded(
   deps: Pick<AppDeps, "db" | "hub">,
   args: {
     environment: Environment;
+    execution: Awaited<ReturnType<typeof buildExecutionOptions>> | null;
     eventSequence: number;
     request: ThreadCreateServiceRequest;
     thread: ReturnType<typeof createThread>;
@@ -165,6 +181,9 @@ async function startQueuedThreadIfNeeded(
   const input = args.request.input;
   if (!input || input.length === 0) {
     throw new ApiError(500, "invalid_request", "Thread start requires input");
+  }
+  if (!args.execution) {
+    throw new ApiError(500, "invalid_request", "Thread start requires execution options");
   }
 
   await queueThreadStartCommand(deps, {
@@ -176,7 +195,7 @@ async function startQueuedThreadIfNeeded(
     },
     input,
     eventSequence: args.eventSequence,
-    execution: buildExecutionOptions(args.request, "client/thread/start"),
+    execution: args.execution,
     projectId: args.thread.projectId,
     providerId: args.thread.providerId,
   });
@@ -283,12 +302,22 @@ export async function createThreadFromRequest(
   transitionThreadStatus(deps.db, deps.hub, thread.id, "provisioning");
 
   if (request.input && request.input.length > 0) {
+    const execution = await buildExecutionOptions(
+      deps,
+      request,
+      {
+        hostId,
+        providerId: thread.providerId,
+        threadId: thread.id,
+      },
+      "client/thread/start",
+    );
     appendClientTurnEvent(deps, {
       threadId: thread.id,
       environmentId: environment.id,
       type: "client/thread/start",
       input: request.input,
-      execution: buildExecutionOptions(request, "client/thread/start"),
+      execution,
       initiator: request.spawnInitiator ?? "user",
       requestMethod: "thread/start",
       source: "spawn",

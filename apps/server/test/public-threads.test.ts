@@ -427,13 +427,61 @@ describe("public thread routes", () => {
         data: {},
       });
       seedEvent(harness.deps, {
+        threadId: idleThread.id,
+        environmentId: environment.id,
+        providerThreadId: "provider-idle",
+        sequence: 2,
+        type: "client/turn/requested",
+        data: {
+          direction: "outbound",
+          input: [{ type: "text", text: "Prior task" }],
+          execution: {
+            model: "gpt-5",
+            serviceTier: "flex",
+            reasoningLevel: "medium",
+            sandboxMode: "danger-full-access",
+            source: "client/turn/requested",
+          },
+          initiator: "user",
+          request: {
+            method: "turn/start",
+            params: {},
+          },
+          source: "tell",
+        },
+      });
+      seedEvent(harness.deps, {
         threadId: activeThread.id,
         environmentId: environment.id,
         providerThreadId: "provider-turn",
         turnId: "turn-1",
-        sequence: 2,
+        sequence: 3,
         type: "turn/started",
         data: {},
+      });
+      seedEvent(harness.deps, {
+        threadId: activeThread.id,
+        environmentId: environment.id,
+        providerThreadId: "provider-turn",
+        sequence: 4,
+        type: "client/turn/requested",
+        data: {
+          direction: "outbound",
+          input: [{ type: "text", text: "Prior task" }],
+          execution: {
+            model: "gpt-5",
+            serviceTier: "flex",
+            reasoningLevel: "medium",
+            sandboxMode: "danger-full-access",
+            source: "client/turn/requested",
+          },
+          initiator: "user",
+          request: {
+            method: "turn/start",
+            params: {},
+          },
+          source: "tell",
+        },
       });
 
       const sendResponse = await harness.app.request(
@@ -839,10 +887,14 @@ describe("public thread routes", () => {
       );
       expect(managerResponse.status).toBe(201);
       const managerThread = await readJson(managerResponse) as {
+        environmentId: string | null;
         id: string;
         type: string;
       };
       expect(managerThread.type).toBe("manager");
+      if (!managerThread.environmentId) {
+        throw new Error("Expected manager thread environment");
+      }
       expect(
         harness.db
           .select()
@@ -878,7 +930,7 @@ describe("public thread routes", () => {
       );
       expect(provisionResponse.status).toBe(200);
 
-      const managerSendResponse = await harness.app.request(
+      const managerSendPromise = harness.app.request(
         `/api/v1/threads/${managerThread.id}/send`,
         {
           method: "POST",
@@ -891,21 +943,65 @@ describe("public thread routes", () => {
           }),
         },
       );
+      const managerModelsCommand = await waitForQueuedCommandAfter(
+        harness,
+        managerProvisionCommand.row.cursor,
+        ({ command }) =>
+          command.type === "provider.list_models" &&
+          command.providerId === "codex",
+      );
+      await reportQueuedCommandSuccess(harness, managerModelsCommand, {
+        models: [
+          {
+            id: "gpt-5",
+            model: "gpt-5",
+            displayName: "GPT-5",
+            description: "Default manager model",
+            supportedReasoningEfforts: [],
+            defaultReasoningEffort: "medium",
+            isDefault: true,
+          },
+        ],
+      });
+      const managerPreferencesCommand = await waitForQueuedCommandAfter(
+        harness,
+        managerModelsCommand.row.cursor,
+        ({ command }) =>
+          command.type === "workspace.read_file" &&
+          command.environmentId === managerThread.environmentId,
+      );
+      await reportQueuedCommandSuccess(harness, managerPreferencesCommand, {
+        path: "PREFERENCES.md",
+        content: "Prefer concise user updates.",
+      });
+      const managerSendResponse = await managerSendPromise;
       expect(managerSendResponse.status).toBe(200);
 
       const managerStartCommand = await waitForQueuedCommandAfter(
         harness,
-        managerProvisionCommand.row.cursor,
+        managerPreferencesCommand.row.cursor,
         ({ command }) =>
           command.type === "thread.start" &&
           command.threadId === managerThread.id,
       );
       expect(managerStartCommand.command.options).toMatchObject({
+        model: "gpt-5",
+        serviceTier: "flex",
+        reasoningLevel: "medium",
+        sandboxMode: "danger-full-access",
         source: "client/turn/requested",
       });
-      expect(managerStartCommand.command.threadType).toBe("manager");
-      expect(managerStartCommand.command.projectName).toBe(project.name);
-      expect(managerStartCommand.command.projectRootPath).toBe("/tmp/thread-data-project");
+      expect(managerStartCommand.command.dynamicTools).toEqual(
+        [expect.objectContaining({ name: "message_user" })],
+      );
+      expect(managerStartCommand.command.instructions).toContain(
+        "You are a manager for this project.",
+      );
+      expect(managerStartCommand.command.instructions).toContain(
+        "Prefer concise user updates.",
+      );
+      expect(managerStartCommand.command.instructions).toContain(project.name);
+      expect(managerStartCommand.command.instructions).toContain("/tmp/thread-data-project");
     } finally {
       await harness.cleanup();
     }

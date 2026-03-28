@@ -125,6 +125,8 @@ export function createFakeRuntime() {
     ranTurnOptions: undefined as ThreadExecutionOptions | undefined,
     ranTurnInstructions: undefined as string | undefined,
     steeredTurnId: undefined as string | undefined,
+    steeredTurnOptions: undefined as ThreadExecutionOptions | undefined,
+    steeredTurnInstructions: undefined as string | undefined,
     stoppedThreadId: undefined as string | undefined,
     renamedTitle: undefined as string | undefined,
     runningProviders: [] as string[],
@@ -167,8 +169,14 @@ export function createFakeRuntime() {
       state.ranTurnOptions = args.options;
       state.ranTurnInstructions = args.instructions;
     },
-    async steerTurn(args: { expectedTurnId: string }) {
+    async steerTurn(args: {
+      expectedTurnId: string;
+      instructions?: string;
+      options?: ThreadExecutionOptions;
+    }) {
       state.steeredTurnId = args.expectedTurnId;
+      state.steeredTurnOptions = args.options;
+      state.steeredTurnInstructions = args.instructions;
     },
     async stopThread(args: { threadId: string }) {
       state.stoppedThreadId = args.threadId;

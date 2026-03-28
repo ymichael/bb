@@ -1,5 +1,3 @@
-import fs from "node:fs/promises";
-import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { dispatchCommand } from "../../src/command-dispatch.js";
 import { RuntimeManager } from "../../src/runtime-manager.js";
@@ -24,12 +22,17 @@ describe("thread command dispatch", () => {
         threadId: "thread-1",
         workspacePath: "/tmp/env-1",
         projectId: "project-1",
-        projectName: "Project 1",
-        projectRootPath: "/tmp/project-1",
         providerId: "fake",
-        threadType: "standard",
         eventSequence: 1,
         input: [{ type: "text", text: "hello" }],
+        options: {
+          model: "gpt-5",
+          serviceTier: "flex",
+          reasoningLevel: "medium",
+          sandboxMode: "danger-full-access",
+        },
+        instructions: "Be a helpful coding agent.",
+        dynamicTools: [],
       },
       { runtimeManager: harness.manager },
     );
@@ -40,11 +43,16 @@ describe("thread command dispatch", () => {
         threadId: "thread-1",
         workspacePath: "/tmp/env-1",
         projectId: "project-1",
-        projectName: "Project 1",
-        projectRootPath: "/tmp/project-1",
         providerId: "fake",
-        threadType: "standard",
         providerThreadId: "provider-1",
+        options: {
+          model: "gpt-5",
+          serviceTier: "flex",
+          reasoningLevel: "medium",
+          sandboxMode: "danger-full-access",
+        },
+        instructions: "Be a helpful coding agent.",
+        dynamicTools: [],
       },
       { runtimeManager: harness.manager },
     );
@@ -71,9 +79,9 @@ describe("thread command dispatch", () => {
     expect(renameResult).toEqual({});
     expect(stopResult).toEqual({});
     expect(harness.runtimeState.startedThreadId).toBe("thread-1");
-    expect(harness.runtimeState.startedInstructions).toContain("coding agent");
+    expect(harness.runtimeState.startedInstructions).toBe("Be a helpful coding agent.");
     expect(harness.runtimeState.resumedThreadId).toBe("thread-1");
-    expect(harness.runtimeState.resumedInstructions).toContain("coding agent");
+    expect(harness.runtimeState.resumedInstructions).toBe("Be a helpful coding agent.");
     expect(harness.runtimeState.renamedTitle).toBe("Renamed");
     expect(harness.runtimeState.stoppedThreadId).toBe("thread-1");
     expect(harness.manager.listActiveThreads()).toEqual([]);
@@ -94,13 +102,18 @@ describe("thread command dispatch", () => {
         threadId: "thread-1",
         workspacePath: "/tmp/env-1",
         projectId: "project-1",
-        projectName: "Project 1",
-        projectRootPath: "/tmp/project-1",
         providerId: "fake",
-        threadType: "standard",
         providerThreadId: "provider-1",
         eventSequence: 3,
         input: [{ type: "text", text: "hello" }],
+        options: {
+          model: "gpt-5",
+          serviceTier: "flex",
+          reasoningLevel: "medium",
+          sandboxMode: "danger-full-access",
+        },
+        instructions: "Be a helpful coding agent.",
+        dynamicTools: [],
       },
       { runtimeManager: harness.manager },
     );
@@ -111,14 +124,19 @@ describe("thread command dispatch", () => {
         threadId: "thread-1",
         workspacePath: "/tmp/env-1",
         projectId: "project-1",
-        projectName: "Project 1",
-        projectRootPath: "/tmp/project-1",
         providerId: "fake",
-        threadType: "standard",
         providerThreadId: "provider-1",
         eventSequence: 4,
         expectedTurnId: "turn-1",
         input: [{ type: "text", text: "adjust" }],
+        options: {
+          model: "gpt-5",
+          serviceTier: "flex",
+          reasoningLevel: "medium",
+          sandboxMode: "danger-full-access",
+        },
+        instructions: "Be a helpful coding agent.",
+        dynamicTools: [],
       },
       { runtimeManager: harness.manager },
     );
@@ -127,6 +145,7 @@ describe("thread command dispatch", () => {
     expect(steerResult).toEqual({});
     expect(harness.runtimeState.ranTurnText).toBe("hello");
     expect(harness.runtimeState.steeredTurnId).toBe("turn-1");
+    expect(harness.runtimeState.steeredTurnInstructions).toBe("Be a helpful coding agent.");
   });
 
   it("lazily resumes a missing thread runtime before turn.run", async () => {
@@ -139,13 +158,18 @@ describe("thread command dispatch", () => {
         threadId: "thread-1",
         workspacePath: "/tmp/env-lazy",
         projectId: "project-1",
-        projectName: "Project 1",
-        projectRootPath: "/tmp/project-1",
         providerId: "fake",
-        threadType: "standard",
         providerThreadId: "provider-1",
         eventSequence: 1,
         input: [{ type: "text", text: "hello" }],
+        options: {
+          model: "gpt-5",
+          serviceTier: "flex",
+          reasoningLevel: "medium",
+          sandboxMode: "danger-full-access",
+        },
+        instructions: "Be a helpful coding agent.",
+        dynamicTools: [],
       },
       { runtimeManager: harness.manager },
     );
@@ -199,13 +223,18 @@ describe("thread command dispatch", () => {
         threadId: "thread-1",
         workspacePath: "/tmp/env-exit",
         projectId: "project-1",
-        projectName: "Project 1",
-        projectRootPath: "/tmp/project-1",
         providerId: "fake",
-        threadType: "standard",
         providerThreadId: "provider-1",
         eventSequence: 2,
         input: [{ type: "text", text: "after exit" }],
+        options: {
+          model: "gpt-5",
+          serviceTier: "flex",
+          reasoningLevel: "medium",
+          sandboxMode: "danger-full-access",
+        },
+        instructions: "Be a helpful coding agent.",
+        dynamicTools: [],
       },
       { runtimeManager: manager },
     );
@@ -292,14 +321,16 @@ describe("thread command dispatch", () => {
     });
   });
 
-  it("resolves manager runtime config inside the daemon", async () => {
+  it("uses the server-provided manager runtime config", async () => {
     const managerWorkspace = await makeTempDir("bb-manager-runtime-");
-    await fs.writeFile(
-      path.join(managerWorkspace, "PREFERENCES.md"),
-      "Prefer concise user updates.\nDelegate implementation quickly.\n",
-      "utf8",
-    );
     const harness = createHarness({ workspacePath: managerWorkspace });
+    const managerInstructions = [
+      "You are a manager for this project.",
+      "Prefer concise user updates.",
+      "Delegate implementation quickly.",
+      "Manager Project",
+      managerWorkspace,
+    ].join("\n");
 
     await dispatchCommand(
       {
@@ -308,12 +339,33 @@ describe("thread command dispatch", () => {
         threadId: "thread-manager",
         workspacePath: managerWorkspace,
         projectId: "project-1",
-        projectName: "Manager Project",
-        projectRootPath: "/tmp/manager-project",
         providerId: "fake",
-        threadType: "manager",
         eventSequence: 1,
         input: [{ type: "text", text: "hello" }],
+        options: {
+          model: "claude-opus-4-6",
+          serviceTier: "flex",
+          reasoningLevel: "medium",
+          sandboxMode: "danger-full-access",
+        },
+        instructions: managerInstructions,
+        dynamicTools: [
+          {
+            name: "message_user",
+            description: "Send a user-visible update from the manager thread.",
+            inputSchema: {
+              type: "object",
+              additionalProperties: false,
+              properties: {
+                text: {
+                  type: "string",
+                  description: "User-visible message text.",
+                },
+              },
+              required: ["text"],
+            },
+          },
+        ],
       },
       { runtimeManager: harness.manager },
     );

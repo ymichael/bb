@@ -633,7 +633,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
       await sendRequest(proc.child, cmd, proc.pending, () => nextRequestId++);
     },
 
-    async steerTurn({ threadId, expectedTurnId, input }) {
+    async steerTurn({ threadId, expectedTurnId, input, options: execOpts, instructions }) {
       const pid = resolveProviderForThread(threadId);
       const proc = requireProviderProcess(pid);
 
@@ -643,6 +643,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
         providerThreadId: threadToProviderThread.get(threadId),
         expectedTurnId,
         input,
+        options: toAdapterOptions(execOpts, instructions, {}),
       });
 
       if (!cmd) return;

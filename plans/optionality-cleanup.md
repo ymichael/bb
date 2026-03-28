@@ -110,37 +110,37 @@ Everything else should be deleted, made required, or filled in by the server bef
 
 ### 4. Fill In Defaults Once, Then Make Internal Fields Required
 
-- [ ] Add one server-side helper for thread runtime config. It should fill execution defaults, assemble instructions, and choose tool lists before the server queues daemon commands.
+- [x] Add one server-side helper for thread runtime config. It should fill execution defaults, assemble instructions, and choose tool lists before the server queues daemon commands.
   Purpose: have one place decide runtime behavior instead of letting each path or the daemon invent its own fallback, including active follow-up steer requests.
   Current: `buildExecutionOptions()` just omits missing values in [apps/server/src/services/thread-commands.ts](/Users/michael/.codex/worktrees/93ba/bb/apps/server/src/services/thread-commands.ts#L23), draft creation hard-codes `reasoningLevel: "medium"` and `sandboxMode: "danger-full-access"` in [apps/server/src/routes/threads/actions.ts](/Users/michael/.codex/worktrees/93ba/bb/apps/server/src/routes/threads/actions.ts#L202), manager creation sets only some fields in [apps/server/src/routes/projects.ts](/Users/michael/.codex/worktrees/93ba/bb/apps/server/src/routes/projects.ts#L213), and provider adapters apply their own fallbacks differently.
-- [ ] Move standard and manager instruction assembly from the host daemon to the server.
+- [x] Move standard and manager instruction assembly from the host daemon to the server.
   Purpose: make prompt behavior a server-owned product decision instead of daemon-side policy.
   Current: the daemon renders `standardAgentInstructions` and `managerAgentInstructions` in [apps/host-daemon/src/thread-runtime-config.ts](/Users/michael/.codex/worktrees/93ba/bb/apps/host-daemon/src/thread-runtime-config.ts#L10) and [apps/host-daemon/src/thread-runtime-config.ts](/Users/michael/.codex/worktrees/93ba/bb/apps/host-daemon/src/thread-runtime-config.ts#L137).
-- [ ] Add a server flow that reads manager `PREFERENCES.md` from the host before queueing manager thread commands.
+- [x] Add a server flow that reads manager `PREFERENCES.md` from the host before queueing manager thread commands.
   Purpose: let the server assemble manager instructions without pushing product policy back into the daemon.
   Current: the daemon reads manager `PREFERENCES.md` locally in [apps/host-daemon/src/thread-runtime-config.ts](/Users/michael/.codex/worktrees/93ba/bb/apps/host-daemon/src/thread-runtime-config.ts#L101).
-- [ ] Add `instructions` to the host-daemon thread runtime commands and make it required for `thread.start`, `thread.resume`, `turn.run`, and `turn.steer`.
+- [x] Add `instructions` to the host-daemon thread runtime commands and make it required for `thread.start`, `thread.resume`, `turn.run`, and `turn.steer`.
   Purpose: make the daemon execute the instruction text the server chose instead of rendering its own.
   Current: the daemon currently builds instructions internally via `resolveThreadRuntimeConfig()` in [apps/host-daemon/src/command-dispatch.ts](/Users/michael/.codex/worktrees/93ba/bb/apps/host-daemon/src/command-dispatch.ts#L48), and the host-daemon command schema has no explicit `instructions` field in [packages/host-daemon-contract/src/commands.ts](/Users/michael/.codex/worktrees/93ba/bb/packages/host-daemon-contract/src/commands.ts#L52).
-- [ ] Fill in `model`, `serviceTier`, `reasoningLevel`, and `sandboxMode` before queuing daemon commands.
+- [x] Fill in `model`, `serviceTier`, `reasoningLevel`, and `sandboxMode` before queuing daemon commands.
   Purpose: make daemon commands carry the execution settings the server decided to use. For thread start, `model` comes from the create-thread request, while missing `serviceTier`, `reasoningLevel`, and `sandboxMode` are filled by the server. For follow-ups and steer, missing values come from the thread's default execution options.
   Current: missing execution knobs still flow through to provider-specific defaults instead of one server-owned default in [apps/server/src/services/thread-commands.ts](/Users/michael/.codex/worktrees/93ba/bb/apps/server/src/services/thread-commands.ts#L23).
-- [ ] Make host-daemon `thread.start`, `turn.run`, and `turn.steer` execution options required after the server fills in defaults.
+- [x] Make host-daemon `thread.start`, `turn.run`, and `turn.steer` execution options required after the server fills in defaults.
   Purpose: remove “maybe this command has options” ambiguity from the server/daemon boundary and ensure steer requests see the same filled-in defaults and overrides as start/run.
   Current: these commands all accept optional `options` in [packages/host-daemon-contract/src/commands.ts](/Users/michael/.codex/worktrees/93ba/bb/packages/host-daemon-contract/src/commands.ts#L54), and server queueing only includes the field when present in [apps/server/src/services/thread-commands.ts](/Users/michael/.codex/worktrees/93ba/bb/apps/server/src/services/thread-commands.ts#L38).
-- [ ] Split the shared thread runtime command context so `turn.run` and `turn.steer` can require `providerThreadId` while `thread.start` does not.
+- [x] Split the shared thread runtime command context so `turn.run` and `turn.steer` can require `providerThreadId` while `thread.start` does not.
   Purpose: stop one shared schema from making `providerThreadId` look optional where resume logic actually needs it.
   Current: `providerThreadId` is optional in the shared runtime context in [packages/host-daemon-contract/src/commands.ts](/Users/michael/.codex/worktrees/93ba/bb/packages/host-daemon-contract/src/commands.ts#L54). The server tries to fill it from past events when queueing `turn.run` / `turn.steer` in [apps/server/src/services/thread-commands.ts](/Users/michael/.codex/worktrees/93ba/bb/apps/server/src/services/thread-commands.ts#L188) and [apps/server/src/services/thread-commands.ts](/Users/michael/.codex/worktrees/93ba/bb/apps/server/src/services/thread-commands.ts#L236), and daemon dispatch throws if it needs to resume a runtime without one in [apps/host-daemon/src/command-handlers/thread.ts](/Users/michael/.codex/worktrees/93ba/bb/apps/host-daemon/src/command-handlers/thread.ts#L59).
-- [ ] Make `dynamicTools` a required server-owned field on the host-daemon thread runtime commands.
+- [x] Make `dynamicTools` a required server-owned field on the host-daemon thread runtime commands.
   Purpose: let the server choose the tool list explicitly instead of having the daemon inject manager tools.
   Current: the host-daemon command schema still makes `dynamicTools` optional in [packages/host-daemon-contract/src/commands.ts](/Users/michael/.codex/worktrees/93ba/bb/packages/host-daemon-contract/src/commands.ts#L54), and the daemon injects manager tools in [apps/host-daemon/src/thread-runtime-config.ts](/Users/michael/.codex/worktrees/93ba/bb/apps/host-daemon/src/thread-runtime-config.ts#L112).
-- [ ] Make the server always send the full tool list for thread runtime commands: `[]` for standard threads and `[message_user]` for manager threads.
+- [x] Make the server always send the full tool list for thread runtime commands: `[]` for standard threads and `[message_user]` for manager threads.
   Purpose: make manager tool selection a server-owned product decision.
   Current: manager tool injection currently happens only in the daemon in [apps/host-daemon/src/thread-runtime-config.ts](/Users/michael/.codex/worktrees/93ba/bb/apps/host-daemon/src/thread-runtime-config.ts#L112).
-- [ ] Delete daemon-side manager tool injection and daemon-side instruction templating.
+- [x] Delete daemon-side manager tool injection and daemon-side instruction templating.
   Purpose: remove product-policy branches from the host daemon.
   Current: `resolveThreadRuntimeConfig()` in [apps/host-daemon/src/thread-runtime-config.ts](/Users/michael/.codex/worktrees/93ba/bb/apps/host-daemon/src/thread-runtime-config.ts#L126) decides instructions and manager tools based on `threadType`.
-- [ ] Delete `threadType` from the host-daemon thread runtime command context once the daemon no longer branches on thread type.
+- [x] Delete `threadType` from the host-daemon thread runtime command context once the daemon no longer branches on thread type.
   Purpose: remove a product-policy field from the daemon boundary after the server owns instructions and tool lists.
   Current: `threadType` is carried in [packages/host-daemon-contract/src/commands.ts](/Users/michael/.codex/worktrees/93ba/bb/packages/host-daemon-contract/src/commands.ts#L52) and is currently used by daemon-side runtime-config logic.
 - [x] Make the public diff API require `selection`, and make the daemon contract require it too.
@@ -152,7 +152,7 @@ Everything else should be deleted, made required, or filled in by the server bef
 - [x] Delete `workspace.checkpoint.remoteName` and make checkpoint always use `origin`.
   Purpose: remove an unused internal option and keep checkpoint behavior fixed. This remains an internal-only contract change; no public API should be added for it.
   Current: there is no in-tree production caller for `workspace.checkpoint`; only host-daemon tests exercise it in [apps/host-daemon/test/command/workspace-dispatch.test.ts](/Users/michael/.codex/worktrees/93ba/bb/apps/host-daemon/test/command/workspace-dispatch.test.ts#L72). Workspace defaults missing `remoteName` to `"origin"` in [packages/workspace/src/workspace.ts](/Users/michael/.codex/worktrees/93ba/bb/packages/workspace/src/workspace.ts#L240).
-- [ ] Keep `message_user` as an implementation-owned manager tool that is always included for manager threads.
+- [x] Keep `message_user` as an implementation-owned manager tool that is always included for manager threads.
   Purpose: preserve the real manager communication path as a server-owned manager tool.
   Current: `message_user` is implemented server-side in [apps/server/src/internal/tool-calls.ts](/Users/michael/.codex/worktrees/93ba/bb/apps/server/src/internal/tool-calls.ts#L23), but is still injected daemon-side in [apps/host-daemon/src/thread-runtime-config.ts](/Users/michael/.codex/worktrees/93ba/bb/apps/host-daemon/src/thread-runtime-config.ts#L65).
 - [x] Delete the manager `spawn_thread` dynamic tool and its server-side tool-call implementation.

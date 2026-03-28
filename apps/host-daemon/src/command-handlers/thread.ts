@@ -1,13 +1,11 @@
 import type { HostDaemonCommandResult } from "@bb/host-daemon-contract";
 import type { RuntimeEntry } from "../runtime-manager.js";
 import { CommandDispatchError, type CommandDispatchOptions, type CommandOf } from "../command-dispatch-support.js";
-import { resolveThreadRuntimeConfig } from "../thread-runtime-config.js";
 
 export async function startThread(
   command: CommandOf<"thread.start">,
   options: CommandDispatchOptions,
 ): Promise<HostDaemonCommandResult<"thread.start">> {
-  const runtimeConfig = await resolveThreadRuntimeConfig(command);
   const entry = await options.runtimeManager.ensureEnvironment({
     environmentId: command.environmentId,
     workspacePath: command.workspacePath,
@@ -17,9 +15,9 @@ export async function startThread(
     projectId: command.projectId,
     providerId: command.providerId,
     input: command.input,
-    options: runtimeConfig.options,
-    instructions: runtimeConfig.instructions,
-    dynamicTools: runtimeConfig.dynamicTools,
+    options: command.options,
+    instructions: command.instructions,
+    dynamicTools: command.dynamicTools,
   });
   options.runtimeManager.markThreadActive(
     command.environmentId,
@@ -33,7 +31,6 @@ export async function resumeThread(
   command: CommandOf<"thread.resume">,
   options: CommandDispatchOptions,
 ): Promise<HostDaemonCommandResult<"thread.resume">> {
-  const runtimeConfig = await resolveThreadRuntimeConfig(command);
   const entry = await options.runtimeManager.ensureEnvironment({
     environmentId: command.environmentId,
     workspacePath: command.workspacePath,
@@ -43,10 +40,10 @@ export async function resumeThread(
     projectId: command.projectId,
     providerThreadId: command.providerThreadId,
     providerId: command.providerId,
-    options: runtimeConfig.options,
-    instructions: runtimeConfig.instructions,
+    options: command.options,
+    instructions: command.instructions,
     resumePath: command.workspacePath,
-    dynamicTools: runtimeConfig.dynamicTools,
+    dynamicTools: command.dynamicTools,
   });
   options.runtimeManager.markThreadActive(
     command.environmentId,
@@ -75,16 +72,15 @@ export async function ensureThreadRuntime(
         `No provider thread id available for thread ${command.threadId}`,
       );
     }
-    const runtimeConfig = await resolveThreadRuntimeConfig(command);
     const result = await entry.runtime.resumeThread({
       threadId: command.threadId,
       projectId: command.projectId,
       providerThreadId: command.providerThreadId,
       providerId: command.providerId,
-      options: runtimeConfig.options,
-      instructions: runtimeConfig.instructions,
+      options: command.options,
+      instructions: command.instructions,
       resumePath: command.workspacePath,
-      dynamicTools: runtimeConfig.dynamicTools,
+      dynamicTools: command.dynamicTools,
     });
     options.runtimeManager.markThreadActive(
       command.environmentId,

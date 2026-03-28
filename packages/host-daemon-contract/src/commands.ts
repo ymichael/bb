@@ -3,12 +3,14 @@ import {
   discoveredWorkspacePropertiesSchema,
   dynamicToolSchema,
   promptInputSchema,
-  threadTypeSchema,
   threadExecutionOptionsSchema,
   threadGitDiffResponseSchema,
   threadGitDiffSelectionSchema,
   workspaceProvisionTypeSchema,
   providerInfoSchema,
+  reasoningLevelSchema,
+  sandboxModeSchema,
+  serviceTierSchema,
   workspaceStatusSchema,
 } from "@bb/domain";
 import { z } from "zod";
@@ -41,7 +43,12 @@ export const HOST_DAEMON_COMMAND_TYPES = [
 export const hostDaemonCommandTypeSchema = z.enum(HOST_DAEMON_COMMAND_TYPES);
 export type HostDaemonCommandType = z.infer<typeof hostDaemonCommandTypeSchema>;
 
-export const hostDaemonExecutionOptionsSchema = threadExecutionOptionsSchema;
+export const hostDaemonExecutionOptionsSchema = threadExecutionOptionsSchema.extend({
+  model: z.string().min(1),
+  serviceTier: serviceTierSchema,
+  reasoningLevel: reasoningLevelSchema,
+  sandboxMode: sandboxModeSchema,
+});
 export type HostDaemonExecutionOptions = z.infer<
   typeof hostDaemonExecutionOptionsSchema
 >;
@@ -54,14 +61,16 @@ const hostDaemonThreadTargetSchema = z.object({
 const hostDaemonThreadRuntimeContextSchema = z.object({
   workspacePath: z.string().min(1),
   projectId: z.string().min(1),
-  projectName: z.string().min(1),
-  projectRootPath: z.string().min(1),
   providerId: z.string().min(1),
-  threadType: threadTypeSchema,
-  providerThreadId: z.string().min(1).optional(),
-  options: hostDaemonExecutionOptionsSchema.optional(),
-  dynamicTools: z.array(dynamicToolSchema).optional(),
+  options: hostDaemonExecutionOptionsSchema,
+  instructions: z.string().min(1),
+  dynamicTools: z.array(dynamicToolSchema),
 });
+
+const hostDaemonExistingThreadRuntimeContextSchema =
+  hostDaemonThreadRuntimeContextSchema.extend({
+    providerThreadId: z.string().min(1),
+  });
 
 const hostDaemonEnvironmentTargetSchema = z.object({
   environmentId: z.string().min(1),
@@ -82,14 +91,14 @@ export const threadStartCommandSchema = hostDaemonThreadTargetSchema.merge(
 
 /** Reconnect a thread's provider session after a daemon restart. Does not start a turn. */
 export const threadResumeCommandSchema = hostDaemonThreadTargetSchema.merge(
-  hostDaemonThreadRuntimeContextSchema,
+  hostDaemonExistingThreadRuntimeContextSchema,
 ).extend({
   type: z.literal("thread.resume"),
 });
 
 /** Run a conversation turn with user input. Used for every message after the first. */
 export const turnRunCommandSchema = hostDaemonThreadTargetSchema.merge(
-  hostDaemonThreadRuntimeContextSchema,
+  hostDaemonExistingThreadRuntimeContextSchema,
 ).extend({
   type: z.literal("turn.run"),
   eventSequence: z.number().int().nonnegative(),
@@ -97,7 +106,7 @@ export const turnRunCommandSchema = hostDaemonThreadTargetSchema.merge(
 });
 
 export const turnSteerCommandSchema = hostDaemonThreadTargetSchema.merge(
-  hostDaemonThreadRuntimeContextSchema,
+  hostDaemonExistingThreadRuntimeContextSchema,
 ).extend({
   type: z.literal("turn.steer"),
   eventSequence: z.number().int().nonnegative(),

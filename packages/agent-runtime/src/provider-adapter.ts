@@ -64,6 +64,7 @@ export type AdapterCommand =
       providerThreadId?: string;
       expectedTurnId: string;
       input: PromptInput[];
+      options?: AdapterOptions;
     }
   | { type: "thread/stop"; threadId: string }
   | {

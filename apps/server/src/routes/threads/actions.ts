@@ -138,7 +138,16 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
     const { environment, thread } = requireThreadEnvironment(deps.db, context.req.param("id"));
     ensureThreadIsWritable(thread);
     const mode = resolveSendMode(thread.status, payload.mode);
-    const execution = buildExecutionOptions(payload, "client/turn/requested");
+    const execution = await buildExecutionOptions(
+      deps,
+      payload,
+      {
+        hostId: environment.hostId,
+        providerId: thread.providerId,
+        threadId: thread.id,
+      },
+      "client/turn/requested",
+    );
 
     if (
       queueTurnDuringReprovision({
@@ -200,14 +209,26 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
   });
 
   post("/threads/:id/drafts", createDraftRequestSchema, async (context, payload) => {
+    const { environment, thread } = requireThreadEnvironment(deps.db, context.req.param("id"));
+    ensureThreadIsWritable(thread);
+    const execution = await buildExecutionOptions(
+      deps,
+      payload,
+      {
+        hostId: environment.hostId,
+        providerId: thread.providerId,
+        threadId: thread.id,
+      },
+      "client/turn/requested",
+    );
     const draft = createDraft(deps.db, deps.hub, {
       threadId: context.req.param("id"),
       content: encodeDraftContent(payload.input),
       mode: "auto",
-      ...(payload.model ? { model: payload.model } : {}),
-      reasoningLevel: payload.reasoningLevel ?? "medium",
-      sandboxMode: payload.sandboxMode ?? "danger-full-access",
-      ...(payload.serviceTier ? { serviceTier: payload.serviceTier } : {}),
+      model: execution.model,
+      reasoningLevel: execution.reasoningLevel,
+      sandboxMode: execution.sandboxMode,
+      serviceTier: execution.serviceTier,
     });
     return context.json(toQueuedMessage(draft), 201);
   });
@@ -221,15 +242,16 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
     const { environment, thread } = requireThreadEnvironment(deps.db, context.req.param("id"));
     ensureThreadIsWritable(thread);
     const mode = resolveSendMode(thread.status, payload.mode ?? queuedMessage.mode);
-    const execution: ThreadExecutionOptions = {
-      source: "client/turn/requested",
-      ...(queuedMessage.model ? { model: queuedMessage.model } : {}),
-      reasoningLevel: queuedMessage.reasoningLevel,
-      sandboxMode: queuedMessage.sandboxMode,
-      ...(queuedMessage.serviceTier
-        ? { serviceTier: queuedMessage.serviceTier }
-        : {}),
-    };
+    const execution = await buildExecutionOptions(
+      deps,
+      queuedMessage,
+      {
+        hostId: environment.hostId,
+        providerId: thread.providerId,
+        threadId: thread.id,
+      },
+      "client/turn/requested",
+    );
 
     if (
       queueTurnDuringReprovision({

@@ -1,7 +1,5 @@
 import {
   getActiveSession,
-  getDefaultProjectSource,
-  getProject,
   queueCommand,
   transitionThreadStatus,
 } from "@bb/db";
@@ -13,26 +11,46 @@ import type {
 import type { HostDaemonExecutionOptions } from "@bb/host-daemon-contract";
 import type {
   CreateThreadRequest,
-  SendMessageRequest,
 } from "@bb/server-contract";
 import type { AppDeps } from "../types.js";
 import { ApiError } from "../errors.js";
 import { requireConnectedHostSession } from "./entity-lookup.js";
 import { getLastProviderThreadId } from "./thread-events.js";
+import {
+  resolveExecutionOptions,
+  resolveThreadRuntimeCommandConfig,
+  type ThreadRuntimeCommandEnvironment,
+} from "./thread-runtime-config.js";
 
-export function buildExecutionOptions(
-  request:
-    | Pick<CreateThreadRequest, "model" | "reasoningLevel" | "sandboxMode" | "serviceTier">
-    | Pick<SendMessageRequest, "model" | "reasoningLevel" | "sandboxMode" | "serviceTier">,
+export interface ExecutionOptionsRequest {
+  model?: CreateThreadRequest["model"];
+  reasoningLevel?: CreateThreadRequest["reasoningLevel"];
+  sandboxMode?: CreateThreadRequest["sandboxMode"];
+  serviceTier?: CreateThreadRequest["serviceTier"];
+}
+
+export async function buildExecutionOptions(
+  deps: Pick<AppDeps, "db" | "hub">,
+  request: ExecutionOptionsRequest,
+  args: {
+    hostId: string;
+    providerId: string;
+    threadId: string;
+  },
   source: "client/thread/start" | "client/turn/requested" | "client/turn/start",
-): ThreadExecutionOptions {
-  return {
-    ...(request.model ? { model: request.model } : {}),
-    ...(request.serviceTier ? { serviceTier: request.serviceTier } : {}),
-    ...(request.reasoningLevel ? { reasoningLevel: request.reasoningLevel } : {}),
-    ...(request.sandboxMode ? { sandboxMode: request.sandboxMode } : {}),
-    source,
-  };
+): Promise<HostDaemonExecutionOptions> {
+  return resolveExecutionOptions(deps, {
+    hostId: args.hostId,
+    providerId: args.providerId,
+    requestedExecution: {
+      ...(request.model ? { model: request.model } : {}),
+      ...(request.serviceTier ? { serviceTier: request.serviceTier } : {}),
+      ...(request.reasoningLevel ? { reasoningLevel: request.reasoningLevel } : {}),
+      ...(request.sandboxMode ? { sandboxMode: request.sandboxMode } : {}),
+      source,
+    },
+    threadId: args.threadId,
+  });
 }
 
 export async function queueThreadStartCommand(
@@ -44,14 +62,14 @@ export async function queueThreadStartCommand(
       id: string;
       path: string | null;
     };
-    execution: HostDaemonExecutionOptions;
+    execution: ThreadExecutionOptions;
     input: PromptInput[];
     projectId: string;
     providerId: string;
     thread: Thread;
   },
 ): Promise<void> {
-  const runtimeContext = await buildThreadRuntimeContext(deps, {
+  const runtimeContext = await resolveThreadRuntimeCommandConfig(deps, {
     thread: args.thread,
     environment: args.environment,
     execution: args.execution,
@@ -67,84 +85,20 @@ export async function queueThreadStartCommand(
       threadId: args.thread.id,
       workspacePath: runtimeContext.workspacePath,
       projectId: args.projectId,
-      projectName: runtimeContext.projectName,
-      projectRootPath: runtimeContext.projectRootPath,
       providerId: args.providerId,
-      threadType: runtimeContext.threadType,
       eventSequence: args.eventSequence,
       input: args.input,
-      ...(runtimeContext.options ? { options: runtimeContext.options } : {}),
+      options: runtimeContext.options,
+      instructions: runtimeContext.instructions,
+      dynamicTools: runtimeContext.dynamicTools,
     }),
   });
-}
-
-interface ThreadCommandEnvironment {
-  hostId: string;
-  id: string;
-  path: string | null;
-}
-
-interface ReadyThreadCommandEnvironment {
-  hostId: string;
-  id: string;
-  path: string;
-}
-
-interface ThreadRuntimeContext {
-  options?: HostDaemonExecutionOptions;
-  projectId: string;
-  projectName: string;
-  projectRootPath: string;
-  providerId: string;
-  providerThreadId?: string;
-  threadType: Thread["type"];
-  workspacePath: string;
-}
-
-function requireEnvironmentPath(
-  environment: ThreadCommandEnvironment,
-): string {
-  if (!environment.path) {
-    throw new ApiError(409, "invalid_request", "Environment is not ready");
-  }
-
-  return environment.path;
-}
-
-async function buildThreadRuntimeContext(
-  deps: Pick<AppDeps, "db">,
-  args: {
-    environment: ThreadCommandEnvironment;
-    execution?: ThreadExecutionOptions;
-    providerThreadId?: string;
-    thread: Thread;
-  },
-): Promise<ThreadRuntimeContext> {
-  const workspacePath = requireEnvironmentPath(args.environment);
-  const project = getProject(deps.db, args.thread.projectId);
-  if (!project) {
-    throw new ApiError(404, "project_not_found", "Project not found");
-  }
-  const defaultSource = getDefaultProjectSource(deps.db, args.thread.projectId);
-
-  return {
-    workspacePath,
-    projectId: args.thread.projectId,
-    projectName: project.name,
-    projectRootPath: defaultSource?.path ?? workspacePath,
-    providerId: args.thread.providerId,
-    threadType: args.thread.type,
-    ...(args.providerThreadId
-      ? { providerThreadId: args.providerThreadId }
-      : {}),
-    ...(args.execution ? { options: args.execution } : {}),
-  };
 }
 
 export async function queueReadyThreadTurnCommand(
   deps: Pick<AppDeps, "db" | "hub">,
   args: {
-    environment: ReadyThreadCommandEnvironment;
+    environment: ThreadRuntimeCommandEnvironment & { path: string };
     eventSequence: number;
     execution: ThreadExecutionOptions;
     input: PromptInput[];
@@ -187,7 +141,7 @@ export async function queueTurnRunCommand(
   deps: Pick<AppDeps, "db" | "hub">,
   args: {
     eventSequence: number;
-    environment: ThreadCommandEnvironment;
+    environment: ThreadRuntimeCommandEnvironment;
     execution: ThreadExecutionOptions;
     input: PromptInput[];
     providerThreadId?: string;
@@ -195,13 +149,14 @@ export async function queueTurnRunCommand(
   },
 ): Promise<void> {
   const session = requireConnectedHostSession(deps, args.environment.hostId);
-  const providerThreadId =
-    args.providerThreadId ?? getLastProviderThreadId(deps, args.thread.id) ?? undefined;
-  const runtimeContext = await buildThreadRuntimeContext(deps, {
+  const providerThreadId = requireProviderThreadId(
+    args.providerThreadId ?? getLastProviderThreadId(deps, args.thread.id),
+    args.thread.id,
+  );
+  const runtimeContext = await resolveThreadRuntimeCommandConfig(deps, {
     thread: args.thread,
     environment: args.environment,
     execution: args.execution,
-    providerThreadId,
   });
   queueCommand(deps.db, deps.hub, {
     hostId: args.environment.hostId,
@@ -214,15 +169,12 @@ export async function queueTurnRunCommand(
       eventSequence: args.eventSequence,
       workspacePath: runtimeContext.workspacePath,
       projectId: runtimeContext.projectId,
-      projectName: runtimeContext.projectName,
-      projectRootPath: runtimeContext.projectRootPath,
       providerId: runtimeContext.providerId,
-      threadType: runtimeContext.threadType,
-      ...(runtimeContext.providerThreadId
-        ? { providerThreadId: runtimeContext.providerThreadId }
-        : {}),
+      providerThreadId,
       input: args.input,
-      ...(runtimeContext.options ? { options: runtimeContext.options } : {}),
+      options: runtimeContext.options,
+      instructions: runtimeContext.instructions,
+      dynamicTools: runtimeContext.dynamicTools,
     }),
   });
 
@@ -235,7 +187,7 @@ export async function queueTurnSteerCommand(
   deps: Pick<AppDeps, "db" | "hub">,
   args: {
     eventSequence: number;
-    environment: ThreadCommandEnvironment;
+    environment: ThreadRuntimeCommandEnvironment;
     execution: ThreadExecutionOptions;
     expectedTurnId: string;
     input: PromptInput[];
@@ -244,13 +196,14 @@ export async function queueTurnSteerCommand(
   },
 ): Promise<void> {
   const session = requireConnectedHostSession(deps, args.environment.hostId);
-  const providerThreadId =
-    args.providerThreadId ?? getLastProviderThreadId(deps, args.thread.id) ?? undefined;
-  const runtimeContext = await buildThreadRuntimeContext(deps, {
+  const providerThreadId = requireProviderThreadId(
+    args.providerThreadId ?? getLastProviderThreadId(deps, args.thread.id),
+    args.thread.id,
+  );
+  const runtimeContext = await resolveThreadRuntimeCommandConfig(deps, {
     thread: args.thread,
     environment: args.environment,
     execution: args.execution,
-    providerThreadId,
   });
   queueCommand(deps.db, deps.hub, {
     hostId: args.environment.hostId,
@@ -263,18 +216,30 @@ export async function queueTurnSteerCommand(
       eventSequence: args.eventSequence,
       workspacePath: runtimeContext.workspacePath,
       projectId: runtimeContext.projectId,
-      projectName: runtimeContext.projectName,
-      projectRootPath: runtimeContext.projectRootPath,
       providerId: runtimeContext.providerId,
-      threadType: runtimeContext.threadType,
-      ...(runtimeContext.providerThreadId
-        ? { providerThreadId: runtimeContext.providerThreadId }
-        : {}),
+      providerThreadId,
       expectedTurnId: args.expectedTurnId,
       input: args.input,
-      ...(runtimeContext.options ? { options: runtimeContext.options } : {}),
+      options: runtimeContext.options,
+      instructions: runtimeContext.instructions,
+      dynamicTools: runtimeContext.dynamicTools,
     }),
   });
+}
+
+function requireProviderThreadId(
+  providerThreadId: string | null | undefined,
+  threadId: string,
+): string {
+  if (!providerThreadId) {
+    throw new ApiError(
+      409,
+      "invalid_request",
+      `Thread ${threadId} has no provider session`,
+    );
+  }
+
+  return providerThreadId;
 }
 
 export function queueThreadRenameCommand(

@@ -223,6 +223,29 @@ describe("public thread data routes", () => {
         projectId: project.id,
         environmentId: environment.id,
       });
+      seedEvent(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        sequence: 1,
+        type: "client/turn/requested",
+        data: {
+          direction: "outbound",
+          input: [{ type: "text", text: "Earlier work" }],
+          execution: {
+            model: "gpt-5",
+            serviceTier: "flex",
+            reasoningLevel: "medium",
+            sandboxMode: "danger-full-access",
+            source: "client/turn/requested",
+          },
+          initiator: "user",
+          request: {
+            method: "turn/start",
+            params: {},
+          },
+          source: "tell",
+        },
+      });
 
       const createResponse = await harness.app.request(
         `/api/v1/threads/${thread.id}/drafts`,

@@ -13,7 +13,6 @@ import { provisionEnvironment } from "./command-handlers/environment.js";
 import { ensureThreadRuntime, resumeThread, startThread } from "./command-handlers/thread.js";
 import { demoteWorkspace, promoteWorkspace, squashMerge } from "./command-handlers/workspace.js";
 import { listBranches, listWorkspaceFiles, readWorkspaceFile } from "./command-handlers/workspace-files.js";
-import { resolveThreadRuntimeConfig } from "./thread-runtime-config.js";
 
 export {
   CommandDispatchError,
@@ -50,12 +49,11 @@ export async function dispatchCommand<TCommand extends HostDaemonCommand>(
     case "turn.run": {
       seedThreadHighWaterMarkIfPresent(command, options);
       const entry = await ensureThreadRuntime(command, options);
-      const runtimeConfig = await resolveThreadRuntimeConfig(command);
       await entry.runtime.runTurn({
         threadId: command.threadId,
         input: command.input,
-        options: runtimeConfig.options,
-        instructions: runtimeConfig.instructions,
+        options: command.options,
+        instructions: command.instructions,
       });
       return {} as HostDaemonCommandResult<TCommand["type"]>;
     }
@@ -66,6 +64,8 @@ export async function dispatchCommand<TCommand extends HostDaemonCommand>(
         threadId: command.threadId,
         expectedTurnId: command.expectedTurnId,
         input: command.input,
+        options: command.options,
+        instructions: command.instructions,
       });
       return {} as HostDaemonCommandResult<TCommand["type"]>;
     }
