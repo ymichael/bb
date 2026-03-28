@@ -72,6 +72,13 @@ function collectOptionalFieldPaths(
   return [...paths].sort();
 }
 
+const INTENTIONAL_OPTIONAL_HOST_DAEMON_FIELDS: Record<string, string> = {
+  "hostDaemonCommandSchema.options.approvalPolicy": "Daemon command metadata may omit approval policy when the server does not need to override the default.",
+  "hostDaemonCommandSchema.options.seq": "Daemon command metadata may omit sequence when the command source does not assign one.",
+  "hostDaemonCommandSchema.options.source": "Daemon command metadata may omit source when the command origin is not being tracked.",
+  "hostDaemonCommandSchema.query": "workspace.list_files may omit a search string to list files without filtering.",
+};
+
 describe("host-daemon command schemas", () => {
   it("parses valid workspace and provisioning commands", () => {
     expect(
@@ -202,12 +209,14 @@ describe("host-daemon command schemas", () => {
         contract.hostDaemonCommandResultSchemaByType["workspace.squash_merge"],
     });
 
-    expect(optionalFieldPaths).toEqual([
-      "hostDaemonCommandSchema.options.approvalPolicy",
-      "hostDaemonCommandSchema.options.seq",
-      "hostDaemonCommandSchema.options.source",
-      "hostDaemonCommandSchema.query",
-    ]);
+    expect(optionalFieldPaths).toEqual(
+      Object.keys(INTENTIONAL_OPTIONAL_HOST_DAEMON_FIELDS).sort(),
+    );
+    expect(
+      Object.values(INTENTIONAL_OPTIONAL_HOST_DAEMON_FIELDS).every(
+        (reason) => reason.trim().length > 0,
+      ),
+    ).toBe(true);
   });
 
   it("parses thread.resume with workspacePath", () => {
