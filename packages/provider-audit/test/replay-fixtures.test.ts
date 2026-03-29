@@ -2,11 +2,11 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import type { ViewMessage } from "@bb/domain";
+import type { ProviderAuditReplayFixturesResult } from "../src/types.js";
 import {
   collectCoverageIssues,
-  listFixtureBundles,
   replayFixtures,
   summarizeFixtureCoverage,
 } from "../src/replay.js";
@@ -16,6 +16,8 @@ import {
 } from "../src/visual-audit.js";
 
 const TEMP_DIRS: string[] = [];
+const CHECKED_IN_FIXTURE_ROOT = fixtureRoot();
+let checkedInReplay: ProviderAuditReplayFixturesResult;
 
 function fixtureRoot(): string {
   return join(dirname(fileURLToPath(import.meta.url)), "../fixtures");
@@ -49,18 +51,16 @@ afterEach(() => {
 });
 
 describe("@bb/provider-audit fixture replay", () => {
+  beforeAll(() => {
+    checkedInReplay = replayFixtures({
+      fixtureRoot: CHECKED_IN_FIXTURE_ROOT,
+    });
+  });
+
   it("replays every checked-in fixture into stable summaries", () => {
-    const fixtures = listFixtureBundles({
-      fixtureRoot: fixtureRoot(),
-    });
+    expect(checkedInReplay.fixtures.length).toBeGreaterThan(0);
 
-    expect(fixtures.length).toBeGreaterThan(0);
-
-    const replayed = replayFixtures({
-      fixtureRoot: fixtureRoot(),
-    });
-
-    for (const { fixture, bundle } of replayed.fixtures) {
+    for (const { fixture, bundle } of checkedInReplay.fixtures) {
       expect(
         bundle.auditReport.summary.translatedThreadEventCount,
         `Expected translated events for ${fixture.corpusId}/${fixture.providerId}/${fixture.taskId}`,
@@ -71,7 +71,7 @@ describe("@bb/provider-audit fixture replay", () => {
       ).toBe(0);
     }
 
-    const summary = replayed.fixtures.map(({ fixture, bundle }) => ({
+    const summary = checkedInReplay.fixtures.map(({ fixture, bundle }) => ({
       fixture: `${fixture.corpusId}/${fixture.providerId}/${fixture.taskId}`,
       rawProviderEventCount: bundle.auditReport.summary.rawProviderEventCount,
       translatedThreadEventCount:
@@ -89,11 +89,7 @@ describe("@bb/provider-audit fixture replay", () => {
   });
 
   it("snapshots verbose CLI timeline output for every fixture", () => {
-    const replayed = replayFixtures({
-      fixtureRoot: fixtureRoot(),
-    });
-
-    const verboseTimelines = replayed.fixtures.map(({ fixture, bundle }) => ({
+    const verboseTimelines = checkedInReplay.fixtures.map(({ fixture, bundle }) => ({
       fixture: `${fixture.corpusId}/${fixture.providerId}/${fixture.taskId}`,
       timeline: trimTrailingWhitespace(bundle.timelineVerboseText),
     }));
@@ -102,19 +98,11 @@ describe("@bb/provider-audit fixture replay", () => {
   });
 
   it("summarizes raw-event and tool-call coverage across the checked-in fixtures", () => {
-    const replayed = replayFixtures({
-      fixtureRoot: fixtureRoot(),
-    });
-
-    expect(summarizeFixtureCoverage(replayed)).toMatchSnapshot();
+    expect(summarizeFixtureCoverage(checkedInReplay)).toMatchSnapshot();
   });
 
   it("has no unresolved coverage issues in the checked-in fixtures", () => {
-    const replayed = replayFixtures({
-      fixtureRoot: fixtureRoot(),
-    });
-
-    expect(collectCoverageIssues(replayed)).toEqual({
+    expect(collectCoverageIssues(checkedInReplay)).toEqual({
       unexpectedUntranslatedFixtures: [],
       providersWithUnhandledEvents: [],
       unknownRawEventKinds: [],

@@ -202,6 +202,8 @@ function buildProvisioningTranscript(
     ?.map((entry) => formatProvisioningTranscriptEntry(entry))
     .filter((line): line is string => Boolean(line));
   const lines = transcriptLines && transcriptLines.length > 0 ? transcriptLines : [];
+  // Operation rows advance createdAt as provisioning transcript updates arrive,
+  // so createdAt - startedAt reflects the elapsed provisioning time.
   if (message.status !== "pending" && message.startedAt !== undefined && message.createdAt >= message.startedAt) {
     lines.push(
       `provisioning took ${durationToCompactString(message.createdAt - message.startedAt)}`,

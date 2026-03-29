@@ -2,7 +2,6 @@ import { readFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import {
   createClaudeCodeProviderAdapter,
 } from "./adapter.js";
@@ -10,8 +9,8 @@ import {
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const FIXTURES = resolve(__dirname, "../__fixtures__/claude-code");
 
-function loadFixture(name: string): SDKMessage {
-  return JSON.parse(readFileSync(resolve(FIXTURES, name), "utf8")) as SDKMessage;
+function loadFixture(name: string): unknown {
+  return JSON.parse(readFileSync(resolve(FIXTURES, name), "utf8"));
 }
 
 describe("claude-code provider adapter", () => {
@@ -307,7 +306,7 @@ describe("claude-code provider adapter", () => {
         content: [{ type: "text", text: "Hello world" }],
       },
       session_id: "sess-1",
-    } as SDKMessage);
+    });
 
     expect(events).toContainEqual(
       expect.objectContaining({ type: "turn/started", turnId: "turn-1" }),
@@ -335,7 +334,7 @@ describe("claude-code provider adapter", () => {
         content: [{ type: "text", text: "Now let me read the main files:" }],
       },
       session_id: "sess-1",
-    } as SDKMessage);
+    });
 
     const secondEvents = adapter.translateEvent({
       type: "assistant",
@@ -345,7 +344,7 @@ describe("claude-code provider adapter", () => {
         content: [{ type: "text", text: "Now let me read the test file:" }],
       },
       session_id: "sess-1",
-    } as SDKMessage);
+    });
 
     expect(firstEvents).toContainEqual(
       expect.objectContaining({
@@ -376,7 +375,7 @@ describe("claude-code provider adapter", () => {
       type: "assistant",
       message: { role: "assistant", content: [{ type: "text", text: "Let me check" }] },
       session_id: "sess-1",
-    } as SDKMessage);
+    });
 
     const events = adapter.translateEvent({
       type: "assistant",
@@ -387,7 +386,7 @@ describe("claude-code provider adapter", () => {
         ],
       },
       session_id: "sess-1",
-    } as SDKMessage);
+    });
 
     expect(events).toContainEqual(
       expect.objectContaining({
@@ -407,7 +406,7 @@ describe("claude-code provider adapter", () => {
       type: "assistant",
       message: { role: "assistant", content: [{ type: "text", text: "Let me check" }] },
       session_id: "sess-1",
-    } as SDKMessage);
+    });
 
     const events = adapter.translateEvent({
       type: "assistant",
@@ -418,7 +417,7 @@ describe("claude-code provider adapter", () => {
         ],
       },
       session_id: "sess-1",
-    } as SDKMessage);
+    });
 
     expect(events).toContainEqual(
       expect.objectContaining({
@@ -456,7 +455,7 @@ describe("claude-code provider adapter", () => {
         ],
       },
       session_id: "sess-1",
-    } as SDKMessage);
+    });
 
     expect(events).toContainEqual(
       expect.objectContaining({
@@ -496,7 +495,7 @@ describe("claude-code provider adapter", () => {
         }],
       },
       session_id: "sess-1",
-    } as SDKMessage);
+    });
 
     const events = adapter.translateEvent({
       type: "user",
@@ -510,7 +509,7 @@ describe("claude-code provider adapter", () => {
         }],
       },
       session_id: "sess-1",
-    } as SDKMessage);
+    });
 
     expect(events).toContainEqual(
       expect.objectContaining({
@@ -726,7 +725,7 @@ describe("claude-code provider adapter", () => {
       type: "assistant",
       message: { role: "assistant", content: [{ type: "text", text: "Let me patch that" }] },
       session_id: "sess-1",
-    } as SDKMessage);
+    });
 
     const events = adapter.translateEvent({
       type: "assistant",
@@ -746,7 +745,7 @@ describe("claude-code provider adapter", () => {
         ],
       },
       session_id: "sess-1",
-    } as SDKMessage);
+    });
 
     expect(events).toContainEqual(
       expect.objectContaining({
@@ -786,7 +785,7 @@ describe("claude-code provider adapter", () => {
         ],
       },
       session_id: "sess-1",
-    } as SDKMessage);
+    });
 
     const started = events.find(
       (event): event is Extract<(typeof events)[number], { type: "item/started" }> =>
@@ -814,7 +813,7 @@ describe("claude-code provider adapter", () => {
       type: "assistant",
       message: { role: "assistant", content: [{ type: "text", text: "Let me delegate that" }] },
       session_id: "sess-1",
-    } as SDKMessage);
+    });
 
     const events = adapter.translateEvent({
       type: "assistant",
@@ -834,7 +833,7 @@ describe("claude-code provider adapter", () => {
         ],
       },
       session_id: "sess-1",
-    } as SDKMessage);
+    });
 
     expect(events).toContainEqual(
       expect.objectContaining({
@@ -861,7 +860,7 @@ describe("claude-code provider adapter", () => {
       type: "assistant",
       message: { role: "assistant", content: [{ type: "text", text: "Let me inspect the repo" }] },
       session_id: "sess-1",
-    } as SDKMessage);
+    });
 
     const events = adapter.translateEvent({
       type: "assistant",
@@ -889,7 +888,7 @@ describe("claude-code provider adapter", () => {
         ],
       },
       session_id: "sess-1",
-    } as SDKMessage);
+    });
 
     expect(events).toContainEqual(
       expect.objectContaining({
@@ -941,7 +940,7 @@ describe("claude-code provider adapter", () => {
       type: "assistant",
       message: { role: "assistant", content: [{ type: "text", text: "Let me inspect that" }] },
       session_id: "sess-1",
-    } as SDKMessage);
+    });
 
     const events = adapter.translateEvent({
       type: "assistant",
@@ -957,7 +956,7 @@ describe("claude-code provider adapter", () => {
         ],
       },
       session_id: "sess-1",
-    } as SDKMessage);
+    });
 
     expect(events).toContainEqual(
       expect.objectContaining({
@@ -966,8 +965,16 @@ describe("claude-code provider adapter", () => {
           type: "toolCall",
           id: "tool-read-bad-1",
           tool: "Read",
-          arguments: "not-an-object",
           status: "pending",
+        }),
+      }),
+    );
+    expect(events).not.toContainEqual(
+      expect.objectContaining({
+        type: "item/started",
+        item: expect.objectContaining({
+          id: "tool-read-bad-1",
+          arguments: expect.anything(),
         }),
       }),
     );
@@ -1015,7 +1022,7 @@ describe("claude-code provider adapter", () => {
       type: "assistant",
       message: { role: "assistant", content: [{ type: "text", text: "x" }] },
       session_id: "sess-1",
-    } as SDKMessage);
+    });
 
     const events = adapter.translateEvent({
       type: "stream_event",
@@ -1024,7 +1031,7 @@ describe("claude-code provider adapter", () => {
         delta: { type: "text_delta", text: "streaming..." },
       },
       session_id: "sess-1",
-    } as SDKMessage);
+    });
 
     expect(events).toContainEqual(
       expect.objectContaining({
@@ -1044,7 +1051,7 @@ describe("claude-code provider adapter", () => {
         delta: { type: "text_delta", text: "PONG" },
       },
       session_id: "sess-1",
-    } as SDKMessage);
+    });
 
     expect(events).toContainEqual(
       expect.objectContaining({
@@ -1070,13 +1077,13 @@ describe("claude-code provider adapter", () => {
       type: "assistant",
       message: { role: "assistant", content: [{ type: "text", text: "done" }] },
       session_id: "sess-1",
-    } as SDKMessage);
+    });
 
     const events = adapter.translateEvent({
       type: "result",
       subtype: "end_turn",
       session_id: "sess-1",
-    } as unknown as SDKMessage);
+    });
 
     expect(events).toContainEqual(
       expect.objectContaining({
@@ -1094,13 +1101,13 @@ describe("claude-code provider adapter", () => {
       type: "assistant",
       message: { role: "assistant", content: [{ type: "text", text: "x" }] },
       session_id: "sess-1",
-    } as SDKMessage);
+    });
 
     const events = adapter.translateEvent({
       type: "result",
       subtype: "error",
       session_id: "sess-1",
-    } as unknown as SDKMessage);
+    });
 
     expect(events).toContainEqual(
       expect.objectContaining({
@@ -1119,7 +1126,7 @@ describe("claude-code provider adapter", () => {
       type: "assistant",
       message: { role: "assistant", content: [{ type: "text", text: "x" }] },
       session_id: "sess-1",
-    } as SDKMessage);
+    });
 
     const events = adapter.translateEvent({
       type: "user",
@@ -1130,7 +1137,7 @@ describe("claude-code provider adapter", () => {
         ],
       },
       session_id: "sess-1",
-    } as unknown as SDKMessage);
+    });
 
     expect(events).toContainEqual(
       expect.objectContaining({
@@ -1161,7 +1168,7 @@ describe("claude-code provider adapter", () => {
         ],
       },
       session_id: "sess-1",
-    } as SDKMessage);
+    });
 
     const events = adapter.translateEvent({
       type: "user",
@@ -1178,7 +1185,7 @@ describe("claude-code provider adapter", () => {
         ],
       },
       session_id: "sess-1",
-    } as unknown as SDKMessage);
+    });
 
     expect(events).toContainEqual(
       expect.objectContaining({
@@ -1213,7 +1220,7 @@ describe("claude-code provider adapter", () => {
         ],
       },
       session_id: "sess-1",
-    } as SDKMessage);
+    });
 
     const events = adapter.translateEvent({
       type: "user",
@@ -1228,7 +1235,7 @@ describe("claude-code provider adapter", () => {
         ],
       },
       session_id: "sess-1",
-    } as unknown as SDKMessage);
+    });
 
     expect(events).toContainEqual(
       expect.objectContaining({
@@ -1259,13 +1266,13 @@ describe("claude-code provider adapter", () => {
         ],
       },
       session_id: "sess-1",
-    } as SDKMessage);
+    });
 
     adapter.translateEvent({
       type: "result",
       subtype: "end_turn",
       session_id: "sess-1",
-    } as unknown as SDKMessage);
+    });
 
     const events = adapter.translateEvent({
       type: "user",
@@ -1281,7 +1288,7 @@ describe("claude-code provider adapter", () => {
         ],
       },
       session_id: "sess-1",
-    } as unknown as SDKMessage);
+    });
 
     expect(events).toContainEqual(
       expect.objectContaining({
@@ -1304,7 +1311,7 @@ describe("claude-code provider adapter", () => {
     const events = adapter.translateEvent({
       type: "system",
       session_id: "sess-1",
-    } as SDKMessage);
+    });
     expect(events).toEqual([]);
   });
 
@@ -1318,19 +1325,19 @@ describe("claude-code provider adapter", () => {
       type: "assistant",
       message: { role: "assistant", content: [{ type: "text", text: "first" }] },
       session_id: "sess-1",
-    } as SDKMessage);
+    });
     adapter.translateEvent({
       type: "result",
       subtype: "end_turn",
       session_id: "sess-1",
-    } as unknown as SDKMessage);
+    });
 
     // Turn 2
     const events = adapter.translateEvent({
       type: "assistant",
       message: { role: "assistant", content: [{ type: "text", text: "second" }] },
       session_id: "sess-1",
-    } as SDKMessage);
+    });
 
     expect(events).toContainEqual(
       expect.objectContaining({ type: "turn/started", turnId: "turn-2" }),

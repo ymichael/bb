@@ -40,6 +40,7 @@ import {
   MEDIUM_REASONING_EFFORT,
   XHIGH_REASONING_EFFORT,
   toNonNegativeNumber,
+  toOptionalRecord,
   toOptionalString,
   withParentToolCallId,
 } from "../shared/adapter-utils.js";
@@ -275,11 +276,12 @@ function buildPiFileChangeItem(
 function translatePiToolUseItem(
   input: PiToolUseTranslationInput,
 ): ThreadEventItem {
+  const toolArguments = toOptionalRecord(input.args);
   const baseToolCall = {
     type: "toolCall" as const,
     id: input.callId,
     tool: input.toolName,
-    arguments: input.args,
+    ...(toolArguments ? { arguments: toolArguments } : {}),
     status: "pending" as const,
   };
 

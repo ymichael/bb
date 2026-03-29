@@ -137,7 +137,7 @@ export function parseTaskMessage(
     return null;
   }
 
-  const tasks = asTodoTasks(toRecord(decoded.item.arguments)?.todos);
+  const tasks = asTodoTasks(decoded.item.arguments?.todos);
   if (tasks.length === 0) {
     return null;
   }

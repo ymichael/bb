@@ -156,11 +156,7 @@ function stampTranslatedEvent(args: StampTranslatedEventArgs): ThreadEvent {
     ...(
       providerThreadId !== undefined || "providerThreadId" in args.event
         ? {
-            providerThreadId:
-              providerThreadId ??
-              ("providerThreadId" in args.event
-                ? args.event.providerThreadId
-                : undefined),
+            providerThreadId,
           }
         : {}
     ),

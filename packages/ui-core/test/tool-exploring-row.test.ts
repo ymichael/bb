@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
-import type { ViewToolExploringMessage, ViewToolParsedIntent } from "@bb/domain";
 import {
   buildExploringDetailLines,
   formatExploringIntentLine,
   summarizeExploringCounts,
-} from "../src/thread-timeline/rows/ToolExploringRow.js";
+} from "@bb/core-ui";
+import type { ViewToolExploringMessage, ViewToolParsedIntent } from "@bb/domain";
 
 function buildCall(
   callId: string,

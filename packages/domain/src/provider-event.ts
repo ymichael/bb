@@ -169,7 +169,7 @@ export const threadEventItemSchema = z.discriminatedUnion("type", [
     id: z.string(),
     server: z.string().optional(),
     tool: z.string(),
-    arguments: z.unknown().optional(),
+    arguments: z.record(z.string(), z.unknown()).optional(),
     status: threadEventItemStatusSchema,
     result: z.unknown().optional(),
     error: z.string().optional(),

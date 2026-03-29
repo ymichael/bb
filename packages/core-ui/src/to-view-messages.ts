@@ -40,7 +40,6 @@ import {
   parseReasoningFinalText,
   isTerminalAssistantFlushEvent,
 } from "./assistant-buffering.js";
-import { toRecord } from "./unknown-helpers.js";
 import type {
   ToViewMessagesOptions,
   ViewAssistantReasoningMessage,
@@ -161,8 +160,7 @@ function getToolCallReceiverThreadIds(decoded: ThreadEvent): string[] {
     return [];
   }
 
-  const argumentsRecord = toRecord(decoded.item.arguments);
-  const receiverThreadIds = argumentsRecord?.receiverThreadIds;
+  const receiverThreadIds = decoded.item.arguments?.receiverThreadIds;
   if (!Array.isArray(receiverThreadIds)) {
     return [];
   }

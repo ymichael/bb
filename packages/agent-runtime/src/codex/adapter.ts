@@ -30,7 +30,10 @@ import type { ThreadResumeParams } from "./generated/codex-app-server/schema/v2/
 import type { ThreadStartParams } from "./generated/codex-app-server/schema/v2/ThreadStartParams.js";
 import type { UserInput as CodexUserInput } from "./generated/codex-app-server/schema/v2/UserInput.js";
 import { listCodexModels } from "./models.js";
-import { buildShellEnvironmentPolicyConfig } from "../shared/adapter-utils.js";
+import {
+  buildShellEnvironmentPolicyConfig,
+  toOptionalRecord,
+} from "../shared/adapter-utils.js";
 import {
   decodeProviderToolCallRequest,
 } from "../shared/provider-tool-call-contract.js";
@@ -628,23 +631,27 @@ function translateCodexItem(item: unknown): ThreadEventItem | null {
         status: toItemStatus(parsedItem.status),
       };
     case "mcpToolCall":
-      return {
-        type: "toolCall",
-        id: parsedItem.id,
-        server: parsedItem.server,
-        tool: parsedItem.tool,
-        arguments: parsedItem.arguments,
-        status: toItemStatus(parsedItem.status),
-        error: parsedItem.error?.message,
-        durationMs: parsedItem.durationMs ?? undefined,
-      };
+      {
+        const toolArguments = toOptionalRecord(parsedItem.arguments);
+        return {
+          type: "toolCall",
+          id: parsedItem.id,
+          server: parsedItem.server,
+          tool: parsedItem.tool,
+          ...(toolArguments ? { arguments: toolArguments } : {}),
+          status: toItemStatus(parsedItem.status),
+          error: parsedItem.error?.message,
+          durationMs: parsedItem.durationMs ?? undefined,
+        };
+      }
     case "dynamicToolCall": {
       const result = extractDynamicToolCallResult(parsedItem.contentItems);
+      const toolArguments = toOptionalRecord(parsedItem.arguments);
       return {
         type: "toolCall",
         id: parsedItem.id,
         tool: parsedItem.tool,
-        arguments: parsedItem.arguments,
+        ...(toolArguments ? { arguments: toolArguments } : {}),
         status: toItemStatus(parsedItem.status),
         result,
         error: buildDynamicToolCallError(parsedItem.success, result),

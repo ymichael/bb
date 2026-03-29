@@ -9,7 +9,6 @@ import {
   parseShellCommandIntents,
   stripAgentOutputMetadata,
 } from "./tool-call-parsing.js";
-import { toRecord } from "./unknown-helpers.js";
 
 const STRUCTURED_READ_TOOL_NAMES = new Set(["Read", "read"]);
 const STRUCTURED_SEARCH_TOOL_NAMES = new Set(["Grep", "grep"]);
@@ -317,7 +316,7 @@ export function parseToolCallLifecycleEvent(
     const toolName = decoded.item.tool ?? "tool";
     const serverPrefix = decoded.item.server ? `${decoded.item.server}:` : "";
     const fullToolName = `${serverPrefix}${toolName}`;
-    const parsedArgs = toRecord(decoded.item.arguments);
+    const parsedArgs = decoded.item.arguments ?? null;
 
     const kind = decoded.type === "item/started" ? "begin" : "end";
     const status = kind === "end"

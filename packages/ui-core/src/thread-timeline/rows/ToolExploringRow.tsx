@@ -15,12 +15,6 @@ import {
   useStickyBottomAutoScroll,
 } from "./shared.js";
 
-export {
-  buildExploringDetailLines,
-  formatExploringIntentLine,
-  summarizeExploringCounts,
-} from "@bb/core-ui";
-
 export function ToolExploringRow({
   message,
   initialExpanded = false,
