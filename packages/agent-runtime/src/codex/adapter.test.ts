@@ -24,7 +24,7 @@ function codexEvent<M extends CodexEvent["method"]>(
 }
 
 describe("codex provider adapter", () => {
-  const mockedListCodexModels = listCodexModels as unknown as ReturnType<typeof vi.fn>;
+  const mockedListCodexModels = vi.mocked(listCodexModels);
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -1148,7 +1148,7 @@ describe("codex provider adapter", () => {
   // -- listModels ----------------------------------------------------------
 
   it("lists models through the injected implementation", async () => {
-    mockedListCodexModels.mockResolvedValue([
+    const models = [
       {
         id: "codex-mini",
         model: "codex-mini",
@@ -1158,9 +1158,10 @@ describe("codex provider adapter", () => {
         defaultReasoningEffort: "medium",
         isDefault: true,
       },
-    ]);
+    ] satisfies Awaited<ReturnType<typeof listCodexModels>>;
+    mockedListCodexModels.mockResolvedValue(models);
 
     const adapter = createCodexProviderAdapter();
-    await expect(adapter.listModels()).resolves.toHaveLength(1);
+    await expect(adapter.listModels()).resolves.toEqual(models);
   });
 });

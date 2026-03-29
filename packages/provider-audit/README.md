@@ -342,4 +342,4 @@ The larger goals are:
 - provider-specific behavior should not disappear silently
 - where we do not support something yet, the limitation should be explicit
 
-The biggest remaining product/modeling gaps are tracked in [TODO.md](/Users/michael/.codex/worktrees/e4f5/bb/packages/provider-audit/TODO.md).
+The biggest remaining product/modeling gaps should be tracked in a branch-local TODO or plan while active work is in progress.

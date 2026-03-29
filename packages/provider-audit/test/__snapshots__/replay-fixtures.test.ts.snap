@@ -163,7 +163,7 @@ exports[`@bb/provider-audit fixture replay > replays every checked-in fixture in
     "timelinePreview": [
       "── User ────────────────────────────────────────────────────",
       "I want to make Excalidraw's eyedropper experience friendlier on browsers with uneven platform support. Please inspect the current repo behavior and use the built-in WebSearch and WebFetch tools directly to verify the current browser/platform docs around the EyeDropper API before you recommend a change. Keep a todo list as you go and avoid delegating this research to a subagent.",
-      "── Working for 1m 57s (36 items) ───────────────────────────",
+      "── Working for 1m 57s ──────────────────────────────────────",
       "── Assistant ───────────────────────────────────────────────",
       "---",
       "## Analysis & Recommendation",
@@ -191,10 +191,10 @@ exports[`@bb/provider-audit fixture replay > replays every checked-in fixture in
     "timelinePreview": [
       "── User ────────────────────────────────────────────────────",
       "There's a positioning bug in the eyedropper preview: near the viewport edges, the preview can end up off-screen instead of flipping to the other side of the pointer. Please fix the positioning so the preview stays visible inside the viewport and add focused coverage for the edge cases.",
-      "── Worked for 1m 22s (2 items) ─────────────────────────────",
+      "── Worked for 1m 22s ───────────────────────────────────────",
       "── User ────────────────────────────────────────────────────",
       "Explain how the old positioning logic failed and how your regression coverage would have caught it.",
-      "── Worked for 2m 8s (22 items) ─────────────────────────────",
+      "── Worked for 2m 8s ────────────────────────────────────────",
       "── Assistant ───────────────────────────────────────────────",
       "Everything looks good. Here's a summary of the changes:",
     ],
@@ -219,7 +219,7 @@ exports[`@bb/provider-audit fixture replay > replays every checked-in fixture in
     "timelinePreview": [
       "── User ────────────────────────────────────────────────────",
       "Make the Magic Frame AI workflow discoverable from the command or search experience on desktop. It should show up only when the existing AI feature is actually available, behave like the rest of the tool entries, and include focused coverage for the availability gating and action wiring.",
-      "── Worked for 7m 2s (48 items) ─────────────────────────────",
+      "── Worked for 7m 2s ────────────────────────────────────────",
       "── Assistant ───────────────────────────────────────────────",
       "Everything looks good. Here's a summary of the changes:",
       "---",
@@ -246,7 +246,7 @@ exports[`@bb/provider-audit fixture replay > replays every checked-in fixture in
     "timelinePreview": [
       "── User ────────────────────────────────────────────────────",
       "There's a usability bug in the canvas search sidebar: if I navigate to a later match and then change the query so fewer matches remain, focus can end up pointing at nothing. Fix it so a query change resets focus to the first match when matches exist, and add a regression test validating the behavior.",
-      "── Worked for 3m 25s (13 items) ────────────────────────────",
+      "── Worked for 3m 25s ───────────────────────────────────────",
       "── Assistant ───────────────────────────────────────────────",
       "All 6 tests pass, including the new regression test. Let me summarize the fix:",
       "## Bug & Fix",
@@ -273,7 +273,7 @@ exports[`@bb/provider-audit fixture replay > replays every checked-in fixture in
     "timelinePreview": [
       "── User ────────────────────────────────────────────────────",
       "Add a small result summary to the canvas search sidebar: show \`N results\` when there are matches, show a clear \`No matches found\` empty state when the query is non-empty and there are none, and keep the existing keyboard navigation behavior intact. Update the relevant tests and validate the focused test file.",
-      "── Worked for 2m 33s (13 items) ────────────────────────────",
+      "── Worked for 2m 33s ───────────────────────────────────────",
       "── Assistant ───────────────────────────────────────────────",
       "All 8 tests pass. Here's a summary of what was done:",
       "### Changes Made",
@@ -300,7 +300,7 @@ exports[`@bb/provider-audit fixture replay > replays every checked-in fixture in
     "timelinePreview": [
       "── User ────────────────────────────────────────────────────",
       "I'm trying to understand Excalidraw's text-to-diagram flow before changing it. Please trace the flow from the dialog UI through chat history/state updates to the code that turns the final response into scene updates. Call out the main files, the key types, and any tricky state transitions or failure cases. Keep it grounded in the current codebase with specific file references.",
-      "── Worked for 1m 12s (3 items) ─────────────────────────────",
+      "── Worked for 1m 12s ───────────────────────────────────────",
       "── Assistant ───────────────────────────────────────────────",
       "Here's the full trace of Excalidraw's text-to-diagram (TTD) flow, grounded in the current codebase:",
       "---",
@@ -325,7 +325,7 @@ exports[`@bb/provider-audit fixture replay > replays every checked-in fixture in
     "timelinePreview": [
       "── User ────────────────────────────────────────────────────",
       "I'm trying to understand Excalidraw's collaboration startup flow before changing it. Please trace the path from the collaboration UI into room initialization, socket setup, first scene load, and the state changes that flip the app into collaboration mode. Call out the main files, the key types or state, and any tricky fallback or failure paths. Keep it grounded in the current codebase with specific file references.",
-      "── Worked for 9m 17s (52 items) ────────────────────────────",
+      "── Worked for 9m 17s ───────────────────────────────────────",
       "── Assistant ───────────────────────────────────────────────",
       "I traced the current **client-side** flow. The websocket server itself doesn’t appear to live in this checkout; the client contract is in \`excalidraw-app/app_constants.ts:16-30\`, \`excalidraw-app/collab/Portal.tsx:37-60\`, and \`excalidraw-app/collab/Collab.tsx:567-699\`.",
       "## Main files",
@@ -351,7 +351,7 @@ exports[`@bb/provider-audit fixture replay > replays every checked-in fixture in
     "timelinePreview": [
       "── User ────────────────────────────────────────────────────",
       "There's a positioning bug in the eyedropper preview: near the viewport edges, the preview can end up off-screen instead of flipping to the other side of the pointer. Please fix the positioning so the preview stays visible inside the viewport and add focused coverage for the edge cases.",
-      "── Worked for 4m 31s (36 items) ────────────────────────────",
+      "── Worked for 4m 31s ───────────────────────────────────────",
       "── Assistant ───────────────────────────────────────────────",
       "Fixed.",
       "What changed:",
@@ -378,7 +378,7 @@ exports[`@bb/provider-audit fixture replay > replays every checked-in fixture in
     "timelinePreview": [
       "── User ────────────────────────────────────────────────────",
       "Make the Magic Frame AI workflow discoverable from the command or search experience on desktop. It should show up only when the existing AI feature is actually available, behave like the rest of the tool entries, and include focused coverage for the availability gating and action wiring.",
-      "── Worked for 7m 57s (55 items) ────────────────────────────",
+      "── Worked for 7m 57s ───────────────────────────────────────",
       "── Assistant ───────────────────────────────────────────────",
       "Implemented.",
       "What changed:",
@@ -405,7 +405,7 @@ exports[`@bb/provider-audit fixture replay > replays every checked-in fixture in
     "timelinePreview": [
       "── User ────────────────────────────────────────────────────",
       "There's a usability bug in the canvas search sidebar: if I navigate to a later match and then change the query so fewer matches remain, focus can end up pointing at nothing. Fix it so a query change resets focus to the first match when matches exist, and add a regression test validating the behavior.",
-      "── Worked for 3m 54s (32 items) ────────────────────────────",
+      "── Worked for 3m 54s ───────────────────────────────────────",
       "── Assistant ───────────────────────────────────────────────",
       "Fixed.",
       "Changes:",
@@ -432,7 +432,7 @@ exports[`@bb/provider-audit fixture replay > replays every checked-in fixture in
     "timelinePreview": [
       "── User ────────────────────────────────────────────────────",
       "Add a small result summary to the canvas search sidebar: show \`N results\` when there are matches, show a clear \`No matches found\` empty state when the query is non-empty and there are none, and keep the existing keyboard navigation behavior intact. Update the relevant tests and validate the focused test file.",
-      "── Worked for 4m 7s (36 items) ─────────────────────────────",
+      "── Worked for 4m 7s ────────────────────────────────────────",
       "── Assistant ───────────────────────────────────────────────",
       "Done.",
       "Changed:",
@@ -459,7 +459,7 @@ exports[`@bb/provider-audit fixture replay > replays every checked-in fixture in
     "timelinePreview": [
       "── User ────────────────────────────────────────────────────",
       "Use the available repo_outline helper first for the share and collaboration area. Then inspect the actual code and implement one small discoverability improvement to the share dialog for unsupported browsers with focused validation. Keep the change minimal and move quickly.",
-      "── Worked for 6m 45s (78 items) ────────────────────────────",
+      "── Worked for 6m 45s ───────────────────────────────────────",
       "── Assistant ───────────────────────────────────────────────",
       "Done.",
       "Changes:",
@@ -486,7 +486,7 @@ exports[`@bb/provider-audit fixture replay > replays every checked-in fixture in
     "timelinePreview": [
       "── User ────────────────────────────────────────────────────",
       "I'm trying to understand Excalidraw's text-to-diagram flow before changing it. Please trace the flow from the dialog UI through chat history/state updates to the code that turns the final response into scene updates. Call out the main files, the key types, and any tricky state transitions or failure cases. Keep it grounded in the current codebase with specific file references.",
-      "── Worked for 7m 10s (50 items) ────────────────────────────",
+      "── Worked for 7m 10s ───────────────────────────────────────",
       "── Assistant ───────────────────────────────────────────────",
       "Here’s the current end-to-end flow I found.",
       "### 1) Entry points / dialog mounting",
@@ -536,7 +536,7 @@ exports[`@bb/provider-audit fixture replay > replays every checked-in fixture in
     "timelinePreview": [
       "── User ────────────────────────────────────────────────────",
       "Use the available repo_outline helper first for the command and search area. Then use the built-in ls, find, and grep tools instead of bash while you inventory the relevant directories, trace the path from command registration to availability gating and action dispatch, and call out the safest insertion point for another gated action.",
-      "── Worked for 27s (14 items) ───────────────────────────────",
+      "── Worked for 27s ──────────────────────────────────────────",
       "── Assistant ───────────────────────────────────────────────",
       "Now I have the full picture. Here's the complete trace and recommendation:",
       "---",
@@ -562,7 +562,7 @@ exports[`@bb/provider-audit fixture replay > replays every checked-in fixture in
     "timelinePreview": [
       "── User ────────────────────────────────────────────────────",
       "There's a positioning bug in the eyedropper preview: near the viewport edges, the preview can end up off-screen instead of flipping to the other side of the pointer. Please fix the positioning so the preview stays visible inside the viewport and add focused coverage for the edge cases.",
-      "── Worked for 1m 59s (16 items) ────────────────────────────",
+      "── Worked for 1m 59s ───────────────────────────────────────",
       "── Assistant ───────────────────────────────────────────────",
       "TypeScript is happy. Here's a summary of the fix:",
       "## Changes",
@@ -588,7 +588,7 @@ exports[`@bb/provider-audit fixture replay > replays every checked-in fixture in
     "timelinePreview": [
       "── User ────────────────────────────────────────────────────",
       "Make the Magic Frame AI workflow discoverable from the command or search experience on desktop. It should show up only when the existing AI feature is actually available, behave like the rest of the tool entries, and include focused coverage for the availability gating and action wiring.",
-      "── Worked for 9m 33s (71 items) ────────────────────────────",
+      "── Worked for 9m 33s ───────────────────────────────────────",
       "── User ────────────────────────────────────────────────────",
       "Summarize the user-visible behavior and the validation you ran.",
     ],
@@ -611,7 +611,7 @@ exports[`@bb/provider-audit fixture replay > replays every checked-in fixture in
     "timelinePreview": [
       "── User ────────────────────────────────────────────────────",
       "There's a usability bug in the canvas search sidebar: if I navigate to a later match and then change the query so fewer matches remain, focus can end up pointing at nothing. Fix it so a query change resets focus to the first match when matches exist, and add a regression test validating the behavior.",
-      "── Worked for 1m 45s (10 items) ────────────────────────────",
+      "── Worked for 1m 45s ───────────────────────────────────────",
       "── Assistant ───────────────────────────────────────────────",
       "All 6 tests pass, including the new regression test. Here's what changed:",
       "---",
@@ -637,7 +637,7 @@ exports[`@bb/provider-audit fixture replay > replays every checked-in fixture in
     "timelinePreview": [
       "── User ────────────────────────────────────────────────────",
       "Add a small result summary to the canvas search sidebar: show \`N results\` when there are matches, show a clear \`No matches found\` empty state when the query is non-empty and there are none, and keep the existing keyboard navigation behavior intact. Update the relevant tests and validate the focused test file.",
-      "── Worked for 1m 6s (9 items) ──────────────────────────────",
+      "── Worked for 1m 6s ────────────────────────────────────────",
       "── Assistant ───────────────────────────────────────────────",
       "All 10 tests pass (4 existing + 6 new). Here's a summary of the changes:",
       "---",
@@ -703,7 +703,7 @@ What's the safest extension point if I want to instrument room startup without c
     "timeline": "── User ────────────────────────────────────────────────────
 I want to make Excalidraw's eyedropper experience friendlier on browsers with uneven platform support. Please inspect the current repo behavior and use the built-in WebSearch and WebFetch tools directly to verify the current browser/platform docs around the EyeDropper API before you recommend a change. Keep a todo list as you go and avoid delegating this research to a subagent.
 
-── Working for 1m 57s (36 items) ───────────────────────────
+── Working for 1m 57s ──────────────────────────────────────
   ── Assistant ───────────────────────────────────────────────
   Let me start by setting up a todo list and exploring the codebase for eyedropper-related code, while also searching the web for current EyeDropper API support.
   ── Tool Call: ToolSearch ───────────────────────────────────
@@ -912,7 +912,7 @@ Shall I go ahead and implement this progressive-enhancement change?
 ── User ────────────────────────────────────────────────────
 Implement that improvement with focused validation and keep the existing behavior for unsupported browsers intact.
 
-── Worked for 3m 20s (33 items) ────────────────────────────
+── Worked for 3m 20s ───────────────────────────────────────
   ── Assistant ───────────────────────────────────────────────
   Let me start by planning the implementation carefully, then build it out.
   ── Updated tasks ───────────────────────────────────────────
@@ -1234,7 +1234,7 @@ All sourced during the research phase before writing any code:
     "timeline": "── User ────────────────────────────────────────────────────
 There's a positioning bug in the eyedropper preview: near the viewport edges, the preview can end up off-screen instead of flipping to the other side of the pointer. Please fix the positioning so the preview stays visible inside the viewport and add focused coverage for the edge cases.
 
-── Worked for 1m 22s (2 items) ─────────────────────────────
+── Worked for 1m 22s ───────────────────────────────────────
   ── Subagent Explore: Find eyedropper preview code ──────────
     58.1s
     Excellent! Now let me compile a comprehensive report with all the files related to eyedropper preview positioning logic.
@@ -1377,7 +1377,7 @@ There's a positioning bug in the eyedropper preview: near the viewport edges, th
 ── User ────────────────────────────────────────────────────
 Explain how the old positioning logic failed and how your regression coverage would have caught it.
 
-── Worked for 2m 8s (22 items) ─────────────────────────────
+── Worked for 2m 8s ────────────────────────────────────────
   ── Assistant ───────────────────────────────────────────────
   Let me read the relevant source files to understand the current code and existing tests.
   ── Explored 2 files, 3 lists ───────────────────────────────
@@ -1562,7 +1562,7 @@ The last test is the direct regression check: the old code would have produced \
     "timeline": "── User ────────────────────────────────────────────────────
 Make the Magic Frame AI workflow discoverable from the command or search experience on desktop. It should show up only when the existing AI feature is actually available, behave like the rest of the tool entries, and include focused coverage for the availability gating and action wiring.
 
-── Worked for 7m 2s (48 items) ─────────────────────────────
+── Worked for 7m 2s ────────────────────────────────────────
   ── Subagent Explore: Explore codebase for Magic Frame AI ───
     1m 43s
     Perfect! I have gathered comprehensive information. Let me compile my findings into a thorough report:
@@ -2310,7 +2310,7 @@ Ran the new test suite (\`vitest run\`) — all 6 tests pass:
     "timeline": "── User ────────────────────────────────────────────────────
 There's a usability bug in the canvas search sidebar: if I navigate to a later match and then change the query so fewer matches remain, focus can end up pointing at nothing. Fix it so a query change resets focus to the first match when matches exist, and add a regression test validating the behavior.
 
-── Worked for 3m 25s (13 items) ────────────────────────────
+── Worked for 3m 25s ───────────────────────────────────────
   ── Assistant ───────────────────────────────────────────────
   Let me start by exploring the codebase to understand the canvas search sidebar implementation.
   ── Subagent Explore: Find canvas search sidebar code ───────
@@ -2689,7 +2689,7 @@ When \`findIndex\` returns \`-1\`, the expression \`visibleIndex >= 0\` is \`fal
     "timeline": "── User ────────────────────────────────────────────────────
 Add a small result summary to the canvas search sidebar: show \`N results\` when there are matches, show a clear \`No matches found\` empty state when the query is non-empty and there are none, and keep the existing keyboard navigation behavior intact. Update the relevant tests and validate the focused test file.
 
-── Worked for 2m 33s (13 items) ────────────────────────────
+── Worked for 2m 33s ───────────────────────────────────────
   ── Assistant ───────────────────────────────────────────────
   I'll start by exploring the codebase to understand the canvas search sidebar implementation.
   ── Subagent Explore: Find canvas search sidebar code ───────
@@ -3066,7 +3066,7 @@ Ran \`npx vitest run packages/excalidraw/tests/search.test.tsx\` — all 8 tests
     "timeline": "── User ────────────────────────────────────────────────────
 I'm trying to understand Excalidraw's text-to-diagram flow before changing it. Please trace the flow from the dialog UI through chat history/state updates to the code that turns the final response into scene updates. Call out the main files, the key types, and any tricky state transitions or failure cases. Keep it grounded in the current codebase with specific file references.
 
-── Worked for 1m 12s (3 items) ─────────────────────────────
+── Worked for 1m 12s ───────────────────────────────────────
   ── Subagent Explore: Explore text-to-diagram UI dialog ─────
     40.3s
     Perfect! Now I have a comprehensive understanding. Let me provide the complete report:
@@ -3697,7 +3697,7 @@ I'm trying to understand Excalidraw's text-to-diagram flow before changing it. P
     This complete pipeline allows users to generate diagrams via AI chat, see live previews as Mermaid syntax is generated, and insert the rendered elements directly into the Excalidraw canvas with proper positioning, bindings, and file handling.
     tool_uses: 40
     duration_ms: 64054</usage>
-    ── Worked for 41s (40 items) ───────────────────────────────
+    ── Worked for 41s ──────────────────────────────────────────
       ── Explored 13 files, 12 searches, 3 lists ─────────────────
         Search parseMermaid|mermaidToExcalidraw|convertToExcalidraw
         Search insertElements|ExcalidrawElementSkeleton
@@ -3925,7 +3925,7 @@ TTDDialogTrigger → setAppState({ openDialog: "ttd" })
 ── User ────────────────────────────────────────────────────
 What's the safest extension point if I want to tweak the UI without changing the scene-generation logic?
 
-── Worked for 7s (6 items) ─────────────────────────────────
+── Worked for 7s ───────────────────────────────────────────
   ── Assistant ───────────────────────────────────────────────
   Based on the flow we already traced, there are several clean extension points where UI changes stay completely decoupled from the conversion/scene pipeline. Let me verify the exact prop boundaries to give you precise guidance.
   ── Explored 6 files ────────────────────────────────────────
@@ -4060,7 +4060,7 @@ The clean separation is that \`TextToDiagram.tsx\` acts as the **adapter** betwe
     "timeline": "── User ────────────────────────────────────────────────────
 I'm trying to understand Excalidraw's collaboration startup flow before changing it. Please trace the path from the collaboration UI into room initialization, socket setup, first scene load, and the state changes that flip the app into collaboration mode. Call out the main files, the key types or state, and any tricky fallback or failure paths. Keep it grounded in the current codebase with specific file references.
 
-── Worked for 9m 17s (52 items) ────────────────────────────
+── Worked for 9m 17s ───────────────────────────────────────
   ── Tool Call: exec_command ─────────────────────────────────
     ✗ bb status
     0ms
@@ -4381,7 +4381,7 @@ So: **best completion hook = \`initializeRoom()\`; best outer lifecycle hook = \
     "timeline": "── User ────────────────────────────────────────────────────
 There's a positioning bug in the eyedropper preview: near the viewport edges, the preview can end up off-screen instead of flipping to the other side of the pointer. Please fix the positioning so the preview stays visible inside the viewport and add focused coverage for the edge cases.
 
-── Worked for 4m 31s (36 items) ────────────────────────────
+── Worked for 4m 31s ───────────────────────────────────────
   ── Assistant ───────────────────────────────────────────────
   Using \`vercel-react-best-practices\` because this is a React UI bugfix with tests.
   ── Tool Call: exec_command ─────────────────────────────────
@@ -4763,7 +4763,7 @@ So the new tests directly encode the bug: if someone reintroduced the old fixed-
     "timeline": "── User ────────────────────────────────────────────────────
 Make the Magic Frame AI workflow discoverable from the command or search experience on desktop. It should show up only when the existing AI feature is actually available, behave like the rest of the tool entries, and include focused coverage for the availability gating and action wiring.
 
-── Worked for 7m 57s (55 items) ────────────────────────────
+── Worked for 7m 57s ───────────────────────────────────────
   ── Tool Call: exec_command ─────────────────────────────────
     ✗ bb status
     0ms
@@ -7196,7 +7196,7 @@ Note:
     "timeline": "── User ────────────────────────────────────────────────────
 There's a usability bug in the canvas search sidebar: if I navigate to a later match and then change the query so fewer matches remain, focus can end up pointing at nothing. Fix it so a query change resets focus to the first match when matches exist, and add a regression test validating the behavior.
 
-── Worked for 3m 54s (32 items) ────────────────────────────
+── Worked for 3m 54s ───────────────────────────────────────
   ── Tool Call: exec_command ─────────────────────────────────
     ✗ bb status
     0ms
@@ -7528,7 +7528,7 @@ That’s exactly what the regression test sets up:
     "timeline": "── User ────────────────────────────────────────────────────
 Add a small result summary to the canvas search sidebar: show \`N results\` when there are matches, show a clear \`No matches found\` empty state when the query is non-empty and there are none, and keep the existing keyboard navigation behavior intact. Update the relevant tests and validate the focused test file.
 
-── Worked for 4m 7s (36 items) ─────────────────────────────
+── Worked for 4m 7s ────────────────────────────────────────
   ── Assistant ───────────────────────────────────────────────
   Using the \`vercel-react-best-practices\` skill because this is a React UI change with tests.
   ── Tool Call: exec_command ─────────────────────────────────
@@ -8036,7 +8036,7 @@ Result:
     "timeline": "── User ────────────────────────────────────────────────────
 Use the available repo_outline helper first for the share and collaboration area. Then inspect the actual code and implement one small discoverability improvement to the share dialog for unsupported browsers with focused validation. Keep the change minimal and move quickly.
 
-── Worked for 6m 45s (78 items) ────────────────────────────
+── Worked for 6m 45s ───────────────────────────────────────
   ── Tool Call: repo_outline ─────────────────────────────────
     ✓ repo_outline { area: share and collaboration }
     4ms
@@ -8553,7 +8553,7 @@ Outside references consulted:
     "timeline": "── User ────────────────────────────────────────────────────
 I'm trying to understand Excalidraw's text-to-diagram flow before changing it. Please trace the flow from the dialog UI through chat history/state updates to the code that turns the final response into scene updates. Call out the main files, the key types, and any tricky state transitions or failure cases. Keep it grounded in the current codebase with specific file references.
 
-── Worked for 7m 10s (50 items) ────────────────────────────
+── Worked for 7m 10s ───────────────────────────────────────
   ── Updated tasks ───────────────────────────────────────────
     ◼ Inspect repo context and locate text-to-diagram entry points
     □ Trace UI dialog -> state/history -> response handling -> scene update code
@@ -9198,7 +9198,7 @@ Socket.IO allows multiple listeners per event, so these don't replace the existi
     "timeline": "── User ────────────────────────────────────────────────────
 Use the available repo_outline helper first for the command and search area. Then use the built-in ls, find, and grep tools instead of bash while you inventory the relevant directories, trace the path from command registration to availability gating and action dispatch, and call out the safest insertion point for another gated action.
 
-── Worked for 27s (14 items) ───────────────────────────────
+── Worked for 27s ──────────────────────────────────────────
   ── Tool Call: repo_outline ─────────────────────────────────
     ✓ repo_outline { area: command and search }
     2ms
@@ -9346,7 +9346,7 @@ This is a purely additive, data-only change. No dispatch paths, gating logic, or
 | **keyword discoverability** | 8 parameterized + 1 negative | Builds the same haystack the \`CommandPalette\` builds and runs the same \`fuzzy.filter\` + \`deburr\` pipeline against each keyword, plus a negative control (\`"eraser"\` → no match) |
 | **action behaviour** | 2 integration | \`executeAction\` opens the correct sidebar tab; \`perform\` returns \`false\` when a dialog is already open |
 
-── Worked for 2m 59s (36 items) ────────────────────────────
+── Worked for 2m 59s ───────────────────────────────────────
   ── Explored 7 files, 10 searches, 2 lists ──────────────────
     Read packages/excalidraw/actions/actionToggleSearchMenu.ts
     Search keywords in packages/excalidraw/actions/action*.tsx
@@ -9518,7 +9518,7 @@ This is a data-only change on a single field of one registered action. Nothing i
     "timeline": "── User ────────────────────────────────────────────────────
 There's a positioning bug in the eyedropper preview: near the viewport edges, the preview can end up off-screen instead of flipping to the other side of the pointer. Please fix the positioning so the preview stays visible inside the viewport and add focused coverage for the edge cases.
 
-── Worked for 1m 59s (16 items) ────────────────────────────
+── Worked for 1m 59s ───────────────────────────────────────
   ── Explored 2 files, 7 searches ────────────────────────────
     Search eyedropper in $EXCALIDRAW_REPO/packages/
     Search EyeDropper\\|eyeDropper\\|Eyedropper in $EXCALIDRAW_REPO/packages/excalidraw/
@@ -9692,7 +9692,7 @@ Five of the nine tests fail on the old code. The boundary pair (just-fits vs. of
     "timeline": "── User ────────────────────────────────────────────────────
 Make the Magic Frame AI workflow discoverable from the command or search experience on desktop. It should show up only when the existing AI feature is actually available, behave like the rest of the tool entries, and include focused coverage for the availability gating and action wiring.
 
-── Worked for 9m 33s (71 items) ────────────────────────────
+── Worked for 9m 33s ───────────────────────────────────────
   ── Tool Call: exec_command ─────────────────────────────────
     ✗ cd $EXCALIDRAW_REPO && bb subagent explore "Explore the codebase to understand: 1) How the command palette / search experience works on desktop (look for CommandPalette, command menu, search commands, etc.) 2) How the AI / Magic Frame feature works (look for 'magic', 'ai', 'MagicFrame', 'text to diagram' etc.) 3) How actions are registered and wired into the command palette 4) How feature gating/availability for AI is handled (look for isAI, aiEnabled, app.props.aiEnabled or similar flags). Give me specific file paths and code snippets for each area."
     7ms
@@ -10065,7 +10065,7 @@ Summarize the user-visible behavior and the validation you ran.",
     "timeline": "── User ────────────────────────────────────────────────────
 There's a usability bug in the canvas search sidebar: if I navigate to a later match and then change the query so fewer matches remain, focus can end up pointing at nothing. Fix it so a query change resets focus to the first match when matches exist, and add a regression test validating the behavior.
 
-── Worked for 1m 45s (10 items) ────────────────────────────
+── Worked for 1m 45s ───────────────────────────────────────
   ── Explored 1 file ─────────────────────────────────────────
     Read packages/excalidraw/components/SearchMenu.tsx
   ── File Edit ───────────────────────────────────────────────

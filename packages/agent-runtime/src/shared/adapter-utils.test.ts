@@ -53,4 +53,28 @@ describe("adapter-utils", () => {
     expect(diff).toContain("+const enabled = true;");
     expect(diff).not.toContain("@@");
   });
+
+  it("buildEditDiff renders pure additions against /dev/null", () => {
+    const diff = buildEditDiff(
+      "src/new-file.ts",
+      undefined,
+      "export const enabled = true;\n",
+    );
+
+    expect(diff).toContain("--- /dev/null");
+    expect(diff).toContain("+++ b/src/new-file.ts");
+    expect(diff).toContain("+export const enabled = true;");
+  });
+
+  it("buildEditDiff renders pure deletions to /dev/null", () => {
+    const diff = buildEditDiff(
+      "src/old-file.ts",
+      "export const enabled = false;\n",
+      undefined,
+    );
+
+    expect(diff).toContain("--- a/src/old-file.ts");
+    expect(diff).toContain("+++ /dev/null");
+    expect(diff).toContain("-export const enabled = false;");
+  });
 });

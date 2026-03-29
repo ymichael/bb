@@ -55,6 +55,24 @@ export function buildEditDiff(
   newString: string | undefined,
 ): string | undefined {
   const normalizedPath = filePath.replace(/\\/g, "/").replace(/^\/+/, "");
+  if (oldString === undefined && newString !== undefined) {
+    const newLines = newString.split("\n").map((line) => `+${line}`);
+    return [
+      "--- /dev/null",
+      `+++ b/${normalizedPath}`,
+      ...newLines,
+    ].join("\n") + "\n";
+  }
+
+  if (oldString !== undefined && newString === undefined) {
+    const oldLines = oldString.split("\n").map((line) => `-${line}`);
+    return [
+      `--- a/${normalizedPath}`,
+      "+++ /dev/null",
+      ...oldLines,
+    ].join("\n") + "\n";
+  }
+
   if (oldString !== undefined && newString !== undefined) {
     const oldLines = oldString.split("\n").map((line) => `-${line}`);
     const newLines = newString.split("\n").map((line) => `+${line}`);
