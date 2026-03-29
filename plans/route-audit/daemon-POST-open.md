@@ -51,5 +51,3 @@
 ## Review Comments
 
 <!-- Leave comments, questions, or follow-ups below. Delete this file if no action needed. -->
-- Flag 1 is low risk given localhost binding but worth noting if the local API ever becomes accessible to browser JS via CORS (CORS is currently `*`).
-- The `cors({ origin: "*" })` middleware on line 34 means any webpage can call these routes if the user visits it. Combined with flag 1, a malicious webpage could call `POST /open` with an arbitrary path. This is the most significant finding in this audit.

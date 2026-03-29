@@ -58,4 +58,4 @@
 
 ## Review Comments
 
-Flag 1 is a real bug — the `mergeBaseBranch` field on the command has no effect. `WorkspaceImpl.getStatus` needs to accept and forward `StatusOptions`.
+<!-- Leave comments, questions, or follow-ups below. Delete this file if no action needed. -->

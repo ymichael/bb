@@ -52,4 +52,3 @@
 ## Review Comments
 
 <!-- Leave comments, questions, or follow-ups below. Delete this file if no action needed. -->
-- Consider adding a platform check that returns a structured error instead of silently returning null on non-macOS.

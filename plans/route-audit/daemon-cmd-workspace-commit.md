@@ -48,4 +48,4 @@
 
 ## Review Comments
 
-Flag 1 is minor — the caller (server) should check status before committing. But a friendlier error would be nice.
+<!-- Leave comments, questions, or follow-ups below. Delete this file if no action needed. -->

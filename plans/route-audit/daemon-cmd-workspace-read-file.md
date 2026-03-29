@@ -51,4 +51,4 @@
 
 ## Review Comments
 
-Flag 2 — Consider adding a max file size guard or streaming, especially since this could be called by an AI agent that might request large files.
+<!-- Leave comments, questions, or follow-ups below. Delete this file if no action needed. -->

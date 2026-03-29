@@ -44,5 +44,3 @@
 ## Review Comments
 
 <!-- Leave comments, questions, or follow-ups below. Delete this file if no action needed. -->
-- The `scheduleRestart` indirection is well-designed for testability.
-- Flag 2 (CORS `*` + restart) is the highest-severity finding across all five local API routes. A restrictive CORS origin (or an auth token) would mitigate it.

@@ -60,5 +60,4 @@
 
 ## Review Comments
 
-Flag 1 — `threadId` should be removed from the schema or used.
-Flag 2 — Consider a rollback strategy for partial failure.
+<!-- Leave comments, questions, or follow-ups below. Delete this file if no action needed. -->

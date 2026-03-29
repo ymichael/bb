@@ -65,5 +65,4 @@
 
 ## Review Comments
 
-Flag 2 — consider whether the commit message should be caller-provided.
-Flag 4 — `merged` field is always `true`; if a failure returns `false`, the schema still requires `commitSha` which would be meaningless. Either remove `merged` or make `commitSha` conditional.
+<!-- Leave comments, questions, or follow-ups below. Delete this file if no action needed. -->
