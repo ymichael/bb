@@ -38,6 +38,18 @@ const DEFAULT_PROJECT_ID = "provider-audit";
 const DEFAULT_THREAD_ID = "provider-audit-thread";
 const DEFAULT_TIMEOUT_MS = 90_000;
 
+interface BuildExecutionOptionsArgs {
+  model?: string;
+  execution?: ProviderAuditScenarioExecutionOptions;
+}
+
+interface ProviderAuditResolvedExecutionOptions {
+  model: string;
+  serviceTier: NonNullable<ProviderAuditScenarioExecutionOptions["serviceTier"]>;
+  reasoningLevel: NonNullable<ProviderAuditScenarioExecutionOptions["reasoningLevel"]>;
+  sandboxMode: NonNullable<ProviderAuditScenarioExecutionOptions["sandboxMode"]>;
+}
+
 const BUILT_IN_SCENARIOS: Record<string, ProviderAuditScenario> = {
   "excalidraw-ttd-explanation": {
     id: "excalidraw-ttd-explanation",
@@ -520,24 +532,14 @@ function prepareScenarioWorkspace(args: {
   };
 }
 
-function buildExecutionOptions(args: {
-  model?: string;
-  execution?: ProviderAuditScenarioExecutionOptions;
-}): {
-  model?: string;
-  serviceTier?: ProviderAuditScenarioExecutionOptions["serviceTier"];
-  reasoningLevel?: ProviderAuditScenarioExecutionOptions["reasoningLevel"];
-  sandboxMode: NonNullable<ProviderAuditScenarioExecutionOptions["sandboxMode"]>;
-} {
+function buildExecutionOptions(
+  args: BuildExecutionOptionsArgs,
+): ProviderAuditResolvedExecutionOptions {
   return {
+    model: args.model ?? "provider-default",
+    serviceTier: args.execution?.serviceTier ?? "fast",
+    reasoningLevel: args.execution?.reasoningLevel ?? "medium",
     sandboxMode: args.execution?.sandboxMode ?? "danger-full-access",
-    ...(args.execution?.reasoningLevel
-      ? { reasoningLevel: args.execution.reasoningLevel }
-      : {}),
-    ...(args.execution?.serviceTier
-      ? { serviceTier: args.execution.serviceTier }
-      : {}),
-    ...(args.model ? { model: args.model } : {}),
   };
 }
 
@@ -567,7 +569,10 @@ function buildClientRequestRows(args: {
           method: request.requestMethod,
           params: {},
         },
-        execution,
+        execution: {
+          ...execution,
+          source: request.type,
+        },
       },
       createdAt: request.createdAt,
     };

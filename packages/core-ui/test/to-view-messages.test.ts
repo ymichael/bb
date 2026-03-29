@@ -9,6 +9,48 @@ import type { ThreadEventWithMeta } from "../src/to-view-messages.js";
 import { buildTimelineRows } from "../src/thread-detail-rows.js";
 import type { ViewMessage } from "@bb/domain";
 
+const providerEventTypesRequiringProviderThreadId = new Set([
+  "thread/identity",
+  "thread/name/updated",
+  "thread/compacted",
+  "turn/started",
+  "turn/completed",
+  "item/started",
+  "item/completed",
+  "item/agentMessage/delta",
+  "item/commandExecution/outputDelta",
+  "item/fileChange/outputDelta",
+  "item/reasoning/summaryTextDelta",
+  "item/reasoning/textDelta",
+  "item/plan/delta",
+  "item/mcpToolCall/progress",
+  "item/toolCall/progress",
+  "thread/tokenUsage/updated",
+  "turn/plan/updated",
+  "turn/diff/updated",
+  "error",
+  "warning",
+  "provider/unhandled",
+]);
+
+const providerEventTypesRequiringTurnId = new Set([
+  "turn/started",
+  "turn/completed",
+  "item/started",
+  "item/completed",
+  "item/agentMessage/delta",
+  "item/commandExecution/outputDelta",
+  "item/fileChange/outputDelta",
+  "item/reasoning/summaryTextDelta",
+  "item/reasoning/textDelta",
+  "item/plan/delta",
+  "item/mcpToolCall/progress",
+  "item/toolCall/progress",
+  "thread/tokenUsage/updated",
+  "turn/plan/updated",
+  "turn/diff/updated",
+]);
+
 function fixturePath(name: string): string {
   const __dirname = path.dirname(fileURLToPath(import.meta.url));
   return path.join(__dirname, "__fixtures__", name);
@@ -20,7 +62,163 @@ function loadFixture(name: string): ThreadEventRow[] {
 
 /** Convert raw ThreadEventRow[] (test fixtures / inline data) to typed input for toViewMessages. */
 function fromRows(rows: ThreadEventRow[]): ThreadEventWithMeta[] {
-  return rows.map((row) => decodeRow(row));
+  return rows.map((row) => decodeRow(normalizeTestRow(row)));
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function normalizeLegacyItemStatus(status: unknown): unknown {
+  return status === "inProgress" ? "pending" : status;
+}
+
+function stripNullOptionalFields(
+  data: Record<string, unknown>,
+  keys: string[],
+): Record<string, unknown> {
+  let nextData = data;
+  for (const key of keys) {
+    if (nextData[key] !== null) {
+      continue;
+    }
+    if (nextData === data) {
+      nextData = { ...data };
+    }
+    delete nextData[key];
+  }
+  return nextData;
+}
+
+function normalizeLegacyItemRowData(
+  row: ThreadEventRow,
+  data: Record<string, unknown>,
+): Record<string, unknown> {
+  if (
+    (row.type !== "item/started" && row.type !== "item/completed") ||
+    !isRecord(data.item)
+  ) {
+    return data;
+  }
+
+  const item = data.item;
+  if (item.type !== "commandExecution" && item.type !== "fileChange") {
+    return data;
+  }
+
+  const nextItem = stripNullOptionalFields(
+    {
+      ...item,
+      status: normalizeLegacyItemStatus(item.status),
+    },
+    ["aggregatedOutput", "exitCode", "durationMs"],
+  );
+
+  return {
+    ...data,
+    item: nextItem,
+  };
+}
+
+function normalizeTestRow(row: ThreadEventRow): ThreadEventRow {
+  let data = row.data;
+
+  if (
+    (row.type === "turn/started" || row.type === "turn/completed") &&
+    isRecord(data) &&
+    isRecord(data.turn) &&
+    typeof data.turn.id === "string"
+  ) {
+    data = {
+      ...data,
+      turnId: data.turn.id,
+      ...(row.type === "turn/completed" && typeof data.turn.status === "string"
+        ? { status: data.turn.status === "inProgress" ? "interrupted" : data.turn.status }
+        : {}),
+      ...(row.type === "turn/completed" &&
+          isRecord(data.turn.error) &&
+          typeof data.turn.error.message === "string"
+        ? { error: { message: data.turn.error.message } }
+        : {}),
+    };
+  }
+
+  if (
+    row.type === "turn/completed" &&
+    isRecord(data) &&
+    "turnId" in data &&
+    !("status" in data)
+  ) {
+    data = {
+      ...data,
+      status: "completed",
+    };
+  }
+
+  if (
+    row.type === "system/thread/interrupted" &&
+    isRecord(data) &&
+    !("reason" in data)
+  ) {
+    data = {
+      ...data,
+      reason: "user",
+    };
+  }
+
+  if (
+    row.type === "system/thread-title/updated" &&
+    isRecord(data) &&
+    !("source" in data)
+  ) {
+    data = {
+      ...data,
+      source: "provider",
+    };
+  }
+
+  if (
+    (row.type === "item/started" || row.type === "item/completed") &&
+    isRecord(data) &&
+    isRecord(data.item) &&
+    data.item.type === "webSearch" &&
+    isRecord(data.item.action) &&
+    typeof data.item.action.type === "string"
+  ) {
+    data = {
+      ...data,
+      item: {
+        ...data.item,
+        action: data.item.action.type,
+      },
+    };
+  }
+
+  if (isRecord(data)) {
+    data = normalizeLegacyItemRowData(row, data);
+  }
+
+  if (providerEventTypesRequiringTurnId.has(row.type) && !("turnId" in data)) {
+    data = {
+      ...data,
+      turnId: "turn-1",
+    };
+  }
+
+  if (!providerEventTypesRequiringProviderThreadId.has(row.type)) {
+    return { ...row, data };
+  }
+  if ("providerThreadId" in data) {
+    return { ...row, data };
+  }
+
+  return {
+    ...row,
+    data: {
+      ...data,
+      providerThreadId: `provider-${row.threadId}`,
+    },
+  };
 }
 
 function unique<T>(values: T[]): T[] {

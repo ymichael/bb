@@ -160,6 +160,8 @@ export type {
 
 export {
   providerEventSchema,
+  providerEventTypeSchema,
+  providerEventTypeValues,
   providerUnhandledDetailEntrySchema,
   systemEventSchema,
   threadEventFileChangeKindSchema,
@@ -179,6 +181,7 @@ export type {
   ProviderUnhandledDetailEntry,
   ProviderUnhandledEvent,
   ProviderEvent,
+  ProviderEventType,
   SystemEvent,
   ThreadEvent,
   ThreadEventFileChange,

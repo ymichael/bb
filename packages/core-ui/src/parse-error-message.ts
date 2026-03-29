@@ -1,5 +1,5 @@
 import type { ThreadEvent } from "@bb/domain";
-import type { EventMeta } from "./event-decode.js";
+import type { DecodedThreadEvent, EventMeta } from "./event-decode.js";
 import { getEventTurnId } from "./event-decode.js";
 import { messageId } from "./format-helpers.js";
 import type { ViewDebugRawEventMessage, ViewErrorMessage, ViewMessage } from "@bb/domain";
@@ -66,11 +66,16 @@ export function isIgnoredItemCompletedEvent(decoded: ThreadEvent): boolean {
 
 export function appendDebugEvent(
   out: ViewMessage[],
-  decoded: ThreadEvent,
+  decoded: DecodedThreadEvent,
   meta: EventMeta,
   reason: ViewDebugRawEventMessage["reason"],
 ): void {
-  const { type, threadId, ...data } = decoded;
+  const rawEventData = "rawData" in decoded
+    ? decoded.rawData
+    : (() => {
+        const { type: _type, threadId: _threadId, ...data } = decoded;
+        return data;
+      })();
   out.push({
     kind: "debug/raw-event",
     id: messageId(decoded.threadId, "debug", `${meta.seq}:${decoded.type}`),
@@ -82,10 +87,10 @@ export function appendDebugEvent(
     rawType: decoded.type,
     rawEvent: {
       id: meta.id,
-      threadId,
+      threadId: decoded.threadId,
       seq: meta.seq,
-      type,
-      data,
+      type: decoded.type,
+      data: rawEventData,
       createdAt: meta.createdAt,
     },
     reason,

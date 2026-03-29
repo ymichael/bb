@@ -52,6 +52,7 @@ function resolveProviderIdentifiers(
     case "item/reasoning/textDelta":
     case "item/plan/delta":
     case "item/mcpToolCall/progress":
+    case "item/toolCall/progress":
     case "thread/tokenUsage/updated":
     case "turn/plan/updated":
     case "turn/diff/updated":
@@ -60,13 +61,13 @@ function resolveProviderIdentifiers(
         turnId: event.turnId,
       };
     case "error":
+    case "provider/unhandled":
       return {
         providerThreadId: event.providerThreadId,
         turnId: event.turnId ?? null,
       };
     default: {
-      const _exhaustive: never = event;
-      throw new Error(`Unsupported event type: ${_exhaustive}`);
+      throw new Error("Unsupported event type");
     }
   }
 }

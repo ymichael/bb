@@ -5,8 +5,9 @@ import {
   getEventParentToolCallId,
   getEventProviderThreadId,
   getEventTurnId,
+  isKnownThreadEvent,
 } from "./event-decode.js";
-import type { EventMeta } from "./event-decode.js";
+import type { DecodedThreadEvent, EventMeta } from "./event-decode.js";
 import { messageId } from "./format-helpers.js";
 import type { ExecCallPartial } from "./exec-lifecycle.js";
 import {
@@ -66,6 +67,7 @@ interface ProjectionState {
   finalizedReasoningTurnKeys: Set<string>;
   openCompactionsByKey: Map<string, ViewOperationMessage>;
   finalizedCompactionKeys: Set<string>;
+  lastCompletedCompactionKeyByThreadId: Map<string, string>;
   fileEditsByCallId: Map<string, ViewFileEditMessage>;
   delegationParentToolCallIdsByProviderThreadId: Map<string, string>;
   toolActivity: ToolActivityState;
@@ -120,6 +122,7 @@ function createProjectionState(): ProjectionState {
     finalizedReasoningTurnKeys: new Set(),
     openCompactionsByKey: new Map(),
     finalizedCompactionKeys: new Set(),
+    lastCompletedCompactionKeyByThreadId: new Map(),
     fileEditsByCallId: new Map(),
     delegationParentToolCallIdsByProviderThreadId: new Map(),
     toolActivity: {
@@ -1067,6 +1070,7 @@ function onCompactionEnd(
     existing.detail = payload.detail ?? existing.detail;
     state.openCompactionsByKey.delete(payload.key);
     state.finalizedCompactionKeys.add(payload.key);
+    state.lastCompletedCompactionKeyByThreadId.set(threadId, payload.key);
     return;
   }
 
@@ -1089,6 +1093,38 @@ function onCompactionEnd(
     status: "completed",
   });
   state.finalizedCompactionKeys.add(payload.key);
+  state.lastCompletedCompactionKeyByThreadId.set(threadId, payload.key);
+}
+
+function resolveProjectedCompactionEvent(
+  state: ProjectionState,
+  decoded: ThreadEvent,
+  payload: CompactionLifecycleEvent,
+): CompactionLifecycleEvent {
+  if (
+    decoded.type === "thread/compacted" &&
+    getEventTurnId(decoded) === undefined
+  ) {
+    if (state.openCompactionsByKey.size === 1) {
+      const [onlyOpenKey] = state.openCompactionsByKey.keys();
+      if (onlyOpenKey) {
+        return {
+          ...payload,
+          key: onlyOpenKey,
+        };
+      }
+    }
+    const lastCompletedKey = state.lastCompletedCompactionKeyByThreadId.get(
+      decoded.threadId,
+    );
+    if (lastCompletedKey) {
+      return {
+        ...payload,
+        key: lastCompletedKey,
+      };
+    }
+  }
+  return payload;
 }
 
 function flushBufferedAssistantMessages(state: ProjectionState): void {
@@ -1207,7 +1243,7 @@ function finalizePendingMessages(
 
 /** A typed thread event paired with its row metadata. */
 export interface ThreadEventWithMeta {
-  event: ThreadEvent;
+  event: DecodedThreadEvent;
   meta: EventMeta;
 }
 
@@ -1251,6 +1287,27 @@ export function toViewMessages(
         ? state.delegationParentToolCallIdsByProviderThreadId.get(eventProviderThreadId)
         : undefined);
 
+    if (!isKnownThreadEvent(decoded)) {
+      if (includeDebugRawEvents) {
+        const debugReason = isDuplicateEventType(eventType)
+          ? "duplicate-event"
+          : isIgnoredNoiseType(eventType)
+            ? "ignored-noise"
+            : "unhandled";
+
+        if (debugReason === "unhandled") {
+          flushToolActivityBeforeNonToolMessage(state);
+          appendDebugEvent(
+            state.messages,
+            decoded,
+            meta,
+            debugReason,
+          );
+        }
+      }
+      continue;
+    }
+
     if (eventType === "turn/completed") {
       pendingUserSignatureCounts.clientStart.clear();
       pendingUserSignatureCounts.clientThreadStart.clear();
@@ -1280,7 +1337,7 @@ export function toViewMessages(
             localFiles: parsedInput.localFiles,
           });
           const clientStartContext = getClientStartEventContext(
-            eventType,
+            decoded.type,
             decoded.source,
           );
           if (
@@ -1318,7 +1375,7 @@ export function toViewMessages(
         localFiles: userFromClientThreadStart.attachments?.localFiles ?? 0,
       });
       const clientStartContext = getClientStartEventContext(
-        eventType,
+        decoded.type,
         (
           decoded.type === "client/thread/start" ||
           decoded.type === "client/turn/requested" ||
@@ -1728,10 +1785,27 @@ export function toViewMessages(
     const compactionEvent = parseCompactionLifecycleEvent(decoded, meta);
     if (compactionEvent) {
       flushToolActivityBeforeNonToolMessage(state);
-      if (compactionEvent.kind === "begin") {
-        onCompactionBegin(state, meta, decoded.threadId, eventTurnId, compactionEvent);
+      const projectedCompactionEvent = resolveProjectedCompactionEvent(
+        state,
+        decoded,
+        compactionEvent,
+      );
+      if (projectedCompactionEvent.kind === "begin") {
+        onCompactionBegin(
+          state,
+          meta,
+          decoded.threadId,
+          eventTurnId,
+          projectedCompactionEvent,
+        );
       } else {
-        onCompactionEnd(state, meta, decoded.threadId, eventTurnId, compactionEvent);
+        onCompactionEnd(
+          state,
+          meta,
+          decoded.threadId,
+          eventTurnId,
+          projectedCompactionEvent,
+        );
       }
       continue;
     }

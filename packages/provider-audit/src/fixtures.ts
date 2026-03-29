@@ -5,7 +5,7 @@ import {
   statSync,
   writeFileSync,
 } from "node:fs";
-import { basename, join, resolve } from "node:path";
+import { basename, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { AgentRuntimeCaptureEntry } from "@bb/agent-runtime";
 import { z } from "zod";
@@ -57,6 +57,11 @@ interface ProviderAuditFixtureImportBundleArgs {
   fixtureCorpusRoot: string;
 }
 
+interface ResolveFixtureCorpusRootArgs {
+  corpusId: string;
+  fixtureRoot: string;
+}
+
 function getHomeDir(): string | null {
   const homeDir = process.env.HOME;
   return homeDir && homeDir.length > 0 ? homeDir : null;
@@ -64,6 +69,20 @@ function getHomeDir(): string | null {
 
 function writeJsonFile(filePath: string, value: object): void {
   writeFileSync(filePath, JSON.stringify(value, null, 2) + "\n");
+}
+
+function resolveFixtureCorpusRoot(
+  args: ResolveFixtureCorpusRootArgs,
+): string {
+  const fixtureRoot = resolve(args.fixtureRoot);
+  const candidate = resolve(fixtureRoot, args.corpusId);
+  const relativePath = relative(fixtureRoot, candidate);
+  const escapesFixtureRoot =
+    relativePath === ".." || relativePath.startsWith(`..${sep}`);
+  if (escapesFixtureRoot) {
+    throw new Error(`Invalid corpus id: ${args.corpusId}`);
+  }
+  return candidate;
 }
 
 function normalizeTaskId(args: {
@@ -320,7 +339,10 @@ export function parseImportFixturesArgs(
 export function importFixtureCorpus(
   args: ProviderAuditImportFixturesArgs,
 ): ProviderAuditImportFixturesResult {
-  const fixtureCorpusRoot = join(args.fixtureRoot, args.corpusId);
+  const fixtureCorpusRoot = resolveFixtureCorpusRoot({
+    fixtureRoot: args.fixtureRoot,
+    corpusId: args.corpusId,
+  });
   rmSync(fixtureCorpusRoot, { recursive: true, force: true });
   mkdirSync(fixtureCorpusRoot, { recursive: true });
 

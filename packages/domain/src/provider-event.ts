@@ -196,6 +196,33 @@ export const threadEventItemSchema = z.discriminatedUnion("type", [
 ]);
 export type ThreadEventItem = z.infer<typeof threadEventItemSchema>;
 
+export const providerEventTypeValues = [
+  "thread/started",
+  "thread/identity",
+  "turn/started",
+  "turn/completed",
+  "thread/name/updated",
+  "thread/compacted",
+  "item/started",
+  "item/completed",
+  "item/agentMessage/delta",
+  "item/commandExecution/outputDelta",
+  "item/fileChange/outputDelta",
+  "item/reasoning/summaryTextDelta",
+  "item/reasoning/textDelta",
+  "item/plan/delta",
+  "item/mcpToolCall/progress",
+  "item/toolCall/progress",
+  "thread/tokenUsage/updated",
+  "turn/plan/updated",
+  "turn/diff/updated",
+  "error",
+  "warning",
+  "provider/unhandled",
+] as const;
+export const providerEventTypeSchema = z.enum(providerEventTypeValues);
+export type ProviderEventType = z.infer<typeof providerEventTypeSchema>;
+
 /**
  * Events originating from a provider process via the agent runtime.
  * These carry `providerThreadId` — the provider's internal session/thread ID.

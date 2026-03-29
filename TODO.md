@@ -2,9 +2,9 @@
 
 ## Fix First: Blockers And Boundaries
 
-- [ ] Update server event ingestion for `provider/unhandled` and `item/toolCall/progress`
-- [ ] Prevent provider-audit fixture import path traversal from `corpusId`
-- [ ] Validate decoded thread event rows at the `core-ui` boundary with Zod instead of casts
+- [x] Update server event ingestion for `provider/unhandled` and `item/toolCall/progress`
+- [x] Prevent provider-audit fixture import path traversal from `corpusId`
+- [x] Validate decoded thread event rows at the `core-ui` boundary with Zod instead of casts
 
 ## Next: Adapter Correctness
 
@@ -22,6 +22,7 @@
 
 ## Later: Guideline Cleanup
 
+- [ ] Hide Claude `rate_limit_event` rows from CLI and React timelines
 - [ ] Remove Pi `as never` / `as Model<any>` generic workarounds
 - [ ] Replace brittle `resolveBridgePath()` `/src/` string hacks
 - [ ] Reduce Codex handled-method duplication between schema and lookup list
