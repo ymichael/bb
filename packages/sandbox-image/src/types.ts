@@ -2,7 +2,7 @@ export interface SandboxImageBuildRecord {
   buildId: string;
   builtAt: string;
   createTarget: string;
-  dockerfileHash?: string;
+  dockerfileHash: string;
   name: string;
   tags: string[];
   templateId: string;

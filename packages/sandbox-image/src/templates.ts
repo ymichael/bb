@@ -10,7 +10,7 @@ const sandboxImageBuildRecordSchema = z.object({
   buildId: z.string(),
   builtAt: z.string(),
   createTarget: z.string(),
-  dockerfileHash: z.string().optional(),
+  dockerfileHash: z.string(),
   name: z.string(),
   tags: z.array(z.string()),
   templateId: z.string(),
