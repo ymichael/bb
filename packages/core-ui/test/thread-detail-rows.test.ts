@@ -2,6 +2,45 @@ import { describe, expect, it } from "vitest";
 import { buildTimelineRows, type TimelineRow } from "../src/thread-detail-rows.js";
 import type { ViewMessage, ViewProvisioningTranscriptEntry } from "@bb/domain";
 
+type TimelineMessageRow = Extract<TimelineRow, { kind: "message" }>;
+type TimelineToolGroupRow = Extract<TimelineRow, { kind: "tool-group" }>;
+type ViewAssistantTextMessage = Extract<ViewMessage, { kind: "assistant-text" }>;
+type ViewErrorMessage = Extract<ViewMessage, { kind: "error" }>;
+
+function expectToolGroupRow(row: TimelineRow | undefined): TimelineToolGroupRow {
+  expect(row?.kind).toBe("tool-group");
+  if (!row || row.kind !== "tool-group") {
+    throw new Error("Expected a tool-group row");
+  }
+  return row;
+}
+
+function expectMessageRow(row: TimelineRow | undefined): TimelineMessageRow {
+  expect(row?.kind).toBe("message");
+  if (!row || row.kind !== "message") {
+    throw new Error("Expected a message row");
+  }
+  return row;
+}
+
+function expectAssistantTextMessage(
+  message: ViewMessage | undefined,
+): ViewAssistantTextMessage {
+  expect(message?.kind).toBe("assistant-text");
+  if (!message || message.kind !== "assistant-text") {
+    throw new Error("Expected an assistant-text message");
+  }
+  return message;
+}
+
+function expectErrorMessage(message: ViewMessage | undefined): ViewErrorMessage {
+  expect(message?.kind).toBe("error");
+  if (!message || message.kind !== "error") {
+    throw new Error("Expected an error message");
+  }
+  return message;
+}
+
 function primaryCheckoutOperation(
   seq: number,
   title: string,
@@ -320,19 +359,15 @@ describe("buildTimelineRows primary-checkout (operation) collapsing", () => {
     ]);
 
     expect(rows.map((row) => row.kind)).toEqual(["message", "tool-group", "message"]);
-    expect(rows[1]?.kind).toBe("tool-group");
-    if (rows[1]?.kind !== "tool-group") return;
-    expect(rows[1].messages.map((message) => message.kind)).toEqual([
+    const toolGroup = expectToolGroupRow(rows[1]);
+    expect(toolGroup.messages.map((message) => message.kind)).toEqual([
       "assistant-text",
       "tool-call",
     ]);
-    expect(rows[2]?.kind).toBe("message");
-    if (rows[2]?.kind === "message") {
-      expect(rows[2].message.kind).toBe("assistant-text");
-      if (rows[2].message.kind === "assistant-text") {
-        expect(rows[2].message.text).toBe("The fix is in SearchMenu.tsx.");
-      }
-    }
+    const finalRow = expectMessageRow(rows[2]);
+    expect(expectAssistantTextMessage(finalRow.message).text).toBe(
+      "The fix is in SearchMenu.tsx.",
+    );
   });
 
   it("marks grouped error rows as failed work and counts non-tool rows", () => {
@@ -375,11 +410,10 @@ describe("buildTimelineRows primary-checkout (operation) collapsing", () => {
     ]);
 
     expect(rows.map((row) => row.kind)).toEqual(["tool-group", "message"]);
-    expect(rows[0]?.kind).toBe("tool-group");
-    if (rows[0]?.kind !== "tool-group") return;
-    expect(rows[0].summaryCount).toBe(2);
-    expect(rows[0].status).toBe("error");
-    expect(rows[0].messages.map((message) => message.kind)).toEqual([
+    const toolGroup = expectToolGroupRow(rows[0]);
+    expect(toolGroup.summaryCount).toBe(2);
+    expect(toolGroup.status).toBe("error");
+    expect(toolGroup.messages.map((message) => message.kind)).toEqual([
       "tasks",
       "error",
     ]);
@@ -425,10 +459,8 @@ describe("buildTimelineRows primary-checkout (operation) collapsing", () => {
     ]);
 
     expect(rows.map((row) => row.kind)).toEqual(["tool-group", "message"]);
-    expect(rows[0]?.kind).toBe("tool-group");
-    if (rows[0]?.kind !== "tool-group") return;
-    expect(rows[0].messages).toHaveLength(2);
-    expect(rows[1]?.kind).toBe("message");
+    expect(expectToolGroupRow(rows[0]).messages).toHaveLength(2);
+    expectMessageRow(rows[1]);
   });
 
   it("keeps a Pi-style last assistant message inside the group when later tool activity finishes after it", () => {
@@ -471,9 +503,8 @@ describe("buildTimelineRows primary-checkout (operation) collapsing", () => {
     ]);
 
     expect(rows).toHaveLength(1);
-    expect(rows[0]?.kind).toBe("tool-group");
-    if (rows[0]?.kind !== "tool-group") return;
-    expect(rows[0].messages.map((message) => message.kind)).toEqual([
+    const toolGroup = expectToolGroupRow(rows[0]);
+    expect(toolGroup.messages.map((message) => message.kind)).toEqual([
       "assistant-text",
       "tool-call",
       "assistant-text",
@@ -533,9 +564,8 @@ describe("buildTimelineRows primary-checkout (operation) collapsing", () => {
     ]);
 
     expect(rows.map((row) => row.kind)).toEqual(["tool-group", "message"]);
-    expect(rows[0]?.kind).toBe("tool-group");
-    if (rows[0]?.kind !== "tool-group") return;
-    expect(rows[0].messages.map((message) => message.kind)).toEqual([
+    const toolGroup = expectToolGroupRow(rows[0]);
+    expect(toolGroup.messages.map((message) => message.kind)).toEqual([
       "delegation",
       "tasks",
       "error",
@@ -738,15 +768,11 @@ describe("buildTimelineRows primary-checkout (operation) collapsing", () => {
 
     // No final assistant-text, so intermediate text + tool calls all group
     expect(rows.map((row) => row.kind)).toEqual(["message", "tool-group"]);
-    expect(rows[0]?.kind).toBe("message");
-    if (rows[0]?.kind === "message") {
-      expect(rows[0].message.kind).toBe("user");
-    }
-    expect(rows[1]?.kind).toBe("tool-group");
-    if (rows[1]?.kind !== "tool-group") return;
+    expect(expectMessageRow(rows[0]).message.kind).toBe("user");
+    const toolGroup = expectToolGroupRow(rows[1]);
     // summaryCount only counts tool items, not intermediate text
-    expect(rows[1].summaryCount).toBe(2);
-    expect(rows[1].messages).toHaveLength(3);
+    expect(toolGroup.summaryCount).toBe(2);
+    expect(toolGroup.messages).toHaveLength(3);
   });
 
   it("groups intermediate assistant text with following tool call when no final answer", () => {
@@ -789,10 +815,7 @@ describe("buildTimelineRows primary-checkout (operation) collapsing", () => {
 
     // No final assistant-text → intermediate text + tool call grouped together
     expect(rows.map((row) => row.kind)).toEqual(["message", "tool-group"]);
-    expect(rows[1]?.kind).toBe("tool-group");
-    if (rows[1]?.kind === "tool-group") {
-      expect(rows[1].messages).toHaveLength(2);
-    }
+    expect(expectToolGroupRow(rows[1]).messages).toHaveLength(2);
   });
 
   it("collapses a promote started/completed pair into a single operation row", () => {
@@ -947,15 +970,13 @@ describe("buildTimelineRows reconnect error collapsing", () => {
     ]);
 
     expect(rows).toHaveLength(1);
-    expect(rows[0]?.kind).toBe("message");
-    if (rows[0]?.kind !== "message") return;
-    expect(rows[0].message.kind).toBe("error");
-    if (rows[0].message.kind !== "error") return;
-    expect(rows[0].message.message).toBe("Reconnecting... 4/5");
-    expect(rows[0].message.sourceSeqStart).toBe(10);
-    expect(rows[0].message.sourceSeqEnd).toBe(12);
-    expect(rows[0].message.createdAt).toBe(12);
-    expect(rows[0].message.startedAt).toBe(10);
+    const messageRow = expectMessageRow(rows[0]);
+    const errorMessage = expectErrorMessage(messageRow.message);
+    expect(errorMessage.message).toBe("Reconnecting... 4/5");
+    expect(errorMessage.sourceSeqStart).toBe(10);
+    expect(errorMessage.sourceSeqEnd).toBe(12);
+    expect(errorMessage.createdAt).toBe(12);
+    expect(errorMessage.startedAt).toBe(10);
   });
 
   it("groups reconnect errors with other turn activity into a single tool group", () => {

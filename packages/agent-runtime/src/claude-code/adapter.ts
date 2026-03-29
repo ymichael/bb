@@ -7,8 +7,6 @@
  * and produces `ThreadEvent[]`.
  */
 
-import { resolve, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
 import type { SDKResultMessage } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
 import type {
@@ -23,6 +21,7 @@ import type {
 import {
   decodeProviderToolCallRequest,
 } from "../shared/provider-tool-call-contract.js";
+import { resolveBridgePath } from "../shared/bridge-path.js";
 import {
   bashArgsSchema,
   textBlockSchema,
@@ -60,9 +59,6 @@ import { claudeCodeVisibilityMetadata } from "./visibility.js";
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
 
 const STATIC_CLAUDE_CODE_MODELS: AvailableModel[] = [
   {
@@ -340,15 +336,6 @@ function translateClaudeToolResultItem(
 // ---------------------------------------------------------------------------
 // Claude Code–specific helpers
 // ---------------------------------------------------------------------------
-
-function resolveBridgePath(): string {
-  // When running via vitest, __dirname points to src/ where .js doesn't exist.
-  // Redirect to dist/ so the bridge is always the compiled JS.
-  const dir = __dirname.includes("/src/")
-    ? __dirname.replace("/src/", "/dist/")
-    : __dirname;
-  return resolve(dir, "bridge", "bridge.js");
-}
 
 function buildClaudeCodeConfig(envVars?: Record<string, string>): Record<string, unknown> | undefined {
   const config = buildShellEnvironmentPolicyConfig(envVars);
@@ -700,7 +687,10 @@ export function createClaudeCodeProviderAdapter(
     capabilities,
     process: {
       command: opts?.processCommand ?? "node",
-      args: opts?.processArgs ?? [resolveBridgePath()],
+      args: opts?.processArgs ?? [resolveBridgePath({
+        importMetaUrl: import.meta.url,
+        bridgeRelativePath: "bridge/bridge.js",
+      })],
     },
 
     // -- Unified command builder -------------------------------------------

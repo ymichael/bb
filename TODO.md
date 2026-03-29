@@ -16,13 +16,13 @@
 
 ## Next: Tests
 
-- [ ] Replace silent early-return narrowing in `thread-detail-rows` tests with hard assertions
+- [x] Replace silent early-return narrowing in `thread-detail-rows` tests with hard assertions
 - [x] Add Claude `thread/resume` options pass-through coverage
 - [x] Add adapter coverage for `thread/stop`
 
 ## Later: Guideline Cleanup
 
-- [ ] Hide Claude `rate_limit_event` rows from CLI and React timelines
-- [ ] Remove Pi `as never` / `as Model<any>` generic workarounds
-- [ ] Replace brittle `resolveBridgePath()` `/src/` string hacks
-- [ ] Reduce Codex handled-method duplication between schema and lookup list
+- [x] Hide Claude `rate_limit_event` rows from CLI and React timelines
+- [x] Remove Pi `as never` / `as Model<any>` generic workarounds
+- [x] Replace brittle `resolveBridgePath()` `/src/` string hacks
+- [x] Reduce Codex handled-method duplication between schema and lookup list

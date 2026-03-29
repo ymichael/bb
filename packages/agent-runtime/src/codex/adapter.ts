@@ -407,31 +407,11 @@ const codexHandledEventSchema = z.discriminatedUnion("method", [
 ]);
 type CodexHandledEvent = z.infer<typeof codexHandledEventSchema>;
 
-const HANDLED_CODEX_METHODS = [
-  "turn/started",
-  "turn/completed",
-  "thread/started",
-  "thread/name/updated",
-  "thread/compacted",
-  "item/started",
-  "item/completed",
-  "item/agentMessage/delta",
-  "item/commandExecution/outputDelta",
-  "item/fileChange/outputDelta",
-  "item/reasoning/summaryTextDelta",
-  "item/reasoning/textDelta",
-  "item/plan/delta",
-  "item/mcpToolCall/progress",
-  "thread/tokenUsage/updated",
-  "turn/plan/updated",
-  "turn/diff/updated",
-  "error",
-  "deprecationNotice",
-  "configWarning",
-] as const;
-type HandledCodexMethod = typeof HANDLED_CODEX_METHODS[number];
+type HandledCodexMethod = CodexHandledEvent["method"];
 
-const handledCodexMethodSet = new Set<string>(HANDLED_CODEX_METHODS);
+const handledCodexMethodSet = new Set<string>(
+  codexHandledEventSchema.options.map((option) => option.shape.method.value),
+);
 
 function isHandledCodexMethod(method: string): method is HandledCodexMethod {
   return handledCodexMethodSet.has(method);

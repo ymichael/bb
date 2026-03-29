@@ -7,9 +7,7 @@
  * and produces `ThreadEvent[]`.
  */
 
-import { resolve, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
-import { supportsXhigh, type Model } from "@mariozechner/pi-ai";
+import type { KnownProvider } from "@mariozechner/pi-ai";
 import { AuthStorage } from "@mariozechner/pi-coding-agent";
 import { z } from "zod";
 import type {
@@ -28,6 +26,7 @@ import type {
 import {
   decodeProviderToolCallRequest,
 } from "../shared/provider-tool-call-contract.js";
+import { resolveBridgePath } from "../shared/bridge-path.js";
 import {
   bashArgsSchema,
   textBlockSchema,
@@ -79,9 +78,6 @@ interface PiUnhandledEventArgs {
 // Constants
 // ---------------------------------------------------------------------------
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-
 function buildUnhandledPiEvent(
   args: PiUnhandledEventArgs,
 ): ThreadEvent[] {
@@ -129,10 +125,23 @@ const PI_DEFAULT_MODEL_PREFERENCES = [
 // Pi-specific helpers
 // ---------------------------------------------------------------------------
 
-type PiCatalogModel = Pick<
-  Model<any>,
-  "id" | "name" | "provider" | "reasoning" | "input"
->;
+interface PiCatalogModel {
+  id: string;
+  name: string;
+  provider: string;
+  reasoning: boolean;
+  input: string[];
+}
+
+const piCatalogModelSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  provider: z.string(),
+  reasoning: z.boolean(),
+  input: z.array(z.string()),
+}).passthrough();
+
+const piCatalogModelsSchema = z.array(piCatalogModelSchema);
 
 const piEventTypeSchema = z.object({
   type: z.enum([
@@ -384,15 +393,6 @@ function translatePiToolResultItem(
   }
 }
 
-function resolveBridgePath(): string {
-  // When running via vitest, __dirname points to src/ where .js doesn't exist.
-  // Redirect to dist/ so the bridge is always the compiled JS.
-  const dir = __dirname.includes("/src/")
-    ? __dirname.replace("/src/", "/dist/")
-    : __dirname;
-  return resolve(dir, "bridge", "bridge.js");
-}
-
 function buildPiConfig(threadId: string, options?: AdapterOptions): Record<string, unknown> | undefined {
   const config: Record<string, unknown> = {};
   if (threadId) config["shell_environment_policy.set.BB_THREAD_ID"] = threadId;
@@ -408,9 +408,9 @@ function buildPiConfig(threadId: string, options?: AdapterOptions): Record<strin
 // ---------------------------------------------------------------------------
 
 export function buildPiAvailableModels(args: {
-  providers: string[];
-  getModels: (provider: string) => PiCatalogModel[];
-  hasAuth: (provider: string) => boolean;
+  providers: KnownProvider[];
+  getModels: (provider: KnownProvider) => PiCatalogModel[];
+  hasAuth: (provider: KnownProvider) => boolean;
 }): AvailableModel[] {
   const models: AvailableModel[] = [];
   for (const provider of args.providers) {
@@ -440,9 +440,7 @@ async function listPiModels(): Promise<AvailableModel[]> {
   ]);
   return buildPiAvailableModels({
     providers: getProviders(),
-    // Pi SDK models are parameterized by provider name, but this adapter only
-    // consumes a stable read-only subset of fields from the returned models.
-    getModels: (provider) => getModels(provider as never) as PiCatalogModel[],
+    getModels: (provider) => piCatalogModelsSchema.parse(getModels(provider)),
     hasAuth: (provider) => authStorageModule.hasAuth(provider),
   });
 }
@@ -454,10 +452,18 @@ function toCanonicalPiModelId(provider: string, modelId: string): string {
 function getPiReasoningEfforts(model: PiCatalogModel): ModelReasoningEffort[] {
   if (!model.reasoning) return [LOW_REASONING_EFFORT];
   const efforts = [LOW_REASONING_EFFORT, MEDIUM_REASONING_EFFORT, HIGH_REASONING_EFFORT];
-  // Pi SDK keeps the model generic parameter on supportsXhigh(), but this
-  // adapter only needs the shared catalog fields captured by PiCatalogModel.
-  if (supportsXhigh(model as Model<any>)) efforts.push(XHIGH_REASONING_EFFORT);
+  if (supportsPiXhigh(model)) efforts.push(XHIGH_REASONING_EFFORT);
   return efforts;
+}
+
+function supportsPiXhigh(model: PiCatalogModel): boolean {
+  return (
+    model.id.includes("gpt-5.2") ||
+    model.id.includes("gpt-5.3") ||
+    model.id.includes("gpt-5.4") ||
+    model.id.includes("opus-4-6") ||
+    model.id.includes("opus-4.6")
+  );
 }
 
 function describePiModel(model: PiCatalogModel): string {
@@ -760,7 +766,10 @@ export function createPiProviderAdapter(
     capabilities,
     process: {
       command: opts?.processCommand ?? "node",
-      args: opts?.processArgs ?? [resolveBridgePath()],
+      args: opts?.processArgs ?? [resolveBridgePath({
+        importMetaUrl: import.meta.url,
+        bridgeRelativePath: "bridge/bridge.js",
+      })],
     },
 
     // -- Unified command builder -------------------------------------------
