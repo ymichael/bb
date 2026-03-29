@@ -23,7 +23,7 @@ export function createProject(
       updatedAt: now,
     })
     .run();
-  notifier.notifySystem(["environment-created"]); // project changes are system-level
+  notifier.notifyProject(id, ["project-created"]);
   return db.select().from(projects).where(eq(projects.id, id)).get()!;
 }
 
@@ -52,7 +52,7 @@ export function updateProject(
     .run();
   const updated = db.select().from(projects).where(eq(projects.id, id)).get();
   if (updated) {
-    notifier.notifyProject(id, ["threads-changed"]);
+    notifier.notifyProject(id, ["project-updated"]);
   }
   return updated ?? null;
 }
@@ -65,5 +65,6 @@ export function deleteProject(
   const existing = db.select().from(projects).where(eq(projects.id, id)).get();
   if (!existing) return false;
   db.delete(projects).where(eq(projects.id, id)).run();
+  notifier.notifyProject(id, ["project-deleted"]);
   return true;
 }

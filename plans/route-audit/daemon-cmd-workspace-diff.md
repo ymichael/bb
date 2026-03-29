@@ -10,7 +10,7 @@
 | Field | Required | Notes |
 |---|---|---|
 | `environmentId` | Yes | Inherited from workspace target. Identifies the runtime entry. |
-| `environmentStatus` | Yes | Must be `"ready"`. |
+| ~~`environmentStatus`~~ | ~~Yes~~ | Removed — no longer part of the command payload. |
 | `workspacePath` | Yes | Fallback path for lazy workspace provisioning. |
 | `selection` | Yes | `ThreadGitDiffSelection` — discriminated union: `{ type: "combined" }` or `{ type: "commit", sha: string }`. Determines which diff is returned. |
 | `mergeBaseBranch` | Yes | Branch name used as merge-base reference for the diff range. |

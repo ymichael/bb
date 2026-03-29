@@ -1,4 +1,5 @@
 import type { ClientMessage } from "@bb/domain";
+import { REALTIME_ENTITIES } from "@bb/domain";
 import { decodeSocketPayload } from "./decode-payload.js";
 import type { NotificationHub } from "./hub.js";
 
@@ -7,6 +8,8 @@ interface ClientSocket {
   send(data: string): void;
 }
 
+const realtimeEntitySet: ReadonlySet<string> = new Set(REALTIME_ENTITIES);
+
 function isClientMessage(value: unknown): value is ClientMessage {
   if (!value || typeof value !== "object" || !("type" in value)) {
     return false;
@@ -14,15 +17,10 @@ function isClientMessage(value: unknown): value is ClientMessage {
   if (value.type !== "subscribe" && value.type !== "unsubscribe") {
     return false;
   }
-  if (!("entity" in value)) {
+  if (!("entity" in value) || typeof value.entity !== "string") {
     return false;
   }
-  return (
-    value.entity === "thread" ||
-    value.entity === "project" ||
-    value.entity === "environment" ||
-    value.entity === "system"
-  );
+  return realtimeEntitySet.has(value.entity);
 }
 
 export function onClientSocketOpen(

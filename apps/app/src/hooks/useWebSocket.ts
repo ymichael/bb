@@ -197,6 +197,7 @@ export function useWebSocket(): void {
     wsManager.subscribe("thread");
     wsManager.subscribe("project");
     wsManager.subscribe("environment");
+    wsManager.subscribe("host");
     wsManager.subscribe("system");
 
     // Invalidate React Query caches on changes
@@ -234,11 +235,13 @@ export function useWebSocket(): void {
             queryClient.invalidateQueries({ queryKey: ["environmentWorkStatus", message.id] });
           }
           break;
-        case "system":
+        case "host":
           queryClient.invalidateQueries({ queryKey: ["hosts"] });
           break;
         case "project":
           queryClient.invalidateQueries({ queryKey: ["projects"] });
+          break;
+        case "system":
           break;
         default:
           assertNever(message);
@@ -257,6 +260,7 @@ export function useWebSocket(): void {
       wsManager.unsubscribe("thread");
       wsManager.unsubscribe("project");
       wsManager.unsubscribe("environment");
+      wsManager.unsubscribe("host");
       wsManager.unsubscribe("system");
       wsManager.disconnect();
     };

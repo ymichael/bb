@@ -98,7 +98,6 @@ async function readManagerPreferences(
       command: {
         type: "workspace.read_file",
         environmentId: args.environment.id,
-        environmentStatus: "ready",
         workspacePath: args.workspacePath,
         path: MANAGER_PREFERENCES_FILE_NAME,
       },

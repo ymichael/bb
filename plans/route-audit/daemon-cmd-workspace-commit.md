@@ -10,7 +10,7 @@
 | Field | Required | Notes |
 |---|---|---|
 | `environmentId` | Yes | Identifies the runtime entry. |
-| `environmentStatus` | Yes | Must be `"ready"`. |
+| ~~`environmentStatus`~~ | ~~Yes~~ | Removed — no longer part of the command payload. |
 | `workspacePath` | Yes | Fallback for lazy provisioning. |
 | `message` | Yes | Commit message string, min 1 char. Passed directly as the `-m` argument to `git commit`. |
 

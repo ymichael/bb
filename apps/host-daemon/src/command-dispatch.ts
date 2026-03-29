@@ -138,11 +138,6 @@ export async function dispatchCommand<TCommand extends HostDaemonCommand>(
       return squashMerge(command, options.runtimeManager) as Promise<
         HostDaemonCommandResult<TCommand["type"]>
       >;
-    case "workspace.reset": {
-      const entry = await requireWorkspaceEnvironment(command, options.runtimeManager);
-      await entry.workspace.reset();
-      return {} as HostDaemonCommandResult<TCommand["type"]>;
-    }
     case "workspace.checkpoint": {
       const entry = await requireWorkspaceEnvironment(command, options.runtimeManager);
       return entry.workspace.checkpoint({

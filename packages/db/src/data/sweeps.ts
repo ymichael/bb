@@ -138,7 +138,7 @@ export function sweepExpiredLeases(
       .run();
     sessionsClosed++;
 
-    notifier.notifySystem(["host-disconnected"]);
+    notifier.notifyHost(["host-disconnected"]);
 
     // Find all active/idle/provisioning threads on environments belonging to this host
     const activeThreads = db
@@ -220,7 +220,9 @@ export function sweepDestroyingEnvironments(
   db.delete(environments)
     .where(inArray(environments.id, staleEnvironmentIds))
     .run();
-  notifier.notifySystem(["environment-deleted"]);
+  for (const environmentId of staleEnvironmentIds) {
+    notifier.notifyEnvironment(environmentId, ["environment-deleted"]);
+  }
 
   return {
     deleted: staleEnvironmentIds.length,

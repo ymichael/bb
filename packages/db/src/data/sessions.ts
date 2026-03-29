@@ -70,7 +70,7 @@ export function openSession(
     })
     .run();
 
-  notifier.notifySystem(["host-connected"]);
+  notifier.notifyHost(["host-connected"]);
 
   return db
     .select()
@@ -108,7 +108,7 @@ export function closeSession(
     .where(eq(hostDaemonSessions.id, sessionId))
     .run();
 
-  notifier.notifySystem(["host-disconnected"]);
+  notifier.notifyHost(["host-disconnected"]);
 
   return (
     db

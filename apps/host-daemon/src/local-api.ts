@@ -35,12 +35,9 @@ export async function startLocalApiServer(
 
   const { get, post } = typedRoutes<HostDaemonLocalSchema>(app);
 
-  get("/host-id", (c) =>
-    c.json({ hostId: options.hostId }),
-  );
-
   get("/status", (c) =>
     c.json({
+      hostId: options.hostId,
       connected: options.getConnected(),
       serverUrl: options.serverUrl,
     }),

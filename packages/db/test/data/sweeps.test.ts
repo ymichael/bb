@@ -92,6 +92,7 @@ describe("sweepExpiredCommands", () => {
     const spy: DbNotifier = {
       notifyThread: vi.fn(),
       notifyEnvironment: vi.fn(),
+      notifyHost: vi.fn(),
       notifyCommand: vi.fn(),
       notifyProject: vi.fn(),
       notifySystem: vi.fn(),
@@ -191,6 +192,7 @@ describe("sweepExpiredLeases", () => {
       notifyEnvironment: vi.fn(),
       notifyCommand: vi.fn(),
       notifyProject: vi.fn(),
+      notifyHost: vi.fn(),
       notifySystem: vi.fn(),
     };
 
@@ -215,7 +217,7 @@ describe("sweepExpiredLeases", () => {
       .get();
     expect(updatedThread?.status).toBe("error");
 
-    expect(spy.notifySystem).toHaveBeenCalledWith(["host-disconnected"]);
+    expect(spy.notifyHost).toHaveBeenCalledWith(["host-disconnected"]);
     expect(spy.notifyThread).toHaveBeenCalledWith(thread.id, ["status-changed"]);
   });
 });
@@ -356,6 +358,7 @@ describe("sweepDestroyingEnvironments", () => {
     const spy: DbNotifier = {
       notifyThread: vi.fn(),
       notifyEnvironment: vi.fn(),
+      notifyHost: vi.fn(),
       notifyCommand: vi.fn(),
       notifyProject: vi.fn(),
       notifySystem: vi.fn(),
@@ -366,6 +369,6 @@ describe("sweepDestroyingEnvironments", () => {
     expect(
       db.select().from(environments).all().map((row) => row.id),
     ).toEqual([freshEnvironment.id]);
-    expect(spy.notifySystem).toHaveBeenCalledWith(["environment-deleted"]);
+    expect(spy.notifyEnvironment).toHaveBeenCalledWith(staleEnvironment.id, ["environment-deleted"]);
   });
 });

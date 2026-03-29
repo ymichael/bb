@@ -202,6 +202,7 @@ describe("transitionThreadStatus", () => {
     const spy: DbNotifier = {
       notifyThread: vi.fn(),
       notifyEnvironment: vi.fn(),
+      notifyHost: vi.fn(),
       notifyCommand: vi.fn(),
       notifyProject: vi.fn(),
       notifySystem: vi.fn(),

@@ -29,7 +29,7 @@
 
 ### `commit` action
 
-3. (async) `queueCommandAndWait` with `workspace.commit` command (`environmentId`, `environmentStatus`, `workspacePath`, `message`).
+3. (async) `queueCommandAndWait` with `workspace.commit` command (`environmentId`, `workspacePath`, `message`).
 4. (sync) Parses result — extracts `commitSha`, `commitSubject`.
 5. (sync) If `autoArchiveOnSuccess`:
    - `archiveThread(deps.db, deps.hub, actingThread.id)` — sets `archivedAt` on the thread, notifies hub.
@@ -41,7 +41,7 @@
 
 ### `squash_merge` action
 
-3. (async) `queueCommandAndWait` with `workspace.squash_merge` command (`environmentId`, `environmentStatus`, `workspacePath`, `targetBranch`).
+3. (async) `queueCommandAndWait` with `workspace.squash_merge` command (`environmentId`, `workspacePath`, `targetBranch`).
 4. (sync) Parses result — extracts `merged`, `commitSha`.
 5-6. Same auto-archive + cleanup flow as `commit`.
 7. Returns `{ ok, action: "squash_merge", merged, message, autoArchived, commitSha }`.
@@ -50,14 +50,14 @@
 
 3. (sync) `getDefaultProjectSource(deps.db, environment.projectId)` — queries `project_sources WHERE projectId = ? AND isDefault = true`.
 4. (sync) Validates `source?.path` exists and `source.hostId === environment.hostId`. Throws 409 if not promotable.
-5. (async) `queueCommandAndWait` with `workspace.promote` command (`environmentId`, `environmentStatus`, `workspacePath`, `threadId`, `primaryPath`).
+5. (async) `queueCommandAndWait` with `workspace.promote` command (`environmentId`, `workspacePath`, `threadId`, `primaryPath`).
 6. Returns `{ ok, action: "promote", message }`.
 
 ### `demote` action
 
 3. (sync) `getDefaultProjectSource(deps.db, environment.projectId)` — same query as promote.
 4. (sync) Validates `source?.path`, `source.hostId === environment.hostId`, `environment.branchName`, and `actingThread.mergeBaseBranch` are all present. Throws 409 if not demotable.
-5. (async) `queueCommandAndWait` with `workspace.demote` command (`environmentId`, `environmentStatus`, `workspacePath`, `threadId`, `primaryPath`, `defaultBranch`, `envBranch`).
+5. (async) `queueCommandAndWait` with `workspace.demote` command (`environmentId`, `workspacePath`, `threadId`, `primaryPath`, `defaultBranch`, `envBranch`).
 6. Returns `{ ok, action: "demote", message }`.
 
 > **-> HTTP 200 returns here.** For commit/squash_merge with autoArchive: the environment cleanup (including potential `environment.destroy` command) runs **before** the response — it's awaited. The `environment.destroy` command is fire-and-forget (queued but not awaited).

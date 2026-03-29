@@ -27,6 +27,7 @@
     "@bb/templates": "workspace:*",
     "@bb/workspace": "workspace:*",
     "@hono/node-server": "^1.19.11",
+    "mime-types": "^3.0.2",
     "p-debounce": "^5.1.0",
     "p-retry": "^6.2.1",
     "partysocket": "^1.1.16",
@@ -35,6 +36,7 @@
   },
   "devDependencies": {
     "@bb/tsconfig": "workspace:*",
+    "@types/mime-types": "^3.0.1",
     "@types/node": "^22.0.0",
     "hono": "^4.7.0",
     "tsx": "^4.21.0",

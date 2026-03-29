@@ -32,7 +32,6 @@ export const HOST_DAEMON_COMMAND_TYPES = [
   "workspace.diff",
   "workspace.commit",
   "workspace.squash_merge",
-  "workspace.reset",
   "workspace.checkpoint",
   "workspace.promote",
   "workspace.demote",
@@ -77,7 +76,6 @@ const hostDaemonEnvironmentTargetSchema = z.object({
 });
 
 const hostDaemonWorkspaceTargetSchema = hostDaemonEnvironmentTargetSchema.extend({
-  environmentStatus: z.literal("ready"),
   workspacePath: z.string().min(1),
 });
 
@@ -220,11 +218,6 @@ export const workspaceSquashMergeCommandSchema = hostDaemonWorkspaceTargetSchema
   targetBranch: z.string().min(1),
 });
 
-/** Discard all uncommitted changes. Internal use only — not exposed via public API. */
-export const workspaceResetCommandSchema = hostDaemonWorkspaceTargetSchema.extend({
-  type: z.literal("workspace.reset"),
-});
-
 /** Commit and push to remote. Internal use only — not exposed via public API. */
 export const workspaceCheckpointCommandSchema = hostDaemonWorkspaceTargetSchema.extend({
   type: z.literal("workspace.checkpoint"),
@@ -275,7 +268,6 @@ const hostDaemonNonProvisionCommandSchema = z.discriminatedUnion("type", [
   workspaceDiffCommandSchema,
   workspaceCommitCommandSchema,
   workspaceSquashMergeCommandSchema,
-  workspaceResetCommandSchema,
   workspaceCheckpointCommandSchema,
   workspacePromoteCommandSchema,
   workspaceDemoteCommandSchema,
@@ -324,7 +316,6 @@ export const hostDaemonCommandResultSchemaByType = {
     merged: z.boolean(),
     commitSha: z.string().min(1),
   }),
-  "workspace.reset": z.object({}),
   "workspace.checkpoint": z.object({
     commitSha: z.string().min(1),
     remoteName: z.string().min(1),
@@ -342,6 +333,7 @@ export const hostDaemonCommandResultSchemaByType = {
   "workspace.read_file": z.object({
     path: z.string(),
     content: z.string(),
+    mimeType: z.string().optional(),
   }),
   "workspace.list_branches": z.object({
     branches: z.array(z.string()),

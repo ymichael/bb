@@ -3,13 +3,11 @@ export { typedRoutes } from "@bb/hono-typed-routes";
 
 export {
   createHostDaemonLocalClient,
-  hostIdResponseSchema,
   openRequestSchema,
   pickFolderResponseSchema,
   statusResponseSchema,
 } from "./local.js";
 export type {
-  HostIdResponse,
   HostDaemonLocalRoutes,
   HostDaemonLocalSchema,
   OpenRequest,
@@ -41,7 +39,6 @@ export {
   workspaceDiffCommandSchema,
   workspaceDemoteCommandSchema,
   workspacePromoteCommandSchema,
-  workspaceResetCommandSchema,
   workspaceListBranchesCommandSchema,
   workspaceListFilesCommandSchema,
   workspaceReadFileCommandSchema,

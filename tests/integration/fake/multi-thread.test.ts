@@ -316,7 +316,7 @@ describe.sequential("fake provider multi-thread integration", () => {
       });
       const projectB = await createProjectFixture(harness, {
         name: "Environment Isolation B",
-        sourcePath: secondRepoDir,
+        path: secondRepoDir,
       });
       const threadA = await createReadyHostThread(harness, {
         projectId: projectA.id,
@@ -475,7 +475,7 @@ describe.sequential("fake provider multi-thread integration", () => {
       });
       const projectB = await createProjectFixture(harness, {
         name: "Stress Isolated Environment",
-        sourcePath: secondRepoDir,
+        path: secondRepoDir,
       });
       const threadA = await createReadyHostThread(harness, {
         projectId: projectA.id,

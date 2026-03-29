@@ -30,8 +30,7 @@ describe("public project and host routes", () => {
         },
         body: JSON.stringify({
           name: "Project One",
-          hostId: host.id,
-          sourcePath: "/tmp/project-one",
+          source: { type: "local_path", hostId: host.id, path: "/tmp/project-one" },
         }),
       });
       expect(createResponse.status).toBe(201);
@@ -100,8 +99,7 @@ describe("public project and host routes", () => {
         },
         body: JSON.stringify({
           name: "Project Sources",
-          hostId: host.id,
-          sourcePath: "/tmp/project-sources",
+          source: { type: "local_path", hostId: host.id, path: "/tmp/project-sources" },
         }),
       });
       const project = await readJson(projectResponse) as {
@@ -167,6 +165,7 @@ describe("public project and host routes", () => {
             "content-type": "application/json",
           },
           body: JSON.stringify({
+            type: "local_path",
             path: "/tmp/project-sources-renamed",
           }),
         },

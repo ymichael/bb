@@ -6,9 +6,9 @@
 
 ## Request Body (or Params)
 
-| Field | Required | Notes |
-|---|---|---|
-| _(none)_ | -- | No input. |
+| Field    | Required | Notes     |
+| -------- | -------- | --------- |
+| _(none)_ | --       | No input. |
 
 ## Implementation Trace
 
@@ -25,19 +25,23 @@
 
 ## Flags
 
+> **Updated 2026-03-29:** `GET /host-id` merged into this route. Now returns `{ hostId, connected, serverUrl }`.
+
 None. Clean.
 
 ## Usages
 
-| Caller | Location | Purpose |
-|---|---|---|
-| `createHostDaemonLocalClient` | `packages/host-daemon-contract/src/local.ts:64` | Typed Hono client factory; defines the `/status` route type |
-| local-api test | `apps/host-daemon/src/local-api.test.ts:37` | Integration test that verifies `GET /status` returns `connected` and `serverUrl` |
-| _(no app callers)_ | -- | The frontend app (`apps/app`) does not call this route; it discovers daemon reachability via `GET /host-id` and server connectivity via the server's own WebSocket |
-| _(no CLI callers)_ | -- | The CLI (`apps/cli`) does not call this route; it only uses `GET /host-id` |
+| Caller                        | Location                                        | Purpose                                                                                                                                                            |
+| ----------------------------- | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `createHostDaemonLocalClient` | `packages/host-daemon-contract/src/local.ts:64` | Typed Hono client factory; defines the `/status` route type                                                                                                        |
+| local-api test                | `apps/host-daemon/src/local-api.test.ts:37`     | Integration test that verifies `GET /status` returns `connected` and `serverUrl`                                                                                   |
+| _(no app callers)_            | --                                              | The frontend app (`apps/app`) does not call this route; it discovers daemon reachability via `GET /host-id` and server connectivity via the server's own WebSocket |
+| _(no CLI callers)_            | --                                              | The CLI (`apps/cli`) does not call this route; it only uses `GET /host-id`                                                                                         |
 
 ---
 
 ## Review Comments
 
-<!-- Leave comments, questions, or follow-ups below. Delete this file if no action needed. -->
+I wonder if we can merge host-id into /status
+
+> Done — `GET /host-id` merged into `GET /status`. The response now includes `hostId` alongside `connected` and `serverUrl`. `GET /host-id` has been deleted. All callers (app, CLI) updated to use `/status`.

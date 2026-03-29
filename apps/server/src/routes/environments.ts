@@ -45,7 +45,7 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
       command: {
         type: "workspace.status",
         environmentId: environment.id,
-        environmentStatus: environment.status,
+
         workspacePath: environment.path,
         mergeBaseBranch: query.mergeBaseBranch,
       },
@@ -62,7 +62,7 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
       command: {
         type: "workspace.diff",
         environmentId: environment.id,
-        environmentStatus: environment.status,
+
         workspacePath: environment.path,
         selection: toWorkspaceDiffSelection(query),
         mergeBaseBranch: query.mergeBaseBranch,
@@ -81,7 +81,7 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
       command: {
         type: "workspace.list_branches",
         environmentId: environment.id,
-        environmentStatus: environment.status,
+
         workspacePath: environment.path,
       },
     });
@@ -106,7 +106,7 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
           command: {
             type: "workspace.commit",
             environmentId: environment.id,
-            environmentStatus: environment.status,
+    
             workspacePath: environment.path,
             message: payload.options.message,
           },
@@ -135,7 +135,7 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
           command: {
             type: "workspace.squash_merge",
             environmentId: environment.id,
-            environmentStatus: environment.status,
+    
             workspacePath: environment.path,
             targetBranch: payload.options.mergeBaseBranch,
           },
@@ -168,7 +168,7 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
           command: {
             type: "workspace.promote",
             environmentId: environment.id,
-            environmentStatus: environment.status,
+    
             workspacePath: environment.path,
             threadId: actingThread.id,
             primaryPath: source.path,
@@ -196,7 +196,7 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
           command: {
             type: "workspace.demote",
             environmentId: environment.id,
-            environmentStatus: environment.status,
+    
             workspacePath: environment.path,
             threadId: actingThread.id,
             primaryPath: source.path,

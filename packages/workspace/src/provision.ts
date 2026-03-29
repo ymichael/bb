@@ -162,8 +162,8 @@ class WorkspaceImpl implements IWorkspace {
     return (await this.ws.currentBranch) ?? null;
   }
 
-  getStatus(): Promise<WorkspaceStatus> {
-    return this.ws.getStatus();
+  getStatus(options?: StatusOptions): Promise<WorkspaceStatus> {
+    return this.ws.getStatus(options);
   }
 
   getDiff(options?: DiffOptions): Promise<DiffResult> {

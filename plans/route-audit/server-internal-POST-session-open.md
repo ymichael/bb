@@ -24,11 +24,11 @@
 3. **Upsert host record** (sync) — `upsertHost(db, hub, { id, name, type })`.
    - SELECT by PK `hosts.id`.
    - If exists: UPDATE `name`, `type`, `lastSeenAt`, `updatedAt`.
-   - If not: INSERT new row, notify system `["host-connected"]`.
+   - If not: INSERT new row, notify host `["host-connected"]`.
 4. **Open new session** (sync) — `openSession(db, hub, { ... })`.
    - Selects all active sessions for this `hostId` and closes them (status="closed", closeReason="replaced").
    - Inserts new session row with `status="active"`, `leaseExpiresAt = now + LEASE_TIMEOUT_MS` (30s).
-   - Notifies system `["host-connected"]`.
+   - Notifies host `["host-connected"]`.
    - Returns the newly inserted session row.
 5. **Close stale daemon WebSocket** (sync) — If `existingSession` (from step 2) exists and its `id` differs from the new session's `id`, calls `hub.closeDaemonSession(existingSession.id, "replaced")`.
    - Sends `{ type: "session-close", reason: "replaced" }` to the old daemon's WebSocket.

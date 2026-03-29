@@ -63,6 +63,7 @@ const INTENTIONAL_OPTIONAL_SERVER_FIELDS: Record<string, string> = {
   "timelineToolDetailsQuerySchema.includeManagerDebugView": "Timeline tool detail queries may omit manager debug view unless explicitly requested.",
   "timelineToolDetailsRequestSchema.includeManagerDebugView": "Timeline tool detail requests may omit manager debug view unless explicitly requested.",
   "updateProjectRequestSchema.name": "Project PATCH requests omit name when leaving it unchanged.",
+  "updateProjectSourceRequestSchema.isDefault": "Project source PATCH requests omit isDefault when not changing the default source.",
   "updateProjectSourceRequestSchema.path": "Project source PATCH requests omit path when leaving it unchanged.",
   "updateProjectSourceRequestSchema.repoUrl": "Project source PATCH requests omit repo URL when leaving it unchanged.",
   "updateThreadRequestSchema.mergeBaseBranch": "Thread PATCH requests omit mergeBaseBranch when leaving it unchanged or use null to clear it.",
@@ -148,15 +149,13 @@ describe("server-contract canonical schemas", () => {
     ).toEqual({ messages: [] });
 
     expect(PROJECT_CHANGE_KINDS).toEqual([
-      "sources-changed",
+      "project-created",
+      "project-updated",
+      "project-deleted",
+      "project-sources-changed",
       "threads-changed",
     ]);
-    expect(SYSTEM_CHANGE_KINDS).toEqual([
-      "host-connected",
-      "host-disconnected",
-      "environment-created",
-      "environment-deleted",
-    ]);
+    expect(SYSTEM_CHANGE_KINDS).toEqual([]);
   });
 
   it("keeps only intentional optional request fields", () => {

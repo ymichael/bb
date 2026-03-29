@@ -7,12 +7,12 @@
 
 ## Command Payload
 
-| Field | Required | Notes |
-|---|---|---|
-| `environmentId` | Yes | Identifies the runtime entry. |
-| `environmentStatus` | Yes | Must be `"ready"`. |
-| `workspacePath` | Yes | Fallback for lazy provisioning. |
-| `path` | Yes | Relative file path within the workspace. Resolved against workspace root. Path traversal is validated. |
+| Field               | Required | Notes                                                                                                  |
+| ------------------- | -------- | ------------------------------------------------------------------------------------------------------ |
+| `environmentId`     | Yes      | Identifies the runtime entry.                                                                          |
+| ~~`environmentStatus`~~ | ~~Yes~~ | Removed — no longer part of the command payload.                                                       |
+| `workspacePath`     | Yes      | Fallback for lazy provisioning.                                                                        |
+| `path`              | Yes      | Relative file path within the workspace. Resolved against workspace root. Path traversal is validated. |
 
 **All 4 fields consumed. No dead params.**
 
@@ -36,19 +36,35 @@
 
 ## Flags
 
-1. **Path traversal check has an edge case.** The check `resolved !== workspacePath` allows reading the workspace root directory itself as a file, which would fail with an EISDIR error from `fs.readFile`. Not a security issue, just an unhelpful error.
-2. **No size limit on file reads.** Reading a large binary file will load it entirely into memory as a UTF-8 string. Could cause OOM on very large files.
-3. **Binary files read as UTF-8.** No detection of binary files — they'll be read as garbled UTF-8 strings. The caller gets no signal that the content is binary.
+> **Updated 2026-03-29:** `environmentStatus` removed from all workspace commands. Directory guard and 10MB size limit added. `mimeType` returned in result.
+
+1. ~~**Path traversal check has an edge case.** The check `resolved !== workspacePath` allows reading the workspace root directory itself as a file, which would fail with an EISDIR error from `fs.readFile`. Not a security issue, just an unhelpful error.~~ **Fixed** — directory guard now returns a helpful error.
+2. ~~**No size limit on file reads.** Reading a large binary file will load it entirely into memory as a UTF-8 string. Could cause OOM on very large files.~~ **Fixed** — 10MB hardcoded limit added.
+3. ~~**Binary files read as UTF-8.** No detection of binary files — they'll be read as garbled UTF-8 strings. The caller gets no signal that the content is binary.~~ **Fixed** — `mimeType` is now returned in the result, allowing callers to detect binary content.
 
 ## Usages
 
-| Caller | Location | Trigger |
-|---|---|---|
-| `GET /threads/:id/workspace/file` | `apps/server/src/routes/threads/data.ts:113-125` | Client reads a single file from a thread's workspace |
-| `readManagerPreferences` | `apps/server/src/services/thread-runtime-config.ts:95-106` | Server reads `.bb/manager.md` from workspace to build runtime instructions for thread execution |
+| Caller                            | Location                                                   | Trigger                                                                                         |
+| --------------------------------- | ---------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `GET /threads/:id/workspace/file` | `apps/server/src/routes/threads/data.ts:113-125`           | Client reads a single file from a thread's workspace                                            |
+| `readManagerPreferences`          | `apps/server/src/services/thread-runtime-config.ts:95-106` | Server reads `.bb/manager.md` from workspace to build runtime instructions for thread execution |
 
 ---
 
 ## Review Comments
 
-<!-- Leave comments, questions, or follow-ups below. Delete this file if no action needed. -->
+1. lets handle the "attempting to read a directory case" and return a helpful error
+
+> Done — directory guard added. Attempting to read a directory now returns a `CommandDispatchError` with a helpful message.
+
+2. lets add a reasonable hardcoded max file size limit for now. 10MB seems reasonable?
+
+> Done — 10MB hardcoded limit added. Files exceeding the limit return an error.
+
+3. how would we fix 3? would we also send back a content type?
+
+> Done — `mimeType` field added to the result schema, allowing callers to detect binary content and handle it appropriately.
+
+4. what's the point of the environmentStatus payload attribute?
+
+> Removed — `environmentStatus` has been stripped from all workspace command payloads.

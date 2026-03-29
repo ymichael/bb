@@ -137,21 +137,20 @@ describe("CommandRouter", () => {
         command: {
           type: "workspace.commit",
           environmentId: "env-1",
-          environmentStatus: "ready",
           workspacePath: "/tmp/env-1",
           threadId: "thread-1",
           message: "Commit",
         },
       },
       {
-        id: "reset",
+        id: "status",
         cursor: 2,
         command: {
-          type: "workspace.reset",
+          type: "workspace.status",
           environmentId: "env-1",
-          environmentStatus: "ready",
           workspacePath: "/tmp/env-1",
           threadId: "thread-1",
+          mergeBaseBranch: "main",
         },
       },
     ]);
@@ -159,7 +158,7 @@ describe("CommandRouter", () => {
     await vi.waitFor(() => {
       expect(workspace.commit).toHaveBeenCalledTimes(1);
     });
-    expect(workspace.reset).not.toHaveBeenCalled();
+    expect(workspace.getStatus).not.toHaveBeenCalled();
 
     commitDeferred.resolve({
       commitSha: "commit-1",
@@ -167,7 +166,7 @@ describe("CommandRouter", () => {
     });
     await handling;
 
-    expect(workspace.reset).toHaveBeenCalledTimes(1);
+    expect(workspace.getStatus).toHaveBeenCalledTimes(1);
   });
 
   it("runs provider commands for different threads concurrently", async () => {

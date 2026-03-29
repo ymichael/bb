@@ -79,7 +79,7 @@ describe("public authorization regressions", () => {
         {
           method: "PATCH",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ path: "/hacked" }),
+          body: JSON.stringify({ type: "local_path", path: "/hacked" }),
         },
       );
 

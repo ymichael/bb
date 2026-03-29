@@ -20,7 +20,9 @@
 | `subscribe` | `entity`, `id?` | Subscribe to change notifications for an entity type (thread, project, environment, system) and optionally a specific ID. |
 | `unsubscribe` | `entity`, `id?` | Remove a prior subscription. |
 
-**Validation**: `isClientMessage` is a manual runtime type guard (not Zod). Checks `type` is "subscribe"/"unsubscribe" and `entity` is one of "thread", "project", "environment", "system". Invalid messages close the socket with code 1008.
+**Validation**: `isClientMessage` is a manual runtime type guard (not Zod). Checks `type` is "subscribe"/"unsubscribe" and `entity` is one of "thread", "project", "environment", "host", "system". Invalid messages close the socket with code 1008.
+
+> **Updated 2026-03-29:** `"host"` entity added to subscription types. `"host-connected"` and `"host-disconnected"` now notify on the host entity instead of system. `SYSTEM_CHANGE_KINDS` is now empty.
 
 ## Message Types (Server -> Client)
 
@@ -41,7 +43,7 @@
 
 ## Hub Notification Flow
 
-When server code calls `hub.notifyThread(threadId, changes)` (or notifyProject, notifyEnvironment, notifySystem):
+When server code calls `hub.notifyThread(threadId, changes)` (or notifyProject, notifyEnvironment, notifyHost, notifySystem):
 - `notifyClients` looks up sockets subscribed to the broad key (e.g., `"thread"`) and the specific key (e.g., `"thread:abc123"`).
 - Unions both sets, serializes the `ChangedMessage`, and sends to each socket.
 

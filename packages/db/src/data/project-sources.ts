@@ -49,7 +49,7 @@ export function createProjectSource(
       updatedAt: now,
     })
     .run();
-  notifier.notifyProject(input.projectId, ["sources-changed"]);
+  notifier.notifyProject(input.projectId, ["project-sources-changed"]);
   return db
     .select()
     .from(projectSources)
@@ -68,6 +68,7 @@ export function listProjectSources(db: DbConnection, projectId: string) {
 export interface UpdateProjectSourceInput {
   path?: string | null;
   repoUrl?: string | null;
+  isDefault?: true;
 }
 
 export function updateProjectSource(
@@ -84,15 +85,23 @@ export function updateProjectSource(
   if (!existing) return null;
 
   const now = Date.now();
+  if (input.isDefault) {
+    db.update(projectSources)
+      .set({ isDefault: false, updatedAt: now })
+      .where(eq(projectSources.projectId, existing.projectId))
+      .run();
+  }
+  const { isDefault: _isDefault, ...rest } = input;
   db.update(projectSources)
     .set({
-      ...input,
+      ...rest,
+      ...(input.isDefault ? { isDefault: true } : {}),
       updatedAt: now,
     })
     .where(eq(projectSources.id, id))
     .run();
 
-  notifier.notifyProject(existing.projectId, ["sources-changed"]);
+  notifier.notifyProject(existing.projectId, ["project-sources-changed"]);
   return (
     db
       .select()
@@ -148,6 +157,6 @@ export function deleteProjectSource(
         .run();
     }
   }
-  notifier.notifyProject(existing.projectId, ["sources-changed"]);
+  notifier.notifyProject(existing.projectId, ["project-sources-changed"]);
   return true;
 }

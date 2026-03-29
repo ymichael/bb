@@ -1,4 +1,5 @@
-export type RealtimeEntity = "thread" | "project" | "environment" | "system";
+export const REALTIME_ENTITIES = ["thread", "project", "environment", "host", "system"] as const;
+export type RealtimeEntity = (typeof REALTIME_ENTITIES)[number];
 
 export const THREAD_CHANGE_KINDS = [
   "thread-created",
@@ -13,23 +14,29 @@ export const THREAD_CHANGE_KINDS = [
 export type ThreadChangeKind = (typeof THREAD_CHANGE_KINDS)[number];
 
 export const PROJECT_CHANGE_KINDS = [
-  "sources-changed",
+  "project-created",
+  "project-updated",
+  "project-deleted",
+  "project-sources-changed",
   "threads-changed",
 ] as const;
 export type ProjectChangeKind = (typeof PROJECT_CHANGE_KINDS)[number];
 
 export const ENVIRONMENT_CHANGE_KINDS = [
+  "environment-created",
+  "environment-deleted",
   "status-changed",
   "work-status-changed",
 ] as const;
 export type EnvironmentChangeKind = (typeof ENVIRONMENT_CHANGE_KINDS)[number];
 
-export const SYSTEM_CHANGE_KINDS = [
+export const HOST_CHANGE_KINDS = [
   "host-connected",
   "host-disconnected",
-  "environment-created",
-  "environment-deleted",
 ] as const;
+export type HostChangeKind = (typeof HOST_CHANGE_KINDS)[number];
+
+export const SYSTEM_CHANGE_KINDS = [] as const;
 export type SystemChangeKind = (typeof SYSTEM_CHANGE_KINDS)[number];
 
 export interface SubscribeMessage {
@@ -67,6 +74,12 @@ export interface EnvironmentChangedMessage {
   changes: EnvironmentChangeKind[];
 }
 
+export interface HostChangedMessage {
+  type: "changed";
+  entity: "host";
+  changes: HostChangeKind[];
+}
+
 export interface SystemChangedMessage {
   type: "changed";
   entity: "system";
@@ -77,5 +90,6 @@ export type ChangedMessage =
   | ThreadChangedMessage
   | ProjectChangedMessage
   | EnvironmentChangedMessage
+  | HostChangedMessage
   | SystemChangedMessage;
 export type ServerMessage = ChangedMessage;

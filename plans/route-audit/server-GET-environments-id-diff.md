@@ -19,7 +19,7 @@
 
 1. (sync) `requireReadyEnvironment(deps.db, id)` — PK lookup, validates `status === "ready"` and `path` exists.
 2. (sync) `toWorkspaceDiffSelection(query)` — maps query `selection` to the daemon command shape (`{ type: "commit", sha }` or `{ type: "combined" }`).
-3. (async) `queueCommandAndWait(deps, {...})` — queues `workspace.diff` command with `environmentId`, `environmentStatus`, `workspacePath`, `selection`, `mergeBaseBranch`. Same flow as status route (session check -> queue -> wait -> validate).
+3. (async) `queueCommandAndWait(deps, {...})` — queues `workspace.diff` command with `environmentId`, `workspacePath`, `selection`, `mergeBaseBranch`. Same flow as status route (session check -> queue -> wait -> validate).
 4. (sync) Parses result with `hostDaemonCommandResultSchemaByType["workspace.diff"]`, returns `.diff`.
 
 > **-> HTTP 200 returns here.** No background work.

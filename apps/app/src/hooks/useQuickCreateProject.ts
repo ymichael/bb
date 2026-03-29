@@ -21,7 +21,7 @@ export function useQuickCreateProject() {
       return
     }
 
-    mutate({ name, sourcePath: selectedPath, hostId: localHostId })
+    mutate({ name, source: { type: "local_path", hostId: localHostId, path: selectedPath } })
   }, [isPending, mutate, pickFolder, localHostId])
 
   const isAvailable = pickFolder != null && localHostId != null

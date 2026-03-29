@@ -10,7 +10,7 @@
 | Field | Required | Notes |
 |---|---|---|
 | `environmentId` | Yes | Identifies the runtime entry. |
-| `environmentStatus` | Yes | Must be `"ready"`. |
+| ~~`environmentStatus`~~ | ~~Yes~~ | Removed — no longer part of the command payload. |
 | `workspacePath` | Yes | Fallback for lazy provisioning. |
 | `query` | No | Optional substring filter (case-insensitive). Filters the file list by matching against the full relative path. |
 

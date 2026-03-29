@@ -42,7 +42,7 @@ export const localHostIdAtom = atom<Promise<string | null>>(async (get) => {
 // Re-probe the local daemon when a host connects to the server.
 wsManager.onChanged((message) => {
   if (
-    message.entity === "system" &&
+    message.entity === "host" &&
     message.changes.includes("host-connected")
   ) {
     getDefaultStore().set(localHostIdRefreshAtom, (c) => c + 1);

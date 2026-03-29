@@ -17,7 +17,7 @@ import type { IntegrationHarness } from "./harness.js";
 
 export interface CreateProjectFixtureOptions {
   name: string;
-  sourcePath?: string;
+  path?: string;
 }
 
 export interface ProjectFixture {
@@ -57,9 +57,12 @@ export async function createProjectFixture(
   options: CreateProjectFixtureOptions,
 ): Promise<ProjectFixture> {
   const project = await createProject(harness.api, {
-    hostId: harness.hostId,
     name: options.name,
-    sourcePath: options.sourcePath ?? harness.repoDir,
+    source: {
+      type: "local_path",
+      hostId: harness.hostId,
+      path: options.path ?? harness.repoDir,
+    },
   });
   return { id: project.id };
 }

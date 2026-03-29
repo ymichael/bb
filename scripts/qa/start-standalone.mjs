@@ -82,9 +82,8 @@ async function main() {
 
     const host = await waitForConnectedHost(serverUrl);
     const project = await createProject(serverUrl, {
-      hostId: host.id,
       name: "Standalone QA Project",
-      sourcePath: projectRoot,
+      source: { type: "local_path", hostId: host.id, path: projectRoot },
     });
 
     const cleanupCommand =

@@ -10,7 +10,7 @@
 | Field | Required | Notes |
 |---|---|---|
 | `environmentId` | Yes | Identifies the runtime entry. |
-| `environmentStatus` | Yes | Must be `"ready"`. |
+| ~~`environmentStatus`~~ | ~~Yes~~ | Removed — no longer part of the command payload. |
 | `workspacePath` | Yes | Fallback for lazy provisioning. |
 | `commitMessage` | Yes | Message used for the commit if there are uncommitted changes. Min 1 char. |
 

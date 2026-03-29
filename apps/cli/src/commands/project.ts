@@ -78,8 +78,11 @@ export function registerProjectCommands(program: Command, getUrl: () => string):
         client.api.v1.projects.$post({
           json: {
             name: opts.name,
-            sourcePath: opts.root,
-            hostId,
+            source: {
+              type: "local_path",
+              hostId,
+              path: opts.root,
+            },
           },
         }),
       );

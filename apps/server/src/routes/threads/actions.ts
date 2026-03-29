@@ -217,7 +217,6 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
             command: {
               type: "workspace.status",
               environmentId: environment.id,
-              environmentStatus: environment.status,
               workspacePath: environment.path,
               mergeBaseBranch,
             },

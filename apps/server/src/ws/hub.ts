@@ -1,6 +1,7 @@
 import type {
   ChangedMessage,
   EnvironmentChangeKind,
+  HostChangeKind,
   ProjectChangeKind,
   SystemChangeKind,
   ThreadChangeKind,
@@ -220,6 +221,14 @@ export class NotificationHub implements DbNotifier {
       waiter.resolve(true);
     }
     this.commandWaiters.delete(hostId);
+  }
+
+  notifyHost(changes: HostChangeKind[]): void {
+    this.notifyClients({
+      type: "changed",
+      entity: "host",
+      changes,
+    });
   }
 
   notifySystem(changes: SystemChangeKind[]): void {

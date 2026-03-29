@@ -141,8 +141,7 @@ describe("server integration", () => {
       const projectResponse = await publicClient.projects.$post({
         json: {
           name: "Test Project",
-          hostId: "host-1",
-          sourcePath: "/tmp/project-root",
+          source: { type: "local_path", hostId: "host-1", path: "/tmp/project-root" },
         },
       });
       const project = await projectResponse.json();
@@ -229,8 +228,7 @@ describe("server integration", () => {
         await publicClient.projects.$post({
           json: {
             name: "Event Project",
-            hostId: "host-1",
-            sourcePath: "/tmp/event-project",
+            source: { type: "local_path", hostId: "host-1", path: "/tmp/event-project" },
           },
         })
       ).json();
@@ -368,8 +366,7 @@ describe("server integration", () => {
         await publicClient.projects.$post({
           json: {
             name: "Lifecycle Project",
-            hostId: "host-1",
-            sourcePath: "/tmp/lifecycle-project",
+            source: { type: "local_path", hostId: "host-1", path: "/tmp/lifecycle-project" },
           },
         })
       ).json();

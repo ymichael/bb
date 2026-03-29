@@ -10,7 +10,7 @@
 | Field | Required | Notes |
 |---|---|---|
 | `environmentId` | Yes | Inherited from `hostDaemonWorkspaceTargetSchema`. Used to look up or lazily create the runtime entry. |
-| `environmentStatus` | Yes | Must be literal `"ready"`. Guard checked by `requireWorkspaceEnvironment`. |
+| ~~`environmentStatus`~~ | ~~Yes~~ | Removed — no longer part of the command payload. |
 | `workspacePath` | Yes | Inherited from workspace target. Used to lazily provision workspace if entry missing. |
 | `mergeBaseBranch` | Yes | Branch name passed to `workspace.getStatus()` to compute ahead/behind counts and merge-base ref. |
 
@@ -19,7 +19,7 @@
 ## Implementation Trace
 
 1. `dispatchCommand` matches `"workspace.status"`, calls `requireWorkspaceEnvironment(command, runtimeManager)`.
-   - Validates `environmentStatus === "ready"`.
+   - Validates workspace environment is available (previously checked `environmentStatus === "ready"`, now handled internally).
    - Looks up existing entry or lazily provisions via `ensureEnvironment`.
 2. Calls `entry.workspace.getStatus({ mergeBaseBranch: command.mergeBaseBranch })`.
    - **BUG:** `WorkspaceImpl.getStatus()` (provision.ts:165-167) does NOT forward the `options` argument to `this.ws.getStatus()`. The signature accepts `StatusOptions` but the body calls `this.ws.getStatus()` with no args. The `mergeBaseBranch` from the command is silently dropped, and `Workspace.getStatus` falls back to `readDefaultBranch()`.
@@ -44,7 +44,9 @@
 
 ## Flags
 
-1. **`WorkspaceImpl.getStatus` drops options.** `provision.ts:165` defines `getStatus(): Promise<WorkspaceStatus>` with no params, ignoring the `StatusOptions` argument. The `mergeBaseBranch` passed from the command is never forwarded to `Workspace.getStatus`. This means the command always computes status against the default branch, not the caller-specified merge base.
+> **Updated 2026-03-29:** `environmentStatus` removed from command payload. `mergeBaseBranch` forwarding bug fixed.
+
+1. ~~**`WorkspaceImpl.getStatus` drops options.** `provision.ts:165` defines `getStatus(): Promise<WorkspaceStatus>` with no params, ignoring the `StatusOptions` argument. The `mergeBaseBranch` passed from the command is never forwarded to `Workspace.getStatus`. This means the command always computes status against the default branch, not the caller-specified merge base.~~ **Fixed** — `WorkspaceImpl.getStatus` now forwards the `options` argument to `Workspace.getStatus`, so the caller-specified `mergeBaseBranch` is used correctly.
 2. Result schema declares `workspaceStatus` as `nullable()`, but the implementation never returns `null` — it either returns the status object or throws. The nullable type is misleading.
 
 ## Usages

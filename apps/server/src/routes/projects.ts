@@ -77,15 +77,17 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
   get("/projects", (context) => context.json(buildProjectResponses(deps)));
 
   post("/projects", createProjectRequestSchema, async (context, payload) => {
-    requireHostWithStatus(deps.db, payload.hostId);
+    const { source } = payload;
+    requireHostWithStatus(deps.db, source.hostId);
     const project = createProject(deps.db, deps.hub, {
       name: payload.name,
     });
     createProjectSource(deps.db, deps.hub, {
       projectId: project.id,
-      hostId: payload.hostId,
-      type: "local_path",
-      path: payload.sourcePath,
+      hostId: source.hostId,
+      type: source.type,
+      path: source.type === "local_path" ? source.path : null,
+      repoUrl: source.type === "github_repo" ? source.repoUrl : null,
       isDefault: true,
     });
     return context.json(buildProjectResponses(deps, project.id)[0], 201);
@@ -96,7 +98,6 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
   );
 
   patch("/projects/:id", updateProjectRequestSchema, async (context, payload) => {
-    requireProject(deps.db, context.req.param("id"));
     const project = updateProject(deps.db, deps.hub, context.req.param("id"), payload);
     if (!project) {
       throw new ApiError(404, "project_not_found", "Project not found");
@@ -126,15 +127,22 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
 
   patch("/projects/:id/sources/:sourceId", updateProjectSourceRequestSchema, async (context, payload) => {
     requireProject(deps.db, context.req.param("id"));
-    requireProjectSource(deps, {
+    const existing = requireProjectSource(deps, {
       projectId: context.req.param("id"),
       sourceId: context.req.param("sourceId"),
     });
+    if (payload.type !== existing.type) {
+      throw new ApiError(400, "invalid_request", `Source type mismatch: source is ${existing.type} but request specifies ${payload.type}`);
+    }
     const source = updateProjectSource(
       deps.db,
       deps.hub,
       context.req.param("sourceId"),
-      payload,
+      {
+        ...(payload.type === "local_path" && payload.path ? { path: payload.path } : {}),
+        ...(payload.type === "github_repo" && payload.repoUrl ? { repoUrl: payload.repoUrl } : {}),
+        ...(payload.isDefault ? { isDefault: payload.isDefault } : {}),
+      },
     );
     if (!source) {
       throw new ApiError(404, "invalid_request", "Project source not found");
@@ -143,11 +151,20 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
   });
 
   del("/projects/:id/sources/:sourceId", (context) => {
-    requireProject(deps.db, context.req.param("id"));
+    const projectId = context.req.param("id");
+    requireProject(deps.db, projectId);
     requireProjectSource(deps, {
-      projectId: context.req.param("id"),
+      projectId,
       sourceId: context.req.param("sourceId"),
     });
+    const sourceCount = deps.db
+      .select()
+      .from(projectSources)
+      .where(eq(projectSources.projectId, projectId))
+      .all().length;
+    if (sourceCount <= 1) {
+      throw new ApiError(409, "invalid_request", "Cannot delete the last source of a project");
+    }
     const deleted = deleteProjectSource(deps.db, deps.hub, context.req.param("sourceId"));
     if (!deleted) {
       throw new ApiError(404, "invalid_request", "Project source not found");
@@ -173,7 +190,6 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
       command: {
         type: "workspace.list_files",
         environmentId: environment.id,
-        environmentStatus: "ready",
         workspacePath: source.path,
         ...(query.query ? { query: query.query } : {}),
       },

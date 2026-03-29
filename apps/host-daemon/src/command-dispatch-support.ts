@@ -60,18 +60,10 @@ export async function requireExistingEnvironment(
 export async function requireWorkspaceEnvironment(
   args: {
     environmentId: string;
-    environmentStatus: "ready";
     workspacePath: string;
   },
   runtimeManager: RuntimeManager,
 ): Promise<RuntimeEntry> {
-  if (args.environmentStatus !== "ready") {
-    throw new CommandDispatchError(
-      "invalid_environment_status",
-      `Environment ${args.environmentId} is not ready`,
-    );
-  }
-
   const existing = await runtimeManager.getOrAwait(args.environmentId);
   if (existing) {
     return existing;

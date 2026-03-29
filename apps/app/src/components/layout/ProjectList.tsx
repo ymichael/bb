@@ -228,7 +228,7 @@ export function ProjectList({
     )
     try {
       if (existingSource) {
-        await api.updateProjectSource(projectId, existingSource.id, { path: selectedPath })
+        await api.updateProjectSource(projectId, existingSource.id, { type: "local_path", path: selectedPath })
       } else {
         await api.addProjectSource(projectId, {
           hostId: localHostId,

@@ -10,7 +10,7 @@
 | Field | Required | Notes |
 |---|---|---|
 | `environmentId` | Yes | Identifies the environment workspace (source). |
-| `environmentStatus` | Yes | Must be `"ready"`. |
+| ~~`environmentStatus`~~ | ~~Yes~~ | Removed — no longer part of the command payload. |
 | `workspacePath` | Yes | Fallback for lazy provisioning. |
 | `threadId` | Yes | Included in schema but **not used** by the handler or any downstream code. |
 | `primaryPath` | Yes | Absolute path to the primary checkout. Opened as a separate workspace. |

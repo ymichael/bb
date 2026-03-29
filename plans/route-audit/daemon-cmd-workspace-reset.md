@@ -7,11 +7,11 @@
 
 ## Command Payload
 
-| Field | Required | Notes |
-|---|---|---|
-| `environmentId` | Yes | Identifies the runtime entry. |
-| `environmentStatus` | Yes | Must be `"ready"`. |
-| `workspacePath` | Yes | Fallback for lazy provisioning. |
+| Field               | Required | Notes                           |
+| ------------------- | -------- | ------------------------------- |
+| `environmentId`     | Yes      | Identifies the runtime entry.   |
+| ~~`environmentStatus`~~ | ~~Yes~~ | Removed (command deleted). |
+| `workspacePath`     | Yes      | Fallback for lazy provisioning. |
 
 **All 3 fields consumed. No dead params.**
 
@@ -32,16 +32,24 @@
 
 ## Flags
 
-None. Clean. The command is simple and correctly scoped. The JSDoc notes it is internal-only.
+> **Updated 2026-03-29:** Command deleted entirely — schema, handler, and result schema all removed.
+
+~~None. Clean. The command is simple and correctly scoped. The JSDoc notes it is internal-only.~~
+
+**This command has been deleted.**
 
 ## Usages
 
-| Caller | Location | Trigger |
-|---|---|---|
-| _(none)_ | — | No server-side callers. Command is defined and handled but never queued. |
+~~| Caller   | Location | Trigger                                                                  |~~
+~~| -------- | -------- | ------------------------------------------------------------------------ |~~
+~~| _(none)_ | —        | No server-side callers. Command is defined and handled but never queued. |~~
+
+No usages — command no longer exists.
 
 ---
 
 ## Review Comments
 
-<!-- Leave comments, questions, or follow-ups below. Delete this file if no action needed. -->
+Delete this command.
+
+> Done — `workspace.reset` command deleted. Schema, handler, and result schema all removed.

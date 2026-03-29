@@ -129,7 +129,9 @@ export type {
 
 export {
   ENVIRONMENT_CHANGE_KINDS,
+  HOST_CHANGE_KINDS,
   PROJECT_CHANGE_KINDS,
+  REALTIME_ENTITIES,
   SYSTEM_CHANGE_KINDS,
   THREAD_CHANGE_KINDS,
 } from "@bb/domain";
@@ -138,6 +140,8 @@ export type {
   ClientMessage,
   EnvironmentChangeKind,
   EnvironmentChangedMessage,
+  HostChangeKind,
+  HostChangedMessage,
   ProjectChangeKind,
   RealtimeEntity,
   ServerMessage,

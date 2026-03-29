@@ -12,7 +12,7 @@ export async function fetchLocalHostId(): Promise<string | null> {
   if (cachedHostId !== undefined) return cachedHostId;
   try {
     const client = createHostDaemonLocalClient(resolveHostDaemonUrl());
-    const res = await client["host-id"].$get();
+    const res = await client.status.$get();
     if (!res.ok) {
       cachedHostId = null;
       return null;

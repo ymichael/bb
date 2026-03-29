@@ -66,7 +66,7 @@
 2. SELECT session by PK. If not found or not "active", return.
 3. `closeSession(db, hub, sessionId, "daemon-disconnect")`:
    - UPDATE session to `status="closed"`, `closeReason="daemon-disconnect"`.
-   - `notifier.notifySystem(["host-disconnected"])`.
+   - `notifier.notifyHost(["host-disconnected"])`.
 4. **Interrupt active threads** — SELECT threads JOIN environments WHERE `environments.hostId = session.hostId` AND `threads.status IN ("active", "provisioning")`.
 5. For each interrupted thread:
    - `appendSystemErrorEvent` — inserts `system/error` event with code `"host_daemon_disconnected"`.

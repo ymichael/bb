@@ -22,7 +22,7 @@ export function getHostDaemonClient(port: number) {
 export async function fetchHostId(port: number): Promise<string | null> {
   try {
     const daemon = getHostDaemonClient(port);
-    const res = await daemon["host-id"].$get();
+    const res = await daemon.status.$get();
     if (!res.ok) return null;
     const body = (await res.json()) as { hostId: string };
     return body.hostId;

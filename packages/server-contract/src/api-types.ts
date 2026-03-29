@@ -132,10 +132,27 @@ export const updateThreadRequestSchema = z
   );
 export type UpdateThreadRequest = z.infer<typeof updateThreadRequestSchema>;
 
+const createLocalPathProjectSourceRequestSchema = z.object({
+  hostId: z.string().min(1),
+  type: z.literal("local_path"),
+  path: z.string().min(1),
+});
+
+const createGitHubRepoProjectSourceRequestSchema = z.object({
+  hostId: z.string().min(1),
+  type: z.literal("github_repo"),
+  repoUrl: z.string().url(),
+});
+
+export const createProjectSourceRequestSchema = z.discriminatedUnion("type", [
+  createLocalPathProjectSourceRequestSchema,
+  createGitHubRepoProjectSourceRequestSchema,
+]);
+export type CreateProjectSourceRequest = z.infer<typeof createProjectSourceRequestSchema>;
+
 export const createProjectRequestSchema = z.object({
   name: z.string().min(1),
-  hostId: z.string().min(1),
-  sourcePath: z.string().min(1),
+  source: createProjectSourceRequestSchema,
 });
 export type CreateProjectRequest = z.infer<typeof createProjectRequestSchema>;
 
@@ -262,34 +279,28 @@ export const updateProjectRequestSchema = z
   );
 export type UpdateProjectRequest = z.infer<typeof updateProjectRequestSchema>;
 
-const createLocalPathProjectSourceRequestSchema = z.object({
-  hostId: z.string().min(1),
+const updateLocalPathProjectSourceRequestSchema = z.object({
   type: z.literal("local_path"),
-  path: z.string().min(1),
+  path: z.string().min(1).optional(),
+  isDefault: z.literal(true).optional(),
 });
 
-const createGitHubRepoProjectSourceRequestSchema = z.object({
-  hostId: z.string().min(1),
+const updateGitHubRepoProjectSourceRequestSchema = z.object({
   type: z.literal("github_repo"),
-  repoUrl: z.string().url(),
+  repoUrl: z.string().url().optional(),
+  isDefault: z.literal(true).optional(),
 });
 
-export const createProjectSourceRequestSchema = z.discriminatedUnion("type", [
-  createLocalPathProjectSourceRequestSchema,
-  createGitHubRepoProjectSourceRequestSchema,
-]);
-export type CreateProjectSourceRequest = z.infer<typeof createProjectSourceRequestSchema>;
-
-export const updateProjectSourceRequestSchema = z
-  .object({
-    path: z.string().min(1),
-    repoUrl: z.string().url(),
-  })
-  .partial()
-  .refine(
-    (value) => value.path !== undefined || value.repoUrl !== undefined,
-    "At least one field must be provided",
-  );
+export const updateProjectSourceRequestSchema = z.discriminatedUnion("type", [
+  updateLocalPathProjectSourceRequestSchema,
+  updateGitHubRepoProjectSourceRequestSchema,
+]).refine(
+  (value) =>
+    ("path" in value && value.path !== undefined) ||
+    ("repoUrl" in value && value.repoUrl !== undefined) ||
+    value.isDefault !== undefined,
+  "At least one field besides type must be provided",
+);
 export type UpdateProjectSourceRequest = z.infer<typeof updateProjectSourceRequestSchema>;
 
 export const environmentActionTypeSchema = z.enum([

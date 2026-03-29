@@ -7,11 +7,6 @@ import type { EmptyInput, Endpoint } from "./common.js";
 // Schemas
 // ---------------------------------------------------------------------------
 
-export const hostIdResponseSchema = z.object({
-  hostId: z.string().min(1),
-});
-export type HostIdResponse = z.infer<typeof hostIdResponseSchema>;
-
 export const openRequestSchema = z.object({
   path: z.string().min(1),
 });
@@ -23,6 +18,7 @@ export const pickFolderResponseSchema = z.object({
 export type PickFolderResponse = z.infer<typeof pickFolderResponseSchema>;
 
 export const statusResponseSchema = z.object({
+  hostId: z.string().min(1),
   connected: z.boolean(),
   serverUrl: z.string(),
 });
@@ -33,9 +29,6 @@ export type StatusResponse = z.infer<typeof statusResponseSchema>;
 // ---------------------------------------------------------------------------
 
 export type HostDaemonLocalSchema = {
-  "/host-id": {
-    $get: Endpoint<EmptyInput, HostIdResponse>;
-  };
   "/open": {
     $post: Endpoint<{ json: OpenRequest }, Record<string, never>>;
   };

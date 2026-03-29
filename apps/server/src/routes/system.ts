@@ -7,6 +7,7 @@ import {
   type SystemProvidersQuery,
 } from "@bb/server-contract";
 import type { Hono } from "hono";
+import { getHost } from "@bb/db";
 import type { AppDeps } from "../types.js";
 import { COMMAND_TIMEOUT_MS } from "../constants.js";
 import { ApiError } from "../errors.js";
@@ -21,6 +22,9 @@ function resolveHostId(deps: AppDeps, query: HostLookupQuery): string {
     return requireEnvironment(deps.db, query.environmentId).hostId;
   }
   if (query.hostId) {
+    if (!getHost(deps.db, query.hostId)) {
+      throw new ApiError(404, "not_found", "Host not found");
+    }
     return query.hostId;
   }
   return requireDefaultConnectedHostId(deps.db);

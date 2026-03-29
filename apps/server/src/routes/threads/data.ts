@@ -1,4 +1,3 @@
-import type { Environment } from "@bb/domain";
 import { hostDaemonCommandResultSchemaByType } from "@bb/host-daemon-contract";
 import type { Hono } from "hono";
 import {
@@ -14,7 +13,7 @@ import type { AppDeps } from "../../types.js";
 import { COMMAND_TIMEOUT_MS } from "../../constants.js";
 import { ApiError } from "../../errors.js";
 import {
-  requireThreadEnvironment,
+  requireReadyEnvironment,
   requireThread,
 } from "../../services/entity-lookup.js";
 import { queueCommandAndWait } from "../../services/command-wait.js";
@@ -26,19 +25,14 @@ import {
 import { getLastExecutionOptions } from "../../services/thread-events.js";
 import { parseOptionalInteger } from "../../services/validation.js";
 
-function requireReadyWorkspaceEnvironment(environment: Environment): Environment & {
-  path: string;
-  status: "ready";
-} {
-  if (environment.status !== "ready" || !environment.path) {
-    throw new ApiError(409, "invalid_request", "Environment is not ready");
+function validateFilePath(filePath: string): void {
+  if (
+    filePath.startsWith("/") ||
+    filePath.split("/").includes("..") ||
+    filePath.split("\\").includes("..")
+  ) {
+    throw new ApiError(400, "invalid_request", "Invalid file path");
   }
-
-  return {
-    ...environment,
-    path: environment.path,
-    status: "ready" as const,
-  };
 }
 
 export function registerThreadDataRoutes(app: Hono, deps: AppDeps): void {
@@ -84,20 +78,23 @@ export function registerThreadDataRoutes(app: Hono, deps: AppDeps): void {
     ),
   );
 
-  get("/threads/:id/default-execution-options", (context) =>
-    context.json(getLastExecutionOptions(deps, context.req.param("id"))),
-  );
+  get("/threads/:id/default-execution-options", (context) => {
+    requireThread(deps.db, context.req.param("id"));
+    return context.json(getLastExecutionOptions(deps, context.req.param("id")));
+  });
 
   get("/threads/:id/workspace/files", threadWorkspaceFilesQuerySchema, async (context, query) => {
-    const { environment } = requireThreadEnvironment(deps.db, context.req.param("id"));
-    const readyEnvironment = requireReadyWorkspaceEnvironment(environment);
+    const thread = requireThread(deps.db, context.req.param("id"));
+    if (!thread.environmentId) {
+      throw new ApiError(409, "invalid_request", "Thread has no environment");
+    }
+    const readyEnvironment = requireReadyEnvironment(deps.db, thread.environmentId);
     const rawResult = await queueCommandAndWait(deps, {
       hostId: readyEnvironment.hostId,
       timeoutMs: COMMAND_TIMEOUT_MS,
       command: {
         type: "workspace.list_files",
         environmentId: readyEnvironment.id,
-        environmentStatus: readyEnvironment.status,
         workspacePath: readyEnvironment.path,
         ...(query.query ? { query: query.query } : {}),
       },
@@ -108,15 +105,18 @@ export function registerThreadDataRoutes(app: Hono, deps: AppDeps): void {
   });
 
   get("/threads/:id/workspace/file", threadWorkspaceFileQuerySchema, async (context, query) => {
-    const { environment } = requireThreadEnvironment(deps.db, context.req.param("id"));
-    const readyEnvironment = requireReadyWorkspaceEnvironment(environment);
+    validateFilePath(query.path);
+    const thread = requireThread(deps.db, context.req.param("id"));
+    if (!thread.environmentId) {
+      throw new ApiError(409, "invalid_request", "Thread has no environment");
+    }
+    const readyEnvironment = requireReadyEnvironment(deps.db, thread.environmentId);
     const rawResult = await queueCommandAndWait(deps, {
       hostId: readyEnvironment.hostId,
       timeoutMs: COMMAND_TIMEOUT_MS,
       command: {
         type: "workspace.read_file",
         environmentId: readyEnvironment.id,
-        environmentStatus: readyEnvironment.status,
         workspacePath: readyEnvironment.path,
         path: query.path,
       },

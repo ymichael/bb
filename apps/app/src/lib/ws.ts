@@ -1,4 +1,7 @@
 import ReconnectingWebSocket from "partysocket/ws";
+import {
+  REALTIME_ENTITIES,
+} from "@bb/server-contract";
 import type {
   ClientMessage,
   ChangedMessage,
@@ -140,8 +143,10 @@ function subKey(entity: RealtimeEntity, id?: string): string {
   return id ? `${entity}:${id}` : entity;
 }
 
+const realtimeEntitySet: ReadonlySet<string> = new Set(REALTIME_ENTITIES);
+
 function isRealtimeEntity(value: string): value is RealtimeEntity {
-  return value === "thread" || value === "project" || value === "environment" || value === "system";
+  return realtimeEntitySet.has(value);
 }
 
 export function parseSubKey(

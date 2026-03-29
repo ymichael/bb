@@ -45,7 +45,7 @@ export function createEnvironment(
       updatedAt: now,
     })
     .run();
-  notifier.notifySystem(["environment-created"]);
+  notifier.notifyEnvironment(id, ["environment-created"]);
   return db
     .select()
     .from(environments)
@@ -136,6 +136,6 @@ export function deleteEnvironment(
     .get();
   if (!existing) return false;
   db.delete(environments).where(eq(environments.id, id)).run();
-  notifier.notifySystem(["environment-deleted"]);
+  notifier.notifyEnvironment(id, ["environment-deleted"]);
   return true;
 }

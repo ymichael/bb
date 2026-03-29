@@ -239,9 +239,11 @@ export type {
 } from "./ui-message.js";
 
 export {
+  REALTIME_ENTITIES,
   THREAD_CHANGE_KINDS,
   PROJECT_CHANGE_KINDS,
   ENVIRONMENT_CHANGE_KINDS,
+  HOST_CHANGE_KINDS,
   SYSTEM_CHANGE_KINDS,
 } from "./change-kinds.js";
 export type {
@@ -249,6 +251,7 @@ export type {
   ThreadChangeKind,
   ProjectChangeKind,
   EnvironmentChangeKind,
+  HostChangeKind,
   SystemChangeKind,
   SubscribeMessage,
   UnsubscribeMessage,
@@ -256,6 +259,7 @@ export type {
   ThreadChangedMessage,
   ProjectChangedMessage,
   EnvironmentChangedMessage,
+  HostChangedMessage,
   SystemChangedMessage,
   ChangedMessage,
   ServerMessage,

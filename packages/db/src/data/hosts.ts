@@ -47,7 +47,7 @@ export function upsertHost(
         updatedAt: now,
       })
       .run();
-    notifier.notifySystem(["host-connected"]);
+    notifier.notifyHost(["host-connected"]);
   }
 
   return db.select().from(hosts).where(eq(hosts.id, id)).get()!;

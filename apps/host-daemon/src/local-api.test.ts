@@ -33,11 +33,10 @@ describe("local API server", () => {
     });
     const client = createHostDaemonLocalClient(`http://localhost:${server.port}`);
 
-    const hostIdResponse = await client["host-id"].$get();
     const statusResponse = await client.status.$get();
 
-    expect(await hostIdResponse.json()).toEqual({ hostId: "host-1" });
     expect(await statusResponse.json()).toEqual({
+      hostId: "host-1",
       connected: true,
       serverUrl: "http://server.test",
     });
