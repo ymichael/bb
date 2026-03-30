@@ -67,6 +67,7 @@ Verify the change does not violate any guideline in `AGENTS.md`. Pay particular 
 
 ## 8. Test Quality
 
+- **Regression tests for correctness fixes:** Every bug fix in section 2 should have a corresponding test that would have caught the bug. If there is no test, the reviewer should ask why. Valid reasons exist — the test infrastructure doesn't support it yet, the bug is in a thin integration layer that can only be tested end-to-end, etc. — but the reason must be stated explicitly, not left implicit.
 - **Coverage:** Are the important branches tested? Not line count — are the meaningful decision points covered?
 - **Behavior over implementation:** Tests should assert on outcomes (state, return values, persisted data), not call sequences or internal structure.
 - **Mocking discipline:** Only mock at true external boundaries (network, timers). Never mock the database — use in-memory SQLite. Never mock the module under test.
