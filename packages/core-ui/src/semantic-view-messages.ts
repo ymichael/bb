@@ -1,6 +1,5 @@
 import type { ViewDelegationMessage, ViewMessage, ViewTasksMessage, ViewToolCallMessage } from "@bb/domain";
-
-const DELEGATION_TOOL_NAMES = new Set(["Agent", "Task", "spawnAgent", "resumeAgent"]);
+import { isDelegationToolName } from "./tool-call-parsing.js";
 
 interface IndexedMessage {
   message: ViewMessage;
@@ -54,17 +53,12 @@ function compactTaskMessages(messages: ViewMessage[]): ViewMessage[] {
   return compacted;
 }
 
-function baseToolName(toolName: string): string {
-  const segments = toolName.split(":");
-  return segments[segments.length - 1] ?? toolName;
-}
-
 function isDelegationCandidate(
   message: ViewMessage,
 ): message is ViewToolCallMessage {
   return (
     message.kind === "tool-call" &&
-    DELEGATION_TOOL_NAMES.has(baseToolName(message.toolName))
+    isDelegationToolName(message.toolName)
   );
 }
 

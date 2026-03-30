@@ -873,7 +873,9 @@ export function createPiProviderAdapter(
     // -- Tool call codec ---------------------------------------------------
 
     decodeToolCallRequest(request: JsonRpcMessage): ToolCallRequest | null {
-      if (request.id == null) return null;
+      if (typeof request.id !== "string" && typeof request.id !== "number") {
+        return null;
+      }
       return decodeProviderToolCallRequest(request.id, request.method, request.params);
     },
 

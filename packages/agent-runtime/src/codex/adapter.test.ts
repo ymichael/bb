@@ -732,6 +732,40 @@ describe("codex provider adapter", () => {
     });
   });
 
+  it("translateEvent item/completed with image-only dynamicToolCall keeps readable output", () => {
+    const adapter = createCodexProviderAdapter();
+    const events = adapter.translateEvent(
+      codexEvent("item/completed", {
+        threadId: "t1",
+        turnId: "turn-1",
+        item: {
+          type: "dynamicToolCall",
+          id: "dyn-img-1",
+          tool: "bb_test_image",
+          arguments: {},
+          status: "failed",
+          contentItems: [{ type: "inputImage", imageUrl: "https://example.com/tool-result.png" }],
+          success: false,
+          durationMs: 4,
+        },
+      }),
+    );
+
+    expect(events).toContainEqual({
+      type: "item/completed",
+      threadId: "t1",
+      providerThreadId: "t1",
+      turnId: "turn-1",
+      item: expect.objectContaining({
+        type: "toolCall",
+        id: "dyn-img-1",
+        status: "failed",
+        result: "[image: https://example.com/tool-result.png]",
+        error: "[image: https://example.com/tool-result.png]",
+      }),
+    });
+  });
+
   it("translateEvent item/completed with collabAgentToolCall maps to toolCall", () => {
     const adapter = createCodexProviderAdapter();
     const events = adapter.translateEvent(

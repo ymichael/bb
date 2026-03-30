@@ -2,7 +2,11 @@ import { type ReactNode } from "react";
 import { durationToCompactString } from "@bb/core-ui";
 import { ExpandablePanel } from "../../disclosure.js";
 import { EventCodeBlock } from "../../event-content.js";
-import type { ViewOperationMessage, ViewProvisioningTranscriptEntry } from "@bb/domain";
+import type {
+  ViewOperationMessage,
+  ViewProvisioningTranscriptEntry,
+  ViewThreadOperationStatus,
+} from "@bb/domain";
 import { cx } from "../../utils.js";
 import {
   EVENT_DETAIL_MAX_HEIGHT_CLASS,
@@ -48,14 +52,21 @@ function extractPromptSections(detailText: string | undefined): {
   };
 }
 
-function isShimmeringOperationStatus(status: string): boolean {
+function assertNeverOperationKind(value: never): never {
+  throw new Error(`Unexpected thread operation kind: ${String(value)}`);
+}
+
+function isShimmeringOperationStatus(status: ViewThreadOperationStatus): boolean {
   switch (status) {
     case "requested":
     case "queued":
     case "running":
     case "started":
       return true;
-    default:
+    case "completed":
+    case "failed":
+    case "noop":
+    case "other":
       return false;
   }
 }
@@ -318,6 +329,9 @@ function buildOperationSummary(
       return <EventTitle prefix={label} detail={metadata.rawStatus} tone={tone} />;
     }
   }
+
+  const unreachableKind: never = metadata.operation;
+  return assertNeverOperationKind(unreachableKind);
 }
 
 function buildCompactionSummary(

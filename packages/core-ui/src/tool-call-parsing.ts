@@ -2,8 +2,10 @@ import type { ViewToolCallSummary, ViewToolParsedIntent } from "@bb/domain";
 import { getFirstStringField } from "./format-helpers.js";
 
 const SHELL_WRAPPER_NAMES = new Set(["sh", "bash", "zsh"]);
+const DELEGATION_TOOL_NAMES = new Set(["Agent", "Task", "spawnAgent", "resumeAgent"]);
 
 type ToolArguments = Record<string, unknown>;
+type ToolIntentKind = ViewToolParsedIntent["type"];
 
 type ToolCommandFormatter = (toolName: string, args: ToolArguments) => string;
 
@@ -31,6 +33,7 @@ interface ToolDescriptor {
   secondaryArgKeys?: readonly string[];
   formatCommand?: ToolCommandFormatter;
   formatOutput?: ToolOutputFormatter;
+  intentKind?: ToolIntentKind;
 }
 
 const SHELL_SEGMENT_BREAK_TOKENS = new Set(["&&", "||", "|", ";"]);
@@ -69,13 +72,18 @@ export function extractShellCommandFromString(value: string): string | undefined
   return unwrapQuotedShellArg(commandArg.trim());
 }
 
+export function baseToolName(toolName: string): string {
+  const segments = toolName.split(":");
+  return segments[segments.length - 1] ?? toolName;
+}
+
 const TOOL_TABLE: Record<string, ToolDescriptor> = {
-  Read: { argKeys: ["file_path", "file", "path"] },
-  read: { argKeys: ["file_path", "file", "path"] },
-  Glob: { argKeys: ["pattern", "path"] },
-  glob: { argKeys: ["pattern", "path"] },
-  Grep: { argKeys: ["pattern", "query"], secondaryArgKeys: ["path"] },
-  grep: { argKeys: ["pattern", "query"], secondaryArgKeys: ["path"] },
+  Read: { argKeys: ["file_path", "file", "path"], intentKind: "read" },
+  read: { argKeys: ["file_path", "file", "path"], intentKind: "read" },
+  Glob: { argKeys: ["pattern", "path"], intentKind: "list_files" },
+  glob: { argKeys: ["pattern", "path"], intentKind: "list_files" },
+  Grep: { argKeys: ["pattern", "query"], secondaryArgKeys: ["path"], intentKind: "search" },
+  grep: { argKeys: ["pattern", "query"], secondaryArgKeys: ["path"], intentKind: "search" },
   Bash: { argKeys: ["command"] },
   bash: { argKeys: ["command"] },
   Edit: { argKeys: ["file_path", "path"] },
@@ -96,6 +104,11 @@ const TOOL_TABLE: Record<string, ToolDescriptor> = {
     formatCommand: formatAgentCommand,
     formatOutput: formatAgentOutput,
   },
+  Task: {
+    argKeys: ["description", "prompt"],
+    formatCommand: formatAgentCommand,
+    formatOutput: formatAgentOutput,
+  },
   spawnAgent: {
     argKeys: ["prompt"],
     formatCommand: formatCollabAgentCommand,
@@ -108,6 +121,26 @@ const TOOL_TABLE: Record<string, ToolDescriptor> = {
   wait: { argKeys: [], formatCommand: formatCollabAgentCommand },
   closeAgent: { argKeys: [], formatCommand: formatCollabAgentCommand },
 };
+
+function getToolDescriptor(toolName: string): ToolDescriptor | undefined {
+  return TOOL_TABLE[baseToolName(toolName)];
+}
+
+export function isStructuredReadToolName(toolName: string): boolean {
+  return getToolDescriptor(toolName)?.intentKind === "read";
+}
+
+export function isStructuredSearchToolName(toolName: string): boolean {
+  return getToolDescriptor(toolName)?.intentKind === "search";
+}
+
+export function isStructuredListToolName(toolName: string): boolean {
+  return getToolDescriptor(toolName)?.intentKind === "list_files";
+}
+
+export function isDelegationToolName(toolName: string): boolean {
+  return DELEGATION_TOOL_NAMES.has(baseToolName(toolName));
+}
 
 function truncateForDisplay(value: string, maxLength: number): string {
   if (value.length <= maxLength) return value;

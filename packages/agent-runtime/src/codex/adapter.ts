@@ -310,6 +310,8 @@ const codexWarningParamsSchema = z.object({
 
 const codexBridgeEnvelopeSchema = z.union([
   jsonRpcEnvelopeSchema,
+  // Current Codex fixture captures still arrive as `{ method, params }`
+  // notifications without `jsonrpc: "2.0"`, so the bridge accepts both.
   z.object({
     method: z.string(),
     params: z.record(z.string(), z.unknown()).optional(),
@@ -565,15 +567,20 @@ function extractDynamicToolCallResult(
     return undefined;
   }
 
-  const textParts = contentItems
-    .filter((contentItem) => contentItem.type === "inputText")
-    .map((contentItem) => contentItem.text);
+  const parts = contentItems.map((contentItem) => {
+    switch (contentItem.type) {
+      case "inputText":
+        return contentItem.text;
+      case "inputImage":
+        return `[image: ${contentItem.imageUrl}]`;
+    }
+  }).filter((part) => part.trim().length > 0);
 
-  if (textParts.length > 0) {
-    return textParts.join("\n");
+  if (parts.length === 0) {
+    return undefined;
   }
 
-  return contentItems;
+  return parts.join("\n");
 }
 
 function buildDynamicToolCallError(

@@ -3,22 +3,17 @@ import { getEventParentToolCallId, type EventMeta } from "./event-decode.js";
 import type { ViewFileEditMessage, ViewToolCallMessage, ViewToolCallSummary, ViewToolParsedIntent } from "@bb/domain";
 import { durationToString, getFirstStringField } from "./format-helpers.js";
 import {
+  baseToolName,
   extractShellCommandFromString,
   formatToolCallCommand,
   formatToolCallOutput,
+  isDelegationToolName,
+  isStructuredListToolName,
+  isStructuredReadToolName,
+  isStructuredSearchToolName,
   parseShellCommandIntents,
   stripAgentOutputMetadata,
 } from "./tool-call-parsing.js";
-
-const STRUCTURED_READ_TOOL_NAMES = new Set(["Read", "read"]);
-const STRUCTURED_SEARCH_TOOL_NAMES = new Set(["Grep", "grep"]);
-const STRUCTURED_LIST_TOOL_NAMES = new Set(["Glob", "glob", "find"]);
-const DELEGATION_TOOL_NAMES = new Set([
-  "Agent",
-  "Task",
-  "spawnAgent",
-  "resumeAgent",
-]);
 
 interface DelegationMetadata {
   subagentType?: string;
@@ -78,11 +73,6 @@ export interface ExecLifecycleEvent {
 function toExecDefaultStatus(kind: "begin" | "end"): ViewToolCallMessage["status"] {
   if (kind === "begin") return "pending";
   return "completed";
-}
-
-function baseToolName(toolName: string): string {
-  const segments = toolName.split(":");
-  return segments[segments.length - 1] ?? toolName;
 }
 
 function buildStructuredReadIntents(
@@ -146,13 +136,13 @@ function getStructuredToolParsedIntents(
   args: Record<string, unknown> | null,
 ): ViewToolParsedIntent[] {
   const baseName = baseToolName(toolName);
-  if (STRUCTURED_READ_TOOL_NAMES.has(baseName)) {
+  if (isStructuredReadToolName(baseName)) {
     return buildStructuredReadIntents(toolName, args);
   }
-  if (STRUCTURED_SEARCH_TOOL_NAMES.has(baseName)) {
+  if (isStructuredSearchToolName(baseName)) {
     return buildStructuredSearchIntents(toolName, args);
   }
-  if (STRUCTURED_LIST_TOOL_NAMES.has(baseName)) {
+  if (isStructuredListToolName(baseName)) {
     return buildStructuredListIntents(toolName, args);
   }
   return [];
@@ -162,7 +152,7 @@ function getDelegationMetadata(
   toolName: string,
   args: Record<string, unknown> | null,
 ): DelegationMetadata {
-  if (!DELEGATION_TOOL_NAMES.has(baseToolName(toolName))) {
+  if (!isDelegationToolName(toolName)) {
     return {};
   }
 

@@ -73,6 +73,9 @@ export const ClaudeCodeEyedropperPreviewBugfix = createFixtureStory(
 export const ClaudeCodeMagicframeFeature = createFixtureStory(
   "excalidraw/claude-code/magicframe-feature",
 );
+export const ClaudeCodeEyedropperBrowserCompat = createFixtureStory(
+  "excalidraw/claude-code/eyedropper-browser-compat",
+);
 
 export const CodexExplanation = createFixtureStory(
   "excalidraw/codex/ttd-explanation",
@@ -92,6 +95,9 @@ export const CodexEyedropperPreviewBugfix = createFixtureStory(
 export const CodexMagicframeFeature = createFixtureStory(
   "excalidraw/codex/magicframe-feature",
 );
+export const CodexShareWebCompat = createFixtureStory(
+  "excalidraw/codex/share-web-compat",
+);
 
 export const PiExplanation = createFixtureStory(
   "excalidraw/pi/ttd-explanation",
@@ -110,4 +116,7 @@ export const PiEyedropperPreviewBugfix = createFixtureStory(
 );
 export const PiMagicframeFeature = createFixtureStory(
   "excalidraw/pi/magicframe-feature",
+);
+export const PiCommandPaletteMap = createFixtureStory(
+  "excalidraw/pi/command-palette-map",
 );

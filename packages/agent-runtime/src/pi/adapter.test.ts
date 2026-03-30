@@ -209,6 +209,17 @@ describe("pi provider adapter", () => {
     });
   });
 
+  it("decodeToolCallRequest rejects non-string, non-number request ids", () => {
+    const adapter = createPiProviderAdapter();
+    const malformedRequest = JSON.parse(
+      "{\"jsonrpc\":\"2.0\",\"id\":true,\"method\":\"item/tool/call\",\"params\":{\"threadId\":\"t1\",\"turnId\":\"turn-1\",\"callId\":\"call-1\",\"tool\":\"bb_test_ping\",\"arguments\":{\"ping\":true}}}",
+    );
+
+    expect(
+      adapter.decodeToolCallRequest(malformedRequest),
+    ).toBeNull();
+  });
+
   // -- translateEvent: turn lifecycle --------------------------------------
 
   it("translateEvent agent_start emits turn/started", () => {
