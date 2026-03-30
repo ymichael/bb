@@ -11,7 +11,6 @@
     "reset:all": "node scripts/reset-bb-data.mjs --all",
     "clean": "turbo run clean",
     "lint": "turbo run lint",
-    "check:package-entrypoints": "node scripts/check-package-entrypoints.mjs",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
     "test:integration": "turbo run test:integration test:e2e",
