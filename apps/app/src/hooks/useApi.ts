@@ -503,20 +503,20 @@ export function useThreadTimeline(
   options?: {
     enabled?: boolean;
     refetchOnMount?: boolean | "always";
-    includeWorkspaceViewer?: boolean;
+    includeAllEvents?: boolean;
   },
 ) {
   return useQuery<ThreadTimelineResponse>({
     queryKey: [
       "threadTimeline",
       id,
-      options?.includeWorkspaceViewer ?? false,
+      options?.includeAllEvents ?? false,
     ],
     queryFn: () =>
       api.getThreadTimeline(
         id,
         false,
-        options?.includeWorkspaceViewer ?? false,
+        options?.includeAllEvents ?? false,
       ),
     enabled: (options?.enabled ?? true) && !!id,
     refetchOnMount: options?.refetchOnMount ?? true,
@@ -531,18 +531,18 @@ export function useThreadTimelineToolDetails() {
       id,
       sourceSeqStart,
       sourceSeqEnd,
-      includeWorkspaceViewer,
+      includeAllEvents,
     }: {
       id: string;
       sourceSeqStart: number;
       sourceSeqEnd: number;
-      includeWorkspaceViewer?: boolean;
+      includeAllEvents?: boolean;
     }): Promise<TimelineToolDetailsResponse> =>
       api.getThreadTimelineToolDetails(
         id,
         sourceSeqStart,
         sourceSeqEnd,
-        includeWorkspaceViewer ?? false,
+        includeAllEvents ?? false,
       ),
   });
 }

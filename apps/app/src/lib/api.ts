@@ -205,7 +205,6 @@ export async function loadFilePreview(
     mimeType: normalizeFilePreviewMimeType(response.headers.get("content-type")),
     name: target.name,
     path: target.path,
-    sizeBytes: contentBytes.byteLength,
     url: target.url,
   });
 }
@@ -513,14 +512,14 @@ export async function requestEnvironmentAction(
 export async function getThreadTimeline(
   id: string,
   includeToolGroupMessages: boolean = false,
-  includeWorkspaceViewer: boolean = false,
+  includeAllEvents: boolean = false,
 ): Promise<ThreadTimelineResponse> {
   return request<ThreadTimelineResponse>(
     apiClient.threads[":id"].timeline.$get({
       param: { id },
       query: {
         ...(includeToolGroupMessages ? { includeToolGroupMessages: "true" } : {}),
-        ...(includeWorkspaceViewer ? { includeManagerDebugView: "true" } : {}),
+        ...(includeAllEvents ? { includeManagerDebugView: "true" } : {}),
       },
     }),
   );
@@ -530,7 +529,7 @@ export async function getThreadTimelineToolDetails(
   id: string,
   sourceSeqStart: number,
   sourceSeqEnd: number,
-  includeWorkspaceViewer: boolean = false,
+  includeAllEvents: boolean = false,
 ): Promise<TimelineToolDetailsResponse> {
   return request<TimelineToolDetailsResponse>(
     apiClient.threads[":id"].timeline["tool-details"].$get({
@@ -538,7 +537,7 @@ export async function getThreadTimelineToolDetails(
       query: {
         sourceSeqStart: String(sourceSeqStart),
         sourceSeqEnd: String(sourceSeqEnd),
-        ...(includeWorkspaceViewer ? { includeManagerDebugView: "true" } : {}),
+        ...(includeAllEvents ? { includeManagerDebugView: "true" } : {}),
       },
     }),
   );

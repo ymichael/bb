@@ -178,14 +178,14 @@ export function ThreadDetailView() {
   });
   const { data: parentThread } = useThread(thread?.parentThreadId ?? "");
   const {
-    handleThreadStorageViewerChange,
+    handleShowAllEventsChange,
     isThreadStorageFilePreviewLoading,
+    showAllEvents,
     threadStorageFilePreview,
     threadStorageFilePreviewError,
     threadStorageFiles,
     selectedThreadStoragePath,
     setSelectedThreadStoragePath,
-    showThreadStorageViewer,
   } = useThreadStorageViewer({
     threadId,
     threadType: thread?.type,
@@ -199,7 +199,7 @@ export function ThreadDetailView() {
     threadId ?? "",
     {
       refetchOnMount: "always",
-      includeWorkspaceViewer: showThreadStorageViewer,
+      includeAllEvents: showAllEvents,
     },
   );
   const { data: defaultExecutionOptions } = useThreadDefaultExecutionOptions(
@@ -365,7 +365,7 @@ export function ThreadDetailView() {
     loadToolGroupMessages: (args) =>
       timelineToolDetails.mutateAsync({
         ...args,
-        includeWorkspaceViewer: showThreadStorageViewer,
+        includeAllEvents: showAllEvents,
       }),
   });
   captureTimelineScrollPositionRef.current = captureTimelineScrollPosition;
@@ -872,9 +872,9 @@ export function ThreadDetailView() {
         threadDeleteDialog.onOpen(thread);
       }}
       viewerToggleLabel={isManagerThread ? "Show all events" : undefined}
-      viewerToggleChecked={isManagerThread ? showThreadStorageViewer : undefined}
+      viewerToggleChecked={isManagerThread ? showAllEvents : undefined}
       onViewerToggleCheckedChange={
-        isManagerThread ? handleThreadStorageViewerChange : undefined
+        isManagerThread ? handleShowAllEventsChange : undefined
       }
       isArchived={thread.archivedAt != null}
       threadType={thread.type}

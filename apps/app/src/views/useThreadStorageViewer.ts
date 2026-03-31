@@ -5,17 +5,17 @@ import {
   useThreadStorageFiles,
 } from "../hooks/useApi";
 
-const THREAD_STORAGE_VIEWER_STORAGE_KEY_PREFIX = "thread-storage-viewer:";
+const SHOW_ALL_EVENTS_STORAGE_KEY_PREFIX = "thread-show-all-events:";
 
 interface UseThreadStorageViewerParams {
   threadId?: string;
   threadType?: ThreadType;
 }
 
-type ThreadStorageViewerToggleHandler = (checked: boolean) => void;
+type ShowAllEventsToggleHandler = (checked: boolean) => void;
 
-function getThreadStorageViewerStorageKey(threadId: string) {
-  return `${THREAD_STORAGE_VIEWER_STORAGE_KEY_PREFIX}${threadId}`;
+function getShowAllEventsStorageKey(threadId: string) {
+  return `${SHOW_ALL_EVENTS_STORAGE_KEY_PREFIX}${threadId}`;
 }
 
 export function useThreadStorageViewer({
@@ -23,7 +23,7 @@ export function useThreadStorageViewer({
   threadType,
 }: UseThreadStorageViewerParams) {
   const isManagerThread = threadType === "manager";
-  const [showThreadStorageViewer, setShowThreadStorageViewer] = useState(false);
+  const [showAllEvents, setShowAllEvents] = useState(false);
   const [selectedThreadStoragePath, setSelectedThreadStoragePath] =
     useState<string | null>(null);
   const { data: threadStorageFiles } = useThreadStorageFiles(
@@ -53,24 +53,22 @@ export function useThreadStorageViewer({
     }
 
     if (!threadId || !isManagerThread) {
-      setShowThreadStorageViewer(false);
+      setShowAllEvents(false);
       return;
     }
 
-    const rawValue = window.localStorage.getItem(
-      getThreadStorageViewerStorageKey(threadId),
-    );
-    setShowThreadStorageViewer(rawValue === "true");
+    const rawValue = window.localStorage.getItem(getShowAllEventsStorageKey(threadId));
+    setShowAllEvents(rawValue === "true");
   }, [isManagerThread, threadId]);
 
-  const handleThreadStorageViewerChange: ThreadStorageViewerToggleHandler = useCallback(
+  const handleShowAllEventsChange: ShowAllEventsToggleHandler = useCallback(
     (checked) => {
-      setShowThreadStorageViewer(checked);
+      setShowAllEvents(checked);
       if (typeof window === "undefined" || !threadId || !isManagerThread) {
         return;
       }
 
-      const storageKey = getThreadStorageViewerStorageKey(threadId);
+      const storageKey = getShowAllEventsStorageKey(threadId);
       if (checked) {
         window.localStorage.setItem(storageKey, "true");
         return;
@@ -102,14 +100,14 @@ export function useThreadStorageViewer({
 
   return {
     effectiveThreadStoragePath,
-    handleThreadStorageViewerChange,
+    handleShowAllEventsChange,
     isManagerThread,
     isThreadStorageFilePreviewLoading,
+    showAllEvents,
     threadStorageFilePreview,
     threadStorageFilePreviewError,
     threadStorageFiles,
     selectedThreadStoragePath,
     setSelectedThreadStoragePath,
-    showThreadStorageViewer,
   };
 }

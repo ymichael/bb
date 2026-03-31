@@ -29,7 +29,6 @@ export interface FilePreviewTarget {
 interface FilePreviewBase extends FilePreviewTarget {
   kind: "image" | "text" | "unsupported";
   mimeType: string;
-  sizeBytes: number;
 }
 
 export interface ImageFilePreview extends FilePreviewBase {
@@ -53,7 +52,6 @@ export type FilePreview =
 export interface BuildFilePreviewArgs extends FilePreviewTarget {
   contentBytes: Uint8Array;
   mimeType: string;
-  sizeBytes?: number;
 }
 
 function isKnownTextMimeType(mimeType: string): boolean {
@@ -87,12 +85,10 @@ export function normalizeFilePreviewMimeType(value: string | null): string {
 export function buildFilePreview(
   args: BuildFilePreviewArgs,
 ): FilePreview {
-  const sizeBytes = args.sizeBytes ?? args.contentBytes.byteLength;
   const base = {
     mimeType: args.mimeType,
     name: args.name,
     path: args.path,
-    sizeBytes,
     url: args.url,
   };
 

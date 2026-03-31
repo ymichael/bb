@@ -23,7 +23,7 @@ interface LoadToolGroupMessagesArgs {
   id: string;
   sourceSeqStart: number;
   sourceSeqEnd: number;
-  includeWorkspaceViewer?: boolean;
+  includeAllEvents?: boolean;
 }
 
 interface UseThreadTimelineControllerParams {

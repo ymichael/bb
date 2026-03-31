@@ -19,7 +19,6 @@ describe("file-preview", () => {
       mimeType: "text/plain",
       name: "notes.txt",
       path: "notes.txt",
-      sizeBytes: 24,
       url: "/files/notes.txt",
       content: "export const value = 1;\n",
     });
@@ -37,7 +36,6 @@ describe("file-preview", () => {
       kind: "text",
       mimeType: "application/octet-stream",
       path: "result.log",
-      sizeBytes: 12,
       url: "/files/result.log",
       content: "{\"ok\":true}\n",
     });
@@ -57,7 +55,6 @@ describe("file-preview", () => {
       mimeType: "image/png",
       name: "diagram.png",
       path: "diagram.png",
-      sizeBytes: 4,
       url: "/files/diagram.png",
     });
   });
@@ -74,7 +71,6 @@ describe("file-preview", () => {
       kind: "unsupported",
       mimeType: "text/plain",
       path: "broken.txt",
-      sizeBytes: 3,
       url: "/files/broken.txt",
     });
   });
@@ -91,7 +87,6 @@ describe("file-preview", () => {
       kind: "unsupported",
       mimeType: "application/octet-stream",
       path: "archive.bin",
-      sizeBytes: 4,
       url: "/files/archive.bin",
     });
   });
