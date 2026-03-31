@@ -58,11 +58,21 @@ export type {
 export { upsertHost, getHost, listHosts } from "./hosts.js";
 export type { UpsertHostInput } from "./hosts.js";
 
-export { insertEvents, getHighWaterMarks, listEvents } from "./events.js";
+export {
+  getHighWaterMarks,
+  getLatestThreadSequence,
+  insertEvents,
+  listEvents,
+  pruneResolvedAgentMessageDeltas,
+  pruneThreadEventsBeforeSequence,
+} from "./events.js";
 export type {
+  GetLatestThreadSequenceArgs,
   InsertEventInput,
   InsertEventsResult,
   ListEventsOptions,
+  PruneResolvedAgentMessageDeltasArgs,
+  PruneThreadEventsBeforeSequenceArgs,
 } from "./events.js";
 
 export {

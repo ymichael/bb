@@ -4,9 +4,12 @@ import { migrate } from "../../src/migrate.js";
 import { noopNotifier } from "../../src/notifier.js";
 import type { DbNotifier } from "../../src/notifier.js";
 import {
-  insertEvents,
   getHighWaterMarks,
+  getLatestThreadSequence,
+  insertEvents,
   listEvents,
+  pruneResolvedAgentMessageDeltas,
+  pruneThreadEventsBeforeSequence,
 } from "../../src/data/events.js";
 import { createProject } from "../../src/data/projects.js";
 import { createThread } from "../../src/data/threads.js";
@@ -197,6 +200,170 @@ describe("events", () => {
     const after1 = listEvents(db, { threadId: thread.id, afterSequence: 1 });
     expect(after1).toHaveLength(2);
     expect(after1[0]!.sequence).toBe(2);
+  });
+
+  it("returns the latest sequence for a thread", () => {
+    const { db, thread } = setup();
+
+    insertEvents(db, noopNotifier, [
+      { threadId: thread.id, sequence: 2, type: "system/error", ...emptyItemFields, data: "{}" },
+      { threadId: thread.id, sequence: 5, type: "system/error", ...emptyItemFields, data: "{}" },
+    ]);
+
+    expect(getLatestThreadSequence(db, { threadId: thread.id })).toBe(5);
+  });
+
+  it("prunes event types before a sequence cutoff and keeps recent rows", () => {
+    const { db, thread } = setup();
+
+    insertEvents(db, noopNotifier, [
+      { threadId: thread.id, sequence: 1, type: "thread/tokenUsage/updated", ...emptyItemFields, data: "{}" },
+      { threadId: thread.id, sequence: 2, type: "thread/tokenUsage/updated", ...emptyItemFields, data: "{}" },
+      { threadId: thread.id, sequence: 3, type: "thread/tokenUsage/updated", ...emptyItemFields, data: "{}" },
+      { threadId: thread.id, sequence: 4, type: "thread/tokenUsage/updated", ...emptyItemFields, data: "{}" },
+      { threadId: thread.id, sequence: 5, type: "thread/tokenUsage/updated", ...emptyItemFields, data: "{}" },
+    ]);
+
+    const latestSequence = getLatestThreadSequence(db, { threadId: thread.id });
+    const removed = pruneThreadEventsBeforeSequence(db, {
+      threadId: thread.id,
+      sequenceCutoff: latestSequence - 2,
+      types: ["thread/tokenUsage/updated"],
+    });
+
+    expect(removed).toBe(3);
+    expect(listEvents(db, { threadId: thread.id }).map((event) => event.sequence)).toEqual([4, 5]);
+  });
+
+  it("prunes resolved assistant deltas but preserves the first delta row", () => {
+    const { db, thread } = setup();
+
+    insertEvents(db, noopNotifier, [
+      {
+        threadId: thread.id,
+        sequence: 1,
+        type: "item/agentMessage/delta",
+        itemId: "msg-1",
+        itemKind: null,
+        data: JSON.stringify({ itemId: "msg-1", delta: "Hel" }),
+      },
+      {
+        threadId: thread.id,
+        sequence: 2,
+        type: "item/agentMessage/delta",
+        itemId: "msg-1",
+        itemKind: null,
+        data: JSON.stringify({ itemId: "msg-1", delta: "lo" }),
+      },
+      {
+        threadId: thread.id,
+        sequence: 3,
+        type: "item/agentMessage/delta",
+        itemId: "msg-1",
+        itemKind: null,
+        data: JSON.stringify({ itemId: "msg-1", delta: "!" }),
+      },
+      {
+        threadId: thread.id,
+        sequence: 4,
+        type: "item/completed",
+        itemId: "msg-1",
+        itemKind: "agentMessage",
+        data: JSON.stringify({
+          item: {
+            id: "msg-1",
+            type: "agentMessage",
+            text: "Hello!",
+          },
+        }),
+      },
+    ]);
+
+    const removed = pruneResolvedAgentMessageDeltas(db, {
+      threadId: thread.id,
+    });
+
+    expect(removed).toBe(2);
+    expect(listEvents(db, { threadId: thread.id }).map((event) => event.sequence)).toEqual([1, 4]);
+  });
+
+  it("keeps unresolved assistant deltas", () => {
+    const { db, thread } = setup();
+
+    insertEvents(db, noopNotifier, [
+      {
+        threadId: thread.id,
+        sequence: 1,
+        type: "item/agentMessage/delta",
+        itemId: "msg-1",
+        itemKind: null,
+        data: JSON.stringify({ itemId: "msg-1", delta: "Hel" }),
+      },
+      {
+        threadId: thread.id,
+        sequence: 2,
+        type: "item/agentMessage/delta",
+        itemId: "msg-1",
+        itemKind: null,
+        data: JSON.stringify({ itemId: "msg-1", delta: "lo" }),
+      },
+    ]);
+
+    const removed = pruneResolvedAgentMessageDeltas(db, {
+      threadId: thread.id,
+    });
+
+    expect(removed).toBe(0);
+    expect(listEvents(db, { threadId: thread.id }).map((event) => event.sequence)).toEqual([1, 2]);
+  });
+
+  it("pruning is scoped to the target thread", () => {
+    const { db, project, thread } = setup();
+    const thread2 = createThread(db, noopNotifier, {
+      projectId: project.id,
+      providerId: "codex",
+    });
+
+    insertEvents(db, noopNotifier, [
+      {
+        threadId: thread.id,
+        sequence: 1,
+        type: "thread/tokenUsage/updated",
+        ...emptyItemFields,
+        data: "{}",
+      },
+      {
+        threadId: thread.id,
+        sequence: 2,
+        type: "thread/tokenUsage/updated",
+        ...emptyItemFields,
+        data: "{}",
+      },
+      {
+        threadId: thread2.id,
+        sequence: 1,
+        type: "thread/tokenUsage/updated",
+        ...emptyItemFields,
+        data: "{}",
+      },
+      {
+        threadId: thread2.id,
+        sequence: 2,
+        type: "thread/tokenUsage/updated",
+        ...emptyItemFields,
+        data: "{}",
+      },
+    ]);
+
+    const removed = pruneThreadEventsBeforeSequence(db, {
+      threadId: thread.id,
+      sequenceCutoff: 1,
+      types: ["thread/tokenUsage/updated"],
+    });
+
+    expect(removed).toBe(1);
+    expect(listEvents(db, { threadId: thread.id }).map((event) => event.sequence)).toEqual([2]);
+    expect(listEvents(db, { threadId: thread2.id }).map((event) => event.sequence)).toEqual([1, 2]);
   });
 
   it("notifies on events-appended per thread", () => {

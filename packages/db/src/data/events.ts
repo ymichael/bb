@@ -1,4 +1,4 @@
-import { eq, sql, max, inArray } from "drizzle-orm";
+import { and, eq, inArray, lte, max, sql } from "drizzle-orm";
 import type { ThreadEventItemType, ThreadEventType } from "@bb/domain";
 import type { DbConnection } from "../connection.js";
 import type { DbNotifier } from "../notifier.js";
@@ -120,6 +120,20 @@ export interface ListEventsOptions {
   limit?: number;
 }
 
+export interface GetLatestThreadSequenceArgs {
+  threadId: string;
+}
+
+export interface PruneThreadEventsBeforeSequenceArgs {
+  sequenceCutoff: number;
+  threadId: string;
+  types: readonly ThreadEventType[];
+}
+
+export interface PruneResolvedAgentMessageDeltasArgs {
+  threadId: string;
+}
+
 export function listEvents(db: DbConnection, options: ListEventsOptions) {
   const { threadId, afterSequence, limit } = options;
 
@@ -142,4 +156,71 @@ export function listEvents(db: DbConnection, options: ListEventsOptions) {
     .orderBy(events.sequence);
   if (limit) return q.limit(limit).all();
   return q.all();
+}
+
+export function getLatestThreadSequence(
+  db: DbConnection,
+  args: GetLatestThreadSequenceArgs,
+): number {
+  const row = db
+    .select({
+      maxSequence: max(events.sequence),
+    })
+    .from(events)
+    .where(eq(events.threadId, args.threadId))
+    .get();
+
+  return row?.maxSequence ?? 0;
+}
+
+export function pruneThreadEventsBeforeSequence(
+  db: DbConnection,
+  args: PruneThreadEventsBeforeSequenceArgs,
+): number {
+  if (args.sequenceCutoff <= 0 || args.types.length === 0) {
+    return 0;
+  }
+
+  const result = db
+    .delete(events)
+    .where(
+      and(
+        eq(events.threadId, args.threadId),
+        lte(events.sequence, args.sequenceCutoff),
+        inArray(events.type, [...args.types]),
+      ),
+    )
+    .run();
+
+  return result.changes;
+}
+
+export function pruneResolvedAgentMessageDeltas(
+  db: DbConnection,
+  args: PruneResolvedAgentMessageDeltasArgs,
+): number {
+  const result = db.run(
+    sql`DELETE FROM events
+        WHERE ${events.threadId} = ${args.threadId}
+          AND ${events.type} = 'item/agentMessage/delta'
+          AND ${events.itemId} IS NOT NULL
+          AND EXISTS (
+            SELECT 1
+            FROM events completed
+            WHERE completed.thread_id = ${events.threadId}
+              AND completed.type = 'item/completed'
+              AND completed.item_kind = 'agentMessage'
+              AND completed.item_id = ${events.itemId}
+          )
+          AND EXISTS (
+            SELECT 1
+            FROM events earlier_delta
+            WHERE earlier_delta.thread_id = ${events.threadId}
+              AND earlier_delta.type = 'item/agentMessage/delta'
+              AND earlier_delta.item_id = ${events.itemId}
+              AND earlier_delta.sequence < ${events.sequence}
+          )`,
+  );
+
+  return result.changes;
 }
