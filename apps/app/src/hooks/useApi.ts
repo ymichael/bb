@@ -456,7 +456,7 @@ export function useManagerWorkspaceFilePreview(
   path: string | null,
   options?: { enabled?: boolean },
 ) {
-  return useQuery<api.ManagerWorkspaceFilePreview>({
+  return useQuery<api.FilePreview>({
     queryKey: ["managerWorkspaceFilePreview", id, path],
     queryFn: ({ signal }) => api.getManagerWorkspaceFilePreview(id, path ?? "", signal),
     enabled: (options?.enabled ?? true) && !!id && !!path,

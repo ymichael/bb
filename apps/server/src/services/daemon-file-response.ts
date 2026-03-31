@@ -11,8 +11,6 @@ function buildFileContentHeaders(
 ): HeadersInit {
   return {
     "content-type": result.mimeType ?? OCTET_STREAM_MIME_TYPE,
-    "x-bb-content-encoding": result.contentEncoding,
-    "x-bb-size-bytes": String(result.sizeBytes),
   };
 }
 

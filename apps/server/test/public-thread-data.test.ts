@@ -830,8 +830,8 @@ describe("public thread data routes", () => {
       const fileResponse = await filePromise;
       expect(fileResponse.status).toBe(200);
       expect(fileResponse.headers.get("content-type")).toBe("image/png");
-      expect(fileResponse.headers.get("x-bb-content-encoding")).toBe("base64");
-      expect(fileResponse.headers.get("x-bb-size-bytes")).toBe(String(pngBytes.byteLength));
+      expect(fileResponse.headers.get("x-bb-content-encoding")).toBeNull();
+      expect(fileResponse.headers.get("x-bb-size-bytes")).toBeNull();
       expect(new Uint8Array(await fileResponse.arrayBuffer())).toEqual(pngBytes);
     } finally {
       await harness.cleanup();

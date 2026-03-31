@@ -40,13 +40,13 @@ import type {
 } from "@bb/server-contract";
 import { apiClient, toRelativeUrl } from "./api-server";
 import {
-  buildManagerWorkspaceFilePreview,
-  normalizeManagerWorkspaceMimeType,
-  parseManagerWorkspaceContentEncodingHeader,
-  parseManagerWorkspaceSizeBytesHeader,
-  type ManagerWorkspaceFilePreview,
-} from "./manager-workspace-file-preview";
-export type { ManagerWorkspaceFilePreview } from "./manager-workspace-file-preview";
+  buildFilePreview,
+  normalizeFilePreviewMimeType,
+  type FilePreview,
+  type FilePreviewTarget,
+} from "./file-preview";
+import { buildManagerWorkspaceContentUrl } from "./file-content-urls";
+export type { FilePreview } from "./file-preview";
 
 const MAX_ERROR_MESSAGE_LENGTH = 180;
 const HTML_DOCUMENT_PATTERN = /<!doctype html|<html[\s>]/i;
@@ -187,6 +187,27 @@ async function requestResponse(responsePromise: Promise<Response>): Promise<Resp
     await throwHttpError(res);
   }
   return res;
+}
+
+export async function loadFilePreview(
+  target: FilePreviewTarget,
+  signal?: AbortSignal,
+): Promise<FilePreview> {
+  const response = await requestResponse(
+    fetch(target.url, {
+      method: "GET",
+      signal,
+    }),
+  );
+  const contentBytes = new Uint8Array(await response.arrayBuffer());
+  return buildFilePreview({
+    contentBytes,
+    mimeType: normalizeFilePreviewMimeType(response.headers.get("content-type")),
+    name: target.name,
+    path: target.path,
+    sizeBytes: contentBytes.byteLength,
+    url: target.url,
+  });
 }
 
 async function postMultipart<T>(
@@ -364,31 +385,14 @@ export async function getManagerWorkspaceFilePreview(
   id: string,
   path: string,
   signal?: AbortSignal,
-): Promise<ManagerWorkspaceFilePreview> {
-  const url = apiClient.threads[":id"]["manager-workspace"].content.$url({
-    param: { id },
-    query: { path },
-  });
-  const response = await requestResponse(
-    fetch(toRelativeUrl(url), {
-      method: "GET",
-      signal,
-    }),
+): Promise<FilePreview> {
+  return loadFilePreview(
+    {
+      path,
+      url: buildManagerWorkspaceContentUrl(id, path),
+    },
+    signal,
   );
-  const contentBytes = new Uint8Array(await response.arrayBuffer());
-  const mimeType = normalizeManagerWorkspaceMimeType(response.headers.get("content-type"));
-  return buildManagerWorkspaceFilePreview({
-    contentBytes,
-    contentEncoding: parseManagerWorkspaceContentEncodingHeader(
-      response.headers.get("x-bb-content-encoding"),
-    ),
-    mimeType,
-    path,
-    sizeBytes: parseManagerWorkspaceSizeBytesHeader(
-      response.headers.get("x-bb-size-bytes"),
-      contentBytes.byteLength,
-    ),
-  });
 }
 
 export async function updateThread(

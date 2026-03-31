@@ -1,4 +1,4 @@
-import { useEffect, useState, type ComponentProps, type ReactNode } from "react";
+import { type ComponentProps, type ReactNode } from "react";
 import { Check, ChevronDown, ChevronRight, Copy, X } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Panel, PanelGroup } from "react-resizable-panels";
@@ -17,7 +17,7 @@ import { ThreadTimelinePane } from "./ThreadTimelinePane";
 import { DetailCard, DetailRow } from "@bb/ui-core";
 import type { Thread } from "@bb/domain";
 import type { WorkspaceFile } from "@bb/server-contract";
-import type { ManagerWorkspaceFilePreview } from "@/lib/manager-workspace-file-preview";
+import type { FilePreview } from "@/lib/file-preview";
 
 const TIMELINE_PANEL_DEFAULT_SIZE_PERCENT = 50;
 const CLOSED_TIMELINE_PANEL_SIZE_PERCENT = 100;
@@ -75,7 +75,7 @@ interface ThreadDetailMetadataProps {
 
 interface ThreadDetailWorkspaceProps {
   fileError?: Error | null;
-  filePreview?: ManagerWorkspaceFilePreview;
+  filePreview?: FilePreview;
   files?: readonly WorkspaceFile[];
   isFileLoading: boolean;
   onTogglePath: (path: string) => void;
@@ -341,27 +341,6 @@ function ThreadMetadataContent({
   );
 }
 
-function useWorkspaceImageUrl(
-  filePreview: ManagerWorkspaceFilePreview | undefined,
-): string | null {
-  const [imageUrl, setImageUrl] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (filePreview?.kind !== "image") {
-      setImageUrl(null);
-      return;
-    }
-
-    const nextImageUrl = URL.createObjectURL(filePreview.blob);
-    setImageUrl(nextImageUrl);
-    return () => {
-      URL.revokeObjectURL(nextImageUrl);
-    };
-  }, [filePreview]);
-
-  return imageUrl;
-}
-
 function WorkspaceContent({
   fileError,
   filePreview,
@@ -370,7 +349,7 @@ function WorkspaceContent({
   onTogglePath,
   selectedPath,
 }: ThreadDetailWorkspaceProps) {
-  const imageUrl = useWorkspaceImageUrl(filePreview);
+  const imageUrl = filePreview?.kind === "image" ? filePreview.url : null;
 
   if ((files?.length ?? 0) === 0) {
     return (
