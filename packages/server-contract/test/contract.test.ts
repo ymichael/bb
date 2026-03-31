@@ -32,6 +32,8 @@ const INTENTIONAL_OPTIONAL_SERVER_FIELDS: Record<string, string> = {
   "createThreadRequestSchema.title": "Thread creation may omit a custom title and use the generated title flow.",
   "environmentActionApiErrorSchema.details": "Some environment action failures do not have structured detail payloads.",
   "environmentActionApiErrorSchema.retryable": "Environment action errors may omit retryability when no retry hint exists.",
+  "managerWorkspaceFilesQuerySchema.limit": "Manager workspace file listing may omit limit to use the default result count.",
+  "managerWorkspaceFilesQuerySchema.query": "Manager workspace file listing may omit a search string to list files without filtering.",
   "projectFilesQuerySchema.limit": "Project file search may omit limit to use the server-side default result count.",
   "projectFilesQuerySchema.query": "Project file search may omit a search string to list files without filtering.",
   "sendMessageRequestSchema.model": "Follow-up sends may inherit the thread's default model.",
@@ -51,8 +53,6 @@ const INTENTIONAL_OPTIONAL_SERVER_FIELDS: Record<string, string> = {
   "threadTimelineQuerySchema.includeManagerDebugView": "Timeline queries may omit manager debug view unless explicitly requested.",
   "threadTimelineQuerySchema.includeToolGroupMessages": "Timeline queries may omit grouped tool messages unless explicitly requested.",
   "threadTimelineResponseSchema.contextWindowUsage": "Timeline responses omit context window usage when the provider did not report it.",
-  "threadWorkspaceFilesQuerySchema.limit": "Workspace file listing may omit limit to use the default result count.",
-  "threadWorkspaceFilesQuerySchema.query": "Workspace file listing may omit a search string to list files without filtering.",
   "timelineToolDetailsQuerySchema.includeManagerDebugView": "Timeline tool detail queries may omit manager debug view unless explicitly requested.",
   "timelineToolDetailsRequestSchema.includeManagerDebugView": "Timeline tool detail requests may omit manager debug view unless explicitly requested.",
   "updateProjectRequestSchema.name": "Project PATCH requests omit name when leaving it unchanged.",
@@ -225,6 +225,17 @@ describe("server-contract clients", () => {
         },
       }).pathname,
     ).toBe("/api/v1/threads/thr_123/timeline/tool-details");
+    expect(
+      publicClient.threads[":id"]["manager-workspace"].files.$url({
+        param: { id: "thr_123" },
+      }).pathname,
+    ).toBe("/api/v1/threads/thr_123/manager-workspace/files");
+    expect(
+      publicClient.threads[":id"]["manager-workspace"].content.$url({
+        param: { id: "thr_123" },
+        query: { path: "notes/plan.md" },
+      }).pathname,
+    ).toBe("/api/v1/threads/thr_123/manager-workspace/content");
   });
 
   it("keeps route inputs in shared named types instead of inline objects", () => {
@@ -249,6 +260,7 @@ describe("server-contract clients", () => {
       createThreadRequestSchema: contract.createThreadRequestSchema,
       environmentActionApiErrorSchema: contract.environmentActionApiErrorSchema,
       environmentStatusResponseSchema: contract.environmentStatusResponseSchema,
+      managerWorkspaceFilesQuerySchema: contract.managerWorkspaceFilesQuerySchema,
       projectFilesQuerySchema: contract.projectFilesQuerySchema,
       sendDraftResponseSchema: contract.sendDraftResponseSchema,
       sendMessageRequestSchema: contract.sendMessageRequestSchema,
@@ -259,7 +271,6 @@ describe("server-contract clients", () => {
       threadListQuerySchema: contract.threadListQuerySchema,
       threadTimelineQuerySchema: contract.threadTimelineQuerySchema,
       threadTimelineResponseSchema: contract.threadTimelineResponseSchema,
-      threadWorkspaceFilesQuerySchema: contract.threadWorkspaceFilesQuerySchema,
       timelineToolDetailsQuerySchema: contract.timelineToolDetailsQuerySchema,
       timelineToolDetailsRequestSchema: contract.timelineToolDetailsRequestSchema,
       updateProjectRequestSchema: contract.updateProjectRequestSchema,

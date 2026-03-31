@@ -1,11 +1,12 @@
+import path from "node:path";
 import { hostDaemonCommandResultSchemaByType } from "@bb/host-daemon-contract";
 import type { Hono } from "hono";
 import {
+  managerWorkspaceContentQuerySchema,
+  managerWorkspaceFilesQuerySchema,
   threadEventWaitQuerySchema,
   threadEventsQuerySchema,
   threadTimelineQuerySchema,
-  threadWorkspaceFileQuerySchema,
-  threadWorkspaceFilesQuerySchema,
   timelineToolDetailsQuerySchema,
   typedRoutes,
   type PublicApiSchema,
@@ -18,6 +19,11 @@ import {
   requireThread,
 } from "../../services/entity-lookup.js";
 import { queueCommandAndWait } from "../../services/command-wait.js";
+import {
+  createDaemonFileContentResponse,
+  remapDaemonFileRouteError,
+} from "../../services/daemon-file-response.js";
+import { requireManagerWorkspacePath } from "../../services/manager-workspace.js";
 import { buildThreadTimeline, buildTimelineToolDetails } from "../../services/timeline.js";
 import {
   findThreadEvent,
@@ -35,6 +41,44 @@ function validateFilePath(filePath: string): void {
   ) {
     throw new ApiError(400, "invalid_request", "Invalid file path");
   }
+}
+
+interface ManagerWorkspaceTarget {
+  hostId: string;
+  workspacePath: string;
+}
+
+interface RequireManagerWorkspaceTargetArgs {
+  threadId: string;
+}
+
+function parseWorkspaceFileListLimit(rawLimit: string | undefined): number {
+  const limit = Math.min(parseOptionalInteger(rawLimit, "limit") ?? 1000, 10000);
+  if (limit <= 0) {
+    throw new ApiError(400, "invalid_request", "limit must be a positive integer");
+  }
+  return limit;
+}
+
+function requireManagerWorkspaceTarget(
+  deps: Pick<AppDeps, "db">,
+  args: RequireManagerWorkspaceTargetArgs,
+): ManagerWorkspaceTarget {
+  const thread = requireThread(deps.db, args.threadId);
+  if (thread.type !== "manager") {
+    throw new ApiError(409, "invalid_request", "Thread is not a manager");
+  }
+  if (!thread.environmentId) {
+    throw new ApiError(409, "invalid_request", "Thread has no environment");
+  }
+  const readyEnvironment = requireReadyEnvironment(deps.db, thread.environmentId);
+  return {
+    hostId: readyEnvironment.hostId,
+    workspacePath: requireManagerWorkspacePath(deps, {
+      hostId: readyEnvironment.hostId,
+      threadId: thread.id,
+    }),
+  };
 }
 
 export function registerThreadDataRoutes(app: Hono, deps: AppDeps): void {
@@ -118,56 +162,62 @@ export function registerThreadDataRoutes(app: Hono, deps: AppDeps): void {
     return context.json(getLastExecutionOptions(deps, context.req.param("id")));
   });
 
-  get("/threads/:id/workspace/files", threadWorkspaceFilesQuerySchema, async (context, query) => {
-    const thread = requireThread(deps.db, context.req.param("id"));
-    if (!thread.environmentId) {
-      throw new ApiError(409, "invalid_request", "Thread has no environment");
-    }
-    const readyEnvironment = requireReadyEnvironment(deps.db, thread.environmentId);
-    const limit = Math.min(parseOptionalInteger(query.limit, "limit") ?? 1000, 10000);
-    if (limit <= 0) {
-      throw new ApiError(400, "invalid_request", "limit must be a positive integer");
-    }
-    const rawResult = await queueCommandAndWait(deps, {
-      hostId: readyEnvironment.hostId,
-      timeoutMs: COMMAND_TIMEOUT_MS,
-      command: {
-        type: "workspace.list_files",
-        environmentId: readyEnvironment.id,
-        workspaceContext: {
-          workspacePath: readyEnvironment.path,
-          workspaceProvisionType: readyEnvironment.workspaceProvisionType,
-        },
-        ...(query.query ? { query: query.query } : {}),
-        limit,
-      },
-    });
-    const result = hostDaemonCommandResultSchemaByType["workspace.list_files"].parse(rawResult);
-    return context.json({ files: result.files, truncated: result.truncated });
-  });
+  get(
+    "/threads/:id/manager-workspace/files",
+    managerWorkspaceFilesQuerySchema,
+    async (context, query) => {
+      const target = requireManagerWorkspaceTarget(deps, {
+        threadId: context.req.param("id"),
+      });
+      const limit = parseWorkspaceFileListLimit(query.limit);
 
-  get("/threads/:id/workspace/file", threadWorkspaceFileQuerySchema, async (context, query) => {
-    validateFilePath(query.path);
-    const thread = requireThread(deps.db, context.req.param("id"));
-    if (!thread.environmentId) {
-      throw new ApiError(409, "invalid_request", "Thread has no environment");
-    }
-    const readyEnvironment = requireReadyEnvironment(deps.db, thread.environmentId);
-    const rawResult = await queueCommandAndWait(deps, {
-      hostId: readyEnvironment.hostId,
-      timeoutMs: COMMAND_TIMEOUT_MS,
-      command: {
-        type: "workspace.read_file",
-        environmentId: readyEnvironment.id,
-        workspaceContext: {
-          workspacePath: readyEnvironment.path,
-          workspaceProvisionType: readyEnvironment.workspaceProvisionType,
-        },
-        path: query.path,
-      },
-    });
-    return context.json(
-      hostDaemonCommandResultSchemaByType["workspace.read_file"].parse(rawResult),
-    );
-  });
+      try {
+        const rawResult = await queueCommandAndWait(deps, {
+          hostId: target.hostId,
+          timeoutMs: COMMAND_TIMEOUT_MS,
+          command: {
+            type: "host.list_files",
+            path: target.workspacePath,
+            ...(query.query ? { query: query.query } : {}),
+            limit,
+          },
+        });
+        const result = hostDaemonCommandResultSchemaByType["host.list_files"].parse(rawResult);
+        return context.json({ files: result.files, truncated: result.truncated });
+      } catch (error) {
+        if (error instanceof ApiError && error.body.code === "ENOENT") {
+          return context.json({ files: [], truncated: false });
+        }
+        throw error;
+      }
+    },
+  );
+
+  get(
+    "/threads/:id/manager-workspace/content",
+    managerWorkspaceContentQuerySchema,
+    async (context, query) => {
+      validateFilePath(query.path);
+      const target = requireManagerWorkspaceTarget(deps, {
+        threadId: context.req.param("id"),
+      });
+
+      try {
+        const rawResult = await queueCommandAndWait(deps, {
+          hostId: target.hostId,
+          timeoutMs: COMMAND_TIMEOUT_MS,
+          command: {
+            type: "host.read_file",
+            path: path.join(target.workspacePath, query.path),
+          },
+        });
+        return createDaemonFileContentResponse(
+          hostDaemonCommandResultSchemaByType["host.read_file"].parse(rawResult),
+        );
+      } catch (error) {
+        remapDaemonFileRouteError(error);
+      }
+      throw new ApiError(500, "internal_error", "Unexpected manager workspace route state");
+    },
+  );
 }

@@ -2,9 +2,9 @@ import { and, eq } from "drizzle-orm";
 import { createDraftId, events, getDraft, getThread, queuedThreadMessages } from "@bb/db";
 import { describe, expect, it } from "vitest";
 import {
+  reportQueuedCommandError,
   reportQueuedCommandSuccess,
   waitForQueuedCommand,
-  waitForQueuedCommandAfter,
 } from "./helpers/commands.js";
 import {
   seedEnvironment,
@@ -676,42 +676,44 @@ describe("public thread data routes", () => {
     }
   });
 
-  it("queues workspace list and read file commands for thread workspace routes", async () => {
+  it("lists manager workspace files via host.list_files", async () => {
     const harness = await createTestAppHarness();
     try {
       const { host } = seedHostSession(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
-        path: "/tmp/thread-workspace",
+        path: "/tmp/project-source",
       });
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
-        path: "/tmp/thread-workspace",
+        path: "/tmp/project-source",
       });
       const thread = seedThread(harness.deps, {
         projectId: project.id,
         environmentId: environment.id,
+        type: "manager",
       });
+      const managerWorkspacePath = `/tmp/bb-host-data/${host.id}/workspace/${thread.id}`;
 
       const filesPromise = harness.app.request(
-        `/api/v1/threads/${thread.id}/workspace/files?query=src`,
+        `/api/v1/threads/${thread.id}/manager-workspace/files?query=notes`,
       );
       const filesCommand = await waitForQueuedCommand(
         harness,
         ({ command }) =>
-          command.type === "workspace.list_files" &&
-          command.environmentId === environment.id,
+          command.type === "host.list_files" &&
+          command.path === managerWorkspacePath,
       );
       expect(filesCommand.command).toMatchObject({
-        workspaceContext: { workspacePath: "/tmp/thread-workspace", workspaceProvisionType: "unmanaged" },
-        query: "src",
+        path: managerWorkspacePath,
+        query: "notes",
         limit: 1000,
       });
       await reportQueuedCommandSuccess(harness, filesCommand, {
         files: [
-          { path: "src/index.ts", name: "index.ts" },
-          { path: "src/routes.ts", name: "routes.ts" },
+          { path: "notes/plan.md", name: "plan.md" },
+          { path: "notes/todo.md", name: "todo.md" },
         ],
         truncated: false,
       });
@@ -719,39 +721,141 @@ describe("public thread data routes", () => {
       expect(filesResponse.status).toBe(200);
       await expect(readJson(filesResponse)).resolves.toEqual({
         files: [
-          { path: "src/index.ts", name: "index.ts" },
-          { path: "src/routes.ts", name: "routes.ts" },
+          { path: "notes/plan.md", name: "plan.md" },
+          { path: "notes/todo.md", name: "todo.md" },
         ],
         truncated: false,
       });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("serves manager workspace file content as raw bytes", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps);
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/project-source",
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/project-source",
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        type: "manager",
+      });
+      const pngBytes = Uint8Array.from([137, 80, 78, 71]);
+      const managerWorkspaceFilePath =
+        `/tmp/bb-host-data/${host.id}/workspace/${thread.id}/images/diagram.png`;
 
       const filePromise = harness.app.request(
-        `/api/v1/threads/${thread.id}/workspace/file?path=${encodeURIComponent("src/index.ts")}`,
+        `/api/v1/threads/${thread.id}/manager-workspace/content?path=${encodeURIComponent("images/diagram.png")}`,
       );
-      const fileCommand = await waitForQueuedCommandAfter(
+      const fileCommand = await waitForQueuedCommand(
         harness,
-        filesCommand.row.cursor,
         ({ command }) =>
-          command.type === "workspace.read_file" &&
-          command.environmentId === environment.id,
+          command.type === "host.read_file" &&
+          command.path === managerWorkspaceFilePath,
       );
       expect(fileCommand.command).toMatchObject({
-        workspaceContext: { workspacePath: "/tmp/thread-workspace", workspaceProvisionType: "unmanaged" },
-        path: "src/index.ts",
+        path: managerWorkspaceFilePath,
       });
       await reportQueuedCommandSuccess(harness, fileCommand, {
-        path: "src/index.ts",
-        content: "export const value = 1;\n",
-        contentEncoding: "utf8",
-        sizeBytes: "export const value = 1;\n".length,
+        path: managerWorkspaceFilePath,
+        content: Buffer.from(pngBytes).toString("base64"),
+        contentEncoding: "base64",
+        mimeType: "image/png",
+        sizeBytes: pngBytes.byteLength,
       });
       const fileResponse = await filePromise;
       expect(fileResponse.status).toBe(200);
+      expect(fileResponse.headers.get("content-type")).toBe("image/png");
+      expect(fileResponse.headers.get("x-bb-content-encoding")).toBe("base64");
+      expect(fileResponse.headers.get("x-bb-size-bytes")).toBe(String(pngBytes.byteLength));
+      expect(new Uint8Array(await fileResponse.arrayBuffer())).toEqual(pngBytes);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("returns an empty manager workspace file list when the durable workspace is absent", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps);
+      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        type: "manager",
+      });
+
+      const filesPromise = harness.app.request(
+        `/api/v1/threads/${thread.id}/manager-workspace/files`,
+      );
+      const filesCommand = await waitForQueuedCommand(
+        harness,
+        ({ command }) => command.type === "host.list_files",
+      );
+      const filesErrorResponse = await reportQueuedCommandError(harness, filesCommand, {
+        errorCode: "ENOENT",
+        errorMessage: "Path does not exist",
+      });
+      expect(filesErrorResponse.status).toBe(200);
+
+      const filesResponse = await filesPromise;
+      expect(filesResponse.status).toBe(200);
+      await expect(readJson(filesResponse)).resolves.toEqual({
+        files: [],
+        truncated: false,
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("maps manager workspace file read failures to user-facing 4xx responses", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps);
+      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        type: "manager",
+      });
+
+      const filePromise = harness.app.request(
+        `/api/v1/threads/${thread.id}/manager-workspace/content?path=${encodeURIComponent("notes/missing.txt")}`,
+      );
+      const fileCommand = await waitForQueuedCommand(
+        harness,
+        ({ command }) => command.type === "host.read_file",
+      );
+      const fileErrorResponse = await reportQueuedCommandError(harness, fileCommand, {
+        errorCode: "file_too_large",
+        errorMessage: "File exceeds limit",
+      });
+      expect(fileErrorResponse.status).toBe(200);
+
+      const fileResponse = await filePromise;
+      expect(fileResponse.status).toBe(413);
       await expect(readJson(fileResponse)).resolves.toEqual({
-        path: "src/index.ts",
-        content: "export const value = 1;\n",
-        contentEncoding: "utf8",
-        sizeBytes: "export const value = 1;\n".length,
+        code: "file_too_large",
+        message: "File exceeds limit",
+        retryable: false,
       });
     } finally {
       await harness.cleanup();

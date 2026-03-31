@@ -439,26 +439,26 @@ export function useThreadDefaultExecutionOptions(
   });
 }
 
-export function useThreadWorkspaceFiles(
+export function useManagerWorkspaceFiles(
   id: string,
   options?: { enabled?: boolean },
 ) {
   return useQuery<WorkspaceFileListResponse>({
-    queryKey: ["threadWorkspaceFiles", id],
-    queryFn: () => api.listThreadWorkspaceFiles(id),
+    queryKey: ["managerWorkspaceFiles", id],
+    queryFn: () => api.listManagerWorkspaceFiles(id),
     enabled: (options?.enabled ?? true) && !!id,
     refetchOnWindowFocus: false,
   });
 }
 
-export function useThreadWorkspaceFile(
+export function useManagerWorkspaceFilePreview(
   id: string,
   path: string | null,
   options?: { enabled?: boolean },
 ) {
-  return useQuery<{ path: string; content: string }>({
-    queryKey: ["threadWorkspaceFile", id, path],
-    queryFn: () => api.getThreadWorkspaceFile(id, path ?? ""),
+  return useQuery<api.ManagerWorkspaceFilePreview>({
+    queryKey: ["managerWorkspaceFilePreview", id, path],
+    queryFn: ({ signal }) => api.getManagerWorkspaceFilePreview(id, path ?? "", signal),
     enabled: (options?.enabled ?? true) && !!id && !!path,
     refetchOnWindowFocus: false,
   });

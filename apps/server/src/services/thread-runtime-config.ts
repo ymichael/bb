@@ -20,8 +20,8 @@ import { COMMAND_TIMEOUT_MS } from "../constants.js";
 import { ApiError } from "../errors.js";
 import type { AppDeps } from "../types.js";
 import { queueCommandAndWait } from "./command-wait.js";
-import { requireConnectedHostSession } from "./entity-lookup.js";
 import { getLastExecutionOptions } from "./thread-events.js";
+import { requireManagerWorkspacePath } from "./manager-workspace.js";
 
 const DEFAULT_SERVICE_TIER: ServiceTier = "flex";
 const DEFAULT_REASONING_LEVEL: ReasoningLevel = "medium";
@@ -160,22 +160,6 @@ export async function resolveExecutionOptions(
   };
 }
 
-function requireManagerWorkspacePath(
-  deps: Pick<AppDeps, "db">,
-  hostId: string,
-  threadId: string,
-): string {
-  const session = requireConnectedHostSession(deps, hostId);
-  if (!session.dataDir) {
-    throw new ApiError(
-      502,
-      "host_protocol_mismatch",
-      "Connected host session did not report its data directory",
-    );
-  }
-  return path.join(session.dataDir, "workspace", threadId);
-}
-
 export async function resolveThreadRuntimeCommandConfig(
   deps: Pick<AppDeps, "db" | "hub">,
   args: ResolveThreadRuntimeCommandConfigArgs,
@@ -203,8 +187,7 @@ export async function resolveThreadRuntimeCommandConfig(
   }
   const managerWorkspacePath = requireManagerWorkspacePath(
     deps,
-    args.environment.hostId,
-    args.thread.id,
+    { hostId: args.environment.hostId, threadId: args.thread.id },
   );
 
   const managerPreferencesContent = args.isThreadCreation

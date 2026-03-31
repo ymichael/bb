@@ -39,6 +39,14 @@ import type {
   WorkspaceFileListResponse,
 } from "@bb/server-contract";
 import { apiClient, toRelativeUrl } from "./api-server";
+import {
+  buildManagerWorkspaceFilePreview,
+  normalizeManagerWorkspaceMimeType,
+  parseManagerWorkspaceContentEncodingHeader,
+  parseManagerWorkspaceSizeBytesHeader,
+  type ManagerWorkspaceFilePreview,
+} from "./manager-workspace-file-preview";
+export type { ManagerWorkspaceFilePreview } from "./manager-workspace-file-preview";
 
 const MAX_ERROR_MESSAGE_LENGTH = 180;
 const HTML_DOCUMENT_PATTERN = /<!doctype html|<html[\s>]/i;
@@ -164,19 +172,21 @@ async function throwHttpError(res: Response): Promise<never> {
 }
 
 async function request<T>(responsePromise: Promise<Response>): Promise<T> {
-  const res = await responsePromise;
-  if (!res.ok) {
-    await throwHttpError(res);
-  }
+  const res = await requestResponse(responsePromise);
   const text = await res.text();
   return JSON.parse(text) as T;
 }
 
 async function requestVoid(responsePromise: Promise<Response>): Promise<void> {
+  await requestResponse(responsePromise);
+}
+
+async function requestResponse(responsePromise: Promise<Response>): Promise<Response> {
   const res = await responsePromise;
   if (!res.ok) {
     await throwHttpError(res);
   }
+  return res;
 }
 
 async function postMultipart<T>(
@@ -342,24 +352,43 @@ export async function getThread(id: string): Promise<Thread> {
   return request<Thread>(apiClient.threads[":id"].$get({ param: { id } }));
 }
 
-export async function listThreadWorkspaceFiles(
+export async function listManagerWorkspaceFiles(
   id: string,
 ): Promise<WorkspaceFileListResponse> {
   return request<WorkspaceFileListResponse>(
-    apiClient.threads[":id"].workspace.files.$get({ param: { id } }),
+    apiClient.threads[":id"]["manager-workspace"].files.$get({ param: { id } }),
   );
 }
 
-export async function getThreadWorkspaceFile(
+export async function getManagerWorkspaceFilePreview(
   id: string,
   path: string,
-): Promise<{ path: string; content: string }> {
-  return request<{ path: string; content: string }>(
-    apiClient.threads[":id"].workspace.file.$get({
-      param: { id },
-      query: { path },
+  signal?: AbortSignal,
+): Promise<ManagerWorkspaceFilePreview> {
+  const url = apiClient.threads[":id"]["manager-workspace"].content.$url({
+    param: { id },
+    query: { path },
+  });
+  const response = await requestResponse(
+    fetch(toRelativeUrl(url), {
+      method: "GET",
+      signal,
     }),
   );
+  const contentBytes = new Uint8Array(await response.arrayBuffer());
+  const mimeType = normalizeManagerWorkspaceMimeType(response.headers.get("content-type"));
+  return buildManagerWorkspaceFilePreview({
+    contentBytes,
+    contentEncoding: parseManagerWorkspaceContentEncodingHeader(
+      response.headers.get("x-bb-content-encoding"),
+    ),
+    mimeType,
+    path,
+    sizeBytes: parseManagerWorkspaceSizeBytesHeader(
+      response.headers.get("x-bb-size-bytes"),
+      contentBytes.byteLength,
+    ),
+  });
 }
 
 export async function updateThread(

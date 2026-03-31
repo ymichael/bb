@@ -31,6 +31,8 @@ import type {
   EnvironmentActionResponse,
   EnvironmentStatusQuery,
   EnvironmentStatusResponse,
+  ManagerWorkspaceContentQuery,
+  ManagerWorkspaceFilesQuery,
   ProjectAttachmentContentQuery,
   ProjectAttachmentUploadForm,
   ProjectFilesQuery,
@@ -49,8 +51,6 @@ import type {
   ThreadListQuery,
   ThreadTimelineQuery,
   ThreadTimelineResponse,
-  ThreadWorkspaceFileQuery,
-  ThreadWorkspaceFilesQuery,
   TimelineToolDetailsQuery,
   TimelineToolDetailsResponse,
   UpdateProjectRequest,
@@ -262,19 +262,25 @@ export type PublicApiSchema = {
     /** Returns the last used options for the thread for use as defaults in the UI. */
     $get: Endpoint<PathId, ResolvedThreadExecutionOptions | null>;
   };
-  "/threads/:id/workspace/files": {
+  "/threads/:id/manager-workspace/files": {
     /**
-     * List files in the thread's workspace.
-     * Resolves thread -> environmentId -> environment -> hostId, queues
-     * `workspace.list_files` to the host daemon, and waits for the result.
+     * List files in the durable manager workspace for a manager thread.
+     * Resolves the manager workspace root from the active host session `dataDir`
+     * and proxies to `host.list_files`.
      */
-    $get: Endpoint<PathId & { query?: ThreadWorkspaceFilesQuery }, WorkspaceFileListResponse>;
+    $get: Endpoint<PathId & { query?: ManagerWorkspaceFilesQuery }, WorkspaceFileListResponse>;
   };
-  "/threads/:id/workspace/file": {
-    /** Read a single file from the thread's workspace. Proxies to `workspace.read_file`. */
+  "/threads/:id/manager-workspace/content": {
+    /**
+     * Serve manager workspace file content as raw bytes with `Content-Type`.
+     * Resolves the manager workspace root from the active host session `dataDir`
+     * and proxies to `host.read_file`.
+     */
     $get: Endpoint<
-      PathId & { query: ThreadWorkspaceFileQuery },
-      { path: string; content: string; mimeType?: string }
+      PathId & { query: ManagerWorkspaceContentQuery },
+      Uint8Array,
+      200,
+      "binary"
     >;
   };
 

@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ThreadType } from "@bb/domain";
 import {
-  useThreadWorkspaceFile,
-  useThreadWorkspaceFiles,
+  useManagerWorkspaceFilePreview,
+  useManagerWorkspaceFiles,
 } from "../hooks/useApi";
 
 const LEGACY_MANAGER_DEBUG_VIEW_STORAGE_KEY_PREFIX = "thread-manager-debug-view:";
@@ -31,7 +31,7 @@ export function useWorkspaceViewer({
   const [showWorkspaceViewer, setShowWorkspaceViewer] = useState(false);
   const [selectedWorkspacePath, setSelectedWorkspacePath] =
     useState<string | null>(null);
-  const { data: workspaceFiles } = useThreadWorkspaceFiles(
+  const { data: workspaceFiles } = useManagerWorkspaceFiles(
     threadId ?? "",
     {
       enabled: isManagerThread,
@@ -45,10 +45,10 @@ export function useWorkspaceViewer({
     return selectedWorkspacePath ?? workspaceFiles?.files?.[0]?.path ?? null;
   }, [isManagerThread, workspaceFiles?.files, selectedWorkspacePath]);
   const {
-    data: workspaceFile,
-    isLoading: isWorkspaceFileLoading,
-    error: workspaceFileError,
-  } = useThreadWorkspaceFile(threadId ?? "", effectiveWorkspacePath, {
+    data: workspaceFilePreview,
+    isLoading: isWorkspaceFilePreviewLoading,
+    error: workspaceFilePreviewError,
+  } = useManagerWorkspaceFilePreview(threadId ?? "", effectiveWorkspacePath, {
     enabled: isManagerThread && effectiveWorkspacePath !== null,
   });
 
@@ -112,9 +112,9 @@ export function useWorkspaceViewer({
     effectiveWorkspacePath,
     handleWorkspaceViewerChange,
     isManagerThread,
-    isWorkspaceFileLoading,
-    workspaceFile,
-    workspaceFileError,
+    isWorkspaceFilePreviewLoading,
+    workspaceFilePreview,
+    workspaceFilePreviewError,
     workspaceFiles,
     selectedWorkspacePath,
     setSelectedWorkspacePath,

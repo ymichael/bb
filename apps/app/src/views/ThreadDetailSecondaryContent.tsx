@@ -1,4 +1,4 @@
-import { type ComponentProps, type ReactNode } from "react";
+import { useEffect, useState, type ComponentProps, type ReactNode } from "react";
 import { Check, ChevronDown, ChevronRight, Copy, X } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Panel, PanelGroup } from "react-resizable-panels";
@@ -17,6 +17,7 @@ import { ThreadTimelinePane } from "./ThreadTimelinePane";
 import { DetailCard, DetailRow } from "@bb/ui-core";
 import type { Thread } from "@bb/domain";
 import type { WorkspaceFile } from "@bb/server-contract";
+import type { ManagerWorkspaceFilePreview } from "@/lib/manager-workspace-file-preview";
 
 const TIMELINE_PANEL_DEFAULT_SIZE_PERCENT = 50;
 const CLOSED_TIMELINE_PANEL_SIZE_PERCENT = 100;
@@ -73,8 +74,8 @@ interface ThreadDetailMetadataProps {
 }
 
 interface ThreadDetailWorkspaceProps {
-  fileContent?: string;
   fileError?: Error | null;
+  filePreview?: ManagerWorkspaceFilePreview;
   files?: readonly WorkspaceFile[];
   isFileLoading: boolean;
   onTogglePath: (path: string) => void;
@@ -340,14 +341,37 @@ function ThreadMetadataContent({
   );
 }
 
+function useWorkspaceImageUrl(
+  filePreview: ManagerWorkspaceFilePreview | undefined,
+): string | null {
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (filePreview?.kind !== "image") {
+      setImageUrl(null);
+      return;
+    }
+
+    const nextImageUrl = URL.createObjectURL(filePreview.blob);
+    setImageUrl(nextImageUrl);
+    return () => {
+      URL.revokeObjectURL(nextImageUrl);
+    };
+  }, [filePreview]);
+
+  return imageUrl;
+}
+
 function WorkspaceContent({
-  fileContent,
   fileError,
+  filePreview,
   files,
   isFileLoading,
   onTogglePath,
   selectedPath,
 }: ThreadDetailWorkspaceProps) {
+  const imageUrl = useWorkspaceImageUrl(filePreview);
+
   if ((files?.length ?? 0) === 0) {
     return (
       <p className="rounded-lg border border-dashed border-border/70 bg-background/45 px-3 py-6 text-center text-sm text-muted-foreground">
@@ -391,10 +415,28 @@ function WorkspaceContent({
                   <p className="text-xs text-destructive">
                     {fileError.message}
                   </p>
-                ) : fileContent ? (
-                  <pre className="overflow-auto whitespace-pre-wrap break-words font-mono text-xs text-foreground">
-                    {fileContent}
-                  </pre>
+                ) : filePreview?.kind === "text" ? (
+                  filePreview.content.length > 0 ? (
+                    <pre className="overflow-auto whitespace-pre-wrap break-words font-mono text-xs text-foreground">
+                      {filePreview.content}
+                    </pre>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">Empty file.</p>
+                  )
+                ) : filePreview?.kind === "image" ? (
+                  imageUrl ? (
+                    <img
+                      src={imageUrl}
+                      alt={filePreview.path}
+                      className="max-h-96 w-auto max-w-full rounded-md border border-border/70 bg-background object-contain"
+                    />
+                  ) : (
+                    <p className="text-xs text-muted-foreground">Loading image preview...</p>
+                  )
+                ) : filePreview?.kind === "unsupported" ? (
+                  <p className="text-xs text-muted-foreground">
+                    Preview not available for {filePreview.mimeType}.
+                  </p>
                 ) : (
                   <p className="text-xs text-muted-foreground">
                     Select a manager workspace file to view it.

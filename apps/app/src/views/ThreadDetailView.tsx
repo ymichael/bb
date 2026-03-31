@@ -179,9 +179,9 @@ export function ThreadDetailView() {
   const { data: parentThread } = useThread(thread?.parentThreadId ?? "");
   const {
     handleWorkspaceViewerChange,
-    isWorkspaceFileLoading,
-    workspaceFile,
-    workspaceFileError,
+    isWorkspaceFilePreviewLoading,
+    workspaceFilePreview,
+    workspaceFilePreviewError,
     workspaceFiles,
     selectedWorkspacePath,
     setSelectedWorkspacePath,
@@ -1102,15 +1102,15 @@ export function ThreadDetailView() {
   );
   const workspace = thread.type === "manager"
     ? {
-        fileContent: workspaceFile?.content,
+        filePreview: workspaceFilePreview,
         fileError:
-          workspaceFileError instanceof Error
-            ? workspaceFileError
-            : workspaceFileError
+          workspaceFilePreviewError instanceof Error
+            ? workspaceFilePreviewError
+            : workspaceFilePreviewError
               ? new Error("Failed to load workspace file")
               : null,
         files: workspaceFiles?.files,
-        isFileLoading: isWorkspaceFileLoading,
+        isFileLoading: isWorkspaceFilePreviewLoading,
         onTogglePath: handleWorkspacePathToggle,
         selectedPath: selectedWorkspacePath,
       }
