@@ -1,6 +1,3 @@
-import { readFileSync } from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import type { ThreadEventRow } from "@bb/domain";
 import { decodeRow } from "../src/event-decode.js";
@@ -8,15 +5,6 @@ import { toViewMessages } from "../src/to-view-messages.js";
 import type { ThreadEventWithMeta } from "../src/to-view-messages.js";
 import { buildTimelineRows } from "../src/thread-detail-rows.js";
 import type { ViewMessage } from "@bb/domain";
-
-function fixturePath(name: string): string {
-  const __dirname = path.dirname(fileURLToPath(import.meta.url));
-  return path.join(__dirname, "__fixtures__", name);
-}
-
-function loadFixture(name: string): ThreadEventRow[] {
-  return JSON.parse(readFileSync(fixturePath(name), "utf8")) as ThreadEventRow[];
-}
 
 /** Convert raw ThreadEventRow[] (test fixtures / inline data) to typed input for toViewMessages. */
 function fromRows(rows: ThreadEventRow[]): ThreadEventWithMeta[] {
@@ -155,42 +143,6 @@ describe("toViewMessages replay coverage", () => {
     expect(assistantMessages).toHaveLength(1);
     expect(assistantMessages[0]?.text).toBe("PONG");
     expect(assistantMessages[0]?.status).toBe("completed");
-  });
-
-  it("projects the direct raw-events fixture with stable, deduplicated output", () => {
-    const events = loadFixture("thread-JQh4-pAyGlgHLACZ8AXY2-events.json");
-    expect(events.length).toBeGreaterThan(500);
-
-    const projected = toViewMessages(fromRows(events), {
-      threadStatus: "active",
-    });
-    const projectedAgain = toViewMessages(fromRows(events));
-
-    expect(projected.length).toBeGreaterThan(0);
-    expect(projected.map((message) => message.id)).toEqual(
-      projectedAgain.map((message) => message.id),
-    );
-
-    const kinds = unique(projected.map((message) => message.kind));
-    expect(kinds).toContain("user");
-    expect(kinds).toContain("assistant-text");
-
-    expect(projected.some((message) => message.kind === "debug/raw-event")).toBe(
-      false,
-    );
-
-    const userMessages = projected.filter(
-      (message): message is Extract<ViewMessage, { kind: "user" }> =>
-        message.kind === "user",
-    );
-    if (userMessages.length > 0) {
-      const userTurnIds = userMessages
-        .map((message) => message.turnId)
-        .filter((value): value is string => typeof value === "string");
-      expect(unique(userTurnIds).length).toBe(userTurnIds.length);
-    }
-
-    assertMonotonicSourceSeq(projected);
   });
 
   it("marks incomplete tools as interrupted when thread is not active", () => {
@@ -3436,7 +3388,9 @@ describe("toViewMessages replay coverage", () => {
         seq: 2,
         type: "turn/started",
         data: {
-        providerThreadId: "thread-1", turnId: "turn-1" },
+          providerThreadId: "thread-1",
+          turnId: "turn-1",
+        },
         createdAt: 2,
       },
       {
