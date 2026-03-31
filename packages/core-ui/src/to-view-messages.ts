@@ -5,9 +5,8 @@ import {
   getEventParentToolCallId,
   getEventProviderThreadId,
   getEventTurnId,
-  isKnownThreadEvent,
 } from "./event-decode.js";
-import type { DecodedThreadEvent, EventMeta } from "./event-decode.js";
+import type { EventMeta } from "./event-decode.js";
 import { messageId } from "./format-helpers.js";
 import type { ExecCallPartial } from "./exec-lifecycle.js";
 import {
@@ -1245,7 +1244,7 @@ function finalizePendingMessages(
 
 /** A typed thread event paired with its row metadata. */
 export interface ThreadEventWithMeta {
-  event: DecodedThreadEvent;
+  event: ThreadEvent;
   meta: EventMeta;
 }
 
@@ -1288,27 +1287,6 @@ export function toViewMessages(
       (eventProviderThreadId
         ? state.delegationParentToolCallIdsByProviderThreadId.get(eventProviderThreadId)
         : undefined);
-
-    if (!isKnownThreadEvent(decoded)) {
-      if (includeDebugRawEvents) {
-        const debugReason = isDuplicateEventType(eventType)
-          ? "duplicate-event"
-          : isIgnoredNoiseType(eventType)
-            ? "ignored-noise"
-            : "unhandled";
-
-        if (debugReason === "unhandled") {
-          flushToolActivityBeforeNonToolMessage(state);
-          appendDebugEvent(
-            state.messages,
-            decoded,
-            meta,
-            debugReason,
-          );
-        }
-      }
-      continue;
-    }
 
     if (eventType === "turn/completed") {
       pendingUserSignatureCounts.clientStart.clear();

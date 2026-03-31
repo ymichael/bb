@@ -318,6 +318,9 @@ importers:
         specifier: ^3.24.0
         version: 3.25.76
     devDependencies:
+      '@bb/provider-audit':
+        specifier: workspace:*
+        version: link:../../packages/provider-audit
       '@bb/tsconfig':
         specifier: workspace:*
         version: link:../../packages/tsconfig

@@ -27,6 +27,9 @@
     "test": {
       "dependsOn": ["build", "^build"]
     },
+    "bench": {
+      "dependsOn": ["build", "^build"]
+    },
     "test:integration": {
       "dependsOn": ["build", "^build"]
     },

@@ -1,5 +1,5 @@
 import type { ThreadEvent } from "@bb/domain";
-import type { DecodedThreadEvent, EventMeta } from "./event-decode.js";
+import type { EventMeta } from "./event-decode.js";
 import { getEventTurnId } from "./event-decode.js";
 import { messageId } from "./format-helpers.js";
 import type { ViewDebugRawEventMessage, ViewErrorMessage, ViewMessage } from "@bb/domain";
@@ -30,8 +30,7 @@ export function isIgnoredNoiseType(eventType: string): boolean {
   return (
     eventType === "thread/started" ||
     eventType === "thread/tokenUsage/updated" ||
-    eventType === "thread/identity" ||
-    eventType === "item/reasoning/summaryPartAdded"
+    eventType === "thread/identity"
   );
 }
 
@@ -66,16 +65,11 @@ export function isIgnoredItemCompletedEvent(decoded: ThreadEvent): boolean {
 
 export function appendDebugEvent(
   out: ViewMessage[],
-  decoded: DecodedThreadEvent,
+  decoded: ThreadEvent,
   meta: EventMeta,
   reason: ViewDebugRawEventMessage["reason"],
 ): void {
-  const rawEventData = "rawData" in decoded
-    ? decoded.rawData
-    : (() => {
-        const { type: _type, threadId: _threadId, ...data } = decoded;
-        return data;
-      })();
+  const { type: _type, threadId: _threadId, ...rawEventData } = decoded;
   out.push({
     kind: "debug/raw-event",
     id: messageId(decoded.threadId, "debug", `${meta.seq}:${decoded.type}`),

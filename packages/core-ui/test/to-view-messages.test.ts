@@ -2740,31 +2740,6 @@ describe("toViewMessages replay coverage", () => {
     });
   });
 
-  it("wraps unknown events in debug mode and drops them otherwise", () => {
-    const events: ThreadEventRow[] = [
-      {
-        id: "evt-1",
-        threadId: "thread-1",
-        seq: 1,
-        type: "account/updated",
-        data: {
-          authMode: null,
-        },
-        createdAt: 1,
-      },
-    ];
-
-    expect(toViewMessages(fromRows(events))).toEqual([]);
-
-    const withDebug = toViewMessages(fromRows(events), { includeDebugRawEvents: true });
-    expect(withDebug).toHaveLength(1);
-    expect(withDebug[0]?.kind).toBe("debug/raw-event");
-    if (withDebug[0]?.kind === "debug/raw-event") {
-      expect(withDebug[0].reason).toBe("unhandled");
-      expect(withDebug[0].rawType).toBe("account/updated");
-    }
-  });
-
   it("classifies duplicate-event types but does not emit debug rows for them", () => {
     const events: ThreadEventRow[] = [
       {
@@ -2893,27 +2868,6 @@ describe("toViewMessages replay coverage", () => {
           providerThreadId: "thread-1",
           item: { type: "agentMessage", id: "msg-1", text: "" },
           turnId: "turn-1",
-        },
-        createdAt: 2,
-      },
-    ];
-
-    const withDebug = toViewMessages(fromRows(events), { includeDebugRawEvents: true });
-    expect(withDebug).toEqual([]);
-  });
-
-  it("drops reasoning section markers in debug mode", () => {
-    const events: ThreadEventRow[] = [
-      {
-        id: "evt-1",
-        threadId: "thread-1",
-        seq: 1,
-        type: "item/reasoning/summaryPartAdded",
-        data: {
-          threadId: "thread-1",
-          turnId: "turn-1",
-          itemId: "rs-1",
-          summaryIndex: 0,
         },
         createdAt: 2,
       },
@@ -3863,66 +3817,6 @@ describe("toViewMessages replay coverage", () => {
     expect(user?.attachments?.imageUrls).toEqual(["https://example.com/a.png"]);
     expect(user?.attachments?.localImagePaths).toEqual(["/tmp/local-a.png"]);
     expect(user?.attachments?.localFilePaths).toEqual(["/tmp/notes.md"]);
-  });
-
-  it("ignores legacy codex/event user_message rows", () => {
-    const events: ThreadEventRow[] = [
-      {
-        id: "evt-1",
-        threadId: "thread-1",
-        seq: 1,
-        type: "client/thread/start",
-        data: {
-          direction: "outbound",
-          source: "spawn",
-          initiator: "agent",
-          input: [
-            { type: "text", text: "Check screenshot" },
-            { type: "localImage", path: "/tmp/shot.png" },
-          ],
-          request: {
-            method: "thread/start",
-            params: {},
-          },
-          execution: {
-            model: "gpt-5",
-            serviceTier: "flex",
-            reasoningLevel: "medium",
-            sandboxMode: "danger-full-access",
-            source: "client/thread/start",
-          },
-        },
-        createdAt: 1,
-      },
-      {
-        id: "evt-2",
-        threadId: "thread-1",
-        seq: 2,
-        type: "codex/event/user_message",
-        data: {
-          id: "turn-1",
-          msg: {
-            type: "userMessage",
-            message: "Check screenshot",
-            images: [],
-            local_images: ["/tmp/shot.png"],
-            text_elements: [],
-          },
-        },
-        createdAt: 2,
-      },
-    ];
-
-    const projected = toViewMessages(fromRows(events), {
-      threadStatus: "idle",
-    });
-    const users = projected.filter(
-      (message): message is Extract<ViewMessage, { kind: "user" }> =>
-        message.kind === "user",
-    );
-
-    expect(users).toHaveLength(1);
-    expect(users[0]?.attachments?.localImagePaths).toEqual(["/tmp/shot.png"]);
   });
 
   it("deduplicates provider userMessage image data URL in favor of client start localImage", () => {

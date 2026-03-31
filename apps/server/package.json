@@ -11,6 +11,7 @@
   },
   "scripts": {
     "build": "tsc",
+    "bench": "vitest bench --config vitest.config.ts",
     "start": "node dist/index.js",
     "start:prod": "NODE_ENV=production node dist/index.js",
     "dev": "tsx watch src/index.ts",
@@ -37,6 +38,7 @@
     "zod": "^3.24.0"
   },
   "devDependencies": {
+    "@bb/provider-audit": "workspace:*",
     "@bb/tsconfig": "workspace:*",
     "@types/mime-types": "^3.0.1",
     "@types/node": "^22.0.0",

@@ -1,4 +1,4 @@
-import { and, desc, eq, gt, gte, lte, sql } from "drizzle-orm";
+import { and, desc, eq, gt, gte, lte, notInArray, sql } from "drizzle-orm";
 import { events } from "@bb/db";
 import {
   providerEventSchema,
@@ -8,14 +8,23 @@ import type { ThreadEventRow, ThreadEventType } from "@bb/domain";
 import type { DbConnection } from "@bb/db";
 import { ApiError } from "../errors.js";
 
-interface StoredEventRow {
+export interface StoredEventRow {
   createdAt: number;
   data: string;
   id: string;
   sequence: number;
   threadId: string;
-  type: string;
+  type: ThreadEventType;
 }
+
+const storedEventRowFields = {
+  createdAt: events.createdAt,
+  data: events.data,
+  id: events.id,
+  sequence: events.sequence,
+  threadId: events.threadId,
+  type: events.type,
+};
 
 export function decodeEventRow(row: StoredEventRow): ThreadEventRow {
   return {
@@ -37,7 +46,7 @@ export function listThreadEventRows(
   },
 ): ThreadEventRow[] {
   const rows = db
-    .select()
+    .select(storedEventRowFields)
     .from(events)
     .where(
       args.afterSeq === undefined
@@ -60,7 +69,7 @@ export function listThreadEventRowsInRange(
   },
 ): ThreadEventRow[] {
   const rows = db
-    .select()
+    .select(storedEventRowFields)
     .from(events)
     .where(
       and(
@@ -75,20 +84,54 @@ export function listThreadEventRowsInRange(
   return rows.map((row) => decodeEventRow(row));
 }
 
+export function listRecentStoredEventRows(
+  db: DbConnection,
+  args: {
+    excludedTypes?: readonly ThreadEventType[];
+    threadId: string;
+  },
+): StoredEventRow[] {
+  const condition =
+    args.excludedTypes && args.excludedTypes.length > 0
+      ? and(
+          eq(events.threadId, args.threadId),
+          notInArray(events.type, [...args.excludedTypes]),
+        )
+      : eq(events.threadId, args.threadId);
+
+  return db
+    .select(storedEventRowFields)
+    .from(events)
+    .where(condition)
+    .orderBy(events.sequence)
+    .all();
+}
+
 export function listRecentThreadEventRows(
   db: DbConnection,
   args: {
     threadId: string;
   },
 ): ThreadEventRow[] {
-  const rows = db
-    .select()
-    .from(events)
-    .where(eq(events.threadId, args.threadId))
-    .orderBy(events.sequence)
-    .all();
+  return listRecentStoredEventRows(db, args).map((row) => decodeEventRow(row));
+}
 
-  return rows.map((row) => decodeEventRow(row));
+export function getLatestStoredEventRowByType(
+  db: DbConnection,
+  args: {
+    threadId: string;
+    type: ThreadEventType;
+  },
+): StoredEventRow | null {
+  const rows = db
+    .select(storedEventRowFields)
+    .from(events)
+    .where(and(eq(events.threadId, args.threadId), eq(events.type, args.type)))
+    .orderBy(desc(events.sequence))
+    .limit(1)
+    .get();
+
+  return rows ?? null;
 }
 
 export function findThreadEvent(

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ThreadEventRow } from "@bb/domain";
-import { decodeRow, isKnownThreadEvent } from "../src/event-decode.js";
+import { decodeRow } from "../src/event-decode.js";
 
 describe("decodeRow", () => {
   it("parses persisted provider events through the thread event schema", () => {
@@ -102,21 +102,5 @@ describe("decodeRow", () => {
     };
 
     expect(() => decodeRow(row)).toThrow();
-  });
-
-  it("identifies unknown decoded rows by event type instead of rawData shape", () => {
-    const decoded = decodeRow({
-      id: "row-unknown-1",
-      threadId: "thread-1",
-      seq: 4,
-      type: "provider/future-event",
-      data: {
-        providerThreadId: "provider-thread-1",
-        rawData: "payload-shaped-like-a-future-event",
-      },
-      createdAt: 999,
-    });
-
-    expect(isKnownThreadEvent(decoded.event)).toBe(false);
   });
 });
