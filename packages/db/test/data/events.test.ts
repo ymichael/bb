@@ -84,6 +84,24 @@ describe("events", () => {
     expect(JSON.parse(all[0]!.data)).toMatchObject({ message: "first" });
   });
 
+  it("stores the provided createdAt timestamp", () => {
+    const { db, thread } = setup();
+    const createdAt = 1_700_000_000_000;
+
+    insertEvents(db, noopNotifier, [
+      {
+        threadId: thread.id,
+        sequence: 1,
+        type: "system/error",
+        createdAt,
+        data: JSON.stringify({ message: "timestamped" }),
+      },
+    ]);
+
+    const [event] = listEvents(db, { threadId: thread.id });
+    expect(event?.createdAt).toBe(createdAt);
+  });
+
   it("returns high-water marks per thread", () => {
     const { db, project, thread } = setup();
     const thread2 = createThread(db, noopNotifier, {

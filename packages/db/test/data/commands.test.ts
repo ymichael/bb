@@ -121,6 +121,7 @@ describe("commands", () => {
 
   it("reports command result", () => {
     const { db, host } = setup();
+    const completedAt = 1_700_000_000_000;
 
     const cmd = queueCommand(db, noopNotifier, {
       hostId: host.id,
@@ -134,16 +135,18 @@ describe("commands", () => {
     const result = reportCommandResult(db, noopNotifier, {
       commandId: cmd.id,
       state: "success",
+      completedAt,
       resultPayload: JSON.stringify({ status: "ok" }),
     });
 
     expect(result?.state).toBe("success");
-    expect(result?.completedAt).toBeTypeOf("number");
+    expect(result?.completedAt).toBe(completedAt);
     expect(result?.resultPayload).toBe(JSON.stringify({ status: "ok" }));
   });
 
   it("reports command error", () => {
     const { db, host } = setup();
+    const completedAt = 1_700_000_000_123;
 
     const cmd = queueCommand(db, noopNotifier, {
       hostId: host.id,
@@ -156,10 +159,11 @@ describe("commands", () => {
     const result = reportCommandResult(db, noopNotifier, {
       commandId: cmd.id,
       state: "error",
+      completedAt,
       resultPayload: JSON.stringify({ error: "timeout" }),
     });
 
     expect(result?.state).toBe("error");
-    expect(result?.completedAt).toBeTypeOf("number");
+    expect(result?.completedAt).toBe(completedAt);
   });
 });

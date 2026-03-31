@@ -12,6 +12,7 @@ export interface InsertEventInput {
   providerThreadId?: string | null;
   sequence: number;
   type: ThreadEventType;
+  createdAt?: number;
   data: string;
 }
 
@@ -27,7 +28,6 @@ export function insertEvents(
 ): number {
   if (eventInputs.length === 0) return 0;
 
-  const now = Date.now();
   let insertedCount = 0;
 
   // Track which threads get new events for notification
@@ -35,9 +35,10 @@ export function insertEvents(
 
   for (const input of eventInputs) {
     const id = createEventId();
+    const createdAt = input.createdAt ?? Date.now();
     const result = db.run(
       sql`INSERT OR IGNORE INTO events (id, thread_id, environment_id, turn_id, provider_thread_id, sequence, type, data, created_at)
-          VALUES (${id}, ${input.threadId}, ${input.environmentId ?? null}, ${input.turnId ?? null}, ${input.providerThreadId ?? null}, ${input.sequence}, ${input.type}, ${input.data}, ${now})`,
+          VALUES (${id}, ${input.threadId}, ${input.environmentId ?? null}, ${input.turnId ?? null}, ${input.providerThreadId ?? null}, ${input.sequence}, ${input.type}, ${input.data}, ${createdAt})`,
     );
     if (result.changes > 0) {
       insertedCount++;

@@ -178,6 +178,7 @@ describe("internal session routes", () => {
   it("handles provisioning command success and failure", async () => {
     const harness = await createTestAppHarness();
     try {
+      const successCompletedAt = 1_700_000_000_000;
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-results",
       });
@@ -230,7 +231,7 @@ describe("internal session routes", () => {
           sessionId: session.id,
           commandId: successCommand.id,
           cursor: successCommand.cursor,
-          completedAt: Date.now(),
+          completedAt: successCompletedAt,
           type: "environment.provision",
           ok: true,
           result: {
@@ -244,6 +245,13 @@ describe("internal session routes", () => {
         }),
       });
       expect(successResponse.status).toBe(200);
+      expect(
+        harness.db
+          .select()
+          .from(hostDaemonCommands)
+          .where(eq(hostDaemonCommands.id, successCommand.id))
+          .get()?.completedAt,
+      ).toBe(successCompletedAt);
       expect(getEnvironment(harness.db, successEnvironment.id)?.status).toBe("ready");
       expect(getThread(harness.db, successThread.id)?.status).toBe("active");
       const threadStartCommand = await waitForQueuedCommandAfter(

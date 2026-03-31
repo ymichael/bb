@@ -102,6 +102,7 @@ export function fetchCommands(
 export interface ReportCommandResultInput {
   commandId: string;
   state: "success" | "error";
+  completedAt: number;
   resultPayload?: string | null;
 }
 
@@ -113,12 +114,11 @@ export function reportCommandResult(
   notifier: DbNotifier,
   input: ReportCommandResultInput,
 ) {
-  const now = Date.now();
   return db.update(hostDaemonCommands)
     .set({
       state: input.state,
       resultPayload: input.resultPayload ?? null,
-      completedAt: now,
+      completedAt: input.completedAt,
     })
     .where(eq(hostDaemonCommands.id, input.commandId))
     .returning()

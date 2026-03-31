@@ -19,6 +19,8 @@ describe("internal event and tool-call routes", () => {
   it("deduplicates events by thread and sequence and returns high-water marks", async () => {
     const harness = await createTestAppHarness();
     try {
+      const firstCreatedAt = 1_700_000_000_000;
+      const duplicateCreatedAt = firstCreatedAt + 50;
       const { host, session } = seedHostSession(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
       const environment = seedEnvironment(harness.deps, {
@@ -42,7 +44,7 @@ describe("internal event and tool-call routes", () => {
               environmentId: environment.id,
               threadId: thread.id,
               sequence: 1,
-              createdAt: Date.now(),
+              createdAt: firstCreatedAt,
               event: {
                 type: "turn/started",
                 threadId: thread.id,
@@ -55,7 +57,7 @@ describe("internal event and tool-call routes", () => {
               environmentId: environment.id,
               threadId: thread.id,
               sequence: 1,
-              createdAt: Date.now(),
+              createdAt: duplicateCreatedAt,
               event: {
                 type: "turn/started",
                 threadId: thread.id,
@@ -73,7 +75,9 @@ describe("internal event and tool-call routes", () => {
           [thread.id]: 1,
         },
       });
-      expect(harness.db.select().from(events).all()).toHaveLength(1);
+      const storedEvents = harness.db.select().from(events).all();
+      expect(storedEvents).toHaveLength(1);
+      expect(storedEvents[0]?.createdAt).toBe(firstCreatedAt);
     } finally {
       await harness.cleanup();
     }

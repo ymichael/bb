@@ -38,6 +38,7 @@ export async function handleCommandResult(
   const updated = reportCommandResult(deps.db, deps.hub, {
     commandId: command.id,
     state: report.ok ? "success" : "error",
+    completedAt: report.completedAt,
     resultPayload,
   });
   if (!updated) {
