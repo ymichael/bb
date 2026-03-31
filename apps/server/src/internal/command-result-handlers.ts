@@ -63,6 +63,7 @@ async function handleProvisionCommandResult(
       branchName: report.result.branchName,
       defaultBranch: report.result.defaultBranch,
     });
+    deps.hub.notifyEnvironment(command.environmentId, ["work-status-changed"]);
 
     if (shouldDestroyAfterProvision) {
       queueEnvironmentDestroyCommand(deps, {
@@ -290,6 +291,38 @@ function handleThreadCommandFailure(
   tryTransition(deps.db, deps.hub, thread.id, "error");
 }
 
+function handleWorkspaceMutationResult(
+  deps: Pick<AppDeps, "db" | "hub">,
+  report: Extract<
+    HostDaemonCommandResultReport,
+    {
+      type:
+        | "workspace.commit"
+        | "workspace.squash_merge"
+        | "workspace.checkpoint"
+        | "workspace.promote"
+        | "workspace.demote";
+    }
+  >,
+  commandRow: typeof hostDaemonCommands.$inferSelect,
+): void {
+  if (!report.ok) {
+    return;
+  }
+  const command = parseCommand(commandRow);
+  switch (command.type) {
+    case "workspace.commit":
+    case "workspace.squash_merge":
+    case "workspace.checkpoint":
+    case "workspace.promote":
+    case "workspace.demote":
+      deps.hub.notifyEnvironment(command.environmentId, ["work-status-changed"]);
+      return;
+    default:
+      return;
+  }
+}
+
 export async function handleCommandResultSideEffects(
   deps: Pick<AppDeps, "db" | "hub">,
   report: HostDaemonCommandResultReport,
@@ -311,6 +344,13 @@ export async function handleCommandResultSideEffects(
       if (!report.ok) {
         handleThreadCommandFailure(deps, report, commandRow);
       }
+      return;
+    case "workspace.commit":
+    case "workspace.squash_merge":
+    case "workspace.checkpoint":
+    case "workspace.promote":
+    case "workspace.demote":
+      handleWorkspaceMutationResult(deps, report, commandRow);
       return;
     default:
       return;
