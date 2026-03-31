@@ -11,6 +11,7 @@ import {
   type HostDaemonCommand,
   type HostDaemonCommandEnvelope,
   type HostDaemonCommandResultReport,
+  type HostDaemonDaemonWsMessage,
   type HostDaemonEventEnvelope,
   type HostDaemonServerWsMessage,
   type HostDaemonSessionOpenRequest,
@@ -80,7 +81,7 @@ export interface TestServer {
   events: HostDaemonEventEnvelope[];
   heartbeats: Array<{
     sessionId: string;
-    message: { bufferDepth: number };
+    message: HostDaemonDaemonWsMessage;
   }>;
   sessionOpenCalls: HostDaemonSessionOpenRequest[];
   toolCalls: Array<{ sessionId: string; tool: string }>;
@@ -100,7 +101,7 @@ export async function createTestServer(
   const sessionOpenCalls: HostDaemonSessionOpenRequest[] = [];
   const heartbeats: Array<{
     sessionId: string;
-    message: { bufferDepth: number };
+    message: HostDaemonDaemonWsMessage;
   }> = [];
   const commandFetches: Array<{ sessionId: string }> = [];
   const commandResultReports: HostDaemonCommandResultReport[] = [];
@@ -251,9 +252,7 @@ export async function createTestServer(
         );
         heartbeats.push({
           sessionId: url.searchParams.get("sessionId") ?? "",
-          message: {
-            bufferDepth: message.bufferDepth,
-          },
+          message,
         });
       });
       websocket.on("close", () => {

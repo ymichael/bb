@@ -293,7 +293,7 @@ Synchronous: daemon posts `POST /internal/session/tool-call`, blocks on HTTP res
 ### WS notifications
 
 **Server → Daemon:** `commands-available`, `session-close` (with reason)
-**Daemon → Server:** `heartbeat` (with bufferDepth)
+**Daemon → Server:** `heartbeat`
 
 ### Reconnection
 

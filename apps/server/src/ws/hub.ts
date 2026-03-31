@@ -44,6 +44,10 @@ export class NotificationHub implements DbNotifier {
   private readonly commandWaiters = new Map<string, Set<CommandWaiter>>();
   private readonly daemonSessions = new Map<string, { hostId: string; socket: HubSocket }>();
   private readonly daemonSessionIdsByHost = new Map<string, string>();
+  private readonly pendingDaemonDisconnects = new Map<
+    string,
+    ReturnType<typeof setTimeout>
+  >();
   private readonly threadEventWaiters = new Map<string, Set<ThreadEventWaiter>>();
 
   registerClient(socket: HubSocket): void {
@@ -97,8 +101,10 @@ export class NotificationHub implements DbNotifier {
   }
 
   registerDaemon(sessionId: string, hostId: string, socket: HubSocket): void {
+    this.cancelPendingDaemonDisconnect(sessionId);
     const existingSessionId = this.daemonSessionIdsByHost.get(hostId);
     if (existingSessionId && existingSessionId !== sessionId) {
+      this.cancelPendingDaemonDisconnect(existingSessionId);
       this.unregisterDaemon(existingSessionId);
     }
     this.daemonSessions.set(sessionId, { hostId, socket });
@@ -120,6 +126,7 @@ export class NotificationHub implements DbNotifier {
     sessionId: string,
     reason: "daemon-disconnect" | "expired" | "replaced",
   ): void {
+    this.cancelPendingDaemonDisconnect(sessionId);
     const entry = this.daemonSessions.get(sessionId);
     if (!entry) {
       return;
@@ -127,6 +134,28 @@ export class NotificationHub implements DbNotifier {
     entry.socket.send(JSON.stringify({ type: "session-close", reason }));
     entry.socket.close(1000, reason);
     this.unregisterDaemon(sessionId);
+  }
+
+  scheduleDaemonDisconnect(
+    sessionId: string,
+    delayMs: number,
+    callback: () => void,
+  ): void {
+    this.cancelPendingDaemonDisconnect(sessionId);
+    const timeout = setTimeout(() => {
+      this.pendingDaemonDisconnects.delete(sessionId);
+      callback();
+    }, delayMs);
+    this.pendingDaemonDisconnects.set(sessionId, timeout);
+  }
+
+  cancelPendingDaemonDisconnect(sessionId: string): void {
+    const timeout = this.pendingDaemonDisconnects.get(sessionId);
+    if (!timeout) {
+      return;
+    }
+    clearTimeout(timeout);
+    this.pendingDaemonDisconnects.delete(sessionId);
   }
 
   async waitForCommands(hostId: string, timeoutMs: number): Promise<boolean> {

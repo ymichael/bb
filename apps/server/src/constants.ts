@@ -2,4 +2,5 @@ export const COMMAND_TIMEOUT_MS = 30_000;
 export const PROVISION_TIMEOUT_MS = 300_000;
 export const HEARTBEAT_INTERVAL_MS = 5_000;
 export const LEASE_TIMEOUT_MS = 30_000;
+export const DAEMON_DISCONNECT_GRACE_MS = 5_000;
 export const COMMAND_RESULT_CACHE_TTL_MS = 5 * 60_000;

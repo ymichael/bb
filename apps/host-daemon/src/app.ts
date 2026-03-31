@@ -168,9 +168,6 @@ export async function createHostDaemonApp(
     logger: options.logger,
     serverClient,
     createWebSocket: options.createWebSocket,
-    getHeartbeatPayload: () => ({
-      bufferDepth: eventBuffer.depth(),
-    }),
     getActiveThreads: () => runtimeManager.listActiveThreads(),
     onCommandsAvailable: () => commandFetchLoop.request(),
     onSessionOpened: (session) => {

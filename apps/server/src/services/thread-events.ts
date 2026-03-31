@@ -5,6 +5,7 @@ import {
   events,
 } from "@bb/db";
 import {
+  systemErrorEventDataSchema,
   turnRequestEventDataSchema,
 } from "@bb/domain";
 import type {
@@ -14,6 +15,7 @@ import type {
   TurnRequestEventData,
   ThreadEventType,
   ResolvedThreadExecutionOptions,
+  SystemErrorEventData,
   ThreadTurnInitiator,
 } from "@bb/domain";
 import { ApiError } from "../errors.js";
@@ -54,6 +56,14 @@ export interface AppendThreadOwnershipChangeEventArgs {
   environmentId?: string | null;
   nextParentThreadId: string | null;
   previousParentThreadId: string | null;
+  threadId: string;
+}
+
+export interface AppendSystemErrorEventArgs {
+  code: string;
+  detail?: string;
+  environmentId?: string | null;
+  message: string;
   threadId: string;
 }
 
@@ -194,23 +204,23 @@ export function buildCwdBranchEntries(args: {
 
 export function appendSystemErrorEvent(
   deps: Pick<AppDeps, "db" | "hub">,
-  args: {
-    code: string;
-    detail?: string;
-    environmentId?: string | null;
-    message: string;
-    threadId: string;
-  },
+  args: AppendSystemErrorEventArgs,
 ): number {
   return appendThreadEvent(deps, {
     threadId: args.threadId,
     environmentId: args.environmentId ?? null,
     type: "system/error",
-    data: {
-      code: args.code,
-      message: args.message,
-      ...(args.detail ? { detail: args.detail } : {}),
-    },
+    data: buildSystemErrorEventData(args),
+  });
+}
+
+export function buildSystemErrorEventData(
+  args: Pick<AppendSystemErrorEventArgs, "code" | "detail" | "message">,
+): SystemErrorEventData {
+  return systemErrorEventDataSchema.parse({
+    code: args.code,
+    message: args.message,
+    ...(args.detail ? { detail: args.detail } : {}),
   });
 }
 

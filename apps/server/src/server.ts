@@ -98,8 +98,12 @@ export function createApp(deps: AppDeps, options?: CreateAppOptions): ServerApp 
             ...websocketContext,
             socket,
           }),
-        onMessage: (event) =>
-          onDaemonSocketMessage(deps, websocketContext.sessionId, event.data),
+        onMessage: (event, socket) =>
+          onDaemonSocketMessage(deps, {
+            raw: event.data,
+            sessionId: websocketContext.sessionId,
+            socket,
+          }),
         onClose: () =>
           onDaemonSocketClose(deps, websocketContext.sessionId),
       };

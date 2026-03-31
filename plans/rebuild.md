@@ -466,7 +466,7 @@ apps/server/src/internal/
 Session open, command fetch/result, event ingestion, tool calls, reconciliation.
 
 **Key correctness requirements (all three Phase 6 attempts got these wrong):**
-- **Heartbeat messages must update the session.** When the daemon sends `{ type: "heartbeat", bufferDepth, lastCommandCursor }` over the WS, the server must update `lastHeartbeatAt` and `leaseExpiresAt` on the session record. Without this, lease timeout sweeps will kill live sessions.
+- **Heartbeat messages must update the session.** When the daemon sends `{ type: "heartbeat" }` over the WS, the server must update `lastHeartbeatAt` and `leaseExpiresAt` on the session record. Without this, lease timeout sweeps will kill live sessions.
 - **Server-side cursor tracking must NOT advance past incomplete commands.** The `setCursor` call must only advance when all prior commands have completed. Do NOT use `Math.max(getCursor, report.cursor)` — this skips commands that complete out of order, violating the at-least-once delivery guarantee.
 - **Use the real `NotificationHub` for command result recording.** Don't pass noop notifiers to `setCursor` or data functions called during command result handling — the hub must fire `notifyCommand` and `notifyThread` so WS clients get real-time updates.
 - **Reconciliation queries must be efficient.** Do NOT load all environments and all threads into memory then filter in JS. Use targeted queries with WHERE clauses joining environments to the host. This is O(host's environments) not O(all environments).

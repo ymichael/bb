@@ -84,13 +84,6 @@ export type HostDaemonEventBatchResponse = z.infer<
   typeof hostDaemonEventBatchResponseSchema
 >;
 
-export const hostDaemonHeartbeatPayloadSchema = z.object({
-  bufferDepth: z.number().int().nonnegative(),
-});
-export type HostDaemonHeartbeatPayload = z.infer<
-  typeof hostDaemonHeartbeatPayloadSchema
->;
-
 export const hostDaemonServerWsMessageSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("commands-available"),
@@ -106,8 +99,7 @@ export type HostDaemonServerWsMessage = z.infer<
 
 export const hostDaemonDaemonWsMessageSchema = z.object({
   type: z.literal("heartbeat"),
-  bufferDepth: z.number().int().nonnegative(),
-});
+}).strict();
 export type HostDaemonDaemonWsMessage = z.infer<
   typeof hostDaemonDaemonWsMessageSchema
 >;

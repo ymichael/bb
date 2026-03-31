@@ -514,20 +514,17 @@ describe("host-daemon session schemas", () => {
     expect(
       hostDaemonDaemonWsMessageSchema.parse({
         type: "heartbeat",
-        bufferDepth: 3,
       }),
     ).toMatchObject({
       type: "heartbeat",
     });
 
-    expect(
+    expect(() =>
       hostDaemonDaemonWsMessageSchema.parse({
         type: "heartbeat",
         bufferDepth: 0,
       }),
-    ).toMatchObject({
-      bufferDepth: 0,
-    });
+    ).toThrow();
   });
 
   it("builds an internal client rooted at /internal", () => {

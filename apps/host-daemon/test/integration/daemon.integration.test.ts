@@ -168,7 +168,7 @@ describe("host daemon integration", () => {
       });
       expect(harness.server.heartbeats[0]?.sessionId).toBe("session-1");
       expect(harness.server.heartbeats[0]?.message).toEqual({
-        bufferDepth: 0,
+        type: "heartbeat",
       });
       expect(
         await pathExists(path.join(harness.dataDir, "command-cursor")),
@@ -220,7 +220,7 @@ describe("host daemon integration", () => {
       );
       await waitFor(() =>
         harness.server.heartbeats.some(
-          (heartbeat) => heartbeat.message.bufferDepth === 0,
+          (heartbeat) => heartbeat.message.type === "heartbeat",
         ),
       );
 

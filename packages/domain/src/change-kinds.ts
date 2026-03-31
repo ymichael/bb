@@ -1,5 +1,8 @@
+import { z } from "zod";
+
 export const REALTIME_ENTITIES = ["thread", "project", "environment", "host", "system"] as const;
 export type RealtimeEntity = (typeof REALTIME_ENTITIES)[number];
+export const realtimeEntitySchema = z.enum(REALTIME_ENTITIES);
 
 export const THREAD_CHANGE_KINDS = [
   "thread-created",
@@ -39,19 +42,25 @@ export type HostChangeKind = (typeof HOST_CHANGE_KINDS)[number];
 export const SYSTEM_CHANGE_KINDS = [] as const;
 export type SystemChangeKind = (typeof SYSTEM_CHANGE_KINDS)[number];
 
-export interface SubscribeMessage {
-  type: "subscribe";
-  entity: RealtimeEntity;
-  id?: string;
-}
+export const subscribeMessageSchema = z.object({
+  type: z.literal("subscribe"),
+  entity: realtimeEntitySchema,
+  id: z.string().optional(),
+});
+export type SubscribeMessage = z.infer<typeof subscribeMessageSchema>;
 
-export interface UnsubscribeMessage {
-  type: "unsubscribe";
-  entity: RealtimeEntity;
-  id?: string;
-}
+export const unsubscribeMessageSchema = z.object({
+  type: z.literal("unsubscribe"),
+  entity: realtimeEntitySchema,
+  id: z.string().optional(),
+});
+export type UnsubscribeMessage = z.infer<typeof unsubscribeMessageSchema>;
 
-export type ClientMessage = SubscribeMessage | UnsubscribeMessage;
+export const clientMessageSchema = z.discriminatedUnion("type", [
+  subscribeMessageSchema,
+  unsubscribeMessageSchema,
+]);
+export type ClientMessage = z.infer<typeof clientMessageSchema>;
 
 export interface ThreadChangedMessage {
   type: "changed";

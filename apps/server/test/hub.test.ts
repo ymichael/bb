@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { NotificationHub } from "../src/ws/hub.js";
 
 interface MockSocket {
@@ -105,6 +105,29 @@ describe("NotificationHub", () => {
     expect(socket1.messages).toHaveLength(1);
     expect(socket2.messages).toHaveLength(1);
     expect(socket3.messages).toHaveLength(0);
+  });
+
+  it("cancels the replaced daemon session's pending disconnect timer", async () => {
+    vi.useFakeTimers();
+    try {
+      const hub = new NotificationHub();
+      const socket1 = createMockSocket();
+      const socket2 = createMockSocket();
+      const callback = vi.fn();
+
+      hub.registerDaemon("session-1", "host-1", socket1);
+      hub.scheduleDaemonDisconnect("session-1", 1_000, callback);
+
+      hub.registerDaemon("session-2", "host-1", socket2);
+      await vi.advanceTimersByTimeAsync(1_000);
+
+      expect(callback).not.toHaveBeenCalled();
+      hub.notifyCommand("host-1");
+      expect(socket1.messages).toHaveLength(0);
+      expect(socket2.messages).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("resolves command waiters and command-result waiters", async () => {

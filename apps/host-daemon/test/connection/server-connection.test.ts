@@ -119,11 +119,7 @@ describe("ServerConnection", () => {
 
   it("sends heartbeat messages over the websocket", async () => {
     testServer = await createTestServer();
-    const { connection } = createConnection(testServer, {
-      getHeartbeatPayload: () => ({
-        bufferDepth: 3,
-      }),
-    });
+    const { connection } = createConnection(testServer);
 
     await connection.start();
     await waitFor(() => testServer!.heartbeats.length > 0);
@@ -131,7 +127,7 @@ describe("ServerConnection", () => {
     expect(testServer.heartbeats[0]).toEqual({
       sessionId: "session-1",
       message: {
-        bufferDepth: 3,
+        type: "heartbeat",
       },
     });
 

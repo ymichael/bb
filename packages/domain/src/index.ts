@@ -291,6 +291,10 @@ export {
   ENVIRONMENT_CHANGE_KINDS,
   HOST_CHANGE_KINDS,
   SYSTEM_CHANGE_KINDS,
+  clientMessageSchema,
+  realtimeEntitySchema,
+  subscribeMessageSchema,
+  unsubscribeMessageSchema,
 } from "./change-kinds.js";
 export type {
   RealtimeEntity,

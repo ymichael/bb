@@ -1,26 +1,10 @@
-import type { ClientMessage } from "@bb/domain";
-import { REALTIME_ENTITIES } from "@bb/domain";
+import { clientMessageSchema } from "@bb/domain";
 import { decodeSocketPayload } from "./decode-payload.js";
 import type { NotificationHub } from "./hub.js";
 
 interface ClientSocket {
   close(code?: number, reason?: string): void;
   send(data: string): void;
-}
-
-const realtimeEntitySet: ReadonlySet<string> = new Set(REALTIME_ENTITIES);
-
-function isClientMessage(value: unknown): value is ClientMessage {
-  if (!value || typeof value !== "object" || !("type" in value)) {
-    return false;
-  }
-  if (value.type !== "subscribe" && value.type !== "unsubscribe") {
-    return false;
-  }
-  if (!("entity" in value) || typeof value.entity !== "string") {
-    return false;
-  }
-  return realtimeEntitySet.has(value.entity);
 }
 
 export function onClientSocketOpen(
@@ -35,11 +19,20 @@ export function onClientSocketMessage(
   socket: ClientSocket,
   raw: unknown,
 ): void {
-  const parsed = JSON.parse(decodeSocketPayload(raw)) as unknown;
-  if (!isClientMessage(parsed)) {
+  let decoded: unknown;
+  try {
+    decoded = JSON.parse(decodeSocketPayload(raw));
+  } catch {
     socket.close(1008, "invalid-message");
     return;
   }
+
+  const result = clientMessageSchema.safeParse(decoded);
+  if (!result.success) {
+    socket.close(1008, "invalid-message");
+    return;
+  }
+  const parsed = result.data;
 
   switch (parsed.type) {
     case "subscribe":

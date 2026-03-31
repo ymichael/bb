@@ -48,9 +48,6 @@ export interface ServerConnectionOptions {
   getActiveThreads?: () =>
     | HostDaemonActiveThread[]
     | Promise<HostDaemonActiveThread[]>;
-  getHeartbeatPayload?: () => {
-    bufferDepth: number;
-  };
   onCommandsAvailable?: () => void | Promise<void>;
   onSessionClose?: (
     reason: "replaced" | "expired" | "daemon-disconnect",
