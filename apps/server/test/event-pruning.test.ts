@@ -5,9 +5,11 @@ import {
   pruneThreadEventHistory,
   pruneThreadEventHistoryBestEffort,
 } from "../src/services/event-pruning.js";
+import { internalAuthHeaders } from "./helpers/commands.js";
 import {
   seedEnvironment,
   seedHost,
+  seedHostSession,
   seedProjectWithSource,
   seedStoredEvent,
   seedThread,
@@ -22,12 +24,15 @@ interface SeedNoiseRowsArgs {
 
 function listEventSequencesForType(
   harness: Awaited<ReturnType<typeof createTestAppHarness>>,
-  args: { threadId: string; type: string },
+  args: { itemId?: string; threadId: string; type: string },
 ): number[] {
   return listEvents(harness.db, {
     threadId: args.threadId,
   })
-    .filter((event) => event.type === args.type)
+    .filter((event) =>
+      event.type === args.type &&
+      (args.itemId === undefined || event.itemId === args.itemId),
+    )
     .map((event) => event.sequence);
 }
 
@@ -297,6 +302,112 @@ describe("thread event pruning", () => {
         }),
       ).toBeNull();
       expect(loggerWarn).toHaveBeenCalledTimes(1);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("prunes active-thread noise rows after ingest without dropping unresolved deltas", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host, session } = seedHostSession(harness.deps);
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "active",
+      });
+
+      seedNoiseRows(harness, {
+        threadId: thread.id,
+        endingSequence: 1_000,
+      });
+      seedResolvedAssistantMessage(harness, {
+        threadId: thread.id,
+        itemId: "msg-completed",
+        deltaSequences: [1_001, 1_002],
+        completedSequence: 1_003,
+      });
+      for (const sequence of [1_004, 1_005]) {
+        seedStoredEvent(harness.deps, {
+          threadId: thread.id,
+          sequence,
+          type: "item/agentMessage/delta",
+          itemId: "msg-active",
+          itemKind: null,
+          data: {
+            itemId: "msg-active",
+            delta: `chunk-${sequence}`,
+          },
+        });
+      }
+
+      const response = await harness.app.request("/internal/session/events", {
+        method: "POST",
+        headers: internalAuthHeaders(harness),
+        body: JSON.stringify({
+          sessionId: session.id,
+          events: [
+            {
+              environmentId: environment.id,
+              threadId: thread.id,
+              sequence: 1_006,
+              createdAt: Date.now(),
+              event: {
+                type: "thread/tokenUsage/updated",
+                threadId: thread.id,
+                providerThreadId: "provider-thread-1",
+                turnId: "turn-1",
+                tokenUsage: {
+                  total: {
+                    totalTokens: 1,
+                    inputTokens: 1,
+                    cachedInputTokens: 0,
+                    outputTokens: 0,
+                    reasoningOutputTokens: 0,
+                  },
+                  last: {
+                    totalTokens: 1,
+                    inputTokens: 1,
+                    cachedInputTokens: 0,
+                    outputTokens: 0,
+                    reasoningOutputTokens: 0,
+                  },
+                  modelContextWindow: 200_000,
+                },
+              },
+            },
+          ],
+        }),
+      });
+
+      expect(response.status).toBe(200);
+      expect(
+        listEventSequencesForType(harness, {
+          threadId: thread.id,
+          type: "thread/tokenUsage/updated",
+        }).at(0),
+      ).toBe(7);
+      expect(
+        listEventSequencesForType(harness, {
+          threadId: thread.id,
+          type: "item/agentMessage/delta",
+          itemId: "msg-completed",
+        }),
+      ).toEqual([1_001]);
+      expect(
+        listEventSequencesForType(harness, {
+          threadId: thread.id,
+          type: "item/agentMessage/delta",
+          itemId: "msg-active",
+        }),
+      ).toEqual([1_004, 1_005]);
     } finally {
       await harness.cleanup();
     }

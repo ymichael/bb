@@ -1,4 +1,5 @@
 import {
+  getThread,
   getLatestThreadSequence,
   pruneResolvedAgentMessageDeltas,
   pruneThreadEventsBeforeSequence,
@@ -21,9 +22,21 @@ export interface ThreadEventPruningResult {
   totalRemoved: number;
 }
 
+export interface MaybePruneActiveThreadEventHistoryArgs {
+  latestPrunableSequence: number;
+  threadId: string;
+}
+
+interface ActiveThreadPruneState {
+  lastPrunedAt: number;
+  lastPrunedSequence: number;
+}
+
 export const ACTIVE_THREAD_EVENT_KEEP_RECENT = 1_000;
 export const IDLE_THREAD_EVENT_KEEP_RECENT = 300;
 export const ARCHIVED_THREAD_EVENT_KEEP_RECENT = 120;
+export const ACTIVE_THREAD_EVENT_PRUNE_MIN_SEQUENCE_DELTA = 250;
+export const ACTIVE_THREAD_EVENT_PRUNE_MIN_INTERVAL_MS = 30_000;
 
 export const AGE_PRUNABLE_THREAD_EVENT_TYPES: readonly ThreadEventType[] = [
   "thread/tokenUsage/updated",
@@ -39,6 +52,7 @@ const KEEP_RECENT_BY_MODE: Record<ThreadEventPruningMode, number> = {
 const agePrunableThreadEventTypeSet = new Set<ThreadEventType>(
   AGE_PRUNABLE_THREAD_EVENT_TYPES,
 );
+const activeThreadPruneStateByThreadId = new Map<string, ActiveThreadPruneState>();
 
 export function isAgePrunableThreadEventType(
   eventType: ThreadEventType,
@@ -94,4 +108,43 @@ export function pruneThreadEventHistoryBestEffort(
     );
     return null;
   }
+}
+
+export function maybePruneActiveThreadEventHistory(
+  deps: Pick<AppDeps, "db" | "logger">,
+  args: MaybePruneActiveThreadEventHistoryArgs,
+): ThreadEventPruningResult | null {
+  const thread = getThread(deps.db, args.threadId);
+  if (!thread || thread.status !== "active" || thread.archivedAt !== null) {
+    return null;
+  }
+
+  const lastState = activeThreadPruneStateByThreadId.get(args.threadId);
+  const lastPrunedSequence = lastState?.lastPrunedSequence ?? 0;
+  if (
+    args.latestPrunableSequence - lastPrunedSequence <
+    ACTIVE_THREAD_EVENT_PRUNE_MIN_SEQUENCE_DELTA
+  ) {
+    return null;
+  }
+
+  const now = Date.now();
+  const lastPrunedAt = lastState?.lastPrunedAt ?? 0;
+  if (now - lastPrunedAt < ACTIVE_THREAD_EVENT_PRUNE_MIN_INTERVAL_MS) {
+    return null;
+  }
+
+  activeThreadPruneStateByThreadId.set(args.threadId, {
+    lastPrunedAt: now,
+    lastPrunedSequence: args.latestPrunableSequence,
+  });
+
+  return pruneThreadEventHistoryBestEffort(deps, {
+    mode: "active",
+    threadId: args.threadId,
+  });
+}
+
+export function resetActiveThreadEventPruningState(threadId: string): void {
+  activeThreadPruneStateByThreadId.delete(threadId);
 }

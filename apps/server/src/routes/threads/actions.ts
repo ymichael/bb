@@ -28,7 +28,10 @@ import {
   queueTurnDuringReprovision,
   requireReadyThreadEnvironment,
 } from "../../services/thread-turn-dispatch.js";
-import { pruneThreadEventHistoryBestEffort } from "../../services/event-pruning.js";
+import {
+  pruneThreadEventHistoryBestEffort,
+  resetActiveThreadEventPruningState,
+} from "../../services/event-pruning.js";
 import { queueCommandAndWait } from "../../services/command-wait.js";
 import {
   buildExecutionOptions,
@@ -258,6 +261,7 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
       });
     }
     archiveThread(deps.db, deps.hub, thread.id);
+    resetActiveThreadEventPruningState(thread.id);
     pruneThreadEventHistoryBestEffort(deps, {
       mode: "archived",
       threadId: thread.id,

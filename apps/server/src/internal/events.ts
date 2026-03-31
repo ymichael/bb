@@ -18,6 +18,10 @@ import {
 import type { Hono } from "hono";
 import { ApiError } from "../errors.js";
 import type { AppDeps } from "../types.js";
+import {
+  isAgePrunableThreadEventType,
+  maybePruneActiveThreadEventHistory,
+} from "../services/event-pruning.js";
 import { sendNextQueuedDraftIfPresent } from "../services/queued-drafts.js";
 import { tryTransition } from "../services/thread-transitions.js";
 import { applyTurnCompletedEvent } from "./turn-completed-events.js";
@@ -53,6 +57,16 @@ interface ShouldApplyEventEffectArgs {
 interface TurnKeyArgs {
   threadId: string;
   turnId: string;
+}
+
+interface ActivePruneCandidate {
+  latestPrunableSequence: number;
+  threadId: string;
+}
+
+interface ResolveActivePruneCandidatesArgs {
+  events: HostDaemonEventEnvelope[];
+  insertedEventIndexes: number[];
 }
 
 function resolveProviderIdentifiers(
@@ -271,6 +285,37 @@ function resolveEventsToApply(
   );
 }
 
+function resolveActivePruneCandidates(
+  args: ResolveActivePruneCandidatesArgs,
+): ActivePruneCandidate[] {
+  const latestPrunableSequenceByThreadId = new Map<string, number>();
+  const insertedEventIndexLookup = new Set(args.insertedEventIndexes);
+
+  for (const [index, entry] of args.events.entries()) {
+    if (!insertedEventIndexLookup.has(index)) {
+      continue;
+    }
+    if (!isAgePrunableThreadEventType(entry.event.type)) {
+      continue;
+    }
+
+    const previousSequence = latestPrunableSequenceByThreadId.get(entry.threadId);
+    if (
+      previousSequence === undefined ||
+      entry.sequence > previousSequence
+    ) {
+      latestPrunableSequenceByThreadId.set(entry.threadId, entry.sequence);
+    }
+  }
+
+  return [...latestPrunableSequenceByThreadId.entries()].map(
+    ([threadId, latestPrunableSequence]) => ({
+      threadId,
+      latestPrunableSequence,
+    }),
+  );
+}
+
 function validateAndResolveCanonicalEventBatchEnvironments(
   deps: Pick<AppDeps, "db">,
   args: ValidateAndResolveCanonicalEventBatchEnvironmentsArgs,
@@ -371,6 +416,12 @@ export function registerInternalEventRoutes(app: Hono, deps: AppDeps): void {
         insertedEventIndexes: insertResult.insertedInputIndexes,
       }),
     );
+    for (const candidate of resolveActivePruneCandidates({
+      events: payload.events,
+      insertedEventIndexes: insertResult.insertedInputIndexes,
+    })) {
+      maybePruneActiveThreadEventHistory(deps, candidate);
+    }
 
     return context.json({
       threadHighWaterMarks: getHighWaterMarks(

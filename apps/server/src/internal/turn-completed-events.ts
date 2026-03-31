@@ -6,7 +6,10 @@ import {
   parseStoredEvent,
   storedEventRowFields,
 } from "../services/thread-data.js";
-import { pruneThreadEventHistoryBestEffort } from "../services/event-pruning.js";
+import {
+  pruneThreadEventHistoryBestEffort,
+  resetActiveThreadEventPruningState,
+} from "../services/event-pruning.js";
 
 export function applyTurnCompletedEvent(
   deps: Pick<AppDeps, "db" | "hub" | "logger">,
@@ -32,6 +35,10 @@ export function applyTurnCompletedEvent(
     }
   } catch {
     // Ignore invalid transitions from concurrent changes.
+  }
+
+  if (nextStatus) {
+    resetActiveThreadEventPruningState(payload.threadId);
   }
 
   if (nextStatus === "idle") {
