@@ -211,6 +211,8 @@ export const workspaceStatusCommandSchema = hostDaemonWorkspaceTargetSchema.exte
 export const workspaceDiffCommandSchema = hostDaemonWorkspaceTargetSchema.extend({
   type: z.literal("workspace.diff"),
   target: workspaceDiffTargetSchema,
+  maxDiffBytes: z.number().int().positive().optional(),
+  maxFileListBytes: z.number().int().positive().optional(),
 });
 
 export const workspaceCommitCommandSchema = hostDaemonWorkspaceTargetSchema.extend({
@@ -221,6 +223,7 @@ export const workspaceCommitCommandSchema = hostDaemonWorkspaceTargetSchema.exte
 export const workspaceSquashMergeCommandSchema = hostDaemonWorkspaceTargetSchema.extend({
   type: z.literal("workspace.squash_merge"),
   targetBranch: z.string().min(1),
+  commitMessage: z.string().min(1),
 });
 
 /** Commit and push to remote. Internal use only — not exposed via public API. */

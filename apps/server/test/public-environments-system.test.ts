@@ -219,7 +219,7 @@ describe("public environment and system routes", () => {
     }
   });
 
-  it("queues workspace.commit and returns the reported commit info", async () => {
+  it("queues workspace.commit after checking status and diff, then returns the reported commit info", async () => {
     const harness = await createTestAppHarness();
     try {
       const { host } = seedHostSession(harness.deps);
@@ -244,27 +244,70 @@ describe("public environment and system routes", () => {
             action: "commit",
             threadId: thread.id,
             options: {
-              message: "Checkpoint changes",
               autoArchiveOnSuccess: false,
             },
           }),
         },
       );
 
-      const queued = await waitForQueuedCommand(
+      // Step 1: Server queries workspace status
+      const statusCommand = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "workspace.status" &&
+          command.environmentId === environment.id,
+      );
+      await reportQueuedCommandSuccess(harness, statusCommand, {
+        workspaceStatus: {
+          workingTree: {
+            hasUncommittedChanges: true,
+            state: "dirty_uncommitted",
+            changedFiles: 1,
+            insertions: 1,
+            deletions: 0,
+            files: [],
+          },
+          branch: {
+            currentBranch: "feature",
+            defaultBranch: "main",
+          },
+          mergeBase: null,
+        },
+      });
+
+      // Step 2: Server queries diff for AI commit message generation
+      const diffCommand = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "workspace.diff" &&
+          command.environmentId === environment.id,
+      );
+      expect(diffCommand.command).toMatchObject({
+        target: { type: "uncommitted" },
+      });
+      await reportQueuedCommandSuccess(harness, diffCommand, {
+        diff: {
+          diff: "diff --git a/file.ts b/file.ts",
+          truncated: false,
+          shortstat: " 1 file changed, 1 insertion(+)\n",
+          files: "M\tfile.ts\n",
+        },
+      });
+
+      // Step 3: Server queues commit (AI message generation may fall back)
+      const commitCommand = await waitForQueuedCommand(
         harness,
         ({ command }) =>
           command.type === "workspace.commit" &&
           command.environmentId === environment.id,
       );
-      expect(queued.command).toMatchObject({
+      expect(commitCommand.command).toMatchObject({
         workspaceContext: { workspacePath: "/tmp/test-environment", workspaceProvisionType: "unmanaged" },
-        message: "Checkpoint changes",
+        message: "bb: automated commit",
       });
-
-      await reportQueuedCommandSuccess(harness, queued, {
+      await reportQueuedCommandSuccess(harness, commitCommand, {
         commitSha: "abc123",
-        commitSubject: "Checkpoint changes",
+        commitSubject: "bb: automated commit",
       });
 
       const response = await responsePromise;
@@ -273,7 +316,7 @@ describe("public environment and system routes", () => {
         ok: true,
         action: "commit",
         commitSha: "abc123",
-        commitSubject: "Checkpoint changes",
+        commitSubject: "bb: automated commit",
       });
     } finally {
       await harness.cleanup();
@@ -376,7 +419,7 @@ describe("public environment and system routes", () => {
     }
   });
 
-  it("queues workspace.squash_merge and returns the merge result", async () => {
+  it("queues workspace.squash_merge after checking status and diff, then returns the merge result", async () => {
     const harness = await createTestAppHarness();
     try {
       const { host } = seedHostSession(harness.deps);
@@ -411,17 +454,63 @@ describe("public environment and system routes", () => {
         },
       );
 
-      const queued = await waitForQueuedCommand(
+      // Step 1: Server queries workspace status
+      const statusCommand = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "workspace.status" &&
+          command.environmentId === environment.id,
+      );
+      await reportQueuedCommandSuccess(harness, statusCommand, {
+        workspaceStatus: {
+          workingTree: {
+            hasUncommittedChanges: false,
+            state: "clean",
+            changedFiles: 0,
+            insertions: 0,
+            deletions: 0,
+            files: [],
+          },
+          branch: {
+            currentBranch: "bb/feature",
+            defaultBranch: "main",
+          },
+          mergeBase: null,
+        },
+      });
+
+      // Step 2: Server queries branch_committed diff
+      const diffCommand = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "workspace.diff" &&
+          command.environmentId === environment.id,
+      );
+      expect(diffCommand.command).toMatchObject({
+        target: { type: "branch_committed", mergeBaseBranch: "main" },
+      });
+      await reportQueuedCommandSuccess(harness, diffCommand, {
+        diff: {
+          diff: "diff --git a/file.ts b/file.ts",
+          truncated: false,
+          shortstat: " 1 file changed, 1 insertion(+)\n",
+          files: "M\tfile.ts\n",
+        },
+      });
+
+      // Step 3: Server queues squash_merge with generated message
+      const mergeCommand = await waitForQueuedCommand(
         harness,
         ({ command }) =>
           command.type === "workspace.squash_merge" &&
           command.environmentId === environment.id,
       );
-      expect(queued.command).toMatchObject({
+      expect(mergeCommand.command).toMatchObject({
         workspaceContext: { workspacePath: "/tmp/test-environment", workspaceProvisionType: "managed-worktree" },
         targetBranch: "main",
+        commitMessage: "bb: squash merge",
       });
-      await reportQueuedCommandSuccess(harness, queued, {
+      await reportQueuedCommandSuccess(harness, mergeCommand, {
         merged: true,
         commitSha: "merge123",
       });
@@ -433,6 +522,266 @@ describe("public environment and system routes", () => {
         action: "squash_merge",
         merged: true,
         commitSha: "merge123",
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("rejects squash merge with 409 when workspace is in detached HEAD state", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps);
+      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        managed: true,
+        workspaceProvisionType: "managed-worktree",
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        mergeBaseBranch: "main",
+      });
+
+      const responsePromise = harness.app.request(
+        `/api/v1/environments/${environment.id}/actions`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            action: "squash_merge",
+            threadId: thread.id,
+            options: { mergeBaseBranch: "main", autoArchiveOnSuccess: false },
+          }),
+        },
+      );
+
+      const statusCommand = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "workspace.status" &&
+          command.environmentId === environment.id,
+      );
+      await reportQueuedCommandSuccess(harness, statusCommand, {
+        workspaceStatus: {
+          workingTree: {
+            hasUncommittedChanges: false,
+            state: "clean",
+            changedFiles: 0,
+            insertions: 0,
+            deletions: 0,
+            files: [],
+          },
+          branch: {
+            currentBranch: null,
+            defaultBranch: "main",
+          },
+          mergeBase: null,
+        },
+      });
+
+      const response = await responsePromise;
+      expect(response.status).toBe(409);
+      await expect(readJson(response)).resolves.toMatchObject({
+        code: "invalid_request",
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("rejects commit with 409 when workspace has no uncommitted changes", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps);
+      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+      });
+
+      const responsePromise = harness.app.request(
+        `/api/v1/environments/${environment.id}/actions`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            action: "commit",
+            threadId: thread.id,
+            options: { autoArchiveOnSuccess: false },
+          }),
+        },
+      );
+
+      // Status and diff are fired in parallel; respond to both
+      const statusCommand = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "workspace.status" &&
+          command.environmentId === environment.id,
+      );
+      const diffCommand = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "workspace.diff" &&
+          command.environmentId === environment.id,
+      );
+      await Promise.all([
+        reportQueuedCommandSuccess(harness, statusCommand, {
+          workspaceStatus: {
+            workingTree: {
+              hasUncommittedChanges: false,
+              state: "clean",
+              changedFiles: 0,
+              insertions: 0,
+              deletions: 0,
+              files: [],
+            },
+            branch: {
+              currentBranch: "feature",
+              defaultBranch: "main",
+            },
+            mergeBase: null,
+          },
+        }),
+        reportQueuedCommandSuccess(harness, diffCommand, {
+          diff: {
+            diff: "",
+            truncated: false,
+            shortstat: "",
+            files: "",
+          },
+        }),
+      ]);
+
+      const response = await responsePromise;
+      expect(response.status).toBe(409);
+      await expect(readJson(response)).resolves.toMatchObject({
+        code: "no_changes",
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("auto-commits dirty workspace before squash merge", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps);
+      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        managed: true,
+        workspaceProvisionType: "managed-worktree",
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        mergeBaseBranch: "main",
+      });
+
+      const responsePromise = harness.app.request(
+        `/api/v1/environments/${environment.id}/actions`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            action: "squash_merge",
+            threadId: thread.id,
+            options: { mergeBaseBranch: "main", autoArchiveOnSuccess: false },
+          }),
+        },
+      );
+
+      // Step 1: Status reports dirty workspace
+      const statusCommand = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "workspace.status" &&
+          command.environmentId === environment.id,
+      );
+      await reportQueuedCommandSuccess(harness, statusCommand, {
+        workspaceStatus: {
+          workingTree: {
+            hasUncommittedChanges: true,
+            state: "dirty_uncommitted",
+            changedFiles: 2,
+            insertions: 5,
+            deletions: 1,
+            files: [],
+          },
+          branch: {
+            currentBranch: "bb/dirty-merge",
+            defaultBranch: "main",
+          },
+          mergeBase: null,
+        },
+      });
+
+      // Step 2: Server issues pre-merge commit
+      const preCommitCommand = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "workspace.commit" &&
+          command.environmentId === environment.id,
+      );
+      expect(preCommitCommand.command).toMatchObject({
+        message: "bb: pre-merge commit",
+      });
+      await reportQueuedCommandSuccess(harness, preCommitCommand, {
+        commitSha: "pre-merge-sha",
+        commitSubject: "bb: pre-merge commit",
+      });
+
+      // Step 3: Diff for AI message
+      const diffCommand = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "workspace.diff" &&
+          command.environmentId === environment.id,
+      );
+      expect(diffCommand.command).toMatchObject({
+        target: { type: "branch_committed", mergeBaseBranch: "main" },
+      });
+      await reportQueuedCommandSuccess(harness, diffCommand, {
+        diff: {
+          diff: "diff --git a/file.ts b/file.ts",
+          truncated: false,
+          shortstat: " 1 file changed, 5 insertions(+), 1 deletion(-)\n",
+          files: "M\tfile.ts\n",
+        },
+      });
+
+      // Step 4: Final squash merge
+      const mergeCommand = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "workspace.squash_merge" &&
+          command.environmentId === environment.id,
+      );
+      expect(mergeCommand.command).toMatchObject({
+        targetBranch: "main",
+        commitMessage: "bb: squash merge",
+      });
+      await reportQueuedCommandSuccess(harness, mergeCommand, {
+        merged: true,
+        commitSha: "squash-sha",
+      });
+
+      const response = await responsePromise;
+      expect(response.status).toBe(200);
+      await expect(readJson(response)).resolves.toMatchObject({
+        ok: true,
+        action: "squash_merge",
+        merged: true,
+        commitSha: "squash-sha",
       });
     } finally {
       await harness.cleanup();

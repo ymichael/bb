@@ -321,7 +321,6 @@ export const environmentActionTypeSchema = z.enum([
 export type EnvironmentActionType = z.infer<typeof environmentActionTypeSchema>;
 
 export const commitOptionsSchema = z.object({
-  message: z.string().min(1),
   autoArchiveOnSuccess: z.boolean(),
 });
 export type CommitOptions = z.infer<typeof commitOptionsSchema>;

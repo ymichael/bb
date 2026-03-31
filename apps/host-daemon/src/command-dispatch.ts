@@ -16,6 +16,10 @@ import { WorkspaceError } from "@bb/workspace";
 import { demoteWorkspace, promoteWorkspace, squashMerge } from "./command-handlers/workspace.js";
 import { listBranches, listWorkspaceFiles, readWorkspaceFile } from "./command-handlers/workspace-files.js";
 
+/** System stability caps — applied when the server doesn't specify its own. */
+const SYSTEM_MAX_DIFF_BYTES = 2 * 1024 * 1024; // 2 MB
+const SYSTEM_MAX_FILE_LIST_BYTES = 256 * 1024; // 256 KB
+
 export {
   CommandDispatchError,
   getErrorCode,
@@ -134,6 +138,8 @@ export async function dispatchCommand<TCommand extends HostDaemonCommand>(
       return {
         diff: await entry.workspace.getDiff({
           target: command.target,
+          maxDiffBytes: command.maxDiffBytes ?? SYSTEM_MAX_DIFF_BYTES,
+          maxFileListBytes: command.maxFileListBytes ?? SYSTEM_MAX_FILE_LIST_BYTES,
         }),
       } as HostDaemonCommandResult<TCommand["type"]>;
     }
@@ -141,6 +147,7 @@ export async function dispatchCommand<TCommand extends HostDaemonCommand>(
       const entry = await requireWorkspaceEnvironment(command, options.runtimeManager);
       return entry.workspace.commit({
         message: command.message,
+        noVerify: true,
       }) as Promise<HostDaemonCommandResult<TCommand["type"]>>;
     }
     case "workspace.squash_merge":

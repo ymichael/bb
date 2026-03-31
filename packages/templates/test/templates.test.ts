@@ -22,12 +22,11 @@ describe("@bb/templates", () => {
 
   it("renders a template with variables", () => {
     const rendered = renderTemplate("threadOperationCommitFailureFollowUp", {
-      exactCommitMessage: "feat: add tests",
       errorMessage: "hooks/pre-commit exited with status 1",
     });
 
     expect(rendered).toContain("Commit in this thread workspace failed.");
-    expect(rendered).toContain("feat: add tests");
+    expect(rendered).toContain("hooks/pre-commit exited with status 1");
   });
 
   it("renders squash merge commit failure follow-up from structured variables", () => {

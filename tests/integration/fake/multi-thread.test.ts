@@ -363,7 +363,6 @@ describe.sequential("fake provider multi-thread integration", () => {
           threadId: threadA.thread.id,
           options: {
             autoArchiveOnSuccess: false,
-            message: "env-a commit",
           },
         }),
         runEnvironmentAction(harness.api, threadB.environment.id, {
@@ -371,7 +370,6 @@ describe.sequential("fake provider multi-thread integration", () => {
           threadId: threadB.thread.id,
           options: {
             autoArchiveOnSuccess: false,
-            message: "env-b commit",
           },
         }),
       ]);
@@ -381,13 +379,13 @@ describe.sequential("fake provider multi-thread integration", () => {
           args: ["log", "-1", "--format=%s"],
           cwd: harness.repoDir,
         })).trim(),
-      ).toBe("env-a commit");
+      ).toBe("bb: automated commit");
       expect(
         (await runGit({
           args: ["log", "-1", "--format=%s"],
           cwd: secondRepoDir,
         })).trim(),
-      ).toBe("env-b commit");
+      ).toBe("bb: automated commit");
     }));
 
   it("keeps provider processes isolated for different providers in one environment", async () => {
@@ -592,7 +590,6 @@ describe.sequential("fake provider multi-thread integration", () => {
           threadId: threadA.thread.id,
           options: {
             autoArchiveOnSuccess: false,
-            message: "instance-a commit",
           },
         }),
         runEnvironmentAction(harnessB.api, threadB.environment.id, {
@@ -600,7 +597,6 @@ describe.sequential("fake provider multi-thread integration", () => {
           threadId: threadB.thread.id,
           options: {
             autoArchiveOnSuccess: false,
-            message: "instance-b commit",
           },
         }),
       ]);
@@ -617,13 +613,13 @@ describe.sequential("fake provider multi-thread integration", () => {
           args: ["log", "-1", "--format=%s"],
           cwd: harnessA.repoDir,
         })).trim(),
-      ).toBe("instance-a commit");
+      ).toBe("bb: automated commit");
       expect(
         (await runGit({
           args: ["log", "-1", "--format=%s"],
           cwd: harnessB.repoDir,
         })).trim(),
-      ).toBe("instance-b commit");
+      ).toBe("bb: automated commit");
       await expect(
         fs.access(path.join(harnessB.repoDir, "instance-a.txt")),
       ).rejects.toThrow();

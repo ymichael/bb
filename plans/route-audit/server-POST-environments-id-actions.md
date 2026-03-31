@@ -11,7 +11,6 @@
 | `:id` (path)                   | Yes                         | Environment ID. Looked up via `requireReadyEnvironment`.                                                                                                                                        |
 | `threadId`                     | Yes (all actions)           | Validated to belong to this environment via `requireThreadInEnvironment`. Used for promote/demote daemon commands. For commit/squash_merge, the thread is the target for optional auto-archive. |
 | `action`                       | Yes                         | Discriminant: `"commit"`, `"squash_merge"`, `"promote"`, `"demote"`.                                                                                                                            |
-| `options.message`              | Required for `commit`       | Commit message passed to `workspace.commit` daemon command.                                                                                                                                     |
 | `options.autoArchiveOnSuccess` | Required for `commit`       | If true and commit succeeds, archives the acting thread and may trigger environment cleanup.                                                                                                    |
 | `options.mergeBaseBranch`      | Required for `squash_merge` | Target branch for squash merge, passed as `targetBranch` to `workspace.squash_merge`.                                                                                                           |
 | `options.autoArchiveOnSuccess` | Required for `squash_merge` | Same as commit — archives thread on success.                                                                                                                                                    |
@@ -29,22 +28,29 @@
 
 ### `commit` action
 
-3. (async) `queueCommandAndWait` with `workspace.commit` command (`environmentId`, `workspaceContext`, `message`).
-4. (sync) Parses result — extracts `commitSha`, `commitSubject`.
-5. (sync) If `autoArchiveOnSuccess`:
+3. (async) `queueCommandAndWait` with `workspace.status` — checks for uncommitted changes. Returns 409 `no_changes` if workspace is clean.
+4. (async) `queueCommandAndWait` with `workspace.diff` (target: `uncommitted`) — fetches diff for AI commit message generation.
+5. (async) `generateCommitMessage(deps, { diffDescription, shortstat, files, patch })` — calls inference model with 10s timeout. Falls back to `"bb: automated commit"` on failure. Diff and file list are truncated before sending to the LLM (32KB / 4KB caps).
+6. (async) `queueCommandAndWait` with `workspace.commit` command (`environmentId`, `workspaceContext`, `message`).
+7. (sync) Parses result — extracts `commitSha`, `commitSubject`.
+8. (sync) If `autoArchiveOnSuccess`:
    - `archiveThread(deps.db, deps.hub, actingThread.id)` — sets `archivedAt` on the thread, notifies hub.
-6. (async) If thread was archived: `maybeCleanupEnvironment(deps, archivedThread.environmentId)`:
+9. (async) If thread was archived: `maybeCleanupEnvironment(deps, archivedThread.environmentId)`:
    - Looks up environment, checks `managed`, not already `destroying`/`destroyed`.
    - Counts non-archived threads in this environment (`threads WHERE environmentId = ? AND archivedAt IS NULL`).
    - If count is 0: updates environment status to `"destroying"`, queues `environment.destroy` command to daemon.
-7. Returns `{ ok, action: "commit", message, autoArchived, commitSha, commitSubject }`.
+10. Returns `{ ok, action: "commit", message, autoArchived, commitSha, commitSubject }`.
 
 ### `squash_merge` action
 
-3. (async) `queueCommandAndWait` with `workspace.squash_merge` command (`environmentId`, `workspaceContext`, `targetBranch`).
-4. (sync) Parses result — extracts `merged`, `commitSha`.
-   5-6. Same auto-archive + cleanup flow as `commit`.
-5. Returns `{ ok, action: "squash_merge", merged, message, autoArchived, commitSha }`.
+3. (async) `queueCommandAndWait` with `workspace.status` — checks for uncommitted changes and current branch. Returns 409 if `currentBranch` is null (detached HEAD).
+4. (async, conditional) If dirty: `queueCommandAndWait` with `workspace.commit` using `"bb: pre-merge commit"` to flush uncommitted changes before merging.
+5. (async) `queueCommandAndWait` with `workspace.diff` (target: `branch_committed`, `mergeBaseBranch`) — fetches branch diff for AI commit message generation.
+6. (async) `generateCommitMessage(deps, ...)` — same inference call as commit, falls back to `"bb: squash merge"`.
+7. (async) `queueCommandAndWait` with `workspace.squash_merge` command (`environmentId`, `workspaceContext`, `targetBranch`, `commitMessage`).
+8. (sync) Parses result — extracts `merged`, `commitSha`.
+   9-10. Same auto-archive + cleanup flow as `commit`.
+11. Returns `{ ok, action: "squash_merge", merged, message, autoArchived, commitSha }`.
 
 ### `promote` action
 
@@ -132,10 +138,9 @@
 ---
 
 > **Updated 2026-03-29:** DB functions now use RETURNING — post-write re-reads eliminated.
+> **Updated 2026-03-30:** Commit and squash merge restructured. `message` removed from `commitOptionsSchema` — server now generates commit messages via AI inference (with fallback). Commit action checks status before proceeding (409 on clean workspace). Squash merge auto-commits dirty state, guards detached HEAD, generates AI message for the squash commit. `commitMessage` added to `workspace.squash_merge` command schema. Diff/file payloads truncated before sending to LLM. `--no-verify` hardcoded in daemon for all automated commits.
 
 ## Review Comments
-
-<!-- Leave comments, questions, or follow-ups below. Delete this file if no action needed. -->
 
 Should the request payload be a discriminated union? is it already one?
 

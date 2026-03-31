@@ -427,7 +427,6 @@ describe.sequential("fake provider smoke integration", () => {
         threadId: thread.id,
         options: {
           autoArchiveOnSuccess: false,
-          message: "smoke commit",
         },
       });
       expect(result.action).toBe("commit");
@@ -443,7 +442,7 @@ describe.sequential("fake provider smoke integration", () => {
         args: ["log", "-1", "--format=%s"],
         cwd: workspacePath,
       });
-      expect(subject.trim()).toBe("smoke commit");
+      expect(subject.trim()).toBe("bb: automated commit");
     }));
 
   it("promotes and demotes a managed worktree after committing changes", () =>
@@ -468,7 +467,6 @@ describe.sequential("fake provider smoke integration", () => {
         threadId: thread.id,
         options: {
           autoArchiveOnSuccess: false,
-          message: "feature work",
         },
       });
       await runEnvironmentAction(harness.api, environment.id, {
@@ -480,7 +478,7 @@ describe.sequential("fake provider smoke integration", () => {
         args: ["log", "-1", "--format=%s"],
         cwd: harness.repoDir,
       });
-      expect(promotedHead.trim()).toBe("feature work");
+      expect(promotedHead.trim()).toBe("bb: automated commit");
 
       await runEnvironmentAction(harness.api, environment.id, {
         action: "demote",

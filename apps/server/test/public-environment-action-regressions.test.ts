@@ -17,6 +17,123 @@ async function readJson(response: Response): Promise<unknown> {
   return response.json();
 }
 
+const CLEAN_STATUS = {
+  workspaceStatus: {
+    workingTree: {
+      hasUncommittedChanges: false,
+      state: "clean" as const,
+      changedFiles: 0,
+      insertions: 0,
+      deletions: 0,
+      files: [],
+    },
+    branch: {
+      currentBranch: "feature",
+      defaultBranch: "main",
+    },
+    mergeBase: null,
+  },
+};
+
+const DIRTY_STATUS = {
+  workspaceStatus: {
+    workingTree: {
+      hasUncommittedChanges: true,
+      state: "dirty_uncommitted" as const,
+      changedFiles: 1,
+      insertions: 1,
+      deletions: 0,
+      files: [],
+    },
+    branch: {
+      currentBranch: "feature",
+      defaultBranch: "main",
+    },
+    mergeBase: null,
+  },
+};
+
+const STUB_DIFF = {
+  diff: {
+    diff: "diff --git a/file.ts b/file.ts",
+    truncated: false,
+    shortstat: " 1 file changed, 1 insertion(+)\n",
+    files: "M\tfile.ts\n",
+  },
+};
+
+/**
+ * Drive the server's commit multi-step flow (status -> diff -> commit)
+ * by responding to each queued command in order.
+ */
+async function driveCommitFlow(
+  harness: Awaited<ReturnType<typeof createTestAppHarness>>,
+  environmentId: string,
+  commitResult: { commitSha: string; commitSubject: string },
+) {
+  const statusCommand = await waitForQueuedCommand(
+    harness,
+    ({ command }) =>
+      command.type === "workspace.status" &&
+      command.environmentId === environmentId,
+  );
+  await reportQueuedCommandSuccess(harness, statusCommand, DIRTY_STATUS);
+
+  const diffCommand = await waitForQueuedCommand(
+    harness,
+    ({ command }) =>
+      command.type === "workspace.diff" &&
+      command.environmentId === environmentId,
+  );
+  await reportQueuedCommandSuccess(harness, diffCommand, STUB_DIFF);
+
+  const commitCommand = await waitForQueuedCommand(
+    harness,
+    ({ command }) =>
+      command.type === "workspace.commit" &&
+      command.environmentId === environmentId,
+  );
+  await reportQueuedCommandSuccess(harness, commitCommand, commitResult);
+
+  return commitCommand;
+}
+
+/**
+ * Drive the server's squash-merge multi-step flow (status -> diff -> squash_merge)
+ * by responding to each queued command in order.
+ */
+async function driveSquashMergeFlow(
+  harness: Awaited<ReturnType<typeof createTestAppHarness>>,
+  environmentId: string,
+  mergeResult: { merged: boolean; commitSha: string },
+) {
+  const statusCommand = await waitForQueuedCommand(
+    harness,
+    ({ command }) =>
+      command.type === "workspace.status" &&
+      command.environmentId === environmentId,
+  );
+  await reportQueuedCommandSuccess(harness, statusCommand, CLEAN_STATUS);
+
+  const diffCommand = await waitForQueuedCommand(
+    harness,
+    ({ command }) =>
+      command.type === "workspace.diff" &&
+      command.environmentId === environmentId,
+  );
+  await reportQueuedCommandSuccess(harness, diffCommand, STUB_DIFF);
+
+  const mergeCommand = await waitForQueuedCommand(
+    harness,
+    ({ command }) =>
+      command.type === "workspace.squash_merge" &&
+      command.environmentId === environmentId,
+  );
+  await reportQueuedCommandSuccess(harness, mergeCommand, mergeResult);
+
+  return mergeCommand;
+}
+
 describe("public environment action regressions", () => {
   it("rejects malformed commit and squash-merge payloads with a 400", async () => {
     const harness = await createTestAppHarness();
@@ -86,22 +203,15 @@ describe("public environment action regressions", () => {
             action: "commit",
             threadId: thread.id,
             options: {
-              message: "Archive after commit",
               autoArchiveOnSuccess: true,
             },
           }),
         },
       );
 
-      const commitCommand = await waitForQueuedCommand(
-        harness,
-        ({ command }) =>
-          command.type === "workspace.commit" &&
-          command.environmentId === environment.id,
-      );
-      await reportQueuedCommandSuccess(harness, commitCommand, {
+      const commitCommand = await driveCommitFlow(harness, environment.id, {
         commitSha: "commit-archive-sha",
-        commitSubject: "Archive after commit",
+        commitSubject: "bb: automated commit",
       });
 
       const response = await responsePromise;
@@ -164,13 +274,7 @@ describe("public environment action regressions", () => {
         },
       );
 
-      const mergeCommand = await waitForQueuedCommand(
-        harness,
-        ({ command }) =>
-          command.type === "workspace.squash_merge" &&
-          command.environmentId === environment.id,
-      );
-      await reportQueuedCommandSuccess(harness, mergeCommand, {
+      const mergeCommand = await driveSquashMergeFlow(harness, environment.id, {
         merged: true,
         commitSha: "squash-archive-sha",
       });
@@ -242,22 +346,15 @@ describe("public environment action regressions", () => {
             action: "commit",
             threadId: actingThread.id,
             options: {
-              message: "Checkpoint changes",
               autoArchiveOnSuccess: true,
             },
           }),
         },
       );
 
-      const commitCommand = await waitForQueuedCommand(
-        harness,
-        ({ command }) =>
-          command.type === "workspace.commit" &&
-          command.environmentId === environment.id,
-      );
-      await reportQueuedCommandSuccess(harness, commitCommand, {
+      await driveCommitFlow(harness, environment.id, {
         commitSha: "targeted-thread-commit",
-        commitSubject: "Checkpoint changes",
+        commitSubject: "bb: automated commit",
       });
 
       const response = await responsePromise;
@@ -274,7 +371,6 @@ describe("public environment action regressions", () => {
             action: "commit",
             threadId: mismatchedThread.id,
             options: {
-              message: "Checkpoint changes",
               autoArchiveOnSuccess: false,
             },
           }),

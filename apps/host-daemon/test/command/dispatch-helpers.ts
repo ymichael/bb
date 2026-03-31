@@ -79,7 +79,7 @@ export function createFakeWorkspace(pathname: string) {
     async getBranches() {
       return ["main"];
     },
-    async commit(options: { message: string }) {
+    async commit(options: { message: string; noVerify: boolean }) {
       state.lastCommitMessage = options.message;
       return {
         commitSha: "commit-1",
@@ -98,7 +98,7 @@ export function createFakeWorkspace(pathname: string) {
         remoteName: "origin",
       };
     },
-    async squashMergeInto(options: { targetBranch: string }) {
+    async squashMergeInto(options: { targetBranch: string; commitMessage: string }) {
       return {
         merged: true,
         commitSha: `merge-${options.targetBranch}`,

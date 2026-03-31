@@ -288,7 +288,7 @@ describe("provisionWorkspace", () => {
 
       // commit
       await fs.writeFile(path.join(repoPath, "new.txt"), "data\n", "utf8");
-      const result = await ws.commit({ message: "Test commit" });
+      const result = await ws.commit({ message: "Test commit", noVerify: false });
       expect(result.commitSha).toBeTruthy();
 
       // reset
@@ -329,7 +329,7 @@ describe("provisionWorkspace", () => {
 
       // Add commit on env branch
       await fs.writeFile(path.join(targetPath, "feature.txt"), "work\n", "utf8");
-      await env.commit({ message: "Feature work" });
+      await env.commit({ message: "Feature work", noVerify: false });
 
       // Promote
       await env.promote(primary);

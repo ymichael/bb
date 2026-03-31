@@ -20,6 +20,15 @@ import {
 } from "../services/entity-lookup.js";
 import { queueCommandAndWait } from "../services/command-wait.js";
 import { requireSourceForHost } from "../services/thread-create-helpers.js";
+import { generateCommitMessage } from "../services/commit-message.js";
+
+const COMMIT_FALLBACK_MESSAGE = "bb: automated commit";
+const SQUASH_MERGE_FALLBACK_MESSAGE = "bb: squash merge";
+const PRE_MERGE_COMMIT_MESSAGE = "bb: pre-merge commit";
+
+/** Caps for diffs sent to the inference model for commit message generation. */
+const AI_MAX_DIFF_BYTES = 32_000;
+const AI_MAX_FILE_LIST_BYTES = 4_000;
 
 function toWorkspaceDiffTarget(query: EnvironmentDiffQuery) {
   switch (query.target) {
@@ -124,17 +133,56 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
 
     switch (payload.action) {
       case "commit": {
+        const workspaceContext = {
+          workspacePath: environment.path,
+          workspaceProvisionType: environment.workspaceProvisionType,
+        };
+
+        const [statusRaw, diffRaw] = await Promise.all([
+          queueCommandAndWait(deps, {
+            hostId: environment.hostId,
+            timeoutMs: COMMAND_TIMEOUT_MS,
+            command: {
+              type: "workspace.status",
+              environmentId: environment.id,
+              workspaceContext,
+            },
+          }),
+          queueCommandAndWait(deps, {
+            hostId: environment.hostId,
+            timeoutMs: COMMAND_TIMEOUT_MS,
+            command: {
+              type: "workspace.diff",
+              environmentId: environment.id,
+              workspaceContext,
+              target: { type: "uncommitted" },
+              maxDiffBytes: AI_MAX_DIFF_BYTES,
+              maxFileListBytes: AI_MAX_FILE_LIST_BYTES,
+            },
+          }),
+        ]);
+        const statusResult = hostDaemonCommandResultSchemaByType["workspace.status"].parse(statusRaw);
+        if (!statusResult.workspaceStatus.workingTree.hasUncommittedChanges) {
+          throw new ApiError(409, "no_changes", "No uncommitted changes to commit");
+        }
+        const diffResult = hostDaemonCommandResultSchemaByType["workspace.diff"].parse(diffRaw);
+
+        const aiMessage = await generateCommitMessage(deps, {
+          diffDescription: "uncommitted changes",
+          shortstat: diffResult.diff.shortstat,
+          files: diffResult.diff.files,
+          patch: diffResult.diff.diff,
+        });
+        const commitMessage = aiMessage ?? COMMIT_FALLBACK_MESSAGE;
+
         const rawResult = await queueCommandAndWait(deps, {
           hostId: environment.hostId,
           timeoutMs: COMMAND_TIMEOUT_MS,
           command: {
             type: "workspace.commit",
             environmentId: environment.id,
-            workspaceContext: {
-              workspacePath: environment.path,
-              workspaceProvisionType: environment.workspaceProvisionType,
-            },
-            message: payload.options.message,
+            workspaceContext,
+            message: commitMessage,
           },
         });
         const result = hostDaemonCommandResultSchemaByType["workspace.commit"].parse(rawResult);
@@ -155,17 +203,72 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
         });
       }
       case "squash_merge": {
+        const workspaceContext = {
+          workspacePath: environment.path,
+          workspaceProvisionType: environment.workspaceProvisionType,
+        };
+        const targetBranch = payload.options.mergeBaseBranch;
+
+        const statusRaw = await queueCommandAndWait(deps, {
+          hostId: environment.hostId,
+          timeoutMs: COMMAND_TIMEOUT_MS,
+          command: {
+            type: "workspace.status",
+            environmentId: environment.id,
+            workspaceContext,
+          },
+        });
+        const statusResult = hostDaemonCommandResultSchemaByType["workspace.status"].parse(statusRaw);
+
+        const currentBranch = statusResult.workspaceStatus.branch.currentBranch;
+        if (!currentBranch) {
+          throw new ApiError(409, "invalid_request", "Cannot squash merge from a detached workspace");
+        }
+
+        if (statusResult.workspaceStatus.workingTree.hasUncommittedChanges) {
+          await queueCommandAndWait(deps, {
+            hostId: environment.hostId,
+            timeoutMs: COMMAND_TIMEOUT_MS,
+            command: {
+              type: "workspace.commit",
+              environmentId: environment.id,
+              workspaceContext,
+              message: PRE_MERGE_COMMIT_MESSAGE,
+            },
+          });
+        }
+
+        const diffRaw = await queueCommandAndWait(deps, {
+          hostId: environment.hostId,
+          timeoutMs: COMMAND_TIMEOUT_MS,
+          command: {
+            type: "workspace.diff",
+            environmentId: environment.id,
+            workspaceContext,
+            target: { type: "branch_committed", mergeBaseBranch: targetBranch },
+            maxDiffBytes: AI_MAX_DIFF_BYTES,
+            maxFileListBytes: AI_MAX_FILE_LIST_BYTES,
+          },
+        });
+        const diffResult = hostDaemonCommandResultSchemaByType["workspace.diff"].parse(diffRaw);
+
+        const aiMessage = await generateCommitMessage(deps, {
+          diffDescription: `squash merge of ${currentBranch} into ${targetBranch}`,
+          shortstat: diffResult.diff.shortstat,
+          files: diffResult.diff.files,
+          patch: diffResult.diff.diff,
+        });
+        const commitMessage = aiMessage ?? SQUASH_MERGE_FALLBACK_MESSAGE;
+
         const rawResult = await queueCommandAndWait(deps, {
           hostId: environment.hostId,
           timeoutMs: COMMAND_TIMEOUT_MS,
           command: {
             type: "workspace.squash_merge",
             environmentId: environment.id,
-            workspaceContext: {
-              workspacePath: environment.path,
-              workspaceProvisionType: environment.workspaceProvisionType,
-            },
-            targetBranch: payload.options.mergeBaseBranch,
+            workspaceContext,
+            targetBranch,
+            commitMessage,
           },
         });
         const result = hostDaemonCommandResultSchemaByType["workspace.squash_merge"].parse(rawResult);

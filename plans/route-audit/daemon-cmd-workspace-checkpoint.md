@@ -25,7 +25,7 @@
    - `ensureGitRepo(this.path)`.
    - Gets `branchName` from `this.currentBranch`. Throws `WorkspaceError("Cannot checkpoint a detached workspace")` if detached.
    - **Conditional commit:**
-     - If `hasUncommittedChanges(this.path)` is true: calls `this.commit({ message: commitMessage })`, which runs `git add -A` then `git commit -m <message>`. Captures `commitSha` from the result.
+     - If `hasUncommittedChanges(this.path)` is true: calls `this.commit({ message: commitMessage, noVerify: true })`, which runs `git add -A` then `git commit --no-verify -m <message>`. Captures `commitSha` from the result.
      - If clean: `commitSha = git rev-parse HEAD` (existing HEAD).
    - **Push:** `git push origin <branchName>`.
    - `remoteName` is hardcoded to `"origin"`.
@@ -52,6 +52,10 @@
 ## Updates
 
 - **Error codes now structured.** `WorkspaceError` carries a `code` field. Checkpoint failures now surface specific codes: `"detached_head"` (detached workspace), `"git_command_failed"` (commit or push failures). Partially resolves flag 2.
+
+## Updates
+
+- **2026-03-30:** `noVerify` is now required on `CommitOptions`. Checkpoint passes `noVerify: true` explicitly — automated system commits skip pre-commit hooks.
 
 ## Review Comments
 

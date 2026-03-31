@@ -1,4 +1,4 @@
-import { complete, getModel } from "@mariozechner/pi-ai";
+import { complete } from "@mariozechner/pi-ai";
 import { renderTemplate } from "@bb/templates";
 import {
   getEnvironment,
@@ -7,6 +7,7 @@ import {
 } from "@bb/db";
 import type { PromptInput } from "@bb/domain";
 import type { AppDeps } from "../types.js";
+import { extractAssistantText, getInferenceModel } from "./inference.js";
 import { queueThreadRenameCommand } from "./thread-commands.js";
 import { appendThreadTitleUpdatedEvent } from "./thread-events.js";
 
@@ -21,25 +22,6 @@ export function deriveTitleFallback(input: PromptInput[]): string | null {
     return null;
   }
   return text.length <= 80 ? text : `${text.slice(0, 77)}...`;
-}
-
-function parseInferenceModel(model: string) {
-  const slashIndex = model.indexOf("/");
-  if (slashIndex === -1) {
-    throw new Error(`Invalid inference model: ${model}`);
-  }
-  return {
-    provider: model.slice(0, slashIndex),
-    modelId: model.slice(slashIndex + 1),
-  };
-}
-
-function extractAssistantText(message: Awaited<ReturnType<typeof complete>>): string {
-  return message.content
-    .filter((item) => item.type === "text")
-    .map((item) => item.text)
-    .join("\n")
-    .trim();
 }
 
 function parseGeneratedTitle(text: string): { branchName?: string; title?: string } {
@@ -68,14 +50,8 @@ export async function generateThreadTitle(
   }
 
   try {
-    const modelInfo = parseInferenceModel(deps.config.inferenceModel);
-    if (modelInfo.provider === "openai" && !deps.config.openAiApiKey) {
-      return;
-    }
-    // @ts-expect-error — pi-ai overloads getModel per provider; our provider string is dynamic
-    const model = getModel(modelInfo.provider, modelInfo.modelId);
+    const model = getInferenceModel(deps);
     if (!model) {
-      deps.logger.warn({ provider: modelInfo.provider }, "Unsupported inference provider");
       return;
     }
     const prompt = renderTemplate("generateThreadMetadata", {

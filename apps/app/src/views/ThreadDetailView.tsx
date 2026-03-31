@@ -99,14 +99,6 @@ function buildAskAgentInputForGitOperation(args: {
         {
           type: "text",
           text: buildCommitFailureFollowUpInstruction(
-            {
-              action: "commit",
-              threadId: "thread",
-              options: {
-                message: "Checkpoint changes",
-                autoArchiveOnSuccess: false,
-              },
-            },
             { errorMessage: details.errorMessage },
           ),
         },
@@ -815,7 +807,6 @@ export function ThreadDetailView() {
         threadId,
         action: "commit",
         options: {
-          message: "Checkpoint changes",
           autoArchiveOnSuccess,
         },
       });

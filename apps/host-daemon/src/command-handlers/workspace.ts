@@ -9,6 +9,7 @@ export async function squashMerge(
   const entry = await requireWorkspaceEnvironment(command, runtimeManager);
   const result = await entry.workspace.squashMergeInto({
     targetBranch: command.targetBranch,
+    commitMessage: command.commitMessage,
   });
   return {
     merged: result.merged,

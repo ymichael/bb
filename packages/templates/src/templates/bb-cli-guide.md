@@ -73,7 +73,7 @@ Operations:
 
 ```
 bb environment commit <environment-id> --thread <thread-id>            # Request an agent-driven commit
-bb environment commit <environment-id> --self --message "feat: add X"  # Commit using the current thread as initiator
+bb environment commit <environment-id> --self                          # Commit using the current thread as initiator
 bb environment squash-merge <environment-id> --thread <thread-id>      # Request an agent-driven squash merge
 bb environment squash-merge <environment-id> --self                    # Squash-merge using the current thread as initiator
 bb environment promote <environment-id>               # Promote an environment to primary checkout

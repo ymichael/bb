@@ -12,7 +12,6 @@ import {
 } from "./helpers.js";
 
 interface EnvironmentCommitCommandOptions {
-  message?: string;
   json?: boolean;
   thread: string;
 }
@@ -45,7 +44,6 @@ export function registerEnvironmentCommands(
     .command("commit <id>")
     .description("Commit changes in an environment")
     .requiredOption("--thread <threadId>", "Thread to act on")
-    .option("--message <message>", "Commit message hint")
     .option("--json", "Print machine-readable JSON output")
     .action(action(async (id: string, opts: EnvironmentCommitCommandOptions) => {
       const client = createClient(getUrl());
@@ -58,7 +56,6 @@ export function registerEnvironmentCommands(
               action: "commit",
               threadId: opts.thread,
               options: {
-                message: opts.message ?? "Checkpoint changes",
                 autoArchiveOnSuccess: false,
               },
             },

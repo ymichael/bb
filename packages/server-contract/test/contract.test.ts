@@ -96,7 +96,7 @@ describe("server-contract canonical schemas", () => {
       environmentActionRequestSchema.parse({
         action: "commit",
         threadId: "thr_123",
-        options: { message: "Checkpoint", autoArchiveOnSuccess: false },
+        options: { autoArchiveOnSuccess: false },
       }),
     ).toMatchObject({
       action: "commit",

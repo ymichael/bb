@@ -47,16 +47,13 @@ export function buildSquashMergeCommitFailureFollowUpInstruction(
 }
 
 export function buildCommitFailureFollowUpInstruction(
-  request: Extract<EnvironmentActionRequest, { action: "commit" }>,
   options?: {
     errorMessage?: string;
   },
 ): string {
-  const exactCommitMessage = request.options?.message?.trim() || undefined;
   const errorMessage = options?.errorMessage?.trim() || undefined;
 
   return renderTemplate("threadOperationCommitFailureFollowUp", {
-    exactCommitMessage,
     errorMessage,
   });
 }

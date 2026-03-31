@@ -26,7 +26,8 @@ import fs from "node:fs/promises";
 
 export interface DiffOptions {
   target?: WorkspaceDiffTarget;
-  maxBytes?: number;
+  maxDiffBytes?: number;
+  maxFileListBytes?: number;
 }
 
 export interface StatusOptions {
@@ -37,6 +38,7 @@ export type DiffResult = ThreadGitDiffResponse;
 
 export interface CommitOptions {
   message: string;
+  noVerify: boolean;
 }
 
 export interface CommitResult {
@@ -61,6 +63,7 @@ export interface CheckpointResult {
 
 export interface SquashMergeOptions {
   targetBranch: string;
+  commitMessage: string;
 }
 
 export interface SquashMergeResult {
@@ -88,8 +91,6 @@ type ReadDiffArtifactsArgs = {
   numstatArgs: string[];
 };
 
-const SQUASH_MERGE_PREP_COMMIT_MESSAGE = "bb squash merge prep";
-const SQUASH_MERGE_COMMIT_MESSAGE = "bb squash merge";
 const UNTRACKED_DIFF_BATCH_SIZE = 10;
 
 function countWorktrees(porcelainOutput: string): number {
@@ -258,7 +259,8 @@ export class Workspace {
 
     const target = options.target ?? { type: "uncommitted" as const };
     return this.buildDiffSummary({
-      maxBytes: options.maxBytes,
+      maxDiffBytes: options.maxDiffBytes,
+      maxFileListBytes: options.maxFileListBytes,
       target,
     });
   }
@@ -271,7 +273,11 @@ export class Workspace {
     await ensureGitRepo(this.path);
 
     await runGit(["add", "-A"], { cwd: this.path });
-    await runGit(["commit", "-m", options.message], { cwd: this.path });
+    const commitArgs = ["commit", "-m", options.message];
+    if (options.noVerify) {
+      commitArgs.push("--no-verify");
+    }
+    await runGit(commitArgs, { cwd: this.path });
     const commitSha = await revParse(this.path, "HEAD");
     const commitSubject = (
       await runGit(["log", "-1", "--pretty=%s"], { cwd: this.path })
@@ -311,6 +317,7 @@ export class Workspace {
       commitSha = (
         await this.commit({
           message: options.commitMessage,
+          noVerify: true,
         })
       ).commitSha;
     } else {
@@ -397,14 +404,6 @@ export class Workspace {
       throw new WorkspaceError("detached_head", "Cannot squash merge from a detached workspace");
     }
 
-    if (await hasUncommittedChanges(this.path)) {
-      await this.commit({ message: SQUASH_MERGE_PREP_COMMIT_MESSAGE });
-    }
-
-    await this.fetch({ remote: "origin", branch: options.targetBranch }).catch(
-      () => undefined,
-    );
-
     const tempDir = await createTempDir("bb-squash-");
     const worktreeCountBefore = await runGit(["worktree", "list", "--porcelain"], {
       cwd: this.path,
@@ -435,7 +434,7 @@ export class Workspace {
       }
 
       await runGit(["merge", "--squash", sourceBranch], { cwd: tempDir });
-      await runGit(["commit", "-m", SQUASH_MERGE_COMMIT_MESSAGE], { cwd: tempDir });
+      await runGit(["commit", "--no-verify", "-m", options.commitMessage], { cwd: tempDir });
       const commitSha = await revParse(tempDir, "HEAD");
 
       return {
@@ -465,22 +464,20 @@ export class Workspace {
 
   private async buildDiffSummary(args: {
     target: WorkspaceDiffTarget;
-    maxBytes?: number;
+    maxDiffBytes?: number;
+    maxFileListBytes?: number;
   }): Promise<DiffSummary> {
-    const [diff, shortstat, files] = await this.readDiffArtifacts(args.target);
-    const truncated = typeof args.maxBytes === "number" && diff.length > args.maxBytes;
-    if (truncated) {
-      return {
-        diff: diff.slice(0, args.maxBytes),
-        files,
-        shortstat,
-        truncated,
-      };
-    }
+    const [rawDiff, shortstat, rawFiles] = await this.readDiffArtifacts(args.target);
+
+    const diffTruncated =
+      typeof args.maxDiffBytes === "number" && rawDiff.length > args.maxDiffBytes;
+    const fileTruncated =
+      typeof args.maxFileListBytes === "number" && rawFiles.length > args.maxFileListBytes;
+    const truncated = diffTruncated || fileTruncated;
 
     return {
-      diff,
-      files,
+      diff: diffTruncated ? rawDiff.slice(0, args.maxDiffBytes) : rawDiff,
+      files: fileTruncated ? rawFiles.slice(0, args.maxFileListBytes) : rawFiles,
       shortstat,
       truncated,
     };

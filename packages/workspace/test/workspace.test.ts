@@ -156,6 +156,7 @@ describe("Workspace", () => {
     await fs.writeFile(path.join(repoPath, "README.md"), "commit me\n", "utf8");
     const commit = await workspace.commit({
       message: "Commit from workspace",
+      noVerify: false,
     });
     const head = (
       await runGit(["rev-parse", "HEAD"], { cwd: repoPath })
@@ -216,25 +217,19 @@ describe("Workspace", () => {
     await fs.writeFile(path.join(repoPath, "README.md"), "squash\n", "utf8");
     await runGit(["add", "README.md"], { cwd: repoPath });
     await runGit(["commit", "-m", "Feature work"], { cwd: repoPath });
-    await fs.writeFile(path.join(repoPath, "README.md"), "squash plus local changes\n", "utf8");
     await runGit(["branch", "-D", "main"], { cwd: repoPath });
 
     const workspace = new Workspace(repoPath);
     const result = await workspace.squashMergeInto({
       targetBranch: "main",
+      commitMessage: "feat: squash merge feature into main",
     });
 
-    const sourceBranchSubject = (
-      await runGit(["log", "-1", "--pretty=%s", "feature"], { cwd: repoPath })
-    ).stdout.trim();
     const targetBranchSubject = (
       await runGit(["log", "-1", "--pretty=%s", "main"], { cwd: repoPath })
     ).stdout.trim();
-    const mergedReadme = await fs.readFile(path.join(repoPath, "README.md"), "utf8");
     expect(result.merged).toBe(true);
-    expect(sourceBranchSubject).toBe("bb squash merge prep");
-    expect(targetBranchSubject).toBe("bb squash merge");
-    expect(mergedReadme).toBe("squash plus local changes\n");
+    expect(targetBranchSubject).toBe("feat: squash merge feature into main");
   });
 
   it("rejects git mutations for non-git directories", async () => {
@@ -244,7 +239,7 @@ describe("Workspace", () => {
     expect(await workspace.isGitRepo).toBe(false);
     expect(await workspace.currentBranch).toBeUndefined();
     await expect(
-      workspace.commit({ message: "nope" }),
+      workspace.commit({ message: "nope", noVerify: false }),
     ).rejects.toThrow(/not a git repository/u);
     await expect(workspace.getStatus()).rejects.toThrow(WorkspaceError);
   });
