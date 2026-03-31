@@ -136,7 +136,6 @@ describe("public thread lifecycle regressions", () => {
       const thread = seedThread(harness.deps, {
         projectId: project.id,
         environmentId: environment.id,
-        mergeBaseBranch: "main",
       });
 
       const responsePromise = harness.app.request(
@@ -199,11 +198,11 @@ describe("public thread lifecycle regressions", () => {
         workspaceProvisionType: "managed-worktree",
         path: "/tmp/demote-secondary-source/.bb-worktrees/thread",
         branchName: "bb/demote-secondary",
+        mergeBaseBranch: "main",
       });
       const thread = seedThread(harness.deps, {
         projectId: project.id,
         environmentId: environment.id,
-        mergeBaseBranch: "main",
       });
 
       const responsePromise = harness.app.request(

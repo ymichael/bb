@@ -109,7 +109,6 @@ describe("resolveThreadPlaceholder", () => {
       environmentId: null,
       title: null,
       titleFallback: null,
-      mergeBaseBranch: null,
       parentThreadId: null,
       archivedAt: null,
     };
@@ -136,7 +135,6 @@ describe("resolveThreadPlaceholder", () => {
       environmentId: null,
       title: null,
       titleFallback: null,
-      mergeBaseBranch: null,
       parentThreadId: null,
       archivedAt: null,
     };

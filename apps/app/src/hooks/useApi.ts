@@ -33,6 +33,7 @@ import type {
   ThreadDraftListResponse,
   ThreadTimelineResponse,
   TimelineToolDetailsResponse,
+  UpdateEnvironmentRequest,
   UpdateProjectRequest,
   UploadedPromptAttachment,
   WorkspaceFileListResponse,
@@ -760,20 +761,44 @@ export function useStopThread() {
   });
 }
 
+interface UpdateEnvironmentMutationArgs extends UpdateEnvironmentRequest {
+  id: string;
+}
+
+interface UpdateThreadMutationArgs {
+  id: string;
+  title?: string;
+  parentThreadId?: string | null;
+}
+
+export function useUpdateEnvironment() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...req }: UpdateEnvironmentMutationArgs) =>
+      api.updateEnvironment(id, req),
+    onSuccess: (environment) => {
+      queryClient.setQueryData<Environment>(
+        [ENVIRONMENT_QUERY_KEY, environment.id],
+        environment,
+      );
+      queryClient.invalidateQueries({
+        queryKey: [ENVIRONMENT_WORK_STATUS_QUERY_KEY, environment.id],
+      });
+      queryClient.invalidateQueries({
+        queryKey: [ENVIRONMENT_GIT_DIFF_QUERY_KEY, environment.id],
+      });
+      queryClient.invalidateQueries({
+        queryKey: [ENVIRONMENT_MERGE_BASE_BRANCHES_QUERY_KEY, environment.id],
+      });
+      queryClient.invalidateQueries({ queryKey: ["status"] });
+    },
+  });
+}
+
 export function useUpdateThread() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (
-      {
-        id,
-        ...req
-      }: {
-        id: string;
-        title?: string;
-        mergeBaseBranch?: string | null;
-        parentThreadId?: string | null;
-      },
-    ) =>
+    mutationFn: ({ id, ...req }: UpdateThreadMutationArgs) =>
       api.updateThread(id, req),
     onSuccess: (thread) => {
       queryClient.setQueryData<Thread>(["thread", thread.id], thread);

@@ -33,6 +33,7 @@ import type {
   ThreadDraftListResponse,
   ThreadTimelineResponse,
   TimelineToolDetailsResponse,
+  UpdateEnvironmentRequest,
   UpdateProjectRequest,
   UpdateThreadRequest,
   UpdateProjectSourceRequest,
@@ -486,6 +487,13 @@ export async function markThreadUnread(id: string): Promise<Thread> {
 
 export async function getEnvironment(id: string): Promise<Environment> {
   return request<Environment>(apiClient.environments[":id"].$get({ param: { id } }));
+}
+
+export async function updateEnvironment(
+  id: string,
+  req: UpdateEnvironmentRequest,
+): Promise<Environment> {
+  return request<Environment>(apiClient.environments[":id"].$patch({ param: { id }, json: req }));
 }
 
 export async function getEnvironmentWorkStatus(

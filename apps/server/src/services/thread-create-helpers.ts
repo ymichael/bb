@@ -152,7 +152,6 @@ export function createThreadRecord(
   deps: Pick<AppDeps, "db" | "hub">,
   request: ThreadCreateServiceRequest,
   environmentId: string | null,
-  mergeBaseBranch: string | null,
 ) {
   return createThread(deps.db, deps.hub, {
     projectId: request.projectId,
@@ -163,7 +162,6 @@ export function createThreadRecord(
     titleFallback: deriveTitleFallback(request.input),
     parentThreadId: request.parentThreadId ?? null,
     status: "created",
-    mergeBaseBranch,
   });
 }
 

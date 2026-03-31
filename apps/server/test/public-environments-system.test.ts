@@ -368,11 +368,11 @@ describe("public environment and system routes", () => {
         managed: true,
         workspaceProvisionType: "managed-worktree",
         branchName: "bb/promote-test",
+        mergeBaseBranch: "main",
       });
       const primaryThread = seedThread(harness.deps, {
         projectId: project.id,
         environmentId: environment.id,
-        mergeBaseBranch: "main",
       });
 
       const promotePromise = harness.app.request(
@@ -461,7 +461,6 @@ describe("public environment and system routes", () => {
       const thread = seedThread(harness.deps, {
         projectId: project.id,
         environmentId: environment.id,
-        mergeBaseBranch: "main",
       });
 
       const responsePromise = harness.app.request(
@@ -569,7 +568,6 @@ describe("public environment and system routes", () => {
       const thread = seedThread(harness.deps, {
         projectId: project.id,
         environmentId: environment.id,
-        mergeBaseBranch: "main",
       });
 
       const responsePromise = harness.app.request(
@@ -710,7 +708,6 @@ describe("public environment and system routes", () => {
       const thread = seedThread(harness.deps, {
         projectId: project.id,
         environmentId: environment.id,
-        mergeBaseBranch: "main",
       });
 
       const responsePromise = harness.app.request(

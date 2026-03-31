@@ -20,6 +20,7 @@ import {
   useThreadDefaultExecutionOptions,
   useThreadDrafts,
   useThreads,
+  useUpdateEnvironment,
   useUpdateThread,
   useUploadPromptAttachment,
 } from "../hooks/useApi";
@@ -225,6 +226,7 @@ export function ThreadDetailView() {
   const markThreadRead = useMarkThreadRead();
   const markThreadUnread = useMarkThreadUnread();
   const deleteThread = useDeleteThread();
+  const updateEnvironment = useUpdateEnvironment();
   const updateThread = useUpdateThread();
   const uploadPromptAttachment = useUploadPromptAttachment();
   const promptDraft = usePromptDraftStorage({ projectId, threadId });
@@ -333,12 +335,13 @@ export function ThreadDetailView() {
       captureTimelineScrollPositionRef.current();
     },
     preferredTheme,
-    defaultMergeBaseBranch: thread?.mergeBaseBranch ?? environment?.defaultBranch ?? undefined,
+    defaultMergeBaseBranch:
+      environment?.mergeBaseBranch ?? environment?.defaultBranch ?? undefined,
     environmentId: thread?.environmentId ?? undefined,
   });
   const requestedMergeBaseBranch =
     selectedMergeBaseBranch ??
-    thread?.mergeBaseBranch ??
+    environment?.mergeBaseBranch ??
     environment?.defaultBranch ??
     undefined;
   const workStatusQuery = useEnvironmentWorkStatus(
@@ -402,11 +405,12 @@ export function ThreadDetailView() {
     threadMergeBaseBranch,
     threadMergeBaseCandidates,
   } = useThreadMergeBase({
+    environment,
     mergeBaseBranchOptions,
     selectedMergeBaseBranch,
     setSelectedMergeBaseBranch,
     thread,
-    updateThread,
+    updateEnvironment,
     workspaceStatus,
   });
 
@@ -785,7 +789,8 @@ export function ThreadDetailView() {
     markThreadRead.isPending ||
     markThreadUnread.isPending ||
     deleteThread.isPending ||
-    updateThread.isPending;
+    updateThread.isPending ||
+    updateEnvironment.isPending;
   const handleCopyThreadBranch = async () => {
     if (!threadBranchName) {
       return;
@@ -1157,7 +1162,7 @@ export function ThreadDetailView() {
           unarchivePending:
             unarchiveThread.isPending &&
             unarchiveThread.variables?.id === thread.id,
-          updateThreadPending: updateThread.isPending,
+          updateThreadPending: updateThread.isPending || updateEnvironment.isPending,
           workspaceStatusFiles: workspaceWorkingTree?.files,
         }}
         secondaryPanel={{

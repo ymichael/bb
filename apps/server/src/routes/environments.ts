@@ -141,7 +141,7 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
 
   post("/environments/:id/actions", environmentActionRequestSchema, async (context, payload) => {
     const environment = requireReadyEnvironment(deps.db, context.req.param("id"));
-    const actingThread = requireThreadInEnvironment(
+    requireThreadInEnvironment(
       deps.db,
       environment.id,
       payload.threadId,
@@ -319,7 +319,8 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
           environment.projectId,
           environment.hostId,
         );
-        if (!environment.branchName || !actingThread.mergeBaseBranch) {
+        const mergeBaseBranch = environment.mergeBaseBranch ?? environment.defaultBranch;
+        if (!environment.branchName || !mergeBaseBranch) {
           throw new ApiError(409, "invalid_request", "Environment cannot be demoted");
         }
         await queueCommandAndWait(deps, {
@@ -333,7 +334,7 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
               workspaceProvisionType: environment.workspaceProvisionType,
             },
             primaryPath: source.path,
-            defaultBranch: actingThread.mergeBaseBranch,
+            defaultBranch: mergeBaseBranch,
             envBranch: environment.branchName,
           },
         });

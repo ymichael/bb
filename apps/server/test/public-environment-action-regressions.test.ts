@@ -213,11 +213,11 @@ describe("public environment action regressions", () => {
         workspaceProvisionType: "managed-worktree",
         path: "/tmp/demote-guard-project/.bb-worktrees/missing-env-branch",
         branchName: null,
+        mergeBaseBranch: "main",
       });
       const threadMissingEnvBranch = seedThread(harness.deps, {
         projectId: project.id,
         environmentId: missingEnvBranch.id,
-        mergeBaseBranch: "main",
       });
 
       const missingEnvBranchResponse = await harness.app.request(
@@ -244,11 +244,12 @@ describe("public environment action regressions", () => {
         workspaceProvisionType: "managed-worktree",
         path: "/tmp/demote-guard-project/.bb-worktrees/missing-merge-base",
         branchName: "bb/demote-guard",
+        defaultBranch: null,
+        mergeBaseBranch: null,
       });
       const threadMissingMergeBase = seedThread(harness.deps, {
         projectId: project.id,
         environmentId: missingMergeBase.id,
-        mergeBaseBranch: null,
       });
 
       const missingMergeBaseResponse = await harness.app.request(

@@ -130,7 +130,6 @@ export const threads = sqliteTable(
     title: text("title"),
     titleFallback: text("title_fallback"),
     status: text("status", { enum: threadStatusValues }).notNull().default("created"),
-    mergeBaseBranch: text("merge_base_branch"),
     parentThreadId: text("parent_thread_id").references(
       (): AnySQLiteColumn => threads.id,
       { onDelete: "set null" },

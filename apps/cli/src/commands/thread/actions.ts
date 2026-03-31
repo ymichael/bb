@@ -1,5 +1,5 @@
 import { Command } from "commander";
-import { type ReasoningLevel, type Thread, type ThreadStatus } from "@bb/domain";
+import { type Environment, type ReasoningLevel, type Thread, type ThreadStatus } from "@bb/domain";
 import { action } from "../../action.js";
 import { assertNever } from "../../assert-never.js";
 import { createClient, unwrap } from "../../client.js";
@@ -59,7 +59,6 @@ interface PostThreadMessageArgs {
 
 interface ThreadUpdateBody {
   title?: string;
-  mergeBaseBranch?: string;
   parentThreadId?: string | null;
 }
 
@@ -99,21 +98,38 @@ export function registerActionsCommands(
       if (opts.title) {
         body.title = opts.title;
       }
-      if (opts.mergeBaseBranch) {
-        body.mergeBaseBranch = opts.mergeBaseBranch;
-      }
       if (opts.parentThread) {
         body.parentThreadId = opts.parentThread;
       } else if (opts.clearParentThread) {
         body.parentThreadId = null;
       }
 
-      const thread = await unwrap<Thread>(
-        client.api.v1.threads[":id"].$patch({
-          param: { id: threadId },
-          json: body,
-        }),
+      const currentThread = await unwrap<Thread>(
+        client.api.v1.threads[":id"].$get({ param: { id: threadId } }),
       );
+      const needsThreadPatch = Object.keys(body).length > 0;
+
+      let updatedEnvironment: Environment | undefined;
+      if (opts.mergeBaseBranch) {
+        if (!currentThread.environmentId) {
+          throw new Error("Thread is not attached to an environment.");
+        }
+        updatedEnvironment = await unwrap<Environment>(
+          client.api.v1.environments[":id"].$patch({
+            param: { id: currentThread.environmentId },
+            json: { mergeBaseBranch: opts.mergeBaseBranch },
+          }),
+        );
+      }
+
+      const thread = needsThreadPatch
+        ? await unwrap<Thread>(
+            client.api.v1.threads[":id"].$patch({
+              param: { id: threadId },
+              json: body,
+            }),
+          )
+        : currentThread;
       if (outputJson(opts, thread)) return;
       console.log(`Thread ${thread.id} updated`);
       if (opts.title) {
@@ -121,7 +137,7 @@ export function registerActionsCommands(
       }
       if (opts.mergeBaseBranch) {
         console.log(
-          `Merge base branch: ${thread.mergeBaseBranch ?? opts.mergeBaseBranch}`,
+          `Merge base branch: ${updatedEnvironment?.mergeBaseBranch ?? opts.mergeBaseBranch}`,
         );
       }
       if (opts.parentThread || opts.clearParentThread) {

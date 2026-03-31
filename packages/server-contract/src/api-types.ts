@@ -121,14 +121,12 @@ export type ArchiveThreadRequest = z.infer<typeof archiveThreadRequestSchema>;
 export const updateThreadRequestSchema = z
   .object({
     title: z.string().min(1).nullable(),
-    mergeBaseBranch: z.string().min(1).nullable(),
     parentThreadId: z.string().min(1).nullable(),
   })
   .partial()
   .refine(
     (value) =>
       value.title !== undefined ||
-      value.mergeBaseBranch !== undefined ||
       value.parentThreadId !== undefined,
     "At least one field must be provided",
   );

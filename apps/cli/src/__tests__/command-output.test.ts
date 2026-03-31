@@ -43,7 +43,6 @@ function makeThread(overrides: Partial<Thread> & { id: string; projectId: string
     status: "idle",
     title: null,
     titleFallback: null,
-    mergeBaseBranch: null,
     environmentId: null,
     parentThreadId: null,
     archivedAt: null,
@@ -1110,12 +1109,14 @@ describe("CLI JSON output contracts", () => {
       createdAt: 1,
       updatedAt: 1,
     });
+    const get = vi.fn(async () => thread);
     const patch = vi.fn(async () => thread);
     createClientMock.mockReturnValue(asServerClient({
       api: {
         v1: {
           threads: {
             ":id": {
+              $get: get,
               $patch: patch,
             },
           },
@@ -1148,12 +1149,14 @@ describe("CLI JSON output contracts", () => {
       createdAt: 1,
       updatedAt: 1,
     });
+    const get = vi.fn(async () => thread);
     const patch = vi.fn(async () => thread);
     createClientMock.mockReturnValue(asServerClient({
       api: {
         v1: {
           threads: {
             ":id": {
+              $get: get,
               $patch: patch,
             },
           },
@@ -1342,7 +1345,11 @@ describe("CLI JSON output contracts", () => {
           threadId: "thread-t0",
           seq: 3,
           type: "turn/completed",
-          data: { reason: "done" },
+          data: {
+            providerThreadId: "provider-thread-t0",
+            turnId: "turn-1",
+            status: "completed",
+          },
           createdAt: Date.now(),
         }),
         {

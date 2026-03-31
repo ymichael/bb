@@ -25,7 +25,7 @@ import {
   sendTextMessage,
   stopThread,
   unarchiveThread,
-  updateThread,
+  updateEnvironment,
 } from "../helpers/api.js";
 import {
   waitForCommand,
@@ -451,7 +451,7 @@ describe.sequential("fake provider smoke integration", () => {
       });
 
       const workspacePath = environment.path ?? "";
-      await updateThread(harness.api, thread.id, {
+      await updateEnvironment(harness.api, environment.id, {
         mergeBaseBranch: "main",
       });
       await createTestFile({

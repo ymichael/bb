@@ -213,7 +213,7 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
       throw new ApiError(409, "invalid_request", "Thread is already archived");
     }
     if (!force && environment.status === "ready" && environment.path) {
-      const mergeBaseBranch = thread.mergeBaseBranch ?? environment.defaultBranch;
+      const mergeBaseBranch = environment.mergeBaseBranch ?? environment.defaultBranch;
       if (!mergeBaseBranch && environment.isGitRepo) {
         throw new ApiError(409, "invalid_request", "Thread archive requires a merge base branch");
       }

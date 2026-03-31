@@ -1,38 +1,41 @@
 import { useCallback, useEffect, useMemo, useRef } from "react";
-import type { Thread, WorkspaceStatus } from "@bb/domain";
+import type { Environment, Thread, WorkspaceStatus } from "@bb/domain";
 import { toast } from "sonner";
 import { getMergeBaseBranchCandidates } from "@/components/thread/MergeBaseBranchPicker";
-import { useUpdateThread } from "../hooks/useApi";
+import { useUpdateEnvironment } from "../hooks/useApi";
 
 interface UseThreadMergeBaseParams {
+  environment?: Environment;
   mergeBaseBranchOptions?: readonly string[];
   selectedMergeBaseBranch?: string;
   setSelectedMergeBaseBranch: (branch: string | undefined) => void;
   thread?: Thread;
-  updateThread: ReturnType<typeof useUpdateThread>;
+  updateEnvironment: ReturnType<typeof useUpdateEnvironment>;
   workspaceStatus?: WorkspaceStatus;
 }
 
 type MergeBaseBranchChangeHandler = (branch: string) => void;
 
 export function useThreadMergeBase({
+  environment,
   mergeBaseBranchOptions,
   selectedMergeBaseBranch,
   setSelectedMergeBaseBranch,
   thread,
-  updateThread,
+  updateEnvironment,
   workspaceStatus,
 }: UseThreadMergeBaseParams) {
-  const mergeBaseStateThreadIdRef = useRef<string | undefined>(undefined);
+  const mergeBaseStateKeyRef = useRef<string | undefined>(undefined);
+  const mergeBaseStateKey = environment?.id ?? thread?.id;
 
   useEffect(() => {
-    if (mergeBaseStateThreadIdRef.current === thread?.id) {
+    if (mergeBaseStateKeyRef.current === mergeBaseStateKey) {
       return;
     }
 
-    mergeBaseStateThreadIdRef.current = thread?.id;
-    setSelectedMergeBaseBranch(thread?.mergeBaseBranch ?? undefined);
-  }, [setSelectedMergeBaseBranch, thread?.id, thread?.mergeBaseBranch]);
+    mergeBaseStateKeyRef.current = mergeBaseStateKey;
+    setSelectedMergeBaseBranch(environment?.mergeBaseBranch ?? undefined);
+  }, [environment?.mergeBaseBranch, mergeBaseStateKey, setSelectedMergeBaseBranch]);
 
   const effectiveMergeBaseBranch =
     selectedMergeBaseBranch ??
@@ -59,7 +62,7 @@ export function useThreadMergeBase({
 
   const handleThreadMergeBaseBranchChange: MergeBaseBranchChangeHandler = useCallback(
     (branch) => {
-      if (!thread) {
+      if (!environment || !thread?.environmentId) {
         return;
       }
 
@@ -69,21 +72,21 @@ export function useThreadMergeBase({
         normalizedBranch.length > 0 && normalizedBranch !== defaultBranch
           ? normalizedBranch
           : null;
-      const currentPersistedMergeBaseBranch = thread.mergeBaseBranch ?? null;
+      const currentPersistedMergeBaseBranch = environment.mergeBaseBranch;
 
       setSelectedMergeBaseBranch(normalizedBranch);
       if (nextPersistedMergeBaseBranch === currentPersistedMergeBaseBranch) {
         return;
       }
 
-      updateThread.mutate(
+      updateEnvironment.mutate(
         {
-          id: thread.id,
+          id: environment.id,
           mergeBaseBranch: nextPersistedMergeBaseBranch,
         },
         {
           onError: (error) => {
-            setSelectedMergeBaseBranch(thread.mergeBaseBranch ?? undefined);
+            setSelectedMergeBaseBranch(environment.mergeBaseBranch ?? undefined);
             toast.error(
               error instanceof Error
                 ? error.message
@@ -93,7 +96,13 @@ export function useThreadMergeBase({
         },
       );
     },
-    [setSelectedMergeBaseBranch, thread, updateThread, workspaceStatus?.branch.defaultBranch],
+    [
+      environment,
+      setSelectedMergeBaseBranch,
+      thread?.environmentId,
+      updateEnvironment,
+      workspaceStatus?.branch.defaultBranch,
+    ],
   );
 
   return {

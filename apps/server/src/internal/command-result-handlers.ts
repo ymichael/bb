@@ -6,7 +6,6 @@ import {
   hostDaemonCommands,
   threads,
   updateEnvironment,
-  updateThread,
 } from "@bb/db";
 import {
   hostDaemonCommandSchema,
@@ -74,12 +73,6 @@ async function handleProvisionCommandResult(
     });
 
     for (const thread of boundThreads) {
-      if (!thread.mergeBaseBranch && report.result.defaultBranch) {
-        updateThread(deps.db, deps.hub, thread.id, {
-          mergeBaseBranch: report.result.defaultBranch,
-        });
-      }
-
       const isInitiator = thread.id === command.initiator?.threadId;
       let entries = cwdBranchEntries;
       if (isInitiator && report.result.transcript.length > 0) {
