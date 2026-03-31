@@ -20,7 +20,6 @@ import {
   parseStoredEventRow,
 } from "./thread-data.js";
 
-export const TIMELINE_EXCLUDED_EVENT_TYPES = TIMELINE_NOISE_EVENT_TYPES;
 const MIN_AGENT_MESSAGE_DELTAS_FOR_SUMMARY_COMPACTION = 1000;
 
 export function toThreadEventWithMeta(
@@ -96,7 +95,7 @@ export function buildThreadTimeline(
     threadId: thread.id,
     ...(options.includeManagerDebugView === true
       ? {}
-      : { excludedTypes: TIMELINE_EXCLUDED_EVENT_TYPES }),
+      : { excludedTypes: TIMELINE_NOISE_EVENT_TYPES }),
   });
   const eventRows = compactSummaryStoredEventRows(rawEventRows);
   const messages = toViewMessages(

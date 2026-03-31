@@ -13,6 +13,7 @@ import {
 } from "@bb/db";
 import {
   buildTimelineRows,
+  TIMELINE_NOISE_EVENT_TYPES,
   toViewMessages,
   type ThreadEventWithMeta,
 } from "@bb/core-ui";
@@ -22,7 +23,6 @@ import type { ViewMessage } from "@bb/domain";
 import {
   buildThreadTimeline,
   compactSummaryStoredEventRows,
-  TIMELINE_EXCLUDED_EVENT_TYPES,
   toThreadEventWithMeta,
 } from "../../src/services/timeline.js";
 import {
@@ -150,7 +150,7 @@ function createTimelineBenchmarkScenario(
   );
   const storedEventRows = listRecentStoredEventRows(db, {
     threadId: thread.id,
-    excludedTypes: TIMELINE_EXCLUDED_EVENT_TYPES,
+    excludedTypes: TIMELINE_NOISE_EVENT_TYPES,
   });
   const summaryEventRows = compactSummaryStoredEventRows(storedEventRows);
   const decodedSummaryEvents = summaryEventRows.map((row) =>
@@ -166,7 +166,7 @@ function createTimelineBenchmarkScenario(
   const loadSummaryStoredRows = () =>
     listRecentStoredEventRows(db, {
       threadId: thread.id,
-      excludedTypes: TIMELINE_EXCLUDED_EVENT_TYPES,
+      excludedTypes: TIMELINE_NOISE_EVENT_TYPES,
     });
   const compactSummaryStoredRows = () => compactSummaryStoredEventRows(storedEventRows);
   const loadTokenUsageRows = () =>
