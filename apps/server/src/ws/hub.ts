@@ -104,6 +104,7 @@ export class NotificationHub implements DbNotifier {
     this.cancelPendingDaemonDisconnect(sessionId);
     const existingSessionId = this.daemonSessionIdsByHost.get(hostId);
     if (existingSessionId && existingSessionId !== sessionId) {
+      this.cancelPendingDaemonDisconnect(existingSessionId);
       this.unregisterDaemon(existingSessionId);
     }
     this.daemonSessions.set(sessionId, { hostId, socket });

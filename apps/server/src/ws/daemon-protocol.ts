@@ -11,6 +11,7 @@ import {
 import { hostDaemonDaemonWsMessageSchema } from "@bb/host-daemon-contract";
 import { DAEMON_DISCONNECT_GRACE_MS } from "../constants.js";
 import { ApiError } from "../errors.js";
+import { buildSystemErrorEventData } from "../services/thread-events.js";
 import type { AppDeps } from "../types.js";
 import { requireActiveSession } from "../internal/session-state.js";
 import { decodeSocketPayload } from "./decode-payload.js";
@@ -115,31 +116,38 @@ function interruptThreadsForDisconnectedHost(
   deps: Pick<AppDeps, "db">,
   hostId: string,
 ): { eventThreadIds: string[]; statusThreadIds: string[] } {
-  const interruptedThreads = deps.db
-    .select({
-      environmentId: threads.environmentId,
-      id: threads.id,
-    })
-    .from(threads)
-    .innerJoin(environments, eq(threads.environmentId, environments.id))
-    .where(
-      and(
-        eq(environments.hostId, hostId),
-        inArray(threads.status, ["active", "provisioning"]),
-      ),
-    )
-    .all();
-
-  if (interruptedThreads.length === 0) {
-    return {
-      eventThreadIds: [],
-      statusThreadIds: [],
-    };
-  }
-
   const now = Date.now();
+  const disconnectErrorData = buildSystemErrorEventData({
+    code: "host_daemon_disconnected",
+    detail: "The host daemon disconnected while work was in progress.",
+    message: "Host daemon disconnected during active work",
+  });
+
   return deps.db.transaction(
     (tx) => {
+      const interruptedThreads = tx
+        .select({
+          environmentId: threads.environmentId,
+          id: threads.id,
+        })
+        .from(threads)
+        .innerJoin(environments, eq(threads.environmentId, environments.id))
+        .where(
+          and(
+            eq(environments.hostId, hostId),
+            inArray(threads.status, ["active", "provisioning"]),
+          ),
+        )
+        .all();
+
+      if (interruptedThreads.length === 0) {
+        return {
+          eventThreadIds: [],
+          statusThreadIds: [],
+        };
+      }
+
+      const interruptedThreadIds = interruptedThreads.map((thread) => thread.id);
       const maxSequences = new Map(
         tx
           .select({
@@ -147,12 +155,7 @@ function interruptThreadsForDisconnectedHost(
             threadId: events.threadId,
           })
           .from(events)
-          .where(
-            inArray(
-              events.threadId,
-              interruptedThreads.map((thread) => thread.id),
-            ),
-          )
+          .where(inArray(events.threadId, interruptedThreadIds))
           .groupBy(events.threadId)
           .all()
           .map((row) => [row.threadId, row.maxSeq ?? 0] as const),
@@ -165,11 +168,7 @@ function interruptThreadsForDisconnectedHost(
             maxSequences.set(thread.id, nextSequence);
             return {
               createdAt: now,
-              data: JSON.stringify({
-                code: "host_daemon_disconnected",
-                detail: "The host daemon disconnected while work was in progress.",
-                message: "Host daemon disconnected during active work",
-              }),
+              data: JSON.stringify(disconnectErrorData),
               environmentId: thread.environmentId,
               id: createEventId(),
               itemId: null,
@@ -191,10 +190,7 @@ function interruptThreadsForDisconnectedHost(
         })
         .where(
           and(
-            inArray(
-              threads.id,
-              interruptedThreads.map((thread) => thread.id),
-            ),
+            inArray(threads.id, interruptedThreadIds),
             inArray(threads.status, ["active", "provisioning"]),
           ),
         )
@@ -202,7 +198,7 @@ function interruptThreadsForDisconnectedHost(
         .all();
 
       return {
-        eventThreadIds: interruptedThreads.map((thread) => thread.id),
+        eventThreadIds: interruptedThreadIds,
         statusThreadIds: updatedThreads.map((thread) => thread.id),
       };
     },
