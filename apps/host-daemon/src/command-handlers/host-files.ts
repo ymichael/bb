@@ -1,4 +1,3 @@
-import fs from "node:fs/promises";
 import path from "node:path";
 import type { HostDaemonCommandResult } from "@bb/host-daemon-contract";
 import { CommandDispatchError } from "../command-dispatch-support.js";
@@ -6,6 +5,7 @@ import type { CommandOf } from "../command-dispatch-support.js";
 import { isFsErrorWithCode } from "../fs-errors.js";
 import { finalizeListedFiles, listFilesRecursively } from "./file-list.js";
 import { readFileForTransport } from "./file-read.js";
+import { resolveNonSymlinkDirectoryPath } from "./root-path.js";
 
 export async function listHostFiles(
   command: CommandOf<"host.list_files">,
@@ -18,16 +18,13 @@ export async function listHostFiles(
   }
 
   try {
-    const stat = await fs.stat(command.path);
-    if (!stat.isDirectory()) {
-      throw new CommandDispatchError(
-        "invalid_path",
-        "Path is not a directory",
-      );
-    }
+    const realRootPath = await resolveNonSymlinkDirectoryPath({
+      description: "Path",
+      path: command.path,
+    });
 
     return finalizeListedFiles({
-      filePaths: await listFilesRecursively(command.path, command.path),
+      filePaths: await listFilesRecursively(realRootPath, realRootPath),
       limit: command.limit,
       ...(command.query ? { query: command.query } : {}),
     });

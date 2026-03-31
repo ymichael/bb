@@ -4,6 +4,7 @@ import path from "node:path";
 import mimeTypes from "mime-types";
 import { CommandDispatchError } from "../command-dispatch-support.js";
 import { isFsErrorWithCode } from "../fs-errors.js";
+import { resolveNonSymlinkDirectoryPath } from "./root-path.js";
 
 const IMAGE_FILE_SIZE_LIMIT_BYTES = 10 * 1024 * 1024;
 const NON_IMAGE_FILE_SIZE_LIMIT_BYTES = 25 * 1024 * 1024;
@@ -68,22 +69,11 @@ async function resolveReadablePath(
     return args.resolvedPath;
   }
 
-  const rootStat = await fs.lstat(args.rootPath);
-  if (rootStat.isSymbolicLink()) {
-    throw new CommandDispatchError(
-      "invalid_path",
-      `Root path "${args.rootPath}" must not be a symlink`,
-    );
-  }
-  if (!rootStat.isDirectory()) {
-    throw new CommandDispatchError(
-      "invalid_path",
-      `Root path "${args.rootPath}" is not a directory`,
-    );
-  }
-
   const [realRootPath, realResolvedPath] = await Promise.all([
-    fs.realpath(args.rootPath),
+    resolveNonSymlinkDirectoryPath({
+      description: "Root path",
+      path: args.rootPath,
+    }),
     fs.realpath(args.resolvedPath),
   ]);
   if (!isPathWithinRoot(realResolvedPath, realRootPath)) {

@@ -195,6 +195,31 @@ describe("workspace command dispatch", () => {
     expect(result.truncated).toBe(false);
   });
 
+  it("rejects host.list_files when path itself is a symlink", async () => {
+    const tempDir = await makeTempDir("bb-dispatch-host-list-symlink-root-");
+    const targetRoot = path.join(tempDir, "target-root");
+    const symlinkRoot = path.join(tempDir, "root-link");
+    await fs.mkdir(targetRoot);
+    await fs.writeFile(path.join(targetRoot, "notes.txt"), "hello");
+    await fs.symlink(targetRoot, symlinkRoot);
+
+    const harness = createHarness();
+
+    await expect(
+      dispatchCommand(
+        {
+          type: "host.list_files",
+          path: symlinkRoot,
+          limit: 1000,
+        },
+        { runtimeManager: harness.manager },
+      ),
+    ).rejects.toMatchObject({
+      code: "invalid_path",
+      message: expect.stringContaining("must not be a symlink"),
+    });
+  });
+
   it("covers workspace.read_file", async () => {
     const tempDir = await makeTempDir("bb-dispatch-read-file-");
     await fs.writeFile(path.join(tempDir, "readme.txt"), "contents here");

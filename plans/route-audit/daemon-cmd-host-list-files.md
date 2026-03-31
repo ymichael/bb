@@ -20,8 +20,8 @@
 
 1. `dispatchCommand` matches `"host.list_files"` and calls `listHostFiles(command)`.
 2. `listHostFiles` rejects non-absolute paths with `CommandDispatchError("invalid_path")`.
-3. It `stat`s `command.path` and rejects non-directories with `CommandDispatchError("invalid_path")`.
-4. It calls `listFilesRecursively(command.path, command.path)`, which:
+3. It resolves `command.path` as a non-symlink directory root and rejects symlinked or non-directory roots with `CommandDispatchError("invalid_path")`.
+4. It calls `listFilesRecursively(realRootPath, realRootPath)`, which:
    - walks the directory tree recursively
    - skips dotfiles/directories
    - skips `node_modules`
@@ -36,7 +36,7 @@
 ## Flags
 
 1. **Not git-aware.** Unlike `workspace.list_files`, this command always walks the filesystem directly.
-2. **No root restriction beyond absolute paths.** The server must choose a bounded root; the daemon does not enforce one.
+2. **Root choice is still server-owned, but the daemon now rejects symlinked roots.** The server must choose the intended bounded root; the daemon prevents swapping that root to another directory via a symlink.
 3. **Hidden files are skipped structurally.** Any path segment starting with `.` is excluded because the recursive walker skips dot-prefixed entries entirely.
 
 ## Usages
