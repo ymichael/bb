@@ -21,7 +21,6 @@ interface TimelineScrollAnchor {
 
 interface LoadToolGroupMessagesArgs {
   id: string;
-  turnId: string;
   sourceSeqStart: number;
   sourceSeqEnd: number;
   includeWorkspaceViewer?: boolean;
@@ -269,7 +268,6 @@ export function useThreadTimelineController({
       setLoadingToolGroupIds((prev) => new Set(prev).add(entry.id));
       void loadToolGroupMessages({
         id: threadId,
-        turnId: entry.turnId,
         sourceSeqStart: entry.sourceSeqStart,
         sourceSeqEnd: entry.sourceSeqEnd,
       })

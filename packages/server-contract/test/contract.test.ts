@@ -220,7 +220,6 @@ describe("server-contract clients", () => {
       publicClient.threads[":id"].timeline["tool-details"].$url({
         param: { id: "thr_123" },
         query: {
-          turnId: "turn_1",
           sourceSeqStart: "1",
           sourceSeqEnd: "2",
         },

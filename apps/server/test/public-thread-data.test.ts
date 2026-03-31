@@ -64,7 +64,7 @@ describe("public thread data routes", () => {
       );
 
       const toolDetailsResponse = await harness.app.request(
-        `/api/v1/threads/${thread.id}/timeline/tool-details?turnId=turn-1&sourceSeqStart=2&sourceSeqEnd=2`,
+        `/api/v1/threads/${thread.id}/timeline/tool-details?sourceSeqStart=2&sourceSeqEnd=2`,
       );
       expect(toolDetailsResponse.status).toBe(200);
       const toolDetails = await readJson(toolDetailsResponse) as {
@@ -92,7 +92,7 @@ describe("public thread data routes", () => {
       });
 
       const response = await harness.app.request(
-        `/api/v1/threads/${thread.id}/timeline/tool-details?turnId=turn-1&sourceSeqStart=oops&sourceSeqEnd=2`,
+        `/api/v1/threads/${thread.id}/timeline/tool-details?sourceSeqStart=oops&sourceSeqEnd=2`,
       );
       expect(response.status).toBe(400);
       await expect(readJson(response)).resolves.toMatchObject({
@@ -195,7 +195,7 @@ describe("public thread data routes", () => {
     }
   });
 
-  it("fails loudly when the latest stored output event is malformed", async () => {
+  it("skips malformed item/completed events and returns the last valid output", async () => {
     const harness = await createTestAppHarness();
     try {
       const { host } = seedHostSession(harness.deps);
@@ -224,6 +224,8 @@ describe("public thread data routes", () => {
           },
         },
       });
+      // Malformed: missing item.type, so json_extract(data, '$.item.type') != 'agentMessage'
+      // — filtered out at the DB level, not a 500
       seedEvent(harness.deps, {
         threadId: thread.id,
         environmentId: environment.id,
@@ -242,10 +244,9 @@ describe("public thread data routes", () => {
         `/api/v1/threads/${thread.id}/output`,
       );
 
-      expect(response.status).toBe(500);
-      await expect(readJson(response)).resolves.toMatchObject({
-        code: "internal_error",
-        message: expect.stringContaining(`thread ${thread.id}`),
+      expect(response.status).toBe(200);
+      await expect(readJson(response)).resolves.toEqual({
+        output: "Earlier assistant reply",
       });
     } finally {
       await harness.cleanup();

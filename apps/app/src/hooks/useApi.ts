@@ -532,20 +532,17 @@ export function useThreadTimelineToolDetails() {
   return useMutation({
     mutationFn: ({
       id,
-      turnId,
       sourceSeqStart,
       sourceSeqEnd,
       includeWorkspaceViewer,
     }: {
       id: string;
-      turnId: string;
       sourceSeqStart: number;
       sourceSeqEnd: number;
       includeWorkspaceViewer?: boolean;
     }): Promise<TimelineToolDetailsResponse> =>
       api.getThreadTimelineToolDetails(
         id,
-        turnId,
         sourceSeqStart,
         sourceSeqEnd,
         includeWorkspaceViewer ?? false,

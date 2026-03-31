@@ -216,7 +216,6 @@ export const threadTimelineQuerySchema = z.object({
 export type ThreadTimelineQuery = z.infer<typeof threadTimelineQuerySchema>;
 
 export const timelineToolDetailsQuerySchema = z.object({
-  turnId: z.string().min(1),
   sourceSeqStart: z.string().regex(/^\d+$/),
   sourceSeqEnd: z.string().regex(/^\d+$/),
   includeManagerDebugView: z.enum(["true", "false"]).optional(),

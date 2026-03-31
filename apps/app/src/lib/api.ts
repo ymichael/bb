@@ -497,7 +497,6 @@ export async function getThreadTimeline(
 
 export async function getThreadTimelineToolDetails(
   id: string,
-  turnId: string,
   sourceSeqStart: number,
   sourceSeqEnd: number,
   includeWorkspaceViewer: boolean = false,
@@ -506,7 +505,6 @@ export async function getThreadTimelineToolDetails(
     apiClient.threads[":id"].timeline["tool-details"].$get({
       param: { id },
       query: {
-        turnId,
         sourceSeqStart: String(sourceSeqStart),
         sourceSeqEnd: String(sourceSeqEnd),
         ...(includeWorkspaceViewer ? { includeManagerDebugView: "true" } : {}),
