@@ -1,5 +1,6 @@
 import { eq } from "drizzle-orm";
-import { hostDaemonSessions } from "@bb/db";
+import { hostDaemonCommands, hostDaemonSessions } from "@bb/db";
+import { hostDaemonCommandSchema } from "@bb/host-daemon-contract";
 import { describe, expect, it } from "vitest";
 import {
   reportQueuedCommandSuccess,
@@ -416,6 +417,79 @@ describe("public project and host routes", () => {
       expect(
         Buffer.from(await contentResponse.arrayBuffer()).toString("utf8"),
       ).toBe("attachment body");
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("queues environment.destroy commands for managed environments when deleting a project", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, { id: "host-delete-env" });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/project-delete-env",
+      });
+
+      // Managed environment that should be destroyed.
+      const managed = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/managed-worktree",
+        managed: true,
+        status: "ready",
+        workspaceProvisionType: "managed-worktree",
+      });
+
+      // Already-destroyed managed environment — should NOT get another command.
+      seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/already-destroyed",
+        managed: true,
+        status: "destroyed",
+        workspaceProvisionType: "managed-clone",
+      });
+
+      // Unmanaged environment — should NOT get a destroy command.
+      seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/unmanaged",
+        managed: false,
+        status: "ready",
+        workspaceProvisionType: "unmanaged",
+      });
+
+      const deleteResponse = await harness.app.request(
+        `/api/v1/projects/${project.id}`,
+        { method: "DELETE" },
+      );
+      expect(deleteResponse.status).toBe(200);
+
+      const commands = harness.db
+        .select()
+        .from(hostDaemonCommands)
+        .all()
+        .map((row) => hostDaemonCommandSchema.parse(JSON.parse(row.payload)));
+
+      const destroyCommands = commands.filter(
+        (c) => c.type === "environment.destroy",
+      );
+      expect(destroyCommands).toHaveLength(1);
+      expect(destroyCommands[0]).toMatchObject({
+        type: "environment.destroy",
+        environmentId: managed.id,
+        workspaceContext: {
+          workspacePath: "/tmp/managed-worktree",
+          workspaceProvisionType: "managed-worktree",
+        },
+      });
+
+      // Project should be gone.
+      const listResponse = await harness.app.request("/api/v1/projects");
+      expect(listResponse.status).toBe(200);
+      await expect(readJson(listResponse)).resolves.toEqual([]);
     } finally {
       await harness.cleanup();
     }

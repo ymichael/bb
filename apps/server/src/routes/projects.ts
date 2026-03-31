@@ -5,6 +5,7 @@ import {
   deleteProject,
   deleteProjectSource,
   getDefaultProjectSource,
+  listEnvironments,
   listProjects,
   listThreads,
   projectSources,
@@ -31,6 +32,7 @@ import type { AppDeps } from "../types.js";
 import { COMMAND_TIMEOUT_MS } from "../constants.js";
 import { ApiError } from "../errors.js";
 import { deleteProjectAttachments, readAttachment, storeAttachment } from "../services/attachments.js";
+import { queueEnvironmentDestroyCommand } from "../services/environment-cleanup.js";
 import { requireHostWithStatus, requireProject } from "../services/entity-lookup.js";
 import { ensureProjectSourceEnvironment, createThreadFromRequest } from "../services/thread-create.js";
 import { queueCommandAndWait } from "../services/command-wait.js";
@@ -105,9 +107,27 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
   });
 
   del("/projects/:id", async (context) => {
-    requireProject(deps.db, context.req.param("id"));
-    await deleteProjectAttachments(deps.config.dataDir, context.req.param("id"));
-    deleteProject(deps.db, deps.hub, context.req.param("id"));
+    const id = context.req.param("id");
+    requireProject(deps.db, id);
+
+    // Queue host-daemon destroy commands for managed environments before the
+    // cascade delete removes the environment rows.
+    const environments = listEnvironments(deps.db, id);
+    for (const env of environments) {
+      if (env.managed && env.path && env.status !== "destroying" && env.status !== "destroyed") {
+        queueEnvironmentDestroyCommand(deps, {
+          hostId: env.hostId,
+          id: env.id,
+          path: env.path,
+          workspaceProvisionType: env.workspaceProvisionType,
+        });
+      }
+    }
+
+    // DB delete first (cascades to environments, threads, events, sources),
+    // then filesystem cleanup — avoids losing attachments if the delete throws.
+    deleteProject(deps.db, deps.hub, id);
+    await deleteProjectAttachments(deps.config.dataDir, id);
     return context.json({ ok: true });
   });
 

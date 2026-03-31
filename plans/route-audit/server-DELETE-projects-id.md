@@ -47,8 +47,8 @@
 > **Updated 2026-03-29:** `deleteProject` now notifies `"project-deleted"`.
 
 1. ~~`deleteProject` does not call `notifier.notifyProject(...)` or `notifier.notifySystem(...)` after deletion. Connected clients won't get a real-time update that the project was removed. Compare with `createProject` which does notify.~~ **Fixed** — now notifies `"project-deleted"`.
-2. The delete relies on SQLite FK cascades for threads, environments, etc. This is correct but means no application-level cleanup runs for those child entities (e.g., no environment teardown commands are sent to the host daemon). Deleting a project with active managed environments will leave orphaned worktrees/clones on the host filesystem.
-3. Attachment cleanup happens before the DB delete. If the DB delete fails after attachments are removed, the data is lost. Low risk but ordering could be swapped.
+2. ~~The delete relies on SQLite FK cascades for threads, environments, etc. This is correct but means no application-level cleanup runs for those child entities (e.g., no environment teardown commands are sent to the host daemon). Deleting a project with active managed environments will leave orphaned worktrees/clones on the host filesystem.~~ **Fixed** — now queues `environment.destroy` commands for managed environments before the cascade delete.
+3. ~~Attachment cleanup happens before the DB delete. If the DB delete fails after attachments are removed, the data is lost. Low risk but ordering could be swapped.~~ **Fixed** — DB delete now runs before attachment cleanup.
 
 ## Usages
 

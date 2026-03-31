@@ -13,6 +13,7 @@ import {
   parseStoredThreadEvent,
 } from "@bb/domain";
 import type {
+  EnvironmentStatus,
   PromptInput,
   StoredThreadEventDataForType,
   ThreadEventItemType,
@@ -102,7 +103,7 @@ export function seedEnvironment(
     hostId: string;
     projectId: string;
     path?: string;
-    status?: "provisioning" | "ready" | "error" | "destroying";
+    status?: EnvironmentStatus;
     managed?: boolean;
     workspaceProvisionType?: "unmanaged" | "managed-worktree" | "managed-clone";
     branchName?: string | null;
