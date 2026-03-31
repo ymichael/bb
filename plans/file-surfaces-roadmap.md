@@ -2,7 +2,7 @@
 
 ## Goal
 
-Move the current file-related features toward two clear product capabilities:
+Move the current file-related features toward two stable product capabilities:
 
 1. **Blob-backed file delivery**
    - Attachments
@@ -14,7 +14,7 @@ The public API should stay stable where possible while the server swaps route in
 
 ## Current State
 
-### Blob-like reads today
+### Blob-backed reads today
 
 - **Attachments**
   - Uploaded through `POST /api/v1/projects/:id/attachments`
@@ -23,7 +23,8 @@ The public API should stay stable where possible while the server swaps route in
 - **Manager workspace**
   - Listed through `GET /api/v1/threads/:id/manager-workspace/files`
   - Read through `GET /api/v1/threads/:id/manager-workspace/content`
-  - Backed by a live host-local folder derived from `<session.dataDir>/workspace/<threadId>`
+  - Authored in a live host-local folder derived from `<session.dataDir>/workspace/<threadId>`
+  - Still served from the live host today
 
 ### Source-backed listing today
 
@@ -34,15 +35,15 @@ The public API should stay stable where possible while the server swaps route in
 
 ## Target State
 
-### 1. Blob-backed file delivery
+### Blob-backed file delivery
 
-- Attachments remain uploadable/readable through their current public routes.
+- Attachments remain uploadable and readable through their current public routes.
 - Manager workspace files continue to be authored locally by the manager agent in a host-local folder.
-- Manager workspace reads stop depending on the live host for user-facing list/read routes.
-- Instead, manager workspace content is **published** into object storage and served from a synced snapshot.
+- Manager workspace user-facing reads stop depending on the live host.
+- Instead, manager workspace files are published into object storage and served from a synced snapshot.
 - The app treats attachment URLs and manager-workspace URLs as ordinary file URLs.
 
-### 2. Source-backed file discovery
+### Source-backed file discovery
 
 - `GET /api/v1/projects/:id/files` remains the single user-facing endpoint for project file suggestions.
 - The server dispatches internally on project source type:
@@ -54,51 +55,133 @@ The public API should stay stable where possible while the server swaps route in
 
 - Keep **blob-backed delivery** separate from **source-backed discovery**.
 - Do not collapse all file features into one generic route family that hides meaningful differences.
-- Server owns product policy, source dispatch, snapshot selection, and storage configuration.
-- Daemon owns host-local filesystem access and any host-local change detection.
-- Manager workspace should have a **write model** (live host folder) and a separate **read model** (published snapshot).
+- Server owns product policy, route behavior, source dispatch, snapshot selection, and storage configuration.
+- Daemon owns host-local filesystem access and optional host-local change detection.
+- Manager workspace should have a **write model** and a separate **read model**:
+  - write model: live host-local folder
+  - read model: published snapshot
 - Prefer metadata-first preview flows. Consumers should not need to download arbitrary binary payloads just to learn they are not previewable.
 
-## Proposed New Package
-
-Introduce **`@bb/files`** as the shared package for file-domain types and policies.
-
-### Initial contents
-
-- Shared file metadata schemas and types
-  - file list entries
-  - blob metadata
-  - snapshot manifest entries
-- Shared path/value helpers for file-domain contracts
-- Shared MIME classification helpers with explicit semantics
-  - preview image MIME helpers
-  - preview text MIME helpers
-  - transport-safe UTF-8 MIME helpers
-
-### Why this package is worth adding
-
-- We already have file-domain logic spread across app, server, and daemon.
-- The current hard-coded MIME policy lists are easy to let drift.
-- The future object-backed manager workspace needs manifest types that are not server-only.
-- `@bb/files` gives us one place for shared file-domain vocabulary without putting storage SDK code in a shared package.
-
-### What should **not** go into `@bb/files`
-
-- S3/R2 SDK clients
-- GitHub API clients
-- server-only storage implementations
-- daemon command handlers
-
-Those stay in the owning app/service layers.
-
-## Migration Plan
-
-### Completed pre-work
+## Completed Pre-Work
 
 The current live manager-workspace path was hardened before this roadmap:
 
-1. `GET /threads/:id/manager-workspace/content` now passes a bounded `rootPath` to `host.read_file`, and the daemon rejects symlink-resolved reads that escape the durable manager workspace root.
-2. The daemon now uses UTF-8 transport only when the file bytes are actually valid UTF-8; otherwise it falls back to base64 and preserves the original bytes.
+1. `host.read_file` now requires a declared `rootPath`, and the daemon enforces symlink-resolved containment under that root.
+2. `GET /threads/:id/manager-workspace/content` and manager preferences reads both use the durable manager workspace root as that bound.
+3. The daemon now uses UTF-8 transport only when the file bytes are actually valid UTF-8; otherwise it falls back to base64 and preserves the original bytes.
+
+## Proposed Package Boundary
+
+Introduce **`@bb/blob-storage`** as the first new shared package.
+
+This package should be **storage-only**. It should not know about attachments, manager workspaces, projects, previewability, or route semantics.
+
+### Why this package comes first
+
+- Attachments and published manager workspace are converging on the same storage substrate.
+- If storage abstractions start inside `server` first, they are likely to accrete product concepts and become hard to extract cleanly later.
+- S3 and R2 are both stable enough that we can commit to a provider-neutral storage interface now.
+
+### Proposed minimal interface
+
+```ts
+interface BlobStorage {
+  put(args: {
+    key: string;
+    body: Uint8Array;
+    contentType?: string;
+    cacheControl?: string;
+    metadata?: Record<string, string>;
+  }): Promise<{
+    etag?: string;
+    sizeBytes: number;
+  }>;
+
+  get(args: {
+    key: string;
+    range?: { start: number; end?: number };
+  }): Promise<{
+    body: Uint8Array;
+    contentType?: string;
+    cacheControl?: string;
+    metadata: Record<string, string>;
+    sizeBytes: number;
+    etag?: string;
+  } | null>;
+
+  head(args: {
+    key: string;
+  }): Promise<{
+    contentType?: string;
+    cacheControl?: string;
+    metadata: Record<string, string>;
+    sizeBytes: number;
+    etag?: string;
+  } | null>;
+
+  delete(args: {
+    key: string;
+  }): Promise<void>;
+}
+```
+
+Optional, but likely useful:
+
+```ts
+interface BlobUrlSigner {
+  signGet(args: {
+    key: string;
+    expiresInSeconds: number;
+  }): Promise<string>;
+}
+```
+
+### Explicit non-goals for `@bb/blob-storage`
+
+- No bucket traversal or `list` in the core interface
+  - manager workspace should list from a manifest, not from raw object-store prefixes
+- No attachment or manager-workspace domain types
+- No GitHub client logic
+- No MIME preview policy
+- No route/auth logic
+
+## Ownership Split
+
+### `@bb/blob-storage`
+
+- Provider-neutral storage interfaces
+- Local filesystem implementation
+- S3-compatible implementation for S3/R2
+- Shared contract tests across implementations
+
+### Server-owned code
+
+- `AttachmentStore`
+- `PublishedManagerWorkspaceStore`
+- `ManagerWorkspacePublisher`
+- `ProjectSourceFileLister`
+- Object key naming
+- Snapshot manifest persistence
+- Route behavior and access policy
+
+### Daemon-owned code
+
+- Host-local bounded file listing and reading primitives
+- Optional file change reporting hooks if we later want more immediate manager-workspace publishing
+
+### Maybe later: `@bb/files`
+
+Do **not** introduce this first.
+
+Add `@bb/files` only if we later have enough truly shared file-domain logic to justify it, for example:
+
+- snapshot manifest schemas shared across server and app
+- stable file metadata types used by multiple packages
+- MIME policy helpers that genuinely need to be shared across app/server/daemon
+
+If that package happens later, it should sit above `@bb/blob-storage`, not replace it.
+
+## Migration Plan
 
 ### Phase 0: Remove dead `workspace.read_file` if it stays unused by product code
 
@@ -106,20 +189,24 @@ The current live manager-workspace path was hardened before this roadmap:
    - After the manager-workspace migration, this command appears to be dead outside daemon contracts/tests.
    - If no caller needs it, delete it end to end instead of keeping parallel read surfaces around.
 
-### Phase 1: Introduce `@bb/files`
+Exit condition:
+- no product code depends on `workspace.read_file`
 
-1. Create `packages/files`
-2. Move shared file-domain types and helpers into it
-3. Update app/server/daemon imports to use the new package
-4. Make MIME policy differences explicit by naming helpers after their purpose instead of sharing ambiguous sets
+### Phase 1: Introduce `@bb/blob-storage`
+
+1. Create `packages/blob-storage`
+2. Define the provider-neutral interfaces
+3. Add a local-filesystem implementation
+4. Add an S3-compatible implementation for S3/R2
+5. Add implementation-agnostic contract tests
 
 Exit condition:
-- app, server, and daemon no longer maintain overlapping file-domain MIME/policy helpers independently when they are describing the same concept
+- the repo has a storage package whose public API is provider-neutral and does not mention attachments or manager workspaces
 
-### Phase 2: Extract attachment storage behind an interface
+### Phase 2: Move attachments onto `@bb/blob-storage`
 
-1. Introduce a server-side `AttachmentStore` abstraction
-2. Keep the current local-filesystem implementation as the default
+1. Introduce a server-side `AttachmentStore` backed by `@bb/blob-storage`
+2. Keep the current local-filesystem behavior as the default implementation
 3. Add an object-storage-backed implementation behind configuration
 4. Preserve the current attachment upload/read routes while swapping route internals
 
@@ -142,7 +229,7 @@ Preferred behavior:
 Exit condition:
 - manager workspace list/read routes no longer require the host to be online for previously-published content
 
-### Phase 4: Publish manager workspace content into object storage
+### Phase 4: Publish manager workspace snapshots into object storage
 
 1. Add a sync/publish pipeline for manager workspace snapshots
 2. Upload changed files to object storage
@@ -180,22 +267,6 @@ Exit condition:
 Exit condition:
 - consumers do not need to download arbitrary binary content just to decide whether preview is possible
 
-## Proposed Runtime Abstractions
-
-These should live in the owning app layers, not in `@bb/files`.
-
-### Server-side
-
-- `AttachmentStore`
-- `PublishedManagerWorkspaceStore`
-- `ProjectSourceFileLister`
-- `ManagerWorkspacePublisher`
-
-### Daemon-side
-
-- host-local bounded file listing/reading primitives for a declared root
-- optional file change reporting hooks if we later want more immediate manager-workspace publishing
-
 ## Public API Direction
 
 ### Keep stable
@@ -208,30 +279,35 @@ These should live in the owning app layers, not in `@bb/files`.
 
 ### Internal changes behind those routes
 
-- attachments: filesystem-backed -> pluggable local/object-backed store
+- attachments: filesystem-backed -> `@bb/blob-storage`-backed attachment store
 - manager workspace: live host read -> published snapshot read
 - project file listing: local-path-only -> source-type dispatcher
 
 ## Exit Criteria
 
+- `@bb/blob-storage` exists with a stable provider-neutral interface and at least local + S3-compatible implementations.
 - Attachments can be backed by either local filesystem or object storage without changing public routes.
 - Manager workspace list/read routes serve published snapshots rather than live host files.
 - Manager workspace live writes remain unchanged for the agent.
 - `/projects/:id/files` supports both `local_path` and `github_repo`.
-- File-domain shared types/policies live in `@bb/files`.
 
 ## Validation
 
-### Package extraction
+### `@bb/blob-storage`
 
-- `pnpm exec turbo run typecheck --filter=@bb/files --filter=@bb/app --filter=@bb/server --filter=@bb/host-daemon`
-- `pnpm exec turbo run test --filter=@bb/files --filter=@bb/app --filter=@bb/server --filter=@bb/host-daemon`
+- `pnpm exec turbo run typecheck --filter=@bb/blob-storage`
+- `pnpm exec turbo run test --filter=@bb/blob-storage`
+- contract tests should run against both local and S3-compatible implementations
 
-### Storage abstraction / route behavior
+### Attachments and manager workspace
 
 - attachments: test both local and object-backed implementations against the same route behavior
 - manager workspace: test list/read behavior against published snapshots
-- project source listing: test both `local_path` and `github_repo` through `/projects/:id/files`
+- manager workspace: test snapshot publication from a host-local write directory into object storage
+
+### Project source listing
+
+- test both `local_path` and `github_repo` through `/projects/:id/files`
 
 ## Notes
 
