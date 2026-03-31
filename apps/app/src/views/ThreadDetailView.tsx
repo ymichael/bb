@@ -53,6 +53,7 @@ import { environmentActionFailureDetailsSchema } from "@bb/server-contract";
 import { promptDraftToInput } from "@/lib/prompt-draft";
 import { HttpError } from "@/lib/api";
 import { getAutoArchivePreferences } from "@/lib/auto-archive-preferences";
+import { useStoredThreadShowAllEvents } from "@/lib/thread-show-all-events";
 import { getGitStatusDisplay } from "@/lib/workspace-status";
 import {
   formatChangeSummary,
@@ -177,10 +178,13 @@ export function ThreadDetailView() {
     refetchOnMount: "always",
   });
   const { data: parentThread } = useThread(thread?.parentThreadId ?? "");
+  const isManagerThread = thread?.type === "manager";
+  const [storedShowAllEvents, setStoredShowAllEvents] = useStoredThreadShowAllEvents(
+    threadId,
+  );
+  const showAllEvents = isManagerThread ? storedShowAllEvents : false;
   const {
-    handleShowAllEventsChange,
     isThreadStorageFilePreviewLoading,
-    showAllEvents,
     threadStorageFilePreview,
     threadStorageFilePreviewError,
     threadStorageFiles,
@@ -190,6 +194,13 @@ export function ThreadDetailView() {
     threadId,
     threadType: thread?.type,
   });
+  const handleShowAllEventsChange = useCallback((checked: boolean) => {
+    if (!isManagerThread) {
+      return;
+    }
+
+    setStoredShowAllEvents(checked);
+  }, [isManagerThread, setStoredShowAllEvents]);
   const { data: allProjectThreads } = useThreads({ projectId });
   const managerThreads = useMemo(
     () => (allProjectThreads ?? []).filter((candidate) => candidate.type === "manager"),
@@ -528,7 +539,6 @@ export function ThreadDetailView() {
       threadId,
     ],
   );
-  const isManagerThread = thread?.type === "manager";
   const parentThreadId = thread?.parentThreadId;
   const parentThreadDisplayName =
     parentThread?.title && parentThread.title.trim().length > 0
