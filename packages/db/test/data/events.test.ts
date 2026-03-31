@@ -8,6 +8,7 @@ import {
   getLatestThreadSequence,
   insertEvents,
   listEvents,
+  pruneTokenUsageEventsBeforeSequence,
   pruneResolvedAgentMessageDeltas,
   pruneThreadEventsBeforeSequence,
 } from "../../src/data/events.js";
@@ -31,6 +32,33 @@ const emptyItemFields = {
   itemId: null,
   itemKind: null,
 } as const;
+
+interface CreateTokenUsageDataArgs {
+  modelContextWindow: number | null;
+  totalTokens: number;
+}
+
+function createTokenUsageData(args: CreateTokenUsageDataArgs): string {
+  return JSON.stringify({
+    tokenUsage: {
+      total: {
+        totalTokens: args.totalTokens,
+        inputTokens: args.totalTokens,
+        cachedInputTokens: 0,
+        outputTokens: 0,
+        reasoningOutputTokens: 0,
+      },
+      last: {
+        totalTokens: args.totalTokens,
+        inputTokens: args.totalTokens,
+        cachedInputTokens: 0,
+        outputTokens: 0,
+        reasoningOutputTokens: 0,
+      },
+      modelContextWindow: args.modelContextWindow,
+    },
+  });
+}
 
 describe("events", () => {
   it("inserts events and returns count", () => {
@@ -233,6 +261,61 @@ describe("events", () => {
 
     expect(removed).toBe(3);
     expect(listEvents(db, { threadId: thread.id }).map((event) => event.sequence)).toEqual([4, 5]);
+  });
+
+  it("prunes token-usage rows before a sequence cutoff but keeps the latest totals row and latest context row", () => {
+    const { db, thread } = setup();
+
+    insertEvents(db, noopNotifier, [
+      {
+        threadId: thread.id,
+        sequence: 1,
+        type: "thread/tokenUsage/updated",
+        ...emptyItemFields,
+        data: createTokenUsageData({
+          totalTokens: 10,
+          modelContextWindow: 200_000,
+        }),
+      },
+      {
+        threadId: thread.id,
+        sequence: 2,
+        type: "thread/tokenUsage/updated",
+        ...emptyItemFields,
+        data: createTokenUsageData({
+          totalTokens: 20,
+          modelContextWindow: null,
+        }),
+      },
+      {
+        threadId: thread.id,
+        sequence: 3,
+        type: "thread/tokenUsage/updated",
+        ...emptyItemFields,
+        data: createTokenUsageData({
+          totalTokens: 30,
+          modelContextWindow: null,
+        }),
+      },
+      {
+        threadId: thread.id,
+        sequence: 4,
+        type: "thread/tokenUsage/updated",
+        ...emptyItemFields,
+        data: createTokenUsageData({
+          totalTokens: 40,
+          modelContextWindow: null,
+        }),
+      },
+    ]);
+
+    const removed = pruneTokenUsageEventsBeforeSequence(db, {
+      threadId: thread.id,
+      sequenceCutoff: 4,
+    });
+
+    expect(removed).toBe(2);
+    expect(listEvents(db, { threadId: thread.id }).map((event) => event.sequence)).toEqual([1, 4]);
   });
 
   it("prunes resolved assistant deltas but preserves the first delta row", () => {

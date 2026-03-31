@@ -2,6 +2,7 @@ import {
   getThread,
   getLatestThreadSequence,
   pruneResolvedAgentMessageDeltas,
+  pruneTokenUsageEventsBeforeSequence,
   pruneThreadEventsBeforeSequence,
 } from "@bb/db";
 import type { ThreadEventType } from "@bb/domain";
@@ -43,6 +44,10 @@ export const AGE_PRUNABLE_THREAD_EVENT_TYPES: readonly ThreadEventType[] = [
   "turn/diff/updated",
 ] as const;
 
+const GENERIC_AGE_PRUNABLE_THREAD_EVENT_TYPES: readonly ThreadEventType[] = [
+  "turn/diff/updated",
+] as const;
+
 const KEEP_RECENT_BY_MODE: Record<ThreadEventPruningMode, number> = {
   active: ACTIVE_THREAD_EVENT_KEEP_RECENT,
   idle: IDLE_THREAD_EVENT_KEEP_RECENT,
@@ -69,11 +74,16 @@ export function pruneThreadEventHistory(
   });
   const keepRecent = KEEP_RECENT_BY_MODE[args.mode];
   const sequenceCutoff = Math.max(0, latestSequence - keepRecent);
-  const removedAgePrunableEvents = pruneThreadEventsBeforeSequence(deps.db, {
-    threadId: args.threadId,
-    sequenceCutoff,
-    types: AGE_PRUNABLE_THREAD_EVENT_TYPES,
-  });
+  const removedAgePrunableEvents =
+    pruneTokenUsageEventsBeforeSequence(deps.db, {
+      threadId: args.threadId,
+      sequenceCutoff,
+    }) +
+    pruneThreadEventsBeforeSequence(deps.db, {
+      threadId: args.threadId,
+      sequenceCutoff,
+      types: GENERIC_AGE_PRUNABLE_THREAD_EVENT_TYPES,
+    });
   const removedResolvedAgentMessageDeltas = pruneResolvedAgentMessageDeltas(
     deps.db,
     {

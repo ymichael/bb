@@ -63,6 +63,7 @@ export {
   getLatestThreadSequence,
   insertEvents,
   listEvents,
+  pruneTokenUsageEventsBeforeSequence,
   pruneResolvedAgentMessageDeltas,
   pruneThreadEventsBeforeSequence,
 } from "./events.js";
@@ -71,6 +72,7 @@ export type {
   InsertEventInput,
   InsertEventsResult,
   ListEventsOptions,
+  PruneTokenUsageEventsBeforeSequenceArgs,
   PruneResolvedAgentMessageDeltasArgs,
   PruneThreadEventsBeforeSequenceArgs,
 } from "./events.js";

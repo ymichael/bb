@@ -130,6 +130,11 @@ export interface PruneThreadEventsBeforeSequenceArgs {
   types: readonly ThreadEventType[];
 }
 
+export interface PruneTokenUsageEventsBeforeSequenceArgs {
+  sequenceCutoff: number;
+  threadId: string;
+}
+
 export interface PruneResolvedAgentMessageDeltasArgs {
   threadId: string;
 }
@@ -191,6 +196,43 @@ export function pruneThreadEventsBeforeSequence(
       ),
     )
     .run();
+
+  return result.changes;
+}
+
+export function pruneTokenUsageEventsBeforeSequence(
+  db: DbConnection,
+  args: PruneTokenUsageEventsBeforeSequenceArgs,
+): number {
+  if (args.sequenceCutoff <= 0) {
+    return 0;
+  }
+
+  // The timeline needs the latest totals row plus the latest older row that
+  // still carries a non-null modelContextWindow.
+  const result = db.run(
+    sql`DELETE FROM events
+        WHERE ${events.threadId} = ${args.threadId}
+          AND ${events.type} = 'thread/tokenUsage/updated'
+          AND ${events.sequence} <= ${args.sequenceCutoff}
+          AND ${events.id} NOT IN (
+            SELECT latest.id
+            FROM events latest
+            WHERE latest.thread_id = ${args.threadId}
+              AND latest.type = 'thread/tokenUsage/updated'
+            ORDER BY latest.sequence DESC
+            LIMIT 1
+          )
+          AND ${events.id} NOT IN (
+            SELECT latest_context.id
+            FROM events latest_context
+            WHERE latest_context.thread_id = ${args.threadId}
+              AND latest_context.type = 'thread/tokenUsage/updated'
+              AND json_extract(latest_context.data, '$.tokenUsage.modelContextWindow') IS NOT NULL
+            ORDER BY latest_context.sequence DESC
+            LIMIT 1
+          )`,
+  );
 
   return result.changes;
 }

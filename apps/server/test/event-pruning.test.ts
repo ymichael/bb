@@ -5,6 +5,7 @@ import {
   pruneThreadEventHistory,
   pruneThreadEventHistoryBestEffort,
 } from "../src/services/event-pruning.js";
+import { buildThreadTimeline } from "../src/services/timeline.js";
 import { internalAuthHeaders } from "./helpers/commands.js";
 import {
   seedEnvironment,
@@ -20,6 +21,33 @@ interface SeedNoiseRowsArgs {
   endingSequence: number;
   startingSequence?: number;
   threadId: string;
+}
+
+interface CreateTokenUsageDataArgs {
+  modelContextWindow: number | null;
+  totalTokens: number;
+}
+
+function createTokenUsageData(args: CreateTokenUsageDataArgs): Record<string, unknown> {
+  return {
+    tokenUsage: {
+      total: {
+        totalTokens: args.totalTokens,
+        inputTokens: args.totalTokens,
+        cachedInputTokens: 0,
+        outputTokens: 0,
+        reasoningOutputTokens: 0,
+      },
+      last: {
+        totalTokens: args.totalTokens,
+        inputTokens: args.totalTokens,
+        cachedInputTokens: 0,
+        outputTokens: 0,
+        reasoningOutputTokens: 0,
+      },
+      modelContextWindow: args.modelContextWindow,
+    },
+  };
 }
 
 function listEventSequencesForType(
@@ -48,11 +76,16 @@ function seedNoiseRows(
   ) {
     seedStoredEvent(harness.deps, {
       threadId: args.threadId,
+      providerThreadId: "provider-thread-1",
       sequence,
+      turnId: `turn-${sequence}`,
       type: "thread/tokenUsage/updated",
       itemId: null,
       itemKind: null,
-      data: {},
+      data: createTokenUsageData({
+        totalTokens: sequence,
+        modelContextWindow: null,
+      }),
     });
   }
 }
@@ -148,6 +181,60 @@ describe("thread event pruning", () => {
           type: "item/agentMessage/delta",
         }),
       ).toEqual([306]);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("preserves context window usage when idle pruning removes old token-usage rows", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const host = seedHost(harness.deps);
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+      });
+
+      for (let sequence = 1; sequence <= 305; sequence += 1) {
+        seedStoredEvent(harness.deps, {
+          threadId: thread.id,
+          providerThreadId: "provider-thread-1",
+          sequence,
+          turnId: `turn-${sequence}`,
+          type: "thread/tokenUsage/updated",
+          itemId: null,
+          itemKind: null,
+          data: createTokenUsageData({
+            totalTokens: sequence,
+            modelContextWindow: sequence === 1 ? 200_000 : null,
+          }),
+        });
+      }
+
+      const result = pruneThreadEventHistory(harness.deps, {
+        mode: "idle",
+        threadId: thread.id,
+      });
+      const timeline = buildThreadTimeline(harness.db, thread, {});
+
+      expect(result.removedAgePrunableEvents).toBe(4);
+      expect(
+        listEventSequencesForType(harness, {
+          threadId: thread.id,
+          type: "thread/tokenUsage/updated",
+        }).slice(0, 3),
+      ).toEqual([1, 6, 7]);
+      expect(timeline.contextWindowUsage).toEqual({
+        totalTokens: 305,
+        modelContextWindow: 200_000,
+      });
     } finally {
       await harness.cleanup();
     }
