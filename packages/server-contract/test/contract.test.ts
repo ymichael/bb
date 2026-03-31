@@ -50,7 +50,6 @@ const INTENTIONAL_OPTIONAL_SERVER_FIELDS: Record<string, string> = {
   "threadListQuerySchema.type": "Thread listing may omit type when not filtering by thread type.",
   "threadTimelineQuerySchema.includeManagerDebugView": "Timeline queries may omit manager debug view unless explicitly requested.",
   "threadTimelineQuerySchema.includeToolGroupMessages": "Timeline queries may omit grouped tool messages unless explicitly requested.",
-  "threadTimelineQuerySchema.limit": "Timeline queries may omit limit to use the server-side default page size.",
   "threadTimelineResponseSchema.contextWindowUsage": "Timeline responses omit context window usage when the provider did not report it.",
   "threadWorkspaceFilesQuerySchema.limit": "Workspace file listing may omit limit to use the default result count.",
   "threadWorkspaceFilesQuerySchema.query": "Workspace file listing may omit a search string to list files without filtering.",

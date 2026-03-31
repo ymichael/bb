@@ -131,7 +131,7 @@ describe("public authorization regressions", () => {
 
       expect(response.status).toBe(409);
       await expect(readJson(response)).resolves.toMatchObject({
-        code: "unsupported_operation",
+        code: "invalid_request",
       });
       expect(
         harness.db
