@@ -20,7 +20,7 @@
    - `requireThread(db, id)` -> 404 if missing
    - rejects non-manager threads with 409
    - rejects threads without an environment with 409
-   - `requireReadyEnvironment(db, environmentId)` -> 409 if not ready
+   - `requireEnvironment(db, environmentId)` -> 404 if missing
    - `requireManagerWorkspacePath(deps, { hostId, threadId })`:
      - `requireConnectedHostSession(deps, hostId)` -> 502 if disconnected
      - reads the active session `dataDir`
@@ -35,7 +35,7 @@
 | # | Query | Table | Notes |
 |---|---|---|---|
 | 1 | `SELECT * FROM threads WHERE id = ?` | `threads` | `requireThread` |
-| 2 | `SELECT * FROM environments WHERE id = ?` | `environments` | `requireReadyEnvironment` |
+| 2 | `SELECT * FROM environments WHERE id = ?` | `environments` | `requireEnvironment` |
 | 3 | `SELECT * FROM host_daemon_sessions WHERE hostId = ? ...` | `host_daemon_sessions` | `requireConnectedHostSession` |
 
 **Total: 3 synchronous DB lookups before the daemon command is queued.**

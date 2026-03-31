@@ -3,15 +3,9 @@ import path from "node:path";
 import type { HostDaemonCommandResult } from "@bb/host-daemon-contract";
 import { CommandDispatchError } from "../command-dispatch-support.js";
 import type { CommandOf } from "../command-dispatch-support.js";
+import { isFsErrorWithCode } from "../fs-errors.js";
 import { finalizeListedFiles, listFilesRecursively } from "./file-list.js";
 import { readFileForTransport } from "./file-read.js";
-
-function isFsErrorWithCode(
-  error: unknown,
-  code: string,
-): error is NodeJS.ErrnoException {
-  return error instanceof Error && "code" in error && error.code === code;
-}
 
 export async function listHostFiles(
   command: CommandOf<"host.list_files">,

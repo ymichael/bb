@@ -349,8 +349,6 @@ function WorkspaceContent({
   onTogglePath,
   selectedPath,
 }: ThreadDetailWorkspaceProps) {
-  const imageUrl = filePreview?.kind === "image" ? filePreview.url : null;
-
   if ((files?.length ?? 0) === 0) {
     return (
       <p className="rounded-lg border border-dashed border-border/70 bg-background/45 px-3 py-6 text-center text-sm text-muted-foreground">
@@ -403,15 +401,11 @@ function WorkspaceContent({
                     <p className="text-xs text-muted-foreground">Empty file.</p>
                   )
                 ) : filePreview?.kind === "image" ? (
-                  imageUrl ? (
-                    <img
-                      src={imageUrl}
-                      alt={filePreview.path}
-                      className="max-h-96 w-auto max-w-full rounded-md border border-border/70 bg-background object-contain"
-                    />
-                  ) : (
-                    <p className="text-xs text-muted-foreground">Loading image preview...</p>
-                  )
+                  <img
+                    src={filePreview.url}
+                    alt={filePreview.path}
+                    className="max-h-96 w-auto max-w-full rounded-md border border-border/70 bg-background object-contain"
+                  />
                 ) : filePreview?.kind === "unsupported" ? (
                   <p className="text-xs text-muted-foreground">
                     Preview not available for {filePreview.mimeType}.

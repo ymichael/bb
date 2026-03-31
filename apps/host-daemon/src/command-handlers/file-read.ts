@@ -2,6 +2,7 @@ import { isUtf8 } from "node:buffer";
 import fs from "node:fs/promises";
 import mimeTypes from "mime-types";
 import { CommandDispatchError } from "../command-dispatch-support.js";
+import { isFsErrorWithCode } from "../fs-errors.js";
 
 const IMAGE_FILE_SIZE_LIMIT_BYTES = 10 * 1024 * 1024;
 const NON_IMAGE_FILE_SIZE_LIMIT_BYTES = 25 * 1024 * 1024;
@@ -30,13 +31,6 @@ export interface ReadFileForTransportResult {
   mimeType?: string;
   path: string;
   sizeBytes: number;
-}
-
-function isFsErrorWithCode(
-  error: unknown,
-  code: string,
-): error is NodeJS.ErrnoException {
-  return error instanceof Error && "code" in error && error.code === code;
 }
 
 function isBinaryImageMimeType(mimeType?: string): boolean {
