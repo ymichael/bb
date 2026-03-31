@@ -18,6 +18,12 @@ interface DaemonSocket {
   send(data: string): void;
 }
 
+interface DaemonSocketMessageArgs {
+  raw: unknown;
+  sessionId: string;
+  socket: DaemonSocket;
+}
+
 export function validateDaemonWebSocket(
   deps: Pick<AppDeps, "config" | "db">,
   args: { sessionId: string | null; token: string | null },
@@ -41,11 +47,23 @@ export function onDaemonSocketOpen(
 
 export function onDaemonSocketMessage(
   deps: Pick<AppDeps, "db">,
-  sessionId: string,
-  raw: unknown,
+  args: DaemonSocketMessageArgs,
 ): void {
-  hostDaemonDaemonWsMessageSchema.parse(JSON.parse(decodeSocketPayload(raw)));
-  const session = requireActiveSession(deps.db, sessionId);
+  let decoded: unknown;
+  try {
+    decoded = JSON.parse(decodeSocketPayload(args.raw));
+  } catch {
+    args.socket.close(1008, "invalid-message");
+    return;
+  }
+
+  const result = hostDaemonDaemonWsMessageSchema.safeParse(decoded);
+  if (!result.success) {
+    args.socket.close(1008, "invalid-message");
+    return;
+  }
+
+  const session = requireActiveSession(deps.db, args.sessionId);
   heartbeatSession(
     deps.db,
     session.id,

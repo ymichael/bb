@@ -39,6 +39,20 @@ async function waitForClose(socket: WebSocket): Promise<void> {
   });
 }
 
+async function waitForCloseDetails(
+  socket: WebSocket,
+): Promise<{ code: number; reason: string }> {
+  return new Promise((resolve, reject) => {
+    socket.once("close", (code, reason) => {
+      resolve({
+        code,
+        reason: reason.toString("utf8"),
+      });
+    });
+    socket.once("error", reject);
+  });
+}
+
 async function waitForSessionStatus(
   args: {
     server: Awaited<ReturnType<typeof startTestServer>>;
@@ -157,6 +171,87 @@ describe("internal session correctness", () => {
       const closed = waitForClose(socket);
       socket.close();
       await closed;
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("closes the daemon websocket with 1008 on malformed messages", async () => {
+    const server = await startTestServer();
+    try {
+      const daemonClient = createHostDaemonClient(
+        server.baseUrl,
+        server.config.authToken,
+      );
+      const sessionResponse = await daemonClient.session.open.$post({
+        json: {
+          hostId: "host-malformed-heartbeat",
+          instanceId: "instance-1",
+          hostName: "Malformed Heartbeat Host",
+          hostType: "persistent",
+          dataDir: "/tmp/host-malformed-heartbeat-data",
+          protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
+          activeThreads: [],
+        },
+      });
+      expect(sessionResponse.status).toBe(201);
+      const session = await sessionResponse.json();
+
+      const socket = new WebSocket(
+        `${server.baseUrl.replace("http", "ws")}/internal/ws?sessionId=${encodeURIComponent(session.sessionId)}&token=${encodeURIComponent(server.config.authToken)}`,
+      );
+      await waitForOpen(socket);
+
+      const closed = waitForCloseDetails(socket);
+      socket.send("{");
+
+      await expect(closed).resolves.toEqual({
+        code: 1008,
+        reason: "invalid-message",
+      });
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("closes the daemon websocket with 1008 on invalid heartbeat payloads", async () => {
+    const server = await startTestServer();
+    try {
+      const daemonClient = createHostDaemonClient(
+        server.baseUrl,
+        server.config.authToken,
+      );
+      const sessionResponse = await daemonClient.session.open.$post({
+        json: {
+          hostId: "host-invalid-heartbeat",
+          instanceId: "instance-1",
+          hostName: "Invalid Heartbeat Host",
+          hostType: "persistent",
+          dataDir: "/tmp/host-invalid-heartbeat-data",
+          protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
+          activeThreads: [],
+        },
+      });
+      expect(sessionResponse.status).toBe(201);
+      const session = await sessionResponse.json();
+
+      const socket = new WebSocket(
+        `${server.baseUrl.replace("http", "ws")}/internal/ws?sessionId=${encodeURIComponent(session.sessionId)}&token=${encodeURIComponent(server.config.authToken)}`,
+      );
+      await waitForOpen(socket);
+
+      const closed = waitForCloseDetails(socket);
+      socket.send(
+        JSON.stringify({
+          type: "heartbeat",
+          bufferDepth: 1,
+        }),
+      );
+
+      await expect(closed).resolves.toEqual({
+        code: 1008,
+        reason: "invalid-message",
+      });
     } finally {
       await server.close();
     }

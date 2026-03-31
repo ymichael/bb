@@ -75,6 +75,70 @@ describe("client websocket protocol", () => {
     expect(socket.messages).toHaveLength(0);
   });
 
+  it("removes subscriptions after unsubscribe messages", () => {
+    const hub = new NotificationHub();
+    const socket = createMockSocket();
+
+    onClientSocketOpen(hub, socket);
+    onClientSocketMessage(
+      hub,
+      socket,
+      JSON.stringify({
+        type: "subscribe",
+        entity: "thread",
+        id: "thread-1",
+      }),
+    );
+    onClientSocketMessage(
+      hub,
+      socket,
+      JSON.stringify({
+        type: "unsubscribe",
+        entity: "thread",
+        id: "thread-1",
+      }),
+    );
+    hub.notifyThread("thread-1", ["events-appended"]);
+
+    expect(socket.closed).toHaveLength(0);
+    expect(socket.messages).toHaveLength(0);
+  });
+
+  it("rejects subscribe messages for unknown entities", () => {
+    const hub = new NotificationHub();
+    const socket = createMockSocket();
+
+    onClientSocketOpen(hub, socket);
+    onClientSocketMessage(
+      hub,
+      socket,
+      JSON.stringify({
+        type: "subscribe",
+        entity: "bogus",
+      }),
+    );
+
+    expect(socket.closed).toEqual([{ code: 1008, reason: "invalid-message" }]);
+    expect(socket.messages).toHaveLength(0);
+  });
+
+  it("rejects client messages with missing required fields", () => {
+    const hub = new NotificationHub();
+    const socket = createMockSocket();
+
+    onClientSocketOpen(hub, socket);
+    onClientSocketMessage(
+      hub,
+      socket,
+      JSON.stringify({
+        type: "subscribe",
+      }),
+    );
+
+    expect(socket.closed).toEqual([{ code: 1008, reason: "invalid-message" }]);
+    expect(socket.messages).toHaveLength(0);
+  });
+
   it("closes the socket instead of throwing on malformed JSON", () => {
     const hub = new NotificationHub();
     const socket = createMockSocket();

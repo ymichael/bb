@@ -54,9 +54,11 @@
 
 `onDaemonSocketMessage(deps, sessionId, raw)`:
 1. Decode payload via `decodeSocketPayload`.
-2. Parse via `hostDaemonDaemonWsMessageSchema` (validates `type: "heartbeat"`).
-3. `requireActiveSession(db, sessionId)` — re-validates session is still active.
-4. `heartbeatSession(db, sessionId, Date.now() + session.leaseTimeoutMs)`:
+2. `JSON.parse` inside a try/catch.
+3. Parse via `hostDaemonDaemonWsMessageSchema` (validates `type: "heartbeat"`).
+4. If invalid: `socket.close(1008, "invalid-message")`.
+5. `requireActiveSession(db, sessionId)` — re-validates session is still active.
+6. `heartbeatSession(db, sessionId, Date.now() + session.leaseTimeoutMs)`:
    - UPDATE `host_daemon_sessions` SET `lastHeartbeatAt`, `leaseExpiresAt`, `updatedAt`.
 
 ### onClose
