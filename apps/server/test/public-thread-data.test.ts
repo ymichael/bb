@@ -1,5 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { createDraftId, environments, events, getDraft, getThread, queuedThreadMessages } from "@bb/db";
+import { threadDraftListResponseSchema } from "@bb/server-contract";
 import { describe, expect, it } from "vitest";
 import {
   reportQueuedCommandError,
@@ -549,7 +550,7 @@ describe("public thread data routes", () => {
       const response = await harness.app.request(`/api/v1/threads/${thread.id}/drafts`);
 
       expect(response.status).toBe(200);
-      const drafts = await readJson(response) as unknown[];
+      const drafts = threadDraftListResponseSchema.parse(await readJson(response));
       expect(drafts).toHaveLength(2);
       expect(drafts).toEqual(expect.arrayContaining([
         expect.objectContaining({

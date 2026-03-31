@@ -211,6 +211,10 @@ describe("server-contract clients", () => {
         .pathname,
     ).toBe("/api/v1/threads/thr_123/send");
     expect(
+      publicClient.threads[":id"].drafts.$url({ param: { id: "thr_123" } })
+        .pathname,
+    ).toBe("/api/v1/threads/thr_123/drafts");
+    expect(
       publicClient.projects[":id"].managers.$url({
         param: { id: "proj_123" },
       }).pathname,
