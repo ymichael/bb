@@ -13,6 +13,10 @@ import {
   formatTimelineAsText,
   toViewMessages,
 } from "@bb/core-ui";
+import {
+  buildThreadEvent,
+  buildThreadEventRow,
+} from "@bb/domain";
 import type { ThreadEventRow, ToolCallRequest, ToolCallResponse } from "@bb/domain";
 import type {
   ProviderAuditBundle,
@@ -555,12 +559,14 @@ function buildClientRequestRows(args: {
   });
 
   return args.clientRequests.map((request) => {
-    return {
+    return buildThreadEventRow({
       id: request.id,
       threadId: args.threadId,
       seq: 0,
-      type: request.type,
-      data: {
+      createdAt: request.createdAt,
+      event: {
+        type: request.type,
+        threadId: args.threadId,
         direction: "outbound",
         source: "tell",
         initiator: "user",
@@ -574,8 +580,7 @@ function buildClientRequestRows(args: {
           source: request.type,
         },
       },
-      createdAt: request.createdAt,
-    };
+    });
   });
 }
 
@@ -597,15 +602,13 @@ function buildThreadEventRows(args: {
   });
 
   const providerRows = args.translatedCaptures.map((entry, index) => {
-    const { type, threadId: _ignoredThreadId, ...data } = entry.event;
-    return {
+    return buildThreadEventRow({
       id: `audit-row-${index + 1}`,
       threadId: entry.event.threadId,
       seq: 0,
-      type,
-      data,
       createdAt: entry.capturedAt,
-    };
+      event: entry.event,
+    });
   });
 
   return [...clientRows, ...providerRows]
@@ -623,9 +626,12 @@ function buildThreadEventRows(args: {
       }
       return left.index - right.index;
     })
-    .map((entry, index) => ({
-      ...entry.row,
+    .map((entry, index) => buildThreadEventRow({
+      id: entry.row.id,
+      threadId: entry.row.threadId,
       seq: index + 1,
+      createdAt: entry.row.createdAt,
+      event: buildThreadEvent(entry.row),
     }));
 }
 

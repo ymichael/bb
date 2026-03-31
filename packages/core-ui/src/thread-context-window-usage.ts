@@ -1,5 +1,7 @@
-import type { ThreadEventRow } from "@bb/domain";
-import { isRecord } from "./unknown-helpers.js";
+import {
+  isThreadEventRowOfType,
+  type ThreadEventRow,
+} from "@bb/domain";
 
 interface ThreadContextWindowSignal {
   totalTokens?: number;
@@ -26,15 +28,9 @@ function toPositiveNumber(value: unknown): number | undefined {
 }
 
 function decodeContextWindowSignal(event: ThreadEventRow): ThreadContextWindowSignal | null {
-  const payload = event.data;
-
-  if (event.type === "thread/tokenUsage/updated") {
-    const tokenUsage = isRecord(payload.tokenUsage) ? payload.tokenUsage : undefined;
-    const totalUsage = isRecord(tokenUsage?.total) ? tokenUsage.total : undefined;
-    const lastUsage = isRecord(tokenUsage?.last) ? tokenUsage.last : undefined;
-    const totalTokens =
-      toNonNegativeNumber(lastUsage?.totalTokens) ??
-      toNonNegativeNumber(totalUsage?.totalTokens);
+  if (isThreadEventRowOfType(event, "thread/tokenUsage/updated")) {
+    const tokenUsage = event.data.tokenUsage;
+    const totalTokens = toNonNegativeNumber(tokenUsage.last.totalTokens);
     const modelContextWindow = toPositiveNumber(tokenUsage?.modelContextWindow);
     if (totalTokens === undefined && modelContextWindow === undefined) {
       return null;
@@ -44,8 +40,6 @@ function decodeContextWindowSignal(event: ThreadEventRow): ThreadContextWindowSi
       modelContextWindow,
     };
   }
-
-  // Provider event methods are open_external: unknown methods are intentionally ignored.
   return null;
 }
 

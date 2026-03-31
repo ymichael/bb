@@ -1,3 +1,4 @@
+import { buildThreadEventRow } from "@bb/domain";
 import type { ThreadEvent } from "@bb/domain";
 import type { EventMeta } from "./event-decode.js";
 import { getEventTurnId } from "./event-decode.js";
@@ -69,7 +70,6 @@ export function appendDebugEvent(
   meta: EventMeta,
   reason: ViewDebugRawEventMessage["reason"],
 ): void {
-  const { type: _type, threadId: _threadId, ...rawEventData } = decoded;
   out.push({
     kind: "debug/raw-event",
     id: messageId(decoded.threadId, "debug", `${meta.seq}:${decoded.type}`),
@@ -79,14 +79,13 @@ export function appendDebugEvent(
     createdAt: meta.createdAt,
     turnId: getEventTurnId(decoded),
     rawType: decoded.type,
-    rawEvent: {
+    rawEvent: buildThreadEventRow({
       id: meta.id,
       threadId: decoded.threadId,
       seq: meta.seq,
-      type: decoded.type,
-      data: rawEventData,
       createdAt: meta.createdAt,
-    },
+      event: decoded,
+    }),
     reason,
   });
 }

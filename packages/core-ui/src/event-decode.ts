@@ -1,4 +1,4 @@
-import { threadEventSchema } from "@bb/domain";
+import { buildThreadEvent } from "@bb/domain";
 import type { ThreadEvent, ThreadEventRow } from "@bb/domain";
 
 /** Extract the optional turnId from any decoded ThreadEvent. */
@@ -42,15 +42,8 @@ function buildEventMeta(row: ThreadEventRow): EventMeta {
 export function decodeRow(
   row: ThreadEventRow,
 ): { event: ThreadEvent; meta: EventMeta } {
-  const parsedEvent = threadEventSchema.safeParse({
-    type: row.type,
-    ...row.data,
-    threadId: row.threadId,
-  });
   return {
-    event: parsedEvent.success ? parsedEvent.data : (() => {
-      throw parsedEvent.error;
-    })(),
+    event: buildThreadEvent(row),
     meta: buildEventMeta(row),
   };
 }

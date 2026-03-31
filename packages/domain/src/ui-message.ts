@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { Thread } from "./thread.js";
-import type { ThreadEventRow } from "./thread-events.js";
+import type { ThreadEventRow } from "./stored-thread-event.js";
 
 export const viewMessageStatusValues = [
   "streaming",

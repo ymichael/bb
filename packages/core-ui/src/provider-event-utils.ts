@@ -3,8 +3,11 @@
  * These are not provider-specific — they operate on bb's own persisted types.
  */
 
-import type { PromptInput, ThreadEventRow } from "@bb/domain";
-import { isRecord } from "./unknown-helpers.js";
+import {
+  isThreadEventRowOfType,
+  type PromptInput,
+  type ThreadEventRow,
+} from "@bb/domain";
 
 /**
  * Derive a thread title from prompt input text.
@@ -30,11 +33,9 @@ export function deriveThreadTitleFromInput(
  * Returns undefined if the event is not an agent message completion.
  */
 export function outputFromThreadEvent(event: ThreadEventRow): string | undefined {
-  if (event.type !== "item/completed") return undefined;
-  const data = event.data;
-  const item = isRecord(data.item) ? data.item : undefined;
-  if (!item) return undefined;
+  if (!isThreadEventRowOfType(event, "item/completed")) return undefined;
+  const item = event.data.item;
   if (item.type !== "agentMessage") return undefined;
-  const text = typeof item.text === "string" ? item.text : undefined;
+  const text = item.text;
   return text || undefined;
 }

@@ -158,23 +158,3 @@ export type ThreadEventDataForType<TType extends string> =
   TType extends SystemEventType
     ? ThreadEventDataByType[TType]
     : Record<string, unknown>;
-
-export const threadEventRowSchema = z.object({
-  id: z.string(),
-  threadId: z.string(),
-  seq: z.number(),
-  type: z.string(),
-  data: z.record(z.unknown()),
-  createdAt: z.number(),
-});
-
-export interface ThreadEventRow<TType extends string = string> {
-  id: string;
-  threadId: string;
-  seq: number;
-  type: TType;
-  data: ThreadEventDataForType<TType>;
-  createdAt: number;
-}
-
-export type ThreadEventOfType<TType extends string> = ThreadEventRow<TType>;

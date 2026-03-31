@@ -9,6 +9,18 @@ interface TodoArgumentShape {
   status?: string;
 }
 
+function toTodoArgumentShape(value: unknown): TodoArgumentShape | null {
+  const record = toRecord(value);
+  if (!record) {
+    return null;
+  }
+
+  return {
+    content: typeof record.content === "string" ? record.content : undefined,
+    status: typeof record.status === "string" ? record.status : undefined,
+  };
+}
+
 function toViewTaskStatus(
   value: string | undefined,
 ): ViewTaskEntry["status"] {
@@ -47,9 +59,8 @@ function asTodoTasks(value: unknown): ViewTaskEntry[] {
 
   const tasks: ViewTaskEntry[] = [];
   for (const entry of value) {
-    const record = toRecord(entry);
-    if (!record) continue;
-    const todo = record as TodoArgumentShape;
+    const todo = toTodoArgumentShape(entry);
+    if (!todo) continue;
     if (!todo.content || todo.content.trim().length === 0) {
       continue;
     }

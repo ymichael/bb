@@ -1087,6 +1087,8 @@ describe("public thread data routes", () => {
       seedEvent(harness.deps, {
         threadId: thread.id,
         environmentId: environment.id,
+        providerThreadId: "provider-thread-1",
+        turnId: "turn-1",
         sequence: 2,
         type: "item/completed",
         data: { item: { type: "agentMessage", id: "msg-1", text: "Reply" } },
@@ -1152,6 +1154,8 @@ describe("public thread data routes", () => {
       seedEvent(harness.deps, {
         threadId: thread.id,
         environmentId: environment.id,
+        providerThreadId: "provider-thread-1",
+        turnId: "turn-1",
         sequence: 5,
         type: "item/completed",
         data: { item: { type: "agentMessage", id: "msg-1", text: "Reply" } },

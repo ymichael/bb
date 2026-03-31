@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
-import type { ThreadEventRow } from "@bb/domain";
+import { parseThreadEventRow } from "@bb/domain";
 import { decodeRow } from "../src/event-decode.js";
 
 describe("decodeRow", () => {
-  it("parses persisted provider events through the thread event schema", () => {
-    const row: ThreadEventRow = {
+  it("reconstructs typed persisted provider events", () => {
+    const row = parseThreadEventRow({
       id: "row-1",
       threadId: "thread-1",
       seq: 1,
@@ -20,7 +20,7 @@ describe("decodeRow", () => {
         },
       },
       createdAt: 123,
-    };
+    });
 
     expect(decodeRow(row)).toEqual({
       event: {
@@ -43,8 +43,8 @@ describe("decodeRow", () => {
     });
   });
 
-  it("throws when persisted event data does not match the thread event schema", () => {
-    const row: ThreadEventRow = {
+  it("throws when persisted event data does not match the stored row schema", () => {
+    const row = {
       id: "row-1",
       threadId: "thread-1",
       seq: 1,
@@ -62,11 +62,11 @@ describe("decodeRow", () => {
       createdAt: 123,
     };
 
-    expect(() => decodeRow(row)).toThrow();
+    expect(() => parseThreadEventRow(row)).toThrow();
   });
 
   it("throws when turn/completed rows omit canonical status", () => {
-    const row: ThreadEventRow = {
+    const row = {
       id: "row-turn-status-missing",
       threadId: "thread-1",
       seq: 2,
@@ -78,11 +78,11 @@ describe("decodeRow", () => {
       createdAt: 456,
     };
 
-    expect(() => decodeRow(row)).toThrow();
+    expect(() => parseThreadEventRow(row)).toThrow();
   });
 
   it("throws when web-search item actions are not canonical strings", () => {
-    const row: ThreadEventRow = {
+    const row = {
       id: "row-web-search-action",
       threadId: "thread-1",
       seq: 3,
@@ -101,6 +101,6 @@ describe("decodeRow", () => {
       createdAt: 789,
     };
 
-    expect(() => decodeRow(row)).toThrow();
+    expect(() => parseThreadEventRow(row)).toThrow();
   });
 });

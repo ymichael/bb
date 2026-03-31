@@ -1,8 +1,8 @@
 import { Command } from "commander";
 import {
+  parseThreadEventRow,
   type Thread,
   type ThreadStatus,
-  threadEventRowSchema,
   threadStatusSchema,
   threadStatusValues,
 } from "@bb/domain";
@@ -120,7 +120,7 @@ export function registerWaitCommand(
             throw new Error(`Wait request failed with ${statusCode}: ${body}`);
           }
 
-          const matched = threadEventRowSchema.parse(await response.json());
+          const matched = parseThreadEventRow(await response.json());
           if (outputJson(opts, { threadId, matched: true, target })) return;
           console.log(
             `Thread ${threadId} observed event ${target.eventType} at seq ${matched.seq}.`,

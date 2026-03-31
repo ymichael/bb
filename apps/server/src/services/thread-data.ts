@@ -1,6 +1,8 @@
 import { and, desc, eq, gt, gte, lte, notInArray, sql } from "drizzle-orm";
 import { events } from "@bb/db";
 import {
+  buildThreadEventRow,
+  parseStoredThreadEvent,
   providerEventSchema,
   systemManagerUserMessageEventDataSchema,
 } from "@bb/domain";
@@ -14,8 +16,10 @@ export interface StoredEventRow {
   id: string;
   itemId: string | null;
   itemKind: ThreadEventItemType | null;
+  providerThreadId: string | null;
   sequence: number;
   threadId: string;
+  turnId: string | null;
   type: ThreadEventType;
 }
 
@@ -25,8 +29,10 @@ const storedEventRowFields = {
   id: events.id,
   itemId: events.itemId,
   itemKind: events.itemKind,
+  providerThreadId: events.providerThreadId,
   sequence: events.sequence,
   threadId: events.threadId,
+  turnId: events.turnId,
   type: events.type,
 };
 
@@ -65,14 +71,19 @@ function parseStoredEventPayload(row: StoredEventPayloadRow): Record<string, unk
 }
 
 export function decodeEventRow(row: StoredEventRow): ThreadEventRow {
-  return {
+  return buildThreadEventRow({
     id: row.id,
     threadId: row.threadId,
     seq: row.sequence,
-    type: row.type,
-    data: parseStoredEventPayload(row),
     createdAt: row.createdAt,
-  };
+    event: parseStoredThreadEvent({
+      type: row.type,
+      data: parseStoredEventPayload(row),
+      threadId: row.threadId,
+      providerThreadId: row.providerThreadId,
+      turnId: row.turnId,
+    }),
+  });
 }
 
 export function listThreadEventRows(

@@ -47,7 +47,5 @@ export type { ThreadEventWithMeta } from "./to-view-messages.js";
 
 export {
   extractErrorMessage,
-  getStringField,
-  isRecord,
   toRecord,
 } from "./unknown-helpers.js";

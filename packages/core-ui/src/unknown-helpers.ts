@@ -1,17 +1,9 @@
-export function isRecord(value: unknown): value is Record<string, unknown> {
+function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
 export function toRecord(value: unknown): Record<string, unknown> | null {
   return isRecord(value) ? value : null;
-}
-
-export function getStringField(
-  record: Record<string, unknown> | null,
-  key: string,
-): string | undefined {
-  const value = record?.[key];
-  return typeof value === "string" && value.length > 0 ? value : undefined;
 }
 
 /**

@@ -140,7 +140,6 @@ export {
   systemThreadTitleUpdatedEventDataSchema,
   threadEnvironmentStartReasonSchema,
   threadEnvironmentStartReasonValues,
-  threadEventRowSchema,
   threadProvisioningReasonSchema,
   threadProvisioningReasonValues,
   threadTurnInitiatorSchema,
@@ -162,14 +161,28 @@ export type {
   ThreadEventData,
   ThreadEventDataByType,
   ThreadEventDataForType,
-  ThreadEventOfType,
-  ThreadEventRow,
   ThreadProvisioningReason,
   ThreadTurnInitiator,
   TurnRequestEventData,
   TurnRequestOptions,
   TurnLifecycleEventData,
 } from "./thread-events.js";
+
+export {
+  buildThreadEvent,
+  buildThreadEventRow,
+  isThreadEventRowOfType,
+  parseStoredThreadEvent,
+  parseThreadEventRow,
+  threadEventRowSchema,
+} from "./stored-thread-event.js";
+export type {
+  StoredThreadEventData,
+  StoredThreadEventDataByType,
+  StoredThreadEventDataForType,
+  ThreadEventOfType,
+  ThreadEventRow,
+} from "./stored-thread-event.js";
 
 export {
   providerEventSchema,

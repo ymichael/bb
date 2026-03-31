@@ -1,8 +1,14 @@
-import { getStringField } from "./unknown-helpers.js";
-
 /** Get the effective start time of a message, falling back to createdAt. */
 export function getMessageStartedAt(message: { createdAt: number; startedAt?: number }): number {
   return message.startedAt ?? message.createdAt;
+}
+
+function getNonEmptyStringField(
+  record: Record<string, unknown> | null,
+  key: string,
+): string | undefined {
+  const value = record?.[key];
+  return typeof value === "string" && value.length > 0 ? value : undefined;
 }
 
 export function getFirstStringField(
@@ -10,7 +16,7 @@ export function getFirstStringField(
   keys: readonly string[],
 ): string | undefined {
   for (const key of keys) {
-    const value = getStringField(record, key);
+    const value = getNonEmptyStringField(record, key);
     if (value) return value;
   }
   return undefined;
