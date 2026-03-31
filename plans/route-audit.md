@@ -118,8 +118,6 @@ All individual audits live in `plans/route-audit/`. One file per route/command.
 - [x] `POST /internal/session/command-result` → `server-internal-POST-session-command-result.md`
 - [x] `POST /internal/session/events` → `server-internal-POST-session-events.md`
 - [x] `POST /internal/session/tool-call` → `server-internal-POST-session-tool-call.md`
-- [x] `GET /ws` → `server-ws-client.md`
-- [x] `GET /internal/ws` → `server-ws-daemon.md`
 
 ### Host-Daemon Local API
 - [x] `GET /host-id` → `daemon-GET-host-id.md`
