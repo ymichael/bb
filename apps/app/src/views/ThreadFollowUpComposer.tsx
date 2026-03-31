@@ -5,6 +5,7 @@ import {
   type SandboxMode,
   type ServiceTier,
   type ThreadQueuedMessage,
+  type WorkspaceStatus,
 } from "@bb/domain";
 import {
   PromptBox,
@@ -162,9 +163,7 @@ export interface ComposerBannerProps {
   promptBannerSummary: string;
   showBranchComparisonUi: boolean;
   showPromptGitStatsBanner: boolean;
-  workspaceStatus?: {
-    files?: ComponentProps<typeof WorkspaceChangesList>["files"];
-  } | null;
+  workspaceStatus?: WorkspaceStatus | null;
 }
 
 export interface ComposerCoreProps {
@@ -346,7 +345,7 @@ export function ThreadFollowUpComposer({
               >
                 <div className="overflow-hidden">
                   <WorkspaceChangesList
-                    files={banner.workspaceStatus.files ?? []}
+                    files={banner.workspaceStatus.workingTree.files}
                     onFileClick={banner.onPromptBannerFileClick}
                   />
                 </div>

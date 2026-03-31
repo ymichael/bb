@@ -284,7 +284,7 @@ describe("provisionWorkspace", () => {
 
       // getStatus
       const status = await ws.getStatus();
-      expect(status.state).toBe("clean");
+      expect(status.workingTree.state).toBe("clean");
 
       // commit
       await fs.writeFile(path.join(repoPath, "new.txt"), "data\n", "utf8");
@@ -295,7 +295,7 @@ describe("provisionWorkspace", () => {
       await fs.writeFile(path.join(repoPath, "dirty.txt"), "dirty\n", "utf8");
       await ws.reset();
       const statusAfter = await ws.getStatus();
-      expect(statusAfter.state).toBe("clean");
+      expect(statusAfter.workingTree.state).toBe("clean");
 
       // getBranches
       const branches = await ws.getBranches();
@@ -303,7 +303,7 @@ describe("provisionWorkspace", () => {
 
       // getDiff
       const diff = await ws.getDiff();
-      expect(diff.currentBranch).toBe("main");
+      expect(typeof diff.diff).toBe("string");
     });
   });
 

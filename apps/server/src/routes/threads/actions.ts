@@ -234,8 +234,8 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
           }),
         );
         if (
-          status.workspaceStatus?.hasUncommittedChanges ||
-          status.workspaceStatus?.hasCommittedUnmergedChanges
+          status.workspaceStatus?.workingTree.hasUncommittedChanges ||
+          status.workspaceStatus?.mergeBase?.hasCommittedUnmergedChanges
         ) {
           throw new ApiError(
             409,

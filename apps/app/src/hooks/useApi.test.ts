@@ -17,32 +17,37 @@ import {
   resolveWorkspaceStatusPlaceholder,
 } from "./useApi";
 
-function makeStatus(state: WorkspaceStatus["state"]): WorkspaceStatus {
+function makeStatus(state: WorkspaceStatus["workingTree"]["state"]): WorkspaceStatus {
   return {
-    state,
-    changedFiles: 0,
-    insertions: 0,
-    deletions: 0,
-    workspaceChangedFiles: 0,
-    workspaceInsertions: 0,
-    workspaceDeletions: 0,
-    hasUncommittedChanges: false,
-    hasCommittedUnmergedChanges: false,
-    aheadCount: 0,
-    behindCount: 0,
+    workingTree: {
+      hasUncommittedChanges: false,
+      state,
+      changedFiles: 0,
+      insertions: 0,
+      deletions: 0,
+      files: [],
+    },
+    branch: {
+      currentBranch: "feature",
+      defaultBranch: "main",
+    },
+    mergeBase: {
+      mergeBaseBranch: "main",
+      baseRef: "origin/main",
+      aheadCount: 0,
+      behindCount: 0,
+      hasCommittedUnmergedChanges: false,
+      commits: [],
+    },
   };
 }
 
 function makeGitDiffResponse(): ThreadGitDiffResponse {
   return {
-    mode: "worktree_commits",
-    currentBranch: "feat/test",
-    mergeBaseBranch: "main",
-    mergeBaseRef: "origin/main",
-    commits: [],
-    selection: { type: "combined" },
     diff: "diff --git a/file b/file",
     truncated: false,
+    shortstat: " 1 file changed, 1 insertion(+)\n",
+    files: "M\tfile\n",
   };
 }
 
@@ -198,7 +203,7 @@ describe("resolveEnvironmentGitDiffPlaceholder", () => {
     expect(
       resolveEnvironmentGitDiffPlaceholder(
         previousGitDiff,
-        ["environmentGitDiff", "env-1", "combined", "combined", null],
+        ["environmentGitDiff", "env-1", "all", "main"],
         "env-1",
       ),
     ).toBe(previousGitDiff);
@@ -210,7 +215,7 @@ describe("resolveEnvironmentGitDiffPlaceholder", () => {
     expect(
       resolveEnvironmentGitDiffPlaceholder(
         previousGitDiff,
-        ["environmentGitDiff", "env-1", "combined", "combined", null],
+        ["environmentGitDiff", "env-1", "all", "main"],
         "env-2",
       ),
     ).toBeUndefined();

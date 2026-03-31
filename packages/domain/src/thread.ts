@@ -31,30 +31,62 @@ export const workspaceStateValues = [
 export const workspaceStateSchema = z.enum(workspaceStateValues);
 export type WorkspaceState = z.infer<typeof workspaceStateSchema>;
 
-export const workspaceFileChangeSchema = z.object({
-  path: z.string(),
-  status: z.string(),
-});
-export type WorkspaceFileChange = z.infer<typeof workspaceFileChangeSchema>;
+export const workspaceFileStatusKindSchema = z.enum([
+  "M",
+  "A",
+  "D",
+  "R",
+  "C",
+  "U",
+  "??",
+]);
+export type WorkspaceFileStatusKind = z.infer<typeof workspaceFileStatusKindSchema>;
 
-export const workspaceStatusSchema = z.object({
+export const workspaceFileStatusSchema = z.object({
+  path: z.string(),
+  status: workspaceFileStatusKindSchema,
+});
+export type WorkspaceFileStatus = z.infer<typeof workspaceFileStatusSchema>;
+
+export const workspaceCommitSummarySchema = z.object({
+  sha: z.string(),
+  shortSha: z.string(),
+  subject: z.string(),
+  authorName: z.string(),
+  authoredAt: z.number(),
+});
+export type WorkspaceCommitSummary = z.infer<typeof workspaceCommitSummarySchema>;
+
+export const workspaceWorkingTreeSchema = z.object({
+  hasUncommittedChanges: z.boolean(),
   state: workspaceStateSchema,
   changedFiles: z.number(),
   insertions: z.number(),
   deletions: z.number(),
-  workspaceChangedFiles: z.number(),
-  workspaceInsertions: z.number(),
-  workspaceDeletions: z.number(),
-  hasUncommittedChanges: z.boolean(),
-  hasCommittedUnmergedChanges: z.boolean(),
+  files: z.array(workspaceFileStatusSchema),
+});
+export type WorkspaceWorkingTree = z.infer<typeof workspaceWorkingTreeSchema>;
+
+export const workspaceBranchSchema = z.object({
+  currentBranch: z.string().nullable(),
+  defaultBranch: z.string(),
+});
+export type WorkspaceBranch = z.infer<typeof workspaceBranchSchema>;
+
+export const workspaceMergeBaseSchema = z.object({
+  mergeBaseBranch: z.string(),
+  baseRef: z.string().nullable(),
   aheadCount: z.number(),
   behindCount: z.number(),
-  currentBranch: z.string().optional(),
-  defaultBranch: z.string().optional(),
-  mergeBaseBranch: z.string().optional(),
-  mergeBaseBranches: z.array(z.string()).optional(),
-  baseRef: z.string().optional(),
-  files: z.array(workspaceFileChangeSchema).optional(),
+  hasCommittedUnmergedChanges: z.boolean(),
+  commits: z.array(workspaceCommitSummarySchema),
+});
+export type WorkspaceMergeBase = z.infer<typeof workspaceMergeBaseSchema>;
+
+export const workspaceStatusSchema = z.object({
+  workingTree: workspaceWorkingTreeSchema,
+  branch: workspaceBranchSchema,
+  mergeBase: workspaceMergeBaseSchema.nullable(),
 });
 export type WorkspaceStatus = z.infer<typeof workspaceStatusSchema>;
 

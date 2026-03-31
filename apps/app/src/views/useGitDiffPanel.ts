@@ -5,7 +5,11 @@ import {
   useState,
 } from "react";
 import type { Location, NavigateFunction } from "react-router-dom";
-import { useEnvironmentGitDiff, useEnvironmentMergeBaseBranches } from "../hooks/useApi";
+import {
+  useEnvironmentGitDiff,
+  useEnvironmentMergeBaseBranches,
+  useEnvironmentWorkStatus,
+} from "../hooks/useApi";
 import {
   getThreadSecondaryPanel,
   useStoredThreadSecondaryPanel,
@@ -84,12 +88,15 @@ export function useGitDiffPanel({
     preferredTheme,
   });
 
-  const gitDiffSelection = useMemo(
+  const effectiveMergeBaseBranch = selectedMergeBaseBranch ?? defaultMergeBaseBranch;
+  const gitDiffTarget = useMemo(
     () =>
       selectedGitDiffCommitSha
         ? { type: "commit" as const, sha: selectedGitDiffCommitSha }
-        : { type: "combined" as const },
-    [selectedGitDiffCommitSha],
+        : effectiveMergeBaseBranch
+          ? { type: "all" as const, mergeBaseBranch: effectiveMergeBaseBranch }
+          : undefined,
+    [effectiveMergeBaseBranch, selectedGitDiffCommitSha],
   );
   const {
     data: mergeBaseBranchOptions,
@@ -100,14 +107,23 @@ export function useGitDiffPanel({
       shouldLoadMergeBaseBranchOptions &&
       isMergeBaseBranchPickerOpen,
   });
+  const { data: gitDiffWorkspaceStatus } = useEnvironmentWorkStatus(
+    environmentId ?? "",
+    effectiveMergeBaseBranch,
+    {
+      enabled:
+        Boolean(environmentId) &&
+        Boolean(effectiveMergeBaseBranch) &&
+        isDiffPanelActive,
+    },
+  );
   const {
     data: threadGitDiff,
     isLoading: isGitDiffLoading,
     error: gitDiffError,
   } = useEnvironmentGitDiff(environmentId ?? "", {
-    enabled: Boolean(environmentId) && isDiffPanelActive,
-    selection: gitDiffSelection,
-    mergeBaseBranch: selectedMergeBaseBranch ?? defaultMergeBaseBranch,
+    enabled: Boolean(environmentId) && isDiffPanelActive && gitDiffTarget !== undefined,
+    target: gitDiffTarget,
   });
   const parsedGitDiffFileEntries = useMemo(
     () =>
@@ -237,20 +253,15 @@ export function useGitDiffPanel({
   }, [environmentId]);
 
   useEffect(() => {
-    if (!threadGitDiff) return;
-    if (threadGitDiff.mode !== "worktree_commits") {
-      if (selectedGitDiffCommitSha !== null) {
-        setSelectedGitDiffCommitSha(null);
-      }
-      return;
-    }
     if (
       selectedGitDiffCommitSha &&
-      !threadGitDiff.commits.some((commit) => commit.sha === selectedGitDiffCommitSha)
+      !gitDiffWorkspaceStatus?.mergeBase?.commits.some(
+        (commit) => commit.sha === selectedGitDiffCommitSha,
+      )
     ) {
       setSelectedGitDiffCommitSha(null);
     }
-  }, [selectedGitDiffCommitSha, threadGitDiff]);
+  }, [gitDiffWorkspaceStatus?.mergeBase?.commits, selectedGitDiffCommitSha]);
 
   const setThreadSecondaryPanel = useCallback(
     (panel: ThreadSecondaryPanelTab | null) => {
@@ -353,23 +364,20 @@ export function useGitDiffPanel({
     pendingGitDiffScrollPath,
   ]);
 
-  const selectedDiffCommitSha =
-    threadGitDiff?.selection.type === "commit"
-      ? threadGitDiff.selection.sha
-      : null;
-  const gitDiffSelectValue = selectedDiffCommitSha ?? "combined";
+  const diffCommits = gitDiffWorkspaceStatus?.mergeBase?.commits ?? [];
+  const gitDiffSelectValue = selectedGitDiffCommitSha ?? "all";
   const gitDiffSelectOptions: GitDiffSelectionOption[] =
-    threadGitDiff?.mode === "worktree_commits"
+    diffCommits.length > 0
       ? [
-          { value: "combined", label: "All changes combined" },
-          ...threadGitDiff.commits.map((commit) => ({
+          { value: "all", label: "All changes" },
+          ...diffCommits.map((commit) => ({
             value: commit.sha,
             label: `${commit.shortSha} · ${commit.subject}`,
           })),
         ]
       : [{
-          value: "combined",
-          label: "Uncommitted changes",
+          value: "all",
+          label: "All changes",
         }];
   const currentGitDiff = threadGitDiff?.diff ?? "";
   const hasCurrentGitDiff = currentGitDiff.trim().length > 0;
@@ -418,7 +426,7 @@ export function useGitDiffPanel({
     loadingGitDiffFileKeys,
     mergeBaseBranchOptions,
     onGitDiffSelectionChange: (value: string) => {
-      setSelectedGitDiffCommitSha(value === "combined" ? null : value);
+      setSelectedGitDiffCommitSha(value === "all" ? null : value);
     },
     onMergeBaseBranchPickerOpenChange: (open: boolean) => {
       if (open) {

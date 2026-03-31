@@ -396,9 +396,9 @@ describe.sequential("fake provider smoke integration", () => {
       const diff = await getEnvironmentDiff(harness.api, environment.id);
       const branches = await getEnvironmentBranches(harness.api, environment.id);
 
-      expect(status.workspace?.state).toBe("clean");
-      expect(status.workspace?.hasUncommittedChanges).toBe(false);
-      expect(diff.currentBranch).toBe("main");
+      expect(status.workspace?.workingTree.state).toBe("clean");
+      expect(status.workspace?.workingTree.hasUncommittedChanges).toBe(false);
+      expect(typeof diff.diff).toBe("string");
       expect(branches).toContain("main");
     }));
 
@@ -420,7 +420,7 @@ describe.sequential("fake provider smoke integration", () => {
       });
 
       const dirtyStatus = await getEnvironmentStatus(harness.api, environment.id);
-      expect(dirtyStatus.workspace?.hasUncommittedChanges).toBe(true);
+      expect(dirtyStatus.workspace?.workingTree.hasUncommittedChanges).toBe(true);
 
       const result = await runEnvironmentAction(harness.api, environment.id, {
         action: "commit",
@@ -437,7 +437,7 @@ describe.sequential("fake provider smoke integration", () => {
       expect(result.commitSha).toBeTruthy();
 
       const cleanStatus = await getEnvironmentStatus(harness.api, environment.id);
-      expect(cleanStatus.workspace?.state).toBe("clean");
+      expect(cleanStatus.workspace?.workingTree.state).toBe("clean");
 
       const subject = await runGit({
         args: ["log", "-1", "--format=%s"],
@@ -493,7 +493,7 @@ describe.sequential("fake provider smoke integration", () => {
       });
       const environmentStatus = await getEnvironmentStatus(harness.api, environment.id);
       expect(sourceBranch.trim()).toBe("main");
-      expect(environmentStatus.workspace?.state).toBe("committed_unmerged");
+      expect(environmentStatus.workspace?.workingTree.state).toBe("committed_unmerged");
     }));
 
   it("archives and unarchives a thread, blocking work while archived", () =>

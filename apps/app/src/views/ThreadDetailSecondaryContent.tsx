@@ -331,7 +331,7 @@ function ThreadMetadataContent({
           valueClassName="pt-0.5"
         >
           <WorkspaceChangesList
-            files={workspaceStatusFiles}
+            files={workspaceStatusFiles ?? []}
             maxHeightClassName="max-h-48"
           />
         </DetailRow>

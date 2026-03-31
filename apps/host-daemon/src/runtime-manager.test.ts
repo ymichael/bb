@@ -26,33 +26,32 @@ type ListModelsArgs = Parameters<AgentRuntime["listModels"]>[0];
 
 function createFakeWorkspace(path: string) {
   const status: GetStatusResult = {
-    state: "clean",
-    changedFiles: 0,
-    insertions: 0,
-    deletions: 0,
-    workspaceChangedFiles: 0,
-    workspaceInsertions: 0,
-    workspaceDeletions: 0,
-    hasUncommittedChanges: false,
-    hasCommittedUnmergedChanges: false,
-    aheadCount: 0,
-    behindCount: 0,
-    currentBranch: "main",
-    defaultBranch: "main",
-    mergeBaseBranch: "main",
-    mergeBaseBranches: [],
-    baseRef: "main",
-    files: [],
+    workingTree: {
+      hasUncommittedChanges: false,
+      state: "clean",
+      changedFiles: 0,
+      insertions: 0,
+      deletions: 0,
+      files: [],
+    },
+    branch: {
+      currentBranch: "main",
+      defaultBranch: "main",
+    },
+    mergeBase: {
+      mergeBaseBranch: "main",
+      baseRef: "main",
+      aheadCount: 0,
+      behindCount: 0,
+      hasCommittedUnmergedChanges: false,
+      commits: [],
+    },
   };
   const diff: GetDiffResult = {
-    mode: "local_uncommitted",
-    currentBranch: "main",
-    mergeBaseBranch: "main",
-    mergeBaseRef: "main",
-    commits: [],
-    selection: { type: "combined" },
     diff: "",
     truncated: false,
+    shortstat: "",
+    files: "",
   };
   const workspace = {
     path,

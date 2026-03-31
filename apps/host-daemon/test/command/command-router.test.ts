@@ -21,16 +21,26 @@ function createFakeWorkspace(path: string) {
     isGitRepo: true,
     isWorktree: false,
     currentBranch: vi.fn(async () => "main"),
-    getStatus: vi.fn(async () => null),
+    getStatus: vi.fn(async () => ({
+      workingTree: {
+        hasUncommittedChanges: false,
+        state: "clean" as const,
+        changedFiles: 0,
+        insertions: 0,
+        deletions: 0,
+        files: [],
+      },
+      branch: {
+        currentBranch: "main",
+        defaultBranch: "main",
+      },
+      mergeBase: null,
+    })),
     getDiff: vi.fn(async () => ({
-      mode: "combined",
-      currentBranch: "main",
-      mergeBaseBranch: "main",
-      mergeBaseRef: "main",
-      commits: [],
-      selection: { type: "combined" as const },
       diff: "",
       truncated: false,
+      shortstat: "",
+      files: "",
     })),
     getBranches: vi.fn(async () => ["main"]),
     commit: vi.fn(async () => ({

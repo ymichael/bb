@@ -41,7 +41,7 @@ interface ThreadGitActionDialogProps {
   branchName?: string;
   gitStatusLabel?: string;
   gitStatusSummary?: string;
-  changedFiles?: WorkspaceStatus["files"];
+  changedFiles?: WorkspaceStatus["workingTree"]["files"];
   threadId?: string;
   threadType?: ThreadType;
   showMergeBaseDetails?: boolean;
@@ -300,7 +300,7 @@ function ThreadGitActionDialogContent({
                 valueClassName="pt-0.5"
               >
                 <WorkspaceChangesList
-                  files={changedFiles}
+                  files={changedFiles ?? []}
                   maxHeightClassName="max-h-40"
                 />
               </DetailRow>

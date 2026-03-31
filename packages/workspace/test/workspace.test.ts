@@ -47,19 +47,19 @@ describe("Workspace", () => {
     const repoPath = await initRepo();
     const workspace = new Workspace(repoPath);
 
-    expect((await workspace.getStatus()).state).toBe("clean");
+    expect((await workspace.getStatus()).workingTree.state).toBe("clean");
 
     await fs.writeFile(path.join(repoPath, "README.md"), "dirty\n", "utf8");
-    expect((await workspace.getStatus()).state).toBe("dirty_uncommitted");
+    expect((await workspace.getStatus()).workingTree.state).toBe("dirty_uncommitted");
 
     await workspace.reset();
     await fs.writeFile(path.join(repoPath, "notes.txt"), "note\n", "utf8");
     const untrackedStatus = await workspace.getStatus();
-    expect(untrackedStatus.state).toBe("untracked");
-    expect(untrackedStatus.changedFiles).toBe(1);
+    expect(untrackedStatus.workingTree.state).toBe("untracked");
+    expect(untrackedStatus.workingTree.changedFiles).toBe(1);
   });
 
-  it("returns combined and commit diff views against a merge-base branch", async () => {
+  it("returns grouped status details only when merge-base data is requested", async () => {
     const repoPath = await initRepo();
     await runGit(["checkout", "-b", "feature"], { cwd: repoPath });
     await fs.writeFile(path.join(repoPath, "README.md"), "feature\n", "utf8");
@@ -67,21 +67,55 @@ describe("Workspace", () => {
     await runGit(["commit", "-m", "Feature commit"], { cwd: repoPath });
 
     const workspace = new Workspace(repoPath);
-    const status = await workspace.getStatus({ mergeBaseBranch: "main" });
-    expect(status.mergeBaseBranch).toBe("main");
-    expect(status.aheadCount).toBe(1);
-    expect(status.behindCount).toBe(0);
+    const localOnlyStatus = await workspace.getStatus();
+    expect(localOnlyStatus.mergeBase).toBeNull();
+    expect(localOnlyStatus.workingTree.state).toBe("clean");
 
-    const combined = await workspace.getDiff({ mergeBaseBranch: "main" });
-    expect(combined.mode).toBe("worktree_commits");
-    expect(combined.commits[0]?.subject).toBe("Feature commit");
-    expect(combined.diff).toContain("+feature");
+    const status = await workspace.getStatus({ mergeBaseBranch: "main" });
+    expect(status.branch.currentBranch).toBe("feature");
+    expect(status.branch.defaultBranch).toBe("main");
+    expect(status.mergeBase).toMatchObject({
+      mergeBaseBranch: "main",
+      aheadCount: 1,
+      behindCount: 0,
+      hasCommittedUnmergedChanges: true,
+    });
+    expect(status.mergeBase?.commits[0]?.subject).toBe("Feature commit");
+  });
+
+  it("returns diff content for each supported target", async () => {
+    const repoPath = await initRepo();
+    await runGit(["checkout", "-b", "feature"], { cwd: repoPath });
+    await fs.writeFile(path.join(repoPath, "README.md"), "feature\n", "utf8");
+    await runGit(["add", "README.md"], { cwd: repoPath });
+    await runGit(["commit", "-m", "Feature commit"], { cwd: repoPath });
+    await fs.writeFile(path.join(repoPath, "README.md"), "feature plus pending\n", "utf8");
+
+    const workspace = new Workspace(repoPath);
+    const status = await workspace.getStatus({ mergeBaseBranch: "main" });
+    const commitSha = status.mergeBase?.commits[0]?.sha;
+    expect(commitSha).toBeDefined();
+
+    const uncommitted = await workspace.getDiff({
+      target: { type: "uncommitted" },
+    });
+    expect(uncommitted.diff).toContain("feature plus pending");
+    expect(uncommitted.files).toContain("README.md");
+    expect(uncommitted.shortstat).toContain("1 file changed");
+
+    const branchCommitted = await workspace.getDiff({
+      target: { type: "branch_committed", mergeBaseBranch: "main" },
+    });
+    expect(branchCommitted.diff).toContain("+feature");
+
+    const all = await workspace.getDiff({
+      target: { type: "all", mergeBaseBranch: "main" },
+    });
+    expect(all.diff).toContain("feature plus pending");
 
     const commitOnly = await workspace.getDiff({
-      mergeBaseBranch: "main",
-      selection: { type: "commit", sha: combined.commits[0]!.sha },
+      target: { type: "commit", sha: commitSha! },
     });
-    expect(commitOnly.selection.type).toBe("commit");
     expect(commitOnly.diff).toContain("+feature");
   });
 
@@ -102,7 +136,7 @@ describe("Workspace", () => {
     await fs.writeFile(path.join(repoPath, "temp.txt"), "temporary\n", "utf8");
     await workspace.reset();
 
-    expect((await workspace.getStatus()).state).toBe("clean");
+    expect((await workspace.getStatus()).workingTree.state).toBe("clean");
     await expect(fs.stat(path.join(repoPath, "temp.txt"))).rejects.toThrow();
   });
 
@@ -114,7 +148,7 @@ describe("Workspace", () => {
     const workspace = new Workspace(repoPath);
     const stashRef = await workspace.stash("save changes");
     expect(stashRef).toMatch(/^stash@\{/u);
-    expect((await workspace.getStatus()).state).toBe("clean");
+    expect((await workspace.getStatus()).workingTree.state).toBe("clean");
 
     await workspace.detachHead();
     expect(await workspace.currentBranch).toBeUndefined();
@@ -123,7 +157,7 @@ describe("Workspace", () => {
     expect(await workspace.currentBranch).toBe("feature");
 
     await workspace.stashPop(stashRef ?? undefined);
-    expect((await workspace.getStatus()).state).toBe("dirty_uncommitted");
+    expect((await workspace.getStatus()).workingTree.state).toBe("dirty_uncommitted");
   });
 
   it("creates checkpoints and pushes them to a local bare remote", async () => {

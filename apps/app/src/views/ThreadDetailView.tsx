@@ -349,6 +349,9 @@ export function ThreadDetailView() {
   const workspaceStatusError = workStatusQuery.error;
   const workspaceStatus =
     workspaceStatusError ? undefined : (workStatus ?? undefined);
+  const workspaceWorkingTree = workspaceStatus?.workingTree;
+  const workspaceBranch = workspaceStatus?.branch;
+  const workspaceMergeBase = workspaceStatus?.mergeBase;
   const { isLocalHost, openPath } = useHostDaemon();
   const isReasoningBlockActive = false;
   const isThreadTimelinePending = timelineLoading && threadDetailRows.length === 0;
@@ -684,7 +687,7 @@ export function ThreadDetailView() {
     }
 
     if (isDirectThreadEnvironment) {
-      if (!workspaceStatus.hasUncommittedChanges) {
+      if (!workspaceWorkingTree?.hasUncommittedChanges) {
         return null;
       }
       return {
@@ -696,13 +699,13 @@ export function ThreadDetailView() {
     if (
       environment?.managed &&
       (
-        workspaceStatus.hasCommittedUnmergedChanges ||
-        workspaceStatus.hasUncommittedChanges
+        workspaceMergeBase?.hasCommittedUnmergedChanges ||
+        workspaceWorkingTree?.hasUncommittedChanges
       )
     ) {
       return {
         target: {
-          kind: workspaceStatus.hasUncommittedChanges
+          kind: workspaceWorkingTree?.hasUncommittedChanges
             ? "commit_and_squash_merge"
             : "squash_merge",
         },
@@ -725,31 +728,35 @@ export function ThreadDetailView() {
   const promptBannerSummary = workspaceStatus
     ? showBranchComparisonUi
       ? formatChangeSummary({
-          changedFiles: workspaceStatus.changedFiles,
-          insertions: workspaceStatus.insertions,
-          deletions: workspaceStatus.deletions,
+          changedFiles: workspaceWorkingTree?.changedFiles ?? 0,
+          insertions: workspaceWorkingTree?.insertions ?? 0,
+          deletions: workspaceWorkingTree?.deletions ?? 0,
         })
-      : formatWorkspaceChangeSummary(workspaceStatus)
+      : formatWorkspaceChangeSummary(workspaceWorkingTree ?? {
+          changedFiles: 0,
+          insertions: 0,
+          deletions: 0,
+        })
     : "";
   const showPromptGitStatsBanner = canUseGitUi && Boolean(
     workspaceStatus &&
     (
       showBranchComparisonUi
-        ? workspaceStatus.changedFiles > 0
-        : workspaceStatus.workspaceChangedFiles > 0
+        ? (workspaceWorkingTree?.changedFiles ?? 0) > 0
+        : (workspaceWorkingTree?.changedFiles ?? 0) > 0
     ),
   );
   const canExpandPromptChangeList = Boolean(
     canUseGitUi &&
     workspaceStatus &&
-    (workspaceStatus.files?.length ?? 0) > 0,
+    (workspaceWorkingTree?.files.length ?? 0) > 0,
   );
   const promptBannerMergeBaseBranch = effectiveMergeBaseBranch;
   const threadEnvironmentType =
     threadEnvironmentLabel ??
     (environment ? "environment" : undefined);
   const threadEnvironmentValue: ReactNode | undefined = threadEnvironmentLabel ?? undefined;
-  const threadBranchName = workspaceStatus?.currentBranch;
+  const threadBranchName = workspaceBranch?.currentBranch ?? undefined;
   const showWorkspaceStatus =
     canUseGitUi &&
     (Boolean(workspaceStatus) || Boolean(workspaceStatusError)) &&
@@ -761,19 +768,19 @@ export function ThreadDetailView() {
       showBranchComparison: showBranchComparisonUi,
     },
   );
-  const threadGitStatusLabelClass = workspaceStatus?.state === "deleted"
+  const threadGitStatusLabelClass = workspaceWorkingTree?.state === "deleted"
     ? "text-destructive"
-    : workspaceStatus?.state === "untracked"
+    : workspaceWorkingTree?.state === "untracked"
       ? "text-muted-foreground"
       : "text-foreground";
   const showThreadChangedFiles = canUseGitUi && Boolean(
     workspaceStatus &&
       (
-        workspaceStatus.state === "dirty_uncommitted" ||
-        workspaceStatus.state === "dirty_and_committed_unmerged" ||
-        workspaceStatus.state === "committed_unmerged"
+        workspaceWorkingTree?.state === "dirty_uncommitted" ||
+        workspaceWorkingTree?.state === "dirty_and_committed_unmerged" ||
+        workspaceWorkingTree?.state === "committed_unmerged"
       ) &&
-      (workspaceStatus.files?.length ?? 0) > 0,
+      (workspaceWorkingTree?.files.length ?? 0) > 0,
   );
   const showThreadMetadata = Boolean(
     isManagerThread ||
@@ -1172,7 +1179,7 @@ export function ThreadDetailView() {
             unarchiveThread.isPending &&
             unarchiveThread.variables?.id === thread.id,
           updateThreadPending: updateThread.isPending,
-          workspaceStatusFiles: workspaceStatus?.files,
+          workspaceStatusFiles: workspaceWorkingTree?.files,
         }}
         secondaryPanel={{
           activePanel: effectiveSecondaryPanel,
@@ -1274,7 +1281,7 @@ export function ThreadDetailView() {
           branchName={threadBranchName}
           gitStatusLabel={threadGitStatusDisplay.label}
           gitStatusSummary={threadGitStatusDisplay.summary}
-          changedFiles={workspaceStatus?.files}
+          changedFiles={workspaceWorkingTree?.files}
           threadId={thread.id}
           threadType={thread.type}
           showMergeBaseDetails={showBranchComparisonUi}

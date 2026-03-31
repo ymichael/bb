@@ -28,8 +28,7 @@ describe("workspace command dispatch", () => {
         type: "workspace.diff",
         environmentId: "env-1",
         workspaceContext: { workspacePath: "/tmp/env-1", workspaceProvisionType: "unmanaged" },
-        mergeBaseBranch: "main",
-        selection: { type: "combined" },
+        target: { type: "all", mergeBaseBranch: "main" },
       },
       { runtimeManager: harness.manager },
     );
@@ -83,7 +82,7 @@ describe("workspace command dispatch", () => {
       { runtimeManager: harness.manager },
     );
 
-    expect(statusResult.workspaceStatus?.state).toBe("clean");
+    expect(statusResult.workspaceStatus?.workingTree.state).toBe("clean");
     expect(diffResult.diff.diff).toBe("");
     expect(commitResult).toEqual({ commitSha: "commit-1", commitSubject: "Commit message" });
     expect(squashResult).toEqual({ merged: true, commitSha: "merge-main" });
@@ -104,12 +103,11 @@ describe("workspace command dispatch", () => {
         type: "workspace.status",
         environmentId: "env-rehydrate",
         workspaceContext: { workspacePath: "/tmp/env-rehydrate", workspaceProvisionType: "unmanaged" },
-        mergeBaseBranch: "main",
       },
       { runtimeManager: harness.manager },
     );
 
-    expect(result.workspaceStatus?.state).toBe("clean");
+    expect(result.workspaceStatus?.workingTree.state).toBe("clean");
     expect(harness.provisions).toEqual([
       {
         workspaceProvisionType: "unmanaged",

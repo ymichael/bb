@@ -65,21 +65,7 @@ interface ParsedGitDiffFileEntry {
   fileDiff: ParsedGitDiffFile;
 }
 
-interface ThreadGitDiffSelection {
-  type: string;
-  sha?: string;
-}
-
-interface ThreadGitDiffCommit {
-  sha: string;
-  shortSha: string;
-  subject: string;
-}
-
 interface ThreadGitDiffData {
-  mode: string;
-  selection: ThreadGitDiffSelection;
-  commits?: ThreadGitDiffCommit[];
   diff: string;
   truncated?: boolean;
 }

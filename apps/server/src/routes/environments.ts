@@ -21,14 +21,30 @@ import {
 import { queueCommandAndWait } from "../services/command-wait.js";
 import { requireSourceForHost } from "../services/thread-create-helpers.js";
 
-function toWorkspaceDiffSelection(query: EnvironmentDiffQuery) {
-  if (query.selection === "commit") {
-    return {
-      type: "commit" as const,
-      sha: query.commitSha,
-    };
+function toWorkspaceDiffTarget(query: EnvironmentDiffQuery) {
+  switch (query.target) {
+    case "uncommitted":
+      return { type: "uncommitted" as const };
+    case "branch_committed":
+      return {
+        type: "branch_committed" as const,
+        mergeBaseBranch: query.mergeBaseBranch,
+      };
+    case "all":
+      return {
+        type: "all" as const,
+        mergeBaseBranch: query.mergeBaseBranch,
+      };
+    case "commit":
+      return {
+        type: "commit" as const,
+        sha: query.sha,
+      };
+    default: {
+      const _exhaustive: never = query;
+      return _exhaustive;
+    }
   }
-  return { type: "combined" as const };
 }
 
 export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
@@ -50,7 +66,9 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
           workspacePath: environment.path,
           workspaceProvisionType: environment.workspaceProvisionType,
         },
-        mergeBaseBranch: query.mergeBaseBranch,
+        ...(query.mergeBaseBranch
+          ? { mergeBaseBranch: query.mergeBaseBranch }
+          : {}),
       },
     });
     const result = hostDaemonCommandResultSchemaByType["workspace.status"].parse(rawResult);
@@ -69,8 +87,7 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
           workspacePath: environment.path,
           workspaceProvisionType: environment.workspaceProvisionType,
         },
-        selection: toWorkspaceDiffSelection(query),
-        mergeBaseBranch: query.mergeBaseBranch,
+        target: toWorkspaceDiffTarget(query),
       },
     });
     return context.json(

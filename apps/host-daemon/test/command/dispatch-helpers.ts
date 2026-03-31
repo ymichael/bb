@@ -11,7 +11,12 @@ const tempDirs: string[] = [];
 export function createFakeWorkspace(pathname: string) {
   const state = {
     statusReads: 0,
-    lastDiffSelection: undefined as unknown,
+    lastDiffTarget: undefined as
+      | { type: "uncommitted" }
+      | { type: "branch_committed"; mergeBaseBranch: string }
+      | { type: "all"; mergeBaseBranch: string }
+      | { type: "commit"; sha: string }
+      | undefined,
     lastCommitMessage: undefined as string | undefined,
     resetCount: 0,
     lastCheckpointMessage: undefined as string | undefined,
@@ -31,39 +36,44 @@ export function createFakeWorkspace(pathname: string) {
     },
     async getStatus(options?: { mergeBaseBranch?: string }) {
       state.statusReads += 1;
-      const mergeBaseBranch = options?.mergeBaseBranch ?? "main";
       return {
-        state: "clean" as const,
-        changedFiles: 0,
-        insertions: 0,
-        deletions: 0,
-        workspaceChangedFiles: 0,
-        workspaceInsertions: 0,
-        workspaceDeletions: 0,
-        hasUncommittedChanges: false,
-        hasCommittedUnmergedChanges: false,
-        aheadCount: 0,
-        behindCount: 0,
-        currentBranch: "main",
-        defaultBranch: "main",
-        mergeBaseBranch,
-        mergeBaseBranches: [],
-        baseRef: mergeBaseBranch,
-        files: [],
+        workingTree: {
+          hasUncommittedChanges: false,
+          state: "clean" as const,
+          changedFiles: 0,
+          insertions: 0,
+          deletions: 0,
+          files: [],
+        },
+        branch: {
+          currentBranch: "main",
+          defaultBranch: "main",
+        },
+        mergeBase: options?.mergeBaseBranch
+          ? {
+              mergeBaseBranch: options.mergeBaseBranch,
+              baseRef: options.mergeBaseBranch,
+              aheadCount: 0,
+              behindCount: 0,
+              hasCommittedUnmergedChanges: false,
+              commits: [],
+            }
+          : null,
       };
     },
-    async getDiff(options?: { mergeBaseBranch?: string; selection?: unknown }) {
-      state.lastDiffSelection = options?.selection;
-      const mergeBaseBranch = options?.mergeBaseBranch ?? "main";
+    async getDiff(options?: {
+      target?:
+        | { type: "uncommitted" }
+        | { type: "branch_committed"; mergeBaseBranch: string }
+        | { type: "all"; mergeBaseBranch: string }
+        | { type: "commit"; sha: string };
+    }) {
+      state.lastDiffTarget = options?.target;
       return {
-        mode: "combined" as const,
-        currentBranch: "main",
-        mergeBaseBranch,
-        mergeBaseRef: mergeBaseBranch,
-        commits: [],
-        selection: { type: "combined" as const },
         diff: "",
         truncated: false,
+        shortstat: "",
+        files: "",
       };
     },
     async getBranches() {

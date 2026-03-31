@@ -17,7 +17,7 @@ export async function provisionEnvironment(
       ? await detectSetupScript(command)
       : false;
   const defaultBranch = entry.workspace.isGitRepo
-    ? (await entry.workspace.getStatus()).defaultBranch ?? null
+    ? (await entry.workspace.getStatus()).branch.defaultBranch || null
     : null;
   return {
     path: entry.workspace.path,

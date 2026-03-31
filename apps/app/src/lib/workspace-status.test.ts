@@ -7,19 +7,28 @@ import {
   threadWorktreeCleanLabel,
 } from "./workspace-status";
 
-function makeStatus(state: WorkspaceStatus["state"]): WorkspaceStatus {
+function makeStatus(state: WorkspaceStatus["workingTree"]["state"]): WorkspaceStatus {
   return {
-    state,
-    changedFiles: 0,
-    insertions: 0,
-    deletions: 0,
-    workspaceChangedFiles: 0,
-    workspaceInsertions: 0,
-    workspaceDeletions: 0,
-    hasUncommittedChanges: false,
-    hasCommittedUnmergedChanges: false,
-    aheadCount: 0,
-    behindCount: 0,
+    workingTree: {
+      hasUncommittedChanges: false,
+      state,
+      changedFiles: 0,
+      insertions: 0,
+      deletions: 0,
+      files: [],
+    },
+    branch: {
+      currentBranch: "feature",
+      defaultBranch: "main",
+    },
+    mergeBase: {
+      mergeBaseBranch: "main",
+      baseRef: "origin/main",
+      aheadCount: 0,
+      behindCount: 0,
+      hasCommittedUnmergedChanges: false,
+      commits: [],
+    },
   };
 }
 
@@ -42,7 +51,10 @@ describe("workspace-status", () => {
     expect(
       threadWorktreeCleanLabel({
         ...makeStatus("clean"),
-        behindCount: 4,
+        mergeBase: {
+          ...makeStatus("clean").mergeBase!,
+          behindCount: 4,
+        },
       }),
     ).toBe("Clean");
   });
@@ -68,7 +80,10 @@ describe("workspace-status", () => {
     expect(
       workspaceStatusDescription({
         ...makeStatus("clean"),
-        behindCount: 2,
+        mergeBase: {
+          ...makeStatus("clean").mergeBase!,
+          behindCount: 2,
+        },
       }),
     ).toBe(
       "No local file changes, but this branch is behind its merge base.",
@@ -80,7 +95,10 @@ describe("workspace-status", () => {
       getGitStatusDisplay(
         {
           ...makeStatus("clean"),
-          behindCount: 3,
+          mergeBase: {
+            ...makeStatus("clean").mergeBase!,
+            behindCount: 3,
+          },
         },
         {
           mergeBaseBranch: "main",
@@ -98,8 +116,11 @@ describe("workspace-status", () => {
       getGitStatusDisplay(
         {
           ...makeStatus("clean"),
-          aheadCount: 2,
-          behindCount: 1,
+          mergeBase: {
+            ...makeStatus("clean").mergeBase!,
+            aheadCount: 2,
+            behindCount: 1,
+          },
         },
         {
           mergeBaseBranch: "main",
@@ -117,7 +138,11 @@ describe("workspace-status", () => {
       getGitStatusDisplay(
         {
           ...makeStatus("committed_unmerged"),
-          aheadCount: 2,
+          mergeBase: {
+            ...makeStatus("committed_unmerged").mergeBase!,
+            aheadCount: 2,
+            hasCommittedUnmergedChanges: true,
+          },
         },
         {
           mergeBaseBranch: "main",
@@ -134,9 +159,12 @@ describe("workspace-status", () => {
     expect(
       getGitStatusDisplay({
         ...makeStatus("dirty_uncommitted"),
-        workspaceChangedFiles: 3,
-        workspaceInsertions: 8,
-        workspaceDeletions: 2,
+        workingTree: {
+          ...makeStatus("dirty_uncommitted").workingTree,
+          changedFiles: 3,
+          insertions: 8,
+          deletions: 2,
+        },
       }),
     ).toEqual({
       label: "Dirty",

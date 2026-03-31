@@ -8,19 +8,28 @@ import {
   requiresArchiveConfirmation,
 } from "./thread-archive"
 
-function makeStatus(state: WorkspaceStatus["state"]): WorkspaceStatus {
+function makeStatus(state: WorkspaceStatus["workingTree"]["state"]): WorkspaceStatus {
   return {
-    state,
-    changedFiles: 0,
-    insertions: 0,
-    deletions: 0,
-    workspaceChangedFiles: 0,
-    workspaceInsertions: 0,
-    workspaceDeletions: 0,
-    hasUncommittedChanges: false,
-    hasCommittedUnmergedChanges: false,
-    aheadCount: 0,
-    behindCount: 0,
+    workingTree: {
+      hasUncommittedChanges: false,
+      state,
+      changedFiles: 0,
+      insertions: 0,
+      deletions: 0,
+      files: [],
+    },
+    branch: {
+      currentBranch: "feature",
+      defaultBranch: "main",
+    },
+    mergeBase: {
+      mergeBaseBranch: "main",
+      baseRef: "origin/main",
+      aheadCount: 0,
+      behindCount: 0,
+      hasCommittedUnmergedChanges: false,
+      commits: [],
+    },
   }
 }
 

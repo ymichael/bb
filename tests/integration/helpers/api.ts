@@ -235,7 +235,7 @@ export async function getEnvironmentDiff(
     param: { id: environmentId },
     query: {
       mergeBaseBranch,
-      selection: "combined",
+      target: "all",
     },
   });
   await expectStatus(response, 200, `get environment diff ${environmentId}`);

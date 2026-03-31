@@ -26,7 +26,8 @@ import { statusText } from "./helpers.js";
 interface ThreadShowCommandOptions {
   workStatus?: boolean;
   gitDiff?: boolean;
-  diffSelection?: string;
+  diffTarget?: string;
+  diffSha?: string;
   diffMergeBase?: string;
   mergeBaseBranches?: boolean;
   json?: boolean;
@@ -85,12 +86,17 @@ export function registerShowCommand(
     .option("--work-status", "Include work status (git state) in output")
     .option("--git-diff", "Include git diff in output")
     .option(
-      "--diff-selection <type>",
-      "Diff selection type: combined (used with --git-diff)",
+      "--diff-target <type>",
+      "Diff target: uncommitted, branch_committed, all, or commit (used with --git-diff)",
+      "all",
+    )
+    .option(
+      "--diff-sha <sha>",
+      "Commit SHA for --diff-target commit",
     )
     .option(
       "--diff-merge-base <branch>",
-      "Merge base branch for diff (used with --git-diff)",
+      "Merge base branch for --diff-target branch_committed or all",
     )
     .option("--merge-base-branches", "Include available merge-base branches in output")
     .action(action(async (id: string | undefined, opts: ThreadShowCommandOptions) => {
@@ -142,19 +148,46 @@ export function registerShowCommand(
 
       let gitDiff: ThreadGitDiffResponse | undefined;
       if (opts.gitDiff && thread.environmentId) {
-        const mergeBaseBranch = await requireMergeBaseBranch(opts.diffMergeBase);
-        if (opts.diffSelection !== undefined && opts.diffSelection !== "combined") {
-          throw new Error(
-            "Only --diff-selection combined is currently supported by bb thread show.",
-          );
-        }
+        const diffTarget = (opts.diffTarget ?? "all").trim();
+        const query = (() => {
+          switch (diffTarget) {
+            case "uncommitted":
+              return { target: "uncommitted" as const };
+            case "branch_committed":
+              return {
+                target: "branch_committed" as const,
+                mergeBaseBranch: opts.diffMergeBase,
+              };
+            case "all":
+              return {
+                target: "all" as const,
+                mergeBaseBranch: opts.diffMergeBase,
+              };
+            case "commit":
+              if (!opts.diffSha) {
+                throw new Error("--diff-sha is required when --diff-target commit is used");
+              }
+              return {
+                target: "commit" as const,
+                sha: opts.diffSha,
+              };
+            default:
+              throw new Error(
+                "Unsupported --diff-target. Use uncommitted, branch_committed, all, or commit.",
+              );
+          }
+        })();
+        const resolvedQuery =
+          query.target === "branch_committed" || query.target === "all"
+            ? {
+                ...query,
+                mergeBaseBranch: await requireMergeBaseBranch(query.mergeBaseBranch),
+              }
+            : query;
         gitDiff = await unwrap<ThreadGitDiffResponse>(
           client.api.v1.environments[":id"].diff.$get({
             param: { id: thread.environmentId },
-            query: {
-              selection: "combined",
-              mergeBaseBranch,
-            },
+            query: resolvedQuery,
           }),
         );
       }
@@ -192,22 +225,25 @@ export function registerShowCommand(
           const ws = fetchedWorkStatus.status;
           console.log("");
           console.log("Work status:");
-          console.log(`  State:    ${ws.state}`);
-          if (ws.currentBranch) {
-            console.log(`  Branch:   ${ws.currentBranch}`);
+          console.log(`  State:    ${ws.workingTree.state}`);
+          if (ws.branch.currentBranch) {
+            console.log(`  Branch:   ${ws.branch.currentBranch}`);
           }
           console.log(
-            `  Changed files: ${ws.changedFiles} (workspace: ${ws.workspaceChangedFiles})`,
+            `  Changed files: ${ws.workingTree.changedFiles}`,
           );
           console.log(
-            `  Insertions:    +${ws.insertions} (workspace: +${ws.workspaceInsertions})`,
+            `  Insertions:    +${ws.workingTree.insertions}`,
           );
           console.log(
-            `  Deletions:     -${ws.deletions} (workspace: -${ws.workspaceDeletions})`,
+            `  Deletions:     -${ws.workingTree.deletions}`,
           );
-          console.log(
-            `  Ahead: ${ws.aheadCount}  Behind: ${ws.behindCount}`,
-          );
+          if (ws.mergeBase) {
+            console.log(`  Merge base:   ${ws.mergeBase.mergeBaseBranch}`);
+            console.log(
+              `  Ahead: ${ws.mergeBase.aheadCount}  Behind: ${ws.mergeBase.behindCount}`,
+            );
+          }
         } else {
           console.log("");
           console.log("Work status: unavailable");
@@ -217,18 +253,11 @@ export function registerShowCommand(
       if (gitDiff) {
         console.log("");
         console.log("Git diff:");
-        console.log(`  Mode: ${gitDiff.mode}`);
-        if (gitDiff.currentBranch) {
-          console.log(`  Branch: ${gitDiff.currentBranch}`);
+        if (gitDiff.files.trim().length > 0) {
+          console.log(`  Files:\n${gitDiff.files.trimEnd()}`);
         }
-        if (gitDiff.mergeBaseBranch) {
-          console.log(`  Merge base branch: ${gitDiff.mergeBaseBranch}`);
-        }
-        if (gitDiff.commits.length > 0) {
-          console.log(`  Commits: ${gitDiff.commits.length}`);
-          for (const commit of gitDiff.commits) {
-            console.log(`    ${commit.shortSha} ${commit.subject}`);
-          }
+        if (gitDiff.shortstat.trim().length > 0) {
+          console.log(`  Summary: ${gitDiff.shortstat.trim()}`);
         }
         if (gitDiff.diff) {
           console.log("");

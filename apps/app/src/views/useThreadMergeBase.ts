@@ -36,10 +36,10 @@ export function useThreadMergeBase({
 
   const effectiveMergeBaseBranch =
     selectedMergeBaseBranch ??
-    workspaceStatus?.mergeBaseBranch ??
-    workspaceStatus?.defaultBranch;
+    workspaceStatus?.mergeBase?.mergeBaseBranch ??
+    workspaceStatus?.branch.defaultBranch;
   const showBranchComparisonUi = Boolean(
-    effectiveMergeBaseBranch || workspaceStatus?.defaultBranch,
+    effectiveMergeBaseBranch || workspaceStatus?.branch.defaultBranch,
   );
   const threadMergeBaseBranch = effectiveMergeBaseBranch;
   const threadMergeBaseCandidates = useMemo(
@@ -64,7 +64,7 @@ export function useThreadMergeBase({
       }
 
       const normalizedBranch = branch.trim();
-      const defaultBranch = workspaceStatus?.defaultBranch?.trim();
+      const defaultBranch = workspaceStatus?.branch.defaultBranch.trim();
       const nextPersistedMergeBaseBranch =
         normalizedBranch.length > 0 && normalizedBranch !== defaultBranch
           ? normalizedBranch
@@ -93,7 +93,7 @@ export function useThreadMergeBase({
         },
       );
     },
-    [setSelectedMergeBaseBranch, thread, updateThread, workspaceStatus?.defaultBranch],
+    [setSelectedMergeBaseBranch, thread, updateThread, workspaceStatus?.branch.defaultBranch],
   );
 
   return {

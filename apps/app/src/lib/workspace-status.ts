@@ -11,14 +11,16 @@ export function threadWorktreeCleanLabel(
   if (!status) {
     return "Clean";
   }
-  if (status.state === "untracked") {
+  if (status.workingTree.state === "untracked") {
     return "Untracked";
   }
-  if (status.state !== "clean") {
+  if (status.workingTree.state !== "clean") {
     return "Clean";
   }
 
-  const isUpToDate = status.aheadCount === 0 && status.behindCount === 0;
+  const isUpToDate =
+    (status.mergeBase?.aheadCount ?? 0) === 0 &&
+    (status.mergeBase?.behindCount ?? 0) === 0;
   return isUpToDate ? "Clean, Up to date" : "Clean";
 }
 
@@ -40,7 +42,8 @@ function formatComparisonSummary(
   status: WorkspaceStatus,
   mergeBaseBranch?: string,
 ): string | null {
-  const { aheadCount, behindCount } = status;
+  const aheadCount = status.mergeBase?.aheadCount ?? 0;
+  const behindCount = status.mergeBase?.behindCount ?? 0;
   if (aheadCount === 0 && behindCount === 0) {
     return null;
   }
@@ -81,32 +84,33 @@ export function getGitStatusDisplay(
     };
   }
 
+  const resolvedMergeBaseBranch = options?.mergeBaseBranch ?? status.mergeBase?.mergeBaseBranch;
   const comparisonSummary = options?.showBranchComparison
-    ? formatComparisonSummary(status, options.mergeBaseBranch)
+    ? formatComparisonSummary(status, resolvedMergeBaseBranch)
     : null;
   const hasWorkspaceChanges =
-    status.workspaceChangedFiles > 0 ||
-    status.workspaceInsertions > 0 ||
-    status.workspaceDeletions > 0;
+    status.workingTree.changedFiles > 0 ||
+    status.workingTree.insertions > 0 ||
+    status.workingTree.deletions > 0;
   const workspaceSummary = hasWorkspaceChanges
-    ? formatWorkspaceChangeSummary(status)
+    ? formatWorkspaceChangeSummary(status.workingTree)
     : null;
 
-  switch (status.state) {
+  switch (status.workingTree.state) {
     case "clean": {
-      if (status.aheadCount > 0 && status.behindCount > 0) {
+      if ((status.mergeBase?.aheadCount ?? 0) > 0 && (status.mergeBase?.behindCount ?? 0) > 0) {
         return {
           label: "Diverged",
           summary: comparisonSummary ?? "Branch has diverged.",
         };
       }
-      if (status.aheadCount > 0) {
+      if ((status.mergeBase?.aheadCount ?? 0) > 0) {
         return {
           label: "Ahead",
           summary: comparisonSummary ?? "Local commits pending merge.",
         };
       }
-      if (status.behindCount > 0) {
+      if ((status.mergeBase?.behindCount ?? 0) > 0) {
         return {
           label: "Behind",
           summary: comparisonSummary ?? "Branch is behind its merge base.",
@@ -114,8 +118,8 @@ export function getGitStatusDisplay(
       }
       return {
         label: options?.showBranchComparison ? "Up to date" : "Clean",
-        summary: options?.mergeBaseBranch
-          ? `No local changes relative to ${options.mergeBaseBranch}.`
+        summary: resolvedMergeBaseBranch
+          ? `No local changes relative to ${resolvedMergeBaseBranch}.`
           : "No local changes.",
       };
     }
@@ -138,13 +142,13 @@ export function getGitStatusDisplay(
         ]),
       };
     case "committed_unmerged":
-      if (status.aheadCount > 0 && status.behindCount > 0) {
+      if ((status.mergeBase?.aheadCount ?? 0) > 0 && (status.mergeBase?.behindCount ?? 0) > 0) {
         return {
           label: "Diverged",
           summary: comparisonSummary ?? "Branch has diverged.",
         };
       }
-      if (status.behindCount > 0) {
+      if ((status.mergeBase?.behindCount ?? 0) > 0) {
         return {
           label: "Behind",
           summary: comparisonSummary ?? "Branch is behind its merge base.",
@@ -163,7 +167,7 @@ export function getGitStatusDisplay(
         ]),
       };
     default:
-      return assertNever(status.state);
+      return assertNever(status.workingTree.state);
   }
 }
 
@@ -174,15 +178,15 @@ export function workspaceStatusDescription(
     return "Workspace status is unavailable.";
   }
 
-  switch (status.state) {
+  switch (status.workingTree.state) {
     case "clean": {
-      if (status.aheadCount > 0 && status.behindCount > 0) {
+      if ((status.mergeBase?.aheadCount ?? 0) > 0 && (status.mergeBase?.behindCount ?? 0) > 0) {
         return "No local file changes, but this branch has diverged from its merge base.";
       }
-      if (status.aheadCount > 0) {
+      if ((status.mergeBase?.aheadCount ?? 0) > 0) {
         return "No local file changes, but this branch has local commits waiting to be merged.";
       }
-      if (status.behindCount > 0) {
+      if ((status.mergeBase?.behindCount ?? 0) > 0) {
         return "No local file changes, but this branch is behind its merge base.";
       }
       return "No local changes or unmerged commits.";
@@ -194,20 +198,20 @@ export function workspaceStatusDescription(
     case "dirty_uncommitted":
       return "You have local changes that have not been committed yet.";
     case "committed_unmerged":
-      if (status.aheadCount > 0 && status.behindCount > 0) {
+      if ((status.mergeBase?.aheadCount ?? 0) > 0 && (status.mergeBase?.behindCount ?? 0) > 0) {
         return "You have local commits waiting to be merged, and this branch is also behind its merge base.";
       }
-      if (status.behindCount > 0) {
+      if ((status.mergeBase?.behindCount ?? 0) > 0) {
         return "You have local commits waiting to be merged, and this branch is behind its merge base.";
       }
       return "You have local commits that have not been merged yet.";
     case "dirty_and_committed_unmerged":
-      if (status.behindCount > 0) {
+      if ((status.mergeBase?.behindCount ?? 0) > 0) {
         return "You have uncommitted changes and local commits waiting to be merged, and this branch is behind its merge base.";
       }
       return "You have uncommitted changes and local commits waiting to be merged.";
     default:
-      return assertNever(status.state);
+      return assertNever(status.workingTree.state);
   }
 }
 
@@ -217,7 +221,7 @@ export function workspaceStatusVariant(
 ): StatusPillVariant {
   if (!status) return "outline";
 
-  switch (status.state) {
+  switch (status.workingTree.state) {
     case "clean":
       return "outline";
     case "untracked":
@@ -231,6 +235,6 @@ export function workspaceStatusVariant(
     case "dirty_and_committed_unmerged":
       return "secondary";
     default:
-      return assertNever(status.state);
+      return assertNever(status.workingTree.state);
   }
 }

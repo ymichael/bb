@@ -7,8 +7,8 @@ type ChangeCounts = {
 };
 
 type WorkspaceChangeCounts = Pick<
-  WorkspaceStatus,
-  "workspaceChangedFiles" | "workspaceInsertions" | "workspaceDeletions"
+  WorkspaceStatus["workingTree"],
+  "changedFiles" | "insertions" | "deletions"
 >;
 
 export function formatWorkspaceChangedFilesLabel(changedFiles: number): string {
@@ -30,28 +30,28 @@ export function formatChangeSummary(counts: ChangeCounts): string {
 
 export function hasWorkspaceLineChanges(counts: WorkspaceChangeCounts): boolean {
   return hasLineChanges({
-    insertions: counts.workspaceInsertions,
-    deletions: counts.workspaceDeletions,
+    insertions: counts.insertions,
+    deletions: counts.deletions,
   });
 }
 
 export function formatWorkspaceChangeSummary(counts: WorkspaceChangeCounts): string {
   return formatChangeSummary({
-    changedFiles: counts.workspaceChangedFiles,
-    insertions: counts.workspaceInsertions,
-    deletions: counts.workspaceDeletions,
+    changedFiles: counts.changedFiles,
+    insertions: counts.insertions,
+    deletions: counts.deletions,
   });
 }
 
 export function formatDirtyWorkspaceLabel(counts: WorkspaceChangeCounts): string {
   if (!hasWorkspaceLineChanges(counts)) {
-    if (counts.workspaceChangedFiles > 0) {
-      return `Dirty ${formatWorkspaceChangedFilesLabel(counts.workspaceChangedFiles)}`;
+    if (counts.changedFiles > 0) {
+      return `Dirty ${formatWorkspaceChangedFilesLabel(counts.changedFiles)}`;
     }
     return "Dirty";
   }
 
-  return `Dirty +${counts.workspaceInsertions} -${counts.workspaceDeletions}`;
+  return `Dirty +${counts.insertions} -${counts.deletions}`;
 }
 
 export function formatWorkspaceFileStatus(status: string): string {

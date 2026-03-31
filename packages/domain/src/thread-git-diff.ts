@@ -1,44 +1,29 @@
 import { z } from "zod";
 
-export const threadGitDiffCommitSummarySchema = z.object({
-  sha: z.string(),
-  shortSha: z.string(),
-  subject: z.string(),
-  authorName: z.string().optional(),
-  authoredAt: z.number().optional(),
-});
-export type ThreadGitDiffCommitSummary = z.infer<
-  typeof threadGitDiffCommitSummarySchema
->;
-
-export const threadGitDiffSelectionSchema = z.discriminatedUnion("type", [
+export const workspaceDiffTargetSchema = z.discriminatedUnion("type", [
   z.object({
-    type: z.literal("combined"),
+    type: z.literal("uncommitted"),
+  }),
+  z.object({
+    type: z.literal("branch_committed"),
+    mergeBaseBranch: z.string().min(1),
+  }),
+  z.object({
+    type: z.literal("all"),
+    mergeBaseBranch: z.string().min(1),
   }),
   z.object({
     type: z.literal("commit"),
-    sha: z.string(),
+    sha: z.string().regex(/^[0-9a-f]{4,40}$/iu),
   }),
 ]);
-export type ThreadGitDiffSelection = z.infer<
-  typeof threadGitDiffSelectionSchema
->;
-
-export const threadGitDiffModeSchema = z.enum([
-  "local_uncommitted",
-  "worktree_commits",
-]);
-export type ThreadGitDiffMode = z.infer<typeof threadGitDiffModeSchema>;
+export type WorkspaceDiffTarget = z.infer<typeof workspaceDiffTargetSchema>;
 
 export const threadGitDiffResponseSchema = z.object({
-  mode: threadGitDiffModeSchema,
-  currentBranch: z.string().optional(),
-  mergeBaseBranch: z.string().optional(),
-  mergeBaseRef: z.string().optional(),
-  commits: z.array(threadGitDiffCommitSummarySchema),
-  selection: threadGitDiffSelectionSchema,
   diff: z.string(),
   truncated: z.boolean(),
+  shortstat: z.string(),
+  files: z.string(),
 });
 export type ThreadGitDiffResponse = z.infer<
   typeof threadGitDiffResponseSchema

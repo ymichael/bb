@@ -78,17 +78,26 @@ async function createTestGitRepo(): Promise<TestGitRepo> {
 
 function cleanWorkspaceStatus() {
   return {
-    state: "clean",
-    changedFiles: 0,
-    insertions: 0,
-    deletions: 0,
-    workspaceChangedFiles: 0,
-    workspaceInsertions: 0,
-    workspaceDeletions: 0,
-    hasUncommittedChanges: false,
-    hasCommittedUnmergedChanges: false,
-    aheadCount: 0,
-    behindCount: 0,
+    workingTree: {
+      hasUncommittedChanges: false,
+      state: "clean",
+      changedFiles: 0,
+      insertions: 0,
+      deletions: 0,
+      files: [],
+    },
+    branch: {
+      currentBranch: "bb/thread",
+      defaultBranch: "main",
+    },
+    mergeBase: {
+      mergeBaseBranch: "main",
+      baseRef: "origin/main",
+      aheadCount: 0,
+      behindCount: 0,
+      hasCommittedUnmergedChanges: false,
+      commits: [],
+    },
   };
 }
 
@@ -856,10 +865,12 @@ describe("public thread routes", () => {
       await reportQueuedCommandSuccess(harness, dirtyStatusCommand, {
         workspaceStatus: {
           ...cleanWorkspaceStatus(),
-          state: "dirty_uncommitted",
-          changedFiles: 1,
-          workspaceChangedFiles: 1,
-          hasUncommittedChanges: true,
+          workingTree: {
+            ...cleanWorkspaceStatus().workingTree,
+            state: "dirty_uncommitted",
+            changedFiles: 1,
+            hasUncommittedChanges: true,
+          },
         },
       });
       const dirtyArchiveResponse = await dirtyArchivePromise;

@@ -10,10 +10,10 @@ export function WorkspaceChangesList({
   onFileClick,
   onOpenFile,
 }: {
-  files: WorkspaceStatus["files"];
+  files: WorkspaceStatus["workingTree"]["files"];
   maxHeightClassName?: string;
   emptyMessage?: string;
-  onFileClick?: (file: NonNullable<WorkspaceStatus["files"]>[number]) => void;
+  onFileClick?: (file: WorkspaceStatus["workingTree"]["files"][number]) => void;
   onOpenFile?: (relativePath: string) => void;
 }) {
   if (!files || files.length === 0) {

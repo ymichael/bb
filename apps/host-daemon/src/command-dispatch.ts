@@ -133,8 +133,7 @@ export async function dispatchCommand<TCommand extends HostDaemonCommand>(
       const entry = await requireWorkspaceEnvironment(command, options.runtimeManager);
       return {
         diff: await entry.workspace.getDiff({
-          mergeBaseBranch: command.mergeBaseBranch,
-          selection: command.selection,
+          target: command.target,
         }),
       } as HostDaemonCommandResult<TCommand["type"]>;
     }

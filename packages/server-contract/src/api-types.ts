@@ -183,19 +183,25 @@ const mergeBaseBranchQuerySchema = z
   .min(1, "A merge base branch is required");
 
 export const environmentStatusQuerySchema = z.object({
-  mergeBaseBranch: mergeBaseBranchQuerySchema,
+  mergeBaseBranch: mergeBaseBranchQuerySchema.optional(),
 });
 export type EnvironmentStatusQuery = z.infer<typeof environmentStatusQuerySchema>;
 
-export const environmentDiffQuerySchema = z.discriminatedUnion("selection", [
+export const environmentDiffQuerySchema = z.discriminatedUnion("target", [
   z.object({
-    selection: z.literal("combined"),
+    target: z.literal("uncommitted"),
+  }),
+  z.object({
+    target: z.literal("branch_committed"),
     mergeBaseBranch: mergeBaseBranchQuerySchema,
   }),
   z.object({
-    selection: z.literal("commit"),
-    commitSha: z.string().min(1),
+    target: z.literal("all"),
     mergeBaseBranch: mergeBaseBranchQuerySchema,
+  }),
+  z.object({
+    target: z.literal("commit"),
+    sha: z.string().regex(/^[0-9a-f]{4,40}$/iu),
   }),
 ]);
 export type EnvironmentDiffQuery = z.infer<typeof environmentDiffQuerySchema>;

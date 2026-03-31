@@ -430,7 +430,7 @@ describe.sequential("real provider end-to-end integration", () => {
             harness.api,
             environment.id,
           );
-          expect(initialStatus.workspace?.currentBranch).toBeTruthy();
+          expect(initialStatus.workspace?.branch.currentBranch).toBeTruthy();
           expect(branches.length).toBeGreaterThan(0);
 
           await sendTextMessage(harness.api, thread.id, {
@@ -454,7 +454,7 @@ describe.sequential("real provider end-to-end integration", () => {
             environment.id,
           );
           const diff = await getEnvironmentDiff(harness.api, environment.id);
-          expect(refreshedStatus.workspace?.currentBranch).toBeTruthy();
+          expect(refreshedStatus.workspace?.branch.currentBranch).toBeTruthy();
           expectNonEmptyOutput(
             await getThreadOutput(harness.api, thread.id),
             `${providerId} workspace output`,

@@ -17,9 +17,9 @@ describe("workspace-change-summary", () => {
   it("includes +/- counts when line changes exist", () => {
     expect(
       formatWorkspaceChangeSummary({
-        workspaceChangedFiles: 3,
-        workspaceInsertions: 9,
-        workspaceDeletions: 4,
+        changedFiles: 3,
+        insertions: 9,
+        deletions: 4,
       }),
     ).toBe("3 files, +9 -4");
   });
@@ -37,9 +37,9 @@ describe("workspace-change-summary", () => {
   it("omits +/- counts when only file-level changes exist", () => {
     expect(
       formatWorkspaceChangeSummary({
-        workspaceChangedFiles: 1,
-        workspaceInsertions: 0,
-        workspaceDeletions: 0,
+        changedFiles: 1,
+        insertions: 0,
+        deletions: 0,
       }),
     ).toBe("1 file");
   });
@@ -47,16 +47,16 @@ describe("workspace-change-summary", () => {
   it("formats dirty labels with file fallback when line counts are zero", () => {
     expect(
       formatDirtyWorkspaceLabel({
-        workspaceChangedFiles: 1,
-        workspaceInsertions: 0,
-        workspaceDeletions: 0,
+        changedFiles: 1,
+        insertions: 0,
+        deletions: 0,
       }),
     ).toBe("Dirty 1 file");
     expect(
       formatDirtyWorkspaceLabel({
-        workspaceChangedFiles: 0,
-        workspaceInsertions: 0,
-        workspaceDeletions: 0,
+        changedFiles: 0,
+        insertions: 0,
+        deletions: 0,
       }),
     ).toBe("Dirty");
   });
@@ -64,16 +64,16 @@ describe("workspace-change-summary", () => {
   it("detects line changes", () => {
     expect(
       hasWorkspaceLineChanges({
-        workspaceChangedFiles: 2,
-        workspaceInsertions: 1,
-        workspaceDeletions: 0,
+        changedFiles: 2,
+        insertions: 1,
+        deletions: 0,
       }),
     ).toBe(true);
     expect(
       hasWorkspaceLineChanges({
-        workspaceChangedFiles: 2,
-        workspaceInsertions: 0,
-        workspaceDeletions: 0,
+        changedFiles: 2,
+        insertions: 0,
+        deletions: 0,
       }),
     ).toBe(false);
   });

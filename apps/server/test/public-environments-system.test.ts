@@ -20,7 +20,7 @@ describe("public environment and system routes", () => {
     vi.unstubAllGlobals();
   });
 
-  it("rejects status and diff requests without an explicit merge-base branch", async () => {
+  it("allows status without a merge-base branch and rejects branch-relative diff without one", async () => {
     const harness = await createTestAppHarness();
     try {
       const { host } = seedHostSession(harness.deps);
@@ -37,17 +37,43 @@ describe("public environment and system routes", () => {
         branchName: "bb/merge-base",
       });
 
-      const statusResponse = await harness.app.request(
+      const statusPromise = harness.app.request(
         `/api/v1/environments/${environment.id}/status`,
       );
-      expect(statusResponse.status).toBe(400);
+      const statusCommand = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "workspace.status" &&
+          command.environmentId === environment.id,
+      );
+      expect(statusCommand.command).not.toHaveProperty("mergeBaseBranch");
+      await reportQueuedCommandSuccess(harness, statusCommand, {
+        workspaceStatus: {
+          workingTree: {
+            hasUncommittedChanges: false,
+            state: "clean",
+            changedFiles: 0,
+            insertions: 0,
+            deletions: 0,
+            files: [],
+          },
+          branch: {
+            currentBranch: "bb/merge-base",
+            defaultBranch: "main",
+          },
+          mergeBase: null,
+        },
+      });
+      const statusResponse = await statusPromise;
+      expect(statusResponse.status).toBe(200);
       await expect(readJson(statusResponse)).resolves.toMatchObject({
-        code: "invalid_request",
-        message: "A merge base branch is required",
+        workspace: {
+          mergeBase: null,
+        },
       });
 
       const diffResponse = await harness.app.request(
-        `/api/v1/environments/${environment.id}/diff?selection=combined`,
+        `/api/v1/environments/${environment.id}/diff?target=all`,
       );
       expect(diffResponse.status).toBe(400);
       await expect(readJson(diffResponse)).resolves.toMatchObject({
@@ -101,31 +127,43 @@ describe("public environment and system routes", () => {
       });
       await reportQueuedCommandSuccess(harness, statusCommand, {
         workspaceStatus: {
-          state: "dirty_uncommitted",
-          changedFiles: 2,
-          insertions: 5,
-          deletions: 1,
-          workspaceChangedFiles: 2,
-          workspaceInsertions: 5,
-          workspaceDeletions: 1,
-          hasUncommittedChanges: true,
-          hasCommittedUnmergedChanges: false,
-          aheadCount: 1,
-          behindCount: 0,
-          currentBranch: "bb/details",
+          workingTree: {
+            hasUncommittedChanges: true,
+            state: "dirty_uncommitted",
+            changedFiles: 2,
+            insertions: 5,
+            deletions: 1,
+            files: [],
+          },
+          branch: {
+            currentBranch: "bb/details",
+            defaultBranch: "main",
+          },
+          mergeBase: {
+            mergeBaseBranch: "main",
+            baseRef: "origin/main",
+            aheadCount: 1,
+            behindCount: 0,
+            hasCommittedUnmergedChanges: true,
+            commits: [],
+          },
         },
       });
       const statusResponse = await statusPromise;
       expect(statusResponse.status).toBe(200);
       await expect(readJson(statusResponse)).resolves.toEqual({
         workspace: expect.objectContaining({
-          state: "dirty_uncommitted",
-          currentBranch: "bb/details",
+          workingTree: expect.objectContaining({
+            state: "dirty_uncommitted",
+          }),
+          branch: expect.objectContaining({
+            currentBranch: "bb/details",
+          }),
         }),
       });
 
       const diffPromise = harness.app.request(
-        `/api/v1/environments/${environment.id}/diff?selection=combined&mergeBaseBranch=main`,
+        `/api/v1/environments/${environment.id}/diff?target=all&mergeBaseBranch=main`,
       );
       const diffCommand = await waitForQueuedCommand(
         harness,
@@ -135,32 +173,23 @@ describe("public environment and system routes", () => {
       );
       expect(diffCommand.command).toMatchObject({
         workspaceContext: { workspacePath: "/tmp/environment-details/worktree", workspaceProvisionType: "managed-worktree" },
-        mergeBaseBranch: "main",
-        selection: { type: "combined" },
+        target: { type: "all", mergeBaseBranch: "main" },
       });
       await reportQueuedCommandSuccess(harness, diffCommand, {
         diff: {
-          mode: "local_uncommitted",
-          currentBranch: "bb/details",
-          mergeBaseBranch: "main",
-          mergeBaseRef: "origin/main",
-          commits: [],
-          selection: { type: "combined" },
           diff: "diff --git a/file.ts b/file.ts",
           truncated: false,
+          shortstat: " 1 file changed, 1 insertion(+)\n",
+          files: "M\tfile.ts\n",
         },
       });
       const diffResponse = await diffPromise;
       expect(diffResponse.status).toBe(200);
       await expect(readJson(diffResponse)).resolves.toEqual({
-        mode: "local_uncommitted",
-        currentBranch: "bb/details",
-        mergeBaseBranch: "main",
-        mergeBaseRef: "origin/main",
-        commits: [],
-        selection: { type: "combined" },
         diff: "diff --git a/file.ts b/file.ts",
         truncated: false,
+        shortstat: " 1 file changed, 1 insertion(+)\n",
+        files: "M\tfile.ts\n",
       });
 
       const branchesPromise = harness.app.request(

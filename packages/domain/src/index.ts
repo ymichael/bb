@@ -87,32 +87,38 @@ export {
   threadStatusValues,
   threadTypeSchema,
   threadTypeValues,
-  workspaceFileChangeSchema,
+  workspaceBranchSchema,
+  workspaceCommitSummarySchema,
+  workspaceFileStatusKindSchema,
+  workspaceFileStatusSchema,
+  workspaceMergeBaseSchema,
   workspaceStateSchema,
   workspaceStateValues,
   workspaceStatusSchema,
+  workspaceWorkingTreeSchema,
 } from "./thread.js";
 export type {
   Thread,
   ThreadQueuedMessage,
   ThreadStatus,
   ThreadType,
-  WorkspaceFileChange,
+  WorkspaceBranch,
+  WorkspaceCommitSummary,
+  WorkspaceFileStatus,
+  WorkspaceFileStatusKind,
+  WorkspaceMergeBase,
   WorkspaceState,
   WorkspaceStatus,
+  WorkspaceWorkingTree,
 } from "./thread.js";
 
 export {
-  threadGitDiffCommitSummarySchema,
-  threadGitDiffModeSchema,
   threadGitDiffResponseSchema,
-  threadGitDiffSelectionSchema,
+  workspaceDiffTargetSchema,
 } from "./thread-git-diff.js";
 export type {
-  ThreadGitDiffCommitSummary,
-  ThreadGitDiffMode,
   ThreadGitDiffResponse,
-  ThreadGitDiffSelection,
+  WorkspaceDiffTarget,
 } from "./thread-git-diff.js";
 
 export {

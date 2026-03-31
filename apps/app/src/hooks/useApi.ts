@@ -16,8 +16,8 @@ import type {
   TimelineRow,
   AvailableModel,
   ThreadGitDiffResponse,
-  ThreadGitDiffSelection,
   WorkspaceStatus,
+  WorkspaceDiffTarget,
   ThreadQueuedMessage,
 } from "@bb/domain";
 import type {
@@ -480,8 +480,8 @@ export function useEnvironmentWorkStatus(
 ) {
   return useQuery<WorkspaceStatus | null>({
     queryKey: [ENVIRONMENT_WORK_STATUS_QUERY_KEY, environmentId, mergeBaseBranch ?? null],
-    queryFn: () => api.getEnvironmentWorkStatus(environmentId!, mergeBaseBranch!),
-    enabled: (options?.enabled ?? true) && !!environmentId && !!mergeBaseBranch,
+    queryFn: () => api.getEnvironmentWorkStatus(environmentId!, mergeBaseBranch),
+    enabled: (options?.enabled ?? true) && !!environmentId,
     refetchOnWindowFocus: false,
   });
 }
@@ -551,24 +551,25 @@ export function useEnvironmentGitDiff(
   id: string,
   options: {
     enabled?: boolean;
-    selection: ThreadGitDiffSelection;
-    mergeBaseBranch?: string;
+    target?: WorkspaceDiffTarget;
   },
 ) {
-  const selectionKey =
-    options.selection.type === "commit"
-      ? options.selection.sha
-      : "combined";
+  const target = options.target;
+  const targetKey =
+    target?.type === "commit"
+      ? target.sha
+      : target?.type === "all" || target?.type === "branch_committed"
+        ? target.mergeBaseBranch
+        : null;
   return useQuery<ThreadGitDiffResponse>({
     queryKey: [
       ENVIRONMENT_GIT_DIFF_QUERY_KEY,
       id,
-      options.selection.type,
-      selectionKey,
-      options.mergeBaseBranch ?? null,
+      target?.type ?? null,
+      targetKey,
     ],
-    queryFn: () => api.getEnvironmentDiff(id, options.selection, options.mergeBaseBranch!),
-    enabled: (options?.enabled ?? true) && !!id && !!options.mergeBaseBranch,
+    queryFn: () => api.getEnvironmentDiff(id, target!),
+    enabled: (options?.enabled ?? true) && !!id && target !== undefined,
     placeholderData: (previousData, previousQuery) =>
       resolveEnvironmentGitDiffPlaceholder(previousData, previousQuery?.queryKey, id),
     refetchOnWindowFocus: false,

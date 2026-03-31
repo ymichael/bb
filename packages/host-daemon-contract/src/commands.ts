@@ -5,12 +5,12 @@ import {
   promptInputSchema,
   threadExecutionOptionsSchema,
   threadGitDiffResponseSchema,
-  threadGitDiffSelectionSchema,
   workspaceProvisionTypeSchema,
   providerInfoSchema,
   reasoningLevelSchema,
   sandboxModeSchema,
   serviceTierSchema,
+  workspaceDiffTargetSchema,
   workspaceStatusSchema,
 } from "@bb/domain";
 import { z } from "zod";
@@ -205,13 +205,12 @@ export const environmentDestroyCommandSchema = hostDaemonWorkspaceTargetSchema.e
 
 export const workspaceStatusCommandSchema = hostDaemonWorkspaceTargetSchema.extend({
   type: z.literal("workspace.status"),
-  mergeBaseBranch: z.string().min(1),
+  mergeBaseBranch: z.string().min(1).optional(),
 });
 
 export const workspaceDiffCommandSchema = hostDaemonWorkspaceTargetSchema.extend({
   type: z.literal("workspace.diff"),
-  selection: threadGitDiffSelectionSchema,
-  mergeBaseBranch: z.string().min(1),
+  target: workspaceDiffTargetSchema,
 });
 
 export const workspaceCommitCommandSchema = hostDaemonWorkspaceTargetSchema.extend({

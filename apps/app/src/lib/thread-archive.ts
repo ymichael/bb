@@ -26,17 +26,17 @@ export function requiresArchiveConfirmation(
     return false
   }
 
-  switch (workStatus.state) {
+  switch (workStatus.workingTree.state) {
     case "clean":
     case "deleted":
-      return false
+      return workStatus.mergeBase?.hasCommittedUnmergedChanges === true
     case "untracked":
     case "dirty_uncommitted":
     case "committed_unmerged":
     case "dirty_and_committed_unmerged":
       return true
     default:
-      return assertNever(workStatus.state)
+      return assertNever(workStatus.workingTree.state)
   }
 }
 

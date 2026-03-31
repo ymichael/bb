@@ -11,8 +11,8 @@ import type {
   Thread,
   ThreadType,
   ThreadGitDiffResponse,
-  ThreadGitDiffSelection,
   ThreadQueuedMessage,
+  WorkspaceDiffTarget,
   WorkspaceStatus,
   AvailableModel,
 } from "@bb/domain";
@@ -451,12 +451,12 @@ export async function getEnvironment(id: string): Promise<Environment> {
 
 export async function getEnvironmentWorkStatus(
   environmentId: string,
-  mergeBaseBranch: string,
+  mergeBaseBranch?: string,
 ): Promise<WorkspaceStatus | null> {
   const res = await request<EnvironmentStatusResponse>(
     apiClient.environments[":id"].status.$get({
       param: { id: environmentId },
-      query: { mergeBaseBranch },
+      query: mergeBaseBranch ? { mergeBaseBranch } : {},
     }),
   );
   return res.workspace;
@@ -513,20 +513,33 @@ export async function getThreadTimelineToolDetails(
 
 export async function getEnvironmentDiff(
   id: string,
-  selection: ThreadGitDiffSelection,
-  mergeBaseBranch: string,
+  target: WorkspaceDiffTarget,
 ): Promise<ThreadGitDiffResponse> {
-  const query =
-    selection.type === "commit"
-      ? {
-          selection: "commit" as const,
-          commitSha: selection.sha,
-          mergeBaseBranch,
-        }
-      : {
-          selection: "combined" as const,
-          mergeBaseBranch,
+  const query = (() => {
+    switch (target.type) {
+      case "uncommitted":
+        return { target: "uncommitted" as const };
+      case "branch_committed":
+        return {
+          target: "branch_committed" as const,
+          mergeBaseBranch: target.mergeBaseBranch,
         };
+      case "all":
+        return {
+          target: "all" as const,
+          mergeBaseBranch: target.mergeBaseBranch,
+        };
+      case "commit":
+        return {
+          target: "commit" as const,
+          sha: target.sha,
+        };
+      default: {
+        const _exhaustive: never = target;
+        return _exhaustive;
+      }
+    }
+  })();
 
   return request<ThreadGitDiffResponse>(
     apiClient.environments[":id"].diff.$get({
