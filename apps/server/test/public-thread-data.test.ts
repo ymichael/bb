@@ -1,5 +1,5 @@
 import { and, eq } from "drizzle-orm";
-import { createDraftId, events, getDraft, getThread, queuedThreadMessages } from "@bb/db";
+import { createDraftId, environments, events, getDraft, getThread, queuedThreadMessages } from "@bb/db";
 import { describe, expect, it } from "vitest";
 import {
   reportQueuedCommandError,
@@ -724,6 +724,61 @@ describe("public thread data routes", () => {
           { path: "notes/plan.md", name: "plan.md" },
           { path: "notes/todo.md", name: "todo.md" },
         ],
+        truncated: false,
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("lists manager workspace files without requiring a ready environment", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps);
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/project-source",
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/project-source",
+        status: "provisioning",
+      });
+      harness.db.update(environments)
+        .set({
+          path: null,
+          status: "provisioning",
+          updatedAt: Date.now(),
+        })
+        .where(eq(environments.id, environment.id))
+        .run();
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        type: "manager",
+        status: "provisioning",
+      });
+      const managerWorkspacePath = `/tmp/bb-host-data/${host.id}/workspace/${thread.id}`;
+
+      const filesPromise = harness.app.request(
+        `/api/v1/threads/${thread.id}/manager-workspace/files`,
+      );
+      const filesCommand = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "host.list_files" &&
+          command.path === managerWorkspacePath,
+      );
+      await reportQueuedCommandSuccess(harness, filesCommand, {
+        files: [{ path: "notes/plan.md", name: "plan.md" }],
+        truncated: false,
+      });
+
+      const filesResponse = await filesPromise;
+      expect(filesResponse.status).toBe(200);
+      await expect(readJson(filesResponse)).resolves.toEqual({
+        files: [{ path: "notes/plan.md", name: "plan.md" }],
         truncated: false,
       });
     } finally {

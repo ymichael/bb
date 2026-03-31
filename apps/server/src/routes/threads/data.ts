@@ -15,7 +15,7 @@ import type { AppDeps } from "../../types.js";
 import { COMMAND_TIMEOUT_MS } from "../../constants.js";
 import { ApiError } from "../../errors.js";
 import {
-  requireReadyEnvironment,
+  requireEnvironment,
   requireThread,
 } from "../../services/entity-lookup.js";
 import { queueCommandAndWait } from "../../services/command-wait.js";
@@ -71,11 +71,11 @@ function requireManagerWorkspaceTarget(
   if (!thread.environmentId) {
     throw new ApiError(409, "invalid_request", "Thread has no environment");
   }
-  const readyEnvironment = requireReadyEnvironment(deps.db, thread.environmentId);
+  const environment = requireEnvironment(deps.db, thread.environmentId);
   return {
-    hostId: readyEnvironment.hostId,
+    hostId: environment.hostId,
     workspacePath: requireManagerWorkspacePath(deps, {
-      hostId: readyEnvironment.hostId,
+      hostId: environment.hostId,
       threadId: thread.id,
     }),
   };
