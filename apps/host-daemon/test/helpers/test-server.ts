@@ -4,6 +4,7 @@ import {
   hostDaemonCommandResultReportSchema,
   hostDaemonCommandsQuerySchema,
   hostDaemonDaemonWsMessageSchema,
+  hostDaemonEnvironmentChangeRequestSchema,
   hostDaemonEventBatchRequestSchema,
   hostDaemonServerWsMessageSchema,
   hostDaemonSessionOpenRequestSchema,
@@ -12,6 +13,7 @@ import {
   type HostDaemonCommandEnvelope,
   type HostDaemonCommandResultReport,
   type HostDaemonDaemonWsMessage,
+  type HostDaemonEnvironmentChangeRequest,
   type HostDaemonEventEnvelope,
   type HostDaemonServerWsMessage,
   type HostDaemonSessionOpenRequest,
@@ -78,6 +80,7 @@ export interface TestServer {
   commandFetches: Array<{ sessionId: string }>;
   commandResultReports: HostDaemonCommandResultReport[];
   commandResults: HostDaemonCommandResultReport[];
+  environmentChanges: HostDaemonEnvironmentChangeRequest[];
   events: HostDaemonEventEnvelope[];
   heartbeats: Array<{
     sessionId: string;
@@ -105,6 +108,7 @@ export async function createTestServer(
   }> = [];
   const commandFetches: Array<{ sessionId: string }> = [];
   const commandResultReports: HostDaemonCommandResultReport[] = [];
+  const environmentChanges: TestServer["environmentChanges"] = [];
   const toolCalls: Array<{ sessionId: string; tool: string }> = [];
   const events: HostDaemonEventEnvelope[] = [];
   const activeSockets = new Set<WebSocket>();
@@ -218,6 +222,13 @@ export async function createTestServer(
     }
     return context.json({ threadHighWaterMarks });
   });
+  app.post("/internal/session/environment-change", async (context) => {
+    const payload = hostDaemonEnvironmentChangeRequestSchema.parse(
+      await context.req.json(),
+    );
+    environmentChanges.push(payload);
+    return context.json({ ok: true });
+  });
   app.post("/internal/session/tool-call", async (context) => {
     const payload = hostDaemonToolCallRequestSchema.parse(
       await context.req.json(),
@@ -278,6 +289,7 @@ export async function createTestServer(
     get commandResults() {
       return commandResultReports;
     },
+    environmentChanges,
     events,
     heartbeats,
     sessionOpenCalls,

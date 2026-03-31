@@ -84,6 +84,29 @@ export type HostDaemonEventBatchResponse = z.infer<
   typeof hostDaemonEventBatchResponseSchema
 >;
 
+export const hostDaemonEnvironmentChangeSchema = z.literal(
+  "work-status-changed",
+);
+export type HostDaemonEnvironmentChange = z.infer<
+  typeof hostDaemonEnvironmentChangeSchema
+>;
+
+export const hostDaemonEnvironmentChangeRequestSchema = z.object({
+  sessionId: z.string().min(1),
+  environmentId: z.string().min(1),
+  change: hostDaemonEnvironmentChangeSchema,
+});
+export type HostDaemonEnvironmentChangeRequest = z.infer<
+  typeof hostDaemonEnvironmentChangeRequestSchema
+>;
+
+export const hostDaemonHeartbeatPayloadSchema = z.object({
+  bufferDepth: z.number().int().nonnegative(),
+  lastCommandCursor: z.number().int().nonnegative().nullable(),
+});
+export type HostDaemonHeartbeatPayload = z.infer<
+  typeof hostDaemonHeartbeatPayloadSchema
+>;
 export const hostDaemonServerWsMessageSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("commands-available"),
@@ -152,6 +175,10 @@ export type HostDaemonInternalSchema = {
       { json: HostDaemonEventBatchRequest },
       HostDaemonEventBatchResponse
     >;
+  };
+  "/session/environment-change": {
+    /** Used by the daemon to report raw environment workspace change hints for server-side validation and fan-out. */
+    $post: Endpoint<{ json: HostDaemonEnvironmentChangeRequest }, { ok: true }>;
   };
   "/session/tool-call": {
     /** Used by the daemon to execute server-side tool calls on behalf of a provider (e.g. message_user). */

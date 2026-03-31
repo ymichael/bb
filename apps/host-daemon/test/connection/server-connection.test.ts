@@ -299,6 +299,27 @@ describe("ServerConnection", () => {
     await connection.shutdown();
   });
 
+  it("posts environment change hints through the session API", async () => {
+    testServer = await createTestServer();
+    const { connection, serverClient } = createConnection(testServer);
+
+    await connection.start();
+    await serverClient.postEnvironmentChange({
+      environmentId: "env-1",
+      change: "work-status-changed",
+    });
+
+    expect(testServer.environmentChanges).toEqual([
+      {
+        sessionId: "session-1",
+        environmentId: "env-1",
+        change: "work-status-changed",
+      },
+    ]);
+
+    await connection.shutdown();
+  });
+
   it("includes active threads when opening the session", async () => {
     testServer = await createTestServer();
     const activeThreads: HostDaemonActiveThread[] = [

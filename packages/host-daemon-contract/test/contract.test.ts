@@ -9,6 +9,7 @@ import {
   hostDaemonCommandsQuerySchema,
   hostDaemonCommandSchema,
   hostDaemonDaemonWsMessageSchema,
+  hostDaemonEnvironmentChangeRequestSchema,
   hostDaemonEventBatchRequestSchema,
   hostDaemonEventBatchResponseSchema,
   hostDaemonServerWsMessageSchema,
@@ -475,6 +476,18 @@ describe("host-daemon session schemas", () => {
         thr_123: 42,
       },
     });
+
+    expect(
+      hostDaemonEnvironmentChangeRequestSchema.parse({
+        sessionId: "session_123",
+        environmentId: "env_123",
+        change: "work-status-changed",
+      }),
+    ).toEqual({
+      sessionId: "session_123",
+      environmentId: "env_123",
+      change: "work-status-changed",
+    });
   });
 
   it("restricts websocket messages to notifications and heartbeats", () => {
@@ -536,6 +549,9 @@ describe("host-daemon session schemas", () => {
     );
     expect(client.session["command-result"].$url().pathname).toBe(
       "/internal/session/command-result",
+    );
+    expect(client.session["environment-change"].$url().pathname).toBe(
+      "/internal/session/environment-change",
     );
   });
 });

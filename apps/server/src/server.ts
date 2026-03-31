@@ -12,6 +12,7 @@ import { registerSystemRoutes } from "./routes/system.js";
 import { registerThreadRoutes } from "./routes/threads/index.js";
 import { registerInternalCommandRoutes } from "./internal/commands.js";
 import { registerInternalCommandResultRoutes } from "./internal/command-result-route.js";
+import { registerInternalEnvironmentChangeRoutes } from "./internal/environment-changes.js";
 import { registerInternalEventRoutes } from "./internal/events.js";
 import { registerInternalSessionRoutes } from "./internal/session.js";
 import { registerInternalToolCallRoutes } from "./internal/tool-calls.js";
@@ -71,6 +72,7 @@ export function createApp(deps: AppDeps, options?: CreateAppOptions): ServerApp 
   registerInternalSessionRoutes(internalApi, deps);
   registerInternalCommandRoutes(internalApi, deps);
   registerInternalCommandResultRoutes(internalApi, deps);
+  registerInternalEnvironmentChangeRoutes(internalApi, deps);
   registerInternalEventRoutes(internalApi, deps);
   registerInternalToolCallRoutes(internalApi, deps);
   app.route("/internal", internalApi);

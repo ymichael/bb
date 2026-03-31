@@ -5,6 +5,7 @@ import {
   hostDaemonCommandEnvelopeSchema,
   hostDaemonCommandResultReportSchema,
   hostDaemonCommandsQuerySchema,
+  hostDaemonEnvironmentChangeRequestSchema,
   hostDaemonEventBatchRequestSchema,
   hostDaemonEventBatchResponseSchema,
   hostDaemonSessionOpenRequestSchema,
@@ -15,6 +16,7 @@ import {
   type HostDaemonCommandEnvelope,
   type HostDaemonCommandResultReport,
   type HostDaemonEventEnvelope,
+  type HostDaemonEnvironmentChangeRequest,
   type HostDaemonSessionOpenRequest,
   type HostDaemonSessionOpenResponse,
   type HostDaemonToolCallResponse,
@@ -51,6 +53,10 @@ function extractRawCommandType(rawCommand: unknown): string | undefined {
 }
 
 type FetchFn = typeof fetch;
+type PostEnvironmentChangeArgs = Omit<
+  HostDaemonEnvironmentChangeRequest,
+  "sessionId"
+>;
 
 export interface CreateServerClientOptions {
   serverUrl: string;
@@ -79,6 +85,7 @@ export interface ServerClient {
   reportCommandResult(
     report: Omit<HostDaemonCommandResultReport, "sessionId">,
   ): Promise<void>;
+  postEnvironmentChange(args: PostEnvironmentChangeArgs): Promise<void>;
   postEvents(events: HostDaemonEventEnvelope[]): Promise<Record<string, number>>;
   callTool(request: ToolCallRequest): Promise<HostDaemonToolCallResponse>;
 }
@@ -296,6 +303,26 @@ export function createServerClient(
           },
         },
       );
+    },
+
+    async postEnvironmentChange(args): Promise<void> {
+      const payload = hostDaemonEnvironmentChangeRequestSchema.parse({
+        sessionId: requireSessionId(),
+        environmentId: args.environmentId,
+        change: args.change,
+      });
+      const response = await fetchFn(
+        buildInternalUrl("/session/environment-change"),
+        {
+          method: "POST",
+          headers: headers(),
+          body: JSON.stringify(payload),
+        },
+      );
+
+      if (!response.ok) {
+        throw createResponseError("post environment change", response);
+      }
     },
 
     async postEvents(
