@@ -1,5 +1,8 @@
 import path from "node:path";
-import { getProject } from "@bb/db";
+import {
+  getDefaultProjectSource,
+  getProject,
+} from "@bb/db";
 import type {
   DynamicTool,
   ReasoningLevel,
@@ -176,6 +179,9 @@ export async function resolveThreadRuntimeCommandConfig(
     throw new ApiError(404, "project_not_found", "Project not found");
   }
 
+  const defaultSource = getDefaultProjectSource(deps.db, args.thread.projectId);
+  const projectRootPath =
+    defaultSource?.type === "local_path" ? defaultSource.path : workspacePath;
   const { workspaceProvisionType } = args.environment;
 
   if (args.thread.type !== "manager") {
@@ -200,7 +206,6 @@ export async function resolveThreadRuntimeCommandConfig(
         hostId: args.environment.hostId,
         managerWorkspacePath,
       });
-  const projectRootPath = workspacePath;
 
   return {
     dynamicTools: MANAGER_DYNAMIC_TOOLS,

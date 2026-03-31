@@ -8,6 +8,7 @@ import {
   listProjects,
   listThreads,
   projectSources,
+  toProjectSource,
   updateProject,
   updateProjectSource,
 } from "@bb/db";
@@ -48,7 +49,9 @@ function buildProjectResponses(deps: AppDeps, projectId?: string): ProjectRespon
 
   return projects.map((project) => ({
     ...project,
-    sources: sources.filter((source) => source.projectId === project.id),
+    sources: sources
+      .filter((source) => source.projectId === project.id)
+      .map(toProjectSource),
   }));
 }
 
@@ -79,15 +82,12 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
 
   post("/projects", createProjectRequestSchema, async (context, payload) => {
     const { source } = payload;
-    requireHostWithStatus(deps.db, source.hostId);
+    if (source.type === "local_path") {
+      requireHostWithStatus(deps.db, source.hostId);
+    }
     const { project } = createProject(deps.db, deps.hub, {
       name: payload.name,
-      source: {
-        type: source.type,
-        hostId: source.hostId,
-        path: source.type === "local_path" ? source.path : null,
-        repoUrl: source.type === "github_repo" ? source.repoUrl : null,
-      },
+      source,
     });
     return context.json(buildProjectResponses(deps, project.id)[0], 201);
   });
@@ -113,13 +113,12 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
 
   post("/projects/:id/sources", createProjectSourceRequestSchema, async (context, payload) => {
     requireProject(deps.db, context.req.param("id"));
-    requireHostWithStatus(deps.db, payload.hostId);
+    if (payload.type === "local_path") {
+      requireHostWithStatus(deps.db, payload.hostId);
+    }
     const source = createProjectSource(deps.db, deps.hub, {
       projectId: context.req.param("id"),
-      hostId: payload.hostId,
-      type: payload.type,
-      path: payload.type === "local_path" ? payload.path : null,
-      repoUrl: payload.type === "github_repo" ? payload.repoUrl : null,
+      ...payload,
     });
     return context.json(source, 201);
   });
@@ -137,11 +136,15 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
       deps.db,
       deps.hub,
       context.req.param("sourceId"),
-      {
-        ...(payload.type === "local_path" && payload.path ? { path: payload.path } : {}),
-        ...(payload.type === "github_repo" && payload.repoUrl ? { repoUrl: payload.repoUrl } : {}),
-        ...(payload.isDefault ? { isDefault: payload.isDefault } : {}),
-      },
+      payload.type === "local_path"
+        ? {
+            ...(payload.path ? { path: payload.path } : {}),
+            ...(payload.isDefault ? { isDefault: payload.isDefault } : {}),
+          }
+        : {
+            ...(payload.repoUrl ? { repoUrl: payload.repoUrl } : {}),
+            ...(payload.isDefault ? { isDefault: payload.isDefault } : {}),
+          },
     );
     if (!source) {
       throw new ApiError(404, "invalid_request", "Project source not found");
@@ -174,7 +177,7 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
   get("/projects/:id/files", projectFilesQuerySchema, async (context, query) => {
     requireProject(deps.db, context.req.param("id"));
     const source = getDefaultProjectSource(deps.db, context.req.param("id"));
-    if (!source || !source.path) {
+    if (!source || source.type !== "local_path") {
       throw new ApiError(409, "invalid_request", "Project has no default source");
     }
 
@@ -236,7 +239,7 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
     if (!source) {
       throw new ApiError(409, "invalid_request", "Project has no default source");
     }
-    if (!source.path) {
+    if (source.type !== "local_path") {
       throw new ApiError(409, "invalid_request", "Default source has no local path");
     }
 

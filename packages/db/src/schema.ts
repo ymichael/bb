@@ -1,10 +1,12 @@
 import {
+  check,
   index,
   integer,
   sqliteTable,
   text,
   uniqueIndex,
 } from "drizzle-orm/sqlite-core";
+import { sql } from "drizzle-orm";
 import type { AnySQLiteColumn } from "drizzle-orm/sqlite-core";
 import { threadStatusValues } from "@bb/domain";
 import type {
@@ -52,9 +54,7 @@ export const projectSources = sqliteTable(
       .notNull()
       .references(() => projects.id, { onDelete: "cascade" }),
     type: text("type").$type<ProjectSourceType>().notNull(),
-    hostId: text("host_id")
-      .notNull()
-      .references(() => hosts.id, { onDelete: "cascade" }),
+    hostId: text("host_id").references(() => hosts.id, { onDelete: "cascade" }),
     path: text("path"),
     repoUrl: text("repo_url"),
     isDefault: integer("is_default", { mode: "boolean" }).notNull().default(false),
@@ -65,6 +65,14 @@ export const projectSources = sqliteTable(
     index("project_sources_project_idx").on(table.projectId),
     index("project_sources_host_idx").on(table.hostId),
     uniqueIndex("project_sources_project_host_idx").on(table.projectId, table.hostId),
+    check(
+      "project_sources_shape_check",
+      sql`(
+        (${table.type} = 'local_path' AND ${table.hostId} IS NOT NULL AND ${table.path} IS NOT NULL AND ${table.repoUrl} IS NULL)
+        OR
+        (${table.type} = 'github_repo' AND ${table.hostId} IS NULL AND ${table.path} IS NULL AND ${table.repoUrl} IS NOT NULL)
+      )`,
+    ),
     // NOTE: Drizzle does not support partial/filtered unique indexes.
     // The constraint "only one default source per project" (WHERE is_default = 1)
     // must be enforced in application code.

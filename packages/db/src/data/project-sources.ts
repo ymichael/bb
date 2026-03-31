@@ -1,17 +1,64 @@
 import { and, eq, ne } from "drizzle-orm";
-import type { ProjectSourceType } from "@bb/domain";
+import type { ProjectSource } from "@bb/domain";
 import type { DbConnection } from "../connection.js";
 import type { DbNotifier } from "../notifier.js";
 import { projectSources } from "../schema.js";
 import { createProjectSourceId } from "../ids.js";
 
-export interface CreateProjectSourceInput {
+type ProjectSourceRow = typeof projectSources.$inferSelect;
+
+export interface CreateLocalPathProjectSourceInput {
   projectId: string;
-  type: ProjectSourceType;
+  type: "local_path";
   hostId: string;
-  path?: string | null;
-  repoUrl?: string | null;
+  path: string;
   isDefault?: boolean;
+}
+
+export interface CreateGitHubRepoProjectSourceInput {
+  projectId: string;
+  type: "github_repo";
+  repoUrl: string;
+  isDefault?: boolean;
+}
+export type CreateProjectSourceInput =
+  | CreateLocalPathProjectSourceInput
+  | CreateGitHubRepoProjectSourceInput;
+
+export function toProjectSource(row: ProjectSourceRow): ProjectSource {
+  switch (row.type) {
+    case "local_path":
+      if (!row.hostId || !row.path || row.repoUrl) {
+        throw new Error(`Invalid local_path project source row: ${row.id}`);
+      }
+      return {
+        id: row.id,
+        projectId: row.projectId,
+        type: "local_path",
+        hostId: row.hostId,
+        path: row.path,
+        isDefault: row.isDefault,
+        createdAt: row.createdAt,
+        updatedAt: row.updatedAt,
+      };
+    case "github_repo":
+      if (row.hostId || row.path || !row.repoUrl) {
+        throw new Error(`Invalid github_repo project source row: ${row.id}`);
+      }
+      return {
+        id: row.id,
+        projectId: row.projectId,
+        type: "github_repo",
+        repoUrl: row.repoUrl,
+        isDefault: row.isDefault,
+        createdAt: row.createdAt,
+        updatedAt: row.updatedAt,
+      };
+    default: {
+      const _exhaustive: never = row.type;
+      return _exhaustive;
+    }
+  }
 }
 
 export function createProjectSource(
@@ -41,9 +88,9 @@ export function createProjectSource(
       id,
       projectId: input.projectId,
       type: input.type,
-      hostId: input.hostId,
-      path: input.path ?? null,
-      repoUrl: input.repoUrl ?? null,
+      hostId: input.type === "local_path" ? input.hostId : null,
+      path: input.type === "local_path" ? input.path : null,
+      repoUrl: input.type === "github_repo" ? input.repoUrl : null,
       isDefault: shouldBeDefault,
       createdAt: now,
       updatedAt: now,
@@ -51,7 +98,7 @@ export function createProjectSource(
     .returning()
     .get();
   notifier.notifyProject(input.projectId, ["project-sources-changed"]);
-  return row;
+  return toProjectSource(row);
 }
 
 export function listProjectSources(db: DbConnection, projectId: string) {
@@ -59,14 +106,24 @@ export function listProjectSources(db: DbConnection, projectId: string) {
     .select()
     .from(projectSources)
     .where(eq(projectSources.projectId, projectId))
-    .all();
+    .all()
+    .map(toProjectSource);
 }
 
-export interface UpdateProjectSourceInput {
-  path?: string | null;
-  repoUrl?: string | null;
+export interface UpdateLocalPathProjectSourceInput {
+  path?: string;
+  repoUrl?: never;
   isDefault?: true;
 }
+
+export interface UpdateGitHubRepoProjectSourceInput {
+  path?: never;
+  repoUrl?: string;
+  isDefault?: true;
+}
+export type UpdateProjectSourceInput =
+  | UpdateLocalPathProjectSourceInput
+  | UpdateGitHubRepoProjectSourceInput;
 
 export function updateProjectSource(
   db: DbConnection,
@@ -100,7 +157,7 @@ export function updateProjectSource(
     .get();
 
   notifier.notifyProject(existing.projectId, ["project-sources-changed"]);
-  return updated ?? null;
+  return updated ? toProjectSource(updated) : null;
 }
 
 export function getProjectSourceByHost(
@@ -108,7 +165,7 @@ export function getProjectSourceByHost(
   projectId: string,
   hostId: string,
 ) {
-  return (
+  const source = (
     db
       .select()
       .from(projectSources)
@@ -120,10 +177,11 @@ export function getProjectSourceByHost(
       )
       .get() ?? null
   );
+  return source ? toProjectSource(source) : null;
 }
 
 export function getDefaultProjectSource(db: DbConnection, projectId: string) {
-  return (
+  const source = (
     db
       .select()
       .from(projectSources)
@@ -135,6 +193,7 @@ export function getDefaultProjectSource(db: DbConnection, projectId: string) {
       )
       .get() ?? null
   );
+  return source ? toProjectSource(source) : null;
 }
 
 export function deleteProjectSource(

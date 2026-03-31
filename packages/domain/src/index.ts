@@ -56,12 +56,19 @@ export type {
 } from "./environment.js";
 
 export {
+  findLocalPathProjectSourceForHost,
+  githubRepoProjectSourceSchema,
+  isGitHubRepoProjectSource,
+  isLocalPathProjectSource,
+  localPathProjectSourceSchema,
   projectSchema,
   projectSourceSchema,
   projectSourceTypeSchema,
   projectSourceTypeValues,
 } from "./project.js";
 export type {
+  GitHubRepoProjectSource,
+  LocalPathProjectSource,
   Project,
   ProjectSource,
   ProjectSourceType,

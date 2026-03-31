@@ -135,13 +135,12 @@ const createLocalPathProjectSourceRequestSchema = z.object({
   hostId: z.string().min(1),
   type: z.literal("local_path"),
   path: z.string().min(1),
-});
+}).strict();
 
 const createGitHubRepoProjectSourceRequestSchema = z.object({
-  hostId: z.string().min(1),
   type: z.literal("github_repo"),
   repoUrl: z.string().url(),
-});
+}).strict();
 
 export const createProjectSourceRequestSchema = z.discriminatedUnion("type", [
   createLocalPathProjectSourceRequestSchema,
@@ -293,13 +292,13 @@ const updateLocalPathProjectSourceRequestSchema = z.object({
   type: z.literal("local_path"),
   path: z.string().min(1).optional(),
   isDefault: z.literal(true).optional(),
-});
+}).strict();
 
 const updateGitHubRepoProjectSourceRequestSchema = z.object({
   type: z.literal("github_repo"),
   repoUrl: z.string().url().optional(),
   isDefault: z.literal(true).optional(),
-});
+}).strict();
 
 export const updateProjectSourceRequestSchema = z.discriminatedUnion("type", [
   updateLocalPathProjectSourceRequestSchema,

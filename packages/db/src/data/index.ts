@@ -12,6 +12,7 @@ export {
   listProjectSources,
   getProjectSourceByHost,
   getDefaultProjectSource,
+  toProjectSource,
   updateProjectSource,
   deleteProjectSource,
 } from "./project-sources.js";

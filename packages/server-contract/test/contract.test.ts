@@ -128,7 +128,6 @@ describe("server-contract canonical schemas", () => {
 
     expect(
       createProjectSourceRequestSchema.parse({
-        hostId: "host_123",
         type: "github_repo",
         repoUrl: "https://github.com/example/repo",
       }),
@@ -136,6 +135,14 @@ describe("server-contract canonical schemas", () => {
       type: "github_repo",
       repoUrl: "https://github.com/example/repo",
     });
+
+    expect(() =>
+      createProjectSourceRequestSchema.parse({
+        hostId: "host_123",
+        type: "github_repo",
+        repoUrl: "https://github.com/example/repo",
+      }),
+    ).toThrow();
 
     expect(
       timelineToolDetailsResponseSchema.parse({ messages: [] }),

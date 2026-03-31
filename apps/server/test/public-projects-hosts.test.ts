@@ -86,6 +86,43 @@ describe("public project and host routes", () => {
     }
   });
 
+  it("creates a github repo project without a host-scoped source", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const response = await harness.app.request("/api/v1/projects", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          name: "GitHub Project",
+          source: {
+            type: "github_repo",
+            repoUrl: "https://github.com/example/github-project",
+          },
+        }),
+      });
+
+      expect(response.status).toBe(201);
+      const project = await readJson(response) as {
+        name: string;
+        sources: Array<Record<string, unknown>>;
+      };
+      expect(project.name).toBe("GitHub Project");
+      expect(project.sources).toEqual([
+        expect.objectContaining({
+          type: "github_repo",
+          repoUrl: "https://github.com/example/github-project",
+          isDefault: true,
+        }),
+      ]);
+      expect(project.sources[0]).not.toHaveProperty("hostId");
+      expect(project.sources[0]).not.toHaveProperty("path");
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("supports project source CRUD and reassigns the default source on delete", async () => {
     const harness = await createTestAppHarness();
     try {
@@ -141,6 +178,30 @@ describe("public project and host routes", () => {
       );
       expect(missingTypeResponse.status).toBe(400);
 
+      const createGitHubSourceResponse = await harness.app.request(
+        `/api/v1/projects/${project.id}/sources`,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            type: "github_repo",
+            repoUrl: "https://github.com/example/project-sources",
+          }),
+        },
+      );
+      expect(createGitHubSourceResponse.status).toBe(201);
+      const githubSource = await readJson(createGitHubSourceResponse) as {
+        repoUrl: string;
+        type: string;
+      };
+      expect(githubSource).toMatchObject({
+        type: "github_repo",
+        repoUrl: "https://github.com/example/project-sources",
+      });
+      expect(githubSource).not.toHaveProperty("hostId");
+
       const invalidGitHubSourceResponse = await harness.app.request(
         `/api/v1/projects/${project.id}/sources`,
         {
@@ -151,7 +212,7 @@ describe("public project and host routes", () => {
           body: JSON.stringify({
             hostId: secondaryHost.id,
             type: "github_repo",
-            path: "/tmp/project-sources-github",
+            repoUrl: "https://github.com/example/project-sources-extra-host",
           }),
         },
       );
@@ -188,12 +249,17 @@ describe("public project and host routes", () => {
         `/api/v1/projects/${project.id}`,
       );
       const projectAfterDelete = await readJson(projectAfterDeleteResponse) as {
-        sources: Array<{ id: string; isDefault: boolean }>;
+        sources: Array<{ id: string; isDefault: boolean; repoUrl?: string; type: string }>;
       };
       expect(projectAfterDelete.sources).toEqual([
         expect.objectContaining({
           id: secondSource.id,
           isDefault: true,
+        }),
+        expect.objectContaining({
+          type: "github_repo",
+          isDefault: false,
+          repoUrl: "https://github.com/example/project-sources",
         }),
       ]);
     } finally {
@@ -265,7 +331,7 @@ describe("public project and host routes", () => {
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
-        path: source.path ?? "/tmp/project-files",
+        path: source.path,
       });
 
       const responsePromise = harness.app.request(

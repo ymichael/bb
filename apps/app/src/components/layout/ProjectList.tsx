@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useState } from "react"
 import { useAtom } from "jotai"
 import { useQueries, useQueryClient } from "@tanstack/react-query"
-import type { Thread } from "@bb/domain"
+import {
+  findLocalPathProjectSourceForHost,
+  type Thread,
+} from "@bb/domain"
 import {
   AlertTriangle,
   ChevronDown,
@@ -230,9 +233,9 @@ export function ProjectList({
     const selectedPath = await pickFolder()
     if (!selectedPath) return
     const project = projects?.find((p) => p.id === projectId)
-    const existingSource = project?.sources?.find(
-      (s: { hostId: string }) => s.hostId === localHostId,
-    )
+    const existingSource = project?.sources
+      ? findLocalPathProjectSourceForHost(project.sources, localHostId)
+      : undefined
     try {
       if (existingSource) {
         await api.updateProjectSource(projectId, existingSource.id, { type: "local_path", path: selectedPath })
@@ -569,7 +572,7 @@ export function ProjectList({
               const isProjectActive =
                 selectedProjectId === project.id && !selectedThreadId
               const localSource = localHostId
-                ? project.sources?.find((s: { hostId: string }) => s.hostId === localHostId)
+                ? findLocalPathProjectSourceForHost(project.sources, localHostId)
                 : undefined
               const isProjectPathMissing = localHostId != null && !localSource
 

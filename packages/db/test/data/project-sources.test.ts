@@ -74,17 +74,16 @@ describe("project-sources", () => {
   it("returns the default source and preserves it when adding more sources", () => {
     const { db, project } = setup();
     const initialDefault = getDefaultProjectSource(db, project.id);
-    const secondaryHost = upsertHost(db, noopNotifier, {
-      name: "test-host-2",
-      type: "persistent",
-    });
-    createProjectSource(db, noopNotifier, {
+    const source = createProjectSource(db, noopNotifier, {
       projectId: project.id,
       type: "github_repo",
-      hostId: secondaryHost.id,
       repoUrl: "https://github.com/example/repo",
     });
 
+    expect(source).toMatchObject({
+      type: "github_repo",
+      repoUrl: "https://github.com/example/repo",
+    });
     expect(getDefaultProjectSource(db, project.id)?.id).toBe(initialDefault!.id);
   });
 

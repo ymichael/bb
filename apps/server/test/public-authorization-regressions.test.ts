@@ -107,7 +107,6 @@ describe("public authorization regressions", () => {
         name: "Project Without Local Source",
         source: {
           type: "github_repo",
-          hostId: host.id,
           repoUrl: "https://github.com/test/repo",
         },
       });

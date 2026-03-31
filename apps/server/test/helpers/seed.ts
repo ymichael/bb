@@ -58,6 +58,9 @@ export function seedProjectWithSource(
       path: args.path ?? "/tmp/test-project",
     },
   });
+  if (source.type !== "local_path") {
+    throw new Error("seedProjectWithSource expected a local_path source");
+  }
   return { project, source };
 }
 

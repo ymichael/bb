@@ -1,4 +1,5 @@
 import { Command } from "commander";
+import { findLocalPathProjectSourceForHost } from "@bb/domain";
 import type { ProjectResponse } from "@bb/server-contract";
 import { action } from "../action.js";
 import { createClient, unwrap } from "../client.js";
@@ -169,9 +170,13 @@ function printProject(project: ProjectResponse, localHostId: string | null): voi
   if (project.sources.length > 0) {
     console.log("  Sources:");
     for (const source of project.sources) {
-      const local = localHostId && source.hostId === localHostId ? " (local)" : "";
-      const path = source.path ?? source.repoUrl ?? "-";
-      console.log(`    ${source.hostId}${local}  ${source.type}  ${path}`);
+      if (source.type === "local_path") {
+        const local = localHostId && source.hostId === localHostId ? " (local)" : "";
+        console.log(`    ${source.hostId}${local}  ${source.type}  ${source.path}`);
+        continue;
+      }
+
+      console.log(`    -  ${source.type}  ${source.repoUrl}`);
     }
   }
   console.log("");
@@ -180,7 +185,7 @@ function printProject(project: ProjectResponse, localHostId: string | null): voi
 function printProjectTable(projects: ProjectResponse[], localHostId: string | null): void {
   const rows = projects.map((project) => {
     const localSource = localHostId
-      ? project.sources.find((source) => source.hostId === localHostId)
+      ? findLocalPathProjectSourceForHost(project.sources, localHostId)
       : undefined;
     return [project.id, project.name, localSource?.path ?? "-"];
   });

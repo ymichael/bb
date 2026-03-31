@@ -78,6 +78,13 @@
       "when": 1779772800000,
       "tag": "0010_swift_nomad",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1779939600000,
+      "tag": "0010_mellow_lifeguard",
+      "breakpoints": true
     }
   ]
 }

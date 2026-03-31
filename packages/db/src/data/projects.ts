@@ -1,18 +1,29 @@
 import { eq } from "drizzle-orm";
-import type { ProjectSourceType } from "@bb/domain";
 import type { DbConnection } from "../connection.js";
 import type { DbNotifier } from "../notifier.js";
 import { projects, projectSources } from "../schema.js";
 import { createProjectId, createProjectSourceId } from "../ids.js";
+import {
+  toProjectSource,
+} from "./project-sources.js";
+
+export interface CreateProjectLocalPathSourceInput {
+  type: "local_path";
+  hostId: string;
+  path: string;
+}
+
+export interface CreateProjectGitHubRepoSourceInput {
+  type: "github_repo";
+  repoUrl: string;
+}
+export type CreateProjectSourceInput =
+  | CreateProjectLocalPathSourceInput
+  | CreateProjectGitHubRepoSourceInput;
 
 export interface CreateProjectInput {
   name: string;
-  source: {
-    type: ProjectSourceType;
-    hostId: string;
-    path?: string | null;
-    repoUrl?: string | null;
-  };
+  source: CreateProjectSourceInput;
 }
 
 export function createProject(
@@ -41,9 +52,9 @@ export function createProject(
         id: sourceId,
         projectId,
         type: input.source.type,
-        hostId: input.source.hostId,
-        path: input.source.path ?? null,
-        repoUrl: input.source.repoUrl ?? null,
+        hostId: input.source.type === "local_path" ? input.source.hostId : null,
+        path: input.source.type === "local_path" ? input.source.path : null,
+        repoUrl: input.source.type === "github_repo" ? input.source.repoUrl : null,
         isDefault: true,
         createdAt: now,
         updatedAt: now,
@@ -55,7 +66,7 @@ export function createProject(
 
   notifier.notifyProject(projectId, ["project-created"]);
   notifier.notifyProject(projectId, ["project-sources-changed"]);
-  return { project, source };
+  return { project, source: toProjectSource(source) };
 }
 
 export function getProject(db: DbConnection, id: string) {

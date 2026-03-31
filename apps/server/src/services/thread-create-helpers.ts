@@ -7,16 +7,12 @@ import {
   getThread,
   queueCommand,
 } from "@bb/db";
-import type { ProjectSource } from "@bb/domain";
+import type { LocalPathProjectSource } from "@bb/domain";
 import type { AppDeps } from "../types.js";
 import { ApiError } from "../errors.js";
 import { requireConnectedHostSession } from "./entity-lookup.js";
 import type { ThreadCreateServiceRequest } from "./thread-create-request.js";
 import { deriveTitleFallback } from "./title-generation.js";
-
-export interface ResolvedProjectSource extends ProjectSource {
-  path: string;
-}
 
 function slugify(value: string): string {
   const cleaned = value
@@ -62,25 +58,22 @@ export function requireProjectExists(
   return project;
 }
 
-export function requireDefaultSource(
+export function requireDefaultLocalPathSource(
   deps: Pick<AppDeps, "db">,
   projectId: string,
-): ResolvedProjectSource {
+): LocalPathProjectSource {
   const source = getDefaultProjectSource(deps.db, projectId);
   if (!source) {
     throw new ApiError(409, "invalid_request", "Project has no default source");
   }
-  if (!source.path) {
+  if (source.type !== "local_path") {
     throw new ApiError(
       409,
       "unsupported_operation",
       "Project source path is not available",
     );
   }
-  return {
-    ...source,
-    path: source.path,
-  };
+  return source;
 }
 
 export const SETUP_SCRIPT_NAME = ".bb-env-setup.sh";
@@ -90,26 +83,16 @@ export function requireSourceForHost(
   deps: Pick<AppDeps, "db">,
   projectId: string,
   hostId: string,
-): ResolvedProjectSource {
+): LocalPathProjectSource {
   const source = getProjectSourceByHost(deps.db, projectId, hostId);
-  if (!source) {
+  if (!source || source.type !== "local_path") {
     throw new ApiError(
       409,
       "invalid_request",
       "No project source configured for this host",
     );
   }
-  if (!source.path) {
-    throw new ApiError(
-      409,
-      "unsupported_operation",
-      "Project source path is not available",
-    );
-  }
-  return {
-    ...source,
-    path: source.path,
-  };
+  return source;
 }
 
 type QueueEnvironmentProvisionArgs =
