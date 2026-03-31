@@ -3,7 +3,6 @@ import { WebSocket } from "ws";
 import { eq } from "drizzle-orm";
 import {
   getThread,
-  hostDaemonCursors,
   hostDaemonSessions,
   listEvents,
   queueCommand,
@@ -85,129 +84,6 @@ async function waitForThreadStatus(
 }
 
 describe("internal session correctness", () => {
-  it("advances host cursors only across contiguous completed commands", async () => {
-    const harness = await createTestAppHarness();
-    try {
-      const { host, session } = seedHostSession(harness.deps, {
-        id: "host-cursor-ordering",
-      });
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
-      const environment = seedEnvironment(harness.deps, {
-        hostId: host.id,
-        projectId: project.id,
-      });
-      const thread = seedThread(harness.deps, {
-        projectId: project.id,
-        environmentId: environment.id,
-      });
-
-      const command1 = queueCommand(harness.db, harness.hub, {
-        hostId: host.id,
-        sessionId: session.id,
-        type: "thread.stop",
-        payload: JSON.stringify({
-          type: "thread.stop",
-          environmentId: environment.id,
-          threadId: thread.id,
-        }),
-      });
-      const command2 = queueCommand(harness.db, harness.hub, {
-        hostId: host.id,
-        sessionId: session.id,
-        type: "thread.stop",
-        payload: JSON.stringify({
-          type: "thread.stop",
-          environmentId: environment.id,
-          threadId: thread.id,
-        }),
-      });
-      const command3 = queueCommand(harness.db, harness.hub, {
-        hostId: host.id,
-        sessionId: session.id,
-        type: "thread.stop",
-        payload: JSON.stringify({
-          type: "thread.stop",
-          environmentId: environment.id,
-          threadId: thread.id,
-        }),
-      });
-      expect(command1.cursor).toBe(1);
-      expect(command2.cursor).toBe(2);
-      expect(command3.cursor).toBe(3);
-
-      const outOfOrderResponse = await harness.app.request(
-        "/internal/session/command-result",
-        {
-          method: "POST",
-          headers: internalAuthHeaders(harness),
-          body: JSON.stringify({
-            sessionId: session.id,
-            commandId: command3.id,
-            completedAt: Date.now(),
-            type: "thread.stop",
-            ok: true,
-            result: {},
-          }),
-        },
-      );
-      expect(outOfOrderResponse.status).toBe(200);
-      const initialCursor = harness.db
-        .select()
-        .from(hostDaemonCursors)
-        .where(eq(hostDaemonCursors.hostId, host.id))
-        .get();
-      expect(initialCursor?.cursor ?? 0).toBe(0);
-
-      const firstContiguousResponse = await harness.app.request(
-        "/internal/session/command-result",
-        {
-          method: "POST",
-          headers: internalAuthHeaders(harness),
-          body: JSON.stringify({
-            sessionId: session.id,
-            commandId: command1.id,
-            completedAt: Date.now(),
-            type: "thread.stop",
-            ok: true,
-            result: {},
-          }),
-        },
-      );
-      expect(firstContiguousResponse.status).toBe(200);
-      const afterFirst = harness.db
-        .select()
-        .from(hostDaemonCursors)
-        .where(eq(hostDaemonCursors.hostId, host.id))
-        .get();
-      expect(afterFirst?.cursor).toBe(1);
-
-      const secondContiguousResponse = await harness.app.request(
-        "/internal/session/command-result",
-        {
-          method: "POST",
-          headers: internalAuthHeaders(harness),
-          body: JSON.stringify({
-            sessionId: session.id,
-            commandId: command2.id,
-            completedAt: Date.now(),
-            type: "thread.stop",
-            ok: true,
-            result: {},
-          }),
-        },
-      );
-      expect(secondContiguousResponse.status).toBe(200);
-      const finalCursor = harness.db
-        .select()
-        .from(hostDaemonCursors)
-        .where(eq(hostDaemonCursors.hostId, host.id))
-        .get();
-      expect(finalCursor?.cursor).toBe(3);
-    } finally {
-      await harness.cleanup();
-    }
-  });
-
   it("returns an empty command batch instead of timing out when the queue is empty", async () => {
     const harness = await createTestAppHarness();
     try {

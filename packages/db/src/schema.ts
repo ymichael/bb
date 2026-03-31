@@ -252,11 +252,3 @@ export const hostDaemonCommands = sqliteTable(
     ),
   ],
 );
-
-export const hostDaemonCursors = sqliteTable("host_daemon_cursors", {
-  hostId: text("host_id")
-    .primaryKey()
-    .references(() => hosts.id, { onDelete: "cascade" }),
-  cursor: integer("cursor").notNull().default(0),
-  updatedAt: integer("updated_at").notNull(),
-});

@@ -3,7 +3,6 @@ import {
   events,
   getEnvironment,
   getThread,
-  hostDaemonCursors,
   hostDaemonCommands,
   threads,
   updateEnvironment,
@@ -29,66 +28,6 @@ function parseCommand(
   commandRow: typeof hostDaemonCommands.$inferSelect,
 ) {
   return hostDaemonCommandSchema.parse(JSON.parse(commandRow.payload));
-}
-
-export function advanceHostCursor(
-  deps: Pick<AppDeps, "db" | "hub">,
-  hostId: string,
-): void {
-  deps.db.transaction((tx) => {
-    const currentCursor =
-      tx
-        .select({ cursor: hostDaemonCursors.cursor })
-        .from(hostDaemonCursors)
-        .where(eq(hostDaemonCursors.hostId, hostId))
-        .get()?.cursor ?? 0;
-    const rows = tx
-      .select({
-        cursor: hostDaemonCommands.cursor,
-        state: hostDaemonCommands.state,
-      })
-      .from(hostDaemonCommands)
-      .where(eq(hostDaemonCommands.hostId, hostId))
-      .orderBy(hostDaemonCommands.cursor)
-      .all();
-
-    let nextCursor = currentCursor;
-    for (const row of rows) {
-      if (row.cursor !== nextCursor + 1) {
-        continue;
-      }
-      if (row.state !== "success" && row.state !== "error") {
-        break;
-      }
-      nextCursor = row.cursor;
-    }
-
-    if (nextCursor === currentCursor) {
-      return;
-    }
-
-    const now = Date.now();
-    const existing = tx
-      .select({ hostId: hostDaemonCursors.hostId })
-      .from(hostDaemonCursors)
-      .where(eq(hostDaemonCursors.hostId, hostId))
-      .get();
-    if (existing) {
-      tx.update(hostDaemonCursors)
-        .set({ cursor: nextCursor, updatedAt: now })
-        .where(eq(hostDaemonCursors.hostId, hostId))
-        .run();
-      return;
-    }
-
-    tx.insert(hostDaemonCursors)
-      .values({
-        hostId,
-        cursor: nextCursor,
-        updatedAt: now,
-      })
-      .run();
-  });
 }
 
 async function handleProvisionCommandResult(

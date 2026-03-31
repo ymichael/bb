@@ -6,7 +6,6 @@ import {
 import type { HostDaemonCommandResultReport } from "@bb/host-daemon-contract";
 import type { AppDeps } from "../types.js";
 import {
-  advanceHostCursor,
   handleCommandResultSideEffects,
 } from "./command-result-handlers.js";
 
@@ -47,7 +46,6 @@ export async function handleCommandResult(
 
   await handleCommandResultSideEffects(deps, report, updated);
 
-  advanceHostCursor(deps, command.hostId);
   const response = report.ok
     ? {
         commandId: command.id,

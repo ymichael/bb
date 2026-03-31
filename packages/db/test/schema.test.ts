@@ -14,7 +14,6 @@ import {
   environments,
   events,
   hostDaemonCommands,
-  hostDaemonCursors,
   hostDaemonSessions,
   hosts,
   migrate,
@@ -120,11 +119,6 @@ describe("db rebuild schema", () => {
       payload: "{}",
       state: "queued",
       createdAt: now,
-    }).run();
-    db.insert(hostDaemonCursors).values({
-      hostId,
-      cursor: 1,
-      updatedAt: now,
     }).run();
     db.insert(queuedThreadMessages).values({
       id: createDraftId(),
@@ -320,20 +314,14 @@ describe("db rebuild schema", () => {
       state: "queued",
       createdAt: now,
     }).run();
-    db.insert(hostDaemonCursors).values({
-      hostId,
-      cursor: 1,
-      updatedAt: now,
-    }).run();
 
-    // Commands reference host without cascade, so delete commands first
+    // Commands reference host without cascade, so delete commands first.
     db.delete(hostDaemonCommands).run();
     db.delete(hosts).where(eq(hosts.id, hostId)).run();
 
     expect(db.select().from(environments).all()).toHaveLength(0);
     expect(db.select().from(hostDaemonSessions).all()).toHaveLength(0);
     expect(db.select().from(hostDaemonCommands).all()).toHaveLength(0);
-    expect(db.select().from(hostDaemonCursors).all()).toHaveLength(0);
 
     closeConnection(db);
   });

@@ -76,8 +76,6 @@ export {
 } from "./sessions.js";
 export type { OpenSessionInput } from "./sessions.js";
 
-export { getCursor, setCursor } from "./cursors.js";
-
 export {
   claimDraft,
   claimNextDraft,

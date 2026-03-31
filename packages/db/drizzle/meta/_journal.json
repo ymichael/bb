@@ -85,6 +85,13 @@
       "when": 1779939600000,
       "tag": "0010_mellow_lifeguard",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1774979263000,
+      "tag": "0011_clear_maverick",
+      "breakpoints": true
     }
   ]
 }
