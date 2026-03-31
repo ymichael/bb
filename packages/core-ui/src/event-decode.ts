@@ -85,63 +85,23 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function normalizeLegacyItemStatus(status: unknown): unknown {
-  return status === "inProgress" ? "pending" : status;
-}
-
-function stripNullOptionalFields(
-  data: Record<string, unknown>,
-  keys: string[],
-): Record<string, unknown> {
-  let nextData = data;
-  for (const key of keys) {
-    if (nextData[key] !== null) {
-      continue;
-    }
-    if (nextData === data) {
-      nextData = { ...data };
-    }
-    delete nextData[key];
-  }
-  return nextData;
-}
-
-function normalizeLegacyItemRowData(
-  row: ThreadEventRow,
-  data: Record<string, unknown>,
-): Record<string, unknown> {
-  if (
-    (row.type !== "item/started" && row.type !== "item/completed") ||
-    !isRecord(data.item)
-  ) {
-    return data;
-  }
-
-  const item = data.item;
-  if (item.type !== "commandExecution" && item.type !== "fileChange") {
-    return data;
-  }
-
-  const nextItem = stripNullOptionalFields(
-    {
-      ...item,
-      status: normalizeLegacyItemStatus(item.status),
-    },
-    ["aggregatedOutput", "exitCode", "durationMs"],
-  );
-
-  return {
-    ...data,
-    item: nextItem,
-  };
-}
-
-function normalizePersistedRow(row: ThreadEventRow): ThreadEventRow {
+function normalizeLegacyPersistedProviderRow(row: ThreadEventRow): ThreadEventRow {
   if (!isRecord(row.data)) {
     return row;
   }
 
   let data = row.data;
+
+  if (
+    providerEventTypesRequiringProviderThreadId.has(row.type) &&
+    getOptionalEventString(data, "providerThreadId") === undefined
+  ) {
+    data = {
+      ...data,
+      providerThreadId:
+        getOptionalEventString(data, "threadId") ?? row.threadId,
+    };
+  }
 
   if (
     (row.type === "turn/started" || row.type === "turn/completed") &&
@@ -162,67 +122,13 @@ function normalizePersistedRow(row: ThreadEventRow): ThreadEventRow {
     };
   }
 
-  if (
-    row.type === "turn/completed" &&
-    !("status" in data) &&
-    typeof getOptionalEventString(data, "turnId") === "string"
-  ) {
-    data = {
-      ...data,
-      status: "completed",
-    };
-  }
-
-  if (row.type === "system/thread/interrupted" && !("reason" in data)) {
-    data = {
-      ...data,
-      reason: "user",
-    };
-  }
-
-  if (row.type === "system/thread-title/updated" && !("source" in data)) {
-    data = {
-      ...data,
-      source: "provider",
-    };
-  }
-
-  if (
-    (row.type === "item/started" || row.type === "item/completed") &&
-    isRecord(data.item) &&
-    data.item.type === "webSearch" &&
-    isRecord(data.item.action) &&
-    typeof data.item.action.type === "string"
-  ) {
-    data = {
-      ...data,
-      item: {
-        ...data.item,
-        action: data.item.action.type,
-      },
-    };
-  }
-
-  data = normalizeLegacyItemRowData(row, data);
-
-  if (
-    providerEventTypesRequiringProviderThreadId.has(row.type) &&
-    getOptionalEventString(data, "providerThreadId") === undefined
-  ) {
-    data = {
-      ...data,
-      providerThreadId:
-        getOptionalEventString(data, "threadId") ?? row.threadId,
-    };
-  }
-
   return data === row.data ? row : { ...row, data };
 }
 
 export function decodeRow(
   row: ThreadEventRow,
 ): { event: DecodedThreadEvent; meta: EventMeta } {
-  const normalizedRow = normalizePersistedRow(row);
+  const normalizedRow = normalizeLegacyPersistedProviderRow(row);
   const parsedEvent = threadEventSchema.safeParse({
     type: normalizedRow.type,
     ...normalizedRow.data,

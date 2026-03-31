@@ -98,6 +98,60 @@ describe("decodeRow", () => {
     });
   });
 
+  it("throws when turn/completed rows omit canonical status", () => {
+    const row: ThreadEventRow = {
+      id: "row-turn-status-missing",
+      threadId: "thread-1",
+      seq: 3,
+      type: "turn/completed",
+      data: {
+        providerThreadId: "provider-thread-1",
+        turnId: "turn-1",
+      },
+      createdAt: 789,
+    };
+
+    expect(() => decodeRow(row)).toThrow();
+  });
+
+  it("throws when system rows rely on deleted default fields", () => {
+    const row: ThreadEventRow = {
+      id: "row-thread-interrupted",
+      threadId: "thread-1",
+      seq: 4,
+      type: "system/thread/interrupted",
+      data: {
+        message: "Stopped by user",
+      },
+      createdAt: 999,
+    };
+
+    expect(() => decodeRow(row)).toThrow();
+  });
+
+  it("throws when web-search items use legacy structured action payloads", () => {
+    const row: ThreadEventRow = {
+      id: "row-web-search-action",
+      threadId: "thread-1",
+      seq: 5,
+      type: "item/completed",
+      data: {
+        providerThreadId: "provider-thread-1",
+        turnId: "turn-1",
+        item: {
+          type: "webSearch",
+          id: "web-1",
+          query: "react suspense",
+          action: { type: "search", query: "react suspense" },
+          outputText: "Found the React Suspense docs",
+        },
+      },
+      createdAt: 1111,
+    };
+
+    expect(() => decodeRow(row)).toThrow();
+  });
+
   it("identifies unknown decoded rows by event type instead of rawData shape", () => {
     const decoded = decodeRow({
       id: "row-unknown-1",
