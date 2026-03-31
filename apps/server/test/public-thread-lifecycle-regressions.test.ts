@@ -48,8 +48,7 @@ describe("public thread lifecycle regressions", () => {
       const firstProvision = await waitForQueuedCommand(
         harness,
         ({ command }) =>
-          command.type === "environment.provision" &&
-          command.projectId === project.id,
+          command.type === "environment.provision",
       );
 
       const secondResponse = await harness.app.request("/api/v1/threads", {
@@ -74,8 +73,7 @@ describe("public thread lifecycle regressions", () => {
         harness,
         firstProvision.row.cursor,
         ({ command }) =>
-          command.type === "environment.provision" &&
-          command.projectId === project.id,
+          command.type === "environment.provision",
       );
 
       expect(firstThread).toMatchObject({ id: expect.any(String) });

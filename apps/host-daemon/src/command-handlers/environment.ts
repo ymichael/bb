@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import type { HostDaemonCommandResult, environmentProvisionCommandSchema } from "@bb/host-daemon-contract";
-import { CommandDispatchError, type CommandDispatchOptions, type CommandOf } from "../command-dispatch-support.js";
+import { type CommandDispatchOptions, type CommandOf } from "../command-dispatch-support.js";
 
 export async function provisionEnvironment(
   command: CommandOf<"environment.provision">,
@@ -32,15 +32,16 @@ export async function provisionEnvironment(
 export async function detectSetupScript(
   command: typeof environmentProvisionCommandSchema._type,
 ): Promise<boolean> {
-  const scriptName = ".bb-env-setup.sh";
   let scriptParentPath: string;
+  let scriptName: string;
   switch (command.workspaceProvisionType) {
     case "unmanaged":
-      scriptParentPath = command.path;
-      break;
+      // Unmanaged workspaces don't run setup scripts (managed check in caller prevents this)
+      return false;
     case "managed-worktree":
     case "managed-clone":
       scriptParentPath = command.sourcePath;
+      scriptName = command.setupScript;
       break;
   }
   try {
@@ -63,17 +64,13 @@ export function toProvisionWorkspaceOptions(
     }
     case "managed-worktree":
     case "managed-clone": {
-      if (!command.sourcePath || !command.targetPath || !command.branchName) {
-        throw new CommandDispatchError(
-          "invalid_command",
-          `Managed provision missing sourcePath/targetPath/branchName for environment ${command.environmentId}`,
-        );
-      }
       return {
         workspaceProvisionType: command.workspaceProvisionType,
         sourcePath: command.sourcePath,
         targetPath: command.targetPath,
         branchName: command.branchName,
+        scriptName: command.setupScript,
+        timeoutMs: command.setupTimeoutMs,
       };
     }
   }

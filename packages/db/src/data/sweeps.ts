@@ -13,7 +13,7 @@ import { transitionThreadStatus } from "./threads.js";
 const STANDARD_COMMAND_TTL_MS = 60_000;
 
 /** Provision command TTL: 5 minutes */
-const PROVISION_COMMAND_TTL_MS = 5 * 60_000;
+const PROVISION_COMMAND_TTL_MS = 20 * 60_000;
 
 /** Destroyed environments are hard-deleted after 7 days. */
 const DESTROYING_ENVIRONMENT_TTL_MS = 7 * 24 * 60 * 60_000;

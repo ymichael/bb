@@ -204,7 +204,6 @@ describe("internal session routes", () => {
         payload: JSON.stringify({
           type: "environment.provision",
           environmentId: successEnvironment.id,
-          projectId: project.id,
           workspaceProvisionType: "unmanaged",
           path: "/tmp/provision-success",
         }),
@@ -263,7 +262,6 @@ describe("internal session routes", () => {
         payload: JSON.stringify({
           type: "environment.provision",
           environmentId: failureEnvironment.id,
-          projectId: project.id,
           workspaceProvisionType: "unmanaged",
           path: "/tmp/provision-failure",
         }),
@@ -355,11 +353,12 @@ describe("internal session routes", () => {
         payload: JSON.stringify({
           type: "environment.provision",
           environmentId: environment.id,
-          projectId: project.id,
           workspaceProvisionType: "managed-worktree",
           targetPath: "/tmp/reprovision-start",
           sourcePath: "/tmp/reprovision-source",
           branchName: "bb/reprovision-start",
+          setupScript: ".bb-env-setup.sh",
+          setupTimeoutMs: 900000,
         }),
       });
 
@@ -478,11 +477,12 @@ describe("internal session routes", () => {
         payload: JSON.stringify({
           type: "environment.provision",
           environmentId: environment.id,
-          projectId: project.id,
           workspaceProvisionType: "managed-worktree",
           targetPath: "/tmp/reprovision-malformed",
           sourcePath: "/tmp/reprovision-malformed-source",
           branchName: "bb/reprovision-malformed",
+          setupScript: ".bb-env-setup.sh",
+          setupTimeoutMs: 900000,
         }),
       });
 
@@ -592,11 +592,12 @@ describe("internal session routes", () => {
         payload: JSON.stringify({
           type: "environment.provision",
           environmentId: environment.id,
-          projectId: project.id,
           workspaceProvisionType: "managed-worktree",
           targetPath: "/tmp/reprovision-filter",
           sourcePath: "/tmp/reprovision-filter-source",
           branchName: "bb/reprovision-filter",
+          setupScript: ".bb-env-setup.sh",
+          setupTimeoutMs: 900000,
         }),
       });
 

@@ -56,11 +56,15 @@ describe("workspace provisioning", () => {
       sourcePath: sourceRepo,
       targetPath,
       branchName: "feature",
+      scriptName: ".bb-env-setup.sh",
+      timeoutMs: 900000,
     });
     const second = await createWorktree({
       sourcePath: sourceRepo,
       targetPath,
       branchName: "feature",
+      scriptName: ".bb-env-setup.sh",
+      timeoutMs: 900000,
     });
 
     expect(first.path).toBe(targetPath);
@@ -80,6 +84,8 @@ describe("workspace provisioning", () => {
         sourcePath: sourceRepo,
         targetPath,
         branchName: "broken",
+        scriptName: ".bb-env-setup.sh",
+        timeoutMs: 900000,
       }),
     ).rejects.toThrow(/Setup script failed/u);
 
@@ -95,6 +101,8 @@ describe("workspace provisioning", () => {
       sourcePath: sourceRepo,
       targetPath,
       branchName: "clone-branch",
+      scriptName: ".bb-env-setup.sh",
+      timeoutMs: 900000,
     });
 
     expect(await new Workspace(targetPath).currentBranch).toBe("clone-branch");
@@ -111,6 +119,8 @@ describe("workspace provisioning", () => {
     const entries: string[] = [];
     const result = await runSetupScript({
       workspacePath,
+      scriptName: ".bb-env-setup.sh",
+      timeoutMs: 900000,
       onProgress: (entry) => entries.push(`${entry.type}:${entry.text}`),
     });
     expect(result.ran).toBe(true);
@@ -125,6 +135,7 @@ describe("workspace provisioning", () => {
     await expect(
       runSetupScript({
         workspacePath,
+        scriptName: ".bb-env-setup.sh",
         timeoutMs: 50,
       }),
     ).rejects.toThrow(/timed out/u);
@@ -133,7 +144,7 @@ describe("workspace provisioning", () => {
   it("returns a no-op when the setup script is missing", async () => {
     const workspacePath = await makeTempDir("bb-setup-noop-");
 
-    await expect(runSetupScript({ workspacePath })).resolves.toEqual({ ran: false });
+    await expect(runSetupScript({ workspacePath, scriptName: ".bb-env-setup.sh", timeoutMs: 900000 })).resolves.toEqual({ ran: false });
   });
 
   it("removes worktrees and plain directories", async () => {
@@ -145,6 +156,8 @@ describe("workspace provisioning", () => {
       sourcePath: sourceRepo,
       targetPath,
       branchName: "feature",
+      scriptName: ".bb-env-setup.sh",
+      timeoutMs: 900000,
     });
     await fs.writeFile(path.join(targetPath, "local.txt"), "dirty\n", "utf8");
     await removeWorktree({ path: targetPath, force: true });

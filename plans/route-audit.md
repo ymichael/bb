@@ -19,7 +19,7 @@ All individual audits live in `plans/route-audit/`. One file per route/command. 
 ### Dead Params (AGENTS.md violation: "accepted-but-ignored fields are forbidden")
 - `turnId` in `GET /threads/:id/timeline/tool-details`
 - `limit` in `GET /threads/:id/workspace/files`
-- `projectId` in `environment.provision`
+- ~~`projectId` in `environment.provision`~~ (resolved)
 - `path` + `workspaceProvisionType` in `environment.destroy`
 - `threadId` in `workspace.promote` and `workspace.demote`
 - `cursor` + `completedAt` in `POST /session/command-result`

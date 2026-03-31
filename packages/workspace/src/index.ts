@@ -3,6 +3,7 @@ export type {
   IWorkspace,
   ProvisionWorkspaceOpts,
   UnmanagedWorkspaceOpts,
+  ManagedWorkspaceBaseOpts,
   ManagedWorktreeOpts,
   ManagedCloneOpts,
   ReconnectManagedWorktreeOpts,

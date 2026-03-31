@@ -82,30 +82,50 @@ export function requireDefaultSource(
   };
 }
 
+export const SETUP_SCRIPT_NAME = ".bb-env-setup.sh";
+export const SETUP_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes
+
+type QueueEnvironmentProvisionArgs =
+  | {
+      workspaceProvisionType: "unmanaged";
+      environmentId: string;
+      hostId: string;
+      path?: string;
+    }
+  | {
+      workspaceProvisionType: "managed-worktree" | "managed-clone";
+      environmentId: string;
+      hostId: string;
+      sourcePath: string;
+      targetPath: string;
+      branchName: string;
+      setupScript: string;
+      setupTimeoutMs: number;
+    };
+
 export function queueEnvironmentProvision(
   deps: Pick<AppDeps, "db" | "hub">,
-  args: {
-    branchName?: string;
-    environmentId: string;
-    hostId: string;
-    path?: string;
-    projectId: string;
-    sourcePath?: string;
-    targetPath?: string;
-    workspaceProvisionType: "managed-clone" | "managed-worktree" | "unmanaged";
-  },
+  args: QueueEnvironmentProvisionArgs,
 ): void {
   const session = requireConnectedHostSession(deps, args.hostId);
-  const payload = {
-    type: "environment.provision" as const,
-    environmentId: args.environmentId,
-    projectId: args.projectId,
-    workspaceProvisionType: args.workspaceProvisionType,
-    ...(args.path ? { path: args.path } : {}),
-    ...(args.sourcePath ? { sourcePath: args.sourcePath } : {}),
-    ...(args.targetPath ? { targetPath: args.targetPath } : {}),
-    ...(args.branchName ? { branchName: args.branchName } : {}),
-  };
+  const payload =
+    args.workspaceProvisionType === "unmanaged"
+      ? {
+          type: "environment.provision" as const,
+          environmentId: args.environmentId,
+          workspaceProvisionType: args.workspaceProvisionType,
+          ...(args.path != null ? { path: args.path } : {}),
+        }
+      : {
+          type: "environment.provision" as const,
+          environmentId: args.environmentId,
+          workspaceProvisionType: args.workspaceProvisionType,
+          sourcePath: args.sourcePath,
+          targetPath: args.targetPath,
+          branchName: args.branchName,
+          setupScript: args.setupScript,
+          setupTimeoutMs: args.setupTimeoutMs,
+        };
   queueCommand(deps.db, deps.hub, {
     hostId: args.hostId,
     sessionId: session.id,

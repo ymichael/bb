@@ -14,6 +14,8 @@ import {
   buildManagedTargetPath,
   queueEnvironmentProvision,
   requireDefaultSource,
+  SETUP_SCRIPT_NAME,
+  SETUP_TIMEOUT_MS,
 } from "./thread-create-helpers.js";
 import { tryTransition } from "./thread-transitions.js";
 
@@ -43,10 +45,8 @@ export function queueManagedEnvironmentReprovision(
     thread: Thread;
   },
 ): ManagedReprovisionResult {
-  if (
-    !args.environment.managed ||
-    args.environment.workspaceProvisionType === "unmanaged"
-  ) {
+  const provisionType = args.environment.workspaceProvisionType;
+  if (!args.environment.managed || provisionType === "unmanaged") {
     throw new ApiError(
       409,
       "invalid_request",
@@ -121,10 +121,11 @@ export function queueManagedEnvironmentReprovision(
     branchName,
     environmentId: args.environment.id,
     hostId: args.environment.hostId,
-    projectId: args.thread.projectId,
     sourcePath: defaultSource.path,
     targetPath,
-    workspaceProvisionType: args.environment.workspaceProvisionType,
+    workspaceProvisionType: provisionType,
+    setupScript: SETUP_SCRIPT_NAME,
+    setupTimeoutMs: SETUP_TIMEOUT_MS,
   });
   return MANAGED_REPROVISION_QUEUED;
 }

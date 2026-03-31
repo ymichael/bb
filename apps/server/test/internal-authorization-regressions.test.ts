@@ -65,7 +65,6 @@ describe("internal authorization regressions", () => {
         payload: JSON.stringify({
           type: "environment.provision",
           environmentId: environment.id,
-          projectId: project.id,
           workspaceProvisionType: "unmanaged",
           path: "/tmp/cross-host-command",
         }),

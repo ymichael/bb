@@ -41,32 +41,25 @@ export interface UnmanagedWorkspaceOpts extends ProvisionBase {
   path: string;
 }
 
-export interface ManagedWorktreeOpts extends ProvisionBase {
-  workspaceProvisionType: "managed-worktree";
-  /** Source repo path (the primary checkout) */
+export interface ManagedWorkspaceBaseOpts extends ProvisionBase {
+  /** Source repo path */
   sourcePath: string;
-  /** Where to create the worktree */
+  /** Target path for worktree/clone creation */
   targetPath: string;
-  /** Branch name for the worktree */
+  /** Branch name */
   branchName: string;
-  /** Setup script filename (default: .bb-env-setup.sh) */
-  scriptName?: string;
-  /** Setup script timeout in ms (default: 5 min) */
-  timeoutMs?: number;
+  /** Setup script filename. Controlled by the server. */
+  scriptName: string;
+  /** Setup script timeout in ms. Controlled by the server. */
+  timeoutMs: number;
 }
 
-export interface ManagedCloneOpts extends ProvisionBase {
+export interface ManagedWorktreeOpts extends ManagedWorkspaceBaseOpts {
+  workspaceProvisionType: "managed-worktree";
+}
+
+export interface ManagedCloneOpts extends ManagedWorkspaceBaseOpts {
   workspaceProvisionType: "managed-clone";
-  /** Source repo path to clone from */
-  sourcePath: string;
-  /** Where to create the clone */
-  targetPath: string;
-  /** Branch name to create after cloning */
-  branchName: string;
-  /** Setup script filename (default: .bb-env-setup.sh) */
-  scriptName?: string;
-  /** Setup script timeout in ms (default: 5 min) */
-  timeoutMs?: number;
 }
 
 export interface ReconnectManagedWorktreeOpts extends ProvisionBase {

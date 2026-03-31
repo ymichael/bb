@@ -42,11 +42,12 @@ describe("host-daemon command schemas", () => {
       hostDaemonCommandSchema.parse({
         type: "environment.provision",
         environmentId: "env_123",
-        projectId: "proj_123",
         workspaceProvisionType: "managed-worktree",
         sourcePath: "/tmp/project",
         targetPath: "/tmp/project/.bb/env",
         branchName: "bb/env-123",
+        setupScript: ".bb-env-setup.sh",
+        setupTimeoutMs: 900000,
       }),
     ).toMatchObject({
       type: "environment.provision",
@@ -91,7 +92,6 @@ describe("host-daemon command schemas", () => {
       hostDaemonCommandSchema.parse({
         type: "environment.provision",
         environmentId: "env_123",
-        projectId: "proj_123",
         workspaceProvisionType: "managed-worktree",
         sourcePath: "/tmp/project",
         targetPath: "/tmp/project/.bb/env",
@@ -102,7 +102,6 @@ describe("host-daemon command schemas", () => {
       hostDaemonCommandSchema.parse({
         type: "environment.provision",
         environmentId: "env_123",
-        projectId: "proj_123",
         workspaceProvisionType: "unmanaged",
       }),
     ).toThrow();

@@ -121,7 +121,7 @@ describe("sweepExpiredCommands", () => {
     expect(spy.notifyThread).toHaveBeenCalledWith(thread.id, ["status-changed"]);
   });
 
-  it("uses 5-minute TTL for environment.provision commands", () => {
+  it("uses 20-minute TTL for environment.provision commands", () => {
     const { db, host } = setup();
 
     const cmd = queueCommand(db, noopNotifier, {
@@ -141,9 +141,9 @@ describe("sweepExpiredCommands", () => {
     const result1 = sweepExpiredCommands(db, noopNotifier);
     expect(result1.requeued).toBe(0); // Not expired yet
 
-    // 6 minutes ago (past provision TTL)
+    // 21 minutes ago (past provision TTL)
     db.update(hostDaemonCommands)
-      .set({ fetchedAt: Date.now() - 6 * 60_000 })
+      .set({ fetchedAt: Date.now() - 21 * 60_000 })
       .where(eq(hostDaemonCommands.id, cmd.id))
       .run();
 

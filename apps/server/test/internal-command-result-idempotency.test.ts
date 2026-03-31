@@ -61,7 +61,6 @@ describe("internal command result idempotency", () => {
         payload: JSON.stringify({
           type: "environment.provision",
           environmentId: environment.id,
-          projectId: project.id,
           workspaceProvisionType: "unmanaged",
           path: "/tmp/idempotent-provision",
         }),

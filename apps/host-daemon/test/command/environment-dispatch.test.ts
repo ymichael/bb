@@ -15,7 +15,6 @@ describe("environment command dispatch", () => {
       {
         type: "environment.provision",
         environmentId: "env-unmanaged",
-        projectId: "project-1",
         workspaceProvisionType: "unmanaged",
         path: sourcePath,
       },
@@ -46,11 +45,12 @@ describe("environment command dispatch", () => {
       {
         type: "environment.provision",
         environmentId: "env-worktree",
-        projectId: "project-1",
         workspaceProvisionType: "managed-worktree",
         sourcePath,
         targetPath: "/tmp/worktree",
         branchName: "bb/test",
+        setupScript: ".bb-env-setup.sh",
+        setupTimeoutMs: 900000,
       },
       { runtimeManager: harness.manager },
     );
@@ -69,6 +69,8 @@ describe("environment command dispatch", () => {
         sourcePath,
         targetPath: "/tmp/worktree",
         branchName: "bb/test",
+        scriptName: ".bb-env-setup.sh",
+        timeoutMs: 900000,
       },
     ]);
   });
@@ -81,11 +83,12 @@ describe("environment command dispatch", () => {
       {
         type: "environment.provision",
         environmentId: "env-clone",
-        projectId: "project-1",
         workspaceProvisionType: "managed-clone",
         sourcePath,
         targetPath: "/tmp/clone",
         branchName: "bb/clone",
+        setupScript: ".bb-env-setup.sh",
+        setupTimeoutMs: 900000,
       },
       { runtimeManager: harness.manager },
     );
@@ -104,6 +107,8 @@ describe("environment command dispatch", () => {
         sourcePath,
         targetPath: "/tmp/clone",
         branchName: "bb/clone",
+        scriptName: ".bb-env-setup.sh",
+        timeoutMs: 900000,
       },
     ]);
   });

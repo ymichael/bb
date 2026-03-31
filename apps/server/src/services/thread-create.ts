@@ -25,6 +25,8 @@ import {
   queueEnvironmentProvision,
   requireDefaultSource,
   requireProjectExists,
+  SETUP_SCRIPT_NAME,
+  SETUP_TIMEOUT_MS,
 } from "./thread-create-helpers.js";
 import {
   type ThreadCreateServiceRequest,
@@ -332,7 +334,6 @@ export async function createThreadFromRequest(
         environmentId: environment.id,
         hostId,
         path: unmanagedPath ?? undefined,
-        projectId: request.projectId,
         workspaceProvisionType: "unmanaged",
       });
       break;
@@ -342,11 +343,12 @@ export async function createThreadFromRequest(
       queueEnvironmentProvision(deps, {
         environmentId: environment.id,
         hostId,
-        projectId: request.projectId,
         workspaceProvisionType: workspace.type,
         sourcePath: defaultSource.path,
         targetPath: buildManagedTargetPath(defaultSource.path, request.projectId, thread.id),
         branchName: buildManagedBranchName(request, thread.id),
+        setupScript: SETUP_SCRIPT_NAME,
+        setupTimeoutMs: SETUP_TIMEOUT_MS,
       });
       break;
     }
@@ -392,7 +394,6 @@ export async function ensureProjectSourceEnvironment(
     command: {
       type: "environment.provision",
       environmentId: environment.id,
-      projectId: args.projectId,
       workspaceProvisionType: "unmanaged",
       path: args.path,
     },

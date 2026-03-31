@@ -134,7 +134,6 @@ export const providerListModelsCommandSchema = z.object({
 
 const environmentProvisionCommandBaseSchema = hostDaemonEnvironmentTargetSchema.extend({
   type: z.literal("environment.provision"),
-  projectId: z.string().min(1),
 });
 
 const unmanagedEnvironmentProvisionCommandSchema =
@@ -144,27 +143,28 @@ const unmanagedEnvironmentProvisionCommandSchema =
     path: z.string().min(1),
   });
 
+const managedEnvironmentProvisionFieldsSchema = z.object({
+  /** Source repo path */
+  sourcePath: z.string().min(1),
+  /** Target path for worktree/clone creation */
+  targetPath: z.string().min(1),
+  /** Branch name */
+  branchName: z.string().min(1),
+  /** Setup script filename to run after provisioning */
+  setupScript: z.string().min(1),
+  /** Maximum time in ms to wait for the setup script */
+  setupTimeoutMs: z.number().int().positive(),
+});
+
 const managedWorktreeEnvironmentProvisionCommandSchema =
-  environmentProvisionCommandBaseSchema.extend({
-    workspaceProvisionType: z.literal("managed-worktree"),
-    /** Source repo path */
-    sourcePath: z.string().min(1),
-    /** Target path for worktree creation */
-    targetPath: z.string().min(1),
-    /** Branch name */
-    branchName: z.string().min(1),
-  });
+  environmentProvisionCommandBaseSchema
+    .merge(managedEnvironmentProvisionFieldsSchema)
+    .extend({ workspaceProvisionType: z.literal("managed-worktree") });
 
 const managedCloneEnvironmentProvisionCommandSchema =
-  environmentProvisionCommandBaseSchema.extend({
-    workspaceProvisionType: z.literal("managed-clone"),
-    /** Source repo path */
-    sourcePath: z.string().min(1),
-    /** Target path for clone creation */
-    targetPath: z.string().min(1),
-    /** Branch name */
-    branchName: z.string().min(1),
-  });
+  environmentProvisionCommandBaseSchema
+    .merge(managedEnvironmentProvisionFieldsSchema)
+    .extend({ workspaceProvisionType: z.literal("managed-clone") });
 
 /**
  * Provision a workspace for an environment.

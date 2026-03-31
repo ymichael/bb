@@ -143,7 +143,6 @@ describe("public thread routes", () => {
       );
       expect(queued.command).toMatchObject({
         environmentId: environment?.id,
-        projectId: project.id,
         path: source.path,
         workspaceProvisionType: "unmanaged",
       });
@@ -196,9 +195,10 @@ describe("public thread routes", () => {
         ({ command }) => command.type === "environment.provision",
       );
       expect(queued.command).toMatchObject({
-        projectId: project.id,
         sourcePath: source.path,
         workspaceProvisionType: "managed-worktree",
+        setupScript: ".bb-env-setup.sh",
+        setupTimeoutMs: 900000,
       });
       expect(queued.command).toHaveProperty("targetPath");
       expect(queued.command).toHaveProperty("branchName");

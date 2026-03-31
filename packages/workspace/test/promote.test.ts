@@ -37,6 +37,8 @@ async function createPrimaryAndWorktree(): Promise<{
     sourcePath: primaryRepo,
     targetPath: worktreePath,
     branchName: "bb/env-test",
+    scriptName: ".bb-env-setup.sh",
+    timeoutMs: 900000,
   });
   await fs.writeFile(path.join(worktreePath, "feature.txt"), "feature work\n", "utf8");
   await runGit(["add", "."], { cwd: worktreePath });

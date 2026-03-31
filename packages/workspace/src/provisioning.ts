@@ -11,17 +11,17 @@ export interface CreateWorkspaceArgs {
   sourcePath: string;
   targetPath: string;
   branchName: string;
-  /** Setup script filename (default: .bb-env-setup.sh) */
-  scriptName?: string;
-  /** Setup script timeout in ms (default: 5 min) */
-  timeoutMs?: number;
+  /** Setup script filename. Controlled by the server. */
+  scriptName: string;
+  /** Setup script timeout in ms. Controlled by the server. */
+  timeoutMs: number;
   onProgress?: ProgressCallback;
 }
 
 export interface RunSetupScriptArgs {
   workspacePath: string;
-  scriptName?: string;
-  timeoutMs?: number;
+  scriptName: string;
+  timeoutMs: number;
   onProgress?: ProgressCallback;
 }
 
@@ -143,16 +143,15 @@ export async function createClone(args: CreateWorkspaceArgs): Promise<{ path: st
 export async function runSetupScript(
   args: RunSetupScriptArgs,
 ): Promise<{ ran: boolean; exitCode?: number; output?: string }> {
-  const scriptName = args.scriptName ?? ".bb-env-setup.sh";
-  const scriptPath = path.join(args.workspacePath, scriptName);
+  const scriptPath = path.join(args.workspacePath, args.scriptName);
   if (!(await pathExists(scriptPath))) {
     return { ran: false };
   }
 
-  emitStep({ onProgress: args.onProgress, key: "setup", text: `Running ${scriptName}`, status: "started" });
+  emitStep({ onProgress: args.onProgress, key: "setup", text: `Running ${args.scriptName}`, status: "started" });
 
-  const timeoutMs = args.timeoutMs ?? 5 * 60 * 1000;
-  const child = spawn("/bin/sh", [scriptPath], {
+  const { timeoutMs } = args;
+  const child = spawn("/bin/bash", [scriptPath], {
     cwd: args.workspacePath,
     stdio: ["ignore", "pipe", "pipe"],
   });
@@ -189,7 +188,7 @@ export async function runSetupScript(
 
     const output = outputChunks.join("");
     if (timedOut) {
-      emitStep({ onProgress: args.onProgress, key: "setup", text: `${scriptName} timed out`, status: "failed" });
+      emitStep({ onProgress: args.onProgress, key: "setup", text: `${args.scriptName} timed out`, status: "failed" });
       throw new WorkspaceError(
         "setup_script_failed",
         `Setup script timed out after ${timeoutMs}ms: ${scriptPath}`,
@@ -197,7 +196,7 @@ export async function runSetupScript(
     }
 
     if (result.signal) {
-      emitStep({ onProgress: args.onProgress, key: "setup", text: `${scriptName} interrupted`, status: "failed" });
+      emitStep({ onProgress: args.onProgress, key: "setup", text: `${args.scriptName} interrupted`, status: "failed" });
       throw new WorkspaceError(
         "setup_script_failed",
         `Setup script exited via signal ${result.signal}: ${scriptPath}`,
@@ -205,14 +204,14 @@ export async function runSetupScript(
     }
 
     if ((result.exitCode ?? 0) !== 0) {
-      emitStep({ onProgress: args.onProgress, key: "setup", text: `${scriptName} failed`, status: "failed" });
+      emitStep({ onProgress: args.onProgress, key: "setup", text: `${args.scriptName} failed`, status: "failed" });
       throw new WorkspaceError(
         "setup_script_failed",
         `Setup script failed with exit code ${result.exitCode}: ${scriptPath}`,
       );
     }
 
-    emitStep({ onProgress: args.onProgress, key: "setup", text: `Finished ${scriptName}`, status: "completed" });
+    emitStep({ onProgress: args.onProgress, key: "setup", text: `Finished ${args.scriptName}`, status: "completed" });
     return { ran: true, exitCode: result.exitCode ?? 0, output };
   } finally {
     clearTimeout(timeout);

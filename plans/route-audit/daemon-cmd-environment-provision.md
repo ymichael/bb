@@ -13,7 +13,6 @@
 |---|---|---|
 | `type` | Yes | Literal `"environment.provision"`. |
 | `environmentId` | Yes | Target environment. Used as key for runtime manager entry and lane serialization. |
-| `projectId` | Yes | `z.string().min(1)`. **Not consumed by the handler.** Passed in the schema but never read by `provisionEnvironment` or `toProvisionWorkspaceOptions`. Dead param. |
 | `workspaceProvisionType` | Yes | Discriminant: `"unmanaged"`, `"managed-worktree"`, or `"managed-clone"`. |
 
 ### Variant: `unmanaged`
@@ -29,6 +28,8 @@
 | `sourcePath` | Yes | Source repo path (primary checkout). Used as worktree source and setup script detection root. |
 | `targetPath` | Yes | Where to create the worktree. Becomes the workspace path. |
 | `branchName` | Yes | Branch name for the new worktree. Passed to `git worktree add -B`. |
+| `setupScript` | Yes | Setup script filename to run after provisioning (server passes `.bb-env-setup.sh`). |
+| `setupTimeoutMs` | Yes | Maximum time in ms to wait for the setup script (server passes 15 min). |
 
 ### Variant: `managed-clone`
 
@@ -37,8 +38,10 @@
 | `sourcePath` | Yes | Source repo path to clone from. Also used for setup script detection. |
 | `targetPath` | Yes | Where to create the clone. Becomes the workspace path. |
 | `branchName` | Yes | Branch name created after cloning via `git checkout -B`. |
+| `setupScript` | Yes | Setup script filename to run after provisioning (server passes `.bb-env-setup.sh`). |
+| `setupTimeoutMs` | Yes | Maximum time in ms to wait for the setup script (server passes 15 min). |
 
-**Dead param: `projectId` is accepted but never consumed by the handler.**
+**`projectId` removed. `setupScript` and `setupTimeoutMs` added as required fields on managed variants.**
 
 ## Implementation Trace
 
@@ -49,9 +52,9 @@
    - `ensureEnvironment` is idempotent: if an entry already exists or is pending, returns it immediately.
    - Otherwise creates a new entry via `createEntry`.
 3. If `!alreadyExists && entry.workspace.managed`, calls `detectSetupScript(command)`.
-   - `detectSetupScript` checks for `.bb-env-setup.sh` in the source directory (not the target).
-   - For unmanaged: checks `command.path`.
-   - For managed-worktree/managed-clone: checks `command.sourcePath`.
+   - `detectSetupScript` reads the script name from `command.setupScript` for managed variants.
+   - For unmanaged: returns `false` (no setup script support).
+   - For managed-worktree/managed-clone: checks if `command.setupScript` exists in `command.sourcePath`.
    - Returns `true` if the file exists, `false` otherwise.
 4. If `entry.workspace.isGitRepo`, calls `entry.workspace.getStatus()` and reads `defaultBranch`.
 5. Calls `entry.workspace.currentBranch()` for the branch name.
@@ -67,7 +70,7 @@
    - Calls `detectGitRepo(path)` and `detectWorktree(path)`.
    - Returns `WorkspaceImpl` with `managed: false`, no destroy behavior.
 3. Back in `provisionEnvironment`:
-   - `alreadyExists` is false on first call, but `entry.workspace.managed` is `false`, so `detectSetupScript` is **skipped**.
+   - `alreadyExists` is false on first call, but `entry.workspace.managed` is `false`, so `detectSetupScript` returns `false`.
    - `ranSetup` is `false`.
 
 ### Path B: `managed-worktree`
@@ -81,15 +84,15 @@
      - If target exists but is wrong branch or not a git repo, throws.
    - `createWorktree` (provisioning.ts:90):
      - Runs `git worktree add -B <branchName> <targetPath>` from `sourcePath`.
-     - Calls `runSetupScript({ workspacePath: targetPath, ... })`.
-       - Looks for `.bb-env-setup.sh` in targetPath (the new worktree).
-       - Runs it via `/bin/sh` with 5-minute timeout, captures stdout/stderr.
+     - Calls `runSetupScript({ workspacePath: targetPath, scriptName, timeoutMs })`.
+       - Looks for the setup script (from `command.setupScript`) in targetPath (the new worktree).
+       - Runs it via `/bin/bash` with server-controlled timeout (from `command.setupTimeoutMs`), captures stdout/stderr.
        - Throws on non-zero exit, timeout, or signal.
      - On failure: calls `removeWorktree({ path: targetPath, force: true })` for rollback.
    - Returns `WorkspaceImpl` with `managed: true`, `isWorktree: true`.
      - Destroy: `removeWorktree({ path, force: true })` -- resolves common dir and runs `git worktree remove`, then `fs.rm`.
 3. Back in `provisionEnvironment`:
-   - `detectSetupScript(command)` checks for `.bb-env-setup.sh` in `command.sourcePath`.
+   - `detectSetupScript(command)` checks for `command.setupScript` in `command.sourcePath`.
    - `ranSetup` reports whether the script **exists** in source, not whether it actually ran.
 
 ### Path C: `managed-clone`
@@ -107,7 +110,7 @@
    - Returns `WorkspaceImpl` with `managed: true`, `isWorktree: false`.
      - Destroy: `removeDirectory({ path })` -- `fs.rm` recursive.
 3. Back in `provisionEnvironment`:
-   - Same as Path B: `detectSetupScript` checks `command.sourcePath` for the script.
+   - Same as Path B: `detectSetupScript` checks `command.sourcePath` for `command.setupScript`.
 
 ## Code Reuse
 
@@ -119,10 +122,10 @@
 
 ## Flags
 
-1. **`projectId` is a dead param.** The schema requires it (`environmentProvisionCommandBaseSchema.extend({ projectId })`) but `provisionEnvironment` and `toProvisionWorkspaceOptions` never read it. Either remove it from the schema or consume it.
-2. **`ranSetup` reports script existence, not execution.** `detectSetupScript` checks if `.bb-env-setup.sh` exists in the source path. Meanwhile the actual setup script execution happens inside `createWorktree`/`createClone` via `runSetupScript`, which checks the *target* path. These are different paths -- the script might exist in source but not be copied to target (e.g., if it is gitignored). The name `ranSetup` implies the script ran, but the check is only whether it exists at the source. On idempotent re-provision (target already exists), `runSetupScript` is skipped but `detectSetupScript` would still return true.
-3. **`toProvisionWorkspaceOptions` has redundant validation.** For managed variants, it checks `if (!command.sourcePath || !command.targetPath || !command.branchName)` -- but these fields are already `z.string().min(1)` in the schema, so they can never be falsy after parsing. The guard is dead code.
-4. **Setup script timeout and scriptName are not configurable from the command.** The workspace package supports `scriptName` and `timeoutMs` options, but `toProvisionWorkspaceOptions` does not pass them through. They use defaults (`.bb-env-setup.sh`, 5 min). This is fine if intentional, but worth noting.
+1. ~~**`projectId` is a dead param.**~~ **Resolved.** Removed from `environmentProvisionCommandBaseSchema` and all callers.
+2. **`ranSetup` reports script existence, not execution.** `detectSetupScript` checks if `command.setupScript` exists in the source path. Meanwhile the actual setup script execution happens inside `createWorktree`/`createClone` via `runSetupScript`, which checks the *target* path. These are different paths -- the script might exist in source but not be copied to target (e.g., if it is gitignored). The name `ranSetup` implies the script ran, but the check is only whether it exists at the source. On idempotent re-provision (target already exists), `runSetupScript` is skipped but `detectSetupScript` would still return true.
+3. ~~**`toProvisionWorkspaceOptions` has redundant validation.**~~ **Resolved.** Removed the dead guard; schema validation is sufficient.
+4. ~~**Setup script timeout and scriptName are not configurable from the command.**~~ **Resolved.** `setupScript` (`z.string().min(1)`) and `setupTimeoutMs` (`z.number().int().positive()`) are now required fields on both managed variants. The server passes `".bb-env-setup.sh"` and `15 * 60 * 1000` (15 min). The daemon passes them through to `provisionWorkspace` as `scriptName` and `timeoutMs`. Default timeout in `packages/workspace/src/provisioning.ts` also updated from 5 min to 15 min, and shell changed from `/bin/sh` to `/bin/bash`.
 
 ## Usages
 

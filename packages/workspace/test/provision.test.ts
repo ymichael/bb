@@ -102,6 +102,8 @@ describe("provisionWorkspace", () => {
         sourcePath: repoPath,
         targetPath,
         branchName: "bb/env-test",
+        scriptName: ".bb-env-setup.sh",
+        timeoutMs: 900000,
       });
 
       expect(ws.path).toBe(targetPath);
@@ -121,6 +123,8 @@ describe("provisionWorkspace", () => {
         sourcePath: repoPath,
         targetPath,
         branchName: "bb/env-destroy",
+        scriptName: ".bb-env-setup.sh",
+        timeoutMs: 900000,
       });
 
       await ws.destroy();
@@ -153,6 +157,7 @@ describe("provisionWorkspace", () => {
         targetPath,
         branchName: "bb/env-script",
         scriptName: "custom-setup.sh",
+        timeoutMs: 900000,
       });
 
       const marker = await fs.readFile(
@@ -173,6 +178,8 @@ describe("provisionWorkspace", () => {
           sourcePath: repoPath,
           targetPath,
           branchName: "bb/env-fail",
+          scriptName: ".bb-env-setup.sh",
+          timeoutMs: 900000,
         }),
       ).rejects.toThrow(/Setup script failed/u);
 
@@ -191,6 +198,8 @@ describe("provisionWorkspace", () => {
         sourcePath: repoPath,
         targetPath,
         branchName: "bb/clone-branch",
+        scriptName: ".bb-env-setup.sh",
+        timeoutMs: 900000,
       });
 
       expect(ws.path).toBe(targetPath);
@@ -210,6 +219,8 @@ describe("provisionWorkspace", () => {
         sourcePath: repoPath,
         targetPath,
         branchName: "bb/clone-destroy",
+        scriptName: ".bb-env-setup.sh",
+        timeoutMs: 900000,
       });
 
       await ws.destroy();
@@ -257,6 +268,8 @@ describe("provisionWorkspace", () => {
           sourcePath: repoPath,
           targetPath,
           branchName: "bb/clone-fail",
+          scriptName: ".bb-env-setup.sh",
+          timeoutMs: 900000,
         }),
       ).rejects.toThrow(/Setup script failed/u);
 
