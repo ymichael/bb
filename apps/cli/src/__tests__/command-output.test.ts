@@ -151,7 +151,7 @@ describe("CLI command output contracts", () => {
       {
         id: "proj-1",
         name: "Alpha",
-        sources: [{ hostId: "host-test-001", type: "local", path: "/tmp/alpha" }],
+        sources: [{ hostId: "host-test-001", type: "local_path", path: "/tmp/alpha" }],
         createdAt: 1,
         updatedAt: 2,
       },
