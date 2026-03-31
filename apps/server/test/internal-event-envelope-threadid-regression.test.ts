@@ -49,7 +49,6 @@ describe("internal event envelope threadId regression", () => {
           sessionId: hostA.session.id,
           events: [
             {
-              id: "evt-thread-mismatch",
               environmentId: environmentA.id,
               threadId: threadA.id,
               sequence: 1,

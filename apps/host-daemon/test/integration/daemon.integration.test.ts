@@ -166,7 +166,6 @@ describe("host daemon integration", () => {
       await waitFor(() => harness.server.heartbeats.length > 0);
 
       expect(harness.server.commandResults[0]).toMatchObject({
-        cursor: 1,
         type: "thread.start",
         ok: true,
       });

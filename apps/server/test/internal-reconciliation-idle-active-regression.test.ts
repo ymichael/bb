@@ -40,8 +40,6 @@ describe("internal reconciliation idle-active regression", () => {
           protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
           activeThreads: [
             {
-              environmentId: environment.id,
-              providerThreadId: "provider-idle-active",
               threadId: thread.id,
             },
           ],

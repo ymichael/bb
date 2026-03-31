@@ -6,12 +6,10 @@ export interface BufferedEventInput {
   environmentId: string;
   threadId: string;
   event: ThreadEvent;
-  id?: string;
   createdAt?: number;
 }
 
 export interface BufferedEvent extends BufferedEventInput {
-  id: string;
   sequence: number;
   createdAt: number;
 }
@@ -24,7 +22,6 @@ export interface CreateEventBufferOptions {
   flushAtCount?: number;
   maxBufferedEvents?: number;
   now?: () => number;
-  createId?: (event: Omit<BufferedEvent, "id">) => string;
 }
 
 export interface EventBuffer {
@@ -48,10 +45,6 @@ export function createEventBuffer(
   const flushAtCount = options.flushAtCount ?? DEFAULT_FLUSH_AT_COUNT;
   const maxBufferedEvents = options.maxBufferedEvents ?? DEFAULT_MAX_BUFFERED_EVENTS;
   const now = options.now ?? Date.now;
-  const createId =
-    options.createId ??
-    ((event: Omit<BufferedEvent, "id">) =>
-      `${event.threadId}:${event.sequence}:${event.createdAt}`);
 
   const nextSequenceByThread = new Map<string, number>();
   for (const [threadId, highWaterMark] of Object.entries(
@@ -102,9 +95,7 @@ export function createEventBuffer(
       ...event,
       sequence,
       createdAt: event.createdAt ?? now(),
-      id: event.id ?? "",
     };
-    bufferedEvent.id ||= createId(bufferedEvent);
 
     buffer = [...buffer, bufferedEvent];
     trimOverflow();

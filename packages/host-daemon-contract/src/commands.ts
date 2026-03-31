@@ -393,7 +393,6 @@ export type HostDaemonCommandEnvelope = z.infer<
 const hostDaemonCommandResultReportBaseSchema = z.object({
   sessionId: z.string().min(1),
   commandId: z.string().min(1),
-  cursor: z.number().int().nonnegative(),
   completedAt: z.number().int().nonnegative(),
 });
 

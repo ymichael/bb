@@ -354,7 +354,6 @@ describe.sequential("fake provider recovery integration", () => {
         json: {
           commandId: "cmd_stale",
           completedAt: Date.now(),
-          cursor: 1,
           ok: true,
           result: {
             providerThreadId: "provider-stale",

@@ -200,7 +200,6 @@ describe("ServerConnection", () => {
     await connection.start();
     await serverClient.reportCommandResult({
       commandId: "cmd-1",
-      cursor: 7,
       completedAt: 1,
       type: "turn.run",
       ok: true,
@@ -212,7 +211,6 @@ describe("ServerConnection", () => {
       hostDaemonCommandResultReportSchema.parse({
         sessionId: "session-1",
         commandId: "cmd-1",
-        cursor: 7,
         completedAt: 1,
         type: "turn.run",
         ok: true,
@@ -221,7 +219,6 @@ describe("ServerConnection", () => {
       hostDaemonCommandResultReportSchema.parse({
         sessionId: "session-1",
         commandId: "cmd-1",
-        cursor: 7,
         completedAt: 1,
         type: "turn.run",
         ok: true,
@@ -244,7 +241,6 @@ describe("ServerConnection", () => {
     await expect(
       serverClient.reportCommandResult({
         commandId: "cmd-1",
-        cursor: 7,
         completedAt: 1,
         type: "turn.run",
         ok: true,
@@ -269,7 +265,6 @@ describe("ServerConnection", () => {
     await expect(
       serverClient.reportCommandResult({
         commandId: "cmd-1",
-        cursor: 7,
         completedAt: 1,
         type: "turn.run",
         ok: true,
@@ -314,9 +309,7 @@ describe("ServerConnection", () => {
     testServer = await createTestServer();
     const activeThreads: HostDaemonActiveThread[] = [
       {
-        environmentId: "env-1",
         threadId: "thread-1",
-        providerThreadId: "provider-1",
       },
     ];
     const { connection } = createConnection(testServer, {

@@ -175,7 +175,6 @@ describe("server integration", () => {
         json: {
           sessionId: session.sessionId,
           commandId: provisionCommand.id,
-          cursor: provisionCommand.cursor,
           completedAt: Date.now(),
           type: "environment.provision",
           ok: true,
@@ -258,7 +257,6 @@ describe("server integration", () => {
         json: {
           sessionId: session.sessionId,
           commandId: provisionCommand.id,
-          cursor: provisionCommand.cursor,
           completedAt: Date.now(),
           type: "environment.provision",
           ok: true,
@@ -282,7 +280,6 @@ describe("server integration", () => {
         json: {
           sessionId: session.sessionId,
           commandId: threadStartCommand.id,
-          cursor: threadStartCommand.cursor,
           completedAt: Date.now(),
           type: "thread.start",
           ok: true,
@@ -320,7 +317,6 @@ describe("server integration", () => {
           sessionId: session.sessionId,
           events: [
             {
-              id: "evt-1",
               environmentId: thread.environmentId,
               threadId: thread.id,
               sequence: nextSequence,
@@ -397,7 +393,6 @@ describe("server integration", () => {
         json: {
           sessionId: session.sessionId,
           commandId: provisionCommand.id,
-          cursor: provisionCommand.cursor,
           completedAt: Date.now(),
           type: "environment.provision",
           ok: true,
@@ -423,7 +418,6 @@ describe("server integration", () => {
         json: {
           sessionId: session.sessionId,
           commandId: initialThreadStartCommand.id,
-          cursor: initialThreadStartCommand.cursor,
           completedAt: Date.now(),
           type: "thread.start",
           ok: true,
@@ -439,7 +433,6 @@ describe("server integration", () => {
           sessionId: session.sessionId,
           events: [
             {
-              id: "evt-initial-started",
               environmentId: thread.environmentId,
               threadId: thread.id,
               sequence: initialNextSequence,
@@ -452,7 +445,6 @@ describe("server integration", () => {
               },
             },
             {
-              id: "evt-initial-completed",
               environmentId: thread.environmentId,
               threadId: thread.id,
               sequence: initialNextSequence + 1,
@@ -495,7 +487,6 @@ describe("server integration", () => {
         json: {
           sessionId: session.sessionId,
           commandId: turnRunCommand.id,
-          cursor: turnRunCommand.cursor,
           completedAt: Date.now(),
           type: "turn.run",
           ok: true,
@@ -509,7 +500,6 @@ describe("server integration", () => {
           sessionId: session.sessionId,
           events: [
             {
-              id: "evt-started",
               environmentId: thread.environmentId,
               threadId: thread.id,
               sequence: nextSequence,
@@ -522,7 +512,6 @@ describe("server integration", () => {
               },
             },
             {
-              id: "evt-completed",
               environmentId: thread.environmentId,
               threadId: thread.id,
               sequence: nextSequence + 1,

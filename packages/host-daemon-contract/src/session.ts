@@ -17,9 +17,7 @@ import {
 const nonNegativeIntegerStringSchema = z.string().regex(/^\d+$/);
 
 export const hostDaemonActiveThreadSchema = z.object({
-  environmentId: z.string().min(1),
   threadId: z.string().min(1),
-  providerThreadId: z.string().min(1),
 });
 export type HostDaemonActiveThread = z.infer<typeof hostDaemonActiveThreadSchema>;
 
@@ -62,7 +60,6 @@ export const hostDaemonCommandBatchSchema = z.object({
 export type HostDaemonCommandBatch = z.infer<typeof hostDaemonCommandBatchSchema>;
 
 export const hostDaemonEventEnvelopeSchema = z.object({
-  id: z.string().min(1),
   environmentId: z.string().min(1),
   threadId: z.string().min(1),
   sequence: z.number().int().nonnegative(),
@@ -118,11 +115,17 @@ export type HostDaemonDaemonWsMessage = z.infer<
   typeof hostDaemonDaemonWsMessageSchema
 >;
 
-export const hostDaemonToolCallRequestSchema = toolCallRequestSchema.and(
-  z.object({
+export const hostDaemonToolCallRequestSchema = toolCallRequestSchema
+  .pick({
+    threadId: true,
+    turnId: true,
+    callId: true,
+    tool: true,
+    arguments: true,
+  })
+  .extend({
     sessionId: z.string().min(1),
-  }),
-);
+  });
 export type HostDaemonToolCallRequest = z.infer<
   typeof hostDaemonToolCallRequestSchema
 >;

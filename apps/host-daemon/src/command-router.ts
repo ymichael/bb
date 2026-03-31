@@ -10,7 +10,12 @@ import {
 import type { HostDaemonLogger } from "./logger.js";
 import { RuntimeManager } from "./runtime-manager.js";
 
-type RoutedCommandResult = Omit<HostDaemonCommandResultReport, "sessionId">;
+type CommandResultReport = Omit<HostDaemonCommandResultReport, "sessionId">;
+
+export interface RoutedCommandResult {
+  cursor: number;
+  report: CommandResultReport;
+}
 
 export interface CommandRouterOptions {
   runtimeManager: RuntimeManager;
@@ -68,10 +73,10 @@ export class CommandRouter {
     }
 
     const result = await task;
-    if (envelope.command.type === "environment.destroy" && result.ok) {
+    if (envelope.command.type === "environment.destroy" && result.report.ok) {
       this.environmentLanes.delete(envelope.command.environmentId);
     }
-    this.recordCompletedResult(envelope.cursor, result);
+    this.recordCompletedResult(result);
     this.reportingPromise = this.reportingPromise
       .then(() => this.flushCompleted())
       .catch((error) => {
@@ -83,10 +88,8 @@ export class CommandRouter {
     await this.reportingPromise;
   }
 
-  private recordCompletedResult(
-    cursor: number,
-    result: RoutedCommandResult,
-  ): void {
+  private recordCompletedResult(result: RoutedCommandResult): void {
+    const { cursor } = result;
     const pendingCount = this.completedResults.size;
     if (cursor > this.lastReportedCursor + pendingCount + 1) {
       this.logger.warn(
@@ -132,9 +135,8 @@ export class CommandRouter {
   private async executeCommand(
     envelope: HostDaemonCommandEnvelope,
   ): Promise<RoutedCommandResult> {
-    const baseResult = {
+    const baseReport = {
       commandId: envelope.id,
-      cursor: envelope.cursor,
       type: envelope.command.type,
     } as const;
 
@@ -146,10 +148,13 @@ export class CommandRouter {
         listModels: this.options.listModels,
       });
       return {
-        ...baseResult,
-        completedAt: this.now(),
-        ok: true as const,
-        result,
+        cursor: envelope.cursor,
+        report: {
+          ...baseReport,
+          completedAt: this.now(),
+          ok: true as const,
+          result,
+        },
       };
     } catch (error) {
       this.logger.warn(
@@ -162,11 +167,14 @@ export class CommandRouter {
         "command execution failed",
       );
       return {
-        ...baseResult,
-        completedAt: this.now(),
-        ok: false as const,
-        errorCode: getErrorCode(error),
-        errorMessage: error instanceof Error ? error.message : String(error),
+        cursor: envelope.cursor,
+        report: {
+          ...baseReport,
+          completedAt: this.now(),
+          ok: false as const,
+          errorCode: getErrorCode(error),
+          errorMessage: error instanceof Error ? error.message : String(error),
+        },
       };
     }
   }

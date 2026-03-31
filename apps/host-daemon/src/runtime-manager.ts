@@ -119,15 +119,13 @@ export class RuntimeManager {
 
   listActiveThreads(): HostDaemonActiveThread[] {
     const activeThreads: HostDaemonActiveThread[] = [];
-    for (const [environmentId, entry] of this.entries) {
+    for (const entry of this.entries.values()) {
       for (const [threadId, thread] of entry.threads) {
         if (thread.status !== "active") {
           continue;
         }
         activeThreads.push({
-          environmentId,
           threadId,
-          providerThreadId: thread.providerThreadId,
         });
       }
     }

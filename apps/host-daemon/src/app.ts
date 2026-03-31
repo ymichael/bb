@@ -162,7 +162,7 @@ export async function createHostDaemonApp(
       flush: () => eventBuffer.flush(),
     },
     reportResult: async (result) => {
-      await serverClient.reportCommandResult(result);
+      await serverClient.reportCommandResult(result.report);
       cursorState.value = result.cursor;
       await (options.writeCursor ?? writeCommandCursor)(
         options.dataDir,

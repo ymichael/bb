@@ -86,7 +86,6 @@ export async function reportQueuedCommandSuccess<
     body: JSON.stringify({
       sessionId,
       commandId: queued.row.id,
-      cursor: queued.row.cursor,
       completedAt: Date.now(),
       type: queued.command.type,
       ok: true,
@@ -111,7 +110,6 @@ export async function reportQueuedCommandError(
     body: JSON.stringify({
       sessionId,
       commandId: queued.row.id,
-      cursor: queued.row.cursor,
       completedAt: Date.now(),
       type: queued.command.type,
       ok: false,

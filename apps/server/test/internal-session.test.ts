@@ -230,7 +230,6 @@ describe("internal session routes", () => {
         body: JSON.stringify({
           sessionId: session.id,
           commandId: successCommand.id,
-          cursor: successCommand.cursor,
           completedAt: successCompletedAt,
           type: "environment.provision",
           ok: true,
@@ -296,7 +295,6 @@ describe("internal session routes", () => {
         body: JSON.stringify({
           sessionId: session.id,
           commandId: failureCommand.id,
-          cursor: failureCommand.cursor,
           completedAt: Date.now(),
           type: "environment.provision",
           ok: false,
@@ -485,7 +483,6 @@ describe("internal session routes", () => {
         body: JSON.stringify({
           sessionId: session.id,
           commandId: provisionCommand.id,
-          cursor: provisionCommand.cursor,
           completedAt: Date.now(),
           type: "environment.provision",
           ok: true,
@@ -610,7 +607,6 @@ describe("internal session routes", () => {
         body: JSON.stringify({
           sessionId: session.id,
           commandId: provisionCommand.id,
-          cursor: provisionCommand.cursor,
           completedAt: Date.now(),
           type: "environment.provision",
           ok: true,
@@ -726,7 +722,6 @@ describe("internal session routes", () => {
         body: JSON.stringify({
           sessionId: session.id,
           commandId: provisionCommand.id,
-          cursor: provisionCommand.cursor,
           completedAt: Date.now(),
           type: "environment.provision",
           ok: true,
@@ -833,8 +828,6 @@ describe("internal session routes", () => {
           protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
           activeThreads: [
             {
-              environmentId: environment.id,
-              providerThreadId: "provider-recovered",
               threadId: erroredThread.id,
             },
           ],
@@ -885,7 +878,6 @@ describe("internal session routes", () => {
         body: JSON.stringify({
           sessionId: session.id,
           commandId: destroyCommand.id,
-          cursor: destroyCommand.cursor,
           completedAt: Date.now(),
           type: "environment.destroy",
           ok: true,
@@ -936,7 +928,6 @@ describe("internal session routes", () => {
         body: JSON.stringify({
           sessionId: session.id,
           commandId: destroyCommand.id,
-          cursor: destroyCommand.cursor,
           completedAt: Date.now(),
           type: "environment.destroy",
           ok: true,

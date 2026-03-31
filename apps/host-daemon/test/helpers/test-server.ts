@@ -52,6 +52,19 @@ async function serveHonoRequest(
   response.end(Buffer.from(await honoResponse.arrayBuffer()));
 }
 
+function getRawCommandId(rawCommand: unknown): string | null {
+  if (
+    rawCommand != null &&
+    typeof rawCommand === "object" &&
+    "id" in rawCommand &&
+    typeof rawCommand.id === "string"
+  ) {
+    return rawCommand.id;
+  }
+
+  return null;
+}
+
 export interface CreateTestServerOptions {
   commandResultFailures?: number;
   commandResultFailureStatus?: number;
@@ -98,7 +111,7 @@ export async function createTestServer(
   const commands = new Map<number, HostDaemonCommandEnvelope>();
   // Raw commands bypass Zod validation — used to test unknown command types
   const rawCommands = new Map<number, unknown>();
-  const completedCommandCursors = new Set<number>();
+  const completedCommandIds = new Set<string>();
   const threadHighWaterMarks = {
     ...(options.threadHighWaterMarks ?? { threadA: 4 }),
   };
@@ -138,13 +151,14 @@ export async function createTestServer(
     const available = [...commands.values()].filter(
       (command) =>
         command.cursor > afterCursor &&
-        !completedCommandCursors.has(command.cursor),
+        !completedCommandIds.has(command.id),
     );
 
     const availableRaw = [...rawCommands.entries()]
       .filter(
-        ([cursor]) =>
-          cursor > afterCursor && !completedCommandCursors.has(cursor),
+        ([cursor, rawCommand]) =>
+          cursor > afterCursor &&
+          !completedCommandIds.has(getRawCommandId(rawCommand) ?? ""),
       )
       .map(([, value]) => value);
 
@@ -182,7 +196,7 @@ export async function createTestServer(
       });
     }
 
-    completedCommandCursors.add(payload.cursor);
+    completedCommandIds.add(payload.commandId);
     return context.json({ ok: true });
   });
   app.post("/internal/session/events", async (context) => {

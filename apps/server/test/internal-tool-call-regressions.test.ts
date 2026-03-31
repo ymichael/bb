@@ -38,7 +38,6 @@ describe("internal tool-call regressions", () => {
         headers: internalAuthHeaders(harness),
         body: JSON.stringify({
           sessionId: hostA.session.id,
-          requestId: "req-cross-host",
           threadId: thread.id,
           turnId: "turn-cross-host",
           callId: "call-cross-host",

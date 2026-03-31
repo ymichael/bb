@@ -359,9 +359,7 @@ describe("host-daemon session schemas", () => {
         protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
         activeThreads: [
           {
-            environmentId: "env_123",
             threadId: "thr_123",
-            providerThreadId: "provider_thr_123",
           },
         ],
       }),
@@ -380,8 +378,7 @@ describe("host-daemon session schemas", () => {
         protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
         activeThreads: [
           {
-            environmentId: "env_124",
-            threadId: "thr_124",
+            threadId: "",
           },
         ],
       }),
@@ -415,7 +412,6 @@ describe("host-daemon session schemas", () => {
         sessionId: "session_123",
         events: [
           {
-            id: "evt_1",
             environmentId: "env_123",
             threadId: "thr_123",
             sequence: 1,
@@ -432,7 +428,7 @@ describe("host-daemon session schemas", () => {
       sessionId: "session_123",
       events: [
         {
-          id: "evt_1",
+          threadId: "thr_123",
         },
       ],
     });

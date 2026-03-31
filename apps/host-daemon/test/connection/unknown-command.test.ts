@@ -84,7 +84,6 @@ describe("fetchCommands with unknown command types", () => {
     expect(errorReport).toBeDefined();
     expect((errorReport as any).ok).toBe(false);
     expect((errorReport as any).errorCode).toBe("unknown_command");
-    expect((errorReport as any).cursor).toBe(99);
   });
 
   it("handles a batch with only unknown commands", async () => {
@@ -128,7 +127,7 @@ describe("fetchCommands with unknown command types", () => {
     expect((errorReport as any).errorCode).toBe("unknown_command");
   });
 
-  it("reports error for commands missing id or cursor", async () => {
+  it("reports error for commands missing id", async () => {
     testServer = await createTestServer();
     const logger = createLogger();
     const sessionState = { value: "" };
@@ -149,8 +148,9 @@ describe("fetchCommands with unknown command types", () => {
     });
     sessionState.value = session.sessionId;
 
-    // Queue a raw command without id/cursor
+    // Queue a raw command without id
     testServer.queueRawCommand({
+      cursor: 77,
       command: { type: "future.missing_fields" },
     });
 
@@ -158,10 +158,10 @@ describe("fetchCommands with unknown command types", () => {
 
     expect(commands).toHaveLength(0);
 
-    // Should warn about the unknown type AND about missing id/cursor
+    // Should warn about the unknown type AND about missing id
     const warnCalls = (logger.warn as ReturnType<typeof vi.fn>).mock.calls;
     const missingFieldsWarning = warnCalls.find(
-      ([, msg]: any) => msg === "cannot report unknown command: missing id or cursor",
+      ([, msg]: any) => msg === "cannot report unknown command: missing id",
     );
     expect(missingFieldsWarning).toBeDefined();
   });

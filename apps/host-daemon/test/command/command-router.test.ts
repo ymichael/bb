@@ -368,8 +368,8 @@ describe("CommandRouter", () => {
       reportResult: async (result) => {
         results.push({
           cursor: result.cursor,
-          completedAt: result.completedAt,
-          ok: result.ok,
+          completedAt: result.report.completedAt,
+          ok: result.report.ok,
         });
       },
     });

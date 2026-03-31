@@ -143,7 +143,6 @@ describe("internal session correctness", () => {
           body: JSON.stringify({
             sessionId: session.id,
             commandId: command3.id,
-            cursor: command3.cursor,
             completedAt: Date.now(),
             type: "thread.stop",
             ok: true,
@@ -167,7 +166,6 @@ describe("internal session correctness", () => {
           body: JSON.stringify({
             sessionId: session.id,
             commandId: command1.id,
-            cursor: command1.cursor,
             completedAt: Date.now(),
             type: "thread.stop",
             ok: true,
@@ -191,7 +189,6 @@ describe("internal session correctness", () => {
           body: JSON.stringify({
             sessionId: session.id,
             commandId: command2.id,
-            cursor: command2.cursor,
             completedAt: Date.now(),
             type: "thread.stop",
             ok: true,

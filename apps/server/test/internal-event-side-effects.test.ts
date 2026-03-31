@@ -54,7 +54,6 @@ describe("internal event side effects", () => {
           sessionId: session.id,
           events: [
             {
-              id: "evt-name-updated",
               environmentId: environment.id,
               threadId: renamedThread.id,
               sequence: 1,
@@ -67,7 +66,6 @@ describe("internal event side effects", () => {
               },
             },
             {
-              id: "evt-turn-started",
               environmentId: environment.id,
               threadId: startedThread.id,
               sequence: 1,
@@ -145,7 +143,6 @@ describe("internal event side effects", () => {
           sessionId: session.id,
           events: [
             {
-              id: "evt-turn-completed",
               environmentId: environment.id,
               threadId: thread.id,
               sequence: 3,

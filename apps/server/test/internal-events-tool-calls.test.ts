@@ -40,7 +40,6 @@ describe("internal event and tool-call routes", () => {
           sessionId: session.id,
           events: [
             {
-              id: "evt-1",
               environmentId: environment.id,
               threadId: thread.id,
               sequence: 1,
@@ -53,7 +52,6 @@ describe("internal event and tool-call routes", () => {
               },
             },
             {
-              id: "evt-2",
               environmentId: environment.id,
               threadId: thread.id,
               sequence: 1,
@@ -105,7 +103,6 @@ describe("internal event and tool-call routes", () => {
           sessionId: session.id,
           events: [
             {
-              id: "evt-started",
               environmentId: environment.id,
               threadId: thread.id,
               sequence: 1,
@@ -118,7 +115,6 @@ describe("internal event and tool-call routes", () => {
               },
             },
             {
-              id: "evt-completed",
               environmentId: environment.id,
               threadId: thread.id,
               sequence: 2,
@@ -168,7 +164,6 @@ describe("internal event and tool-call routes", () => {
         headers: internalAuthHeaders(harness),
         body: JSON.stringify({
           sessionId: session.id,
-          requestId: "req-1",
           threadId: managerThread.id,
           turnId: "turn-1",
           callId: "call-1",
@@ -214,7 +209,6 @@ describe("internal event and tool-call routes", () => {
         headers: internalAuthHeaders(harness),
         body: JSON.stringify({
           sessionId: session.id,
-          requestId: "req-2",
           threadId: managerThread.id,
           turnId: "turn-2",
           callId: "call-2",

@@ -132,13 +132,12 @@ export function createServerClient(
   async function reportUnknownCommand(rawCommand: unknown): Promise<void> {
     try {
       const commandId = extractRawField<string>(rawCommand, "id");
-      const cursor = extractRawField<number>(rawCommand, "cursor");
       const rawType = extractRawCommandType(rawCommand) ?? "unknown";
 
-      if (!commandId || cursor === undefined) {
+      if (!commandId) {
         options.logger.warn(
           { rawCommand },
-          "cannot report unknown command: missing id or cursor",
+          "cannot report unknown command: missing id",
         );
         return;
       }
@@ -151,7 +150,6 @@ export function createServerClient(
           body: JSON.stringify({
             sessionId: requireSessionId(),
             commandId,
-            cursor,
             type: rawType,
             completedAt: Date.now(),
             ok: false,

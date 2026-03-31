@@ -77,7 +77,6 @@ describe("internal authorization regressions", () => {
         body: JSON.stringify({
           sessionId: hostA.session.id,
           commandId: command.id,
-          cursor: command.cursor,
           completedAt: Date.now(),
           type: "environment.provision",
           ok: true,
@@ -140,7 +139,6 @@ describe("internal authorization regressions", () => {
           sessionId: hostA.session.id,
           events: [
             {
-              id: "evt-cross-host",
               environmentId: environment.id,
               threadId: thread.id,
               sequence: 1,
