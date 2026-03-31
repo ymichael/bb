@@ -13,9 +13,9 @@ import {
   buildManagedBranchNameFromSeed,
   buildManagedTargetPath,
   queueEnvironmentProvision,
-  requireDefaultSource,
   SETUP_SCRIPT_NAME,
   SETUP_TIMEOUT_MS,
+  requireSourceForHost,
 } from "./thread-create-helpers.js";
 import { tryTransition } from "./thread-transitions.js";
 
@@ -54,18 +54,15 @@ export function queueManagedEnvironmentReprovision(
     );
   }
 
-  const defaultSource = requireDefaultSource(deps, args.thread.projectId);
-  if (defaultSource.hostId !== args.environment.hostId) {
-    throw new ApiError(
-      409,
-      "invalid_request",
-      "Managed workspaces must run on the default source host",
-    );
-  }
+  const source = requireSourceForHost(
+    deps,
+    args.thread.projectId,
+    args.environment.hostId,
+  );
 
   const targetPath =
     args.environment.path ??
-    buildManagedTargetPath(defaultSource.path, args.thread.projectId, args.thread.id);
+    buildManagedTargetPath(source.path, args.thread.projectId, args.thread.id);
   const branchName =
     args.environment.branchName ??
     buildManagedBranchNameFromSeed(
@@ -121,7 +118,7 @@ export function queueManagedEnvironmentReprovision(
     branchName,
     environmentId: args.environment.id,
     hostId: args.environment.hostId,
-    sourcePath: defaultSource.path,
+    sourcePath: source.path,
     targetPath,
     workspaceProvisionType: provisionType,
     setupScript: SETUP_SCRIPT_NAME,

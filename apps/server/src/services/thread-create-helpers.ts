@@ -2,6 +2,7 @@ import path from "node:path";
 import {
   createThread,
   getDefaultProjectSource,
+  getProjectSourceByHost,
   getProject,
   getThread,
   queueCommand,
@@ -84,6 +85,32 @@ export function requireDefaultSource(
 
 export const SETUP_SCRIPT_NAME = ".bb-env-setup.sh";
 export const SETUP_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes
+
+export function requireSourceForHost(
+  deps: Pick<AppDeps, "db">,
+  projectId: string,
+  hostId: string,
+): ResolvedProjectSource {
+  const source = getProjectSourceByHost(deps.db, projectId, hostId);
+  if (!source) {
+    throw new ApiError(
+      409,
+      "invalid_request",
+      "No project source configured for this host",
+    );
+  }
+  if (!source.path) {
+    throw new ApiError(
+      409,
+      "unsupported_operation",
+      "Project source path is not available",
+    );
+  }
+  return {
+    ...source,
+    path: source.path,
+  };
+}
 
 type QueueEnvironmentProvisionArgs =
   | {

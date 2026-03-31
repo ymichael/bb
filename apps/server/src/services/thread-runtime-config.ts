@@ -1,5 +1,5 @@
 import {
-  getDefaultProjectSource,
+  getProjectSourceByHost,
   getProject,
 } from "@bb/db";
 import type {
@@ -167,8 +167,12 @@ export async function resolveThreadRuntimeCommandConfig(
     throw new ApiError(404, "project_not_found", "Project not found");
   }
 
-  const defaultSource = getDefaultProjectSource(deps.db, args.thread.projectId);
-  const projectRootPath = defaultSource?.path ?? workspacePath;
+  const source = getProjectSourceByHost(
+    deps.db,
+    args.thread.projectId,
+    args.environment.hostId,
+  );
+  const projectRootPath = source?.path ?? workspacePath;
 
   const { workspaceProvisionType } = args.environment;
 

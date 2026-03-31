@@ -1,4 +1,4 @@
-import { archiveThread, getDefaultProjectSource } from "@bb/db";
+import { archiveThread } from "@bb/db";
 import { hostDaemonCommandResultSchemaByType } from "@bb/host-daemon-contract";
 import {
   environmentActionRequestSchema,
@@ -19,6 +19,7 @@ import {
   requireThreadInEnvironment,
 } from "../services/entity-lookup.js";
 import { queueCommandAndWait } from "../services/command-wait.js";
+import { requireSourceForHost } from "../services/thread-create-helpers.js";
 
 function toWorkspaceDiffSelection(query: EnvironmentDiffQuery) {
   if (query.selection === "commit") {
@@ -168,10 +169,11 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
         });
       }
       case "promote": {
-        const source = getDefaultProjectSource(deps.db, environment.projectId);
-        if (!source?.path || source.hostId !== environment.hostId) {
-          throw new ApiError(409, "invalid_request", "Environment cannot be promoted");
-        }
+        const source = requireSourceForHost(
+          deps,
+          environment.projectId,
+          environment.hostId,
+        );
         await queueCommandAndWait(deps, {
           hostId: environment.hostId,
           timeoutMs: COMMAND_TIMEOUT_MS,
@@ -193,13 +195,12 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
         });
       }
       case "demote": {
-        const source = getDefaultProjectSource(deps.db, environment.projectId);
-        if (
-          !source?.path ||
-          source.hostId !== environment.hostId ||
-          !environment.branchName ||
-          !actingThread.mergeBaseBranch
-        ) {
+        const source = requireSourceForHost(
+          deps,
+          environment.projectId,
+          environment.hostId,
+        );
+        if (!environment.branchName || !actingThread.mergeBaseBranch) {
           throw new ApiError(409, "invalid_request", "Environment cannot be demoted");
         }
         await queueCommandAndWait(deps, {

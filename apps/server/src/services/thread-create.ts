@@ -23,10 +23,10 @@ import {
   createThreadRecord,
   getThreadSafe,
   queueEnvironmentProvision,
-  requireDefaultSource,
   requireProjectExists,
   SETUP_SCRIPT_NAME,
   SETUP_TIMEOUT_MS,
+  requireSourceForHost,
 } from "./thread-create-helpers.js";
 import {
   type ThreadCreateServiceRequest,
@@ -244,15 +244,14 @@ export async function createThreadFromRequest(
   const hostId = request.environment.hostId;
   requireConnectedHostSession(deps, hostId);
   const workspace = request.environment.workspace;
-  const defaultSource = requireDefaultSource(deps, request.projectId);
+  const managedSource = workspace.type === "unmanaged"
+    ? null
+    : requireSourceForHost(deps, request.projectId, hostId);
   const unmanagedPath = workspace.type === "unmanaged"
-    ? workspace.path ?? defaultSource.path
+    ? workspace.path ?? requireSourceForHost(deps, request.projectId, hostId).path
     : null;
   const mergeBaseBranch = null;
 
-  if (workspace.type === "unmanaged" && !unmanagedPath) {
-    throw new ApiError(409, "invalid_request", "Workspace path is required");
-  }
   if (workspace.type === "unmanaged" && unmanagedPath) {
     const reusedThread = await maybeReuseUnmanagedEnvironment(deps, {
       hostId,
@@ -264,17 +263,6 @@ export async function createThreadFromRequest(
       return reusedThread;
     }
   }
-  if (
-    (workspace.type === "managed-worktree" || workspace.type === "managed-clone") &&
-    defaultSource.hostId !== hostId
-  ) {
-    throw new ApiError(
-      409,
-      "invalid_request",
-      "Managed workspaces must run on the default source host",
-    );
-  }
-
   const environment = createEnvironment(deps.db, deps.hub, {
     projectId: request.projectId,
     hostId,
@@ -340,12 +328,17 @@ export async function createThreadFromRequest(
     }
     case "managed-worktree":
     case "managed-clone": {
+      const source = managedSource ?? requireSourceForHost(
+        deps,
+        request.projectId,
+        hostId,
+      );
       queueEnvironmentProvision(deps, {
         environmentId: environment.id,
         hostId,
         workspaceProvisionType: workspace.type,
-        sourcePath: defaultSource.path,
-        targetPath: buildManagedTargetPath(defaultSource.path, request.projectId, thread.id),
+        sourcePath: source.path,
+        targetPath: buildManagedTargetPath(source.path, request.projectId, thread.id),
         branchName: buildManagedBranchName(request, thread.id),
         setupScript: SETUP_SCRIPT_NAME,
         setupTimeoutMs: SETUP_TIMEOUT_MS,
