@@ -6,12 +6,12 @@
 
 ## Request Body (or Params)
 
-| Field                          | Required                    | Notes                                                                                                                                                                                           |
-| ------------------------------ | --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `:id` (path)                   | Yes                         | Environment ID. Looked up via `requireReadyEnvironment`.                                                                                                                                        |
-| `threadId`                     | Yes (all actions)           | Validated to belong to this environment via `requireThreadInEnvironment`.                                                                                                                        |
-| `action`                       | Yes                         | Discriminant: `"commit"`, `"squash_merge"`, `"promote"`, `"demote"`.                                                                                                                            |
-| `options.mergeBaseBranch`      | Required for `squash_merge` | Target branch for squash merge, passed as `targetBranch` to `workspace.squash_merge`.                                                                                                           |
+| Field                     | Required                    | Notes                                                                                 |
+| ------------------------- | --------------------------- | ------------------------------------------------------------------------------------- |
+| `:id` (path)              | Yes                         | Environment ID. Looked up via `requireReadyEnvironment`.                              |
+| `threadId`                | Yes (all actions)           | Validated to belong to this environment via `requireThreadInEnvironment`.             |
+| `action`                  | Yes                         | Discriminant: `"commit"`, `"squash_merge"`, `"promote"`, `"demote"`.                  |
+| `options.mergeBaseBranch` | Required for `squash_merge` | Target branch for squash merge, passed as `targetBranch` to `workspace.squash_merge`. |
 
 **All fields consumed. No dead params.** The `commit`, `promote`, and `demote` variants have no `options` field.
 
@@ -116,6 +116,4 @@
 
 ## Review Comments
 
-Should the request payload be a discriminated union? is it already one?
-
-> Yes — `environmentActionRequestSchema` is already a discriminated union on `action`. Four variants: `promote` (no options), `demote` (no options), `commit` (no options), `squash_merge` (with `squashMergeOptionsSchema`).
+TODO: requireThreadInEnvironment should be removed completely!
