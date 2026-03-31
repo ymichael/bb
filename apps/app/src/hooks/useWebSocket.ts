@@ -26,6 +26,74 @@ const INVALIDATION_DEBOUNCE_MS = 250;
 // Keep realtime thread updates responsive while still coalescing bursts.
 const INVALIDATION_MAX_WAIT_MS = 500;
 const TIMELINE_EVENT_REFETCH_INTERVAL_MS = 500;
+const ENVIRONMENT_INVALIDATION_DEBOUNCE_MS = 250;
+const ENVIRONMENT_INVALIDATION_MAX_WAIT_MS = 500;
+
+interface BufferedEnvironmentInvalidatorOptions {
+  debounceMs: number;
+  flushChangedEnvironmentIds: (environmentIds: string[]) => void;
+  maxWaitMs: number;
+}
+
+interface BufferedEnvironmentInvalidator {
+  cleanup: () => void;
+  flush: () => void;
+  markChanged: (environmentId: string) => void;
+}
+
+export function createBufferedEnvironmentInvalidator(
+  options: BufferedEnvironmentInvalidatorOptions,
+): BufferedEnvironmentInvalidator {
+  const changedEnvironmentIds = new Set<string>();
+  let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+  let maxWaitTimer: ReturnType<typeof setTimeout> | null = null;
+
+  const flush = () => {
+    if (debounceTimer !== null) {
+      clearTimeout(debounceTimer);
+      debounceTimer = null;
+    }
+    if (maxWaitTimer !== null) {
+      clearTimeout(maxWaitTimer);
+      maxWaitTimer = null;
+    }
+    if (changedEnvironmentIds.size === 0) {
+      return;
+    }
+    options.flushChangedEnvironmentIds(Array.from(changedEnvironmentIds));
+    changedEnvironmentIds.clear();
+  };
+
+  const schedule = () => {
+    if (debounceTimer !== null) {
+      clearTimeout(debounceTimer);
+    }
+    debounceTimer = setTimeout(flush, options.debounceMs);
+
+    if (maxWaitTimer === null) {
+      maxWaitTimer = setTimeout(flush, options.maxWaitMs);
+    }
+  };
+
+  return {
+    cleanup: () => {
+      if (debounceTimer !== null) {
+        clearTimeout(debounceTimer);
+        debounceTimer = null;
+      }
+      if (maxWaitTimer !== null) {
+        clearTimeout(maxWaitTimer);
+        maxWaitTimer = null;
+      }
+      changedEnvironmentIds.clear();
+    },
+    flush,
+    markChanged: (environmentId: string) => {
+      changedEnvironmentIds.add(environmentId);
+      schedule();
+    },
+  };
+}
 
 interface ThreadChangeFlags {
   listChanged: boolean;
@@ -118,6 +186,19 @@ export function useWebSocket(): void {
     const changedThreadKinds = new Map<string, Set<ThreadChangeKind>>();
     const globalChangeKinds = new Set<ThreadChangeKind>();
     const lastTimelineRefetchAtByThread = new Map<string, number>();
+    const environmentInvalidator = createBufferedEnvironmentInvalidator({
+      debounceMs: ENVIRONMENT_INVALIDATION_DEBOUNCE_MS,
+      flushChangedEnvironmentIds: (environmentIds) => {
+        for (const environmentId of environmentIds) {
+          for (const queryKey of getEnvironmentStateInvalidationQueryKeys({
+            environmentId,
+          })) {
+            queryClient.invalidateQueries({ queryKey });
+          }
+        }
+      },
+      maxWaitMs: ENVIRONMENT_INVALIDATION_MAX_WAIT_MS,
+    });
     let shouldInvalidateThreads = false;
     let shouldInvalidateStatus = false;
     let shouldInvalidateAllThreadDrafts = false;
@@ -258,11 +339,7 @@ export function useWebSocket(): void {
           break;
         case "environment":
           if (message.id) {
-            for (const queryKey of getEnvironmentStateInvalidationQueryKeys({
-              environmentId: message.id,
-            })) {
-              queryClient.invalidateQueries({ queryKey });
-            }
+            environmentInvalidator.markChanged(message.id);
           }
           break;
         case "host":
@@ -289,6 +366,7 @@ export function useWebSocket(): void {
       if (maxWaitTimer !== null) {
         clearTimeout(maxWaitTimer);
       }
+      environmentInvalidator.cleanup();
       unsubscribeConnected();
       unsubscribe();
       wsManager.unsubscribe("thread");
