@@ -5,6 +5,7 @@ import { noopNotifier } from "../../src/notifier.js";
 import {
   createProjectSource,
   getDefaultProjectSource,
+  getProjectSourceByHost,
   listProjectSources,
   updateProjectSource,
   deleteProjectSource,
@@ -85,6 +86,34 @@ describe("project-sources", () => {
     });
 
     expect(getDefaultProjectSource(db, project.id)?.id).toBe(initialDefault!.id);
+  });
+
+  it("returns the source for a specific host", () => {
+    const { db, project } = setup();
+    const secondaryHost = upsertHost(db, noopNotifier, {
+      name: "test-host-2",
+      type: "persistent",
+    });
+    const secondarySource = createProjectSource(db, noopNotifier, {
+      projectId: project.id,
+      type: "local_path",
+      hostId: secondaryHost.id,
+      path: "/tmp/code-2",
+    });
+
+    expect(getProjectSourceByHost(db, project.id, secondaryHost.id)?.id).toBe(
+      secondarySource.id,
+    );
+  });
+
+  it("returns null when a host has no source", () => {
+    const { db, project } = setup();
+    const missingHost = upsertHost(db, noopNotifier, {
+      name: "missing-host",
+      type: "persistent",
+    });
+
+    expect(getProjectSourceByHost(db, project.id, missingHost.id)).toBeNull();
   });
 
   it("updates a project source", () => {

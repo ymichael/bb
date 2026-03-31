@@ -10,6 +10,7 @@ export type { CreateProjectInput, UpdateProjectInput } from "./projects.js";
 export {
   createProjectSource,
   listProjectSources,
+  getProjectSourceByHost,
   getDefaultProjectSource,
   updateProjectSource,
   deleteProjectSource,

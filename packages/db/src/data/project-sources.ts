@@ -103,6 +103,25 @@ export function updateProjectSource(
   return updated ?? null;
 }
 
+export function getProjectSourceByHost(
+  db: DbConnection,
+  projectId: string,
+  hostId: string,
+) {
+  return (
+    db
+      .select()
+      .from(projectSources)
+      .where(
+        and(
+          eq(projectSources.projectId, projectId),
+          eq(projectSources.hostId, hostId),
+        ),
+      )
+      .get() ?? null
+  );
+}
+
 export function getDefaultProjectSource(db: DbConnection, projectId: string) {
   return (
     db
