@@ -120,7 +120,7 @@ threads: id, projectId, environmentId, providerId, type, title, titleFallback, s
 **Statuses:** Exactly 5 values: `created`, `provisioning`, `idle`, `active`, `error`. Transitions enforced by a central `transitionThreadStatus` function with an explicit allowed-transitions table:
 
 ```
-created → provisioning, idle
+created → provisioning, idle, error
 provisioning → idle, error
 idle → active, error
 active → idle, error

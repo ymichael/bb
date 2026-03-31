@@ -206,6 +206,17 @@ describe("transitionThreadStatus", () => {
     expect(() =>
       transitionThreadStatus(db, noopNotifier, thread.id, "created"),
     ).toThrow("Invalid thread status transition: idle → created");
+
+    const provisioningThread = createThread(db, noopNotifier, {
+      projectId: project.id,
+      providerId: "codex",
+      status: "provisioning",
+    });
+
+    // provisioning → active is not allowed
+    expect(() =>
+      transitionThreadStatus(db, noopNotifier, provisioningThread.id, "active"),
+    ).toThrow("Invalid thread status transition: provisioning → active");
   });
 
   it("rejects transition for non-existent thread", () => {
