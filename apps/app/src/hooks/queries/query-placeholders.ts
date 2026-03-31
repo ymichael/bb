@@ -46,7 +46,7 @@ function resolveThreadScopedPlaceholder<TData>(
     : undefined;
 }
 
-export function resolveWorkspaceStatusPlaceholder(
+export function resolveEnvironmentWorkStatusPlaceholder(
   previousData: WorkspaceStatus | null | undefined,
   previousQueryKey: QueryKey | undefined,
   nextEnvironmentId: string,

@@ -15,9 +15,9 @@ import {
 } from "./query-cache";
 import {
   resolveEnvironmentGitDiffPlaceholder,
+  resolveEnvironmentWorkStatusPlaceholder,
   resolveThreadPlaceholder,
   resolveThreadTimelinePlaceholder,
-  resolveWorkspaceStatusPlaceholder,
 } from "./query-placeholders";
 
 function makeStatus(state: WorkspaceStatus["workingTree"]["state"]): WorkspaceStatus {
@@ -54,12 +54,12 @@ function makeGitDiffResponse(): ThreadGitDiffResponse {
   };
 }
 
-describe("resolveWorkspaceStatusPlaceholder", () => {
+describe("resolveEnvironmentWorkStatusPlaceholder", () => {
   it("keeps previous data when only merge-base selection changes", () => {
     const previousStatus = makeStatus("clean");
 
     expect(
-      resolveWorkspaceStatusPlaceholder(
+      resolveEnvironmentWorkStatusPlaceholder(
         previousStatus,
         ["environmentWorkStatus", "thread-1", null],
         "thread-1",
@@ -71,7 +71,7 @@ describe("resolveWorkspaceStatusPlaceholder", () => {
     const previousStatus = makeStatus("deleted");
 
     expect(
-      resolveWorkspaceStatusPlaceholder(
+      resolveEnvironmentWorkStatusPlaceholder(
         previousStatus,
         ["environmentWorkStatus", "thread-1", null],
         "thread-2",
@@ -81,7 +81,7 @@ describe("resolveWorkspaceStatusPlaceholder", () => {
 
   it("preserves null placeholders only for the same thread", () => {
     expect(
-      resolveWorkspaceStatusPlaceholder(
+      resolveEnvironmentWorkStatusPlaceholder(
         null,
         ["environmentWorkStatus", "thread-1", null],
         "thread-1",
@@ -89,7 +89,7 @@ describe("resolveWorkspaceStatusPlaceholder", () => {
     ).toBeNull();
 
     expect(
-      resolveWorkspaceStatusPlaceholder(
+      resolveEnvironmentWorkStatusPlaceholder(
         null,
         ["environmentWorkStatus", "thread-1", null],
         "thread-2",

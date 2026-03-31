@@ -14,7 +14,7 @@ import {
 } from "./query-keys";
 import {
   resolveEnvironmentGitDiffPlaceholder,
-  resolveWorkspaceStatusPlaceholder,
+  resolveEnvironmentWorkStatusPlaceholder,
 } from "./query-placeholders";
 
 interface QueryOptions {
@@ -71,7 +71,7 @@ export function useEnvironmentWorkStatus(
     enabled: (options?.enabled ?? true) && Boolean(environmentId),
     refetchOnWindowFocus: false,
     placeholderData: (previousData, previousQuery) =>
-      resolveWorkspaceStatusPlaceholder(
+      resolveEnvironmentWorkStatusPlaceholder(
         previousData,
         previousQuery?.queryKey,
         requireEnvironmentId(environmentId, "useEnvironmentWorkStatus"),
