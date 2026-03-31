@@ -1,9 +1,9 @@
 import { eq, max, sql } from "drizzle-orm";
 import {
   createEventId,
+  deriveStoredEventItemFieldsFromSource,
   events,
 } from "@bb/db";
-import type { StoredEventItemFields } from "@bb/db";
 import {
   turnRequestEventDataSchema,
 } from "@bb/domain";
@@ -57,36 +57,6 @@ export interface AppendThreadOwnershipChangeEventArgs {
   threadId: string;
 }
 
-function deriveStoredEventItemFieldsFromAppendArgs(
-  args: AppendThreadEventArgs,
-): StoredEventItemFields {
-  switch (args.type) {
-    case "item/started":
-    case "item/completed":
-      return {
-        itemId: args.data.item.id,
-        itemKind: args.data.item.type,
-      };
-    case "item/agentMessage/delta":
-    case "item/commandExecution/outputDelta":
-    case "item/fileChange/outputDelta":
-    case "item/reasoning/summaryTextDelta":
-    case "item/reasoning/textDelta":
-    case "item/plan/delta":
-    case "item/mcpToolCall/progress":
-    case "item/toolCall/progress":
-      return {
-        itemId: args.data.itemId ?? null,
-        itemKind: null,
-      };
-    default:
-      return {
-        itemId: null,
-        itemKind: null,
-      };
-  }
-}
-
 export function appendThreadEvent<TType extends ThreadEventType>(
   deps: Pick<AppDeps, "db" | "hub">,
   args: AppendThreadEventArgs<TType>,
@@ -104,7 +74,11 @@ export function appendThreadEvent(
         .where(eq(events.threadId, args.threadId))
         .get();
       const sequence = (maxRow?.maxSeq ?? 0) + 1;
-      const itemFields = deriveStoredEventItemFieldsFromAppendArgs(args);
+      const itemFields = deriveStoredEventItemFieldsFromSource({
+        type: args.type,
+        item: "item" in args.data ? args.data.item : undefined,
+        itemId: "itemId" in args.data ? args.data.itemId : undefined,
+      });
 
       tx.run(
         sql`INSERT INTO events

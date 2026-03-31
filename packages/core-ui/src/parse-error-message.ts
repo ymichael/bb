@@ -1,5 +1,5 @@
 import { buildThreadEventRow } from "@bb/domain";
-import type { ThreadEvent } from "@bb/domain";
+import type { ThreadEvent, ThreadEventType } from "@bb/domain";
 import type { EventMeta } from "./event-decode.js";
 import { getEventTurnId } from "./event-decode.js";
 import { messageId } from "./format-helpers.js";
@@ -27,7 +27,7 @@ export function parseErrorMessage(decoded: ThreadEvent, meta: EventMeta): ViewEr
   };
 }
 
-export function isIgnoredNoiseType(eventType: string): boolean {
+export function isIgnoredNoiseType(eventType: ThreadEventType): boolean {
   return (
     eventType === "thread/started" ||
     eventType === "thread/tokenUsage/updated" ||
@@ -35,7 +35,7 @@ export function isIgnoredNoiseType(eventType: string): boolean {
   );
 }
 
-export function isDuplicateEventType(eventType: string): boolean {
+export function isDuplicateEventType(eventType: ThreadEventType): boolean {
   return (
     eventType === "turn/started" ||
     eventType === "turn/completed" ||

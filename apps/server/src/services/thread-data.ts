@@ -4,7 +4,12 @@ import {
   buildThreadEventRow,
   parseStoredThreadEvent,
 } from "@bb/domain";
-import type { ThreadEventItemType, ThreadEventRow, ThreadEventType } from "@bb/domain";
+import type {
+  ThreadEvent,
+  ThreadEventItemType,
+  ThreadEventRow,
+  ThreadEventType,
+} from "@bb/domain";
 import type { DbConnection } from "@bb/db";
 import { ApiError } from "../errors.js";
 
@@ -73,19 +78,23 @@ function parseStoredEventPayload(row: StoredEventPayloadRow): Record<string, unk
   return record;
 }
 
+export function parseStoredEvent(row: StoredEventRow): ThreadEvent {
+  return parseStoredThreadEvent({
+    type: row.type,
+    data: parseStoredEventPayload(row),
+    threadId: row.threadId,
+    providerThreadId: row.providerThreadId,
+    turnId: row.turnId,
+  });
+}
+
 export function parseStoredEventRow(row: StoredEventRow): ThreadEventRow {
   return buildThreadEventRow({
     id: row.id,
     threadId: row.threadId,
     seq: row.sequence,
     createdAt: row.createdAt,
-    event: parseStoredThreadEvent({
-      type: row.type,
-      data: parseStoredEventPayload(row),
-      threadId: row.threadId,
-      providerThreadId: row.providerThreadId,
-      turnId: row.turnId,
-    }),
+    event: parseStoredEvent(row),
   });
 }
 
@@ -112,15 +121,15 @@ export function listThreadEventRows(
   return rows.map((row) => parseStoredEventRow(row));
 }
 
-export function listThreadEventRowsInRange(
+export function listStoredEventRowsInRange(
   db: DbConnection,
   args: {
     seqEnd: number;
     seqStart: number;
     threadId: string;
   },
-): ThreadEventRow[] {
-  const rows = db
+): StoredEventRow[] {
+  return db
     .select(storedEventRowFields)
     .from(events)
     .where(
@@ -132,8 +141,6 @@ export function listThreadEventRowsInRange(
     )
     .orderBy(events.sequence)
     .all();
-
-  return rows.map((row) => parseStoredEventRow(row));
 }
 
 export function listRecentStoredEventRows(

@@ -31,7 +31,7 @@ function decodeContextWindowSignal(event: ThreadEventRow): ThreadContextWindowSi
   if (isThreadEventRowOfType(event, "thread/tokenUsage/updated")) {
     const tokenUsage = event.data.tokenUsage;
     const totalTokens = toNonNegativeNumber(tokenUsage.last.totalTokens);
-    const modelContextWindow = toPositiveNumber(tokenUsage?.modelContextWindow);
+    const modelContextWindow = toPositiveNumber(tokenUsage.modelContextWindow);
     if (totalTokens === undefined && modelContextWindow === undefined) {
       return null;
     }

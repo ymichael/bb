@@ -1,10 +1,9 @@
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { events, getThread, transitionThreadStatus } from "@bb/db";
-import { buildThreadEvent } from "@bb/domain";
 import type { ThreadEvent } from "@bb/domain";
 import type { AppDeps } from "../types.js";
 import {
-  parseStoredEventRow,
+  parseStoredEvent,
   storedEventRowFields,
 } from "../services/thread-data.js";
 
@@ -56,7 +55,7 @@ export function handleTurnCompletedEvents(
       continue;
     }
     seenThreadIds.add(row.threadId);
-    const payload = buildThreadEvent(parseStoredEventRow(row));
+    const payload = parseStoredEvent(row);
     if (payload.type !== "turn/completed") {
       continue;
     }

@@ -30,6 +30,108 @@ describe("buildThreadTimeline", () => {
     });
   }
 
+  it("preserves completed assistant content and excludes summary-noise rows after compaction", async () => {
+    const harness = await createTestAppHarness();
+    harnesses.push(harness);
+
+    const host = seedHost(harness.deps);
+    const { project } = seedProjectWithSource(harness.deps, {
+      hostId: host.id,
+    });
+    const environment = seedEnvironment(harness.deps, {
+      hostId: host.id,
+      projectId: project.id,
+    });
+    const thread = seedThread(harness.deps, {
+      projectId: project.id,
+      environmentId: environment.id,
+    });
+
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId: environment.id,
+      sequence: 1,
+      type: "thread/started",
+      data: {},
+    });
+
+    for (let index = 0; index < 1000; index += 1) {
+      seedEvent(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        providerThreadId: "provider-thread-1",
+        turnId: "turn-1",
+        sequence: index + 2,
+        type: "item/agentMessage/delta",
+        data: {
+          itemId: "msg-1",
+          delta: index === 0 ? "Final" : " chunk",
+        },
+      });
+    }
+
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId: environment.id,
+      providerThreadId: "provider-thread-1",
+      turnId: "turn-1",
+      sequence: 1002,
+      type: "item/completed",
+      data: {
+        item: {
+          id: "msg-1",
+          type: "agentMessage",
+          text: "Final answer",
+        },
+      },
+    });
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId: environment.id,
+      providerThreadId: "provider-thread-1",
+      turnId: "turn-1",
+      sequence: 1003,
+      type: "thread/tokenUsage/updated",
+      data: {
+        tokenUsage: {
+          total: {
+            totalTokens: 84,
+            inputTokens: 42,
+            cachedInputTokens: 0,
+            outputTokens: 42,
+            reasoningOutputTokens: 0,
+          },
+          last: {
+            totalTokens: 42,
+            inputTokens: 0,
+            cachedInputTokens: 0,
+            outputTokens: 42,
+            reasoningOutputTokens: 0,
+          },
+          modelContextWindow: 200_000,
+        },
+      },
+    });
+
+    const timeline = buildThreadTimeline(harness.db, thread, {});
+
+    expect(timeline.rows).toHaveLength(1);
+    expect(timeline.rows[0]).toMatchObject({
+      kind: "message",
+      message: {
+        kind: "assistant-text",
+        text: "Final answer",
+        status: "completed",
+        sourceSeqStart: 2,
+        sourceSeqEnd: 1002,
+      },
+    });
+    expect(timeline.contextWindowUsage).toEqual({
+      totalTokens: 42,
+      modelContextWindow: 200_000,
+    });
+  });
+
   it("keeps the last non-null modelContextWindow when the newest token-usage row omits it", async () => {
     const harness = await createTestAppHarness();
     harnesses.push(harness);

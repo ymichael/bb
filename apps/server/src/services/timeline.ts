@@ -1,10 +1,10 @@
 import {
   buildTimelineRows,
-  decodeRow,
   extractThreadContextWindowUsage,
   toViewMessages,
+  type ThreadEventWithMeta,
 } from "@bb/core-ui";
-import type { Thread } from "@bb/domain";
+import type { Thread, ThreadEventType } from "@bb/domain";
 import type {
   ThreadTimelineResponse,
   TimelineToolDetailsResponse,
@@ -13,44 +13,53 @@ import type { DbConnection } from "@bb/db";
 import {
   type StoredEventRow,
   listRecentStoredEventRows,
+  listStoredEventRowsInRange,
   listTokenUsageRowsForContextWindowUsage,
-  listThreadEventRowsInRange,
+  parseStoredEvent,
   parseStoredEventRow,
 } from "./thread-data.js";
 
-const TIMELINE_EXCLUDED_EVENT_TYPES = [
+export const TIMELINE_EXCLUDED_EVENT_TYPES: readonly ThreadEventType[] = [
   "thread/started",
   "thread/identity",
   "thread/tokenUsage/updated",
 ] as const;
 const MIN_AGENT_MESSAGE_DELTAS_FOR_SUMMARY_COMPACTION = 1000;
 
+function toThreadEventWithMeta(row: StoredEventRow): ThreadEventWithMeta {
+  return {
+    event: parseStoredEvent(row),
+    meta: {
+      id: row.id,
+      seq: row.sequence,
+      createdAt: row.createdAt,
+    },
+  };
+}
+
 export function compactSummaryStoredEventRows(
   rows: readonly StoredEventRow[],
 ): readonly StoredEventRow[] {
   let agentMessageDeltaCount = 0;
+  const completedAgentMessageItemIds = new Set<string>();
   for (const row of rows) {
     if (row.type === "item/agentMessage/delta") {
       agentMessageDeltaCount += 1;
+      continue;
+    }
+    if (
+      row.type === "item/completed" &&
+      row.itemKind === "agentMessage" &&
+      row.itemId
+    ) {
+      completedAgentMessageItemIds.add(row.itemId);
     }
   }
 
-  if (agentMessageDeltaCount < MIN_AGENT_MESSAGE_DELTAS_FOR_SUMMARY_COMPACTION) {
-    return rows;
-  }
-
-  const completedAgentMessageItemIds = new Set<string>();
-  for (const row of rows) {
-    const itemId =
-      row.type === "item/completed" && row.itemKind === "agentMessage"
-        ? row.itemId
-        : null;
-    if (itemId) {
-      completedAgentMessageItemIds.add(itemId);
-    }
-  }
-
-  if (completedAgentMessageItemIds.size === 0) {
+  if (
+    agentMessageDeltaCount < MIN_AGENT_MESSAGE_DELTAS_FOR_SUMMARY_COMPACTION ||
+    completedAgentMessageItemIds.size === 0
+  ) {
     return rows;
   }
 
@@ -91,12 +100,15 @@ export function buildThreadTimeline(
       : { excludedTypes: TIMELINE_EXCLUDED_EVENT_TYPES }),
   });
   const eventRows = compactSummaryStoredEventRows(rawEventRows);
-  const messages = toViewMessages(eventRows.map((row) => decodeRow(parseStoredEventRow(row))), {
-    includeDebugRawEvents: options.includeManagerDebugView,
-    includeInternalSystemMessages: options.includeManagerDebugView,
-    threadStatus: thread.status,
-    threadType: thread.type,
-  });
+  const messages = toViewMessages(
+    eventRows.map((row) => toThreadEventWithMeta(row)),
+    {
+      includeDebugRawEvents: options.includeManagerDebugView,
+      includeInternalSystemMessages: options.includeManagerDebugView,
+      threadStatus: thread.status,
+      threadType: thread.type,
+    },
+  );
   const tokenUsageRows = listTokenUsageRowsForContextWindowUsage(db, {
     threadId: thread.id,
   });
@@ -119,18 +131,21 @@ export function buildTimelineToolDetails(
     sourceSeqStart: number;
   },
 ): TimelineToolDetailsResponse {
-  const eventRows = listThreadEventRowsInRange(db, {
+  const eventRows = listStoredEventRowsInRange(db, {
     threadId: thread.id,
     seqStart: options.sourceSeqStart,
     seqEnd: options.sourceSeqEnd,
   });
 
   return {
-    messages: toViewMessages(eventRows.map((row) => decodeRow(row)), {
-      includeDebugRawEvents: options.includeManagerDebugView,
-      includeInternalSystemMessages: options.includeManagerDebugView,
-      threadStatus: thread.status,
-      threadType: thread.type,
-    }),
+    messages: toViewMessages(
+      eventRows.map((row) => toThreadEventWithMeta(row)),
+      {
+        includeDebugRawEvents: options.includeManagerDebugView,
+        includeInternalSystemMessages: options.includeManagerDebugView,
+        threadStatus: thread.status,
+        threadType: thread.type,
+      },
+    ),
   };
 }

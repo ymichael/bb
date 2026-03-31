@@ -13,7 +13,6 @@ import {
 } from "@bb/db";
 import {
   buildTimelineRows,
-  decodeRow,
   toViewMessages,
   type ThreadEventWithMeta,
 } from "@bb/core-ui";
@@ -23,12 +22,13 @@ import type { ViewMessage } from "@bb/domain";
 import {
   buildThreadTimeline,
   compactSummaryStoredEventRows,
+  TIMELINE_EXCLUDED_EVENT_TYPES,
 } from "../../src/services/timeline.js";
 import {
   type StoredEventRow,
   listRecentStoredEventRows,
   listTokenUsageRowsForContextWindowUsage,
-  parseStoredEventRow,
+  parseStoredEvent,
 } from "../../src/services/thread-data.js";
 
 interface TimelineBenchmarkFixture {
@@ -77,11 +77,17 @@ const TIMELINE_BENCHMARK_FIXTURES: TimelineBenchmarkFixture[] = [
 ];
 
 let cachedScenarios: TimelineBenchmarkScenario[] | null = null;
-const TIMELINE_EXCLUDED_EVENT_TYPES = [
-  "thread/started",
-  "thread/identity",
-  "thread/tokenUsage/updated",
-] as const;
+
+function toThreadEventWithMeta(row: StoredEventRow): ThreadEventWithMeta {
+  return {
+    event: parseStoredEvent(row),
+    meta: {
+      id: row.id,
+      seq: row.sequence,
+      createdAt: row.createdAt,
+    },
+  };
+}
 
 function createTimelineBenchmarkScenario(
   fixture: TimelineBenchmarkFixture,
@@ -159,7 +165,7 @@ function createTimelineBenchmarkScenario(
   });
   const summaryEventRows = compactSummaryStoredEventRows(storedEventRows);
   const decodedSummaryEvents = summaryEventRows.map((row) =>
-    decodeRow(parseStoredEventRow(row)),
+    toThreadEventWithMeta(row),
   );
   const summaryMessages = toViewMessages(decodedSummaryEvents, {
     threadStatus: thread.status,
@@ -179,7 +185,7 @@ function createTimelineBenchmarkScenario(
       threadId: thread.id,
     });
   const decodeSummaryEvents = () =>
-    summaryEventRows.map((row) => decodeRow(parseStoredEventRow(row)));
+    summaryEventRows.map((row) => toThreadEventWithMeta(row));
   const projectSummaryMessages = () =>
     toViewMessages(decodedSummaryEvents, {
       threadStatus: thread.status,

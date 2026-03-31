@@ -110,7 +110,10 @@ export function buildThreadEventRow<TEvent extends ThreadEvent>(
 export function buildThreadEvent(row: ThreadEventRow): ThreadEvent {
   return parseStoredThreadEvent({
     data: row.data,
+    providerThreadId:
+      "providerThreadId" in row.data ? row.data.providerThreadId : undefined,
     threadId: row.threadId,
+    turnId: "turnId" in row.data ? row.data.turnId : undefined,
     type: row.type,
   });
 }
