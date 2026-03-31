@@ -1,14 +1,15 @@
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { events, getThread, transitionThreadStatus } from "@bb/db";
-import type { ThreadEvent } from "@bb/domain";
+import type { ThreadEvent, ThreadStatus } from "@bb/domain";
 import type { AppDeps } from "../types.js";
 import {
   parseStoredEvent,
   storedEventRowFields,
 } from "../services/thread-data.js";
+import { pruneThreadEventHistoryBestEffort } from "../services/event-pruning.js";
 
 export function applyTurnCompletedEvent(
-  deps: Pick<AppDeps, "db" | "hub">,
+  deps: Pick<AppDeps, "db" | "hub" | "logger">,
   payload: Extract<ThreadEvent, { type: "turn/completed" }>,
 ): void {
   const thread = getThread(deps.db, payload.threadId);
@@ -16,21 +17,33 @@ export function applyTurnCompletedEvent(
     return;
   }
 
+  let nextStatus: ThreadStatus | null = null;
+  if (payload.status === "failed") {
+    nextStatus = "error";
+  } else if (payload.status === "interrupted") {
+    nextStatus = "idle";
+  } else if (thread.status === "active" || thread.status === "error") {
+    nextStatus = "idle";
+  }
+
   try {
-    if (payload.status === "failed") {
-      transitionThreadStatus(deps.db, deps.hub, payload.threadId, "error");
-    } else if (payload.status === "interrupted") {
-      transitionThreadStatus(deps.db, deps.hub, payload.threadId, "idle");
-    } else if (thread.status === "active" || thread.status === "error") {
-      transitionThreadStatus(deps.db, deps.hub, payload.threadId, "idle");
+    if (nextStatus) {
+      transitionThreadStatus(deps.db, deps.hub, payload.threadId, nextStatus);
     }
   } catch {
     // Ignore invalid transitions from concurrent changes.
   }
+
+  if (nextStatus === "idle") {
+    pruneThreadEventHistoryBestEffort(deps, {
+      mode: "idle",
+      threadId: payload.threadId,
+    });
+  }
 }
 
 export function handleTurnCompletedEvents(
-  deps: Pick<AppDeps, "db" | "hub">,
+  deps: Pick<AppDeps, "db" | "hub" | "logger">,
   threadIds: string[],
 ): void {
   if (threadIds.length === 0) {
