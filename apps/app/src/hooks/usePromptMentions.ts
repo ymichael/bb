@@ -1,7 +1,8 @@
 import type { ThreadType } from "@bb/domain";
 import { useEffect, useMemo, useState } from "react";
 import { useDebounceValue } from "usehooks-ts";
-import { useProjectFileSuggestions, useThreads } from "./useApi";
+import { useProjectFileSuggestions } from "./queries/project-queries";
+import { useThreads } from "./queries/thread-queries";
 
 export type PromptMentionSuggestion =
   | { kind: "file"; path: string; replacement: string }

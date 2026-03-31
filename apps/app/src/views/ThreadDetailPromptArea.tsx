@@ -9,7 +9,6 @@ import type {
   WorkspaceStatus,
 } from "@bb/domain";
 import type { ThreadTimelineResponse } from "@bb/server-contract";
-import type { SendMessageRequest } from "@bb/server-contract";
 import { usePromptDraftStorage } from "@/hooks/usePromptDraftStorage";
 import { usePromptMentions } from "@/hooks/usePromptMentions";
 import { useThreadCreationOptions } from "@/hooks/useThreadCreationOptions";
@@ -20,16 +19,8 @@ import { promptDraftToInput } from "@/lib/prompt-draft";
 import { toast } from "sonner";
 import { ThreadFollowUpComposer } from "./ThreadFollowUpComposer";
 import { queuedInputToDraft } from "./threadQueuedMessages";
+import type { SendMessageMutationLike } from "./threadDetailMutationTypes";
 import { useThreadFollowUpTracking } from "./useThreadFollowUpTracking";
-
-interface SendMessageMutationRequest extends SendMessageRequest {
-  id: string;
-}
-
-interface SendMessageMutationLike {
-  isPending: boolean;
-  mutateAsync: (request: SendMessageMutationRequest) => Promise<unknown>;
-}
 
 interface PromptBannerFile {
   path: string;

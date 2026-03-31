@@ -1,5 +1,5 @@
 import { Navigate } from "react-router-dom";
-import { useProjects } from "../hooks/useApi";
+import { useProjects } from "../hooks/queries/project-queries";
 import { Button } from "@/components/ui/button";
 import { PageShell } from "@/components/layout/PageShell";
 import { useQuickCreateProject } from "@/hooks/useQuickCreateProject";

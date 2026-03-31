@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import type { Thread } from "@bb/domain";
-import { useMarkThreadRead } from "../hooks/useApi";
+import { useMarkThreadRead } from "../hooks/mutations/thread-mutations";
 
 interface UseThreadReadTrackingParams {
   markThreadRead: ReturnType<typeof useMarkThreadRead>;

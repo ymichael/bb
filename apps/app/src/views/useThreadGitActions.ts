@@ -5,8 +5,6 @@ import type {
   Thread,
   WorkspaceStatus,
 } from "@bb/domain";
-import type { EnvironmentActionRequest } from "@bb/server-contract";
-import type { SendMessageRequest } from "@bb/server-contract";
 import type { EnvironmentActionFailureDetails } from "@bb/server-contract";
 import { environmentActionFailureDetailsSchema } from "@bb/server-contract";
 import { useDialogState } from "@/hooks/useDialogState";
@@ -20,22 +18,10 @@ import {
   buildSquashMergeConflictFollowUpInstruction,
 } from "@/lib/thread-operation-prompts";
 import { HttpError } from "@/lib/api";
-
-type RequestEnvironmentActionVariables = { id: string } & EnvironmentActionRequest;
-
-interface RequestEnvironmentActionMutationLike {
-  isPending: boolean;
-  mutateAsync: (request: RequestEnvironmentActionVariables) => Promise<unknown>;
-}
-
-interface SendMessageMutationRequest extends SendMessageRequest {
-  id: string;
-}
-
-interface SendMessageMutationLike {
-  isPending: boolean;
-  mutateAsync: (request: SendMessageMutationRequest) => Promise<unknown>;
-}
+import type {
+  RequestEnvironmentActionMutationLike,
+  SendMessageMutationLike,
+} from "./threadDetailMutationTypes";
 
 interface BuildAskAgentInputForGitOperationParams {
   error: unknown;

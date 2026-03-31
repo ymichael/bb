@@ -9,7 +9,7 @@ import {
   useEnvironmentGitDiff,
   useEnvironmentMergeBaseBranches,
   useEnvironmentWorkStatus,
-} from "../hooks/useApi";
+} from "../hooks/queries/environment-queries";
 import {
   getThreadSecondaryPanel,
   useStoredThreadSecondaryPanel,

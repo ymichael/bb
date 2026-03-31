@@ -1,27 +1,23 @@
 import { useCallback, useMemo, useRef, type ReactNode } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
+import { useRequestEnvironmentAction } from "../hooks/mutations/environment-mutations";
 import {
-  useThread,
-  useEnvironment,
-  useEnvironmentWorkStatus,
-  useThreadTimeline,
-  useThreadTimelineToolDetails,
-  useSendThreadMessage,
   useArchiveThread,
-  useRequestEnvironmentAction,
+  useDeleteThread,
   useMarkThreadRead,
   useMarkThreadUnread,
-  useDeleteThread,
+  useSendThreadMessage,
   useUnarchiveThread,
-  useThreads,
-  useUpdateEnvironment,
   useUpdateThread,
-} from "../hooks/useApi";
-import { useHostDaemon } from "@/hooks/useHostDaemon";
-import { usePreferredTheme } from "@/hooks/useTheme";
-import { useDialogState } from "@/hooks/useDialogState";
-import { PageShell } from "@/components/layout/PageShell";
-import { ThreadActionsMenu } from "@/components/thread/ThreadActionsMenu";
+} from "../hooks/mutations/thread-mutations";
+import { useUpdateEnvironment } from "../hooks/mutations/environment-mutations";
+import { useEnvironment, useEnvironmentWorkStatus } from "../hooks/queries/environment-queries";
+import {
+  useThread,
+  useThreadTimeline,
+  useThreadTimelineToolDetails,
+  useThreads,
+} from "../hooks/queries/thread-queries";
 import {
   ThreadGitActionDialog,
 } from "@/components/thread/ThreadGitActionDialog";
@@ -29,10 +25,15 @@ import {
   ThreadRenameDialog,
   type ThreadRenameDialogTarget,
 } from "@/components/thread/ThreadRenameDialog";
+import { PageShell } from "@/components/layout/PageShell";
 import { ThreadDeleteDialog } from "@/components/thread/ThreadDeleteDialog";
+import { ThreadActionsMenu } from "@/components/thread/ThreadActionsMenu";
 import { formatEnvironmentDisplay } from "@bb/core-ui";
 import { findLatestActivityRowId } from "@bb/ui-core";
 import type { Thread } from "@bb/domain";
+import { useDialogState } from "@/hooks/useDialogState";
+import { useHostDaemon } from "@/hooks/useHostDaemon";
+import { usePreferredTheme } from "@/hooks/useTheme";
 import { HttpError } from "@/lib/api";
 import { useStoredShowAllEvents } from "@/lib/show-all-events-preference";
 import { getGitStatusDisplay } from "@/lib/workspace-status";
@@ -55,6 +56,7 @@ import { useEnvironmentMergeBase } from "./useEnvironmentMergeBase";
 import { useThreadGitActions } from "./useThreadGitActions";
 import { useThreadReadTracking } from "./useThreadReadTracking";
 import { toast } from "sonner";
+
 export function ThreadDetailView() {
   const { projectId, threadId } = useParams<{
     projectId: string;

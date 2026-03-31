@@ -16,7 +16,7 @@ import {
   resolveEnvironmentGitDiffPlaceholder,
   resolveThreadTimelinePlaceholder,
   resolveWorkspaceStatusPlaceholder,
-} from "./useApi";
+} from "./shared";
 
 function makeStatus(state: WorkspaceStatus["workingTree"]["state"]): WorkspaceStatus {
   return {

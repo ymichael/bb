@@ -3,7 +3,7 @@ import type { ThreadType } from "@bb/domain";
 import {
   useThreadStorageFilePreview,
   useThreadStorageFiles,
-} from "../hooks/useApi";
+} from "../hooks/queries/thread-queries";
 
 interface UseThreadStorageViewerParams {
   threadId?: string;

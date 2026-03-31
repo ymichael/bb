@@ -4,11 +4,9 @@ import { PromptBox } from "@/components/promptbox/PromptBox";
 import { PromptExecutionControls } from "@/components/promptbox/PromptExecutionControls";
 import { PromptOptionPicker } from "@/components/promptbox/PromptOptionPicker";
 import { PageShell } from "@/components/layout/PageShell";
-import {
-  useProjects,
-  useCreateThread,
-  useUploadPromptAttachment,
-} from "@/hooks/useApi";
+import { useUploadPromptAttachment } from "@/hooks/mutations/project-mutations";
+import { useCreateThread } from "@/hooks/mutations/thread-mutations";
+import { useProjects } from "@/hooks/queries/project-queries";
 import { useHostDaemon } from "@/hooks/useHostDaemon";
 import { usePromptDraftStorage } from "@/hooks/usePromptDraftStorage";
 import { usePromptMentions } from "@/hooks/usePromptMentions";

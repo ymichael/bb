@@ -1,5 +1,5 @@
 import { useCallback } from "react"
-import { useCreateProject } from "@/hooks/useApi"
+import { useCreateProject } from "@/hooks/mutations/project-mutations"
 import { useHostDaemon } from "@/hooks/useHostDaemon"
 import { deriveProjectNameFromPath } from "@/lib/projectPathInput"
 
