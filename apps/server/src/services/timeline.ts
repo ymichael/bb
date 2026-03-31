@@ -1,10 +1,11 @@
 import {
   buildTimelineRows,
   extractThreadContextWindowUsage,
+  TIMELINE_NOISE_EVENT_TYPES,
   toViewMessages,
   type ThreadEventWithMeta,
 } from "@bb/core-ui";
-import type { Thread, ThreadEventType } from "@bb/domain";
+import type { Thread } from "@bb/domain";
 import type {
   ThreadTimelineResponse,
   TimelineToolDetailsResponse,
@@ -19,14 +20,12 @@ import {
   parseStoredEventRow,
 } from "./thread-data.js";
 
-export const TIMELINE_EXCLUDED_EVENT_TYPES: readonly ThreadEventType[] = [
-  "thread/started",
-  "thread/identity",
-  "thread/tokenUsage/updated",
-] as const;
+export const TIMELINE_EXCLUDED_EVENT_TYPES = TIMELINE_NOISE_EVENT_TYPES;
 const MIN_AGENT_MESSAGE_DELTAS_FOR_SUMMARY_COMPACTION = 1000;
 
-function toThreadEventWithMeta(row: StoredEventRow): ThreadEventWithMeta {
+export function toThreadEventWithMeta(
+  row: StoredEventRow,
+): ThreadEventWithMeta {
   return {
     event: parseStoredEvent(row),
     meta: {

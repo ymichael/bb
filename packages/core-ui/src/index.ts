@@ -15,6 +15,10 @@ export {
 } from "./timeline-summary.js";
 export type { ToolGroupSummaryParts } from "./timeline-summary.js";
 export {
+  isIgnoredNoiseType,
+  TIMELINE_NOISE_EVENT_TYPES,
+} from "./timeline-noise-events.js";
+export {
   buildExploringDetailLines,
   formatDelegationSummary,
   formatExploringCountsLabel,

@@ -27,14 +27,6 @@ export function parseErrorMessage(decoded: ThreadEvent, meta: EventMeta): ViewEr
   };
 }
 
-export function isIgnoredNoiseType(eventType: ThreadEventType): boolean {
-  return (
-    eventType === "thread/started" ||
-    eventType === "thread/tokenUsage/updated" ||
-    eventType === "thread/identity"
-  );
-}
-
 export function isDuplicateEventType(eventType: ThreadEventType): boolean {
   return (
     eventType === "turn/started" ||

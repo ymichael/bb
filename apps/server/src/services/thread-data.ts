@@ -6,25 +6,11 @@ import {
 } from "@bb/domain";
 import type {
   ThreadEvent,
-  ThreadEventItemType,
   ThreadEventRow,
   ThreadEventType,
 } from "@bb/domain";
 import type { DbConnection } from "@bb/db";
 import { ApiError } from "../errors.js";
-
-export interface StoredEventRow {
-  createdAt: number;
-  data: string;
-  id: string;
-  itemId: string | null;
-  itemKind: ThreadEventItemType | null;
-  providerThreadId: string | null;
-  sequence: number;
-  threadId: string;
-  turnId: string | null;
-  type: ThreadEventType;
-}
 
 export const storedEventRowFields = {
   createdAt: events.createdAt,
@@ -39,12 +25,15 @@ export const storedEventRowFields = {
   type: events.type,
 };
 
-interface StoredEventPayloadRow {
-  data: string;
-  sequence: number;
-  threadId: string;
-  type: ThreadEventType;
-}
+export type StoredEventRow = Pick<
+  typeof events.$inferSelect,
+  keyof typeof storedEventRowFields
+>;
+
+type StoredEventPayloadRow = Pick<
+  StoredEventRow,
+  "data" | "sequence" | "threadId" | "type"
+>;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);

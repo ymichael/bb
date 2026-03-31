@@ -23,12 +23,12 @@ import {
   buildThreadTimeline,
   compactSummaryStoredEventRows,
   TIMELINE_EXCLUDED_EVENT_TYPES,
+  toThreadEventWithMeta,
 } from "../../src/services/timeline.js";
 import {
   type StoredEventRow,
   listRecentStoredEventRows,
   listTokenUsageRowsForContextWindowUsage,
-  parseStoredEvent,
 } from "../../src/services/thread-data.js";
 
 interface TimelineBenchmarkFixture {
@@ -77,17 +77,6 @@ const TIMELINE_BENCHMARK_FIXTURES: TimelineBenchmarkFixture[] = [
 ];
 
 let cachedScenarios: TimelineBenchmarkScenario[] | null = null;
-
-function toThreadEventWithMeta(row: StoredEventRow): ThreadEventWithMeta {
-  return {
-    event: parseStoredEvent(row),
-    meta: {
-      id: row.id,
-      seq: row.sequence,
-      createdAt: row.createdAt,
-    },
-  };
-}
 
 function createTimelineBenchmarkScenario(
   fixture: TimelineBenchmarkFixture,

@@ -1,5 +1,6 @@
 import type { ViewToolCallSummary, ViewToolParsedIntent } from "@bb/domain";
 import { getFirstStringField } from "./format-helpers.js";
+import { toRecord } from "./unknown-helpers.js";
 
 const SHELL_WRAPPER_NAMES = new Set(["sh", "bash", "zsh"]);
 const DELEGATION_TOOL_NAMES = new Set(["Agent", "Task", "spawnAgent", "resumeAgent"]);
@@ -147,10 +148,6 @@ function truncateForDisplay(value: string, maxLength: number): string {
   return `${value.slice(0, maxLength - 3)}...`;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
-
 function asString(value: unknown): string | undefined {
   return typeof value === "string" && value.trim().length > 0 ? value : undefined;
 }
@@ -160,11 +157,12 @@ function asTodoWriteTodos(value: unknown): TodoWriteTodo[] {
 
   const todos: TodoWriteTodo[] = [];
   for (const entry of value) {
-    if (!isRecord(entry)) continue;
+    const record = toRecord(entry);
+    if (!record) continue;
     todos.push({
-      content: asString(entry.content),
-      status: asString(entry.status),
-      activeForm: asString(entry.activeForm),
+      content: asString(record.content),
+      status: asString(record.status),
+      activeForm: asString(record.activeForm),
     });
   }
   return todos;

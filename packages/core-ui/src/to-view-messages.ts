@@ -20,7 +20,8 @@ import type { WebSearchLifecycleEvent } from "./web-search-lifecycle.js";
 import { parseWebSearchLifecycleEvent } from "./web-search-lifecycle.js";
 import { isExploringCall } from "./tool-call-parsing.js";
 import { parseOperationMessage, finalizeOperationMessage } from "./parse-operation-message.js";
-import { parseErrorMessage, isIgnoredNoiseType, isDuplicateEventType, isIgnoredItemStartEvent, isIgnoredItemCompletedEvent, appendDebugEvent } from "./parse-error-message.js";
+import { parseErrorMessage, isDuplicateEventType, isIgnoredItemStartEvent, isIgnoredItemCompletedEvent, appendDebugEvent } from "./parse-error-message.js";
+import { isIgnoredNoiseType } from "./timeline-noise-events.js";
 import { normalizeSemanticViewMessages } from "./semantic-view-messages.js";
 import { parseTaskMessage, shouldSuppressLowValueToolCall } from "./task-message-parsing.js";
 import {
