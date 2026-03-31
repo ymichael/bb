@@ -115,6 +115,10 @@ describe("Workspace", () => {
       target: { type: "all", mergeBaseBranch: "main" },
     });
     expect(all.diff).toContain("feature plus pending");
+    expect(all.diff).toContain("untracked pending");
+    expect(all.files).toContain("README.md");
+    expect(all.files).toContain("notes.txt");
+    expect(all.shortstat).toContain("2 files changed");
 
     const commitOnly = await workspace.getDiff({
       target: { type: "commit", sha: commitSha! },

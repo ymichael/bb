@@ -540,7 +540,11 @@ export class Workspace {
         if (!mergeBaseRef) {
           return ["", "", ""];
         }
-        return this.runDiffCommands([mergeBaseRef], [mergeBaseRef], [mergeBaseRef]);
+        return this.readDiffArtifactsIncludingUntracked({
+          diffArgs: [mergeBaseRef],
+          filesArgs: [mergeBaseRef],
+          numstatArgs: [mergeBaseRef],
+        });
       }
       case "commit": {
         const [diff, shortstat, files] = await Promise.all([
@@ -583,29 +587,45 @@ export class Workspace {
     return [diff.stdout, shortstat.stdout, files.stdout];
   }
 
-  private async readUncommittedDiffArtifacts(): Promise<[string, string, string]> {
-    const [trackedDiff, trackedNumstat, trackedFiles, untrackedFilesOutput] = await Promise.all([
-      runGit(["diff", "--no-ext-diff", "--binary", "HEAD", "--"], {
+  private async readDiffArtifactsIncludingUntracked(args: {
+    diffArgs: string[];
+    filesArgs: string[];
+    numstatArgs: string[];
+  }): Promise<[string, string, string]> {
+    const [trackedDiff, trackedNumstat, trackedFiles] = await Promise.all([
+      runGit(["diff", "--no-ext-diff", "--binary", ...args.diffArgs], {
         cwd: this.path,
       }),
-      runGit(["diff", "--no-ext-diff", "--numstat", "HEAD", "--"], {
+      runGit(["diff", "--no-ext-diff", "--numstat", ...args.numstatArgs], {
         cwd: this.path,
       }),
-      runGit(["diff", "--no-ext-diff", "--name-status", "HEAD", "--"], {
-        cwd: this.path,
-      }),
-      runGit(["ls-files", "--others", "--exclude-standard", "-z"], {
+      runGit(["diff", "--no-ext-diff", "--name-status", ...args.filesArgs], {
         cwd: this.path,
       }),
     ]);
 
+    return this.appendUntrackedDiffArtifacts({
+      trackedDiff: trackedDiff.stdout,
+      trackedFiles: trackedFiles.stdout,
+      trackedNumstat: trackedNumstat.stdout,
+    });
+  }
+
+  private async appendUntrackedDiffArtifacts(args: {
+    trackedDiff: string;
+    trackedFiles: string;
+    trackedNumstat: string;
+  }): Promise<[string, string, string]> {
+    const untrackedFilesOutput = await runGit(
+      ["ls-files", "--others", "--exclude-standard", "-z"],
+      { cwd: this.path },
+    );
     const untrackedPaths = parseNullSeparatedLines(untrackedFilesOutput.stdout);
     if (untrackedPaths.length === 0) {
-      const trackedSummary = summarizeNumstat(trackedNumstat.stdout);
       return [
-        trackedDiff.stdout,
-        formatShortstat(trackedSummary),
-        trackedFiles.stdout,
+        args.trackedDiff,
+        formatShortstat(summarizeNumstat(args.trackedNumstat)),
+        args.trackedFiles,
       ];
     }
 
@@ -635,19 +655,19 @@ export class Workspace {
     );
 
     const combinedNumstat = [
-      trackedNumstat.stdout.trimEnd(),
+      args.trackedNumstat.trimEnd(),
       ...untrackedArtifacts.map((artifact) => artifact.numstat.trimEnd()),
     ]
       .filter((value) => value.length > 0)
       .join("\n");
     const combinedDiff = [
-      trackedDiff.stdout.trimEnd(),
+      args.trackedDiff.trimEnd(),
       ...untrackedArtifacts.map((artifact) => artifact.diff.trimEnd()),
     ]
       .filter((value) => value.length > 0)
       .join("\n");
     const combinedFiles = [
-      trackedFiles.stdout.trimEnd(),
+      args.trackedFiles.trimEnd(),
       ...untrackedArtifacts.map((artifact) => artifact.files.trimEnd()),
     ]
       .filter((value) => value.length > 0)
@@ -658,5 +678,13 @@ export class Workspace {
       formatShortstat(summarizeNumstat(combinedNumstat)),
       combinedFiles.length > 0 ? `${combinedFiles}\n` : "",
     ];
+  }
+
+  private async readUncommittedDiffArtifacts(): Promise<[string, string, string]> {
+    return this.readDiffArtifactsIncludingUntracked({
+      diffArgs: ["HEAD", "--"],
+      filesArgs: ["HEAD", "--"],
+      numstatArgs: ["HEAD", "--"],
+    });
   }
 }
