@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useMemo, useRef, type ReactNode } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import {
   useThread,
@@ -7,52 +7,32 @@ import {
   useThreadTimeline,
   useThreadTimelineToolDetails,
   useSendThreadMessage,
-  useCreateThreadDraft,
-  useSendThreadDraft,
-  useDeleteThreadDraft,
   useArchiveThread,
   useRequestEnvironmentAction,
-  useStopThread,
   useMarkThreadRead,
   useMarkThreadUnread,
   useDeleteThread,
   useUnarchiveThread,
-  useThreadDefaultExecutionOptions,
-  useThreadDrafts,
   useThreads,
   useUpdateEnvironment,
   useUpdateThread,
-  useUploadPromptAttachment,
 } from "../hooks/useApi";
-import { useThreadCreationOptions } from "@/hooks/useThreadCreationOptions";
-import { usePromptDraftStorage } from "@/hooks/usePromptDraftStorage";
-import { usePromptMentions } from "@/hooks/usePromptMentions";
 import { useHostDaemon } from "@/hooks/useHostDaemon";
 import { usePreferredTheme } from "@/hooks/useTheme";
 import { useDialogState } from "@/hooks/useDialogState";
 import { PageShell } from "@/components/layout/PageShell";
 import { ThreadActionsMenu } from "@/components/thread/ThreadActionsMenu";
 import {
-  ThreadGitActionDialogError,
   ThreadGitActionDialog,
-  type ThreadGitActionDialogTarget,
 } from "@/components/thread/ThreadGitActionDialog";
 import {
   ThreadRenameDialog,
   type ThreadRenameDialogTarget,
 } from "@/components/thread/ThreadRenameDialog";
 import { ThreadDeleteDialog } from "@/components/thread/ThreadDeleteDialog";
-import {
-  buildCommitFailureFollowUpInstruction,
-  buildSquashMergeCommitFailureFollowUpInstruction,
-  buildSquashMergeConflictFollowUpInstruction,
-} from "@/lib/thread-operation-prompts";
 import { formatEnvironmentDisplay } from "@bb/core-ui";
 import { findLatestActivityRowId } from "@bb/ui-core";
-import type { PromptInput, ServiceTier, Thread } from "@bb/domain";
-import type { EnvironmentActionFailureDetails } from "@bb/server-contract";
-import { environmentActionFailureDetailsSchema } from "@bb/server-contract";
-import { promptDraftToInput } from "@/lib/prompt-draft";
+import type { Thread } from "@bb/domain";
 import { HttpError } from "@/lib/api";
 import { useStoredShowAllEvents } from "@/lib/show-all-events-preference";
 import { getGitStatusDisplay } from "@/lib/workspace-status";
@@ -65,105 +45,16 @@ import {
   isArchiveForceRequiredError,
   requiresArchiveConfirmation,
 } from "@/lib/thread-archive";
-import { queuedInputToDraft } from "./threadQueuedMessages";
 import { useGitDiffPanel } from "./useGitDiffPanel";
 import { useThreadTimelineController } from "./useThreadTimelineController";
 import { ThreadDetailHeader } from "./ThreadDetailHeader";
-import { ThreadFollowUpComposer } from "./ThreadFollowUpComposer";
+import { ThreadDetailPromptArea } from "./ThreadDetailPromptArea";
 import { ThreadDetailSecondaryContent } from "./ThreadDetailSecondaryContent";
 import { useThreadStorageViewer } from "./useThreadStorageViewer";
-import { useThreadFollowUpTracking } from "./useThreadFollowUpTracking";
 import { useEnvironmentMergeBase } from "./useEnvironmentMergeBase";
+import { useThreadGitActions } from "./useThreadGitActions";
 import { useThreadReadTracking } from "./useThreadReadTracking";
 import { toast } from "sonner";
-
-function toEnvironmentActionFailureDetails(error: unknown): EnvironmentActionFailureDetails | undefined {
-  if (!(error instanceof HttpError) || typeof error.body !== "object" || error.body === null) {
-    return undefined;
-  }
-  const body = error.body as Record<string, unknown>;
-  const result = environmentActionFailureDetailsSchema.safeParse(body.details);
-  return result.success ? result.data : undefined;
-}
-
-function buildAskAgentInputForGitOperation(args: {
-  error: unknown;
-  mergeBaseBranch?: string;
-}): PromptInput[] | undefined {
-  const { error, mergeBaseBranch } = args;
-  const details = toEnvironmentActionFailureDetails(error);
-  if (!details) {
-    return undefined;
-  }
-  switch (details.kind) {
-    case "commit_failed":
-      return [
-        {
-          type: "text",
-          text: buildCommitFailureFollowUpInstruction(
-            { errorMessage: details.errorMessage },
-          ),
-        },
-      ];
-    case "squash_merge_conflict":
-      if (!mergeBaseBranch) {
-        return undefined;
-      }
-      return [
-        {
-          type: "text",
-          text: buildSquashMergeConflictFollowUpInstruction(
-            {
-              action: "squash_merge",
-              options: {
-                mergeBaseBranch,
-              },
-            },
-            { conflictFiles: details.conflictFiles },
-          ),
-        },
-      ];
-    case "squash_merge_commit_failed":
-      if (!mergeBaseBranch) {
-        return undefined;
-      }
-      return [
-        {
-          type: "text",
-          text: buildSquashMergeCommitFailureFollowUpInstruction(
-            {
-              action: "squash_merge",
-              options: {
-                mergeBaseBranch,
-              },
-            },
-            {
-              stage: details.stage,
-              errorMessage: details.errorMessage,
-            },
-          ),
-        },
-      ];
-    default:
-      return undefined;
-  }
-}
-
-function toThreadGitActionDialogError(args: {
-  error: unknown;
-  mergeBaseBranch?: string;
-}): ThreadGitActionDialogError {
-  const { error, mergeBaseBranch } = args;
-  const message =
-    error instanceof Error ? error.message : "Failed to start git action";
-  return new ThreadGitActionDialogError(message, {
-    askAgentInput: buildAskAgentInputForGitOperation({
-      error,
-      mergeBaseBranch,
-    }),
-  });
-}
-
 export function ThreadDetailView() {
   const { projectId, threadId } = useParams<{
     projectId: string;
@@ -197,7 +88,6 @@ export function ThreadDetailView() {
     setStoredShowAllEvents(checked);
   }, [isManagerThread, setStoredShowAllEvents]);
   const { data: allProjectThreads } = useThreads({ projectId });
-  const { data: queuedMessages = [] } = useThreadDrafts(threadId ?? "");
   const managerThreads = useMemo(
     () => (allProjectThreads ?? []).filter((candidate) => candidate.type === "manager"),
     [allProjectThreads],
@@ -209,74 +99,19 @@ export function ThreadDetailView() {
       includeAllEvents: showAllEvents,
     },
   );
-  const { data: defaultExecutionOptions } = useThreadDefaultExecutionOptions(
-    threadId ?? "",
-  );
   const timelineToolDetails = useThreadTimelineToolDetails();
   const sendMessage = useSendThreadMessage();
-  const createDraft = useCreateThreadDraft();
-  const sendDraft = useSendThreadDraft();
-  const deleteDraft = useDeleteThreadDraft();
   const archiveThread = useArchiveThread();
   const requestEnvironmentAction = useRequestEnvironmentAction();
-  const stopThread = useStopThread();
   const unarchiveThread = useUnarchiveThread();
   const markThreadRead = useMarkThreadRead();
   const markThreadUnread = useMarkThreadUnread();
   const deleteThread = useDeleteThread();
   const updateEnvironment = useUpdateEnvironment();
   const updateThread = useUpdateThread();
-  const uploadPromptAttachment = useUploadPromptAttachment();
-  const promptDraft = usePromptDraftStorage({ projectId, threadId });
-  const promptMentions = usePromptMentions(projectId, {
-    threadSuggestionMode:
-      thread?.type === "manager" ? "all" : thread ? "managers" : "none",
-    currentThreadId: threadId,
-  });
-  const [attachmentError, setAttachmentError] = useState<string | null>(null);
-  const [isChangeListExpanded, setIsChangeListExpanded] = useState(false);
-  const [processingQueuedMessageId, setProcessingQueuedMessageId] =
-    useState<string | null>(null);
   const threadRenameDialog = useDialogState<ThreadRenameDialogTarget>();
   const threadDeleteDialog = useDialogState<Thread>();
-  const threadGitActionDialog = useDialogState<ThreadGitActionDialogTarget>();
   const captureTimelineScrollPositionRef = useRef<() => void>(() => {});
-  const promptInput = useMemo(
-    () =>
-      promptDraftToInput({
-        text: promptDraft.text,
-        attachments: promptDraft.attachments,
-      }),
-    [promptDraft.attachments, promptDraft.text],
-  );
-  const {
-    selectedProviderId,
-    providerOptions,
-    hasMultipleProviders,
-    selectedProviderDisplayName,
-    selectedModel,
-    setSelectedModel,
-    serviceTier,
-    setServiceTier,
-    reasoningLevel,
-    setReasoningLevel,
-    sandboxMode,
-    setSandboxMode,
-    activeModel,
-    modelOptions,
-    reasoningOptions,
-    sandboxOptions,
-    supportsServiceTier,
-  } = useThreadCreationOptions({
-    scope: "thread",
-    resetKey: threadId,
-    initialProviderId: thread?.providerId,
-    initialModel: defaultExecutionOptions?.model,
-    initialServiceTier: defaultExecutionOptions?.serviceTier,
-    initialReasoningLevel: defaultExecutionOptions?.reasoningLevel,
-    initialSandboxMode: defaultExecutionOptions?.sandboxMode,
-    initialEnvironmentSelectionValue: thread?.environmentId ?? undefined,
-  });
   const preferredTheme = usePreferredTheme();
   const threadDetailRows = useMemo(() => timeline?.rows ?? [], [timeline?.rows]);
   const contextWindowUsage = timeline?.contextWindowUsage ?? undefined;
@@ -352,7 +187,6 @@ export function ThreadDetailView() {
     workspaceStatusError ? undefined : (workStatus ?? undefined);
   const workspaceWorkingTree = workspaceStatus?.workingTree;
   const workspaceBranch = workspaceStatus?.branch;
-  const workspaceMergeBase = workspaceStatus?.mergeBase;
   const { isLocalHost, openPath } = useHostDaemon();
   const isReasoningBlockActive = false;
   const isThreadTimelinePending = timelineLoading && threadDetailRows.length === 0;
@@ -378,18 +212,6 @@ export function ThreadDetailView() {
       }),
   });
   captureTimelineScrollPositionRef.current = captureTimelineScrollPosition;
-  const handleFollowUpAcknowledged = useCallback(() => {
-    promptDraft.clear();
-  }, [promptDraft]);
-  const {
-    beginPendingFollowUp,
-    clearPendingFollowUp,
-    pendingSubmittedFollowUp,
-  } = useThreadFollowUpTracking({
-    threadDetailRows,
-    threadId,
-    onAcknowledged: handleFollowUpAcknowledged,
-  });
   useThreadReadTracking({
     markThreadRead,
     thread,
@@ -409,6 +231,13 @@ export function ThreadDetailView() {
     setSelectedMergeBaseBranch,
     thread,
     updateEnvironment,
+    workspaceStatus,
+  });
+  const gitActions = useThreadGitActions({
+    environment,
+    requestEnvironmentAction,
+    sendMessage,
+    thread,
     workspaceStatus,
   });
 
@@ -491,53 +320,6 @@ export function ThreadDetailView() {
       },
     );
   }, [archiveThread, environment, navigate, thread, unarchiveThread, workStatus]);
-  const handlePromptGitStatsBannerClick = useCallback(() => {
-    openThreadDiffPanel();
-  }, [openThreadDiffPanel]);
-  const handlePromptBannerFileClick = useCallback(
-    (file: { path: string }) => {
-      openDiffFile(file.path);
-    },
-    [openDiffFile],
-  );
-  const sendFollowUpInput = useCallback(
-    async ({
-      input,
-      mode = "auto",
-      model,
-      serviceTier: executionServiceTier,
-      reasoningLevel: executionReasoningLevel,
-      sandboxMode: executionSandboxMode,
-    }: {
-      input: PromptInput[];
-      mode?: "auto" | "steer";
-      model?: string;
-      serviceTier?: ServiceTier;
-      reasoningLevel?: "low" | "medium" | "high" | "xhigh";
-      sandboxMode?: "read-only" | "workspace-write" | "danger-full-access";
-    }) => {
-      if (!threadId || input.length === 0) return;
-      scrollToBottom();
-      await sendMessage.mutateAsync({
-        id: threadId,
-        input,
-        mode,
-        ...(mode === "steer"
-          ? {}
-          : {
-              ...(model ? { model } : {}),
-              ...(executionServiceTier ? { serviceTier: executionServiceTier } : {}),
-              ...(executionReasoningLevel ? { reasoningLevel: executionReasoningLevel } : {}),
-              ...(executionSandboxMode ? { sandboxMode: executionSandboxMode } : {}),
-            }),
-      });
-    },
-    [
-      scrollToBottom,
-      sendMessage,
-      threadId,
-    ],
-  );
   const parentThreadId = thread?.parentThreadId;
   const parentThreadDisplayName =
     parentThread?.title && parentThread.title.trim().length > 0
@@ -590,26 +372,6 @@ export function ThreadDetailView() {
       currentPath === path ? null : path,
     );
   }, [setSelectedThreadStoragePath]);
-  const handleAttachFiles = useCallback(async (files: File[]) => {
-    if (!projectId || files.length === 0) return;
-
-    setAttachmentError(null);
-    const failedFiles: string[] = [];
-    for (const file of files) {
-      try {
-        const uploaded = await uploadPromptAttachment.mutateAsync({
-          projectId,
-          file,
-        });
-        promptDraft.addAttachment(uploaded);
-      } catch {
-        failedFiles.push(file.name);
-      }
-    }
-    if (failedFiles.length > 0) {
-      setAttachmentError(`Failed to attach: ${failedFiles.join(", ")}`);
-    }
-  }, [projectId, promptDraft, uploadPromptAttachment]);
 
   if (!projectId || !threadId) {
     return (
@@ -644,29 +406,6 @@ export function ThreadDetailView() {
     );
   }
 
-  const isCreated = thread.status === "created";
-  const isProvisioning = thread.status === "provisioning";
-  const isRuntimeError = thread.status === "error";
-  const isQueueMutationPending =
-    createDraft.isPending ||
-    sendDraft.isPending ||
-    deleteDraft.isPending;
-  const isFollowUpSubmitting =
-    sendMessage.isPending ||
-    pendingSubmittedFollowUp !== null ||
-    requestEnvironmentAction.isPending ||
-    createDraft.isPending;
-  const canSendFollowUp = !isCreated && !isProvisioning;
-  const promptPlaceholder =
-    isCreated
-      ? "Thread is being created..."
-      : isProvisioning
-      ? "Thread is provisioning..."
-      : isRuntimeError
-      ? "Retry by sending a follow-up message"
-      : thread.status === "idle"
-      ? "Ask for follow-up changes"
-      : "Send a message to this thread...";
   const canUseGitUi = !isManagerThread;
   const canAssignToManager =
     thread.type === "standard" &&
@@ -675,56 +414,9 @@ export function ThreadDetailView() {
     !managerThreads.some((manager) => manager.id === thread.id);
   const canTakeOverThread =
     thread.type === "standard" && Boolean(thread.parentThreadId);
-  const isArchivedThread = thread.archivedAt != null;
-  const isDirectThreadEnvironment =
-    environment?.managed === false;
-  const threadHeaderGitAction: {
-    target: ThreadGitActionDialogTarget;
-    label: string;
-  } | null = (() => {
-    if (!canUseGitUi || !workspaceStatus || isArchivedThread) {
-      return null;
-    }
-
-    if (isDirectThreadEnvironment) {
-      if (!workspaceWorkingTree?.hasUncommittedChanges) {
-        return null;
-      }
-      return {
-        target: { kind: "commit" },
-        label: "Commit",
-      };
-    }
-
-    if (
-      environment?.managed &&
-      (
-        workspaceMergeBase?.hasCommittedUnmergedChanges ||
-        workspaceWorkingTree?.hasUncommittedChanges
-      )
-    ) {
-      return {
-        target: {
-          kind: workspaceWorkingTree?.hasUncommittedChanges
-            ? "commit_and_squash_merge"
-            : "squash_merge",
-        },
-        label: "Squash merge",
-      };
-    }
-
-    return null;
-  })();
-  const isThreadGitActionPending = requestEnvironmentAction.isPending;
   const threadEnvironmentLabel = environment
     ? formatEnvironmentDisplay(environment, isLocalHost(environment.hostId)).label
     : undefined;
-  const provisioningStatusLabel =
-    isCreated
-      ? "Created..."
-      : isProvisioning
-      ? "Provisioning..."
-      : undefined;
   const promptBannerSummary = workspaceStatus
     ? showBranchComparisonUi
       ? formatChangeSummary(workspaceStatus.workingTree)
@@ -804,54 +496,6 @@ export function ThreadDetailView() {
       toast.error("Failed to copy branch name");
     }
   };
-  const handleCommitThread = async () => {
-    const attachedEnvironmentId = thread.environmentId;
-    if (!attachedEnvironmentId) {
-      return;
-    }
-    try {
-      await requestEnvironmentAction.mutateAsync({
-        id: attachedEnvironmentId,
-        action: "commit",
-      });
-    } catch (nextError) {
-      throw toThreadGitActionDialogError({ error: nextError });
-    }
-  };
-  const handleSquashMergeThread = async ({
-    mergeBaseBranch,
-  }: {
-    mergeBaseBranch: string;
-  }) => {
-    const attachedEnvironmentId = thread.environmentId;
-    if (!attachedEnvironmentId) {
-      return;
-    }
-    try {
-      await requestEnvironmentAction.mutateAsync({
-        id: attachedEnvironmentId,
-        action: "squash_merge",
-        options: {
-          mergeBaseBranch,
-        },
-      });
-    } catch (nextError) {
-      throw toThreadGitActionDialogError({
-        error: nextError,
-        mergeBaseBranch,
-      });
-    }
-  };
-  const handleAskAgentToFixGitAction = async (input: PromptInput[]) => {
-    if (!threadId) {
-      return;
-    }
-    await sendMessage.mutateAsync({
-      id: threadId,
-      input,
-      mode: "auto",
-    });
-  };
   const threadActionsMenu = (
     <ThreadActionsMenu
       triggerClassName="h-7 w-7 rounded-md p-0 text-muted-foreground"
@@ -881,112 +525,6 @@ export function ThreadDetailView() {
       threadType={thread.type}
     />
   );
-  const handleSend = async () => {
-    if (promptInput.length === 0) return;
-
-    if (thread.status === "active") {
-      try {
-        await createDraft.mutateAsync({
-          id: thread.id,
-          input: promptInput,
-          model: activeModel?.model ?? selectedModel,
-          ...(supportsServiceTier && serviceTier ? { serviceTier } : {}),
-          reasoningLevel,
-          sandboxMode,
-        });
-        promptDraft.clear();
-        setAttachmentError(null);
-      } catch (nextError) {
-        window.alert(nextError instanceof Error ? nextError.message : "Failed to queue follow-up");
-      }
-      return;
-    }
-
-    beginPendingFollowUp(promptInput);
-    setAttachmentError(null);
-
-    try {
-      await sendFollowUpInput({
-        input: promptInput,
-        model: activeModel?.model ?? selectedModel,
-        ...(supportsServiceTier && serviceTier ? { serviceTier } : {}),
-        reasoningLevel,
-        sandboxMode,
-      });
-    } catch (nextError) {
-      clearPendingFollowUp();
-      window.alert(nextError instanceof Error ? nextError.message : "Failed to send follow-up");
-    }
-  };
-  const handleSendQueuedImmediately = (messageId: string) => {
-    const queuedMessage = queuedMessages.find((candidate) => candidate.id === messageId);
-    if (!queuedMessage) return;
-
-    setProcessingQueuedMessageId(messageId);
-    void sendDraft
-      .mutateAsync({
-        id: thread.id,
-        queuedMessageId: messageId,
-      })
-      .then(() => {
-        setAttachmentError(null);
-      })
-      .catch((nextError) => {
-        window.alert(
-          nextError instanceof Error ? nextError.message : "Failed to send queued follow-up",
-        );
-      })
-      .finally(() => {
-        setProcessingQueuedMessageId((currentMessageId) =>
-          currentMessageId === messageId ? null : currentMessageId,
-        );
-      });
-  };
-  const handleEditQueuedMessage = (messageId: string) => {
-    const queuedMessage = queuedMessages.find((candidate) => candidate.id === messageId);
-    if (!queuedMessage) return;
-
-    setProcessingQueuedMessageId(messageId);
-    void deleteDraft
-      .mutateAsync({
-        id: thread.id,
-        queuedMessageId: messageId,
-      })
-      .then(() => {
-        const restoredDraft = queuedInputToDraft(queuedMessage.content);
-        promptDraft.setText(restoredDraft.text);
-        promptDraft.setAttachments(restoredDraft.attachments);
-        setAttachmentError(null);
-      })
-      .catch((nextError) => {
-        window.alert(
-          nextError instanceof Error ? nextError.message : "Failed to edit queued follow-up",
-        );
-      })
-      .finally(() => {
-        setProcessingQueuedMessageId((currentMessageId) =>
-          currentMessageId === messageId ? null : currentMessageId,
-        );
-      });
-  };
-  const handleDeleteQueuedMessage = (messageId: string) => {
-    setProcessingQueuedMessageId(messageId);
-    void deleteDraft
-      .mutateAsync({
-        id: thread.id,
-        queuedMessageId: messageId,
-      })
-      .catch((nextError) => {
-        window.alert(
-          nextError instanceof Error ? nextError.message : "Failed to delete queued follow-up",
-        );
-      })
-      .finally(() => {
-        setProcessingQueuedMessageId((currentMessageId) =>
-          currentMessageId === messageId ? null : currentMessageId,
-        );
-      });
-  };
   const effectiveSecondaryPanel =
     !canUseGitUi && activeSecondaryPanel === "git-diff"
       ? "thread-info"
@@ -1000,105 +538,43 @@ export function ThreadDetailView() {
       isManagedThread={Boolean(parentThreadId)}
       isManagerThread={isManagerThread}
       isSecondaryPanelOpen={isSecondaryPanelOpen}
-      isThreadGitActionPending={isThreadGitActionPending}
-      onOpenThreadGitAction={threadGitActionDialog.onOpen}
+      isThreadGitActionPending={gitActions.isThreadGitActionPending}
+      onOpenThreadGitAction={gitActions.threadGitActionDialog.onOpen}
       onToggleSecondaryPanel={toggleThreadSecondaryPanel}
-      threadHeaderGitAction={threadHeaderGitAction}
+      threadHeaderGitAction={gitActions.threadHeaderGitAction}
       threadTitle={threadTitle}
     />
   );
   const composerFooter = (
-    <ThreadFollowUpComposer
-      attachments={{
-        attachmentError,
-        attachments: promptDraft.attachments,
-        isAttaching: uploadPromptAttachment.isPending,
-        onAttachFiles: handleAttachFiles,
-        onRemoveAttachment: promptDraft.removeAttachment,
-        projectId,
-      }}
-      banner={{
-        canExpandPromptChangeList,
-        isChangeListExpanded,
-        isDiffPanelActive: canUseGitUi && isDiffPanelActive,
-        mergeBaseBranchOptions,
-        mergeBaseBranchOptionsLoading: isLoadingMergeBaseBranchOptions,
-        onPromptBannerFileClick: canUseGitUi ? handlePromptBannerFileClick : () => {},
-        onPromptBannerMergeBaseBranchChange: showBranchComparisonUi
-          ? handleMergeBaseBranchChange
-          : undefined,
-        onPromptBannerMergeBaseBranchPickerOpenChange: showBranchComparisonUi
-          ? onMergeBaseBranchPickerOpenChange
-          : undefined,
-        onPromptGitStatsBannerClick: canUseGitUi ? handlePromptGitStatsBannerClick : () => {},
-        onToggleChangeListExpanded: () => {
-          setIsChangeListExpanded((prev) => !prev);
-        },
-        promptBannerMergeBaseBranch,
-        promptBannerSummary,
-        showBranchComparisonUi,
-        showPromptGitStatsBanner,
-        workspaceStatus,
-      }}
-      composer={{
-        canSendFollowUp,
-        composerRef: promptComposerRef,
-        isFollowUpSubmitting,
-        message: promptDraft.text,
-        onChangeMessage: promptDraft.setText,
-        onStop: () => stopThread.mutate(thread.id),
-        onSubmit: handleSend,
-        processingQueuedMessageId,
-        promptPlaceholder,
-        provisioningStatusLabel,
-        threadId: thread.id,
-        threadStatus: thread.status,
-      }}
-      environment={{
-        contextWindowUsage,
-        environmentIcon: undefined,
-        environmentLabel: threadEnvironmentValue,
-      }}
-      execution={{
-        activeModel,
-        hasMultipleProviders,
-        modelOptions,
-        onReasoningLevelChange: setReasoningLevel,
-        onSandboxModeChange: setSandboxMode,
-        onSelectedModelChange: setSelectedModel,
-        onServiceTierChange: setServiceTier,
-        providerDisplayName: selectedProviderDisplayName,
-        providerOptions,
-        reasoningLevel,
-        reasoningOptions,
-        sandboxMode,
-        sandboxOptions,
-        selectedModel,
-        selectedProviderId,
-        serviceTier,
-        supportsServiceTier,
-      }}
-      mentions={{
-        mentionError: promptMentions.isError,
-        mentionLoading: promptMentions.isLoading,
-        mentionSearchScope:
-          promptMentions.threadSuggestionMode === "all"
-            ? "files-and-threads"
-            : promptMentions.threadSuggestionMode === "managers"
-              ? "files-and-managers"
-              : "files",
-        mentionSuggestions: promptMentions.suggestions,
-        onMentionQueryChange: promptMentions.setQuery,
-      }}
-      queue={{
-        isQueueMutationPending,
-        onDeleteQueuedMessage: handleDeleteQueuedMessage,
-        onEditQueuedMessage: handleEditQueuedMessage,
-        onScrollToBottom: scrollToBottom,
-        onSendQueuedImmediately: handleSendQueuedImmediately,
-        queuedMessages,
-        showScrollToBottom,
-      }}
+    <ThreadDetailPromptArea
+      canExpandPromptChangeList={canExpandPromptChangeList}
+      canUseGitUi={canUseGitUi}
+      contextWindowUsage={contextWindowUsage}
+      environmentLabel={threadEnvironmentValue}
+      isDiffPanelActive={isDiffPanelActive}
+      isEnvironmentActionPending={requestEnvironmentAction.isPending}
+      isLoadingMergeBaseBranchOptions={isLoadingMergeBaseBranchOptions}
+      mergeBaseBranchOptions={mergeBaseBranchOptions}
+      onMergeBaseBranchChange={
+        showBranchComparisonUi ? handleMergeBaseBranchChange : undefined
+      }
+      onMergeBaseBranchPickerOpenChange={
+        showBranchComparisonUi ? onMergeBaseBranchPickerOpenChange : undefined
+      }
+      openDiffFile={openDiffFile}
+      openThreadDiffPanel={openThreadDiffPanel}
+      projectId={projectId}
+      promptBannerMergeBaseBranch={promptBannerMergeBaseBranch}
+      promptBannerSummary={promptBannerSummary}
+      promptComposerRef={promptComposerRef}
+      scrollToBottom={scrollToBottom}
+      sendMessage={sendMessage}
+      showBranchComparisonUi={showBranchComparisonUi}
+      showPromptGitStatsBanner={showPromptGitStatsBanner}
+      showScrollToBottom={showScrollToBottom}
+      thread={thread}
+      threadDetailRows={threadDetailRows}
+      workspaceStatus={workspaceStatus}
     />
   );
   const threadStorage = thread.type === "manager"
@@ -1255,7 +731,7 @@ export function ThreadDetailView() {
       />
       {canUseGitUi ? (
         <ThreadGitActionDialog
-          target={threadGitActionDialog.target}
+          target={gitActions.threadGitActionDialog.target}
           pending={requestEnvironmentAction.isPending}
           askAgentPending={sendMessage.isPending}
           branchName={threadBranchName}
@@ -1276,13 +752,13 @@ export function ThreadDetailView() {
           }
           onOpenChange={(open) => {
             if (!open) {
-              threadGitActionDialog.onClose();
+              gitActions.threadGitActionDialog.onClose();
               onMergeBaseBranchPickerOpenChange(false);
             }
           }}
-          onCommit={handleCommitThread}
-          onSquashMerge={handleSquashMergeThread}
-          onAskAgentToFix={handleAskAgentToFixGitAction}
+          onCommit={gitActions.handleCommitThread}
+          onSquashMerge={gitActions.handleSquashMergeThread}
+          onAskAgentToFix={gitActions.handleAskAgentToFixGitAction}
         />
       ) : null}
     </>
