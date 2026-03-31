@@ -20,7 +20,13 @@ import {
   removeWorktree,
   removeDirectory,
 } from "./provisioning.js";
-import { detectGitRepo, pathExists, runGit, WorkspaceError } from "./git.js";
+import {
+  detectGitRepo,
+  pathExists,
+  runGit,
+  type WorkspaceStatusChangeCallback,
+  WorkspaceError,
+} from "./git.js";
 
 // ---------------------------------------------------------------------------
 // Options (discriminated union on workspaceProvisionType from @bb/domain)
@@ -98,6 +104,7 @@ export interface IWorkspace {
   getStatus(options?: StatusOptions): Promise<WorkspaceStatus>;
   getDiff(options?: DiffOptions): Promise<DiffResult>;
   getBranches(): Promise<string[]>;
+  watchStatus(onChange: WorkspaceStatusChangeCallback): () => void;
 
   // Git mutations
   commit(options: CommitOptions): Promise<CommitResult>;
@@ -176,6 +183,10 @@ class WorkspaceImpl implements IWorkspace {
 
   getBranches(): Promise<string[]> {
     return this.ws.getBranches();
+  }
+
+  watchStatus(onChange: WorkspaceStatusChangeCallback): () => void {
+    return this.ws.watchStatus(onChange);
   }
 
   commit(options: CommitOptions): Promise<CommitResult> {

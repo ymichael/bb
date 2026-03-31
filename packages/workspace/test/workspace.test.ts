@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { setTimeout as sleep } from "node:timers/promises";
 import { afterEach, describe, expect, it } from "vitest";
 import { Workspace } from "../src/workspace.js";
 import { WorkspaceError } from "../src/git.js";
@@ -34,6 +35,21 @@ async function initBareRemoteFrom(repoPath: string): Promise<string> {
   await runGit(["remote", "add", "origin", barePath], { cwd: repoPath });
   await runGit(["push", "-u", "origin", "main"], { cwd: repoPath });
   return barePath;
+}
+
+async function waitForCallCount(
+  getCallCount: () => number,
+  expectedCount: number,
+  timeoutMs = 1_000,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (getCallCount() >= expectedCount) {
+      return;
+    }
+    await sleep(20);
+  }
+  throw new Error("Timed out waiting for watcher callback");
 }
 
 afterEach(async () => {
@@ -255,5 +271,54 @@ describe("Workspace", () => {
       workspace.commit({ message: "nope", noVerify: false }),
     ).rejects.toThrow(/not a git repository/u);
     await expect(workspace.getStatus()).rejects.toThrow(WorkspaceError);
+  });
+
+  it("watches workspace status changes without duplicate callbacks for the same burst", async () => {
+    const repoPath = await initRepo();
+    const workspace = new Workspace(repoPath);
+    const calls: number[] = [];
+    const stopWatching = workspace.watchStatus(() => {
+      calls.push(Date.now());
+    });
+
+    try {
+      await fs.writeFile(path.join(repoPath, "README.md"), "watch me\n", "utf8");
+      await waitForCallCount(() => calls.length, 1);
+      expect(calls).toHaveLength(1);
+    } finally {
+      stopWatching();
+    }
+  });
+
+  it("detects branch-ref updates through the watch fingerprint", async () => {
+    const repoPath = await initRepo();
+    const workspace = new Workspace(repoPath);
+    const calls: number[] = [];
+    const stopWatching = workspace.watchStatus(() => {
+      calls.push(Date.now());
+    });
+
+    try {
+      await runGit(["checkout", "-b", "feature"], { cwd: repoPath });
+      await waitForCallCount(() => calls.length, 1);
+      expect(await workspace.currentBranch).toBe("feature");
+    } finally {
+      stopWatching();
+    }
+  });
+
+  it("stops emitting callbacks after watch teardown", async () => {
+    const repoPath = await initRepo();
+    const workspace = new Workspace(repoPath);
+    const calls: number[] = [];
+    const stopWatching = workspace.watchStatus(() => {
+      calls.push(Date.now());
+    });
+
+    stopWatching();
+    await fs.writeFile(path.join(repoPath, "README.md"), "no callbacks\n", "utf8");
+    await sleep(200);
+
+    expect(calls).toHaveLength(0);
   });
 });

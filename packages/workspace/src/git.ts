@@ -1,4 +1,5 @@
 import { execFile, type ExecFileException } from "node:child_process";
+import { watch, type FSWatcher } from "node:fs";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -6,6 +7,7 @@ import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
 const DEFAULT_BUFFER_BYTES = 16 * 1024 * 1024;
+const WORKSPACE_STATUS_WATCH_DEBOUNCE_MS = 75;
 
 export class WorkspaceError extends Error {
   readonly code: string;
@@ -27,6 +29,8 @@ export interface GitCommandResult {
   stderr: string;
   exitCode: number;
 }
+
+export type WorkspaceStatusChangeCallback = () => void;
 
 type BranchStatus = {
   branchName?: string;
@@ -279,4 +283,165 @@ export async function hasUncommittedChanges(cwd: string): Promise<boolean> {
 
 export async function createTempDir(prefix: string): Promise<string> {
   return fs.mkdtemp(path.join(os.tmpdir(), prefix));
+}
+
+async function resolveGitDirectory(cwd: string): Promise<string | undefined> {
+  const dotGitPath = path.join(cwd, ".git");
+  try {
+    const dotGitStat = await fs.lstat(dotGitPath);
+    if (dotGitStat.isDirectory()) {
+      return dotGitPath;
+    }
+    if (!dotGitStat.isFile()) {
+      return undefined;
+    }
+    const dotGitContents = await fs.readFile(dotGitPath, "utf8");
+    const firstLine = dotGitContents.split("\n")[0]?.trim() ?? "";
+    if (!firstLine.startsWith("gitdir:")) {
+      return undefined;
+    }
+    const relativeGitDir = firstLine.slice("gitdir:".length).trim();
+    if (relativeGitDir.length === 0) {
+      return undefined;
+    }
+    return path.resolve(cwd, relativeGitDir);
+  } catch {
+    return undefined;
+  }
+}
+
+async function resolveGitMetadataPaths(cwd: string): Promise<string[]> {
+  const dotGitPath = path.join(cwd, ".git");
+  const gitDirPath = await resolveGitDirectory(cwd);
+  const metadataRoot = gitDirPath ?? dotGitPath;
+  return [
+    dotGitPath,
+    metadataRoot,
+    path.join(metadataRoot, "HEAD"),
+    path.join(metadataRoot, "index"),
+    path.join(metadataRoot, "packed-refs"),
+    path.join(metadataRoot, "refs", "heads"),
+    path.join(metadataRoot, "refs", "remotes", "origin"),
+  ];
+}
+
+async function readMetadataFingerprintEntry(targetPath: string): Promise<string> {
+  try {
+    const stat = await fs.stat(targetPath);
+    const statEntry = [
+      targetPath,
+      stat.isDirectory() ? "dir" : stat.isFile() ? "file" : "other",
+      String(stat.size),
+      String(stat.mtimeMs),
+    ].join(":");
+    if (path.basename(targetPath) === "HEAD" && stat.isFile()) {
+      const headContents = await fs.readFile(targetPath, "utf8");
+      return `${statEntry}:${headContents.trim()}`;
+    }
+    return statEntry;
+  } catch {
+    return `${targetPath}:missing`;
+  }
+}
+
+async function createWorkspaceStatusWatchFingerprint(cwd: string): Promise<string> {
+  await ensureGitRepo(cwd);
+  const [statusOutput, metadataPaths] = await Promise.all([
+    runGit(
+      ["status", "--porcelain=v1", "--branch", "--untracked-files=all"],
+      { cwd },
+    ),
+    resolveGitMetadataPaths(cwd),
+  ]);
+  const metadataEntries = await Promise.all(
+    metadataPaths.map((metadataPath) => readMetadataFingerprintEntry(metadataPath)),
+  );
+  return JSON.stringify({
+    metadataEntries,
+    status: statusOutput.stdout,
+  });
+}
+
+export function watchWorkspaceStatus(
+  cwd: string,
+  onChange: WorkspaceStatusChangeCallback,
+): () => void {
+  let disposed = false;
+  let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+  let lastFingerprint = "";
+  let baselineLoaded = false;
+  const watchers: FSWatcher[] = [];
+
+  const runCheck = async () => {
+    try {
+      const nextFingerprint = await createWorkspaceStatusWatchFingerprint(cwd);
+      if (disposed) {
+        return;
+      }
+      if (!baselineLoaded) {
+        lastFingerprint = nextFingerprint;
+        baselineLoaded = true;
+        return;
+      }
+      if (nextFingerprint === lastFingerprint) {
+        return;
+      }
+      lastFingerprint = nextFingerprint;
+      onChange();
+    } catch {
+      // Ignore watch checks for missing/non-git paths; query refetch remains the fallback.
+    }
+  };
+
+  const scheduleCheck = () => {
+    if (disposed) {
+      return;
+    }
+    if (debounceTimer !== null) {
+      clearTimeout(debounceTimer);
+    }
+    debounceTimer = setTimeout(() => {
+      debounceTimer = null;
+      void runCheck();
+    }, WORKSPACE_STATUS_WATCH_DEBOUNCE_MS);
+  };
+
+  void runCheck();
+  void (async () => {
+    try {
+      const metadataPaths = await resolveGitMetadataPaths(cwd);
+      if (disposed) {
+        return;
+      }
+      for (const metadataPath of metadataPaths) {
+        if (!(await pathExists(metadataPath))) {
+          continue;
+        }
+        try {
+          const watcher = watch(metadataPath, { persistent: false }, scheduleCheck);
+          watcher.on("error", scheduleCheck);
+          watchers.push(watcher);
+        } catch {
+          // Ignore unsupported watch targets; other targets and mutation-triggered hints remain.
+        }
+      }
+    } catch {
+      // Ignore initial watch setup failures; explicit command-triggered refresh remains.
+    }
+  })();
+
+  return () => {
+    disposed = true;
+    if (debounceTimer !== null) {
+      clearTimeout(debounceTimer);
+      debounceTimer = null;
+    }
+    for (const watcher of watchers) {
+      try {
+        watcher.close();
+      } catch {
+        // Ignore close failures during teardown.
+      }
+    }
+  };
 }

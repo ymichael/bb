@@ -20,6 +20,8 @@ import {
   revParse,
   runGit,
   summarizeNumstat,
+  type WorkspaceStatusChangeCallback,
+  watchWorkspaceStatus,
   WorkspaceError,
 } from "./git.js";
 import fs from "node:fs/promises";
@@ -261,6 +263,10 @@ export class Workspace {
 
   async getBranches(): Promise<string[]> {
     return listBranches(this.path);
+  }
+
+  watchStatus(onChange: WorkspaceStatusChangeCallback): () => void {
+    return watchWorkspaceStatus(this.path, onChange);
   }
 
   async commit(options: CommitOptions): Promise<CommitResult> {
