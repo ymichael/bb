@@ -6,10 +6,11 @@ import {
   useDeleteThread,
   useMarkThreadRead,
   useMarkThreadUnread,
-  useSendThreadMessage,
   useUnarchiveThread,
   useUpdateThread,
-} from "../hooks/mutations/thread-mutations";
+import { useUpdateEnvironment } from "../hooks/mutations/environment-mutations";
+} from "../hooks/mutations/thread-state-mutations";
+import { useSendThreadMessage } from "../hooks/mutations/thread-runtime-mutations";
 import { useUpdateEnvironment } from "../hooks/mutations/environment-mutations";
 import { useEnvironment, useEnvironmentWorkStatus } from "../hooks/queries/environment-queries";
 import {
