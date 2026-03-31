@@ -282,9 +282,26 @@ describe("Workspace", () => {
     });
 
     try {
+      await sleep(300);
       await fs.writeFile(path.join(repoPath, "README.md"), "watch me\n", "utf8");
       await waitForCallCount(() => calls.length, 1);
       expect(calls).toHaveLength(1);
+    } finally {
+      stopWatching();
+    }
+  });
+
+  it("does not emit callbacks when a clean workspace watch starts", async () => {
+    const repoPath = await initRepo();
+    const workspace = new Workspace(repoPath);
+    const calls: number[] = [];
+    const stopWatching = workspace.watchStatus(() => {
+      calls.push(Date.now());
+    });
+
+    try {
+      await sleep(300);
+      expect(calls).toHaveLength(0);
     } finally {
       stopWatching();
     }
@@ -299,6 +316,7 @@ describe("Workspace", () => {
     });
 
     try {
+      await sleep(300);
       await runGit(["checkout", "-b", "feature"], { cwd: repoPath });
       await waitForCallCount(() => calls.length, 1);
       expect(await workspace.currentBranch).toBe("feature");

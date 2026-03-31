@@ -1,5 +1,11 @@
 import { execFile, type ExecFileException } from "node:child_process";
-import { watch, type FSWatcher } from "node:fs";
+import {
+  existsSync,
+  lstatSync,
+  readFileSync,
+  watch,
+  type FSWatcher,
+} from "node:fs";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -310,15 +316,55 @@ async function resolveGitDirectory(cwd: string): Promise<string | undefined> {
   }
 }
 
-async function resolveGitMetadataPaths(cwd: string): Promise<string[]> {
+function resolveGitDirectorySync(cwd: string): string | undefined {
   const dotGitPath = path.join(cwd, ".git");
-  const gitDirPath = await resolveGitDirectory(cwd);
+  try {
+    const dotGitStat = lstatSync(dotGitPath);
+    if (dotGitStat.isDirectory()) {
+      return dotGitPath;
+    }
+    if (!dotGitStat.isFile()) {
+      return undefined;
+    }
+    const dotGitContents = readFileSync(dotGitPath, "utf8");
+    const firstLine = dotGitContents.split("\n")[0]?.trim() ?? "";
+    if (!firstLine.startsWith("gitdir:")) {
+      return undefined;
+    }
+    const relativeGitDir = firstLine.slice("gitdir:".length).trim();
+    if (relativeGitDir.length === 0) {
+      return undefined;
+    }
+    return path.resolve(cwd, relativeGitDir);
+  } catch {
+    return undefined;
+  }
+}
+
+function resolveGitMetadataWatchPathsSync(cwd: string): string[] {
+  const dotGitPath = path.join(cwd, ".git");
+  const gitDirPath = resolveGitDirectorySync(cwd);
   const metadataRoot = gitDirPath ?? dotGitPath;
   return [
     dotGitPath,
     metadataRoot,
     path.join(metadataRoot, "HEAD"),
     path.join(metadataRoot, "index"),
+    path.join(metadataRoot, "packed-refs"),
+    path.join(metadataRoot, "refs", "heads"),
+    path.join(metadataRoot, "refs", "remotes", "origin"),
+  ];
+}
+
+async function resolveGitMetadataFingerprintPaths(
+  cwd: string,
+): Promise<string[]> {
+  const gitDirPath = await resolveGitDirectory(cwd);
+  const metadataRoot = gitDirPath ?? path.join(cwd, ".git");
+  return [
+    // Exclude index/root mtimes here: running git status can refresh those
+    // without any user-visible workspace change, which would cause false positives.
+    path.join(metadataRoot, "HEAD"),
     path.join(metadataRoot, "packed-refs"),
     path.join(metadataRoot, "refs", "heads"),
     path.join(metadataRoot, "refs", "remotes", "origin"),
@@ -351,7 +397,7 @@ async function createWorkspaceStatusWatchFingerprint(cwd: string): Promise<strin
       ["status", "--porcelain=v1", "--branch", "--untracked-files=all"],
       { cwd },
     ),
-    resolveGitMetadataPaths(cwd),
+    resolveGitMetadataFingerprintPaths(cwd),
   ]);
   const metadataEntries = await Promise.all(
     metadataPaths.map((metadataPath) => readMetadataFingerprintEntry(metadataPath)),
@@ -362,6 +408,19 @@ async function createWorkspaceStatusWatchFingerprint(cwd: string): Promise<strin
   });
 }
 
+function shouldIgnoreWorkspaceWatchFilename(
+  filename: string | Buffer | null | undefined,
+): boolean {
+  if (!filename) {
+    return false;
+  }
+  const normalizedPath = path.normalize(filename.toString());
+  return (
+    normalizedPath === ".git" ||
+    normalizedPath.startsWith(`.git${path.sep}`)
+  );
+}
+
 export function watchWorkspaceStatus(
   cwd: string,
   onChange: WorkspaceStatusChangeCallback,
@@ -370,26 +429,40 @@ export function watchWorkspaceStatus(
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
   let lastFingerprint = "";
   let baselineLoaded = false;
+  let checkInFlight = false;
+  let recheckRequested = false;
   const watchers: FSWatcher[] = [];
 
-  const runCheck = async () => {
+  const runChecks = async () => {
+    if (checkInFlight) {
+      recheckRequested = true;
+      return;
+    }
+    checkInFlight = true;
     try {
-      const nextFingerprint = await createWorkspaceStatusWatchFingerprint(cwd);
-      if (disposed) {
-        return;
-      }
-      if (!baselineLoaded) {
-        lastFingerprint = nextFingerprint;
-        baselineLoaded = true;
-        return;
-      }
-      if (nextFingerprint === lastFingerprint) {
-        return;
-      }
-      lastFingerprint = nextFingerprint;
-      onChange();
-    } catch {
-      // Ignore watch checks for missing/non-git paths; query refetch remains the fallback.
+      do {
+        recheckRequested = false;
+        try {
+          const nextFingerprint = await createWorkspaceStatusWatchFingerprint(cwd);
+          if (disposed) {
+            return;
+          }
+          if (!baselineLoaded) {
+            lastFingerprint = nextFingerprint;
+            baselineLoaded = true;
+            continue;
+          }
+          if (nextFingerprint === lastFingerprint) {
+            continue;
+          }
+          lastFingerprint = nextFingerprint;
+          onChange();
+        } catch {
+          // Ignore watch checks for missing/non-git paths; query refetch remains the fallback.
+        }
+      } while (recheckRequested && !disposed);
+    } finally {
+      checkInFlight = false;
     }
   };
 
@@ -402,33 +475,47 @@ export function watchWorkspaceStatus(
     }
     debounceTimer = setTimeout(() => {
       debounceTimer = null;
-      void runCheck();
+      void runChecks();
     }, WORKSPACE_STATUS_WATCH_DEBOUNCE_MS);
   };
 
-  void runCheck();
-  void (async () => {
-    try {
-      const metadataPaths = await resolveGitMetadataPaths(cwd);
-      if (disposed) {
-        return;
-      }
-      for (const metadataPath of metadataPaths) {
-        if (!(await pathExists(metadataPath))) {
-          continue;
+  void runChecks();
+  try {
+    const workspaceWatcher = watch(
+      cwd,
+      {
+        persistent: false,
+        recursive: true,
+      },
+      (_eventType, filename) => {
+        if (shouldIgnoreWorkspaceWatchFilename(filename)) {
+          return;
         }
-        try {
-          const watcher = watch(metadataPath, { persistent: false }, scheduleCheck);
-          watcher.on("error", scheduleCheck);
-          watchers.push(watcher);
-        } catch {
-          // Ignore unsupported watch targets; other targets and mutation-triggered hints remain.
-        }
+        scheduleCheck();
+      },
+    );
+    workspaceWatcher.on("error", scheduleCheck);
+    watchers.push(workspaceWatcher);
+  } catch {
+    // Ignore unsupported recursive workspace watches; git metadata watches remain.
+  }
+  try {
+    const metadataPaths = resolveGitMetadataWatchPathsSync(cwd);
+    for (const metadataPath of metadataPaths) {
+      if (!existsSync(metadataPath)) {
+        continue;
       }
-    } catch {
-      // Ignore initial watch setup failures; explicit command-triggered refresh remains.
+      try {
+        const watcher = watch(metadataPath, { persistent: false }, scheduleCheck);
+        watcher.on("error", scheduleCheck);
+        watchers.push(watcher);
+      } catch {
+        // Ignore unsupported watch targets; other targets and mutation-triggered hints remain.
+      }
     }
-  })();
+  } catch {
+    // Ignore initial watch setup failures; explicit command-triggered refresh remains.
+  }
 
   return () => {
     disposed = true;
