@@ -244,6 +244,13 @@ async function createSandboxHostThread(
       "Sandbox provisioning requires E2B_API_KEY to be configured",
     );
   }
+  if (!deps.config.githubPat) {
+    throw new ApiError(
+      501,
+      "not_configured",
+      "Sandbox provisioning requires BB_GITHUB_PAT to be configured",
+    );
+  }
 
   const defaultSource = requireSandboxCloneSource(deps, args.request.projectId);
   const hostId = createHostId();

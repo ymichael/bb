@@ -539,7 +539,9 @@ describe("public thread routes", () => {
   });
 
   it("rejects sandbox-host threads for local-path project sources", async () => {
-    const harness = await createTestAppHarness();
+    const harness = await createTestAppHarness({
+      githubPat: "test-github-pat",
+    });
     try {
       const { host } = seedHostSession(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
@@ -694,7 +696,9 @@ describe("public thread routes", () => {
   });
 
   it("cleans up the sandbox host row when provisioning fails", async () => {
-    const harness = await createTestAppHarness();
+    const harness = await createTestAppHarness({
+      githubPat: "test-github-pat",
+    });
     try {
       let sandboxHostId = "";
       provisionHostMock.mockImplementation(async (options: SandboxProvisionCall) => {
@@ -742,7 +746,10 @@ describe("public thread routes", () => {
     "https://0.0.0.0:3000",
     "https://[::1]:3000",
   ])("rejects unreachable sandbox public URLs: %s", async (publicUrl) => {
-    const harness = await createTestAppHarness({ publicUrl });
+    const harness = await createTestAppHarness({
+      githubPat: "test-github-pat",
+      publicUrl,
+    });
     try {
       const { host } = seedHostSession(harness.deps);
       const { project } = createProject(harness.db, harness.hub, {
@@ -776,6 +783,50 @@ describe("public thread routes", () => {
         code: "invalid_request",
         message:
           "Sandbox provisioning requires BB_PUBLIC_URL to be reachable from the internet",
+      });
+      expect(provisionHostMock).not.toHaveBeenCalled();
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("rejects sandbox-host threads when BB_GITHUB_PAT is not configured", async () => {
+    const harness = await createTestAppHarness({
+      githubPat: "",
+    });
+    try {
+      const { host } = seedHostSession(harness.deps);
+      const { project } = createProject(harness.db, harness.hub, {
+        name: "Cloud Sandbox Project",
+        source: {
+          repoUrl: "https://github.com/example/repo.git",
+          type: "github_repo",
+        },
+      });
+
+      const response = await harness.app.request("/api/v1/threads", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          projectId: project.id,
+          providerId: "codex",
+          type: "standard",
+          model: "gpt-5",
+          input: [{ type: "text", text: "Provision a sandbox thread" }],
+          environment: {
+            type: "sandbox-host",
+            sandboxType: "e2b",
+          },
+        }),
+      });
+
+      expect(response.status).toBe(501);
+      await expect(readJson(response)).resolves.toMatchObject({
+        code: "not_configured",
+        message:
+          "Sandbox provisioning requires BB_GITHUB_PAT to be configured",
       });
       expect(provisionHostMock).not.toHaveBeenCalled();
     } finally {
