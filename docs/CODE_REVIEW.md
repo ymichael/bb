@@ -34,6 +34,7 @@ If the work is driven by a plan (in `plans/`), verify. If there is no plan, skip
 - Is the foundation solid, or are we building on something brittle that will cost us later?
 - Are responsibilities clearly separated, or is logic entangled across concerns?
 - Would a new contributor understand *why* this code exists, not just *what* it does?
+- Is any concern being hand-rolled when a well-known, battle-tested library already handles it? Flag it — install and use the library instead.
 - Is complexity abstracted into well-named, well-scoped functions that can be understood and tested independently?
 - Are files a reasonable size, or is there a thousand-line module that no one will want to touch?
 - Are names precise? A function called `process` or `handle` is a smell — what does it *actually* do?
