@@ -108,6 +108,7 @@ export function seedEnvironment(
     workspaceProvisionType?: "unmanaged" | "managed-worktree" | "managed-clone";
     branchName?: string | null;
     defaultBranch?: string | null;
+    mergeBaseBranch?: string | null;
   },
 ) {
   return createEnvironment(deps.db, deps.hub, {
@@ -121,6 +122,7 @@ export function seedEnvironment(
     workspaceProvisionType: args.workspaceProvisionType ?? "unmanaged",
     branchName: args.branchName !== undefined ? args.branchName : "bb/test",
     defaultBranch: args.defaultBranch !== undefined ? args.defaultBranch : "main",
+    mergeBaseBranch: args.mergeBaseBranch ?? null,
   });
 }
 
@@ -133,7 +135,6 @@ export function seedThread(
     status?: "created" | "provisioning" | "idle" | "active" | "error";
     type?: "standard" | "manager";
     title?: string | null;
-    mergeBaseBranch?: string | null;
     parentThreadId?: string | null;
     titleFallback?: string | null;
   },
@@ -146,7 +147,6 @@ export function seedThread(
     type: args.type ?? "standard",
     title: args.title ?? "Test Thread",
     titleFallback: args.titleFallback ?? "Test Thread",
-    mergeBaseBranch: args.mergeBaseBranch !== undefined ? args.mergeBaseBranch : "main",
     parentThreadId: args.parentThreadId ?? null,
   });
 }

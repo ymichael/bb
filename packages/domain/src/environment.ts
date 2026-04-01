@@ -42,6 +42,7 @@ export const environmentSchema = z.object({
   workspaceProvisionType: workspaceProvisionTypeSchema,
   branchName: z.string().nullable(),
   defaultBranch: z.string().nullable(),
+  mergeBaseBranch: z.string().nullable(),
   status: environmentStatusSchema,
   createdAt: z.number(),
   updatedAt: z.number(),

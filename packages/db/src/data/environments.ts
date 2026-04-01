@@ -1,5 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import type {
+  DiscoveredWorkspaceProperties,
+  EnvironmentChangeKind,
   EnvironmentStatus,
   WorkspaceProvisionType,
 } from "@bb/domain";
@@ -18,6 +20,7 @@ export interface CreateEnvironmentInput {
   isWorktree?: boolean;
   branchName?: string | null;
   defaultBranch?: string | null;
+  mergeBaseBranch?: string | null;
   status?: EnvironmentStatus;
 }
 
@@ -39,6 +42,7 @@ export function createEnvironment(
       isWorktree: input.isWorktree ?? false,
       branchName: input.branchName ?? null,
       defaultBranch: input.defaultBranch ?? null,
+      mergeBaseBranch: input.mergeBaseBranch ?? null,
       workspaceProvisionType: input.workspaceProvisionType,
       status: input.status ?? "provisioning",
       createdAt: now,
@@ -81,20 +85,72 @@ export function listEnvironments(db: DbConnection, projectId?: string) {
   return db.select().from(environments).all();
 }
 
-export interface UpdateEnvironmentInput {
-  path?: string | null;
-  status?: EnvironmentStatus;
-  isGitRepo?: boolean;
-  isWorktree?: boolean;
+interface EnvironmentUpdateColumns {
   branchName?: string | null;
   defaultBranch?: string | null;
+  isGitRepo?: boolean;
+  isWorktree?: boolean;
+  mergeBaseBranch?: string | null;
+  path?: string | null;
+  status?: EnvironmentStatus;
 }
 
-export function updateEnvironment(
+export interface ApplyProvisionedEnvironmentInput extends DiscoveredWorkspaceProperties {
+  status: EnvironmentStatus;
+}
+
+export interface UpdateEnvironmentMetadataInput {
+  mergeBaseBranch: string | null;
+}
+
+export interface UpdateEnvironmentStatusInput {
+  status: EnvironmentStatus;
+}
+
+function buildEnvironmentUpdateSet(input: EnvironmentUpdateColumns): EnvironmentUpdateColumns {
+  const set: EnvironmentUpdateColumns = {};
+  if ("path" in input) set.path = input.path;
+  if ("status" in input) set.status = input.status;
+  if ("isGitRepo" in input) set.isGitRepo = input.isGitRepo;
+  if ("isWorktree" in input) set.isWorktree = input.isWorktree;
+  if ("branchName" in input) set.branchName = input.branchName;
+  if ("defaultBranch" in input) set.defaultBranch = input.defaultBranch;
+  if ("mergeBaseBranch" in input) set.mergeBaseBranch = input.mergeBaseBranch;
+  return set;
+}
+
+function getEnvironmentChangeKinds(args: {
+  existing: typeof environments.$inferSelect;
+  input: EnvironmentUpdateColumns;
+  updated: typeof environments.$inferSelect;
+}): EnvironmentChangeKind[] {
+  const changes: EnvironmentChangeKind[] = [];
+
+  if ("status" in args.input && args.updated.status !== args.existing.status) {
+    changes.push("status-changed");
+  }
+
+  const metadataChanged =
+    ("path" in args.input && args.updated.path !== args.existing.path) ||
+    ("isGitRepo" in args.input && args.updated.isGitRepo !== args.existing.isGitRepo) ||
+    ("isWorktree" in args.input && args.updated.isWorktree !== args.existing.isWorktree) ||
+    ("branchName" in args.input && args.updated.branchName !== args.existing.branchName) ||
+    ("defaultBranch" in args.input && args.updated.defaultBranch !== args.existing.defaultBranch) ||
+    ("mergeBaseBranch" in args.input &&
+      args.updated.mergeBaseBranch !== args.existing.mergeBaseBranch);
+
+  if (metadataChanged) {
+    changes.push("metadata-changed");
+  }
+
+  return changes;
+}
+
+function updateEnvironmentRecord(
   db: DbConnection,
   notifier: DbNotifier,
   id: string,
-  input: UpdateEnvironmentInput,
+  input: EnvironmentUpdateColumns,
 ) {
   const existing = db
     .select()
@@ -104,17 +160,65 @@ export function updateEnvironment(
   if (!existing) return null;
 
   const now = Date.now();
+  const set = buildEnvironmentUpdateSet(input);
   const updated = db.update(environments)
-    .set({ ...input, updatedAt: now })
+    .set({ ...set, updatedAt: now })
     .where(eq(environments.id, id))
     .returning()
     .get();
 
-  if (updated && input.status && input.status !== existing.status) {
-    notifier.notifyEnvironment(id, ["status-changed"]);
+  if (!updated) {
+    return null;
   }
 
-  return updated ?? null;
+  const changes = getEnvironmentChangeKinds({
+    existing,
+    input: set,
+    updated,
+  });
+  if (changes.length > 0) {
+    notifier.notifyEnvironment(id, changes);
+  }
+
+  return updated;
+}
+
+export function applyProvisionedEnvironment(
+  db: DbConnection,
+  notifier: DbNotifier,
+  id: string,
+  input: ApplyProvisionedEnvironmentInput,
+) {
+  return updateEnvironmentRecord(db, notifier, id, {
+    path: input.path,
+    status: input.status,
+    isGitRepo: input.isGitRepo,
+    isWorktree: input.isWorktree,
+    branchName: input.branchName,
+    defaultBranch: input.defaultBranch,
+  });
+}
+
+export function updateEnvironmentMetadata(
+  db: DbConnection,
+  notifier: DbNotifier,
+  id: string,
+  input: UpdateEnvironmentMetadataInput,
+) {
+  return updateEnvironmentRecord(db, notifier, id, {
+    mergeBaseBranch: input.mergeBaseBranch,
+  });
+}
+
+export function updateEnvironmentStatus(
+  db: DbConnection,
+  notifier: DbNotifier,
+  id: string,
+  input: UpdateEnvironmentStatusInput,
+) {
+  return updateEnvironmentRecord(db, notifier, id, {
+    status: input.status,
+  });
 }
 
 export function deleteEnvironment(

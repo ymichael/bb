@@ -25,7 +25,6 @@ export interface CreateThreadInput {
   title?: string | null;
   titleFallback?: string | null;
   status?: ThreadStatus;
-  mergeBaseBranch?: string | null;
   parentThreadId?: string | null;
 }
 
@@ -46,7 +45,6 @@ export function createThread(
       title: input.title ?? null,
       titleFallback: input.titleFallback ?? null,
       status: input.status ?? "created",
-      mergeBaseBranch: input.mergeBaseBranch ?? null,
       parentThreadId: input.parentThreadId ?? null,
       createdAt: now,
       updatedAt: now,
@@ -97,7 +95,6 @@ export function listThreads(
 export interface UpdateThreadInput {
   environmentId?: string | null;
   lastReadAt?: number | null;
-  mergeBaseBranch?: string | null;
   parentThreadId?: string | null;
   title?: string | null;
   titleFallback?: string | null;
@@ -119,7 +116,6 @@ export function updateThread(
   if ("titleFallback" in input) set.titleFallback = input.titleFallback;
   if ("environmentId" in input) set.environmentId = input.environmentId;
   if ("lastReadAt" in input) set.lastReadAt = input.lastReadAt;
-  if ("mergeBaseBranch" in input) set.mergeBaseBranch = input.mergeBaseBranch;
   if ("parentThreadId" in input) set.parentThreadId = input.parentThreadId;
 
   const updated = db.update(threads)

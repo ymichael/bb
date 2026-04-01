@@ -15,6 +15,7 @@ import {
   environmentActionRequestSchema,
   sendMessageRequestSchema,
   timelineToolDetailsResponseSchema,
+  updateEnvironmentRequestSchema,
 } from "../src/index.js";
 
 const INTENTIONAL_OPTIONAL_SERVER_FIELDS: Record<string, string> = {
@@ -59,7 +60,6 @@ const INTENTIONAL_OPTIONAL_SERVER_FIELDS: Record<string, string> = {
   "updateProjectSourceRequestSchema.isDefault": "Project source PATCH requests omit isDefault when not changing the default source.",
   "updateProjectSourceRequestSchema.path": "Project source PATCH requests omit path when leaving it unchanged.",
   "updateProjectSourceRequestSchema.repoUrl": "Project source PATCH requests omit repo URL when leaving it unchanged.",
-  "updateThreadRequestSchema.mergeBaseBranch": "Thread PATCH requests omit mergeBaseBranch when leaving it unchanged or use null to clear it.",
   "updateThreadRequestSchema.parentThreadId": "Thread PATCH requests omit parentThreadId when leaving it unchanged or use null to clear it.",
   "updateThreadRequestSchema.title": "Thread PATCH requests omit title when leaving it unchanged or use null to clear it.",
   "uploadedPromptAttachmentSchema.mimeType": "Uploaded attachments may omit mime type when the client could not determine one.",
@@ -95,11 +95,24 @@ describe("server-contract canonical schemas", () => {
     expect(
       environmentActionRequestSchema.parse({
         action: "commit",
-        threadId: "thr_123",
       }),
     ).toMatchObject({
       action: "commit",
-      threadId: "thr_123",
+    });
+
+    expect(() =>
+      environmentActionRequestSchema.parse({
+        action: "commit",
+        threadId: "thr_123",
+      }),
+    ).toThrow();
+
+    expect(
+      updateEnvironmentRequestSchema.parse({
+        mergeBaseBranch: null,
+      }),
+    ).toEqual({
+      mergeBaseBranch: null,
     });
 
     expect(

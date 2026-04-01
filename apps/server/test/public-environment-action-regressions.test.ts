@@ -7,7 +7,6 @@ import {
   seedEnvironment,
   seedHostSession,
   seedProjectWithSource,
-  seedThread,
 } from "./helpers/seed.js";
 import { createTestAppHarness } from "./helpers/test-app.js";
 
@@ -143,7 +142,6 @@ describe("public environment action regressions", () => {
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
             action: "squash_merge",
-            threadId: "thread_missing",
           }),
         },
       );
@@ -156,7 +154,7 @@ describe("public environment action regressions", () => {
     }
   });
 
-  it("rejects commit with a thread from a different environment", async () => {
+  it("rejects legacy environment action payloads that still send threadId", async () => {
     const harness = await createTestAppHarness();
     try {
       const { host } = seedHostSession(harness.deps, { id: "host-thread-target" });
@@ -168,15 +166,6 @@ describe("public environment action regressions", () => {
         workspaceProvisionType: "managed-worktree",
         path: "/tmp/thread-target",
       });
-      const otherEnvironment = seedEnvironment(harness.deps, {
-        hostId: host.id,
-        projectId: project.id,
-        path: "/tmp/other-environment",
-      });
-      const mismatchedThread = seedThread(harness.deps, {
-        projectId: project.id,
-        environmentId: otherEnvironment.id,
-      });
 
       const mismatchedResponse = await harness.app.request(
         `/api/v1/environments/${environment.id}/actions`,
@@ -185,11 +174,11 @@ describe("public environment action regressions", () => {
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
             action: "commit",
-            threadId: mismatchedThread.id,
+            threadId: "thread-legacy",
           }),
         },
       );
-      expect(mismatchedResponse.status).toBe(409);
+      expect(mismatchedResponse.status).toBe(400);
       await expect(readJson(mismatchedResponse)).resolves.toMatchObject({
         code: "invalid_request",
       });
@@ -213,10 +202,6 @@ describe("public environment action regressions", () => {
         workspaceProvisionType: "managed-worktree",
         path: "/tmp/demote-guard-project/.bb-worktrees/missing-env-branch",
         branchName: null,
-      });
-      const threadMissingEnvBranch = seedThread(harness.deps, {
-        projectId: project.id,
-        environmentId: missingEnvBranch.id,
         mergeBaseBranch: "main",
       });
 
@@ -225,10 +210,7 @@ describe("public environment action regressions", () => {
         {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            action: "demote",
-            threadId: threadMissingEnvBranch.id,
-          }),
+          body: JSON.stringify({ action: "demote" }),
         },
       );
       expect(missingEnvBranchResponse.status).toBe(409);
@@ -244,10 +226,7 @@ describe("public environment action regressions", () => {
         workspaceProvisionType: "managed-worktree",
         path: "/tmp/demote-guard-project/.bb-worktrees/missing-merge-base",
         branchName: "bb/demote-guard",
-      });
-      const threadMissingMergeBase = seedThread(harness.deps, {
-        projectId: project.id,
-        environmentId: missingMergeBase.id,
+        defaultBranch: null,
         mergeBaseBranch: null,
       });
 
@@ -256,10 +235,7 @@ describe("public environment action regressions", () => {
         {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            action: "demote",
-            threadId: threadMissingMergeBase.id,
-          }),
+          body: JSON.stringify({ action: "demote" }),
         },
       );
       expect(missingMergeBaseResponse.status).toBe(409);

@@ -360,11 +360,9 @@ describe.sequential("fake provider multi-thread integration", () => {
       await Promise.all([
         runEnvironmentAction(harness.api, threadA.environment.id, {
           action: "commit",
-          threadId: threadA.thread.id,
         }),
         runEnvironmentAction(harness.api, threadB.environment.id, {
           action: "commit",
-          threadId: threadB.thread.id,
         }),
       ]);
 
@@ -581,11 +579,9 @@ describe.sequential("fake provider multi-thread integration", () => {
       await Promise.all([
         runEnvironmentAction(harnessA.api, threadA.environment.id, {
           action: "commit",
-          threadId: threadA.thread.id,
         }),
         runEnvironmentAction(harnessB.api, threadB.environment.id, {
           action: "commit",
-          threadId: threadB.thread.id,
         }),
       ]);
 

@@ -1,4 +1,5 @@
 import { Command } from "commander";
+import type { Environment } from "@bb/domain";
 import type {
   CommitActionResponse,
   SquashMergeActionResponse,
@@ -13,23 +14,25 @@ import {
 
 interface EnvironmentCommitCommandOptions {
   json?: boolean;
-  thread: string;
+}
+
+interface EnvironmentUpdateCommandOptions {
+  clearMergeBaseBranch?: boolean;
+  json?: boolean;
+  mergeBaseBranch?: string;
 }
 
 interface EnvironmentSquashMergeCommandOptions {
   mergeBaseBranch: string;
   json?: boolean;
-  thread: string;
 }
 
 interface EnvironmentPromoteCommandOptions {
   json?: boolean;
-  thread: string;
 }
 
 interface EnvironmentDemoteCommandOptions {
   json?: boolean;
-  thread: string;
 }
 
 export function registerEnvironmentCommands(
@@ -41,9 +44,47 @@ export function registerEnvironmentCommands(
     .description("Inspect and operate on first-class environments");
 
   environment
+    .command("update <id>")
+    .description("Update environment metadata")
+    .option("--merge-base-branch <branch>", "Set the merge-base branch override")
+    .option("--clear-merge-base-branch", "Clear the merge-base branch override")
+    .option("--json", "Print machine-readable JSON output")
+    .action(action(async (id: string, opts: EnvironmentUpdateCommandOptions) => {
+      const client = createClient(getUrl());
+      if (opts.mergeBaseBranch && opts.clearMergeBaseBranch) {
+        throw new Error(
+          "Cannot combine --merge-base-branch with --clear-merge-base-branch.",
+        );
+      }
+      if (!opts.mergeBaseBranch && !opts.clearMergeBaseBranch) {
+        throw new Error(
+          "No changes requested. Provide --merge-base-branch or --clear-merge-base-branch.",
+        );
+      }
+
+      const environment = await unwrap<Environment>(
+        client.api.v1.environments[":id"].$patch({
+          param: { id },
+          json: {
+            mergeBaseBranch: opts.clearMergeBaseBranch
+              ? null
+              : opts.mergeBaseBranch ?? null,
+          },
+        }),
+      );
+
+      if (outputJson(opts, environment)) return;
+      console.log(`Environment ${environment.id} updated`);
+      console.log(
+        environment.mergeBaseBranch
+          ? `Merge base branch: ${environment.mergeBaseBranch}`
+          : "Merge base branch cleared",
+      );
+    }));
+
+  environment
     .command("commit <id>")
     .description("Commit changes in an environment")
-    .requiredOption("--thread <threadId>", "Thread to act on")
     .option("--json", "Print machine-readable JSON output")
     .action(action(async (id: string, opts: EnvironmentCommitCommandOptions) => {
       const client = createClient(getUrl());
@@ -54,7 +95,6 @@ export function registerEnvironmentCommands(
             param: { id },
             json: {
               action: "commit",
-              threadId: opts.thread,
             },
           }),
         );
@@ -68,7 +108,6 @@ export function registerEnvironmentCommands(
   environment
     .command("squash-merge <id>")
     .description("Squash-merge changes in an environment")
-    .requiredOption("--thread <threadId>", "Thread to act on")
     .requiredOption("--merge-base-branch <branch>", "Merge-base branch")
     .option("--json", "Print machine-readable JSON output")
     .action(action(async (
@@ -81,7 +120,6 @@ export function registerEnvironmentCommands(
           param: { id },
           json: {
             action: "squash_merge",
-            threadId: opts.thread,
             options: {
               mergeBaseBranch: opts.mergeBaseBranch,
             },
@@ -95,7 +133,6 @@ export function registerEnvironmentCommands(
   environment
     .command("promote <id>")
     .description("Promote an environment into the primary checkout")
-    .requiredOption("--thread <threadId>", "Thread to act on")
     .option("--json", "Print machine-readable JSON output")
     .action(action(async (id: string, opts: EnvironmentPromoteCommandOptions) => {
       const client = createClient(getUrl());
@@ -104,7 +141,7 @@ export function registerEnvironmentCommands(
         result = await unwrap<{ ok: true; action: "promote"; message: string }>(
           client.api.v1.environments[":id"].actions.$post({
             param: { id },
-            json: { action: "promote", threadId: opts.thread },
+            json: { action: "promote" },
           }),
         );
       } catch (err: unknown) {
@@ -117,14 +154,13 @@ export function registerEnvironmentCommands(
   environment
     .command("demote <id>")
     .description("Demote an environment from the primary checkout")
-    .requiredOption("--thread <threadId>", "Thread to act on")
     .option("--json", "Print machine-readable JSON output")
     .action(action(async (id: string, opts: EnvironmentDemoteCommandOptions) => {
       const client = createClient(getUrl());
       const result = await unwrap<{ ok: true; action: "demote"; message: string }>(
         client.api.v1.environments[":id"].actions.$post({
           param: { id },
-          json: { action: "demote", threadId: opts.thread },
+          json: { action: "demote" },
         }),
       );
       if (outputJson(opts, result)) return;

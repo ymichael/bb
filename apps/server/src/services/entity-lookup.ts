@@ -145,22 +145,6 @@ export function requireThreadEnvironment(
   };
 }
 
-export function requireThreadInEnvironment(
-  db: DbConnection,
-  environmentId: string,
-  threadId: string,
-): Thread {
-  const thread = requireThread(db, threadId);
-  if (thread.environmentId !== environmentId) {
-    throw new ApiError(
-      409,
-      "invalid_request",
-      "Thread does not belong to this environment",
-    );
-  }
-  return thread;
-}
-
 export function requireDefaultConnectedHostId(db: DbConnection): string {
   const session = db
     .select({ hostId: hostDaemonSessions.hostId })

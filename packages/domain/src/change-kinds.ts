@@ -28,6 +28,7 @@ export type ProjectChangeKind = (typeof PROJECT_CHANGE_KINDS)[number];
 export const ENVIRONMENT_CHANGE_KINDS = [
   "environment-created",
   "environment-deleted",
+  "metadata-changed",
   "status-changed",
   "work-status-changed",
 ] as const;

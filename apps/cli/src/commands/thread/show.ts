@@ -125,10 +125,11 @@ export function registerShowCommand(
         return environment;
       };
       const requireMergeBaseBranch = async (override?: string) => {
+        const environment = await getEnvironment();
         const mergeBaseBranch =
           override ??
-          thread.mergeBaseBranch ??
-          (await getEnvironment())?.defaultBranch ??
+          environment?.mergeBaseBranch ??
+          environment?.defaultBranch ??
           undefined;
         if (!mergeBaseBranch) {
           throw new Error("Thread environment does not have a merge base branch");

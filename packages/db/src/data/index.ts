@@ -39,16 +39,20 @@ export type {
 } from "./threads.js";
 
 export {
+  applyProvisionedEnvironment,
   createEnvironment,
   getEnvironment,
   findEnvironmentByHostPath,
   listEnvironments,
-  updateEnvironment,
+  updateEnvironmentMetadata,
+  updateEnvironmentStatus,
   deleteEnvironment,
 } from "./environments.js";
 export type {
+  ApplyProvisionedEnvironmentInput,
   CreateEnvironmentInput,
-  UpdateEnvironmentInput,
+  UpdateEnvironmentMetadataInput,
+  UpdateEnvironmentStatusInput,
 } from "./environments.js";
 
 export { upsertHost, getHost, listHosts } from "./hosts.js";

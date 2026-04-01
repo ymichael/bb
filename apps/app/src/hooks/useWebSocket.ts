@@ -6,6 +6,7 @@ import {
 import type { Thread } from "@bb/domain";
 import type { ThreadChangeKind } from "@bb/domain";
 import { wsManager } from "../lib/ws";
+import { getEnvironmentStateInvalidationQueryKeys } from "./useApi";
 
 const INVALIDATION_DEBOUNCE_MS = 250;
 // Keep realtime thread updates responsive while still coalescing bursts.
@@ -243,8 +244,11 @@ export function useWebSocket(): void {
           break;
         case "environment":
           if (message.id) {
-            queryClient.invalidateQueries({ queryKey: ["environment", message.id] });
-            queryClient.invalidateQueries({ queryKey: ["environmentWorkStatus", message.id] });
+            for (const queryKey of getEnvironmentStateInvalidationQueryKeys({
+              environmentId: message.id,
+            })) {
+              queryClient.invalidateQueries({ queryKey });
+            }
           }
           break;
         case "host":

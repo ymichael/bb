@@ -15,7 +15,6 @@ interface ThreadUpdateCommandOptions {
   self?: boolean;
   json?: boolean;
   title?: string;
-  mergeBaseBranch?: string;
   parentThread?: string;
   clearParentThread?: boolean;
 }
@@ -59,7 +58,6 @@ interface PostThreadMessageArgs {
 
 interface ThreadUpdateBody {
   title?: string;
-  mergeBaseBranch?: string;
   parentThreadId?: string | null;
 }
 
@@ -73,7 +71,6 @@ export function registerActionsCommands(
     .option("--self", "Target the current thread (from BB_THREAD_ID)")
     .option("--json", "Print machine-readable JSON output")
     .option("--title <title>", "Set the thread title")
-    .option("--merge-base-branch <branch>", "Set the merge base branch")
     .option("--parent-thread <id>", "Set the managing parent thread id")
     .option("--clear-parent-thread", "Clear the managing parent thread id")
     .action(action(async (id: string | undefined, opts: ThreadUpdateCommandOptions) => {
@@ -86,11 +83,10 @@ export function registerActionsCommands(
       if (
         !opts.parentThread &&
         !opts.clearParentThread &&
-        !opts.title &&
-        !opts.mergeBaseBranch
+        !opts.title
       ) {
         throw new Error(
-          "No changes requested. Provide --title, --merge-base-branch, --parent-thread, or --clear-parent-thread.",
+          "No changes requested. Provide --title, --parent-thread, or --clear-parent-thread.",
         );
       }
 
@@ -98,9 +94,6 @@ export function registerActionsCommands(
       const body: ThreadUpdateBody = {};
       if (opts.title) {
         body.title = opts.title;
-      }
-      if (opts.mergeBaseBranch) {
-        body.mergeBaseBranch = opts.mergeBaseBranch;
       }
       if (opts.parentThread) {
         body.parentThreadId = opts.parentThread;
@@ -118,11 +111,6 @@ export function registerActionsCommands(
       console.log(`Thread ${thread.id} updated`);
       if (opts.title) {
         console.log(`Title: ${thread.title ?? "<untitled>"}`);
-      }
-      if (opts.mergeBaseBranch) {
-        console.log(
-          `Merge base branch: ${thread.mergeBaseBranch ?? opts.mergeBaseBranch}`,
-        );
       }
       if (opts.parentThread || opts.clearParentThread) {
         console.log(

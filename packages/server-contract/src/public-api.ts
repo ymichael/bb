@@ -54,6 +54,7 @@ import type {
   ThreadTimelineResponse,
   TimelineToolDetailsQuery,
   TimelineToolDetailsResponse,
+  UpdateEnvironmentRequest,
   UpdateProjectRequest,
   UpdateProjectSourceRequest,
   UpdateThreadRequest,
@@ -139,6 +140,7 @@ export type PublicApiSchema = {
     $get:
       | Endpoint<PathId, Environment, 200>
       | Endpoint<PathId, ApiError, 404>;
+    $patch: Endpoint<PathId & { json: UpdateEnvironmentRequest }, Environment>;
   };
   "/environments/:id/status": {
     /** Get workspace status (git state) for an environment. Proxies to `workspace.status`. */

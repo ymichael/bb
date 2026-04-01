@@ -23,6 +23,7 @@ import type {
   ProjectResponse,
   SendMessageRequest,
   ThreadTimelineResponse,
+  UpdateEnvironmentRequest,
   UpdateThreadRequest,
 } from "@bb/server-contract";
 import {
@@ -103,10 +104,11 @@ async function requireMergeBaseBranch(
   environmentId: string,
 ): Promise<string> {
   const environment = await getEnvironment(api, environmentId);
-  if (!environment.defaultBranch) {
+  const mergeBaseBranch = environment.mergeBaseBranch ?? environment.defaultBranch;
+  if (!mergeBaseBranch) {
     throw new Error(`Environment ${environmentId} has no default branch`);
   }
-  return environment.defaultBranch;
+  return mergeBaseBranch;
 }
 
 export async function archiveThread(
@@ -357,6 +359,19 @@ export async function unarchiveThread(
     param: { id: threadId },
   });
   await expectStatus(response, 200, `unarchive thread ${threadId}`);
+}
+
+export async function updateEnvironment(
+  api: PublicApiClient,
+  environmentId: string,
+  request: UpdateEnvironmentRequest,
+): Promise<Environment> {
+  const response = await api.environments[":id"].$patch({
+    param: { id: environmentId },
+    json: request,
+  });
+  await expectStatus(response, 200, `update environment ${environmentId}`);
+  return environmentSchema.parse(await response.json());
 }
 
 export async function updateThread(

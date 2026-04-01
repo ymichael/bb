@@ -4,7 +4,7 @@ import {
   getEnvironment,
   getActiveSession,
   queueCommand,
-  updateEnvironment,
+  updateEnvironmentStatus,
 } from "@bb/db";
 import { threads } from "@bb/db";
 import type { AppDeps } from "../types.js";
@@ -64,7 +64,7 @@ export async function maybeCleanupEnvironment(
     return;
   }
 
-  updateEnvironment(deps.db, deps.hub, environmentId, {
+  updateEnvironmentStatus(deps.db, deps.hub, environmentId, {
     status: "destroying",
   });
 

@@ -1,8 +1,10 @@
+import { updateEnvironmentMetadata } from "@bb/db";
 import { hostDaemonCommandResultSchemaByType } from "@bb/host-daemon-contract";
 import {
   environmentActionRequestSchema,
   environmentDiffQuerySchema,
   environmentStatusQuerySchema,
+  updateEnvironmentRequestSchema,
   typedRoutes,
   type EnvironmentDiffQuery,
   type PublicApiSchema,
@@ -14,7 +16,6 @@ import { ApiError } from "../errors.js";
 import {
   requireEnvironment,
   requireReadyEnvironment,
-  requireThreadInEnvironment,
 } from "../services/entity-lookup.js";
 import { queueCommandAndWait } from "../services/command-wait.js";
 import { requireSourceForHost } from "../services/thread-create-helpers.js";
@@ -55,11 +56,27 @@ function toWorkspaceDiffTarget(query: EnvironmentDiffQuery) {
 }
 
 export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
-  const { get, post } = typedRoutes<PublicApiSchema>(app, { onValidationError: (msg) => new ApiError(400, "invalid_request", msg) });
+  const { get, patch, post } = typedRoutes<PublicApiSchema>(app, {
+    onValidationError: (msg) => new ApiError(400, "invalid_request", msg),
+  });
 
   get("/environments/:id", (context) =>
     context.json(requireEnvironment(deps.db, context.req.param("id"))),
   );
+
+  patch("/environments/:id", updateEnvironmentRequestSchema, (context, payload) => {
+    const environment = requireEnvironment(deps.db, context.req.param("id"));
+    const updated = updateEnvironmentMetadata(
+      deps.db,
+      deps.hub,
+      environment.id,
+      payload,
+    );
+    if (!updated) {
+      throw new ApiError(404, "environment_not_found", "Environment not found");
+    }
+    return context.json(updated);
+  });
 
   get("/environments/:id/status", environmentStatusQuerySchema, async (context, query) => {
     const environment = requireReadyEnvironment(deps.db, context.req.param("id"));
@@ -123,11 +140,6 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
 
   post("/environments/:id/actions", environmentActionRequestSchema, async (context, payload) => {
     const environment = requireReadyEnvironment(deps.db, context.req.param("id"));
-    const actingThread = requireThreadInEnvironment(
-      deps.db,
-      environment.id,
-      payload.threadId,
-    );
 
     switch (payload.action) {
       case "commit": {
@@ -301,7 +313,8 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
           environment.projectId,
           environment.hostId,
         );
-        if (!environment.branchName || !actingThread.mergeBaseBranch) {
+        const mergeBaseBranch = environment.mergeBaseBranch ?? environment.defaultBranch;
+        if (!environment.branchName || !mergeBaseBranch) {
           throw new ApiError(409, "invalid_request", "Environment cannot be demoted");
         }
         await queueCommandAndWait(deps, {
@@ -315,7 +328,7 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
               workspaceProvisionType: environment.workspaceProvisionType,
             },
             primaryPath: source.path,
-            defaultBranch: actingThread.mergeBaseBranch,
+            defaultBranch: mergeBaseBranch,
             envBranch: environment.branchName,
           },
         });

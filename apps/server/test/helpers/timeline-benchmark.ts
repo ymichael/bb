@@ -130,7 +130,6 @@ function createTimelineBenchmarkScenario(
     type: "standard",
     title: fixture.taskId,
     titleFallback: fixture.taskId,
-    mergeBaseBranch: "main",
     parentThreadId: null,
   });
 

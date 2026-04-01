@@ -72,12 +72,12 @@ bb thread delete <thread-id>          # Delete permanently
 Operations:
 
 ```
-bb environment commit <environment-id> --thread <thread-id>            # Request an agent-driven commit
-bb environment commit <environment-id> --self                          # Commit using the current thread as initiator
-bb environment squash-merge <environment-id> --thread <thread-id>      # Request an agent-driven squash merge
-bb environment squash-merge <environment-id> --self                    # Squash-merge using the current thread as initiator
+bb environment update <environment-id> --merge-base-branch <branch>   # Set the environment merge-base override
+bb environment update <environment-id> --clear-merge-base-branch      # Clear the environment merge-base override
+bb environment commit <environment-id>                                 # Create a commit in the environment
+bb environment squash-merge <environment-id> --merge-base-branch <branch>  # Squash-merge the environment into the target branch
 bb environment promote <environment-id>               # Promote an environment to primary checkout
-bb environment demote [environment-id]                # Demote the active primary-checkout environment
+bb environment demote <environment-id>                # Demote an environment from the primary checkout
 bb environment promote-status --project <project-id>  # Show the active primary-checkout environment
 ```
 

@@ -213,8 +213,6 @@ describe("public thread routes", () => {
       expect(queued.command).toHaveProperty("targetPath");
       expect(queued.command).toHaveProperty("branchName");
 
-      const thread = getThread(harness.db, createdThread.id);
-      expect(thread?.mergeBaseBranch).toBeNull();
     } finally {
       await repo.cleanup();
       await harness.cleanup();
@@ -1227,7 +1225,6 @@ describe("public thread routes", () => {
         environmentId: environment.id,
         providerId: "codex",
         status: "idle",
-        mergeBaseBranch: null,
         title: "Non-git thread",
         titleFallback: "Non-git thread",
       });

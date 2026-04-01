@@ -25,7 +25,7 @@ import {
   sendTextMessage,
   stopThread,
   unarchiveThread,
-  updateThread,
+  updateEnvironment,
 } from "../helpers/api.js";
 import {
   waitForCommand,
@@ -405,7 +405,7 @@ describe.sequential("fake provider smoke integration", () => {
   it("commits dirty workspace changes through the environment actions route", () =>
     withHarness(async (harness) => {
       const project = await createProjectFixture(harness, "Workspace Commit Smoke");
-      const { environment, thread } = await createReadyThread(harness, {
+      const { environment } = await createReadyThread(harness, {
         projectId: project.id,
         workspace: {
           type: "unmanaged",
@@ -424,7 +424,6 @@ describe.sequential("fake provider smoke integration", () => {
 
       const result = await runEnvironmentAction(harness.api, environment.id, {
         action: "commit",
-        threadId: thread.id,
       });
       expect(result.action).toBe("commit");
       if (result.action !== "commit") {
@@ -445,13 +444,13 @@ describe.sequential("fake provider smoke integration", () => {
   it("promotes and demotes a managed worktree after committing changes", () =>
     withHarness(async (harness) => {
       const project = await createProjectFixture(harness, "Promote Smoke");
-      const { environment, thread } = await createReadyThread(harness, {
+      const { environment } = await createReadyThread(harness, {
         projectId: project.id,
         workspace: { type: "managed-worktree" },
       });
 
       const workspacePath = environment.path ?? "";
-      await updateThread(harness.api, thread.id, {
+      await updateEnvironment(harness.api, environment.id, {
         mergeBaseBranch: "main",
       });
       await createTestFile({
@@ -461,11 +460,9 @@ describe.sequential("fake provider smoke integration", () => {
 
       await runEnvironmentAction(harness.api, environment.id, {
         action: "commit",
-        threadId: thread.id,
       });
       await runEnvironmentAction(harness.api, environment.id, {
         action: "promote",
-        threadId: thread.id,
       });
 
       const promotedHead = await runGit({
@@ -476,7 +473,6 @@ describe.sequential("fake provider smoke integration", () => {
 
       await runEnvironmentAction(harness.api, environment.id, {
         action: "demote",
-        threadId: thread.id,
       });
 
       const sourceBranch = await runGit({

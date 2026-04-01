@@ -43,7 +43,7 @@ interface ThreadGitStatusDisplay {
 
 interface ThreadDetailMetadataProps {
   canAssignToManager: boolean;
-  canSelectThreadMergeBase: boolean;
+  canSelectMergeBase: boolean;
   canTakeOverThread: boolean;
   isLoadingMergeBaseBranchOptions: boolean;
   isManagerThread: boolean;
@@ -58,7 +58,7 @@ interface ThreadDetailMetadataProps {
   projectId: string;
   selectedManagerOptionLabel?: string;
   showThreadChangedFiles: boolean;
-  showThreadMergeBase: boolean;
+  showMergeBase: boolean;
   showWorkspaceStatus: boolean;
   thread: Thread;
   threadBranchName?: string;
@@ -66,8 +66,8 @@ interface ThreadDetailMetadataProps {
   threadEnvironmentValue?: ReactNode;
   threadGitStatusDisplay: ThreadGitStatusDisplay;
   threadGitStatusLabelClass: string;
-  threadMergeBaseBranch?: string;
-  threadMergeBaseCandidates: readonly string[];
+  mergeBaseBranch?: string;
+  mergeBaseCandidates: readonly string[];
   unarchivePending: boolean;
   updateThreadPending: boolean;
   workspaceStatusFiles?: ComponentProps<typeof WorkspaceChangesList>["files"];
@@ -195,7 +195,7 @@ function ThreadManagerSelector({
 
 function ThreadMetadataContent({
   canAssignToManager,
-  canSelectThreadMergeBase,
+  canSelectMergeBase,
   canTakeOverThread,
   isLoadingMergeBaseBranchOptions,
   isManagerThread,
@@ -210,7 +210,7 @@ function ThreadMetadataContent({
   projectId,
   selectedManagerOptionLabel,
   showThreadChangedFiles,
-  showThreadMergeBase,
+  showMergeBase,
   showWorkspaceStatus,
   thread,
   threadBranchName,
@@ -218,8 +218,8 @@ function ThreadMetadataContent({
   threadEnvironmentValue,
   threadGitStatusDisplay,
   threadGitStatusLabelClass,
-  threadMergeBaseBranch,
-  threadMergeBaseCandidates,
+  mergeBaseBranch,
+  mergeBaseCandidates,
   unarchivePending,
   updateThreadPending,
   workspaceStatusFiles,
@@ -274,15 +274,15 @@ function ThreadMetadataContent({
           </button>
         </DetailRow>
       ) : null}
-      {!isManagerThread && showThreadMergeBase ? (
+      {!isManagerThread && showMergeBase ? (
         <DetailRow
           label="Merge base"
           valueClassName="min-w-0 truncate"
         >
-          {canSelectThreadMergeBase && threadMergeBaseBranch ? (
+          {canSelectMergeBase && mergeBaseBranch ? (
             <MergeBaseBranchPicker
-              value={threadMergeBaseBranch}
-              options={threadMergeBaseCandidates}
+              value={mergeBaseBranch}
+              options={mergeBaseCandidates}
               variant="minimal"
               loading={isLoadingMergeBaseBranchOptions}
               onChange={onMergeBaseBranchChange}
@@ -290,7 +290,7 @@ function ThreadMetadataContent({
               className="max-w-full text-foreground"
             />
           ) : (
-            threadMergeBaseBranch
+            mergeBaseBranch
           )}
         </DetailRow>
       ) : null}

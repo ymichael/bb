@@ -20,6 +20,7 @@ import {
   useThreadDefaultExecutionOptions,
   useThreadDrafts,
   useThreads,
+  useUpdateEnvironment,
   useUpdateThread,
   useUploadPromptAttachment,
 } from "../hooks/useApi";
@@ -72,7 +73,7 @@ import { ThreadFollowUpComposer } from "./ThreadFollowUpComposer";
 import { ThreadDetailSecondaryContent } from "./ThreadDetailSecondaryContent";
 import { useThreadStorageViewer } from "./useThreadStorageViewer";
 import { useThreadFollowUpTracking } from "./useThreadFollowUpTracking";
-import { useThreadMergeBase } from "./useThreadMergeBase";
+import { useEnvironmentMergeBase } from "./useEnvironmentMergeBase";
 import { useThreadReadTracking } from "./useThreadReadTracking";
 import { toast } from "sonner";
 
@@ -114,7 +115,6 @@ function buildAskAgentInputForGitOperation(args: {
           text: buildSquashMergeConflictFollowUpInstruction(
             {
               action: "squash_merge",
-              threadId: "thread",
               options: {
                 mergeBaseBranch,
               },
@@ -133,7 +133,6 @@ function buildAskAgentInputForGitOperation(args: {
           text: buildSquashMergeCommitFailureFollowUpInstruction(
             {
               action: "squash_merge",
-              threadId: "thread",
               options: {
                 mergeBaseBranch,
               },
@@ -225,6 +224,7 @@ export function ThreadDetailView() {
   const markThreadRead = useMarkThreadRead();
   const markThreadUnread = useMarkThreadUnread();
   const deleteThread = useDeleteThread();
+  const updateEnvironment = useUpdateEnvironment();
   const updateThread = useUpdateThread();
   const uploadPromptAttachment = useUploadPromptAttachment();
   const promptDraft = usePromptDraftStorage({ projectId, threadId });
@@ -333,12 +333,13 @@ export function ThreadDetailView() {
       captureTimelineScrollPositionRef.current();
     },
     preferredTheme,
-    defaultMergeBaseBranch: thread?.mergeBaseBranch ?? environment?.defaultBranch ?? undefined,
+    defaultMergeBaseBranch:
+      environment?.mergeBaseBranch ?? environment?.defaultBranch ?? undefined,
     environmentId: thread?.environmentId ?? undefined,
   });
   const requestedMergeBaseBranch =
     selectedMergeBaseBranch ??
-    thread?.mergeBaseBranch ??
+    environment?.mergeBaseBranch ??
     environment?.defaultBranch ??
     undefined;
   const workStatusQuery = useEnvironmentWorkStatus(
@@ -394,19 +395,20 @@ export function ThreadDetailView() {
     thread,
   });
   const {
-    canSelectThreadMergeBase,
+    canSelectMergeBase,
     effectiveMergeBaseBranch,
-    handleThreadMergeBaseBranchChange,
+    handleMergeBaseBranchChange,
     showBranchComparisonUi,
-    showThreadMergeBase,
-    threadMergeBaseBranch,
-    threadMergeBaseCandidates,
-  } = useThreadMergeBase({
+    showMergeBase,
+    mergeBaseBranch,
+    mergeBaseCandidates,
+  } = useEnvironmentMergeBase({
+    environment,
     mergeBaseBranchOptions,
     selectedMergeBaseBranch,
     setSelectedMergeBaseBranch,
     thread,
-    updateThread,
+    updateEnvironment,
     workspaceStatus,
   });
 
@@ -750,7 +752,7 @@ export function ThreadDetailView() {
   const threadGitStatusDisplay = getGitStatusDisplay(
     workspaceStatus,
     {
-      mergeBaseBranch: threadMergeBaseBranch,
+      mergeBaseBranch,
       showBranchComparison: showBranchComparisonUi,
     },
   );
@@ -773,7 +775,7 @@ export function ThreadDetailView() {
     parentThreadId ||
       (!isManagerThread && threadEnvironmentType) ||
       (!isManagerThread && threadBranchName) ||
-      (!isManagerThread && showThreadMergeBase) ||
+      (!isManagerThread && showMergeBase) ||
       showWorkspaceStatus ||
       showThreadChangedFiles ||
       thread.archivedAt != null,
@@ -785,7 +787,8 @@ export function ThreadDetailView() {
     markThreadRead.isPending ||
     markThreadUnread.isPending ||
     deleteThread.isPending ||
-    updateThread.isPending;
+    updateThread.isPending ||
+    updateEnvironment.isPending;
   const handleCopyThreadBranch = async () => {
     if (!threadBranchName) {
       return;
@@ -803,13 +806,12 @@ export function ThreadDetailView() {
   };
   const handleCommitThread = async () => {
     const attachedEnvironmentId = thread.environmentId;
-    if (!threadId || !attachedEnvironmentId) {
+    if (!attachedEnvironmentId) {
       return;
     }
     try {
       await requestEnvironmentAction.mutateAsync({
         id: attachedEnvironmentId,
-        threadId,
         action: "commit",
       });
     } catch (nextError) {
@@ -822,13 +824,12 @@ export function ThreadDetailView() {
     mergeBaseBranch: string;
   }) => {
     const attachedEnvironmentId = thread.environmentId;
-    if (!threadId || !attachedEnvironmentId) {
+    if (!attachedEnvironmentId) {
       return;
     }
     try {
       await requestEnvironmentAction.mutateAsync({
         id: attachedEnvironmentId,
-        threadId,
         action: "squash_merge",
         options: {
           mergeBaseBranch,
@@ -1024,7 +1025,7 @@ export function ThreadDetailView() {
         mergeBaseBranchOptionsLoading: isLoadingMergeBaseBranchOptions,
         onPromptBannerFileClick: canUseGitUi ? handlePromptBannerFileClick : () => {},
         onPromptBannerMergeBaseBranchChange: showBranchComparisonUi
-          ? handleThreadMergeBaseBranchChange
+          ? handleMergeBaseBranchChange
           : undefined,
         onPromptBannerMergeBaseBranchPickerOpenChange: showBranchComparisonUi
           ? onMergeBaseBranchPickerOpenChange
@@ -1125,7 +1126,7 @@ export function ThreadDetailView() {
         threadStorage={threadStorage}
         metadata={{
           canAssignToManager,
-          canSelectThreadMergeBase,
+          canSelectMergeBase,
           canTakeOverThread,
           isLoadingMergeBaseBranchOptions,
           isManagerThread,
@@ -1135,7 +1136,7 @@ export function ThreadDetailView() {
           onCopyThreadBranch: () => {
             void handleCopyThreadBranch();
           },
-          onMergeBaseBranchChange: handleThreadMergeBaseBranchChange,
+          onMergeBaseBranchChange: handleMergeBaseBranchChange,
           onMergeBaseBranchPickerOpenChange: onMergeBaseBranchPickerOpenChange,
           onUnarchive: () => {
             unarchiveThread.mutate({ id: thread.id });
@@ -1144,7 +1145,7 @@ export function ThreadDetailView() {
           projectId,
           selectedManagerOptionLabel: selectedManagerOption?.label,
           showThreadChangedFiles,
-          showThreadMergeBase,
+          showMergeBase,
           showWorkspaceStatus,
           thread,
           threadBranchName,
@@ -1152,12 +1153,12 @@ export function ThreadDetailView() {
           threadEnvironmentValue,
           threadGitStatusDisplay,
           threadGitStatusLabelClass,
-          threadMergeBaseBranch,
-          threadMergeBaseCandidates,
+          mergeBaseBranch,
+          mergeBaseCandidates,
           unarchivePending:
             unarchiveThread.isPending &&
             unarchiveThread.variables?.id === thread.id,
-          updateThreadPending: updateThread.isPending,
+          updateThreadPending: updateThread.isPending || updateEnvironment.isPending,
           workspaceStatusFiles: workspaceWorkingTree?.files,
         }}
         secondaryPanel={{
@@ -1268,7 +1269,7 @@ export function ThreadDetailView() {
           mergeBaseBranchOptions={mergeBaseBranchOptions}
           mergeBaseBranchOptionsLoading={isLoadingMergeBaseBranchOptions}
           onMergeBaseBranchChange={
-            showBranchComparisonUi ? handleThreadMergeBaseBranchChange : undefined
+            showBranchComparisonUi ? handleMergeBaseBranchChange : undefined
           }
           onMergeBaseBranchPickerOpenChange={
             showBranchComparisonUi ? onMergeBaseBranchPickerOpenChange : undefined

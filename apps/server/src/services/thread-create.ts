@@ -1,11 +1,11 @@
 import {
+  applyProvisionedEnvironment,
   createEnvironment,
   createThread,
   deleteThread,
   findEnvironmentByHostPath,
   getEnvironment,
   transitionThreadStatus,
-  updateEnvironment,
 } from "@bb/db";
 import type { Environment } from "@bb/domain";
 import { hostDaemonCommandResultSchemaByType } from "@bb/host-daemon-contract";
@@ -34,14 +34,12 @@ import {
 
 interface CreateThreadInEnvironmentArgs {
   environment: Environment;
-  mergeBaseBranch: string | null;
   request: ThreadCreateServiceRequest;
   threadStatus: "idle" | "provisioning";
 }
 
 interface ReuseEnvironmentByHostPathArgs {
   hostId: string;
-  mergeBaseBranch: string | null;
   path: string;
   request: ThreadCreateServiceRequest;
 }
@@ -54,7 +52,6 @@ async function createThreadInEnvironment(
     deps,
     args.request,
     args.environment.id,
-    args.mergeBaseBranch,
   );
   transitionThreadStatus(deps.db, deps.hub, thread.id, args.threadStatus);
 
@@ -155,7 +152,6 @@ async function reuseEnvironmentByHostPath(
   if (existing.status === "ready") {
     return createThreadInEnvironment(deps, {
       environment: existing,
-      mergeBaseBranch: args.mergeBaseBranch,
       request: args.request,
       threadStatus: "idle",
     });
@@ -164,7 +160,6 @@ async function reuseEnvironmentByHostPath(
   if (existing.status === "provisioning") {
     return createThreadInEnvironment(deps, {
       environment: existing,
-      mergeBaseBranch: args.mergeBaseBranch,
       request: args.request,
       threadStatus: "provisioning",
     });
@@ -231,14 +226,12 @@ export async function createThreadFromRequest(
         "Environment belongs to a different project",
       );
     }
-    const mergeBaseBranch = environment.defaultBranch ?? null;
     if (environment.status === "ready") {
       if (!environment.path) {
         throw new ApiError(409, "invalid_request", "Environment is not ready");
       }
       return createThreadInEnvironment(deps, {
         environment,
-        mergeBaseBranch,
         request,
         threadStatus: "idle",
       });
@@ -246,7 +239,6 @@ export async function createThreadFromRequest(
     if (environment.status === "provisioning") {
       return createThreadInEnvironment(deps, {
         environment,
-        mergeBaseBranch,
         request,
         threadStatus: "provisioning",
       });
@@ -263,12 +255,10 @@ export async function createThreadFromRequest(
   const unmanagedPath = workspace.type === "unmanaged"
     ? workspace.path ?? requireSourceForHost(deps, request.projectId, hostId).path
     : null;
-  const mergeBaseBranch = null;
 
   if (workspace.type === "unmanaged" && unmanagedPath) {
     const reusedThread = await reuseEnvironmentByHostPath(deps, {
       hostId,
-      mergeBaseBranch,
       path: unmanagedPath,
       request,
     });
@@ -287,7 +277,6 @@ export async function createThreadFromRequest(
     deps,
     request,
     environment.id,
-    mergeBaseBranch,
   );
   transitionThreadStatus(deps.db, deps.hub, thread.id, "provisioning");
 
@@ -409,7 +398,7 @@ export async function ensureProjectSourceEnvironment(
   });
   const result = hostDaemonCommandResultSchemaByType["environment.provision"].parse(rawResult);
 
-  const updated = updateEnvironment(deps.db, deps.hub, environment.id, {
+  const updated = applyProvisionedEnvironment(deps.db, deps.hub, environment.id, {
     path: result.path,
     status: "ready",
     isGitRepo: result.isGitRepo,

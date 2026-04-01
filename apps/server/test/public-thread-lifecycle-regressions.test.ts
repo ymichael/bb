@@ -16,7 +16,6 @@ import {
   seedHost,
   seedHostSession,
   seedProjectWithSource,
-  seedThread,
 } from "./helpers/seed.js";
 import { createTestAppHarness } from "./helpers/test-app.js";
 
@@ -133,21 +132,13 @@ describe("public thread lifecycle regressions", () => {
         path: "/tmp/promote-secondary-source/.bb-worktrees/thread",
         branchName: "bb/promote-secondary",
       });
-      const thread = seedThread(harness.deps, {
-        projectId: project.id,
-        environmentId: environment.id,
-        mergeBaseBranch: "main",
-      });
 
       const responsePromise = harness.app.request(
         `/api/v1/environments/${environment.id}/actions`,
         {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            action: "promote",
-            threadId: thread.id,
-          }),
+          body: JSON.stringify({ action: "promote" }),
         },
       );
 
@@ -199,10 +190,6 @@ describe("public thread lifecycle regressions", () => {
         workspaceProvisionType: "managed-worktree",
         path: "/tmp/demote-secondary-source/.bb-worktrees/thread",
         branchName: "bb/demote-secondary",
-      });
-      const thread = seedThread(harness.deps, {
-        projectId: project.id,
-        environmentId: environment.id,
         mergeBaseBranch: "main",
       });
 
@@ -211,10 +198,7 @@ describe("public thread lifecycle regressions", () => {
         {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            action: "demote",
-            threadId: thread.id,
-          }),
+          body: JSON.stringify({ action: "demote" }),
         },
       );
 

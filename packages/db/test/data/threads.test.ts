@@ -174,6 +174,18 @@ describe("transitionThreadStatus", () => {
     expect(t7.status).toBe("active");
   });
 
+  it("allows created to error when provisioning fails before activation", () => {
+    const { db, project } = setup();
+    const thread = createThread(db, noopNotifier, {
+      projectId: project.id,
+      providerId: "codex",
+      status: "created",
+    });
+
+    const updated = transitionThreadStatus(db, noopNotifier, thread.id, "error");
+    expect(updated.status).toBe("error");
+  });
+
   it("rejects invalid transitions", () => {
     const { db, project } = setup();
     const thread = createThread(db, noopNotifier, {
@@ -187,10 +199,13 @@ describe("transitionThreadStatus", () => {
       transitionThreadStatus(db, noopNotifier, thread.id, "active"),
     ).toThrow("Invalid thread status transition: created → active");
 
-    // created → error is not allowed
+    // created → idle is allowed, so move to idle before checking an invalid edge
+    transitionThreadStatus(db, noopNotifier, thread.id, "idle");
+
+    // idle → created is not allowed
     expect(() =>
-      transitionThreadStatus(db, noopNotifier, thread.id, "error"),
-    ).toThrow("Invalid thread status transition");
+      transitionThreadStatus(db, noopNotifier, thread.id, "created"),
+    ).toThrow("Invalid thread status transition: idle → created");
   });
 
   it("rejects transition for non-existent thread", () => {
@@ -202,7 +217,7 @@ describe("transitionThreadStatus", () => {
 
   it("verifies all transitions in ALLOWED_TRANSITIONS map", () => {
     // Verify the transitions match the architecture doc
-    expect(ALLOWED_TRANSITIONS.created).toEqual(["provisioning", "idle"]);
+    expect(ALLOWED_TRANSITIONS.created).toEqual(["provisioning", "idle", "error"]);
     expect(ALLOWED_TRANSITIONS.provisioning).toEqual(["idle", "error"]);
     expect(ALLOWED_TRANSITIONS.idle).toEqual(["provisioning", "active", "error"]);
     expect(ALLOWED_TRANSITIONS.active).toEqual(["idle", "error"]);
