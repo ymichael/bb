@@ -1,3 +1,4 @@
+import { Provider as JotaiProvider } from "jotai";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { JSX, ReactNode } from "react";
 
@@ -26,7 +27,9 @@ export function createQueryClientTestHarness(): QueryClientTestHarness {
   });
 
   const wrapper: QueryClientTestWrapper = ({ children }) => (
-    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    <JotaiProvider>
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    </JotaiProvider>
   );
 
   return {
