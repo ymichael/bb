@@ -12,7 +12,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { FormError } from "@/components/shared/FormError";
 import { Input } from "@/components/ui/input";
-import { useAvailableModels, useSystemProviders, useHireProjectManager } from "@/hooks/useApi";
+import { useHireProjectManager } from "@/hooks/mutations/project-mutations";
+import { useAvailableModels, useSystemProviders } from "@/hooks/queries/system-queries";
 import { formatModelLabel } from "@/hooks/useThreadCreationOptions";
 import { getProviderIconInfo } from "@/lib/provider-icon";
 import { PromptProviderModelPicker } from "@/components/promptbox/PromptProviderModelPicker";

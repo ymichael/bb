@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Switch } from "@/components/ui/switch"
 import { cn } from "@/lib/utils"
-import { useAvailableModels } from "@/hooks/useApi"
+import { useAvailableModels } from "@/hooks/queries/system-queries"
 import {
   PROMPT_OPTION_BASE_CLASS_NAME,
   PROMPT_OPTION_INTERACTIVE_CLASS_NAME,

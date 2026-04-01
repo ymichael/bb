@@ -12,11 +12,13 @@ import {
   buildOptimisticUserThreadRow,
   getEnvironmentActionInvalidationQueryKeys,
   getEnvironmentStateInvalidationQueryKeys,
-  resolveThreadPlaceholder,
+} from "./query-cache";
+import {
   resolveEnvironmentGitDiffPlaceholder,
+  resolveEnvironmentWorkStatusPlaceholder,
+  resolveThreadPlaceholder,
   resolveThreadTimelinePlaceholder,
-  resolveWorkspaceStatusPlaceholder,
-} from "./useApi";
+} from "./query-placeholders";
 
 function makeStatus(state: WorkspaceStatus["workingTree"]["state"]): WorkspaceStatus {
   return {
@@ -52,14 +54,14 @@ function makeGitDiffResponse(): ThreadGitDiffResponse {
   };
 }
 
-describe("resolveWorkspaceStatusPlaceholder", () => {
+describe("resolveEnvironmentWorkStatusPlaceholder", () => {
   it("keeps previous data when only merge-base selection changes", () => {
     const previousStatus = makeStatus("clean");
 
     expect(
-      resolveWorkspaceStatusPlaceholder(
+      resolveEnvironmentWorkStatusPlaceholder(
         previousStatus,
-        ["workspaceStatus", "thread-1", null],
+        ["environmentWorkStatus", "thread-1", null],
         "thread-1",
       ),
     ).toBe(previousStatus);
@@ -69,9 +71,9 @@ describe("resolveWorkspaceStatusPlaceholder", () => {
     const previousStatus = makeStatus("deleted");
 
     expect(
-      resolveWorkspaceStatusPlaceholder(
+      resolveEnvironmentWorkStatusPlaceholder(
         previousStatus,
-        ["workspaceStatus", "thread-1", null],
+        ["environmentWorkStatus", "thread-1", null],
         "thread-2",
       ),
     ).toBeUndefined();
@@ -79,17 +81,17 @@ describe("resolveWorkspaceStatusPlaceholder", () => {
 
   it("preserves null placeholders only for the same thread", () => {
     expect(
-      resolveWorkspaceStatusPlaceholder(
+      resolveEnvironmentWorkStatusPlaceholder(
         null,
-        ["workspaceStatus", "thread-1", null],
+        ["environmentWorkStatus", "thread-1", null],
         "thread-1",
       ),
     ).toBeNull();
 
     expect(
-      resolveWorkspaceStatusPlaceholder(
+      resolveEnvironmentWorkStatusPlaceholder(
         null,
-        ["workspaceStatus", "thread-1", null],
+        ["environmentWorkStatus", "thread-1", null],
         "thread-2",
       ),
     ).toBeUndefined();
@@ -174,7 +176,7 @@ describe("resolveThreadTimelinePlaceholder", () => {
     expect(
       resolveThreadTimelinePlaceholder(
         previousTimeline,
-        ["threadTimeline", "thread-1", null],
+        ["threadTimeline", "thread-1", false],
         "thread-1",
       ),
     ).toBe(previousTimeline);
@@ -188,7 +190,7 @@ describe("resolveThreadTimelinePlaceholder", () => {
     expect(
       resolveThreadTimelinePlaceholder(
         previousTimeline,
-        ["threadTimeline", "thread-1", null],
+        ["threadTimeline", "thread-1", false],
         "thread-2",
       ),
     ).toBeUndefined();

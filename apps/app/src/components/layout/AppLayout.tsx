@@ -29,9 +29,9 @@ import {
 import { AppSidebar } from "./AppSidebar"
 import {
   useHireProjectManager,
-  useProjects,
-  useThread,
-} from "@/hooks/useApi"
+} from "@/hooks/mutations/project-mutations"
+import { useProjects } from "@/hooks/queries/project-queries"
+import { useThread } from "@/hooks/queries/thread-queries"
 import { useDialogState } from "@/hooks/useDialogState"
 import { getThreadDisplayTitle } from "@/lib/thread-title"
 import { HireManagerModal } from "@/components/HireManagerModal"

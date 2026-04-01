@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 
 export function useDialogState<T>() {
   const [target, setTarget] = useState<T | null>(null);
@@ -17,12 +17,15 @@ export function useDialogState<T>() {
     }
   }, []);
 
-  return {
-    isOpen: target !== null,
-    onClose,
-    onOpen,
-    onOpenChange,
-    setTarget,
-    target,
-  };
+  return useMemo(
+    () => ({
+      isOpen: target !== null,
+      onClose,
+      onOpen,
+      onOpenChange,
+      setTarget,
+      target,
+    }),
+    [onClose, onOpen, onOpenChange, setTarget, target],
+  );
 }

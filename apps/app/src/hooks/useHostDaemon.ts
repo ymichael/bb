@@ -2,7 +2,7 @@ import { useAtomValue } from "jotai";
 import { useCallback, useMemo } from "react";
 import { hostDaemonPortAtom, localHostIdAtom } from "@/lib/atoms";
 import { openPath as daemonOpenPath, pickFolder as daemonPickFolder } from "@/lib/api-host-daemon";
-import { useHosts } from "./useApi";
+import { useHosts } from "./queries/system-queries";
 
 /**
  * Hook for host daemon operations (open-path, pick-folder).

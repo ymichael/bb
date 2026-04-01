@@ -1,7 +1,8 @@
 import { Link, useParams } from "react-router-dom";
 import { PageShell } from "@/components/layout/PageShell";
 import { ArchiveTimestampAction } from "@/components/shared/ArchiveTimestampAction";
-import { useThreads, useUnarchiveThread } from "@/hooks/useApi";
+import { useUnarchiveThread } from "@/hooks/mutations/thread-state-mutations";
+import { useThreads } from "@/hooks/queries/thread-queries";
 import { getThreadDisplayTitle } from "@/lib/thread-title";
 
 export function ProjectArchivedThreadsView() {

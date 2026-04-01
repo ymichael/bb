@@ -14,7 +14,7 @@ import { getProviderIconInfo } from "@/lib/provider-icon";
 import {
   useAvailableModels,
   useSystemProviders,
-} from "./useApi";
+} from "./queries/system-queries";
 
 const MODEL_STORAGE_KEY = "bb.promptbox.model";
 const SERVICE_TIER_STORAGE_KEY = "bb.promptbox.service-tier";

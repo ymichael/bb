@@ -9,7 +9,7 @@ import {
   useEnvironmentGitDiff,
   useEnvironmentMergeBaseBranches,
   useEnvironmentWorkStatus,
-} from "../hooks/useApi";
+} from "../hooks/queries/environment-queries";
 import {
   getThreadSecondaryPanel,
   useStoredThreadSecondaryPanel,
@@ -18,22 +18,26 @@ import {
 } from "@/lib/thread-secondary-panel";
 import {
   doesGitDiffFileMatchPath,
-  getGitDiffParseKey,
   getParsedGitDiffFileKey,
   parseGitDiffFiles,
   parseGitDiffPatchChunks,
-  splitGitDiffIntoPatchChunks,
   summarizeGitDiff,
   type ParsedGitDiffFile,
 } from "./threadDetailGitDiff";
 import { type GitDiffSelectionOption } from "./ThreadSecondaryPanel";
+import {
+  buildGitDiffParsePlan,
+  buildGitDiffSelectionOptions,
+  buildGitDiffStatsLabel,
+  buildGitDiffTarget,
+  GIT_DIFF_PARSE_BATCH_DELAY_MS,
+  GIT_DIFF_PARSE_BATCH_SIZE,
+  GIT_DIFF_PARSE_INITIAL_BATCH_SIZE,
+  resolveGitDiffPreparationState,
+  shouldResetSelectedGitDiffCommit,
+} from "./gitDiffPanelHelpers";
 import { useResponsiveGitDiffPanelDisplay } from "./useResponsiveGitDiffPanelDisplay";
 import { useGitDiffFileRenderQueue } from "./useGitDiffFileRenderQueue";
-
-const GIT_DIFF_PARSE_BATCH_THRESHOLD = 24;
-const GIT_DIFF_PARSE_INITIAL_BATCH_SIZE = 6;
-const GIT_DIFF_PARSE_BATCH_SIZE = 18;
-const GIT_DIFF_PARSE_BATCH_DELAY_MS = 24;
 
 interface UseGitDiffPanelParams {
   location: Location;
@@ -90,12 +94,7 @@ export function useGitDiffPanel({
 
   const effectiveMergeBaseBranch = selectedMergeBaseBranch ?? defaultMergeBaseBranch;
   const gitDiffTarget = useMemo(
-    () =>
-      selectedGitDiffCommitSha
-        ? { type: "commit" as const, sha: selectedGitDiffCommitSha }
-        : effectiveMergeBaseBranch
-          ? { type: "all" as const, mergeBaseBranch: effectiveMergeBaseBranch }
-          : undefined,
+    () => buildGitDiffTarget(selectedGitDiffCommitSha, effectiveMergeBaseBranch),
     [effectiveMergeBaseBranch, selectedGitDiffCommitSha],
   );
   const {
@@ -162,8 +161,12 @@ export function useGitDiffPanel({
 
   useEffect(() => {
     const gitDiff = threadGitDiff?.diff ?? "";
-    const gitDiffKey = getGitDiffParseKey(gitDiff);
-    if (!isDiffPanelActive || gitDiff.trim().length === 0) {
+    const parsePlan = buildGitDiffParsePlan({
+      gitDiff,
+      isDiffPanelActive,
+    });
+
+    if (parsePlan.kind === "reset") {
       setParsedGitDiffFiles([]);
       setIsParsingGitDiffFiles(false);
       setLastParsedGitDiffKey("");
@@ -171,21 +174,21 @@ export function useGitDiffPanel({
     }
 
     setParsedGitDiffFiles([]);
-    const patchChunks = splitGitDiffIntoPatchChunks(gitDiff);
-    if (patchChunks.length === 0) {
+    if (parsePlan.kind === "empty") {
       setParsedGitDiffFiles([]);
       setIsParsingGitDiffFiles(false);
-      setLastParsedGitDiffKey(gitDiffKey);
+      setLastParsedGitDiffKey(parsePlan.gitDiffKey);
       return;
     }
 
-    if (patchChunks.length <= GIT_DIFF_PARSE_BATCH_THRESHOLD) {
+    if (parsePlan.kind === "immediate") {
       setParsedGitDiffFiles(parseGitDiffFiles(gitDiff));
       setIsParsingGitDiffFiles(false);
-      setLastParsedGitDiffKey(gitDiffKey);
+      setLastParsedGitDiffKey(parsePlan.gitDiffKey);
       return;
     }
 
+    const patchChunks = parsePlan.patchChunks;
     let cancelled = false;
     let timerId: number | null = null;
     let nextPatchIndex = 0;
@@ -203,7 +206,7 @@ export function useGitDiffPanel({
       const batchChunks = patchChunks.slice(nextPatchIndex, nextPatchIndex + batchSize);
       if (batchChunks.length === 0) {
         setIsParsingGitDiffFiles(false);
-        setLastParsedGitDiffKey(gitDiffKey);
+        setLastParsedGitDiffKey(parsePlan.gitDiffKey);
         return;
       }
 
@@ -220,7 +223,7 @@ export function useGitDiffPanel({
 
       if (nextPatchIndex >= patchChunks.length || cancelled) {
         setIsParsingGitDiffFiles(false);
-        setLastParsedGitDiffKey(gitDiffKey);
+        setLastParsedGitDiffKey(parsePlan.gitDiffKey);
         return;
       }
 
@@ -254,9 +257,9 @@ export function useGitDiffPanel({
 
   useEffect(() => {
     if (
-      selectedGitDiffCommitSha &&
-      !gitDiffWorkspaceStatus?.mergeBase?.commits.some(
-        (commit) => commit.sha === selectedGitDiffCommitSha,
+      shouldResetSelectedGitDiffCommit(
+        selectedGitDiffCommitSha,
+        gitDiffWorkspaceStatus?.mergeBase?.commits ?? [],
       )
     ) {
       setSelectedGitDiffCommitSha(null);
@@ -366,36 +369,25 @@ export function useGitDiffPanel({
 
   const diffCommits = gitDiffWorkspaceStatus?.mergeBase?.commits ?? [];
   const gitDiffSelectValue = selectedGitDiffCommitSha ?? "all";
-  const gitDiffSelectOptions: GitDiffSelectionOption[] =
-    diffCommits.length > 0
-      ? [
-          { value: "all", label: "All changes" },
-          ...diffCommits.map((commit) => ({
-            value: commit.sha,
-            label: `${commit.shortSha} · ${commit.subject}`,
-          })),
-        ]
-      : [{
-          value: "all",
-          label: "All changes",
-        }];
+  const gitDiffSelectOptions: GitDiffSelectionOption[] = buildGitDiffSelectionOptions(
+    diffCommits,
+  );
   const currentGitDiff = threadGitDiff?.diff ?? "";
-  const hasCurrentGitDiff = currentGitDiff.trim().length > 0;
-  const currentGitDiffKey = getGitDiffParseKey(currentGitDiff);
   const gitDiffStats = summarizeGitDiff(
     isParsingGitDiffFiles ? [] : parsedGitDiffFiles,
     currentGitDiff,
   );
-  const gitDiffStatsLabel =
-    gitDiffStats.files === 0 && gitDiffStats.additions === 0 && gitDiffStats.deletions === 0
-      ? "No changes"
-      : `${gitDiffStats.files} ${gitDiffStats.files === 1 ? "file" : "files"} · +${gitDiffStats.additions} -${gitDiffStats.deletions}`;
-  const hasParsedGitDiffFiles = parsedGitDiffFileEntries.length > 0;
-  const isAwaitingCurrentGitDiffParse =
-    hasCurrentGitDiff && lastParsedGitDiffKey !== currentGitDiffKey;
-  const isPreparingGitDiff =
-    !hasParsedGitDiffFiles &&
-    (isGitDiffLoading || isParsingGitDiffFiles || isAwaitingCurrentGitDiffParse);
+  const gitDiffStatsLabel = buildGitDiffStatsLabel(gitDiffStats);
+  const {
+    hasParsedGitDiffFiles,
+    isPreparingGitDiff,
+  } = resolveGitDiffPreparationState({
+    currentGitDiff,
+    isGitDiffLoading,
+    isParsingGitDiffFiles,
+    lastParsedGitDiffKey,
+    parsedGitDiffFileCount: parsedGitDiffFileEntries.length,
+  });
   const areAllGitDiffFilesCollapsed =
     hasParsedGitDiffFiles &&
     parsedGitDiffFileEntries.every(({ key }) => collapsedGitDiffFileKeys.has(key));

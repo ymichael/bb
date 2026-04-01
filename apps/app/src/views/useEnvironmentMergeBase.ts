@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef } from "react";
 import type { Environment, Thread, WorkspaceStatus } from "@bb/domain";
 import { toast } from "sonner";
 import { getMergeBaseBranchCandidates } from "@/components/thread/MergeBaseBranchPicker";
-import { useUpdateEnvironment } from "../hooks/useApi";
+import { useUpdateEnvironment } from "../hooks/mutations/environment-mutations";
 
 interface UseEnvironmentMergeBaseParams {
   environment?: Environment;
