@@ -21,7 +21,7 @@ async function loadSystemConfig(): Promise<SystemConfigResponse> {
 }
 
 /** System config from the server. Resolves once on first read. */
-export const systemConfigAtom = atom<Promise<SystemConfigResponse>>(loadSystemConfig());
+export const systemConfigAtom = atom(async () => loadSystemConfig());
 
 // ---------------------------------------------------------------------------
 // Local host ID — probed from the host daemon on startup.

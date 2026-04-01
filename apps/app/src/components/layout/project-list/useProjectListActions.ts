@@ -14,6 +14,7 @@ import { toast } from "sonner"
 import type { ThreadRenameDialogTarget } from "@/components/thread/ThreadRenameDialog"
 import type { ProjectDeleteDialogTarget } from "./ProjectDeleteDialog"
 import type { ProjectRenameDialogTarget } from "./ProjectRenameDialog"
+import { getThreadReadToggleAction } from "./threadReadState"
 
 interface UseProjectListActionsParams {
   localHostId: string | null | undefined
@@ -236,7 +237,7 @@ export function useProjectListActions({
   }, [requestArchiveThread, unarchiveThread])
 
   const toggleThreadRead = useCallback((thread: Thread) => {
-    if ((thread.lastReadAt ?? 0) >= thread.updatedAt) {
+    if (getThreadReadToggleAction(thread) === "mark_unread") {
       markThreadUnread.mutate(thread.id)
       return
     }

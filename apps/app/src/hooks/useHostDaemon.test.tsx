@@ -6,6 +6,7 @@ import type { Host } from "@bb/domain";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { hostsQueryKey } from "@/hooks/queries/query-keys";
 import { createQueryClientTestHarness } from "@/test/queryClientTestHarness";
+import { useHostDaemon } from "./useHostDaemon";
 
 const {
   fetchHostId,
@@ -137,7 +138,6 @@ function createHostDaemonProbe(useHostDaemon: () => HostDaemonSnapshot) {
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
-  vi.resetModules();
 });
 
 describe("useHostDaemon", () => {
@@ -152,7 +152,6 @@ describe("useHostDaemon", () => {
       hosts: [localHost],
       localHostId: localHost.id,
     });
-    const { useHostDaemon } = await import("./useHostDaemon");
     const HostDaemonProbe = createHostDaemonProbe(useHostDaemon);
 
     await act(async () => {
@@ -187,7 +186,6 @@ describe("useHostDaemon", () => {
       hosts: [],
       localHostId: null,
     });
-    const { useHostDaemon } = await import("./useHostDaemon");
     const HostDaemonProbe = createHostDaemonProbe(useHostDaemon);
 
     await act(async () => {
