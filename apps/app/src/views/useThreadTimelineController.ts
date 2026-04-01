@@ -7,17 +7,22 @@ import {
 } from "react";
 import type { ViewMessage } from "@bb/domain";
 import { type TimelineRow, type TimelineToolGroupRow } from "@bb/domain";
-import { DEFAULT_SCROLL_STICK_THRESHOLD_PX } from "@bb/ui-core";
 import { useResizeObserver } from "usehooks-ts";
+import {
+  captureTimelineScrollAnchorFromViewport,
+  getScrollBottomTargetScrollTop,
+  getTimelineAnchorOffsetDelta,
+  hasMeaningfulComposerHeightChange,
+  hasMeaningfulTimelineContainerResize,
+  isTimelineNearBottom,
+  shouldLoadToolGroupMessages,
+  shouldShowTimelineScrollToBottom,
+  type TimelineScrollAnchor,
+  type TimelineScrollMode,
+  type TimelineViewportRow,
+} from "./threadTimelineControllerHelpers";
 
 const TIMELINE_ROW_SELECTOR = "[data-thread-row-id]";
-
-type TimelineScrollMode = "pinned_bottom" | "reading_history";
-
-interface TimelineScrollAnchor {
-  rowId: string;
-  offsetTop: number;
-}
 
 interface LoadToolGroupMessagesArgs {
   id: string;
@@ -35,44 +40,38 @@ interface UseThreadTimelineControllerParams {
   ) => Promise<{ messages: ViewMessage[] }>;
 }
 
-function isNearBottom(container: HTMLDivElement): boolean {
-  const distanceFromBottom =
-    container.scrollHeight - container.scrollTop - container.clientHeight;
-  return distanceFromBottom <= DEFAULT_SCROLL_STICK_THRESHOLD_PX;
-}
-
-function shouldShowScrollToBottom(container: HTMLDivElement): boolean {
-  const maxScrollOffset = container.scrollHeight - container.clientHeight;
-  if (maxScrollOffset <= DEFAULT_SCROLL_STICK_THRESHOLD_PX) {
-    return false;
-  }
-  return !isNearBottom(container);
-}
-
-function captureTimelineScrollAnchor(
+function getTimelineViewportRows(
   container: HTMLDivElement,
-): TimelineScrollAnchor | null {
-  if (isNearBottom(container)) {
-    return null;
-  }
-
-  const containerRect = container.getBoundingClientRect();
-  const rows = Array.from(
+): TimelineViewportRow[] {
+  return Array.from(
     container.querySelectorAll<HTMLElement>(TIMELINE_ROW_SELECTOR),
-  );
+  )
+    .map((row) => {
+      const rowId = row.dataset.threadRowId;
+      if (!rowId) {
+        return null;
+      }
 
-  for (const row of rows) {
-    const rowRect = row.getBoundingClientRect();
-    if (rowRect.bottom <= containerRect.top + 1) continue;
-    const rowId = row.dataset.threadRowId;
-    if (!rowId) continue;
-    return {
-      rowId,
-      offsetTop: rowRect.top - containerRect.top,
-    };
-  }
+      const rowRect = row.getBoundingClientRect();
+      return {
+        rowId,
+        top: rowRect.top,
+        bottom: rowRect.bottom,
+      };
+    })
+    .filter((row): row is TimelineViewportRow => row !== null);
+}
 
-  return null;
+function captureTimelineScrollAnchor(container: HTMLDivElement): TimelineScrollAnchor | null {
+  const containerRect = container.getBoundingClientRect();
+
+  return captureTimelineScrollAnchorFromViewport({
+    clientHeight: container.clientHeight,
+    containerTop: containerRect.top,
+    rows: getTimelineViewportRows(container),
+    scrollHeight: container.scrollHeight,
+    scrollTop: container.scrollTop,
+  });
 }
 
 function findTimelineRowElement(
@@ -96,8 +95,12 @@ function restoreAnchorPosition(
 
   const containerRect = container.getBoundingClientRect();
   const targetRect = targetRow.getBoundingClientRect();
-  const offsetDelta = targetRect.top - containerRect.top - anchor.offsetTop;
-  if (Math.abs(offsetDelta) >= 0.5) {
+  const offsetDelta = getTimelineAnchorOffsetDelta({
+    anchor,
+    containerTop: containerRect.top,
+    targetTop: targetRect.top,
+  });
+  if (offsetDelta !== 0) {
     container.scrollTop += offsetDelta;
   }
 }
@@ -108,11 +111,12 @@ function scrollBottomSentinelIntoView(
 ): void {
   const containerRect = container.getBoundingClientRect();
   const sentinelRect = sentinel.getBoundingClientRect();
-  const targetScrollTop =
-    container.scrollTop +
-    (sentinelRect.bottom - containerRect.top) -
-    container.clientHeight;
-  container.scrollTop = Math.max(0, targetScrollTop);
+  container.scrollTop = getScrollBottomTargetScrollTop({
+    clientHeight: container.clientHeight,
+    containerTop: containerRect.top,
+    scrollTop: container.scrollTop,
+    sentinelBottom: sentinelRect.bottom,
+  });
 }
 
 export function useThreadTimelineController({
@@ -147,10 +151,15 @@ export function useThreadTimelineController({
   const postJumpTimeoutRef = useRef<number | null>(null);
 
   const syncScrollState = useCallback((container: HTMLDivElement) => {
-    const sticking = isNearBottom(container);
+    const snapshot = {
+      clientHeight: container.clientHeight,
+      scrollHeight: container.scrollHeight,
+      scrollTop: container.scrollTop,
+    };
+    const sticking = isTimelineNearBottom(snapshot);
     setIsStickingToBottom((current) => (current === sticking ? current : sticking));
     setShowScrollToBottom((current) => {
-      const next = shouldShowScrollToBottom(container);
+      const next = shouldShowTimelineScrollToBottom(snapshot);
       return current === next ? current : next;
     });
 
@@ -262,12 +271,25 @@ export function useThreadTimelineController({
 
   const handleLoadToolGroupMessages = useCallback(
     (entry: TimelineToolGroupRow) => {
-      if (!threadId) return;
-      if (entry.messages.length > 0 || toolGroupMessagesById[entry.id]) return;
-      if (loadingToolGroupIds.has(entry.id)) return;
+      const currentThreadId = threadId;
+
+      if (
+        !shouldLoadToolGroupMessages({
+          cachedMessageCount: toolGroupMessagesById[entry.id]?.length ?? 0,
+          inlineMessageCount: entry.messages.length,
+          isLoading: loadingToolGroupIds.has(entry.id),
+          threadId: currentThreadId,
+        })
+      ) {
+        return;
+      }
+      if (!currentThreadId) {
+        return;
+      }
+
       setLoadingToolGroupIds((prev) => new Set(prev).add(entry.id));
       void loadToolGroupMessages({
-        id: threadId,
+        id: currentThreadId,
         sourceSeqStart: entry.sourceSeqStart,
         sourceSeqEnd: entry.sourceSeqEnd,
       })
@@ -363,9 +385,10 @@ export function useThreadTimelineController({
       };
 
       if (
-        previous &&
-        (Math.abs(previous.width - nextWidth) >= 0.5 ||
-          Math.abs(previous.height - nextHeight) >= 0.5)
+        hasMeaningfulTimelineContainerResize(previous, {
+          width: nextWidth,
+          height: nextHeight,
+        })
       ) {
         scheduleReconcile("container_resized");
       }
@@ -382,7 +405,7 @@ export function useThreadTimelineController({
 
       const previousHeight = previousComposerHeightRef.current;
       previousComposerHeightRef.current = nextHeight;
-      if (previousHeight !== null && Math.abs(previousHeight - nextHeight) >= 0.5) {
+      if (hasMeaningfulComposerHeightChange(previousHeight, nextHeight)) {
         scheduleReconcile("composer_height_changed");
       }
     },
