@@ -1,20 +1,17 @@
+import type { EnvironmentActionResponse } from "@bb/server-contract";
 import type {
-  EnvironmentActionRequest,
-  SendMessageRequest,
-} from "@bb/server-contract";
-
-export type RequestEnvironmentActionMutationRequest = { id: string } & EnvironmentActionRequest;
+  RequestEnvironmentActionMutationRequest,
+  SendThreadMessageMutationRequest,
+} from "@/hooks/mutations/mutation-request-types";
 
 export interface RequestEnvironmentActionMutationLike {
   isPending: boolean;
-  mutateAsync: (request: RequestEnvironmentActionMutationRequest) => Promise<unknown>;
+  mutateAsync: (request: RequestEnvironmentActionMutationRequest) => Promise<EnvironmentActionResponse>;
 }
 
-export interface SendMessageMutationRequest extends SendMessageRequest {
-  id: string;
-}
+export type SendMessageMutationRequest = SendThreadMessageMutationRequest;
 
 export interface SendMessageMutationLike {
   isPending: boolean;
-  mutateAsync: (request: SendMessageMutationRequest) => Promise<unknown>;
+  mutateAsync: (request: SendMessageMutationRequest) => Promise<void>;
 }

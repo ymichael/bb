@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useState } from "react"
+import { useQueryClient } from "@tanstack/react-query"
 import type { Thread } from "@bb/domain"
 import type { ProjectResponse } from "@bb/server-contract"
 import { useDeleteProject, useUpdateProject } from "@/hooks/mutations/project-mutations"
 import { useArchiveThread, useDeleteThread, useMarkThreadRead, useMarkThreadUnread, useUnarchiveThread, useUpdateThread } from "@/hooks/mutations/thread-state-mutations"
-import { useApiClient } from "@/hooks/queries/query-client"
 import { projectsQueryKey } from "@/hooks/queries/query-keys"
 import { useDialogState } from "@/hooks/useDialogState"
 import * as api from "@/lib/api"
@@ -40,7 +40,7 @@ export function useProjectListActions({
   const deleteThread = useDeleteThread()
   const updateProject = useUpdateProject()
   const deleteProject = useDeleteProject()
-  const queryClient = useApiClient()
+  const queryClient = useQueryClient()
   const [pathUpdateProjectId, setPathUpdateProjectId] = useState<string | null>(null)
   const archiveConfirmationDialog = useDialogState<Thread>()
   const projectRenameDialog = useDialogState<ProjectRenameDialogTarget>()
@@ -56,7 +56,7 @@ export function useProjectListActions({
     if (!nextThread || nextThread.archivedAt != null) {
       archiveConfirmationDialog.onClose()
     }
-  }, [archiveConfirmationDialog, threads])
+  }, [archiveConfirmationDialog.onClose, archiveConfirmationDialog.target, threads])
 
   const requestRenameProject = useCallback((project: ProjectResponse) => {
     if (updateProject.isPending) return
@@ -65,7 +65,7 @@ export function useProjectListActions({
       id: project.id,
       currentName: project.name,
     })
-  }, [projectRenameDialog, updateProject.isPending])
+  }, [projectRenameDialog.onOpen, updateProject.isPending])
 
   const submitProjectRename = useCallback((projectId: string, name: string) => {
     updateProject.mutate(
@@ -82,7 +82,7 @@ export function useProjectListActions({
         },
       },
     )
-  }, [projectRenameDialog, updateProject])
+  }, [projectRenameDialog.onClose, updateProject.mutate])
 
   const upsertProjectSourcePath = useCallback(async (projectId: string) => {
     if (!pickFolder || !localHostId) return
@@ -126,7 +126,7 @@ export function useProjectListActions({
       id: project.id,
       name: project.name,
     })
-  }, [deleteProject.isPending, projectDeleteDialog])
+  }, [deleteProject.isPending, projectDeleteDialog.onOpen])
 
   const confirmDeleteProject = useCallback((projectId: string) => {
     deleteProject.mutate(projectId, {
@@ -138,7 +138,7 @@ export function useProjectListActions({
         toast.error(error instanceof Error ? error.message : "Failed to remove project.")
       },
     })
-  }, [deleteProject, onProjectRemoved, projectDeleteDialog])
+  }, [deleteProject.mutate, onProjectRemoved, projectDeleteDialog.onClose])
 
   const requestArchiveThread = useCallback((thread: Thread) => {
     if (archiveThread.isPending) return
@@ -158,7 +158,7 @@ export function useProjectListActions({
         },
       },
     )
-  }, [archiveConfirmationDialog, archiveThread])
+  }, [archiveConfirmationDialog.onOpen, archiveThread.isPending, archiveThread.mutate])
 
   const confirmArchiveThread = useCallback((thread: Thread) => {
     if (archiveThread.isPending) return
@@ -175,7 +175,7 @@ export function useProjectListActions({
         },
       },
     )
-  }, [archiveConfirmationDialog, archiveThread])
+  }, [archiveConfirmationDialog.onClose, archiveThread.isPending, archiveThread.mutate])
 
   const requestRenameThread = useCallback((thread: Thread) => {
     if (updateThread.isPending) return
@@ -185,7 +185,7 @@ export function useProjectListActions({
       currentTitle: getThreadDisplayTitle(thread),
       threadType: thread.type,
     })
-  }, [threadRenameDialog, updateThread.isPending])
+  }, [threadRenameDialog.onOpen, updateThread.isPending])
 
   const submitThreadRename = useCallback((threadId: string, title: string) => {
     updateThread.mutate(
@@ -202,12 +202,12 @@ export function useProjectListActions({
         },
       },
     )
-  }, [threadRenameDialog, updateThread])
+  }, [threadRenameDialog.onClose, updateThread.mutate])
 
   const requestDeleteThread = useCallback((thread: Thread) => {
     if (deleteThread.isPending) return
     threadDeleteDialog.onOpen(thread)
-  }, [deleteThread.isPending, threadDeleteDialog])
+  }, [deleteThread.isPending, threadDeleteDialog.onOpen])
 
   const confirmDeleteThread = useCallback((thread: Thread) => {
     deleteThread.mutate(
@@ -224,7 +224,7 @@ export function useProjectListActions({
         },
       },
     )
-  }, [deleteThread, onThreadDeleted, threadDeleteDialog])
+  }, [deleteThread.mutate, onThreadDeleted, threadDeleteDialog.onClose])
 
   const toggleThreadArchive = useCallback((thread: Thread) => {
     if (thread.archivedAt != null) {

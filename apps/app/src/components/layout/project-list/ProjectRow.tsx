@@ -293,9 +293,9 @@ export function ProjectRow({
                     onToggleArchive={onToggleThreadArchive}
                     onDelete={onDeleteThread}
                     options={{
-                      isManager: true,
+                      kind: "manager",
                       hasManagedChildren: managedChildren.length > 0,
-                      isManagerCollapsed,
+                      isCollapsed: isManagerCollapsed,
                       managedChildCount: managedChildren.length,
                       managedChildBusyCount: managedChildren.filter(isBusyThread).length,
                     }}
@@ -314,7 +314,7 @@ export function ProjectRow({
                           onRename={onRenameThread}
                           onToggleArchive={onToggleThreadArchive}
                           onDelete={onDeleteThread}
-                          options={{ isManagedChild: true }}
+                          options={{ kind: "managed-child" }}
                         />
                       ))}
                     </div>
@@ -334,6 +334,7 @@ export function ProjectRow({
                 onRename={onRenameThread}
                 onToggleArchive={onToggleThreadArchive}
                 onDelete={onDeleteThread}
+                options={{ kind: "default" }}
               />
             ))}
           </div>

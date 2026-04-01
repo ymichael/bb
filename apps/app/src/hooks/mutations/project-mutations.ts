@@ -1,4 +1,4 @@
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { ReasoningLevel, Thread } from "@bb/domain";
 import type {
   CreateProjectRequest,
@@ -16,9 +16,6 @@ import {
   threadQueryKey,
   threadsQueryKey,
 } from "../queries/query-keys";
-import {
-  useApiClient,
-} from "../queries/query-client";
 
 interface HireProjectManagerRequest {
   projectId: string;
@@ -38,7 +35,7 @@ interface UploadPromptAttachmentRequest {
 }
 
 export function useCreateProject() {
-  const queryClient = useApiClient();
+  const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: (request: CreateProjectRequest) => api.createProject(request),
@@ -49,7 +46,7 @@ export function useCreateProject() {
 }
 
 export function useHireProjectManager() {
-  const queryClient = useApiClient();
+  const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: ({
@@ -77,7 +74,7 @@ export function useHireProjectManager() {
 }
 
 export function useUpdateProject() {
-  const queryClient = useApiClient();
+  const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: ({ id, ...request }: UpdateProjectMutationRequest) =>
@@ -93,7 +90,7 @@ export function useUpdateProject() {
 }
 
 export function useDeleteProject() {
-  const queryClient = useApiClient();
+  const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: (projectId: string) => api.deleteProject(projectId),

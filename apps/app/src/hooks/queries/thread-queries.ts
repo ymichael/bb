@@ -1,4 +1,4 @@
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
   ResolvedThreadExecutionOptions,
   Thread,
@@ -27,9 +27,6 @@ import {
   threadStorageFilePreviewQueryKey,
   threadTimelineQueryKey,
 } from "./query-keys";
-import {
-  useApiClient,
-} from "./query-client";
 
 interface QueryOptions {
   enabled?: boolean;
@@ -83,7 +80,7 @@ export function useThread(
   id: string,
   options?: RefetchOnMountOptions,
 ) {
-  const queryClient = useApiClient();
+  const queryClient = useQueryClient();
 
   return useQuery<Thread>({
     queryKey: threadQueryKey(id),

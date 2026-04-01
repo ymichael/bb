@@ -1,27 +1,24 @@
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { Environment } from "@bb/domain";
 import type {
-  EnvironmentActionRequest,
   EnvironmentActionResponse,
   UpdateEnvironmentRequest,
 } from "@bb/server-contract";
 import * as api from "@/lib/api";
+import type { RequestEnvironmentActionMutationRequest } from "./mutation-request-types";
 import {
   getEnvironmentActionInvalidationQueryKeys,
   getEnvironmentStateInvalidationQueryKeys,
 } from "../queries/query-cache";
 import {
+  ENVIRONMENT_QUERY_KEY,
   environmentQueryKey,
+  statusQueryKey,
 } from "../queries/query-keys";
-import {
-  useApiClient,
-} from "../queries/query-client";
-
-type RequestEnvironmentActionMutationRequest = { id: string } & EnvironmentActionRequest;
 type UpdateEnvironmentMutationRequest = { id: string } & UpdateEnvironmentRequest;
 
 export function useRequestEnvironmentAction() {
-  const queryClient = useApiClient();
+  const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: ({
@@ -40,7 +37,7 @@ export function useRequestEnvironmentAction() {
 }
 
 export function useUpdateEnvironment() {
-  const queryClient = useApiClient();
+  const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: ({ id, ...request }: UpdateEnvironmentMutationRequest) =>
@@ -53,12 +50,12 @@ export function useUpdateEnvironment() {
       for (const queryKey of getEnvironmentStateInvalidationQueryKeys({
         environmentId: environment.id,
       })) {
-        if (queryKey[0] === "environment") {
+        if (queryKey[0] === ENVIRONMENT_QUERY_KEY) {
           continue;
         }
         queryClient.invalidateQueries({ queryKey });
       }
-      queryClient.invalidateQueries({ queryKey: ["status"] });
+      queryClient.invalidateQueries({ queryKey: statusQueryKey() });
     },
   });
 }

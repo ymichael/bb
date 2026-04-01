@@ -12,14 +12,20 @@ import { isBusyThread, isUnreadDoneThread } from "@/lib/thread-activity"
 import { getThreadDisplayTitle } from "@/lib/thread-title"
 import { cn } from "@/lib/utils"
 
-export interface ThreadRowOptions {
-  isManagedChild?: boolean
-  isManager?: boolean
-  hasManagedChildren?: boolean
-  isManagerCollapsed?: boolean
-  managedChildCount?: number
-  managedChildBusyCount?: number
-}
+export type ThreadRowOptions =
+  | {
+      kind: "default"
+    }
+  | {
+      kind: "manager"
+      hasManagedChildren: boolean
+      isCollapsed: boolean
+      managedChildCount: number
+      managedChildBusyCount: number
+    }
+  | {
+      kind: "managed-child"
+    }
 
 interface ThreadRowProps {
   projectId: string
@@ -32,7 +38,7 @@ interface ThreadRowProps {
   onRename: (thread: Thread) => void
   onToggleArchive: (thread: Thread) => void
   onDelete: (thread: Thread) => void
-  options?: ThreadRowOptions
+  options: ThreadRowOptions
 }
 
 function ManagedThreadBranchGlyph() {
@@ -61,12 +67,13 @@ export function ThreadRow({
   const threadIsBusy = isBusyThread(thread)
   const showUnreadBadge = isUnreadDoneThread(thread)
   const threadTitle = getThreadDisplayTitle(thread)
-  const isManager = options?.isManager === true
-  const isManagedChild = options?.isManagedChild === true
-  const hasManagedChildren = options?.hasManagedChildren === true
-  const isManagerCollapsed = options?.isManagerCollapsed === true
-  const managedChildCount = options?.managedChildCount ?? 0
-  const managedChildBusyCount = options?.managedChildBusyCount ?? 0
+  const isManager = options.kind === "manager"
+  const isManagedChild = options.kind === "managed-child"
+  const hasManagedChildren = options.kind === "manager" && options.hasManagedChildren
+  const isManagerCollapsed = options.kind === "manager" && options.isCollapsed
+  const managedChildCount = options.kind === "manager" ? options.managedChildCount : 0
+  const managedChildBusyCount =
+    options.kind === "manager" ? options.managedChildBusyCount : 0
 
   return (
     <div

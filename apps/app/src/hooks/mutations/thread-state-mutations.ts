@@ -1,4 +1,4 @@
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { QueryClient } from "@tanstack/react-query";
 import type { Thread } from "@bb/domain";
 import type {
@@ -20,9 +20,6 @@ import {
   threadTimelineQueryKeyPrefix,
   threadsQueryKey,
 } from "../queries/query-keys";
-import {
-  useApiClient,
-} from "../queries/query-client";
 
 interface ThreadMutationRequest {
   id: string;
@@ -85,7 +82,7 @@ function restoreThreadLists(
 }
 
 export function useUpdateThread() {
-  const queryClient = useApiClient();
+  const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: ({ id, ...request }: ThreadMutationRequest & UpdateThreadRequest) =>
@@ -99,7 +96,7 @@ export function useUpdateThread() {
 }
 
 export function useArchiveThread() {
-  const queryClient = useApiClient();
+  const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: ({ id, force }: ArchiveThreadMutationRequest) =>
@@ -155,7 +152,7 @@ export function useArchiveThread() {
 }
 
 export function useUnarchiveThread() {
-  const queryClient = useApiClient();
+  const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: ({ id }: ThreadMutationRequest) => api.unarchiveThread(id),
@@ -216,7 +213,7 @@ export function useUnarchiveThread() {
 }
 
 export function useDeleteThread() {
-  const queryClient = useApiClient();
+  const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: ({ id }: ThreadMutationRequest) => api.deleteThread(id),
@@ -273,7 +270,7 @@ export function useDeleteThread() {
 }
 
 export function useMarkThreadRead() {
-  const queryClient = useApiClient();
+  const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: (threadId: string) => api.markThreadRead(threadId),
@@ -285,7 +282,7 @@ export function useMarkThreadRead() {
 }
 
 export function useMarkThreadUnread() {
-  const queryClient = useApiClient();
+  const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: (threadId: string) => api.markThreadUnread(threadId),

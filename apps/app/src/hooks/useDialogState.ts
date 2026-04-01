@@ -26,6 +26,6 @@ export function useDialogState<T>() {
       setTarget,
       target,
     }),
-    [onClose, onOpen, onOpenChange, target],
+    [onClose, onOpen, onOpenChange, setTarget, target],
   );
 }

@@ -7,6 +7,18 @@ import type { Thread } from "@bb/domain";
 import type { ThreadChangeKind } from "@bb/domain";
 import { wsManager } from "../lib/ws";
 import { getEnvironmentStateInvalidationQueryKeys } from "./queries/query-cache";
+import {
+  allThreadDraftsQueryKeyPrefix,
+  allThreadQueryKeyPrefix,
+  allThreadTimelineQueryKeyPrefix,
+  hostsQueryKey,
+  projectsQueryKey,
+  statusQueryKey,
+  threadDraftsQueryKey,
+  threadQueryKey,
+  threadTimelineQueryKeyPrefix,
+  threadsQueryKey,
+} from "./queries/query-keys";
 
 const INVALIDATION_DEBOUNCE_MS = 250;
 // Keep realtime thread updates responsive while still coalescing bursts.
@@ -135,17 +147,17 @@ export function useWebSocket(): void {
       }
 
       if (shouldInvalidateThreads) {
-        queryClient.invalidateQueries({ queryKey: ["threads"] });
+        queryClient.invalidateQueries({ queryKey: threadsQueryKey() });
       }
 
       if (shouldInvalidateAllThreadsById) {
-        queryClient.invalidateQueries({ queryKey: ["thread"] });
+        queryClient.invalidateQueries({ queryKey: allThreadQueryKeyPrefix() });
       }
       if (shouldInvalidateAllThreadDrafts) {
-        queryClient.invalidateQueries({ queryKey: ["threadDrafts"] });
+        queryClient.invalidateQueries({ queryKey: allThreadDraftsQueryKeyPrefix() });
       }
       if (shouldInvalidateAllThreadTimeline) {
-        queryClient.invalidateQueries({ queryKey: ["threadTimeline"] });
+        queryClient.invalidateQueries({ queryKey: allThreadTimelineQueryKeyPrefix() });
       }
 
       const now = Date.now();
@@ -156,23 +168,23 @@ export function useWebSocket(): void {
         const flags = toThreadChangeFlags(Array.from(changeKinds));
 
         if (flags.threadChanged) {
-          queryClient.invalidateQueries({ queryKey: ["thread", id] });
+          queryClient.invalidateQueries({ queryKey: threadQueryKey(id) });
         }
         if (flags.queueChanged) {
-          queryClient.invalidateQueries({ queryKey: ["threadDrafts", id] });
+          queryClient.invalidateQueries({ queryKey: threadDraftsQueryKey(id) });
         }
         if (flags.timelineChanged) {
           if (flags.statusChanged) {
-            queryClient.invalidateQueries({ queryKey: ["threadTimeline", id] });
+            queryClient.invalidateQueries({ queryKey: threadTimelineQueryKeyPrefix(id) });
             lastTimelineRefetchAtByThread.set(id, now);
           } else {
             const lastRefetchAt = lastTimelineRefetchAtByThread.get(id) ?? 0;
-            const cachedThread = queryClient.getQueryData<Thread>(["thread", id]);
+            const cachedThread = queryClient.getQueryData<Thread>(threadQueryKey(id));
             if (
               shouldBypassTimelineEventThrottle(cachedThread?.status) ||
               now - lastRefetchAt >= TIMELINE_EVENT_REFETCH_INTERVAL_MS
             ) {
-              queryClient.invalidateQueries({ queryKey: ["threadTimeline", id] });
+              queryClient.invalidateQueries({ queryKey: threadTimelineQueryKeyPrefix(id) });
               lastTimelineRefetchAtByThread.set(id, now);
             }
           }
@@ -180,7 +192,7 @@ export function useWebSocket(): void {
       }
 
       if (shouldInvalidateStatus) {
-        queryClient.invalidateQueries({ queryKey: ["status"] });
+        queryClient.invalidateQueries({ queryKey: statusQueryKey() });
       }
 
       changedThreadKinds.clear();
@@ -252,10 +264,10 @@ export function useWebSocket(): void {
           }
           break;
         case "host":
-          queryClient.invalidateQueries({ queryKey: ["hosts"] });
+          queryClient.invalidateQueries({ queryKey: hostsQueryKey() });
           break;
         case "project":
-          queryClient.invalidateQueries({ queryKey: ["projects"] });
+          queryClient.invalidateQueries({ queryKey: projectsQueryKey() });
           break;
         case "system":
           break;

@@ -1,13 +1,13 @@
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { Thread, ThreadQueuedMessage } from "@bb/domain";
 import type {
   CreateDraftRequest,
   CreateThreadRequest,
   SendDraftResponse,
-  SendMessageRequest,
 } from "@bb/server-contract";
 import * as api from "@/lib/api";
 import { wsManager } from "@/lib/ws";
+import type { SendThreadMessageMutationRequest } from "./mutation-request-types";
 import {
   optimisticallyInsertThread,
   updateCachedThread,
@@ -20,11 +20,6 @@ import {
   threadTimelineQueryKeyPrefix,
   threadsQueryKey,
 } from "../queries/query-keys";
-import { useApiClient } from "../queries/query-client";
-
-interface SendThreadMessageMutationRequest extends SendMessageRequest {
-  id: string;
-}
 
 interface CreateThreadDraftMutationRequest extends CreateDraftRequest {
   id: string;
@@ -41,7 +36,7 @@ interface DeleteThreadDraftMutationRequest {
 }
 
 export function useCreateThread() {
-  const queryClient = useApiClient();
+  const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: (request: CreateThreadRequest) => api.createThread(request),
@@ -62,7 +57,7 @@ export function useCreateThread() {
 }
 
 export function useSendThreadMessage() {
-  const queryClient = useApiClient();
+  const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: ({
@@ -122,7 +117,7 @@ export function useSendThreadMessage() {
 }
 
 export function useCreateThreadDraft() {
-  const queryClient = useApiClient();
+  const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: ({
@@ -148,7 +143,7 @@ export function useCreateThreadDraft() {
 }
 
 export function useSendThreadDraft() {
-  const queryClient = useApiClient();
+  const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: ({
@@ -167,7 +162,7 @@ export function useSendThreadDraft() {
 }
 
 export function useDeleteThreadDraft() {
-  const queryClient = useApiClient();
+  const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: ({
@@ -182,7 +177,7 @@ export function useDeleteThreadDraft() {
 }
 
 export function useStopThread() {
-  const queryClient = useApiClient();
+  const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: (threadId: string) => api.stopThread(threadId),

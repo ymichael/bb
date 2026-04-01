@@ -39,11 +39,13 @@ export type ProjectFilesQueryKeyPrefix = readonly [
 ];
 export type ThreadsQueryKey = readonly [typeof THREADS_QUERY_KEY];
 export type ThreadListQueryKey = readonly [typeof THREADS_QUERY_KEY, ThreadListQueryFilters?];
+export type ThreadQueryKeyPrefix = readonly [typeof THREAD_QUERY_KEY];
 export type ThreadQueryKey = readonly [typeof THREAD_QUERY_KEY, string];
 export type ThreadDefaultExecutionOptionsQueryKey = readonly [
   typeof THREAD_DEFAULT_EXECUTION_OPTIONS_QUERY_KEY,
   string,
 ];
+export type ThreadDraftsQueryKeyPrefix = readonly [typeof THREAD_DRAFTS_QUERY_KEY];
 export type ThreadDraftsQueryKey = readonly [typeof THREAD_DRAFTS_QUERY_KEY, string];
 export type ThreadStorageFilesQueryKey = readonly [typeof THREAD_STORAGE_FILES_QUERY_KEY, string];
 export type ThreadStorageFilePreviewQueryKey = readonly [
@@ -82,6 +84,7 @@ export type ThreadTimelineQueryKeyPrefix = readonly [
   typeof THREAD_TIMELINE_QUERY_KEY,
   string,
 ];
+export type AllThreadTimelineQueryKeyPrefix = readonly [typeof THREAD_TIMELINE_QUERY_KEY];
 export type EnvironmentGitDiffQueryKey = readonly [
   typeof ENVIRONMENT_GIT_DIFF_QUERY_KEY,
   string,
@@ -133,6 +136,10 @@ export function threadQueryKey(threadId: string): ThreadQueryKey {
   return [THREAD_QUERY_KEY, threadId];
 }
 
+export function allThreadQueryKeyPrefix(): ThreadQueryKeyPrefix {
+  return [THREAD_QUERY_KEY];
+}
+
 export function threadDefaultExecutionOptionsQueryKey(
   threadId: string,
 ): ThreadDefaultExecutionOptionsQueryKey {
@@ -141,6 +148,10 @@ export function threadDefaultExecutionOptionsQueryKey(
 
 export function threadDraftsQueryKey(threadId: string): ThreadDraftsQueryKey {
   return [THREAD_DRAFTS_QUERY_KEY, threadId];
+}
+
+export function allThreadDraftsQueryKeyPrefix(): ThreadDraftsQueryKeyPrefix {
+  return [THREAD_DRAFTS_QUERY_KEY];
 }
 
 export function threadStorageFilesQueryKey(threadId: string): ThreadStorageFilesQueryKey {
@@ -202,6 +213,10 @@ export function threadTimelineQueryKeyPrefix(
   threadId: string,
 ): ThreadTimelineQueryKeyPrefix {
   return [THREAD_TIMELINE_QUERY_KEY, threadId];
+}
+
+export function allThreadTimelineQueryKeyPrefix(): AllThreadTimelineQueryKeyPrefix {
+  return [THREAD_TIMELINE_QUERY_KEY];
 }
 
 export function environmentGitDiffQueryKey(
