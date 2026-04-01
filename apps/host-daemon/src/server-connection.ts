@@ -74,7 +74,7 @@ export class ServerConnection {
 
   async start(): Promise<HostDaemonSessionOpenResponse> {
     this.stopped = false;
-    return this.openSessionAndConnect();
+    return this.connectWebSocket(null);
   }
 
   async shutdown(): Promise<void> {
@@ -96,12 +96,6 @@ export class ServerConnection {
     this.sessionCloseHandler = handler;
   }
 
-  private async openSessionAndConnect(): Promise<HostDaemonSessionOpenResponse> {
-    const session = await this.openSession();
-    await this.connectWebSocket(session.sessionId);
-    return session;
-  }
-
   private async openSession(): Promise<HostDaemonSessionOpenResponse> {
     const session = await this.options.serverClient.openSession({
       hostId: this.options.hostId,
@@ -119,8 +113,8 @@ export class ServerConnection {
   }
 
   private async connectWebSocket(
-    initialSessionId: string,
-  ): Promise<void> {
+    initialSessionId: string | null,
+  ): Promise<HostDaemonSessionOpenResponse> {
     let nextSessionId: string | null = initialSessionId;
     const websocket = this.createWebSocket(
       async () => {
@@ -141,7 +135,7 @@ export class ServerConnection {
     );
     this.websocket = websocket;
 
-    return new Promise((resolve, reject) => {
+    return new Promise<HostDaemonSessionOpenResponse>((resolve, reject) => {
       let settled = false;
       let hasOpened = false;
 
@@ -168,7 +162,7 @@ export class ServerConnection {
           await this.options.onSessionOpened?.(session);
           if (!settled) {
             settled = true;
-            resolve();
+            resolve(session);
           }
         };
 
