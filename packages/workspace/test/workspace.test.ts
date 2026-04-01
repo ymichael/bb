@@ -2,10 +2,17 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { Workspace } from "../src/workspace.js";
 import { WorkspaceError } from "../src/git.js";
 import { runGit } from "../src/git.js";
+
+type GitModule = typeof import("../src/git.js");
+type WatchWorkspaceStatus = GitModule["watchWorkspaceStatus"];
+type NodeFsModule = typeof import("node:fs");
+type NodeFsWatch = NodeFsModule["watch"];
+type NodeFsWatchArgs = Parameters<NodeFsWatch>;
+type NodeFsWatchResult = ReturnType<NodeFsWatch>;
 
 const tempDirs: string[] = [];
 
@@ -52,7 +59,52 @@ async function waitForCallCount(
   throw new Error("Timed out waiting for watcher callback");
 }
 
+function usesRecursiveWorkspaceWatch(watchArgs: NodeFsWatchArgs): boolean {
+  const watchOptions = watchArgs[1];
+  return (
+    typeof watchOptions === "object" &&
+    watchOptions !== null &&
+    "recursive" in watchOptions &&
+    watchOptions.recursive === true
+  );
+}
+
+function callNodeFsWatch(
+  nodeFs: NodeFsModule,
+  watchArgs: NodeFsWatchArgs,
+): NodeFsWatchResult {
+  const secondArg = watchArgs[1];
+  const thirdArg = watchArgs[2];
+  if (typeof secondArg === "function" || secondArg === undefined) {
+    return nodeFs.watch(watchArgs[0], secondArg);
+  }
+  if (thirdArg === undefined) {
+    return nodeFs.watch(watchArgs[0], secondArg);
+  }
+  return nodeFs.watch(watchArgs[0], secondArg, thirdArg);
+}
+
+async function importWatchWorkspaceStatusWithRecursiveWatchFailure(): Promise<WatchWorkspaceStatus> {
+  vi.resetModules();
+  vi.doMock("node:fs", async () => {
+    const actualFs = await vi.importActual<NodeFsModule>("node:fs");
+    return {
+      ...actualFs,
+      watch(...watchArgs: NodeFsWatchArgs): NodeFsWatchResult {
+        if (usesRecursiveWorkspaceWatch(watchArgs)) {
+          throw new Error("recursive watch unavailable");
+        }
+        return callNodeFsWatch(actualFs, watchArgs);
+      },
+    };
+  });
+  const gitModule = await import("../src/git.js");
+  return gitModule.watchWorkspaceStatus;
+}
+
 afterEach(async () => {
+  vi.doUnmock("node:fs");
+  vi.resetModules();
   await Promise.all(
     tempDirs.splice(0).map((dir) => fs.rm(dir, { recursive: true, force: true })),
   );
@@ -346,6 +398,25 @@ describe("Workspace", () => {
         target: { type: "uncommitted" },
       });
       expect(diff.diff).toContain("second edit");
+    } finally {
+      stopWatching();
+    }
+  });
+
+  it("falls back to polling when recursive workspace watch setup fails", async () => {
+    const repoPath = await initRepo();
+    const watchWorkspaceStatus =
+      await importWatchWorkspaceStatusWithRecursiveWatchFailure();
+    const calls: number[] = [];
+    const stopWatching = watchWorkspaceStatus(repoPath, () => {
+      calls.push(Date.now());
+    });
+
+    try {
+      await sleep(300);
+      await fs.writeFile(path.join(repoPath, "README.md"), "polled edit\n", "utf8");
+      await waitForCallCount(() => calls.length, 1, 2_000);
+      expect(calls).toHaveLength(1);
     } finally {
       stopWatching();
     }

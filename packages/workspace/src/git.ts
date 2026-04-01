@@ -14,6 +14,7 @@ import { promisify } from "node:util";
 const execFileAsync = promisify(execFile);
 const DEFAULT_BUFFER_BYTES = 16 * 1024 * 1024;
 const WORKSPACE_STATUS_WATCH_DEBOUNCE_MS = 75;
+const WORKSPACE_STATUS_WATCH_FALLBACK_POLL_INTERVAL_MS = 250;
 
 export class WorkspaceError extends Error {
   readonly code: string;
@@ -463,6 +464,7 @@ export function watchWorkspaceStatus(
 ): () => void {
   let disposed = false;
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+  let fallbackPollTimer: ReturnType<typeof setInterval> | null = null;
   let lastFingerprint = "";
   let baselineLoaded = false;
   let checkInFlight = false;
@@ -515,6 +517,18 @@ export function watchWorkspaceStatus(
     }, WORKSPACE_STATUS_WATCH_DEBOUNCE_MS);
   };
 
+  const startFallbackPolling = () => {
+    if (disposed || fallbackPollTimer !== null) {
+      return;
+    }
+    fallbackPollTimer = setInterval(() => {
+      if (disposed) {
+        return;
+      }
+      void runChecks();
+    }, WORKSPACE_STATUS_WATCH_FALLBACK_POLL_INTERVAL_MS);
+  };
+
   void runChecks();
   try {
     const workspaceWatcher = watch(
@@ -530,10 +544,13 @@ export function watchWorkspaceStatus(
         scheduleCheck();
       },
     );
-    workspaceWatcher.on("error", scheduleCheck);
+    workspaceWatcher.on("error", () => {
+      startFallbackPolling();
+      scheduleCheck();
+    });
     watchers.push(workspaceWatcher);
   } catch {
-    // Ignore unsupported recursive workspace watches; git metadata watches remain.
+    startFallbackPolling();
   }
   try {
     const metadataPaths = resolveGitMetadataWatchPathsSync(cwd);
@@ -558,6 +575,10 @@ export function watchWorkspaceStatus(
     if (debounceTimer !== null) {
       clearTimeout(debounceTimer);
       debounceTimer = null;
+    }
+    if (fallbackPollTimer !== null) {
+      clearInterval(fallbackPollTimer);
+      fallbackPollTimer = null;
     }
     for (const watcher of watchers) {
       try {
