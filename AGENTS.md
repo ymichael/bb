@@ -34,11 +34,23 @@
 - Never mock the module under test or its private methods.
 - Pipe slow test output to a file, then read the file. Never grep or tail inline on slow tests — if the pattern misses, you've wasted an entire run. Example: `pnpm exec turbo run test --filter=@bb/integration-tests --force > /tmp/test-out.txt 2>&1`, then read `/tmp/test-out.txt`.
 
-## Debugging
+## Debugging Tips
 
 - Don't assume — instrument and observe. Add logging, read logs, inspect the database, repeat.
 - Prefer server API, CLI, direct SQL queries, or log files over browser-based debugging. Use the browser only for browser-specific issues.
-- Work methodically. Everything in this app is traceable; there is no need to guess.
+
+  | -           | Dev            | Prod           |
+  | ----------- | -------------- | -------------- |
+  | Frontend    | `:5173`        | `:3000`        |
+  | Server API  | `:3334`        | `:3000`        |
+  | Host daemon | `:3002`        | `:3001`        |
+  | Data dir    | `~/.bb-dev/`   | `~/.bb/`       |
+  | Database    | `<data>/bb.db` | `<data>/bb.db` |
+  | Logs        | `<data>/logs/` | `<data>/logs/` |
+
+- Entity IDs in URLs (`proj_*`, `thr_*`) are primary keys. Query them directly: `sqlite3 ~/.bb-dev/bb.db "SELECT * FROM threads WHERE id = 'thr_xxx';"`.
+- API routes are under `/api/v1/` — e.g. `GET /api/v1/threads/:id`. `curl` the server directly to isolate frontend vs server bugs.
+- Use the CLI to inspect state: `pnpm bb thread show <id>`, `pnpm bb project list`, `pnpm bb status`. From source: `pnpm bb:dev`.
 
 ## Contract Documentation
 
