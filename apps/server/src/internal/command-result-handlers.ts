@@ -221,6 +221,33 @@ function handleThreadStopResult(
   });
 }
 
+function handleThreadCommandFailure(
+  deps: Pick<AppDeps, "db" | "hub">,
+  report: HostDaemonCommandResultReport & { ok: false },
+  commandRow: typeof hostDaemonCommands.$inferSelect,
+): void {
+  const command = parseCommand(commandRow);
+  if (
+    command.type !== "thread.start" &&
+    command.type !== "turn.run" &&
+    command.type !== "turn.steer"
+  ) {
+    return;
+  }
+  const thread = getThread(deps.db, command.threadId);
+  if (!thread) {
+    return;
+  }
+  appendSystemErrorEvent(deps, {
+    threadId: thread.id,
+    environmentId: command.environmentId,
+    code: "thread_command_failed",
+    message: `Command ${report.type} failed`,
+    detail: report.errorMessage,
+  });
+  tryTransition(deps.db, deps.hub, thread.id, "error");
+}
+
 export async function handleCommandResultSideEffects(
   deps: Pick<AppDeps, "db" | "hub">,
   report: HostDaemonCommandResultReport,
@@ -235,6 +262,13 @@ export async function handleCommandResultSideEffects(
       return;
     case "thread.stop":
       handleThreadStopResult(deps, report, commandRow);
+      return;
+    case "thread.start":
+    case "turn.run":
+    case "turn.steer":
+      if (!report.ok) {
+        handleThreadCommandFailure(deps, report, commandRow);
+      }
       return;
     default:
       return;
