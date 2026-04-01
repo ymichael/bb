@@ -71,7 +71,6 @@ export function registerActionsCommands(
     .option("--self", "Target the current thread (from BB_THREAD_ID)")
     .option("--json", "Print machine-readable JSON output")
     .option("--title <title>", "Set the thread title")
-    .option("--merge-base-branch <branch>", "Set the merge base branch")
     .option("--parent-thread <id>", "Set the managing parent thread id")
     .option("--clear-parent-thread", "Clear the managing parent thread id")
     .action(action(async (id: string | undefined, opts: ThreadUpdateCommandOptions) => {

@@ -1271,6 +1271,16 @@ describe("CLI JSON output contracts", () => {
     );
   });
 
+  it("bb thread update rejects the removed merge-base flag", async () => {
+    await expect(
+      runCommand(
+        ["thread", "update", "thread-update-legacy", "--merge-base-branch", "release"],
+        (program) => registerThreadCommands(program, () => "http://server"),
+      ),
+    ).rejects.toThrow("process.exit:1");
+    expect(createClientMock).not.toHaveBeenCalled();
+  });
+
   it("bb environment update --json prints the updated environment", async () => {
     const environment = makeEnvironment({
       id: "env-json-update",

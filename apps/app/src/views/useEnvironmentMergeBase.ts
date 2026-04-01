@@ -16,6 +16,38 @@ interface UseEnvironmentMergeBaseParams {
 
 type MergeBaseBranchChangeHandler = (branch: string) => void;
 
+interface ShouldSyncSelectedMergeBaseBranchParams {
+  previousStateKey?: string;
+  nextStateKey?: string;
+  persistedMergeBaseBranch?: string | null;
+  selectedMergeBaseBranch?: string;
+  updatePending: boolean;
+}
+
+function normalizeSelectedMergeBaseBranch(branch?: string | null): string | undefined {
+  return branch ?? undefined;
+}
+
+export function shouldSyncSelectedMergeBaseBranch({
+  previousStateKey,
+  nextStateKey,
+  persistedMergeBaseBranch,
+  selectedMergeBaseBranch,
+  updatePending,
+}: ShouldSyncSelectedMergeBaseBranchParams): boolean {
+  if (previousStateKey !== nextStateKey) {
+    return true;
+  }
+
+  if (updatePending) {
+    return false;
+  }
+
+  return (
+    selectedMergeBaseBranch !== normalizeSelectedMergeBaseBranch(persistedMergeBaseBranch)
+  );
+}
+
 export function useEnvironmentMergeBase({
   environment,
   mergeBaseBranchOptions,
@@ -27,15 +59,29 @@ export function useEnvironmentMergeBase({
 }: UseEnvironmentMergeBaseParams) {
   const mergeBaseStateKeyRef = useRef<string | undefined>(undefined);
   const mergeBaseStateKey = environment?.id ?? thread?.id;
+  const isCurrentEnvironmentUpdatePending =
+    updateEnvironment.isPending && updateEnvironment.variables?.id === environment?.id;
 
   useEffect(() => {
-    if (mergeBaseStateKeyRef.current === mergeBaseStateKey) {
+    if (!shouldSyncSelectedMergeBaseBranch({
+      previousStateKey: mergeBaseStateKeyRef.current,
+      nextStateKey: mergeBaseStateKey,
+      persistedMergeBaseBranch: environment?.mergeBaseBranch,
+      selectedMergeBaseBranch,
+      updatePending: isCurrentEnvironmentUpdatePending,
+    })) {
       return;
     }
 
     mergeBaseStateKeyRef.current = mergeBaseStateKey;
-    setSelectedMergeBaseBranch(environment?.mergeBaseBranch ?? undefined);
-  }, [environment?.mergeBaseBranch, mergeBaseStateKey, setSelectedMergeBaseBranch]);
+    setSelectedMergeBaseBranch(normalizeSelectedMergeBaseBranch(environment?.mergeBaseBranch));
+  }, [
+    environment?.mergeBaseBranch,
+    isCurrentEnvironmentUpdatePending,
+    mergeBaseStateKey,
+    selectedMergeBaseBranch,
+    setSelectedMergeBaseBranch,
+  ]);
 
   const effectiveMergeBaseBranch =
     selectedMergeBaseBranch ??
