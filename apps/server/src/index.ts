@@ -27,6 +27,7 @@ const { app, injectWebSocket } = createApp(
       dataDir: commonConfig.BB_DATA_DIR,
       e2bApiKey: serverConfig.E2B_API_KEY,
       e2bTemplate: serverConfig.E2B_TEMPLATE,
+      githubPat: serverConfig.BB_GITHUB_PAT,
       hostDaemonPort: serverConfig.BB_HOST_DAEMON_PORT,
       inferenceModel: serverConfig.BB_INFERENCE_MODEL,
       openAiApiKey: serverConfig.OPENAI_API_KEY,

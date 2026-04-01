@@ -35,6 +35,7 @@ import type {
 
 interface DaemonEnvOptions {
   authToken: string;
+  daemonEnv: Record<string, string>;
   hostId: string;
   hostName: string;
   serverUrl: string;
@@ -117,6 +118,7 @@ export async function startBackgroundProcess(
 function buildDaemonEnv(options: DaemonEnvOptions): Record<string, string> {
   return {
     ...resolveDaemonPassthroughEnv(),
+    ...options.daemonEnv,
     BB_BRIDGE_DIR: SANDBOX_BRIDGE_DIR,
     BB_DATA_DIR: SANDBOX_DATA_DIR,
     BB_DAEMON_HEALTH_PATH: SANDBOX_DAEMON_HEALTH_PATH,
@@ -245,6 +247,7 @@ export async function provisionHost(
   requireE2BSandboxType(options.sandboxType);
   const daemonEnv = buildDaemonEnv({
     authToken: options.authToken,
+    daemonEnv: options.daemonEnv,
     hostId: options.hostId,
     hostName: options.hostName,
     serverUrl: normalizeServerUrl(options.serverUrl),
@@ -276,6 +279,7 @@ export async function resumeHost(
 ): Promise<SandboxHost> {
   const daemonEnv = buildDaemonEnv({
     authToken: options.authToken,
+    daemonEnv: options.daemonEnv,
     hostId: options.hostId,
     hostName: options.hostName,
     serverUrl: normalizeServerUrl(options.serverUrl),

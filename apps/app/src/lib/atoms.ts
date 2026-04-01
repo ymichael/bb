@@ -12,11 +12,21 @@ async function loadSystemConfig(): Promise<SystemConfigResponse> {
   try {
     const res = await apiClient.system.config.$get();
     if (!res.ok) {
-      return { hostDaemonPort: null, voiceTranscriptionEnabled: false };
+      return {
+        e2bConfigured: false,
+        githubConnected: false,
+        hostDaemonPort: null,
+        voiceTranscriptionEnabled: false,
+      };
     }
     return (await res.json()) as SystemConfigResponse;
   } catch {
-    return { hostDaemonPort: null, voiceTranscriptionEnabled: false };
+    return {
+      e2bConfigured: false,
+      githubConnected: false,
+      hostDaemonPort: null,
+      voiceTranscriptionEnabled: false,
+    };
   }
 }
 

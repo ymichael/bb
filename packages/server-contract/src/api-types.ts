@@ -455,6 +455,8 @@ export const projectResponseSchema = projectSchema.extend({
 export type ProjectResponse = z.infer<typeof projectResponseSchema>;
 
 export const systemConfigResponseSchema = z.object({
+  e2bConfigured: z.boolean(),
+  githubConnected: z.boolean(),
   hostDaemonPort: z.number().nullable(),
   voiceTranscriptionEnabled: z.boolean(),
 });

@@ -47,6 +47,7 @@ describe("consumer-specific config", () => {
     vi.stubEnv("BB_PUBLIC_URL", undefined);
     vi.stubEnv("E2B_API_KEY", undefined);
     vi.stubEnv("E2B_TEMPLATE", undefined);
+    vi.stubEnv("BB_GITHUB_PAT", undefined);
     vi.stubEnv("BB_INFERENCE_MODEL", undefined);
     vi.stubEnv("OPENAI_API_KEY", "test-openai-key");
 
@@ -59,6 +60,7 @@ describe("consumer-specific config", () => {
     expect(serverConfig.BB_PUBLIC_URL).toBe("http://localhost:3334");
     expect(serverConfig.E2B_API_KEY).toBe("");
     expect(serverConfig.E2B_TEMPLATE).toBe("");
+    expect(serverConfig.BB_GITHUB_PAT).toBe("");
     expect(serverConfig.BB_INFERENCE_MODEL).toBe("openai/gpt-4o-mini");
     expect(serverConfig.OPENAI_API_KEY).toBe("test-openai-key");
   });

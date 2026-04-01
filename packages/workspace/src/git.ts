@@ -20,6 +20,7 @@ export interface RunGitOptions {
   cwd: string;
   timeoutMs?: number;
   allowFailure?: boolean;
+  env?: NodeJS.ProcessEnv;
 }
 
 export interface GitCommandResult {
@@ -84,6 +85,7 @@ export async function runGit(
     const result = await execFileAsync("git", args, {
       cwd: options.cwd,
       encoding: "utf8",
+      ...(options.env ? { env: { ...process.env, ...options.env } } : {}),
       maxBuffer: DEFAULT_BUFFER_BYTES,
       timeout: options.timeoutMs,
     });

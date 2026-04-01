@@ -87,6 +87,7 @@ describe("sandbox host provisioning", () => {
     const host = await provisionHost({
       authToken: "secret-token",
       daemonArtifacts: testDaemonArtifacts,
+      daemonEnv: {},
       hostId: "host-123",
       hostName: "sandbox-123",
       sandboxType: "e2b",
@@ -140,6 +141,7 @@ describe("sandbox host provisioning", () => {
     const provisioning = provisionHost({
       authToken: "secret-token",
       daemonArtifacts: testDaemonArtifacts,
+      daemonEnv: {},
       hostId: "host-123",
       hostName: "sandbox-123",
       sandboxType: "e2b",
@@ -166,6 +168,7 @@ describe("sandbox host provisioning", () => {
     const provisioning = provisionHost({
       authToken: "secret-token",
       daemonArtifacts: testDaemonArtifacts,
+      daemonEnv: {},
       hostId: "host-123",
       hostName: "sandbox-123",
       sandboxType: "e2b",
@@ -188,6 +191,7 @@ describe("sandbox host provisioning", () => {
       provisionHost({
         authToken: "secret-token",
         daemonArtifacts: testDaemonArtifacts,
+        daemonEnv: {},
         hostId: "host-123",
         hostName: "sandbox-123",
         sandboxType: "e2b",
@@ -209,6 +213,7 @@ describe("sandbox host provisioning", () => {
     const provisioning = provisionHost({
       authToken: "secret-token",
       daemonArtifacts: testDaemonArtifacts,
+      daemonEnv: {},
       hostId: "host-123",
       hostName: "sandbox-123",
       sandboxType: "e2b",
@@ -232,6 +237,7 @@ describe("sandbox host provisioning", () => {
     const host = await provisionHost({
       authToken: "secret-token",
       daemonArtifacts: testDaemonArtifacts,
+      daemonEnv: {},
       hostId: "host-123",
       hostName: "sandbox-123",
       sandboxType: "e2b",
@@ -257,6 +263,7 @@ describe("sandbox host provisioning", () => {
     const resuming = resumeHost({
       authToken: "secret-token",
       daemonArtifacts: testDaemonArtifacts,
+      daemonEnv: {},
       externalId: "sandbox-123",
       hostId: "host-123",
       hostName: "sandbox-123",
@@ -307,6 +314,7 @@ describe("sandbox host provisioning", () => {
     const resuming = resumeHost({
       authToken: "secret-token",
       daemonArtifacts: testDaemonArtifacts,
+      daemonEnv: {},
       externalId: "sandbox-123",
       hostId: "host-123",
       hostName: "sandbox-123",
@@ -318,5 +326,42 @@ describe("sandbox host provisioning", () => {
     await assertion;
 
     expect(sandbox.kill).toHaveBeenCalledTimes(1);
+  });
+
+  it("includes custom daemon env values during provisioning", async () => {
+    const sandbox = createMockSandbox();
+    sandbox.commands.run
+      .mockResolvedValueOnce({ pid: 321 })
+      .mockResolvedValueOnce({ stdout: `${SANDBOX_DAEMON_HEALTH_RESPONSE}\n` });
+    sandboxCreateMock.mockResolvedValue(sandbox);
+
+    await provisionHost({
+      authToken: "secret-token",
+      daemonArtifacts: testDaemonArtifacts,
+      daemonEnv: { GITHUB_TOKEN: "github-token" },
+      hostId: "host-123",
+      hostName: "sandbox-123",
+      sandboxType: "e2b",
+      serverUrl: "https://bb.example.test",
+      template: testSandboxTemplate,
+    });
+
+    expect(sandboxCreateMock).toHaveBeenCalledWith(
+      testSandboxTemplate,
+      expect.objectContaining({
+        envs: {
+          ...expectedDaemonEnv,
+          GITHUB_TOKEN: "github-token",
+        },
+        lifecycle: { onTimeout: "pause" },
+      }),
+    );
+    expect(sandbox.commands.run).toHaveBeenCalledWith(daemonStartCommand, {
+      background: true,
+      envs: {
+        ...expectedDaemonEnv,
+        GITHUB_TOKEN: "github-token",
+      },
+    });
   });
 });

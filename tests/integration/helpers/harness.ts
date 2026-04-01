@@ -191,6 +191,7 @@ async function startIntegrationServer(
     dataDir: serverDataDir,
     e2bApiKey: process.env.E2B_API_KEY ?? "test-e2b-api-key",
     e2bTemplate: process.env.E2B_TEMPLATE ?? "",
+    githubPat: "",
     hostDaemonPort: 3001,
     inferenceModel: "test/mock-model",
     openAiApiKey: process.env.OPENAI_API_KEY ?? "test-openai-key",

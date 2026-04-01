@@ -140,6 +140,20 @@ describe("workspace provisioning", () => {
     expect(await new Workspace(targetPath).currentBranch).toBe("feature");
   });
 
+  it("passes explicit env overrides to git commands", async () => {
+    const sourceRepo = await initRepoWithOptionalSetup();
+
+    const result = await runGit(["var", "GIT_AUTHOR_IDENT"], {
+      cwd: sourceRepo,
+      env: {
+        GIT_AUTHOR_EMAIL: "env@example.com",
+        GIT_AUTHOR_NAME: "Env Author",
+      },
+    });
+
+    expect(result.stdout).toContain("Env Author <env@example.com>");
+  });
+
   it("streams setup script output and respects timeouts", async () => {
     const workspacePath = await makeTempDir("bb-setup-script-");
     await fs.writeFile(

@@ -226,6 +226,213 @@ describe("CLI command output contracts", () => {
     );
   });
 
+  it("bb project create supports github repo sources", async () => {
+    const created = {
+      id: "proj-created",
+      name: "Alpha",
+      createdAt: 1,
+      updatedAt: 2,
+      sources: [],
+    };
+    const post = vi.fn(async () => created);
+    createClientMock.mockReturnValue(asServerClient({
+      api: {
+        v1: {
+          projects: {
+            $post: post,
+          },
+        },
+      },
+    }));
+
+    await runCommand(
+      [
+        "project",
+        "create",
+        "--name",
+        "Alpha",
+        "--repo-url",
+        "https://github.com/example/repo.git",
+        "--json",
+      ],
+      (program) => registerProjectCommands(program, () => "http://server"),
+    );
+
+    expect(post).toHaveBeenCalledWith({
+      json: {
+        name: "Alpha",
+        source: {
+          repoUrl: "https://github.com/example/repo.git",
+          type: "github_repo",
+        },
+      },
+    });
+  });
+
+  it("bb project source add posts a github source and can mark it default", async () => {
+    const post = vi.fn(async () => ({
+      createdAt: 1,
+      id: "source-2",
+      isDefault: false,
+      projectId: "proj-1",
+      repoUrl: "https://github.com/example/repo.git",
+      type: "github_repo",
+      updatedAt: 2,
+    }));
+    const patch = vi.fn(async () => ({
+      createdAt: 1,
+      id: "source-2",
+      isDefault: true,
+      projectId: "proj-1",
+      repoUrl: "https://github.com/example/repo.git",
+      type: "github_repo",
+      updatedAt: 3,
+    }));
+    createClientMock.mockReturnValue(asServerClient({
+      api: {
+        v1: {
+          projects: {
+            ":id": {
+              sources: {
+                $post: post,
+                ":sourceId": {
+                  $patch: patch,
+                },
+              },
+            },
+          },
+        },
+      },
+    }));
+
+    await runCommand(
+      [
+        "project",
+        "source",
+        "add",
+        "proj-1",
+        "--repo-url",
+        "https://github.com/example/repo.git",
+        "--default",
+        "--json",
+      ],
+      (program) => registerProjectCommands(program, () => "http://server"),
+    );
+
+    expect(post).toHaveBeenCalledWith({
+      json: {
+        repoUrl: "https://github.com/example/repo.git",
+        type: "github_repo",
+      },
+      param: { id: "proj-1" },
+    });
+    expect(patch).toHaveBeenCalledWith({
+      json: {
+        isDefault: true,
+        type: "github_repo",
+      },
+      param: { id: "proj-1", sourceId: "source-2" },
+    });
+  });
+
+  it("bb project source update patches the existing source type", async () => {
+    const get = vi.fn(async () => ({
+      createdAt: 1,
+      id: "proj-1",
+      name: "Alpha",
+      sources: [
+        {
+          createdAt: 1,
+          hostId: "host-test-001",
+          id: "source-1",
+          isDefault: true,
+          path: "/tmp/alpha",
+          projectId: "proj-1",
+          type: "local_path",
+          updatedAt: 2,
+        },
+      ],
+      updatedAt: 2,
+    }));
+    const patch = vi.fn(async () => ({
+      createdAt: 1,
+      hostId: "host-test-001",
+      id: "source-1",
+      isDefault: true,
+      path: "/tmp/renamed",
+      projectId: "proj-1",
+      type: "local_path",
+      updatedAt: 3,
+    }));
+    createClientMock.mockReturnValue(asServerClient({
+      api: {
+        v1: {
+          projects: {
+            ":id": {
+              $get: get,
+              sources: {
+                ":sourceId": {
+                  $patch: patch,
+                },
+              },
+            },
+          },
+        },
+      },
+    }));
+
+    await runCommand(
+      [
+        "project",
+        "source",
+        "update",
+        "proj-1",
+        "source-1",
+        "--path",
+        "/tmp/renamed",
+        "--json",
+      ],
+      (program) => registerProjectCommands(program, () => "http://server"),
+    );
+
+    expect(patch).toHaveBeenCalledWith({
+      json: {
+        path: "/tmp/renamed",
+        type: "local_path",
+      },
+      param: { id: "proj-1", sourceId: "source-1" },
+    });
+  });
+
+  it("bb project source delete deletes without prompting when --yes is passed", async () => {
+    const del = vi.fn(async () => ({ ok: true }));
+    createClientMock.mockReturnValue(asServerClient({
+      api: {
+        v1: {
+          projects: {
+            ":id": {
+              sources: {
+                ":sourceId": {
+                  $delete: del,
+                },
+              },
+            },
+          },
+        },
+      },
+    }));
+
+    await runCommand(
+      ["project", "source", "delete", "proj-1", "source-1", "--yes", "--json"],
+      (program) => registerProjectCommands(program, () => "http://server"),
+    );
+
+    expect(del).toHaveBeenCalledWith({
+      param: { id: "proj-1", sourceId: "source-1" },
+    });
+    expect(readlineState.question).not.toHaveBeenCalled();
+  });
+
   it("bb manager hire posts to the project manager route", async () => {
     const post = vi.fn(async () => ({
       id: "thread-manager-1",

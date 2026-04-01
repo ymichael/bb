@@ -37,6 +37,8 @@ export function registerSystemRoutes(app: Hono, deps: AppDeps): void {
 
   get("/system/config", (context) =>
     context.json({
+      e2bConfigured: deps.config.e2bApiKey !== "",
+      githubConnected: deps.config.githubPat !== "",
       hostDaemonPort: deps.config.hostDaemonPort,
       voiceTranscriptionEnabled: !!deps.config.openAiApiKey,
     }),

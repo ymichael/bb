@@ -31,6 +31,35 @@ export interface RemoveWorktreeArgs {
   force?: boolean;
 }
 
+const GITHUB_HOSTNAME = "github.com";
+const GITHUB_TOKEN_ENV_KEY = "GITHUB_TOKEN";
+
+function buildGitHubCloneEnv(sourcePath: string): NodeJS.ProcessEnv | undefined {
+  const githubToken = process.env[GITHUB_TOKEN_ENV_KEY]?.trim();
+  if (!githubToken) {
+    return undefined;
+  }
+
+  let sourceUrl: URL;
+  try {
+    sourceUrl = new URL(sourcePath);
+  } catch {
+    return undefined;
+  }
+
+  if (sourceUrl.protocol !== "https:" || sourceUrl.hostname !== GITHUB_HOSTNAME) {
+    return undefined;
+  }
+
+  return {
+    GIT_CONFIG_COUNT: "1",
+    GIT_CONFIG_KEY_0: "credential.helper",
+    GIT_CONFIG_VALUE_0:
+      '!f() { if test "$1" = get; then echo username=x-access-token; echo password=$GITHUB_TOKEN; fi; }; f',
+    GIT_TERMINAL_PROMPT: "0",
+  };
+}
+
 function emitProgress(
   onProgress: ProgressCallback | undefined,
   entry: ProvisioningTranscriptEntry,
@@ -166,6 +195,7 @@ export async function createClone(args: CreateWorkspaceArgs): Promise<{ path: st
   const cloneText = `git ${cloneArgs.join(" ")}`;
   const checkoutArgs = ["checkout", "-B", args.branchName];
   const checkoutText = `git ${checkoutArgs.join(" ")}`;
+  const cloneEnv = buildGitHubCloneEnv(args.sourcePath);
 
   emitCwd({ onProgress: args.onProgress, keySuffix: "source", cwd: path.dirname(args.targetPath) });
   emitStep({ onProgress: args.onProgress, key: "git-clone", text: cloneText, status: "started" });
@@ -173,7 +203,10 @@ export async function createClone(args: CreateWorkspaceArgs): Promise<{ path: st
   let cloneCompleted = false;
   let checkoutCompleted = false;
   try {
-    const cloneResult = await runGit(cloneArgs, { cwd: path.dirname(args.targetPath) });
+    const cloneResult = await runGit(cloneArgs, {
+      cwd: path.dirname(args.targetPath),
+      ...(cloneEnv ? { env: cloneEnv } : {}),
+    });
     emitGitOutput(args.onProgress, "git-clone", cloneResult);
     emitStep({ onProgress: args.onProgress, key: "git-clone", text: cloneText, status: "completed", metadata: { durationMs: Date.now() - cloneStartedAt } });
     cloneCompleted = true;

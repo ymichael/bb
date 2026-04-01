@@ -49,6 +49,7 @@ export interface SandboxDaemonArtifacts {
 export interface ProvisionHostOptions {
   apiKey?: string;
   daemonArtifacts?: SandboxDaemonArtifacts;
+  daemonEnv: Record<string, string>;
   hostId: string;
   hostName: string;
   sandboxType: string;
@@ -61,6 +62,7 @@ export interface ProvisionHostOptions {
 export interface ResumeHostOptions {
   apiKey?: string;
   daemonArtifacts?: SandboxDaemonArtifacts;
+  daemonEnv: Record<string, string>;
   externalId: string;
   hostId: string;
   hostName: string;

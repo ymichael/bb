@@ -217,6 +217,7 @@ describe("host lifecycle", () => {
       expect(resumeHostMock).toHaveBeenCalledWith({
         apiKey: undefined,
         authToken: harness.config.authToken,
+        daemonEnv: {},
         externalId: "sandbox-concurrent",
         hostId: host.id,
         hostName: host.name,

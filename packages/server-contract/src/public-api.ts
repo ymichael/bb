@@ -184,7 +184,7 @@ export type PublicApiSchema = {
      * Environment type determines the flow:
      * - "reuse": attaches to an existing environment.
      * - "host" + unmanaged/managed-worktree/managed-clone: provisions a new environment.
-     * - "sandbox-host": returns 501 (not yet implemented).
+     * - "sandbox-host": provisions a new ephemeral sandbox host for cloneable project sources.
      *
      * If input is provided, the thread starts automatically after provisioning.
      * A title is generated asynchronously if not provided.

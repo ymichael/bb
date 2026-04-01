@@ -22,6 +22,7 @@ import { queueCommandAndWait } from "./command-wait.js";
 import { COMMAND_TIMEOUT_MS } from "../constants.js";
 import { requireConnectedHostSession } from "./entity-lookup.js";
 import { waitForHostSession } from "./host-lifecycle.js";
+import { buildSandboxDaemonEnv } from "./sandbox-daemon-env.js";
 import { appendClientTurnEvent, appendProvisioningEvent, buildCwdBranchEntries } from "./thread-events.js";
 import { buildExecutionOptions, queueThreadStartCommand } from "./thread-commands.js";
 import { generateThreadTitle } from "./title-generation.js";
@@ -260,6 +261,7 @@ async function createSandboxHostThread(
     sandboxHost = await provisionHost({
       apiKey: deps.config.e2bApiKey,
       authToken: deps.config.authToken,
+      daemonEnv: buildSandboxDaemonEnv(deps.config.githubPat),
       hostId,
       hostName,
       sandboxType: args.sandboxType,

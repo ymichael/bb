@@ -46,6 +46,7 @@ export async function createTestAppHarness(
     dataDir,
     e2bApiKey: "test-e2b-api-key",
     e2bTemplate: "",
+    githubPat: "",
     hostDaemonPort: 3001,
     inferenceModel: "test/mock-model",
     openAiApiKey: "test-openai-key",

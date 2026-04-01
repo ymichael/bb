@@ -10,6 +10,7 @@ export interface ServerRuntimeConfig {
   dataDir: string;
   e2bApiKey: string;
   e2bTemplate: string;
+  githubPat: string;
   hostDaemonPort: number;
   inferenceModel: string;
   openAiApiKey: string;

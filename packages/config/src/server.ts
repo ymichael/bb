@@ -44,6 +44,11 @@ const rawServerConfig = envsafe({
     default: "",
     allowEmpty: true,
   }),
+  BB_GITHUB_PAT: str({
+    desc: "GitHub personal access token used for authenticated repo clones in sandboxes",
+    default: "",
+    allowEmpty: true,
+  }),
   BB_INFERENCE_MODEL: str({
     desc: "Inference model used for server-side completions in provider/model format",
     default: DEFAULTS.inferenceModel,

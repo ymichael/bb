@@ -10,6 +10,7 @@ import {
 } from "@bb/sandbox-host";
 import type { AppDeps } from "../types.js";
 import { ApiError } from "../errors.js";
+import { buildSandboxDaemonEnv } from "./sandbox-daemon-env.js";
 
 const DEFAULT_SESSION_WAIT_TIMEOUT_MS = 60_000;
 const SESSION_WAIT_INTERVAL_MS = 2_000;
@@ -70,6 +71,7 @@ async function loadSandboxHost(
     resumeHost({
       apiKey: toOptionalConfigString(deps.config.e2bApiKey),
       authToken: deps.config.authToken,
+      daemonEnv: buildSandboxDaemonEnv(deps.config.githubPat),
       externalId,
       hostId: host.id,
       hostName: host.name,

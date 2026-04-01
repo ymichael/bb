@@ -43,6 +43,7 @@ const resumeHostMock = vi.fn();
 type SandboxHostMockArgs = Array<object | string | undefined>;
 
 interface SandboxProvisionCall {
+  daemonEnv?: Record<string, string>;
   hostId: string;
   hostName: string;
 }
@@ -576,7 +577,9 @@ describe("public thread routes", () => {
   });
 
   it("creates sandbox-host threads for cloneable project sources", async () => {
-    const harness = await createTestAppHarness();
+    const harness = await createTestAppHarness({
+      githubPat: "test-github-pat",
+    });
     try {
       const sandboxLifecycle = {
         destroy: vi.fn().mockResolvedValue(undefined),
@@ -639,6 +642,9 @@ describe("public thread routes", () => {
       expect(provisionHostMock).toHaveBeenCalledWith({
         apiKey: "test-e2b-api-key",
         authToken: harness.config.authToken,
+        daemonEnv: {
+          GITHUB_TOKEN: "test-github-pat",
+        },
         hostId: expect.stringMatching(/^host_/u),
         hostName: expect.stringMatching(/^sandbox-/u),
         sandboxType: "e2b",
