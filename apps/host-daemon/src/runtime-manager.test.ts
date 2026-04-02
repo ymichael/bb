@@ -162,7 +162,7 @@ describe("RuntimeManager", () => {
   it("shuts down the runtime and destroys the workspace", async () => {
     const stopWatchingStatus = vi.fn(() => undefined);
     const workspace = createFakeWorkspace("/tmp/env-1", {
-      watchStatus: () => stopWatchingStatus,
+      watchStatus: (_args) => stopWatchingStatus,
     });
     const runtime = createFakeRuntime();
     const manager = new RuntimeManager({
@@ -186,10 +186,10 @@ describe("RuntimeManager", () => {
 
   it("installs the workspace status watcher once and reports workspace status changes", async () => {
     const stopWatchingStatus = vi.fn(() => undefined);
-    let onStatusChange: WatchStatusArgs[0] | undefined;
+    let watchStatusArgs: WatchStatusArgs[0] | undefined;
     const workspace = createFakeWorkspace("/tmp/env-watch", {
-      watchStatus: (callback) => {
-        onStatusChange = callback;
+      watchStatus: (args) => {
+        watchStatusArgs = args;
         return stopWatchingStatus;
       },
     });
@@ -210,11 +210,49 @@ describe("RuntimeManager", () => {
       environmentId: "env-watch",
       workspacePath: "/tmp/env-watch",
     });
-    onStatusChange?.();
+    watchStatusArgs?.onChange();
 
     expect(workspace.watchStatus).toHaveBeenCalledTimes(1);
     expect(onWorkspaceStatusChanged).toHaveBeenCalledWith({
       environmentId: "env-watch",
+    });
+    expect(stopWatchingStatus).not.toHaveBeenCalled();
+  });
+
+  it("forwards workspace watch startup failures with the environment id", async () => {
+    const stopWatchingStatus = vi.fn(() => undefined);
+    let watchStatusArgs: WatchStatusArgs[0] | undefined;
+    const workspace = createFakeWorkspace("/tmp/env-watch", {
+      watchStatus: (args) => {
+        watchStatusArgs = args;
+        return stopWatchingStatus;
+      },
+    });
+    const onWorkspaceStatusWatchError = vi.fn();
+    const manager = new RuntimeManager({
+      provisionWorkspace: createProvisionWorkspaceMock("/tmp/env-watch").mockResolvedValue(
+        workspace,
+      ),
+      createRuntime: vi.fn(() => createFakeRuntime()),
+      onWorkspaceStatusWatchError,
+    });
+
+    await manager.ensureEnvironment({
+      environmentId: "env-watch",
+      workspacePath: "/tmp/env-watch",
+    });
+
+    watchStatusArgs?.onWatchError?.({
+      message: "Error starting FSEvents stream",
+      rootPath: "/tmp/env-watch",
+    });
+
+    expect(onWorkspaceStatusWatchError).toHaveBeenCalledWith({
+      environmentId: "env-watch",
+      error: {
+        message: "Error starting FSEvents stream",
+        rootPath: "/tmp/env-watch",
+      },
     });
     expect(stopWatchingStatus).not.toHaveBeenCalled();
   });
@@ -269,7 +307,7 @@ describe("RuntimeManager", () => {
   it("removes stale entries when the provider process exits", async () => {
     const stopWatchingStatus = vi.fn(() => undefined);
     const workspace = createFakeWorkspace("/tmp/env-exit", {
-      watchStatus: () => stopWatchingStatus,
+      watchStatus: (_args) => stopWatchingStatus,
     });
     const runtime = createFakeRuntime();
     let onProcessExit:
@@ -312,7 +350,7 @@ describe("RuntimeManager", () => {
   it("keeps sibling provider threads running when one provider exits", async () => {
     const stopWatchingStatus = vi.fn(() => undefined);
     const workspace = createFakeWorkspace("/tmp/env-shared", {
-      watchStatus: () => stopWatchingStatus,
+      watchStatus: (_args) => stopWatchingStatus,
     });
     const runtime = createFakeRuntime();
     let runningProviders = ["fake-alpha", "fake-beta"];
@@ -361,10 +399,10 @@ describe("RuntimeManager", () => {
     const stopWatchingStatusA = vi.fn(() => undefined);
     const stopWatchingStatusB = vi.fn(() => undefined);
     const workspaceA = createFakeWorkspace("/tmp/env-a", {
-      watchStatus: () => stopWatchingStatusA,
+      watchStatus: (_args) => stopWatchingStatusA,
     });
     const workspaceB = createFakeWorkspace("/tmp/env-b", {
-      watchStatus: () => stopWatchingStatusB,
+      watchStatus: (_args) => stopWatchingStatusB,
     });
     const runtimeA = createFakeRuntime();
     const runtimeB = createFakeRuntime();

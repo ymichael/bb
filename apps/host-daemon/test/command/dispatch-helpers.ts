@@ -78,7 +78,7 @@ export function createFakeWorkspace(pathname: string) {
     async getBranches() {
       return ["main"];
     },
-    watchStatus() {
+    watchStatus(_args) {
       return () => undefined;
     },
     async commit(options: { message: string; noVerify: boolean }) {

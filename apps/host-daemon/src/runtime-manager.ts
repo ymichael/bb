@@ -9,6 +9,7 @@ import {
   provisionWorkspace,
   type IWorkspace,
   type ProvisionWorkspaceOpts,
+  type WorkspaceStatusWatchError,
 } from "@bb/workspace";
 
 function lazyProvisionOpts(
@@ -53,6 +54,10 @@ export interface RuntimeManagerOptions {
   adapterFactory?: AgentRuntimeOptions["adapterFactory"];
   onEvent?: (args: { environmentId: string; event: ThreadEvent }) => void;
   onWorkspaceStatusChanged?: (args: { environmentId: string }) => void;
+  onWorkspaceStatusWatchError?: (args: {
+    environmentId: string;
+    error: WorkspaceStatusWatchError;
+  }) => void;
   onToolCall?: AgentRuntimeOptions["onToolCall"];
   onStderr?: AgentRuntimeOptions["onStderr"];
   onProcessExit?: AgentRuntimeOptions["onProcessExit"];
@@ -210,10 +215,18 @@ export class RuntimeManager {
     }
 
     const workspace = await this.provisionWorkspace(provision);
-    const stopWatchingStatus = workspace.watchStatus(() => {
-      this.options.onWorkspaceStatusChanged?.({
-        environmentId: args.environmentId,
-      });
+    const stopWatchingStatus = workspace.watchStatus({
+      onChange: () => {
+        this.options.onWorkspaceStatusChanged?.({
+          environmentId: args.environmentId,
+        });
+      },
+      onWatchError: (error) => {
+        this.options.onWorkspaceStatusWatchError?.({
+          environmentId: args.environmentId,
+          error,
+        });
+      },
     });
     const threads = new Map<
       string,

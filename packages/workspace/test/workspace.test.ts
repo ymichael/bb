@@ -120,6 +120,49 @@ async function importWatchWorkspaceStatusWithTransientWorkspaceSubscriptionFailu
   return gitModule.watchWorkspaceStatus;
 }
 
+async function importWatchWorkspaceStatusWithPersistentWorkspaceSubscriptionFailure(
+  workspaceRootPath: string,
+): Promise<{
+  getWorkspaceSubscriptionAttemptCount: () => number;
+  watchWorkspaceStatus: WatchWorkspaceStatus;
+}> {
+  let workspaceSubscriptionAttemptCount = 0;
+  vi.resetModules();
+  vi.doMock("@parcel/watcher", async () => {
+    const actualWatcher =
+      await vi.importActual<ParcelWatcherModule>("@parcel/watcher");
+    return {
+      ...actualWatcher,
+      default: {
+        ...actualWatcher.default,
+        subscribe(
+          ...watchArgs: ParcelWatcherSubscribeArgs
+        ): Promise<ParcelWatcherSubscribeResult> {
+          if (isWorkspaceRootSubscription(watchArgs, workspaceRootPath)) {
+            workspaceSubscriptionAttemptCount += 1;
+            throw new Error("workspace subscription unavailable");
+          }
+          return actualWatcher.default.subscribe(...watchArgs);
+        },
+      },
+      subscribe(
+        ...watchArgs: ParcelWatcherSubscribeArgs
+      ): Promise<ParcelWatcherSubscribeResult> {
+        if (isWorkspaceRootSubscription(watchArgs, workspaceRootPath)) {
+          workspaceSubscriptionAttemptCount += 1;
+          throw new Error("workspace subscription unavailable");
+        }
+        return actualWatcher.subscribe(...watchArgs);
+      },
+    };
+  });
+  const gitModule = await import("../src/git.js");
+  return {
+    getWorkspaceSubscriptionAttemptCount: () => workspaceSubscriptionAttemptCount,
+    watchWorkspaceStatus: gitModule.watchWorkspaceStatus,
+  };
+}
+
 afterEach(async () => {
   vi.doUnmock("@parcel/watcher");
   vi.resetModules();
@@ -347,8 +390,10 @@ describe("Workspace", () => {
     const repoPath = await initRepo();
     const workspace = new Workspace(repoPath);
     const calls: number[] = [];
-    const stopWatching = workspace.watchStatus(() => {
-      calls.push(Date.now());
+    const stopWatching = workspace.watchStatus({
+      onChange: () => {
+        calls.push(Date.now());
+      },
     });
 
     try {
@@ -365,8 +410,10 @@ describe("Workspace", () => {
     const repoPath = await initRepo();
     const workspace = new Workspace(repoPath);
     const calls: number[] = [];
-    const stopWatching = workspace.watchStatus(() => {
-      calls.push(Date.now());
+    const stopWatching = workspace.watchStatus({
+      onChange: () => {
+        calls.push(Date.now());
+      },
     });
 
     try {
@@ -381,8 +428,10 @@ describe("Workspace", () => {
     const repoPath = await initRepo();
     const workspace = new Workspace(repoPath);
     const calls: number[] = [];
-    const stopWatching = workspace.watchStatus(() => {
-      calls.push(Date.now());
+    const stopWatching = workspace.watchStatus({
+      onChange: () => {
+        calls.push(Date.now());
+      },
     });
 
     try {
@@ -399,8 +448,10 @@ describe("Workspace", () => {
     const repoPath = await initRepo();
     const workspace = new Workspace(repoPath);
     const calls: number[] = [];
-    const stopWatching = workspace.watchStatus(() => {
-      calls.push(Date.now());
+    const stopWatching = workspace.watchStatus({
+      onChange: () => {
+        calls.push(Date.now());
+      },
     });
 
     try {
@@ -429,8 +480,10 @@ describe("Workspace", () => {
 
     const workspace = new Workspace(repoPath);
     const calls: number[] = [];
-    const stopWatching = workspace.watchStatus(() => {
-      calls.push(Date.now());
+    const stopWatching = workspace.watchStatus({
+      onChange: () => {
+        calls.push(Date.now());
+      },
     });
 
     try {
@@ -456,8 +509,10 @@ describe("Workspace", () => {
     const watchWorkspaceStatus =
       await importWatchWorkspaceStatusWithTransientWorkspaceSubscriptionFailure(repoPath);
     const calls: number[] = [];
-    const stopWatching = watchWorkspaceStatus(repoPath, () => {
-      calls.push(Date.now());
+    const stopWatching = watchWorkspaceStatus(repoPath, {
+      onChange: () => {
+        calls.push(Date.now());
+      },
     });
 
     try {
@@ -467,6 +522,36 @@ describe("Workspace", () => {
       await fs.writeFile(path.join(repoPath, "README.md"), "retried edit\n", "utf8");
       await waitForCallCount(() => calls.length, 1, 2_000);
       expect(calls).toHaveLength(1);
+    } finally {
+      stopWatching();
+    }
+  });
+
+  it("reports persistent workspace watch startup failures once while retries continue", async () => {
+    const repoPath = await initRepo();
+    const {
+      getWorkspaceSubscriptionAttemptCount,
+      watchWorkspaceStatus,
+    } =
+      await importWatchWorkspaceStatusWithPersistentWorkspaceSubscriptionFailure(repoPath);
+    const calls: number[] = [];
+    const watchErrors: string[] = [];
+    const stopWatching = watchWorkspaceStatus(repoPath, {
+      onChange: () => {
+        calls.push(Date.now());
+      },
+      onWatchError: (error) => {
+        watchErrors.push(`${error.rootPath}:${error.message}`);
+      },
+    });
+
+    try {
+      await sleep(650);
+      expect(calls).toHaveLength(0);
+      expect(watchErrors).toHaveLength(1);
+      expect(watchErrors[0]).toContain(repoPath);
+      expect(watchErrors[0]).toContain("workspace subscription unavailable");
+      expect(getWorkspaceSubscriptionAttemptCount()).toBeGreaterThan(1);
     } finally {
       stopWatching();
     }
@@ -482,8 +567,10 @@ describe("Workspace", () => {
     const worktreePath = await addDetachedWorktree(repoPath);
     const workspace = new Workspace(worktreePath);
     const calls: number[] = [];
-    const stopWatching = workspace.watchStatus(() => {
-      calls.push(Date.now());
+    const stopWatching = workspace.watchStatus({
+      onChange: () => {
+        calls.push(Date.now());
+      },
     });
 
     try {
@@ -507,8 +594,10 @@ describe("Workspace", () => {
     const repoPath = await initRepo();
     const workspace = new Workspace(repoPath);
     const calls: number[] = [];
-    const stopWatching = workspace.watchStatus(() => {
-      calls.push(Date.now());
+    const stopWatching = workspace.watchStatus({
+      onChange: () => {
+        calls.push(Date.now());
+      },
     });
 
     stopWatching();

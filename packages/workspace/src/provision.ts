@@ -24,7 +24,7 @@ import {
   detectGitRepo,
   pathExists,
   runGit,
-  type WorkspaceStatusChangeCallback,
+  type WorkspaceStatusWatchArgs,
   WorkspaceError,
 } from "./git.js";
 
@@ -104,7 +104,7 @@ export interface IWorkspace {
   getStatus(options?: StatusOptions): Promise<WorkspaceStatus>;
   getDiff(options?: DiffOptions): Promise<DiffResult>;
   getBranches(): Promise<string[]>;
-  watchStatus(onChange: WorkspaceStatusChangeCallback): () => void;
+  watchStatus(args: WorkspaceStatusWatchArgs): () => void;
 
   // Git mutations
   commit(options: CommitOptions): Promise<CommitResult>;
@@ -185,8 +185,8 @@ class WorkspaceImpl implements IWorkspace {
     return this.ws.getBranches();
   }
 
-  watchStatus(onChange: WorkspaceStatusChangeCallback): () => void {
-    return this.ws.watchStatus(onChange);
+  watchStatus(args: WorkspaceStatusWatchArgs): () => void {
+    return this.ws.watchStatus(args);
   }
 
   commit(options: CommitOptions): Promise<CommitResult> {

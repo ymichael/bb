@@ -20,7 +20,7 @@ import {
   revParse,
   runGit,
   summarizeNumstat,
-  type WorkspaceStatusChangeCallback,
+  type WorkspaceStatusWatchArgs,
   watchWorkspaceStatus,
   WorkspaceError,
 } from "./git.js";
@@ -265,8 +265,8 @@ export class Workspace {
     return listBranches(this.path);
   }
 
-  watchStatus(onChange: WorkspaceStatusChangeCallback): () => void {
-    return watchWorkspaceStatus(this.path, onChange);
+  watchStatus(args: WorkspaceStatusWatchArgs): () => void {
+    return watchWorkspaceStatus(this.path, args);
   }
 
   async commit(options: CommitOptions): Promise<CommitResult> {

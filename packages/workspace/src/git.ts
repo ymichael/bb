@@ -33,6 +33,20 @@ export interface GitCommandResult {
 
 export type WorkspaceStatusChangeCallback = () => void;
 
+export interface WorkspaceStatusWatchError {
+  message: string;
+  rootPath: string;
+}
+
+export type WorkspaceStatusWatchErrorCallback = (
+  error: WorkspaceStatusWatchError,
+) => void;
+
+export interface WorkspaceStatusWatchArgs {
+  onChange: WorkspaceStatusChangeCallback;
+  onWatchError?: WorkspaceStatusWatchErrorCallback;
+}
+
 type BranchStatus = {
   branchName?: string;
   aheadCount: number;
@@ -88,6 +102,13 @@ function toExecError(error: unknown): ExecFileException | undefined {
 
 function trimOutput(value: string): string {
   return value.trim().replace(/\n+$/u, "");
+}
+
+function toErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message.trim().length > 0) {
+    return error.message;
+  }
+  return "Unknown watch error";
 }
 
 function getExitCode(error: ExecFileException | undefined): number {
@@ -498,13 +519,14 @@ async function resolveMetadataWatchSpecs(cwd: string): Promise<WatchSubscription
 
 export function watchWorkspaceStatus(
   cwd: string,
-  onChange: WorkspaceStatusChangeCallback,
+  args: WorkspaceStatusWatchArgs,
 ): () => void {
   let disposed = false;
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
   let metadataStartRetryTimer: ReturnType<typeof setTimeout> | null = null;
   const retryTimers = new Map<string, ReturnType<typeof setTimeout>>();
   const subscriptions = new Map<string, ParcelWatcherAsyncSubscription>();
+  const warnedRootPaths = new Set<string>();
 
   const clearMetadataStartRetryTimer = () => {
     if (metadataStartRetryTimer === null) {
@@ -542,8 +564,19 @@ export function watchWorkspaceStatus(
       if (disposed) {
         return;
       }
-      onChange();
+      args.onChange();
     }, WORKSPACE_STATUS_WATCH_DEBOUNCE_MS);
+  };
+
+  const reportWatchError = (spec: WatchSubscriptionSpec, error: unknown) => {
+    if (warnedRootPaths.has(spec.rootPath)) {
+      return;
+    }
+    warnedRootPaths.add(spec.rootPath);
+    args.onWatchError?.({
+      message: toErrorMessage(error),
+      rootPath: spec.rootPath,
+    });
   };
 
   const scheduleMetadataWatchRetry = () => {
@@ -596,6 +629,7 @@ export function watchWorkspaceStatus(
               return;
             }
             if (error) {
+              reportWatchError(spec, error);
               handleWatchFailure(spec);
               return;
             }
@@ -619,10 +653,11 @@ export function watchWorkspaceStatus(
           return;
         }
         subscriptions.set(spec.rootPath, subscription);
-      } catch {
+      } catch (error) {
         if (disposed) {
           return;
         }
+        reportWatchError(spec, error);
         scheduleWatchRetry(spec);
       }
     })();

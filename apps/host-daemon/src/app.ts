@@ -282,6 +282,16 @@ export async function createHostDaemonApp(
         change: "work-status-changed",
       });
     },
+    onWorkspaceStatusWatchError: ({ environmentId, error }) => {
+      options.logger.warn(
+        {
+          environmentId,
+          rootPath: error.rootPath,
+          watchError: error.message,
+        },
+        "Workspace status watch unavailable; retrying in background",
+      );
+    },
     onToolCall: options.onToolCall ?? ((request) => serverClient.callTool(request)),
   });
 
