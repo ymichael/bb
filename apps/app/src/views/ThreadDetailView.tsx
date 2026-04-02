@@ -458,11 +458,7 @@ export function ThreadDetailView() {
       : "text-foreground";
   const showThreadChangedFiles = canUseGitUi && Boolean(
     workspaceStatus &&
-      (
-        workspaceWorkingTree?.state === "dirty_uncommitted" ||
-        workspaceWorkingTree?.state === "dirty_and_committed_unmerged" ||
-        workspaceWorkingTree?.state === "committed_unmerged"
-      ) &&
+      workspaceWorkingTree?.state !== "clean" &&
       (workspaceWorkingTree?.files.length ?? 0) > 0,
   );
   const showThreadMetadata = Boolean(

@@ -5,25 +5,6 @@ import {
   formatWorkspaceChangeSummary,
 } from "@/lib/workspace-change-summary";
 
-export function threadWorktreeCleanLabel(
-  status: WorkspaceStatus | undefined,
-): string {
-  if (!status) {
-    return "Clean";
-  }
-  if (status.workingTree.state === "untracked") {
-    return "Untracked";
-  }
-  if (status.workingTree.state !== "clean") {
-    return "Clean";
-  }
-
-  const isUpToDate =
-    (status.mergeBase?.aheadCount ?? 0) === 0 &&
-    (status.mergeBase?.behindCount ?? 0) === 0;
-  return isUpToDate ? "Clean, Up to date" : "Clean";
-}
-
 interface ThreadGitStatusDisplay {
   label:
     | "Unknown"

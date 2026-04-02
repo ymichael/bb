@@ -4,7 +4,6 @@ import {
   getGitStatusDisplay,
   workspaceStatusDescription,
   workspaceStatusVariant,
-  threadWorktreeCleanLabel,
 } from "./workspace-status";
 
 function makeStatus(state: WorkspaceStatus["workingTree"]["state"]): WorkspaceStatus {
@@ -43,24 +42,7 @@ describe("workspace-status", () => {
     ).toBe("outline");
   });
 
-  it("shows up-to-date clean label when branch is clean and synchronized", () => {
-    expect(threadWorktreeCleanLabel(makeStatus("clean"))).toBe("Clean, Up to date");
-  });
-
-  it("shows clean label when branch is clean but behind merge base", () => {
-    expect(
-      threadWorktreeCleanLabel({
-        ...makeStatus("clean"),
-        mergeBase: {
-          ...makeStatus("clean").mergeBase!,
-          behindCount: 4,
-        },
-      }),
-    ).toBe("Clean");
-  });
-
   it("shows untracked label and copy for workspaces with only untracked files", () => {
-    expect(threadWorktreeCleanLabel(makeStatus("untracked"))).toBe("Untracked");
     expect(workspaceStatusVariant(makeStatus("untracked"))).toBe("outline");
     expect(workspaceStatusDescription(makeStatus("untracked"))).toBe(
       "Workspace has untracked files that have not been committed yet.",
