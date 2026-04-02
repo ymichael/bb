@@ -3,8 +3,12 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
+import { extractThreadContextWindowUsage } from "@bb/core-ui";
 import type { ViewMessage } from "@bb/domain";
-import type { ProviderAuditReplayFixturesResult } from "../src/types.js";
+import type {
+  ProviderAuditBundle,
+  ProviderAuditReplayFixturesResult,
+} from "../src/types.js";
 import {
   collectCoverageIssues,
   replayFixtures,
@@ -41,6 +45,44 @@ function trimTrailingWhitespace(text: string): string {
     .split("\n")
     .map((line) => line.replace(/[ \t]+$/u, ""))
     .join("\n");
+}
+
+type TokenUsageTranslatedCapture = Extract<
+  ProviderAuditBundle["translatedCaptures"][number],
+  { event: { type: "thread/tokenUsage/updated" } }
+>;
+
+interface TokenUsageEventSnapshot {
+  rawCaptureId: string;
+  modelContextWindow: number | null;
+}
+
+interface FixtureContextWindowSnapshot {
+  fixture: string;
+  contextWindowUsage: ReturnType<typeof extractThreadContextWindowUsage>;
+  tokenUsageEvents: TokenUsageEventSnapshot[];
+}
+
+function isTokenUsageTranslatedCapture(
+  entry: ProviderAuditBundle["translatedCaptures"][number],
+): entry is TokenUsageTranslatedCapture {
+  return entry.event.type === "thread/tokenUsage/updated";
+}
+
+function buildFixtureContextWindowSnapshot(
+  bundle: ProviderAuditBundle,
+  fixtureId: string,
+): FixtureContextWindowSnapshot {
+  return {
+    fixture: fixtureId,
+    contextWindowUsage: extractThreadContextWindowUsage(bundle.threadEventRows),
+    tokenUsageEvents: bundle.translatedCaptures
+      .filter(isTokenUsageTranslatedCapture)
+      .map((entry) => ({
+        rawCaptureId: entry.rawCaptureId,
+        modelContextWindow: entry.event.tokenUsage.modelContextWindow,
+      })),
+  };
 }
 
 afterEach(() => {
@@ -98,6 +140,18 @@ describe("@bb/provider-audit fixture replay", () => {
 
   it("summarizes raw-event and tool-call coverage across the checked-in fixtures", () => {
     expect(summarizeFixtureCoverage(checkedInReplay)).toMatchSnapshot();
+  });
+
+  it("snapshots parsed context-window data for replayed token-usage events", () => {
+    const contextWindowSnapshots = checkedInReplay.fixtures.map(
+      ({ fixture, bundle }) =>
+        buildFixtureContextWindowSnapshot(
+          bundle,
+          `${fixture.corpusId}/${fixture.providerId}/${fixture.taskId}`,
+        ),
+    );
+
+    expect(contextWindowSnapshots).toMatchSnapshot();
   });
 
   it("has no unresolved coverage issues in the checked-in fixtures", () => {

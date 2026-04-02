@@ -2386,6 +2386,1289 @@ exports[`@bb/provider-audit fixture replay > replays every checked-in fixture in
 ]
 `;
 
+exports[`@bb/provider-audit fixture replay > snapshots parsed context-window data for replayed token-usage events 1`] = `
+[
+  {
+    "contextWindowUsage": null,
+    "fixture": "excalidraw/claude-code/collab-startup-explanation",
+    "tokenUsageEvents": [
+      {
+        "modelContextWindow": null,
+        "rawCaptureId": "capture-4",
+      },
+      {
+        "modelContextWindow": null,
+        "rawCaptureId": "capture-7",
+      },
+    ],
+  },
+  {
+    "contextWindowUsage": {
+      "modelContextWindow": 1000000,
+      "totalTokens": 61504,
+    },
+    "fixture": "excalidraw/claude-code/eyedropper-browser-compat",
+    "tokenUsageEvents": [
+      {
+        "modelContextWindow": 1000000,
+        "rawCaptureId": "capture-1391",
+      },
+      {
+        "modelContextWindow": 1000000,
+        "rawCaptureId": "capture-4765",
+      },
+      {
+        "modelContextWindow": 1000000,
+        "rawCaptureId": "capture-4806",
+      },
+    ],
+  },
+  {
+    "contextWindowUsage": {
+      "modelContextWindow": 1000000,
+      "totalTokens": 338649,
+    },
+    "fixture": "excalidraw/claude-code/eyedropper-preview-bugfix",
+    "tokenUsageEvents": [
+      {
+        "modelContextWindow": 1000000,
+        "rawCaptureId": "capture-216",
+      },
+      {
+        "modelContextWindow": 1000000,
+        "rawCaptureId": "capture-2313",
+      },
+    ],
+  },
+  {
+    "contextWindowUsage": {
+      "modelContextWindow": 1000000,
+      "totalTokens": 46414,
+    },
+    "fixture": "excalidraw/claude-code/magicframe-feature",
+    "tokenUsageEvents": [
+      {
+        "modelContextWindow": 1000000,
+        "rawCaptureId": "capture-4923",
+      },
+      {
+        "modelContextWindow": 1000000,
+        "rawCaptureId": "capture-4943",
+      },
+    ],
+  },
+  {
+    "contextWindowUsage": {
+      "modelContextWindow": 1000000,
+      "totalTokens": 31924,
+    },
+    "fixture": "excalidraw/claude-code/search-bugfix",
+    "tokenUsageEvents": [
+      {
+        "modelContextWindow": 1000000,
+        "rawCaptureId": "capture-1004",
+      },
+      {
+        "modelContextWindow": 1000000,
+        "rawCaptureId": "capture-1053",
+      },
+    ],
+  },
+  {
+    "contextWindowUsage": {
+      "modelContextWindow": 1000000,
+      "totalTokens": 31011,
+    },
+    "fixture": "excalidraw/claude-code/search-feature",
+    "tokenUsageEvents": [
+      {
+        "modelContextWindow": 1000000,
+        "rawCaptureId": "capture-1345",
+      },
+      {
+        "modelContextWindow": 1000000,
+        "rawCaptureId": "capture-1363",
+      },
+    ],
+  },
+  {
+    "contextWindowUsage": {
+      "modelContextWindow": 1000000,
+      "totalTokens": 89890,
+    },
+    "fixture": "excalidraw/claude-code/ttd-explanation",
+    "tokenUsageEvents": [
+      {
+        "modelContextWindow": 1000000,
+        "rawCaptureId": "capture-730",
+      },
+      {
+        "modelContextWindow": 1000000,
+        "rawCaptureId": "capture-996",
+      },
+    ],
+  },
+  {
+    "contextWindowUsage": {
+      "modelContextWindow": 258400,
+      "totalTokens": 91403,
+    },
+    "fixture": "excalidraw/codex/collab-startup-explanation",
+    "tokenUsageEvents": [
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-11",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-20",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-24",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-32",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-40",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-52",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-62",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-74",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-84",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-88",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-96",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-104",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-112",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-120",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-130",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-138",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-142",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-148",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-154",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-162",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-168",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-174",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-180",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-190",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-196",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-202",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-208",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-212",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-218",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-225",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-230",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-3042",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-3050",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-3519",
+      },
+    ],
+  },
+  {
+    "contextWindowUsage": {
+      "modelContextWindow": 258400,
+      "totalTokens": 53122,
+    },
+    "fixture": "excalidraw/codex/eyedropper-preview-bugfix",
+    "tokenUsageEvents": [
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-34",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-45",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-71",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-79",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-89",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-99",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-109",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-119",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-125",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-134",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-140",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-150",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-164",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-170",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-173",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-213",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-218",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-237",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-240",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-515",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-524",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-943",
+      },
+    ],
+  },
+  {
+    "contextWindowUsage": {
+      "modelContextWindow": 258400,
+      "totalTokens": 124919,
+    },
+    "fixture": "excalidraw/codex/magicframe-feature",
+    "tokenUsageEvents": [
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-11",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-47",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-55",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-63",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-71",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-79",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-87",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-95",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-103",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-111",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-117",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-125",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-133",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-141",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-147",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-153",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-157",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-163",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-171",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-178",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-183",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-192",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-200",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-240",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-249",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-258",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-272",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-329",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-336",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-344",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-352",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-382",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-387",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-395",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-403",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-432",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-437",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-447",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-722",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-731",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-951",
+      },
+    ],
+  },
+  {
+    "contextWindowUsage": {
+      "modelContextWindow": 258400,
+      "totalTokens": 44973,
+    },
+    "fixture": "excalidraw/codex/search-bugfix",
+    "tokenUsageEvents": [
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-9",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-18",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-20",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-28",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-36",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-44",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-50",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-60",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-95",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-103",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-111",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-117",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-123",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-129",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-138",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-142",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-149",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-158",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-167",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-182",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-190",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-195",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-205",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-361",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-370",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-665",
+      },
+    ],
+  },
+  {
+    "contextWindowUsage": {
+      "modelContextWindow": 258400,
+      "totalTokens": 55623,
+    },
+    "fixture": "excalidraw/codex/search-feature",
+    "tokenUsageEvents": [
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-33",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-44",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-46",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-54",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-64",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-72",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-82",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-88",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-96",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-104",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-110",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-116",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-122",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-132",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-141",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-145",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-152",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-163",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-172",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-189",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-192",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-396",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-405",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-588",
+      },
+    ],
+  },
+  {
+    "contextWindowUsage": {
+      "modelContextWindow": 258400,
+      "totalTokens": 80064,
+    },
+    "fixture": "excalidraw/codex/share-web-compat",
+    "tokenUsageEvents": [
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-14",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-18",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-71",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-81",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-89",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-101",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-109",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-119",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-123",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-131",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-137",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-143",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-149",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-157",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-163",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-167",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-173",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-179",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-187",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-193",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-201",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-205",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-211",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-217",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-223",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-229",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-235",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-247",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-250",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-259",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-266",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-273",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-281",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-289",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-296",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-303",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-310",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-318",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-326",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-337",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-344",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-351",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-358",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-369",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-389",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-394",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-404",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-416",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-424",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-440",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-445",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-458",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-463",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-473",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-496",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-501",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-510",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-755",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-764",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-1102",
+      },
+    ],
+  },
+  {
+    "contextWindowUsage": {
+      "modelContextWindow": 258400,
+      "totalTokens": 78074,
+    },
+    "fixture": "excalidraw/codex/ttd-explanation",
+    "tokenUsageEvents": [
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-10",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-12",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-20",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-28",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-34",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-44",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-54",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-64",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-70",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-78",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-88",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-98",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-108",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-114",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-124",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-128",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-134",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-140",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-146",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-150",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-156",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-162",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-168",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-174",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-180",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-186",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-192",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-199",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-203",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-209",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-215",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-221",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-228",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-2621",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-2629",
+      },
+      {
+        "modelContextWindow": 258400,
+        "rawCaptureId": "capture-3082",
+      },
+    ],
+  },
+  {
+    "contextWindowUsage": {
+      "modelContextWindow": 1000000,
+      "totalTokens": 42341,
+    },
+    "fixture": "excalidraw/pi/collab-startup-explanation",
+    "tokenUsageEvents": [
+      {
+        "modelContextWindow": 1000000,
+        "rawCaptureId": "capture-321",
+      },
+      {
+        "modelContextWindow": 1000000,
+        "rawCaptureId": "capture-510",
+      },
+    ],
+  },
+  {
+    "contextWindowUsage": {
+      "modelContextWindow": 1000000,
+      "totalTokens": 35859,
+    },
+    "fixture": "excalidraw/pi/command-palette-map",
+    "tokenUsageEvents": [
+      {
+        "modelContextWindow": 1000000,
+        "rawCaptureId": "capture-279",
+      },
+      {
+        "modelContextWindow": 1000000,
+        "rawCaptureId": "capture-1032",
+      },
+      {
+        "modelContextWindow": 1000000,
+        "rawCaptureId": "capture-1091",
+      },
+    ],
+  },
+  {
+    "contextWindowUsage": {
+      "modelContextWindow": 1000000,
+      "totalTokens": 12485,
+    },
+    "fixture": "excalidraw/pi/eyedropper-preview-bugfix",
+    "tokenUsageEvents": [
+      {
+        "modelContextWindow": 1000000,
+        "rawCaptureId": "capture-335",
+      },
+      {
+        "modelContextWindow": 1000000,
+        "rawCaptureId": "capture-390",
+      },
+    ],
+  },
+  {
+    "contextWindowUsage": {
+      "modelContextWindow": 1000000,
+      "totalTokens": 0,
+    },
+    "fixture": "excalidraw/pi/magicframe-feature",
+    "tokenUsageEvents": [
+      {
+        "modelContextWindow": 1000000,
+        "rawCaptureId": "capture-1381",
+      },
+      {
+        "modelContextWindow": 1000000,
+        "rawCaptureId": "capture-1390",
+      },
+    ],
+  },
+  {
+    "contextWindowUsage": {
+      "modelContextWindow": 1000000,
+      "totalTokens": 57938,
+    },
+    "fixture": "excalidraw/pi/search-bugfix",
+    "tokenUsageEvents": [
+      {
+        "modelContextWindow": 1000000,
+        "rawCaptureId": "capture-326",
+      },
+      {
+        "modelContextWindow": 1000000,
+        "rawCaptureId": "capture-362",
+      },
+    ],
+  },
+  {
+    "contextWindowUsage": {
+      "modelContextWindow": 1000000,
+      "totalTokens": 48823,
+    },
+    "fixture": "excalidraw/pi/search-feature",
+    "tokenUsageEvents": [
+      {
+        "modelContextWindow": 1000000,
+        "rawCaptureId": "capture-275",
+      },
+      {
+        "modelContextWindow": 1000000,
+        "rawCaptureId": "capture-294",
+      },
+    ],
+  },
+  {
+    "contextWindowUsage": {
+      "modelContextWindow": 1000000,
+      "totalTokens": 32867,
+    },
+    "fixture": "excalidraw/pi/ttd-explanation",
+    "tokenUsageEvents": [
+      {
+        "modelContextWindow": 1000000,
+        "rawCaptureId": "capture-154",
+      },
+      {
+        "modelContextWindow": 1000000,
+        "rawCaptureId": "capture-214",
+      },
+    ],
+  },
+]
+`;
+
 exports[`@bb/provider-audit fixture replay > snapshots verbose CLI timeline output for every fixture 1`] = `
 [
   {
