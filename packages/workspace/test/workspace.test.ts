@@ -77,9 +77,10 @@ function isWorkspaceRootSubscription(
   return rootPath === workspaceRootPath && options?.ignore?.includes(".git") === true;
 }
 
-async function importWatchWorkspaceStatusWithWorkspaceSubscriptionFailure(
+async function importWatchWorkspaceStatusWithTransientWorkspaceSubscriptionFailure(
   workspaceRootPath: string,
 ): Promise<WatchWorkspaceStatus> {
+  let failedWorkspaceSubscription = false;
   vi.resetModules();
   vi.doMock("@parcel/watcher", async () => {
     const actualWatcher =
@@ -91,7 +92,11 @@ async function importWatchWorkspaceStatusWithWorkspaceSubscriptionFailure(
         subscribe(
           ...watchArgs: ParcelWatcherSubscribeArgs
         ): Promise<ParcelWatcherSubscribeResult> {
-          if (isWorkspaceRootSubscription(watchArgs, workspaceRootPath)) {
+          if (
+            isWorkspaceRootSubscription(watchArgs, workspaceRootPath) &&
+            !failedWorkspaceSubscription
+          ) {
+            failedWorkspaceSubscription = true;
             throw new Error("workspace subscription unavailable");
           }
           return actualWatcher.default.subscribe(...watchArgs);
@@ -100,7 +105,11 @@ async function importWatchWorkspaceStatusWithWorkspaceSubscriptionFailure(
       subscribe(
         ...watchArgs: ParcelWatcherSubscribeArgs
       ): Promise<ParcelWatcherSubscribeResult> {
-        if (isWorkspaceRootSubscription(watchArgs, workspaceRootPath)) {
+        if (
+          isWorkspaceRootSubscription(watchArgs, workspaceRootPath) &&
+          !failedWorkspaceSubscription
+        ) {
+          failedWorkspaceSubscription = true;
           throw new Error("workspace subscription unavailable");
         }
         return actualWatcher.subscribe(...watchArgs);
@@ -368,7 +377,7 @@ describe("Workspace", () => {
     }
   });
 
-  it("detects branch-ref updates through the watch fingerprint", async () => {
+  it("detects branch-ref updates through metadata watches", async () => {
     const repoPath = await initRepo();
     const workspace = new Workspace(repoPath);
     const calls: number[] = [];
@@ -412,7 +421,7 @@ describe("Workspace", () => {
     }
   });
 
-  it("detects repeated edits to dirty files with quoted porcelain paths", async () => {
+  it("detects repeated edits to dirty files with spaced file names", async () => {
     const repoPath = await initRepo();
     await fs.writeFile(path.join(repoPath, "a b.txt"), "base\n", "utf8");
     await runGit(["add", "a b.txt"], { cwd: repoPath });
@@ -442,18 +451,20 @@ describe("Workspace", () => {
     }
   });
 
-  it("falls back to polling when workspace subscription setup fails", async () => {
+  it("retries workspace subscriptions when setup fails", async () => {
     const repoPath = await initRepo();
     const watchWorkspaceStatus =
-      await importWatchWorkspaceStatusWithWorkspaceSubscriptionFailure(repoPath);
+      await importWatchWorkspaceStatusWithTransientWorkspaceSubscriptionFailure(repoPath);
     const calls: number[] = [];
     const stopWatching = watchWorkspaceStatus(repoPath, () => {
       calls.push(Date.now());
     });
 
     try {
-      await sleep(300);
-      await fs.writeFile(path.join(repoPath, "README.md"), "polled edit\n", "utf8");
+      await sleep(600);
+      expect(calls).toHaveLength(0);
+
+      await fs.writeFile(path.join(repoPath, "README.md"), "retried edit\n", "utf8");
       await waitForCallCount(() => calls.length, 1, 2_000);
       expect(calls).toHaveLength(1);
     } finally {
