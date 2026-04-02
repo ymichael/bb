@@ -88,6 +88,33 @@ describe("Workspace", () => {
     expect(status.mergeBase?.commits[0]?.subject).toBe("Feature commit");
   });
 
+  it("reports untracked files plus committed unmerged changes as dirty_and_committed_unmerged", async () => {
+    const repoPath = await initRepo();
+    await runGit(["checkout", "-b", "feature"], { cwd: repoPath });
+    await fs.writeFile(path.join(repoPath, "README.md"), "feature\n", "utf8");
+    await runGit(["add", "README.md"], { cwd: repoPath });
+    await runGit(["commit", "-m", "Feature commit"], { cwd: repoPath });
+    await fs.writeFile(path.join(repoPath, "notes.txt"), "untracked pending\n", "utf8");
+
+    const workspace = new Workspace(repoPath);
+    const status = await workspace.getStatus({ mergeBaseBranch: "main" });
+
+    expect(status.workingTree.state).toBe("dirty_and_committed_unmerged");
+    expect(status.workingTree.changedFiles).toBe(1);
+    expect(status.workingTree.files).toEqual([
+      {
+        path: "notes.txt",
+        status: "??",
+      },
+    ]);
+    expect(status.mergeBase).toMatchObject({
+      mergeBaseBranch: "main",
+      hasCommittedUnmergedChanges: true,
+      aheadCount: 1,
+      behindCount: 0,
+    });
+  });
+
   it("returns diff content for each supported target", async () => {
     const repoPath = await initRepo();
     await runGit(["checkout", "-b", "feature"], { cwd: repoPath });
