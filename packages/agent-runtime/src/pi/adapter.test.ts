@@ -731,7 +731,9 @@ describe("pi provider adapter", () => {
   });
 
   it("translateEvent accumulates Pi token usage across turns", () => {
-    const adapter = createPiProviderAdapter();
+    const adapter = createPiProviderAdapter({
+      resolveModelContextWindow: () => 123_456,
+    });
 
     adapter.translateEvent(loadFixture("agent-start.json"));
     const firstTurnEvents = adapter.translateEvent(loadFixture("agent-end-with-message.json"));
@@ -754,7 +756,7 @@ describe("pi provider adapter", () => {
       cachedInputTokens: 3380,
       outputTokens: 156,
     });
-    expect(firstTokenUsage?.tokenUsage.modelContextWindow).toBe(1_000_000);
+    expect(firstTokenUsage?.tokenUsage.modelContextWindow).toBe(123_456);
     expect(secondTokenUsage?.tokenUsage.total).toMatchObject({
       totalTokens: 15472,
       inputTokens: 8400,
@@ -762,7 +764,7 @@ describe("pi provider adapter", () => {
       outputTokens: 312,
     });
     expect(secondTokenUsage?.tokenUsage.last).toEqual(firstTokenUsage?.tokenUsage.last);
-    expect(secondTokenUsage?.tokenUsage.modelContextWindow).toBe(1_000_000);
+    expect(secondTokenUsage?.tokenUsage.modelContextWindow).toBe(123_456);
   });
 
   it("translateEvent clears stale tool state when a turn ends without tool results", () => {

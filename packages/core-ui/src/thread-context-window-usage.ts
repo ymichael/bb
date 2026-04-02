@@ -1,5 +1,6 @@
 import {
   isThreadEventRowOfType,
+  toPositiveNumber,
   type ThreadEventRow,
 } from "@bb/domain";
 
@@ -15,13 +16,6 @@ interface ContextWindowUsage {
 
 function toNonNegativeNumber(value: unknown): number | undefined {
   if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
-    return undefined;
-  }
-  return value;
-}
-
-function toPositiveNumber(value: unknown): number | undefined {
-  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
     return undefined;
   }
   return value;

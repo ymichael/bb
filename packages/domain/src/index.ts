@@ -230,6 +230,10 @@ export type {
 } from "./provider-event.js";
 
 export {
+  toPositiveNumber,
+} from "./number-utils.js";
+
+export {
   timelineMessageRowSchema,
   timelineRowSchema,
   timelineToolGroupRowSchema,

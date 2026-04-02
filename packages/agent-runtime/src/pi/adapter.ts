@@ -7,8 +7,8 @@
  * and produces `ThreadEvent[]`.
  */
 
-import { getModels, getProviders, type KnownProvider } from "@mariozechner/pi-ai";
-import { AuthStorage } from "@mariozechner/pi-coding-agent";
+import type { KnownProvider } from "@mariozechner/pi-ai";
+import { AuthStorage, ModelRegistry } from "@mariozechner/pi-coding-agent";
 import { z } from "zod";
 import type {
   AgentSessionEvent,
@@ -23,6 +23,7 @@ import type {
   ThreadEventTokenUsageBreakdown,
   ToolCallRequest,
 } from "@bb/domain";
+import { toPositiveNumber } from "@bb/domain";
 import {
   decodeProviderToolCallRequest,
 } from "../shared/provider-tool-call-contract.js";
@@ -442,7 +443,10 @@ export function buildPiAvailableModels(args: {
 }
 
 async function listPiModels(): Promise<AvailableModel[]> {
-  const authStorage = AuthStorage.create();
+  const [{ getModels, getProviders }, authStorage] = await Promise.all([
+    import("@mariozechner/pi-ai"),
+    Promise.resolve(AuthStorage.create()),
+  ]);
   return buildPiAvailableModels({
     providers: getProviders(),
     getModels: (provider) => piCatalogModelsSchema.parse(getModels(provider)),
@@ -454,33 +458,47 @@ function toCanonicalPiModelId(provider: string, modelId: string): string {
   return modelId.includes("/") ? modelId : `${provider}/${modelId}`;
 }
 
-function toPositiveNumber(value: unknown): number | undefined {
-  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
-    return undefined;
-  }
-  return value;
+type PiModelContextWindowLookup = ReadonlyMap<string, number>;
+
+type PiModelContextWindowResolver = (
+  lastAssistant: PiAssistantMessage | undefined,
+) => number | null;
+
+function createPiModelRegistry(): ModelRegistry {
+  return new ModelRegistry(AuthStorage.create());
 }
 
-function buildPiModelContextWindowLookup(): ReadonlyMap<string, number> {
+function buildPiModelContextWindowLookup(
+  models: readonly PiCatalogModel[],
+): PiModelContextWindowLookup {
   const lookup = new Map<string, number>();
-  for (const provider of getProviders()) {
-    const models = piCatalogModelsSchema.parse(getModels(provider));
-    for (const model of models) {
-      const contextWindow = toPositiveNumber(model.contextWindow);
-      if (contextWindow === undefined) {
-        continue;
-      }
-      const canonicalId = toCanonicalPiModelId(provider, model.id);
-      lookup.set(canonicalId, contextWindow);
-      if (model.id.includes("/")) {
-        lookup.set(model.id, contextWindow);
-      }
+  for (const model of models) {
+    const contextWindow = toPositiveNumber(model.contextWindow);
+    if (contextWindow === undefined) {
+      continue;
+    }
+    const canonicalId = toCanonicalPiModelId(model.provider, model.id);
+    lookup.set(canonicalId, contextWindow);
+    if (model.id.includes("/")) {
+      lookup.set(model.id, contextWindow);
     }
   }
   return lookup;
 }
 
-const PI_MODEL_CONTEXT_WINDOW_LOOKUP = buildPiModelContextWindowLookup();
+function createPiModelContextWindowResolver(): PiModelContextWindowResolver {
+  return (lastAssistant) => {
+    if (!toOptionalString(lastAssistant?.model)) {
+      return null;
+    }
+
+    // Resolve against a fresh registry so models.json overrides and custom
+    // model definitions are reflected without module-level cached state.
+    const models = piCatalogModelsSchema.parse(createPiModelRegistry().getAll());
+    const modelContextWindowLookup = buildPiModelContextWindowLookup(models);
+    return resolvePiModelContextWindow(lastAssistant, modelContextWindowLookup);
+  };
+}
 
 function getPiReasoningEfforts(model: PiCatalogModel): ModelReasoningEffort[] {
   if (!model.reasoning) return [LOW_REASONING_EFFORT];
@@ -530,6 +548,8 @@ export interface CreatePiProviderAdapterOptions {
   launchEnv?: Record<string, string>;
   /** Override model listing. Used by unit tests to avoid real API calls. */
   listModels?: () => Promise<AvailableModel[]>;
+  /** Override context-window resolution. Used by unit tests to avoid real catalogs. */
+  resolveModelContextWindow?: PiModelContextWindowResolver;
 }
 
 interface PiTurnState {
@@ -549,7 +569,8 @@ export function createPiProviderAdapter(
     supportsServiceTier: false,
   };
   const models = opts?.listModels ?? listPiModels;
-  const modelContextWindowLookup = PI_MODEL_CONTEXT_WINDOW_LOOKUP;
+  const resolveModelContextWindow = opts?.resolveModelContextWindow
+    ?? createPiModelContextWindowResolver();
 
   // Per-thread turn state — Pi SDK doesn't have turn IDs, so the adapter
   // assigns them. Keyed by threadId so multiple threads sharing one adapter
@@ -718,7 +739,7 @@ export function createPiProviderAdapter(
           const tokenUsage = extractPiTokenUsage(
             lastAssistant,
             state.cumulativeTokens,
-            modelContextWindowLookup,
+            resolveModelContextWindow,
           );
           if (tokenUsage) {
             events.push({
@@ -1016,25 +1037,14 @@ function extractAssistantText(
 function extractPiTokenUsage(
   lastAssistant: PiAssistantMessage | undefined,
   cumulativeTokens: ThreadEventTokenUsageBreakdown,
-  modelContextWindowLookup: ReadonlyMap<string, number>,
+  resolveModelContextWindow: PiModelContextWindowResolver,
 ): ThreadEventTokenUsage | undefined {
   const last = toAssistantUsageBreakdown(lastAssistant);
-  const modelContextWindow = resolvePiModelContextWindow(
-    lastAssistant,
-    modelContextWindowLookup,
-  );
-
-  if (!last && modelContextWindow === null) {
+  if (!last) {
     return undefined;
   }
-
-  const current: ThreadEventTokenUsageBreakdown = last ?? {
-    totalTokens: 0,
-    inputTokens: 0,
-    cachedInputTokens: 0,
-    outputTokens: 0,
-    reasoningOutputTokens: 0,
-  };
+  const modelContextWindow = resolveModelContextWindow(lastAssistant);
+  const current = last;
 
   // Accumulate into the per-thread cumulative total
   cumulativeTokens.totalTokens += current.totalTokens;
@@ -1052,7 +1062,7 @@ function extractPiTokenUsage(
 
 function resolvePiModelContextWindow(
   lastAssistant: PiAssistantMessage | undefined,
-  modelContextWindowLookup: ReadonlyMap<string, number>,
+  modelContextWindowLookup: PiModelContextWindowLookup,
 ): number | null {
   const modelId = toOptionalString(lastAssistant?.model);
   if (!modelId) {

@@ -18,6 +18,7 @@ import type {
   ThreadEventTokenUsageBreakdown,
   ToolCallRequest,
 } from "@bb/domain";
+import { toPositiveNumber } from "@bb/domain";
 import {
   decodeProviderToolCallRequest,
 } from "../shared/provider-tool-call-contract.js";
@@ -1111,17 +1112,11 @@ function extractModelContextWindow(
   let largestContextWindow: number | null = null;
   for (const usage of Object.values(modelUsage)) {
     const contextWindow = toPositiveNumber(usage.contextWindow);
-    if (contextWindow === null) continue;
+    if (contextWindow === undefined) continue;
     if (largestContextWindow === null || contextWindow > largestContextWindow) {
       largestContextWindow = contextWindow;
     }
   }
 
   return largestContextWindow;
-}
-
-function toPositiveNumber(value: unknown): number | null {
-  return typeof value === "number" && Number.isFinite(value) && value > 0
-    ? value
-    : null;
 }
