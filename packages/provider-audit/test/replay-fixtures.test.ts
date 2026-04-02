@@ -167,6 +167,24 @@ describe("@bb/provider-audit fixture replay", () => {
     expect(contextWindowSnapshots).toMatchSnapshot();
   });
 
+  it("replayed Pi fixtures expose non-null context-window usage", () => {
+    const piSnapshots = checkedInReplay.fixtures
+      .filter(({ fixture }) => fixture.providerId === "pi")
+      .map(({ fixture, bundle }) =>
+        buildFixtureContextWindowSnapshot(
+          bundle,
+          `${fixture.corpusId}/${fixture.providerId}/${fixture.taskId}`,
+        ),
+      );
+
+    expect(piSnapshots.length).toBeGreaterThan(0);
+    for (const snapshot of piSnapshots) {
+      expect(snapshot.contextWindowUsage).not.toBeNull();
+      expect(snapshot.tokenUsageSummary.nonNullModelContextWindowCount).toBeGreaterThan(0);
+      expect(snapshot.tokenUsageSummary.distinctModelContextWindows.length).toBeGreaterThan(0);
+    }
+  });
+
   it("has no unresolved coverage issues in the checked-in fixtures", () => {
     expect(collectCoverageIssues(checkedInReplay)).toEqual({
       unexpectedUntranslatedFixtures: [],
