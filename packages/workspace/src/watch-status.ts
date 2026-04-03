@@ -3,10 +3,10 @@ import type { WorkspaceStatusWatchArgs } from "./watch-status-types.js";
 
 export type {
   WorkspaceStatusChangeCallback,
+  WorkspaceStatusWatchArgs,
   WorkspaceStatusWatchError,
   WorkspaceStatusWatchErrorCallback,
 } from "./watch-status-types.js";
-export type { WorkspaceStatusWatchArgs } from "./watch-status-types.js";
 
 export function watchWorkspaceStatus(
   cwd: string,

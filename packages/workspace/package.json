@@ -6,6 +6,10 @@
     ".": {
       "import": "./dist/index.js",
       "types": "./dist/index.d.ts"
+    },
+    "./watch-status": {
+      "import": "./dist/watch-status.js",
+      "types": "./dist/watch-status.d.ts"
     }
   },
   "main": "./dist/index.js",

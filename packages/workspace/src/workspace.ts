@@ -23,10 +23,6 @@ import {
   WorkspaceError,
 } from "./git.js";
 import fs from "node:fs/promises";
-import {
-  type WorkspaceStatusWatchArgs,
-  watchWorkspaceStatus,
-} from "./watch-status.js";
 
 export interface DiffOptions {
   target?: WorkspaceDiffTarget;
@@ -266,11 +262,6 @@ export class Workspace {
   async getBranches(): Promise<string[]> {
     return listBranches(this.path);
   }
-
-  watchStatus(args: WorkspaceStatusWatchArgs): () => void {
-    return watchWorkspaceStatus(this.path, args);
-  }
-
   async commit(options: CommitOptions): Promise<CommitResult> {
     await ensureGitRepo(this.path);
 

@@ -26,7 +26,3 @@ export type {
   GitCommandResult,
 } from "./git.js";
 export { WorkspaceError } from "./git.js";
-export type {
-  WorkspaceStatusWatchArgs,
-  WorkspaceStatusWatchError,
-} from "./watch-status.js";

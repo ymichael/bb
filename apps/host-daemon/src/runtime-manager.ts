@@ -9,8 +9,13 @@ import {
   provisionWorkspace,
   type IWorkspace,
   type ProvisionWorkspaceOpts,
-  type WorkspaceStatusWatchError,
 } from "@bb/workspace";
+import {
+  watchWorkspaceStatus,
+  type WorkspaceStatusWatchError,
+} from "@bb/workspace/watch-status";
+
+type WatchWorkspaceStatus = typeof watchWorkspaceStatus;
 
 function lazyProvisionOpts(
   workspacePath: string,
@@ -51,6 +56,7 @@ export interface EnsureEnvironmentArgs {
 export interface RuntimeManagerOptions {
   createRuntime?: (options: AgentRuntimeOptions) => AgentRuntime;
   provisionWorkspace?: (options: ProvisionWorkspaceOpts) => Promise<IWorkspace>;
+  watchWorkspaceStatus?: WatchWorkspaceStatus;
   adapterFactory?: AgentRuntimeOptions["adapterFactory"];
   onEvent?: (args: { environmentId: string; event: ThreadEvent }) => void;
   onWorkspaceStatusChanged?: (args: { environmentId: string }) => void;
@@ -66,12 +72,15 @@ export interface RuntimeManagerOptions {
 export class RuntimeManager {
   private readonly createRuntime;
   private readonly provisionWorkspace;
+  private readonly watchWorkspaceStatus;
   private readonly entries = new Map<string, RuntimeEntry>();
   private readonly pendingEntries = new Map<string, Promise<RuntimeEntry>>();
 
   constructor(private readonly options: RuntimeManagerOptions = {}) {
     this.createRuntime = options.createRuntime ?? createAgentRuntime;
     this.provisionWorkspace = options.provisionWorkspace ?? provisionWorkspace;
+    this.watchWorkspaceStatus =
+      options.watchWorkspaceStatus ?? watchWorkspaceStatus;
   }
 
   get(environmentId: string): RuntimeEntry | undefined {
@@ -215,7 +224,7 @@ export class RuntimeManager {
     }
 
     const workspace = await this.provisionWorkspace(provision);
-    const stopWatchingStatus = workspace.watchStatus({
+    const stopWatchingStatus = this.watchWorkspaceStatus(workspace.path, {
       onChange: () => {
         this.options.onWorkspaceStatusChanged?.({
           environmentId: args.environmentId,

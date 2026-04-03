@@ -1,3 +1,4 @@
+import parcelWatcher from "@parcel/watcher";
 import { calculateExponentialBackoffDelay } from "@bb/domain";
 import { detectGitRepo, pathExists } from "./git.js";
 import { createDebouncedCallbackScheduler } from "./watch-callback-scheduler.js";
@@ -15,8 +16,7 @@ const WORKSPACE_STATUS_WATCH_MAX_WAIT_MS = 500;
 const WORKSPACE_STATUS_WATCH_RETRY_DELAY_MS = 250;
 const WORKSPACE_STATUS_WATCH_MAX_RETRY_DELAY_MS = 30_000;
 
-type ParcelWatcherModule = typeof import("@parcel/watcher");
-type ParcelWatcherSubscribe = ParcelWatcherModule["subscribe"];
+type ParcelWatcherSubscribe = typeof parcelWatcher.subscribe;
 type ParcelWatcherCallback = Parameters<ParcelWatcherSubscribe>[1];
 type ParcelWatcherAsyncSubscription = Awaited<
   ReturnType<ParcelWatcherSubscribe>
@@ -30,15 +30,6 @@ interface WorkspaceStatusWatcherArgs extends WorkspaceStatusWatchArgs {
   maxRetryDelayMs: number;
   maxWaitMs: number;
   retryDelayMs: number;
-}
-
-let parcelWatcherModulePromise: Promise<ParcelWatcherModule> | null = null;
-
-function loadParcelWatcher(): Promise<ParcelWatcherModule> {
-  if (parcelWatcherModulePromise === null) {
-    parcelWatcherModulePromise = import("@parcel/watcher");
-  }
-  return parcelWatcherModulePromise;
 }
 
 function toErrorMessage(error: unknown): string {
@@ -218,7 +209,6 @@ export class WorkspaceStatusWatcher {
       return;
     }
     try {
-      const parcelWatcher = await loadParcelWatcher();
       const subscription = await parcelWatcher.subscribe(
         spec.rootPath,
         (error: ParcelWatcherError, events: ParcelWatcherEventBatch) => {

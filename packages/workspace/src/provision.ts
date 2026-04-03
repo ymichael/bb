@@ -26,7 +26,6 @@ import {
   runGit,
   WorkspaceError,
 } from "./git.js";
-import type { WorkspaceStatusWatchArgs } from "./watch-status.js";
 
 // ---------------------------------------------------------------------------
 // Options (discriminated union on workspaceProvisionType from @bb/domain)
@@ -104,7 +103,6 @@ export interface IWorkspace {
   getStatus(options?: StatusOptions): Promise<WorkspaceStatus>;
   getDiff(options?: DiffOptions): Promise<DiffResult>;
   getBranches(): Promise<string[]>;
-  watchStatus(args: WorkspaceStatusWatchArgs): () => void;
 
   // Git mutations
   commit(options: CommitOptions): Promise<CommitResult>;
@@ -183,10 +181,6 @@ class WorkspaceImpl implements IWorkspace {
 
   getBranches(): Promise<string[]> {
     return this.ws.getBranches();
-  }
-
-  watchStatus(args: WorkspaceStatusWatchArgs): () => void {
-    return this.ws.watchStatus(args);
   }
 
   commit(options: CommitOptions): Promise<CommitResult> {
