@@ -1029,6 +1029,53 @@ describe("public thread routes", () => {
     }
   });
 
+  it("deletes idle managed threads while disconnected and queues cleanup immediately", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const host = seedHost(harness.deps, { id: "host-delete-idle-managed-offline" });
+      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        managed: true,
+        workspaceProvisionType: "managed-worktree",
+        path: "/tmp/delete-idle-managed-offline",
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "idle",
+      });
+
+      const response = await harness.app.request(`/api/v1/threads/${thread.id}`, {
+        method: "DELETE",
+      });
+
+      expect(response.status).toBe(200);
+      expect(getThread(harness.db, thread.id)?.deletedAt).toBeTypeOf("number");
+      expect(getEnvironment(harness.db, environment.id)?.status).toBe("destroying");
+
+      const destroyCommand = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "environment.destroy" &&
+          command.environmentId === environment.id,
+      );
+      expect(destroyCommand.row.sessionId).toBeNull();
+      await expect(
+        waitForQueuedCommandAfter(
+          harness,
+          destroyCommand.row.cursor,
+          ({ command }) =>
+            command.type === "thread.stop" && command.threadId === thread.id,
+          100,
+        ),
+      ).rejects.toThrow("Timed out waiting for queued command");
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("archives shared managed environments without prompting or queueing cleanup", async () => {
     const harness = await createTestAppHarness();
     try {
@@ -1123,6 +1170,97 @@ describe("public thread routes", () => {
           100,
         ),
       ).rejects.toThrow("Timed out waiting for queued command");
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("archives active isolated managed environments without destroying them until stop finalization completes", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-archive-managed-active",
+      });
+      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        managed: true,
+        workspaceProvisionType: "managed-worktree",
+        path: "/tmp/archive-managed-active",
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "active",
+      });
+
+      const archivePromise = harness.app.request(`/api/v1/threads/${thread.id}/archive`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ force: false }),
+      });
+
+      const initialStatusCommand = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "workspace.status" &&
+          command.environmentId === environment.id,
+      );
+      await reportQueuedCommandSuccess(harness, initialStatusCommand, {
+        workspaceStatus: cleanWorkspaceStatus(),
+      });
+
+      const stopCommand = await waitForQueuedCommandAfter(
+        harness,
+        initialStatusCommand.row.cursor,
+        ({ command }) =>
+          command.type === "thread.stop" &&
+          command.threadId === thread.id,
+      );
+
+      const archiveResponse = await archivePromise;
+      expect(archiveResponse.status).toBe(200);
+      expect(getThread(harness.db, thread.id)?.archivedAt).toBeTypeOf("number");
+      expect(getThread(harness.db, thread.id)?.stopRequestedAt).toBeTypeOf("number");
+      await expect(
+        waitForQueuedCommandAfter(
+          harness,
+          stopCommand.row.cursor,
+          ({ command }) =>
+            command.type === "environment.destroy" &&
+            command.environmentId === environment.id,
+          100,
+        ),
+      ).rejects.toThrow("Timed out waiting for queued command");
+
+      const stopResultPromise = reportQueuedCommandSuccess(harness, stopCommand, {});
+
+      const cleanupStatusCommand = await waitForQueuedCommandAfter(
+        harness,
+        stopCommand.row.cursor,
+        ({ command }) =>
+          command.type === "workspace.status" &&
+          command.environmentId === environment.id,
+      );
+      await reportQueuedCommandSuccess(harness, cleanupStatusCommand, {
+        workspaceStatus: cleanWorkspaceStatus(),
+      });
+      const stopResultResponse = await stopResultPromise;
+      expect(stopResultResponse.status).toBe(200);
+
+      const destroyCommand = await waitForQueuedCommandAfter(
+        harness,
+        cleanupStatusCommand.row.cursor,
+        ({ command }) =>
+          command.type === "environment.destroy" &&
+          command.environmentId === environment.id,
+      );
+      expect(destroyCommand.command).toMatchObject({
+        environmentId: environment.id,
+      });
     } finally {
       await harness.cleanup();
     }

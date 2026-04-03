@@ -16,6 +16,7 @@ import {
   createThread,
   archiveThread,
   markThreadDeleted,
+  markThreadStopRequested,
 } from "../../src/data/threads.js";
 import { createEnvironment } from "../../src/data/environments.js";
 import { openSession } from "../../src/data/sessions.js";
@@ -153,6 +154,56 @@ describe("sweepExpiredCommands", () => {
 
     const result2 = sweepExpiredCommands(db, noopNotifier);
     expect(result2.requeued).toBe(1); // Now expired and re-queued
+  });
+
+  it("does not transition deleted or stop-pending threads to error when commands expire", () => {
+    const { db, host, project } = setup();
+    const deletedThread = createThread(db, noopNotifier, {
+      projectId: project.id,
+      providerId: "codex",
+      status: "idle",
+    });
+    const stopPendingThread = createThread(db, noopNotifier, {
+      projectId: project.id,
+      providerId: "codex",
+      status: "active",
+    });
+    markThreadDeleted(db, noopNotifier, { threadId: deletedThread.id });
+    markThreadStopRequested(db, noopNotifier, {
+      threadId: stopPendingThread.id,
+      requestedAt: 123,
+    });
+
+    const deletedCommand = queueCommand(db, noopNotifier, {
+      hostId: host.id,
+      type: "workspace.status",
+      payload: JSON.stringify({ threadId: deletedThread.id }),
+    });
+    const stopPendingCommand = queueCommand(db, noopNotifier, {
+      hostId: host.id,
+      type: "workspace.status",
+      payload: JSON.stringify({ threadId: stopPendingThread.id }),
+    });
+
+    fetchCommands(db, noopNotifier, { hostId: host.id });
+    db.update(hostDaemonCommands)
+      .set({ fetchedAt: Date.now() - 70_000, retryCount: 1 })
+      .where(eq(hostDaemonCommands.id, deletedCommand.id))
+      .run();
+    db.update(hostDaemonCommands)
+      .set({ fetchedAt: Date.now() - 70_000, retryCount: 1 })
+      .where(eq(hostDaemonCommands.id, stopPendingCommand.id))
+      .run();
+
+    const result = sweepExpiredCommands(db, noopNotifier);
+    expect(result.errored).toBe(2);
+
+    expect(
+      db.select().from(threads).where(eq(threads.id, deletedThread.id)).get()?.status,
+    ).toBe("idle");
+    expect(
+      db.select().from(threads).where(eq(threads.id, stopPendingThread.id)).get()?.status,
+    ).toBe("active");
   });
 });
 

@@ -106,7 +106,7 @@ function requestThreadStopIfNeeded(
   });
 }
 
-async function ensureArchiveDoesNotRequireConfirmation(
+async function resolveArchiveCleanupTiming(
   deps: AppDeps,
   thread: Thread,
   environment: Environment,
@@ -131,6 +131,7 @@ async function ensureArchiveDoesNotRequireConfirmation(
 
   const session = getActiveSession(deps.db, environment.hostId);
   if (!session || session.leaseExpiresAt <= Date.now()) {
+    // Defer cleanup until the reconnect/sweep path can validate workspace state.
     return false;
   }
 
@@ -304,7 +305,7 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
     if (thread.archivedAt !== null) {
       throw new ApiError(409, "invalid_request", "Thread is already archived");
     }
-    const shouldEvaluateCleanupNow = await ensureArchiveDoesNotRequireConfirmation(
+    const shouldEvaluateCleanupAfterArchiveNow = await resolveArchiveCleanupTiming(
       deps,
       thread,
       environment,
@@ -317,7 +318,7 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
       mode: "archived",
       threadId: thread.id,
     });
-    if (thread.status !== "active" && shouldEvaluateCleanupNow) {
+    if (thread.status !== "active" && shouldEvaluateCleanupAfterArchiveNow) {
       cleanupEnvironmentAfterThreadRemoval(deps, thread.environmentId);
     }
     return context.json({ ok: true });

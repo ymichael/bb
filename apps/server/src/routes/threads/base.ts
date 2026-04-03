@@ -116,6 +116,8 @@ export function registerThreadBaseRoutes(app: Hono, deps: AppDeps): void {
       });
     }
 
+    // Active tombstones still block cleanup through the stop-pending guard in
+    // environment cleanup until stop finalization removes the runtime.
     cleanupEnvironmentAfterThreadRemoval(deps, thread.environmentId);
     return context.json({ ok: true });
   });

@@ -42,7 +42,9 @@ function hasConnectedHostSession(
   return session !== null && session.leaseExpiresAt > Date.now();
 }
 
-function hasPendingStopRequests(
+// Soft-deleted active threads still block environment cleanup until stop
+// finalization or reconnect reconciliation confirms the runtime is gone.
+function hasPendingThreadShutdowns(
   deps: Pick<AppDeps, "db">,
   environmentId: string,
 ): boolean {
@@ -114,7 +116,7 @@ function authorizeEnvironmentCleanup(
     return;
   }
 
-  if (hasPendingStopRequests(deps, environmentId)) {
+  if (hasPendingThreadShutdowns(deps, environmentId)) {
     return;
   }
 
@@ -216,7 +218,7 @@ export async function evaluateManagedEnvironmentArchiveCleanup(
     return;
   }
 
-  if (hasPendingStopRequests(deps, environment.id)) {
+  if (hasPendingThreadShutdowns(deps, environment.id)) {
     return;
   }
 
