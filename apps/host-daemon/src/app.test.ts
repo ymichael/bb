@@ -3,10 +3,6 @@ import {
   createCommandFetchLoop,
 } from "./app.js";
 
-interface FetchCommandsArgs {
-  afterCursor: number;
-}
-
 function createLogger() {
   return {
     info: vi.fn(),

@@ -241,19 +241,6 @@ describe("getEnvironmentStateInvalidationQueryKeys", () => {
 });
 
 describe("getEnvironmentActionInvalidationQueryKeys", () => {
-  it("targets realtime environment-scoped queries", () => {
-    expect(
-      getEnvironmentRealtimeInvalidationQueryKeys({
-        environmentId: "env-1",
-      }),
-    ).toEqual([
-      ["environment", "env-1"],
-      ["environmentWorkStatus", "env-1"],
-      ["environmentGitDiff", "env-1"],
-      ["environmentMergeBaseBranches", "env-1"],
-    ]);
-  });
-
   it("targets environment-scoped queries", () => {
     expect(
       getEnvironmentActionInvalidationQueryKeys({

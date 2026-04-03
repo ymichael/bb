@@ -17,7 +17,6 @@ import { createTestAppHarness } from "./helpers/test-app.js";
 type WorkspaceMutationCommandType =
   | "workspace.commit"
   | "workspace.squash_merge"
-  | "workspace.checkpoint"
   | "workspace.promote"
   | "workspace.demote";
 
@@ -71,25 +70,6 @@ const WORKSPACE_MUTATION_CASES: WorkspaceMutationCase[] = [
         },
         commitMessage: "Squash branch",
         targetBranch: "main",
-      }),
-  },
-  {
-    commandType: "workspace.checkpoint",
-    name: "workspace.checkpoint",
-    result: {
-      branchName: "bb/test",
-      commitSha: "ghi789",
-      remoteName: "origin",
-    },
-    toPayload: ({ environmentId, workspacePath }) =>
-      JSON.stringify({
-        type: "workspace.checkpoint",
-        environmentId,
-        workspaceContext: {
-          workspacePath,
-          workspaceProvisionType: "unmanaged",
-        },
-        commitMessage: "Checkpoint",
       }),
   },
   {
@@ -209,6 +189,7 @@ describe("internal command result environment notifications", () => {
         payload: JSON.stringify({
           type: "environment.provision",
           environmentId: environment.id,
+          initiator: null,
           path: "/tmp/provision-notify",
           workspaceProvisionType: "unmanaged",
         }),
@@ -221,7 +202,7 @@ describe("internal command result environment notifications", () => {
         isGitRepo: true,
         isWorktree: false,
         path: "/tmp/provision-notify",
-        ranSetup: false,
+        transcript: [],
       };
 
       const response = await harness.app.request("/internal/session/command-result", {

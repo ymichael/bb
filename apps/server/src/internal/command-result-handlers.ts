@@ -43,7 +43,6 @@ type WorkspaceMutationResultReport = Extract<
     type:
       | "workspace.commit"
       | "workspace.squash_merge"
-      | "workspace.checkpoint"
       | "workspace.promote"
       | "workspace.demote";
   }
@@ -362,7 +361,6 @@ export async function handleCommandResultSideEffects(
       return;
     case "workspace.commit":
     case "workspace.squash_merge":
-    case "workspace.checkpoint":
     case "workspace.promote":
     case "workspace.demote":
       handleWorkspaceMutationResult(deps, report, commandRow);

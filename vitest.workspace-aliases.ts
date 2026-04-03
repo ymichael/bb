@@ -38,6 +38,10 @@ export const workspaceTestAliases = {
   "@bb/server": path.resolve(repoRoot, "apps/server/src/index.ts"),
   "@bb/cli": path.resolve(repoRoot, "apps/cli/src/index.ts"),
   "@bb/logger": path.resolve(repoRoot, "packages/logger/src/index.ts"),
+  "@bb/provider-audit": path.resolve(
+    repoRoot,
+    "packages/provider-audit/src/index.ts",
+  ),
   "@bb/ui-core": path.resolve(repoRoot, "packages/ui-core/src/index.ts"),
   "@bb/workspace/watch-status": path.resolve(
     repoRoot,
