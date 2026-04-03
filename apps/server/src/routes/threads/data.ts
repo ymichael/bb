@@ -18,7 +18,7 @@ import { COMMAND_TIMEOUT_MS } from "../../constants.js";
 import { ApiError } from "../../errors.js";
 import {
   requireEnvironment,
-  requireThread,
+  requirePublicThread,
 } from "../../services/entity-lookup.js";
 import { queueCommandAndWait } from "../../services/command-wait.js";
 import {
@@ -67,7 +67,7 @@ function requireThreadStorageTarget(
   deps: Pick<AppDeps, "db">,
   args: RequireThreadStorageTargetArgs,
 ): ThreadStorageTarget {
-  const thread = requireThread(deps.db, args.threadId);
+  const thread = requirePublicThread(deps.db, args.threadId);
   if (!thread.environmentId) {
     throw new ApiError(409, "invalid_request", "Thread has no environment");
   }
@@ -88,7 +88,7 @@ export function registerThreadDataRoutes(app: Hono, deps: AppDeps): void {
 
   get("/threads/:id/timeline", threadTimelineQuerySchema, (context, query) =>
     context.json(
-      buildThreadTimeline(deps.db, requireThread(deps.db, context.req.param("id")), {
+      buildThreadTimeline(deps.db, requirePublicThread(deps.db, context.req.param("id")), {
         includeManagerDebugView: query.includeManagerDebugView === "true",
         includeToolGroupMessages: query.includeToolGroupMessages === "true",
       }),
@@ -99,7 +99,7 @@ export function registerThreadDataRoutes(app: Hono, deps: AppDeps): void {
     context.json(
       buildTimelineToolDetails(
         deps.db,
-        requireThread(deps.db, context.req.param("id")),
+        requirePublicThread(deps.db, context.req.param("id")),
         {
           sourceSeqStart: parseOptionalInteger(query.sourceSeqStart, "sourceSeqStart") ?? 0,
           sourceSeqEnd: parseOptionalInteger(query.sourceSeqEnd, "sourceSeqEnd") ?? 0,
@@ -110,18 +110,18 @@ export function registerThreadDataRoutes(app: Hono, deps: AppDeps): void {
   );
 
   get("/threads/:id/output", (context) => {
-    requireThread(deps.db, context.req.param("id"));
+    requirePublicThread(deps.db, context.req.param("id"));
     return context.json({ output: getLastThreadOutput(deps.db, context.req.param("id")) });
   });
 
   get("/threads/:id/drafts", (context) => {
     const threadId = context.req.param("id");
-    requireThread(deps.db, threadId);
+    requirePublicThread(deps.db, threadId);
     return context.json(listDrafts(deps.db, threadId).map((draft) => toQueuedMessage(draft)));
   });
 
   get("/threads/:id/events", threadEventsQuerySchema, (context, query) => {
-    requireThread(deps.db, context.req.param("id"));
+    requirePublicThread(deps.db, context.req.param("id"));
     return context.json(
       listThreadEventRows(deps.db, {
         threadId: context.req.param("id"),
@@ -133,7 +133,7 @@ export function registerThreadDataRoutes(app: Hono, deps: AppDeps): void {
 
   get("/threads/:id/events/wait", threadEventWaitQuerySchema, async (context, query) => {
     const threadId = context.req.param("id");
-    requireThread(deps.db, threadId);
+    requirePublicThread(deps.db, threadId);
 
     const afterSeq = parseOptionalInteger(query.afterSeq, "afterSeq");
     const waitMs = Math.min(parseOptionalInteger(query.waitMs, "waitMs") ?? 30_000, 60_000);
@@ -168,7 +168,7 @@ export function registerThreadDataRoutes(app: Hono, deps: AppDeps): void {
   });
 
   get("/threads/:id/default-execution-options", (context) => {
-    requireThread(deps.db, context.req.param("id"));
+    requirePublicThread(deps.db, context.req.param("id"));
     return context.json(getLastExecutionOptions(deps, context.req.param("id")));
   });
 

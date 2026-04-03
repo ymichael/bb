@@ -45,7 +45,6 @@ import {
 import { getThreadDisplayTitle, threadTypeLabel } from "@/lib/thread-title";
 import {
   isArchiveForceRequiredError,
-  requiresArchiveConfirmation,
 } from "@/lib/thread-archive";
 import { useGitDiffPanel } from "./useGitDiffPanel";
 import { useThreadTimelineController } from "./useThreadTimelineController";
@@ -292,11 +291,6 @@ export function ThreadDetailView() {
       return;
     }
 
-    if (requiresArchiveConfirmation(workStatus, environment)) {
-      threadArchiveConfirmationDialog.onOpen(thread);
-      return;
-    }
-
     archiveThread.mutate(
       { id: thread.id, force: false },
       {
@@ -321,7 +315,6 @@ export function ThreadDetailView() {
     thread,
     threadArchiveConfirmationDialog,
     unarchiveThread,
-    workStatus,
   ]);
   const parentThreadId = thread?.parentThreadId;
   const parentThreadDisplayName =

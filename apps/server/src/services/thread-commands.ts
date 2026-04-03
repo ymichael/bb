@@ -1,8 +1,10 @@
 import {
+  hostDaemonCommands,
   getActiveSession,
   queueCommand,
   transitionThreadStatus,
 } from "@bb/db";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import type {
   PromptInput,
   ResolvedThreadExecutionOptions,
@@ -27,6 +29,12 @@ export interface ExecutionOptionsRequest {
   reasoningLevel?: CreateThreadRequest["reasoningLevel"];
   sandboxMode?: CreateThreadRequest["sandboxMode"];
   serviceTier?: CreateThreadRequest["serviceTier"];
+}
+
+export interface QueueThreadStopCommandArgs {
+  environmentId: string;
+  hostId: string;
+  threadId: string;
 }
 
 export async function buildExecutionOptions(
@@ -267,3 +275,36 @@ export function queueThreadRenameCommand(
   });
 }
 
+export function queueThreadStopCommand(
+  deps: Pick<AppDeps, "db" | "hub">,
+  args: QueueThreadStopCommandArgs,
+): void {
+  const existing = deps.db
+    .select({ id: hostDaemonCommands.id })
+    .from(hostDaemonCommands)
+    .where(
+      and(
+        eq(hostDaemonCommands.hostId, args.hostId),
+        eq(hostDaemonCommands.type, "thread.stop"),
+        inArray(hostDaemonCommands.state, ["pending", "fetched"]),
+        sql`json_extract(${hostDaemonCommands.payload}, '$.threadId') = ${args.threadId}`,
+      ),
+    )
+    .get();
+
+  if (existing) {
+    return;
+  }
+
+  const session = getActiveSession(deps.db, args.hostId);
+  queueCommand(deps.db, deps.hub, {
+    hostId: args.hostId,
+    sessionId: session?.id ?? null,
+    type: "thread.stop",
+    payload: JSON.stringify({
+      type: "thread.stop",
+      environmentId: args.environmentId,
+      threadId: args.threadId,
+    }),
+  });
+}

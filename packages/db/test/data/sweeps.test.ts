@@ -12,7 +12,12 @@ import {
 } from "../../src/data/sweeps.js";
 import { upsertHost } from "../../src/data/hosts.js";
 import { createProject } from "../../src/data/projects.js";
-import { createThread, archiveThread } from "../../src/data/threads.js";
+import {
+  createThread,
+  archiveThread,
+  markThreadDeleted,
+  markThreadStopRequested,
+} from "../../src/data/threads.js";
 import { createEnvironment } from "../../src/data/environments.js";
 import { openSession } from "../../src/data/sessions.js";
 import { queueCommand, fetchCommands } from "../../src/data/commands.js";
@@ -149,6 +154,56 @@ describe("sweepExpiredCommands", () => {
 
     const result2 = sweepExpiredCommands(db, noopNotifier);
     expect(result2.requeued).toBe(1); // Now expired and re-queued
+  });
+
+  it("does not transition deleted or stop-pending threads to error when commands expire", () => {
+    const { db, host, project } = setup();
+    const deletedThread = createThread(db, noopNotifier, {
+      projectId: project.id,
+      providerId: "codex",
+      status: "idle",
+    });
+    const stopPendingThread = createThread(db, noopNotifier, {
+      projectId: project.id,
+      providerId: "codex",
+      status: "active",
+    });
+    markThreadDeleted(db, noopNotifier, { threadId: deletedThread.id });
+    markThreadStopRequested(db, noopNotifier, {
+      threadId: stopPendingThread.id,
+      requestedAt: 123,
+    });
+
+    const deletedCommand = queueCommand(db, noopNotifier, {
+      hostId: host.id,
+      type: "workspace.status",
+      payload: JSON.stringify({ threadId: deletedThread.id }),
+    });
+    const stopPendingCommand = queueCommand(db, noopNotifier, {
+      hostId: host.id,
+      type: "workspace.status",
+      payload: JSON.stringify({ threadId: stopPendingThread.id }),
+    });
+
+    fetchCommands(db, noopNotifier, { hostId: host.id });
+    db.update(hostDaemonCommands)
+      .set({ fetchedAt: Date.now() - 70_000, retryCount: 1 })
+      .where(eq(hostDaemonCommands.id, deletedCommand.id))
+      .run();
+    db.update(hostDaemonCommands)
+      .set({ fetchedAt: Date.now() - 70_000, retryCount: 1 })
+      .where(eq(hostDaemonCommands.id, stopPendingCommand.id))
+      .run();
+
+    const result = sweepExpiredCommands(db, noopNotifier);
+    expect(result.errored).toBe(2);
+
+    expect(
+      db.select().from(threads).where(eq(threads.id, deletedThread.id)).get()?.status,
+    ).toBe("idle");
+    expect(
+      db.select().from(threads).where(eq(threads.id, stopPendingThread.id)).get()?.status,
+    ).toBe("active");
   });
 });
 
@@ -291,6 +346,32 @@ describe("sweepManagedEnvironments", () => {
     archiveThread(db, noopNotifier, thread.id);
 
     // Now it's a candidate
+    const candidates = sweepManagedEnvironments(db);
+    expect(candidates).toHaveLength(1);
+    expect(candidates[0]!.id).toBe(env.id);
+  });
+
+  it("treats soft-deleted threads as non-live when selecting cleanup candidates", () => {
+    const { db, host, project } = setup();
+
+    const env = createEnvironment(db, noopNotifier, {
+      projectId: project.id,
+      hostId: host.id,
+      path: "/tmp/env",
+      managed: true,
+      workspaceProvisionType: "managed-worktree",
+      status: "ready",
+    });
+
+    const thread = createThread(db, noopNotifier, {
+      projectId: project.id,
+      environmentId: env.id,
+      providerId: "codex",
+      status: "idle",
+    });
+
+    markThreadDeleted(db, noopNotifier, { threadId: thread.id });
+
     const candidates = sweepManagedEnvironments(db);
     expect(candidates).toHaveLength(1);
     expect(candidates[0]!.id).toBe(env.id);

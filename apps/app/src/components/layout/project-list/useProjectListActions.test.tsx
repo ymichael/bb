@@ -55,12 +55,14 @@ function makeThread(overrides: ThreadOverrides = {}): Thread {
   return {
     archivedAt: null,
     createdAt: 1,
+    deletedAt: null,
     environmentId: "environment-1",
     id: "thread-1",
     lastReadAt: null,
     parentThreadId: null,
     projectId: "project-1",
     providerId: "provider-1",
+    stopRequestedAt: null,
     status: "idle",
     title: "Thread title",
     titleFallback: "Thread title",
@@ -110,10 +112,10 @@ function makeProjectResponse(
 function makeArchiveForceRequiredError(): HttpError {
   return new HttpError({
     body: {
-      code: "worktree_not_clean",
+      code: "archive_confirmation_required",
     },
-    code: "worktree_not_clean",
-    message: "Workspace must be clean before archiving",
+    code: "archive_confirmation_required",
+    message: "Archiving this thread would clean up a workspace that contains work.",
     status: 409,
   });
 }

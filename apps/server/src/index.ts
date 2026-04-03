@@ -5,15 +5,9 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { commonConfig, serverConfig } from "@bb/config/server";
 import { createLogger } from "@bb/logger";
-import {
-  sweepDestroyingEnvironments,
-  sweepExpiredCommands,
-  sweepExpiredLeases,
-  sweepManagedEnvironments,
-} from "@bb/db";
 import { initDb } from "./db.js";
 import { createApp } from "./server.js";
-import { maybeCleanupEnvironment } from "./services/environment-cleanup.js";
+import { runPeriodicSweeps } from "./services/periodic-sweeps.js";
 import { NotificationHub } from "./ws/hub.js";
 
 const logger = createLogger({ component: "server" });
@@ -42,12 +36,7 @@ const { app, injectWebSocket } = createApp(
 );
 
 setInterval(() => {
-  sweepExpiredCommands(db, hub);
-  sweepExpiredLeases(db, hub);
-  sweepDestroyingEnvironments(db, hub);
-  for (const environment of sweepManagedEnvironments(db)) {
-    void maybeCleanupEnvironment({ db, hub }, environment.id);
-  }
+  void runPeriodicSweeps({ db, hub, logger });
 }, 10_000).unref();
 
 const server = serve({

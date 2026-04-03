@@ -105,6 +105,17 @@ export function requireThread(db: DbConnection, threadId: string): Thread {
   return thread;
 }
 
+export function requirePublicThread(
+  db: DbConnection,
+  threadId: string,
+): Thread {
+  const thread = requireThread(db, threadId);
+  if (thread.deletedAt !== null) {
+    throw new ApiError(404, "thread_not_found", "Thread not found");
+  }
+  return thread;
+}
+
 export function requireEnvironment(
   db: DbConnection,
   environmentId: string,
@@ -136,6 +147,20 @@ export function requireThreadEnvironment(
   threadId: string,
 ): { environment: Environment; thread: Thread } {
   const thread = requireThread(db, threadId);
+  if (!thread.environmentId) {
+    throw new ApiError(409, "invalid_request", "Thread has no environment");
+  }
+  return {
+    thread,
+    environment: requireEnvironment(db, thread.environmentId),
+  };
+}
+
+export function requirePublicThreadEnvironment(
+  db: DbConnection,
+  threadId: string,
+): { environment: Environment; thread: Thread } {
+  const thread = requirePublicThread(db, threadId);
   if (!thread.environmentId) {
     throw new ApiError(409, "invalid_request", "Thread has no environment");
   }

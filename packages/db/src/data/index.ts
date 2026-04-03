@@ -23,18 +23,25 @@ export type {
 
 export {
   createThread,
+  countLiveThreadsInEnvironment,
   getThread,
   listThreads,
   updateThread,
   deleteThread,
   archiveThread,
+  clearThreadStopRequested,
+  markThreadDeleted,
+  markThreadStopRequested,
   unarchiveThread,
   transitionThreadStatus,
   ALLOWED_TRANSITIONS,
 } from "./threads.js";
 export type {
+  CountLiveThreadsInEnvironmentArgs,
   CreateThreadInput,
   ListThreadsOptions,
+  MarkThreadDeletedArgs,
+  MarkThreadStopRequestedArgs,
   UpdateThreadInput,
 } from "./threads.js";
 

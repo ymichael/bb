@@ -1,4 +1,4 @@
-import { and, desc, eq, isNotNull, isNull } from "drizzle-orm";
+import { and, count, desc, eq, isNotNull, isNull, ne } from "drizzle-orm";
 import type { ThreadChangeKind, ThreadStatus, ThreadType } from "@bb/domain";
 import type { DbConnection } from "../connection.js";
 import type { DbNotifier } from "../notifier.js";
@@ -67,12 +67,28 @@ export interface ListThreadsOptions {
   type?: ThreadType;
 }
 
+export interface CountLiveThreadsInEnvironmentArgs {
+  environmentId: string;
+  excludeThreadId?: string;
+}
+
+export interface MarkThreadStopRequestedArgs {
+  requestedAt?: number;
+  threadId: string;
+}
+
+export interface MarkThreadDeletedArgs {
+  deletedAt?: number;
+  threadId: string;
+}
+
 export function listThreads(
   db: DbConnection,
   options: ListThreadsOptions,
 ) {
   const filters = [
     eq(threads.projectId, options.projectId),
+    isNull(threads.deletedAt),
     options.type ? eq(threads.type, options.type) : undefined,
     options.parentThreadId
       ? eq(threads.parentThreadId, options.parentThreadId)
@@ -90,6 +106,28 @@ export function listThreads(
     .where(and(...filters))
     .orderBy(desc(threads.createdAt))
     .all();
+}
+
+export function countLiveThreadsInEnvironment(
+  db: DbConnection,
+  args: CountLiveThreadsInEnvironmentArgs,
+): number {
+  const liveThreadCount = db
+    .select({ count: count() })
+    .from(threads)
+    .where(
+      and(
+        eq(threads.environmentId, args.environmentId),
+        isNull(threads.archivedAt),
+        isNull(threads.deletedAt),
+        args.excludeThreadId
+          ? ne(threads.id, args.excludeThreadId)
+          : undefined,
+      ),
+    )
+    .get();
+
+  return liveThreadCount?.count ?? 0;
 }
 
 export interface UpdateThreadInput {
@@ -140,6 +178,70 @@ export function deleteThread(
   notifier.notifyThread(id, ["thread-deleted"]);
   notifier.notifyProject(existing.projectId, ["threads-changed"]);
   return true;
+}
+
+export function markThreadStopRequested(
+  db: DbConnection,
+  notifier: DbNotifier,
+  args: MarkThreadStopRequestedArgs,
+) {
+  const updated = db.update(threads)
+    .set({
+      stopRequestedAt: args.requestedAt ?? Date.now(),
+      updatedAt: Date.now(),
+    })
+    .where(eq(threads.id, args.threadId))
+    .returning()
+    .get();
+
+  if (updated) {
+    notifier.notifyThread(args.threadId, ["status-changed"]);
+  }
+
+  return updated ?? null;
+}
+
+export function clearThreadStopRequested(
+  db: DbConnection,
+  notifier: DbNotifier,
+  threadId: string,
+) {
+  const updated = db.update(threads)
+    .set({
+      stopRequestedAt: null,
+      updatedAt: Date.now(),
+    })
+    .where(eq(threads.id, threadId))
+    .returning()
+    .get();
+
+  if (updated) {
+    notifier.notifyThread(threadId, ["status-changed"]);
+  }
+
+  return updated ?? null;
+}
+
+export function markThreadDeleted(
+  db: DbConnection,
+  notifier: DbNotifier,
+  args: MarkThreadDeletedArgs,
+) {
+  const updated = db.update(threads)
+    .set({
+      deletedAt: args.deletedAt ?? Date.now(),
+      updatedAt: Date.now(),
+    })
+    .where(eq(threads.id, args.threadId))
+    .returning()
+    .get();
+
+  if (updated) {
+    notifier.notifyThread(args.threadId, ["thread-deleted"]);
+    notifier.notifyProject(updated.projectId, ["threads-changed"]);
+  }
+
+  return updated ?? null;
 }
 
 export function archiveThread(

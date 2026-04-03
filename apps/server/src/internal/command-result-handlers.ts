@@ -1,6 +1,8 @@
 import { and, desc, eq, or } from "drizzle-orm";
 import {
+  clearThreadStopRequested,
   applyProvisionedEnvironment,
+  deleteThread,
   events,
   getEnvironment,
   getThread,
@@ -21,7 +23,11 @@ import {
   appendThreadInterruptedEvent,
 } from "../services/thread-events.js";
 import { queueThreadStartCommand } from "../services/thread-commands.js";
-import { queueEnvironmentDestroyCommand } from "../services/environment-cleanup.js";
+import {
+  evaluateManagedEnvironmentArchiveCleanup,
+  maybeStartEnvironmentCleanup,
+  queueEnvironmentDestroyCommand,
+} from "../services/environment-cleanup.js";
 import { tryTransition } from "../services/thread-transitions.js";
 
 function parseCommand(
@@ -200,25 +206,58 @@ function handleThreadStopResult(
   deps: Pick<AppDeps, "db" | "hub">,
   report: Extract<HostDaemonCommandResultReport, { type: "thread.stop" }>,
   commandRow: typeof hostDaemonCommands.$inferSelect,
-): void {
+): Promise<void> {
   if (!report.ok) {
-    return;
+    return Promise.resolve();
   }
   const command = parseCommand(commandRow);
   if (command.type !== "thread.stop") {
+    return Promise.resolve();
+  }
+  return finalizeStoppedThread(deps, command.threadId);
+}
+
+async function finalizeStoppedThread(
+  deps: Pick<AppDeps, "db" | "hub">,
+  threadId: string,
+): Promise<void> {
+  const currentThread = getThread(deps.db, threadId);
+  if (!currentThread) {
     return;
   }
-  const thread = getThread(deps.db, command.threadId);
-  if (!thread) {
+
+  if (currentThread.status === "active") {
+    tryTransition(deps.db, deps.hub, currentThread.id, "idle");
+  }
+
+  if (currentThread.stopRequestedAt !== null) {
+    clearThreadStopRequested(deps.db, deps.hub, currentThread.id);
+  }
+
+  const finalizedThread = getThread(deps.db, threadId);
+  if (!finalizedThread) {
     return;
   }
-  if (thread.status === "active") {
-    tryTransition(deps.db, deps.hub, thread.id, "idle");
+
+  if (finalizedThread.deletedAt === null) {
+    appendThreadInterruptedEvent(deps, {
+      threadId: finalizedThread.id,
+      message: "Thread stopped by user request",
+    });
   }
-  appendThreadInterruptedEvent(deps, {
-    threadId: thread.id,
-    message: "Thread stopped by user request",
-  });
+
+  if (finalizedThread.deletedAt !== null) {
+    const environmentId = finalizedThread.environmentId;
+    deleteThread(deps.db, deps.hub, finalizedThread.id);
+    maybeStartEnvironmentCleanup(deps, environmentId);
+    return;
+  }
+
+  if (finalizedThread.archivedAt !== null) {
+    await evaluateManagedEnvironmentArchiveCleanup(deps, {
+      environmentId: finalizedThread.environmentId,
+    });
+  }
 }
 
 function handleThreadCommandFailure(
@@ -236,6 +275,9 @@ function handleThreadCommandFailure(
   }
   const thread = getThread(deps.db, command.threadId);
   if (!thread) {
+    return;
+  }
+  if (thread.deletedAt !== null || thread.stopRequestedAt !== null) {
     return;
   }
   appendSystemErrorEvent(deps, {
@@ -261,7 +303,7 @@ export async function handleCommandResultSideEffects(
       handleEnvironmentDestroyResult(deps, report, commandRow);
       return;
     case "thread.stop":
-      handleThreadStopResult(deps, report, commandRow);
+      await handleThreadStopResult(deps, report, commandRow);
       return;
     case "thread.start":
     case "turn.run":

@@ -113,6 +113,27 @@
       "when": 1779993600000,
       "tag": "0014_bright_resolve",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "6",
+      "when": 1779997200000,
+      "tag": "0015_calm_spectrum",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "6",
+      "when": 1779997260000,
+      "tag": "0016_gentle_smasher",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "6",
+      "when": 1779997320000,
+      "tag": "0017_fine_odin",
+      "breakpoints": true
     }
   ]
 }

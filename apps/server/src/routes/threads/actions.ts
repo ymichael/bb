@@ -3,6 +3,7 @@ import {
   createDraft,
   deleteDraft,
   getDraft,
+  getActiveSession,
   unarchiveThread,
   updateThread,
 } from "@bb/db";
@@ -16,13 +17,19 @@ import {
   type PublicApiSchema,
 } from "@bb/server-contract";
 import type { Hono } from "hono";
-import type { Thread } from "@bb/domain";
+import type { Environment, Thread } from "@bb/domain";
 import type { AppDeps } from "../../types.js";
 import { COMMAND_TIMEOUT_MS } from "../../constants.js";
 import { ApiError } from "../../errors.js";
 import { toQueuedMessage } from "../../services/drafts.js";
-import { maybeCleanupEnvironment } from "../../services/environment-cleanup.js";
-import { requireThread, requireThreadEnvironment } from "../../services/entity-lookup.js";
+import {
+  maybeStartEnvironmentCleanup,
+  wouldCleanupEnvironment,
+} from "../../services/environment-cleanup.js";
+import {
+  requirePublicThread,
+  requirePublicThreadEnvironment,
+} from "../../services/entity-lookup.js";
 import { sendQueuedDraft } from "../../services/queued-drafts.js";
 import {
   queueTurnDuringReprovision,
@@ -38,6 +45,7 @@ import {
   queueReadyThreadTurnCommand,
   queueTurnSteerCommand,
 } from "../../services/thread-commands.js";
+import { requestThreadStop } from "../../services/thread-stop.js";
 import {
   appendClientTurnEvent,
   getLastTurnId,
@@ -72,11 +80,94 @@ function resolveSendMode(
   return "start";
 }
 
+function requestThreadStopIfNeeded(
+  deps: Pick<AppDeps, "db" | "hub">,
+  thread: Thread,
+  environment: {
+    hostId: string;
+    id: string;
+  },
+): void {
+  if (thread.status !== "active") {
+    return;
+  }
+
+  requestThreadStop(deps, {
+    environmentId: environment.id,
+    hostId: environment.hostId,
+    stopRequestedAt: thread.stopRequestedAt,
+    threadId: thread.id,
+  });
+}
+
+async function resolveArchiveCleanupTiming(
+  deps: AppDeps,
+  thread: Thread,
+  environment: Environment,
+  force: boolean,
+): Promise<boolean> {
+  const willCleanupEnvironment = wouldCleanupEnvironment(deps, {
+    environmentId: thread.environmentId,
+    excludeThreadId: thread.id,
+  });
+
+  if (!willCleanupEnvironment) {
+    return false;
+  }
+
+  if (force) {
+    return true;
+  }
+
+  if (environment.status !== "ready" || !environment.path) {
+    return true;
+  }
+
+  const session = getActiveSession(deps.db, environment.hostId);
+  if (!session || session.leaseExpiresAt <= Date.now()) {
+    // Defer cleanup until the reconnect/sweep path can validate workspace state.
+    return false;
+  }
+
+  const mergeBaseBranch = environment.mergeBaseBranch ?? environment.defaultBranch;
+  if (environment.isGitRepo && !mergeBaseBranch) {
+    return false;
+  }
+
+  const status = hostDaemonCommandResultSchemaByType["workspace.status"].parse(
+    await queueCommandAndWait(deps, {
+      hostId: environment.hostId,
+      timeoutMs: COMMAND_TIMEOUT_MS,
+      command: {
+        type: "workspace.status",
+        environmentId: environment.id,
+        workspaceContext: {
+          workspacePath: environment.path,
+          workspaceProvisionType: environment.workspaceProvisionType,
+        },
+        ...(mergeBaseBranch ? { mergeBaseBranch } : {}),
+      },
+    }),
+  );
+  if (
+    status.workspaceStatus.workingTree.hasUncommittedChanges ||
+    status.workspaceStatus.mergeBase?.hasCommittedUnmergedChanges === true
+  ) {
+    throw new ApiError(
+      409,
+      "archive_confirmation_required",
+      "Archiving this thread would clean up a workspace that contains work.",
+    );
+  }
+
+  return true;
+}
+
 export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
   const { post, del } = typedRoutes<PublicApiSchema>(app, { onValidationError: (msg) => new ApiError(400, "invalid_request", msg) });
 
   post("/threads/:id/send", sendMessageRequestSchema, async (context, payload) => {
-    const { environment, thread } = requireThreadEnvironment(deps.db, context.req.param("id"));
+    const { environment, thread } = requirePublicThreadEnvironment(deps.db, context.req.param("id"));
     ensureThreadIsWritable(thread);
     const mode = resolveSendMode(thread.status, payload.mode);
     const execution = await buildExecutionOptions(
@@ -150,7 +241,7 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
   });
 
   post("/threads/:id/drafts", createDraftRequestSchema, async (context, payload) => {
-    const { thread } = requireThreadEnvironment(deps.db, context.req.param("id"));
+    const { thread } = requirePublicThreadEnvironment(deps.db, context.req.param("id"));
     ensureThreadIsWritable(thread);
     const execution = await buildExecutionOptions(
       deps,
@@ -172,7 +263,7 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
   });
 
   post("/threads/:id/drafts/:draftId/send", sendDraftRequestSchema, async (context) => {
-    const { thread } = requireThreadEnvironment(deps.db, context.req.param("id"));
+    const { thread } = requirePublicThreadEnvironment(deps.db, context.req.param("id"));
     ensureThreadIsWritable(thread);
     const queuedMessage = await sendQueuedDraft(deps, {
       draftId: context.req.param("draftId"),
@@ -194,89 +285,47 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
   });
 
   post("/threads/:id/stop", async (context) => {
-    const { environment, thread } = requireThreadEnvironment(deps.db, context.req.param("id"));
-    if (thread.status !== "active") {
+    const { environment, thread } = requirePublicThreadEnvironment(deps.db, context.req.param("id"));
+    if (thread.status !== "active" && thread.stopRequestedAt === null) {
       throw new ApiError(409, "invalid_request", "Thread is not active");
     }
-    await queueCommandAndWait(deps, {
-      hostId: environment.hostId,
-      timeoutMs: COMMAND_TIMEOUT_MS,
-      command: {
-        type: "thread.stop",
-        environmentId: environment.id,
-        threadId: thread.id,
-      },
-    });
+    requestThreadStopIfNeeded(deps, thread, environment);
     return context.json({ ok: true });
   });
 
   post("/threads/:id/archive", archiveThreadRequestSchema, async (context, payload) => {
-    const force = payload.force === true;
-    const { environment, thread } = requireThreadEnvironment(deps.db, context.req.param("id"));
+    const force = payload.force;
+    const { environment, thread } = requirePublicThreadEnvironment(deps.db, context.req.param("id"));
     if (thread.archivedAt !== null) {
       throw new ApiError(409, "invalid_request", "Thread is already archived");
     }
-    if (!force && environment.status === "ready" && environment.path) {
-      const mergeBaseBranch = environment.mergeBaseBranch ?? environment.defaultBranch;
-      if (!mergeBaseBranch && environment.isGitRepo) {
-        throw new ApiError(409, "invalid_request", "Thread archive requires a merge base branch");
-      }
-      if (mergeBaseBranch) {
-        const status = hostDaemonCommandResultSchemaByType["workspace.status"].parse(
-          await queueCommandAndWait(deps, {
-            hostId: environment.hostId,
-            timeoutMs: COMMAND_TIMEOUT_MS,
-            command: {
-              type: "workspace.status",
-              environmentId: environment.id,
-              workspaceContext: {
-                workspacePath: environment.path,
-                workspaceProvisionType: environment.workspaceProvisionType,
-              },
-              mergeBaseBranch,
-            },
-          }),
-        );
-        if (
-          status.workspaceStatus?.workingTree.hasUncommittedChanges ||
-          status.workspaceStatus?.mergeBase?.hasCommittedUnmergedChanges
-        ) {
-          throw new ApiError(
-            409,
-            "invalid_request",
-            "Thread has uncommitted or unmerged changes",
-          );
-        }
-      }
-    }
-    if (thread.status === "active") {
-      await queueCommandAndWait(deps, {
-        hostId: environment.hostId,
-        timeoutMs: COMMAND_TIMEOUT_MS,
-        command: {
-          type: "thread.stop",
-          environmentId: environment.id,
-          threadId: thread.id,
-        },
-      });
-    }
+    const shouldEvaluateCleanupAfterArchiveNow = await resolveArchiveCleanupTiming(
+      deps,
+      thread,
+      environment,
+      force,
+    );
     archiveThread(deps.db, deps.hub, thread.id);
+    requestThreadStopIfNeeded(deps, thread, environment);
     resetActiveThreadEventPruningState(thread.id);
     pruneThreadEventHistoryBestEffort(deps, {
       mode: "archived",
       threadId: thread.id,
     });
-    await maybeCleanupEnvironment(deps, thread.environmentId);
+    if (thread.status !== "active" && shouldEvaluateCleanupAfterArchiveNow) {
+      maybeStartEnvironmentCleanup(deps, thread.environmentId);
+    }
     return context.json({ ok: true });
   });
 
   post("/threads/:id/unarchive", (context) => {
-    requireThread(deps.db, context.req.param("id"));
+    requirePublicThread(deps.db, context.req.param("id"));
     unarchiveThread(deps.db, deps.hub, context.req.param("id"));
     return context.json({ ok: true });
   });
 
   post("/threads/:id/read", (context) => {
+    requirePublicThread(deps.db, context.req.param("id"));
     const thread = updateThread(deps.db, deps.hub, context.req.param("id"), {
       lastReadAt: Date.now(),
     });
@@ -287,6 +336,7 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
   });
 
   post("/threads/:id/unread", (context) => {
+    requirePublicThread(deps.db, context.req.param("id"));
     const thread = updateThread(deps.db, deps.hub, context.req.param("id"), {
       lastReadAt: null,
     });

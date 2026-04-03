@@ -1,6 +1,8 @@
 import {
   deleteThread,
+  getActiveSession,
   listThreads,
+  markThreadDeleted,
   updateThread,
 } from "@bb/db";
 import {
@@ -12,16 +14,17 @@ import {
 } from "@bb/server-contract";
 import type { Hono } from "hono";
 import type { AppDeps } from "../../types.js";
-import { COMMAND_TIMEOUT_MS } from "../../constants.js";
 import { ApiError } from "../../errors.js";
-import { maybeCleanupEnvironment } from "../../services/environment-cleanup.js";
+import { maybeStartEnvironmentCleanup } from "../../services/environment-cleanup.js";
 import {
   requireEnvironment,
-  requireThread,
-  requireThreadEnvironment,
+  requirePublicThread,
+  requirePublicThreadEnvironment,
 } from "../../services/entity-lookup.js";
-import { queueCommandAndWait } from "../../services/command-wait.js";
-import { queueThreadRenameCommand } from "../../services/thread-commands.js";
+import {
+  queueThreadRenameCommand,
+} from "../../services/thread-commands.js";
+import { requestThreadStop } from "../../services/thread-stop.js";
 import { appendThreadOwnershipChangeEvent } from "../../services/thread-events.js";
 import { createThreadFromRequest } from "../../services/thread-create.js";
 export function registerThreadBaseRoutes(app: Hono, deps: AppDeps): void {
@@ -45,11 +48,11 @@ export function registerThreadBaseRoutes(app: Hono, deps: AppDeps): void {
   );
 
   get("/threads/:id", (context) =>
-    context.json(requireThread(deps.db, context.req.param("id"))),
+    context.json(requirePublicThread(deps.db, context.req.param("id"))),
   );
 
   patch("/threads/:id", updateThreadRequestSchema, async (context, payload) => {
-    const thread = requireThread(deps.db, context.req.param("id"));
+    const thread = requirePublicThread(deps.db, context.req.param("id"));
     const updated = updateThread(deps.db, deps.hub, thread.id, payload);
     if (!updated) {
       throw new ApiError(404, "thread_not_found", "Thread not found");
@@ -86,20 +89,30 @@ export function registerThreadBaseRoutes(app: Hono, deps: AppDeps): void {
   });
 
   del("/threads/:id", async (context) => {
-    const { environment, thread } = requireThreadEnvironment(deps.db, context.req.param("id"));
+    const { environment, thread } = requirePublicThreadEnvironment(deps.db, context.req.param("id"));
+    const connectedSession = getActiveSession(deps.db, environment.hostId);
+    if (thread.status !== "active" && connectedSession) {
+      deleteThread(deps.db, deps.hub, thread.id);
+      maybeStartEnvironmentCleanup(deps, thread.environmentId);
+      return context.json({ ok: true });
+    }
+
+    markThreadDeleted(deps.db, deps.hub, {
+      threadId: thread.id,
+    });
+
     if (thread.status === "active") {
-      await queueCommandAndWait(deps, {
+      requestThreadStop(deps, {
+        environmentId: environment.id,
         hostId: environment.hostId,
-        timeoutMs: COMMAND_TIMEOUT_MS,
-        command: {
-          type: "thread.stop",
-          environmentId: environment.id,
-          threadId: thread.id,
-        },
+        stopRequestedAt: thread.stopRequestedAt,
+        threadId: thread.id,
       });
     }
-    deleteThread(deps.db, deps.hub, thread.id);
-    await maybeCleanupEnvironment(deps, thread.environmentId);
+
+    // Active tombstones still block cleanup through the stop-pending guard in
+    // environment cleanup until stop finalization removes the runtime.
+    maybeStartEnvironmentCleanup(deps, thread.environmentId);
     return context.json({ ok: true });
   });
 }

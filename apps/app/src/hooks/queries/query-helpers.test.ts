@@ -112,6 +112,8 @@ describe("resolveThreadPlaceholder", () => {
       titleFallback: null,
       parentThreadId: null,
       archivedAt: null,
+      stopRequestedAt: null,
+      deletedAt: null,
     };
 
     expect(
@@ -138,6 +140,8 @@ describe("resolveThreadPlaceholder", () => {
       titleFallback: null,
       parentThreadId: null,
       archivedAt: null,
+      stopRequestedAt: null,
+      deletedAt: null,
     };
 
     expect(
@@ -252,4 +256,3 @@ describe("getEnvironmentActionInvalidationQueryKeys", () => {
     ]);
   });
 });
-

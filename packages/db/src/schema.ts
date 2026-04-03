@@ -135,6 +135,8 @@ export const threads = sqliteTable(
       { onDelete: "set null" },
     ),
     archivedAt: integer("archived_at"),
+    stopRequestedAt: integer("stop_requested_at"),
+    deletedAt: integer("deleted_at"),
     lastReadAt: integer("last_read_at"),
     createdAt: integer("created_at").notNull(),
     updatedAt: integer("updated_at").notNull(),
@@ -144,6 +146,11 @@ export const threads = sqliteTable(
     index("threads_environment_idx").on(table.environmentId),
     index("threads_parent_idx").on(table.parentThreadId),
     index("threads_archived_status_idx").on(table.archivedAt, table.status),
+    index("threads_environment_archived_deleted_idx").on(
+      table.environmentId,
+      table.archivedAt,
+      table.deletedAt,
+    ),
   ],
 );
 

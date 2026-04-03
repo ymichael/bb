@@ -46,6 +46,8 @@ function makeThread(overrides: Partial<Thread> & { id: string; projectId: string
     environmentId: null,
     parentThreadId: null,
     archivedAt: null,
+    stopRequestedAt: null,
+    deletedAt: null,
     lastReadAt: null,
     createdAt: Date.now(),
     updatedAt: Date.now(),

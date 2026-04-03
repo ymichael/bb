@@ -113,6 +113,8 @@ export const threadSchema = z.object({
   status: threadStatusSchema,
   parentThreadId: z.string().nullable(),
   archivedAt: z.number().nullable(),
+  stopRequestedAt: z.number().nullable(),
+  deletedAt: z.number().nullable(),
   lastReadAt: z.number().nullable(),
   createdAt: z.number(),
   updatedAt: z.number(),

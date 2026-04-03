@@ -7,7 +7,7 @@ import {
   threads,
   environments,
 } from "../schema.js";
-import { transitionThreadStatus } from "./threads.js";
+import { getThread, transitionThreadStatus } from "./threads.js";
 
 /** Standard command TTL: 60 seconds */
 const STANDARD_COMMAND_TTL_MS = 60_000;
@@ -82,6 +82,10 @@ export function sweepExpiredCommands(
       try {
         const payload = JSON.parse(cmd.payload);
         if (payload.threadId) {
+          const thread = getThread(db, payload.threadId);
+          if (!thread || thread.deletedAt !== null || thread.stopRequestedAt !== null) {
+            continue;
+          }
           try {
             transitionThreadStatus(db, notifier, payload.threadId, "error");
           } catch {
@@ -149,6 +153,8 @@ export function sweepExpiredLeases(
         and(
           eq(environments.hostId, session.hostId),
           inArray(threads.status, ["active", "idle", "provisioning"]),
+          sql`${threads.deletedAt} IS NULL`,
+          sql`${threads.stopRequestedAt} IS NULL`,
         ),
       )
       .all();
@@ -184,6 +190,7 @@ export function sweepManagedEnvironments(db: DbConnection) {
           SELECT 1 FROM threads
           WHERE threads.environment_id = ${environments.id}
           AND threads.archived_at IS NULL
+          AND threads.deleted_at IS NULL
         )`,
       ),
     )
