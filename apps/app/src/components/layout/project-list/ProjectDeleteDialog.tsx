@@ -1,4 +1,3 @@
-import { AlertTriangle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -31,10 +30,7 @@ export function ProjectDeleteDialog({
     <Dialog open={target !== null} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <AlertTriangle className="size-4 text-destructive" />
-            Remove project?
-          </DialogTitle>
+          <DialogTitle>Remove project?</DialogTitle>
           <DialogDescription>
             {target
               ? `Remove "${target.name}" and all of its threads? This cannot be undone.`
@@ -42,9 +38,6 @@ export function ProjectDeleteDialog({
           </DialogDescription>
         </DialogHeader>
         <DialogFooter>
-          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
           <Button
             type="button"
             variant="destructive"

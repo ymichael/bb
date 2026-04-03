@@ -1,5 +1,4 @@
 import type { Thread } from "@bb/domain"
-import { AlertTriangle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -9,7 +8,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { getThreadDisplayTitle, threadTypeLabel } from "@/lib/thread-title"
+import { threadTypeLabel } from "@/lib/thread-title"
 
 interface ThreadDeleteDialogProps {
   target: Thread | null
@@ -24,27 +23,16 @@ export function ThreadDeleteDialog({
   onOpenChange,
   onDelete,
 }: ThreadDeleteDialogProps) {
-  const threadTitle = target ? getThreadDisplayTitle(target) : ""
   const label = target ? threadTypeLabel(target.type) : "thread"
 
   return (
     <Dialog open={target !== null} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <AlertTriangle className="size-4 text-destructive" />
-            Delete {label}?
-          </DialogTitle>
-          <DialogDescription>
-            {target
-              ? `Delete "${threadTitle}" and its timeline permanently? This cannot be undone.`
-              : `Delete this ${label} permanently? This cannot be undone.`}
-          </DialogDescription>
+          <DialogTitle>Delete {label}?</DialogTitle>
+          <DialogDescription>This action cannot be undone.</DialogDescription>
         </DialogHeader>
         <DialogFooter>
-          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
           <Button
             type="button"
             variant="destructive"
