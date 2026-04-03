@@ -349,15 +349,23 @@ export async function cleanupStandaloneOrphans() {
 }
 
 export function buildDaemonRestartCommand(args) {
-  return [
+  const shutdownCommand = args.daemonPid
+    ? [
+        `(kill ${shellQuote(String(args.daemonPid))} >/dev/null 2>&1 || true)`,
+        `while kill -0 ${shellQuote(String(args.daemonPid))} 2>/dev/null; do sleep 1; done`,
+      ]
+    : [];
+
+  const startCommand = [
     `BB_DATA_DIR=${shellQuote(args.dataDir)}`,
     `BB_HOST_DAEMON_PORT=${shellQuote(String(args.daemonPort))}`,
     `BB_SECRET_TOKEN=${shellQuote(args.authToken)}`,
     `BB_SERVER_URL=${shellQuote(args.serverUrl)}`,
     `BB_STANDALONE_PARENT_PID=${shellQuote(String(args.parentPid))}`,
-    `node ${shellQuote(args.entrypoint)}`,
-    `>> ${shellQuote(args.logPath)} 2>&1 &`,
+    `node ${shellQuote(args.entrypoint)} >> ${shellQuote(args.logPath)} 2>&1 &`,
   ].join(" ");
+
+  return [...shutdownCommand, startCommand].join("; ");
 }
 
 export async function waitFor(check, options) {

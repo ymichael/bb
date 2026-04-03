@@ -92,6 +92,7 @@ async function main() {
       `node ${path.join(repoRoot, "scripts/qa/cleanup-standalone.mjs")}`;
     const restartDaemonCommand = buildDaemonRestartCommand({
       authToken: token,
+      daemonPid: daemonProcess.pid,
       daemonPort,
       dataDir: bbRoot,
       entrypoint: path.join(repoRoot, "apps/host-daemon/dist/index.js"),

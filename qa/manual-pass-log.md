@@ -86,3 +86,32 @@ Validated:
 - The QA runbook was updated to match the current CLI surface: explicit `--model` flags on `bb thread spawn`, `bb thread show` without the removed `--recent-events` flag, and `bb environment commit/promote/demote` with `--thread`.
 - The shared direct-workspace prompts explicitly said not to modify files so the archive check exercised lifecycle behavior instead of workspace dirtiness.
 - One combined provider-specific loop hit a transient Pi stop timeout after earlier provider work; isolated per-provider reruns passed, so no reproducible product bug remained in that path.
+
+## Agent CLI Environment
+
+Date: 2026-04-02
+Operator: Codex
+Status: passed
+Standalone state path: `/var/folders/lr/f3ynv4xj6p77kvx_rz7zgzg00000gn/T/bb-standalone-qttTXW/standalone-state.json`
+Server URL: `http://127.0.0.1:50429`
+Host daemon port: `50430`
+Codex CLI smoke thread: `thr_4bhd5pbbaj`
+Codex CLI smoke environment: `env_pvtttduv8x`
+Bridge provider thread: `thr_hrs7hrmcgw`
+Bridge provider: `claude-code`
+
+Validated:
+
+- The codex thread reached `idle` after executing `bb status --json`, `bb guide`, `env | sort | grep '^BB_'`, and `bb thread update --self --title 'CLI Self Rename Smoke'` from inside the provider shell.
+- No `command not found: bb` failure occurred. The thread reported `BB_PROJECT_ID=proj_2v4aicwcy5`, `BB_THREAD_ID=thr_4bhd5pbbaj`, `BB_ENVIRONMENT_ID=env_pvtttduv8x`, `BB_SERVER_URL=http://127.0.0.1:50429`, and `BB_HOST_DAEMON_PORT=50430`.
+- The thread title changed to `CLI Self Rename Smoke`, confirming that mutating CLI commands work from the injected thread context.
+- A real daemon restart was verified twice:
+  - first by manually stopping PID `49755` and starting a fresh daemon session, then sending a follow-up to the same thread
+  - again with the repaired standalone restart command, which shut down daemon PID `8819` and produced a fresh connected session (`hses_74jgcwdivb`) in the daemon log before the follow-up completed
+- After both restarts, the same thread resumed and still reported the same `BB_*` values, including the same `BB_ENVIRONMENT_ID`.
+- The `claude-code` bridge-backed thread also reached `idle` and reported the expected `BB_PROJECT_ID`, `BB_THREAD_ID`, `BB_ENVIRONMENT_ID`, `BB_SERVER_URL`, and `BB_HOST_DAEMON_PORT` values from inside its shell.
+
+Notes:
+
+- `bb thread show --self --json` is not currently supported by the CLI; the codex smoke thread reported `unknown option '--self'`. This did not block verification because `bb thread update --self` worked and the follow-up checks used `bb thread show <thread-id> --json`.
+- The standalone restart helper was incorrect at the start of QA because it tried to launch a new daemon without stopping the existing one, which correctly failed on the daemon lock. `scripts/qa/shared.mjs` and `scripts/qa/start-standalone.mjs` were updated so the generated restart command now kills the old daemon PID before starting the replacement process.

@@ -146,6 +146,57 @@ describe("host-daemon command schemas", () => {
     ).toThrow();
   });
 
+  it("requires environmentId on thread and turn commands", () => {
+    expect(() =>
+      hostDaemonCommandSchema.parse({
+        type: "thread.start",
+        threadId: "thr_123",
+        workspaceContext: {
+          workspacePath: "/tmp/workspace",
+          workspaceProvisionType: "unmanaged",
+        },
+        projectId: "proj_123",
+        providerId: "codex",
+        options: {
+          model: "gpt-5",
+          serviceTier: "default",
+          reasoningLevel: "medium",
+          sandboxMode: "danger-full-access",
+        },
+        instructions: "Be concise.",
+        dynamicTools: [],
+        eventSequence: 0,
+        input: [{ type: "text", text: "hello" }],
+      }),
+    ).toThrow();
+
+    expect(() =>
+      hostDaemonCommandSchema.parse({
+        type: "turn.run",
+        threadId: "thr_123",
+        eventSequence: 1,
+        input: [{ type: "text", text: "follow up" }],
+        options: {
+          model: "gpt-5",
+          serviceTier: "default",
+          reasoningLevel: "medium",
+          sandboxMode: "danger-full-access",
+        },
+        resumeContext: {
+          workspaceContext: {
+            workspacePath: "/tmp/workspace",
+            workspaceProvisionType: "unmanaged",
+          },
+          projectId: "proj_123",
+          providerId: "codex",
+          providerThreadId: "prov_123",
+          instructions: "Be concise.",
+          dynamicTools: [],
+        },
+      }),
+    ).toThrow();
+  });
+
   it("parses thread.start with workspacePath", () => {
     expect(
       hostDaemonCommandSchema.parse({
