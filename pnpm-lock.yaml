@@ -214,6 +214,9 @@ importers:
       '@bb/agent-runtime':
         specifier: workspace:*
         version: link:../../packages/agent-runtime
+      '@bb/cli':
+        specifier: workspace:*
+        version: link:../cli
       '@bb/config':
         specifier: workspace:*
         version: link:../../packages/config

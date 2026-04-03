@@ -20,6 +20,7 @@
   },
   "dependencies": {
     "@bb/agent-runtime": "workspace:*",
+    "@bb/cli": "workspace:*",
     "@bb/config": "workspace:*",
     "@bb/domain": "workspace:*",
     "@bb/host-daemon-contract": "workspace:*",

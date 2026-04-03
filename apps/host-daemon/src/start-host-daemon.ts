@@ -8,6 +8,7 @@ import type { HostDaemon } from "./daemon.js";
 import { loadHostIdentity } from "./identity.js";
 import { acquireDaemonLock } from "./lock.js";
 import { restartHostDaemon } from "./restart.js";
+import { prepareRuntimeShellEnv } from "./runtime-shell-env.js";
 import type { CreateReconnectingWebSocket } from "./server-connection.js";
 
 export interface StartHostDaemonOptions {
@@ -37,12 +38,19 @@ export async function startHostDaemon(
   const authToken = options.authToken ?? commonConfig.BB_SECRET_TOKEN;
   const hostType = options.hostType ?? "persistent";
   const enableLocalApi = options.enableLocalApi ?? hostType === "persistent";
+  const localApiPort =
+    options.localApiPort ?? hostDaemonConfig.BB_HOST_DAEMON_PORT;
   const releaseLock = await (options.acquireLock ?? acquireDaemonLock)(dataDir);
 
   let app: Awaited<ReturnType<typeof createHostDaemonApp>> | undefined;
   try {
     const identity = await (options.loadIdentity ?? loadHostIdentity)({ dataDir });
     const instanceId = (options.createInstanceId ?? randomUUID)();
+    const runtimeShellEnv = await prepareRuntimeShellEnv({
+      dataDir,
+      serverUrl,
+      localApiPort,
+    });
     app = await createHostDaemonApp({
       dataDir,
       serverUrl,
@@ -58,7 +66,8 @@ export async function startHostDaemon(
           releaseLock,
         }),
       enableLocalApi,
-      localApiPort: options.localApiPort ?? hostDaemonConfig.BB_HOST_DAEMON_PORT,
+      localApiPort,
+      runtimeShellEnv,
       adapterFactory: options.adapterFactory,
       onToolCall: options.onToolCall,
       openPath: options.openPath,

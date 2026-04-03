@@ -10,8 +10,11 @@ The `bb` CLI is the primary interface for managing threads and coordinating work
 
 Context variables are set automatically when running inside a thread environment:
 
+- `BB_SERVER_URL` — current BB server endpoint
+- `BB_HOST_DAEMON_PORT` — current host-daemon local API port
 - `BB_PROJECT_ID` — current project
 - `BB_THREAD_ID` — current thread
+- `BB_ENVIRONMENT_ID` — current environment
 
 Read-only commands (e.g., `show`, `list`, `log`) print which thread or project was resolved from these env vars.
 Mutating commands (e.g., `commit`, `stop`, `archive`, `update`) require an explicit thread ID or the `--self` flag to target the current thread from `BB_THREAD_ID`.
