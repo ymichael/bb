@@ -3,15 +3,34 @@ import {
   createBufferedEnvironmentChangeReporter,
   createCommandFetchLoop,
 } from "./app.js";
+import type { HostDaemonEnvironmentChangePayload } from "@bb/host-daemon-contract";
 import { AbortError } from "p-retry";
 
 interface FetchCommandsArgs {
   afterCursor: number;
 }
 
-interface EnvironmentChangeReport {
-  environmentId: string;
-  change: "work-status-changed";
+interface DeferredPromise<T> {
+  promise: Promise<T>;
+  reject: (reason?: unknown) => void;
+  resolve: (value: T | PromiseLike<T>) => void;
+}
+
+function createDeferredPromise<T>(): DeferredPromise<T> {
+  let reject: DeferredPromise<T>["reject"] | null = null;
+  let resolve: DeferredPromise<T>["resolve"] | null = null;
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve;
+    reject = promiseReject;
+  });
+  if (!resolve || !reject) {
+    throw new Error("Failed to create deferred promise");
+  }
+  return {
+    promise,
+    reject,
+    resolve,
+  };
 }
 
 function createLogger() {
@@ -91,6 +110,46 @@ describe("createBufferedEnvironmentChangeReporter", () => {
     expect(logger.warn).not.toHaveBeenCalled();
   });
 
+  it("preserves trailing workspace status changes that arrive while a report is in flight", async () => {
+    vi.useFakeTimers();
+    const logger = createLogger();
+    const firstReport = createDeferredPromise<void>();
+    const reportEnvironmentChange = vi
+      .fn<(_: HostDaemonEnvironmentChangePayload) => Promise<void>>()
+      .mockImplementationOnce(() => firstReport.promise)
+      .mockResolvedValueOnce(undefined);
+    const reporter = createBufferedEnvironmentChangeReporter({
+      logger,
+      debounceMs: 100,
+      reportEnvironmentChange,
+    });
+
+    reporter.queue({
+      environmentId: "env-1",
+      change: "work-status-changed",
+    });
+
+    await vi.advanceTimersByTimeAsync(100);
+    expect(reportEnvironmentChange).toHaveBeenCalledTimes(1);
+
+    reporter.queue({
+      environmentId: "env-1",
+      change: "work-status-changed",
+    });
+
+    firstReport.resolve(undefined);
+    await Promise.resolve();
+
+    expect(reportEnvironmentChange).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(99);
+    expect(reportEnvironmentChange).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(1);
+    expect(reportEnvironmentChange).toHaveBeenCalledTimes(2);
+    expect(logger.warn).not.toHaveBeenCalled();
+  });
+
   it("cancels queued environment change reports on dispose", async () => {
     vi.useFakeTimers();
     const logger = createLogger();
@@ -115,7 +174,7 @@ describe("createBufferedEnvironmentChangeReporter", () => {
     vi.useFakeTimers();
     const logger = createLogger();
     const reportEnvironmentChange = vi
-      .fn<(_: EnvironmentChangeReport) => Promise<void>>()
+      .fn<(_: HostDaemonEnvironmentChangePayload) => Promise<void>>()
       .mockRejectedValueOnce(new Error("boom"))
       .mockResolvedValueOnce(undefined);
     const reporter = createBufferedEnvironmentChangeReporter({
@@ -145,7 +204,7 @@ describe("createBufferedEnvironmentChangeReporter", () => {
     vi.useFakeTimers();
     const logger = createLogger();
     const reportEnvironmentChange = vi
-      .fn<(_: EnvironmentChangeReport) => Promise<void>>()
+      .fn<(_: HostDaemonEnvironmentChangePayload) => Promise<void>>()
       .mockRejectedValueOnce(new AbortError("gone"));
     const reporter = createBufferedEnvironmentChangeReporter({
       logger,

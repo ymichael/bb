@@ -36,6 +36,35 @@ function parseCommand(
   return hostDaemonCommandSchema.parse(JSON.parse(commandRow.payload));
 }
 
+type ParsedHostDaemonCommand = ReturnType<typeof parseCommand>;
+type WorkspaceMutationResultReport = Extract<
+  HostDaemonCommandResultReport,
+  {
+    type:
+      | "workspace.commit"
+      | "workspace.squash_merge"
+      | "workspace.checkpoint"
+      | "workspace.promote"
+      | "workspace.demote";
+  }
+>;
+type EnvironmentScopedCommand = Extract<
+  ParsedHostDaemonCommand,
+  { environmentId: string }
+>;
+type WorkspaceMutationCommand = Extract<
+  EnvironmentScopedCommand,
+  {
+    type: WorkspaceMutationResultReport["type"];
+  }
+>;
+
+function isWorkspaceMutationCommand(
+  command: ParsedHostDaemonCommand,
+  expectedType: WorkspaceMutationResultReport["type"],
+): command is WorkspaceMutationCommand {
+  return "environmentId" in command && command.type === expectedType;
+}
 async function handleProvisionCommandResult(
   deps: Pick<AppDeps, "db" | "hub">,
   report: Extract<HostDaemonCommandResultReport, { type: "environment.provision" }>,
@@ -293,34 +322,17 @@ function handleThreadCommandFailure(
 
 function handleWorkspaceMutationResult(
   deps: Pick<AppDeps, "db" | "hub">,
-  report: Extract<
-    HostDaemonCommandResultReport,
-    {
-      type:
-        | "workspace.commit"
-        | "workspace.squash_merge"
-        | "workspace.checkpoint"
-        | "workspace.promote"
-        | "workspace.demote";
-    }
-  >,
+  report: WorkspaceMutationResultReport,
   commandRow: typeof hostDaemonCommands.$inferSelect,
 ): void {
   if (!report.ok) {
     return;
   }
   const command = parseCommand(commandRow);
-  switch (command.type) {
-    case "workspace.commit":
-    case "workspace.squash_merge":
-    case "workspace.checkpoint":
-    case "workspace.promote":
-    case "workspace.demote":
-      deps.hub.notifyEnvironment(command.environmentId, ["work-status-changed"]);
-      return;
-    default:
-      return;
+  if (!isWorkspaceMutationCommand(command, report.type)) {
+    return;
   }
+  deps.hub.notifyEnvironment(command.environmentId, ["work-status-changed"]);
 }
 
 export async function handleCommandResultSideEffects(

@@ -86,4 +86,60 @@ describe("internal environment change route", () => {
       await harness.cleanup();
     }
   });
+
+  it("returns 404 for unknown environments", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { session } = seedHostSession(harness.deps, {
+        id: "host-env-change-missing",
+      });
+      const notifyEnvironmentSpy = vi.spyOn(harness.hub, "notifyEnvironment");
+
+      const response = await harness.app.request("/internal/session/environment-change", {
+        method: "POST",
+        headers: internalAuthHeaders(harness),
+        body: JSON.stringify({
+          sessionId: session.id,
+          environmentId: "env-missing",
+          change: "work-status-changed",
+        }),
+      });
+
+      expect(response.status).toBe(404);
+      await expect(readJson(response)).resolves.toMatchObject({
+        code: "environment_not_found",
+      });
+      expect(notifyEnvironmentSpy).not.toHaveBeenCalled();
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("returns 400 for invalid environment change kinds", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { session } = seedHostSession(harness.deps, {
+        id: "host-env-change-invalid",
+      });
+      const notifyEnvironmentSpy = vi.spyOn(harness.hub, "notifyEnvironment");
+
+      const response = await harness.app.request("/internal/session/environment-change", {
+        method: "POST",
+        headers: internalAuthHeaders(harness),
+        body: JSON.stringify({
+          sessionId: session.id,
+          environmentId: "env-1",
+          change: "status-changed",
+        }),
+      });
+
+      expect(response.status).toBe(400);
+      await expect(readJson(response)).resolves.toMatchObject({
+        code: "invalid_request",
+      });
+      expect(notifyEnvironmentSpy).not.toHaveBeenCalled();
+    } finally {
+      await harness.cleanup();
+    }
+  });
 });

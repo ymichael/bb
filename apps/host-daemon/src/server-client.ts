@@ -16,7 +16,7 @@ import {
   type HostDaemonCommandEnvelope,
   type HostDaemonCommandResultReport,
   type HostDaemonEventEnvelope,
-  type HostDaemonEnvironmentChangeRequest,
+  type HostDaemonEnvironmentChangePayload,
   type HostDaemonSessionOpenRequest,
   type HostDaemonSessionOpenResponse,
   type HostDaemonToolCallResponse,
@@ -53,10 +53,6 @@ function extractRawCommandType(rawCommand: unknown): string | undefined {
 }
 
 type FetchFn = typeof fetch;
-type PostEnvironmentChangeArgs = Omit<
-  HostDaemonEnvironmentChangeRequest,
-  "sessionId"
->;
 
 export interface CreateServerClientOptions {
   serverUrl: string;
@@ -85,7 +81,7 @@ export interface ServerClient {
   reportCommandResult(
     report: Omit<HostDaemonCommandResultReport, "sessionId">,
   ): Promise<void>;
-  postEnvironmentChange(args: PostEnvironmentChangeArgs): Promise<void>;
+  postEnvironmentChange(args: HostDaemonEnvironmentChangePayload): Promise<void>;
   postEvents(events: HostDaemonEventEnvelope[]): Promise<Record<string, number>>;
   callTool(request: ToolCallRequest): Promise<HostDaemonToolCallResponse>;
 }

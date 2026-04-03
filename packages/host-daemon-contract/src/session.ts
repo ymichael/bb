@@ -1,6 +1,7 @@
 import type { Hono } from "hono";
 import { hc } from "hono/client";
 import {
+  ENVIRONMENT_CHANGE_KINDS,
   hostTypeSchema,
   threadEventSchema,
   toolCallRequestSchema,
@@ -84,17 +85,24 @@ export type HostDaemonEventBatchResponse = z.infer<
   typeof hostDaemonEventBatchResponseSchema
 >;
 
-export const hostDaemonEnvironmentChangeSchema = z.literal(
-  "work-status-changed",
-);
+export const hostDaemonEnvironmentChangeSchema = z
+  .enum(ENVIRONMENT_CHANGE_KINDS)
+  .extract(["work-status-changed"]);
 export type HostDaemonEnvironmentChange = z.infer<
   typeof hostDaemonEnvironmentChangeSchema
 >;
 
-export const hostDaemonEnvironmentChangeRequestSchema = z.object({
-  sessionId: z.string().min(1),
+export const hostDaemonEnvironmentChangePayloadSchema = z.object({
   environmentId: z.string().min(1),
   change: hostDaemonEnvironmentChangeSchema,
+});
+export type HostDaemonEnvironmentChangePayload = z.infer<
+  typeof hostDaemonEnvironmentChangePayloadSchema
+>;
+
+export const hostDaemonEnvironmentChangeRequestSchema = z.object({
+  sessionId: z.string().min(1),
+  ...hostDaemonEnvironmentChangePayloadSchema.shape,
 });
 export type HostDaemonEnvironmentChangeRequest = z.infer<
   typeof hostDaemonEnvironmentChangeRequestSchema

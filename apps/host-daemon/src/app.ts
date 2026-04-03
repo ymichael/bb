@@ -10,7 +10,7 @@ import {
   type CreateReconnectingWebSocket,
 } from "./server-connection.js";
 import type { AgentRuntimeOptions } from "@bb/agent-runtime";
-import type { HostDaemonEnvironmentChangeRequest } from "@bb/host-daemon-contract";
+import type { HostDaemonEnvironmentChangePayload } from "@bb/host-daemon-contract";
 import type { HostType, ToolCallRequest, ToolCallResponse } from "@bb/domain";
 import { AbortError } from "p-retry";
 
@@ -21,23 +21,23 @@ interface SessionState {
 const COMMAND_FETCH_RETRY_DELAY_MS = 2_000;
 const ENVIRONMENT_CHANGE_REPORT_DEBOUNCE_MS = 150;
 const ENVIRONMENT_CHANGE_REPORT_RETRY_DELAY_MS = 1_000;
-
-type BufferedEnvironmentChange = Omit<
-  HostDaemonEnvironmentChangeRequest,
-  "sessionId"
->;
+const ENVIRONMENT_CHANGE_REPORT_MAX_RETRY_DELAY_MS = 30_000;
 
 interface BufferedEnvironmentChangeReporterArgs {
   debounceMs?: number;
   logger: HostDaemonLogger;
   reportEnvironmentChange: (
-    change: BufferedEnvironmentChange,
+    change: HostDaemonEnvironmentChangePayload,
   ) => Promise<void>;
+  retryMaxDelayMs?: number;
   retryDelayMs?: number;
 }
 
 interface BufferedEnvironmentChangeEntry {
-  change: BufferedEnvironmentChange;
+  change: HostDaemonEnvironmentChangePayload;
+  dirtyWhileInflight: boolean;
+  inflight: boolean;
+  retryAttempt: number;
   timer: ReturnType<typeof setTimeout> | null;
 }
 
@@ -54,13 +54,24 @@ function shouldRetryEnvironmentChangeError(error: unknown): boolean {
   return !(error instanceof AbortError);
 }
 
+interface RetryDelayArgs {
+  attempt: number;
+  baseDelayMs: number;
+  maxDelayMs: number;
+}
+
+function calculateRetryDelay(args: RetryDelayArgs): number {
+  const exponent = Math.max(0, args.attempt - 1);
+  return Math.min(args.baseDelayMs * 2 ** exponent, args.maxDelayMs);
+}
+
 export function createBufferedEnvironmentChangeReporter(
   args: BufferedEnvironmentChangeReporterArgs,
 ) {
   let disposed = false;
   const entries = new Map<string, BufferedEnvironmentChangeEntry>();
 
-  function toKey(change: BufferedEnvironmentChange): string {
+  function toKey(change: HostDaemonEnvironmentChangePayload): string {
     return `${change.environmentId}:${change.change}`;
   }
 
@@ -82,21 +93,37 @@ export function createBufferedEnvironmentChangeReporter(
 
   async function flushEntry(payload: FlushEntryArgs): Promise<void> {
     const entry = entries.get(payload.key);
-    if (!entry || disposed) {
+    if (!entry || entry.inflight || disposed) {
       return;
     }
+    entry.inflight = true;
     try {
       await args.reportEnvironmentChange(entry.change);
       if (disposed) {
         return;
       }
-      if (entries.get(payload.key) === entry) {
-        entries.delete(payload.key);
+      if (entries.get(payload.key) !== entry) {
+        return;
       }
+      entry.inflight = false;
+      entry.retryAttempt = 0;
+      if (entry.dirtyWhileInflight) {
+        entry.dirtyWhileInflight = false;
+        scheduleEntry({
+          delayMs: args.debounceMs ?? ENVIRONMENT_CHANGE_REPORT_DEBOUNCE_MS,
+          key: payload.key,
+        });
+        return;
+      }
+      entries.delete(payload.key);
     } catch (error) {
       if (disposed) {
         return;
       }
+      if (entries.get(payload.key) !== entry) {
+        return;
+      }
+      entry.inflight = false;
       if (!shouldRetryEnvironmentChangeError(error)) {
         args.logger.warn(
           {
@@ -110,6 +137,7 @@ export function createBufferedEnvironmentChangeReporter(
         }
         return;
       }
+      entry.retryAttempt += 1;
       args.logger.warn(
         {
           change: entry.change,
@@ -118,24 +146,37 @@ export function createBufferedEnvironmentChangeReporter(
         "Failed to report environment change",
       );
       scheduleEntry({
-        delayMs:
-          args.retryDelayMs ?? ENVIRONMENT_CHANGE_REPORT_RETRY_DELAY_MS,
+        delayMs: calculateRetryDelay({
+          attempt: entry.retryAttempt,
+          baseDelayMs:
+            args.retryDelayMs ?? ENVIRONMENT_CHANGE_REPORT_RETRY_DELAY_MS,
+          maxDelayMs:
+            args.retryMaxDelayMs ??
+            ENVIRONMENT_CHANGE_REPORT_MAX_RETRY_DELAY_MS,
+        }),
         key: payload.key,
       });
     }
   }
 
   return {
-    queue(change: BufferedEnvironmentChange): void {
+    queue(change: HostDaemonEnvironmentChangePayload): void {
       if (disposed) {
         return;
       }
       const key = toKey(change);
-      if (entries.has(key)) {
+      const existingEntry = entries.get(key);
+      if (existingEntry) {
+        if (existingEntry.inflight) {
+          existingEntry.dirtyWhileInflight = true;
+        }
         return;
       }
       entries.set(key, {
         change,
+        dirtyWhileInflight: false,
+        inflight: false,
+        retryAttempt: 0,
         timer: null,
       });
       scheduleEntry({
