@@ -3,10 +3,10 @@
   "version": "0.0.1",
   "type": "module",
   "bin": {
-    "bb": "./dist/index.js"
+    "bb": "./dist/bin/bb"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && node ./scripts/prepare-bin.mjs",
     "start": "node dist/index.js",
     "clean": "rm -rf dist",
     "typecheck": "tsc --noEmit",
