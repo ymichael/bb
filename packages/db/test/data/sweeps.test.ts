@@ -208,7 +208,7 @@ describe("sweepExpiredCommands", () => {
 });
 
 describe("sweepExpiredLeases", () => {
-  it("closes expired sessions and errors threads", () => {
+  it("closes expired sessions and errors active threads", () => {
     const { db, host, project } = setup();
 
     const env = createEnvironment(db, noopNotifier, {
@@ -223,7 +223,7 @@ describe("sweepExpiredLeases", () => {
       projectId: project.id,
       environmentId: env.id,
       providerId: "codex",
-      status: "idle",
+      status: "active",
     });
 
     const session = openSession(db, noopNotifier, {
@@ -275,6 +275,52 @@ describe("sweepExpiredLeases", () => {
 
     expect(spy.notifyHost).toHaveBeenCalledWith(["host-disconnected"]);
     expect(spy.notifyThread).toHaveBeenCalledWith(thread.id, ["status-changed"]);
+  });
+
+  it("does not error idle threads on lease expiry", () => {
+    const { db, host, project } = setup();
+
+    const env = createEnvironment(db, noopNotifier, {
+      projectId: project.id,
+      hostId: host.id,
+      path: "/tmp/env",
+      workspaceProvisionType: "unmanaged",
+      status: "ready",
+    });
+
+    const thread = createThread(db, noopNotifier, {
+      projectId: project.id,
+      environmentId: env.id,
+      providerId: "codex",
+      status: "idle",
+    });
+
+    const session = openSession(db, noopNotifier, {
+      hostId: host.id,
+      instanceId: "inst-1",
+      hostName: "test-host",
+      hostType: "persistent",
+      dataDir: "/tmp/test-host-data",
+      protocolVersion: 1,
+      heartbeatIntervalMs: 10_000,
+      leaseTimeoutMs: 30_000,
+    });
+
+    db.update(hostDaemonSessions)
+      .set({ leaseExpiresAt: Date.now() - 1000 })
+      .where(eq(hostDaemonSessions.id, session.id))
+      .run();
+
+    const result = sweepExpiredLeases(db, noopNotifier);
+    expect(result.sessionsClosed).toBe(1);
+    expect(result.threadsErrored).toBe(0);
+
+    const updatedThread = db
+      .select()
+      .from(threads)
+      .where(eq(threads.id, thread.id))
+      .get();
+    expect(updatedThread?.status).toBe("idle");
   });
 });
 

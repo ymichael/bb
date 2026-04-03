@@ -144,7 +144,8 @@ export function sweepExpiredLeases(
 
     notifier.notifyHost(["host-disconnected"]);
 
-    // Find all active/idle/provisioning threads on environments belonging to this host
+    // Find active/provisioning threads on environments belonging to this host.
+    // Idle threads are excluded — they have no in-flight work to interrupt.
     const activeThreads = db
       .select({ id: threads.id })
       .from(threads)
@@ -152,7 +153,7 @@ export function sweepExpiredLeases(
       .where(
         and(
           eq(environments.hostId, session.hostId),
-          inArray(threads.status, ["active", "idle", "provisioning"]),
+          inArray(threads.status, ["active", "provisioning"]),
           sql`${threads.deletedAt} IS NULL`,
           sql`${threads.stopRequestedAt} IS NULL`,
         ),
