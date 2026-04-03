@@ -1,6 +1,7 @@
 import parcelWatcher from "@parcel/watcher";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { calculateExponentialBackoffDelay } from "@bb/domain";
 import { detectGitRepo, pathExists } from "./git.js";
 
 const WORKSPACE_STATUS_WATCH_DEBOUNCE_MS = 75;
@@ -21,7 +22,7 @@ export type WorkspaceStatusWatchErrorCallback = (
 
 export interface WorkspaceStatusWatchArgs {
   onChange: WorkspaceStatusChangeCallback;
-  onWatchError?: WorkspaceStatusWatchErrorCallback;
+  onWatchError: WorkspaceStatusWatchErrorCallback;
 }
 
 type ParcelWatcherSubscribe = typeof parcelWatcher.subscribe;
@@ -33,12 +34,6 @@ type ParcelWatcherOptions = Parameters<ParcelWatcherSubscribe>[2];
 interface GitMetadataLayout {
   commonDirPath: string;
   gitDirPath: string;
-}
-
-interface RetryDelayArgs {
-  attempt: number;
-  baseDelayMs: number;
-  maxDelayMs: number;
 }
 
 interface WatchSubscriptionSpec {
@@ -55,11 +50,6 @@ function toErrorMessage(error: unknown): string {
     return error.message;
   }
   return "Unknown watch error";
-}
-
-function calculateRetryDelay(args: RetryDelayArgs): number {
-  const exponent = Math.max(0, args.attempt - 1);
-  return Math.min(args.baseDelayMs * 2 ** exponent, args.maxDelayMs);
 }
 
 async function resolveGitDirectory(cwd: string): Promise<string | undefined> {
@@ -220,7 +210,7 @@ export function watchWorkspaceStatus(
       return;
     }
     warnedRootPaths.add(spec.rootPath);
-    args.onWatchError?.({
+    args.onWatchError({
       message: toErrorMessage(error),
       rootPath: spec.rootPath,
     });
@@ -234,7 +224,7 @@ export function watchWorkspaceStatus(
     metadataStartRetryTimer = setTimeout(() => {
       metadataStartRetryTimer = null;
       startMetadataWatchSubscriptions();
-    }, calculateRetryDelay({
+    }, calculateExponentialBackoffDelay({
       attempt: metadataRetryAttempt,
       baseDelayMs: WORKSPACE_STATUS_WATCH_RETRY_DELAY_MS,
       maxDelayMs: WORKSPACE_STATUS_WATCH_MAX_RETRY_DELAY_MS,
@@ -257,7 +247,7 @@ export function watchWorkspaceStatus(
         return;
       }
       startWatchSubscription(spec);
-    }, calculateRetryDelay({
+    }, calculateExponentialBackoffDelay({
       attempt: retryAttempt,
       baseDelayMs: WORKSPACE_STATUS_WATCH_RETRY_DELAY_MS,
       maxDelayMs: WORKSPACE_STATUS_WATCH_MAX_RETRY_DELAY_MS,

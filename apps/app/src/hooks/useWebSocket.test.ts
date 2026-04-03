@@ -194,7 +194,7 @@ describe("createBufferedEnvironmentInvalidator", () => {
     expect(flushChangedEnvironmentIds).toHaveBeenCalledWith(["env-1", "env-2"]);
   });
 
-  it("cancels pending flushes during cleanup", () => {
+  it("cancels pending flushes during dispose", () => {
     vi.useFakeTimers();
     const flushChangedEnvironmentIds = vi.fn();
     const invalidator = createBufferedEnvironmentInvalidator({
@@ -204,7 +204,7 @@ describe("createBufferedEnvironmentInvalidator", () => {
     });
 
     invalidator.markChanged("env-1");
-    invalidator.cleanup();
+    invalidator.dispose();
     vi.runAllTimers();
 
     expect(flushChangedEnvironmentIds).not.toHaveBeenCalled();

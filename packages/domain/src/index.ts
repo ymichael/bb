@@ -318,3 +318,10 @@ export type {
   ChangedMessage,
   ServerMessage,
 } from "./change-kinds.js";
+
+export {
+  calculateExponentialBackoffDelay,
+} from "./retry.js";
+export type {
+  ExponentialBackoffDelayArgs,
+} from "./retry.js";

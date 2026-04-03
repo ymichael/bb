@@ -36,7 +36,7 @@ interface BufferedEnvironmentInvalidatorOptions {
 }
 
 interface BufferedEnvironmentInvalidator {
-  cleanup: () => void;
+  dispose: () => void;
   markChanged: (environmentId: string) => void;
 }
 
@@ -75,7 +75,7 @@ export function createBufferedEnvironmentInvalidator(
   };
 
   return {
-    cleanup: () => {
+    dispose: () => {
       if (debounceTimer !== null) {
         clearTimeout(debounceTimer);
         debounceTimer = null;
@@ -364,7 +364,7 @@ export function useWebSocket(): void {
       if (maxWaitTimer !== null) {
         clearTimeout(maxWaitTimer);
       }
-      environmentInvalidator.cleanup();
+      environmentInvalidator.dispose();
       unsubscribeConnected();
       unsubscribe();
       wsManager.unsubscribe("thread");

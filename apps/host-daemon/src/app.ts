@@ -10,6 +10,7 @@ import {
   type CreateReconnectingWebSocket,
 } from "./server-connection.js";
 import type { AgentRuntimeOptions } from "@bb/agent-runtime";
+import { calculateExponentialBackoffDelay } from "@bb/domain";
 import type { HostDaemonEnvironmentChangePayload } from "@bb/host-daemon-contract";
 import type { HostType, ToolCallRequest, ToolCallResponse } from "@bb/domain";
 import { AbortError } from "p-retry";
@@ -43,40 +44,57 @@ interface BufferedEnvironmentChangeEntry {
 
 interface ScheduledEntryArgs {
   delayMs: number;
-  key: string;
+  change: HostDaemonEnvironmentChangePayload;
 }
 
 interface FlushEntryArgs {
-  key: string;
+  change: HostDaemonEnvironmentChangePayload;
 }
 
 function shouldRetryEnvironmentChangeError(error: unknown): boolean {
   return !(error instanceof AbortError);
 }
 
-interface RetryDelayArgs {
-  attempt: number;
-  baseDelayMs: number;
-  maxDelayMs: number;
-}
-
-function calculateRetryDelay(args: RetryDelayArgs): number {
-  const exponent = Math.max(0, args.attempt - 1);
-  return Math.min(args.baseDelayMs * 2 ** exponent, args.maxDelayMs);
-}
-
 export function createBufferedEnvironmentChangeReporter(
   args: BufferedEnvironmentChangeReporterArgs,
 ) {
   let disposed = false;
-  const entries = new Map<string, BufferedEnvironmentChangeEntry>();
+  const entries = new Map<
+    string,
+    Map<HostDaemonEnvironmentChangePayload["change"], BufferedEnvironmentChangeEntry>
+  >();
 
-  function toKey(change: HostDaemonEnvironmentChangePayload): string {
-    return `${change.environmentId}:${change.change}`;
+  function getEntry(
+    change: HostDaemonEnvironmentChangePayload,
+  ): BufferedEnvironmentChangeEntry | undefined {
+    return entries.get(change.environmentId)?.get(change.change);
+  }
+
+  function setEntry(
+    change: HostDaemonEnvironmentChangePayload,
+    entry: BufferedEnvironmentChangeEntry,
+  ): void {
+    let environmentEntries = entries.get(change.environmentId);
+    if (!environmentEntries) {
+      environmentEntries = new Map();
+      entries.set(change.environmentId, environmentEntries);
+    }
+    environmentEntries.set(change.change, entry);
+  }
+
+  function deleteEntry(change: HostDaemonEnvironmentChangePayload): void {
+    const environmentEntries = entries.get(change.environmentId);
+    if (!environmentEntries) {
+      return;
+    }
+    environmentEntries.delete(change.change);
+    if (environmentEntries.size === 0) {
+      entries.delete(change.environmentId);
+    }
   }
 
   function scheduleEntry(scheduledEntryArgs: ScheduledEntryArgs): void {
-    const entry = entries.get(scheduledEntryArgs.key);
+    const entry = getEntry(scheduledEntryArgs.change);
     if (!entry || disposed) {
       return;
     }
@@ -86,13 +104,13 @@ export function createBufferedEnvironmentChangeReporter(
     entry.timer = setTimeout(() => {
       entry.timer = null;
       void flushEntry({
-        key: scheduledEntryArgs.key,
+        change: scheduledEntryArgs.change,
       });
     }, scheduledEntryArgs.delayMs);
   }
 
   async function flushEntry(payload: FlushEntryArgs): Promise<void> {
-    const entry = entries.get(payload.key);
+    const entry = getEntry(payload.change);
     if (!entry || entry.inflight || disposed) {
       return;
     }
@@ -102,7 +120,7 @@ export function createBufferedEnvironmentChangeReporter(
       if (disposed) {
         return;
       }
-      if (entries.get(payload.key) !== entry) {
+      if (getEntry(payload.change) !== entry) {
         return;
       }
       entry.inflight = false;
@@ -111,16 +129,16 @@ export function createBufferedEnvironmentChangeReporter(
         entry.dirtyWhileInflight = false;
         scheduleEntry({
           delayMs: args.debounceMs ?? ENVIRONMENT_CHANGE_REPORT_DEBOUNCE_MS,
-          key: payload.key,
+          change: payload.change,
         });
         return;
       }
-      entries.delete(payload.key);
+      deleteEntry(payload.change);
     } catch (error) {
       if (disposed) {
         return;
       }
-      if (entries.get(payload.key) !== entry) {
+      if (getEntry(payload.change) !== entry) {
         return;
       }
       entry.inflight = false;
@@ -132,8 +150,8 @@ export function createBufferedEnvironmentChangeReporter(
           },
           "Dropping environment change after permanent failure",
         );
-        if (entries.get(payload.key) === entry) {
-          entries.delete(payload.key);
+        if (getEntry(payload.change) === entry) {
+          deleteEntry(payload.change);
         }
         return;
       }
@@ -146,7 +164,7 @@ export function createBufferedEnvironmentChangeReporter(
         "Failed to report environment change",
       );
       scheduleEntry({
-        delayMs: calculateRetryDelay({
+        delayMs: calculateExponentialBackoffDelay({
           attempt: entry.retryAttempt,
           baseDelayMs:
             args.retryDelayMs ?? ENVIRONMENT_CHANGE_REPORT_RETRY_DELAY_MS,
@@ -154,7 +172,7 @@ export function createBufferedEnvironmentChangeReporter(
             args.retryMaxDelayMs ??
             ENVIRONMENT_CHANGE_REPORT_MAX_RETRY_DELAY_MS,
         }),
-        key: payload.key,
+        change: payload.change,
       });
     }
   }
@@ -164,15 +182,14 @@ export function createBufferedEnvironmentChangeReporter(
       if (disposed) {
         return;
       }
-      const key = toKey(change);
-      const existingEntry = entries.get(key);
+      const existingEntry = getEntry(change);
       if (existingEntry) {
         if (existingEntry.inflight) {
           existingEntry.dirtyWhileInflight = true;
         }
         return;
       }
-      entries.set(key, {
+      setEntry(change, {
         change,
         dirtyWhileInflight: false,
         inflight: false,
@@ -181,16 +198,18 @@ export function createBufferedEnvironmentChangeReporter(
       });
       scheduleEntry({
         delayMs: args.debounceMs ?? ENVIRONMENT_CHANGE_REPORT_DEBOUNCE_MS,
-        key,
+        change,
       });
     },
     dispose(): void {
       disposed = true;
-      for (const entry of entries.values()) {
-        if (entry.timer === null) {
-          continue;
+      for (const environmentEntries of entries.values()) {
+        for (const entry of environmentEntries.values()) {
+          if (entry.timer === null) {
+            continue;
+          }
+          clearTimeout(entry.timer);
         }
-        clearTimeout(entry.timer);
       }
       entries.clear();
     },
