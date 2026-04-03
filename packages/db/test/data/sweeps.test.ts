@@ -12,7 +12,11 @@ import {
 } from "../../src/data/sweeps.js";
 import { upsertHost } from "../../src/data/hosts.js";
 import { createProject } from "../../src/data/projects.js";
-import { createThread, archiveThread } from "../../src/data/threads.js";
+import {
+  createThread,
+  archiveThread,
+  markThreadDeleted,
+} from "../../src/data/threads.js";
 import { createEnvironment } from "../../src/data/environments.js";
 import { openSession } from "../../src/data/sessions.js";
 import { queueCommand, fetchCommands } from "../../src/data/commands.js";
@@ -291,6 +295,32 @@ describe("sweepManagedEnvironments", () => {
     archiveThread(db, noopNotifier, thread.id);
 
     // Now it's a candidate
+    const candidates = sweepManagedEnvironments(db);
+    expect(candidates).toHaveLength(1);
+    expect(candidates[0]!.id).toBe(env.id);
+  });
+
+  it("treats soft-deleted threads as non-live when selecting cleanup candidates", () => {
+    const { db, host, project } = setup();
+
+    const env = createEnvironment(db, noopNotifier, {
+      projectId: project.id,
+      hostId: host.id,
+      path: "/tmp/env",
+      managed: true,
+      workspaceProvisionType: "managed-worktree",
+      status: "ready",
+    });
+
+    const thread = createThread(db, noopNotifier, {
+      projectId: project.id,
+      environmentId: env.id,
+      providerId: "codex",
+      status: "idle",
+    });
+
+    markThreadDeleted(db, noopNotifier, { threadId: thread.id });
+
     const candidates = sweepManagedEnvironments(db);
     expect(candidates).toHaveLength(1);
     expect(candidates[0]!.id).toBe(env.id);

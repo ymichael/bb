@@ -5,11 +5,15 @@ import { noopNotifier } from "../../src/notifier.js";
 import type { DbNotifier } from "../../src/notifier.js";
 import {
   createThread,
+  countLiveThreadsInEnvironment,
   getThread,
   listThreads,
   updateThread,
   deleteThread,
   archiveThread,
+  clearThreadStopRequested,
+  markThreadDeleted,
+  markThreadStopRequested,
   unarchiveThread,
   transitionThreadStatus,
   ALLOWED_TRANSITIONS,
@@ -40,6 +44,8 @@ describe("threads", () => {
     expect(thread.id).toMatch(/^thr_/);
     expect(thread.status).toBe("created");
     expect(thread.projectId).toBe(project.id);
+    expect(thread.stopRequestedAt).toBeNull();
+    expect(thread.deletedAt).toBeNull();
 
     const fetched = getThread(db, thread.id);
     expect(fetched).toMatchObject({ id: thread.id });
@@ -113,6 +119,22 @@ describe("threads", () => {
     expect(deleteThread(db, noopNotifier, thread.id)).toBe(false);
   });
 
+  it("marks a thread deleted and hides it from public list queries", () => {
+    const { db, project } = setup();
+    const thread = createThread(db, noopNotifier, {
+      projectId: project.id,
+      providerId: "codex",
+    });
+
+    const deleted = markThreadDeleted(db, noopNotifier, {
+      threadId: thread.id,
+    });
+
+    expect(deleted?.deletedAt).toBeTypeOf("number");
+    expect(getThread(db, thread.id)?.deletedAt).toBeTypeOf("number");
+    expect(listThreads(db, { projectId: project.id })).toHaveLength(0);
+  });
+
   it("archives a thread", () => {
     const { db, project } = setup();
     const thread = createThread(db, noopNotifier, {
@@ -133,6 +155,65 @@ describe("threads", () => {
 
     const unarchived = unarchiveThread(db, noopNotifier, thread.id);
     expect(unarchived?.archivedAt).toBeNull();
+  });
+
+  it("tracks stop requests independently from runtime status", () => {
+    const { db, project } = setup();
+    const thread = createThread(db, noopNotifier, {
+      projectId: project.id,
+      providerId: "codex",
+      status: "active",
+    });
+
+    const stopRequested = markThreadStopRequested(db, noopNotifier, {
+      threadId: thread.id,
+      requestedAt: 123,
+    });
+    expect(stopRequested?.stopRequestedAt).toBe(123);
+    expect(getThread(db, thread.id)?.status).toBe("active");
+
+    const cleared = clearThreadStopRequested(db, noopNotifier, thread.id);
+    expect(cleared?.stopRequestedAt).toBeNull();
+  });
+
+  it("counts only non-archived, non-deleted threads as live", () => {
+    const { db, project, host } = setup();
+    const environment = createEnvironment(db, noopNotifier, {
+      projectId: project.id,
+      hostId: host.id,
+      path: "/tmp/thread-live-count",
+      workspaceProvisionType: "unmanaged",
+      status: "ready",
+    });
+    const liveThread = createThread(db, noopNotifier, {
+      projectId: project.id,
+      environmentId: environment.id,
+      providerId: "codex",
+      status: "idle",
+    });
+    const archivedThread = createThread(db, noopNotifier, {
+      projectId: project.id,
+      environmentId: environment.id,
+      providerId: "codex",
+      status: "idle",
+    });
+    const deletedThread = createThread(db, noopNotifier, {
+      projectId: project.id,
+      environmentId: environment.id,
+      providerId: "codex",
+      status: "idle",
+    });
+
+    archiveThread(db, noopNotifier, archivedThread.id);
+    markThreadDeleted(db, noopNotifier, { threadId: deletedThread.id });
+
+    expect(countLiveThreadsInEnvironment(db, { environmentId: environment.id })).toBe(1);
+    expect(
+      countLiveThreadsInEnvironment(db, {
+        environmentId: environment.id,
+        excludeThreadId: liveThread.id,
+      }),
+    ).toBe(0);
   });
 });
 

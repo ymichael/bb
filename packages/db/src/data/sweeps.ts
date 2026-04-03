@@ -184,6 +184,7 @@ export function sweepManagedEnvironments(db: DbConnection) {
           SELECT 1 FROM threads
           WHERE threads.environment_id = ${environments.id}
           AND threads.archived_at IS NULL
+          AND threads.deleted_at IS NULL
         )`,
       ),
     )
