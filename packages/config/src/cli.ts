@@ -1,8 +1,5 @@
 import { envsafe, port, url } from "envsafe";
-import { commonConfig } from "./common.js";
 import { DEFAULTS } from "./defaults.js";
-
-export { commonConfig };
 
 export const cliConfig = envsafe({
   BB_SERVER_URL: url({
