@@ -6,13 +6,20 @@ import {
 } from "@bb/db";
 import type { AppDeps } from "../types.js";
 import { ApiError } from "../errors.js";
-import { createSandboxBackendForId } from "./sandbox-backends.js";
+import { requireSandboxBackendForHost } from "./sandbox-backends.js";
 
 const DEFAULT_SESSION_WAIT_TIMEOUT_MS = 60_000;
 const pendingHostDestroys = new Map<string, Promise<void>>();
 
+type HostRecord = NonNullable<ReturnType<typeof getHost>>;
+type ResumableSandboxHostRecord = HostRecord & { externalId: string };
+
 export interface WaitForHostSessionOptions {
   timeoutMs?: number;
+}
+
+function hasExternalId(host: HostRecord): host is ResumableSandboxHostRecord {
+  return host.externalId !== null;
 }
 
 export async function waitForHostSession(
@@ -55,21 +62,31 @@ async function loadSandboxHost(
     return cached;
   }
 
-  if (!host?.externalId) {
+  if (!hasExternalId(host)) {
     return null;
   }
-  const externalId = host.externalId;
-  const sandboxBackend = createSandboxBackendForId(host.provider ?? "e2b");
+  return loadSandboxHostFromBackend(deps, host, "getOrCreate");
+}
 
-  return deps.sandboxRegistry.getOrCreate(hostId, async () =>
+function loadSandboxHostFromBackend(
+  deps: Pick<AppDeps, "config" | "db" | "hub" | "sandboxRegistry">,
+  host: ResumableSandboxHostRecord,
+  mode: "getOrCreate" | "refresh",
+) {
+  const sandboxBackend = requireSandboxBackendForHost(host);
+  const loadHost = async () =>
     sandboxBackend.resumeHost({
       config: deps.config,
-      externalId,
+      externalId: host.externalId,
       hostId: host.id,
       hostName: host.name,
       serverUrl: deps.config.publicUrl,
-    }),
-  );
+    });
+
+  if (mode === "refresh") {
+    return deps.sandboxRegistry.refresh(host.id, loadHost);
+  }
+  return deps.sandboxRegistry.getOrCreate(host.id, loadHost);
 }
 
 export async function suspendIdleHost(
@@ -79,6 +96,8 @@ export async function suspendIdleHost(
   const host = await loadSandboxHost(deps, hostId);
   if (host) {
     await host.suspend();
+    // Force the next resume through the canonical backend readiness path.
+    deps.sandboxRegistry.remove(hostId);
   }
 }
 
@@ -86,15 +105,13 @@ export async function resumeSuspendedHost(
   deps: Pick<AppDeps, "config" | "db" | "hub" | "sandboxRegistry">,
   hostId: string,
 ) {
-  const cached = deps.sandboxRegistry.get(hostId);
-  const host = await loadSandboxHost(deps, hostId);
-  if (!host) {
+  const hostRecord = getHost(deps.db, hostId);
+  if (!hostRecord || hostRecord.destroyedAt !== null || !hasExternalId(hostRecord)) {
+    deps.sandboxRegistry.remove(hostId);
     throw new ApiError(404, "host_not_found", "Host not found");
   }
-  if (cached === host) {
-    await host.resume();
-  }
-  return host;
+
+  return loadSandboxHostFromBackend(deps, hostRecord, "refresh");
 }
 
 export async function destroyHost(
@@ -134,16 +151,20 @@ async function destroyHostInternal(
     return;
   }
 
-  if (!hostRecord?.externalId) {
+  if (!hostRecord.externalId) {
+    deps.sandboxRegistry.remove(hostId);
+    updateHost(deps.db, deps.hub, hostId, { destroyedAt });
     return;
   }
 
   deps.sandboxRegistry.remove(hostId);
-  const sandboxBackend = createSandboxBackendForId(hostRecord.provider ?? "e2b");
+  const sandboxBackend = requireSandboxBackendForHost(hostRecord);
   await sandboxBackend.destroyHost({
     config: deps.config,
     externalId: hostRecord.externalId,
   });
+  // A concurrent resume can repopulate the registry while destroy is in flight.
+  // Clear again after external teardown so no stale live handle survives.
   deps.sandboxRegistry.remove(hostId);
   updateHost(deps.db, deps.hub, hostId, { destroyedAt });
 }

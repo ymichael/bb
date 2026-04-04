@@ -202,12 +202,13 @@ describe("host lifecycle", () => {
       await suspendIdleHost(harness.deps, hostRow.id);
 
       expect(host.suspend).toHaveBeenCalledTimes(1);
+      expect(harness.deps.sandboxRegistry.get(hostRow.id)).toBeUndefined();
     } finally {
       await harness.cleanup();
     }
   });
 
-  it("resumes a cached sandbox host", async () => {
+  it("resumes a sandbox host through the backend path even when cached", async () => {
     const harness = await createTestAppHarness();
     try {
       const hostRow = upsertHost(harness.db, harness.hub, {
@@ -217,13 +218,27 @@ describe("host lifecycle", () => {
         provider: "e2b",
         type: "ephemeral",
       });
-      const host = createMockSandboxHost(hostRow.id, hostRow.externalId ?? undefined);
-      harness.deps.sandboxRegistry.set(hostRow.id, host);
+      const cachedHost = createMockSandboxHost(hostRow.id, hostRow.externalId ?? undefined);
+      const resumedHost = createMockSandboxHost(hostRow.id, hostRow.externalId ?? undefined);
+      harness.deps.sandboxRegistry.set(hostRow.id, cachedHost);
+      resumeHostMock.mockResolvedValue(resumedHost);
 
       const resumed = await resumeSuspendedHost(harness.deps, hostRow.id);
 
-      expect(host.resume).toHaveBeenCalledTimes(1);
-      expect(resumed).toBe(host);
+      expect(cachedHost.resume).not.toHaveBeenCalled();
+      expect(resumeHostMock).toHaveBeenCalledWith({
+        apiKey: "test-e2b-api-key",
+        authToken: harness.config.authToken,
+        daemonEnv: {
+          OPENAI_API_KEY: "test-openai-key",
+        },
+        externalId: "sandbox-cached-resume",
+        hostId: hostRow.id,
+        hostName: hostRow.name,
+        serverUrl: harness.config.publicUrl,
+      });
+      expect(resumed).toBe(resumedHost);
+      expect(harness.deps.sandboxRegistry.get(hostRow.id)).toBe(resumedHost);
     } finally {
       await harness.cleanup();
     }
@@ -359,6 +374,51 @@ describe("host lifecycle", () => {
         destroyedAt: expect.any(Number),
         externalId: "sandbox-uncached-destroy",
       });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("marks uncached hosts without external IDs destroyed", async () => {
+    const harness = await createTestAppHarness({ e2bApiKey: "" });
+    try {
+      const host = upsertHost(harness.db, harness.hub, {
+        id: "host-no-external-id",
+        name: "Destroy Host",
+        provider: "e2b",
+        type: "ephemeral",
+      });
+
+      await destroyHost(harness.deps, host.id);
+
+      expect(getHost(harness.db, host.id)).toMatchObject({
+        destroyedAt: expect.any(Number),
+        externalId: null,
+      });
+      expect(resumeSandboxMock).not.toHaveBeenCalled();
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("throws when an ephemeral sandbox host is missing a backend provider", async () => {
+    const harness = await createTestAppHarness({ e2bApiKey: "" });
+    try {
+      const host = upsertHost(harness.db, harness.hub, {
+        externalId: "sandbox-missing-provider",
+        id: "host-missing-provider",
+        name: "Missing Provider Host",
+        type: "ephemeral",
+      });
+
+      await expect(resumeSuspendedHost(harness.deps, host.id)).rejects.toMatchObject({
+        body: {
+          code: "internal_error",
+          message: `Sandbox host ${host.id} is missing a backend provider`,
+        },
+        status: 500,
+      });
+      expect(resumeHostMock).not.toHaveBeenCalled();
     } finally {
       await harness.cleanup();
     }

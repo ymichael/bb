@@ -75,6 +75,36 @@ describe("sandbox host registry", () => {
     expect(registry.get(host.hostId)).toBe(host);
   });
 
+  it("refreshes a cached host while deduplicating concurrent reloads", async () => {
+    vi.useFakeTimers();
+    const registry = createSandboxHostRegistry();
+    const staleHost = createMockSandboxHost("host-refresh");
+    const refreshedHost = createMockSandboxHost("host-refresh");
+    let resolveLoad: ((value: SandboxHost) => void) | null = null;
+    const loadHost = vi.fn(
+      () =>
+        new Promise<SandboxHost>((resolve) => {
+          resolveLoad = resolve;
+        }),
+    );
+
+    registry.set(staleHost.hostId, staleHost);
+
+    const firstRefresh = registry.refresh(staleHost.hostId, loadHost);
+    const secondRefresh = registry.refresh(staleHost.hostId, loadHost);
+
+    expect(loadHost).toHaveBeenCalledTimes(1);
+    if (!resolveLoad) {
+      throw new Error("Expected refresh load to be pending");
+    }
+    resolveLoad(refreshedHost);
+
+    const [firstHost, secondHost] = await Promise.all([firstRefresh, secondRefresh]);
+    expect(firstHost).toBe(refreshedHost);
+    expect(secondHost).toBe(refreshedHost);
+    expect(registry.get(staleHost.hostId)).toBe(refreshedHost);
+  });
+
   it("applies capacity eviction to hosts loaded through getOrCreate", async () => {
     vi.useFakeTimers();
     const registry = createSandboxHostRegistry();

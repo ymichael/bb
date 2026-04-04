@@ -1,5 +1,5 @@
 import { toOptionalString } from "@bb/config/strings";
-import type { SandboxBackendInfo } from "@bb/domain";
+import type { HostType, SandboxBackendInfo } from "@bb/domain";
 import {
   provisionHost as provisionSandboxHost,
   resumeHost as resumeSandboxHost,
@@ -43,6 +43,13 @@ export interface SandboxBackendResumeArgs {
 export interface SandboxBackendDestroyArgs {
   config: SandboxBackendConfig;
   externalId: string;
+}
+
+export interface SandboxBackendHostRecord {
+  id: string;
+  name: string;
+  provider: string | null;
+  type: HostType;
 }
 
 export interface SandboxBackend {
@@ -170,4 +177,24 @@ export function createSandboxBackendForId(sandboxType: string): SandboxBackend {
     "invalid_request",
     `Unsupported sandbox backend "${sandboxType}". Available backends: ${backendIds.join(", ")}`,
   );
+}
+
+export function requireSandboxBackendForHost(
+  host: SandboxBackendHostRecord,
+): SandboxBackend {
+  if (host.type !== "ephemeral") {
+    throw new ApiError(
+      500,
+      "internal_error",
+      `Host ${host.id} is not an ephemeral sandbox host`,
+    );
+  }
+  if (!host.provider) {
+    throw new ApiError(
+      500,
+      "internal_error",
+      `Sandbox host ${host.id} is missing a backend provider`,
+    );
+  }
+  return createSandboxBackendForId(host.provider);
 }

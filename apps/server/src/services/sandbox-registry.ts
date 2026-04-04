@@ -13,6 +13,7 @@ export interface SandboxHostRegistry {
     hostId: string,
     loadHost: SandboxHostLoader,
   ): Promise<SandboxHost>;
+  refresh(hostId: string, loadHost: SandboxHostLoader): Promise<SandboxHost>;
   remove(hostId: string): void;
   set(hostId: string, host: SandboxHost): void;
 }
@@ -35,6 +36,32 @@ export function createSandboxHostRegistry(): SandboxHostRegistry {
   function touchHost(hostId: string, host: SandboxHost, now: number): SandboxHost {
     hosts.set(hostId, { host, lastTouchedAt: now });
     return host;
+  }
+
+  function loadAndCacheHost(
+    hostId: string,
+    loadHost: SandboxHostLoader,
+  ): Promise<SandboxHost> {
+    const pending = pendingHosts.get(hostId);
+    if (pending) {
+      return pending;
+    }
+
+    const loadingHost = loadHost()
+      .then((host) => {
+        if (pendingHosts.get(hostId) === loadingHost) {
+          touchHost(hostId, host, Date.now());
+          enforceMaxEntries();
+        }
+        return hosts.get(hostId)?.host ?? host;
+      })
+      .finally(() => {
+        if (pendingHosts.get(hostId) === loadingHost) {
+          pendingHosts.delete(hostId);
+        }
+      });
+    pendingHosts.set(hostId, loadingHost);
+    return loadingHost;
   }
 
   function enforceMaxEntries(): void {
@@ -71,26 +98,12 @@ export function createSandboxHostRegistry(): SandboxHostRegistry {
         return Promise.resolve(touchHost(hostId, cached.host, now));
       }
 
-      const pending = pendingHosts.get(hostId);
-      if (pending) {
-        return pending;
-      }
-
-      const loadingHost = loadHost()
-        .then((host) => {
-          if (pendingHosts.get(hostId) === loadingHost) {
-            touchHost(hostId, host, Date.now());
-            enforceMaxEntries();
-          }
-          return hosts.get(hostId)?.host ?? host;
-        })
-        .finally(() => {
-          if (pendingHosts.get(hostId) === loadingHost) {
-            pendingHosts.delete(hostId);
-          }
-        });
-      pendingHosts.set(hostId, loadingHost);
-      return loadingHost;
+      return loadAndCacheHost(hostId, loadHost);
+    },
+    refresh(hostId: string, loadHost: SandboxHostLoader): Promise<SandboxHost> {
+      pruneExpiredEntries(Date.now());
+      hosts.delete(hostId);
+      return loadAndCacheHost(hostId, loadHost);
     },
     remove(hostId: string): void {
       pendingHosts.delete(hostId);
