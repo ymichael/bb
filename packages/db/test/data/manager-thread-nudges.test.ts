@@ -2,7 +2,16 @@ import { describe, expect, it } from "vitest";
 import { createConnection } from "../../src/connection.js";
 import { migrate } from "../../src/migrate.js";
 import { noopNotifier } from "../../src/notifier.js";
-import { createManagerThreadNudge, deleteManagerThreadNudge, deleteManagerThreadNudgesForThread, getManagerThreadNudge, listDueManagerThreadNudges, listManagerThreadNudgesByThread, updateManagerThreadNudge } from "../../src/data/manager-thread-nudges.js";
+import {
+  advanceManagerThreadNudgeAfterFireInTransaction,
+  createManagerThreadNudge,
+  deleteManagerThreadNudge,
+  deleteManagerThreadNudgesForThread,
+  getManagerThreadNudge,
+  listDueManagerThreadNudges,
+  listManagerThreadNudgesByThread,
+  updateManagerThreadNudge,
+} from "../../src/data/manager-thread-nudges.js";
 import { createProject } from "../../src/data/projects.js";
 import { createThread } from "../../src/data/threads.js";
 import { upsertHost } from "../../src/data/hosts.js";
@@ -81,9 +90,41 @@ describe("manager thread nudges", () => {
       nextFireAt: now + 60_000,
     });
 
-    expect(listDueManagerThreadNudges(db, now).map((nudge) => nudge.id)).toEqual([due.id]);
+    expect(listDueManagerThreadNudges(db, { now, limit: 1 }).map((nudge) => nudge.id)).toEqual([
+      due.id,
+    ]);
     expect(deleteManagerThreadNudge(db, noopNotifier, due.id)).toBe(true);
     expect(deleteManagerThreadNudge(db, noopNotifier, due.id)).toBe(false);
     expect(deleteManagerThreadNudgesForThread(db, noopNotifier, thread.id)).toBe(1);
+  });
+
+  it("does not advance a nudge after it is disabled", () => {
+    const { db, project, thread } = setup();
+    const now = Date.now();
+    const nudge = createManagerThreadNudge(db, noopNotifier, {
+      projectId: project.id,
+      threadId: thread.id,
+      name: "disabled-before-fire",
+      cron: "0 * * * *",
+      timezone: "UTC",
+      enabled: true,
+      nextFireAt: now - 1,
+    });
+
+    updateManagerThreadNudge(db, noopNotifier, nudge.id, { enabled: false });
+    const advanced = db.transaction((tx) =>
+      advanceManagerThreadNudgeAfterFireInTransaction(tx, {
+        expectedNextFireAt: nudge.nextFireAt,
+        nextFireAt: now + 60_000,
+        nudgeId: nudge.id,
+        now,
+      }), { behavior: "immediate" });
+
+    expect(advanced).toBe(false);
+    expect(getManagerThreadNudge(db, nudge.id)).toMatchObject({
+      enabled: false,
+      lastFiredAt: null,
+      nextFireAt: nudge.nextFireAt,
+    });
   });
 });

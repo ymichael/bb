@@ -3,7 +3,17 @@ import { describe, expect, it } from "vitest";
 import { createConnection } from "../../src/connection.js";
 import { migrate } from "../../src/migrate.js";
 import { noopNotifier } from "../../src/notifier.js";
-import { createAutomation, deleteAutomation, getAutomation, hasOpenAutomationThread, listAutomations, listDueAutomations, updateAutomation } from "../../src/data/automations.js";
+import {
+  advanceAutomationAfterRunInTransaction,
+  createAutomation,
+  deleteAutomation,
+  getAutomation,
+  hasOpenAutomationThread,
+  listAutomations,
+  listDueAutomations,
+  restoreAutomationAfterFailedRun,
+  updateAutomation,
+} from "../../src/data/automations.js";
 import { createProject } from "../../src/data/projects.js";
 import { createThread } from "../../src/data/threads.js";
 import { upsertHost } from "../../src/data/hosts.js";
@@ -73,7 +83,7 @@ describe("automations", () => {
       now,
     });
 
-    const due = listDueAutomations(db, now);
+    const due = listDueAutomations(db, { now, limit: 1 });
     expect(due.map((automation) => automation.id)).toEqual([dueAutomation.id]);
 
     const updated = updateAutomation(db, noopNotifier, dueAutomation.id, {
@@ -116,6 +126,81 @@ describe("automations", () => {
 
     db.update(threads)
       .set({ archivedAt: null, deletedAt: now, updatedAt: now })
+      .where(eq(threads.id, thread.id))
+      .run();
+    expect(hasOpenAutomationThread(db, automation.id)).toBe(false);
+  });
+
+  it("uses optimistic locking for schedule advancement and can restore a failed run", () => {
+    const { db, project } = setup();
+    const now = Date.now();
+    const automation = createScheduleAutomation({
+      db,
+      projectId: project.id,
+      now: now - 120_000,
+    });
+
+    const firstAdvanced = db.transaction((tx) =>
+      advanceAutomationAfterRunInTransaction(tx, {
+        automationId: automation.id,
+        expectedNextRunAt: automation.nextRunAt,
+        nextRunAt: now + 60_000,
+        now,
+      }), { behavior: "immediate" });
+    expect(firstAdvanced).toBe(true);
+
+    const secondAdvanced = db.transaction((tx) =>
+      advanceAutomationAfterRunInTransaction(tx, {
+        automationId: automation.id,
+        expectedNextRunAt: automation.nextRunAt,
+        nextRunAt: now + 120_000,
+        now: now + 1,
+      }), { behavior: "immediate" });
+    expect(secondAdvanced).toBe(false);
+
+    const restored = restoreAutomationAfterFailedRun(db, noopNotifier, {
+      automationId: automation.id,
+      expectedAdvancedNextRunAt: now + 60_000,
+      expectedRunCount: 1,
+      projectId: project.id,
+      restoredLastRunAt: automation.lastRunAt,
+      restoredNextRunAt: automation.nextRunAt,
+      restoredRunCount: automation.runCount,
+      now: now + 2,
+    });
+    expect(restored).toBe(true);
+    expect(getAutomation(db, automation.id)).toMatchObject({
+      lastRunAt: automation.lastRunAt,
+      nextRunAt: automation.nextRunAt,
+      runCount: automation.runCount,
+    });
+  });
+
+  it("allows a new run after the prior automation thread is archived", () => {
+    const { db, project } = setup();
+    const now = Date.now();
+    const automation = createScheduleAutomation({
+      db,
+      projectId: project.id,
+      now,
+    });
+    const thread = createThread(db, noopNotifier, {
+      projectId: project.id,
+      providerId: "codex",
+      status: "error",
+      automationId: automation.id,
+    });
+
+    expect(hasOpenAutomationThread(db, automation.id)).toBe(false);
+
+    db.update(threads)
+      .set({ status: "idle", updatedAt: now })
+      .where(eq(threads.id, thread.id))
+      .run();
+    expect(hasOpenAutomationThread(db, automation.id)).toBe(true);
+
+    db.update(threads)
+      .set({ archivedAt: now, updatedAt: now })
       .where(eq(threads.id, thread.id))
       .run();
     expect(hasOpenAutomationThread(db, automation.id)).toBe(false);

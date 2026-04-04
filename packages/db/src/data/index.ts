@@ -30,10 +30,14 @@ export {
   hasOpenAutomationThread,
   listAutomations,
   listDueAutomations,
+  restoreAutomationAfterFailedRun,
   updateAutomation,
 } from "./automations.js";
 export type {
   CreateAutomationInput,
+  DueAutomationCursor,
+  ListDueAutomationsArgs,
+  RestoreAutomationAfterFailedRunArgs,
   UpdateAutomationInput,
 } from "./automations.js";
 
@@ -74,6 +78,8 @@ export {
 } from "./manager-thread-nudges.js";
 export type {
   CreateManagerThreadNudgeInput,
+  DueManagerThreadNudgeCursor,
+  ListDueManagerThreadNudgesArgs,
   UpdateManagerThreadNudgeInput,
 } from "./manager-thread-nudges.js";
 

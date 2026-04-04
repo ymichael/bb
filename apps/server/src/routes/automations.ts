@@ -2,10 +2,12 @@ import {
   createAutomation,
   deleteAutomation,
   getAutomation,
+  getProjectSourceByHost,
   listAutomations,
   updateAutomation,
 } from "@bb/db";
 import {
+  type AutomationAction,
   createAutomationRequestSchema,
   typedRoutes,
   updateAutomationRequestSchema,
@@ -17,6 +19,7 @@ import type { Hono } from "hono";
 import { ApiError } from "../errors.js";
 import type { AppDeps } from "../types.js";
 import {
+  parseAutomationAction,
   parseAutomationTriggerConfig,
   serializeAutomationAction,
   serializeAutomationTrigger,
@@ -27,7 +30,11 @@ import {
   computeNextScheduledTime,
   validateScheduleDefinition,
 } from "../services/schedule-helpers.js";
-import { requireProject } from "../services/entity-lookup.js";
+import {
+  requireEnvironment,
+  requireHostWithStatus,
+  requireProject,
+} from "../services/entity-lookup.js";
 
 interface BuildAutomationUpdateInputArgs {
   current: NonNullable<ReturnType<typeof getAutomation>>;
@@ -40,6 +47,11 @@ interface CreateAutomationValues {
   enabled: boolean;
   name: string;
   trigger: CreateAutomationRequest["trigger"];
+}
+
+interface ValidateAutomationActionProjectScopeArgs {
+  action: AutomationAction;
+  projectId: string;
 }
 
 function requireProjectAutomation(
@@ -123,6 +135,37 @@ function buildAutomationUpdateInput(
   };
 }
 
+function validateAutomationActionProjectScope(
+  deps: Pick<AppDeps, "db">,
+  args: ValidateAutomationActionProjectScopeArgs,
+): void {
+  const environment = args.action.threadRequest.environment;
+  if (environment.type === "sandbox-host") {
+    return;
+  }
+
+  if (environment.type === "reuse") {
+    const reusedEnvironment = requireEnvironment(deps.db, environment.environmentId);
+    if (reusedEnvironment.projectId !== args.projectId) {
+      throw new ApiError(
+        409,
+        "invalid_request",
+        "Environment belongs to a different project",
+      );
+    }
+    return;
+  }
+
+  requireHostWithStatus(deps.db, environment.hostId);
+  if (!getProjectSourceByHost(deps.db, args.projectId, environment.hostId)) {
+    throw new ApiError(
+      409,
+      "invalid_request",
+      "Host is not configured for this project",
+    );
+  }
+}
+
 export function registerAutomationRoutes(app: Hono, deps: AppDeps): void {
   const { get, post, patch, del } = typedRoutes<PublicApiSchema>(app, {
     onValidationError: (msg) => new ApiError(400, "invalid_request", msg),
@@ -142,6 +185,10 @@ export function registerAutomationRoutes(app: Hono, deps: AppDeps): void {
 
     try {
       const values = resolveCreateAutomationValues(payload);
+      validateAutomationActionProjectScope(deps, {
+        action: values.action,
+        projectId,
+      });
       const automation = createAutomation(deps.db, deps.hub, {
         projectId,
         name: values.name,
@@ -173,6 +220,11 @@ export function registerAutomationRoutes(app: Hono, deps: AppDeps): void {
       });
 
       try {
+        const nextAction = payload.action ?? parseAutomationAction(current.action);
+        validateAutomationActionProjectScope(deps, {
+          action: nextAction,
+          projectId,
+        });
         const updated = updateAutomation(
           deps.db,
           deps.hub,

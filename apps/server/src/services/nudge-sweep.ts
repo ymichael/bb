@@ -5,6 +5,7 @@ import {
   type DbConnection,
   type DbTransaction,
   deleteManagerThreadNudge,
+  type DueManagerThreadNudgeCursor,
   getActiveSession,
   getEnvironment,
   getThread,
@@ -27,9 +28,22 @@ import { computeNextScheduledTime } from "./schedule-helpers.js";
 import { tryTransition } from "./thread-transitions.js";
 
 const SCHEDULED_NUDGE_PREFIX = "[bb system] Scheduled nudge:";
+const DUE_NUDGE_BATCH_SIZE = 100;
+type DueManagerThreadNudgeRow = ReturnType<typeof listDueManagerThreadNudges>[number];
 
 interface SweepDueNudgesArgs {
   now?: number;
+}
+
+interface PendingTurnRunCommandArgs {
+  hostId: string;
+  threadId: string;
+}
+
+interface NudgeSweepCache {
+  environmentById: Map<string, ReturnType<typeof getEnvironment>>;
+  pendingTurnRunByThreadId: Map<string, boolean>;
+  providerThreadIdByThreadId: Map<string, string | null>;
 }
 
 function buildScheduledNudgeInput(name: string): PromptInput[] {
@@ -45,7 +59,7 @@ function advanceSkippedNudge(
   deps: Pick<AppDeps, "db" | "hub" | "logger">,
   args: {
     now: number;
-    nudge: ReturnType<typeof listDueManagerThreadNudges>[number];
+    nudge: DueManagerThreadNudgeRow;
     reason: string;
   },
 ): void {
@@ -74,27 +88,81 @@ function advanceSkippedNudge(
   }
 }
 
+function createNudgeSweepCache(): NudgeSweepCache {
+  return {
+    environmentById: new Map(),
+    pendingTurnRunByThreadId: new Map(),
+    providerThreadIdByThreadId: new Map(),
+  };
+}
+
 function hasPendingTurnRunCommand(
   db: DbConnection | DbTransaction,
-  threadId: string,
+  args: PendingTurnRunCommandArgs,
+  cache?: NudgeSweepCache,
 ): boolean {
+  const cached = cache?.pendingTurnRunByThreadId.get(args.threadId);
+  if (cached !== undefined) {
+    return cached;
+  }
+
   const existing = db.select({ id: hostDaemonCommands.id })
     .from(hostDaemonCommands)
     .where(
       and(
+        eq(hostDaemonCommands.hostId, args.hostId),
         eq(hostDaemonCommands.type, "turn.run"),
         inArray(hostDaemonCommands.state, ["pending", "fetched"]),
-        sql`json_extract(${hostDaemonCommands.payload}, '$.threadId') = ${threadId}`,
+        sql`json_extract(${hostDaemonCommands.payload}, '$.threadId') = ${args.threadId}`,
       ),
     )
     .get();
 
-  return existing !== undefined;
+  const hasPending = existing !== undefined;
+  cache?.pendingTurnRunByThreadId.set(args.threadId, hasPending);
+  return hasPending;
+}
+
+function getCachedEnvironment(
+  db: DbConnection,
+  cache: NudgeSweepCache,
+  environmentId: string,
+) {
+  if (cache.environmentById.has(environmentId)) {
+    return cache.environmentById.get(environmentId) ?? null;
+  }
+  const environment = getEnvironment(db, environmentId);
+  cache.environmentById.set(environmentId, environment);
+  return environment;
+}
+
+function getCachedProviderThreadId(
+  deps: Pick<AppDeps, "db" | "hub">,
+  cache: NudgeSweepCache,
+  threadId: string,
+) {
+  if (cache.providerThreadIdByThreadId.has(threadId)) {
+    return cache.providerThreadIdByThreadId.get(threadId) ?? null;
+  }
+  const providerThreadId = getLastProviderThreadId(deps, threadId);
+  cache.providerThreadIdByThreadId.set(threadId, providerThreadId);
+  return providerThreadId;
+}
+
+function toDueManagerThreadNudgeCursor(
+  nudge: DueManagerThreadNudgeRow,
+): DueManagerThreadNudgeCursor {
+  return {
+    createdAt: nudge.createdAt,
+    id: nudge.id,
+    nextFireAt: nudge.nextFireAt,
+  };
 }
 
 async function runNudge(
   deps: Pick<AppDeps, "db" | "hub" | "logger">,
-  nudge: ReturnType<typeof listDueManagerThreadNudges>[number],
+  cache: NudgeSweepCache,
+  nudge: DueManagerThreadNudgeRow,
   now: number,
 ): Promise<void> {
   const thread = getThread(deps.db, nudge.threadId);
@@ -121,7 +189,7 @@ async function runNudge(
     return;
   }
 
-  const environment = getEnvironment(deps.db, thread.environmentId);
+  const environment = getCachedEnvironment(deps.db, cache, thread.environmentId);
   if (!environment || environment.status !== "ready" || !environment.path) {
     advanceSkippedNudge(deps, {
       now,
@@ -142,7 +210,7 @@ async function runNudge(
   }
 
   const input = buildScheduledNudgeInput(nudge.name);
-  const providerThreadId = getLastProviderThreadId(deps, thread.id);
+  const providerThreadId = getCachedProviderThreadId(deps, cache, thread.id);
   if (!providerThreadId) {
     advanceSkippedNudge(deps, {
       now,
@@ -152,7 +220,10 @@ async function runNudge(
     return;
   }
 
-  if (hasPendingTurnRunCommand(deps.db, thread.id)) {
+  if (hasPendingTurnRunCommand(deps.db, {
+    hostId: environment.hostId,
+    threadId: thread.id,
+  }, cache)) {
     advanceSkippedNudge(deps, {
       now,
       nudge,
@@ -210,7 +281,10 @@ async function runNudge(
   let advancedWithoutQueue = false;
 
   deps.db.transaction((tx) => {
-    if (hasPendingTurnRunCommand(tx, thread.id)) {
+    if (hasPendingTurnRunCommand(tx, {
+      hostId: environment.hostId,
+      threadId: thread.id,
+    })) {
       if (
         advanceManagerThreadNudgeAfterFireInTransaction(tx, {
           expectedNextFireAt: nudge.nextFireAt,
@@ -259,6 +333,7 @@ async function runNudge(
   }, { behavior: "immediate" });
 
   if (advancedWithoutQueue) {
+    cache.pendingTurnRunByThreadId.set(thread.id, true);
     deps.hub.notifyProject(nudge.projectId, ["nudges-changed"]);
     deps.logger.info(
       {
@@ -275,6 +350,7 @@ async function runNudge(
     return;
   }
 
+  cache.pendingTurnRunByThreadId.set(thread.id, true);
   deps.hub.notifyProject(nudge.projectId, ["nudges-changed"]);
   if (appendedEvent) {
     deps.hub.notifyThread(thread.id, ["events-appended"]);
@@ -288,20 +364,32 @@ export async function sweepDueNudges(
   args: SweepDueNudgesArgs = {},
 ): Promise<void> {
   const now = args.now ?? Date.now();
-  const dueNudges = listDueManagerThreadNudges(deps.db, now);
+  const cache = createNudgeSweepCache();
+  let after: DueManagerThreadNudgeCursor | undefined;
 
-  for (const nudge of dueNudges) {
-    try {
-      await runNudge(deps, nudge, now);
-    } catch (error) {
-      deps.logger.error(
-        {
-          err: error,
-          nudgeId: nudge.id,
-          threadId: nudge.threadId,
-        },
-        "Failed to process a due manager nudge",
-      );
+  while (true) {
+    const dueNudges = listDueManagerThreadNudges(deps.db, {
+      now,
+      after,
+      limit: DUE_NUDGE_BATCH_SIZE,
+    });
+    for (const nudge of dueNudges) {
+      try {
+        await runNudge(deps, cache, nudge, now);
+      } catch (error) {
+        deps.logger.error(
+          {
+            err: error,
+            nudgeId: nudge.id,
+            threadId: nudge.threadId,
+          },
+          "Failed to process a due manager nudge",
+        );
+      }
     }
+    if (dueNudges.length < DUE_NUDGE_BATCH_SIZE) {
+      return;
+    }
+    after = toDueManagerThreadNudgeCursor(dueNudges[dueNudges.length - 1]!);
   }
 }

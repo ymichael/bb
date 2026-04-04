@@ -23,6 +23,7 @@ import { requireThreadStoragePath } from "./thread-storage.js";
 const ASYNC_FILE_NAME = "ASYNC.md";
 const DEFAULT_ASYNC_TIMEZONE = "UTC";
 const MAX_MANAGER_SCHEDULES = 20;
+const MAX_ASYNC_FILE_BYTES = 256 * 1024;
 
 const asyncScheduleFrontmatterSchema = z.object({
   schedules: z.array(z.unknown()).optional(),
@@ -252,6 +253,7 @@ export async function syncManagerThreadSchedules(
   });
 
   let content: string;
+  let sizeBytes: number;
   try {
     const rawResult = await queueCommandAndWait(deps, {
       hostId: environment.hostId,
@@ -270,6 +272,7 @@ export async function syncManagerThreadSchedules(
         "ASYNC.md must be UTF-8 text",
       );
     }
+    sizeBytes = result.sizeBytes;
     content = result.content;
   } catch (error) {
     if (error instanceof ApiError && error.body.code === "ENOENT") {
@@ -281,6 +284,17 @@ export async function syncManagerThreadSchedules(
       return;
     }
     throw error;
+  }
+
+  if (sizeBytes > MAX_ASYNC_FILE_BYTES) {
+    deps.logger.warn(
+      {
+        sizeBytes,
+        threadId: thread.id,
+      },
+      "Skipping ASYNC.md sync because the file is too large",
+    );
+    return;
   }
 
   if (!hasFrontmatter(content)) {

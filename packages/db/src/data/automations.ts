@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, isNull, lte } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, isNull, lte, or } from "drizzle-orm";
 import type { DbConnection, DbTransaction } from "../connection.js";
 import type { DbNotifier } from "../notifier.js";
 import { createAutomationId } from "../ids.js";
@@ -33,6 +33,28 @@ export interface AdvanceAutomationAfterRunArgs {
   expectedNextRunAt: number | null;
   nextRunAt: number | null;
   now?: number;
+}
+
+export interface RestoreAutomationAfterFailedRunArgs {
+  automationId: string;
+  expectedAdvancedNextRunAt: number | null;
+  expectedRunCount: number;
+  restoredLastRunAt: number | null;
+  restoredNextRunAt: number | null;
+  restoredRunCount: number;
+  now?: number;
+}
+
+export interface DueAutomationCursor {
+  createdAt: number;
+  id: string;
+  nextRunAt: number;
+}
+
+export interface ListDueAutomationsArgs {
+  after?: DueAutomationCursor;
+  limit?: number;
+  now: number;
 }
 
 type AutomationReadConnection = DbConnection | DbTransaction;
@@ -88,19 +110,34 @@ export function listAutomations(
 
 export function listDueAutomations(
   db: DbConnection,
-  now: number,
+  args: ListDueAutomationsArgs,
 ) {
-  return db.select()
+  const afterFilter = args.after
+    ? or(
+        gt(automations.nextRunAt, args.after.nextRunAt),
+        and(
+          eq(automations.nextRunAt, args.after.nextRunAt),
+          gt(automations.createdAt, args.after.createdAt),
+        ),
+        and(
+          eq(automations.nextRunAt, args.after.nextRunAt),
+          eq(automations.createdAt, args.after.createdAt),
+          gt(automations.id, args.after.id),
+        ),
+      )
+    : undefined;
+  const query = db.select()
     .from(automations)
     .where(
       and(
         eq(automations.enabled, true),
         eq(automations.triggerType, "schedule"),
-        lte(automations.nextRunAt, now),
+        lte(automations.nextRunAt, args.now),
+        afterFilter,
       ),
     )
-    .orderBy(automations.nextRunAt, automations.createdAt)
-    .all();
+    .orderBy(automations.nextRunAt, automations.createdAt, automations.id);
+  return args.limit === undefined ? query.all() : query.limit(args.limit).all();
 }
 
 export function updateAutomation(
@@ -211,4 +248,35 @@ export function advanceAutomationAfterRun(
     notifier.notifyProject(args.projectId, ["automations-changed"]);
   }
   return advanced;
+}
+
+export function restoreAutomationAfterFailedRun(
+  db: DbConnection,
+  notifier: DbNotifier,
+  args: RestoreAutomationAfterFailedRunArgs & { projectId: string },
+) {
+  const now = args.now ?? Date.now();
+  const result = db.update(automations)
+    .set({
+      nextRunAt: args.restoredNextRunAt,
+      lastRunAt: args.restoredLastRunAt,
+      runCount: args.restoredRunCount,
+      updatedAt: now,
+    })
+    .where(
+      and(
+        eq(automations.id, args.automationId),
+        args.expectedAdvancedNextRunAt === null
+          ? isNull(automations.nextRunAt)
+          : eq(automations.nextRunAt, args.expectedAdvancedNextRunAt),
+        eq(automations.runCount, args.expectedRunCount),
+      ),
+    )
+    .run();
+
+  const restored = result.changes > 0;
+  if (restored) {
+    notifier.notifyProject(args.projectId, ["automations-changed"]);
+  }
+  return restored;
 }

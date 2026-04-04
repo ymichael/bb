@@ -1,5 +1,10 @@
+import { automationSchema } from "@bb/server-contract";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { seedProjectWithSource, seedHostSession } from "./helpers/seed.js";
+import {
+  seedEnvironment,
+  seedHostSession,
+  seedProjectWithSource,
+} from "./helpers/seed.js";
 import { createTestAppHarness } from "./helpers/test-app.js";
 
 async function readJson(response: Response): Promise<unknown> {
@@ -51,13 +56,7 @@ describe("public automation routes", () => {
         },
       );
       expect(createResponse.status).toBe(201);
-      const createdAutomation = await readJson(createResponse) as {
-        id: string;
-        autoArchive: boolean;
-        enabled: boolean;
-        nextRunAt: number | null;
-        trigger: { cron: string };
-      };
+      const createdAutomation = automationSchema.parse(await readJson(createResponse));
       expect(createdAutomation.enabled).toBe(true);
       expect(createdAutomation.autoArchive).toBe(false);
       expect(createdAutomation.trigger.cron).toBe("0 8 * * 1-5");
@@ -67,7 +66,7 @@ describe("public automation routes", () => {
         `/api/v1/projects/${project.id}/automations`,
       );
       expect(listResponse.status).toBe(200);
-      await expect(readJson(listResponse)).resolves.toEqual([
+      expect(automationSchema.array().parse(await readJson(listResponse))).toEqual([
         expect.objectContaining({
           id: createdAutomation.id,
           name: "Daily summary",
@@ -87,7 +86,7 @@ describe("public automation routes", () => {
         },
       );
       expect(disableResponse.status).toBe(200);
-      await expect(readJson(disableResponse)).resolves.toMatchObject({
+      expect(automationSchema.parse(await readJson(disableResponse))).toMatchObject({
         id: createdAutomation.id,
         enabled: false,
         nextRunAt: null,
@@ -107,7 +106,7 @@ describe("public automation routes", () => {
         },
       );
       expect(enableResponse.status).toBe(200);
-      await expect(readJson(enableResponse)).resolves.toMatchObject({
+      expect(automationSchema.parse(await readJson(enableResponse))).toMatchObject({
         id: createdAutomation.id,
         enabled: true,
         autoArchive: true,
@@ -180,6 +179,153 @@ describe("public automation routes", () => {
         );
         expect(response.status).toBe(400);
       }
+    } finally {
+      vi.useRealTimers();
+      await harness.cleanup();
+    }
+  });
+
+  it("rejects automation actions that reference foreign project environments or hosts", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host: primaryHost } = seedHostSession(harness.deps, {
+        id: "host-automation-project-scope-primary",
+      });
+      const { host: foreignHost } = seedHostSession(harness.deps, {
+        id: "host-automation-project-scope-foreign",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: primaryHost.id,
+      });
+      const { project: foreignProject } = seedProjectWithSource(harness.deps, {
+        hostId: foreignHost.id,
+      });
+      const foreignEnvironment = seedEnvironment(harness.deps, {
+        hostId: foreignHost.id,
+        projectId: foreignProject.id,
+        path: "/tmp/automation-foreign-environment",
+      });
+
+      const reuseResponse = await harness.app.request(
+        `/api/v1/projects/${project.id}/automations`,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            name: "Foreign reuse environment",
+            trigger: {
+              triggerType: "schedule",
+              cron: "0 8 * * 1-5",
+              timezone: "UTC",
+            },
+            action: {
+              actionType: "scheduled-thread",
+              threadRequest: {
+                providerId: "codex",
+                model: "gpt-5",
+                input: [{ type: "text", text: "Should be rejected" }],
+                environment: {
+                  type: "reuse",
+                  environmentId: foreignEnvironment.id,
+                },
+              },
+            },
+          }),
+        },
+      );
+      expect(reuseResponse.status).toBe(409);
+
+      const hostResponse = await harness.app.request(
+        `/api/v1/projects/${project.id}/automations`,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            name: "Foreign host",
+            trigger: {
+              triggerType: "schedule",
+              cron: "0 8 * * 1-5",
+              timezone: "UTC",
+            },
+            action: {
+              actionType: "scheduled-thread",
+              threadRequest: {
+                providerId: "codex",
+                model: "gpt-5",
+                input: [{ type: "text", text: "Should also be rejected" }],
+                environment: {
+                  type: "host",
+                  hostId: foreignHost.id,
+                  workspace: { type: "managed-clone" },
+                },
+              },
+            },
+          }),
+        },
+      );
+      expect(hostResponse.status).toBe(409);
+
+      const createResponse = await harness.app.request(
+        `/api/v1/projects/${project.id}/automations`,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            name: "Scoped automation",
+            trigger: {
+              triggerType: "schedule",
+              cron: "0 8 * * 1-5",
+              timezone: "UTC",
+            },
+            action: {
+              actionType: "scheduled-thread",
+              threadRequest: {
+                providerId: "codex",
+                model: "gpt-5",
+                input: [{ type: "text", text: "Create a valid automation first" }],
+                environment: {
+                  type: "host",
+                  hostId: primaryHost.id,
+                  workspace: { type: "managed-clone" },
+                },
+              },
+            },
+          }),
+        },
+      );
+      expect(createResponse.status).toBe(201);
+      const createdAutomation = automationSchema.parse(await readJson(createResponse));
+
+      const updateResponse = await harness.app.request(
+        `/api/v1/projects/${project.id}/automations/${createdAutomation.id}`,
+        {
+          method: "PATCH",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            action: {
+              actionType: "scheduled-thread",
+              threadRequest: {
+                providerId: "codex",
+                model: "gpt-5",
+                input: [{ type: "text", text: "Cross project update should fail" }],
+                environment: {
+                  type: "reuse",
+                  environmentId: foreignEnvironment.id,
+                },
+              },
+            },
+          }),
+        },
+      );
+      expect(updateResponse.status).toBe(409);
     } finally {
       vi.useRealTimers();
       await harness.cleanup();

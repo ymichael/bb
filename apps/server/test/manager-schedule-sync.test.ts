@@ -137,4 +137,48 @@ describe("manager schedule sync", () => {
       await harness.cleanup();
     }
   });
+
+  it("leaves existing nudges unchanged when ASYNC.md is too large to parse", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-manager-sync-oversized",
+      });
+      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/manager-sync-oversized",
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "idle",
+        type: "manager",
+      });
+      createManagerThreadNudge(harness.db, harness.hub, {
+        projectId: project.id,
+        threadId: thread.id,
+        name: "keep-existing",
+        cron: "0 8 * * *",
+        timezone: "UTC",
+        enabled: true,
+        nextFireAt: Date.now() + 60_000,
+      });
+      const oversizedContent = `---\ntimezone: UTC\nschedules: []\n---\n${"a".repeat(256 * 1024)}`;
+
+      await syncWithFileContent({
+        content: oversizedContent,
+        harness,
+        hostId: host.id,
+        threadId: thread.id,
+      });
+
+      expect(
+        listManagerThreadNudgesByThread(harness.db, thread.id).map((nudge) => nudge.name),
+      ).toEqual(["keep-existing"]);
+    } finally {
+      await harness.cleanup();
+    }
+  });
 });

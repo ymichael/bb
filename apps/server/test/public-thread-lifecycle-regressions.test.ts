@@ -5,6 +5,7 @@ import {
   listThreads,
   transitionThreadStatus,
 } from "@bb/db";
+import { threadSchema } from "@bb/domain";
 import { describe, expect, it } from "vitest";
 import {
   reportQueuedCommandSuccess,
@@ -253,7 +254,7 @@ describe("public thread lifecycle regressions", () => {
       });
 
       expect(response.status).toBe(201);
-      const thread = await readJson(response) as { id: string; status: string };
+      const thread = threadSchema.parse(await readJson(response));
       expect(thread.status).toBe("idle");
       expect(listThreads(harness.db, { projectId: project.id })).toHaveLength(1);
 

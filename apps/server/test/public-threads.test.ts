@@ -21,7 +21,7 @@ import {
   threads,
 } from "@bb/db";
 import { HOST_DAEMON_PROTOCOL_VERSION } from "@bb/host-daemon-contract";
-import { systemOperationEventDataSchema } from "@bb/domain";
+import { systemOperationEventDataSchema, threadSchema } from "@bb/domain";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   reportQueuedCommandSuccess,
@@ -180,11 +180,7 @@ describe("public thread routes", () => {
       });
 
       expect(response.status).toBe(201);
-      const createdThread = await readJson(response) as {
-        environmentId: string;
-        id: string;
-        status: string;
-      };
+      const createdThread = threadSchema.parse(await readJson(response));
       expect(createdThread.status).toBe("provisioning");
 
       const environment = getEnvironment(harness.db, createdThread.environmentId);
@@ -241,11 +237,7 @@ describe("public thread routes", () => {
       });
 
       expect(response.status).toBe(201);
-      const createdThread = await readJson(response) as {
-        environmentId: string;
-        id: string;
-        status: string;
-      };
+      const createdThread = threadSchema.parse(await readJson(response));
       expect(createdThread.status).toBe("provisioning");
 
       const queued = await waitForQueuedCommand(
@@ -295,11 +287,7 @@ describe("public thread routes", () => {
       });
 
       expect(response.status).toBe(201);
-      const createdThread = await readJson(response) as {
-        environmentId: string;
-        id: string;
-        status: string;
-      };
+      const createdThread = threadSchema.parse(await readJson(response));
       expect(createdThread.status).toBe("provisioning");
 
       const queued = await waitForQueuedCommand(
@@ -363,11 +351,7 @@ describe("public thread routes", () => {
       });
 
       expect(response.status).toBe(201);
-      const createdThread = await readJson(response) as {
-        environmentId: string;
-        id: string;
-        status: string;
-      };
+      const createdThread = threadSchema.parse(await readJson(response));
       expect(createdThread.status).toBe("provisioning");
 
       const queued = await waitForQueuedCommand(
@@ -466,10 +450,7 @@ describe("public thread routes", () => {
       });
 
       expect(response.status).toBe(201);
-      const createdThread = await readJson(response) as {
-        environmentId: string;
-        status: string;
-      };
+      const createdThread = threadSchema.parse(await readJson(response));
       expect(createdThread.status).toBe("provisioning");
 
       const queued = await waitForQueuedCommand(
@@ -524,11 +505,7 @@ describe("public thread routes", () => {
       });
 
       expect(response.status).toBe(201);
-      const createdThread = await readJson(response) as {
-        environmentId: string;
-        id: string;
-        status: string;
-      };
+      const createdThread = threadSchema.parse(await readJson(response));
       expect(createdThread).toMatchObject({
         environmentId: environment.id,
         status: "active",
@@ -2077,11 +2054,7 @@ describe("public thread routes", () => {
         },
       );
       expect(managerResponse.status).toBe(201);
-      const managerThread = await readJson(managerResponse) as {
-        environmentId: string | null;
-        id: string;
-        type: string;
-      };
+      const managerThread = threadSchema.parse(await readJson(managerResponse));
       expect(managerThread.type).toBe("manager");
       if (!managerThread.environmentId) {
         throw new Error("Expected manager thread environment");

@@ -1,4 +1,4 @@
-import { and, asc, eq, lte } from "drizzle-orm";
+import { and, asc, eq, gt, lte, or } from "drizzle-orm";
 import type { DbConnection, DbTransaction } from "../connection.js";
 import type { DbNotifier } from "../notifier.js";
 import { createManagerThreadNudgeId } from "../ids.js";
@@ -28,6 +28,18 @@ export interface AdvanceManagerThreadNudgeAfterFireArgs {
   nextFireAt: number;
   nudgeId: string;
   now?: number;
+}
+
+export interface DueManagerThreadNudgeCursor {
+  createdAt: number;
+  id: string;
+  nextFireAt: number;
+}
+
+export interface ListDueManagerThreadNudgesArgs {
+  after?: DueManagerThreadNudgeCursor;
+  limit?: number;
+  now: number;
 }
 
 export function createManagerThreadNudge(
@@ -82,18 +94,37 @@ export function listManagerThreadNudgesByThread(
 
 export function listDueManagerThreadNudges(
   db: DbConnection,
-  now: number,
+  args: ListDueManagerThreadNudgesArgs,
 ) {
-  return db.select()
+  const afterFilter = args.after
+    ? or(
+        gt(managerThreadNudges.nextFireAt, args.after.nextFireAt),
+        and(
+          eq(managerThreadNudges.nextFireAt, args.after.nextFireAt),
+          gt(managerThreadNudges.createdAt, args.after.createdAt),
+        ),
+        and(
+          eq(managerThreadNudges.nextFireAt, args.after.nextFireAt),
+          eq(managerThreadNudges.createdAt, args.after.createdAt),
+          gt(managerThreadNudges.id, args.after.id),
+        ),
+      )
+    : undefined;
+  const query = db.select()
     .from(managerThreadNudges)
     .where(
       and(
         eq(managerThreadNudges.enabled, true),
-        lte(managerThreadNudges.nextFireAt, now),
+        lte(managerThreadNudges.nextFireAt, args.now),
+        afterFilter,
       ),
     )
-    .orderBy(managerThreadNudges.nextFireAt, managerThreadNudges.createdAt)
-    .all();
+    .orderBy(
+      managerThreadNudges.nextFireAt,
+      managerThreadNudges.createdAt,
+      managerThreadNudges.id,
+    );
+  return args.limit === undefined ? query.all() : query.limit(args.limit).all();
 }
 
 export function updateManagerThreadNudge(
@@ -173,6 +204,7 @@ export function advanceManagerThreadNudgeAfterFireInTransaction(
     .where(
       and(
         eq(managerThreadNudges.id, args.nudgeId),
+        eq(managerThreadNudges.enabled, true),
         eq(managerThreadNudges.nextFireAt, args.expectedNextFireAt),
       ),
     )
