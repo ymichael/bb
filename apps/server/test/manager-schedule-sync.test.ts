@@ -334,6 +334,62 @@ describe("manager schedule sync", () => {
     }
   });
 
+  it("uses the actual content byte length when the daemon under-reports file size", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-manager-sync-byte-length",
+      });
+      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/manager-sync-byte-length",
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "idle",
+        type: "manager",
+      });
+      createManagerThreadNudge(harness.db, harness.hub, {
+        projectId: project.id,
+        threadId: thread.id,
+        name: "keep-existing",
+        cron: "0 8 * * *",
+        timezone: "UTC",
+        enabled: true,
+        nextFireAt: Date.now() + 60_000,
+      });
+      const oversizedContent = `---\ntimezone: UTC\nschedules: []\n---\n${"é".repeat(150 * 1024)}`;
+      const { asyncPath, queued, syncPromise } = await startSync({
+        harness,
+        hostId: host.id,
+        threadId: thread.id,
+      });
+
+      const response = await reportQueuedCommandSuccess(
+        harness,
+        queued,
+        {
+          path: asyncPath,
+          content: oversizedContent,
+          contentEncoding: "utf8",
+          mimeType: "text/markdown",
+          sizeBytes: 1,
+        },
+      );
+      expect(response.status).toBe(200);
+      await syncPromise;
+
+      expect(
+        listManagerThreadNudgesByThread(harness.db, thread.id).map((nudge) => nudge.name),
+      ).toEqual(["keep-existing"]);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("clears existing nudges when ASYNC.md does not exist", async () => {
     const harness = await createTestAppHarness();
     try {
@@ -402,6 +458,93 @@ describe("manager schedule sync", () => {
           "schedules:",
           '  - cron: "not-a-cron"',
           "    name: broken",
+          '  - cron: "0 8 * * 1-5"',
+          "    name: valid-recap",
+          "---",
+        ].join("\n"),
+        harness,
+        hostId: host.id,
+        threadId: thread.id,
+      });
+
+      expect(
+        listManagerThreadNudgesByThread(harness.db, thread.id).map((nudge) => nudge.name),
+      ).toEqual(["valid-recap"]);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("keeps only the first twenty ASYNC.md schedules", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-manager-sync-limit",
+      });
+      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/manager-sync-limit",
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "idle",
+        type: "manager",
+      });
+      const schedules = Array.from({ length: 21 }, (_, index) => [
+        `  - cron: "${index} 8 * * *"`,
+        `    name: schedule-${index + 1}`,
+      ].join("\n")).join("\n");
+
+      await syncWithFileContent({
+        content: [
+          "---",
+          "timezone: UTC",
+          "schedules:",
+          schedules,
+          "---",
+        ].join("\n"),
+        harness,
+        hostId: host.id,
+        threadId: thread.id,
+      });
+
+      const nudges = listManagerThreadNudgesByThread(harness.db, thread.id);
+      expect(nudges).toHaveLength(20);
+      expect(nudges.map((nudge) => nudge.name)).not.toContain("schedule-21");
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("skips ASYNC.md schedules that run more often than every five minutes", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-manager-sync-min-interval",
+      });
+      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/manager-sync-min-interval",
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "idle",
+        type: "manager",
+      });
+
+      await syncWithFileContent({
+        content: [
+          "---",
+          "timezone: UTC",
+          "schedules:",
+          '  - cron: "* * * * *"',
+          "    name: too-frequent",
           '  - cron: "0 8 * * 1-5"',
           "    name: valid-recap",
           "---",

@@ -4,6 +4,7 @@ import type { DbNotifier } from "../notifier.js";
 import { createAutomationId } from "../ids.js";
 import { automations, threads } from "../schema.js";
 import { sql } from "drizzle-orm";
+import { getActiveSession } from "./sessions.js";
 
 export interface CreateAutomationInput {
   action: string;
@@ -60,7 +61,7 @@ export interface ListDueAutomationsArgs {
 export interface ClaimAutomationScheduledRunArgs {
   automationId: string;
   expectedNextRunAt: number | null;
-  hostConnected: boolean;
+  hostId: string | null;
   nextRunAt: number;
 }
 
@@ -319,8 +320,11 @@ export function claimAutomationScheduledRun(
       } satisfies ClaimAutomationScheduledRunResult;
     }
 
+    const hostConnected =
+      args.hostId === null ||
+      getActiveSession(tx, args.hostId) !== null;
     const shouldCreateThread =
-      args.hostConnected &&
+      hostConnected &&
       !hasOpenAutomationThread(tx, args.automationId);
     const advanced = advanceAutomationAfterRunInTransaction(tx, {
       automationId: args.automationId,
@@ -336,7 +340,7 @@ export function claimAutomationScheduledRun(
       } satisfies ClaimAutomationScheduledRunResult;
     }
 
-    if (!args.hostConnected) {
+    if (!hostConnected) {
       return {
         advanced: true,
         reason: "host-disconnected",

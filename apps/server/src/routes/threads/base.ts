@@ -44,7 +44,14 @@ export function registerThreadBaseRoutes(app: Hono, deps: AppDeps): void {
   });
 
   post("/threads", createThreadRequestSchema, async (context, payload) =>
-    context.json(await createThreadFromRequest(deps, { ...payload, type: "standard" }), 201),
+    context.json(
+      await createThreadFromRequest(deps, {
+        ...payload,
+        automationId: null,
+        type: "standard",
+      }),
+      201,
+    ),
   );
 
   get("/threads/:id", (context) =>

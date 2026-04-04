@@ -18,6 +18,11 @@ import { apiErrorSchema } from "./errors.js";
 export const sendMessageModeSchema = z.enum(["auto", "start", "steer"]);
 export type SendMessageMode = z.infer<typeof sendMessageModeSchema>;
 
+export const AUTOMATION_NAME_MAX_LENGTH = 200;
+export const SCHEDULE_CRON_MAX_LENGTH = 100;
+export const SCHEDULE_NAME_MAX_LENGTH = 200;
+export const SCHEDULE_TIMEZONE_MAX_LENGTH = 100;
+
 export const threadContextWindowUsageSchema = z.object({
   totalTokens: z.number(),
   modelContextWindow: z.number(),
@@ -87,10 +92,15 @@ const automationThreadRequestSchema = createThreadRequestSchema.omit({
   projectId: true,
 });
 
+export const automationNameSchema = z.string().min(1).max(AUTOMATION_NAME_MAX_LENGTH);
+export const scheduleCronSchema = z.string().min(1).max(SCHEDULE_CRON_MAX_LENGTH);
+export const scheduleNameSchema = z.string().min(1).max(SCHEDULE_NAME_MAX_LENGTH);
+export const scheduleTimezoneSchema = z.string().min(1).max(SCHEDULE_TIMEZONE_MAX_LENGTH);
+
 export const automationScheduleTriggerSchema = z.object({
   triggerType: z.literal("schedule"),
-  cron: z.string().min(1),
-  timezone: z.string().min(1),
+  cron: scheduleCronSchema,
+  timezone: scheduleTimezoneSchema,
 });
 export type AutomationScheduleTrigger = z.infer<
   typeof automationScheduleTriggerSchema
@@ -117,7 +127,7 @@ export type AutomationAction = z.infer<typeof automationActionSchema>;
 export const automationSchema = z.object({
   id: z.string().min(1),
   projectId: z.string().min(1),
-  name: z.string().min(1),
+  name: automationNameSchema,
   enabled: z.boolean(),
   trigger: automationTriggerSchema,
   action: automationActionSchema,
@@ -131,7 +141,7 @@ export const automationSchema = z.object({
 export type Automation = z.infer<typeof automationSchema>;
 
 export const createAutomationRequestSchema = z.object({
-  name: z.string().min(1),
+  name: automationNameSchema,
   enabled: z.boolean().optional(),
   trigger: automationTriggerSchema,
   action: automationActionSchema,
@@ -141,7 +151,7 @@ export type CreateAutomationRequest = z.infer<typeof createAutomationRequestSche
 
 export const updateAutomationRequestSchema = z
   .object({
-    name: z.string().min(1),
+    name: automationNameSchema,
     enabled: z.boolean(),
     trigger: automationTriggerSchema,
     action: automationActionSchema,

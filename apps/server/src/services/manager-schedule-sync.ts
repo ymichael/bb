@@ -7,6 +7,11 @@ import {
   type ReplaceManagerThreadNudgeInput,
 } from "@bb/db";
 import { hostDaemonCommandResultSchemaByType } from "@bb/host-daemon-contract";
+import {
+  scheduleCronSchema,
+  scheduleNameSchema,
+  scheduleTimezoneSchema,
+} from "@bb/server-contract";
 import { z } from "zod";
 import { ApiError } from "../errors.js";
 import type { AppDeps } from "../types.js";
@@ -26,13 +31,13 @@ const ASYNC_FRONTMATTER_DELIMITER = "---";
 
 const asyncScheduleFrontmatterSchema = z.object({
   schedules: z.array(z.unknown()).optional(),
-  timezone: z.string().min(1).optional(),
+  timezone: scheduleTimezoneSchema.optional(),
 });
 
 const asyncScheduleEntrySchema = z.object({
-  cron: z.string().min(1),
-  name: z.string().min(1),
-  timezone: z.string().min(1).optional(),
+  cron: scheduleCronSchema,
+  name: scheduleNameSchema,
+  timezone: scheduleTimezoneSchema.optional(),
 });
 
 interface SyncManagerThreadSchedulesArgs {
@@ -212,9 +217,11 @@ export async function syncManagerThreadSchedules(
     throw error;
   }
 
-  if (sizeBytes > MAX_ASYNC_FILE_BYTES) {
+  const contentSizeBytes = Buffer.byteLength(content, "utf8");
+  if (sizeBytes > MAX_ASYNC_FILE_BYTES || contentSizeBytes > MAX_ASYNC_FILE_BYTES) {
     deps.logger.warn(
       {
+        contentSizeBytes,
         sizeBytes,
         threadId: thread.id,
       },

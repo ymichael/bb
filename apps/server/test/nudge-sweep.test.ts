@@ -4,6 +4,7 @@ import {
   getManagerThreadNudge,
   hostDaemonCommands,
   threads,
+  updateManagerThreadNudge,
 } from "@bb/db";
 import { describe, expect, it } from "vitest";
 import { sweepDueNudges } from "../src/services/nudge-sweep.js";
@@ -332,6 +333,71 @@ describe("nudge sweep", () => {
       const updatedNudge = getManagerThreadNudge(harness.db, nudge.id);
       expect(updatedNudge?.lastFiredAt).toBe(now);
       expect(updatedNudge?.nextFireAt).toBeGreaterThan(now);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("does not queue work after losing the optimistic-lock race", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-nudge-lost-race",
+      });
+      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/nudge-lost-race-environment",
+      });
+      const thread = seedRunnableManagerThread({
+        harness,
+        environmentId: environment.id,
+        projectId: project.id,
+      });
+      const now = Date.now();
+      const nudge = createManagerThreadNudge(harness.db, harness.hub, {
+        projectId: project.id,
+        threadId: thread.id,
+        name: "lost-race-check",
+        cron: "0 8 * * *",
+        timezone: "UTC",
+        enabled: true,
+        nextFireAt: now - 1,
+      });
+
+      const sweepPromise = sweepDueNudges(harness.deps, { now });
+      const readPreferences = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "host.read_file" &&
+          command.path === `/tmp/bb-host-data/${host.id}/thread-storage/${thread.id}/PREFERENCES.md`,
+      );
+
+      const externallyAdvancedNextFireAt = now + 60_000;
+      updateManagerThreadNudge(harness.db, harness.hub, nudge.id, {
+        nextFireAt: externallyAdvancedNextFireAt,
+      });
+
+      const preferencesResponse = await reportQueuedCommandError(harness, readPreferences, {
+        errorCode: "ENOENT",
+        errorMessage: "File not found",
+      });
+      expect(preferencesResponse.status).toBe(200);
+
+      await sweepPromise;
+
+      expect(
+        harness.db
+          .select()
+          .from(hostDaemonCommands)
+          .where(eq(hostDaemonCommands.type, "turn.run"))
+          .all(),
+      ).toHaveLength(0);
+      expect(getManagerThreadNudge(harness.db, nudge.id)).toMatchObject({
+        lastFiredAt: null,
+        nextFireAt: externallyAdvancedNextFireAt,
+      });
     } finally {
       await harness.cleanup();
     }

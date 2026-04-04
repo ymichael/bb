@@ -16,6 +16,7 @@ import {
   updateAutomation,
 } from "../../src/data/automations.js";
 import { createProject } from "../../src/data/projects.js";
+import { openSession } from "../../src/data/sessions.js";
 import { createThread } from "../../src/data/threads.js";
 import { upsertHost } from "../../src/data/hosts.js";
 import { threads } from "../../src/schema.js";
@@ -36,6 +37,7 @@ function setup() {
 
 function createScheduleAutomation(args: {
   db: ReturnType<typeof createConnection>;
+  hostId: string;
   projectId: string;
   now: number;
 }) {
@@ -45,7 +47,19 @@ function createScheduleAutomation(args: {
     enabled: true,
     triggerType: "schedule",
     triggerConfig: "{\"triggerType\":\"schedule\",\"cron\":\"0 8 * * 1-5\",\"timezone\":\"UTC\"}",
-    action: "{\"actionType\":\"scheduled-thread\",\"threadRequest\":{\"providerId\":\"codex\",\"model\":\"gpt-5\",\"input\":[{\"type\":\"text\",\"text\":\"Run daily sync\"}],\"environment\":{\"type\":\"host\",\"hostId\":\"host_1\",\"workspace\":{\"type\":\"managed-clone\"}}}}",
+    action: JSON.stringify({
+      actionType: "scheduled-thread",
+      threadRequest: {
+        providerId: "codex",
+        model: "gpt-5",
+        input: [{ type: "text", text: "Run daily sync" }],
+        environment: {
+          type: "host",
+          hostId: args.hostId,
+          workspace: { type: "managed-clone" },
+        },
+      },
+    }),
     autoArchive: false,
     nextRunAt: args.now + 60_000,
   });
@@ -53,11 +67,12 @@ function createScheduleAutomation(args: {
 
 describe("automations", () => {
   it("creates and retrieves automations", () => {
-    const { db, project } = setup();
+    const { db, host, project } = setup();
     const now = Date.now();
 
     const automation = createScheduleAutomation({
       db,
+      hostId: host.id,
       projectId: project.id,
       now,
     });
@@ -71,15 +86,17 @@ describe("automations", () => {
   });
 
   it("lists due automations and updates them", () => {
-    const { db, project } = setup();
+    const { db, host, project } = setup();
     const now = Date.now();
     const dueAutomation = createScheduleAutomation({
       db,
+      hostId: host.id,
       projectId: project.id,
       now: now - 120_000,
     });
     createScheduleAutomation({
       db,
+      hostId: host.id,
       projectId: project.id,
       now,
     });
@@ -102,10 +119,11 @@ describe("automations", () => {
   });
 
   it("tracks open automation threads and clears them when archived or deleted", () => {
-    const { db, project } = setup();
+    const { db, host, project } = setup();
     const now = Date.now();
     const automation = createScheduleAutomation({
       db,
+      hostId: host.id,
       projectId: project.id,
       now,
     });
@@ -133,10 +151,11 @@ describe("automations", () => {
   });
 
   it("uses optimistic locking for schedule advancement and can restore a failed run", () => {
-    const { db, project } = setup();
+    const { db, host, project } = setup();
     const now = Date.now();
     const automation = createScheduleAutomation({
       db,
+      hostId: host.id,
       projectId: project.id,
       now: now - 120_000,
     });
@@ -178,10 +197,11 @@ describe("automations", () => {
   });
 
   it("allows a new run after the prior automation thread is archived", () => {
-    const { db, project } = setup();
+    const { db, host, project } = setup();
     const now = Date.now();
     const automation = createScheduleAutomation({
       db,
+      hostId: host.id,
       projectId: project.id,
       now,
     });
@@ -208,12 +228,23 @@ describe("automations", () => {
   });
 
   it("claims scheduled runs once and skips creating a new thread when one is already open", () => {
-    const { db, project } = setup();
+    const { db, host, project } = setup();
     const now = Date.now();
     const automation = createScheduleAutomation({
       db,
+      hostId: host.id,
       projectId: project.id,
       now: now - 120_000,
+    });
+    openSession(db, noopNotifier, {
+      hostId: host.id,
+      instanceId: "inst-automation-claim",
+      hostName: "test-host",
+      hostType: "persistent",
+      dataDir: "/tmp/test-host",
+      protocolVersion: 1,
+      heartbeatIntervalMs: 1_000,
+      leaseTimeoutMs: 60_000,
     });
     createThread(db, noopNotifier, {
       projectId: project.id,
@@ -225,7 +256,7 @@ describe("automations", () => {
     const claimed = claimAutomationScheduledRun(db, noopNotifier, {
       automationId: automation.id,
       expectedNextRunAt: automation.nextRunAt,
-      hostConnected: true,
+      hostId: host.id,
       nextRunAt: now + 60_000,
     });
 
@@ -242,7 +273,7 @@ describe("automations", () => {
     const staleClaim = claimAutomationScheduledRun(db, noopNotifier, {
       automationId: automation.id,
       expectedNextRunAt: automation.nextRunAt,
-      hostConnected: true,
+      hostId: host.id,
       nextRunAt: now + 120_000,
     });
     expect(staleClaim).toEqual({
@@ -252,11 +283,36 @@ describe("automations", () => {
     });
   });
 
-  it("deletes automations", () => {
-    const { db, project } = setup();
+  it("claims scheduled runs as disconnected when the host has no active session", () => {
+    const { db, host, project } = setup();
     const now = Date.now();
     const automation = createScheduleAutomation({
       db,
+      hostId: host.id,
+      projectId: project.id,
+      now: now - 120_000,
+    });
+
+    const claimed = claimAutomationScheduledRun(db, noopNotifier, {
+      automationId: automation.id,
+      expectedNextRunAt: automation.nextRunAt,
+      hostId: host.id,
+      nextRunAt: now + 60_000,
+    });
+
+    expect(claimed).toEqual({
+      advanced: true,
+      reason: "host-disconnected",
+      shouldCreateThread: false,
+    });
+  });
+
+  it("deletes automations", () => {
+    const { db, host, project } = setup();
+    const now = Date.now();
+    const automation = createScheduleAutomation({
+      db,
+      hostId: host.id,
       projectId: project.id,
       now,
     });

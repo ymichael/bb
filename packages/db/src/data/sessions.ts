@@ -1,9 +1,11 @@
 import { eq, and, gt } from "drizzle-orm";
 import type { HostType } from "@bb/domain";
-import type { DbConnection } from "../connection.js";
+import type { DbConnection, DbTransaction } from "../connection.js";
 import type { DbNotifier } from "../notifier.js";
 import { hostDaemonSessions } from "../schema.js";
 import { createHostDaemonSessionId } from "../ids.js";
+
+type SessionReadConnection = DbConnection | DbTransaction;
 
 export interface OpenSessionInput {
   hostId: string;
@@ -113,7 +115,7 @@ export function closeSession(
   return updated ?? null;
 }
 
-export function getActiveSession(db: DbConnection, hostId: string) {
+export function getActiveSession(db: SessionReadConnection, hostId: string) {
   return (
     db
       .select()

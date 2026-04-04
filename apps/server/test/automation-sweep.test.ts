@@ -366,7 +366,7 @@ describe("automation sweep", () => {
     }
   });
 
-  it("restores the automation schedule when thread creation fails", async () => {
+  it("restores the automation run state without retrying every sweep when thread creation fails", async () => {
     const harness = await createTestAppHarness();
     try {
       const { host } = seedHostSession(harness.deps, {
@@ -408,6 +408,9 @@ describe("automation sweep", () => {
 
       await sweepDueAutomations(harness.deps, { now });
 
+      const restoredAutomation = getAutomation(harness.db, automation.id);
+      expect(restoredAutomation?.nextRunAt).toBeGreaterThan(now);
+
       expect(
         harness.db
           .select()
@@ -416,11 +419,24 @@ describe("automation sweep", () => {
           .all(),
       ).toHaveLength(0);
       expect(harness.db.select().from(hostDaemonCommands).all()).toHaveLength(0);
-      expect(getAutomation(harness.db, automation.id)).toMatchObject({
+      expect(restoredAutomation).toMatchObject({
         lastRunAt: null,
-        nextRunAt: automation.nextRunAt,
         runCount: 0,
       });
+
+      await sweepDueAutomations(harness.deps, { now: now + 10_000 });
+
+      expect(
+        harness.db
+          .select()
+          .from(threads)
+          .where(eq(threads.automationId, automation.id))
+          .all(),
+      ).toHaveLength(0);
+      expect(harness.db.select().from(hostDaemonCommands).all()).toHaveLength(0);
+      expect(getAutomation(harness.db, automation.id)?.nextRunAt).toBe(
+        restoredAutomation?.nextRunAt,
+      );
     } finally {
       await harness.cleanup();
     }

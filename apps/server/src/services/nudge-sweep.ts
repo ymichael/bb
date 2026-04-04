@@ -46,6 +46,50 @@ interface NudgeSweepCache {
   providerThreadIdByThreadId: Map<string, string | null>;
 }
 
+type NudgeThread = NonNullable<ReturnType<typeof getThread>>;
+type NudgeEnvironment = NonNullable<ReturnType<typeof getEnvironment>>;
+
+interface DeleteDueNudgePreparation {
+  kind: "delete";
+}
+
+interface SkipDueNudgePreparation {
+  kind: "skip";
+  reason: string;
+}
+
+interface QueueDueNudgePreparation {
+  environment: NudgeEnvironment;
+  execution: ResolvedThreadExecutionOptions;
+  input: PromptInput[];
+  kind: "queue";
+  preparedCommand: PreparedTurnRunCommandPayload;
+  sessionId: string;
+  thread: NudgeThread;
+}
+
+type DueNudgePreparation =
+  | DeleteDueNudgePreparation
+  | SkipDueNudgePreparation
+  | QueueDueNudgePreparation;
+
+interface PendingTurnRunNudgeResult {
+  kind: "pending-turn-run";
+}
+
+interface QueuedNudgeResult {
+  kind: "queued";
+}
+
+interface LostRaceNudgeResult {
+  kind: "lost-race";
+}
+
+type QueueDueNudgeResult =
+  | LostRaceNudgeResult
+  | PendingTurnRunNudgeResult
+  | QueuedNudgeResult;
+
 function buildScheduledNudgeInput(name: string): PromptInput[] {
   return [
     {
@@ -151,89 +195,74 @@ function toDueManagerThreadNudgeCursor(
   };
 }
 
-async function runNudge(
+async function prepareDueNudge(
   deps: Pick<AppDeps, "db" | "hub" | "logger">,
   cache: NudgeSweepCache,
   nudge: DueManagerThreadNudgeRow,
   now: number,
-): Promise<void> {
+): Promise<DueNudgePreparation> {
   const thread = getThread(deps.db, nudge.threadId);
   if (!thread || thread.archivedAt !== null || thread.deletedAt !== null) {
-    deleteManagerThreadNudge(deps.db, deps.hub, nudge.id);
-    return;
+    return { kind: "delete" };
   }
 
   if (thread.status !== "idle") {
-    advanceSkippedNudge(deps, {
-      now,
-      nudge,
+    return {
+      kind: "skip",
       reason: "thread-not-idle",
-    });
-    return;
+    };
   }
 
   if (!thread.environmentId) {
-    advanceSkippedNudge(deps, {
-      now,
-      nudge,
+    return {
+      kind: "skip",
       reason: "thread-missing-environment",
-    });
-    return;
+    };
   }
 
   const environment = getCachedEnvironment(deps.db, cache, thread.environmentId);
   if (!environment || environment.status !== "ready" || !environment.path) {
-    advanceSkippedNudge(deps, {
-      now,
-      nudge,
+    return {
+      kind: "skip",
       reason: "environment-not-ready",
-    });
-    return;
+    };
   }
 
   const session = getActiveSession(deps.db, environment.hostId);
   if (!session) {
-    advanceSkippedNudge(deps, {
-      now,
-      nudge,
+    return {
+      kind: "skip",
       reason: "host-disconnected",
-    });
-    return;
+    };
   }
 
   const input = buildScheduledNudgeInput(nudge.name);
   const providerThreadId = getCachedProviderThreadId(deps, cache, thread.id);
   if (!providerThreadId) {
-    advanceSkippedNudge(deps, {
-      now,
-      nudge,
+    return {
+      kind: "skip",
       reason: "missing-provider-thread",
-    });
-    return;
+    };
   }
 
   if (hasPendingTurnRunCommand(deps.db, {
     hostId: environment.hostId,
     threadId: thread.id,
   }, cache)) {
-    advanceSkippedNudge(deps, {
-      now,
-      nudge,
+    return {
+      kind: "skip",
       reason: "pending-turn-run",
-    });
-    return;
+    };
   }
 
-  let execution: ResolvedThreadExecutionOptions;
-  let preparedCommand: PreparedTurnRunCommandPayload;
   try {
-    execution = await buildExecutionOptions(
+    const execution = await buildExecutionOptions(
       deps,
       {},
       { threadId: thread.id },
       "client/turn/requested",
     );
-    preparedCommand = await prepareTurnRunCommandPayload(deps, {
+    const preparedCommand = await prepareTurnRunCommandPayload(deps, {
       environment: {
         id: environment.id,
         hostId: environment.hostId,
@@ -245,6 +274,16 @@ async function runNudge(
       providerThreadId,
       thread,
     });
+
+    return {
+      environment,
+      execution,
+      input,
+      kind: "queue",
+      preparedCommand,
+      sessionId: session.id,
+      thread,
+    };
   } catch (error) {
     deps.logger.warn(
       {
@@ -254,100 +293,128 @@ async function runNudge(
       },
       "Skipping due manager nudge after runtime preparation failed",
     );
+    return {
+      kind: "skip",
+      reason: "runtime-preparation-failed",
+    };
+  }
+}
+
+function queueDueNudgeInTransaction(
+  tx: DbTransaction,
+  args: {
+    nudge: DueManagerThreadNudgeRow;
+    now: number;
+    preparation: QueueDueNudgePreparation;
+  },
+): QueueDueNudgeResult {
+  const nextFireAt = computeNextScheduledTime({
+    cron: args.nudge.cron,
+    timezone: args.nudge.timezone,
+    now: args.now,
+  });
+
+  if (hasPendingTurnRunCommand(tx, {
+    hostId: args.preparation.environment.hostId,
+    threadId: args.preparation.thread.id,
+  })) {
+    const advanced = advanceManagerThreadNudgeAfterFireInTransaction(tx, {
+      expectedNextFireAt: args.nudge.nextFireAt,
+      nextFireAt,
+      nudgeId: args.nudge.id,
+      now: args.now,
+    });
+
+    return advanced
+      ? { kind: "pending-turn-run" }
+      : { kind: "lost-race" };
+  }
+
+  if (
+    !advanceManagerThreadNudgeAfterFireInTransaction(tx, {
+      expectedNextFireAt: args.nudge.nextFireAt,
+      nextFireAt,
+      nudgeId: args.nudge.id,
+      now: args.now,
+    })
+  ) {
+    return { kind: "lost-race" };
+  }
+
+  const eventSequence = appendClientTurnEventInTransaction(tx, {
+    threadId: args.preparation.thread.id,
+    environmentId: args.preparation.environment.id,
+    type: "client/turn/requested",
+    input: args.preparation.input,
+    execution: args.preparation.execution,
+    initiator: "system",
+    requestMethod: "turn/start",
+    source: "tell",
+  });
+
+  queueTurnRunCommandInTransaction(tx, {
+    command: addEventSequenceToTurnRunCommandPayload({
+      eventSequence,
+      preparedCommand: args.preparation.preparedCommand,
+    }),
+    hostId: args.preparation.environment.hostId,
+    sessionId: args.preparation.sessionId,
+  });
+
+  return { kind: "queued" };
+}
+
+async function runNudge(
+  deps: Pick<AppDeps, "db" | "hub" | "logger">,
+  cache: NudgeSweepCache,
+  nudge: DueManagerThreadNudgeRow,
+  now: number,
+): Promise<void> {
+  const preparation = await prepareDueNudge(deps, cache, nudge, now);
+  if (preparation.kind === "delete") {
+    deleteManagerThreadNudge(deps.db, deps.hub, nudge.id);
+    return;
+  }
+
+  if (preparation.kind === "skip") {
     advanceSkippedNudge(deps, {
       now,
       nudge,
-      reason: "runtime-preparation-failed",
+      reason: preparation.reason,
     });
     return;
   }
 
-  const nextFireAt = computeNextScheduledTime({
-    cron: nudge.cron,
-    timezone: nudge.timezone,
-    now,
-  });
-  let queuedCommand = false;
-  let appendedEvent = false;
-  let advancedWithoutQueue = false;
+  const transactionResult = deps.db.transaction((tx) =>
+    queueDueNudgeInTransaction(tx, {
+      nudge,
+      now,
+      preparation,
+    }), { behavior: "immediate" });
 
-  deps.db.transaction((tx) => {
-    if (hasPendingTurnRunCommand(tx, {
-      hostId: environment.hostId,
-      threadId: thread.id,
-    })) {
-      if (
-        advanceManagerThreadNudgeAfterFireInTransaction(tx, {
-          expectedNextFireAt: nudge.nextFireAt,
-          nextFireAt,
-          nudgeId: nudge.id,
-          now,
-        })
-      ) {
-        advancedWithoutQueue = true;
-      }
-      return;
-    }
+  if (transactionResult.kind === "lost-race") {
+    return;
+  }
 
-    if (
-      !advanceManagerThreadNudgeAfterFireInTransaction(tx, {
-        expectedNextFireAt: nudge.nextFireAt,
-        nextFireAt,
-        nudgeId: nudge.id,
-        now,
-      })
-    ) {
-      return;
-    }
-
-    const eventSequence = appendClientTurnEventInTransaction(tx, {
-      threadId: thread.id,
-      environmentId: environment.id,
-      type: "client/turn/requested",
-      input,
-      execution,
-      initiator: "system",
-      requestMethod: "turn/start",
-      source: "tell",
-    });
-
-    queueTurnRunCommandInTransaction(tx, {
-      command: addEventSequenceToTurnRunCommandPayload({
-        eventSequence,
-        preparedCommand,
-      }),
-      hostId: environment.hostId,
-      sessionId: session.id,
-    });
-    appendedEvent = true;
-    queuedCommand = true;
-  }, { behavior: "immediate" });
-
-  if (advancedWithoutQueue) {
-    cache.pendingTurnRunByThreadId.set(thread.id, true);
+  if (transactionResult.kind === "pending-turn-run") {
+    cache.pendingTurnRunByThreadId.set(preparation.thread.id, true);
     deps.hub.notifyProject(nudge.projectId, ["nudges-changed"]);
     deps.logger.info(
       {
         nudgeId: nudge.id,
         reason: "pending-turn-run",
-        threadId: thread.id,
+        threadId: preparation.thread.id,
       },
       "Skipped due manager nudge",
     );
     return;
   }
 
-  if (!queuedCommand) {
-    return;
-  }
-
-  cache.pendingTurnRunByThreadId.set(thread.id, true);
+  cache.pendingTurnRunByThreadId.set(preparation.thread.id, true);
   deps.hub.notifyProject(nudge.projectId, ["nudges-changed"]);
-  if (appendedEvent) {
-    deps.hub.notifyThread(thread.id, ["events-appended"]);
-  }
-  deps.hub.notifyCommand(environment.hostId);
-  tryTransition(deps.db, deps.hub, thread.id, "active");
+  deps.hub.notifyThread(preparation.thread.id, ["events-appended"]);
+  deps.hub.notifyCommand(preparation.environment.hostId);
+  tryTransition(deps.db, deps.hub, preparation.thread.id, "active");
 }
 
 export async function sweepDueNudges(

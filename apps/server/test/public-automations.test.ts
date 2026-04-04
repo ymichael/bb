@@ -1,5 +1,10 @@
 import { createAutomation } from "@bb/db";
-import { automationSchema } from "@bb/server-contract";
+import {
+  automationSchema,
+  AUTOMATION_NAME_MAX_LENGTH,
+  SCHEDULE_CRON_MAX_LENGTH,
+  SCHEDULE_TIMEZONE_MAX_LENGTH,
+} from "@bb/server-contract";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   seedEnvironment,
@@ -168,6 +173,73 @@ describe("public automation routes", () => {
                   providerId: "codex",
                   model: "gpt-5",
                   input: [{ type: "text", text: "Run invalid schedule" }],
+                  environment: {
+                    type: "host",
+                    hostId: host.id,
+                    workspace: { type: "managed-clone" },
+                  },
+                },
+              },
+            }),
+          },
+        );
+        expect(response.status).toBe(400);
+      }
+    } finally {
+      vi.useRealTimers();
+      await harness.cleanup();
+    }
+  });
+
+  it("rejects overlong automation schedule fields at the API boundary", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, { id: "host-automation-max-length" });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+
+      for (const payload of [
+        {
+          name: "n".repeat(AUTOMATION_NAME_MAX_LENGTH + 1),
+          trigger: {
+            triggerType: "schedule",
+            cron: "0 8 * * 1-5",
+            timezone: "UTC",
+          },
+        },
+        {
+          name: "Valid name",
+          trigger: {
+            triggerType: "schedule",
+            cron: "0".repeat(SCHEDULE_CRON_MAX_LENGTH + 1),
+            timezone: "UTC",
+          },
+        },
+        {
+          name: "Valid name",
+          trigger: {
+            triggerType: "schedule",
+            cron: "0 8 * * 1-5",
+            timezone: "T".repeat(SCHEDULE_TIMEZONE_MAX_LENGTH + 1),
+          },
+        },
+      ] as const) {
+        const response = await harness.app.request(
+          `/api/v1/projects/${project.id}/automations`,
+          {
+            method: "POST",
+            headers: {
+              "content-type": "application/json",
+            },
+            body: JSON.stringify({
+              ...payload,
+              action: {
+                actionType: "scheduled-thread",
+                threadRequest: {
+                  providerId: "codex",
+                  model: "gpt-5",
+                  input: [{ type: "text", text: "Reject this invalid payload" }],
                   environment: {
                     type: "host",
                     hostId: host.id,

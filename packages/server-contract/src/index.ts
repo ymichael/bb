@@ -12,8 +12,10 @@ export { apiErrorSchema, domainErrorCodeSchema } from "./errors.js";
 export type { ApiError, DomainErrorCode } from "./errors.js";
 
 export {
+  AUTOMATION_NAME_MAX_LENGTH,
   archiveThreadRequestSchema,
   automationActionSchema,
+  automationNameSchema,
   automationScheduleTriggerSchema,
   automationSchema,
   commitActionResponseSchema,
@@ -73,6 +75,12 @@ export {
   reuseEnvironmentSchema,
   hostEnvironmentSchema,
   sandboxHostEnvironmentSchema,
+  SCHEDULE_CRON_MAX_LENGTH,
+  SCHEDULE_NAME_MAX_LENGTH,
+  SCHEDULE_TIMEZONE_MAX_LENGTH,
+  scheduleCronSchema,
+  scheduleNameSchema,
+  scheduleTimezoneSchema,
   uploadedPromptAttachmentSchema,
   workspaceFileSchema,
 } from "./api-types.js";

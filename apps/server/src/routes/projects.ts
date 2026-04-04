@@ -274,6 +274,7 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
     const welcomeMessage = renderTemplate("systemMessageManagerWelcome", {});
 
     const thread = await createThreadFromRequest(deps, {
+      automationId: null,
       projectId,
       providerId: payload.providerId,
       type: "manager",

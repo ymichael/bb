@@ -52,6 +52,22 @@ export interface AppendSystemErrorEventArgs {
   threadId: string;
 }
 
+function buildClientTurnEventData(
+  args: ClientTurnEventArgs,
+) {
+  return {
+    direction: "outbound" as const,
+    source: args.source,
+    initiator: args.initiator,
+    input: args.input,
+    request: {
+      method: args.requestMethod,
+      params: {},
+    },
+    execution: args.execution,
+  };
+}
+
 export function appendThreadEvent<TType extends ThreadEventType>(
   deps: Pick<AppDeps, "db" | "hub">,
   args: AppendThreadEventArgs<TType>,
@@ -82,17 +98,7 @@ export function appendClientTurnEvent(
     threadId: args.threadId,
     environmentId: args.environmentId,
     type: args.type,
-    data: {
-      direction: "outbound",
-      source: args.source,
-      initiator: args.initiator,
-      input: args.input,
-      request: {
-        method: args.requestMethod,
-        params: {},
-      },
-      execution: args.execution,
-    },
+    data: buildClientTurnEventData(args),
   });
 }
 
@@ -104,17 +110,7 @@ export function appendClientTurnEventInTransaction(
     threadId: args.threadId,
     environmentId: args.environmentId,
     type: args.type,
-    data: {
-      direction: "outbound",
-      source: args.source,
-      initiator: args.initiator,
-      input: args.input,
-      request: {
-        method: args.requestMethod,
-        params: {},
-      },
-      execution: args.execution,
-    },
+    data: buildClientTurnEventData(args),
   });
 }
 

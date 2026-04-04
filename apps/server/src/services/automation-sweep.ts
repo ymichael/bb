@@ -2,7 +2,6 @@ import {
   claimAutomationScheduledRun,
   type ClaimAutomationScheduledRunResult,
   type DueAutomationCursor,
-  getActiveSession,
   getEnvironment,
   listDueAutomations,
   restoreAutomationAfterFailedRun,
@@ -103,16 +102,13 @@ async function runAutomation(
     return;
   }
 
-  const hostConnected =
-    executionContext.hostId === null ||
-    getActiveSession(deps.db, executionContext.hostId) !== null;
   const decision: ClaimAutomationScheduledRunResult = claimAutomationScheduledRun(
     deps.db,
     deps.hub,
     {
       automationId: automation.id,
       expectedNextRunAt: automation.nextRunAt,
-      hostConnected,
+      hostId: executionContext.hostId,
       nextRunAt: executionContext.nextRunAt,
     },
   );
@@ -146,7 +142,7 @@ async function runAutomation(
       expectedRunCount: automation.runCount + 1,
       projectId: automation.projectId,
       restoredLastRunAt: automation.lastRunAt,
-      restoredNextRunAt: automation.nextRunAt,
+      restoredNextRunAt: executionContext.nextRunAt,
       restoredRunCount: automation.runCount,
     });
     deps.logger.error(

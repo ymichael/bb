@@ -182,7 +182,7 @@ export function createThreadRecord(
   return createThread(deps.db, deps.hub, {
     projectId: request.projectId,
     environmentId,
-    automationId: request.automationId ?? null,
+    automationId: request.automationId,
     providerId: request.providerId,
     type: request.type,
     title: request.title ?? null,
