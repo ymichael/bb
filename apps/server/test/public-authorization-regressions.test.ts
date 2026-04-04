@@ -7,6 +7,7 @@ import {
   threads,
 } from "@bb/db";
 import { describe, expect, it } from "vitest";
+import { readJson } from "./helpers/json.js";
 import {
   seedDraft,
   seedEnvironment,
@@ -15,10 +16,6 @@ import {
   seedThread,
 } from "./helpers/seed.js";
 import { createTestAppHarness } from "./helpers/test-app.js";
-
-async function readJson(response: Response): Promise<unknown> {
-  return response.json();
-}
 
 describe("public authorization regressions", () => {
   it("does not delete a project source through another project route", async () => {

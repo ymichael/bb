@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import { events } from "@bb/db";
 import { describe, expect, it } from "vitest";
 import { internalAuthHeaders } from "./helpers/commands.js";
+import { readJson } from "./helpers/json.js";
 import {
   seedEnvironment,
   seedHostSession,
@@ -9,10 +10,6 @@ import {
   seedThread,
 } from "./helpers/seed.js";
 import { createTestAppHarness } from "./helpers/test-app.js";
-
-async function readJson(response: Response): Promise<unknown> {
-  return response.json();
-}
 
 describe("internal tool-call regressions", () => {
   it("rejects tool calls for threads owned by a different host", async () => {

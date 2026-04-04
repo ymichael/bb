@@ -1,16 +1,13 @@
 import { getEnvironment } from "@bb/db";
 import { describe, expect, it, vi } from "vitest";
 import { internalAuthHeaders } from "./helpers/commands.js";
+import { readJson } from "./helpers/json.js";
 import {
   seedEnvironment,
   seedHostSession,
   seedProjectWithSource,
 } from "./helpers/seed.js";
 import { createTestAppHarness } from "./helpers/test-app.js";
-
-async function readJson(response: Response): Promise<unknown> {
-  return response.json();
-}
 
 describe("internal environment change route", () => {
   it("notifies clients for valid session-owned environment change hints without mutating the environment row", async () => {

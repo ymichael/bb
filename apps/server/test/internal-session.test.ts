@@ -23,6 +23,7 @@ import {
   waitForQueuedCommand,
   waitForQueuedCommandAfter,
 } from "./helpers/commands.js";
+import { readJson } from "./helpers/json.js";
 import {
   seedEnvironment,
   seedEvent,
@@ -32,10 +33,6 @@ import {
   seedThread,
 } from "./helpers/seed.js";
 import { createTestAppHarness } from "./helpers/test-app.js";
-
-async function readJson(response: Response): Promise<unknown> {
-  return response.json();
-}
 
 describe("internal session routes", () => {
   it("opens sessions, replaces existing ones, and returns thread high-water marks", async () => {

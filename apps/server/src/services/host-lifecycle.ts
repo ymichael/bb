@@ -9,10 +9,13 @@ import { ApiError } from "../errors.js";
 import { requireSandboxBackendForHost } from "./sandbox-backends.js";
 
 const DEFAULT_SESSION_WAIT_TIMEOUT_MS = 60_000;
-const pendingHostDestroys = new Map<string, Promise<void>>();
 
 type HostRecord = NonNullable<ReturnType<typeof getHost>>;
 type ResumableSandboxHostRecord = HostRecord & { externalId: string };
+
+interface HostDestroyDeduper {
+  run(hostId: string, destroy: () => Promise<void>): Promise<void>;
+}
 
 export interface WaitForHostSessionOptions {
   timeoutMs?: number;
@@ -21,6 +24,29 @@ export interface WaitForHostSessionOptions {
 function hasExternalId(host: HostRecord): host is ResumableSandboxHostRecord {
   return host.externalId !== null;
 }
+
+export function createHostDestroyDeduper(): HostDestroyDeduper {
+  const pendingHostDestroys = new Map<string, Promise<void>>();
+
+  return {
+    run(hostId: string, destroy: () => Promise<void>): Promise<void> {
+      const pendingDestroy = pendingHostDestroys.get(hostId);
+      if (pendingDestroy) {
+        return pendingDestroy;
+      }
+
+      const destroyPromise = destroy().finally(() => {
+        if (pendingHostDestroys.get(hostId) === destroyPromise) {
+          pendingHostDestroys.delete(hostId);
+        }
+      });
+      pendingHostDestroys.set(hostId, destroyPromise);
+      return destroyPromise;
+    },
+  };
+}
+
+const hostDestroyDeduper = createHostDestroyDeduper();
 
 export async function waitForHostSession(
   deps: Pick<AppDeps, "db" | "hub">,
@@ -118,18 +144,7 @@ export async function destroyHost(
   deps: Pick<AppDeps, "config" | "db" | "hub" | "sandboxRegistry">,
   hostId: string,
 ): Promise<void> {
-  const pendingDestroy = pendingHostDestroys.get(hostId);
-  if (pendingDestroy) {
-    return pendingDestroy;
-  }
-
-  const destroyPromise = destroyHostInternal(deps, hostId).finally(() => {
-    if (pendingHostDestroys.get(hostId) === destroyPromise) {
-      pendingHostDestroys.delete(hostId);
-    }
-  });
-  pendingHostDestroys.set(hostId, destroyPromise);
-  return destroyPromise;
+  return hostDestroyDeduper.run(hostId, async () => destroyHostInternal(deps, hostId));
 }
 
 async function destroyHostInternal(

@@ -10,6 +10,7 @@ import {
 import { describe, expect, it } from "vitest";
 import { appendClientTurnEvent } from "../src/services/thread-events.js";
 import { internalAuthHeaders } from "./helpers/commands.js";
+import { readJson } from "./helpers/json.js";
 import {
   seedEnvironment,
   seedHostSession,
@@ -17,10 +18,6 @@ import {
   seedThread,
 } from "./helpers/seed.js";
 import { createTestAppHarness } from "./helpers/test-app.js";
-
-async function readJson(response: Response): Promise<unknown> {
-  return response.json();
-}
 
 describe("internal authorization regressions", () => {
   it("rejects cross-host command results before mutating command state or side effects", async () => {

@@ -3,16 +3,13 @@ import {
   reportQueuedCommandSuccess,
   waitForQueuedCommand,
 } from "./helpers/commands.js";
+import { readJson } from "./helpers/json.js";
 import {
   seedEnvironment,
   seedHostSession,
   seedProjectWithSource,
 } from "./helpers/seed.js";
 import { createTestAppHarness } from "./helpers/test-app.js";
-
-async function readJson(response: Response): Promise<unknown> {
-  return response.json();
-}
 
 const CLEAN_STATUS = {
   workspaceStatus: {

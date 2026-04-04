@@ -3,6 +3,7 @@ import { events, threads } from "@bb/db";
 import { HOST_DAEMON_PROTOCOL_VERSION } from "@bb/host-daemon-contract";
 import { describe, expect, it } from "vitest";
 import { internalAuthHeaders } from "./helpers/commands.js";
+import { readJson } from "./helpers/json.js";
 import {
   seedEnvironment,
   seedHostSession,
@@ -10,10 +11,6 @@ import {
   seedThread,
 } from "./helpers/seed.js";
 import { createTestAppHarness } from "./helpers/test-app.js";
-
-async function readJson(response: Response): Promise<unknown> {
-  return response.json();
-}
 
 describe("internal event and tool-call routes", () => {
   it("deduplicates events by thread and sequence and returns high-water marks", async () => {

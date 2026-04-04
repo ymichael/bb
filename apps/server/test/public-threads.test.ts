@@ -27,6 +27,7 @@ import {
   waitForQueuedCommand,
   waitForQueuedCommandAfter,
 } from "./helpers/commands.js";
+import { readJson } from "./helpers/json.js";
 import {
   seedDraft,
   seedEnvironment,
@@ -56,10 +57,6 @@ vi.mock("@bb/sandbox-host", () => ({
   provisionHost: (...args: SandboxHostMockArgs) => provisionHostMock(...args),
   resumeHost: (...args: SandboxHostMockArgs) => resumeHostMock(...args),
 }));
-
-async function readJson(response: Response): Promise<unknown> {
-  return response.json();
-}
 
 interface GitCommandArgs {
   args: string[];

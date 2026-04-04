@@ -232,7 +232,17 @@ describe("CLI command output contracts", () => {
       name: "Alpha",
       createdAt: 1,
       updatedAt: 2,
-      sources: [],
+      sources: [
+        {
+          createdAt: 1,
+          id: "source-1",
+          isDefault: true,
+          projectId: "proj-created",
+          repoUrl: "https://github.com/example/repo.git",
+          type: "github_repo",
+          updatedAt: 2,
+        },
+      ],
     };
     const post = vi.fn(async () => created);
     createClientMock.mockReturnValue(asServerClient({
@@ -253,22 +263,26 @@ describe("CLI command output contracts", () => {
         "Alpha",
         "--repo-url",
         "https://github.com/example/repo.git",
-        "--json",
       ],
       (program) => registerProjectCommands(program, () => "http://server"),
     );
 
-    expect(post).toHaveBeenCalledWith({
-      json: {
-        name: "Alpha",
-        source: {
-          repoUrl: "https://github.com/example/repo.git",
-          type: "github_repo",
+    expect(collectLogLines(vi.mocked(console.log))).toContain("Project created: proj-created");
+    expect(collectLogLines(vi.mocked(console.log))).toContain(
+      "    -  github_repo  https://github.com/example/repo.git",
+    );
+    expect(post).toHaveBeenCalledTimes(1);
+    expect(post).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        json: {
+          name: "Alpha",
+          source: {
+            repoUrl: "https://github.com/example/repo.git",
+            type: "github_repo",
+          },
         },
-      },
-    });
-    expect(JSON.parse(String(vi.mocked(console.log).mock.calls[0]?.[0]))).toEqual(
-      created,
+      }),
     );
   });
 
@@ -317,34 +331,36 @@ describe("CLI command output contracts", () => {
         "--repo-url",
         "https://github.com/example/repo.git",
         "--default",
-        "--json",
       ],
       (program) => registerProjectCommands(program, () => "http://server"),
     );
 
-    expect(post).toHaveBeenCalledWith({
-      json: {
-        repoUrl: "https://github.com/example/repo.git",
-        type: "github_repo",
-      },
-      param: { id: "proj-1" },
-    });
-    expect(patch).toHaveBeenCalledWith({
-      json: {
-        isDefault: true,
-        type: "github_repo",
-      },
-      param: { id: "proj-1", sourceId: "source-2" },
-    });
-    expect(JSON.parse(String(vi.mocked(console.log).mock.calls[0]?.[0]))).toEqual({
-      createdAt: 1,
-      id: "source-2",
-      isDefault: true,
-      projectId: "proj-1",
-      repoUrl: "https://github.com/example/repo.git",
-      type: "github_repo",
-      updatedAt: 3,
-    });
+    expect(collectLogLines(vi.mocked(console.log))).toContain("Project source added: source-2");
+    expect(collectLogLines(vi.mocked(console.log))).toContain(
+      "source-2  github_repo  https://github.com/example/repo.git [default]",
+    );
+    expect(post).toHaveBeenCalledTimes(1);
+    expect(post).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        json: {
+          repoUrl: "https://github.com/example/repo.git",
+          type: "github_repo",
+        },
+        param: { id: "proj-1" },
+      }),
+    );
+    expect(patch).toHaveBeenCalledTimes(1);
+    expect(patch).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        json: {
+          isDefault: true,
+          type: "github_repo",
+        },
+        param: { id: "proj-1", sourceId: "source-2" },
+      }),
+    );
   });
 
   it("bb project source update patches the existing source type", async () => {
@@ -402,28 +418,25 @@ describe("CLI command output contracts", () => {
         "source-1",
         "--path",
         "/tmp/renamed",
-        "--json",
       ],
       (program) => registerProjectCommands(program, () => "http://server"),
     );
 
-    expect(patch).toHaveBeenCalledWith({
-      json: {
-        path: "/tmp/renamed",
-        type: "local_path",
-      },
-      param: { id: "proj-1", sourceId: "source-1" },
-    });
-    expect(JSON.parse(String(vi.mocked(console.log).mock.calls[0]?.[0]))).toEqual({
-      createdAt: 1,
-      hostId: "host-test-001",
-      id: "source-1",
-      isDefault: true,
-      path: "/tmp/renamed",
-      projectId: "proj-1",
-      type: "local_path",
-      updatedAt: 3,
-    });
+    expect(collectLogLines(vi.mocked(console.log))).toContain("Project source updated: source-1");
+    expect(collectLogLines(vi.mocked(console.log))).toContain(
+      "source-1  host-test-001 (local)  local_path  /tmp/renamed [default]",
+    );
+    expect(patch).toHaveBeenCalledTimes(1);
+    expect(patch).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        json: {
+          path: "/tmp/renamed",
+          type: "local_path",
+        },
+        param: { id: "proj-1", sourceId: "source-1" },
+      }),
+    );
   });
 
   it("bb project source delete deletes without prompting when --yes is passed", async () => {
@@ -445,19 +458,21 @@ describe("CLI command output contracts", () => {
     }));
 
     await runCommand(
-      ["project", "source", "delete", "proj-1", "source-1", "--yes", "--json"],
+      ["project", "source", "delete", "proj-1", "source-1", "--yes"],
       (program) => registerProjectCommands(program, () => "http://server"),
     );
 
-    expect(del).toHaveBeenCalledWith({
-      param: { id: "proj-1", sourceId: "source-1" },
-    });
+    expect(collectLogLines(vi.mocked(console.log))).toContain(
+      "Project source source-1 deleted",
+    );
     expect(readlineState.question).not.toHaveBeenCalled();
-    expect(JSON.parse(String(vi.mocked(console.log).mock.calls[0]?.[0]))).toEqual({
-      ok: true,
-      projectId: "proj-1",
-      sourceId: "source-1",
-    });
+    expect(del).toHaveBeenCalledTimes(1);
+    expect(del).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        param: { id: "proj-1", sourceId: "source-1" },
+      }),
+    );
   });
 
   it("bb manager hire posts to the project manager route", async () => {

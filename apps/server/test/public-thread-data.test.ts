@@ -8,6 +8,7 @@ import {
   reportQueuedCommandSuccess,
   waitForQueuedCommand,
 } from "./helpers/commands.js";
+import { readJson } from "./helpers/json.js";
 import {
   seedDraft,
   seedEnvironment,
@@ -18,10 +19,6 @@ import {
   seedThread,
 } from "./helpers/seed.js";
 import { createTestAppHarness } from "./helpers/test-app.js";
-
-async function readJson(response: Response): Promise<unknown> {
-  return response.json();
-}
 
 const draftIdResponseSchema = z.object({
   id: z.string(),

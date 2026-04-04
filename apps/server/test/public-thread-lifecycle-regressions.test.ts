@@ -11,6 +11,7 @@ import {
   waitForQueuedCommand,
   waitForQueuedCommandAfter,
 } from "./helpers/commands.js";
+import { readJson } from "./helpers/json.js";
 import {
   seedEnvironment,
   seedHost,
@@ -18,10 +19,6 @@ import {
   seedProjectWithSource,
 } from "./helpers/seed.js";
 import { createTestAppHarness } from "./helpers/test-app.js";
-
-async function readJson(response: Response): Promise<unknown> {
-  return response.json();
-}
 
 describe("public thread lifecycle regressions", () => {
   it("uses unique branch names for same-title managed worktree threads", async () => {

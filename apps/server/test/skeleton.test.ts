@@ -2,11 +2,8 @@ import { describe, expect, it } from "vitest";
 import { hosts } from "@bb/db";
 import { HOST_DAEMON_PROTOCOL_VERSION } from "@bb/host-daemon-contract";
 import { initDb } from "../src/db.js";
+import { readJson } from "./helpers/json.js";
 import { createTestAppHarness } from "./helpers/test-app.js";
-
-async function readJson(response: Response): Promise<unknown> {
-  return response.json();
-}
 
 describe("server skeleton", () => {
   it("serves public routes without auth", async () => {

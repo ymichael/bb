@@ -108,6 +108,26 @@ describe("workspace provisioning", () => {
     expect(await new Workspace(targetPath).currentBranch).toBe("clone-branch");
   });
 
+  it("rolls back failed clone setup scripts", async () => {
+    const sourceRepo = await initRepoWithOptionalSetup(
+      "echo failing\nexit 1\n",
+    );
+    const parentDir = await makeTempDir("bb-clone-fail-parent-");
+    const targetPath = path.join(parentDir, "broken-clone");
+
+    await expect(
+      createClone({
+        sourcePath: sourceRepo,
+        targetPath,
+        branchName: "broken-clone",
+        scriptName: ".bb-env-setup.sh",
+        timeoutMs: 900000,
+      }),
+    ).rejects.toThrow(/Setup script failed/u);
+
+    await expect(fs.stat(targetPath)).rejects.toThrow();
+  });
+
   it("creates nested clone targets when parent directories do not exist", async () => {
     const sourceRepo = await initRepoWithOptionalSetup();
     const parentDir = await makeTempDir("bb-clone-nested-parent-");
