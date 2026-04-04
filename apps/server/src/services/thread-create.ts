@@ -357,6 +357,7 @@ export async function createThreadFromRequest(
         "Environment belongs to a different project",
       );
     }
+    requireConnectedHostSession(deps, environment.hostId);
     if (environment.status === "ready") {
       if (!environment.path) {
         throw new ApiError(409, "invalid_request", "Environment is not ready");
@@ -385,6 +386,7 @@ export async function createThreadFromRequest(
   const unmanagedPath = workspace.type === "unmanaged"
     ? workspace.path ?? requireSourceForHost(deps, request.projectId, hostId).path
     : null;
+  requireConnectedHostSession(deps, hostId);
 
   if (workspace.type === "unmanaged" && unmanagedPath) {
     const reusedThread = await reuseEnvironmentByHostPath(deps, {

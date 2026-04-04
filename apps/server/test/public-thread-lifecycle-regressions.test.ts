@@ -5,7 +5,6 @@ import {
   listThreads,
   transitionThreadStatus,
 } from "@bb/db";
-import { threadSchema } from "@bb/domain";
 import { describe, expect, it } from "vitest";
 import {
   reportQueuedCommandSuccess,
@@ -224,7 +223,7 @@ describe("public thread lifecycle regressions", () => {
     }
   });
 
-  it("queues a reused thread start even when the host is disconnected", async () => {
+  it("fails reused thread creation when the host is disconnected", async () => {
     const harness = await createTestAppHarness();
     try {
       const host = seedHost(harness.deps, { id: "host-reuse-disconnected" });
@@ -253,17 +252,18 @@ describe("public thread lifecycle regressions", () => {
         }),
       });
 
-      expect(response.status).toBe(201);
-      const thread = threadSchema.parse(await readJson(response));
-      expect(thread.status).toBe("idle");
-      expect(listThreads(harness.db, { projectId: project.id })).toHaveLength(1);
+      expect(response.status).toBe(502);
+      await expect(readJson(response)).resolves.toMatchObject({
+        code: "host_disconnected",
+      });
+      expect(listThreads(harness.db, { projectId: project.id })).toHaveLength(0);
 
       const queuedCommand = harness.db
         .select()
         .from(hostDaemonCommands)
         .where(eq(hostDaemonCommands.type, "thread.start"))
         .get();
-      expect(queuedCommand?.sessionId).toBeNull();
+      expect(queuedCommand).toBeUndefined();
     } finally {
       await harness.cleanup();
     }

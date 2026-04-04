@@ -17,6 +17,7 @@ import {
   listHosts,
   getThread,
   hostDaemonCommands,
+  listEnvironments,
   listThreads,
   threads,
 } from "@bb/db";
@@ -204,13 +205,13 @@ describe("public thread routes", () => {
     }
   });
 
-  it("creates host threads even when the host is offline by queueing provisioning without a session", async () => {
+  it("fails host thread creation when the host is offline", async () => {
     const harness = await createTestAppHarness();
     try {
       const host = seedHost(harness.deps, {
         id: "host-thread-offline",
       });
-      const { project, source } = seedProjectWithSource(harness.deps, {
+      const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
         path: "/tmp/offline-thread-project",
       });
@@ -236,20 +237,19 @@ describe("public thread routes", () => {
         }),
       });
 
-      expect(response.status).toBe(201);
-      const createdThread = threadSchema.parse(await readJson(response));
-      expect(createdThread.status).toBe("provisioning");
-
-      const queued = await waitForQueuedCommand(
-        harness,
-        ({ command }) => command.type === "environment.provision",
-      );
-      expect(queued.command).toMatchObject({
-        environmentId: createdThread.environmentId,
-        path: source.path,
-        workspaceProvisionType: "unmanaged",
+      expect(response.status).toBe(502);
+      await expect(readJson(response)).resolves.toMatchObject({
+        code: "host_disconnected",
       });
-      expect(queued.row.sessionId).toBeNull();
+      expect(listThreads(harness.db, { projectId: project.id })).toHaveLength(0);
+      expect(listEnvironments(harness.db, project.id)).toHaveLength(0);
+      expect(
+        harness.db
+          .select()
+          .from(hostDaemonCommands)
+          .where(eq(hostDaemonCommands.type, "environment.provision"))
+          .all(),
+      ).toHaveLength(0);
     } finally {
       await harness.cleanup();
     }

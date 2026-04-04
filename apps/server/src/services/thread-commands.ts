@@ -90,15 +90,15 @@ export async function queueThreadStartCommand(
     thread: Thread;
   },
 ): Promise<void> {
+  const session = requireConnectedHostSession(deps, args.environment.hostId);
   const runtimeContext = await resolveThreadRuntimeCommandConfig(deps, {
     thread: args.thread,
     environment: args.environment,
     isThreadCreation: true,
   });
-  const session = getActiveSession(deps.db, args.environment.hostId);
   queueCommand(deps.db, deps.hub, {
     hostId: args.environment.hostId,
-    sessionId: session?.id ?? null,
+    sessionId: session.id,
     type: "thread.start",
     payload: JSON.stringify({
       type: "thread.start",
