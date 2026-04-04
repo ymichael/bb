@@ -49,6 +49,9 @@ interface SandboxProvisionCall {
   hostName: string;
 }
 
+// Server tests treat @bb/sandbox-host as the external sandbox boundary.
+// Package-level tests cover the E2B mechanics directly; these tests focus on
+// server policy and request/response behavior.
 vi.mock("@bb/sandbox-host", () => ({
   provisionHost: (...args: SandboxHostMockArgs) => provisionHostMock(...args),
   resumeHost: (...args: SandboxHostMockArgs) => resumeHostMock(...args),

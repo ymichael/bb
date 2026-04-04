@@ -47,4 +47,50 @@ describe("sandbox host registry", () => {
       hostId: `host-${SANDBOX_HOST_REGISTRY_MAX_ENTRIES}`,
     });
   });
+
+  it("deduplicates concurrent getOrCreate loads and caches the resolved host", async () => {
+    vi.useFakeTimers();
+    const registry = createSandboxHostRegistry();
+    const host = createMockSandboxHost("host-concurrent");
+    let resolveLoad: ((value: SandboxHost) => void) | null = null;
+    const loadHost = vi.fn(
+      () =>
+        new Promise<SandboxHost>((resolve) => {
+          resolveLoad = resolve;
+        }),
+    );
+
+    const firstLoad = registry.getOrCreate(host.hostId, loadHost);
+    const secondLoad = registry.getOrCreate(host.hostId, loadHost);
+
+    expect(loadHost).toHaveBeenCalledTimes(1);
+    if (!resolveLoad) {
+      throw new Error("Expected concurrent load to be pending");
+    }
+    resolveLoad(host);
+
+    const [firstHost, secondHost] = await Promise.all([firstLoad, secondLoad]);
+    expect(firstHost).toBe(host);
+    expect(secondHost).toBe(host);
+    expect(registry.get(host.hostId)).toBe(host);
+  });
+
+  it("applies capacity eviction to hosts loaded through getOrCreate", async () => {
+    vi.useFakeTimers();
+    const registry = createSandboxHostRegistry();
+
+    for (let index = 0; index < SANDBOX_HOST_REGISTRY_MAX_ENTRIES; index += 1) {
+      registry.set(`host-${index}`, createMockSandboxHost(`host-${index}`));
+      vi.advanceTimersByTime(1);
+    }
+
+    const loadedHost = await registry.getOrCreate(
+      "host-loaded",
+      async () => createMockSandboxHost("host-loaded"),
+    );
+
+    expect(loadedHost.hostId).toBe("host-loaded");
+    expect(registry.get("host-0")).toBeUndefined();
+    expect(registry.get("host-loaded")).toBe(loadedHost);
+  });
 });

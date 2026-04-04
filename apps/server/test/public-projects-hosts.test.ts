@@ -1,4 +1,5 @@
 import { eq } from "drizzle-orm";
+import { z } from "zod";
 import { hostDaemonCommands, hostDaemonSessions } from "@bb/db";
 import { hostDaemonCommandSchema } from "@bb/host-daemon-contract";
 import { describe, expect, it } from "vitest";
@@ -17,6 +18,17 @@ import { createTestAppHarness } from "./helpers/test-app.js";
 async function readJson(response: Response): Promise<unknown> {
   return response.json();
 }
+
+const idOnlyResponseSchema = z.object({
+  id: z.string(),
+});
+
+const hostStatusListResponseSchema = z.array(
+  z.object({
+    id: z.string(),
+    status: z.string(),
+  }),
+);
 
 describe("public project and host routes", () => {
   it("supports project CRUD", async () => {
@@ -162,7 +174,9 @@ describe("public project and host routes", () => {
         },
       );
       expect(createSourceResponse.status).toBe(201);
-      const secondSource = await readJson(createSourceResponse) as { id: string };
+      const secondSource = idOnlyResponseSchema.parse(
+        await readJson(createSourceResponse),
+      );
 
       const missingTypeResponse = await harness.app.request(
         `/api/v1/projects/${project.id}/sources`,
@@ -285,10 +299,7 @@ describe("public project and host routes", () => {
 
       const listResponse = await harness.app.request("/api/v1/hosts");
       expect(listResponse.status).toBe(200);
-      const hosts = await readJson(listResponse) as Array<{
-        id: string;
-        status: string;
-      }>;
+      const hosts = hostStatusListResponseSchema.parse(await readJson(listResponse));
       expect(hosts).toEqual(
         expect.arrayContaining([
           expect.objectContaining({

@@ -267,6 +267,9 @@ describe("CLI command output contracts", () => {
         },
       },
     });
+    expect(JSON.parse(String(vi.mocked(console.log).mock.calls[0]?.[0]))).toEqual(
+      created,
+    );
   });
 
   it("bb project source add posts a github source and can mark it default", async () => {
@@ -332,6 +335,15 @@ describe("CLI command output contracts", () => {
         type: "github_repo",
       },
       param: { id: "proj-1", sourceId: "source-2" },
+    });
+    expect(JSON.parse(String(vi.mocked(console.log).mock.calls[0]?.[0]))).toEqual({
+      createdAt: 1,
+      id: "source-2",
+      isDefault: true,
+      projectId: "proj-1",
+      repoUrl: "https://github.com/example/repo.git",
+      type: "github_repo",
+      updatedAt: 3,
     });
   });
 
@@ -402,6 +414,16 @@ describe("CLI command output contracts", () => {
       },
       param: { id: "proj-1", sourceId: "source-1" },
     });
+    expect(JSON.parse(String(vi.mocked(console.log).mock.calls[0]?.[0]))).toEqual({
+      createdAt: 1,
+      hostId: "host-test-001",
+      id: "source-1",
+      isDefault: true,
+      path: "/tmp/renamed",
+      projectId: "proj-1",
+      type: "local_path",
+      updatedAt: 3,
+    });
   });
 
   it("bb project source delete deletes without prompting when --yes is passed", async () => {
@@ -431,6 +453,11 @@ describe("CLI command output contracts", () => {
       param: { id: "proj-1", sourceId: "source-1" },
     });
     expect(readlineState.question).not.toHaveBeenCalled();
+    expect(JSON.parse(String(vi.mocked(console.log).mock.calls[0]?.[0]))).toEqual({
+      ok: true,
+      projectId: "proj-1",
+      sourceId: "source-1",
+    });
   });
 
   it("bb manager hire posts to the project manager route", async () => {

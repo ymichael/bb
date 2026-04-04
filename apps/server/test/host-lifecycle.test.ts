@@ -17,6 +17,9 @@ const resumeHostMock = vi.fn();
 const resumeSandboxMock = vi.fn();
 type SandboxHostMockArgs = Array<object | string | undefined>;
 
+// Server tests treat @bb/sandbox-host as the external sandbox boundary.
+// Package-level tests cover the E2B mechanics directly; these tests focus on
+// server lifecycle policy and orchestration.
 vi.mock("@bb/sandbox-host", () => ({
   resumeHost: (...args: SandboxHostMockArgs) => resumeHostMock(...args),
   resumeSandbox: (...args: SandboxHostMockArgs) => resumeSandboxMock(...args),

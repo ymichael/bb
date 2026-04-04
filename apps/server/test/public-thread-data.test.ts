@@ -1,6 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import { createDraftId, environments, events, getDraft, getThread, queuedThreadMessages } from "@bb/db";
 import { threadDraftListResponseSchema } from "@bb/server-contract";
+import { z } from "zod";
 import { describe, expect, it } from "vitest";
 import {
   reportQueuedCommandError,
@@ -21,6 +22,19 @@ import { createTestAppHarness } from "./helpers/test-app.js";
 async function readJson(response: Response): Promise<unknown> {
   return response.json();
 }
+
+const draftIdResponseSchema = z.object({
+  id: z.string(),
+});
+
+const threadReadResponseSchema = z.object({
+  lastReadAt: z.number().nullable(),
+});
+
+const threadEventWaitResponseSchema = z.object({
+  seq: z.number(),
+  type: z.string(),
+});
 
 describe("public thread data routes", () => {
   it("returns timeline rows and timeline tool details from thread events", async () => {
@@ -426,7 +440,7 @@ describe("public thread data routes", () => {
         },
       );
       expect(readResponse.status).toBe(200);
-      const readThread = await readJson(readResponse) as { lastReadAt: number | null };
+      const readThread = threadReadResponseSchema.parse(await readJson(readResponse));
       expect(readThread.lastReadAt).toBeTypeOf("number");
       expect(getThread(harness.db, thread.id)?.lastReadAt).toBeTypeOf("number");
 
@@ -498,7 +512,7 @@ describe("public thread data routes", () => {
         },
       );
       expect(createResponse.status).toBe(201);
-      const draft = await readJson(createResponse) as { id: string };
+      const draft = draftIdResponseSchema.parse(await readJson(createResponse));
       expect(getDraft(harness.db, draft.id)).toMatchObject({
         id: draft.id,
       });
@@ -623,7 +637,7 @@ describe("public thread data routes", () => {
         },
       );
       expect(createResponse.status).toBe(201);
-      const draft = await readJson(createResponse) as { id: string };
+      const draft = draftIdResponseSchema.parse(await readJson(createResponse));
       expect(getDraft(harness.db, draft.id)).toMatchObject({
         id: draft.id,
         model: "gpt-5",
@@ -1161,7 +1175,7 @@ describe("public thread data routes", () => {
         `/api/v1/threads/${thread.id}/events/wait?type=item/completed&waitMs=1000`,
       );
       expect(response.status).toBe(200);
-      const body = (await readJson(response)) as { type: string; seq: number };
+      const body = threadEventWaitResponseSchema.parse(await readJson(response));
       expect(body.type).toBe("item/completed");
       expect(body.seq).toBe(2);
     } finally {
