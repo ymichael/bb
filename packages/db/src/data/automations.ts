@@ -200,7 +200,7 @@ export function hasOpenAutomationThread(
     .where(
       and(
         eq(threads.automationId, automationId),
-        inArray(threads.status, ["active", "idle", "provisioning"]),
+        inArray(threads.status, ["active", "created", "idle", "provisioning"]),
         isNull(threads.archivedAt),
         isNull(threads.deletedAt),
       ),

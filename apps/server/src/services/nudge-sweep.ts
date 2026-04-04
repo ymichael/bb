@@ -13,15 +13,16 @@ import {
   listDueManagerThreadNudges,
 } from "@bb/db";
 import type { PromptInput, ResolvedThreadExecutionOptions } from "@bb/domain";
-import type { HostDaemonCommand } from "@bb/host-daemon-contract";
 import type { AppDeps } from "../types.js";
 import {
   appendClientTurnEventInTransaction,
   getLastProviderThreadId,
 } from "./thread-events.js";
 import {
+  addEventSequenceToTurnRunCommandPayload,
   buildExecutionOptions,
-  createTurnRunCommandPayload,
+  prepareTurnRunCommandPayload,
+  type PreparedTurnRunCommandPayload,
   queueTurnRunCommandInTransaction,
 } from "./thread-commands.js";
 import { computeNextScheduledTime } from "./schedule-helpers.js";
@@ -137,7 +138,7 @@ function getCachedEnvironment(
 }
 
 function getCachedProviderThreadId(
-  deps: Pick<AppDeps, "db" | "hub">,
+  deps: Pick<AppDeps, "db">,
   cache: NudgeSweepCache,
   threadId: string,
 ) {
@@ -233,7 +234,7 @@ async function runNudge(
   }
 
   let execution: ResolvedThreadExecutionOptions;
-  let command: Extract<HostDaemonCommand, { type: "turn.run" }>;
+  let preparedCommand: PreparedTurnRunCommandPayload;
   try {
     execution = await buildExecutionOptions(
       deps,
@@ -241,14 +242,13 @@ async function runNudge(
       { threadId: thread.id },
       "client/turn/requested",
     );
-    command = await createTurnRunCommandPayload(deps, {
+    preparedCommand = await prepareTurnRunCommandPayload(deps, {
       environment: {
         id: environment.id,
         hostId: environment.hostId,
         path: environment.path,
         workspaceProvisionType: environment.workspaceProvisionType,
       },
-      eventSequence: 0,
       execution,
       input,
       providerThreadId,
@@ -321,10 +321,10 @@ async function runNudge(
     });
 
     queueTurnRunCommandInTransaction(tx, {
-      command: {
-        ...command,
+      command: addEventSequenceToTurnRunCommandPayload({
         eventSequence,
-      },
+        preparedCommand,
+      }),
       hostId: environment.hostId,
       sessionId: session.id,
     });

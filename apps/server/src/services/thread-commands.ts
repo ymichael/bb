@@ -53,6 +53,29 @@ export interface TurnRunCommandPayloadArgs {
   threadId: string;
 }
 
+export interface PrepareTurnRunCommandPayloadArgs {
+  environment: ThreadRuntimeCommandEnvironment;
+  execution: ResolvedThreadExecutionOptions;
+  input: PromptInput[];
+  providerThreadId?: string;
+  thread: Thread;
+}
+
+export interface CreateTurnRunCommandPayloadArgs extends PrepareTurnRunCommandPayloadArgs {
+  eventSequence: number;
+}
+
+export interface FinalizeTurnRunCommandPayloadArgs {
+  eventSequence: number;
+  preparedCommand: PreparedTurnRunCommandPayload;
+}
+
+export type PreparedTurnRunCommandPayload = Omit<
+  Extract<HostDaemonCommand, { type: "turn.run" }>,
+  "eventSequence"
+>;
+type PreparedTurnRunCommandBuildArgs = Omit<TurnRunCommandPayloadArgs, "eventSequence">;
+
 export async function buildExecutionOptions(
   deps: Pick<AppDeps, "db" | "hub">,
   request: ExecutionOptionsRequest,
@@ -119,14 +142,13 @@ export async function queueThreadStartCommand(
   });
 }
 
-function buildTurnRunCommandPayload(
-  args: TurnRunCommandPayloadArgs,
-): Extract<HostDaemonCommand, { type: "turn.run" }> {
+function buildPreparedTurnRunCommandPayload(
+  args: PreparedTurnRunCommandBuildArgs,
+): PreparedTurnRunCommandPayload {
   return {
     type: "turn.run",
     environmentId: args.environmentId,
     threadId: args.threadId,
-    eventSequence: args.eventSequence,
     input: args.input,
     options: args.execution,
     resumeContext: {
@@ -143,17 +165,19 @@ function buildTurnRunCommandPayload(
   };
 }
 
-export async function createTurnRunCommandPayload(
+export function addEventSequenceToTurnRunCommandPayload(
+  args: FinalizeTurnRunCommandPayloadArgs,
+): Extract<HostDaemonCommand, { type: "turn.run" }> {
+  return {
+    ...args.preparedCommand,
+    eventSequence: args.eventSequence,
+  };
+}
+
+export async function prepareTurnRunCommandPayload(
   deps: Pick<AppDeps, "db" | "hub">,
-  args: {
-    environment: ThreadRuntimeCommandEnvironment;
-    eventSequence: number;
-    execution: ResolvedThreadExecutionOptions;
-    input: PromptInput[];
-    providerThreadId?: string;
-    thread: Thread;
-  },
-): Promise<Extract<HostDaemonCommand, { type: "turn.run" }>> {
+  args: PrepareTurnRunCommandPayloadArgs,
+): Promise<PreparedTurnRunCommandPayload> {
   const providerThreadId = requireProviderThreadId(
     args.providerThreadId ?? getLastProviderThreadId(deps, args.thread.id),
     args.thread.id,
@@ -162,14 +186,24 @@ export async function createTurnRunCommandPayload(
     thread: args.thread,
     environment: args.environment,
   });
-  return buildTurnRunCommandPayload({
+  return buildPreparedTurnRunCommandPayload({
     environmentId: args.environment.id,
-    eventSequence: args.eventSequence,
     execution: args.execution,
     input: args.input,
     providerThreadId,
     runtimeContext,
     threadId: args.thread.id,
+  });
+}
+
+export async function createTurnRunCommandPayload(
+  deps: Pick<AppDeps, "db" | "hub">,
+  args: CreateTurnRunCommandPayloadArgs,
+): Promise<Extract<HostDaemonCommand, { type: "turn.run" }>> {
+  const preparedCommand = await prepareTurnRunCommandPayload(deps, args);
+  return addEventSequenceToTurnRunCommandPayload({
+    eventSequence: args.eventSequence,
+    preparedCommand,
   });
 }
 

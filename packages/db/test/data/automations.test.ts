@@ -112,7 +112,7 @@ describe("automations", () => {
     const thread = createThread(db, noopNotifier, {
       projectId: project.id,
       providerId: "codex",
-      status: "idle",
+      status: "created",
       automationId: automation.id,
     });
 

@@ -213,6 +213,91 @@ describe("nudge sweep", () => {
     }
   });
 
+  it("deletes due nudges for archived threads", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-nudge-archived",
+      });
+      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/nudge-archived-environment",
+      });
+      const thread = seedRunnableManagerThread({
+        harness,
+        environmentId: environment.id,
+        projectId: project.id,
+      });
+      const now = Date.now();
+      const nudge = createManagerThreadNudge(harness.db, harness.hub, {
+        projectId: project.id,
+        threadId: thread.id,
+        name: "archived-check",
+        cron: "0 8 * * *",
+        timezone: "UTC",
+        enabled: true,
+        nextFireAt: now - 1,
+      });
+      harness.db.update(threads)
+        .set({ archivedAt: now, updatedAt: now })
+        .where(eq(threads.id, thread.id))
+        .run();
+
+      await sweepDueNudges(harness.deps, { now });
+
+      expect(getManagerThreadNudge(harness.db, nudge.id)).toBeNull();
+      expect(harness.db.select().from(hostDaemonCommands).all()).toHaveLength(0);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("advances due nudges without queueing work when the thread is not idle", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-nudge-non-idle",
+      });
+      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/nudge-non-idle-environment",
+      });
+      const thread = seedRunnableManagerThread({
+        harness,
+        environmentId: environment.id,
+        projectId: project.id,
+      });
+      const now = Date.now();
+      const nudge = createManagerThreadNudge(harness.db, harness.hub, {
+        projectId: project.id,
+        threadId: thread.id,
+        name: "non-idle-check",
+        cron: "0 8 * * *",
+        timezone: "UTC",
+        enabled: true,
+        nextFireAt: now - 1,
+      });
+      harness.db.update(threads)
+        .set({ status: "active", updatedAt: now })
+        .where(eq(threads.id, thread.id))
+        .run();
+
+      await sweepDueNudges(harness.deps, { now });
+
+      expect(harness.db.select().from(hostDaemonCommands).all()).toHaveLength(0);
+      expect(getManagerThreadNudge(harness.db, nudge.id)).toMatchObject({
+        lastFiredAt: now,
+      });
+      expect(getManagerThreadNudge(harness.db, nudge.id)?.nextFireAt).toBeGreaterThan(now);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("advances due nudges without queueing work when the host is offline", async () => {
     const harness = await createTestAppHarness();
     try {
