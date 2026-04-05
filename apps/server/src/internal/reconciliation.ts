@@ -3,11 +3,12 @@ import {
   clearThreadStopRequested,
   deleteThread,
   environments,
+  requestEnvironmentCleanup,
   threads,
 } from "@bb/db";
 import type { HostDaemonActiveThread } from "@bb/host-daemon-contract";
 import type { AppDeps } from "../types.js";
-import { maybeStartEnvironmentCleanup } from "../services/environment-cleanup.js";
+import { advanceEnvironmentCleanup } from "../services/environment-cleanup.js";
 import { requestThreadStop } from "../services/thread-stop.js";
 import { tryTransition } from "../services/thread-transitions.js";
 
@@ -24,6 +25,7 @@ export function reconcileSessionThreads(
       environmentId: threads.environmentId,
       id: threads.id,
       status: threads.status,
+      archivedAt: threads.archivedAt,
       stopRequestedAt: threads.stopRequestedAt,
     })
     .from(threads)
@@ -56,12 +58,23 @@ export function reconcileSessionThreads(
       }
 
       clearThreadStopRequested(deps.db, deps.hub, thread.id);
+
+      if (thread.archivedAt !== null) {
+        void advanceEnvironmentCleanup(deps, {
+          environmentId: thread.environmentId,
+        });
+      }
     }
 
     if (thread.deletedAt !== null && !isActive) {
       const environmentId = thread.environmentId;
       deleteThread(deps.db, deps.hub, thread.id);
-      maybeStartEnvironmentCleanup(deps, environmentId);
+      if (environmentId !== null) {
+        requestEnvironmentCleanup(deps.db, deps.hub, environmentId, {
+          cleanupMode: "force",
+        });
+      }
+      void advanceEnvironmentCleanup(deps, { environmentId });
     }
   }
 

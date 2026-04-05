@@ -1028,6 +1028,84 @@ describe("internal session routes", () => {
     }
   });
 
+  it("resumes forced archived cleanup after reconciliation clears a lost stop result", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-reconcile-archived-force-cleanup",
+      });
+      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        managed: true,
+        workspaceProvisionType: "managed-worktree",
+        path: "/tmp/reconcile-archived-force-cleanup",
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "active",
+      });
+
+      const archiveResponse = await harness.app.request(
+        `/api/v1/threads/${thread.id}/archive`,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({ force: true }),
+        },
+      );
+
+      expect(archiveResponse.status).toBe(200);
+      expect(getEnvironment(harness.db, environment.id)).toMatchObject({
+        cleanupMode: "force",
+        cleanupRequestedAt: expect.any(Number),
+        status: "ready",
+      });
+
+      const stopCommand = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "thread.stop" && command.threadId === thread.id,
+      );
+
+      const reconnectResponse = await harness.app.request("/internal/session/open", {
+        method: "POST",
+        headers: internalAuthHeaders(harness),
+        body: JSON.stringify({
+          activeThreads: [],
+          dataDir: "/tmp/reconcile-archived-force-cleanup",
+          hostId: host.id,
+          hostName: "Reconcile Archived Force Cleanup Host",
+          hostType: "persistent",
+          instanceId: "instance-reconcile-archived-force-cleanup",
+          protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
+        }),
+      });
+
+      expect(reconnectResponse.status).toBe(201);
+      expect(getThread(harness.db, thread.id)?.stopRequestedAt).toBeNull();
+
+      const destroyCommand = await waitForQueuedCommandAfter(
+        harness,
+        stopCommand.row.cursor,
+        ({ command }) =>
+          command.type === "environment.destroy" &&
+          command.environmentId === environment.id,
+      );
+
+      expect(destroyCommand.command).toMatchObject({
+        environmentId: environment.id,
+      });
+      expect(getEnvironment(harness.db, environment.id)?.status).toBe("destroying");
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("requests stop for deleted tombstones that are still active on reconnect", async () => {
     const harness = await createTestAppHarness();
     try {

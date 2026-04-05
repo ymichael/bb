@@ -175,19 +175,20 @@ export function sweepExpiredLeases(
 }
 
 /**
- * Sweep managed environments with zero non-archived threads.
+ * Sweep managed environments with recorded cleanup intent and zero
+ * non-archived threads.
  * Returns the list of environment records that are candidates for cleanup.
  * The caller decides what to do (e.g., queue destroy commands).
  */
 export function sweepManagedEnvironments(db: DbConnection) {
-  // Single query: managed environments NOT destroying, with zero non-archived threads
   const rows = db
     .select()
     .from(environments)
     .where(
       and(
         eq(environments.managed, true),
-        ne(environments.status, "destroying"),
+        sql`${environments.cleanupRequestedAt} IS NOT NULL`,
+        ne(environments.status, "destroyed"),
         sql`NOT EXISTS (
           SELECT 1 FROM threads
           WHERE threads.environment_id = ${environments.id}

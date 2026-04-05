@@ -50,6 +50,7 @@ export type {
 } from "./sandbox-backend.js";
 
 export {
+  environmentCleanupModeSchema,
   WORKSPACE_PROVISION_TYPES,
   discoveredWorkspacePropertiesSchema,
   environmentSchema,
@@ -60,6 +61,7 @@ export {
 export type {
   DiscoveredWorkspaceProperties,
   Environment,
+  EnvironmentCleanupMode,
   EnvironmentStatus,
   WorkspaceProvisionType,
 } from "./environment.js";

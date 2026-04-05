@@ -1801,7 +1801,7 @@ describe("public thread routes", () => {
     }
   });
 
-  it("archives isolated managed environments while disconnected without authorizing cleanup", async () => {
+  it("archives isolated managed environments while disconnected and records deferred safe cleanup", async () => {
     const harness = await createTestAppHarness();
     try {
       const host = seedHost(harness.deps, { id: "host-archive-managed-offline" });
@@ -1829,7 +1829,11 @@ describe("public thread routes", () => {
 
       expect(response.status).toBe(200);
       expect(getThread(harness.db, thread.id)?.archivedAt).toBeTypeOf("number");
-      expect(getEnvironment(harness.db, environment.id)?.status).toBe("ready");
+      expect(getEnvironment(harness.db, environment.id)).toMatchObject({
+        cleanupMode: "safe",
+        cleanupRequestedAt: expect.any(Number),
+        status: "ready",
+      });
       await expect(
         waitForQueuedCommand(
           harness,
@@ -1963,7 +1967,11 @@ describe("public thread routes", () => {
         body: JSON.stringify({ force: true }),
       });
       expect(archiveResponse.status).toBe(200);
-      expect(getEnvironment(harness.db, environment.id)?.status).toBe("destroying");
+      expect(getEnvironment(harness.db, environment.id)).toMatchObject({
+        cleanupMode: "force",
+        cleanupRequestedAt: expect.any(Number),
+        status: "ready",
+      });
 
       const stopCommand = await waitForQueuedCommand(
         harness,
@@ -2038,7 +2046,7 @@ describe("public thread routes", () => {
     }
   });
 
-  it("marks provisioning managed environments as destroying without queueing an invalid destroy", async () => {
+  it("records provisioning managed cleanup intent without queueing an invalid destroy", async () => {
     const harness = await createTestAppHarness();
     try {
       const { host } = seedHostSession(harness.deps);
@@ -2060,7 +2068,11 @@ describe("public thread routes", () => {
         method: "DELETE",
       });
       expect(response.status).toBe(200);
-      expect(getEnvironment(harness.db, environment.id)?.status).toBe("destroying");
+      expect(getEnvironment(harness.db, environment.id)).toMatchObject({
+        cleanupMode: "force",
+        cleanupRequestedAt: expect.any(Number),
+        status: "provisioning",
+      });
 
       const destroyCommands = harness.db
         .select()

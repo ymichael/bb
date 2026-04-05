@@ -7,12 +7,12 @@ import {
 } from "@bb/db";
 import type { AppDeps } from "../types.js";
 import { sweepDueAutomations } from "./automation-sweep.js";
-import { evaluateManagedEnvironmentArchiveCleanup } from "./environment-cleanup.js";
+import { advanceEnvironmentCleanup } from "./environment-cleanup.js";
 import { destroyHost } from "./host-lifecycle.js";
 import { sweepDueNudges } from "./nudge-sweep.js";
 
 export type EvaluateManagedEnvironmentArchiveCleanupFn =
-  typeof evaluateManagedEnvironmentArchiveCleanup;
+  typeof advanceEnvironmentCleanup;
 export type DestroyHostFn = typeof destroyHost;
 
 export async function runManagedEnvironmentArchiveCleanupSweep(
@@ -67,10 +67,10 @@ export async function runPeriodicSweeps(
     sweepDestroyingEnvironments(deps.db, deps.hub);
     await sweepDueAutomations(deps);
     await sweepDueNudges(deps);
-    await runManagedEnvironmentArchiveCleanupSweep(
-      deps,
-      evaluateManagedEnvironmentArchiveCleanup,
-    );
+      await runManagedEnvironmentArchiveCleanupSweep(
+        deps,
+        advanceEnvironmentCleanup,
+      );
     await runEphemeralHostCleanupSweep(deps, destroyHost);
   } catch (error) {
     deps.logger.error({ err: error }, "Periodic sweep failed");

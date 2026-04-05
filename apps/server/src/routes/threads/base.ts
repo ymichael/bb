@@ -15,7 +15,10 @@ import {
 import type { Hono } from "hono";
 import type { AppDeps } from "../../types.js";
 import { ApiError } from "../../errors.js";
-import { maybeStartEnvironmentCleanup } from "../../services/environment-cleanup.js";
+import {
+  advanceEnvironmentCleanup,
+  requestEnvironmentCleanup,
+} from "../../services/environment-cleanup.js";
 import {
   requireEnvironment,
   requirePublicThread,
@@ -100,7 +103,13 @@ export function registerThreadBaseRoutes(app: Hono, deps: AppDeps): void {
     const connectedSession = getActiveSession(deps.db, environment.hostId);
     if (thread.status !== "active" && connectedSession) {
       deleteThread(deps.db, deps.hub, thread.id);
-      maybeStartEnvironmentCleanup(deps, thread.environmentId);
+      requestEnvironmentCleanup(deps, {
+        environmentId: thread.environmentId,
+        mode: "force",
+      });
+      await advanceEnvironmentCleanup(deps, {
+        environmentId: thread.environmentId,
+      });
       return context.json({ ok: true });
     }
 
@@ -119,7 +128,13 @@ export function registerThreadBaseRoutes(app: Hono, deps: AppDeps): void {
 
     // Active tombstones still block cleanup through the stop-pending guard in
     // environment cleanup until stop finalization removes the runtime.
-    maybeStartEnvironmentCleanup(deps, thread.environmentId);
+    requestEnvironmentCleanup(deps, {
+      environmentId: thread.environmentId,
+      mode: "force",
+    });
+    await advanceEnvironmentCleanup(deps, {
+      environmentId: thread.environmentId,
+    });
     return context.json({ ok: true });
   });
 }

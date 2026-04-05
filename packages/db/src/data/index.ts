@@ -94,11 +94,14 @@ export type {
 
 export {
   applyProvisionedEnvironment,
+  clearEnvironmentCleanupRequest,
   claimManagedEnvironmentReprovision,
   createEnvironment,
   getEnvironment,
   findEnvironmentByHostPath,
   listEnvironments,
+  markEnvironmentDestroyed,
+  requestEnvironmentCleanup,
   updateEnvironmentMetadata,
   updateEnvironmentStatus,
   deleteEnvironment,
@@ -107,6 +110,7 @@ export type {
   ApplyProvisionedEnvironmentInput,
   ClaimManagedEnvironmentReprovisionArgs,
   CreateEnvironmentInput,
+  RequestEnvironmentCleanupInput,
   UpdateEnvironmentMetadataInput,
   UpdateEnvironmentStatusInput,
 } from "./environments.js";

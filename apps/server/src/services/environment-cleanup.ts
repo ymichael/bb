@@ -1,15 +1,21 @@
 import { and, eq, inArray, isNotNull, sql } from "drizzle-orm";
-import type { WorkspaceProvisionType } from "@bb/domain";
+import type {
+  EnvironmentCleanupMode,
+  WorkspaceProvisionType,
+} from "@bb/domain";
 import {
   countLiveThreadsInEnvironment,
   getEnvironment,
   getActiveSession,
   hostDaemonCommands,
+  markEnvironmentDestroyed,
   queueCommand,
+  requestEnvironmentCleanup as requestEnvironmentCleanupRecord,
   threads,
   updateEnvironmentStatus,
 } from "@bb/db";
 import { hostDaemonCommandResultSchemaByType } from "@bb/host-daemon-contract";
+import { ApiError } from "../errors.js";
 import type { AppDeps } from "../types.js";
 import { queueCommandAndWait } from "./command-wait.js";
 
@@ -20,17 +26,23 @@ export interface EnvironmentDestroyTarget {
   workspaceProvisionType: WorkspaceProvisionType;
 }
 
-export interface EvaluateManagedEnvironmentArchiveCleanupArgs {
+export interface AdvanceEnvironmentCleanupArgs {
   environmentId: string | null | undefined;
+}
+
+export interface RequestEnvironmentCleanupArgs {
+  environmentId: string | null | undefined;
+  mode: EnvironmentCleanupMode;
+}
+
+export interface ValidateEnvironmentCleanupRequestArgs {
+  environmentId: string | null | undefined;
+  mode: EnvironmentCleanupMode;
 }
 
 export interface WouldCleanupEnvironmentArgs {
   environmentId: string | null | undefined;
   excludeThreadId: string;
-}
-
-export interface AuthorizeEnvironmentCleanupArgs {
-  environmentId: string | null | undefined;
 }
 
 function hasConnectedHostSession(
@@ -94,69 +106,101 @@ function workspaceHasRiskyChanges(
   );
 }
 
-export function maybeStartEnvironmentCleanup(
+async function assertWorkspaceCanBeSafelyCleaned(
   deps: Pick<AppDeps, "db" | "hub">,
-  environmentId: string | null | undefined,
-): void {
-  if (!environmentId) {
-    return;
-  }
-
+  environmentId: string,
+): Promise<boolean> {
   const environment = getEnvironment(deps.db, environmentId);
   if (
     !environment ||
     !environment.managed ||
-    environment.status === "destroyed"
+    environment.status === "destroyed" ||
+    environment.status !== "ready" ||
+    !environment.path
   ) {
-    return;
+    return false;
   }
 
-  if (countLiveThreadsInEnvironment(deps.db, { environmentId }) > 0) {
-    return;
+  if (!hasConnectedHostSession(deps, environment.hostId)) {
+    return false;
   }
 
-  if (hasPendingThreadShutdowns(deps, environmentId)) {
-    return;
+  if (
+    hasPendingCommandForEnvironment(deps, {
+      environmentId: environment.id,
+      type: "workspace.status",
+    })
+  ) {
+    return false;
   }
 
-  if (environment.status !== "destroying") {
-    updateEnvironmentStatus(deps.db, deps.hub, environmentId, {
-      status: "destroying",
-    });
+  const mergeBaseBranch = environment.mergeBaseBranch ?? environment.defaultBranch;
+  if (environment.isGitRepo && !mergeBaseBranch) {
+    return false;
   }
 
-  if (!environment.path) {
-    return;
-  }
-
-  queueEnvironmentDestroyCommand(deps, {
+  const rawResult = await queueCommandAndWait(deps, {
     hostId: environment.hostId,
-    id: environment.id,
-    path: environment.path,
-    workspaceProvisionType: environment.workspaceProvisionType,
+    timeoutMs: 30_000,
+    command: {
+      type: "workspace.status",
+      environmentId: environment.id,
+      workspaceContext: {
+        workspacePath: environment.path,
+        workspaceProvisionType: environment.workspaceProvisionType,
+      },
+      ...(mergeBaseBranch ? { mergeBaseBranch } : {}),
+    },
   });
+  const result = hostDaemonCommandResultSchemaByType["workspace.status"].parse(rawResult);
+  if (workspaceHasRiskyChanges(result.workspaceStatus)) {
+    throw new ApiError(
+      409,
+      "archive_confirmation_required",
+      "Archiving this thread would clean up a workspace that contains work.",
+    );
+  }
+
+  return true;
 }
 
-export function authorizeEnvironmentCleanup(
+function canRequestCleanup(
+  environment: NonNullable<ReturnType<typeof getEnvironment>>,
+): boolean {
+  return environment.managed && environment.status !== "destroyed";
+}
+
+export async function validateEnvironmentCleanupRequest(
   deps: Pick<AppDeps, "db" | "hub">,
-  args: AuthorizeEnvironmentCleanupArgs,
+  args: ValidateEnvironmentCleanupRequestArgs,
+): Promise<void> {
+  if (!args.environmentId || args.mode === "force") {
+    return;
+  }
+
+  const environment = getEnvironment(deps.db, args.environmentId);
+  if (!environment || !canRequestCleanup(environment)) {
+    return;
+  }
+
+  await assertWorkspaceCanBeSafelyCleaned(deps, environment.id);
+}
+
+export function requestEnvironmentCleanup(
+  deps: Pick<AppDeps, "db" | "hub">,
+  args: RequestEnvironmentCleanupArgs,
 ): void {
   if (!args.environmentId) {
     return;
   }
 
   const environment = getEnvironment(deps.db, args.environmentId);
-  if (
-    !environment ||
-    !environment.managed ||
-    environment.status === "destroyed" ||
-    environment.status === "destroying"
-  ) {
+  if (!environment || !canRequestCleanup(environment)) {
     return;
   }
 
-  updateEnvironmentStatus(deps.db, deps.hub, environment.id, {
-    status: "destroying",
+  requestEnvironmentCleanupRecord(deps.db, deps.hub, environment.id, {
+    cleanupMode: args.mode,
   });
 }
 
@@ -189,6 +233,20 @@ export function queueEnvironmentDestroyCommand(
   });
 }
 
+function queueDestroyAndMarkDestroying(
+  deps: Pick<AppDeps, "db" | "hub">,
+  environment: EnvironmentDestroyTarget & {
+    status: NonNullable<ReturnType<typeof getEnvironment>>["status"];
+  },
+): void {
+  queueEnvironmentDestroyCommand(deps, environment);
+  if (environment.status !== "destroying") {
+    updateEnvironmentStatus(deps.db, deps.hub, environment.id, {
+      status: "destroying",
+    });
+  }
+}
+
 export function wouldCleanupEnvironment(
   deps: Pick<AppDeps, "db">,
   args: WouldCleanupEnvironmentArgs,
@@ -208,9 +266,9 @@ export function wouldCleanupEnvironment(
   }) === 0;
 }
 
-export async function evaluateManagedEnvironmentArchiveCleanup(
+export async function advanceEnvironmentCleanup(
   deps: Pick<AppDeps, "db" | "hub">,
-  args: EvaluateManagedEnvironmentArchiveCleanupArgs,
+  args: AdvanceEnvironmentCleanupArgs,
 ): Promise<void> {
   if (!args.environmentId) {
     return;
@@ -220,7 +278,9 @@ export async function evaluateManagedEnvironmentArchiveCleanup(
   if (
     !environment ||
     !environment.managed ||
-    environment.status === "destroyed"
+    environment.status === "destroyed" ||
+    environment.cleanupRequestedAt === null ||
+    environment.cleanupMode === null
   ) {
     return;
   }
@@ -233,11 +293,16 @@ export async function evaluateManagedEnvironmentArchiveCleanup(
     return;
   }
 
-  if (environment.status === "destroying") {
-    if (!environment.path) {
+  if (!environment.path) {
+    if (environment.status === "provisioning") {
       return;
     }
 
+    markEnvironmentDestroyed(deps.db, deps.hub, environment.id);
+    return;
+  }
+
+  if (environment.status === "destroying") {
     queueEnvironmentDestroyCommand(deps, {
       hostId: environment.hostId,
       id: environment.id,
@@ -247,46 +312,50 @@ export async function evaluateManagedEnvironmentArchiveCleanup(
     return;
   }
 
-  if (environment.status !== "ready" || !environment.path) {
-    maybeStartEnvironmentCleanup(deps, environment.id);
+  if (environment.cleanupMode === "safe") {
+    const canDestroyNow = await assertWorkspaceCanBeSafelyCleaned(
+      deps,
+      environment.id,
+    );
+    if (!canDestroyNow) {
+      return;
+    }
+
+    const refreshedEnvironment = getEnvironment(deps.db, environment.id);
+    if (
+      !refreshedEnvironment ||
+      refreshedEnvironment.status === "destroyed" ||
+      refreshedEnvironment.cleanupRequestedAt === null ||
+      refreshedEnvironment.cleanupMode === null ||
+      refreshedEnvironment.status !== "ready" ||
+      !refreshedEnvironment.path
+    ) {
+      return;
+    }
+
+    if (countLiveThreadsInEnvironment(deps.db, { environmentId: refreshedEnvironment.id }) > 0) {
+      return;
+    }
+
+    if (hasPendingThreadShutdowns(deps, refreshedEnvironment.id)) {
+      return;
+    }
+
+    queueDestroyAndMarkDestroying(deps, {
+      hostId: refreshedEnvironment.hostId,
+      id: refreshedEnvironment.id,
+      path: refreshedEnvironment.path,
+      status: refreshedEnvironment.status,
+      workspaceProvisionType: refreshedEnvironment.workspaceProvisionType,
+    });
     return;
   }
 
-  if (!hasConnectedHostSession(deps, environment.hostId)) {
-    return;
-  }
-
-  if (
-    hasPendingCommandForEnvironment(deps, {
-      environmentId: environment.id,
-      type: "workspace.status",
-    })
-  ) {
-    return;
-  }
-
-  const mergeBaseBranch = environment.mergeBaseBranch ?? environment.defaultBranch;
-  if (environment.isGitRepo && !mergeBaseBranch) {
-    return;
-  }
-
-  const rawResult = await queueCommandAndWait(deps, {
+  queueDestroyAndMarkDestroying(deps, {
     hostId: environment.hostId,
-    timeoutMs: 30_000,
-    command: {
-      type: "workspace.status",
-      environmentId: environment.id,
-      workspaceContext: {
-        workspacePath: environment.path,
-        workspaceProvisionType: environment.workspaceProvisionType,
-      },
-      ...(mergeBaseBranch ? { mergeBaseBranch } : {}),
-    },
+    id: environment.id,
+    path: environment.path,
+    status: environment.status,
+    workspaceProvisionType: environment.workspaceProvisionType,
   });
-  const result = hostDaemonCommandResultSchemaByType["workspace.status"].parse(rawResult);
-  if (workspaceHasRiskyChanges(result.workspaceStatus)) {
-    return;
-  }
-
-  maybeStartEnvironmentCleanup(deps, environment.id);
 }

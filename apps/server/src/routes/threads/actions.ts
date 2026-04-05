@@ -3,11 +3,9 @@ import {
   createDraft,
   deleteDraft,
   getDraft,
-  getActiveSession,
   unarchiveThread,
   updateThread,
 } from "@bb/db";
-import { hostDaemonCommandResultSchemaByType } from "@bb/host-daemon-contract";
 import {
   archiveThreadRequestSchema,
   createDraftRequestSchema,
@@ -17,14 +15,14 @@ import {
   type PublicApiSchema,
 } from "@bb/server-contract";
 import type { Hono } from "hono";
-import type { Environment, Thread } from "@bb/domain";
+import type { Thread } from "@bb/domain";
 import type { AppDeps } from "../../types.js";
-import { COMMAND_TIMEOUT_MS } from "../../constants.js";
 import { ApiError } from "../../errors.js";
 import { toQueuedMessage } from "../../services/drafts.js";
 import {
-  authorizeEnvironmentCleanup,
-  maybeStartEnvironmentCleanup,
+  advanceEnvironmentCleanup,
+  requestEnvironmentCleanup,
+  validateEnvironmentCleanupRequest,
   wouldCleanupEnvironment,
 } from "../../services/environment-cleanup.js";
 import {
@@ -40,7 +38,6 @@ import {
   pruneThreadEventHistoryBestEffort,
   resetActiveThreadEventPruningState,
 } from "../../services/event-pruning.js";
-import { queueCommandAndWait } from "../../services/command-wait.js";
 import {
   buildExecutionOptions,
   queueReadyThreadTurnCommand,
@@ -101,66 +98,24 @@ function requestThreadStopIfNeeded(
   });
 }
 
-async function resolveArchiveCleanupTiming(
+async function validateArchiveCleanupRequest(
   deps: AppDeps,
   thread: Thread,
-  environment: Environment,
   force: boolean,
 ): Promise<boolean> {
-  const willCleanupEnvironment = wouldCleanupEnvironment(deps, {
+  const shouldRequestCleanup = wouldCleanupEnvironment(deps, {
     environmentId: thread.environmentId,
     excludeThreadId: thread.id,
   });
 
-  if (!willCleanupEnvironment) {
+  if (!shouldRequestCleanup) {
     return false;
   }
 
-  if (force) {
-    return true;
-  }
-
-  if (environment.status !== "ready" || !environment.path) {
-    return true;
-  }
-
-  const session = getActiveSession(deps.db, environment.hostId);
-  if (!session || session.leaseExpiresAt <= Date.now()) {
-    // Defer cleanup until the reconnect/sweep path can validate workspace state.
-    return false;
-  }
-
-  const mergeBaseBranch = environment.mergeBaseBranch ?? environment.defaultBranch;
-  if (environment.isGitRepo && !mergeBaseBranch) {
-    return false;
-  }
-
-  const status = hostDaemonCommandResultSchemaByType["workspace.status"].parse(
-    await queueCommandAndWait(deps, {
-      hostId: environment.hostId,
-      timeoutMs: COMMAND_TIMEOUT_MS,
-      command: {
-        type: "workspace.status",
-        environmentId: environment.id,
-        workspaceContext: {
-          workspacePath: environment.path,
-          workspaceProvisionType: environment.workspaceProvisionType,
-        },
-        ...(mergeBaseBranch ? { mergeBaseBranch } : {}),
-      },
-    }),
-  );
-  if (
-    status.workspaceStatus.workingTree.hasUncommittedChanges ||
-    status.workspaceStatus.mergeBase?.hasCommittedUnmergedChanges === true
-  ) {
-    throw new ApiError(
-      409,
-      "archive_confirmation_required",
-      "Archiving this thread would clean up a workspace that contains work.",
-    );
-  }
-
+  await validateEnvironmentCleanupRequest(deps, {
+    environmentId: thread.environmentId,
+    mode: force ? "force" : "safe",
+  });
   return true;
 }
 
@@ -300,10 +255,9 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
     if (thread.archivedAt !== null) {
       throw new ApiError(409, "invalid_request", "Thread is already archived");
     }
-    const shouldEvaluateCleanupAfterArchiveNow = await resolveArchiveCleanupTiming(
+    const shouldRequestCleanup = await validateArchiveCleanupRequest(
       deps,
       thread,
-      environment,
       force,
     );
     archiveThread(deps.db, deps.hub, thread.id);
@@ -313,10 +267,12 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
       mode: "archived",
       threadId: thread.id,
     });
-    if (thread.status !== "active" && shouldEvaluateCleanupAfterArchiveNow) {
-      maybeStartEnvironmentCleanup(deps, thread.environmentId);
-    } else if (thread.status === "active" && force && shouldEvaluateCleanupAfterArchiveNow) {
-      authorizeEnvironmentCleanup(deps, {
+    if (shouldRequestCleanup) {
+      requestEnvironmentCleanup(deps, {
+        environmentId: thread.environmentId,
+        mode: force ? "force" : "safe",
+      });
+      await advanceEnvironmentCleanup(deps, {
         environmentId: thread.environmentId,
       });
     }

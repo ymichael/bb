@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { getHost, upsertHost } from "@bb/db";
+import { getHost, requestEnvironmentCleanup, upsertHost } from "@bb/db";
 import {
   runEphemeralHostCleanupSweep,
   runManagedEnvironmentArchiveCleanupSweep,
@@ -35,6 +35,14 @@ describe("periodic sweeps", () => {
         managed: true,
         workspaceProvisionType: "managed-worktree",
         path: "/tmp/periodic-sweep-second",
+      });
+      requestEnvironmentCleanup(harness.db, harness.hub, firstEnvironment.id, {
+        cleanupMode: "force",
+        requestedAt: 123,
+      });
+      requestEnvironmentCleanup(harness.db, harness.hub, secondEnvironment.id, {
+        cleanupMode: "force",
+        requestedAt: 456,
       });
 
       const visitedEnvironmentIds: string[] = [];

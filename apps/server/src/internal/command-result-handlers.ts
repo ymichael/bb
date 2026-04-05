@@ -8,7 +8,9 @@ import {
   getHost,
   getThread,
   hostDaemonCommands,
+  markEnvironmentDestroyed,
   threads,
+  requestEnvironmentCleanup,
   updateEnvironmentStatus,
 } from "@bb/db";
 import {
@@ -25,9 +27,7 @@ import {
 } from "../services/thread-events.js";
 import { queueThreadStartCommand } from "../services/thread-commands.js";
 import {
-  evaluateManagedEnvironmentArchiveCleanup,
-  maybeStartEnvironmentCleanup,
-  queueEnvironmentDestroyCommand,
+  advanceEnvironmentCleanup,
 } from "../services/environment-cleanup.js";
 import { destroyEphemeralHostIfReady } from "../services/host-lifecycle.js";
 import { tryTransition } from "../services/thread-transitions.js";
@@ -84,26 +84,15 @@ async function handleProvisionCommandResult(
     .all();
 
   if (report.ok) {
-    const shouldDestroyAfterProvision = environment?.status === "destroying";
     applyProvisionedEnvironment(deps.db, deps.hub, command.environmentId, {
       path: report.result.path,
-      status: shouldDestroyAfterProvision ? "destroying" : "ready",
+      status: "ready",
       isGitRepo: report.result.isGitRepo,
       isWorktree: report.result.isWorktree,
       branchName: report.result.branchName,
       defaultBranch: report.result.defaultBranch,
     });
     deps.hub.notifyEnvironment(command.environmentId, ["work-status-changed"]);
-
-    if (shouldDestroyAfterProvision) {
-      queueEnvironmentDestroyCommand(deps, {
-        hostId: commandRow.hostId,
-        id: command.environmentId,
-        path: report.result.path,
-        workspaceProvisionType: command.workspaceProvisionType,
-      });
-      return;
-    }
 
     const cwdBranchEntries = buildCwdBranchEntries({
       path: report.result.path,
@@ -114,7 +103,11 @@ async function handleProvisionCommandResult(
       if (thread.deletedAt !== null) {
         const environmentId = thread.environmentId;
         deleteThread(deps.db, deps.hub, thread.id);
-        maybeStartEnvironmentCleanup(deps, environmentId);
+        if (environmentId !== null) {
+          requestEnvironmentCleanup(deps.db, deps.hub, environmentId, {
+            cleanupMode: "force",
+          });
+        }
         continue;
       }
 
@@ -191,6 +184,12 @@ async function handleProvisionCommandResult(
       tryTransition(deps.db, deps.hub, thread.id, "active");
     }
 
+    if (environment?.cleanupRequestedAt !== null) {
+      await advanceEnvironmentCleanup(deps, {
+        environmentId: command.environmentId,
+      });
+    }
+
     return;
   }
 
@@ -221,6 +220,12 @@ async function handleProvisionCommandResult(
     });
     tryTransition(deps.db, deps.hub, thread.id, "error");
   }
+
+  if (environment?.cleanupRequestedAt !== null) {
+    await advanceEnvironmentCleanup(deps, {
+      environmentId: command.environmentId,
+    });
+  }
 }
 
 async function handleEnvironmentDestroyResult(
@@ -239,9 +244,7 @@ async function handleEnvironmentDestroyResult(
   if (environment?.status !== "destroying") {
     return;
   }
-  updateEnvironmentStatus(deps.db, deps.hub, command.environmentId, {
-    status: "destroyed",
-  });
+  markEnvironmentDestroyed(deps.db, deps.hub, command.environmentId);
 
   const host = getHost(deps.db, environment.hostId);
   if (host?.type !== "ephemeral") {
@@ -309,12 +312,17 @@ async function finalizeStoppedThread(
   if (finalizedThread.deletedAt !== null) {
     const environmentId = finalizedThread.environmentId;
     deleteThread(deps.db, deps.hub, finalizedThread.id);
-    maybeStartEnvironmentCleanup(deps, environmentId);
+    if (environmentId !== null) {
+      requestEnvironmentCleanup(deps.db, deps.hub, environmentId, {
+        cleanupMode: "force",
+      });
+    }
+    await advanceEnvironmentCleanup(deps, { environmentId });
     return;
   }
 
   if (finalizedThread.archivedAt !== null) {
-    await evaluateManagedEnvironmentArchiveCleanup(deps, {
+    await advanceEnvironmentCleanup(deps, {
       environmentId: finalizedThread.environmentId,
     });
   }

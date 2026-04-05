@@ -18,7 +18,10 @@ import {
   markThreadDeleted,
   markThreadStopRequested,
 } from "../../src/data/threads.js";
-import { createEnvironment } from "../../src/data/environments.js";
+import {
+  createEnvironment,
+  requestEnvironmentCleanup,
+} from "../../src/data/environments.js";
 import { openSession } from "../../src/data/sessions.js";
 import { queueCommand, fetchCommands } from "../../src/data/commands.js";
 import {
@@ -325,7 +328,7 @@ describe("sweepExpiredLeases", () => {
 });
 
 describe("sweepManagedEnvironments", () => {
-  it("returns managed environments with zero non-archived threads", () => {
+  it("returns managed environments with cleanup requested and zero non-archived threads", () => {
     const { db, host, project } = setup();
 
     const env = createEnvironment(db, noopNotifier, {
@@ -337,7 +340,11 @@ describe("sweepManagedEnvironments", () => {
       status: "ready",
     });
 
-    // No threads at all → should be a candidate
+    requestEnvironmentCleanup(db, noopNotifier, env.id, {
+      cleanupMode: "force",
+      requestedAt: 123,
+    });
+
     const candidates1 = sweepManagedEnvironments(db);
     expect(candidates1).toHaveLength(1);
     expect(candidates1[0]!.id).toBe(env.id);
@@ -353,6 +360,11 @@ describe("sweepManagedEnvironments", () => {
       managed: true,
       workspaceProvisionType: "managed-worktree",
       status: "ready",
+    });
+
+    requestEnvironmentCleanup(db, noopNotifier, env.id, {
+      cleanupMode: "force",
+      requestedAt: 123,
     });
 
     createThread(db, noopNotifier, {
@@ -383,6 +395,11 @@ describe("sweepManagedEnvironments", () => {
       environmentId: env.id,
       providerId: "codex",
       status: "idle",
+    });
+
+    requestEnvironmentCleanup(db, noopNotifier, env.id, {
+      cleanupMode: "safe",
+      requestedAt: 123,
     });
 
     // Not a candidate while thread is active
@@ -416,6 +433,11 @@ describe("sweepManagedEnvironments", () => {
       status: "idle",
     });
 
+    requestEnvironmentCleanup(db, noopNotifier, env.id, {
+      cleanupMode: "force",
+      requestedAt: 123,
+    });
+
     markThreadDeleted(db, noopNotifier, { threadId: thread.id });
 
     const candidates = sweepManagedEnvironments(db);
@@ -426,7 +448,7 @@ describe("sweepManagedEnvironments", () => {
   it("does not return unmanaged environments", () => {
     const { db, host, project } = setup();
 
-    createEnvironment(db, noopNotifier, {
+    const env = createEnvironment(db, noopNotifier, {
       projectId: project.id,
       hostId: host.id,
       path: "/tmp/env",
@@ -435,24 +457,32 @@ describe("sweepManagedEnvironments", () => {
       status: "ready",
     });
 
+    requestEnvironmentCleanup(db, noopNotifier, env.id, {
+      cleanupMode: "force",
+      requestedAt: 123,
+    });
+
     const candidates = sweepManagedEnvironments(db);
     expect(candidates).toHaveLength(0);
   });
 
-  it("does not return environments already being destroyed", () => {
+  it("returns destroying environments with cleanup requested so sweeps can resume destroy queueing", () => {
     const { db, host, project } = setup();
 
-    createEnvironment(db, noopNotifier, {
+    const env = createEnvironment(db, noopNotifier, {
       projectId: project.id,
       hostId: host.id,
       path: "/tmp/env",
       managed: true,
+      cleanupMode: "force",
+      cleanupRequestedAt: 123,
       workspaceProvisionType: "managed-worktree",
       status: "destroying",
     });
 
     const candidates = sweepManagedEnvironments(db);
-    expect(candidates).toHaveLength(0);
+    expect(candidates).toHaveLength(1);
+    expect(candidates[0]!.id).toBe(env.id);
   });
 });
 

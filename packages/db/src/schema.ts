@@ -10,6 +10,7 @@ import { sql } from "drizzle-orm";
 import type { AnySQLiteColumn } from "drizzle-orm/sqlite-core";
 import { threadStatusValues } from "@bb/domain";
 import type {
+  EnvironmentCleanupMode,
   EnvironmentStatus,
   HostType,
   ProjectSourceType,
@@ -102,6 +103,8 @@ export const environments = sqliteTable(
     branchName: text("branch_name"),
     defaultBranch: text("default_branch"),
     mergeBaseBranch: text("merge_base_branch"),
+    cleanupRequestedAt: integer("cleanup_requested_at"),
+    cleanupMode: text("cleanup_mode").$type<EnvironmentCleanupMode>(),
     workspaceProvisionType: text("workspace_provision_type")
       .$type<WorkspaceProvisionType>()
       .notNull(),
@@ -112,6 +115,7 @@ export const environments = sqliteTable(
   (table) => [
     uniqueIndex("environments_host_path_idx").on(table.hostId, table.path),
     index("environments_project_idx").on(table.projectId),
+    index("environments_cleanup_requested_idx").on(table.cleanupRequestedAt),
     index("environments_status_idx").on(table.status),
   ],
 );
