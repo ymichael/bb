@@ -6,6 +6,7 @@ import {
 } from "@bb/db";
 import type { AppDeps } from "../types.js";
 import { ApiError } from "../errors.js";
+import { requireReachablePublicServerUrl } from "./public-server-url.js";
 import { requireSandboxBackendForHost } from "./sandbox-backends.js";
 
 const DEFAULT_SESSION_WAIT_TIMEOUT_MS = 60_000;
@@ -106,7 +107,7 @@ function loadSandboxHostFromBackend(
       externalId: host.externalId,
       hostId: host.id,
       hostName: host.name,
-      serverUrl: deps.config.publicUrl,
+      serverUrl: requireReachablePublicServerUrl(deps.config),
     });
 
   if (mode === "refresh") {

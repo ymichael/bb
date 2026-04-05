@@ -15,7 +15,7 @@ export interface ServerRuntimeConfig {
   hostDaemonPort: number;
   inferenceModel: string;
   openAiApiKey: string;
-  publicUrl: string;
+  publicUrl?: string;
 }
 
 export interface AppDeps {

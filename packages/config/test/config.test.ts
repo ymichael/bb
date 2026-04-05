@@ -58,7 +58,7 @@ describe("consumer-specific config", () => {
 
     expect(serverConfig.BB_SERVER_PORT).toBe(3334);
     expect(serverConfig.BB_DATABASE_URL).toBe("/tmp/bb-data/bb.db");
-    expect(serverConfig.BB_PUBLIC_URL).toBe("http://localhost:3334");
+    expect(serverConfig.BB_PUBLIC_URL).toBe("");
     expect(serverConfig.E2B_API_KEY).toBe("");
     expect(serverConfig.E2B_TEMPLATE).toBe("");
     expect(serverConfig.BB_GITHUB_PAT).toBe("");
@@ -100,16 +100,18 @@ describe("consumer-specific config", () => {
     ).rejects.toThrow(/BB_SERVER_URL/u);
   });
 
-  it("requires BB_PUBLIC_URL in production server config", async () => {
+  it("allows BB_PUBLIC_URL to be omitted in production server config", async () => {
     vi.stubEnv("NODE_ENV", "production");
     vi.stubEnv("BB_PUBLIC_URL", undefined);
     vi.stubEnv("BB_SECRET_TOKEN", "test-secret-token");
     vi.stubEnv("OPENAI_API_KEY", "test-openai-key");
     vi.stubEnv("ANTHROPIC_API_KEY", "test-anthropic-key");
 
-    await expect(
-      importFresh<typeof import("../src/server.js")>("../src/server.js"),
-    ).rejects.toThrow(/BB_PUBLIC_URL/u);
+    const { serverConfig } = await importFresh<typeof import("../src/server.js")>(
+      "../src/server.js",
+    );
+
+    expect(serverConfig.BB_PUBLIC_URL).toBe("");
   });
 
   it("reads the dev-env tunnel token from its dedicated config scope", async () => {

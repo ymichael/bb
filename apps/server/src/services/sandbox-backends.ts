@@ -12,11 +12,12 @@ import type {
 import { ApiError } from "../errors.js";
 import type { ServerRuntimeConfig } from "../types.js";
 import { buildSandboxDaemonEnv } from "./sandbox-daemon-env.js";
+import { hasConfiguredReachablePublicServerUrl } from "./public-server-url.js";
 import { hasConfiguredSandboxTemplate } from "./sandbox-config.js";
 
 export type SandboxBackendInfoResolverConfig = Pick<
   ServerRuntimeConfig,
-  "e2bApiKey" | "e2bTemplate" | "githubPat"
+  "e2bApiKey" | "e2bTemplate" | "githubPat" | "publicUrl"
 >;
 
 export type SandboxBackendConfig = Pick<
@@ -81,7 +82,8 @@ function isE2BBackendAvailable(config: SandboxBackendInfoResolverConfig): boolea
   return (
     config.e2bApiKey !== "" &&
     hasConfiguredSandboxTemplate(config) &&
-    config.githubPat !== ""
+    config.githubPat !== "" &&
+    hasConfiguredReachablePublicServerUrl(config)
   );
 }
 

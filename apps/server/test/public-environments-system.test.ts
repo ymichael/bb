@@ -837,6 +837,24 @@ describe("public environment and system routes", () => {
     }
   });
 
+  it("reports sandbox provisioning as disabled when BB_PUBLIC_URL is unset", async () => {
+    const harness = await createTestAppHarness({
+      publicUrl: undefined,
+    });
+    try {
+      const response = await harness.app.request("/api/v1/system/config");
+      expect(response.status).toBe(200);
+      await expect(readJson(response)).resolves.toEqual({
+        e2bConfigured: false,
+        githubConnected: false,
+        hostDaemonPort: 3001,
+        voiceTranscriptionEnabled: true,
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("lists sandbox backends and availability from GET /system/sandbox-backends", async () => {
     const harness = await createTestAppHarness({
       githubPat: "test-github-pat",
@@ -847,6 +865,31 @@ describe("public environment and system routes", () => {
       await expect(readJson(response)).resolves.toEqual([
         {
           available: true,
+          capabilities: {
+            supportsManagedClone: true,
+            supportsManagedWorktree: false,
+            supportsSuspend: true,
+          },
+          displayName: "E2B",
+          id: "e2b",
+        },
+      ]);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("marks sandbox backends unavailable when BB_PUBLIC_URL is unset", async () => {
+    const harness = await createTestAppHarness({
+      githubPat: "test-github-pat",
+      publicUrl: undefined,
+    });
+    try {
+      const response = await harness.app.request("/api/v1/system/sandbox-backends");
+      expect(response.status).toBe(200);
+      await expect(readJson(response)).resolves.toEqual([
+        {
+          available: false,
           capabilities: {
             supportsManagedClone: true,
             supportsManagedWorktree: false,

@@ -1,9 +1,9 @@
-import { BlockList, isIP } from "node:net";
 import {
   applyProvisionedEnvironment,
   createEnvironment,
   createHostId,
   createThread,
+  deleteEnvironment,
   deleteHost,
   deleteThread,
   findEnvironmentByHostPath,
@@ -22,6 +22,7 @@ import { queueCommandAndWait } from "./command-wait.js";
 import { COMMAND_TIMEOUT_MS } from "../constants.js";
 import { requireConnectedHostSession } from "./entity-lookup.js";
 import { destroyHost, waitForHostSession } from "./host-lifecycle.js";
+import { requireReachablePublicServerUrl } from "./public-server-url.js";
 import { createSandboxBackendForId } from "./sandbox-backends.js";
 import { appendClientTurnEvent, appendProvisioningEvent, buildCwdBranchEntries } from "./thread-events.js";
 import { buildExecutionOptions, queueThreadStartCommand } from "./thread-commands.js";
@@ -60,17 +61,12 @@ interface CreateSandboxHostThreadArgs {
   sandboxType: string;
 }
 
-const unreachableSandboxPublicUrlBlockList = new BlockList();
-unreachableSandboxPublicUrlBlockList.addAddress("0.0.0.0", "ipv4");
-unreachableSandboxPublicUrlBlockList.addAddress("127.0.0.1", "ipv4");
-unreachableSandboxPublicUrlBlockList.addAddress("::", "ipv6");
-unreachableSandboxPublicUrlBlockList.addAddress("::1", "ipv6");
-unreachableSandboxPublicUrlBlockList.addSubnet("10.0.0.0", 8, "ipv4");
-unreachableSandboxPublicUrlBlockList.addSubnet("169.254.0.0", 16, "ipv4");
-unreachableSandboxPublicUrlBlockList.addSubnet("172.16.0.0", 12, "ipv4");
-unreachableSandboxPublicUrlBlockList.addSubnet("192.168.0.0", 16, "ipv4");
-unreachableSandboxPublicUrlBlockList.addSubnet("fc00::", 7, "ipv6");
-unreachableSandboxPublicUrlBlockList.addSubnet("fe80::", 10, "ipv6");
+interface CleanupFailedSandboxHostThreadArgs {
+  environmentId?: string;
+  hostId: string;
+  logger: Pick<AppDeps["logger"], "warn">;
+  threadId?: string;
+}
 
 async function createThreadInEnvironment(
   deps: Pick<AppDeps, "config" | "db" | "hub" | "logger">,
@@ -81,62 +77,62 @@ async function createThreadInEnvironment(
     args.request,
     args.environment.id,
   );
-  transitionThreadStatus(deps.db, deps.hub, thread.id, args.threadStatus);
+  try {
+    transitionThreadStatus(deps.db, deps.hub, thread.id, args.threadStatus);
 
-  const execution = await buildExecutionOptions(
-    deps,
-    args.request,
-    {
-      threadId: thread.id,
-    },
-    "client/thread/start",
-  );
+    const execution = await buildExecutionOptions(
+      deps,
+      args.request,
+      {
+        threadId: thread.id,
+      },
+      "client/thread/start",
+    );
 
-  const eventSequence = appendClientTurnEvent(
-    deps,
-    {
-      threadId: thread.id,
-      environmentId: args.environment.id,
-      type: "client/thread/start",
-      input: args.request.input,
-      execution,
-      initiator: args.request.spawnInitiator ?? "user",
-      requestMethod: "thread/start",
-      source: "spawn",
-    },
-  );
-
-  if (args.threadStatus === "provisioning") {
-    appendProvisioningEvent(deps, {
-      threadId: thread.id,
-      environmentId: args.environment.id,
-      status: "started",
-      entries: [
-        {
-          type: "step",
-          key: "provision",
-          text: "Waiting for environment...",
-          status: "started",
-        },
-      ],
-    });
-  }
-
-  if (args.threadStatus === "idle") {
-    let latestSequence = eventSequence;
-    if (args.environment.path) {
-      const cwdEntries = buildCwdBranchEntries({
-        path: args.environment.path,
-        branchName: args.environment.branchName,
-      });
-      latestSequence = appendProvisioningEvent(deps, {
+    const eventSequence = appendClientTurnEvent(
+      deps,
+      {
         threadId: thread.id,
         environmentId: args.environment.id,
-        status: "completed",
-        entries: cwdEntries,
+        type: "client/thread/start",
+        input: args.request.input,
+        execution,
+        initiator: args.request.spawnInitiator ?? "user",
+        requestMethod: "thread/start",
+        source: "spawn",
+      },
+    );
+
+    if (args.threadStatus === "provisioning") {
+      appendProvisioningEvent(deps, {
+        threadId: thread.id,
+        environmentId: args.environment.id,
+        status: "started",
+        entries: [
+          {
+            type: "step",
+            key: "provision",
+            text: "Waiting for environment...",
+            status: "started",
+          },
+        ],
       });
     }
-    try {
+
+    if (args.threadStatus === "idle") {
+      let latestSequence = eventSequence;
+      if (args.environment.path) {
+        const cwdEntries = buildCwdBranchEntries({
+          path: args.environment.path,
+          branchName: args.environment.branchName,
+        });
+        latestSequence = appendProvisioningEvent(deps, {
+          threadId: thread.id,
+          environmentId: args.environment.id,
+          status: "completed",
+          entries: cwdEntries,
+        });
+      }
       await startQueuedThreadIfNeeded(deps, {
         thread,
         environment: args.environment,
@@ -144,10 +140,10 @@ async function createThreadInEnvironment(
         eventSequence: latestSequence,
         request: args.request,
       });
-    } catch (error) {
-      deleteThread(deps.db, deps.hub, thread.id);
-      throw error;
     }
+  } catch (error) {
+    deleteThread(deps.db, deps.hub, thread.id);
+    throw error;
   }
 
   if (!args.request.title) {
@@ -160,29 +156,27 @@ async function createThreadInEnvironment(
   return getThreadSafe(deps, thread.id);
 }
 
-function ensurePublicServerUrl(publicUrl: string): string {
-  const parsedUrl = new URL(publicUrl);
-  const hostname = parsedUrl.hostname;
-  const normalizedHostname =
-    hostname.startsWith("[") && hostname.endsWith("]")
-      ? hostname.slice(1, -1)
-      : hostname;
-  const ipVersion = isIP(normalizedHostname);
-
-  if (
-    normalizedHostname === "localhost" ||
-    (ipVersion === 4 &&
-      unreachableSandboxPublicUrlBlockList.check(normalizedHostname, "ipv4")) ||
-    (ipVersion === 6 &&
-      unreachableSandboxPublicUrlBlockList.check(normalizedHostname, "ipv6"))
-  ) {
-    throw new ApiError(
-      409,
-      "invalid_request",
-      "Sandbox provisioning requires BB_PUBLIC_URL to be reachable from the internet",
+async function cleanupFailedSandboxHostThread(
+  deps: Pick<AppDeps, "config" | "db" | "hub" | "logger" | "sandboxRegistry">,
+  args: CleanupFailedSandboxHostThreadArgs,
+): Promise<void> {
+  if (args.threadId) {
+    deleteThread(deps.db, deps.hub, args.threadId);
+  }
+  if (args.environmentId) {
+    deleteEnvironment(deps.db, deps.hub, args.environmentId);
+  }
+  try {
+    await destroyHost(deps, args.hostId);
+  } catch (destroyError) {
+    args.logger.warn(
+      {
+        err: destroyError,
+        hostId: args.hostId,
+      },
+      "Failed to destroy sandbox host after provisioning failure",
     );
   }
-  return publicUrl;
 }
 
 async function reuseEnvironmentByHostPath(
@@ -274,7 +268,7 @@ async function createSandboxHostThread(
       config: deps.config,
       hostId,
       hostName,
-      serverUrl: ensurePublicServerUrl(deps.config.publicUrl),
+      serverUrl: requireReachablePublicServerUrl(deps.config),
     });
   } catch (error) {
     deleteHost(deps.db, deps.hub, hostId);
@@ -286,23 +280,6 @@ async function createSandboxHostThread(
   });
   deps.sandboxRegistry.set(hostId, sandboxHost);
 
-  try {
-    await waitForHostSession(deps, hostId);
-  } catch (error) {
-    try {
-      await destroyHost(deps, hostId);
-    } catch (destroyError) {
-      deps.logger.warn(
-        {
-          err: destroyError,
-          hostId,
-        },
-        "Failed to destroy sandbox host after session wait failure",
-      );
-    }
-    throw error;
-  }
-
   const environment = createEnvironment(deps.db, deps.hub, {
     hostId,
     managed: true,
@@ -310,11 +287,34 @@ async function createSandboxHostThread(
     status: "provisioning",
     workspaceProvisionType: "managed-clone",
   });
-  const thread = await createThreadInEnvironment(deps, {
-    environment,
-    request: args.request,
-    threadStatus: "provisioning",
-  });
+
+  let thread;
+  try {
+    thread = await createThreadInEnvironment(deps, {
+      environment,
+      request: args.request,
+      threadStatus: "provisioning",
+    });
+  } catch (error) {
+    await cleanupFailedSandboxHostThread(deps, {
+      environmentId: environment.id,
+      hostId,
+      logger: deps.logger,
+    });
+    throw error;
+  }
+
+  try {
+    await waitForHostSession(deps, hostId);
+  } catch (error) {
+    await cleanupFailedSandboxHostThread(deps, {
+      environmentId: environment.id,
+      hostId,
+      logger: deps.logger,
+      threadId: thread.id,
+    });
+    throw error;
+  }
   const provisionEventSequence = getHighWaterMarks(deps.db, [thread.id])[thread.id] ?? 0;
 
   queueEnvironmentProvision(deps, {

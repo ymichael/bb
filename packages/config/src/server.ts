@@ -2,7 +2,7 @@ import { envsafe, port, str } from "envsafe";
 import { join } from "node:path";
 import { commonConfig } from "./common.js";
 import { DEFAULTS } from "./defaults.js";
-import { resolveDevPublicUrl, validateRequiredUrl } from "./public-url.js";
+import { validateOptionalUrl } from "./public-url.js";
 
 export { commonConfig };
 
@@ -32,7 +32,8 @@ const rawServerConfig = envsafe({
   }),
   BB_PUBLIC_URL: str({
     desc: "Public URL sandboxes can use to reach the server",
-    devDefault: resolveDevPublicUrl(),
+    default: "",
+    allowEmpty: true,
   }),
   E2B_API_KEY: str({
     desc: "E2B API key for ephemeral sandbox provisioning (optional)",
@@ -70,6 +71,6 @@ const rawServerConfig = envsafe({
 
 export const serverConfig = {
   ...rawServerConfig,
-  BB_PUBLIC_URL: validateRequiredUrl("BB_PUBLIC_URL", rawServerConfig.BB_PUBLIC_URL),
+  BB_PUBLIC_URL: validateOptionalUrl("BB_PUBLIC_URL", rawServerConfig.BB_PUBLIC_URL),
   BB_INFERENCE_MODEL: validateInferenceModel(rawServerConfig.BB_INFERENCE_MODEL),
 };

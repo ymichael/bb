@@ -20,6 +20,7 @@ import {
   listThreads,
   threads,
 } from "@bb/db";
+import { HOST_DAEMON_PROTOCOL_VERSION } from "@bb/host-daemon-contract";
 import { systemOperationEventDataSchema } from "@bb/domain";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -28,6 +29,8 @@ import {
   waitForQueuedCommandAfter,
 } from "./helpers/commands.js";
 import { readJson } from "./helpers/json.js";
+import { runEphemeralHostCleanupSweep } from "../src/services/periodic-sweeps.js";
+import { destroyHost } from "../src/services/host-lifecycle.js";
 import {
   seedDraft,
   seedEnvironment,
@@ -49,6 +52,8 @@ interface SandboxProvisionCall {
   hostId: string;
   hostName: string;
 }
+
+type AssertionFn = () => void;
 
 // Server tests treat @bb/sandbox-host as the external sandbox boundary.
 // Package-level tests cover the E2B mechanics directly; these tests focus on
@@ -94,6 +99,23 @@ async function createTestGitRepo(): Promise<TestGitRepo> {
       await rm(repoPath, { recursive: true, force: true });
     },
   };
+}
+
+async function waitForAssertion(assertion: AssertionFn): Promise<void> {
+  const deadline = Date.now() + 1_000;
+  let lastMessage = "Condition not met";
+
+  while (Date.now() < deadline) {
+    try {
+      assertion();
+      return;
+    } catch (error) {
+      lastMessage = error instanceof Error ? error.message : "Condition not met";
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+  }
+
+  throw new Error(lastMessage);
 }
 
 function cleanWorkspaceStatus() {
@@ -696,6 +718,107 @@ describe("public thread routes", () => {
     }
   });
 
+  it("does not sweep connecting sandbox hosts before the first session arrives", async () => {
+    const harness = await createTestAppHarness({
+      githubPat: "test-github-pat",
+    });
+    try {
+      let sandboxHostId: string | undefined;
+      let sandboxHostName: string | undefined;
+      provisionHostMock.mockImplementation(async (options: SandboxProvisionCall) => {
+        sandboxHostId = options.hostId;
+        sandboxHostName = options.hostName;
+        return {
+          destroy: vi.fn().mockResolvedValue(undefined),
+          extendTimeout: vi.fn().mockResolvedValue(undefined),
+          externalId: "sandbox-external-connecting",
+          hostId: options.hostId,
+          resume: vi.fn().mockResolvedValue(undefined),
+          suspend: vi.fn().mockResolvedValue(undefined),
+        };
+      });
+
+      const { project } = createProject(harness.db, harness.hub, {
+        name: "Cloud Sandbox Project",
+        source: {
+          repoUrl: "https://github.com/example/repo.git",
+          type: "github_repo",
+        },
+      });
+
+      const responsePromise = harness.app.request("/api/v1/threads", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          projectId: project.id,
+          providerId: "codex",
+          type: "standard",
+          model: "gpt-5",
+          input: [{ type: "text", text: "Provision a sandbox thread" }],
+          environment: {
+            type: "sandbox-host",
+            sandboxType: "e2b",
+          },
+        }),
+      });
+
+      await waitForAssertion(() => {
+        if (!sandboxHostId) {
+          throw new Error("Expected sandbox host provisioning to start");
+        }
+
+        const sandboxHost = getHost(harness.db, sandboxHostId);
+        expect(sandboxHost).toMatchObject({
+          externalId: "sandbox-external-connecting",
+          id: sandboxHostId,
+        });
+
+        const createdThreads = listThreads(harness.db, {
+          archived: false,
+          projectId: project.id,
+        });
+        expect(createdThreads).toHaveLength(1);
+
+        const createdThread = createdThreads[0];
+        expect(createdThread.status).toBe("provisioning");
+        expect(createdThread.environmentId).toMatch(/^env_/u);
+
+        const environment = getEnvironment(harness.db, createdThread.environmentId!);
+        expect(environment).toMatchObject({
+          hostId: sandboxHostId,
+          managed: true,
+          status: "provisioning",
+        });
+      });
+
+      await runEphemeralHostCleanupSweep(harness.deps, destroyHost);
+
+      expect(sandboxHostId).toBeDefined();
+      expect(getHost(harness.db, sandboxHostId!)).toMatchObject({
+        destroyedAt: null,
+        externalId: "sandbox-external-connecting",
+      });
+
+      openSession(harness.db, harness.hub, {
+        dataDir: `/tmp/bb-host-data/${sandboxHostId}`,
+        heartbeatIntervalMs: 10_000,
+        hostId: sandboxHostId!,
+        hostName: sandboxHostName ?? "Test Sandbox Host",
+        hostType: "ephemeral",
+        instanceId: "instance-sandbox-connecting",
+        leaseTimeoutMs: 60_000,
+        protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
+      });
+
+      const response = await responsePromise;
+      expect(response.status).toBe(201);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("cleans up the sandbox host row when provisioning fails", async () => {
     const harness = await createTestAppHarness({
       githubPat: "test-github-pat",
@@ -792,6 +915,49 @@ describe("public thread routes", () => {
         code: "invalid_request",
         message:
           "Sandbox provisioning requires BB_PUBLIC_URL to be reachable from the internet",
+      });
+      expect(provisionHostMock).not.toHaveBeenCalled();
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("rejects sandbox-host threads when BB_PUBLIC_URL is not configured", async () => {
+    const harness = await createTestAppHarness({
+      githubPat: "test-github-pat",
+      publicUrl: undefined,
+    });
+    try {
+      const { project } = createProject(harness.db, harness.hub, {
+        name: "Cloud Sandbox Project",
+        source: {
+          repoUrl: "https://github.com/example/repo.git",
+          type: "github_repo",
+        },
+      });
+
+      const response = await harness.app.request("/api/v1/threads", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          projectId: project.id,
+          providerId: "codex",
+          type: "standard",
+          model: "gpt-5",
+          input: [{ type: "text", text: "Provision a sandbox thread" }],
+          environment: {
+            type: "sandbox-host",
+            sandboxType: "e2b",
+          },
+        }),
+      });
+
+      expect(response.status).toBe(501);
+      await expect(readJson(response)).resolves.toMatchObject({
+        code: "not_configured",
+        message: "Sandbox provisioning requires BB_PUBLIC_URL to be configured",
       });
       expect(provisionHostMock).not.toHaveBeenCalled();
     } finally {
