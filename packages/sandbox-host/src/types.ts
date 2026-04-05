@@ -41,9 +41,30 @@ export interface SandboxHost {
 }
 
 export interface SandboxDaemonArtifacts {
+  bbCli: string;
   claudeCodeBridge: string;
   daemon: string;
   piBridge: string;
+}
+
+export interface BuildSandboxDaemonEnvOptions {
+  authToken: string;
+  daemonEnv: Record<string, string>;
+  hostId: string;
+  hostName: string;
+  serverUrl: string;
+}
+
+export interface StartSandboxDaemonOptions {
+  sandbox: Sandbox;
+  daemonArtifacts?: SandboxDaemonArtifacts;
+  daemonEnv: Record<string, string>;
+}
+
+export interface ResolvedStartSandboxDaemonOptions {
+  sandbox: Sandbox;
+  daemonArtifacts: SandboxDaemonArtifacts;
+  daemonEnv: Record<string, string>;
 }
 
 export interface ProvisionHostOptions {

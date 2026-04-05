@@ -4,6 +4,8 @@ import {
   resumeHost,
 } from "../src/index.js";
 import {
+  SANDBOX_BB_EXECUTABLE_DIR,
+  SANDBOX_BB_EXECUTABLE_PATH,
   SANDBOX_BRIDGE_DIR,
   SANDBOX_CLAUDE_CODE_BRIDGE_PATH,
   SANDBOX_DAEMON_HEALTH_RESPONSE,
@@ -14,6 +16,7 @@ import {
 } from "../src/constants.js";
 
 const testDaemonArtifacts = {
+  bbCli: "#!/usr/bin/env node\nconsole.log('bb');\n",
   claudeCodeBridge: "console.log('claude bridge');",
   daemon: "console.log('daemon');",
   piBridge: "console.log('pi bridge');",
@@ -55,6 +58,7 @@ function createMockSandbox() {
 }
 
 const expectedDaemonEnv = {
+  BB_CLI_DIR: SANDBOX_BB_EXECUTABLE_DIR,
   BB_BRIDGE_DIR: SANDBOX_BRIDGE_DIR,
   BB_DATA_DIR: "/tmp/bb-data",
   BB_HOST_ID: "host-123",
@@ -78,6 +82,7 @@ describe("sandbox host provisioning", () => {
   it("creates a sandbox with daemon envs and lifecycle pause", async () => {
     const sandbox = createMockSandbox();
     sandbox.commands.run
+      .mockResolvedValueOnce({})
       .mockResolvedValueOnce({ pid: 321 })
       .mockResolvedValueOnce({ stdout: `${SANDBOX_DAEMON_HEALTH_RESPONSE}\n` });
     sandboxCreateMock.mockResolvedValue(sandbox);
@@ -95,6 +100,7 @@ describe("sandbox host provisioning", () => {
 
     expect(sandboxCreateMock).toHaveBeenCalledWith("custom-template", {
       envs: {
+        BB_CLI_DIR: SANDBOX_BB_EXECUTABLE_DIR,
         BB_BRIDGE_DIR: SANDBOX_BRIDGE_DIR,
         BB_DATA_DIR: "/tmp/bb-data",
         BB_HOST_ID: "host-123",
@@ -108,8 +114,18 @@ describe("sandbox host provisioning", () => {
     });
     expect(sandbox.files.write).toHaveBeenNthCalledWith(
       1,
+      SANDBOX_BB_EXECUTABLE_PATH,
+      testDaemonArtifacts.bbCli,
+      {},
+    );
+    expect(sandbox.files.write).toHaveBeenNthCalledWith(
+      2,
       SANDBOX_DAEMON_PATH,
       testDaemonArtifacts.daemon,
+      {},
+    );
+    expect(sandbox.commands.run).toHaveBeenCalledWith(
+      `chmod +x ${SANDBOX_BB_EXECUTABLE_PATH}`,
       {},
     );
     expect(sandbox.commands.run).toHaveBeenCalledWith(daemonStartCommand, {
@@ -127,6 +143,7 @@ describe("sandbox host provisioning", () => {
   it("retries the daemon health check until it succeeds", async () => {
     const sandbox = createMockSandbox();
     sandbox.commands.run
+      .mockResolvedValueOnce({})
       .mockResolvedValueOnce({ pid: 321 })
       .mockRejectedValueOnce(new Error("not ready"))
       .mockRejectedValueOnce(new Error("still not ready"))
@@ -146,12 +163,13 @@ describe("sandbox host provisioning", () => {
     await vi.runAllTimersAsync();
     await provisioning;
 
-    expect(sandbox.commands.run).toHaveBeenCalledTimes(4);
+    expect(sandbox.commands.run).toHaveBeenCalledTimes(5);
   });
 
   it("retries sandbox creation up to three attempts", async () => {
     const sandbox = createMockSandbox();
     sandbox.commands.run
+      .mockResolvedValueOnce({})
       .mockResolvedValueOnce({ pid: 321 })
       .mockResolvedValueOnce({ stdout: `${SANDBOX_DAEMON_HEALTH_RESPONSE}\n` });
     sandboxCreateMock
@@ -198,6 +216,7 @@ describe("sandbox host provisioning", () => {
   it("destroys the sandbox if daemon health never becomes ready", async () => {
     const sandbox = createMockSandbox();
     sandbox.commands.run
+      .mockResolvedValueOnce({})
       .mockResolvedValueOnce({ pid: 321 })
       .mockRejectedValue(new Error("health failed"));
     sandboxCreateMock.mockResolvedValue(sandbox);
@@ -221,6 +240,7 @@ describe("sandbox host provisioning", () => {
   it("suspends and destroys the sandbox through the lifecycle wrapper", async () => {
     const sandbox = createMockSandbox();
     sandbox.commands.run
+      .mockResolvedValueOnce({})
       .mockResolvedValueOnce({ pid: 321 })
       .mockResolvedValueOnce({ stdout: `${SANDBOX_DAEMON_HEALTH_RESPONSE}\n` });
     sandboxCreateMock.mockResolvedValue(sandbox);
@@ -246,6 +266,7 @@ describe("sandbox host provisioning", () => {
     const sandbox = createMockSandbox();
     sandbox.commands.run
       .mockRejectedValueOnce(new Error("daemon not running"))
+      .mockResolvedValueOnce({})
       .mockResolvedValueOnce({ pid: 654 })
       .mockResolvedValueOnce({ stdout: `${SANDBOX_DAEMON_HEALTH_RESPONSE}\n` });
     sandboxConnectMock.mockResolvedValue(sandbox);
@@ -269,20 +290,30 @@ describe("sandbox host provisioning", () => {
     });
     expect(sandbox.files.write).toHaveBeenNthCalledWith(
       1,
+      SANDBOX_BB_EXECUTABLE_PATH,
+      testDaemonArtifacts.bbCli,
+      {},
+    );
+    expect(sandbox.files.write).toHaveBeenNthCalledWith(
+      2,
       SANDBOX_DAEMON_PATH,
       testDaemonArtifacts.daemon,
       {},
     );
     expect(sandbox.files.write).toHaveBeenNthCalledWith(
-      2,
+      3,
       SANDBOX_CLAUDE_CODE_BRIDGE_PATH,
       testDaemonArtifacts.claudeCodeBridge,
       {},
     );
     expect(sandbox.files.write).toHaveBeenNthCalledWith(
-      3,
+      4,
       SANDBOX_PI_BRIDGE_PATH,
       testDaemonArtifacts.piBridge,
+      {},
+    );
+    expect(sandbox.commands.run).toHaveBeenCalledWith(
+      `chmod +x ${SANDBOX_BB_EXECUTABLE_PATH}`,
       {},
     );
     expect(sandbox.commands.run).toHaveBeenCalledWith("curl -sf http://127.0.0.1:9111/health", {});
@@ -344,6 +375,7 @@ describe("sandbox host provisioning", () => {
   it("includes custom daemon env values during provisioning", async () => {
     const sandbox = createMockSandbox();
     sandbox.commands.run
+      .mockResolvedValueOnce({})
       .mockResolvedValueOnce({ pid: 321 })
       .mockResolvedValueOnce({ stdout: `${SANDBOX_DAEMON_HEALTH_RESPONSE}\n` });
     sandboxCreateMock.mockResolvedValue(sandbox);
@@ -362,6 +394,7 @@ describe("sandbox host provisioning", () => {
       testSandboxTemplate,
       expect.objectContaining({
         envs: {
+          BB_CLI_DIR: SANDBOX_BB_EXECUTABLE_DIR,
           ...expectedDaemonEnv,
           GITHUB_TOKEN: "github-token",
         },
@@ -383,6 +416,7 @@ describe("sandbox host provisioning", () => {
 
     const sandbox = createMockSandbox();
     sandbox.commands.run
+      .mockResolvedValueOnce({})
       .mockResolvedValueOnce({ pid: 321 })
       .mockResolvedValueOnce({ stdout: `${SANDBOX_DAEMON_HEALTH_RESPONSE}\n` });
     sandboxCreateMock.mockResolvedValue(sandbox);

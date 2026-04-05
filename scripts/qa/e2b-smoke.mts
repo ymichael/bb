@@ -6,11 +6,28 @@ import {
   startBackgroundProcess,
   writeSandboxFile,
 } from "../../packages/sandbox-host/src/index.ts";
+import { loadSandboxDaemonArtifacts } from "../../packages/sandbox-host/src/daemon-artifacts.ts";
+import {
+  SANDBOX_BB_EXECUTABLE_PATH,
+  SANDBOX_DAEMON_HEALTH_PATH,
+  SANDBOX_DAEMON_HEALTH_PORT,
+  SANDBOX_DAEMON_HEALTH_RESPONSE,
+} from "../../packages/sandbox-host/src/constants.ts";
+import {
+  buildSandboxDaemonEnv,
+  startSandboxDaemon,
+} from "../../packages/sandbox-host/src/provision.ts";
 import { resolveSandboxImageTemplate } from "../../packages/sandbox-image/src/index.ts";
 
-const SMOKE_TIMEOUT_MS = 5 * 60 * 1000;
+const FAKE_SERVER_AUTH_TOKEN = "bb-smoke-token";
+const FAKE_SERVER_HEALTH_PATH = "/health";
+const FAKE_SERVER_PATH = "/tmp/bb-smoke-server.mjs";
+const SMOKE_DAEMON_HOST_ID = "bb-smoke-host";
+const SMOKE_DAEMON_HOST_NAME = "bb-smoke-host";
 const SMOKE_SERVER_PORT = 9999;
 const SMOKE_SERVER_URL = `http://127.0.0.1:${SMOKE_SERVER_PORT}`;
+const SMOKE_TIMEOUT_MS = 5 * 60 * 1000;
+type SmokeSandbox = Awaited<ReturnType<typeof createSandbox>>;
 
 function formatError(error: unknown): string {
   if (error instanceof Error) {
@@ -32,6 +49,102 @@ function shellQuote(value: string): string {
   return `'${value.replaceAll("'", `'\"'\"'`)}'`;
 }
 
+function buildFakeServerSource(authToken: string): string {
+  return [
+    'import { createHash } from "node:crypto";',
+    'import { createServer } from "node:http";',
+    "",
+    `const authToken = ${JSON.stringify(authToken)};`,
+    `const sessionId = ${JSON.stringify("session-smoke")};`,
+    `const serverPort = ${SMOKE_SERVER_PORT};`,
+    "",
+    "function unauthorized(res) {",
+    '  res.writeHead(401, { "content-type": "text/plain" });',
+    '  res.end("unauthorized");',
+    "}",
+    "",
+    "function notFound(res) {",
+    '  res.writeHead(404, { "content-type": "text/plain" });',
+    '  res.end("not found");',
+    "}",
+    "",
+    "function isAuthorized(req) {",
+    '  return req.headers.authorization === `Bearer ${authToken}`;',
+    "}",
+    "",
+    "const server = createServer((req, res) => {",
+    '  const url = new URL(req.url ?? "/", `http://127.0.0.1:${serverPort}`);',
+    `  if (url.pathname === ${JSON.stringify(FAKE_SERVER_HEALTH_PATH)}) {`,
+    '    res.writeHead(200, { "content-type": "text/plain" });',
+    '    res.end("ok");',
+    "    return;",
+    "  }",
+    "",
+    "  if (!isAuthorized(req)) {",
+    "    unauthorized(res);",
+    "    return;",
+    "  }",
+    "",
+    '  if (req.method === "POST" && url.pathname === "/internal/session/open") {',
+    '    req.resume();',
+    '    req.on("end", () => {',
+    '      const payload = JSON.stringify({',
+    "        sessionId,",
+    "        heartbeatIntervalMs: 5_000,",
+    "        leaseTimeoutMs: 20_000,",
+    "        threadHighWaterMarks: {},",
+    "      });",
+    '      res.writeHead(201, { "content-type": "application/json" });',
+    "      res.end(payload);",
+    "    });",
+    "    return;",
+    "  }",
+    "",
+    '  if (req.method === "GET" && url.pathname === "/internal/session/commands") {',
+    "    res.writeHead(204);",
+    "    res.end();",
+    "    return;",
+    "  }",
+    "",
+    "  notFound(res);",
+    "});",
+    "",
+    'server.on("upgrade", (req, socket) => {',
+    '  const url = new URL(req.url ?? "/", `http://127.0.0.1:${serverPort}`);',
+    '  const token = url.searchParams.get("token");',
+    '  const requestedSessionId = url.searchParams.get("sessionId");',
+    '  if (url.pathname !== "/internal/ws" || token !== authToken || requestedSessionId !== sessionId) {',
+    '    socket.write("HTTP/1.1 401 Unauthorized\\r\\n\\r\\n");',
+    "    socket.destroy();",
+    "    return;",
+    "  }",
+    "",
+    '  const websocketKey = req.headers["sec-websocket-key"];',
+    '  if (typeof websocketKey !== "string" || websocketKey.length === 0) {',
+    '    socket.write("HTTP/1.1 400 Bad Request\\r\\n\\r\\n");',
+    "    socket.destroy();",
+    "    return;",
+    "  }",
+    "",
+    "  const accept = createHash(\"sha1\")",
+    '    .update(`${websocketKey}258EAFA5-E914-47DA-95CA-C5AB0DC85B11`)',
+    '    .digest("base64");',
+    '  socket.write(',
+    '    "HTTP/1.1 101 Switching Protocols\\r\\n" +',
+    '      "Upgrade: websocket\\r\\n" +',
+    '      "Connection: Upgrade\\r\\n" +',
+    '      `Sec-WebSocket-Accept: ${accept}\\r\\n\\r\\n`,',
+    "  );",
+    '  socket.on("data", () => {});',
+    '  socket.on("error", () => {});',
+    "});",
+    "",
+    'server.listen(serverPort, "127.0.0.1", () => {',
+    '  console.log("ready");',
+    "});",
+  ].join("\n");
+}
+
 async function waitForCommandSuccess(
   runCommand: () => Promise<void>,
   label: string,
@@ -49,6 +162,87 @@ async function waitForCommandSuccess(
   }
 
   throw new Error(`${label} never became ready: ${formatError(lastError)}`);
+}
+
+async function waitForFakeServerHealth(
+  sandbox: SmokeSandbox,
+): Promise<void> {
+  await waitForCommandSuccess(
+    async () => {
+      const result = await runSandboxCommand(
+        sandbox,
+        `curl -sf ${SMOKE_SERVER_URL}${FAKE_SERVER_HEALTH_PATH}`,
+      );
+      if (result.stdout.trim() !== "ok") {
+        throw new Error(`Unexpected fake server health response: ${result.stdout}`);
+      }
+    },
+    "fake BB server health check",
+  );
+}
+
+async function waitForDaemonHealth(
+  sandbox: SmokeSandbox,
+): Promise<void> {
+  await waitForCommandSuccess(
+    async () => {
+      const result = await runSandboxCommand(
+        sandbox,
+        `curl -sf http://127.0.0.1:${SANDBOX_DAEMON_HEALTH_PORT}${SANDBOX_DAEMON_HEALTH_PATH}`,
+      );
+      if (result.stdout.trim() !== SANDBOX_DAEMON_HEALTH_RESPONSE) {
+        throw new Error(`Unexpected daemon health response: ${result.stdout}`);
+      }
+    },
+    "real daemon health check",
+  );
+}
+
+async function assertBundledBbCli(
+  sandbox: SmokeSandbox,
+): Promise<void> {
+  const result = await runSandboxCommand(
+    sandbox,
+    `${shellQuote(SANDBOX_BB_EXECUTABLE_PATH)} --version`,
+  );
+  if (!/^\d+\.\d+\.\d+$/u.test(result.stdout.trim())) {
+    throw new Error(`Unexpected bb version output: ${result.stdout}`);
+  }
+}
+
+async function writeAndStartFakeServer(
+  sandbox: SmokeSandbox,
+): Promise<void> {
+  await writeSandboxFile(
+    sandbox,
+    FAKE_SERVER_PATH,
+    buildFakeServerSource(FAKE_SERVER_AUTH_TOKEN),
+  );
+  await startBackgroundProcess(
+    sandbox,
+    `node ${shellQuote(FAKE_SERVER_PATH)}`,
+    { onStdout: (data) => process.stdout.write(data) },
+  );
+  await waitForFakeServerHealth(sandbox);
+}
+
+async function startRealDaemon(
+  sandbox: SmokeSandbox,
+): Promise<void> {
+  const daemonArtifacts = await loadSandboxDaemonArtifacts();
+  const daemonEnv = buildSandboxDaemonEnv({
+    authToken: FAKE_SERVER_AUTH_TOKEN,
+    daemonEnv: {},
+    hostId: SMOKE_DAEMON_HOST_ID,
+    hostName: SMOKE_DAEMON_HOST_NAME,
+    serverUrl: SMOKE_SERVER_URL,
+  });
+
+  await startSandboxDaemon({
+    sandbox,
+    daemonArtifacts,
+    daemonEnv,
+  });
 }
 
 async function main(): Promise<void> {
@@ -86,40 +280,15 @@ async function main(): Promise<void> {
     await runSandboxCommand(sandbox, "git --version");
     await runSandboxCommand(sandbox, "gh --version");
 
-    console.log("Writing fake daemon server");
-    await writeSandboxFile(
-      sandbox,
-      "/tmp/fake-daemon.mjs",
-      [
-        'import { createServer } from "node:http";',
-        "const server = createServer((_, res) => {",
-        '  res.writeHead(200, { "content-type": "text/plain" });',
-        '  res.end("ok");',
-        "});",
-        `server.listen(${SMOKE_SERVER_PORT}, () => console.log("ready"));`,
-      ].join("\n"),
-    );
+    console.log("Starting fake BB server");
+    await writeAndStartFakeServer(sandbox);
 
-    console.log("Starting fake daemon server");
-    const handle = await startBackgroundProcess(
-      sandbox,
-      "node /tmp/fake-daemon.mjs",
-      { onStdout: (data) => process.stdout.write(data) },
-    );
+    console.log("Starting real bundled daemon");
+    await startRealDaemon(sandbox);
+    await waitForDaemonHealth(sandbox);
 
-    console.log(`Started background process ${handle.pid}`);
-    await waitForCommandSuccess(
-      async () => {
-        const result = await runSandboxCommand(
-          sandbox,
-          `curl -sf ${SMOKE_SERVER_URL}`,
-        );
-        if (result.stdout.trim() !== "ok") {
-          throw new Error(`Unexpected health response: ${result.stdout}`);
-        }
-      },
-      "fake daemon health check",
-    );
+    console.log("Checking bundled bb CLI");
+    await assertBundledBbCli(sandbox);
 
     console.log("Pausing sandbox");
     await sandbox.pause();
@@ -130,36 +299,29 @@ async function main(): Promise<void> {
     });
     activeSandbox = resumedSandbox;
 
-    console.log("Checking daemon after resume");
+    console.log("Checking fake BB server after resume");
     try {
-      await waitForCommandSuccess(
-        async () => {
-          const result = await runSandboxCommand(
-            resumedSandbox,
-            `curl -sf ${SMOKE_SERVER_URL}`,
-          );
-          if (result.stdout.trim() !== "ok") {
-            throw new Error(`Unexpected health response: ${result.stdout}`);
-          }
-        },
-        "post-resume daemon health check",
-      );
+      await waitForFakeServerHealth(resumedSandbox);
     } catch {
-      console.log("Daemon did not survive pause, restarting it");
-      await startBackgroundProcess(resumedSandbox, "node /tmp/fake-daemon.mjs");
-      await waitForCommandSuccess(
-        async () => {
-          const result = await runSandboxCommand(
-            resumedSandbox,
-            `curl -sf ${SMOKE_SERVER_URL}`,
-          );
-          if (result.stdout.trim() !== "ok") {
-            throw new Error(`Unexpected health response: ${result.stdout}`);
-          }
-        },
-        "restarted daemon health check",
+      console.log("Fake BB server did not survive pause, restarting it");
+      await startBackgroundProcess(
+        resumedSandbox,
+        `node ${shellQuote(FAKE_SERVER_PATH)}`,
       );
+      await waitForFakeServerHealth(resumedSandbox);
     }
+
+    console.log("Checking real daemon after resume");
+    try {
+      await waitForDaemonHealth(resumedSandbox);
+    } catch {
+      console.log("Real daemon did not survive pause, restarting it");
+      await startRealDaemon(resumedSandbox);
+      await waitForDaemonHealth(resumedSandbox);
+    }
+
+    console.log("Checking bundled bb CLI after resume");
+    await assertBundledBbCli(resumedSandbox);
 
     const publicUrl = process.env.BB_PUBLIC_URL ?? "";
     if (isReachablePublicUrl(publicUrl)) {

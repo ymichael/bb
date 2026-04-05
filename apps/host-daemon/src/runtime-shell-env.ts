@@ -5,15 +5,15 @@ import type { AgentRuntimeOptions } from "@bb/agent-runtime";
 
 const EXECUTABLE_PERMISSION_MASK = 0o111;
 
-interface PrepareRuntimeShellEnvOptions {
-  localApiPort: number;
-  serverUrl: string;
-  inheritedPath?: string;
+export interface ResolveLocalBbExecutableDirectoryOptions {
   cliPackageManifestPath?: string;
 }
 
-interface DaemonManagedBbExecutable {
-  executableDirectoryPath: string;
+export interface PrepareRuntimeShellEnvOptions {
+  bbExecutableDirectory: string;
+  localApiPort: number;
+  serverUrl: string;
+  inheritedPath?: string;
 }
 
 function getDefaultCliPackageManifestPath(): string {
@@ -93,10 +93,10 @@ async function isExecutable(cliEntryPath: string): Promise<boolean> {
 }
 
 async function resolveBbExecutable(
-  cliPackageManifestPath?: string,
-): Promise<DaemonManagedBbExecutable> {
+  options: ResolveLocalBbExecutableDirectoryOptions = {},
+): Promise<string> {
   const resolvedCliPackageManifestPath =
-    cliPackageManifestPath ?? getDefaultCliPackageManifestPath();
+    options.cliPackageManifestPath ?? getDefaultCliPackageManifestPath();
   const cliEntryPath = await resolveCliEntryPath(resolvedCliPackageManifestPath);
 
   if (!(await isExecutable(cliEntryPath))) {
@@ -105,9 +105,7 @@ async function resolveBbExecutable(
     );
   }
 
-  return {
-    executableDirectoryPath: dirname(cliEntryPath),
-  };
+  return dirname(cliEntryPath);
 }
 
 function prependPath(
@@ -119,14 +117,18 @@ function prependPath(
     : executableDirectoryPath;
 }
 
-export async function prepareRuntimeShellEnv(
-  options: PrepareRuntimeShellEnvOptions,
-): Promise<NonNullable<AgentRuntimeOptions["shellEnv"]>> {
-  const bbExecutable = await resolveBbExecutable(options.cliPackageManifestPath);
+export async function resolveLocalBbExecutableDirectory(
+  options: ResolveLocalBbExecutableDirectoryOptions = {},
+): Promise<string> {
+  return resolveBbExecutable(options);
+}
 
+export function prepareRuntimeShellEnv(
+  options: PrepareRuntimeShellEnvOptions,
+): NonNullable<AgentRuntimeOptions["shellEnv"]> {
   return {
     PATH: prependPath(
-      bbExecutable.executableDirectoryPath,
+      options.bbExecutableDirectory,
       options.inheritedPath ?? process.env.PATH,
     ),
     BB_SERVER_URL: options.serverUrl,

@@ -55,6 +55,10 @@ export async function loadSandboxDaemonArtifacts(): Promise<SandboxDaemonArtifac
   if (!sandboxDaemonArtifactsPromise) {
     sandboxDaemonArtifactsPromise = Promise.all([
       readBundleArtifact({
+        label: "bb cli",
+        localPath: resolveHostDaemonDistPath("bb"),
+      }),
+      readBundleArtifact({
         label: "daemon",
         localPath: resolveHostDaemonDistPath("daemon-bundle.mjs"),
       }),
@@ -67,7 +71,8 @@ export async function loadSandboxDaemonArtifacts(): Promise<SandboxDaemonArtifac
         localPath: resolveHostDaemonDistPath("bb-pi-bridge.mjs"),
       }),
     ])
-      .then(([daemon, claudeCodeBridge, piBridge]) => ({
+      .then(([bbCli, daemon, claudeCodeBridge, piBridge]) => ({
+        bbCli,
         claudeCodeBridge,
         daemon,
         piBridge,

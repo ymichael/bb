@@ -6,11 +6,13 @@ describe("host daemon entrypoint options", () => {
     expect(
       resolveHostDaemonEntrypointOptionsFromEnv({
         env: {
+          BB_CLI_DIR: " /tmp/bb-bin ",
           BB_BRIDGE_DIR: " /tmp/bridges ",
           BB_HOST_TYPE: "ephemeral",
         },
       }),
     ).toEqual({
+      bbExecutableDirectory: "/tmp/bb-bin",
       bridgeBundleDir: "/tmp/bridges",
       hostType: "ephemeral",
     });
@@ -20,11 +22,13 @@ describe("host daemon entrypoint options", () => {
     expect(
       resolveHostDaemonEntrypointOptionsFromEnv({
         env: {
+          BB_CLI_DIR: "   ",
           BB_BRIDGE_DIR: "   ",
           BB_HOST_TYPE: "",
         },
       }),
     ).toEqual({
+      bbExecutableDirectory: undefined,
       bridgeBundleDir: undefined,
       hostType: undefined,
     });

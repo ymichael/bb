@@ -2,7 +2,10 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { prepareRuntimeShellEnv } from "./runtime-shell-env.js";
+import {
+  prepareRuntimeShellEnv,
+  resolveLocalBbExecutableDirectory,
+} from "./runtime-shell-env.js";
 
 const tempDirs: string[] = [];
 
@@ -65,26 +68,17 @@ afterEach(async () => {
   );
 });
 
-describe("prepareRuntimeShellEnv", () => {
-  it("prepends the CLI executable directory to PATH", async () => {
+describe("resolveLocalBbExecutableDirectory", () => {
+  it("returns the built CLI executable directory", async () => {
     const { cliEntryPath, cliPackageManifestPath } = await createFakeCliPackage({
       executable: true,
     });
 
-    const shellEnv = await prepareRuntimeShellEnv({
-      serverUrl: "http://127.0.0.1:3334",
-      localApiPort: 3002,
-      inheritedPath: "/usr/bin",
-      cliPackageManifestPath,
-    });
-
-    const bbDirectoryPath = path.dirname(cliEntryPath);
-
-    expect(shellEnv).toEqual({
-      PATH: `${bbDirectoryPath}:/usr/bin`,
-      BB_SERVER_URL: "http://127.0.0.1:3334",
-      BB_HOST_DAEMON_PORT: "3002",
-    });
+    await expect(
+      resolveLocalBbExecutableDirectory({
+        cliPackageManifestPath,
+      }),
+    ).resolves.toBe(path.dirname(cliEntryPath));
   });
 
   it("fails clearly when the built CLI entry is missing", async () => {
@@ -93,9 +87,7 @@ describe("prepareRuntimeShellEnv", () => {
     });
 
     await expect(
-      prepareRuntimeShellEnv({
-        serverUrl: "http://127.0.0.1:3334",
-        localApiPort: 3002,
+      resolveLocalBbExecutableDirectory({
         cliPackageManifestPath,
       }),
     ).rejects.toThrow(
@@ -109,13 +101,28 @@ describe("prepareRuntimeShellEnv", () => {
     });
 
     await expect(
-      prepareRuntimeShellEnv({
-        serverUrl: "http://127.0.0.1:3334",
-        localApiPort: 3002,
+      resolveLocalBbExecutableDirectory({
         cliPackageManifestPath,
       }),
     ).rejects.toThrow(
       `Built bb CLI executable is not executable: ${cliEntryPath}. Rebuild @bb/cli before starting the host daemon.`,
     );
+  });
+});
+
+describe("prepareRuntimeShellEnv", () => {
+  it("prepends the configured bb executable directory to PATH", () => {
+    expect(
+      prepareRuntimeShellEnv({
+        bbExecutableDirectory: "/tmp/bb-bin",
+        inheritedPath: "/usr/bin",
+        localApiPort: 3002,
+        serverUrl: "http://127.0.0.1:3334",
+      }),
+    ).toEqual({
+      PATH: "/tmp/bb-bin:/usr/bin",
+      BB_SERVER_URL: "http://127.0.0.1:3334",
+      BB_HOST_DAEMON_PORT: "3002",
+    });
   });
 });

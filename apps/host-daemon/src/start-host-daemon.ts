@@ -12,13 +12,17 @@ import {
   type HostDaemonLocalApiOverrides,
 } from "./local-api-config.js";
 import { restartHostDaemon } from "./restart.js";
-import { prepareRuntimeShellEnv } from "./runtime-shell-env.js";
+import {
+  prepareRuntimeShellEnv,
+  resolveLocalBbExecutableDirectory,
+} from "./runtime-shell-env.js";
 import type { CreateReconnectingWebSocket } from "./server-connection.js";
 
 export interface StartHostDaemonOptions {
   dataDir?: string;
   serverUrl?: string;
   authToken?: string;
+  bbExecutableDirectory?: string;
   bridgeBundleDir?: string;
   hostType?: HostType;
   enableLocalApi?: boolean;
@@ -55,7 +59,11 @@ export async function startHostDaemon(
   try {
     const identity = await (options.loadIdentity ?? loadHostIdentity)({ dataDir });
     const instanceId = (options.createInstanceId ?? randomUUID)();
-    const runtimeShellEnv = await prepareRuntimeShellEnv({
+    const bbExecutableDirectory =
+      options.bbExecutableDirectory ??
+      (await resolveLocalBbExecutableDirectory());
+    const runtimeShellEnv = prepareRuntimeShellEnv({
+      bbExecutableDirectory,
       serverUrl,
       localApiPort:
         localApiConfig?.port ?? hostDaemonConfig.BB_HOST_DAEMON_PORT,

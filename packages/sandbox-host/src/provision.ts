@@ -5,6 +5,8 @@ import { resolveSandboxImageTemplate } from "@bb/sandbox-image";
 import {
   DEFAULT_SANDBOX_CREATE_RETRIES,
   DEFAULT_SANDBOX_TIMEOUT_MS,
+  SANDBOX_BB_EXECUTABLE_DIR,
+  SANDBOX_BB_EXECUTABLE_PATH,
   SANDBOX_BRIDGE_DIR,
   SANDBOX_CLAUDE_CODE_BRIDGE_PATH,
   SANDBOX_DAEMON_HEALTH_PATH,
@@ -21,25 +23,20 @@ import {
 import { loadSandboxDaemonArtifacts } from "./daemon-artifacts.js";
 import { createSandboxHost, resumeSandbox } from "./lifecycle.js";
 import type {
+  BuildSandboxDaemonEnvOptions,
   CreateSandboxOptions,
   ProvisionHostOptions,
   ResumeHostOptions,
+  ResolvedStartSandboxDaemonOptions,
   RunSandboxCommandOptions,
   SandboxDaemonArtifacts,
   SandboxBackgroundProcess,
   SandboxCommandResult,
   SandboxFileOptions,
   SandboxHost,
+  StartSandboxDaemonOptions,
   StartBackgroundProcessOptions,
 } from "./types.js";
-
-interface DaemonEnvOptions {
-  authToken: string;
-  daemonEnv: Record<string, string>;
-  hostId: string;
-  hostName: string;
-  serverUrl: string;
-}
 
 function buildSandboxOptions(options: CreateSandboxOptions): SandboxOpts {
   return {
@@ -95,9 +92,12 @@ export async function startBackgroundProcess(
   return result;
 }
 
-function buildDaemonEnv(options: DaemonEnvOptions): Record<string, string> {
+export function buildSandboxDaemonEnv(
+  options: BuildSandboxDaemonEnvOptions,
+): Record<string, string> {
   return {
     ...options.daemonEnv,
+    BB_CLI_DIR: SANDBOX_BB_EXECUTABLE_DIR,
     BB_BRIDGE_DIR: SANDBOX_BRIDGE_DIR,
     BB_DATA_DIR: SANDBOX_DATA_DIR,
     BB_HOST_ID: options.hostId,
@@ -184,25 +184,36 @@ function normalizeServerUrl(serverUrl: string): string {
 }
 
 async function startDaemonProcess(
-  sandbox: E2BSandbox,
-  daemonArtifacts: SandboxDaemonArtifacts,
-  daemonEnv: Record<string, string>,
+  options: ResolvedStartSandboxDaemonOptions,
 ): Promise<void> {
   await Promise.all([
-    writeSandboxFile(sandbox, SANDBOX_DAEMON_PATH, daemonArtifacts.daemon),
     writeSandboxFile(
-      sandbox,
-      SANDBOX_CLAUDE_CODE_BRIDGE_PATH,
-      daemonArtifacts.claudeCodeBridge,
+      options.sandbox,
+      SANDBOX_BB_EXECUTABLE_PATH,
+      options.daemonArtifacts.bbCli,
     ),
     writeSandboxFile(
-      sandbox,
+      options.sandbox,
+      SANDBOX_DAEMON_PATH,
+      options.daemonArtifacts.daemon,
+    ),
+    writeSandboxFile(
+      options.sandbox,
+      SANDBOX_CLAUDE_CODE_BRIDGE_PATH,
+      options.daemonArtifacts.claudeCodeBridge,
+    ),
+    writeSandboxFile(
+      options.sandbox,
       SANDBOX_PI_BRIDGE_PATH,
-      daemonArtifacts.piBridge,
+      options.daemonArtifacts.piBridge,
     ),
   ]);
-  await startBackgroundProcess(sandbox, buildDaemonStartCommand(), {
-    envs: daemonEnv,
+  await runSandboxCommand(
+    options.sandbox,
+    `chmod +x ${SANDBOX_BB_EXECUTABLE_PATH}`,
+  );
+  await startBackgroundProcess(options.sandbox, buildDaemonStartCommand(), {
+    envs: options.daemonEnv,
   });
 }
 
@@ -212,10 +223,21 @@ async function resolveDaemonArtifacts(
   return daemonArtifacts ?? loadSandboxDaemonArtifacts();
 }
 
+export async function startSandboxDaemon(
+  options: StartSandboxDaemonOptions,
+): Promise<void> {
+  const daemonArtifacts = await resolveDaemonArtifacts(options.daemonArtifacts);
+  await startDaemonProcess({
+    ...options,
+    daemonArtifacts,
+  });
+  await waitForDaemonHealth(options.sandbox);
+}
+
 export async function provisionHost(
   options: ProvisionHostOptions,
 ): Promise<SandboxHost> {
-  const daemonEnv = buildDaemonEnv({
+  const daemonEnv = buildSandboxDaemonEnv({
     authToken: options.authToken,
     daemonEnv: options.daemonEnv,
     hostId: options.hostId,
@@ -233,8 +255,7 @@ export async function provisionHost(
   const daemonArtifacts = await resolveDaemonArtifacts(options.daemonArtifacts);
 
   try {
-    await startDaemonProcess(sandbox, daemonArtifacts, daemonEnv);
-    await waitForDaemonHealth(sandbox);
+    await startSandboxDaemon({ sandbox, daemonArtifacts, daemonEnv });
     return createSandboxHost(sandbox, options.hostId);
   } catch (error) {
     try {
@@ -247,7 +268,7 @@ export async function provisionHost(
 export async function resumeHost(
   options: ResumeHostOptions,
 ): Promise<SandboxHost> {
-  const daemonEnv = buildDaemonEnv({
+  const daemonEnv = buildSandboxDaemonEnv({
     authToken: options.authToken,
     daemonEnv: options.daemonEnv,
     hostId: options.hostId,
@@ -263,9 +284,11 @@ export async function resumeHost(
     try {
       await assertDaemonHealth(sandbox);
     } catch {
-      const daemonArtifacts = await resolveDaemonArtifacts(options.daemonArtifacts);
-      await startDaemonProcess(sandbox, daemonArtifacts, daemonEnv);
-      await waitForDaemonHealth(sandbox);
+      await startSandboxDaemon({
+        sandbox,
+        daemonArtifacts: options.daemonArtifacts,
+        daemonEnv,
+      });
     }
     return createSandboxHost(sandbox, options.hostId);
   } catch (error) {

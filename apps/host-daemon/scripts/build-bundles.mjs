@@ -1,23 +1,14 @@
-import { mkdir, stat } from "node:fs/promises";
+import { chmod, mkdir, stat } from "node:fs/promises";
 import { dirname } from "node:path";
 import { build } from "esbuild";
 import { bundleTargets } from "./bundle-manifest.mjs";
-
-const NODE_ESM_REQUIRE_BANNER = [
-  'import { createRequire as __createRequire } from "node:module";',
-  'import { dirname as __pathDirname } from "node:path";',
-  'import { fileURLToPath as __fileURLToPath } from "node:url";',
-  "const require = __createRequire(import.meta.url);",
-  "const __filename = __fileURLToPath(import.meta.url);",
-  "const __dirname = __pathDirname(__filename);",
-].join("");
 
 async function main() {
   for (const target of bundleTargets) {
     await mkdir(dirname(target.outfile), { recursive: true });
     await build({
       banner: {
-        js: NODE_ESM_REQUIRE_BANNER,
+        js: target.banner,
       },
       bundle: true,
       entryPoints: [target.entryPoint],
@@ -29,6 +20,9 @@ async function main() {
       sourcemap: false,
       target: "node22",
     });
+    if (target.executable) {
+      await chmod(target.outfile, 0o755);
+    }
     const bundleStats = await stat(target.outfile);
     console.log(`${target.label}: ${bundleStats.size} bytes`);
   }
