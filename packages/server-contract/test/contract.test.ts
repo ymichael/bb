@@ -41,7 +41,6 @@ const INTENTIONAL_OPTIONAL_SERVER_FIELDS: Record<string, string> = {
   "updateAutomationRequestSchema.action.threadRequest.serviceTier": "Automation action updates may omit serviceTier and inherit the scheduled thread default.",
   "updateAutomationRequestSchema.action.threadRequest.title": "Automation action updates may omit title and use the generated thread title flow.",
   "updateAutomationRequestSchema.autoArchive": "Automation PATCH requests omit autoArchive when leaving it unchanged.",
-  "updateAutomationRequestSchema.enabled": "Automation PATCH requests omit enabled when leaving it unchanged.",
   "updateAutomationRequestSchema.name": "Automation PATCH requests omit name when leaving it unchanged.",
   "updateAutomationRequestSchema.trigger": "Automation PATCH requests omit trigger when leaving it unchanged.",
   "createManagerThreadRequestSchema.name": "Manager creation may omit a custom name and use the server-generated default.",
@@ -141,6 +140,8 @@ describe("server-contract canonical schemas", () => {
         nextRunAt: 123,
         lastRunAt: null,
         runCount: 0,
+        isValid: true,
+        validationIssues: [],
         createdAt: 1,
         updatedAt: 2,
       }),
@@ -164,6 +165,29 @@ describe("server-contract canonical schemas", () => {
     ).toMatchObject({
       projectId: "proj_123",
     });
+
+    expect(
+      updateAutomationRequestSchema.parse({
+        enabled: true,
+      }),
+    ).toEqual({
+      enabled: true,
+    });
+
+    expect(
+      updateAutomationRequestSchema.parse({
+        autoArchive: true,
+      }),
+    ).toEqual({
+      autoArchive: true,
+    });
+
+    expect(() =>
+      updateAutomationRequestSchema.parse({
+        autoArchive: true,
+        enabled: true,
+      }),
+    ).toThrow();
 
     expect(
       sendMessageRequestSchema.parse({

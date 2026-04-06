@@ -7,11 +7,14 @@ import {
 } from "@bb/db";
 import {
   type AutomationAction,
+  type AutomationScheduleTrigger,
   createAutomationRequestSchema,
   typedRoutes,
   updateAutomationRequestSchema,
   type CreateAutomationRequest,
   type PublicApiSchema,
+  type UpdateAutomationConfigRequest,
+  type UpdateAutomationEnabledRequest,
   type UpdateAutomationRequest,
 } from "@bb/server-contract";
 import type { Hono } from "hono";
@@ -23,6 +26,7 @@ import {
   serializeAutomationAction,
   serializeAutomationTrigger,
   toAutomationResponse,
+  validateStoredAutomationDefinition,
 } from "../services/automation-config.js";
 import {
   ScheduleValidationError,
@@ -34,9 +38,14 @@ import {
 } from "../services/entity-lookup.js";
 import { resolveStableThreadRequestEnvironment } from "../services/thread-request-eligibility.js";
 
-interface BuildAutomationUpdateInputArgs {
+interface BuildAutomationConfigUpdateInputArgs {
   current: NonNullable<ReturnType<typeof getAutomation>>;
-  payload: UpdateAutomationRequest;
+  payload: UpdateAutomationConfigRequest;
+}
+
+interface BuildAutomationEnabledUpdateInputArgs {
+  current: NonNullable<ReturnType<typeof getAutomation>>;
+  payload: UpdateAutomationEnabledRequest;
 }
 
 interface CreateAutomationValues {
@@ -69,12 +78,18 @@ function requireProjectAutomation(
 function resolveNextRunAtForCreate(
   payload: CreateAutomationValues,
 ) {
+  validateScheduleDefinition(payload.trigger);
   if (!payload.enabled) {
     return null;
   }
-  validateScheduleDefinition(payload.trigger);
+  return computeScheduledNextRunAt(payload.trigger);
+}
+
+function computeScheduledNextRunAt(
+  trigger: AutomationScheduleTrigger,
+) {
   return computeNextScheduledTime({
-    ...payload.trigger,
+    ...trigger,
     now: Date.now(),
   });
 }
@@ -91,32 +106,18 @@ function resolveCreateAutomationValues(
   };
 }
 
-function buildAutomationUpdateInput(
-  args: BuildAutomationUpdateInputArgs,
+function buildAutomationConfigUpdateInput(
+  args: BuildAutomationConfigUpdateInputArgs,
 ) {
   const nextTrigger = args.payload.trigger
     ?? parseAutomationTriggerConfig(args.current.triggerConfig);
-  const nextEnabled = args.payload.enabled ?? args.current.enabled;
-  const shouldRecomputeNextRunAt =
-    args.payload.trigger !== undefined ||
-    (args.current.enabled === false && nextEnabled) ||
-    (args.current.nextRunAt === null && nextEnabled);
-
-  const nextRunAt = nextEnabled === false
-    ? null
-    : shouldRecomputeNextRunAt
-      ? (() => {
-          validateScheduleDefinition(nextTrigger);
-          return computeNextScheduledTime({
-            ...nextTrigger,
-            now: Date.now(),
-          });
-        })()
-      : undefined;
+  validateScheduleDefinition(nextTrigger);
+  const nextRunAt = args.current.enabled
+    ? computeScheduledNextRunAt(nextTrigger)
+    : null;
 
   return {
     ...(args.payload.name !== undefined ? { name: args.payload.name } : {}),
-    ...(args.payload.enabled !== undefined ? { enabled: args.payload.enabled } : {}),
     ...(args.payload.trigger !== undefined
       ? {
           triggerType: args.payload.trigger.triggerType,
@@ -129,7 +130,38 @@ function buildAutomationUpdateInput(
     ...(args.payload.autoArchive !== undefined
       ? { autoArchive: args.payload.autoArchive }
       : {}),
-    ...(nextRunAt !== undefined ? { nextRunAt } : {}),
+    nextRunAt,
+  };
+}
+
+function buildAutomationEnabledUpdateInput(
+  deps: Pick<AppDeps, "db">,
+  args: BuildAutomationEnabledUpdateInputArgs,
+) {
+  if (!args.payload.enabled) {
+    return {
+      enabled: false,
+      nextRunAt: null,
+    };
+  }
+
+  const { parsedDefinition, validation } = validateStoredAutomationDefinition(
+    deps,
+    args.current,
+  );
+  if (!validation.isValid || parsedDefinition === null) {
+    return {
+      enabled: true,
+      nextRunAt: null,
+    };
+  }
+
+  return {
+    enabled: true,
+    nextRunAt:
+      args.current.enabled && args.current.nextRunAt !== null
+        ? undefined
+        : computeScheduledNextRunAt(parsedDefinition.trigger),
   };
 }
 
@@ -143,6 +175,12 @@ function validateAutomationActionProjectScope(
   });
 }
 
+function isAutomationEnabledUpdate(
+  payload: UpdateAutomationRequest,
+): payload is UpdateAutomationEnabledRequest {
+  return "enabled" in payload;
+}
+
 export function registerAutomationRoutes(app: Hono, deps: AppDeps): void {
   const { get, post, patch, del } = typedRoutes<PublicApiSchema>(app, {
     onValidationError: (msg) => new ApiError(400, "invalid_request", msg),
@@ -153,7 +191,7 @@ export function registerAutomationRoutes(app: Hono, deps: AppDeps): void {
     requireProject(deps.db, projectId);
     const responses = listAutomations(deps.db, projectId).flatMap((automation) => {
       try {
-        return [toAutomationResponse(automation)];
+        return [toAutomationResponse(deps, automation)];
       } catch (error) {
         deps.logger.warn(
           {
@@ -189,7 +227,7 @@ export function registerAutomationRoutes(app: Hono, deps: AppDeps): void {
         autoArchive: values.autoArchive,
         nextRunAt: resolveNextRunAtForCreate(values),
       });
-      return context.json(toAutomationResponse(automation), 201);
+      return context.json(toAutomationResponse(deps, automation), 201);
     } catch (error) {
       if (error instanceof ScheduleValidationError) {
         throw new ApiError(400, "invalid_request", error.message);
@@ -210,24 +248,32 @@ export function registerAutomationRoutes(app: Hono, deps: AppDeps): void {
       });
 
       try {
-        const nextAction = payload.action ?? parseAutomationAction(current.action);
-        validateAutomationActionProjectScope(deps, {
-          action: nextAction,
-          projectId,
-        });
+        const updateInput = isAutomationEnabledUpdate(payload)
+          ? buildAutomationEnabledUpdateInput(deps, {
+              current,
+              payload,
+            })
+          : (() => {
+              const nextAction = payload.action ?? parseAutomationAction(current.action);
+              validateAutomationActionProjectScope(deps, {
+                action: nextAction,
+                projectId,
+              });
+              return buildAutomationConfigUpdateInput({
+                current,
+                payload,
+              });
+            })();
         const updated = updateAutomation(
           deps.db,
           deps.hub,
           current.id,
-          buildAutomationUpdateInput({
-            current,
-            payload,
-          }),
+          updateInput,
         );
         if (!updated) {
           throw new ApiError(404, "invalid_request", "Automation not found");
         }
-        return context.json(toAutomationResponse(updated));
+        return context.json(toAutomationResponse(deps, updated));
       } catch (error) {
         if (error instanceof ScheduleValidationError) {
           throw new ApiError(400, "invalid_request", error.message);

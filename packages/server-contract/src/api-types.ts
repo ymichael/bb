@@ -124,6 +124,13 @@ export const automationActionSchema = z.discriminatedUnion("actionType", [
 ]);
 export type AutomationAction = z.infer<typeof automationActionSchema>;
 
+export const automationValidationIssueSchema = z.string().min(1);
+export const automationValidationSchema = z.object({
+  isValid: z.boolean(),
+  validationIssues: z.array(automationValidationIssueSchema),
+});
+export type AutomationValidation = z.infer<typeof automationValidationSchema>;
+
 export const automationSchema = z.object({
   id: z.string().min(1),
   projectId: z.string().min(1),
@@ -135,6 +142,8 @@ export const automationSchema = z.object({
   nextRunAt: z.number().nullable(),
   lastRunAt: z.number().nullable(),
   runCount: z.number().int().nonnegative(),
+  isValid: z.boolean(),
+  validationIssues: z.array(automationValidationIssueSchema),
   createdAt: z.number(),
   updatedAt: z.number(),
 });
@@ -149,24 +158,38 @@ export const createAutomationRequestSchema = z.object({
 });
 export type CreateAutomationRequest = z.infer<typeof createAutomationRequestSchema>;
 
-export const updateAutomationRequestSchema = z
+export const updateAutomationEnabledRequestSchema = z.object({
+  enabled: z.boolean(),
+}).strict();
+export type UpdateAutomationEnabledRequest = z.infer<
+  typeof updateAutomationEnabledRequestSchema
+>;
+
+export const updateAutomationConfigRequestSchema = z
   .object({
     name: automationNameSchema,
-    enabled: z.boolean(),
     trigger: automationTriggerSchema,
     action: automationActionSchema,
     autoArchive: z.boolean(),
   })
   .partial()
+  .strict()
   .refine(
     (value) =>
       value.name !== undefined ||
-      value.enabled !== undefined ||
       value.trigger !== undefined ||
       value.action !== undefined ||
       value.autoArchive !== undefined,
     "At least one field must be provided",
   );
+export type UpdateAutomationConfigRequest = z.infer<
+  typeof updateAutomationConfigRequestSchema
+>;
+
+export const updateAutomationRequestSchema = z.union([
+  updateAutomationEnabledRequestSchema,
+  updateAutomationConfigRequestSchema,
+]);
 export type UpdateAutomationRequest = z.infer<typeof updateAutomationRequestSchema>;
 
 export const sendMessageRequestSchema = z.object({

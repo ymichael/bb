@@ -60,6 +60,8 @@ function makeThread(overrides: ThreadOverrides = {}): Thread {
 function makeEnvironment(overrides: EnvironmentOverrides = {}): Environment {
   return {
     branchName: "feature/test",
+    cleanupMode: null,
+    cleanupRequestedAt: null,
     createdAt: 1,
     defaultBranch: "main",
     hostId: "host-1",

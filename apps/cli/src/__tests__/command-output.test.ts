@@ -68,6 +68,8 @@ function makeEnvironment(
     branchName: "bb/thread",
     defaultBranch: "main",
     mergeBaseBranch: null,
+    cleanupRequestedAt: null,
+    cleanupMode: null,
     status: "ready",
     createdAt: Date.now(),
     updatedAt: Date.now(),

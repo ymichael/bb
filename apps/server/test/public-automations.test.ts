@@ -64,6 +64,8 @@ describe("public automation routes", () => {
       expect(createResponse.status).toBe(201);
       const createdAutomation = automationSchema.parse(await readJson(createResponse));
       expect(createdAutomation.enabled).toBe(true);
+      expect(createdAutomation.isValid).toBe(true);
+      expect(createdAutomation.validationIssues).toEqual([]);
       expect(createdAutomation.autoArchive).toBe(false);
       expect(createdAutomation.trigger.cron).toBe("0 8 * * 1-5");
       expect(createdAutomation.nextRunAt).toBeTypeOf("number");
@@ -107,7 +109,6 @@ describe("public automation routes", () => {
           },
           body: JSON.stringify({
             enabled: true,
-            autoArchive: true,
           }),
         },
       );
@@ -115,6 +116,23 @@ describe("public automation routes", () => {
       expect(automationSchema.parse(await readJson(enableResponse))).toMatchObject({
         id: createdAutomation.id,
         enabled: true,
+      });
+
+      const updateResponse = await harness.app.request(
+        `/api/v1/projects/${project.id}/automations/${createdAutomation.id}`,
+        {
+          method: "PATCH",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            autoArchive: true,
+          }),
+        },
+      );
+      expect(updateResponse.status).toBe(200);
+      expect(automationSchema.parse(await readJson(updateResponse))).toMatchObject({
+        id: createdAutomation.id,
         autoArchive: true,
       });
 
@@ -191,6 +209,61 @@ describe("public automation routes", () => {
     }
   });
 
+  it("rejects mixed enable toggles and config edits in one PATCH request", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, { id: "host-automation-mixed-patch" });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const automation = createAutomation(harness.db, harness.hub, {
+        action: JSON.stringify({
+          actionType: "scheduled-thread",
+          threadRequest: {
+            providerId: "codex",
+            model: "gpt-5",
+            input: [{ type: "text", text: "Run mixed patch" }],
+            environment: {
+              type: "host",
+              hostId: host.id,
+              workspace: { type: "managed-clone" },
+            },
+          },
+        }),
+        autoArchive: false,
+        enabled: false,
+        name: "Mixed patch automation",
+        nextRunAt: null,
+        projectId: project.id,
+        triggerConfig: JSON.stringify({
+          triggerType: "schedule",
+          cron: "0 8 * * 1-5",
+          timezone: "UTC",
+        }),
+        triggerType: "schedule",
+      });
+
+      const response = await harness.app.request(
+        `/api/v1/projects/${project.id}/automations/${automation.id}`,
+        {
+          method: "PATCH",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            enabled: true,
+            autoArchive: true,
+          }),
+        },
+      );
+
+      expect(response.status).toBe(400);
+    } finally {
+      vi.useRealTimers();
+      await harness.cleanup();
+    }
+  });
+
   it("rejects overlong automation schedule fields at the API boundary", async () => {
     const harness = await createTestAppHarness();
     try {
@@ -252,6 +325,101 @@ describe("public automation routes", () => {
         );
         expect(response.status).toBe(400);
       }
+    } finally {
+      vi.useRealTimers();
+      await harness.cleanup();
+    }
+  });
+
+  it("validates disabled automation schedules on create and config update", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-automation-disabled-validation",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+
+      const invalidCreateResponse = await harness.app.request(
+        `/api/v1/projects/${project.id}/automations`,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            action: {
+              actionType: "scheduled-thread",
+              threadRequest: {
+                providerId: "codex",
+                model: "gpt-5",
+                input: [{ type: "text", text: "Disabled invalid automation" }],
+                environment: {
+                  type: "host",
+                  hostId: host.id,
+                  workspace: { type: "managed-clone" },
+                },
+              },
+            },
+            enabled: false,
+            name: "Disabled invalid automation",
+            trigger: {
+              triggerType: "schedule",
+              cron: "* * * * *",
+              timezone: "UTC",
+            },
+          }),
+        },
+      );
+
+      expect(invalidCreateResponse.status).toBe(400);
+
+      const automation = createAutomation(harness.db, harness.hub, {
+        action: JSON.stringify({
+          actionType: "scheduled-thread",
+          threadRequest: {
+            providerId: "codex",
+            model: "gpt-5",
+            input: [{ type: "text", text: "Stay disabled" }],
+            environment: {
+              type: "host",
+              hostId: host.id,
+              workspace: { type: "managed-clone" },
+            },
+          },
+        }),
+        autoArchive: false,
+        enabled: false,
+        name: "Disabled automation",
+        nextRunAt: null,
+        projectId: project.id,
+        triggerConfig: JSON.stringify({
+          triggerType: "schedule",
+          cron: "0 8 * * 1-5",
+          timezone: "UTC",
+        }),
+        triggerType: "schedule",
+      });
+
+      const invalidUpdateResponse = await harness.app.request(
+        `/api/v1/projects/${project.id}/automations/${automation.id}`,
+        {
+          method: "PATCH",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            trigger: {
+              triggerType: "schedule",
+              cron: "* * * * *",
+              timezone: "UTC",
+            },
+          }),
+        },
+      );
+
+      expect(invalidUpdateResponse.status).toBe(400);
     } finally {
       vi.useRealTimers();
       await harness.cleanup();
@@ -638,6 +806,71 @@ describe("public automation routes", () => {
             },
           },
         },
+      });
+    } finally {
+      vi.useRealTimers();
+      await harness.cleanup();
+    }
+  });
+
+  it("enables invalid stored automations without failing and leaves them inert", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-automation-enable-invalid",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const automation = createAutomation(harness.db, harness.hub, {
+        action: JSON.stringify({
+          actionType: "scheduled-thread",
+          threadRequest: {
+            providerId: "codex",
+            model: "gpt-5",
+            input: [{ type: "text", text: "Enable invalid automation" }],
+            environment: {
+              type: "host",
+              hostId: host.id,
+              workspace: { type: "managed-clone" },
+            },
+          },
+        }),
+        autoArchive: false,
+        enabled: false,
+        name: "Invalid disabled automation",
+        nextRunAt: null,
+        projectId: project.id,
+        triggerConfig: JSON.stringify({
+          triggerType: "schedule",
+          cron: "* * * * *",
+          timezone: "UTC",
+        }),
+        triggerType: "schedule",
+      });
+
+      const enableResponse = await harness.app.request(
+        `/api/v1/projects/${project.id}/automations/${automation.id}`,
+        {
+          method: "PATCH",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            enabled: true,
+          }),
+        },
+      );
+
+      expect(enableResponse.status).toBe(200);
+      expect(automationSchema.parse(await readJson(enableResponse))).toMatchObject({
+        enabled: true,
+        id: automation.id,
+        isValid: false,
+        nextRunAt: null,
+        validationIssues: [
+          "Schedule must not run more frequently than every 5 minutes",
+        ],
       });
     } finally {
       vi.useRealTimers();
