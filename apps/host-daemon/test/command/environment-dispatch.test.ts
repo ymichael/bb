@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { WorkspaceError } from "@bb/workspace";
+import { WorkspaceError } from "@bb/host-workspace";
 import { dispatchCommand } from "../../src/command-dispatch.js";
 import { cleanupTempDirs, createFakeRuntime, createFakeWorkspace, createHarness, makeTempDir } from "./dispatch-helpers.js";
 import { RuntimeManager } from "../../src/runtime-manager.js";
@@ -32,7 +32,10 @@ describe("environment command dispatch", () => {
     expect(result.transcript).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ key: "cwd", text: `cwd: ${sourcePath}` }),
-        expect.objectContaining({ key: "branch", text: "Branch: main" }),
+        expect.objectContaining({
+          key: "branch",
+          text: expect.stringContaining("Branch: main"),
+        }),
       ]),
     );
     expect(harness.provisions).toEqual([
@@ -72,7 +75,10 @@ describe("environment command dispatch", () => {
     });
     expect(result.transcript).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ key: "branch", text: "Branch: main" }),
+        expect.objectContaining({
+          key: "branch",
+          text: expect.stringContaining("Branch: main"),
+        }),
       ]),
     );
     expect(harness.provisions).toEqual([
@@ -116,7 +122,10 @@ describe("environment command dispatch", () => {
     });
     expect(result.transcript).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ key: "branch", text: "Branch: main" }),
+        expect.objectContaining({
+          key: "branch",
+          text: expect.stringContaining("Branch: main"),
+        }),
       ]),
     );
     expect(harness.provisions).toEqual([

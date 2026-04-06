@@ -12,7 +12,7 @@ import {
 import { provisionEnvironment } from "./command-handlers/environment.js";
 import { listHostFiles, readHostFile } from "./command-handlers/host-files.js";
 import { ensureThreadRuntime, startThread } from "./command-handlers/thread.js";
-import { WorkspaceError } from "@bb/workspace";
+import { WorkspaceError } from "@bb/host-workspace";
 import { demoteWorkspace, promoteWorkspace, squashMerge } from "./command-handlers/workspace.js";
 import { listBranches, listWorkspaceFiles } from "./command-handlers/workspace-files.js";
 

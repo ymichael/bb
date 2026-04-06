@@ -43,6 +43,11 @@ const serverNoWorkspaceAccessRules = {
             "Server must not access workspaces directly. Use daemon commands instead.",
         },
         {
+          name: "@bb/host-workspace",
+          message:
+            "Server must not access workspaces directly. Use daemon commands instead.",
+        },
+        {
           name: "node:fs",
           message:
             "Server must not use node:fs. Use daemon commands for workspace access. (attachments.ts is the only exception — it manages server-local storage.)",

@@ -26,6 +26,7 @@
     "@bb/config": "workspace:*",
     "@bb/domain": "workspace:*",
     "@bb/host-daemon-contract": "workspace:*",
+    "@bb/host-workspace": "workspace:*",
     "@bb/logger": "workspace:*",
     "@bb/templates": "workspace:*",
     "@bb/workspace": "workspace:*",

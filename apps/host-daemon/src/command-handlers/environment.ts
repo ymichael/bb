@@ -1,6 +1,6 @@
 import type { ProvisioningTranscriptEntry } from "@bb/domain";
 import type { HostDaemonCommandResult, environmentProvisionCommandSchema } from "@bb/host-daemon-contract";
-import { revParse, type ProvisionWorkspaceOpts } from "@bb/workspace";
+import type { ProvisionWorkspaceArgs } from "@bb/host-workspace";
 import { type CommandDispatchOptions, type CommandOf } from "../command-dispatch-support.js";
 
 export async function provisionEnvironment(
@@ -33,7 +33,7 @@ export async function provisionEnvironment(
     const defaultBranch = entry.workspace.isGitRepo
       ? (await entry.workspace.getStatus()).branch.defaultBranch || null
       : null;
-    const branchName = await entry.workspace.currentBranch();
+    const branchName = await entry.workspace.getCurrentBranch();
 
     // For fresh provisions, emit cwd (for unmanaged) and branch/SHA entries.
     if (!alreadyExists) {
@@ -50,9 +50,11 @@ export async function provisionEnvironment(
         let branchText = `Branch: ${branchName}`;
         const metadata: { branchName: string; sha?: string } = { branchName };
         try {
-          const sha = await revParse(entry.workspace.path, "HEAD");
-          branchText = `Branch: ${branchName} (${sha.slice(0, 7)})`;
-          metadata.sha = sha;
+          const sha = await entry.workspace.getHeadSha();
+          if (sha) {
+            branchText = `Branch: ${branchName} (${sha.slice(0, 7)})`;
+            metadata.sha = sha;
+          }
         } catch {
           // SHA unavailable (e.g., empty repo)
         }
@@ -117,7 +119,7 @@ function buildOnProgress(args: {
 export function toProvisionWorkspaceOptions(
   command: typeof environmentProvisionCommandSchema._type,
   onProgress?: (entry: ProvisioningTranscriptEntry) => void,
-): ProvisionWorkspaceOpts {
+): ProvisionWorkspaceArgs {
   switch (command.workspaceProvisionType) {
     case "unmanaged": {
       return {

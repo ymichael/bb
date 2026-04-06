@@ -226,6 +226,9 @@ importers:
       '@bb/host-daemon-contract':
         specifier: workspace:*
         version: link:../../packages/host-daemon-contract
+      '@bb/host-workspace':
+        specifier: workspace:*
+        version: link:../../packages/host-workspace
       '@bb/logger':
         specifier: workspace:*
         version: link:../../packages/logger
@@ -548,6 +551,25 @@ importers:
       '@bb/tsconfig':
         specifier: workspace:*
         version: link:../tsconfig
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
+
+  packages/host-workspace:
+    dependencies:
+      '@bb/domain':
+        specifier: workspace:*
+        version: link:../domain
+    devDependencies:
+      '@bb/test-helpers':
+        specifier: workspace:*
+        version: link:../test-helpers
+      '@bb/tsconfig':
+        specifier: workspace:*
+        version: link:../tsconfig
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.19.10
       typescript:
         specifier: ^5.7.0
         version: 5.9.3

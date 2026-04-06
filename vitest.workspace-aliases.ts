@@ -31,6 +31,10 @@ export const workspaceTestAliases = {
     repoRoot,
     "packages/host-daemon-contract/src/index.ts",
   ),
+  "@bb/host-workspace": path.resolve(
+    repoRoot,
+    "packages/host-workspace/src/index.ts",
+  ),
   "@bb/host-daemon/test": path.resolve(
     repoRoot,
     "apps/host-daemon/src/test/index.ts",

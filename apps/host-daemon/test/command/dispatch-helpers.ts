@@ -3,8 +3,12 @@ import os from "node:os";
 import path from "node:path";
 import type { AgentRuntime } from "@bb/agent-runtime";
 import type { AvailableModel, DynamicTool, ThreadExecutionOptions } from "@bb/domain";
-import type { IWorkspace, ProvisionWorkspaceOpts } from "@bb/workspace";
+import type {
+  HostWorkspace,
+  ProvisionWorkspaceArgs,
+} from "@bb/host-workspace";
 import { RuntimeManager } from "../../src/runtime-manager.js";
+import { listFilesRecursively } from "../../src/command-handlers/file-list.js";
 
 const tempDirs: string[] = [];
 
@@ -30,8 +34,11 @@ export function createFakeWorkspace(pathname: string) {
     managed: false,
     isGitRepo: true,
     isWorktree: false,
-    async currentBranch() {
+    async getCurrentBranch() {
       return "main";
+    },
+    async getHeadSha() {
+      return "commit-1";
     },
     async getStatus(options?: { mergeBaseBranch?: string }) {
       state.statusReads += 1;
@@ -75,8 +82,11 @@ export function createFakeWorkspace(pathname: string) {
         files: "",
       };
     },
-    async getBranches() {
+    async listBranches() {
       return ["main"];
+    },
+    async listFiles() {
+      return listFilesRecursively(pathname, pathname);
     },
     async commit(options: { message: string; noVerify: boolean }) {
       state.lastCommitMessage = options.message;
@@ -89,24 +99,28 @@ export function createFakeWorkspace(pathname: string) {
       state.resetCount += 1;
     },
     async fetch() {},
-    async squashMergeInto(options: { targetBranch: string; commitMessage: string }) {
+    async squashMerge(options: { targetBranch: string; commitMessage: string }) {
       return {
         merged: true,
         commitSha: `merge-${options.targetBranch}`,
         targetBranch: options.targetBranch,
       };
     },
-    async promote(primary: IWorkspace) {
+    async promote(primary: HostWorkspace) {
       state.promotedPrimaryPath = primary.path;
     },
-    async demote(args: { primary: IWorkspace; defaultBranch: string; envBranch?: string }) {
+    async demote(args: {
+      primary: HostWorkspace;
+      defaultBranch: string;
+      envBranch?: string;
+    }) {
       state.demotedPrimaryPath = args.primary.path;
       state.demotedDefaultBranch = args.defaultBranch;
     },
     async destroy() {
       state.destroyed = true;
     },
-  } satisfies IWorkspace;
+  } satisfies HostWorkspace;
 
   return { workspace, state };
 }
@@ -217,10 +231,10 @@ export function createHarness(args: {
   const { workspace, state: workspaceState } = createFakeWorkspace(
     args.workspacePath ?? "/tmp/env-1",
   );
-  workspace.currentBranch = async () => args.currentBranch ?? "main";
-  (workspace as { isWorktree: boolean }).isWorktree = args.isWorktree ?? false;
+  workspace.getCurrentBranch = async () => args.currentBranch ?? "main";
+  workspace.isWorktree = args.isWorktree ?? false;
   const { runtime, state: runtimeState } = createFakeRuntime();
-  const provisions: ProvisionWorkspaceOpts[] = [];
+  const provisions: ProvisionWorkspaceArgs[] = [];
   const manager = new RuntimeManager({
     provisionWorkspace: async (options) => {
       provisions.push(options);

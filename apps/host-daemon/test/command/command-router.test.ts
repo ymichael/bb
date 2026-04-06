@@ -1,5 +1,5 @@
 import type { AgentRuntime } from "@bb/agent-runtime";
-import type { IWorkspace } from "@bb/workspace";
+import type { HostWorkspace } from "@bb/host-workspace";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { CommandRouter } from "../../src/command-router.js";
 import { RuntimeManager } from "../../src/runtime-manager.js";
@@ -14,13 +14,20 @@ function createDeferred<T>() {
   return { promise, resolve, reject };
 }
 
-function createFakeWorkspace(path: string) {
-  return {
+interface FakeWorkspace extends HostWorkspace {
+  commit: ReturnType<typeof vi.fn>;
+  destroy: ReturnType<typeof vi.fn>;
+  reset: ReturnType<typeof vi.fn>;
+}
+
+function createFakeWorkspace(path: string): FakeWorkspace {
+  const workspace = {
     path,
     managed: false,
     isGitRepo: true,
     isWorktree: false,
-    currentBranch: vi.fn(async () => "main"),
+    getCurrentBranch: vi.fn(async () => "main"),
+    getHeadSha: vi.fn(async () => "commit-1"),
     getStatus: vi.fn(async () => ({
       workingTree: {
         hasUncommittedChanges: false,
@@ -42,14 +49,15 @@ function createFakeWorkspace(path: string) {
       shortstat: "",
       files: "",
     })),
-    getBranches: vi.fn(async () => ["main"]),
+    listBranches: vi.fn(async () => ["main"]),
+    listFiles: vi.fn(async () => []),
     commit: vi.fn(async () => ({
       commitSha: "commit-1",
       commitSubject: "subject",
     })),
     reset: vi.fn(async () => undefined),
     fetch: vi.fn(async () => undefined),
-    squashMergeInto: vi.fn(async () => ({
+    squashMerge: vi.fn(async () => ({
       merged: true,
       commitSha: "commit-3",
       targetBranch: "main",
@@ -57,14 +65,12 @@ function createFakeWorkspace(path: string) {
     promote: vi.fn(async () => undefined),
     demote: vi.fn(async () => undefined),
     destroy: vi.fn(async () => undefined),
-  } as unknown as IWorkspace & {
-    commit: ReturnType<typeof vi.fn>;
-    destroy: ReturnType<typeof vi.fn>;
-    reset: ReturnType<typeof vi.fn>;
-  };
+  } satisfies FakeWorkspace;
+
+  return workspace;
 }
 
-function createFakeRuntime() {
+function createFakeRuntime(): AgentRuntime {
   return {
     ensureProvider: vi.fn(async () => undefined),
     startThread: vi.fn(async ({ threadId }: { threadId: string }) => ({
@@ -78,8 +84,9 @@ function createFakeRuntime() {
     stopThread: vi.fn(async (_args: unknown) => undefined),
     renameThread: vi.fn(async (_args: unknown) => undefined),
     listModels: vi.fn(async () => []),
+    listRunningProviders: vi.fn(() => []),
     shutdown: vi.fn(async () => undefined),
-  };
+  } satisfies AgentRuntime;
 }
 
 function createLogger() {
@@ -122,9 +129,7 @@ describe("CommandRouter", () => {
 
     const manager = new RuntimeManager({
       provisionWorkspace: vi.fn(async () => workspace),
-      createRuntime: vi.fn(
-        () => createFakeRuntime() as unknown as AgentRuntime,
-      ),
+      createRuntime: vi.fn(() => createFakeRuntime()),
     });
     await manager.ensureEnvironment({
       environmentId: "env-1",
@@ -182,7 +187,7 @@ describe("CommandRouter", () => {
 
     const manager = new RuntimeManager({
       provisionWorkspace: vi.fn(async () => createFakeWorkspace("/tmp/env-1")),
-      createRuntime: vi.fn(() => runtime as unknown as AgentRuntime),
+      createRuntime: vi.fn(() => runtime),
     });
     await manager.ensureEnvironment({
       environmentId: "env-1",
@@ -269,7 +274,7 @@ describe("CommandRouter", () => {
 
     const manager = new RuntimeManager({
       provisionWorkspace: vi.fn(async () => createFakeWorkspace("/tmp/env-1")),
-      createRuntime: vi.fn(() => runtime as unknown as AgentRuntime),
+      createRuntime: vi.fn(() => runtime),
     });
     const reported: string[] = [];
     const router = new CommandRouter({
@@ -353,7 +358,7 @@ describe("CommandRouter", () => {
 
     const manager = new RuntimeManager({
       provisionWorkspace: vi.fn(async () => createFakeWorkspace("/tmp/env-1")),
-      createRuntime: vi.fn(() => runtime as unknown as AgentRuntime),
+      createRuntime: vi.fn(() => runtime),
     });
     let nowValue = 100;
     const results: Array<{ commandId: string; completedAt: number; ok: boolean }> = [];
@@ -422,7 +427,7 @@ describe("CommandRouter", () => {
     const runtime = createFakeRuntime();
     const manager = new RuntimeManager({
       provisionWorkspace: vi.fn(async () => workspace),
-      createRuntime: vi.fn(() => runtime as unknown as AgentRuntime),
+      createRuntime: vi.fn(() => runtime),
     });
     await manager.ensureEnvironment({
       environmentId: "env-1",
@@ -446,17 +451,17 @@ describe("CommandRouter", () => {
       },
     ]);
 
+    const environmentLanes = Reflect.get(router, "environmentLanes");
+    expect(environmentLanes).toBeInstanceOf(Map);
     expect(
-      (
-        router as unknown as { environmentLanes: Map<string, Promise<unknown>> }
-      ).environmentLanes.has("env-1"),
+      environmentLanes instanceof Map && environmentLanes.has("env-1"),
     ).toBe(false);
   });
 
   it("recovers result reporting after a transient report failure", async () => {
     const manager = new RuntimeManager({
       provisionWorkspace: vi.fn(async () => createFakeWorkspace("/tmp/env-1")),
-      createRuntime: vi.fn(() => createFakeRuntime() as unknown as AgentRuntime),
+      createRuntime: vi.fn(() => createFakeRuntime()),
     });
     const logger = createLogger();
     let shouldFail = true;

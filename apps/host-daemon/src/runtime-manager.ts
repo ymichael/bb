@@ -8,9 +8,9 @@ import type { ThreadEvent, WorkspaceProvisionType } from "@bb/domain";
 import type { HostDaemonActiveThread } from "@bb/host-daemon-contract";
 import {
   provisionWorkspace,
-  type IWorkspace,
-  type ProvisionWorkspaceOpts,
-} from "@bb/workspace";
+  type HostWorkspace,
+  type ProvisionWorkspaceArgs,
+} from "@bb/host-workspace";
 import type { WorkspaceStatusWatchError } from "@bb/workspace/watch-status";
 import type { PathChangeWatchError } from "@bb/workspace/watch-path";
 import type {
@@ -43,7 +43,7 @@ interface ThreadStoragePathArgs {
 function lazyProvisionOpts(
   workspacePath: string,
   workspaceProvisionType: WorkspaceProvisionType,
-): ProvisionWorkspaceOpts {
+): ProvisionWorkspaceArgs {
   switch (workspaceProvisionType) {
     case "unmanaged":
       return { workspaceProvisionType: "unmanaged", path: workspacePath };
@@ -58,7 +58,7 @@ export interface RuntimeEntry {
   environmentId: string;
   runtime: AgentRuntime;
   stopWatchingStatus: () => void;
-  workspace: IWorkspace;
+  workspace: HostWorkspace;
   path: string;
   threads: Map<string, RuntimeThreadState>;
 }
@@ -67,13 +67,15 @@ export interface EnsureEnvironmentArgs {
   environmentId: string;
   workspacePath?: string;
   workspaceProvisionType?: WorkspaceProvisionType;
-  provision?: ProvisionWorkspaceOpts;
+  provision?: ProvisionWorkspaceArgs;
 }
 
 export interface RuntimeManagerOptions {
   bridgeBundleDir?: AgentRuntimeOptions["bridgeBundleDir"];
   createRuntime?: (options: AgentRuntimeOptions) => AgentRuntime;
-  provisionWorkspace?: (options: ProvisionWorkspaceOpts) => Promise<IWorkspace>;
+  provisionWorkspace?: (
+    options: ProvisionWorkspaceArgs,
+  ) => Promise<HostWorkspace>;
   watchWorkspaceStatus?: WatchWorkspaceStatus;
   watchPathChanges?: WatchPathChanges;
   adapterFactory?: AgentRuntimeOptions["adapterFactory"];
@@ -179,7 +181,7 @@ export class RuntimeManager {
     return activeThreads;
   }
 
-  async openWorkspace(path: string): Promise<IWorkspace> {
+  async openWorkspace(path: string): Promise<HostWorkspace> {
     return this.provisionWorkspace({
       workspaceProvisionType: "unmanaged",
       path,

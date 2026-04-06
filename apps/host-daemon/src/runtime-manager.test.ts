@@ -1,5 +1,8 @@
 import type { AgentRuntime } from "@bb/agent-runtime";
-import type { IWorkspace, ProvisionWorkspaceOpts } from "@bb/workspace";
+import type {
+  HostWorkspace,
+  ProvisionWorkspaceArgs,
+} from "@bb/host-workspace";
 import type {
   WorkspaceStatusWatchArgs,
   WorkspaceStatusWatchError,
@@ -11,16 +14,16 @@ import type {
 import { describe, expect, it, vi } from "vitest";
 import { RuntimeManager } from "./runtime-manager.js";
 
-type CurrentBranchArgs = Parameters<IWorkspace["currentBranch"]>;
-type GetStatusResult = Awaited<ReturnType<IWorkspace["getStatus"]>>;
-type GetDiffResult = Awaited<ReturnType<IWorkspace["getDiff"]>>;
-type CommitArgs = Parameters<IWorkspace["commit"]>;
-type FetchArgs = Parameters<IWorkspace["fetch"]>;
-type SquashMergeArgs = Parameters<IWorkspace["squashMergeInto"]>;
-type PromoteArgs = Parameters<IWorkspace["promote"]>;
-type DemoteArgs = Parameters<IWorkspace["demote"]>;
-type ProvisionWorkspaceArgs = Parameters<
-  (options: ProvisionWorkspaceOpts) => Promise<IWorkspace>
+type GetCurrentBranchArgs = Parameters<HostWorkspace["getCurrentBranch"]>;
+type GetStatusResult = Awaited<ReturnType<HostWorkspace["getStatus"]>>;
+type GetDiffResult = Awaited<ReturnType<HostWorkspace["getDiff"]>>;
+type CommitArgs = Parameters<HostWorkspace["commit"]>;
+type FetchArgs = Parameters<HostWorkspace["fetch"]>;
+type SquashMergeArgs = Parameters<HostWorkspace["squashMerge"]>;
+type PromoteArgs = Parameters<HostWorkspace["promote"]>;
+type DemoteArgs = Parameters<HostWorkspace["demote"]>;
+type ProvisionWorkspaceMockArgs = Parameters<
+  (options: ProvisionWorkspaceArgs) => Promise<HostWorkspace>
 >;
 type EnsureProviderArgs = Parameters<AgentRuntime["ensureProvider"]>[0];
 type StartThreadArgs = Parameters<AgentRuntime["startThread"]>[0];
@@ -73,19 +76,21 @@ function createFakeWorkspace(
     managed: false,
     isGitRepo: true,
     isWorktree: false,
-    currentBranch: vi.fn(
-      async (..._args: CurrentBranchArgs) => "main",
+    getCurrentBranch: vi.fn(
+      async (..._args: GetCurrentBranchArgs) => "main",
     ),
+    getHeadSha: vi.fn(async () => "commit-1"),
     getStatus: vi.fn(async () => status),
     getDiff: vi.fn(async () => diff),
-    getBranches: vi.fn(async () => ["main"]),
+    listBranches: vi.fn(async () => ["main"]),
+    listFiles: vi.fn(async () => []),
     commit: vi.fn(async (..._args: CommitArgs) => ({
       commitSha: "commit-1",
       commitSubject: "commit",
     })),
     reset: vi.fn(async () => undefined),
     fetch: vi.fn(async (..._args: FetchArgs) => undefined),
-    squashMergeInto: vi.fn(async (..._args: SquashMergeArgs) => ({
+    squashMerge: vi.fn(async (..._args: SquashMergeArgs) => ({
       merged: true,
       commitSha: "commit-1",
       targetBranch: "main",
@@ -93,7 +98,7 @@ function createFakeWorkspace(
     promote: vi.fn(async (..._args: PromoteArgs) => undefined),
     demote: vi.fn(async (..._args: DemoteArgs) => undefined),
     destroy: vi.fn(async () => undefined),
-  } satisfies IWorkspace;
+  } satisfies HostWorkspace;
 
   return workspace;
 }
@@ -137,7 +142,7 @@ function createFakeRuntime() {
 
 function createProvisionWorkspaceMock(path: string) {
   return vi.fn(
-    async (..._args: ProvisionWorkspaceArgs) => createFakeWorkspace(path),
+    async (..._args: ProvisionWorkspaceMockArgs) => createFakeWorkspace(path),
   );
 }
 

@@ -7,7 +7,7 @@ export async function squashMerge(
   runtimeManager: RuntimeManager,
 ): Promise<HostDaemonCommandResult<"workspace.squash_merge">> {
   const entry = await requireWorkspaceEnvironment(command, runtimeManager);
-  const result = await entry.workspace.squashMergeInto({
+  const result = await entry.workspace.squashMerge({
     targetBranch: command.targetBranch,
     commitMessage: command.commitMessage,
   });
