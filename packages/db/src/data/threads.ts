@@ -10,8 +10,8 @@ import { createThreadId } from "../ids.js";
  * Key is the current status, values are the statuses it can transition to.
  */
 export const ALLOWED_TRANSITIONS: Record<ThreadStatus, ThreadStatus[]> = {
-  created: ["provisioning", "idle", "error"],
-  provisioning: ["idle", "error"],
+  created: ["provisioning", "active", "idle", "error"],
+  provisioning: ["active", "idle", "error"],
   idle: ["provisioning", "active", "error"],
   active: ["idle", "error"],
   error: ["active", "idle"],

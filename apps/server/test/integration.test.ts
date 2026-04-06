@@ -192,13 +192,19 @@ describe("server integration", () => {
         param: { id: thread.id },
       });
       const updatedThread = await threadGetResponse.json();
-      expect(updatedThread.status).toBe("idle");
+      expect(updatedThread.status).toBe("provisioning");
 
       const environmentGetResponse = await publicClient.environments[":id"].$get({
         param: { id: thread.environmentId },
       });
       const environment = await environmentGetResponse.json();
       expect(environment.status).toBe("ready");
+
+      const threadStartCommand = await fetchSingleCommand(
+        daemonClient,
+        session.sessionId,
+      );
+      expect(threadStartCommand.command.type).toBe("thread.start");
     } finally {
       await server.close();
     }

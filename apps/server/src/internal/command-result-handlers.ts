@@ -138,9 +138,7 @@ async function handleProvisionCommandResult(
         entries,
       });
 
-      if (thread.status === "created" || thread.status === "provisioning") {
-        tryTransition(deps.db, deps.hub, thread.id, "idle");
-      } else {
+      if (thread.status !== "created" && thread.status !== "provisioning") {
         continue;
       }
 
@@ -343,10 +341,6 @@ function handleThreadStartResult(
   const thread = getThread(deps.db, command.threadId);
   if (!thread) {
     return;
-  }
-
-  if (thread.status === "idle" || thread.status === "error") {
-    tryTransition(deps.db, deps.hub, thread.id, "active");
   }
 
   if (operation) {

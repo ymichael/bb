@@ -133,14 +133,14 @@ export function reconcileSessionThreads(
   }
 
   if (activeThreadIds.length > 0) {
-    const idleButActive = deps.db
+    const inactiveButActive = deps.db
       .select({ id: threads.id })
       .from(threads)
       .innerJoin(environments, eq(threads.environmentId, environments.id))
       .where(
         and(
           eq(environments.hostId, hostId),
-          eq(threads.status, "idle"),
+          inArray(threads.status, ["created", "provisioning", "idle"]),
           isNull(threads.deletedAt),
           isNull(threads.stopRequestedAt),
           inArray(threads.id, activeThreadIds),
@@ -148,7 +148,7 @@ export function reconcileSessionThreads(
       )
       .all();
 
-    for (const thread of idleButActive) {
+    for (const thread of inactiveButActive) {
       tryTransition(deps.db, deps.hub, thread.id, "active");
       const startOperation = getThreadOperation(deps.db, {
         threadId: thread.id,

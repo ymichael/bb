@@ -174,7 +174,12 @@ async function applyEventEffects(
         if (!thread) {
           continue;
         }
-        if (thread.status === "idle" || thread.status === "error") {
+        if (
+          thread.status === "created"
+          || thread.status === "provisioning"
+          || thread.status === "idle"
+          || thread.status === "error"
+        ) {
           tryTransition(deps.db, deps.hub, thread.id, "active");
         }
         continue;

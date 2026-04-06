@@ -293,7 +293,7 @@ describe("internal session routes", () => {
           .get()?.completedAt,
       ).toBe(successCompletedAt);
       expect(getEnvironment(harness.db, successEnvironment.id)?.status).toBe("ready");
-      expect(getThread(harness.db, successThread.id)?.status).toBe("idle");
+      expect(getThread(harness.db, successThread.id)?.status).toBe("provisioning");
       const threadStartCommand = await waitForQueuedCommandAfter(
         harness,
         successCommand.cursor,
@@ -783,7 +783,7 @@ describe("internal session routes", () => {
       });
 
       expect(response.status).toBe(200);
-      expect(getThread(harness.db, provisioningThread.id)?.status).toBe("idle");
+      expect(getThread(harness.db, provisioningThread.id)?.status).toBe("provisioning");
       expect(getThread(harness.db, idleSibling.id)?.status).toBe("idle");
 
       // Initiator gets the full daemon transcript

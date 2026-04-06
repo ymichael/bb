@@ -318,29 +318,21 @@ describe("transitionThreadStatus", () => {
       status: "created",
     });
 
-    // created → active is not allowed
-    expect(() =>
-      transitionThreadStatus(db, noopNotifier, thread.id, "active"),
-    ).toThrow("Invalid thread status transition: created → active");
+    // created → provisioning is allowed, so move through an invalid edge after that
+    transitionThreadStatus(db, noopNotifier, thread.id, "provisioning");
 
-    // created → idle is allowed, so move to idle before checking an invalid edge
-    transitionThreadStatus(db, noopNotifier, thread.id, "idle");
-
-    // idle → created is not allowed
+    // provisioning → created is not allowed
     expect(() =>
       transitionThreadStatus(db, noopNotifier, thread.id, "created"),
-    ).toThrow("Invalid thread status transition: idle → created");
+    ).toThrow("Invalid thread status transition: provisioning → created");
 
-    const provisioningThread = createThread(db, noopNotifier, {
-      projectId: project.id,
-      providerId: "codex",
-      status: "provisioning",
-    });
+    // provisioning → active is allowed, so move to active before checking an invalid edge
+    transitionThreadStatus(db, noopNotifier, thread.id, "active");
 
-    // provisioning → active is not allowed
+    // active → created is not allowed
     expect(() =>
-      transitionThreadStatus(db, noopNotifier, provisioningThread.id, "active"),
-    ).toThrow("Invalid thread status transition: provisioning → active");
+      transitionThreadStatus(db, noopNotifier, thread.id, "created"),
+    ).toThrow("Invalid thread status transition: active → created");
   });
 
   it("rejects transition for non-existent thread", () => {
@@ -354,13 +346,40 @@ describe("transitionThreadStatus", () => {
     // Verify the transitions match the current state machine
     expect(ALLOWED_TRANSITIONS.created).toEqual([
       "provisioning",
+      "active",
       "idle",
       "error",
     ]);
-    expect(ALLOWED_TRANSITIONS.provisioning).toEqual(["idle", "error"]);
+    expect(ALLOWED_TRANSITIONS.provisioning).toEqual(["active", "idle", "error"]);
     expect(ALLOWED_TRANSITIONS.idle).toEqual(["provisioning", "active", "error"]);
     expect(ALLOWED_TRANSITIONS.active).toEqual(["idle", "error"]);
     expect(ALLOWED_TRANSITIONS.error).toEqual(["active", "idle"]);
+  });
+
+  it("allows created and provisioning to move active when startup work begins", () => {
+    const { db, project } = setup();
+    const createdThread = createThread(db, noopNotifier, {
+      projectId: project.id,
+      providerId: "codex",
+      status: "created",
+    });
+    const provisioningThread = createThread(db, noopNotifier, {
+      projectId: project.id,
+      providerId: "codex",
+      status: "provisioning",
+    });
+
+    expect(
+      transitionThreadStatus(db, noopNotifier, createdThread.id, "active").status,
+    ).toBe("active");
+    expect(
+      transitionThreadStatus(
+        db,
+        noopNotifier,
+        provisioningThread.id,
+        "active",
+      ).status,
+    ).toBe("active");
   });
 
   it("notifies on status change", () => {

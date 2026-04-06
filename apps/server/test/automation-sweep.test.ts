@@ -71,7 +71,7 @@ describe("automation sweep", () => {
         automationId: automation.id,
         environmentId: environment.id,
         projectId: project.id,
-        status: "idle",
+        status: "created",
       });
 
       const queued = await waitForQueuedCommand(

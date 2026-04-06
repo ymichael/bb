@@ -58,7 +58,7 @@ import {
 interface CreateThreadInEnvironmentArgs {
   environment: Environment;
   request: ThreadCreateServiceRequest;
-  threadStatus: "idle" | "provisioning";
+  threadStatus: "created" | "provisioning";
 }
 
 interface ReuseEnvironmentByHostPathArgs {
@@ -90,7 +90,9 @@ async function createThreadInEnvironment(
     args.environment.id,
   );
   try {
-    transitionThreadStatus(deps.db, deps.hub, thread.id, args.threadStatus);
+    if (args.threadStatus === "provisioning") {
+      transitionThreadStatus(deps.db, deps.hub, thread.id, args.threadStatus);
+    }
 
     const execution = await buildExecutionOptions(
       deps,
@@ -131,7 +133,7 @@ async function createThreadInEnvironment(
       });
     }
 
-    if (args.threadStatus === "idle") {
+    if (args.threadStatus === "created") {
       let latestSequence = eventSequence;
       if (args.environment.path) {
         const cwdEntries = buildCwdBranchEntries({
@@ -212,7 +214,7 @@ async function reuseEnvironmentByHostPath(
     return createThreadInEnvironment(deps, {
       environment: existing,
       request: args.request,
-      threadStatus: "idle",
+      threadStatus: "created",
     });
   }
 
@@ -378,7 +380,7 @@ export async function createThreadFromRequest(
       return createThreadInEnvironment(deps, {
         environment,
         request,
-        threadStatus: "idle",
+        threadStatus: "created",
       });
     }
     if (environment.status === "provisioning") {
