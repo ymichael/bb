@@ -1,0 +1,745 @@
+import { eq } from "drizzle-orm";
+import {
+  createAutomation,
+  deleteAutomation,
+  getDraft,
+  getEnvironment,
+  hostDaemonCommands,
+  listDrafts,
+  listManagerThreadNudgesByThread,
+  threads,
+} from "@bb/db";
+import { describe, expect, it, vi } from "vitest";
+import {
+  internalAuthHeaders,
+  reportQueuedCommandSuccess,
+  waitForQueuedCommand,
+  waitForQueuedCommandAfter,
+} from "../helpers/commands.js";
+import {
+  createDailySchedule,
+  createScheduleTrigger,
+} from "../helpers/schedules.js";
+import {
+  seedDraft,
+  seedEnvironment,
+  seedEvent,
+  seedHostSession,
+  seedProjectWithSource,
+  seedThread,
+} from "../helpers/seed.js";
+import { createTestAppHarness } from "../helpers/test-app.js";
+
+describe("internal event side effects", () => {
+  it("logs side-effect failures and continues processing the rest of the batch", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host, session } = seedHostSession(harness.deps, {
+        id: "host-event-resilience",
+      });
+      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const renamedThread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+      });
+      const startedThread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "idle",
+      });
+
+      const originalNotifyThread = harness.hub.notifyThread.bind(harness.hub);
+      harness.hub.notifyThread = (threadId, changes) => {
+        if (threadId === renamedThread.id && changes.includes("title-changed")) {
+          throw new Error("title notification failed");
+        }
+        originalNotifyThread(threadId, changes);
+      };
+      const loggerError = vi.fn();
+      harness.deps.logger.error = loggerError;
+
+      const response = await harness.app.request("/internal/session/events", {
+        method: "POST",
+        headers: internalAuthHeaders(harness),
+        body: JSON.stringify({
+          sessionId: session.id,
+          events: [
+            {
+              environmentId: environment.id,
+              threadId: renamedThread.id,
+              sequence: 1,
+              createdAt: Date.now(),
+              event: {
+                type: "thread/name/updated",
+                threadId: renamedThread.id,
+                providerThreadId: "provider-resilience",
+                threadName: "Renamed thread",
+              },
+            },
+            {
+              environmentId: environment.id,
+              threadId: startedThread.id,
+              sequence: 1,
+              createdAt: Date.now(),
+              event: {
+                type: "turn/started",
+                threadId: startedThread.id,
+                providerThreadId: "provider-resilience",
+                turnId: "turn-resilience",
+              },
+            },
+          ],
+        }),
+      });
+
+      expect(response.status).toBe(200);
+      expect(
+        harness.db
+          .select()
+          .from(threads)
+          .where(eq(threads.id, startedThread.id))
+          .get()?.status,
+      ).toBe("active");
+      expect(loggerError).toHaveBeenCalledTimes(1);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("auto-sends the next queued draft when a turn completes", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host, session } = seedHostSession(harness.deps, {
+        id: "host-event-auto-send",
+      });
+      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/queued-draft-auto-send",
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "active",
+      });
+      seedEvent(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        providerThreadId: "provider-auto-send",
+        sequence: 1,
+        type: "thread/identity",
+        data: {},
+      });
+      seedEvent(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        providerThreadId: "provider-auto-send",
+        sequence: 2,
+        turnId: "turn-auto-send",
+        type: "turn/started",
+        data: {},
+      });
+      const draft = seedDraft(harness.deps, {
+        threadId: thread.id,
+        content: [{ type: "text", text: "Queued follow-up" }],
+        model: "gpt-5",
+        serviceTier: "default",
+      });
+
+      const response = await harness.app.request("/internal/session/events", {
+        method: "POST",
+        headers: internalAuthHeaders(harness),
+        body: JSON.stringify({
+          sessionId: session.id,
+          events: [
+            {
+              environmentId: environment.id,
+              threadId: thread.id,
+              sequence: 3,
+              createdAt: Date.now(),
+              event: {
+                type: "turn/completed",
+                threadId: thread.id,
+                providerThreadId: "provider-auto-send",
+                turnId: "turn-auto-send",
+                status: "completed",
+              },
+            },
+          ],
+        }),
+      });
+
+      expect(response.status).toBe(200);
+      const queuedCommand = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "turn.run" && command.threadId === thread.id,
+      );
+      expect(queuedCommand.command).toMatchObject({
+        input: [{ type: "text", text: "Queued follow-up" }],
+        options: {
+          model: "gpt-5",
+          serviceTier: "default",
+        },
+        resumeContext: {
+          providerThreadId: "provider-auto-send",
+        },
+      });
+      expect(getDraft(harness.db, draft.id)).toBeNull();
+      expect(
+        harness.db
+          .select()
+          .from(threads)
+          .where(eq(threads.id, thread.id))
+          .get()?.status,
+      ).toBe("active");
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("syncs ASYNC.md when a manager thread goes idle", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host, session } = seedHostSession(harness.deps, {
+        id: "host-event-manager-sync",
+      });
+      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/manager-sync-environment",
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "active",
+        type: "manager",
+      });
+
+      const responsePromise = harness.app.request("/internal/session/events", {
+        method: "POST",
+        headers: internalAuthHeaders(harness),
+        body: JSON.stringify({
+          sessionId: session.id,
+          events: [
+            {
+              environmentId: environment.id,
+              threadId: thread.id,
+              sequence: 1,
+              createdAt: Date.now(),
+              event: {
+                type: "turn/completed",
+                threadId: thread.id,
+                providerThreadId: "provider-manager-sync",
+                turnId: "turn-manager-sync",
+                status: "completed",
+              },
+            },
+          ],
+        }),
+      });
+
+      const asyncPath = `/tmp/bb-host-data/${host.id}/thread-storage/${thread.id}/ASYNC.md`;
+      const queued = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "host.read_file" &&
+          command.path === asyncPath,
+      );
+      const readResponse = await reportQueuedCommandSuccess(
+        harness,
+        queued,
+        {
+          path: asyncPath,
+          content: [
+            "---",
+            "timezone: America/Los_Angeles",
+            "schedules:",
+            '  - name: daily-recap',
+            '    cron: "0 8 * * 1-5"',
+            "---",
+            "",
+            "## daily-recap",
+            "Summarize yesterday's work.",
+          ].join("\n"),
+          contentEncoding: "utf8",
+          mimeType: "text/markdown",
+          sizeBytes: 111,
+        },
+      );
+      expect(readResponse.status).toBe(200);
+
+      const response = await responsePromise;
+      expect(response.status).toBe(200);
+      expect(
+        listManagerThreadNudgesByThread(harness.db, thread.id).map((nudge) => nudge.name),
+      ).toEqual(["daily-recap"]);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("auto-archives completed automation threads when enabled", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host, session } = seedHostSession(harness.deps, {
+        id: "host-event-auto-archive",
+      });
+      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        managed: true,
+        projectId: project.id,
+        path: "/tmp/auto-archive-environment",
+        workspaceProvisionType: "managed-worktree",
+      });
+      const automation = createAutomation(harness.db, harness.hub, {
+        projectId: project.id,
+        name: "Auto archive",
+        enabled: true,
+        triggerType: "schedule",
+        triggerConfig: JSON.stringify(
+          createScheduleTrigger(createDailySchedule({ times: ["08:00"] })),
+        ),
+        action: JSON.stringify({
+          actionType: "scheduled-thread",
+          threadRequest: {
+            providerId: "codex",
+            model: "gpt-5",
+            input: [{ type: "text", text: "Archive me" }],
+            environment: {
+              type: "reuse",
+              environmentId: environment.id,
+            },
+          },
+        }),
+        autoArchive: true,
+        nextRunAt: Date.now() + 60_000,
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "active",
+      });
+      harness.db.update(threads)
+        .set({ automationId: automation.id })
+        .where(eq(threads.id, thread.id))
+        .run();
+
+      const response = await harness.app.request("/internal/session/events", {
+        method: "POST",
+        headers: internalAuthHeaders(harness),
+        body: JSON.stringify({
+          sessionId: session.id,
+          events: [
+            {
+              environmentId: environment.id,
+              threadId: thread.id,
+              sequence: 1,
+              createdAt: Date.now(),
+              event: {
+                type: "turn/completed",
+                threadId: thread.id,
+                providerThreadId: "provider-auto-archive",
+                turnId: "turn-auto-archive",
+                status: "completed",
+              },
+            },
+          ],
+        }),
+      });
+
+      expect(response.status).toBe(200);
+      expect(
+        harness.db
+          .select()
+          .from(threads)
+          .where(eq(threads.id, thread.id))
+          .get()?.archivedAt,
+      ).toBeTypeOf("number");
+      expect(getEnvironment(harness.db, environment.id)?.cleanupRequestedAt).toBeTypeOf("number");
+
+      deleteAutomation(harness.db, harness.hub, automation.id);
+      harness.db.update(threads)
+        .set({ archivedAt: null, status: "active" })
+        .where(eq(threads.id, thread.id))
+        .run();
+
+      const secondResponse = await harness.app.request("/internal/session/events", {
+        method: "POST",
+        headers: internalAuthHeaders(harness),
+        body: JSON.stringify({
+          sessionId: session.id,
+          events: [
+            {
+              environmentId: environment.id,
+              threadId: thread.id,
+              sequence: 2,
+              createdAt: Date.now(),
+              event: {
+                type: "turn/completed",
+                threadId: thread.id,
+                providerThreadId: "provider-auto-archive",
+                turnId: "turn-auto-archive-2",
+                status: "completed",
+              },
+            },
+          ],
+        }),
+      });
+
+      expect(secondResponse.status).toBe(200);
+      expect(
+        harness.db
+          .select()
+          .from(threads)
+          .where(eq(threads.id, thread.id))
+          .get()?.archivedAt,
+      ).toBeNull();
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("leaves completed automation threads visible when auto-archive is disabled", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host, session } = seedHostSession(harness.deps, {
+        id: "host-event-no-auto-archive",
+      });
+      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/no-auto-archive-environment",
+      });
+      const automation = createAutomation(harness.db, harness.hub, {
+        projectId: project.id,
+        name: "No auto archive",
+        enabled: true,
+        triggerType: "schedule",
+        triggerConfig: JSON.stringify(
+          createScheduleTrigger(createDailySchedule({ times: ["08:00"] })),
+        ),
+        action: JSON.stringify({
+          actionType: "scheduled-thread",
+          threadRequest: {
+            providerId: "codex",
+            model: "gpt-5",
+            input: [{ type: "text", text: "Keep me visible" }],
+            environment: {
+              type: "reuse",
+              environmentId: environment.id,
+            },
+          },
+        }),
+        autoArchive: false,
+        nextRunAt: Date.now() + 60_000,
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "active",
+      });
+      harness.db.update(threads)
+        .set({ automationId: automation.id })
+        .where(eq(threads.id, thread.id))
+        .run();
+
+      const response = await harness.app.request("/internal/session/events", {
+        method: "POST",
+        headers: internalAuthHeaders(harness),
+        body: JSON.stringify({
+          sessionId: session.id,
+          events: [
+            {
+              environmentId: environment.id,
+              threadId: thread.id,
+              sequence: 1,
+              createdAt: Date.now(),
+              event: {
+                type: "turn/completed",
+                threadId: thread.id,
+                providerThreadId: "provider-no-auto-archive",
+                turnId: "turn-no-auto-archive",
+                status: "completed",
+              },
+            },
+          ],
+        }),
+      });
+
+      expect(response.status).toBe(200);
+      expect(
+        harness.db
+          .select()
+          .from(threads)
+          .where(eq(threads.id, thread.id))
+          .get()?.archivedAt,
+      ).toBeNull();
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("does not replay turn/completed side effects for a duplicate batch", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host, session } = seedHostSession(harness.deps, {
+        id: "host-event-completed-dedupe",
+      });
+      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/queued-draft-dedupe",
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "active",
+      });
+      seedEvent(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        providerThreadId: "provider-dedupe",
+        sequence: 1,
+        type: "thread/identity",
+        data: {},
+      });
+      seedEvent(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        providerThreadId: "provider-dedupe",
+        sequence: 2,
+        turnId: "turn-dedupe",
+        type: "turn/started",
+        data: {},
+      });
+      seedDraft(harness.deps, {
+        threadId: thread.id,
+        content: [{ type: "text", text: "Queued follow-up one" }],
+        model: "gpt-5",
+        serviceTier: "default",
+      });
+      seedDraft(harness.deps, {
+        threadId: thread.id,
+        content: [{ type: "text", text: "Queued follow-up two" }],
+        model: "gpt-5",
+        serviceTier: "default",
+      });
+
+      const requestBody = JSON.stringify({
+        sessionId: session.id,
+        events: [
+          {
+            environmentId: environment.id,
+            threadId: thread.id,
+            sequence: 3,
+            createdAt: Date.now(),
+            event: {
+              type: "turn/completed",
+              threadId: thread.id,
+              providerThreadId: "provider-dedupe",
+              turnId: "turn-dedupe",
+              status: "completed",
+            },
+          },
+        ],
+      });
+
+      const firstResponse = await harness.app.request("/internal/session/events", {
+        method: "POST",
+        headers: internalAuthHeaders(harness),
+        body: requestBody,
+      });
+      expect(firstResponse.status).toBe(200);
+
+      const queuedCommand = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "turn.run" && command.threadId === thread.id,
+      );
+      expect(queuedCommand.command.type).toBe("turn.run");
+
+      const duplicateResponse = await harness.app.request("/internal/session/events", {
+        method: "POST",
+        headers: internalAuthHeaders(harness),
+        body: requestBody,
+      });
+      expect(duplicateResponse.status).toBe(200);
+
+      expect(
+        harness.db
+          .select()
+          .from(hostDaemonCommands)
+          .all(),
+      ).toHaveLength(1);
+      expect(listDrafts(harness.db, thread.id)).toHaveLength(1);
+      expect(
+        harness.db
+          .select()
+          .from(threads)
+          .where(eq(threads.id, thread.id))
+          .get()?.status,
+      ).toBe("active");
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("applies only the newly inserted completion side effects from a mixed batch", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host, session } = seedHostSession(harness.deps, {
+        id: "host-event-completed-mixed-batch",
+      });
+      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/queued-draft-mixed-batch",
+      });
+      const threadA = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "active",
+      });
+      const threadB = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "active",
+      });
+
+      for (const thread of [threadA, threadB]) {
+        seedEvent(harness.deps, {
+          threadId: thread.id,
+          environmentId: environment.id,
+          providerThreadId: `provider-${thread.id}`,
+          sequence: 1,
+          type: "thread/identity",
+          data: {},
+        });
+        seedEvent(harness.deps, {
+          threadId: thread.id,
+          environmentId: environment.id,
+          providerThreadId: `provider-${thread.id}`,
+          sequence: 2,
+          turnId: `turn-${thread.id}`,
+          type: "turn/started",
+          data: {},
+        });
+      }
+
+      seedDraft(harness.deps, {
+        threadId: threadA.id,
+        content: [{ type: "text", text: "Queued follow-up one" }],
+        model: "gpt-5",
+        serviceTier: "default",
+      });
+      seedDraft(harness.deps, {
+        threadId: threadA.id,
+        content: [{ type: "text", text: "Queued follow-up two" }],
+        model: "gpt-5",
+        serviceTier: "default",
+      });
+      seedDraft(harness.deps, {
+        threadId: threadB.id,
+        content: [{ type: "text", text: "Queued follow-up three" }],
+        model: "gpt-5",
+        serviceTier: "default",
+      });
+
+      const firstResponse = await harness.app.request("/internal/session/events", {
+        method: "POST",
+        headers: internalAuthHeaders(harness),
+        body: JSON.stringify({
+          sessionId: session.id,
+          events: [
+            {
+              environmentId: environment.id,
+              threadId: threadA.id,
+              sequence: 3,
+              createdAt: Date.now(),
+              event: {
+                type: "turn/completed",
+                threadId: threadA.id,
+                providerThreadId: `provider-${threadA.id}`,
+                turnId: `turn-${threadA.id}`,
+                status: "completed",
+              },
+            },
+          ],
+        }),
+      });
+      expect(firstResponse.status).toBe(200);
+
+      const firstQueuedCommand = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "turn.run" && command.threadId === threadA.id,
+      );
+
+      const mixedResponse = await harness.app.request("/internal/session/events", {
+        method: "POST",
+        headers: internalAuthHeaders(harness),
+        body: JSON.stringify({
+          sessionId: session.id,
+          events: [
+            {
+              environmentId: environment.id,
+              threadId: threadA.id,
+              sequence: 3,
+              createdAt: Date.now(),
+              event: {
+                type: "turn/completed",
+                threadId: threadA.id,
+                providerThreadId: `provider-${threadA.id}`,
+                turnId: `turn-${threadA.id}`,
+                status: "completed",
+              },
+            },
+            {
+              environmentId: environment.id,
+              threadId: threadB.id,
+              sequence: 3,
+              createdAt: Date.now(),
+              event: {
+                type: "turn/completed",
+                threadId: threadB.id,
+                providerThreadId: `provider-${threadB.id}`,
+                turnId: `turn-${threadB.id}`,
+                status: "completed",
+              },
+            },
+          ],
+        }),
+      });
+      expect(mixedResponse.status).toBe(200);
+
+      await waitForQueuedCommandAfter(
+        harness,
+        firstQueuedCommand.row.cursor,
+        ({ command }) =>
+          command.type === "turn.run" && command.threadId === threadB.id,
+      );
+
+      expect(listDrafts(harness.db, threadA.id)).toHaveLength(1);
+      expect(listDrafts(harness.db, threadB.id)).toHaveLength(0);
+      expect(
+        harness.db
+          .select()
+          .from(hostDaemonCommands)
+          .all(),
+      ).toHaveLength(2);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+});
