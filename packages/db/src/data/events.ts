@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNotNull, lte, max, sql } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, isNotNull, lte, max, sql } from "drizzle-orm";
 import type {
   StoredThreadEventDataForType,
   ThreadEventItemType,
@@ -208,6 +208,40 @@ export interface ListEventsOptions {
   limit?: number;
 }
 
+const storedEventRowFields = {
+  createdAt: events.createdAt,
+  data: events.data,
+  id: events.id,
+  itemId: events.itemId,
+  itemKind: events.itemKind,
+  providerThreadId: events.providerThreadId,
+  sequence: events.sequence,
+  threadId: events.threadId,
+  turnId: events.turnId,
+  type: events.type,
+};
+
+export type StoredEventRow = Pick<
+  typeof events.$inferSelect,
+  keyof typeof storedEventRowFields
+>;
+
+export interface ListStoredEventRowsArgs {
+  afterSequence?: number;
+  limit?: number;
+  threadId: string;
+}
+
+export interface FindStoredEventRowArgs {
+  afterSequence?: number;
+  threadId: string;
+  type: ThreadEventType;
+}
+
+export interface GetLatestThreadOutputEventRowArgs {
+  threadId: string;
+}
+
 export interface GetLatestThreadSequenceArgs {
   threadId: string;
 }
@@ -249,6 +283,62 @@ export function listEvents(db: DbConnection, options: ListEventsOptions) {
     .orderBy(events.sequence);
   if (limit) return q.limit(limit).all();
   return q.all();
+}
+
+export function listStoredEventRows(
+  db: DbConnection,
+  args: ListStoredEventRowsArgs,
+): StoredEventRow[] {
+  return db
+    .select(storedEventRowFields)
+    .from(events)
+    .where(
+      args.afterSequence === undefined
+        ? eq(events.threadId, args.threadId)
+        : and(eq(events.threadId, args.threadId), gt(events.sequence, args.afterSequence)),
+    )
+    .orderBy(events.sequence)
+    .limit(args.limit ?? Number.MAX_SAFE_INTEGER)
+    .all();
+}
+
+export function findStoredEventRow(
+  db: DbConnection,
+  args: FindStoredEventRowArgs,
+): StoredEventRow | null {
+  return db
+    .select(storedEventRowFields)
+    .from(events)
+    .where(
+      args.afterSequence !== undefined
+        ? and(
+            eq(events.threadId, args.threadId),
+            eq(events.type, args.type),
+            gt(events.sequence, args.afterSequence),
+          )
+        : and(eq(events.threadId, args.threadId), eq(events.type, args.type)),
+    )
+    .orderBy(events.sequence)
+    .limit(1)
+    .get() ?? null;
+}
+
+export function getLatestThreadOutputEventRow(
+  db: DbConnection,
+  args: GetLatestThreadOutputEventRowArgs,
+): StoredEventRow | null {
+  return db
+    .select(storedEventRowFields)
+    .from(events)
+    .where(
+      sql`${events.threadId} = ${args.threadId} AND (
+        ${events.type} = 'system/manager/user_message'
+        OR (${events.type} = 'item/completed' AND ${events.itemKind} = 'agentMessage')
+      )`,
+    )
+    .orderBy(desc(events.sequence))
+    .limit(1)
+    .get() ?? null;
 }
 
 export function getLatestThreadSequence(

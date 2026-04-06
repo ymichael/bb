@@ -20,6 +20,11 @@ export interface HasPendingHostCommandForThreadArgs {
   type: "thread.stop" | "turn.run";
 }
 
+export interface GetPendingEnvironmentCommandArgs {
+  environmentId: string;
+  type: "environment.destroy" | "workspace.status";
+}
+
 export function getCommand(
   db: CommandReadConnection,
   id: string,
@@ -97,6 +102,23 @@ export function hasPendingHostCommandForThread(
     .get();
 
   return row !== undefined;
+}
+
+export function getPendingEnvironmentCommand(
+  db: CommandReadConnection,
+  args: GetPendingEnvironmentCommandArgs,
+) {
+  return db
+    .select()
+    .from(hostDaemonCommands)
+    .where(
+      and(
+        eq(hostDaemonCommands.type, args.type),
+        inArray(hostDaemonCommands.state, ["pending", "fetched"]),
+        sql`json_extract(${hostDaemonCommands.payload}, '$.environmentId') = ${args.environmentId}`,
+      ),
+    )
+    .get() ?? null;
 }
 
 export interface FetchCommandsOptions {

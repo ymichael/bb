@@ -3,10 +3,14 @@ import { createConnection } from "../../src/connection.js";
 import { migrate } from "../../src/migrate.js";
 import { noopNotifier } from "../../src/notifier.js";
 import {
+  countProjectSources,
   createProjectSource,
   getDefaultProjectSource,
+  getProjectSource,
+  getProjectSourceForProject,
   getProjectSourceByHost,
   listProjectSources,
+  listProjectSourcesByProjectIds,
   updateProjectSource,
   deleteProjectSource,
 } from "../../src/data/project-sources.js";
@@ -71,6 +75,31 @@ describe("project-sources", () => {
     expect(sources).toHaveLength(3);
   });
 
+  it("lists sources across project ids", () => {
+    const { db, host, project } = setup();
+    const { project: otherProject } = createProject(db, noopNotifier, {
+      name: "other-project",
+      source: {
+        type: "local_path",
+        hostId: host.id,
+        path: "/tmp/other-project",
+      },
+    });
+    createProjectSource(db, noopNotifier, {
+      projectId: project.id,
+      type: "github_repo",
+      repoUrl: "https://github.com/example/repo-a",
+    });
+    createProjectSource(db, noopNotifier, {
+      projectId: otherProject.id,
+      type: "github_repo",
+      repoUrl: "https://github.com/example/repo-b",
+    });
+
+    expect(listProjectSourcesByProjectIds(db, [project.id])).toHaveLength(2);
+    expect(listProjectSourcesByProjectIds(db, [project.id, otherProject.id])).toHaveLength(4);
+  });
+
   it("returns the default source and preserves it when adding more sources", () => {
     const { db, project } = setup();
     const initialDefault = getDefaultProjectSource(db, project.id);
@@ -113,6 +142,26 @@ describe("project-sources", () => {
     });
 
     expect(getProjectSourceByHost(db, project.id, missingHost.id)).toBeNull();
+  });
+
+  it("gets project sources by id, by project, and by count", () => {
+    const { db, project } = setup();
+    const source = createProjectSource(db, noopNotifier, {
+      projectId: project.id,
+      type: "github_repo",
+      repoUrl: "https://github.com/example/repo",
+    });
+
+    expect(getProjectSource(db, source.id)?.id).toBe(source.id);
+    expect(getProjectSourceForProject(db, {
+      projectId: project.id,
+      sourceId: source.id,
+    })?.id).toBe(source.id);
+    expect(getProjectSourceForProject(db, {
+      projectId: "proj_other",
+      sourceId: source.id,
+    })).toBeNull();
+    expect(countProjectSources(db, { projectId: project.id })).toBe(2);
   });
 
   it("rejects duplicate sources for the same project and host", () => {

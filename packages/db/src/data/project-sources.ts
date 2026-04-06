@@ -1,4 +1,4 @@
-import { and, eq, ne } from "drizzle-orm";
+import { and, count, eq, inArray, ne } from "drizzle-orm";
 import type { ProjectSource } from "@bb/domain";
 import type { DbConnection } from "../connection.js";
 import type { DbNotifier } from "../notifier.js";
@@ -108,6 +108,75 @@ export function listProjectSources(db: DbConnection, projectId: string) {
     .where(eq(projectSources.projectId, projectId))
     .all()
     .map(toProjectSource);
+}
+
+export function listProjectSourcesByProjectIds(
+  db: DbConnection,
+  projectIds: readonly string[],
+) {
+  if (projectIds.length === 0) {
+    return [];
+  }
+
+  return db
+    .select()
+    .from(projectSources)
+    .where(inArray(projectSources.projectId, [...projectIds]))
+    .all()
+    .map(toProjectSource);
+}
+
+export function getProjectSource(
+  db: DbConnection,
+  sourceId: string,
+) {
+  const source = db
+    .select()
+    .from(projectSources)
+    .where(eq(projectSources.id, sourceId))
+    .get();
+
+  return source ? toProjectSource(source) : null;
+}
+
+export interface GetProjectSourceForProjectArgs {
+  projectId: string;
+  sourceId: string;
+}
+
+export function getProjectSourceForProject(
+  db: DbConnection,
+  args: GetProjectSourceForProjectArgs,
+) {
+  const source = db
+    .select()
+    .from(projectSources)
+    .where(
+      and(
+        eq(projectSources.id, args.sourceId),
+        eq(projectSources.projectId, args.projectId),
+      ),
+    )
+    .get();
+
+  return source ? toProjectSource(source) : null;
+}
+
+export interface CountProjectSourcesArgs {
+  projectId: string;
+}
+
+export function countProjectSources(
+  db: DbConnection,
+  args: CountProjectSourcesArgs,
+): number {
+  const row = db
+    .select({ count: count() })
+    .from(projectSources)
+    .where(eq(projectSources.projectId, args.projectId))
+    .get();
+
+  return row?.count ?? 0;
 }
 
 export interface UpdateLocalPathProjectSourceInput {

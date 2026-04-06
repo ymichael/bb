@@ -89,6 +89,10 @@ export interface ListThreadEnvironmentAssignmentsOnHostArgs {
   threadIds: readonly string[];
 }
 
+export interface ListHostThreadIdsArgs {
+  hostId: string;
+}
+
 export interface ThreadEnvironmentAssignmentRow {
   environmentId: string;
   threadId: string;
@@ -100,6 +104,10 @@ export interface StopRequestedThreadRow {
   status: ThreadStatus;
   stopRequestedAt: number | null;
   threadId: string;
+}
+
+export interface HasPendingThreadShutdownInEnvironmentArgs {
+  environmentId: string;
 }
 
 export function listThreads(
@@ -173,6 +181,19 @@ export function listThreadEnvironmentAssignmentsOnHost(
     .all();
 }
 
+export function listHostThreadIds(
+  db: DbConnection,
+  args: ListHostThreadIdsArgs,
+): string[] {
+  return db
+    .select({ id: threads.id })
+    .from(threads)
+    .innerJoin(environments, eq(threads.environmentId, environments.id))
+    .where(eq(environments.hostId, args.hostId))
+    .all()
+    .map((row) => row.id);
+}
+
 export function listStopRequestedThreads(
   db: DbConnection,
 ): StopRequestedThreadRow[] {
@@ -187,6 +208,24 @@ export function listStopRequestedThreads(
     .innerJoin(environments, eq(threads.environmentId, environments.id))
     .where(isNotNull(threads.stopRequestedAt))
     .all();
+}
+
+export function hasPendingThreadShutdownInEnvironment(
+  db: DbConnection,
+  args: HasPendingThreadShutdownInEnvironmentArgs,
+): boolean {
+  const row = db
+    .select({ id: threads.id })
+    .from(threads)
+    .where(
+      and(
+        eq(threads.environmentId, args.environmentId),
+        isNotNull(threads.stopRequestedAt),
+      ),
+    )
+    .get();
+
+  return row !== undefined;
 }
 
 export interface UpdateThreadInput {

@@ -1,4 +1,4 @@
-import { eq, and, gt } from "drizzle-orm";
+import { and, desc, eq, gt } from "drizzle-orm";
 import type { HostType } from "@bb/domain";
 import type { DbConnection, DbTransaction } from "../connection.js";
 import type { DbNotifier } from "../notifier.js";
@@ -6,6 +6,10 @@ import { hostDaemonSessions } from "../schema.js";
 import { createHostDaemonSessionId } from "../ids.js";
 
 type SessionReadConnection = DbConnection | DbTransaction;
+
+export interface GetActiveSessionByIdArgs {
+  sessionId: string;
+}
 
 export interface OpenSessionInput {
   hostId: string;
@@ -129,6 +133,58 @@ export function getActiveSession(db: SessionReadConnection, hostId: string) {
       )
       .get() ?? null
   );
+}
+
+export function getActiveSessionById(
+  db: SessionReadConnection,
+  args: GetActiveSessionByIdArgs,
+) {
+  return (
+    db
+      .select()
+      .from(hostDaemonSessions)
+      .where(
+        and(
+          eq(hostDaemonSessions.id, args.sessionId),
+          eq(hostDaemonSessions.status, "active"),
+          gt(hostDaemonSessions.leaseExpiresAt, Date.now()),
+        ),
+      )
+      .get() ?? null
+  );
+}
+
+export function listConnectedHostIds(db: SessionReadConnection): string[] {
+  return db
+    .select({ hostId: hostDaemonSessions.hostId })
+    .from(hostDaemonSessions)
+    .where(
+      and(
+        eq(hostDaemonSessions.status, "active"),
+        gt(hostDaemonSessions.leaseExpiresAt, Date.now()),
+      ),
+    )
+    .all()
+    .map((row) => row.hostId);
+}
+
+export function getMostRecentlyUpdatedConnectedHostId(
+  db: SessionReadConnection,
+): string | null {
+  const row = db
+    .select({ hostId: hostDaemonSessions.hostId })
+    .from(hostDaemonSessions)
+    .where(
+      and(
+        eq(hostDaemonSessions.status, "active"),
+        gt(hostDaemonSessions.leaseExpiresAt, Date.now()),
+      ),
+    )
+    .orderBy(desc(hostDaemonSessions.updatedAt))
+    .limit(1)
+    .get();
+
+  return row?.hostId ?? null;
 }
 
 export function heartbeatSession(

@@ -20,7 +20,11 @@ export type {
 
 export {
   createProjectSource,
+  countProjectSources,
+  getProjectSource,
+  getProjectSourceForProject,
   listProjectSources,
+  listProjectSourcesByProjectIds,
   getProjectSourceByHost,
   getDefaultProjectSource,
   toProjectSource,
@@ -28,7 +32,9 @@ export {
   deleteProjectSource,
 } from "./project-sources.js";
 export type {
+  CountProjectSourcesArgs,
   CreateProjectSourceInput,
+  GetProjectSourceForProjectArgs,
   UpdateProjectSourceInput,
 } from "./project-sources.js";
 
@@ -58,6 +64,8 @@ export {
   createThread,
   countLiveThreadsInEnvironment,
   getThread,
+  hasPendingThreadShutdownInEnvironment,
+  listHostThreadIds,
   listStopRequestedThreads,
   listThreadEnvironmentAssignmentsOnHost,
   listThreads,
@@ -74,6 +82,8 @@ export {
 export type {
   CountLiveThreadsInEnvironmentArgs,
   CreateThreadInput,
+  HasPendingThreadShutdownInEnvironmentArgs,
+  ListHostThreadIdsArgs,
   ListThreadsOptions,
   StopRequestedThreadRow,
   ListThreadEnvironmentAssignmentsOnHostArgs,
@@ -155,14 +165,17 @@ export type { UpsertHostInput, UpdateHostInput } from "./hosts.js";
 export {
   appendStoredThreadEvent,
   appendStoredThreadEventInTransaction,
+  findStoredEventRow,
   getHighWaterMarks,
   getLastStoredProviderThreadId,
   getLastStoredTurnId,
   getLastStoredTurnRequestEvent,
+  getLatestThreadOutputEventRow,
   getLatestThreadSequence,
   insertEvents,
   listCompletedTurnsByThreadIds,
   listEvents,
+  listStoredEventRows,
   pruneTokenUsageEventsBeforeSequence,
   pruneResolvedAgentMessageDeltas,
   pruneThreadEventsBeforeSequence,
@@ -170,19 +183,24 @@ export {
 export type {
   AppendStoredThreadEventArgs,
   CompletedStoredTurnRow,
+  FindStoredEventRowArgs,
   GetLatestThreadSequenceArgs,
+  GetLatestThreadOutputEventRowArgs,
   InsertEventInput,
   InsertEventsResult,
   ListEventsOptions,
+  ListStoredEventRowsArgs,
   PruneTokenUsageEventsBeforeSequenceArgs,
   PruneResolvedAgentMessageDeltasArgs,
   PruneThreadEventsBeforeSequenceArgs,
+  StoredEventRow,
   StoredTurnRequestEventRow,
 } from "./events.js";
 
 export {
   cancelCommand,
   getCommand,
+  getPendingEnvironmentCommand,
   hasPendingHostCommandForThread,
   queueCommand,
   queueCommandInTransaction,
@@ -192,6 +210,7 @@ export {
 export type {
   QueueCommandInput,
   FetchCommandsOptions,
+  GetPendingEnvironmentCommandArgs,
   HasPendingHostCommandForThreadArgs,
   ReportCommandResultInput,
 } from "./commands.js";
@@ -200,9 +219,15 @@ export {
   openSession,
   closeSession,
   getActiveSession,
+  getActiveSessionById,
+  getMostRecentlyUpdatedConnectedHostId,
   heartbeatSession,
+  listConnectedHostIds,
 } from "./sessions.js";
-export type { OpenSessionInput } from "./sessions.js";
+export type {
+  GetActiveSessionByIdArgs,
+  OpenSessionInput,
+} from "./sessions.js";
 
 export {
   claimDraft,

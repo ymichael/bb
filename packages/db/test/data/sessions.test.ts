@@ -4,10 +4,13 @@ import { migrate } from "../../src/migrate.js";
 import { noopNotifier } from "../../src/notifier.js";
 import type { DbNotifier } from "../../src/notifier.js";
 import {
-  openSession,
   closeSession,
   getActiveSession,
+  getActiveSessionById,
+  getMostRecentlyUpdatedConnectedHostId,
   heartbeatSession,
+  listConnectedHostIds,
+  openSession,
 } from "../../src/data/sessions.js";
 import { upsertHost } from "../../src/data/hosts.js";
 import { hostDaemonSessions } from "../../src/schema.js";
@@ -44,6 +47,7 @@ describe("sessions", () => {
 
     const active = getActiveSession(db, host.id);
     expect(active?.id).toBe(session.id);
+    expect(getActiveSessionById(db, { sessionId: session.id })?.id).toBe(session.id);
   });
 
   it("closes a session", () => {
@@ -152,6 +156,40 @@ describe("sessions", () => {
       .run();
 
     expect(getActiveSession(db, host.id)).toBeNull();
+    expect(getActiveSessionById(db, { sessionId: session.id })).toBeNull();
+  });
+
+  it("lists connected hosts and returns the most recently updated connected host", () => {
+    const { db, host } = setup();
+    const otherHost = upsertHost(db, noopNotifier, {
+      name: "test-host-2",
+      type: "persistent",
+    });
+    const firstSession = openSession(db, noopNotifier, {
+      hostId: host.id,
+      instanceId: "inst-1",
+      hostName: "test-host",
+      hostType: "persistent",
+      dataDir: "/tmp/test-host-data",
+      protocolVersion: 1,
+      heartbeatIntervalMs: 10_000,
+      leaseTimeoutMs: 30_000,
+    });
+    openSession(db, noopNotifier, {
+      hostId: otherHost.id,
+      instanceId: "inst-2",
+      hostName: "test-host-2",
+      hostType: "persistent",
+      dataDir: "/tmp/test-host-data-2",
+      protocolVersion: 1,
+      heartbeatIntervalMs: 10_000,
+      leaseTimeoutMs: 30_000,
+    });
+
+    closeSession(db, noopNotifier, firstSession.id, "replaced");
+
+    expect(listConnectedHostIds(db)).toEqual([otherHost.id]);
+    expect(getMostRecentlyUpdatedConnectedHostId(db)).toBe(otherHost.id);
   });
 
   it("does not overwrite an already closed session", () => {

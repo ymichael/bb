@@ -7,6 +7,8 @@ import {
   createThread,
   countLiveThreadsInEnvironment,
   getThread,
+  hasPendingThreadShutdownInEnvironment,
+  listHostThreadIds,
   listThreadEnvironmentAssignmentsOnHost,
   listThreads,
   updateThread,
@@ -257,6 +259,58 @@ describe("threads", () => {
         environmentId: environment.id,
       },
     ]);
+  });
+
+  it("lists host thread ids and detects pending shutdowns by environment", () => {
+    const { db, project, host } = setup();
+    const otherHost = upsertHost(db, noopNotifier, {
+      name: "other-host",
+      type: "persistent",
+    });
+    const environment = createEnvironment(db, noopNotifier, {
+      projectId: project.id,
+      hostId: host.id,
+      path: "/tmp/thread-host-match",
+      workspaceProvisionType: "unmanaged",
+      status: "ready",
+    });
+    const otherEnvironment = createEnvironment(db, noopNotifier, {
+      projectId: project.id,
+      hostId: otherHost.id,
+      path: "/tmp/thread-host-other",
+      workspaceProvisionType: "unmanaged",
+      status: "ready",
+    });
+    const activeThread = createThread(db, noopNotifier, {
+      projectId: project.id,
+      environmentId: environment.id,
+      providerId: "codex",
+    });
+    const stoppingThread = createThread(db, noopNotifier, {
+      projectId: project.id,
+      environmentId: environment.id,
+      providerId: "codex",
+    });
+    createThread(db, noopNotifier, {
+      projectId: project.id,
+      environmentId: otherEnvironment.id,
+      providerId: "codex",
+    });
+    markThreadStopRequested(db, noopNotifier, {
+      threadId: stoppingThread.id,
+      requestedAt: 123,
+    });
+
+    expect(listHostThreadIds(db, { hostId: host.id })).toEqual([
+      activeThread.id,
+      stoppingThread.id,
+    ]);
+    expect(hasPendingThreadShutdownInEnvironment(db, {
+      environmentId: environment.id,
+    })).toBe(true);
+    expect(hasPendingThreadShutdownInEnvironment(db, {
+      environmentId: otherEnvironment.id,
+    })).toBe(false);
   });
 });
 

@@ -3,9 +3,10 @@ import { createConnection } from "../../src/connection.js";
 import { migrate } from "../../src/migrate.js";
 import { noopNotifier } from "../../src/notifier.js";
 import {
+  getPendingEnvironmentCommand,
   hasPendingHostCommandForThread,
-  queueCommand,
   fetchCommands,
+  queueCommand,
   reportCommandResult,
 } from "../../src/data/commands.js";
 import { upsertHost } from "../../src/data/hosts.js";
@@ -155,6 +156,44 @@ describe("commands", () => {
       threadId: "thr_missing",
       type: "turn.run",
     })).toBe(false);
+  });
+
+  it("finds pending environment commands by environment id and type", () => {
+    const { db, host } = setup();
+
+    const matching = queueCommand(db, noopNotifier, {
+      hostId: host.id,
+      type: "workspace.status",
+      payload: JSON.stringify({
+        environmentId: "env_target",
+      }),
+    });
+    queueCommand(db, noopNotifier, {
+      hostId: host.id,
+      type: "workspace.status",
+      payload: JSON.stringify({
+        environmentId: "env_other",
+      }),
+    });
+
+    fetchCommands(db, noopNotifier, { hostId: host.id });
+
+    expect(getPendingEnvironmentCommand(db, {
+      environmentId: "env_target",
+      type: "workspace.status",
+    })?.id).toBe(matching.id);
+
+    reportCommandResult(db, noopNotifier, {
+      commandId: matching.id,
+      state: "success",
+      completedAt: Date.now(),
+      resultPayload: JSON.stringify({ ok: true }),
+    });
+
+    expect(getPendingEnvironmentCommand(db, {
+      environmentId: "env_target",
+      type: "workspace.status",
+    })).toBeNull();
   });
 
   it("reports command result", () => {

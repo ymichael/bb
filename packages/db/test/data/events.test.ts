@@ -6,14 +6,17 @@ import type { DbNotifier } from "../../src/notifier.js";
 import {
   appendStoredThreadEvent,
   appendStoredThreadEventInTransaction,
+  findStoredEventRow,
   getHighWaterMarks,
   getLastStoredProviderThreadId,
   getLastStoredTurnId,
   getLastStoredTurnRequestEvent,
+  getLatestThreadOutputEventRow,
   getLatestThreadSequence,
   insertEvents,
   listCompletedTurnsByThreadIds,
   listEvents,
+  listStoredEventRows,
   pruneTokenUsageEventsBeforeSequence,
   pruneResolvedAgentMessageDeltas,
   pruneThreadEventsBeforeSequence,
@@ -185,6 +188,97 @@ describe("events", () => {
 
     const [event] = listEvents(db, { threadId: thread.id });
     expect(event?.createdAt).toBe(createdAt);
+  });
+
+  it("lists and finds stored event rows with shared DB helpers", () => {
+    const { db, thread } = setup();
+
+    insertEvents(db, noopNotifier, [
+      {
+        threadId: thread.id,
+        sequence: 1,
+        type: "system/error",
+        ...emptyItemFields,
+        data: JSON.stringify({ message: "first" }),
+      },
+      {
+        threadId: thread.id,
+        sequence: 2,
+        type: "system/error",
+        ...emptyItemFields,
+        data: JSON.stringify({ message: "second" }),
+      },
+      {
+        threadId: thread.id,
+        sequence: 3,
+        type: "turn/started",
+        ...emptyItemFields,
+        data: JSON.stringify({ turnId: "turn_1" }),
+      },
+    ]);
+
+    expect(listStoredEventRows(db, {
+      afterSequence: 1,
+      limit: 1,
+      threadId: thread.id,
+    })).toMatchObject([
+      {
+        sequence: 2,
+        type: "system/error",
+      },
+    ]);
+
+    expect(findStoredEventRow(db, {
+      afterSequence: 1,
+      threadId: thread.id,
+      type: "system/error",
+    })).toMatchObject({
+      sequence: 2,
+      type: "system/error",
+    });
+  });
+
+  it("finds the latest output event row without scanning unrelated event types", () => {
+    const { db, thread } = setup();
+
+    insertEvents(db, noopNotifier, [
+      {
+        threadId: thread.id,
+        sequence: 1,
+        type: "system/manager/user_message",
+        ...emptyItemFields,
+        data: JSON.stringify({ text: "manager output" }),
+      },
+      {
+        threadId: thread.id,
+        sequence: 2,
+        type: "item/completed",
+        itemId: "msg_1",
+        itemKind: "agentMessage",
+        data: JSON.stringify({ item: { id: "msg_1", type: "agentMessage", text: "assistant output" } }),
+      },
+      {
+        threadId: thread.id,
+        sequence: 3,
+        type: "item/completed",
+        itemId: "call_1",
+        itemKind: "toolCall",
+        data: JSON.stringify({ item: { id: "call_1", type: "toolCall" } }),
+      },
+      {
+        threadId: thread.id,
+        sequence: 4,
+        type: "system/error",
+        ...emptyItemFields,
+        data: JSON.stringify({ message: "ignored" }),
+      },
+    ]);
+
+    expect(getLatestThreadOutputEventRow(db, { threadId: thread.id })).toMatchObject({
+      sequence: 2,
+      itemKind: "agentMessage",
+      type: "item/completed",
+    });
   });
 
   it("appends stored thread events and exposes the latest thread runtime markers", () => {
