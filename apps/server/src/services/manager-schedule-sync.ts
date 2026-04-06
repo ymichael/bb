@@ -8,13 +8,9 @@ import {
 } from "@bb/db";
 import { hostDaemonCommandResultSchemaByType } from "@bb/host-daemon-contract";
 import {
-  dailyScheduleDefinitionSchema,
-  hourlyScheduleDefinitionSchema,
-  monthlyScheduleDefinitionSchema,
+  scheduleCronSchema,
   scheduleNameSchema,
   scheduleTimezoneSchema,
-  type ScheduleDefinition,
-  weeklyScheduleDefinitionSchema,
 } from "@bb/server-contract";
 import { z } from "zod";
 import { ApiError } from "../errors.js";
@@ -22,9 +18,7 @@ import type { AppDeps } from "../types.js";
 import { queueCommandAndWait } from "./command-wait.js";
 import {
   computeNextScheduledTime,
-  parseLegacyCronScheduleDefinition,
   ScheduleValidationError,
-  serializeScheduleExpressionSet,
   validateScheduleDefinition,
 } from "./schedule-helpers.js";
 import { requireThreadStoragePath } from "./thread-storage.js";
@@ -42,34 +36,11 @@ const asyncScheduleFrontmatterSchema = z.object({
   timezone: scheduleTimezoneSchema.optional(),
 });
 
-const asyncHourlyScheduleEntrySchema = hourlyScheduleDefinitionSchema.extend({
+const asyncScheduleEntrySchema = z.object({
+  cron: scheduleCronSchema,
   name: scheduleNameSchema,
   timezone: scheduleTimezoneSchema.optional(),
 });
-const asyncDailyScheduleEntrySchema = dailyScheduleDefinitionSchema.extend({
-  name: scheduleNameSchema,
-  timezone: scheduleTimezoneSchema.optional(),
-});
-const asyncWeeklyScheduleEntrySchema = weeklyScheduleDefinitionSchema.extend({
-  name: scheduleNameSchema,
-  timezone: scheduleTimezoneSchema.optional(),
-});
-const asyncMonthlyScheduleEntrySchema = monthlyScheduleDefinitionSchema.extend({
-  name: scheduleNameSchema,
-  timezone: scheduleTimezoneSchema.optional(),
-});
-const asyncLegacyCronScheduleEntrySchema = z.object({
-  cron: z.string().min(1),
-  name: scheduleNameSchema,
-  timezone: scheduleTimezoneSchema.optional(),
-});
-const asyncScheduleEntrySchema = z.union([
-  asyncHourlyScheduleEntrySchema,
-  asyncDailyScheduleEntrySchema,
-  asyncWeeklyScheduleEntrySchema,
-  asyncMonthlyScheduleEntrySchema,
-  asyncLegacyCronScheduleEntrySchema,
-]);
 
 interface SyncManagerThreadSchedulesArgs {
   threadId: string;
@@ -151,38 +122,14 @@ function toDesiredManagerThreadNudges(
       continue;
     }
 
-    let schedule: ScheduleDefinition;
-    if ("cron" in rawSchedule) {
-      const timezone = rawSchedule.timezone ?? defaultTimezone;
-      try {
-        schedule = parseLegacyCronScheduleDefinition({
-          cron: rawSchedule.cron,
-          timezone,
-        });
-      } catch (error) {
-        if (error instanceof ScheduleValidationError) {
-          deps.logger.warn(
-            {
-              name: rawSchedule.name,
-              reason: error.message,
-              threadId: args.threadId,
-            },
-            "Skipping invalid ASYNC.md schedule",
-          );
-          continue;
-        }
-        throw error;
-      }
-    } else {
-      const timezone = rawSchedule.timezone ?? defaultTimezone;
-      schedule = {
-        ...rawSchedule,
-        timezone,
-      };
-    }
+    const timezone = rawSchedule.timezone ?? defaultTimezone;
+    const cron = rawSchedule.cron.trim();
 
     try {
-      validateScheduleDefinition(schedule);
+      validateScheduleDefinition({
+        cron,
+        timezone,
+      });
     } catch (error) {
       if (error instanceof ScheduleValidationError) {
         deps.logger.warn(
@@ -199,13 +146,14 @@ function toDesiredManagerThreadNudges(
     }
 
     desiredNudges.push({
-      cron: serializeScheduleExpressionSet(schedule),
+      cron,
       name: rawSchedule.name,
       nextFireAt: computeNextScheduledTime({
+        cron,
         now: args.now,
-        schedule,
+        timezone,
       }),
-      timezone: schedule.timezone,
+      timezone,
     });
     seenNames.add(rawSchedule.name);
   }

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   computeNextScheduledTime,
-  parseLegacyCronScheduleDefinition,
+  parseCronScheduleDefinition,
   ScheduleValidationError,
   validateScheduleDefinition,
 } from "../src/services/schedule-helpers.js";
@@ -16,7 +16,7 @@ describe("schedule helpers", () => {
   it("moves spring-forward schedules to the next valid local time", () => {
     const nextRunAt = computeNextScheduledTime({
       now: Date.parse("2026-03-08T09:55:00.000Z"),
-      schedule: createDailySchedule({
+      ...createDailySchedule({
         times: ["02:00"],
         timezone: "America/Los_Angeles",
       }),
@@ -28,7 +28,7 @@ describe("schedule helpers", () => {
   it("picks the first repeated local time during fall-back", () => {
     const nextRunAt = computeNextScheduledTime({
       now: Date.parse("2026-11-01T08:10:00.000Z"),
-      schedule: createDailySchedule({
+      ...createDailySchedule({
         times: ["01:30"],
         timezone: "America/Los_Angeles",
       }),
@@ -40,7 +40,7 @@ describe("schedule helpers", () => {
   it("moves to the next day after the repeated fall-back hour has already passed", () => {
     const nextRunAt = computeNextScheduledTime({
       now: Date.parse("2026-11-01T09:40:00.000Z"),
-      schedule: createDailySchedule({
+      ...createDailySchedule({
         times: ["01:30"],
         timezone: "America/Los_Angeles",
       }),
@@ -52,7 +52,7 @@ describe("schedule helpers", () => {
   it("skips months that do not have the configured monthly date", () => {
     const nextRunAt = computeNextScheduledTime({
       now: Date.parse("2026-04-30T12:00:00.000Z"),
-      schedule: createMonthlySchedule({
+      ...createMonthlySchedule({
         dayOfMonth: 31,
         times: ["09:00"],
       }),
@@ -87,20 +87,33 @@ describe("schedule helpers", () => {
       .not.toThrow();
   });
 
-  it("parses supported legacy weekly cron schedules into the new model", () => {
-    expect(parseLegacyCronScheduleDefinition({
+  it("parses supported weekly cron schedules into the internal subset model", () => {
+    expect(parseCronScheduleDefinition({
       cron: "0 8 * * 1-5",
       timezone: "UTC",
-    })).toEqual(createWeeklySchedule({
+    })).toEqual({
+      kind: "weekly",
       times: ["08:00"],
+      timezone: "UTC",
       weekdays: ["mon", "tue", "wed", "thu", "fri"],
-    }));
+    });
   });
 
-  it("rejects unsupported legacy cron schedules", () => {
+  it("supports cron schedules with multiple daily times", () => {
+    expect(parseCronScheduleDefinition({
+      cron: "0,30 9,17 * * *",
+      timezone: "UTC",
+    })).toEqual({
+      kind: "daily",
+      times: ["09:00", "09:30", "17:00", "17:30"],
+      timezone: "UTC",
+    });
+  });
+
+  it("rejects unsupported cron schedules", () => {
     expect(() =>
-      parseLegacyCronScheduleDefinition({
-        cron: "0,5 8 * * *",
+      parseCronScheduleDefinition({
+        cron: "*/5 8 * * *",
         timezone: "UTC",
       }))
       .toThrow(ScheduleValidationError);

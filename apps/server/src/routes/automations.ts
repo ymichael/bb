@@ -81,7 +81,7 @@ function requireProjectAutomation(
 function resolveNextRunAtForCreate(
   payload: CreateAutomationValues,
 ) {
-  validateScheduleDefinition(payload.trigger.schedule);
+  validateScheduleDefinition(payload.trigger);
   if (!payload.enabled) {
     return null;
   }
@@ -92,8 +92,9 @@ function computeScheduledNextRunAt(
   trigger: AutomationScheduleTrigger,
 ) {
   return computeNextScheduledTime({
+    cron: trigger.cron,
     now: Date.now(),
-    schedule: trigger.schedule,
+    timezone: trigger.timezone,
   });
 }
 
@@ -115,7 +116,7 @@ function buildAutomationConfigUpdateInput(
   const nextTrigger = args.payload.trigger
     ?? parseAutomationTriggerConfig(args.current.triggerConfig);
   if (args.payload.trigger !== undefined) {
-    validateScheduleDefinition(args.payload.trigger.schedule);
+    validateScheduleDefinition(args.payload.trigger);
   }
   const nextRunAt = args.payload.trigger !== undefined
     ? (args.current.enabled

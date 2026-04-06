@@ -22,7 +22,6 @@ export const AUTOMATION_NAME_MAX_LENGTH = 200;
 export const SCHEDULE_CRON_MAX_LENGTH = 100;
 export const SCHEDULE_NAME_MAX_LENGTH = 200;
 export const SCHEDULE_TIMEZONE_MAX_LENGTH = 100;
-export const SCHEDULE_TIMES_MAX_COUNT = 24;
 
 export const threadContextWindowUsageSchema = z.object({
   totalTokens: z.number(),
@@ -97,91 +96,10 @@ export const automationNameSchema = z.string().min(1).max(AUTOMATION_NAME_MAX_LE
 export const scheduleCronSchema = z.string().min(1).max(SCHEDULE_CRON_MAX_LENGTH);
 export const scheduleNameSchema = z.string().min(1).max(SCHEDULE_NAME_MAX_LENGTH);
 export const scheduleTimezoneSchema = z.string().min(1).max(SCHEDULE_TIMEZONE_MAX_LENGTH);
-export const scheduleTimeOfDaySchema = z
-  .string()
-  .regex(/^([01]\d|2[0-3]):([0-5]\d)$/u, "Expected time in HH:MM format");
-export const scheduleWeekdaySchema = z.enum([
-  "mon",
-  "tue",
-  "wed",
-  "thu",
-  "fri",
-  "sat",
-  "sun",
-]);
-
-export const scheduleTimesSchema = z
-  .array(scheduleTimeOfDaySchema)
-  .min(1)
-  .max(SCHEDULE_TIMES_MAX_COUNT)
-  .superRefine((times, context) => {
-    if (new Set(times).size !== times.length) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Schedule times must be unique",
-      });
-    }
-  });
-
-export const scheduleWeekdaysSchema = z
-  .array(scheduleWeekdaySchema)
-  .min(1)
-  .max(7)
-  .superRefine((weekdays, context) => {
-    if (new Set(weekdays).size !== weekdays.length) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Schedule weekdays must be unique",
-      });
-    }
-  });
-
-export const hourlyScheduleDefinitionSchema = z.object({
-  kind: z.literal("hourly"),
-  intervalHours: z.number().int().min(1).max(24),
-  minute: z.number().int().min(0).max(59),
-  timezone: scheduleTimezoneSchema,
-});
-export type HourlyScheduleDefinition = z.infer<
-  typeof hourlyScheduleDefinitionSchema
->;
-
-export const dailyScheduleDefinitionSchema = z.object({
-  kind: z.literal("daily"),
-  times: scheduleTimesSchema,
-  timezone: scheduleTimezoneSchema,
-});
-export type DailyScheduleDefinition = z.infer<typeof dailyScheduleDefinitionSchema>;
-
-export const weeklyScheduleDefinitionSchema = z.object({
-  kind: z.literal("weekly"),
-  times: scheduleTimesSchema,
-  timezone: scheduleTimezoneSchema,
-  weekdays: scheduleWeekdaysSchema,
-});
-export type WeeklyScheduleDefinition = z.infer<typeof weeklyScheduleDefinitionSchema>;
-
-export const monthlyScheduleDefinitionSchema = z.object({
-  dayOfMonth: z.number().int().min(1).max(31),
-  kind: z.literal("monthly"),
-  times: scheduleTimesSchema,
-  timezone: scheduleTimezoneSchema,
-});
-export type MonthlyScheduleDefinition = z.infer<
-  typeof monthlyScheduleDefinitionSchema
->;
-
-export const scheduleDefinitionSchema = z.discriminatedUnion("kind", [
-  hourlyScheduleDefinitionSchema,
-  dailyScheduleDefinitionSchema,
-  weeklyScheduleDefinitionSchema,
-  monthlyScheduleDefinitionSchema,
-]);
-export type ScheduleDefinition = z.infer<typeof scheduleDefinitionSchema>;
-
 export const automationScheduleTriggerSchema = z.object({
   triggerType: z.literal("schedule"),
-  schedule: scheduleDefinitionSchema,
+  cron: scheduleCronSchema,
+  timezone: scheduleTimezoneSchema,
 });
 export type AutomationScheduleTrigger = z.infer<
   typeof automationScheduleTriggerSchema

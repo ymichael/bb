@@ -10,7 +10,6 @@ import {
   automationActionSchema,
   automationSchema,
   automationScheduleTriggerSchema,
-  scheduleCronSchema,
   scheduleTimezoneSchema,
   type AutomationAction,
   type AutomationScheduleTrigger,
@@ -20,8 +19,8 @@ import { ApiError } from "../errors.js";
 import type { AppDeps } from "../types.js";
 import { parseJsonValue, parseJsonWithSchema } from "./json-parsing.js";
 import {
-  parseLegacyCronScheduleDefinition,
   ScheduleValidationError,
+  serializeScheduleDefinitionAsCron,
   validateScheduleDefinition,
 } from "./schedule-helpers.js";
 import {
@@ -54,10 +53,48 @@ export interface SafeParsedAutomationDefinitionResult {
   parsedDefinition: ParsedAutomationDefinition | null;
 }
 
+const scheduleTimeOfDaySchema = z
+  .string()
+  .regex(/^([01]\d|2[0-3]):([0-5]\d)$/u, "Expected time in HH:MM format");
+const scheduleWeekdaySchema = z.enum([
+  "mon",
+  "tue",
+  "wed",
+  "thu",
+  "fri",
+  "sat",
+  "sun",
+]);
+
+const legacyScheduleDefinitionSchema = z.discriminatedUnion("kind", [
+  z.object({
+    intervalHours: z.number().int().min(1).max(24),
+    kind: z.literal("hourly"),
+    minute: z.number().int().min(0).max(59),
+    timezone: scheduleTimezoneSchema,
+  }),
+  z.object({
+    kind: z.literal("daily"),
+    times: z.array(scheduleTimeOfDaySchema).min(1),
+    timezone: scheduleTimezoneSchema,
+  }),
+  z.object({
+    kind: z.literal("weekly"),
+    times: z.array(scheduleTimeOfDaySchema).min(1),
+    timezone: scheduleTimezoneSchema,
+    weekdays: z.array(scheduleWeekdaySchema).min(1),
+  }),
+  z.object({
+    dayOfMonth: z.number().int().min(1).max(31),
+    kind: z.literal("monthly"),
+    times: z.array(scheduleTimeOfDaySchema).min(1),
+    timezone: scheduleTimezoneSchema,
+  }),
+]);
+
 const legacyAutomationScheduleTriggerSchema = z.object({
   triggerType: z.literal("schedule"),
-  cron: scheduleCronSchema,
-  timezone: scheduleTimezoneSchema,
+  schedule: legacyScheduleDefinitionSchema,
 });
 
 export function parseAutomationTriggerConfig(
@@ -72,10 +109,8 @@ export function parseAutomationTriggerConfig(
   const legacyTrigger = legacyAutomationScheduleTriggerSchema.parse(parsed);
   return {
     triggerType: "schedule",
-    schedule: parseLegacyCronScheduleDefinition({
-      cron: legacyTrigger.cron,
-      timezone: legacyTrigger.timezone,
-    }),
+    cron: serializeScheduleDefinitionAsCron(legacyTrigger.schedule),
+    timezone: legacyTrigger.schedule.timezone,
   } satisfies AutomationScheduleTrigger;
 }
 
@@ -101,7 +136,10 @@ export function computeAutomationValidation(
   const validationIssues: string[] = [];
 
   try {
-    validateScheduleDefinition(args.trigger.schedule);
+    validateScheduleDefinition({
+      cron: args.trigger.cron,
+      timezone: args.trigger.timezone,
+    });
   } catch (error) {
     if (error instanceof ScheduleValidationError) {
       validationIssues.push(error.message);
@@ -160,7 +198,10 @@ export function computeAutomationValidationWithProjectData(
   const validationIssues: string[] = [];
 
   try {
-    validateScheduleDefinition(args.trigger.schedule);
+    validateScheduleDefinition({
+      cron: args.trigger.cron,
+      timezone: args.trigger.timezone,
+    });
   } catch (error) {
     if (error instanceof ScheduleValidationError) {
       validationIssues.push(error.message);
@@ -196,7 +237,11 @@ export function safeParseAutomationDefinition(
       parsedDefinition: parseAutomationDefinition(row),
     };
   } catch (error) {
-    if (error instanceof SyntaxError || error instanceof ZodError) {
+    if (
+      error instanceof ScheduleValidationError ||
+      error instanceof SyntaxError ||
+      error instanceof ZodError
+    ) {
       return {
         parsedDefinition: null,
       };
@@ -220,7 +265,11 @@ export function validateStoredAutomationDefinition(
       }),
     };
   } catch (error) {
-    if (error instanceof SyntaxError || error instanceof ZodError) {
+    if (
+      error instanceof ScheduleValidationError ||
+      error instanceof SyntaxError ||
+      error instanceof ZodError
+    ) {
       return {
         parsedDefinition: null,
         validation: {

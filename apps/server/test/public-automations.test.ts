@@ -2,7 +2,7 @@ import { createAutomation, createProjectSource } from "@bb/db";
 import {
   automationSchema,
   AUTOMATION_NAME_MAX_LENGTH,
-  SCHEDULE_TIMES_MAX_COUNT,
+  SCHEDULE_CRON_MAX_LENGTH,
   SCHEDULE_TIMEZONE_MAX_LENGTH,
 } from "@bb/server-contract";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -39,12 +39,9 @@ const tooFrequentTrigger = createScheduleTrigger(createDailySchedule({
   times: ["08:00", "08:03"],
 }));
 const invalidTimeTrigger = {
+  cron: "0 8-9 * * *",
+  timezone: "UTC",
   triggerType: "schedule",
-  schedule: {
-    kind: "daily",
-    times: ["not-a-time"],
-    timezone: "UTC",
-  },
 };
 
 describe("public automation routes", () => {
@@ -93,9 +90,7 @@ describe("public automation routes", () => {
       expect(createdAutomation.isValid).toBe(true);
       expect(createdAutomation.validationIssues).toEqual([]);
       expect(createdAutomation.autoArchive).toBe(false);
-      expect(createdAutomation.trigger.schedule).toEqual(
-        losAngelesWeekdayMorningTrigger.schedule,
-      );
+      expect(createdAutomation.trigger).toEqual(losAngelesWeekdayMorningTrigger);
       expect(createdAutomation.nextRunAt).toBeTypeOf("number");
 
       const listResponse = await harness.app.request(
@@ -291,12 +286,10 @@ describe("public automation routes", () => {
         },
         {
           name: "Valid name",
-          trigger: createScheduleTrigger(createDailySchedule({
-            times: Array.from(
-              { length: SCHEDULE_TIMES_MAX_COUNT + 1 },
-              (_, index) => `${String(index % 24).padStart(2, "0")}:00`,
-            ),
-          })),
+          trigger: createScheduleTrigger({
+            cron: "0 ".repeat(SCHEDULE_CRON_MAX_LENGTH + 1).trim(),
+            timezone: "UTC",
+          }),
         },
         {
           name: "Valid name",

@@ -90,13 +90,9 @@ describe("server-contract canonical schemas", () => {
       createAutomationRequestSchema.parse({
         name: "Daily summary",
         trigger: {
+          cron: "0 8 * * 1-5",
+          timezone: "America/Los_Angeles",
           triggerType: "schedule",
-          schedule: {
-            kind: "weekly",
-            weekdays: ["mon", "tue", "wed", "thu", "fri"],
-            times: ["08:00"],
-            timezone: "America/Los_Angeles",
-          },
         },
         action: {
           actionType: "scheduled-thread",
@@ -123,13 +119,9 @@ describe("server-contract canonical schemas", () => {
         name: "Daily summary",
         enabled: true,
         trigger: {
+          cron: "0 8 * * 1-5",
+          timezone: "America/Los_Angeles",
           triggerType: "schedule",
-          schedule: {
-            kind: "weekly",
-            weekdays: ["mon", "tue", "wed", "thu", "fri"],
-            times: ["08:00"],
-            timezone: "America/Los_Angeles",
-          },
         },
         action: {
           actionType: "scheduled-thread",
