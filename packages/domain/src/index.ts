@@ -67,6 +67,23 @@ export type {
 } from "./environment.js";
 
 export {
+  environmentOperationKindSchema,
+  environmentOperationKindValues,
+  lifecycleOperationStateSchema,
+  lifecycleOperationStateValues,
+  projectOperationKindSchema,
+  projectOperationKindValues,
+  threadOperationKindSchema,
+  threadOperationKindValues,
+} from "./lifecycle-operations.js";
+export type {
+  EnvironmentOperationKind,
+  LifecycleOperationState,
+  ProjectOperationKind,
+  ThreadOperationKind,
+} from "./lifecycle-operations.js";
+
+export {
   findLocalPathProjectSourceForHost,
   githubRepoProjectSourceSchema,
   isGitHubRepoProjectSource,

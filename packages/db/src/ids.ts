@@ -28,12 +28,24 @@ export function createEnvironmentId(): string {
   return createId("env");
 }
 
+export function createEnvironmentOperationId(): string {
+  return createId("eop");
+}
+
 export function createThreadId(): string {
   return createId("thr");
 }
 
+export function createThreadOperationId(): string {
+  return createId("top");
+}
+
 export function createAutomationId(): string {
   return createId("auto");
+}
+
+export function createProjectOperationId(): string {
+  return createId("pop");
 }
 
 export function createManagerThreadNudgeId(): string {

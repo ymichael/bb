@@ -8,6 +8,22 @@ export {
 export type { CreateProjectInput, UpdateProjectInput } from "./projects.js";
 
 export {
+  cancelProjectOperation,
+  getProjectOperation,
+  getProjectOperationByCommandId,
+  markProjectOperationCompleted,
+  markProjectOperationFailed,
+  markProjectOperationFetched,
+  markProjectOperationQueued,
+  upsertProjectOperation,
+} from "./project-operations.js";
+export type {
+  GetProjectOperationArgs,
+  ProjectOperationRow,
+  UpsertProjectOperationInput,
+} from "./project-operations.js";
+
+export {
   createProjectSource,
   listProjectSources,
   getProjectSourceByHost,
@@ -72,6 +88,22 @@ export type {
 } from "./threads.js";
 
 export {
+  cancelThreadOperation,
+  getThreadOperation,
+  getThreadOperationByCommandId,
+  markThreadOperationCompleted,
+  markThreadOperationFailed,
+  markThreadOperationFetched,
+  markThreadOperationQueued,
+  upsertThreadOperation,
+} from "./thread-operations.js";
+export type {
+  GetThreadOperationArgs,
+  ThreadOperationRow,
+  UpsertThreadOperationInput,
+} from "./thread-operations.js";
+
+export {
   advanceManagerThreadNudgeAfterFire,
   advanceManagerThreadNudgeAfterFireInTransaction,
   createManagerThreadNudge,
@@ -91,6 +123,22 @@ export type {
   ReplaceManagerThreadNudgesArgs,
   UpdateManagerThreadNudgeInput,
 } from "./manager-thread-nudges.js";
+
+export {
+  cancelEnvironmentOperation,
+  getEnvironmentOperation,
+  getEnvironmentOperationByCommandId,
+  markEnvironmentOperationCompleted,
+  markEnvironmentOperationFailed,
+  markEnvironmentOperationFetched,
+  markEnvironmentOperationQueued,
+  upsertEnvironmentOperation,
+} from "./environment-operations.js";
+export type {
+  EnvironmentOperationRow,
+  GetEnvironmentOperationArgs,
+  UpsertEnvironmentOperationInput,
+} from "./environment-operations.js";
 
 export {
   applyProvisionedEnvironment,

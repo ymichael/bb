@@ -10,10 +10,14 @@ import { sql } from "drizzle-orm";
 import type { AnySQLiteColumn } from "drizzle-orm/sqlite-core";
 import { threadStatusValues } from "@bb/domain";
 import type {
+  EnvironmentOperationKind,
   EnvironmentCleanupMode,
   EnvironmentStatus,
   HostType,
+  LifecycleOperationState,
+  ProjectOperationKind,
   ProjectSourceType,
+  ThreadOperationKind,
   ThreadEventItemType,
   ThreadEventType,
   ThreadType,
@@ -193,6 +197,7 @@ export const threads = sqliteTable(
   ],
 );
 
+
 export const managerThreadNudges = sqliteTable(
   "manager_thread_nudges",
   {
@@ -340,5 +345,98 @@ export const hostDaemonCommands = sqliteTable(
       table.hostId,
       table.state,
     ),
+  ],
+);
+
+export const projectOperations = sqliteTable(
+  "project_operations",
+  {
+    id: text("id").primaryKey(),
+    projectId: text("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    kind: text("kind").$type<ProjectOperationKind>().notNull(),
+    state: text("state").$type<LifecycleOperationState>().notNull(),
+    payload: text("payload").notNull(),
+    commandId: text("command_id").references(() => hostDaemonCommands.id, {
+      onDelete: "set null",
+    }),
+    requestedAt: integer("requested_at").notNull(),
+    queuedAt: integer("queued_at"),
+    completedAt: integer("completed_at"),
+    failureReason: text("failure_reason"),
+    createdAt: integer("created_at").notNull(),
+    updatedAt: integer("updated_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("project_operations_project_kind_idx").on(
+      table.projectId,
+      table.kind,
+    ),
+    uniqueIndex("project_operations_command_idx").on(table.commandId),
+    index("project_operations_state_idx").on(table.state),
+    index("project_operations_project_idx").on(table.projectId),
+  ],
+);
+
+export const environmentOperations = sqliteTable(
+  "environment_operations",
+  {
+    id: text("id").primaryKey(),
+    environmentId: text("environment_id")
+      .notNull()
+      .references(() => environments.id, { onDelete: "cascade" }),
+    kind: text("kind").$type<EnvironmentOperationKind>().notNull(),
+    state: text("state").$type<LifecycleOperationState>().notNull(),
+    payload: text("payload").notNull(),
+    commandId: text("command_id").references(() => hostDaemonCommands.id, {
+      onDelete: "set null",
+    }),
+    requestedAt: integer("requested_at").notNull(),
+    queuedAt: integer("queued_at"),
+    completedAt: integer("completed_at"),
+    failureReason: text("failure_reason"),
+    createdAt: integer("created_at").notNull(),
+    updatedAt: integer("updated_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("environment_operations_environment_kind_idx").on(
+      table.environmentId,
+      table.kind,
+    ),
+    uniqueIndex("environment_operations_command_idx").on(table.commandId),
+    index("environment_operations_state_idx").on(table.state),
+    index("environment_operations_environment_idx").on(table.environmentId),
+  ],
+);
+
+export const threadOperations = sqliteTable(
+  "thread_operations",
+  {
+    id: text("id").primaryKey(),
+    threadId: text("thread_id")
+      .notNull()
+      .references(() => threads.id, { onDelete: "cascade" }),
+    kind: text("kind").$type<ThreadOperationKind>().notNull(),
+    state: text("state").$type<LifecycleOperationState>().notNull(),
+    payload: text("payload").notNull(),
+    commandId: text("command_id").references(() => hostDaemonCommands.id, {
+      onDelete: "set null",
+    }),
+    requestedAt: integer("requested_at").notNull(),
+    queuedAt: integer("queued_at"),
+    completedAt: integer("completed_at"),
+    failureReason: text("failure_reason"),
+    createdAt: integer("created_at").notNull(),
+    updatedAt: integer("updated_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("thread_operations_thread_kind_idx").on(
+      table.threadId,
+      table.kind,
+    ),
+    uniqueIndex("thread_operations_command_idx").on(table.commandId),
+    index("thread_operations_state_idx").on(table.state),
+    index("thread_operations_thread_idx").on(table.threadId),
   ],
 );
