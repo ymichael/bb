@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import type {
   EnvironmentOperationKind,
   LifecycleOperationState,
@@ -33,6 +33,12 @@ export interface UpdateEnvironmentOperationStateArgs {
   payload?: string;
   queuedAt?: number | null;
   state: LifecycleOperationState;
+}
+
+export interface ListEnvironmentOperationsArgs {
+  environmentIds?: string[];
+  kinds?: EnvironmentOperationKind[];
+  states?: LifecycleOperationState[];
 }
 
 function getEnvironmentOperationRecord(
@@ -84,6 +90,29 @@ export function getEnvironmentOperation(
   args: GetEnvironmentOperationArgs,
 ): EnvironmentOperationRow | null {
   return getEnvironmentOperationRecord(db, args);
+}
+
+export function listEnvironmentOperations(
+  db: EnvironmentOperationReadConnection,
+  args: ListEnvironmentOperationsArgs = {},
+): EnvironmentOperationRow[] {
+  const filters = [
+    args.environmentIds && args.environmentIds.length > 0
+      ? inArray(environmentOperations.environmentId, args.environmentIds)
+      : undefined,
+    args.kinds && args.kinds.length > 0
+      ? inArray(environmentOperations.kind, args.kinds)
+      : undefined,
+    args.states && args.states.length > 0
+      ? inArray(environmentOperations.state, args.states)
+      : undefined,
+  ].filter((value) => value !== undefined);
+
+  return db
+    .select()
+    .from(environmentOperations)
+    .where(filters.length > 0 ? and(...filters) : undefined)
+    .all();
 }
 
 export function getEnvironmentOperationByCommandId(

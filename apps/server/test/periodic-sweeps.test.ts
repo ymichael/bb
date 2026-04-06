@@ -1,15 +1,86 @@
+import { eq } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
-import { getHost, requestEnvironmentCleanup, upsertHost } from "@bb/db";
+import {
+  fetchCommands,
+  getEnvironment,
+  getHost,
+  getThread,
+  hostDaemonCommands,
+  requestEnvironmentCleanup,
+  upsertEnvironmentOperation,
+  upsertHost,
+  upsertThreadOperation,
+} from "@bb/db";
 import {
   runEphemeralHostCleanupSweep,
+  runEnvironmentProvisioningSweep,
   runManagedEnvironmentArchiveCleanupSweep,
+  runPeriodicSweeps,
+  runThreadLifecycleSweep,
 } from "../src/services/periodic-sweeps.js";
+import { requestThreadStop } from "../src/services/thread-stop.js";
 import {
   seedEnvironment,
   seedHostSession,
   seedProjectWithSource,
+  seedThread,
 } from "./helpers/seed.js";
 import { createTestAppHarness } from "./helpers/test-app.js";
+import {
+  waitForQueuedCommand,
+  waitForQueuedCommandAfter,
+} from "./helpers/commands.js";
+
+interface UnmanagedProvisionCommandArgs {
+  environmentId: string;
+  path: string;
+}
+
+interface ThreadStartCommandArgs {
+  environmentId: string;
+  projectId: string;
+  providerId: string;
+  threadId: string;
+  workspacePath: string;
+}
+
+function buildUnmanagedProvisionCommand(
+  args: UnmanagedProvisionCommandArgs,
+) {
+  return {
+    type: "environment.provision" as const,
+    environmentId: args.environmentId,
+    initiator: null,
+    workspaceProvisionType: "unmanaged" as const,
+    path: args.path,
+  };
+}
+
+function buildThreadStartCommand(
+  args: ThreadStartCommandArgs,
+) {
+  return {
+    type: "thread.start" as const,
+    environmentId: args.environmentId,
+    threadId: args.threadId,
+    workspaceContext: {
+      workspacePath: args.workspacePath,
+      workspaceProvisionType: "unmanaged" as const,
+    },
+    projectId: args.projectId,
+    providerId: args.providerId,
+    eventSequence: 1,
+    input: [{ type: "text" as const, text: "Resume work" }],
+    options: {
+      model: "gpt-5",
+      serviceTier: "default" as const,
+      reasoningLevel: "medium" as const,
+      sandboxMode: "danger-full-access" as const,
+    },
+    instructions: "You are a helpful assistant.",
+    dynamicTools: [],
+  };
+}
 
 describe("periodic sweeps", () => {
   it("logs and continues when managed environment archive cleanup rejects", async () => {
@@ -137,6 +208,227 @@ describe("periodic sweeps", () => {
       expect(cachedHost.destroy).toHaveBeenCalledTimes(2);
       expect(getHost(harness.db, host.id)).toMatchObject({
         destroyedAt: expect.any(Number),
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("requeues requested environment provisioning operations without a live command", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-periodic-provision",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/periodic-provision",
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/periodic-provision",
+        status: "provisioning",
+      });
+
+      upsertEnvironmentOperation(harness.db, {
+        environmentId: environment.id,
+        kind: "provision",
+        payload: JSON.stringify(
+          buildUnmanagedProvisionCommand({
+            environmentId: environment.id,
+            path: "/tmp/periodic-provision",
+          }),
+        ),
+      });
+
+      await runEnvironmentProvisioningSweep(harness.deps);
+
+      const queued = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "environment.provision"
+          && command.environmentId === environment.id,
+      );
+      expect(queued.command).toMatchObject({
+        workspaceProvisionType: "unmanaged",
+        path: "/tmp/periodic-provision",
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("requeues requested thread.start operations without a live command", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-periodic-thread-start",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/periodic-thread-start",
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/periodic-thread-start",
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "idle",
+      });
+
+      upsertThreadOperation(harness.db, {
+        threadId: thread.id,
+        kind: "start",
+        payload: JSON.stringify(
+          buildThreadStartCommand({
+            environmentId: environment.id,
+            projectId: project.id,
+            providerId: thread.providerId,
+            threadId: thread.id,
+            workspacePath: "/tmp/periodic-thread-start",
+          }),
+        ),
+      });
+
+      await runThreadLifecycleSweep(harness.deps);
+
+      const queued = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "thread.start"
+          && command.threadId === thread.id,
+      );
+      expect(queued.command).toMatchObject({
+        environmentId: environment.id,
+        threadId: thread.id,
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("marks provisioning state as failed when environment.provision expires after retry", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-periodic-provision-expiry",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/periodic-provision-expiry",
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/periodic-provision-expiry",
+        status: "provisioning",
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "provisioning",
+      });
+
+      upsertEnvironmentOperation(harness.db, {
+        environmentId: environment.id,
+        kind: "provision",
+        payload: JSON.stringify(
+          buildUnmanagedProvisionCommand({
+            environmentId: environment.id,
+            path: "/tmp/periodic-provision-expiry",
+          }),
+        ),
+      });
+
+      await runEnvironmentProvisioningSweep(harness.deps);
+      const queued = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "environment.provision"
+          && command.environmentId === environment.id,
+      );
+
+      fetchCommands(harness.db, harness.hub, { hostId: host.id });
+      harness.db
+        .update(hostDaemonCommands)
+        .set({
+          state: "fetched",
+          fetchedAt: Date.now() - 21 * 60_000,
+          retryCount: 1,
+        })
+        .where(eq(hostDaemonCommands.id, queued.row.id))
+        .run();
+
+      await runPeriodicSweeps(harness.deps);
+
+      expect(getEnvironment(harness.db, environment.id)?.status).toBe("error");
+      expect(getThread(harness.db, thread.id)?.status).toBe("error");
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("reissues active thread.stop after an expired stop command", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-periodic-thread-stop",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/periodic-thread-stop",
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/periodic-thread-stop",
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "active",
+      });
+
+      requestThreadStop(harness.deps, {
+        environmentId: environment.id,
+        hostId: host.id,
+        stopRequestedAt: null,
+        threadId: thread.id,
+      });
+      const firstStop = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "thread.stop"
+          && command.threadId === thread.id,
+      );
+
+      fetchCommands(harness.db, harness.hub, { hostId: host.id });
+      harness.db
+        .update(hostDaemonCommands)
+        .set({
+          state: "fetched",
+          fetchedAt: Date.now() - 70_000,
+          retryCount: 1,
+        })
+        .where(eq(hostDaemonCommands.id, firstStop.row.id))
+        .run();
+
+      await runPeriodicSweeps(harness.deps);
+
+      const retriedStop = await waitForQueuedCommandAfter(
+        harness,
+        firstStop.row.cursor,
+        ({ command }) =>
+          command.type === "thread.stop"
+          && command.threadId === thread.id,
+      );
+      expect(retriedStop.command).toMatchObject({
+        environmentId: environment.id,
+        threadId: thread.id,
       });
     } finally {
       await harness.cleanup();

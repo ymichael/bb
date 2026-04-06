@@ -77,6 +77,18 @@ export async function requestThreadStart(
   args: QueueThreadStartCommandArgs,
 ): Promise<void> {
   requireConnectedHostSession(deps, args.environment.hostId);
+  const existingOperation = getThreadOperation(deps.db, {
+    threadId: args.thread.id,
+    kind: "start",
+  });
+  if (
+    existingOperation
+    && isActiveThreadOperationState(existingOperation.state)
+    && hasQueuedThreadOperationCommand(deps, existingOperation.commandId)
+  ) {
+    return;
+  }
+
   const command = await buildThreadStartCommand(deps, args);
   upsertThreadOperation(deps.db, {
     threadId: args.thread.id,
@@ -162,6 +174,18 @@ export function requestThreadStop(
     markThreadStopRequested(deps.db, deps.hub, {
       threadId: args.threadId,
     });
+  }
+
+  const existingOperation = getThreadOperation(deps.db, {
+    threadId: args.threadId,
+    kind: "stop",
+  });
+  if (
+    existingOperation
+    && isActiveThreadOperationState(existingOperation.state)
+    && hasQueuedThreadOperationCommand(deps, existingOperation.commandId)
+  ) {
+    return;
   }
 
   const command = buildThreadStopCommand(args);

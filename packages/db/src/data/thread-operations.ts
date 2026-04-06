@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import type {
   LifecycleOperationState,
   ThreadOperationKind,
@@ -33,6 +33,12 @@ export interface UpdateThreadOperationStateArgs {
   queuedAt?: number | null;
   state: LifecycleOperationState;
   threadId: string;
+}
+
+export interface ListThreadOperationsArgs {
+  kinds?: ThreadOperationKind[];
+  states?: LifecycleOperationState[];
+  threadIds?: string[];
 }
 
 function getThreadOperationRecord(
@@ -83,6 +89,29 @@ export function getThreadOperation(
   args: GetThreadOperationArgs,
 ): ThreadOperationRow | null {
   return getThreadOperationRecord(db, args);
+}
+
+export function listThreadOperations(
+  db: ThreadOperationReadConnection,
+  args: ListThreadOperationsArgs = {},
+): ThreadOperationRow[] {
+  const filters = [
+    args.kinds && args.kinds.length > 0
+      ? inArray(threadOperations.kind, args.kinds)
+      : undefined,
+    args.states && args.states.length > 0
+      ? inArray(threadOperations.state, args.states)
+      : undefined,
+    args.threadIds && args.threadIds.length > 0
+      ? inArray(threadOperations.threadId, args.threadIds)
+      : undefined,
+  ].filter((value) => value !== undefined);
+
+  return db
+    .select()
+    .from(threadOperations)
+    .where(filters.length > 0 ? and(...filters) : undefined)
+    .all();
 }
 
 export function getThreadOperationByCommandId(

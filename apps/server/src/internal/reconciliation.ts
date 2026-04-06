@@ -3,6 +3,8 @@ import {
   clearThreadStopRequested,
   deleteThread,
   environments,
+  getThreadOperation,
+  markThreadOperationCompleted,
   requestEnvironmentCleanup,
   threads,
 } from "@bb/db";
@@ -57,6 +59,16 @@ export function reconcileSessionThreads(
         tryTransition(deps.db, deps.hub, thread.id, "idle");
       }
 
+      const stopOperation = getThreadOperation(deps.db, {
+        threadId: thread.id,
+        kind: "stop",
+      });
+      if (stopOperation) {
+        markThreadOperationCompleted(deps.db, {
+          threadId: thread.id,
+          kind: stopOperation.kind,
+        });
+      }
       clearThreadStopRequested(deps.db, deps.hub, thread.id);
 
       if (thread.archivedAt !== null) {
@@ -138,6 +150,16 @@ export function reconcileSessionThreads(
 
     for (const thread of idleButActive) {
       tryTransition(deps.db, deps.hub, thread.id, "active");
+      const startOperation = getThreadOperation(deps.db, {
+        threadId: thread.id,
+        kind: "start",
+      });
+      if (startOperation) {
+        markThreadOperationCompleted(deps.db, {
+          threadId: thread.id,
+          kind: startOperation.kind,
+        });
+      }
     }
   }
 }

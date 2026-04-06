@@ -35,6 +35,7 @@ export function sweepExpiredCommands(
   const currentTime = now ?? Date.now();
   let requeued = 0;
   let errored = 0;
+  const erroredCommandIds: string[] = [];
 
   // Find fetched commands that have exceeded their type-specific TTL
   const fetchedCommands = db
@@ -78,6 +79,7 @@ export function sweepExpiredCommands(
         .where(eq(hostDaemonCommands.id, cmd.id))
         .run();
       errored++;
+      erroredCommandIds.push(cmd.id);
 
       // Try to extract threadId from payload and error the thread
       try {
@@ -99,7 +101,7 @@ export function sweepExpiredCommands(
     }
   }
 
-  return { requeued, errored };
+  return { requeued, errored, erroredCommandIds };
 }
 
 /**

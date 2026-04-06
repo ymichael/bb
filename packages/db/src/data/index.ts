@@ -93,6 +93,7 @@ export {
   cancelThreadOperation,
   getThreadOperation,
   getThreadOperationByCommandId,
+  listThreadOperations,
   markThreadOperationCompleted,
   markThreadOperationFailed,
   markThreadOperationFetched,
@@ -101,6 +102,7 @@ export {
 } from "./thread-operations.js";
 export type {
   GetThreadOperationArgs,
+  ListThreadOperationsArgs,
   ThreadOperationRow,
   UpsertThreadOperationInput,
 } from "./thread-operations.js";
@@ -130,6 +132,7 @@ export {
   cancelEnvironmentOperation,
   getEnvironmentOperation,
   getEnvironmentOperationByCommandId,
+  listEnvironmentOperations,
   markEnvironmentOperationCompleted,
   markEnvironmentOperationFailed,
   markEnvironmentOperationFetched,
@@ -139,6 +142,7 @@ export {
 export type {
   EnvironmentOperationRow,
   GetEnvironmentOperationArgs,
+  ListEnvironmentOperationsArgs,
   UpsertEnvironmentOperationInput,
 } from "./environment-operations.js";
 
