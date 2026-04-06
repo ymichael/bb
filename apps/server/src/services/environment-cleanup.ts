@@ -1,20 +1,26 @@
 import { and, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import type {
   EnvironmentCleanupMode,
+  EnvironmentOperationKind,
   WorkspaceProvisionType,
 } from "@bb/domain";
 import {
   countLiveThreadsInEnvironment,
   getEnvironment,
+  getEnvironmentOperation,
   getActiveSession,
   hostDaemonCommands,
+  markEnvironmentOperationCompleted,
+  markEnvironmentOperationQueued,
   markEnvironmentDestroyed,
   queueCommand,
   requestEnvironmentCleanup as requestEnvironmentCleanupRecord,
   threads,
+  upsertEnvironmentOperation,
   updateEnvironmentStatus,
 } from "@bb/db";
 import { hostDaemonCommandResultSchemaByType } from "@bb/host-daemon-contract";
+import { z } from "zod";
 import { ApiError } from "../errors.js";
 import type { AppDeps } from "../types.js";
 import { queueCommandAndWait } from "./command-wait.js";
@@ -45,6 +51,11 @@ export interface WouldCleanupEnvironmentArgs {
   excludeThreadId: string;
 }
 
+const destroyOperationPayloadSchema = z.object({
+  mode: z.enum(["safe", "force"]),
+});
+type DestroyOperationPayload = z.infer<typeof destroyOperationPayloadSchema>;
+
 function hasConnectedHostSession(
   deps: Pick<AppDeps, "db">,
   hostId: string,
@@ -73,14 +84,14 @@ function hasPendingThreadShutdowns(
   return pendingStopThread !== undefined;
 }
 
-function hasPendingCommandForEnvironment(
+function getPendingCommandForEnvironment(
   deps: Pick<AppDeps, "db">,
   args: {
     environmentId: string;
     type: "environment.destroy" | "workspace.status";
   },
-): boolean {
-  const pendingCommand = deps.db
+): { id: string } | null {
+  return deps.db
     .select({ id: hostDaemonCommands.id })
     .from(hostDaemonCommands)
     .where(
@@ -90,9 +101,7 @@ function hasPendingCommandForEnvironment(
         sql`json_extract(${hostDaemonCommands.payload}, '$.environmentId') = ${args.environmentId}`,
       ),
     )
-    .get();
-
-  return pendingCommand !== undefined;
+    .get() ?? null;
 }
 
 function workspaceHasRiskyChanges(
@@ -126,7 +135,7 @@ async function assertWorkspaceCanBeSafelyCleaned(
   }
 
   if (
-    hasPendingCommandForEnvironment(deps, {
+    getPendingCommandForEnvironment(deps, {
       environmentId: environment.id,
       type: "workspace.status",
     })
@@ -170,6 +179,38 @@ function canRequestCleanup(
   return environment.managed && environment.status !== "destroyed";
 }
 
+function resolveRequestedCleanupMode(
+  current: EnvironmentCleanupMode,
+  requested: EnvironmentCleanupMode,
+): EnvironmentCleanupMode {
+  if (current === "force" || requested === "force") {
+    return "force";
+  }
+
+  return "safe";
+}
+
+function getDestroyOperationPayload(
+  deps: Pick<AppDeps, "db">,
+  environmentId: string,
+): DestroyOperationPayload | null {
+  const operation = getEnvironmentOperation(deps.db, {
+    environmentId,
+    kind: "destroy",
+  });
+
+  if (operation) {
+    return destroyOperationPayloadSchema.parse(JSON.parse(operation.payload));
+  }
+
+  const environment = getEnvironment(deps.db, environmentId);
+  if (!environment || environment.cleanupMode === null) {
+    return null;
+  }
+
+  return { mode: environment.cleanupMode };
+}
+
 export async function validateEnvironmentCleanupRequest(
   deps: Pick<AppDeps, "db" | "hub">,
   args: ValidateEnvironmentCleanupRequestArgs,
@@ -199,26 +240,36 @@ export function requestEnvironmentCleanup(
     return;
   }
 
+  const currentPayload = getDestroyOperationPayload(deps, environment.id);
+  const mode = currentPayload
+    ? resolveRequestedCleanupMode(currentPayload.mode, args.mode)
+    : args.mode;
+
+  upsertEnvironmentOperation(deps.db, {
+    environmentId: environment.id,
+    kind: "destroy",
+    payload: JSON.stringify({ mode }),
+    requestedAt: environment.cleanupRequestedAt ?? undefined,
+  });
   requestEnvironmentCleanupRecord(deps.db, deps.hub, environment.id, {
-    cleanupMode: args.mode,
+    cleanupMode: mode,
   });
 }
 
 export function queueEnvironmentDestroyCommand(
   deps: Pick<AppDeps, "db" | "hub">,
   environment: EnvironmentDestroyTarget,
-): void {
-  if (
-    hasPendingCommandForEnvironment(deps, {
-      environmentId: environment.id,
-      type: "environment.destroy",
-    })
-  ) {
-    return;
+) {
+  const pendingCommand = getPendingCommandForEnvironment(deps, {
+    environmentId: environment.id,
+    type: "environment.destroy",
+  });
+  if (pendingCommand) {
+    return pendingCommand.id;
   }
 
   const session = getActiveSession(deps.db, environment.hostId);
-  queueCommand(deps.db, deps.hub, {
+  const queuedCommand = queueCommand(deps.db, deps.hub, {
     hostId: environment.hostId,
     sessionId: session?.id ?? null,
     type: "environment.destroy",
@@ -231,15 +282,23 @@ export function queueEnvironmentDestroyCommand(
       },
     }),
   });
+
+  return queuedCommand.id;
 }
 
 function queueDestroyAndMarkDestroying(
   deps: Pick<AppDeps, "db" | "hub">,
   environment: EnvironmentDestroyTarget & {
+    operationKind: Extract<EnvironmentOperationKind, "destroy">;
     status: NonNullable<ReturnType<typeof getEnvironment>>["status"];
   },
 ): void {
-  queueEnvironmentDestroyCommand(deps, environment);
+  const commandId = queueEnvironmentDestroyCommand(deps, environment);
+  markEnvironmentOperationQueued(deps.db, {
+    environmentId: environment.id,
+    kind: environment.operationKind,
+    commandId,
+  });
   if (environment.status !== "destroying") {
     updateEnvironmentStatus(deps.db, deps.hub, environment.id, {
       status: "destroying",
@@ -275,18 +334,31 @@ export async function advanceEnvironmentCleanup(
   }
 
   const environment = getEnvironment(deps.db, args.environmentId);
+  let destroyOperation = getEnvironmentOperation(deps.db, {
+    environmentId: args.environmentId,
+    kind: "destroy",
+  });
+  const destroyPayload = getDestroyOperationPayload(deps, args.environmentId);
   if (
     !environment ||
     !environment.managed ||
     environment.status === "destroyed" ||
-    environment.cleanupRequestedAt === null ||
-    environment.cleanupMode === null
+    destroyPayload === null
   ) {
     return;
   }
 
   if (countLiveThreadsInEnvironment(deps.db, { environmentId: environment.id }) > 0) {
     return;
+  }
+
+  if (!destroyOperation) {
+    destroyOperation = upsertEnvironmentOperation(deps.db, {
+      environmentId: environment.id,
+      kind: "destroy",
+      payload: JSON.stringify(destroyPayload),
+      requestedAt: environment.cleanupRequestedAt ?? undefined,
+    });
   }
 
   if (hasPendingThreadShutdowns(deps, environment.id)) {
@@ -298,21 +370,29 @@ export async function advanceEnvironmentCleanup(
       return;
     }
 
+    if (destroyOperation) {
+      markEnvironmentOperationCompleted(deps.db, {
+        environmentId: environment.id,
+        kind: "destroy",
+      });
+    }
     markEnvironmentDestroyed(deps.db, deps.hub, environment.id);
     return;
   }
 
-  if (environment.status === "destroying") {
-    queueEnvironmentDestroyCommand(deps, {
-      hostId: environment.hostId,
-      id: environment.id,
-      path: environment.path,
-      workspaceProvisionType: environment.workspaceProvisionType,
-    });
+  if (
+    destroyOperation
+    && (destroyOperation.state === "queued" || destroyOperation.state === "fetched")
+    && destroyOperation.commandId
+    && getPendingCommandForEnvironment(deps, {
+      environmentId: environment.id,
+      type: "environment.destroy",
+    })
+  ) {
     return;
   }
 
-  if (environment.cleanupMode === "safe") {
+  if (destroyPayload.mode === "safe") {
     const canDestroyNow = await assertWorkspaceCanBeSafelyCleaned(
       deps,
       environment.id,
@@ -325,8 +405,6 @@ export async function advanceEnvironmentCleanup(
     if (
       !refreshedEnvironment ||
       refreshedEnvironment.status === "destroyed" ||
-      refreshedEnvironment.cleanupRequestedAt === null ||
-      refreshedEnvironment.cleanupMode === null ||
       refreshedEnvironment.status !== "ready" ||
       !refreshedEnvironment.path
     ) {
@@ -344,6 +422,7 @@ export async function advanceEnvironmentCleanup(
     queueDestroyAndMarkDestroying(deps, {
       hostId: refreshedEnvironment.hostId,
       id: refreshedEnvironment.id,
+      operationKind: "destroy",
       path: refreshedEnvironment.path,
       status: refreshedEnvironment.status,
       workspaceProvisionType: refreshedEnvironment.workspaceProvisionType,
@@ -354,6 +433,7 @@ export async function advanceEnvironmentCleanup(
   queueDestroyAndMarkDestroying(deps, {
     hostId: environment.hostId,
     id: environment.id,
+    operationKind: "destroy",
     path: environment.path,
     status: environment.status,
     workspaceProvisionType: environment.workspaceProvisionType,

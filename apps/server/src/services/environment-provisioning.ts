@@ -1,23 +1,64 @@
-import { claimManagedEnvironmentReprovision } from "@bb/db";
+import {
+  type EnvironmentOperationRow,
+  getActiveSession,
+  getCommand,
+  getEnvironment,
+  getEnvironmentOperation,
+  markEnvironmentOperationQueued,
+  queueCommand,
+  upsertEnvironmentOperation,
+  updateEnvironmentStatus,
+} from "@bb/db";
 import type {
   Environment,
+  EnvironmentOperationKind,
   Thread,
 } from "@bb/domain";
+import {
+  environmentProvisionCommandSchema,
+  type HostDaemonCommand,
+} from "@bb/host-daemon-contract";
 import type { AppDeps } from "../types.js";
 import { ApiError } from "../errors.js";
 import {
   appendProvisioningEvent,
 } from "./thread-events.js";
 import {
+  buildEnvironmentProvisionCommand,
   buildManagedBranchNameFromSeed,
   buildManagedTargetPath,
-  queueEnvironmentProvision,
   SETUP_SCRIPT_NAME,
   SETUP_TIMEOUT_MS,
   requireSourceForHost,
 } from "./thread-create-helpers.js";
 import { requireConnectedHostSession } from "./entity-lookup.js";
 import { tryTransition } from "./thread-transitions.js";
+
+type EnvironmentProvisionOperationKind = Extract<
+  EnvironmentOperationKind,
+  "provision" | "reprovision"
+>;
+
+type EnvironmentProvisionCommand = Extract<
+  HostDaemonCommand,
+  { type: "environment.provision" }
+>;
+
+export interface RequestEnvironmentProvisionArgs {
+  command: EnvironmentProvisionCommand;
+  environmentId: string;
+  kind: EnvironmentProvisionOperationKind;
+}
+
+export interface AdvanceEnvironmentProvisioningArgs {
+  environmentId: string | null | undefined;
+}
+
+function isActiveProvisionOperationState(
+  state: EnvironmentOperationRow["state"],
+): boolean {
+  return state === "requested" || state === "queued" || state === "fetched";
+}
 
 function toProvisioningLabel(
   workspaceProvisionType: Environment["workspaceProvisionType"],
@@ -30,6 +71,100 @@ function toProvisioningLabel(
     case "managed-clone":
       return "Clone";
   }
+}
+
+function getActiveProvisionOperation(
+  deps: Pick<AppDeps, "db">,
+  environmentId: string,
+) {
+  for (const kind of ["reprovision", "provision"] as const) {
+    const operation = getEnvironmentOperation(deps.db, {
+      environmentId,
+      kind,
+    });
+    if (operation && isActiveProvisionOperationState(operation.state)) {
+      return operation;
+    }
+  }
+
+  return null;
+}
+
+function hasQueuedProvisionCommand(
+  deps: Pick<AppDeps, "db">,
+  commandId: string | null,
+): boolean {
+  if (!commandId) {
+    return false;
+  }
+
+  const command = getCommand(deps.db, commandId);
+  return command !== null
+    && (command.state === "pending" || command.state === "fetched");
+}
+
+export function requestEnvironmentProvision(
+  deps: Pick<AppDeps, "db" | "hub">,
+  args: RequestEnvironmentProvisionArgs,
+): void {
+  upsertEnvironmentOperation(deps.db, {
+    environmentId: args.environmentId,
+    kind: args.kind,
+    payload: JSON.stringify(args.command),
+  });
+
+  const environment = getEnvironment(deps.db, args.environmentId);
+  if (environment && environment.status !== "provisioning") {
+    updateEnvironmentStatus(deps.db, deps.hub, environment.id, {
+      status: "provisioning",
+    });
+  }
+}
+
+export function advanceEnvironmentProvisioning(
+  deps: Pick<AppDeps, "db" | "hub">,
+  args: AdvanceEnvironmentProvisioningArgs,
+): string | null {
+  if (!args.environmentId) {
+    return null;
+  }
+
+  const environment = getEnvironment(deps.db, args.environmentId);
+  if (!environment || environment.status === "destroyed") {
+    return null;
+  }
+
+  const operation = getActiveProvisionOperation(deps, environment.id);
+  if (!operation) {
+    return null;
+  }
+
+  if (hasQueuedProvisionCommand(deps, operation.commandId)) {
+    return operation.commandId;
+  }
+
+  const session = getActiveSession(deps.db, environment.hostId);
+  if (!session || session.leaseExpiresAt <= Date.now()) {
+    return null;
+  }
+
+  const command = environmentProvisionCommandSchema.parse(
+    JSON.parse(operation.payload),
+  );
+  const queuedCommand = queueCommand(deps.db, deps.hub, {
+    hostId: environment.hostId,
+    sessionId: session.id,
+    type: command.type,
+    payload: JSON.stringify(command),
+  });
+
+  markEnvironmentOperationQueued(deps.db, {
+    environmentId: environment.id,
+    kind: operation.kind,
+    commandId: queuedCommand.id,
+  });
+
+  return queuedCommand.id;
 }
 
 export const MANAGED_REPROVISION_QUEUED = "queued" as const;
@@ -54,6 +189,11 @@ export function queueManagedEnvironmentReprovision(
     );
   }
 
+  const activeOperation = getActiveProvisionOperation(deps, args.environment.id);
+  if (activeOperation) {
+    return MANAGED_REPROVISION_IN_PROGRESS;
+  }
+
   const source = requireSourceForHost(
     deps,
     args.thread.projectId,
@@ -71,15 +211,6 @@ export function queueManagedEnvironmentReprovision(
       args.thread.id,
     );
 
-  const claimed = claimManagedEnvironmentReprovision(
-    deps.db,
-    deps.hub,
-    { environmentId: args.environment.id },
-  );
-  if (!claimed) {
-    return MANAGED_REPROVISION_IN_PROGRESS;
-  }
-
   if (args.thread.status === "idle") {
     tryTransition(deps.db, deps.hub, args.thread.id, "provisioning");
   }
@@ -96,7 +227,8 @@ export function queueManagedEnvironmentReprovision(
       },
     ],
   });
-  queueEnvironmentProvision(deps, {
+
+  const command = buildEnvironmentProvisionCommand({
     branchName,
     environmentId: args.environment.id,
     hostId: args.environment.hostId,
@@ -106,6 +238,15 @@ export function queueManagedEnvironmentReprovision(
     workspaceProvisionType: provisionType,
     setupScript: SETUP_SCRIPT_NAME,
     setupTimeoutMs: SETUP_TIMEOUT_MS,
+  });
+
+  requestEnvironmentProvision(deps, {
+    environmentId: args.environment.id,
+    kind: "reprovision",
+    command,
+  });
+  advanceEnvironmentProvisioning(deps, {
+    environmentId: args.environment.id,
   });
   return MANAGED_REPROVISION_QUEUED;
 }

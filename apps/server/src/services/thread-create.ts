@@ -21,7 +21,9 @@ import { hostDaemonCommandResultSchemaByType } from "@bb/host-daemon-contract";
 import type { SandboxHost } from "@bb/sandbox-host";
 import type { AppDeps } from "../types.js";
 import { ApiError } from "../errors.js";
-import { queueCommandAndWait } from "./command-wait.js";
+import {
+  waitForQueuedCommandResult,
+} from "./command-wait.js";
 import { COMMAND_TIMEOUT_MS } from "../constants.js";
 import { requireConnectedHostSession } from "./entity-lookup.js";
 import { destroyHost, waitForHostSession } from "./host-lifecycle.js";
@@ -32,15 +34,19 @@ import { buildExecutionOptions, queueThreadStartCommand } from "./thread-command
 import { generateThreadTitle } from "./title-generation.js";
 import {
   buildManagedBranchName,
+  buildEnvironmentProvisionCommand,
   buildManagedTargetPath,
   buildSandboxTargetPath,
   createThreadRecord,
   getThreadSafe,
-  queueEnvironmentProvision,
   requireProjectExists,
   SETUP_SCRIPT_NAME,
   SETUP_TIMEOUT_MS,
 } from "./thread-create-helpers.js";
+import {
+  advanceEnvironmentProvisioning,
+  requestEnvironmentProvision,
+} from "./environment-provisioning.js";
 import {
   resolveStableThreadRequestEnvironment,
 } from "./thread-request-eligibility.js";
@@ -321,7 +327,7 @@ async function createSandboxHostThread(
   }
   const provisionEventSequence = getHighWaterMarks(deps.db, [thread.id])[thread.id] ?? 0;
 
-  queueEnvironmentProvision(deps, {
+  const command = buildEnvironmentProvisionCommand({
     branchName: buildManagedBranchName(args.request, thread.id),
     environmentId: environment.id,
     hostId,
@@ -331,6 +337,14 @@ async function createSandboxHostThread(
     workspaceProvisionType: "managed-clone",
     setupScript: SETUP_SCRIPT_NAME,
     setupTimeoutMs: SETUP_TIMEOUT_MS,
+  });
+  requestEnvironmentProvision(deps, {
+    environmentId: environment.id,
+    kind: "provision",
+    command,
+  });
+  advanceEnvironmentProvisioning(deps, {
+    environmentId: environment.id,
   });
 
   return thread;
@@ -381,8 +395,13 @@ export async function createThreadFromRequest(
   const workspace = resolvedEnvironment.workspace;
   const managedSource: LocalPathProjectSource | null =
     workspace.type === "unmanaged" ? null : resolvedEnvironment.localSource;
-  const unmanagedPath = resolvedEnvironment.unmanagedPath;
+  const unmanagedPath =
+    workspace.type === "unmanaged" ? resolvedEnvironment.unmanagedPath : null;
   requireConnectedHostSession(deps, hostId);
+
+  if (workspace.type === "unmanaged" && unmanagedPath === null) {
+    throw new Error("Validated unmanaged host request is missing a workspace path");
+  }
 
   if (workspace.type === "unmanaged" && unmanagedPath) {
     const reusedThread = await reuseEnvironmentByHostPath(deps, {
@@ -446,13 +465,17 @@ export async function createThreadFromRequest(
     ],
   });
 
+  let provisionCommand: ReturnType<typeof buildEnvironmentProvisionCommand>;
   switch (workspace.type) {
     case "unmanaged": {
-      queueEnvironmentProvision(deps, {
+      if (unmanagedPath === null) {
+        throw new Error("Validated unmanaged host request is missing a workspace path");
+      }
+      provisionCommand = buildEnvironmentProvisionCommand({
         environmentId: environment.id,
         hostId,
         initiator: { threadId: thread.id, eventSequence: provisionEventSequence },
-        path: unmanagedPath ?? undefined,
+        path: unmanagedPath,
         workspaceProvisionType: "unmanaged",
       });
       break;
@@ -462,7 +485,7 @@ export async function createThreadFromRequest(
       if (!managedSource) {
         throw new Error("Validated managed host request is missing a local source");
       }
-      queueEnvironmentProvision(deps, {
+      provisionCommand = buildEnvironmentProvisionCommand({
         environmentId: environment.id,
         hostId,
         initiator: { threadId: thread.id, eventSequence: provisionEventSequence },
@@ -484,6 +507,15 @@ export async function createThreadFromRequest(
       throw new Error(`Unsupported workspace request: ${_exhaustive}`);
     }
   }
+
+  requestEnvironmentProvision(deps, {
+    environmentId: environment.id,
+    kind: "provision",
+    command: provisionCommand,
+  });
+  advanceEnvironmentProvisioning(deps, {
+    environmentId: environment.id,
+  });
 
   if (!request.title) {
     void generateThreadTitle(deps, {
@@ -515,16 +547,32 @@ export async function ensureProjectSourceEnvironment(
     status: "provisioning",
   });
 
-  const rawResult = await queueCommandAndWait(deps, {
+  requireConnectedHostSession(deps, args.hostId);
+  const command = buildEnvironmentProvisionCommand({
+    environmentId: environment.id,
     hostId: args.hostId,
+    initiator: null,
+    workspaceProvisionType: "unmanaged",
+    path: args.path,
+  });
+  requestEnvironmentProvision(deps, {
+    environmentId: environment.id,
+    kind: "provision",
+    command,
+  });
+  const commandId = advanceEnvironmentProvisioning(deps, {
+    environmentId: environment.id,
+  });
+  if (!commandId) {
+    throw new ApiError(
+      500,
+      "internal_error",
+      "Failed to queue environment provisioning",
+    );
+  }
+  const rawResult = await waitForQueuedCommandResult(deps, {
+    commandId,
     timeoutMs: COMMAND_TIMEOUT_MS,
-    command: {
-      type: "environment.provision",
-      environmentId: environment.id,
-      initiator: null,
-      workspaceProvisionType: "unmanaged",
-      path: args.path,
-    },
   });
   const result = hostDaemonCommandResultSchemaByType["environment.provision"].parse(rawResult);
 

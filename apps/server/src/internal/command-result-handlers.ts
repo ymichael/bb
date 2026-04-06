@@ -5,9 +5,12 @@ import {
   deleteThread,
   events,
   getEnvironment,
+  getEnvironmentOperationByCommandId,
   getHost,
   getThread,
   hostDaemonCommands,
+  markEnvironmentOperationCompleted,
+  markEnvironmentOperationFailed,
   markEnvironmentDestroyed,
   threads,
   requestEnvironmentCleanup,
@@ -76,7 +79,7 @@ async function handleProvisionCommandResult(
     return;
   }
 
-  const environment = getEnvironment(deps.db, command.environmentId);
+  const operation = getEnvironmentOperationByCommandId(deps.db, commandRow.id);
   const boundThreads = deps.db
     .select()
     .from(threads)
@@ -84,6 +87,10 @@ async function handleProvisionCommandResult(
     .all();
 
   if (report.ok) {
+    if (operation?.state === "completed") {
+      return;
+    }
+
     applyProvisionedEnvironment(deps.db, deps.hub, command.environmentId, {
       path: report.result.path,
       status: "ready",
@@ -184,18 +191,34 @@ async function handleProvisionCommandResult(
       tryTransition(deps.db, deps.hub, thread.id, "active");
     }
 
-    if (environment?.cleanupRequestedAt !== null) {
-      await advanceEnvironmentCleanup(deps, {
+    if (operation) {
+      markEnvironmentOperationCompleted(deps.db, {
         environmentId: command.environmentId,
+        kind: operation.kind,
       });
     }
 
+    await advanceEnvironmentCleanup(deps, {
+      environmentId: command.environmentId,
+    });
+
+    return;
+  }
+
+  if (operation?.state === "failed") {
     return;
   }
 
   updateEnvironmentStatus(deps.db, deps.hub, command.environmentId, {
     status: "error",
   });
+  if (operation) {
+    markEnvironmentOperationFailed(deps.db, {
+      environmentId: command.environmentId,
+      kind: operation.kind,
+      failureReason: report.errorMessage,
+    });
+  }
 
   for (const thread of boundThreads) {
     appendProvisioningEvent(deps, {
@@ -221,11 +244,9 @@ async function handleProvisionCommandResult(
     tryTransition(deps.db, deps.hub, thread.id, "error");
   }
 
-  if (environment?.cleanupRequestedAt !== null) {
-    await advanceEnvironmentCleanup(deps, {
-      environmentId: command.environmentId,
-    });
-  }
+  await advanceEnvironmentCleanup(deps, {
+    environmentId: command.environmentId,
+  });
 }
 
 async function handleEnvironmentDestroyResult(
@@ -233,18 +254,43 @@ async function handleEnvironmentDestroyResult(
   report: Extract<HostDaemonCommandResultReport, { type: "environment.destroy" }>,
   commandRow: typeof hostDaemonCommands.$inferSelect,
 ): Promise<void> {
-  if (!report.ok) {
-    return;
-  }
   const command = parseCommand(commandRow);
   if (command.type !== "environment.destroy") {
     return;
   }
+  const operation = getEnvironmentOperationByCommandId(deps.db, commandRow.id);
   const environment = getEnvironment(deps.db, command.environmentId);
+
+  if (!report.ok) {
+    if (operation) {
+      markEnvironmentOperationFailed(deps.db, {
+        environmentId: command.environmentId,
+        kind: operation.kind,
+        failureReason: report.errorMessage,
+      });
+    }
+    if (environment?.status === "destroying") {
+      updateEnvironmentStatus(deps.db, deps.hub, command.environmentId, {
+        status: environment.path ? "ready" : "error",
+      });
+    }
+    return;
+  }
+
+  if (operation?.state === "completed") {
+    return;
+  }
+
   if (environment?.status !== "destroying") {
     return;
   }
   markEnvironmentDestroyed(deps.db, deps.hub, command.environmentId);
+  if (operation) {
+    markEnvironmentOperationCompleted(deps.db, {
+      environmentId: command.environmentId,
+      kind: operation.kind,
+    });
+  }
 
   const host = getHost(deps.db, environment.hostId);
   if (host?.type !== "ephemeral") {

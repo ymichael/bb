@@ -203,6 +203,7 @@ export type {
 } from "./events.js";
 
 export {
+  getCommand,
   hasPendingHostCommandForThread,
   queueCommand,
   queueCommandInTransaction,

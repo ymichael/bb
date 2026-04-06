@@ -22,6 +22,11 @@ export interface QueueCommandAndWaitArgs<TType extends HostDaemonCommandType> {
   timeoutMs: number;
 }
 
+export interface WaitForQueuedCommandResultArgs {
+  commandId: string;
+  timeoutMs: number;
+}
+
 function isCompletedCommandResult(value: unknown): value is CompletedCommandResult {
   if (value == null || typeof value !== "object") {
     return false;
@@ -37,7 +42,6 @@ export async function queueCommandAndWait<TType extends HostDaemonCommandType>(
   args: QueueCommandAndWaitArgs<TType>,
 ): Promise<unknown> {
   const session = requireConnectedHostSession(deps, args.hostId);
-
   const queuedCommand = queueCommand(deps.db, deps.hub, {
     hostId: args.hostId,
     sessionId: session.id,
@@ -45,10 +49,20 @@ export async function queueCommandAndWait<TType extends HostDaemonCommandType>(
     payload: JSON.stringify(args.command),
   });
 
+  return waitForQueuedCommandResult(deps, {
+    commandId: queuedCommand.id,
+    timeoutMs: args.timeoutMs,
+  });
+}
+
+export async function waitForQueuedCommandResult(
+  deps: Pick<AppDeps, "hub">,
+  args: WaitForQueuedCommandResultArgs,
+): Promise<unknown> {
   let completed: unknown;
   try {
     completed = await deps.hub.waitForCommandResult(
-      queuedCommand.id,
+      args.commandId,
       args.timeoutMs,
     );
   } catch {

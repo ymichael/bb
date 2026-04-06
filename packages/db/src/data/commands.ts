@@ -20,6 +20,14 @@ export interface HasPendingHostCommandForThreadArgs {
   type: "thread.stop" | "turn.run";
 }
 
+export function getCommand(
+  db: CommandReadConnection,
+  id: string,
+) {
+  return db.select().from(hostDaemonCommands).where(eq(hostDaemonCommands.id, id)).get()
+    ?? null;
+}
+
 function queueCommandRecord(
   db: CommandWriteConnection,
   input: QueueCommandInput,

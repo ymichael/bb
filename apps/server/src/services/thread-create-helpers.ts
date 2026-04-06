@@ -6,6 +6,7 @@ import {
   getThread,
   queueCommand,
 } from "@bb/db";
+import type { HostDaemonCommand } from "@bb/host-daemon-contract";
 import type {
   LocalPathProjectSource,
 } from "@bb/domain";
@@ -104,13 +105,13 @@ export function requireSourceForHost(
   return source;
 }
 
-type QueueEnvironmentProvisionArgs =
+export type EnvironmentProvisionCommandArgs =
   | {
       workspaceProvisionType: "unmanaged";
       environmentId: string;
       hostId: string;
       initiator: { threadId: string; eventSequence: number } | null;
-      path?: string;
+      path: string;
     }
   | {
       workspaceProvisionType: "managed-worktree" | "managed-clone";
@@ -124,19 +125,17 @@ type QueueEnvironmentProvisionArgs =
       setupTimeoutMs: number;
     };
 
-export function queueEnvironmentProvision(
-  deps: Pick<AppDeps, "db" | "hub">,
-  args: QueueEnvironmentProvisionArgs,
-): void {
-  const session = requireConnectedHostSession(deps, args.hostId);
-  const payload =
+export function buildEnvironmentProvisionCommand(
+  args: EnvironmentProvisionCommandArgs,
+): Extract<HostDaemonCommand, { type: "environment.provision" }> {
+  return (
     args.workspaceProvisionType === "unmanaged"
       ? {
           type: "environment.provision" as const,
           environmentId: args.environmentId,
           initiator: args.initiator,
           workspaceProvisionType: args.workspaceProvisionType,
-          ...(args.path != null ? { path: args.path } : {}),
+          path: args.path,
         }
       : {
           type: "environment.provision" as const,
@@ -148,7 +147,16 @@ export function queueEnvironmentProvision(
           branchName: args.branchName,
           setupScript: args.setupScript,
           setupTimeoutMs: args.setupTimeoutMs,
-        };
+        }
+  );
+}
+
+export function queueEnvironmentProvision(
+  deps: Pick<AppDeps, "db" | "hub">,
+  args: EnvironmentProvisionCommandArgs,
+): void {
+  const session = requireConnectedHostSession(deps, args.hostId);
+  const payload = buildEnvironmentProvisionCommand(args);
   queueCommand(deps.db, deps.hub, {
     hostId: args.hostId,
     sessionId: session.id,
