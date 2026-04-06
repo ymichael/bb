@@ -1,13 +1,14 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { Hono } from "hono";
 import {
+  HOST_DAEMON_WEBSOCKET_PROTOCOL,
+  buildHostDaemonWebSocketAuthorizationHeader,
   hostDaemonEnrollRequestSchema,
   hostDaemonCommandResultReportSchema,
   hostDaemonCommandsQuerySchema,
   hostDaemonDaemonWsMessageSchema,
   hostDaemonEnvironmentChangeRequestSchema,
   hostDaemonEventBatchRequestSchema,
-  parseHostDaemonWebSocketHostKey,
   hostDaemonServerWsMessageSchema,
   hostDaemonSessionOpenRequestSchema,
   hostDaemonToolCallRequestSchema,
@@ -54,6 +55,12 @@ async function serveHonoRequest(
     response.setHeader(key, value);
   });
   response.end(Buffer.from(await honoResponse.arrayBuffer()));
+}
+
+function readHeaderValue(
+  header: string | string[] | undefined,
+): string | undefined {
+  return Array.isArray(header) ? header[0] : header;
 }
 
 function getRawCommandId(rawCommand: unknown): string | null {
@@ -275,11 +282,10 @@ export async function createTestServer(
     if (
       url.pathname !== "/internal/ws" ||
       !webSocketAvailable ||
-      parseHostDaemonWebSocketHostKey(
-        Array.isArray(request.headers["sec-websocket-protocol"])
-          ? request.headers["sec-websocket-protocol"][0]
-          : request.headers["sec-websocket-protocol"],
-      ) !== hostKey
+      readHeaderValue(request.headers.authorization) !==
+        buildHostDaemonWebSocketAuthorizationHeader(hostKey) ||
+      readHeaderValue(request.headers["sec-websocket-protocol"]) !==
+        HOST_DAEMON_WEBSOCKET_PROTOCOL
     ) {
       socket.destroy();
       return;

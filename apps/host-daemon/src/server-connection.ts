@@ -1,5 +1,6 @@
 import {
   HOST_DAEMON_PROTOCOL_VERSION,
+  buildHostDaemonWebSocketAuthorizationHeader,
   buildHostDaemonWebSocketProtocols,
   hostDaemonDaemonWsMessageSchema,
   hostDaemonServerWsMessageSchema,
@@ -135,8 +136,13 @@ export class ServerConnection {
         maxReconnectionDelay: this.maxReconnectionDelay,
         reconnectionDelayGrowFactor: this.reconnectionDelayGrowFactor,
         connectionTimeout: this.connectionTimeout,
+        headers: {
+          authorization: buildHostDaemonWebSocketAuthorizationHeader(
+            this.options.hostKey,
+          ),
+        },
         maxRetries: Number.POSITIVE_INFINITY,
-        protocols: buildHostDaemonWebSocketProtocols(this.options.hostKey),
+        protocols: buildHostDaemonWebSocketProtocols(),
       },
     );
     this.websocket = websocket;

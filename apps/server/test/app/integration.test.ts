@@ -2,6 +2,7 @@ import type { RawData } from "ws";
 import { WebSocket } from "ws";
 import {
   HOST_DAEMON_PROTOCOL_VERSION,
+  buildHostDaemonWebSocketAuthorizationHeader,
   buildHostDaemonWebSocketProtocols,
   createHostDaemonClient,
   type HostDaemonCommandEnvelope,
@@ -582,7 +583,12 @@ describe("server integration", () => {
 
       const daemonWs = new WebSocket(
         `${server.baseUrl.replace("http", "ws")}/internal/ws?sessionId=${encodeURIComponent(firstSession.sessionId)}`,
-        buildHostDaemonWebSocketProtocols(hostKey),
+        buildHostDaemonWebSocketProtocols(),
+        {
+          headers: {
+            authorization: buildHostDaemonWebSocketAuthorizationHeader(hostKey),
+          },
+        },
       );
       await waitForOpen(daemonWs);
 

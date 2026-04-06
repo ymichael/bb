@@ -73,8 +73,10 @@ export type {
 } from "./commands.js";
 
 export {
+  buildHostDaemonWebSocketAuthorizationHeader,
   buildHostDaemonWebSocketProtocols,
   createHostDaemonClient,
+  hasHostDaemonWebSocketProtocol,
   hostDaemonEnrollRequestSchema,
   hostDaemonEnrollResponseSchema,
   hostDaemonActiveThreadSchema,
@@ -92,7 +94,7 @@ export {
   hostDaemonSessionOpenResponseSchema,
   hostDaemonToolCallRequestSchema,
   hostDaemonToolCallResponseSchema,
-  parseHostDaemonWebSocketHostKey,
+  HOST_DAEMON_WEBSOCKET_PROTOCOL,
 } from "./session.js";
 export type {
   HostDaemonActiveThread,

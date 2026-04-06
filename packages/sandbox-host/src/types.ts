@@ -50,6 +50,7 @@ export interface SandboxDaemonArtifacts {
 
 export interface BuildSandboxDaemonEnvOptions {
   daemonEnv: Record<string, string>;
+  /** Present only during first boot, before the daemon has persisted auth.json. */
   enrollKey?: string;
   hostId: string;
   hostName: string;

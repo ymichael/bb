@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   HOST_DAEMON_PROTOCOL_VERSION,
+  HOST_DAEMON_WEBSOCKET_PROTOCOL,
   hostDaemonCommandResultReportSchema,
   type HostDaemonActiveThread,
 } from "@bb/host-daemon-contract";
@@ -335,6 +336,30 @@ describe("ServerConnection", () => {
     await connection.start();
 
     expect(testServer.sessionOpenCalls[0]?.activeThreads).toEqual(activeThreads);
+
+    await connection.shutdown();
+  });
+
+  it("authenticates websocket upgrades with a bearer header", async () => {
+    testServer = await createTestServer();
+    let capturedAuthorization: string | undefined;
+    let capturedProtocols: string[] | undefined;
+    const { connection } = createConnection(testServer, {
+      createWebSocket: (urlProvider, options) => {
+        capturedAuthorization = options.headers?.authorization;
+        capturedProtocols = options.protocols;
+        const socket = new FakeReconnectingWebSocket(urlProvider);
+        queueMicrotask(() => {
+          void socket.open();
+        });
+        return socket;
+      },
+    });
+
+    await connection.start();
+
+    expect(capturedAuthorization).toBe(`Bearer ${testServer.hostKey}`);
+    expect(capturedProtocols).toEqual([HOST_DAEMON_WEBSOCKET_PROTOCOL]);
 
     await connection.shutdown();
   });

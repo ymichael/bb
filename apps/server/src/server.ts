@@ -116,6 +116,7 @@ export function createApp(deps: AppDeps, options?: CreateAppOptions): ServerApp 
     "/internal/ws",
     upgradeWebSocket(async (context) => {
       const websocketContext = await validateDaemonWebSocket(deps, {
+        authorizationHeader: context.req.header("authorization"),
         protocolHeader: context.req.header("sec-websocket-protocol"),
         sessionId: context.req.query("sessionId") ?? null,
       });

@@ -21,6 +21,14 @@ function buildEnrollUrl(serverUrl: string): string {
   return new URL("/internal/hosts/enroll", serverUrl).toString();
 }
 
+function summarizeErrorDetail(detail: string): string {
+  const compact = detail.replace(/\s+/gu, " ").trim();
+  if (compact.length <= 200) {
+    return compact;
+  }
+  return `${compact.slice(0, 197)}...`;
+}
+
 export async function enrollDaemonHost(
   args: EnrollHostArgs,
 ): Promise<EnrollHostResult> {
@@ -41,7 +49,7 @@ export async function enrollDaemonHost(
   if (response.status !== 201) {
     const detail = await response.text();
     throw new Error(
-      `Failed to enroll daemon host: ${response.status} ${response.statusText}${detail ? ` - ${detail}` : ""}`,
+      `Failed to enroll daemon host: ${response.status} ${response.statusText}${detail ? ` - ${summarizeErrorDetail(detail)}` : ""}`,
     );
   }
 

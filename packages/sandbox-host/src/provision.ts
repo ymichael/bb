@@ -1,6 +1,7 @@
 import { Sandbox } from "e2b";
 import type { Sandbox as E2BSandbox, SandboxOpts } from "e2b";
 import pRetry from "p-retry";
+import { normalizeServerUrl } from "@bb/host-daemon-contract";
 import { resolveSandboxImageTemplate } from "@bb/sandbox-image";
 import {
   DEFAULT_SANDBOX_CREATE_RETRIES,
@@ -182,10 +183,6 @@ async function waitForDaemonHealth(sandbox: E2BSandbox): Promise<void> {
   } catch (error) {
     throw await formatDaemonHealthFailure(sandbox, error);
   }
-}
-
-function normalizeServerUrl(serverUrl: string): string {
-  return serverUrl.replace(/\/$/u, "");
 }
 
 async function startDaemonProcess(

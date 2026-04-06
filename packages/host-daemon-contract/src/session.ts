@@ -16,36 +16,7 @@ import {
 } from "./commands.js";
 
 const nonNegativeIntegerStringSchema = z.string().regex(/^\d+$/);
-const HOST_DAEMON_WEBSOCKET_PROTOCOL = "bb-host-daemon.v1";
-const HOST_DAEMON_WEBSOCKET_AUTH_PREFIX = "bb-host-auth.";
-
-function encodeHostKeyForWebSocketProtocol(hostKey: string): string {
-  let encoded = "";
-  for (const character of hostKey) {
-    const codePoint = character.codePointAt(0);
-    if (codePoint == null || codePoint > 0x7f) {
-      throw new Error("Host daemon websocket auth supports ASCII host keys only");
-    }
-    encoded += codePoint.toString(16).padStart(2, "0");
-  }
-  return encoded;
-}
-
-function decodeHostKeyFromWebSocketProtocol(encodedHostKey: string): string | null {
-  if (encodedHostKey.length === 0 || encodedHostKey.length % 2 !== 0) {
-    return null;
-  }
-
-  let decoded = "";
-  for (let index = 0; index < encodedHostKey.length; index += 2) {
-    const byte = Number.parseInt(encodedHostKey.slice(index, index + 2), 16);
-    if (!Number.isFinite(byte)) {
-      return null;
-    }
-    decoded += String.fromCharCode(byte);
-  }
-  return decoded.length > 0 ? decoded : null;
-}
+export const HOST_DAEMON_WEBSOCKET_PROTOCOL = "bb-host-daemon.v1";
 
 export const hostDaemonActiveThreadSchema = z.object({
   threadId: z.string().min(1),
@@ -77,7 +48,7 @@ export type HostDaemonEnrollRequest = z.infer<
 export const hostDaemonEnrollResponseSchema = z.object({
   hostId: z.string().min(1),
   hostKey: z.string().min(1),
-});
+}).strict();
 export type HostDaemonEnrollResponse = z.infer<
   typeof hostDaemonEnrollResponseSchema
 >;
@@ -254,45 +225,33 @@ export type HostDaemonInternalSchema = {
 
 export type HostDaemonInternalRoutes = Hono<{}, HostDaemonInternalSchema, "/">;
 
-export function buildHostDaemonWebSocketProtocols(hostKey: string): string[] {
-  return [
-    HOST_DAEMON_WEBSOCKET_PROTOCOL,
-    `${HOST_DAEMON_WEBSOCKET_AUTH_PREFIX}${encodeHostKeyForWebSocketProtocol(
-      hostKey,
-    )}`,
-  ];
-}
-
-export function parseHostDaemonWebSocketHostKey(
-  protocolHeader: string | undefined,
-): string | null {
+function parseProtocolHeader(protocolHeader: string | undefined): string[] {
   if (!protocolHeader) {
-    return null;
+    return [];
   }
 
-  const protocols = protocolHeader
+  return protocolHeader
     .split(",")
     .map((value) => value.trim())
     .filter((value) => value.length > 0);
+}
 
-  if (!protocols.includes(HOST_DAEMON_WEBSOCKET_PROTOCOL)) {
-    return null;
-  }
+export function buildHostDaemonWebSocketAuthorizationHeader(
+  hostKey: string,
+): string {
+  return `Bearer ${hostKey}`;
+}
 
-  const authProtocol = protocols.find((value) =>
-    value.startsWith(HOST_DAEMON_WEBSOCKET_AUTH_PREFIX),
+export function buildHostDaemonWebSocketProtocols(): string[] {
+  return [HOST_DAEMON_WEBSOCKET_PROTOCOL];
+}
+
+export function hasHostDaemonWebSocketProtocol(
+  protocolHeader: string | undefined,
+): boolean {
+  return parseProtocolHeader(protocolHeader).includes(
+    HOST_DAEMON_WEBSOCKET_PROTOCOL,
   );
-
-  if (!authProtocol) {
-    return null;
-  }
-
-  const encodedHostKey = authProtocol.slice(HOST_DAEMON_WEBSOCKET_AUTH_PREFIX.length);
-  if (encodedHostKey.length === 0) {
-    return null;
-  }
-
-  return decodeHostKeyFromWebSocketProtocol(encodedHostKey);
 }
 
 export function createHostDaemonClient(baseUrl: string, hostKey: string) {

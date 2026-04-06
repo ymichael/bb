@@ -9,11 +9,12 @@ import {
   threads,
 } from "@bb/db";
 import {
+  hasHostDaemonWebSocketProtocol,
   hostDaemonDaemonWsMessageSchema,
-  parseHostDaemonWebSocketHostKey,
 } from "@bb/host-daemon-contract";
 import { DAEMON_DISCONNECT_GRACE_MS } from "../constants.js";
 import { ApiError } from "../errors.js";
+import { verifyAuthenticatedDaemon } from "../internal/auth.js";
 import { buildSystemErrorEventData } from "../services/threads/thread-events.js";
 import type { AppDeps } from "../types.js";
 import { requireAuthorizedActiveSession } from "../internal/session-state.js";
@@ -33,23 +34,26 @@ interface DaemonSocketMessageArgs {
 
 export async function validateDaemonWebSocket(
   deps: Pick<AppDeps, "db" | "machineAuth">,
-  args: { protocolHeader: string | undefined; sessionId: string | null },
+  args: {
+    authorizationHeader: string | undefined;
+    protocolHeader: string | undefined;
+    sessionId: string | null;
+  },
 ): Promise<{ hostId: string; sessionId: string }> {
   const sessionId = args.sessionId;
   if (!sessionId) {
     throw new ApiError(401, "unauthorized", "Unauthorized");
   }
-  const hostKey = parseHostDaemonWebSocketHostKey(args.protocolHeader);
-  if (!hostKey) {
+  if (!hasHostDaemonWebSocketProtocol(args.protocolHeader)) {
     throw new ApiError(401, "unauthorized", "Unauthorized");
   }
 
-  const verified = await deps.machineAuth.verifyDaemonHostKey(hostKey);
-  if (!verified) {
-    throw new ApiError(401, "unauthorized", "Unauthorized");
-  }
+  const verified = await verifyAuthenticatedDaemon(
+    deps,
+    args.authorizationHeader,
+  );
   const session = requireAuthorizedActiveSession(deps.db, {
-    hostId: verified.metadata.hostId,
+    hostId: verified.hostId,
     sessionId,
   });
 
@@ -151,7 +155,7 @@ function interruptThreadsForDisconnectedHost(
   hostId: string,
 ): { eventThreadIds: string[]; statusThreadIds: string[] } {
   const now = Date.now();
-  const disconnectEventType: typeof events.$inferInsert.type = "system/error";
+  const disconnectEventType = "system/error" as const;
   const disconnectErrorData = buildSystemErrorEventData({
     code: "host_daemon_disconnected",
     detail: "The host daemon disconnected while work was in progress.",

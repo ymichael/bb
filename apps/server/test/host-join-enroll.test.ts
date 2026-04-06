@@ -230,6 +230,7 @@ describe("host join and enroll routes", () => {
 
       const issuedKey = harness.db
         .select({
+          expiresAt: authApiKeys.expiresAt,
           id: authApiKeys.id,
         })
         .from(authApiKeys)
@@ -237,6 +238,7 @@ describe("host join and enroll routes", () => {
         .get();
 
       expect(issuedKey?.id).toBeTruthy();
+      expect(issuedKey?.expiresAt?.getTime() ?? 0).toBeGreaterThan(Date.now());
 
       await harness.db
         .update(authApiKeys)
@@ -260,6 +262,82 @@ describe("host join and enroll routes", () => {
       });
 
       expect(enrollResponse.status).toBe(401);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("rejects join material when the requested host type conflicts with an existing host", async () => {
+    const harness = await createTestAppHarness();
+
+    try {
+      const firstResponse = await harness.app.request("/api/v1/hosts/join", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          hostId: "host_type_conflict",
+          hostType: "persistent",
+        }),
+      });
+      expect(firstResponse.status).toBe(201);
+
+      const response = await harness.app.request("/api/v1/hosts/join", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          hostId: "host_type_conflict",
+          hostType: "ephemeral",
+        }),
+      });
+
+      expect(response.status).toBe(409);
+      expect(getHost(harness.db, "host_type_conflict")?.type).toBe("persistent");
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("rejects enrollment when an existing host row has a different type", async () => {
+    const harness = await createTestAppHarness();
+
+    try {
+      await harness.app.request("/api/v1/hosts/join", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          hostId: "host_enroll_conflict",
+          hostType: "persistent",
+        }),
+      });
+
+      const joinMaterial = await harness.deps.machineAuth.issueHostEnrollKey({
+        hostId: "host_enroll_conflict",
+        hostType: "ephemeral",
+      });
+
+      const response = await harness.app.request("/internal/hosts/enroll", {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${joinMaterial.key}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          hostId: "host_enroll_conflict",
+          hostName: "conflicting-host",
+          hostType: "ephemeral",
+        }),
+      });
+
+      expect(response.status).toBe(409);
+      expect(getHost(harness.db, "host_enroll_conflict")?.type).toBe(
+        "persistent",
+      );
     } finally {
       await harness.cleanup();
     }

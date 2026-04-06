@@ -1,5 +1,4 @@
 import ReconnectingWebSocket from "partysocket/ws";
-import WS from "ws";
 import {
   HOST_DAEMON_PROTOCOL_VERSION,
   type HostDaemonActiveThread,
@@ -8,6 +7,7 @@ import {
 } from "@bb/host-daemon-contract";
 import type { HostDaemonLogger } from "./logger.js";
 import type { ServerClient } from "./server-client.js";
+import { createNodeWebSocketConstructor } from "./websocket-constructor.js";
 
 export type TimeoutHandle = ReturnType<typeof setTimeout>;
 export type IntervalHandle = ReturnType<typeof setInterval>;
@@ -27,6 +27,7 @@ export interface ReconnectingWebSocketOptions {
   maxReconnectionDelay: number;
   reconnectionDelayGrowFactor: number;
   connectionTimeout: number;
+  headers?: Record<string, string>;
   maxRetries: number;
   protocols?: string[];
 }
@@ -85,10 +86,10 @@ export function createDefaultReconnectingWebSocket(
   urlProvider: () => Promise<string>,
   options: ReconnectingWebSocketOptions,
 ): ReconnectingWebSocketLike {
-  const { protocols, ...reconnectionOptions } = options;
+  const { headers, protocols, ...reconnectionOptions } = options;
   return new ReconnectingWebSocket(urlProvider, protocols ?? [], {
     ...reconnectionOptions,
-    WebSocket: WS,
+    WebSocket: createNodeWebSocketConstructor(headers),
   });
 }
 

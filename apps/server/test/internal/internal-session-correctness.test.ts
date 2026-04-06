@@ -9,6 +9,7 @@ import {
 import { systemErrorEventDataSchema } from "@bb/domain";
 import {
   HOST_DAEMON_PROTOCOL_VERSION,
+  buildHostDaemonWebSocketAuthorizationHeader,
   buildHostDaemonWebSocketProtocols,
   createHostDaemonClient,
 } from "@bb/host-daemon-contract";
@@ -86,23 +87,41 @@ async function waitForUpgradeRejectionStatus(socket: WebSocket): Promise<number>
   });
 }
 
+function createDaemonWebSocket(
+  args: { hostKey: string; serverBaseUrl: string; sessionId: string },
+): WebSocket {
+  return new WebSocket(
+    `${args.serverBaseUrl.replace("http", "ws")}/internal/ws?sessionId=${encodeURIComponent(args.sessionId)}`,
+    buildHostDaemonWebSocketProtocols(),
+    {
+      headers: {
+        authorization: buildHostDaemonWebSocketAuthorizationHeader(
+          args.hostKey,
+        ),
+      },
+    },
+  );
+}
+
 describe("internal session correctness", () => {
   it("throws ApiError for daemon websocket upgrades missing a sessionId", async () => {
     const harness = await createTestAppHarness();
     try {
       await expect(
         validateDaemonWebSocket(harness.deps, {
-          protocolHeader: buildHostDaemonWebSocketProtocols(
+          authorizationHeader: buildHostDaemonWebSocketAuthorizationHeader(
             createTestDaemonHostKey(),
-          ).join(", "),
+          ),
+          protocolHeader: buildHostDaemonWebSocketProtocols().join(", "),
           sessionId: null,
         }),
       ).rejects.toThrowError(ApiError);
       await expect(
         validateDaemonWebSocket(harness.deps, {
-          protocolHeader: buildHostDaemonWebSocketProtocols(
+          authorizationHeader: buildHostDaemonWebSocketAuthorizationHeader(
             createTestDaemonHostKey(),
-          ).join(", "),
+          ),
+          protocolHeader: buildHostDaemonWebSocketProtocols().join(", "),
           sessionId: null,
         }),
       ).rejects.toThrowError("Unauthorized");
@@ -162,10 +181,11 @@ describe("internal session correctness", () => {
         .get()?.leaseExpiresAt;
       expect(initialLease).toBeTypeOf("number");
 
-      const socket = new WebSocket(
-        `${server.baseUrl.replace("http", "ws")}/internal/ws?sessionId=${encodeURIComponent(session.sessionId)}`,
-        buildHostDaemonWebSocketProtocols(hostKey),
-      );
+      const socket = createDaemonWebSocket({
+        hostKey,
+        serverBaseUrl: server.baseUrl,
+        sessionId: session.sessionId,
+      });
       await waitForOpen(socket);
       await sleep(10);
       socket.send(
@@ -211,10 +231,11 @@ describe("internal session correctness", () => {
       expect(sessionResponse.status).toBe(201);
       const session = await sessionResponse.json();
 
-      const socket = new WebSocket(
-        `${server.baseUrl.replace("http", "ws")}/internal/ws?sessionId=${encodeURIComponent(session.sessionId)}`,
-        buildHostDaemonWebSocketProtocols(hostKey),
-      );
+      const socket = createDaemonWebSocket({
+        hostKey,
+        serverBaseUrl: server.baseUrl,
+        sessionId: session.sessionId,
+      });
       await waitForOpen(socket);
 
       const closed = waitForCloseDetails(socket);
@@ -251,10 +272,11 @@ describe("internal session correctness", () => {
       expect(sessionResponse.status).toBe(201);
       const session = await sessionResponse.json();
 
-      const socket = new WebSocket(
-        `${server.baseUrl.replace("http", "ws")}/internal/ws?sessionId=${encodeURIComponent(session.sessionId)}`,
-        buildHostDaemonWebSocketProtocols(hostKey),
-      );
+      const socket = createDaemonWebSocket({
+        hostKey,
+        serverBaseUrl: server.baseUrl,
+        sessionId: session.sessionId,
+      });
       await waitForOpen(socket);
 
       const closed = waitForCloseDetails(socket);
@@ -303,10 +325,11 @@ describe("internal session correctness", () => {
       expect(sessionResponse.status).toBe(201);
       const session = await sessionResponse.json();
 
-      const socket = new WebSocket(
-        `${server.baseUrl.replace("http", "ws")}/internal/ws?sessionId=${encodeURIComponent(session.sessionId)}`,
-        buildHostDaemonWebSocketProtocols(otherHostKey),
-      );
+      const socket = createDaemonWebSocket({
+        hostKey: otherHostKey,
+        serverBaseUrl: server.baseUrl,
+        sessionId: session.sessionId,
+      });
 
       await expect(waitForUpgradeRejectionStatus(socket)).resolves.toBe(403);
     } finally {
@@ -336,10 +359,11 @@ describe("internal session correctness", () => {
       expect(sessionResponse.status).toBe(201);
       const session = await sessionResponse.json();
 
-      const socket = new WebSocket(
-        `${server.baseUrl.replace("http", "ws")}/internal/ws?sessionId=${encodeURIComponent(session.sessionId)}`,
-        buildHostDaemonWebSocketProtocols(hostKey),
-      );
+      const socket = createDaemonWebSocket({
+        hostKey,
+        serverBaseUrl: server.baseUrl,
+        sessionId: session.sessionId,
+      });
       await waitForOpen(socket);
 
       // Close the session in the DB so the next heartbeat finds it inactive.
