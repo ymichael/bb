@@ -90,15 +90,18 @@ export function listEnvironments(db: DbConnection, projectId?: string) {
   return db.select().from(environments).all();
 }
 
-interface EnvironmentUpdateColumns {
+interface EnvironmentMetadataUpdateColumns {
   branchName?: string | null;
-  cleanupMode?: EnvironmentCleanupMode | null;
-  cleanupRequestedAt?: number | null;
   defaultBranch?: string | null;
   isGitRepo?: boolean;
   isWorktree?: boolean;
   mergeBaseBranch?: string | null;
   path?: string | null;
+}
+
+interface EnvironmentLifecycleUpdateColumns {
+  cleanupMode?: EnvironmentCleanupMode | null;
+  cleanupRequestedAt?: number | null;
   status?: EnvironmentStatus;
 }
 
@@ -124,15 +127,24 @@ export interface ClaimManagedEnvironmentReprovisionArgs {
   now?: number;
 }
 
-function buildEnvironmentUpdateSet(input: EnvironmentUpdateColumns): EnvironmentUpdateColumns {
-  const set: EnvironmentUpdateColumns = {};
+function buildEnvironmentMetadataUpdateSet(
+  input: EnvironmentMetadataUpdateColumns,
+): EnvironmentMetadataUpdateColumns {
+  const set: EnvironmentMetadataUpdateColumns = {};
   if ("path" in input) set.path = input.path;
-  if ("status" in input) set.status = input.status;
   if ("isGitRepo" in input) set.isGitRepo = input.isGitRepo;
   if ("isWorktree" in input) set.isWorktree = input.isWorktree;
   if ("branchName" in input) set.branchName = input.branchName;
   if ("defaultBranch" in input) set.defaultBranch = input.defaultBranch;
   if ("mergeBaseBranch" in input) set.mergeBaseBranch = input.mergeBaseBranch;
+  return set;
+}
+
+function buildEnvironmentLifecycleUpdateSet(
+  input: EnvironmentLifecycleUpdateColumns,
+): EnvironmentLifecycleUpdateColumns {
+  const set: EnvironmentLifecycleUpdateColumns = {};
+  if ("status" in input) set.status = input.status;
   if ("cleanupRequestedAt" in input) {
     set.cleanupRequestedAt = input.cleanupRequestedAt;
   }
@@ -140,28 +152,36 @@ function buildEnvironmentUpdateSet(input: EnvironmentUpdateColumns): Environment
   return set;
 }
 
-function getEnvironmentChangeKinds(args: {
+function buildEnvironmentChangeKinds(args: {
   existing: typeof environments.$inferSelect;
-  input: EnvironmentUpdateColumns;
+  lifecycle: EnvironmentLifecycleUpdateColumns;
+  metadata: EnvironmentMetadataUpdateColumns;
   updated: typeof environments.$inferSelect;
 }): EnvironmentChangeKind[] {
   const changes: EnvironmentChangeKind[] = [];
 
-  if ("status" in args.input && args.updated.status !== args.existing.status) {
+  if (
+    "status" in args.lifecycle &&
+    args.updated.status !== args.existing.status
+  ) {
     changes.push("status-changed");
   }
 
   const metadataChanged =
-    ("path" in args.input && args.updated.path !== args.existing.path) ||
-    ("isGitRepo" in args.input && args.updated.isGitRepo !== args.existing.isGitRepo) ||
-    ("isWorktree" in args.input && args.updated.isWorktree !== args.existing.isWorktree) ||
-    ("branchName" in args.input && args.updated.branchName !== args.existing.branchName) ||
-    ("defaultBranch" in args.input && args.updated.defaultBranch !== args.existing.defaultBranch) ||
-    ("mergeBaseBranch" in args.input &&
+    ("path" in args.metadata && args.updated.path !== args.existing.path) ||
+    ("isGitRepo" in args.metadata &&
+      args.updated.isGitRepo !== args.existing.isGitRepo) ||
+    ("isWorktree" in args.metadata &&
+      args.updated.isWorktree !== args.existing.isWorktree) ||
+    ("branchName" in args.metadata &&
+      args.updated.branchName !== args.existing.branchName) ||
+    ("defaultBranch" in args.metadata &&
+      args.updated.defaultBranch !== args.existing.defaultBranch) ||
+    ("mergeBaseBranch" in args.metadata &&
       args.updated.mergeBaseBranch !== args.existing.mergeBaseBranch) ||
-    ("cleanupRequestedAt" in args.input &&
+    ("cleanupRequestedAt" in args.lifecycle &&
       args.updated.cleanupRequestedAt !== args.existing.cleanupRequestedAt) ||
-    ("cleanupMode" in args.input &&
+    ("cleanupMode" in args.lifecycle &&
       args.updated.cleanupMode !== args.existing.cleanupMode);
 
   if (metadataChanged) {
@@ -175,7 +195,10 @@ function updateEnvironmentRecord(
   db: DbConnection,
   notifier: DbNotifier,
   id: string,
-  input: EnvironmentUpdateColumns,
+  args: {
+    lifecycle?: EnvironmentLifecycleUpdateColumns;
+    metadata?: EnvironmentMetadataUpdateColumns;
+  },
 ) {
   const existing = db
     .select()
@@ -185,9 +208,10 @@ function updateEnvironmentRecord(
   if (!existing) return null;
 
   const now = Date.now();
-  const set = buildEnvironmentUpdateSet(input);
+  const metadata = buildEnvironmentMetadataUpdateSet(args.metadata ?? {});
+  const lifecycle = buildEnvironmentLifecycleUpdateSet(args.lifecycle ?? {});
   const updated = db.update(environments)
-    .set({ ...set, updatedAt: now })
+    .set({ ...metadata, ...lifecycle, updatedAt: now })
     .where(eq(environments.id, id))
     .returning()
     .get();
@@ -196,9 +220,10 @@ function updateEnvironmentRecord(
     return null;
   }
 
-  const changes = getEnvironmentChangeKinds({
+  const changes = buildEnvironmentChangeKinds({
     existing,
-    input: set,
+    lifecycle,
+    metadata,
     updated,
   });
   if (changes.length > 0) {
@@ -208,6 +233,24 @@ function updateEnvironmentRecord(
   return updated;
 }
 
+function updateEnvironmentMetadataRecord(
+  db: DbConnection,
+  notifier: DbNotifier,
+  id: string,
+  metadata: EnvironmentMetadataUpdateColumns,
+) {
+  return updateEnvironmentRecord(db, notifier, id, { metadata });
+}
+
+function updateEnvironmentLifecycleRecord(
+  db: DbConnection,
+  notifier: DbNotifier,
+  id: string,
+  lifecycle: EnvironmentLifecycleUpdateColumns,
+) {
+  return updateEnvironmentRecord(db, notifier, id, { lifecycle });
+}
+
 export function applyProvisionedEnvironment(
   db: DbConnection,
   notifier: DbNotifier,
@@ -215,12 +258,16 @@ export function applyProvisionedEnvironment(
   input: ApplyProvisionedEnvironmentInput,
 ) {
   return updateEnvironmentRecord(db, notifier, id, {
-    path: input.path,
-    status: input.status,
-    isGitRepo: input.isGitRepo,
-    isWorktree: input.isWorktree,
-    branchName: input.branchName,
-    defaultBranch: input.defaultBranch,
+    lifecycle: {
+      status: input.status,
+    },
+    metadata: {
+      path: input.path,
+      isGitRepo: input.isGitRepo,
+      isWorktree: input.isWorktree,
+      branchName: input.branchName,
+      defaultBranch: input.defaultBranch,
+    },
   });
 }
 
@@ -230,7 +277,7 @@ export function updateEnvironmentMetadata(
   id: string,
   input: UpdateEnvironmentMetadataInput,
 ) {
-  return updateEnvironmentRecord(db, notifier, id, {
+  return updateEnvironmentMetadataRecord(db, notifier, id, {
     mergeBaseBranch: input.mergeBaseBranch,
   });
 }
@@ -241,7 +288,7 @@ export function updateEnvironmentStatus(
   id: string,
   input: UpdateEnvironmentStatusInput,
 ) {
-  return updateEnvironmentRecord(db, notifier, id, {
+  return updateEnvironmentLifecycleRecord(db, notifier, id, {
     status: input.status,
   });
 }
@@ -267,7 +314,7 @@ export function requestEnvironmentCleanup(
     return null;
   }
 
-  return updateEnvironmentRecord(db, notifier, id, {
+  return updateEnvironmentLifecycleRecord(db, notifier, id, {
     cleanupRequestedAt:
       existing.cleanupRequestedAt ?? input.requestedAt ?? Date.now(),
     cleanupMode: resolveRequestedCleanupMode(
@@ -282,7 +329,7 @@ export function clearEnvironmentCleanupRequest(
   notifier: DbNotifier,
   id: string,
 ) {
-  return updateEnvironmentRecord(db, notifier, id, {
+  return updateEnvironmentLifecycleRecord(db, notifier, id, {
     cleanupRequestedAt: null,
     cleanupMode: null,
   });
@@ -294,9 +341,11 @@ export function markEnvironmentDestroyed(
   id: string,
 ) {
   return updateEnvironmentRecord(db, notifier, id, {
-    cleanupRequestedAt: null,
-    cleanupMode: null,
-    status: "destroyed",
+    lifecycle: {
+      cleanupRequestedAt: null,
+      cleanupMode: null,
+      status: "destroyed",
+    },
   });
 }
 

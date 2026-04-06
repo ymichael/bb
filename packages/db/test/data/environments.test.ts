@@ -5,8 +5,11 @@ import { noopNotifier } from "../../src/notifier.js";
 import type { DbNotifier } from "../../src/notifier.js";
 import {
   applyProvisionedEnvironment,
+  clearEnvironmentCleanupRequest,
   claimManagedEnvironmentReprovision,
   createEnvironment,
+  markEnvironmentDestroyed,
+  requestEnvironmentCleanup,
   updateEnvironmentMetadata,
   updateEnvironmentStatus,
 } from "../../src/data/environments.js";
@@ -160,6 +163,86 @@ describe("environments", () => {
     });
     expect(notifier.notifyEnvironment).toHaveBeenCalledWith(environment.id, [
       "status-changed",
+    ]);
+  });
+
+  it("records cleanup intent through the lifecycle write path", () => {
+    const { db, host, project } = setup();
+    const notifier = createNotifierSpy();
+    const environment = createEnvironment(db, noopNotifier, {
+      projectId: project.id,
+      hostId: host.id,
+      workspaceProvisionType: "managed-worktree",
+      managed: true,
+      status: "ready",
+    });
+
+    const requested = requestEnvironmentCleanup(db, notifier, environment.id, {
+      cleanupMode: "safe",
+      requestedAt: 123,
+    });
+    const escalated = requestEnvironmentCleanup(db, notifier, environment.id, {
+      cleanupMode: "force",
+      requestedAt: 456,
+    });
+    const cleared = clearEnvironmentCleanupRequest(
+      db,
+      notifier,
+      environment.id,
+    );
+
+    expect(requested).toMatchObject({
+      cleanupRequestedAt: 123,
+      cleanupMode: "safe",
+    });
+    expect(escalated).toMatchObject({
+      cleanupRequestedAt: 123,
+      cleanupMode: "force",
+    });
+    expect(cleared).toMatchObject({
+      cleanupRequestedAt: null,
+      cleanupMode: null,
+    });
+    expect(notifier.notifyEnvironment).toHaveBeenNthCalledWith(
+      1,
+      environment.id,
+      ["metadata-changed"],
+    );
+    expect(notifier.notifyEnvironment).toHaveBeenNthCalledWith(
+      2,
+      environment.id,
+      ["metadata-changed"],
+    );
+    expect(notifier.notifyEnvironment).toHaveBeenNthCalledWith(
+      3,
+      environment.id,
+      ["metadata-changed"],
+    );
+  });
+
+  it("marks destroyed through the lifecycle write path", () => {
+    const { db, host, project } = setup();
+    const notifier = createNotifierSpy();
+    const environment = createEnvironment(db, noopNotifier, {
+      projectId: project.id,
+      hostId: host.id,
+      workspaceProvisionType: "managed-worktree",
+      managed: true,
+      cleanupRequestedAt: 123,
+      cleanupMode: "force",
+      status: "destroying",
+    });
+
+    const updated = markEnvironmentDestroyed(db, notifier, environment.id);
+
+    expect(updated).toMatchObject({
+      status: "destroyed",
+      cleanupRequestedAt: null,
+      cleanupMode: null,
+    });
+    expect(notifier.notifyEnvironment).toHaveBeenCalledWith(environment.id, [
+      "status-changed",
+      "metadata-changed",
     ]);
   });
 });

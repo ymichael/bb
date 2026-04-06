@@ -66,6 +66,14 @@
 - Accepted-but-ignored route or command fields are forbidden. Delete them or implement them end to end in the same change.
 - For new APIs and commands, answer “why is this optional?” during design and review.
 
+## Async Lifecycle Ownership
+
+- `status` fields represent current resource state only. Do not grow them into queue-state ladders like `requested`, `queued`, or `fetched`.
+- Durable async lifecycles belong to server-owned lifecycle modules. Routes may request lifecycle work, but only lifecycle owners may advance it, mark it in progress, handle command results, or reconcile it after reconnect.
+- Generic metadata update helpers must not accept lifecycle fields such as `status`, `stopRequestedAt`, `cleanupRequestedAt`, `cleanupMode`, or similar workflow state.
+- Model lifecycle intent and progress explicitly. Do not rely on a resource `status` field alone to represent requested work, queued work, and recovery state.
+- Every new async lifecycle must define how it handles lost daemon results, expired commands, reconnect reconciliation, and repeated requests.
+
 ## Server And Daemon Ownership
 
 - The server owns product policy: defaults, instructions, manager behavior, tool lists, and thread behavior.
