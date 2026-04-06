@@ -1,5 +1,6 @@
 import { z } from "zod";
 import {
+  hostTypeSchema,
   projectSchema,
   projectSourceSchema,
   promptInputSchema,
@@ -268,6 +269,20 @@ export const createProjectRequestSchema = z.object({
   source: createProjectSourceRequestSchema,
 });
 export type CreateProjectRequest = z.infer<typeof createProjectRequestSchema>;
+
+export const createHostJoinRequestSchema = z.object({
+  hostId: z.string().min(1).optional(),
+  hostType: hostTypeSchema,
+}).strict();
+export type CreateHostJoinRequest = z.infer<typeof createHostJoinRequestSchema>;
+
+export const createHostJoinResponseSchema = z.object({
+  expiresAt: z.number().int().positive(),
+  hostId: z.string().min(1),
+  joinCode: z.string().min(1),
+  joinCommand: z.string().min(1),
+});
+export type CreateHostJoinResponse = z.infer<typeof createHostJoinResponseSchema>;
 
 export const createManagerThreadRequestSchema = z.object({
   name: z.string().min(1).optional(),

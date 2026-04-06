@@ -23,7 +23,6 @@ export type SandboxBackendInfoResolverConfig = Pick<
 export type SandboxBackendConfig = Pick<
   ServerRuntimeConfig,
   | "anthropicApiKey"
-  | "authToken"
   | "e2bApiKey"
   | "e2bTemplate"
   | "githubPat"
@@ -32,6 +31,7 @@ export type SandboxBackendConfig = Pick<
 
 export interface SandboxBackendProvisionArgs {
   config: SandboxBackendConfig;
+  enrollKey: string;
   hostId: string;
   hostName: string;
   serverUrl: string;
@@ -116,8 +116,8 @@ function buildProvisionHostOptions(
 ): ProvisionHostOptions {
   return {
     apiKey: args.config.e2bApiKey,
-    authToken: args.config.authToken,
     daemonEnv: buildSandboxDaemonEnv(args.config),
+    enrollKey: args.enrollKey,
     hostId: args.hostId,
     hostName: args.hostName,
     serverUrl: args.serverUrl,
@@ -130,7 +130,6 @@ function buildResumeHostOptions(
 ): ResumeHostOptions {
   return {
     apiKey: toOptionalString(args.config.e2bApiKey),
-    authToken: args.config.authToken,
     daemonEnv: buildSandboxDaemonEnv(args.config),
     externalId: args.externalId,
     hostId: args.hostId,

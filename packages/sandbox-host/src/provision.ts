@@ -105,8 +105,10 @@ export function buildSandboxDaemonEnv(
     BB_HOST_ID: options.hostId,
     BB_HOST_NAME: options.hostName,
     BB_HOST_TYPE: "ephemeral",
+    ...(options.enrollKey !== undefined
+      ? { BB_HOST_ENROLL_KEY: options.enrollKey }
+      : {}),
     PI_PACKAGE_DIR: SANDBOX_PI_PACKAGE_DIR,
-    BB_SECRET_TOKEN: options.authToken,
     BB_SERVER_URL: options.serverUrl,
   };
 }
@@ -246,8 +248,8 @@ export async function provisionHost(
   options: ProvisionHostOptions,
 ): Promise<SandboxHost> {
   const daemonEnv = buildSandboxDaemonEnv({
-    authToken: options.authToken,
     daemonEnv: options.daemonEnv,
+    enrollKey: options.enrollKey,
     hostId: options.hostId,
     hostName: options.hostName,
     serverUrl: normalizeServerUrl(options.serverUrl),
@@ -277,7 +279,6 @@ export async function resumeHost(
   options: ResumeHostOptions,
 ): Promise<SandboxHost> {
   const daemonEnv = buildSandboxDaemonEnv({
-    authToken: options.authToken,
     daemonEnv: options.daemonEnv,
     hostId: options.hostId,
     hostName: options.hostName,

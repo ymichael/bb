@@ -211,9 +211,13 @@ export async function runThreadLifecycleSweep(
 }
 
 export async function runPeriodicSweeps(
-  deps: Pick<AppDeps, "config" | "db" | "hub" | "logger" | "sandboxRegistry">,
+  deps: Pick<
+    AppDeps,
+    "config" | "db" | "hub" | "logger" | "machineAuth" | "sandboxRegistry"
+  >,
 ): Promise<void> {
   try {
+    await deps.machineAuth.pruneExpiredKeys();
     const expired = sweepExpiredCommands(deps.db, deps.hub);
     if (expired.erroredCommandIds.length > 0) {
       await handleExpiredCommands(deps, {

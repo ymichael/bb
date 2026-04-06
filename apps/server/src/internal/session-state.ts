@@ -23,3 +23,19 @@ export function requireActiveSession(db: DbConnection, sessionId: string) {
 
   return session;
 }
+
+export function requireAuthorizedActiveSession(
+  db: DbConnection,
+  args: { hostId: string; sessionId: string },
+) {
+  const session = requireActiveSession(db, args.sessionId);
+  if (session.hostId !== args.hostId) {
+    throw new ApiError(
+      403,
+      "invalid_request",
+      "Session does not belong to the authenticated host",
+    );
+  }
+
+  return session;
+}

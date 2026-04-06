@@ -15,7 +15,7 @@
     "bundle:check": "node ./scripts/check-bundles.mjs",
     "start": "node dist/index.js",
     "start:prod": "NODE_ENV=production node dist/index.js",
-    "dev": "node dist/index.js",
+    "dev": "node ../../scripts/run-host-daemon.mjs --mode dev --auto-join",
     "clean": "rm -rf dist",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --config vitest.config.ts"

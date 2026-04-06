@@ -16,6 +16,36 @@ import {
 } from "./commands.js";
 
 const nonNegativeIntegerStringSchema = z.string().regex(/^\d+$/);
+const HOST_DAEMON_WEBSOCKET_PROTOCOL = "bb-host-daemon.v1";
+const HOST_DAEMON_WEBSOCKET_AUTH_PREFIX = "bb-host-auth.";
+
+function encodeHostKeyForWebSocketProtocol(hostKey: string): string {
+  let encoded = "";
+  for (const character of hostKey) {
+    const codePoint = character.codePointAt(0);
+    if (codePoint == null || codePoint > 0x7f) {
+      throw new Error("Host daemon websocket auth supports ASCII host keys only");
+    }
+    encoded += codePoint.toString(16).padStart(2, "0");
+  }
+  return encoded;
+}
+
+function decodeHostKeyFromWebSocketProtocol(encodedHostKey: string): string | null {
+  if (encodedHostKey.length === 0 || encodedHostKey.length % 2 !== 0) {
+    return null;
+  }
+
+  let decoded = "";
+  for (let index = 0; index < encodedHostKey.length; index += 2) {
+    const byte = Number.parseInt(encodedHostKey.slice(index, index + 2), 16);
+    if (!Number.isFinite(byte)) {
+      return null;
+    }
+    decoded += String.fromCharCode(byte);
+  }
+  return decoded.length > 0 ? decoded : null;
+}
 
 export const hostDaemonActiveThreadSchema = z.object({
   threadId: z.string().min(1),
@@ -33,6 +63,23 @@ export const hostDaemonSessionOpenRequestSchema = z.object({
 });
 export type HostDaemonSessionOpenRequest = z.infer<
   typeof hostDaemonSessionOpenRequestSchema
+>;
+
+export const hostDaemonEnrollRequestSchema = z.object({
+  hostId: z.string().min(1),
+  hostName: z.string().min(1),
+  hostType: hostTypeSchema,
+}).strict();
+export type HostDaemonEnrollRequest = z.infer<
+  typeof hostDaemonEnrollRequestSchema
+>;
+
+export const hostDaemonEnrollResponseSchema = z.object({
+  hostId: z.string().min(1),
+  hostKey: z.string().min(1),
+});
+export type HostDaemonEnrollResponse = z.infer<
+  typeof hostDaemonEnrollResponseSchema
 >;
 
 export const hostDaemonSessionOpenResponseSchema = z.object({
@@ -156,6 +203,14 @@ export type HostDaemonToolCallResponse = z.infer<
 >;
 
 export type HostDaemonInternalSchema = {
+  "/hosts/enroll": {
+    /** Used by the daemon to exchange bootstrap material for its long-lived host credential. */
+    $post: Endpoint<
+      { json: HostDaemonEnrollRequest },
+      HostDaemonEnrollResponse,
+      201
+    >;
+  };
   "/session/open": {
     /** Used by the daemon to establish a session with the server. Replaces any prior session for the same host. */
     $post: Endpoint<
@@ -199,14 +254,55 @@ export type HostDaemonInternalSchema = {
 
 export type HostDaemonInternalRoutes = Hono<{}, HostDaemonInternalSchema, "/">;
 
-export function createHostDaemonClient(baseUrl: string, authToken: string) {
+export function buildHostDaemonWebSocketProtocols(hostKey: string): string[] {
+  return [
+    HOST_DAEMON_WEBSOCKET_PROTOCOL,
+    `${HOST_DAEMON_WEBSOCKET_AUTH_PREFIX}${encodeHostKeyForWebSocketProtocol(
+      hostKey,
+    )}`,
+  ];
+}
+
+export function parseHostDaemonWebSocketHostKey(
+  protocolHeader: string | undefined,
+): string | null {
+  if (!protocolHeader) {
+    return null;
+  }
+
+  const protocols = protocolHeader
+    .split(",")
+    .map((value) => value.trim())
+    .filter((value) => value.length > 0);
+
+  if (!protocols.includes(HOST_DAEMON_WEBSOCKET_PROTOCOL)) {
+    return null;
+  }
+
+  const authProtocol = protocols.find((value) =>
+    value.startsWith(HOST_DAEMON_WEBSOCKET_AUTH_PREFIX),
+  );
+
+  if (!authProtocol) {
+    return null;
+  }
+
+  const encodedHostKey = authProtocol.slice(HOST_DAEMON_WEBSOCKET_AUTH_PREFIX.length);
+  if (encodedHostKey.length === 0) {
+    return null;
+  }
+
+  return decodeHostKeyFromWebSocketProtocol(encodedHostKey);
+}
+
+export function createHostDaemonClient(baseUrl: string, hostKey: string) {
   const normalizedBaseUrl = baseUrl.replace(/\/$/, "");
   const internalBaseUrl = normalizedBaseUrl.endsWith("/internal")
     ? normalizedBaseUrl
     : `${normalizedBaseUrl}/internal`;
   return hc<HostDaemonInternalRoutes>(internalBaseUrl, {
     headers: {
-      authorization: `Bearer ${authToken}`,
+      authorization: `Bearer ${hostKey}`,
     },
   });
 }

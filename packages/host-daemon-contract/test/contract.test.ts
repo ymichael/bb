@@ -4,6 +4,8 @@ import * as contract from "../src/index.js";
 import {
   HOST_DAEMON_PROTOCOL_VERSION,
   createHostDaemonClient,
+  hostDaemonEnrollRequestSchema,
+  hostDaemonEnrollResponseSchema,
   hostDaemonCommandEnvelopeSchema,
   hostDaemonCommandResultSchemaByType,
   hostDaemonCommandsQuerySchema,
@@ -29,6 +31,26 @@ const INTENTIONAL_OPTIONAL_HOST_DAEMON_FIELDS: Record<string, string> = {
 
 describe("host-daemon command schemas", () => {
   it("parses valid workspace and provisioning commands", () => {
+    expect(
+      hostDaemonEnrollRequestSchema.parse({
+        hostId: "host_123",
+        hostName: "test-host",
+        hostType: "persistent",
+      }),
+    ).toMatchObject({
+      hostId: "host_123",
+      hostType: "persistent",
+    });
+
+    expect(
+      hostDaemonEnrollResponseSchema.parse({
+        hostId: "host_123",
+        hostKey: "bbdh_example",
+      }),
+    ).toMatchObject({
+      hostId: "host_123",
+    });
+
     expect(
       hostDaemonCommandSchema.parse({
         type: "workspace.commit",

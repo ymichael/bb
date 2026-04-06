@@ -2,12 +2,16 @@ import type { RawData } from "ws";
 import { WebSocket } from "ws";
 import {
   HOST_DAEMON_PROTOCOL_VERSION,
+  buildHostDaemonWebSocketProtocols,
   createHostDaemonClient,
   type HostDaemonCommandEnvelope,
 } from "@bb/host-daemon-contract";
 import { createPublicApiClient } from "@bb/server-contract";
 import { describe, expect, it } from "vitest";
-import { startTestServer } from "../helpers/test-app.js";
+import {
+  createTestDaemonHostKey,
+  startTestServer,
+} from "../helpers/test-app.js";
 
 function waitForOpen(socket: WebSocket): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -90,6 +94,7 @@ async function waitForThreadSubscription(
 async function fetchSingleCommand(
   daemonClient: ReturnType<typeof createHostDaemonClient>,
   sessionId: string,
+  afterCursor?: number,
 ): Promise<HostDaemonCommandEnvelope> {
   const response = await daemonClient.session.commands.$get({
     query: {
@@ -100,8 +105,12 @@ async function fetchSingleCommand(
   });
   expect(response.status).toBe(200);
   const body = await response.json();
-  expect(body.commands).toHaveLength(1);
-  return body.commands[0];
+  const commands =
+    afterCursor == null
+      ? body.commands
+      : body.commands.filter((command) => command.cursor > afterCursor);
+  expect(commands).toHaveLength(1);
+  return commands[0];
 }
 
 async function getNextEventSequence(
@@ -122,7 +131,10 @@ describe("server integration", () => {
   it("runs session open -> thread creation -> command fetch -> result report -> state update", async () => {
     const server = await startTestServer();
     try {
-      const daemonClient = createHostDaemonClient(server.baseUrl, server.config.authToken);
+      const daemonClient = createHostDaemonClient(
+        server.baseUrl,
+        createTestDaemonHostKey(),
+      );
       const publicClient = createPublicApiClient(server.baseUrl);
 
       const sessionResponse = await daemonClient.session.open.$post({
@@ -213,7 +225,10 @@ describe("server integration", () => {
   it("sends events-appended websocket notifications for thread event ingestion", async () => {
     const server = await startTestServer();
     try {
-      const daemonClient = createHostDaemonClient(server.baseUrl, server.config.authToken);
+      const daemonClient = createHostDaemonClient(
+        server.baseUrl,
+        createTestDaemonHostKey(),
+      );
       const publicClient = createPublicApiClient(server.baseUrl);
 
       const session = await (
@@ -348,7 +363,10 @@ describe("server integration", () => {
   it("runs a full create -> send -> result -> events -> idle lifecycle", async () => {
     const server = await startTestServer();
     try {
-      const daemonClient = createHostDaemonClient(server.baseUrl, server.config.authToken);
+      const daemonClient = createHostDaemonClient(
+        server.baseUrl,
+        createTestDaemonHostKey(),
+      );
       const publicClient = createPublicApiClient(server.baseUrl);
 
       const session = await (
@@ -545,7 +563,8 @@ describe("server integration", () => {
   it("notifies replaced daemon websocket sessions with session-close", async () => {
     const server = await startTestServer();
     try {
-      const daemonClient = createHostDaemonClient(server.baseUrl, server.config.authToken);
+      const hostKey = createTestDaemonHostKey();
+      const daemonClient = createHostDaemonClient(server.baseUrl, hostKey);
 
       const firstSession = await (
         await daemonClient.session.open.$post({
@@ -562,7 +581,8 @@ describe("server integration", () => {
       ).json();
 
       const daemonWs = new WebSocket(
-        `${server.baseUrl.replace("http", "ws")}/internal/ws?sessionId=${encodeURIComponent(firstSession.sessionId)}&token=${encodeURIComponent(server.config.authToken)}`,
+        `${server.baseUrl.replace("http", "ws")}/internal/ws?sessionId=${encodeURIComponent(firstSession.sessionId)}`,
+        buildHostDaemonWebSocketProtocols(hostKey),
       );
       await waitForOpen(daemonWs);
 

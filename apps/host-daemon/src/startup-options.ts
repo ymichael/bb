@@ -5,6 +5,7 @@ import type { HostType } from "@bb/domain";
 export interface HostDaemonEntrypointOptions {
   bbExecutableDirectory?: string;
   bridgeBundleDir?: string;
+  enrollKey?: string;
   hostType?: HostType;
 }
 
@@ -31,6 +32,7 @@ export function resolveHostDaemonEntrypointOptionsFromEnv(
   return {
     bbExecutableDirectory: toOptionalTrimmedString(args.env.BB_CLI_DIR),
     bridgeBundleDir: toOptionalTrimmedString(args.env.BB_BRIDGE_DIR),
+    enrollKey: toOptionalTrimmedString(args.env.BB_HOST_ENROLL_KEY),
     hostType: parseHostType(toOptionalTrimmedString(args.env.BB_HOST_TYPE)),
   };
 }

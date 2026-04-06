@@ -7,7 +7,8 @@ import type { Hono } from "hono";
 import type { AppDeps } from "../types.js";
 import { ApiError } from "../errors.js";
 import { requireEnvironment } from "../services/lib/entity-lookup.js";
-import { requireActiveSession } from "./session-state.js";
+import { getAuthenticatedDaemon } from "./auth.js";
+import { requireAuthorizedActiveSession } from "./session-state.js";
 
 export function registerInternalEnvironmentChangeRoutes(
   app: Hono,
@@ -21,7 +22,11 @@ export function registerInternalEnvironmentChangeRoutes(
     "/session/environment-change",
     hostDaemonEnvironmentChangeRequestSchema,
     async (context, payload) => {
-      const session = requireActiveSession(deps.db, payload.sessionId);
+      const daemon = getAuthenticatedDaemon(context);
+      const session = requireAuthorizedActiveSession(deps.db, {
+        hostId: daemon.hostId,
+        sessionId: payload.sessionId,
+      });
       const environment = requireEnvironment(deps.db, payload.environmentId);
       if (environment.hostId !== session.hostId) {
         throw new ApiError(

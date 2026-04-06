@@ -23,6 +23,8 @@ import type {
   ArchiveThreadRequest,
   Automation,
   CreateAutomationRequest,
+  CreateHostJoinRequest,
+  CreateHostJoinResponse,
   CreateDraftRequest,
   CreateManagerThreadRequest,
   CreateProjectRequest,
@@ -145,6 +147,9 @@ export type PublicApiSchema = {
   /** Host `status` is derived at query time from the `host_daemon_sessions` table. */
   "/hosts": {
     $get: Endpoint<EmptyInput, Host[]>;
+  };
+  "/hosts/join": {
+    $post: Endpoint<{ json: CreateHostJoinRequest }, CreateHostJoinResponse, 201>;
   };
   "/hosts/:id": {
     $get: Endpoint<PathId, Host>;

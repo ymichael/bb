@@ -29,8 +29,9 @@ import {
 import { syncManagerThreadSchedules } from "../services/scheduling/manager-schedule-sync.js";
 import { sendNextQueuedDraftIfPresent } from "../services/threads/queued-drafts.js";
 import { tryTransition } from "../services/threads/thread-transitions.js";
+import { getAuthenticatedDaemon } from "./auth.js";
 import { applyTurnCompletedEvent } from "./turn-completed-events.js";
-import { requireActiveSession } from "./session-state.js";
+import { requireAuthorizedActiveSession } from "./session-state.js";
 
 interface ToStoredEventArgs {
   envelope: HostDaemonEventEnvelope;
@@ -417,7 +418,11 @@ export function registerInternalEventRoutes(app: Hono, deps: AppDeps): void {
   });
 
   post("/session/events", hostDaemonEventBatchRequestSchema, async (context, payload) => {
-    const session = requireActiveSession(deps.db, payload.sessionId);
+    const daemon = getAuthenticatedDaemon(context);
+    const session = requireAuthorizedActiveSession(deps.db, {
+      hostId: daemon.hostId,
+      sessionId: payload.sessionId,
+    });
     const { canonicalEnvironmentIds } = validateAndResolveCanonicalEventBatchEnvironments(deps, {
       hostId: session.hostId,
       events: payload.events,

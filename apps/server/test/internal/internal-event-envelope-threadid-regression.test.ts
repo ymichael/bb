@@ -44,7 +44,7 @@ describe("internal event envelope threadId regression", () => {
 
       const response = await harness.app.request("/internal/session/events", {
         method: "POST",
-        headers: internalAuthHeaders(harness),
+        headers: internalAuthHeaders(harness, { hostId: hostA.host.id }),
         body: JSON.stringify({
           sessionId: hostA.session.id,
           events: [

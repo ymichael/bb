@@ -16,7 +16,6 @@ describe("commonConfig", () => {
     vi.stubEnv("NODE_ENV", "development");
     vi.stubEnv("BB_DATA_DIR", undefined);
     vi.stubEnv("BB_LOG_LEVEL", undefined);
-    vi.stubEnv("BB_SECRET_TOKEN", undefined);
 
     const { commonConfig } = await importFresh<typeof import("../src/common.js")>(
       "../src/common.js",
@@ -24,17 +23,6 @@ describe("commonConfig", () => {
 
     expect(commonConfig.BB_DATA_DIR).toBe(path.join(os.homedir(), ".bb-dev"));
     expect(commonConfig.BB_LOG_LEVEL).toBe("debug");
-    expect(commonConfig.BB_SECRET_TOKEN).toBe("dev-secret");
-  });
-
-
-  it("requires BB_SECRET_TOKEN in production", async () => {
-    vi.stubEnv("NODE_ENV", "production");
-    vi.stubEnv("BB_SECRET_TOKEN", undefined);
-
-    await expect(
-      importFresh<typeof import("../src/common.js")>("../src/common.js"),
-    ).rejects.toThrow(/BB_SECRET_TOKEN/u);
   });
 });
 
@@ -103,7 +91,6 @@ describe("consumer-specific config", () => {
   it("allows BB_PUBLIC_URL to be omitted in production server config", async () => {
     vi.stubEnv("NODE_ENV", "production");
     vi.stubEnv("BB_PUBLIC_URL", undefined);
-    vi.stubEnv("BB_SECRET_TOKEN", "test-secret-token");
     vi.stubEnv("OPENAI_API_KEY", "test-openai-key");
     vi.stubEnv("ANTHROPIC_API_KEY", "test-anthropic-key");
 

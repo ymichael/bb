@@ -6,6 +6,7 @@ import {
   buildShellExports,
   buildDaemonRestartCommand,
   cleanupStandaloneOrphans,
+  createHostJoin,
   createProject,
   createTestGitRepo,
   killProcess,
@@ -18,8 +19,6 @@ import {
   waitForConnectedHost,
   waitForServerReady,
 } from "./shared.mjs";
-
-const token = "standalone-qa-token";
 
 function parseArgs() {
   let format = "json";
@@ -43,7 +42,6 @@ function parseArgs() {
 
   return { format };
 }
-
 async function main() {
   const { format } = parseArgs();
   await cleanupStandaloneOrphans();
@@ -78,7 +76,6 @@ async function main() {
       env: {
         ...process.env,
         BB_DATA_DIR: serverDataDir,
-        BB_SECRET_TOKEN: token,
         BB_SERVER_PORT: String(serverPort),
         [STANDALONE_INSTANCE_ENV]: instanceId,
         [STANDALONE_PARENT_PID_ENV]: String(parentPid),
@@ -88,6 +85,9 @@ async function main() {
     });
 
     await waitForServerReady(serverUrl);
+    const join = await createHostJoin(serverUrl, {
+      hostType: "persistent",
+    });
 
     daemonProcess = spawnLoggedProcess({
       command: "node",
@@ -97,7 +97,8 @@ async function main() {
         ...process.env,
         BB_DATA_DIR: bbRoot,
         BB_HOST_DAEMON_PORT: String(daemonPort),
-        BB_SECRET_TOKEN: token,
+        BB_HOST_ENROLL_KEY: join.joinCode,
+        BB_HOST_ID: join.hostId,
         BB_SERVER_URL: serverUrl,
         [STANDALONE_INSTANCE_ENV]: instanceId,
         [STANDALONE_PARENT_PID_ENV]: String(parentPid),
@@ -116,7 +117,6 @@ async function main() {
       `--state ${statePath} && ` +
       `node ${path.join(repoRoot, "scripts/qa/cleanup-standalone.mjs")}`;
     const restartDaemonCommand = buildDaemonRestartCommand({
-      authToken: token,
       daemonPid: daemonProcess.pid,
       daemonPort,
       dataDir: bbRoot,

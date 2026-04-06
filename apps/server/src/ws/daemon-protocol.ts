@@ -8,12 +8,15 @@ import {
   hostDaemonSessions,
   threads,
 } from "@bb/db";
-import { hostDaemonDaemonWsMessageSchema } from "@bb/host-daemon-contract";
+import {
+  hostDaemonDaemonWsMessageSchema,
+  parseHostDaemonWebSocketHostKey,
+} from "@bb/host-daemon-contract";
 import { DAEMON_DISCONNECT_GRACE_MS } from "../constants.js";
 import { ApiError } from "../errors.js";
 import { buildSystemErrorEventData } from "../services/threads/thread-events.js";
 import type { AppDeps } from "../types.js";
-import { requireActiveSession } from "../internal/session-state.js";
+import { requireAuthorizedActiveSession } from "../internal/session-state.js";
 import { decodeSocketPayload } from "./decode-payload.js";
 
 interface DaemonSocket {
@@ -22,19 +25,34 @@ interface DaemonSocket {
 }
 
 interface DaemonSocketMessageArgs {
+  hostId: string;
   raw: unknown;
   sessionId: string;
   socket: DaemonSocket;
 }
 
-export function validateDaemonWebSocket(
-  deps: Pick<AppDeps, "config" | "db">,
-  args: { sessionId: string | null; token: string | null },
-): { hostId: string; sessionId: string } {
-  if (!args.sessionId || args.token !== deps.config.authToken) {
+export async function validateDaemonWebSocket(
+  deps: Pick<AppDeps, "db" | "machineAuth">,
+  args: { protocolHeader: string | undefined; sessionId: string | null },
+): Promise<{ hostId: string; sessionId: string }> {
+  const sessionId = args.sessionId;
+  if (!sessionId) {
     throw new ApiError(401, "unauthorized", "Unauthorized");
   }
-  const session = requireActiveSession(deps.db, args.sessionId);
+  const hostKey = parseHostDaemonWebSocketHostKey(args.protocolHeader);
+  if (!hostKey) {
+    throw new ApiError(401, "unauthorized", "Unauthorized");
+  }
+
+  const verified = await deps.machineAuth.verifyDaemonHostKey(hostKey);
+  if (!verified) {
+    throw new ApiError(401, "unauthorized", "Unauthorized");
+  }
+  const session = requireAuthorizedActiveSession(deps.db, {
+    hostId: verified.metadata.hostId,
+    sessionId,
+  });
+
   return {
     sessionId: session.id,
     hostId: session.hostId,
@@ -71,7 +89,10 @@ export function onDaemonSocketMessage(
   }
 
   try {
-    const session = requireActiveSession(deps.db, args.sessionId);
+    const session = requireAuthorizedActiveSession(deps.db, {
+      hostId: args.hostId,
+      sessionId: args.sessionId,
+    });
     heartbeatSession(
       deps.db,
       session.id,
@@ -130,6 +151,7 @@ function interruptThreadsForDisconnectedHost(
   hostId: string,
 ): { eventThreadIds: string[]; statusThreadIds: string[] } {
   const now = Date.now();
+  const disconnectEventType: typeof events.$inferInsert.type = "system/error";
   const disconnectErrorData = buildSystemErrorEventData({
     code: "host_daemon_disconnected",
     detail: "The host daemon disconnected while work was in progress.",
@@ -190,7 +212,7 @@ function interruptThreadsForDisconnectedHost(
               sequence: nextSequence,
               threadId: thread.id,
               turnId: null,
-              type: "system/error" as const,
+              type: disconnectEventType,
             };
           }),
         )

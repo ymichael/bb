@@ -9,6 +9,7 @@ import {
 import { systemErrorEventDataSchema } from "@bb/domain";
 import {
   HOST_DAEMON_PROTOCOL_VERSION,
+  buildHostDaemonWebSocketProtocols,
   createHostDaemonClient,
 } from "@bb/host-daemon-contract";
 import { describe, expect, it, vi } from "vitest";
@@ -23,6 +24,7 @@ import {
   seedThread,
 } from "../helpers/seed.js";
 import {
+  createTestDaemonHostKey,
   createTestAppHarness,
   startTestServer,
 } from "../helpers/test-app.js";
@@ -55,22 +57,55 @@ async function waitForCloseDetails(
   });
 }
 
+async function waitForUpgradeRejectionStatus(socket: WebSocket): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const cleanup = () => {
+      socket.off("unexpected-response", onUnexpectedResponse);
+      socket.off("open", onOpen);
+      socket.off("error", onError);
+    };
+
+    const onUnexpectedResponse = (_request: unknown, response: { statusCode?: number }) => {
+      cleanup();
+      resolve(response.statusCode ?? 0);
+    };
+
+    const onOpen = () => {
+      cleanup();
+      reject(new Error("Expected websocket upgrade to be rejected"));
+    };
+
+    const onError = (error: Error) => {
+      cleanup();
+      reject(error);
+    };
+
+    socket.once("unexpected-response", onUnexpectedResponse);
+    socket.once("open", onOpen);
+    socket.once("error", onError);
+  });
+}
+
 describe("internal session correctness", () => {
   it("throws ApiError for daemon websocket upgrades missing a sessionId", async () => {
     const harness = await createTestAppHarness();
     try {
-      expect(() =>
+      await expect(
         validateDaemonWebSocket(harness.deps, {
+          protocolHeader: buildHostDaemonWebSocketProtocols(
+            createTestDaemonHostKey(),
+          ).join(", "),
           sessionId: null,
-          token: harness.config.authToken,
-        })
-      ).toThrowError(ApiError);
-      expect(() =>
+        }),
+      ).rejects.toThrowError(ApiError);
+      await expect(
         validateDaemonWebSocket(harness.deps, {
+          protocolHeader: buildHostDaemonWebSocketProtocols(
+            createTestDaemonHostKey(),
+          ).join(", "),
           sessionId: null,
-          token: harness.config.authToken,
-        })
-      ).toThrowError("Unauthorized");
+        }),
+      ).rejects.toThrowError("Unauthorized");
     } finally {
       await harness.cleanup();
     }
@@ -86,9 +121,7 @@ describe("internal session correctness", () => {
       const response = await harness.app.request(
         `/internal/session/commands?sessionId=${session.id}&limit=100&waitMs=0`,
         {
-          headers: {
-            authorization: `Bearer ${harness.config.authToken}`,
-          },
+          headers: internalAuthHeaders(harness, { hostId: session.hostId }),
         },
       );
 
@@ -104,9 +137,10 @@ describe("internal session correctness", () => {
   it("extends the session lease when the daemon websocket sends a heartbeat", async () => {
     const server = await startTestServer();
     try {
+      const hostKey = createTestDaemonHostKey({ hostId: "host-heartbeat" });
       const daemonClient = createHostDaemonClient(
         server.baseUrl,
-        server.config.authToken,
+        hostKey,
       );
       const sessionResponse = await daemonClient.session.open.$post({
         json: {
@@ -129,7 +163,8 @@ describe("internal session correctness", () => {
       expect(initialLease).toBeTypeOf("number");
 
       const socket = new WebSocket(
-        `${server.baseUrl.replace("http", "ws")}/internal/ws?sessionId=${encodeURIComponent(session.sessionId)}&token=${encodeURIComponent(server.config.authToken)}`,
+        `${server.baseUrl.replace("http", "ws")}/internal/ws?sessionId=${encodeURIComponent(session.sessionId)}`,
+        buildHostDaemonWebSocketProtocols(hostKey),
       );
       await waitForOpen(socket);
       await sleep(10);
@@ -157,9 +192,10 @@ describe("internal session correctness", () => {
   it("closes the daemon websocket with 1008 on malformed messages", async () => {
     const server = await startTestServer();
     try {
+      const hostKey = createTestDaemonHostKey({ hostId: "host-malformed-heartbeat" });
       const daemonClient = createHostDaemonClient(
         server.baseUrl,
-        server.config.authToken,
+        hostKey,
       );
       const sessionResponse = await daemonClient.session.open.$post({
         json: {
@@ -176,7 +212,8 @@ describe("internal session correctness", () => {
       const session = await sessionResponse.json();
 
       const socket = new WebSocket(
-        `${server.baseUrl.replace("http", "ws")}/internal/ws?sessionId=${encodeURIComponent(session.sessionId)}&token=${encodeURIComponent(server.config.authToken)}`,
+        `${server.baseUrl.replace("http", "ws")}/internal/ws?sessionId=${encodeURIComponent(session.sessionId)}`,
+        buildHostDaemonWebSocketProtocols(hostKey),
       );
       await waitForOpen(socket);
 
@@ -195,9 +232,10 @@ describe("internal session correctness", () => {
   it("closes the daemon websocket with 1008 on invalid heartbeat payloads", async () => {
     const server = await startTestServer();
     try {
+      const hostKey = createTestDaemonHostKey({ hostId: "host-invalid-heartbeat" });
       const daemonClient = createHostDaemonClient(
         server.baseUrl,
-        server.config.authToken,
+        hostKey,
       );
       const sessionResponse = await daemonClient.session.open.$post({
         json: {
@@ -214,7 +252,8 @@ describe("internal session correctness", () => {
       const session = await sessionResponse.json();
 
       const socket = new WebSocket(
-        `${server.baseUrl.replace("http", "ws")}/internal/ws?sessionId=${encodeURIComponent(session.sessionId)}&token=${encodeURIComponent(server.config.authToken)}`,
+        `${server.baseUrl.replace("http", "ws")}/internal/ws?sessionId=${encodeURIComponent(session.sessionId)}`,
+        buildHostDaemonWebSocketProtocols(hostKey),
       );
       await waitForOpen(socket);
 
@@ -235,12 +274,53 @@ describe("internal session correctness", () => {
     }
   });
 
+  it("rejects daemon websocket upgrades when the authenticated host does not own the session", async () => {
+    const server = await startTestServer();
+    try {
+      const sessionHostKey = await server.deps.machineAuth.issueDaemonHostKey({
+        hostId: "host-ws-owner",
+        hostType: "persistent",
+      });
+      const otherHostKey = await server.deps.machineAuth.issueDaemonHostKey({
+        hostId: "host-ws-other",
+        hostType: "persistent",
+      });
+      const daemonClient = createHostDaemonClient(
+        server.baseUrl,
+        sessionHostKey,
+      );
+      const sessionResponse = await daemonClient.session.open.$post({
+        json: {
+          hostId: "host-ws-owner",
+          instanceId: "instance-1",
+          hostName: "WebSocket Owner",
+          hostType: "persistent",
+          dataDir: "/tmp/host-ws-owner",
+          protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
+          activeThreads: [],
+        },
+      });
+      expect(sessionResponse.status).toBe(201);
+      const session = await sessionResponse.json();
+
+      const socket = new WebSocket(
+        `${server.baseUrl.replace("http", "ws")}/internal/ws?sessionId=${encodeURIComponent(session.sessionId)}`,
+        buildHostDaemonWebSocketProtocols(otherHostKey),
+      );
+
+      await expect(waitForUpgradeRejectionStatus(socket)).resolves.toBe(403);
+    } finally {
+      await server.close();
+    }
+  });
+
   it("closes the daemon websocket with 1008 when the session is no longer active", async () => {
     const server = await startTestServer();
     try {
+      const hostKey = createTestDaemonHostKey({ hostId: "host-inactive-session" });
       const daemonClient = createHostDaemonClient(
         server.baseUrl,
-        server.config.authToken,
+        hostKey,
       );
       const sessionResponse = await daemonClient.session.open.$post({
         json: {
@@ -257,7 +337,8 @@ describe("internal session correctness", () => {
       const session = await sessionResponse.json();
 
       const socket = new WebSocket(
-        `${server.baseUrl.replace("http", "ws")}/internal/ws?sessionId=${encodeURIComponent(session.sessionId)}&token=${encodeURIComponent(server.config.authToken)}`,
+        `${server.baseUrl.replace("http", "ws")}/internal/ws?sessionId=${encodeURIComponent(session.sessionId)}`,
+        buildHostDaemonWebSocketProtocols(hostKey),
       );
       await waitForOpen(socket);
 

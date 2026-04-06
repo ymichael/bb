@@ -104,6 +104,22 @@ export async function createProject(serverUrl, project) {
   return response.json();
 }
 
+export async function createHostJoin(serverUrl, body = { hostType: "persistent" }) {
+  const response = await fetch(`${serverUrl}/api/v1/hosts/join`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) {
+    throw new Error(
+      `Failed to create host join material: ${response.status} ${await response.text()}`,
+    );
+  }
+  return response.json();
+}
+
 export async function killProcess(pid) {
   if (!pid) {
     return;
@@ -377,7 +393,6 @@ export function buildDaemonRestartCommand(args) {
   const startCommand = [
     `BB_DATA_DIR=${shellQuote(args.dataDir)}`,
     `BB_HOST_DAEMON_PORT=${shellQuote(String(args.daemonPort))}`,
-    `BB_SECRET_TOKEN=${shellQuote(args.authToken)}`,
     `BB_SERVER_URL=${shellQuote(args.serverUrl)}`,
     `BB_STANDALONE_PARENT_PID=${shellQuote(String(args.parentPid))}`,
     `node ${shellQuote(args.entrypoint)} >> ${shellQuote(args.logPath)} 2>&1 &`,

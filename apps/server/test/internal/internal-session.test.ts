@@ -145,9 +145,7 @@ describe("internal session routes", () => {
       const fetchResponse = await harness.app.request(
         `/internal/session/commands?sessionId=${session.id}&limit=10&waitMs=0`,
         {
-          headers: {
-            authorization: `Bearer ${harness.config.authToken}`,
-          },
+          headers: internalAuthHeaders(harness, { hostId: host.id }),
         },
       );
       expect(fetchResponse.status).toBe(200);
@@ -174,9 +172,7 @@ describe("internal session routes", () => {
       const timeoutResponse = await harness.app.request(
         `/internal/session/commands?sessionId=${session.id}&limit=100&waitMs=1`,
         {
-          headers: {
-            authorization: `Bearer ${harness.config.authToken}`,
-          },
+          headers: internalAuthHeaders(harness, { hostId: host.id }),
         },
       );
       expect(timeoutResponse.status).toBe(204);
@@ -198,7 +194,10 @@ describe("internal session routes", () => {
 
       const response = await harness.app.request("/internal/session/open", {
         method: "POST",
-        headers: internalAuthHeaders(harness),
+        headers: internalAuthHeaders(harness, {
+          hostId: host.id,
+          hostType: "ephemeral",
+        }),
         body: JSON.stringify({
           activeThreads: [],
           dataDir: "/tmp/host-daemon-reconnected",

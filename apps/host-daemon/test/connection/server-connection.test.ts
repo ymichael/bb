@@ -44,14 +44,14 @@ function createConnection(
   const logger = createLogger();
   const serverClient = createServerClient({
     serverUrl: testServer.baseUrl,
-    authToken: "secret",
+    hostKey: testServer.hostKey,
     logger,
     getSessionId: () => sessionState.value,
   });
 
   const connection = new ServerConnection({
     serverUrl: testServer.baseUrl,
-    authToken: "secret",
+    hostKey: testServer.hostKey,
     hostId: "host-1",
     hostName: "Host One",
     hostType: "persistent",

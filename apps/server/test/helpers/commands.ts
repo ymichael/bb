@@ -1,15 +1,17 @@
 import { setTimeout as sleep } from "node:timers/promises";
-import { desc } from "drizzle-orm";
-import { hostDaemonCommands } from "@bb/db";
+import { desc, eq } from "drizzle-orm";
+import { hostDaemonCommands, hostDaemonSessions } from "@bb/db";
 import {
   hostDaemonCommandResultSchemaByType,
   hostDaemonCommandSchema,
 } from "@bb/host-daemon-contract";
+import type { HostType } from "@bb/domain";
 import type {
   HostDaemonCommand,
   HostDaemonCommandResultByType,
 } from "@bb/host-daemon-contract";
 import type { TestAppHarness } from "./test-app.js";
+import { createTestDaemonHostKey } from "./test-app.js";
 
 export interface QueuedCommand<
   TCommand extends HostDaemonCommand = HostDaemonCommand,
@@ -18,9 +20,29 @@ export interface QueuedCommand<
   row: typeof hostDaemonCommands.$inferSelect;
 }
 
-export function internalAuthHeaders(harness: TestAppHarness): HeadersInit {
+export function internalAuthHeaders(
+  harness: TestAppHarness,
+  args: { hostId?: string; hostType?: HostType } = {},
+): HeadersInit {
+  const activeSessions = harness.db
+    .select({
+      hostId: hostDaemonSessions.hostId,
+      hostType: hostDaemonSessions.hostType,
+    })
+    .from(hostDaemonSessions)
+    .where(eq(hostDaemonSessions.status, "active"))
+    .all();
+
+  const inferredHost =
+    activeSessions.length === 1
+      ? activeSessions[0]
+      : null;
+
   return {
-    authorization: `Bearer ${harness.config.authToken}`,
+    authorization: `Bearer ${createTestDaemonHostKey({
+      hostId: args.hostId ?? inferredHost?.hostId ?? "host-1",
+      hostType: args.hostType ?? inferredHost?.hostType ?? "persistent",
+    })}`,
     "content-type": "application/json",
   };
 }
@@ -74,6 +96,7 @@ export async function reportQueuedCommandSuccess<
   harness: TestAppHarness,
   queued: QueuedCommand<TCommand>,
   result: HostDaemonCommandResultByType[TCommand["type"]],
+  args: { hostId?: string; hostType?: HostType } = {},
 ): Promise<Response> {
   const sessionId = queued.row.sessionId;
   if (!sessionId) {
@@ -82,7 +105,7 @@ export async function reportQueuedCommandSuccess<
 
   return harness.app.request("/internal/session/command-result", {
     method: "POST",
-    headers: internalAuthHeaders(harness),
+    headers: internalAuthHeaders(harness, args),
     body: JSON.stringify({
       sessionId,
       commandId: queued.row.id,
@@ -98,6 +121,7 @@ export async function reportQueuedCommandError(
   harness: TestAppHarness,
   queued: QueuedCommand,
   args: { errorCode: string; errorMessage: string },
+  auth: { hostId?: string; hostType?: HostType } = {},
 ): Promise<Response> {
   const sessionId = queued.row.sessionId;
   if (!sessionId) {
@@ -106,7 +130,7 @@ export async function reportQueuedCommandError(
 
   return harness.app.request("/internal/session/command-result", {
     method: "POST",
-    headers: internalAuthHeaders(harness),
+    headers: internalAuthHeaders(harness, auth),
     body: JSON.stringify({
       sessionId,
       commandId: queued.row.id,

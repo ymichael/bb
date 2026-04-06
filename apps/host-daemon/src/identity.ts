@@ -4,10 +4,9 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
+import { HOST_ID_FILE_NAME } from "@bb/host-daemon-contract";
 
 const execFile = promisify(execFileCallback);
-
-export const HOST_ID_FILE_NAME = "host-id";
 
 type ExecFileResult = {
   stdout?: string | Buffer;
@@ -41,6 +40,7 @@ export async function readOrCreateHostId(options: {
     await fs.writeFile(hostIdPath, `${hostId}\n`, {
       encoding: "utf8",
       flag: "wx",
+      mode: 0o600,
     });
     return hostId;
   } catch {
@@ -49,6 +49,44 @@ export async function readOrCreateHostId(options: {
       return racedValue;
     }
     throw new Error(`Failed to initialize host ID at ${hostIdPath}`);
+  }
+}
+
+async function persistProvidedHostId(options: {
+  dataDir: string;
+  hostId: string;
+}): Promise<string> {
+  await fs.mkdir(options.dataDir, { recursive: true });
+
+  const hostIdPath = path.join(options.dataDir, HOST_ID_FILE_NAME);
+  const existing = await readHostIdFile(hostIdPath);
+  if (existing) {
+    if (existing !== options.hostId) {
+      throw new Error(
+        `Configured BB_HOST_ID ${options.hostId} does not match persisted host ID ${existing}`,
+      );
+    }
+    return existing;
+  }
+
+  try {
+    await fs.writeFile(hostIdPath, `${options.hostId}\n`, {
+      encoding: "utf8",
+      flag: "wx",
+      mode: 0o600,
+    });
+    return options.hostId;
+  } catch {
+    const racedValue = await readHostIdFile(hostIdPath);
+    if (!racedValue) {
+      throw new Error(`Failed to initialize host ID at ${hostIdPath}`);
+    }
+    if (racedValue !== options.hostId) {
+      throw new Error(
+        `Configured BB_HOST_ID ${options.hostId} does not match persisted host ID ${racedValue}`,
+      );
+    }
+    return racedValue;
   }
 }
 
@@ -86,12 +124,17 @@ export async function loadHostIdentity(options: {
   execFile?: ExecFileFn;
   fallbackHostName?: () => string;
   platform?: NodeJS.Platform;
+  providedHostId?: string;
+  providedHostName?: string;
 }): Promise<HostIdentity> {
-  const providedHostId = process.env.BB_HOST_ID?.trim();
-  const providedHostName = process.env.BB_HOST_NAME?.trim();
+  const providedHostId = options.providedHostId ?? process.env.BB_HOST_ID?.trim();
+  const providedHostName = options.providedHostName ?? process.env.BB_HOST_NAME?.trim();
   const [hostId, hostName] = await Promise.all([
     providedHostId
-      ? Promise.resolve(providedHostId)
+      ? persistProvidedHostId({
+        dataDir: options.dataDir,
+        hostId: providedHostId,
+      })
       : readOrCreateHostId({
         dataDir: options.dataDir,
         createId: options.createId,

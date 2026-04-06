@@ -162,6 +162,13 @@
       "when": 1781222400000,
       "tag": "0021_lifecycle_operation_tables",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "6",
+      "when": 1781226000000,
+      "tag": "0022_swift_machine_auth",
+      "breakpoints": true
     }
   ]
 }

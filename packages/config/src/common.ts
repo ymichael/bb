@@ -21,8 +21,4 @@ export const commonConfig = envsafe({
     devDefault: DEFAULTS.logLevel.dev,
     choices: ["trace", "debug", "info", "warn", "error", "fatal"],
   }),
-  BB_SECRET_TOKEN: str({
-    desc: "Shared secret for daemon-server auth (required in production)",
-    devDefault: DEFAULTS.secretToken.dev,
-  }),
 });

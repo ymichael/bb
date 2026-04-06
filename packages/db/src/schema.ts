@@ -24,6 +24,55 @@ import type {
   WorkspaceProvisionType,
 } from "@bb/domain";
 
+export const authUsers = sqliteTable(
+  "user",
+  {
+    id: text("id").primaryKey(),
+    name: text("name").notNull(),
+    email: text("email").notNull(),
+    emailVerified: integer("emailVerified", { mode: "boolean" }).notNull(),
+    image: text("image"),
+    createdAt: integer("createdAt", { mode: "timestamp_ms" }).notNull(),
+    updatedAt: integer("updatedAt", { mode: "timestamp_ms" }).notNull(),
+  },
+  (table) => [uniqueIndex("user_email_unique").on(table.email)],
+);
+
+export const authApiKeys = sqliteTable(
+  "apikey",
+  {
+    id: text("id").primaryKey(),
+    name: text("name"),
+    start: text("start"),
+    prefix: text("prefix"),
+    key: text("key").notNull(),
+    referenceId: text("referenceId")
+      .notNull()
+      .references(() => authUsers.id, { onDelete: "cascade" }),
+    refillInterval: integer("refillInterval"),
+    refillAmount: integer("refillAmount"),
+    lastRefillAt: integer("lastRefillAt", { mode: "timestamp_ms" }),
+    enabled: integer("enabled", { mode: "boolean" }).notNull(),
+    rateLimitEnabled: integer("rateLimitEnabled", { mode: "boolean" }).notNull(),
+    rateLimitTimeWindow: integer("rateLimitTimeWindow").notNull(),
+    rateLimitMax: integer("rateLimitMax").notNull(),
+    requestCount: integer("requestCount").notNull(),
+    remaining: integer("remaining"),
+    lastRequest: integer("lastRequest", { mode: "timestamp_ms" }),
+    expiresAt: integer("expiresAt", { mode: "timestamp_ms" }),
+    createdAt: integer("createdAt", { mode: "timestamp_ms" }).notNull(),
+    updatedAt: integer("updatedAt", { mode: "timestamp_ms" }).notNull(),
+    permissions: text("permissions"),
+    metadata: text("metadata"),
+    configId: text("configId").notNull(),
+  },
+  (table) => [
+    uniqueIndex("apikey_key_unique").on(table.key),
+    index("apikey_reference_id_idx").on(table.referenceId),
+    index("apikey_config_id_idx").on(table.configId),
+  ],
+);
+
 export const hosts = sqliteTable(
   "hosts",
   {

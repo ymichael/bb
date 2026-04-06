@@ -49,8 +49,8 @@ export interface SandboxDaemonArtifacts {
 }
 
 export interface BuildSandboxDaemonEnvOptions {
-  authToken: string;
   daemonEnv: Record<string, string>;
+  enrollKey?: string;
   hostId: string;
   hostName: string;
   serverUrl: string;
@@ -72,9 +72,9 @@ export interface ProvisionHostOptions {
   apiKey?: string;
   daemonArtifacts?: SandboxDaemonArtifacts;
   daemonEnv: Record<string, string>;
+  enrollKey: string;
   hostId: string;
   hostName: string;
-  authToken: string;
   serverUrl: string;
   template?: string;
   timeoutMs?: number;
@@ -87,7 +87,6 @@ export interface ResumeHostOptions {
   externalId: string;
   hostId: string;
   hostName: string;
-  authToken: string;
   serverUrl: string;
   timeoutMs?: number;
 }

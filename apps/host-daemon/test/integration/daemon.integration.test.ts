@@ -3,6 +3,9 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { createFakeAdapter } from "@bb/agent-runtime/test";
+import {
+  HOST_AUTH_FILE_NAME,
+} from "@bb/host-daemon-contract";
 import { startHostDaemon } from "../../src/index.js";
 import {
   createTestServer,
@@ -117,8 +120,8 @@ async function setupDaemonHarness() {
   });
   const daemon = await startHostDaemon({
     dataDir,
+    enrollKey: server.enrollKey,
     serverUrl: server.baseUrl,
-    authToken: "secret",
     enableLocalApi: false,
     createInstanceId: () => "instance-1",
     adapterFactory: () => createFakeAdapter(),
@@ -358,6 +361,42 @@ describe("host daemon integration", () => {
     } finally {
       await harness.daemon.shutdown("test");
       await harness.server.close();
+    }
+  });
+
+  it("persists auth state on first run when started with explicit join material", async () => {
+    const dataDir = await makeTempDir("bb-host-daemon-first-run-");
+    const workspaceRoot = await makeTempDir("bb-host-daemon-workspaces-");
+    const envPath = path.join(workspaceRoot, "env-bootstrap");
+    await fs.mkdir(envPath, { recursive: true });
+
+    const server = await createTestServer({
+      threadHighWaterMarks: {},
+    });
+    const hostId = "host-local-bootstrap";
+
+    const daemon = await startHostDaemon({
+      dataDir,
+      enableLocalApi: false,
+      createInstanceId: () => "instance-local-bootstrap",
+      adapterFactory: () => createFakeAdapter(),
+      enrollKey: server.enrollKey,
+      loadIdentity: async () => ({
+        hostId,
+        hostName: "Local Bootstrap Host",
+      }),
+      serverUrl: server.baseUrl,
+    });
+
+    try {
+      await waitFor(() => server.sessionOpenCalls.length === 1);
+      expect(server.sessionOpenCalls[0]?.hostId).toBe(hostId);
+      expect(
+        await pathExists(path.join(dataDir, HOST_AUTH_FILE_NAME)),
+      ).toBe(true);
+    } finally {
+      await daemon.shutdown("test");
+      await server.close();
     }
   });
 });

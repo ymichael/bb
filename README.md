@@ -78,6 +78,14 @@ pnpm dev
 
 That starts the Vite app on `http://localhost:5173` and proxies API and WebSocket traffic to a separate dev server on `:3334`, using `~/.bb-dev` by default so it can run alongside `pnpm start`.
 
+To test an additional host against that dev server, use:
+
+```bash
+pnpm dev:host-daemon
+```
+
+That runs a second host daemon against the dev server and stores its state under `~/.bb-dev-host` by default.
+
 ```bash
 pnpm bb:dev --help        # CLI during development
 pnpm reset:dev            # clear dev state
@@ -122,6 +130,8 @@ be read as current architecture, not as a frozen public platform surface.
 Runtime configuration is defined in [`packages/config/src/`](./packages/config/src/) with validated defaults. Environment variables can be overridden in a `.env` file at the repo root (gitignored).
 
 Local state defaults to `~/.bb/`. `pnpm dev` uses `~/.bb-dev/` by default so it can run alongside the production-style server. Thread execution context also exposes `BB_PROJECT_ID`, `BB_THREAD_ID`, and `BB_ENVIRONMENT_ID`.
+
+For a production-style separate host, use `pnpm start:host-daemon` on the target machine after generating join material from the server.
 
 `pnpm reset`, `pnpm reset:dev`, and `pnpm reset:all` remove bb-managed local state only. They do not remove provider credentials or config owned by other tools.
 

@@ -50,6 +50,7 @@ type SandboxHostMockArgs = Array<object | string | undefined>;
 
 interface SandboxProvisionCall {
   daemonEnv?: Record<string, string>;
+  enrollKey?: string;
   hostId: string;
   hostName: string;
 }
@@ -865,11 +866,11 @@ describe("public thread routes", () => {
       expect(createdThread.status).toBe("provisioning");
       expect(provisionHostMock).toHaveBeenCalledWith({
         apiKey: "test-e2b-api-key",
-        authToken: harness.config.authToken,
         daemonEnv: {
           GITHUB_TOKEN: "test-github-pat",
           OPENAI_API_KEY: "test-openai-key",
         },
+        enrollKey: expect.stringMatching(/^bbde_/u),
         hostId: expect.stringMatching(/^host_/u),
         hostName: expect.stringMatching(/^sandbox-/u),
         serverUrl: "https://bb.example.test",

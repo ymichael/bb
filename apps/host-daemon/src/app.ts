@@ -84,7 +84,7 @@ export function createCommandFetchLoop<Command>(
 export interface CreateHostDaemonAppOptions {
   dataDir: string;
   serverUrl: string;
-  authToken: string;
+  hostKey: string;
   bridgeBundleDir?: string;
   hostType: HostType;
   hostId: string;
@@ -122,7 +122,7 @@ export async function createHostDaemonApp(
 
   const serverClient = createServerClient({
     serverUrl: options.serverUrl,
-    authToken: options.authToken,
+    hostKey: options.hostKey,
     logger: options.logger,
     getSessionId: () => {
       if (!sessionState.value) {
@@ -203,7 +203,7 @@ export async function createHostDaemonApp(
 
   const connection = new ServerConnection({
     serverUrl: options.serverUrl,
-    authToken: options.authToken,
+    hostKey: options.hostKey,
     hostId: options.hostId,
     hostName: options.hostName,
     hostType: options.hostType,

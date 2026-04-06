@@ -258,7 +258,7 @@ async function startQueuedThreadIfNeeded(
 }
 
 async function createSandboxHostThread(
-  deps: Pick<AppDeps, "config" | "db" | "hub" | "logger" | "sandboxRegistry">,
+  deps: Pick<AppDeps, "config" | "db" | "hub" | "logger" | "machineAuth" | "sandboxRegistry">,
   args: CreateSandboxHostThreadArgs,
 ) {
   const hostId = createHostId();
@@ -274,8 +274,13 @@ async function createSandboxHostThread(
 
   let sandboxHost: SandboxHost;
   try {
+    const enrollKey = await deps.machineAuth.issueHostEnrollKey({
+      hostId,
+      hostType: "ephemeral",
+    });
     sandboxHost = await sandboxBackend.provisionHost({
       config: deps.config,
+      enrollKey: enrollKey.key,
       hostId,
       hostName,
       serverUrl: requireReachablePublicServerUrl(deps.config),
@@ -351,7 +356,7 @@ async function createSandboxHostThread(
 }
 
 export async function createThreadFromRequest(
-  deps: Pick<AppDeps, "config" | "db" | "hub" | "logger" | "sandboxRegistry">,
+  deps: Pick<AppDeps, "config" | "db" | "hub" | "logger" | "machineAuth" | "sandboxRegistry">,
   request: ThreadCreateServiceRequest,
 ) {
   requireProjectExists(deps, request.projectId);

@@ -64,7 +64,19 @@ function createMockSandbox() {
   };
 }
 
-const expectedDaemonEnv = {
+const expectedProvisionDaemonEnv = {
+  BB_CLI_DIR: SANDBOX_BB_EXECUTABLE_DIR,
+  BB_BRIDGE_DIR: SANDBOX_BRIDGE_DIR,
+  BB_DATA_DIR: "/tmp/bb-data",
+  BB_HOST_ENROLL_KEY: "enroll-token",
+  BB_HOST_ID: "host-123",
+  BB_HOST_NAME: "sandbox-123",
+  BB_HOST_TYPE: "ephemeral",
+  PI_PACKAGE_DIR: SANDBOX_PI_PACKAGE_DIR,
+  BB_SERVER_URL: "https://bb.example.test",
+};
+
+const expectedResumeDaemonEnv = {
   BB_CLI_DIR: SANDBOX_BB_EXECUTABLE_DIR,
   BB_BRIDGE_DIR: SANDBOX_BRIDGE_DIR,
   BB_DATA_DIR: "/tmp/bb-data",
@@ -72,7 +84,6 @@ const expectedDaemonEnv = {
   BB_HOST_NAME: "sandbox-123",
   BB_HOST_TYPE: "ephemeral",
   PI_PACKAGE_DIR: SANDBOX_PI_PACKAGE_DIR,
-  BB_SECRET_TOKEN: "secret-token",
   BB_SERVER_URL: "https://bb.example.test",
 };
 
@@ -96,9 +107,9 @@ describe("sandbox host provisioning", () => {
     sandboxCreateMock.mockResolvedValue(sandbox);
 
     const host = await provisionHost({
-      authToken: "secret-token",
       daemonArtifacts: testDaemonArtifacts,
       daemonEnv: {},
+      enrollKey: "enroll-token",
       hostId: "host-123",
       hostName: "sandbox-123",
       serverUrl: "https://bb.example.test/",
@@ -111,11 +122,11 @@ describe("sandbox host provisioning", () => {
         BB_CLI_DIR: SANDBOX_BB_EXECUTABLE_DIR,
         BB_BRIDGE_DIR: SANDBOX_BRIDGE_DIR,
         BB_DATA_DIR: "/tmp/bb-data",
+        BB_HOST_ENROLL_KEY: "enroll-token",
         BB_HOST_ID: "host-123",
         BB_HOST_NAME: "sandbox-123",
         BB_HOST_TYPE: "ephemeral",
         PI_PACKAGE_DIR: SANDBOX_PI_PACKAGE_DIR,
-        BB_SECRET_TOKEN: "secret-token",
         BB_SERVER_URL: "https://bb.example.test",
       },
       lifecycle: { onTimeout: "pause" },
@@ -157,7 +168,7 @@ describe("sandbox host provisioning", () => {
     );
     expect(sandbox.commands.run).toHaveBeenCalledWith(daemonStartCommand, {
       background: true,
-      envs: expectedDaemonEnv,
+      envs: expectedProvisionDaemonEnv,
     });
     expect(sandbox.commands.run).toHaveBeenCalledWith(
       "curl -sf http://127.0.0.1:9111/health",
@@ -178,9 +189,9 @@ describe("sandbox host provisioning", () => {
     sandboxCreateMock.mockResolvedValue(sandbox);
 
     const provisioning = provisionHost({
-      authToken: "secret-token",
       daemonArtifacts: testDaemonArtifacts,
       daemonEnv: {},
+      enrollKey: "enroll-token",
       hostId: "host-123",
       hostName: "sandbox-123",
       serverUrl: "https://bb.example.test",
@@ -205,9 +216,9 @@ describe("sandbox host provisioning", () => {
       .mockResolvedValueOnce(sandbox);
 
     const provisioning = provisionHost({
-      authToken: "secret-token",
       daemonArtifacts: testDaemonArtifacts,
       daemonEnv: {},
+      enrollKey: "enroll-token",
       hostId: "host-123",
       hostName: "sandbox-123",
       serverUrl: "https://bb.example.test",
@@ -227,9 +238,9 @@ describe("sandbox host provisioning", () => {
 
     await expect(
       provisionHost({
-        authToken: "secret-token",
         daemonArtifacts: testDaemonArtifacts,
         daemonEnv: {},
+        enrollKey: "enroll-token",
         hostId: "host-123",
         hostName: "sandbox-123",
         serverUrl: "https://bb.example.test",
@@ -249,9 +260,9 @@ describe("sandbox host provisioning", () => {
     sandboxCreateMock.mockResolvedValue(sandbox);
 
     const provisioning = provisionHost({
-      authToken: "secret-token",
       daemonArtifacts: testDaemonArtifacts,
       daemonEnv: {},
+      enrollKey: "enroll-token",
       hostId: "host-123",
       hostName: "sandbox-123",
       serverUrl: "https://bb.example.test",
@@ -273,9 +284,9 @@ describe("sandbox host provisioning", () => {
     sandboxCreateMock.mockResolvedValue(sandbox);
 
     const host = await provisionHost({
-      authToken: "secret-token",
       daemonArtifacts: testDaemonArtifacts,
       daemonEnv: {},
+      enrollKey: "enroll-token",
       hostId: "host-123",
       hostName: "sandbox-123",
       serverUrl: "https://bb.example.test",
@@ -299,7 +310,6 @@ describe("sandbox host provisioning", () => {
     sandboxConnectMock.mockResolvedValue(sandbox);
 
     const resuming = resumeHost({
-      authToken: "secret-token",
       daemonArtifacts: testDaemonArtifacts,
       daemonEnv: {},
       externalId: "sandbox-123",
@@ -352,7 +362,7 @@ describe("sandbox host provisioning", () => {
     expect(sandbox.commands.run).toHaveBeenCalledWith("curl -sf http://127.0.0.1:9111/health", {});
     expect(sandbox.commands.run).toHaveBeenCalledWith(daemonStartCommand, {
       background: true,
-      envs: expectedDaemonEnv,
+      envs: expectedResumeDaemonEnv,
     });
     expect(host.externalId).toBe("sandbox-123");
   });
@@ -365,7 +375,6 @@ describe("sandbox host provisioning", () => {
     sandboxConnectMock.mockResolvedValue(sandbox);
 
     const host = await resumeHost({
-      authToken: "secret-token",
       daemonArtifacts: testDaemonArtifacts,
       daemonEnv: {},
       externalId: "sandbox-123",
@@ -389,7 +398,6 @@ describe("sandbox host provisioning", () => {
     sandboxConnectMock.mockResolvedValue(sandbox);
 
     const resuming = resumeHost({
-      authToken: "secret-token",
       daemonArtifacts: testDaemonArtifacts,
       daemonEnv: {},
       externalId: "sandbox-123",
@@ -414,9 +422,9 @@ describe("sandbox host provisioning", () => {
     sandboxCreateMock.mockResolvedValue(sandbox);
 
     await provisionHost({
-      authToken: "secret-token",
       daemonArtifacts: testDaemonArtifacts,
       daemonEnv: { GITHUB_TOKEN: "github-token" },
+      enrollKey: "enroll-token",
       hostId: "host-123",
       hostName: "sandbox-123",
       serverUrl: "https://bb.example.test",
@@ -428,7 +436,7 @@ describe("sandbox host provisioning", () => {
       expect.objectContaining({
         envs: {
           BB_CLI_DIR: SANDBOX_BB_EXECUTABLE_DIR,
-          ...expectedDaemonEnv,
+          ...expectedProvisionDaemonEnv,
           GITHUB_TOKEN: "github-token",
         },
         lifecycle: { onTimeout: "pause" },
@@ -437,7 +445,7 @@ describe("sandbox host provisioning", () => {
     expect(sandbox.commands.run).toHaveBeenCalledWith(daemonStartCommand, {
       background: true,
       envs: {
-        ...expectedDaemonEnv,
+        ...expectedProvisionDaemonEnv,
         GITHUB_TOKEN: "github-token",
       },
     });
@@ -455,9 +463,9 @@ describe("sandbox host provisioning", () => {
     sandboxCreateMock.mockResolvedValue(sandbox);
 
     await provisionHost({
-      authToken: "secret-token",
       daemonArtifacts: testDaemonArtifacts,
       daemonEnv: {},
+      enrollKey: "enroll-token",
       hostId: "host-123",
       hostName: "sandbox-123",
       serverUrl: "https://bb.example.test",
@@ -467,12 +475,12 @@ describe("sandbox host provisioning", () => {
     expect(sandboxCreateMock).toHaveBeenCalledWith(
       testSandboxTemplate,
       expect.objectContaining({
-        envs: expectedDaemonEnv,
+        envs: expectedProvisionDaemonEnv,
       }),
     );
     expect(sandbox.commands.run).toHaveBeenCalledWith(daemonStartCommand, {
       background: true,
-      envs: expectedDaemonEnv,
+      envs: expectedProvisionDaemonEnv,
     });
   });
 });

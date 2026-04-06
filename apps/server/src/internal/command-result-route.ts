@@ -8,8 +8,9 @@ import {
 import type { Hono } from "hono";
 import type { AppDeps } from "../types.js";
 import { ApiError } from "../errors.js";
+import { getAuthenticatedDaemon } from "./auth.js";
 import { handleCommandResult } from "./command-results.js";
-import { requireActiveSession } from "./session-state.js";
+import { requireAuthorizedActiveSession } from "./session-state.js";
 
 export function registerInternalCommandResultRoutes(
   app: Hono,
@@ -20,7 +21,11 @@ export function registerInternalCommandResultRoutes(
   });
 
   post("/session/command-result", hostDaemonCommandResultReportSchema, async (context, payload) => {
-    const session = requireActiveSession(deps.db, payload.sessionId);
+    const daemon = getAuthenticatedDaemon(context);
+    const session = requireAuthorizedActiveSession(deps.db, {
+      hostId: daemon.hostId,
+      sessionId: payload.sessionId,
+    });
     const command = deps.db
       .select()
       .from(hostDaemonCommands)

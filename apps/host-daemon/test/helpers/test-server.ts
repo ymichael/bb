@@ -1,11 +1,13 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { Hono } from "hono";
 import {
+  hostDaemonEnrollRequestSchema,
   hostDaemonCommandResultReportSchema,
   hostDaemonCommandsQuerySchema,
   hostDaemonDaemonWsMessageSchema,
   hostDaemonEnvironmentChangeRequestSchema,
   hostDaemonEventBatchRequestSchema,
+  parseHostDaemonWebSocketHostKey,
   hostDaemonServerWsMessageSchema,
   hostDaemonSessionOpenRequestSchema,
   hostDaemonToolCallRequestSchema,
@@ -96,6 +98,8 @@ export interface TestServer {
   socketCount(): number;
   close(): Promise<void>;
   readonly commandResultAttemptCount: number;
+  readonly enrollKey: string;
+  readonly hostKey: string;
 }
 
 export async function createTestServer(
@@ -126,11 +130,29 @@ export async function createTestServer(
   let nextCursor = 1;
   let nextSessionId = 1;
   let webSocketAvailable = true;
+  const enrollKey = "enroll-secret";
+  const hostKey = "host-secret";
 
   const app = new Hono();
 
   // This fixture intentionally omits auth validation, session lease expiry,
   // and true long-poll semantics. Tests use it only for protocol flow.
+  app.post("/internal/hosts/enroll", async (context) => {
+    const authorization = context.req.header("authorization");
+    if (authorization !== `Bearer ${enrollKey}`) {
+      return new Response(null, { status: 401 });
+    }
+    const payload = hostDaemonEnrollRequestSchema.parse(
+      await context.req.json(),
+    );
+    return context.json(
+      {
+        hostId: payload.hostId,
+        hostKey,
+      },
+      201,
+    );
+  });
   app.post("/internal/session/open", async (context) => {
     const payload = hostDaemonSessionOpenRequestSchema.parse(
       await context.req.json(),
@@ -250,7 +272,15 @@ export async function createTestServer(
 
   server.on("upgrade", (request, socket, head) => {
     const url = new URL(request.url ?? "/", "http://127.0.0.1");
-    if (url.pathname !== "/internal/ws" || !webSocketAvailable) {
+    if (
+      url.pathname !== "/internal/ws" ||
+      !webSocketAvailable ||
+      parseHostDaemonWebSocketHostKey(
+        Array.isArray(request.headers["sec-websocket-protocol"])
+          ? request.headers["sec-websocket-protocol"][0]
+          : request.headers["sec-websocket-protocol"],
+      ) !== hostKey
+    ) {
       socket.destroy();
       return;
     }
@@ -330,6 +360,8 @@ export async function createTestServer(
     get commandResultAttemptCount() {
       return commandResultAttemptCount;
     },
+    enrollKey,
+    hostKey,
     async close(): Promise<void> {
       for (const socket of activeSockets) {
         socket.close();

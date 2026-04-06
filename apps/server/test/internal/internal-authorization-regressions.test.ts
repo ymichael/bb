@@ -70,7 +70,7 @@ describe("internal authorization regressions", () => {
 
       const response = await harness.app.request("/internal/session/command-result", {
         method: "POST",
-        headers: internalAuthHeaders(harness),
+        headers: internalAuthHeaders(harness, { hostId: hostA.host.id }),
         body: JSON.stringify({
           sessionId: hostA.session.id,
           commandId: command.id,
@@ -131,7 +131,7 @@ describe("internal authorization regressions", () => {
 
       const response = await harness.app.request("/internal/session/events", {
         method: "POST",
-        headers: internalAuthHeaders(harness),
+        headers: internalAuthHeaders(harness, { hostId: hostA.host.id }),
         body: JSON.stringify({
           sessionId: hostA.session.id,
           events: [
@@ -195,7 +195,7 @@ describe("internal authorization regressions", () => {
 
       const response = await harness.app.request("/internal/session/events", {
         method: "POST",
-        headers: internalAuthHeaders(harness),
+        headers: internalAuthHeaders(harness, { hostId: host.id }),
         body: JSON.stringify({
           sessionId: session.id,
           events: [

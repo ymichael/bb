@@ -28,6 +28,7 @@ export interface ReconnectingWebSocketOptions {
   reconnectionDelayGrowFactor: number;
   connectionTimeout: number;
   maxRetries: number;
+  protocols?: string[];
 }
 
 export type CreateReconnectingWebSocket = (
@@ -37,7 +38,7 @@ export type CreateReconnectingWebSocket = (
 
 export interface ServerConnectionOptions {
   serverUrl: string;
-  authToken: string;
+  hostKey: string;
   logger: HostDaemonLogger;
   serverClient: ServerClient;
   hostId: string;
@@ -84,8 +85,9 @@ export function createDefaultReconnectingWebSocket(
   urlProvider: () => Promise<string>,
   options: ReconnectingWebSocketOptions,
 ): ReconnectingWebSocketLike {
-  return new ReconnectingWebSocket(urlProvider, [], {
-    ...options,
+  const { protocols, ...reconnectionOptions } = options;
+  return new ReconnectingWebSocket(urlProvider, protocols ?? [], {
+    ...reconnectionOptions,
     WebSocket: WS,
   });
 }

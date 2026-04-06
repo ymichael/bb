@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import { events, getThread, queueCommand } from "@bb/db";
 import { describe, expect, it } from "vitest";
 import {
+  internalAuthHeaders,
   reportQueuedCommandError,
   waitForQueuedCommand,
 } from "../helpers/commands.js";
@@ -214,10 +215,7 @@ describe("thread command failure side effects", () => {
         "/internal/session/command-result",
         {
           method: "POST",
-          headers: {
-            authorization: `Bearer ${harness.config.authToken}`,
-            "content-type": "application/json",
-          },
+          headers: internalAuthHeaders(harness, { hostId: host.id }),
           body: JSON.stringify({
             sessionId: session.id,
             commandId: queued.row.id,

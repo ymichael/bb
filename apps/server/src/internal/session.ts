@@ -9,6 +9,7 @@ import type { AppDeps } from "../types.js";
 import { HEARTBEAT_INTERVAL_MS, LEASE_TIMEOUT_MS } from "../constants.js";
 import { ApiError } from "../errors.js";
 import { listHostThreadIds } from "../services/lib/entity-lookup.js";
+import { assertAuthenticatedHostMatches, getAuthenticatedDaemon } from "./auth.js";
 import { reconcileSessionThreads } from "./reconciliation.js";
 
 export function registerInternalSessionRoutes(app: Hono, deps: AppDeps): void {
@@ -17,18 +18,23 @@ export function registerInternalSessionRoutes(app: Hono, deps: AppDeps): void {
   });
 
   post("/session/open", hostDaemonSessionOpenRequestSchema, async (context, payload) => {
+    const daemon = getAuthenticatedDaemon(context);
+    assertAuthenticatedHostMatches(daemon, {
+      hostId: payload.hostId,
+      hostType: payload.hostType,
+    });
 
-    const existingSession = getActiveSession(deps.db, payload.hostId);
+    const existingSession = getActiveSession(deps.db, daemon.hostId);
     upsertHost(deps.db, deps.hub, {
-      id: payload.hostId,
+      id: daemon.hostId,
       name: payload.hostName,
-      type: payload.hostType,
+      type: daemon.hostType,
     });
     const session = openSession(deps.db, deps.hub, {
-      hostId: payload.hostId,
+      hostId: daemon.hostId,
       instanceId: payload.instanceId,
       hostName: payload.hostName,
-      hostType: payload.hostType,
+      hostType: daemon.hostType,
       dataDir: payload.dataDir,
       protocolVersion: payload.protocolVersion,
       heartbeatIntervalMs: HEARTBEAT_INTERVAL_MS,
@@ -38,7 +44,7 @@ export function registerInternalSessionRoutes(app: Hono, deps: AppDeps): void {
     deps.logger.info(
       {
         sessionId: session.id,
-        hostId: payload.hostId,
+        hostId: daemon.hostId,
         replacedSessionId: existingSession?.id ?? null,
       },
       "Session opened",
@@ -50,7 +56,7 @@ export function registerInternalSessionRoutes(app: Hono, deps: AppDeps): void {
 
     await reconcileSessionThreads(
       deps,
-      payload.hostId,
+      daemon.hostId,
       payload.activeThreads,
     );
 
@@ -61,7 +67,7 @@ export function registerInternalSessionRoutes(app: Hono, deps: AppDeps): void {
         leaseTimeoutMs: LEASE_TIMEOUT_MS,
         threadHighWaterMarks: getHighWaterMarks(
           deps.db,
-          listHostThreadIds(deps.db, payload.hostId),
+          listHostThreadIds(deps.db, daemon.hostId),
         ),
       },
       201,

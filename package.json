@@ -4,8 +4,10 @@
   "type": "module",
   "scripts": {
     "dev": "turbo watch build dev --ui tui --concurrency 20",
+    "dev:host-daemon": "pnpm exec turbo run build --filter=@bb/host-daemon --filter=@bb/cli && node scripts/run-host-daemon.mjs --mode dev",
     "build": "turbo run build",
-    "start": "turbo run build --filter=@bb/app --filter=@bb/cli && turbo run start:prod --filter=@bb/server --filter=@bb/host-daemon --concurrency 20",
+    "start": "pnpm exec turbo run build --filter=@bb/app --filter=@bb/server --filter=@bb/host-daemon --filter=@bb/cli && node scripts/start-bb.mjs",
+    "start:host-daemon": "pnpm exec turbo run build --filter=@bb/host-daemon --filter=@bb/cli && node scripts/run-host-daemon.mjs --mode prod",
     "reset": "BB_DATA_DIR=${BB_DATA_DIR:-$HOME/.bb} node scripts/reset-bb-data.mjs",
     "reset:dev": "BB_DATA_DIR=${BB_DATA_DIR:-$HOME/.bb-dev} node scripts/reset-bb-data.mjs",
     "reset:all": "node scripts/reset-bb-data.mjs --all",

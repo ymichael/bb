@@ -9,6 +9,8 @@ import {
   SYSTEM_CHANGE_KINDS,
   automationSchema,
   createAutomationRequestSchema,
+  createHostJoinRequestSchema,
+  createHostJoinResponseSchema,
   createDraftRequestSchema,
   createManagerThreadRequestSchema,
   createProjectSourceRequestSchema,
@@ -30,6 +32,7 @@ const INTENTIONAL_OPTIONAL_SERVER_FIELDS: Record<string, string> = {
   "createAutomationRequestSchema.action.threadRequest.title": "Automation creation may omit title and use the generated thread title flow.",
   "createAutomationRequestSchema.autoArchive": "Automation creation may omit autoArchive and use the server default.",
   "createAutomationRequestSchema.enabled": "Automation creation may omit enabled and use the server default.",
+  "createHostJoinRequestSchema.hostId": "Host join initiation may omit hostId when the server should generate a new persistent host id.",
   "createDraftRequestSchema.model": "Queued drafts may inherit the thread's default model.",
   "createDraftRequestSchema.reasoningLevel": "Queued drafts may inherit the thread's default reasoning level.",
   "createDraftRequestSchema.sandboxMode": "Queued drafts may inherit the thread's default sandbox mode.",
@@ -148,6 +151,25 @@ describe("server-contract canonical schemas", () => {
     ).toMatchObject({
       id: "auto_123",
       projectId: "proj_123",
+    });
+
+    expect(
+      createHostJoinRequestSchema.parse({
+        hostType: "persistent",
+      }),
+    ).toMatchObject({
+      hostType: "persistent",
+    });
+
+    expect(
+      createHostJoinResponseSchema.parse({
+        expiresAt: 123456789,
+        hostId: "host_123",
+        joinCode: "bbde_example",
+        joinCommand: "BB_SERVER_URL=http://localhost:3334 pnpm start:host-daemon",
+      }),
+    ).toMatchObject({
+      hostId: "host_123",
     });
 
     expect(
@@ -390,6 +412,7 @@ describe("server-contract clients", () => {
       commitActionResponseSchema: contract.commitActionResponseSchema,
       createDraftRequestSchema: contract.createDraftRequestSchema,
       createAutomationRequestSchema: contract.createAutomationRequestSchema,
+      createHostJoinRequestSchema: contract.createHostJoinRequestSchema,
       createManagerThreadRequestSchema: contract.createManagerThreadRequestSchema,
       createThreadRequestSchema: contract.createThreadRequestSchema,
       environmentActionApiErrorSchema: contract.environmentActionApiErrorSchema,

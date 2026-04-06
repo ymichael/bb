@@ -8,13 +8,18 @@ import {
 import type { Hono } from "hono";
 import type { AppDeps } from "../types.js";
 import { parseInteger } from "../services/lib/validation.js";
-import { requireActiveSession } from "./session-state.js";
+import { getAuthenticatedDaemon } from "./auth.js";
+import { requireAuthorizedActiveSession } from "./session-state.js";
 
 export function registerInternalCommandRoutes(app: Hono, deps: AppDeps): void {
   const { get } = typedRoutes<HostDaemonInternalSchema>(app);
 
   get("/session/commands", hostDaemonCommandsQuerySchema, async (context, query) => {
-    const session = requireActiveSession(deps.db, query.sessionId);
+    const daemon = getAuthenticatedDaemon(context);
+    const session = requireAuthorizedActiveSession(deps.db, {
+      hostId: daemon.hostId,
+      sessionId: query.sessionId,
+    });
     const waitMs = parseInteger(query.waitMs, "waitMs");
     const fetchPending = () =>
       fetchCommands(deps.db, deps.hub, {

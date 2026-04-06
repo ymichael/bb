@@ -15,8 +15,13 @@ import { registerInternalCommandRoutes } from "./internal/commands.js";
 import { registerInternalCommandResultRoutes } from "./internal/command-result-route.js";
 import { registerInternalEnvironmentChangeRoutes } from "./internal/environment-changes.js";
 import { registerInternalEventRoutes } from "./internal/events.js";
+import { registerInternalHostRoutes } from "./internal/hosts.js";
 import { registerInternalSessionRoutes } from "./internal/session.js";
 import { registerInternalToolCallRoutes } from "./internal/tool-calls.js";
+import {
+  setAuthenticatedDaemon,
+  verifyAuthenticatedDaemon,
+} from "./internal/auth.js";
 import { onClientSocketClose, onClientSocketMessage, onClientSocketOpen } from "./ws/client-protocol.js";
 import {
   onDaemonSocketClose,
@@ -40,6 +45,13 @@ function unauthorizedResponse(): Response {
   );
 }
 
+function normalizeInternalAuthPath(path: string): string {
+  if (path === "/") {
+    return path;
+  }
+  return path.replace(/\/+$/u, "");
+}
+
 interface CreateAppOptions {
   staticDir?: string;
 }
@@ -52,11 +64,20 @@ export function createApp(deps: AppDeps, options?: CreateAppOptions): ServerApp 
   app.onError((error) => errorToResponse(error));
   app.get("/health", (context) => context.json({ ok: true }));
   app.use("/internal/*", async (context, next) => {
-    const isWebSocketPath = context.req.path === "/internal/ws";
-    const authorized = isWebSocketPath
-      ? context.req.query("token") === deps.config.authToken
-      : context.req.header("authorization") === `Bearer ${deps.config.authToken}`;
-    if (!authorized) {
+    const normalizedPath = normalizeInternalAuthPath(context.req.path);
+    if (normalizedPath === "/internal/hosts/enroll") {
+      return next();
+    }
+    if (normalizedPath === "/internal/ws") {
+      return next();
+    }
+    try {
+      const daemon = await verifyAuthenticatedDaemon(
+        deps,
+        context.req.header("authorization"),
+      );
+      setAuthenticatedDaemon(context, daemon);
+    } catch {
       return unauthorizedResponse();
     }
     return next();
@@ -72,6 +93,7 @@ export function createApp(deps: AppDeps, options?: CreateAppOptions): ServerApp 
   app.route("/api/v1", publicApi);
 
   const internalApi = new Hono();
+  registerInternalHostRoutes(internalApi, deps);
   registerInternalSessionRoutes(internalApi, deps);
   registerInternalCommandRoutes(internalApi, deps);
   registerInternalCommandResultRoutes(internalApi, deps);
@@ -92,10 +114,10 @@ export function createApp(deps: AppDeps, options?: CreateAppOptions): ServerApp 
 
   app.get(
     "/internal/ws",
-    upgradeWebSocket((context) => {
-      const websocketContext = validateDaemonWebSocket(deps, {
+    upgradeWebSocket(async (context) => {
+      const websocketContext = await validateDaemonWebSocket(deps, {
+        protocolHeader: context.req.header("sec-websocket-protocol"),
         sessionId: context.req.query("sessionId") ?? null,
-        token: context.req.query("token") ?? null,
       });
       return {
         onOpen: (_event, socket) =>
@@ -105,6 +127,7 @@ export function createApp(deps: AppDeps, options?: CreateAppOptions): ServerApp 
           }),
         onMessage: (event, socket) =>
           onDaemonSocketMessage(deps, {
+            hostId: websocketContext.hostId,
             raw: event.data,
             sessionId: websocketContext.sessionId,
             socket,

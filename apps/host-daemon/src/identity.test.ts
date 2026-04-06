@@ -37,6 +37,8 @@ describe("identity", () => {
     await expect(
       fs.readFile(path.join(dataDir, "host-id"), "utf8"),
     ).resolves.toContain("host-first");
+    const stats = await fs.stat(path.join(dataDir, "host-id"));
+    expect(stats.mode & 0o777).toBe(0o600);
   });
 
   it("detects a non-empty host name", async () => {
@@ -45,7 +47,7 @@ describe("identity", () => {
     );
   });
 
-  it("uses BB_HOST_ID when provided instead of creating a file-backed ID", async () => {
+  it("persists BB_HOST_ID when provided", async () => {
     const dataDir = await makeTempDir("bb-host-daemon-identity-env-");
     vi.stubEnv("BB_HOST_ID", "host-provided");
 
@@ -56,9 +58,9 @@ describe("identity", () => {
 
     expect(identity.hostId).toBe("host-provided");
     expect(identity.hostName.trim().length).toBeGreaterThan(0);
-    await expect(fs.access(path.join(dataDir, "host-id"))).rejects.toMatchObject({
-      code: "ENOENT",
-    });
+    await expect(
+      fs.readFile(path.join(dataDir, "host-id"), "utf8"),
+    ).resolves.toContain("host-provided");
   });
 
   it("uses BB_HOST_NAME when provided instead of detecting a hostname", async () => {

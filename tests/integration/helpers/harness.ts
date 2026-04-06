@@ -15,21 +15,12 @@ import {
   type HostDaemonApp,
 } from "@bb/host-daemon/test";
 import { createHostDaemonClient } from "@bb/host-daemon-contract";
-import {
-  createSandboxHostRegistry,
-} from "../../../apps/server/src/services/hosts/sandbox-registry.js";
-import {
-  initDb,
-} from "../../../apps/server/src/db.js";
-import {
-  createApp,
-} from "../../../apps/server/src/server.js";
-import type {
-  ServerRuntimeConfig,
-} from "../../../apps/server/src/types.js";
-import {
-  NotificationHub,
-} from "../../../apps/server/src/ws/hub.js";
+import { initDb } from "../../../apps/server/src/db.js";
+import { createApp } from "../../../apps/server/src/server.js";
+import { createSandboxHostRegistry } from "../../../apps/server/src/services/hosts/sandbox-registry.js";
+import { createMachineAuthService } from "../../../apps/server/src/services/machine-auth.js";
+import type { ServerRuntimeConfig } from "../../../apps/server/src/types.js";
+import { NotificationHub } from "../../../apps/server/src/ws/hub.js";
 import { createPublicApiClient } from "@bb/server-contract";
 import { waitForHostConnected } from "./assertions.js";
 import { removePathWithRetry } from "./remove-path.js";
@@ -39,7 +30,6 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../
 const HARNESS_DAEMON_START_RETRY_DELAY_MS = 50;
 const HARNESS_DAEMON_START_MAX_ATTEMPTS = 2;
 const TEST_SERVER_HOST = "127.0.0.1";
-const DEFAULT_TEST_AUTH_TOKEN = "test-integration-token";
 
 let loadedProjectEnvPath: string | null | undefined;
 
@@ -58,6 +48,7 @@ export interface RunningTestServer {
   config: ServerRuntimeConfig;
   db: DbConnection;
   hub: NotificationHub;
+  machineAuth: Awaited<ReturnType<typeof createMachineAuthService>>;
 }
 
 export interface IntegrationHarness {
@@ -90,6 +81,7 @@ interface HarnessDaemonResources {
   daemon: HostDaemon;
   daemonApp: HostDaemonApp;
   hostId: string;
+  hostKey: string;
   releaseLock: () => Promise<void>;
 }
 
@@ -186,7 +178,6 @@ export async function loadProjectEnvFile(): Promise<string | null> {
 
 async function startIntegrationServer(
   tmpRoot: string,
-  authToken: string,
 ): Promise<RunningTestServer> {
   const serverDataDir = path.join(tmpRoot, "server-data");
   await fs.mkdir(serverDataDir, { recursive: true });
@@ -196,7 +187,6 @@ async function startIntegrationServer(
   const sandboxRegistry = createSandboxHostRegistry();
   const config: ServerRuntimeConfig = {
     anthropicApiKey: process.env.ANTHROPIC_API_KEY ?? "",
-    authToken,
     dataDir: serverDataDir,
     e2bApiKey: process.env.E2B_API_KEY ?? "test-e2b-api-key",
     e2bTemplate: process.env.E2B_TEMPLATE ?? "",
@@ -206,11 +196,18 @@ async function startIntegrationServer(
     openAiApiKey: process.env.OPENAI_API_KEY ?? "test-openai-key",
     publicUrl: "https://bb.example.test",
   };
+  const machineAuth = await createMachineAuthService({
+    dataDir: serverDataDir,
+    db,
+    logger: testLogger,
+  });
+  await machineAuth.ensureReady();
   const { app, injectWebSocket } = createApp({
     config,
     db,
     hub,
     logger: testLogger,
+    machineAuth,
     sandboxRegistry,
   });
 
@@ -242,6 +239,7 @@ async function startIntegrationServer(
     config,
     db,
     hub,
+    machineAuth,
     async close(): Promise<void> {
       await new Promise<void>((resolve, reject) => {
         server.close((error) => {
@@ -258,18 +256,21 @@ async function startIntegrationServer(
 
 async function startHarnessDaemon(
   dataDir: string,
-  serverUrl: string,
-  authToken: string,
+  server: RunningTestServer,
   options: CreateHarnessOptions,
 ): Promise<HarnessDaemonResources> {
   const releaseLock = await acquireDaemonLock(dataDir);
 
   try {
     const identity = await loadHostIdentity({ dataDir });
+    const hostKey = await server.machineAuth.issueDaemonHostKey({
+      hostId: identity.hostId,
+      hostType: "persistent",
+    });
     const daemonApp = await createHostDaemonApp({
       adapterFactory: resolveAdapterFactory(options),
-      authToken,
       dataDir,
+      hostKey,
       hostId: identity.hostId,
       hostName: identity.hostName,
       hostType: "persistent",
@@ -278,7 +279,7 @@ async function startHarnessDaemon(
       logger: testLogger,
       releaseLock,
       restart: async () => undefined,
-      serverUrl,
+      serverUrl: server.baseUrl,
     });
     for (let attempt = 1; attempt <= HARNESS_DAEMON_START_MAX_ATTEMPTS; attempt += 1) {
       try {
@@ -300,6 +301,7 @@ async function startHarnessDaemon(
       daemon: daemonApp.daemon,
       daemonApp,
       hostId: identity.hostId,
+      hostKey,
       releaseLock,
     };
   } catch (error) {
@@ -312,7 +314,6 @@ export async function createIntegrationHarness(
   options: CreateHarnessOptions = {},
 ): Promise<IntegrationHarness> {
   await loadProjectEnvFile();
-  const authToken = process.env.BB_SECRET_TOKEN ?? DEFAULT_TEST_AUTH_TOKEN;
   const tmpRoot = await fs.mkdtemp(path.join(tmpdir(), "bb-integration-"));
   await fs.writeFile(path.join(tmpRoot, "parent.pid"), `${process.pid}\n`, "utf8");
   const reposRoot = path.join(tmpRoot, "repos");
@@ -339,13 +340,13 @@ export async function createIntegrationHarness(
 
     daemonResources = await startHarnessDaemon(
       daemonDataDir,
-      server.baseUrl,
-      authToken,
+      server,
       options,
     );
     harness.daemon = daemonResources.daemon;
     harness.daemonApp = daemonResources.daemonApp;
     harness.hostId = daemonResources.hostId;
+    harness.internal = createHostDaemonClient(server.baseUrl, daemonResources.hostKey);
     await waitForHostConnected(harness.api);
   }
 
@@ -390,12 +391,11 @@ export async function createIntegrationHarness(
   }
 
   try {
-    server = await startIntegrationServer(tmpRoot, authToken);
+    server = await startIntegrationServer(tmpRoot);
     const api = createPublicApiClient(server.baseUrl);
     daemonResources = await startHarnessDaemon(
       daemonDataDir,
-      server.baseUrl,
-      authToken,
+      server,
       options,
     );
     await waitForHostConnected(api);
@@ -410,7 +410,7 @@ export async function createIntegrationHarness(
       db: server.db,
       hostId: daemonResources.hostId,
       hub: server.hub,
-      internal: createHostDaemonClient(server.baseUrl, authToken),
+      internal: createHostDaemonClient(server.baseUrl, daemonResources.hostKey),
       repoDir,
       restartDaemon,
       server,

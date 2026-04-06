@@ -56,7 +56,7 @@ type FetchFn = typeof fetch;
 
 export interface CreateServerClientOptions {
   serverUrl: string;
-  authToken: string;
+  hostKey: string;
   logger: HostDaemonLogger;
   getSessionId: () => string;
   fetchFn?: FetchFn;
@@ -103,7 +103,7 @@ export function createServerClient(
 
   function headers(): HeadersInit {
     return {
-      authorization: `Bearer ${options.authToken}`,
+      authorization: `Bearer ${options.hostKey}`,
       "content-type": "application/json",
     };
   }

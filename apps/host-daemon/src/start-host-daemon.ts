@@ -4,7 +4,13 @@ import type { AgentRuntimeOptions } from "@bb/agent-runtime";
 import type { HostType, ToolCallRequest, ToolCallResponse } from "@bb/domain";
 import { createLogger } from "@bb/logger";
 import { createHostDaemonApp } from "./app.js";
+import {
+  readHostAuthState,
+  resolveServerUrl,
+  writeHostAuthState,
+} from "./auth-state.js";
 import type { HostDaemon } from "./daemon.js";
+import { enrollDaemonHost } from "./enroll.js";
 import { loadHostIdentity } from "./identity.js";
 import { acquireDaemonLock } from "./lock.js";
 import {
@@ -25,7 +31,7 @@ import {
 export interface StartHostDaemonOptions {
   dataDir?: string;
   serverUrl?: string;
-  authToken?: string;
+  enrollKey?: string;
   bbExecutableDirectory?: string;
   bridgeBundleDir?: string;
   hostType?: HostType;
@@ -48,22 +54,74 @@ export async function startHostDaemon(
   options: StartHostDaemonOptions = {},
 ): Promise<HostDaemon> {
   const dataDir = options.dataDir ?? commonConfig.BB_DATA_DIR;
-  const serverUrl = options.serverUrl ?? hostDaemonConfig.BB_SERVER_URL;
-  const authToken = options.authToken ?? commonConfig.BB_SECRET_TOKEN;
-  const hostType = options.hostType ?? "persistent";
   const enableLocalApi = options.enableLocalApi ?? true;
-  const localApiConfig = enableLocalApi
-    ? resolveHostDaemonLocalApiConfig({
-      hostType,
-      localApi: options.localApi,
-    })
-    : null;
   const releaseLock = await (options.acquireLock ?? acquireDaemonLock)(dataDir);
 
   let app: Awaited<ReturnType<typeof createHostDaemonApp>> | undefined;
   try {
-    const identity = await (options.loadIdentity ?? loadHostIdentity)({ dataDir });
+    const persistedAuth = await readHostAuthState(dataDir);
+    const identity = await (options.loadIdentity ?? loadHostIdentity)({
+      dataDir,
+    });
     const instanceId = (options.createInstanceId ?? randomUUID)();
+    const serverUrl = resolveServerUrl({
+      persistedServerUrl: persistedAuth?.serverUrl ?? null,
+      providedServerUrl: options.serverUrl ?? hostDaemonConfig.BB_SERVER_URL,
+    });
+    if (!serverUrl) {
+      throw new Error("Host daemon server URL is required");
+    }
+
+    const hostType =
+      persistedAuth?.hostType ??
+      options.hostType ??
+      "persistent";
+    if (persistedAuth && options.hostType && persistedAuth.hostType !== options.hostType) {
+      throw new Error(
+        `Configured host type ${options.hostType} does not match persisted auth state ${persistedAuth.hostType}`,
+      );
+    }
+
+    if (persistedAuth && persistedAuth.hostId !== identity.hostId) {
+      throw new Error(
+        `Resolved host ID ${identity.hostId} does not match persisted auth state ${persistedAuth.hostId}`,
+      );
+    }
+
+    const hostKey =
+      persistedAuth?.hostKey ??
+      (
+        await enrollDaemonHost({
+          fetchFn: options.fetchFn,
+          hostId: identity.hostId,
+          hostName: identity.hostName,
+          hostType,
+          serverUrl,
+          token:
+            options.enrollKey ??
+            (() => {
+              throw new Error(
+                `Missing host bootstrap material. Provide BB_HOST_ENROLL_KEY or populate ${dataDir}/auth.json first.`,
+              );
+            })(),
+        })
+      ).hostKey;
+
+    if (!persistedAuth) {
+      await writeHostAuthState(dataDir, {
+        hostId: identity.hostId,
+        hostKey,
+        hostType,
+        serverUrl,
+      });
+    }
+
+    const localApiConfig = enableLocalApi
+      ? resolveHostDaemonLocalApiConfig({
+        hostType,
+        localApi: options.localApi,
+      })
+      : null;
     const bbExecutableDirectory =
       options.bbExecutableDirectory ??
       (await resolveLocalBbExecutableDirectory());
@@ -81,7 +139,7 @@ export async function startHostDaemon(
     app = await createHostDaemonApp({
       dataDir,
       serverUrl,
-      authToken,
+      hostKey,
       bridgeBundleDir: options.bridgeBundleDir,
       hostType,
       hostId: identity.hostId,

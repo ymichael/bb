@@ -12,9 +12,6 @@ export default defineConfig({
     alias: workspaceTestAliases,
   },
   test: {
-    env: {
-      BB_SECRET_TOKEN: "test-integration-token",
-    },
     // Fake integration suites isolate temp roots, ports, and in-memory state,
     // so we can safely parallelize across files for a large runtime win.
     fileParallelism: true,

@@ -1,5 +1,12 @@
 export type { EmptyInput, Endpoint, Untyped } from "./common.js";
 export { typedRoutes } from "@bb/hono-typed-routes";
+export {
+  HOST_AUTH_FILE_NAME,
+  HOST_ID_FILE_NAME,
+  hostAuthStateSchema,
+  normalizeServerUrl,
+} from "./local-state.js";
+export type { HostAuthState } from "./local-state.js";
 
 export {
   createHostDaemonLocalClient,
@@ -66,7 +73,10 @@ export type {
 } from "./commands.js";
 
 export {
+  buildHostDaemonWebSocketProtocols,
   createHostDaemonClient,
+  hostDaemonEnrollRequestSchema,
+  hostDaemonEnrollResponseSchema,
   hostDaemonActiveThreadSchema,
   hostDaemonCommandBatchSchema,
   hostDaemonCommandsQuerySchema,
@@ -82,10 +92,13 @@ export {
   hostDaemonSessionOpenResponseSchema,
   hostDaemonToolCallRequestSchema,
   hostDaemonToolCallResponseSchema,
+  parseHostDaemonWebSocketHostKey,
 } from "./session.js";
 export type {
   HostDaemonActiveThread,
   HostDaemonCommandBatch,
+  HostDaemonEnrollRequest,
+  HostDaemonEnrollResponse,
   HostDaemonCommandsQuery,
   HostDaemonDaemonWsMessage,
   HostDaemonEnvironmentChange,

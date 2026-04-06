@@ -150,7 +150,12 @@ describe("public thread lifecycle regressions", () => {
       expect(promoteCommand.command).toMatchObject({
         primaryPath: secondarySource.path,
       });
-      await reportQueuedCommandSuccess(harness, promoteCommand, { ok: true });
+      await reportQueuedCommandSuccess(
+        harness,
+        promoteCommand,
+        { ok: true },
+        { hostId: secondaryHost.id },
+      );
 
       const response = await responsePromise;
       expect(response.status).toBe(200);
@@ -212,7 +217,12 @@ describe("public thread lifecycle regressions", () => {
         defaultBranch: "main",
         envBranch: "bb/demote-secondary",
       });
-      await reportQueuedCommandSuccess(harness, demoteCommand, { ok: true });
+      await reportQueuedCommandSuccess(
+        harness,
+        demoteCommand,
+        { ok: true },
+        { hostId: secondaryHost.id },
+      );
 
       const response = await responsePromise;
       expect(response.status).toBe(200);

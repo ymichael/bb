@@ -84,7 +84,10 @@ function resolveAutomationExecutionContext(
 }
 
 async function runAutomation(
-  deps: Pick<AppDeps, "config" | "db" | "hub" | "logger" | "sandboxRegistry">,
+  deps: Pick<
+    AppDeps,
+    "config" | "db" | "hub" | "logger" | "machineAuth" | "sandboxRegistry"
+  >,
   automation: AutomationRow,
   now: number,
 ): Promise<void> {
@@ -157,7 +160,10 @@ async function runAutomation(
 }
 
 export async function sweepDueAutomations(
-  deps: Pick<AppDeps, "config" | "db" | "hub" | "logger" | "sandboxRegistry">,
+  deps: Pick<
+    AppDeps,
+    "config" | "db" | "hub" | "logger" | "machineAuth" | "sandboxRegistry"
+  >,
   args: SweepDueAutomationsArgs = {},
 ): Promise<void> {
   const now = args.now ?? Date.now();

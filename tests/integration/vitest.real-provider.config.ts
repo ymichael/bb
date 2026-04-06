@@ -12,9 +12,6 @@ export default defineConfig({
     alias: workspaceTestAliases,
   },
   test: {
-    env: {
-      BB_SECRET_TOKEN: "test-integration-token",
-    },
     fileParallelism: false,
     globalSetup: ["./global-setup.ts"],
     hookTimeout: Math.ceil(120_000 * timeoutScale),

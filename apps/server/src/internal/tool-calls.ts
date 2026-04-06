@@ -10,7 +10,8 @@ import { ApiError } from "../errors.js";
 import { parseValue } from "../services/lib/validation.js";
 import { appendThreadEvent } from "../services/threads/thread-events.js";
 import { requireThreadEnvironment } from "../services/lib/entity-lookup.js";
-import { requireActiveSession } from "./session-state.js";
+import { getAuthenticatedDaemon } from "./auth.js";
+import { requireAuthorizedActiveSession } from "./session-state.js";
 
 export function registerInternalToolCallRoutes(app: Hono, deps: AppDeps): void {
   const { post } = typedRoutes<HostDaemonInternalSchema>(app, {
@@ -18,7 +19,11 @@ export function registerInternalToolCallRoutes(app: Hono, deps: AppDeps): void {
   });
 
   post("/session/tool-call", hostDaemonToolCallRequestSchema, async (context, payload) => {
-    const session = requireActiveSession(deps.db, payload.sessionId);
+    const daemon = getAuthenticatedDaemon(context);
+    const session = requireAuthorizedActiveSession(deps.db, {
+      hostId: daemon.hostId,
+      sessionId: payload.sessionId,
+    });
     const { environment } = requireThreadEnvironment(deps.db, payload.threadId);
     if (environment.hostId !== session.hostId) {
       throw new ApiError(

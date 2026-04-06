@@ -4,14 +4,16 @@ import { join } from "node:path";
 import { serve } from "@hono/node-server";
 import type { AddressInfo } from "node:net";
 import type { DbConnection } from "@bb/db";
+import type { HostType } from "@bb/domain";
 import { initDb } from "../../src/db.js";
 import { createApp } from "../../src/server.js";
 import { createSandboxHostRegistry } from "../../src/services/hosts/sandbox-registry.js";
+import { createMachineAuthService } from "../../src/services/machine-auth.js";
 import type { AppDeps, ServerRuntimeConfig } from "../../src/types.js";
 import type { NotificationHub } from "../../src/ws/hub.js";
 import { NotificationHub as NotificationHubImpl } from "../../src/ws/hub.js";
 
-export const TEST_AUTH_TOKEN = "test-secret-token";
+const TEST_MACHINE_KEY_PREFIX = "test-daemon-key";
 const TEST_SERVER_HOST = "127.0.0.1";
 
 export interface TestAppHarness {
@@ -34,6 +36,43 @@ const testLogger = {
   warn(): void {},
 };
 
+interface TestDaemonKeyParts {
+  hostId: string;
+  hostType: HostType;
+}
+
+function encodeTestDaemonKey(args: TestDaemonKeyParts): string {
+  return `${TEST_MACHINE_KEY_PREFIX}:${args.hostType}:${args.hostId}`;
+}
+
+function decodeTestDaemonKey(token: string): TestDaemonKeyParts | null {
+  const parts = token.split(":");
+  if (parts.length !== 3 || parts[0] !== TEST_MACHINE_KEY_PREFIX) {
+    return null;
+  }
+
+  const hostType = parts[1];
+  const hostId = parts[2];
+  if (
+    (hostType !== "persistent" && hostType !== "ephemeral") ||
+    hostId.length === 0
+  ) {
+    return null;
+  }
+
+  return {
+    hostId,
+    hostType,
+  };
+}
+
+export function createTestDaemonHostKey(args: Partial<TestDaemonKeyParts> = {}): string {
+  return encodeTestDaemonKey({
+    hostId: args.hostId ?? "host-1",
+    hostType: args.hostType ?? "persistent",
+  });
+}
+
 export async function createTestAppHarness(
   overrides: Partial<ServerRuntimeConfig> = {},
 ): Promise<TestAppHarness> {
@@ -41,9 +80,27 @@ export async function createTestAppHarness(
   const db = initDb(":memory:");
   const hub = new NotificationHubImpl();
   const sandboxRegistry = createSandboxHostRegistry();
+  const machineAuth = await createMachineAuthService({
+    dataDir,
+    db,
+    logger: testLogger,
+  });
+  await machineAuth.ensureReady();
+  const testMachineAuth = {
+    ...machineAuth,
+    async verifyDaemonHostKey(token: string) {
+      const testKey = decodeTestDaemonKey(token);
+      if (testKey) {
+        return {
+          keyId: `test:${testKey.hostType}:${testKey.hostId}`,
+          metadata: testKey,
+        };
+      }
+      return machineAuth.verifyDaemonHostKey(token);
+    },
+  };
   const config: ServerRuntimeConfig = {
     anthropicApiKey: "",
-    authToken: TEST_AUTH_TOKEN,
     dataDir,
     e2bApiKey: "test-e2b-api-key",
     e2bTemplate: "test-e2b-template",
@@ -59,6 +116,7 @@ export async function createTestAppHarness(
     db,
     hub,
     logger: testLogger,
+    machineAuth: testMachineAuth,
     sandboxRegistry,
   };
   const { app } = createApp(deps);

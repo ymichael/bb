@@ -28,7 +28,7 @@ describe("fetchCommands with unknown command types", () => {
     const sessionState = { value: "" };
     const serverClient = createServerClient({
       serverUrl: testServer.baseUrl,
-      authToken: "secret",
+      hostKey: testServer.hostKey,
       logger,
       getSessionId: () => sessionState.value,
     });
@@ -90,7 +90,7 @@ describe("fetchCommands with unknown command types", () => {
     const sessionState = { value: "" };
     const serverClient = createServerClient({
       serverUrl: testServer.baseUrl,
-      authToken: "secret",
+      hostKey: testServer.hostKey,
       logger,
       getSessionId: () => sessionState.value,
     });
@@ -131,7 +131,7 @@ describe("fetchCommands with unknown command types", () => {
     const sessionState = { value: "" };
     const serverClient = createServerClient({
       serverUrl: testServer.baseUrl,
-      authToken: "secret",
+      hostKey: testServer.hostKey,
       logger,
       getSessionId: () => sessionState.value,
     });

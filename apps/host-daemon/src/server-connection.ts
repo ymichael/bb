@@ -1,5 +1,6 @@
 import {
   HOST_DAEMON_PROTOCOL_VERSION,
+  buildHostDaemonWebSocketProtocols,
   hostDaemonDaemonWsMessageSchema,
   hostDaemonServerWsMessageSchema,
   type HostDaemonSessionOpenResponse,
@@ -135,6 +136,7 @@ export class ServerConnection {
         reconnectionDelayGrowFactor: this.reconnectionDelayGrowFactor,
         connectionTimeout: this.connectionTimeout,
         maxRetries: Number.POSITIVE_INFINITY,
+        protocols: buildHostDaemonWebSocketProtocols(this.options.hostKey),
       },
     );
     this.websocket = websocket;
@@ -307,7 +309,6 @@ export class ServerConnection {
     serverUrl.protocol = serverUrl.protocol === "https:" ? "wss:" : "ws:";
     serverUrl.pathname = "/internal/ws";
     serverUrl.searchParams.set("sessionId", sessionId);
-    serverUrl.searchParams.set("token", this.options.authToken);
     return serverUrl.toString();
   }
 }
