@@ -22,6 +22,10 @@ export const workspaceTestAliases = {
   ),
   "@bb/domain": path.resolve(repoRoot, "packages/domain/src/index.ts"),
   "@bb/templates": path.resolve(repoRoot, "packages/templates/src/index.ts"),
+  "@bb/db/internal-lifecycle": path.resolve(
+    repoRoot,
+    "packages/db/src/internal-lifecycle.ts",
+  ),
   "@bb/db": path.resolve(repoRoot, "packages/db/src/index.ts"),
   "@bb/host-daemon-contract": path.resolve(
     repoRoot,

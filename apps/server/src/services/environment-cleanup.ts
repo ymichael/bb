@@ -10,16 +10,18 @@ import {
   getEnvironmentOperation,
   getActiveSession,
   hostDaemonCommands,
-  markEnvironmentOperationCompleted,
-  markEnvironmentOperationFailed,
-  markEnvironmentOperationQueued,
-  markEnvironmentDestroyed,
   queueCommand,
-  requestEnvironmentCleanup as requestEnvironmentCleanupRecord,
   threads,
-  upsertEnvironmentOperation,
-  updateEnvironmentStatus,
 } from "@bb/db";
+import {
+  markEnvironmentOperationRecordCompleted,
+  markEnvironmentOperationRecordFailed,
+  markEnvironmentOperationRecordQueued,
+  recordEnvironmentCleanupRequest,
+  setEnvironmentRecordDestroyed,
+  setEnvironmentStatus,
+  upsertEnvironmentOperationRecord,
+} from "@bb/db/internal-lifecycle";
 import { hostDaemonCommandResultSchemaByType } from "@bb/host-daemon-contract";
 import { z } from "zod";
 import { ApiError } from "../errors.js";
@@ -231,8 +233,8 @@ export function completeEnvironmentDestroy(
     return false;
   }
 
-  markEnvironmentDestroyed(deps.db, deps.hub, args.environmentId);
-  markEnvironmentOperationCompleted(deps.db, {
+  setEnvironmentRecordDestroyed(deps.db, deps.hub, args.environmentId);
+  markEnvironmentOperationRecordCompleted(deps.db, {
     environmentId: args.environmentId,
     kind: "destroy",
   });
@@ -248,12 +250,12 @@ export function failEnvironmentDestroy(
     return false;
   }
 
-  markEnvironmentOperationFailed(deps.db, {
+  markEnvironmentOperationRecordFailed(deps.db, {
     environmentId: args.environmentId,
     kind: "destroy",
     failureReason: args.failureReason,
   });
-  updateEnvironmentStatus(deps.db, deps.hub, args.environmentId, {
+  setEnvironmentStatus(deps.db, deps.hub, args.environmentId, {
     status: environment.path ? "ready" : "error",
   });
   return true;
@@ -293,13 +295,13 @@ export function requestEnvironmentCleanup(
     ? resolveRequestedCleanupMode(currentPayload.mode, args.mode)
     : args.mode;
 
-  upsertEnvironmentOperation(deps.db, {
+  upsertEnvironmentOperationRecord(deps.db, {
     environmentId: environment.id,
     kind: "destroy",
     payload: JSON.stringify({ mode }),
     requestedAt: environment.cleanupRequestedAt ?? undefined,
   });
-  requestEnvironmentCleanupRecord(deps.db, deps.hub, environment.id, {
+  recordEnvironmentCleanupRequest(deps.db, deps.hub, environment.id, {
     cleanupMode: mode,
   });
 }
@@ -342,13 +344,13 @@ function queueDestroyAndMarkDestroying(
   },
 ): void {
   const commandId = queueEnvironmentDestroyCommand(deps, environment);
-  markEnvironmentOperationQueued(deps.db, {
+  markEnvironmentOperationRecordQueued(deps.db, {
     environmentId: environment.id,
     kind: environment.operationKind,
     commandId,
   });
   if (environment.status !== "destroying") {
-    updateEnvironmentStatus(deps.db, deps.hub, environment.id, {
+    setEnvironmentStatus(deps.db, deps.hub, environment.id, {
       status: "destroying",
     });
   }
@@ -401,7 +403,7 @@ export async function advanceEnvironmentCleanup(
   }
 
   if (!destroyOperation) {
-    destroyOperation = upsertEnvironmentOperation(deps.db, {
+    destroyOperation = upsertEnvironmentOperationRecord(deps.db, {
       environmentId: environment.id,
       kind: "destroy",
       payload: JSON.stringify(destroyPayload),
@@ -419,12 +421,12 @@ export async function advanceEnvironmentCleanup(
     }
 
     if (destroyOperation) {
-      markEnvironmentOperationCompleted(deps.db, {
+      markEnvironmentOperationRecordCompleted(deps.db, {
         environmentId: environment.id,
         kind: "destroy",
       });
     }
-    markEnvironmentDestroyed(deps.db, deps.hub, environment.id);
+    setEnvironmentRecordDestroyed(deps.db, deps.hub, environment.id);
     return;
   }
 

@@ -7,11 +7,11 @@ import { queueCommand } from "../../src/data/commands.js";
 import {
   getEnvironmentOperation,
   getEnvironmentOperationByCommandId,
-  markEnvironmentOperationCompleted,
-  markEnvironmentOperationFailed,
-  markEnvironmentOperationFetched,
-  markEnvironmentOperationQueued,
-  upsertEnvironmentOperation,
+  markEnvironmentOperationRecordCompleted,
+  markEnvironmentOperationRecordFailed,
+  markEnvironmentOperationRecordFetched,
+  markEnvironmentOperationRecordQueued,
+  upsertEnvironmentOperationRecord,
 } from "../../src/data/environment-operations.js";
 import { upsertHost } from "../../src/data/hosts.js";
 import { createProject } from "../../src/data/projects.js";
@@ -39,13 +39,13 @@ describe("environment operations", () => {
   it("upserts requested operations by environment and kind", () => {
     const { db, environment } = setup();
 
-    const first = upsertEnvironmentOperation(db, {
+    const first = upsertEnvironmentOperationRecord(db, {
       environmentId: environment.id,
       kind: "destroy",
       payload: JSON.stringify({ mode: "safe" }),
       requestedAt: 123,
     });
-    const second = upsertEnvironmentOperation(db, {
+    const second = upsertEnvironmentOperationRecord(db, {
       environmentId: environment.id,
       kind: "destroy",
       payload: JSON.stringify({ mode: "force" }),
@@ -88,38 +88,38 @@ describe("environment operations", () => {
       }),
     });
 
-    upsertEnvironmentOperation(db, {
+    upsertEnvironmentOperationRecord(db, {
       environmentId: environment.id,
       kind: "provision",
       payload: JSON.stringify({ type: "environment.provision" }),
     });
-    const queued = markEnvironmentOperationQueued(db, {
+    const queued = markEnvironmentOperationRecordQueued(db, {
       environmentId: environment.id,
       kind: "provision",
       commandId: command.id,
       queuedAt: 321,
     });
-    const fetched = markEnvironmentOperationFetched(db, {
+    const fetched = markEnvironmentOperationRecordFetched(db, {
       environmentId: environment.id,
       kind: "provision",
     });
-    const completed = markEnvironmentOperationCompleted(db, {
+    const completed = markEnvironmentOperationRecordCompleted(db, {
       environmentId: environment.id,
       kind: "provision",
       completedAt: 777,
     });
-    upsertEnvironmentOperation(db, {
+    upsertEnvironmentOperationRecord(db, {
       environmentId: environment.id,
       kind: "provision",
       payload: JSON.stringify({ type: "environment.provision", retry: true }),
     });
-    markEnvironmentOperationQueued(db, {
+    markEnvironmentOperationRecordQueued(db, {
       environmentId: environment.id,
       kind: "provision",
       commandId: command.id,
       queuedAt: 888,
     });
-    const failed = markEnvironmentOperationFailed(db, {
+    const failed = markEnvironmentOperationRecordFailed(db, {
       environmentId: environment.id,
       kind: "provision",
       failureReason: "provision timed out",
@@ -189,22 +189,22 @@ describe("environment operations", () => {
       }),
     });
 
-    upsertEnvironmentOperation(db, {
+    upsertEnvironmentOperationRecord(db, {
       environmentId: environment.id,
       kind: "provision",
       payload: JSON.stringify({ type: "environment.provision" }),
     });
-    markEnvironmentOperationQueued(db, {
+    markEnvironmentOperationRecordQueued(db, {
       environmentId: environment.id,
       kind: "provision",
       commandId: firstCommand.id,
     });
-    markEnvironmentOperationCompleted(db, {
+    markEnvironmentOperationRecordCompleted(db, {
       environmentId: environment.id,
       kind: "provision",
     });
 
-    const regressed = markEnvironmentOperationQueued(db, {
+    const regressed = markEnvironmentOperationRecordQueued(db, {
       environmentId: environment.id,
       kind: "provision",
       commandId: secondCommand.id,

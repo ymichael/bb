@@ -7,12 +7,13 @@ import {
   getHost,
   getThread,
   hostDaemonCommands,
-  requestEnvironmentCleanup,
   transitionThreadStatus,
-  upsertEnvironmentOperation,
   upsertHost,
-  upsertThreadOperation,
 } from "@bb/db";
+import {
+  upsertEnvironmentOperationRecord,
+  upsertThreadOperationRecord,
+} from "@bb/db/internal-lifecycle";
 import {
   runEphemeralHostCleanupSweep,
   runEnvironmentProvisioningSweep,
@@ -20,6 +21,7 @@ import {
   runPeriodicSweeps,
   runThreadLifecycleSweep,
 } from "../src/services/periodic-sweeps.js";
+import { requestEnvironmentCleanup } from "../src/services/environment-cleanup.js";
 import { requestThreadStop } from "../src/services/thread-stop.js";
 import {
   seedEnvironment,
@@ -109,13 +111,13 @@ describe("periodic sweeps", () => {
         workspaceProvisionType: "managed-worktree",
         path: "/tmp/periodic-sweep-second",
       });
-      requestEnvironmentCleanup(harness.db, harness.hub, firstEnvironment.id, {
-        cleanupMode: "force",
-        requestedAt: 123,
+      requestEnvironmentCleanup(harness.deps, {
+        environmentId: firstEnvironment.id,
+        mode: "force",
       });
-      requestEnvironmentCleanup(harness.db, harness.hub, secondEnvironment.id, {
-        cleanupMode: "force",
-        requestedAt: 456,
+      requestEnvironmentCleanup(harness.deps, {
+        environmentId: secondEnvironment.id,
+        mode: "force",
       });
 
       const visitedEnvironmentIds: string[] = [];
@@ -233,7 +235,7 @@ describe("periodic sweeps", () => {
         status: "provisioning",
       });
 
-      upsertEnvironmentOperation(harness.db, {
+      upsertEnvironmentOperationRecord(harness.db, {
         environmentId: environment.id,
         kind: "provision",
         payload: JSON.stringify(
@@ -282,7 +284,7 @@ describe("periodic sweeps", () => {
         status: "idle",
       });
 
-      upsertThreadOperation(harness.db, {
+      upsertThreadOperationRecord(harness.db, {
         threadId: thread.id,
         kind: "start",
         payload: JSON.stringify(
@@ -335,7 +337,7 @@ describe("periodic sweeps", () => {
         status: "provisioning",
       });
 
-      upsertEnvironmentOperation(harness.db, {
+      upsertEnvironmentOperationRecord(harness.db, {
         environmentId: environment.id,
         kind: "provision",
         payload: JSON.stringify(
@@ -461,8 +463,9 @@ describe("periodic sweeps", () => {
       });
 
       archiveThread(harness.db, harness.hub, thread.id);
-      requestEnvironmentCleanup(harness.db, harness.hub, environment.id, {
-        cleanupMode: "force",
+      requestEnvironmentCleanup(harness.deps, {
+        environmentId: environment.id,
+        mode: "force",
       });
       requestThreadStop(harness.deps, {
         environmentId: environment.id,

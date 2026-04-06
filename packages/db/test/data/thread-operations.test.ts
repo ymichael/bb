@@ -9,9 +9,9 @@ import { queueCommand } from "../../src/data/commands.js";
 import {
   getThreadOperation,
   getThreadOperationByCommandId,
-  markThreadOperationCompleted,
-  markThreadOperationQueued,
-  upsertThreadOperation,
+  markThreadOperationRecordCompleted,
+  markThreadOperationRecordQueued,
+  upsertThreadOperationRecord,
 } from "../../src/data/thread-operations.js";
 import { createEnvironment } from "../../src/data/environments.js";
 import { upsertHost } from "../../src/data/hosts.js";
@@ -46,13 +46,13 @@ describe("thread operations", () => {
   it("upserts thread lifecycle operations by thread and kind", () => {
     const { db, thread } = setup();
 
-    const first = upsertThreadOperation(db, {
+    const first = upsertThreadOperationRecord(db, {
       threadId: thread.id,
       kind: "start",
       payload: JSON.stringify({ type: "thread.start" }),
       requestedAt: 111,
     });
-    const second = upsertThreadOperation(db, {
+    const second = upsertThreadOperationRecord(db, {
       threadId: thread.id,
       kind: "start",
       payload: JSON.stringify({ type: "thread.start", attempt: 2 }),
@@ -85,18 +85,18 @@ describe("thread operations", () => {
       }),
     });
 
-    upsertThreadOperation(db, {
+    upsertThreadOperationRecord(db, {
       threadId: thread.id,
       kind: "stop",
       payload: JSON.stringify({ type: "thread.stop" }),
     });
-    const queued = markThreadOperationQueued(db, {
+    const queued = markThreadOperationRecordQueued(db, {
       threadId: thread.id,
       kind: "stop",
       commandId: command.id,
       queuedAt: 333,
     });
-    const completed = markThreadOperationCompleted(db, {
+    const completed = markThreadOperationRecordCompleted(db, {
       threadId: thread.id,
       kind: "stop",
       completedAt: 444,
@@ -146,22 +146,22 @@ describe("thread operations", () => {
       }),
     });
 
-    upsertThreadOperation(db, {
+    upsertThreadOperationRecord(db, {
       threadId: thread.id,
       kind: "stop",
       payload: JSON.stringify({ type: "thread.stop" }),
     });
-    markThreadOperationQueued(db, {
+    markThreadOperationRecordQueued(db, {
       threadId: thread.id,
       kind: "stop",
       commandId: firstCommand.id,
     });
-    markThreadOperationCompleted(db, {
+    markThreadOperationRecordCompleted(db, {
       threadId: thread.id,
       kind: "stop",
     });
 
-    const regressed = markThreadOperationQueued(db, {
+    const regressed = markThreadOperationRecordQueued(db, {
       threadId: thread.id,
       kind: "stop",
       commandId: secondCommand.id,

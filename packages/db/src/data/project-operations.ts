@@ -181,14 +181,14 @@ export function getProjectOperationByCommandId(
     .get() ?? null;
 }
 
-export function upsertProjectOperation(
+export function upsertProjectOperationRecord(
   db: ProjectOperationWriteConnection,
   input: UpsertProjectOperationInput,
 ): ProjectOperationRow {
   return upsertLifecycleOperationRecord(db, projectOperationStore, input);
 }
 
-export function markProjectOperationQueued(
+export function markProjectOperationRecordQueued(
   db: ProjectOperationWriteConnection,
   args: {
     commandId: string;
@@ -207,14 +207,14 @@ export function markProjectOperationQueued(
   });
 }
 
-export function markProjectOperationFetched(
+export function markProjectOperationRecordFetched(
   db: ProjectOperationWriteConnection,
   args: GetProjectOperationArgs,
 ): ProjectOperationRow | null {
   return markLifecycleOperationFetched(db, projectOperationStore, args);
 }
 
-export function markProjectOperationCompleted(
+export function markProjectOperationRecordCompleted(
   db: ProjectOperationWriteConnection,
   args: GetProjectOperationArgs & { completedAt?: number },
 ): ProjectOperationRow | null {
@@ -227,7 +227,7 @@ export function markProjectOperationCompleted(
   });
 }
 
-export function markProjectOperationFailed(
+export function markProjectOperationRecordFailed(
   db: ProjectOperationWriteConnection,
   args: GetProjectOperationArgs & {
     completedAt?: number;
@@ -244,7 +244,7 @@ export function markProjectOperationFailed(
   });
 }
 
-export function cancelProjectOperation(
+export function cancelProjectOperationRecord(
   db: ProjectOperationWriteConnection,
   args: GetProjectOperationArgs & { completedAt?: number },
 ): ProjectOperationRow | null {

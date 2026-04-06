@@ -8,8 +8,8 @@ import {
   listProjectOperations,
   markThreadDeleted,
   threads,
-  upsertProjectOperation,
 } from "@bb/db";
+import { upsertProjectOperationRecord } from "@bb/db/internal-lifecycle";
 import type { Environment } from "@bb/domain";
 import type { AppDeps } from "../types.js";
 import { deleteProjectAttachments } from "./attachments.js";
@@ -147,7 +147,7 @@ export function requestProjectDeletion(
     return;
   }
 
-  upsertProjectOperation(deps.db, {
+  upsertProjectOperationRecord(deps.db, {
     projectId: args.projectId,
     kind: "delete",
     payload: JSON.stringify({}),

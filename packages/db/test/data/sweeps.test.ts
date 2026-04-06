@@ -20,7 +20,7 @@ import {
 } from "../../src/data/threads.js";
 import {
   createEnvironment,
-  requestEnvironmentCleanup,
+  recordEnvironmentCleanupRequest,
 } from "../../src/data/environments.js";
 import { openSession } from "../../src/data/sessions.js";
 import { queueCommand, fetchCommands } from "../../src/data/commands.js";
@@ -340,7 +340,7 @@ describe("sweepManagedEnvironments", () => {
       status: "ready",
     });
 
-    requestEnvironmentCleanup(db, noopNotifier, env.id, {
+    recordEnvironmentCleanupRequest(db, noopNotifier, env.id, {
       cleanupMode: "force",
       requestedAt: 123,
     });
@@ -362,7 +362,7 @@ describe("sweepManagedEnvironments", () => {
       status: "ready",
     });
 
-    requestEnvironmentCleanup(db, noopNotifier, env.id, {
+    recordEnvironmentCleanupRequest(db, noopNotifier, env.id, {
       cleanupMode: "force",
       requestedAt: 123,
     });
@@ -397,7 +397,7 @@ describe("sweepManagedEnvironments", () => {
       status: "idle",
     });
 
-    requestEnvironmentCleanup(db, noopNotifier, env.id, {
+    recordEnvironmentCleanupRequest(db, noopNotifier, env.id, {
       cleanupMode: "safe",
       requestedAt: 123,
     });
@@ -433,7 +433,7 @@ describe("sweepManagedEnvironments", () => {
       status: "idle",
     });
 
-    requestEnvironmentCleanup(db, noopNotifier, env.id, {
+    recordEnvironmentCleanupRequest(db, noopNotifier, env.id, {
       cleanupMode: "force",
       requestedAt: 123,
     });
@@ -457,7 +457,7 @@ describe("sweepManagedEnvironments", () => {
       status: "ready",
     });
 
-    requestEnvironmentCleanup(db, noopNotifier, env.id, {
+    recordEnvironmentCleanupRequest(db, noopNotifier, env.id, {
       cleanupMode: "force",
       requestedAt: 123,
     });

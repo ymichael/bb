@@ -1,13 +1,13 @@
 import { eq } from "drizzle-orm";
 import {
   createProjectSource,
-  markThreadOperationCompleted,
   hostDaemonCommands,
   listThreads,
   transitionThreadStatus,
 } from "@bb/db";
 import { threadSchema } from "@bb/domain";
 import { describe, expect, it } from "vitest";
+import { completeThreadStart } from "../src/services/thread-stop.js";
 import {
   reportQueuedCommandSuccess,
   waitForQueuedCommand,
@@ -318,9 +318,8 @@ describe("public thread lifecycle regressions", () => {
       const secondThreadBody = threadSchema.parse(await readJson(secondThread));
 
       if (firstThreadBody.status === "created") {
-        markThreadOperationCompleted(harness.db, {
+        completeThreadStart(harness.deps, {
           threadId: firstThreadBody.id,
-          kind: "start",
         });
         transitionThreadStatus(harness.db, harness.deps.hub, firstThreadBody.id, "idle");
       }
@@ -328,9 +327,8 @@ describe("public thread lifecycle regressions", () => {
         transitionThreadStatus(harness.db, harness.deps.hub, firstThreadBody.id, "idle");
       }
       if (secondThreadBody.status === "created") {
-        markThreadOperationCompleted(harness.db, {
+        completeThreadStart(harness.deps, {
           threadId: secondThreadBody.id,
-          kind: "start",
         });
         transitionThreadStatus(harness.db, harness.deps.hub, secondThreadBody.id, "idle");
       }

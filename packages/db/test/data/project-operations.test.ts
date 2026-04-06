@@ -7,10 +7,10 @@ import {
   getProjectOperation,
   getProjectOperationByCommandId,
   listProjectOperations,
-  markProjectOperationCompleted,
-  markProjectOperationFailed,
-  markProjectOperationQueued,
-  upsertProjectOperation,
+  markProjectOperationRecordCompleted,
+  markProjectOperationRecordFailed,
+  markProjectOperationRecordQueued,
+  upsertProjectOperationRecord,
 } from "../../src/data/project-operations.js";
 import { createProject } from "../../src/data/projects.js";
 import { upsertHost } from "../../src/data/hosts.js";
@@ -33,13 +33,13 @@ describe("project operations", () => {
   it("upserts requested project operations by project and kind", () => {
     const { db, project } = setup();
 
-    const first = upsertProjectOperation(db, {
+    const first = upsertProjectOperationRecord(db, {
       projectId: project.id,
       kind: "delete",
       payload: JSON.stringify({ stage: "requested" }),
       requestedAt: 555,
     });
-    const second = upsertProjectOperation(db, {
+    const second = upsertProjectOperationRecord(db, {
       projectId: project.id,
       kind: "delete",
       payload: JSON.stringify({ stage: "retry" }),
@@ -75,18 +75,18 @@ describe("project operations", () => {
       }),
     });
 
-    upsertProjectOperation(db, {
+    upsertProjectOperationRecord(db, {
       projectId: project.id,
       kind: "delete",
       payload: JSON.stringify({ stage: "requested" }),
     });
-    const queued = markProjectOperationQueued(db, {
+    const queued = markProjectOperationRecordQueued(db, {
       projectId: project.id,
       kind: "delete",
       commandId: command.id,
       queuedAt: 777,
     });
-    const failed = markProjectOperationFailed(db, {
+    const failed = markProjectOperationRecordFailed(db, {
       projectId: project.id,
       kind: "delete",
       failureReason: "environment destroy failed",
@@ -120,7 +120,7 @@ describe("project operations", () => {
   it("lists project operations by kind and state", () => {
     const { db, project } = setup();
 
-    upsertProjectOperation(db, {
+    upsertProjectOperationRecord(db, {
       projectId: project.id,
       kind: "delete",
       payload: JSON.stringify({ stage: "requested" }),
@@ -167,22 +167,22 @@ describe("project operations", () => {
       }),
     });
 
-    upsertProjectOperation(db, {
+    upsertProjectOperationRecord(db, {
       projectId: project.id,
       kind: "delete",
       payload: JSON.stringify({ stage: "requested" }),
     });
-    markProjectOperationQueued(db, {
+    markProjectOperationRecordQueued(db, {
       projectId: project.id,
       kind: "delete",
       commandId: firstCommand.id,
     });
-    markProjectOperationCompleted(db, {
+    markProjectOperationRecordCompleted(db, {
       projectId: project.id,
       kind: "delete",
     });
 
-    const regressed = markProjectOperationQueued(db, {
+    const regressed = markProjectOperationRecordQueued(db, {
       projectId: project.id,
       kind: "delete",
       commandId: secondCommand.id,

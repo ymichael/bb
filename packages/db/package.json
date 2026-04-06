@@ -6,6 +6,10 @@
     ".": {
       "import": "./dist/index.js",
       "types": "./dist/index.d.ts"
+    },
+    "./internal-lifecycle": {
+      "import": "./dist/internal-lifecycle.js",
+      "types": "./dist/internal-lifecycle.d.ts"
     }
   },
   "main": "./dist/index.js",

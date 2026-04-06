@@ -184,14 +184,14 @@ export function getEnvironmentOperationByCommandId(
     .get() ?? null;
 }
 
-export function upsertEnvironmentOperation(
+export function upsertEnvironmentOperationRecord(
   db: EnvironmentOperationWriteConnection,
   input: UpsertEnvironmentOperationInput,
 ): EnvironmentOperationRow {
   return upsertLifecycleOperationRecord(db, environmentOperationStore, input);
 }
 
-export function markEnvironmentOperationQueued(
+export function markEnvironmentOperationRecordQueued(
   db: EnvironmentOperationWriteConnection,
   args: {
     commandId: string;
@@ -210,14 +210,14 @@ export function markEnvironmentOperationQueued(
   });
 }
 
-export function markEnvironmentOperationFetched(
+export function markEnvironmentOperationRecordFetched(
   db: EnvironmentOperationWriteConnection,
   args: GetEnvironmentOperationArgs,
 ): EnvironmentOperationRow | null {
   return markLifecycleOperationFetched(db, environmentOperationStore, args);
 }
 
-export function markEnvironmentOperationCompleted(
+export function markEnvironmentOperationRecordCompleted(
   db: EnvironmentOperationWriteConnection,
   args: GetEnvironmentOperationArgs & { completedAt?: number },
 ): EnvironmentOperationRow | null {
@@ -230,7 +230,7 @@ export function markEnvironmentOperationCompleted(
   });
 }
 
-export function markEnvironmentOperationFailed(
+export function markEnvironmentOperationRecordFailed(
   db: EnvironmentOperationWriteConnection,
   args: GetEnvironmentOperationArgs & {
     completedAt?: number;
@@ -247,7 +247,7 @@ export function markEnvironmentOperationFailed(
   });
 }
 
-export function cancelEnvironmentOperation(
+export function cancelEnvironmentOperationRecord(
   db: EnvironmentOperationWriteConnection,
   args: GetEnvironmentOperationArgs & { completedAt?: number },
 ): EnvironmentOperationRow | null {

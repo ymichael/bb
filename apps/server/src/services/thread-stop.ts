@@ -6,13 +6,15 @@ import {
   getCommand,
   getThread,
   getThreadOperation,
-  markThreadOperationQueued,
-  markThreadOperationCompleted,
-  markThreadOperationFailed,
   markThreadStopRequested,
   queueCommand,
-  upsertThreadOperation,
 } from "@bb/db";
+import {
+  markThreadOperationRecordCompleted,
+  markThreadOperationRecordFailed,
+  markThreadOperationRecordQueued,
+  upsertThreadOperationRecord,
+} from "@bb/db/internal-lifecycle";
 import {
   isActiveLifecycleOperationState,
   type PromptInput,
@@ -145,7 +147,7 @@ function completeThreadOperation(
     return false;
   }
 
-  markThreadOperationCompleted(deps.db, {
+  markThreadOperationRecordCompleted(deps.db, {
     threadId: args.threadId,
     kind: operation.kind,
   });
@@ -165,7 +167,7 @@ function failThreadOperation(
     return false;
   }
 
-  markThreadOperationFailed(deps.db, {
+  markThreadOperationRecordFailed(deps.db, {
     threadId: args.threadId,
     kind: operation.kind,
     failureReason: args.failureReason,
@@ -223,7 +225,7 @@ export async function requestThreadStart(
   }
 
   const command = await buildThreadStartCommand(deps, args);
-  upsertThreadOperation(deps.db, {
+  upsertThreadOperationRecord(deps.db, {
     threadId: args.thread.id,
     kind: "start",
     payload: JSON.stringify(command),
@@ -265,7 +267,7 @@ export async function advanceThreadStart(
     type: command.type,
     payload: JSON.stringify(command),
   });
-  markThreadOperationQueued(deps.db, {
+  markThreadOperationRecordQueued(deps.db, {
     threadId: args.threadId,
     kind: "start",
     commandId: queuedCommand.id,
@@ -325,7 +327,7 @@ export function requestThreadStop(
   }
 
   const command = buildThreadStopCommand(args);
-  upsertThreadOperation(deps.db, {
+  upsertThreadOperationRecord(deps.db, {
     threadId: args.threadId,
     kind: "stop",
     payload: JSON.stringify(command),
@@ -363,7 +365,7 @@ export function advanceThreadStop(
     type: command.type,
     payload: JSON.stringify(command),
   });
-  markThreadOperationQueued(deps.db, {
+  markThreadOperationRecordQueued(deps.db, {
     threadId: args.threadId,
     kind: "stop",
     commandId: queuedCommand.id,

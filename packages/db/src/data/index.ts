@@ -8,21 +8,14 @@ export {
 export type { CreateProjectInput, UpdateProjectInput } from "./projects.js";
 
 export {
-  cancelProjectOperation,
   getProjectOperation,
   getProjectOperationByCommandId,
   listProjectOperations,
-  markProjectOperationCompleted,
-  markProjectOperationFailed,
-  markProjectOperationFetched,
-  markProjectOperationQueued,
-  upsertProjectOperation,
 } from "./project-operations.js";
 export type {
   GetProjectOperationArgs,
   ListProjectOperationsArgs,
   ProjectOperationRow,
-  UpsertProjectOperationInput,
 } from "./project-operations.js";
 
 export {
@@ -92,21 +85,14 @@ export type {
 } from "./threads.js";
 
 export {
-  cancelThreadOperation,
   getThreadOperation,
   getThreadOperationByCommandId,
   listThreadOperations,
-  markThreadOperationCompleted,
-  markThreadOperationFailed,
-  markThreadOperationFetched,
-  markThreadOperationQueued,
-  upsertThreadOperation,
 } from "./thread-operations.js";
 export type {
   GetThreadOperationArgs,
   ListThreadOperationsArgs,
   ThreadOperationRow,
-  UpsertThreadOperationInput,
 } from "./thread-operations.js";
 
 export {
@@ -131,45 +117,28 @@ export type {
 } from "./manager-thread-nudges.js";
 
 export {
-  cancelEnvironmentOperation,
   getEnvironmentOperation,
   getEnvironmentOperationByCommandId,
   listEnvironmentOperations,
-  markEnvironmentOperationCompleted,
-  markEnvironmentOperationFailed,
-  markEnvironmentOperationFetched,
-  markEnvironmentOperationQueued,
-  upsertEnvironmentOperation,
 } from "./environment-operations.js";
 export type {
   EnvironmentOperationRow,
   GetEnvironmentOperationArgs,
   ListEnvironmentOperationsArgs,
-  UpsertEnvironmentOperationInput,
 } from "./environment-operations.js";
 
 export {
-  applyProvisionedEnvironment,
-  clearEnvironmentCleanupRequest,
-  claimManagedEnvironmentReprovision,
   createEnvironment,
   getEnvironment,
   findEnvironmentByHostPath,
   listEnvironments,
   listEnvironmentsByIds,
-  markEnvironmentDestroyed,
-  requestEnvironmentCleanup,
   updateEnvironmentMetadata,
-  updateEnvironmentStatus,
   deleteEnvironment,
 } from "./environments.js";
 export type {
-  ApplyProvisionedEnvironmentInput,
-  ClaimManagedEnvironmentReprovisionArgs,
   CreateEnvironmentInput,
-  RequestEnvironmentCleanupInput,
   UpdateEnvironmentMetadataInput,
-  UpdateEnvironmentStatusInput,
 } from "./environments.js";
 
 export {

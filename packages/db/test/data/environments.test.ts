@@ -4,14 +4,14 @@ import { migrate } from "../../src/migrate.js";
 import { noopNotifier } from "../../src/notifier.js";
 import type { DbNotifier } from "../../src/notifier.js";
 import {
-  applyProvisionedEnvironment,
-  clearEnvironmentCleanupRequest,
-  claimManagedEnvironmentReprovision,
+  applyProvisionedEnvironmentRecord,
+  clearEnvironmentCleanupRequestRecord,
+  claimManagedEnvironmentReprovisionRecord,
   createEnvironment,
-  markEnvironmentDestroyed,
-  requestEnvironmentCleanup,
+  recordEnvironmentCleanupRequest,
+  setEnvironmentRecordDestroyed,
+  setEnvironmentStatus,
   updateEnvironmentMetadata,
-  updateEnvironmentStatus,
 } from "../../src/data/environments.js";
 import { createProject } from "../../src/data/projects.js";
 import { upsertHost } from "../../src/data/hosts.js";
@@ -92,7 +92,7 @@ describe("environments", () => {
     });
     const notifier = createNotifierSpy();
 
-    const updated = updateEnvironmentStatus(db, notifier, environment.id, {
+    const updated = setEnvironmentStatus(db, notifier, environment.id, {
       status: "ready",
     });
 
@@ -112,7 +112,7 @@ describe("environments", () => {
     });
     const notifier = createNotifierSpy();
 
-    const updated = applyProvisionedEnvironment(db, notifier, environment.id, {
+    const updated = applyProvisionedEnvironmentRecord(db, notifier, environment.id, {
       path: "/tmp/project",
       status: "ready",
       isGitRepo: true,
@@ -145,11 +145,11 @@ describe("environments", () => {
       status: "error",
     });
 
-    const firstClaim = claimManagedEnvironmentReprovision(db, notifier, {
+    const firstClaim = claimManagedEnvironmentReprovisionRecord(db, notifier, {
       environmentId: environment.id,
       now: 123,
     });
-    const secondClaim = claimManagedEnvironmentReprovision(db, notifier, {
+    const secondClaim = claimManagedEnvironmentReprovisionRecord(db, notifier, {
       environmentId: environment.id,
       now: 124,
     });
@@ -177,15 +177,15 @@ describe("environments", () => {
       status: "ready",
     });
 
-    const requested = requestEnvironmentCleanup(db, notifier, environment.id, {
+    const requested = recordEnvironmentCleanupRequest(db, notifier, environment.id, {
       cleanupMode: "safe",
       requestedAt: 123,
     });
-    const escalated = requestEnvironmentCleanup(db, notifier, environment.id, {
+    const escalated = recordEnvironmentCleanupRequest(db, notifier, environment.id, {
       cleanupMode: "force",
       requestedAt: 456,
     });
-    const cleared = clearEnvironmentCleanupRequest(
+    const cleared = clearEnvironmentCleanupRequestRecord(
       db,
       notifier,
       environment.id,
@@ -233,7 +233,7 @@ describe("environments", () => {
       status: "destroying",
     });
 
-    const updated = markEnvironmentDestroyed(db, notifier, environment.id);
+    const updated = setEnvironmentRecordDestroyed(db, notifier, environment.id);
 
     expect(updated).toMatchObject({
       status: "destroyed",

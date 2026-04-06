@@ -183,14 +183,14 @@ export function getThreadOperationByCommandId(
     .get() ?? null;
 }
 
-export function upsertThreadOperation(
+export function upsertThreadOperationRecord(
   db: ThreadOperationWriteConnection,
   input: UpsertThreadOperationInput,
 ): ThreadOperationRow {
   return upsertLifecycleOperationRecord(db, threadOperationStore, input);
 }
 
-export function markThreadOperationQueued(
+export function markThreadOperationRecordQueued(
   db: ThreadOperationWriteConnection,
   args: {
     commandId: string;
@@ -209,14 +209,14 @@ export function markThreadOperationQueued(
   });
 }
 
-export function markThreadOperationFetched(
+export function markThreadOperationRecordFetched(
   db: ThreadOperationWriteConnection,
   args: GetThreadOperationArgs,
 ): ThreadOperationRow | null {
   return markLifecycleOperationFetched(db, threadOperationStore, args);
 }
 
-export function markThreadOperationCompleted(
+export function markThreadOperationRecordCompleted(
   db: ThreadOperationWriteConnection,
   args: GetThreadOperationArgs & { completedAt?: number },
 ): ThreadOperationRow | null {
@@ -229,7 +229,7 @@ export function markThreadOperationCompleted(
   });
 }
 
-export function markThreadOperationFailed(
+export function markThreadOperationRecordFailed(
   db: ThreadOperationWriteConnection,
   args: GetThreadOperationArgs & {
     completedAt?: number;
@@ -246,7 +246,7 @@ export function markThreadOperationFailed(
   });
 }
 
-export function cancelThreadOperation(
+export function cancelThreadOperationRecord(
   db: ThreadOperationWriteConnection,
   args: GetThreadOperationArgs & { completedAt?: number },
 ): ThreadOperationRow | null {

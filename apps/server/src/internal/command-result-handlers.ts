@@ -1,6 +1,5 @@
 import { and, desc, eq, or } from "drizzle-orm";
 import {
-  applyProvisionedEnvironment,
   deleteThread,
   events,
   getEnvironment,
@@ -11,6 +10,7 @@ import {
   hostDaemonCommands,
   threads,
 } from "@bb/db";
+import { applyProvisionedEnvironmentRecord } from "@bb/db/internal-lifecycle";
 import {
   hostDaemonCommandSchema,
   type HostDaemonCommandResultReport,
@@ -98,7 +98,7 @@ async function handleProvisionCommandResult(
       return;
     }
 
-    applyProvisionedEnvironment(deps.db, deps.hub, command.environmentId, {
+    applyProvisionedEnvironmentRecord(deps.db, deps.hub, command.environmentId, {
       path: report.result.path,
       status: "ready",
       isGitRepo: report.result.isGitRepo,

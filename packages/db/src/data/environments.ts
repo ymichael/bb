@@ -265,7 +265,7 @@ function updateEnvironmentLifecycleRecord(
   return updateEnvironmentRecord(db, notifier, id, { lifecycle });
 }
 
-export function applyProvisionedEnvironment(
+export function applyProvisionedEnvironmentRecord(
   db: DbConnection,
   notifier: DbNotifier,
   id: string,
@@ -296,7 +296,7 @@ export function updateEnvironmentMetadata(
   });
 }
 
-export function updateEnvironmentStatus(
+export function setEnvironmentStatus(
   db: DbConnection,
   notifier: DbNotifier,
   id: string,
@@ -317,7 +317,7 @@ function resolveRequestedCleanupMode(
   return "safe";
 }
 
-export function requestEnvironmentCleanup(
+export function recordEnvironmentCleanupRequest(
   db: DbConnection,
   notifier: DbNotifier,
   id: string,
@@ -338,7 +338,7 @@ export function requestEnvironmentCleanup(
   });
 }
 
-export function clearEnvironmentCleanupRequest(
+export function clearEnvironmentCleanupRequestRecord(
   db: DbConnection,
   notifier: DbNotifier,
   id: string,
@@ -349,7 +349,7 @@ export function clearEnvironmentCleanupRequest(
   });
 }
 
-export function markEnvironmentDestroyed(
+export function setEnvironmentRecordDestroyed(
   db: DbConnection,
   notifier: DbNotifier,
   id: string,
@@ -363,7 +363,7 @@ export function markEnvironmentDestroyed(
   });
 }
 
-export function claimManagedEnvironmentReprovision(
+export function claimManagedEnvironmentReprovisionRecord(
   db: DbConnection,
   notifier: DbNotifier,
   args: ClaimManagedEnvironmentReprovisionArgs,

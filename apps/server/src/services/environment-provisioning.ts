@@ -4,13 +4,15 @@ import {
   getCommand,
   getEnvironment,
   getEnvironmentOperation,
-  markEnvironmentOperationCompleted,
-  markEnvironmentOperationFailed,
-  markEnvironmentOperationQueued,
   queueCommand,
-  upsertEnvironmentOperation,
-  updateEnvironmentStatus,
 } from "@bb/db";
+import {
+  markEnvironmentOperationRecordCompleted,
+  markEnvironmentOperationRecordFailed,
+  markEnvironmentOperationRecordQueued,
+  setEnvironmentStatus,
+  upsertEnvironmentOperationRecord,
+} from "@bb/db/internal-lifecycle";
 import type {
   Environment,
   EnvironmentOperationKind,
@@ -124,7 +126,7 @@ export function completeEnvironmentProvisioning(
     return false;
   }
 
-  markEnvironmentOperationCompleted(deps.db, {
+  markEnvironmentOperationRecordCompleted(deps.db, {
     environmentId: args.environmentId,
     kind: operation.kind,
   });
@@ -137,7 +139,7 @@ export function failEnvironmentProvisioning(
 ): boolean {
   const operation = getActiveProvisionOperation(deps, args.environmentId);
   if (operation) {
-    markEnvironmentOperationFailed(deps.db, {
+    markEnvironmentOperationRecordFailed(deps.db, {
       environmentId: args.environmentId,
       kind: operation.kind,
       failureReason: args.failureReason,
@@ -150,7 +152,7 @@ export function failEnvironmentProvisioning(
     && environment.status !== "destroyed"
     && environment.status !== "error"
   ) {
-    updateEnvironmentStatus(deps.db, deps.hub, args.environmentId, {
+    setEnvironmentStatus(deps.db, deps.hub, args.environmentId, {
       status: "error",
     });
   }
@@ -162,7 +164,7 @@ export function requestEnvironmentProvision(
   deps: Pick<AppDeps, "db" | "hub">,
   args: RequestEnvironmentProvisionArgs,
 ): void {
-  upsertEnvironmentOperation(deps.db, {
+  upsertEnvironmentOperationRecord(deps.db, {
     environmentId: args.environmentId,
     kind: args.kind,
     payload: JSON.stringify(args.command),
@@ -170,7 +172,7 @@ export function requestEnvironmentProvision(
 
   const environment = getEnvironment(deps.db, args.environmentId);
   if (environment && environment.status !== "provisioning") {
-    updateEnvironmentStatus(deps.db, deps.hub, environment.id, {
+    setEnvironmentStatus(deps.db, deps.hub, environment.id, {
       status: "provisioning",
     });
   }
@@ -214,7 +216,7 @@ export function advanceEnvironmentProvisioning(
     payload: JSON.stringify(command),
   });
 
-  markEnvironmentOperationQueued(deps.db, {
+  markEnvironmentOperationRecordQueued(deps.db, {
     environmentId: environment.id,
     kind: operation.kind,
     commandId: queuedCommand.id,

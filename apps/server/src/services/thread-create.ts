@@ -1,5 +1,4 @@
 import {
-  applyProvisionedEnvironment,
   createEnvironment,
   createHostId,
   createThread,
@@ -11,6 +10,7 @@ import {
   updateHost,
   upsertHost,
 } from "@bb/db";
+import { applyProvisionedEnvironmentRecord } from "@bb/db/internal-lifecycle";
 import type {
   Environment,
   GitHubRepoProjectSource,
@@ -578,7 +578,7 @@ export async function ensureProjectSourceEnvironment(
   });
   const result = hostDaemonCommandResultSchemaByType["environment.provision"].parse(rawResult);
 
-  const updated = applyProvisionedEnvironment(deps.db, deps.hub, environment.id, {
+  const updated = applyProvisionedEnvironmentRecord(deps.db, deps.hub, environment.id, {
     path: result.path,
     status: "ready",
     isGitRepo: result.isGitRepo,
