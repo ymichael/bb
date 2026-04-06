@@ -91,8 +91,12 @@ describe("server-contract canonical schemas", () => {
         name: "Daily summary",
         trigger: {
           triggerType: "schedule",
-          cron: "0 8 * * 1-5",
-          timezone: "America/Los_Angeles",
+          schedule: {
+            kind: "weekly",
+            weekdays: ["mon", "tue", "wed", "thu", "fri"],
+            times: ["08:00"],
+            timezone: "America/Los_Angeles",
+          },
         },
         action: {
           actionType: "scheduled-thread",
@@ -120,8 +124,12 @@ describe("server-contract canonical schemas", () => {
         enabled: true,
         trigger: {
           triggerType: "schedule",
-          cron: "0 8 * * 1-5",
-          timezone: "America/Los_Angeles",
+          schedule: {
+            kind: "weekly",
+            weekdays: ["mon", "tue", "wed", "thu", "fri"],
+            times: ["08:00"],
+            timezone: "America/Los_Angeles",
+          },
         },
         action: {
           actionType: "scheduled-thread",
