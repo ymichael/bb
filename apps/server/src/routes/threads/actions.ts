@@ -40,10 +40,12 @@ import {
 } from "../../services/event-pruning.js";
 import {
   buildExecutionOptions,
-  queueReadyThreadTurnCommand,
   queueTurnSteerCommand,
 } from "../../services/thread-commands.js";
-import { requestThreadStop } from "../../services/thread-stop.js";
+import {
+  queueReadyThreadTurnCommand,
+  requestThreadStop,
+} from "../../services/thread-stop.js";
 import {
   appendClientTurnEvent,
   getLastTurnId,
@@ -160,7 +162,7 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
     });
 
     if (mode === "start") {
-      await queueReadyThreadTurnCommand(deps, {
+      const queuedMode = await queueReadyThreadTurnCommand(deps, {
         thread,
         input: payload.input,
         eventSequence,
@@ -172,7 +174,9 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
           workspaceProvisionType: readyEnvironment.workspaceProvisionType,
         },
       });
-      tryTransition(deps.db, deps.hub, thread.id, "active");
+      if (queuedMode === "turn.run") {
+        tryTransition(deps.db, deps.hub, thread.id, "active");
+      }
     } else {
       const expectedTurnId = getLastTurnId(deps, thread.id);
       if (!expectedTurnId) {

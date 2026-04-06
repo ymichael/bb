@@ -192,7 +192,7 @@ describe("server integration", () => {
         param: { id: thread.id },
       });
       const updatedThread = await threadGetResponse.json();
-      expect(updatedThread.status).toBe("active");
+      expect(updatedThread.status).toBe("idle");
 
       const environmentGetResponse = await publicClient.environments[":id"].$get({
         param: { id: thread.environmentId },

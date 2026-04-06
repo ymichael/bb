@@ -8,9 +8,13 @@ import {
   getEnvironmentOperationByCommandId,
   getHost,
   getThread,
+  getThreadOperation,
+  getThreadOperationByCommandId,
   hostDaemonCommands,
   markEnvironmentOperationCompleted,
   markEnvironmentOperationFailed,
+  markThreadOperationCompleted,
+  markThreadOperationFailed,
   markEnvironmentDestroyed,
   threads,
   requestEnvironmentCleanup,
@@ -28,7 +32,7 @@ import {
   appendSystemErrorEvent,
   appendThreadInterruptedEvent,
 } from "../services/thread-events.js";
-import { queueThreadStartCommand } from "../services/thread-commands.js";
+import { requestThreadStart } from "../services/thread-stop.js";
 import {
   advanceEnvironmentCleanup,
 } from "../services/environment-cleanup.js";
@@ -174,7 +178,7 @@ async function handleProvisionCommandResult(
         continue;
       }
 
-      await queueThreadStartCommand(deps, {
+      await requestThreadStart(deps, {
         thread,
         environment: {
           id: command.environmentId,
@@ -188,7 +192,6 @@ async function handleProvisionCommandResult(
         projectId: thread.projectId,
         providerId: thread.providerId,
       });
-      tryTransition(deps.db, deps.hub, thread.id, "active");
     }
 
     if (operation) {
@@ -311,16 +314,72 @@ async function handleEnvironmentDestroyResult(
   }
 }
 
+function handleThreadStartResult(
+  deps: Pick<AppDeps, "db" | "hub">,
+  report: Extract<HostDaemonCommandResultReport, { type: "thread.start" }>,
+  commandRow: typeof hostDaemonCommands.$inferSelect,
+): void {
+  const command = parseCommand(commandRow);
+  if (command.type !== "thread.start") {
+    return;
+  }
+
+  const operation = getThreadOperationByCommandId(deps.db, commandRow.id);
+  if (!report.ok) {
+    if (operation) {
+      markThreadOperationFailed(deps.db, {
+        threadId: command.threadId,
+        kind: operation.kind,
+        failureReason: report.errorMessage,
+      });
+    }
+    return;
+  }
+
+  if (operation?.state === "completed") {
+    return;
+  }
+
+  const thread = getThread(deps.db, command.threadId);
+  if (!thread) {
+    return;
+  }
+
+  if (thread.status === "idle" || thread.status === "error") {
+    tryTransition(deps.db, deps.hub, thread.id, "active");
+  }
+
+  if (operation) {
+    markThreadOperationCompleted(deps.db, {
+      threadId: thread.id,
+      kind: operation.kind,
+    });
+  }
+}
+
 function handleThreadStopResult(
   deps: Pick<AppDeps, "db" | "hub">,
   report: Extract<HostDaemonCommandResultReport, { type: "thread.stop" }>,
   commandRow: typeof hostDaemonCommands.$inferSelect,
 ): Promise<void> {
-  if (!report.ok) {
-    return Promise.resolve();
-  }
   const command = parseCommand(commandRow);
   if (command.type !== "thread.stop") {
+    return Promise.resolve();
+  }
+  const operation = getThreadOperationByCommandId(deps.db, commandRow.id);
+
+  if (!report.ok) {
+    if (operation) {
+      markThreadOperationFailed(deps.db, {
+        threadId: command.threadId,
+        kind: operation.kind,
+        failureReason: report.errorMessage,
+      });
+    }
+    return Promise.resolve();
+  }
+
+  if (operation?.state === "completed") {
     return Promise.resolve();
   }
   return finalizeStoppedThread(deps, command.threadId);
@@ -337,6 +396,17 @@ async function finalizeStoppedThread(
 
   if (currentThread.status === "active") {
     tryTransition(deps.db, deps.hub, currentThread.id, "idle");
+  }
+
+  const operation = getThreadOperation(deps.db, {
+    threadId,
+    kind: "stop",
+  });
+  if (operation) {
+    markThreadOperationCompleted(deps.db, {
+      threadId,
+      kind: operation.kind,
+    });
   }
 
   if (currentThread.stopRequestedAt !== null) {
@@ -438,6 +508,11 @@ export async function handleCommandResultSideEffects(
       await handleThreadStopResult(deps, report, commandRow);
       return;
     case "thread.start":
+      handleThreadStartResult(deps, report, commandRow);
+      if (!report.ok) {
+        handleThreadCommandFailure(deps, report, commandRow);
+      }
+      return;
     case "turn.run":
     case "turn.steer":
       if (!report.ok) {

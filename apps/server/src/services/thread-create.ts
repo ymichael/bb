@@ -30,7 +30,7 @@ import { destroyHost, waitForHostSession } from "./host-lifecycle.js";
 import { requireReachablePublicServerUrl } from "./public-server-url.js";
 import { createSandboxBackendForId } from "./sandbox-backends.js";
 import { appendClientTurnEvent, appendProvisioningEvent, buildCwdBranchEntries } from "./thread-events.js";
-import { buildExecutionOptions, queueThreadStartCommand } from "./thread-commands.js";
+import { buildExecutionOptions } from "./thread-commands.js";
 import { generateThreadTitle } from "./title-generation.js";
 import {
   buildManagedBranchName,
@@ -47,6 +47,7 @@ import {
   advanceEnvironmentProvisioning,
   requestEnvironmentProvision,
 } from "./environment-provisioning.js";
+import { requestThreadStart } from "./thread-stop.js";
 import {
   resolveStableThreadRequestEnvironment,
 } from "./thread-request-eligibility.js";
@@ -240,7 +241,7 @@ async function startQueuedThreadIfNeeded(
     thread: ReturnType<typeof createThread>;
   },
 ): Promise<void> {
-  await queueThreadStartCommand(deps, {
+  await requestThreadStart(deps, {
     thread: args.thread,
     environment: {
       id: args.environment.id,
@@ -254,7 +255,6 @@ async function startQueuedThreadIfNeeded(
     projectId: args.thread.projectId,
     providerId: args.thread.providerId,
   });
-  transitionThreadStatus(deps.db, deps.hub, args.thread.id, "active");
 }
 
 async function createSandboxHostThread(

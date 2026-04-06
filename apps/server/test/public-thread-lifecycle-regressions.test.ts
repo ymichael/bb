@@ -5,6 +5,7 @@ import {
   listThreads,
   transitionThreadStatus,
 } from "@bb/db";
+import { threadSchema } from "@bb/domain";
 import { describe, expect, it } from "vitest";
 import {
   reportQueuedCommandSuccess,
@@ -312,24 +313,15 @@ describe("public thread lifecycle regressions", () => {
 
       expect(firstThread.status).toBe(201);
       expect(secondThread.status).toBe(201);
-      const firstThreadBody = await readJson(firstThread);
-      const secondThreadBody = await readJson(secondThread);
-      if (
-        typeof firstThreadBody !== "object" ||
-        !firstThreadBody ||
-        !("id" in firstThreadBody) ||
-        typeof firstThreadBody.id !== "string" ||
-        typeof secondThreadBody !== "object" ||
-        !secondThreadBody ||
-        !("id" in secondThreadBody) ||
-        typeof secondThreadBody.id !== "string"
-      ) {
-        throw new Error("Thread creation response shape was invalid");
-      }
+      const firstThreadBody = threadSchema.parse(await readJson(firstThread));
+      const secondThreadBody = threadSchema.parse(await readJson(secondThread));
 
-      // Transition threads to idle so DELETE doesn't try to auto-stop (no daemon in unit tests)
-      transitionThreadStatus(harness.db, harness.deps.hub, firstThreadBody.id as string, "idle");
-      transitionThreadStatus(harness.db, harness.deps.hub, secondThreadBody.id as string, "idle");
+      if (firstThreadBody.status === "active") {
+        transitionThreadStatus(harness.db, harness.deps.hub, firstThreadBody.id, "idle");
+      }
+      if (secondThreadBody.status === "active") {
+        transitionThreadStatus(harness.db, harness.deps.hub, secondThreadBody.id, "idle");
+      }
 
       const firstDelete = await harness.app.request(
         `/api/v1/threads/${firstThreadBody.id}`,

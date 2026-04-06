@@ -13,9 +13,9 @@ import { toQueuedMessage } from "./drafts.js";
 import { requireThreadEnvironment } from "./entity-lookup.js";
 import {
   buildExecutionOptions,
-  queueReadyThreadTurnCommand,
   queueTurnSteerCommand,
 } from "./thread-commands.js";
+import { queueReadyThreadTurnCommand } from "./thread-stop.js";
 import {
   queueTurnDuringReprovision,
   requireReadyThreadEnvironment,
@@ -111,7 +111,7 @@ async function sendClaimedDraft(
   });
 
   if (resolveQueuedDraftSendMode(thread.status) === "start") {
-    await queueReadyThreadTurnCommand(deps, {
+    const queuedMode = await queueReadyThreadTurnCommand(deps, {
       thread,
       input: queuedMessage.content,
       eventSequence,
@@ -123,7 +123,9 @@ async function sendClaimedDraft(
         workspaceProvisionType: readyEnvironment.workspaceProvisionType,
       },
     });
-    tryTransition(deps.db, deps.hub, thread.id, "active");
+    if (queuedMode === "turn.run") {
+      tryTransition(deps.db, deps.hub, thread.id, "active");
+    }
   } else {
     const expectedTurnId = getLastTurnId(deps, thread.id);
     if (!expectedTurnId) {

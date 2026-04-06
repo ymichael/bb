@@ -508,7 +508,7 @@ describe("public thread routes", () => {
       const createdThread = threadSchema.parse(await readJson(response));
       expect(createdThread).toMatchObject({
         environmentId: environment.id,
-        status: "active",
+        status: "idle",
       });
 
       const queuedStart = await waitForQueuedCommand(
@@ -1193,7 +1193,7 @@ describe("public thread routes", () => {
       expect(response.status).toBe(201);
       await expect(readJson(response)).resolves.toMatchObject({
         environmentId: environment.id,
-        status: "active",
+        status: "idle",
       });
     } finally {
       await harness.cleanup();
