@@ -8,6 +8,7 @@ import {
   getThreadOperation,
   markThreadOperationQueued,
   markThreadOperationCompleted,
+  markThreadOperationFailed,
   markThreadStopRequested,
   queueCommand,
   upsertThreadOperation,
@@ -67,6 +68,14 @@ export interface FinalizeStoppedThreadArgs {
   threadId: string;
 }
 
+export interface ThreadOperationMutationArgs {
+  threadId: string;
+}
+
+export interface FailThreadOperationArgs extends ThreadOperationMutationArgs {
+  failureReason: string;
+}
+
 function hasQueuedThreadOperationCommand(
   deps: Pick<AppDeps, "db">,
   commandId: string | null,
@@ -122,6 +131,78 @@ export function hasActiveThreadStartOperation(
     threadId,
     kind: "start",
   }) !== null;
+}
+
+function completeThreadOperation(
+  deps: Pick<AppDeps, "db">,
+  args: {
+    kind: "start" | "stop";
+    threadId: string;
+  },
+): boolean {
+  const operation = getActiveThreadOperation(deps, args);
+  if (!operation) {
+    return false;
+  }
+
+  markThreadOperationCompleted(deps.db, {
+    threadId: args.threadId,
+    kind: operation.kind,
+  });
+  return true;
+}
+
+function failThreadOperation(
+  deps: Pick<AppDeps, "db">,
+  args: {
+    failureReason: string;
+    kind: "start" | "stop";
+    threadId: string;
+  },
+): boolean {
+  const operation = getActiveThreadOperation(deps, args);
+  if (!operation) {
+    return false;
+  }
+
+  markThreadOperationFailed(deps.db, {
+    threadId: args.threadId,
+    kind: operation.kind,
+    failureReason: args.failureReason,
+  });
+  return true;
+}
+
+export function completeThreadStart(
+  deps: Pick<AppDeps, "db">,
+  args: ThreadOperationMutationArgs,
+): boolean {
+  return completeThreadOperation(deps, {
+    threadId: args.threadId,
+    kind: "start",
+  });
+}
+
+export function failThreadStart(
+  deps: Pick<AppDeps, "db">,
+  args: FailThreadOperationArgs,
+): boolean {
+  return failThreadOperation(deps, {
+    threadId: args.threadId,
+    kind: "start",
+    failureReason: args.failureReason,
+  });
+}
+
+export function failThreadStop(
+  deps: Pick<AppDeps, "db">,
+  args: FailThreadOperationArgs,
+): boolean {
+  return failThreadOperation(deps, {
+    threadId: args.threadId,
+    kind: "stop",
+    failureReason: args.failureReason,
+  });
 }
 
 export async function requestThreadStart(
@@ -332,12 +413,10 @@ export async function finalizeStoppedThread(
     tryTransition(deps.db, deps.hub, currentThread.id, "idle");
   }
 
-  if (stopOperation) {
-    markThreadOperationCompleted(deps.db, {
-      threadId: args.threadId,
-      kind: stopOperation.kind,
-    });
-  }
+  completeThreadOperation(deps, {
+    threadId: args.threadId,
+    kind: "stop",
+  });
 
   if (currentThread.stopRequestedAt !== null) {
     clearThreadStopRequested(deps.db, deps.hub, currentThread.id);

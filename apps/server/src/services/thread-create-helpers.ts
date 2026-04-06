@@ -167,19 +167,22 @@ export function queueEnvironmentProvision(
 
 export function createThreadRecord(
   deps: Pick<AppDeps, "db" | "hub">,
-  request: ThreadCreateServiceRequest,
-  environmentId: string | null,
+  args: {
+    environmentId: string | null;
+    request: ThreadCreateServiceRequest;
+    status?: "created" | "provisioning";
+  },
 ) {
   return createThread(deps.db, deps.hub, {
-    projectId: request.projectId,
-    environmentId,
-    automationId: request.automationId,
-    providerId: request.providerId,
-    type: request.type,
-    title: request.title ?? null,
-    titleFallback: deriveTitleFallback(request.input),
-    parentThreadId: request.parentThreadId ?? null,
-    status: "created",
+    projectId: args.request.projectId,
+    environmentId: args.environmentId,
+    automationId: args.request.automationId,
+    providerId: args.request.providerId,
+    type: args.request.type,
+    title: args.request.title ?? null,
+    titleFallback: deriveTitleFallback(args.request.input),
+    parentThreadId: args.request.parentThreadId ?? null,
+    status: args.status ?? "created",
   });
 }
 

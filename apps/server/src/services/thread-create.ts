@@ -8,7 +8,6 @@ import {
   deleteThread,
   findEnvironmentByHostPath,
   getHighWaterMarks,
-  transitionThreadStatus,
   updateHost,
   upsertHost,
 } from "@bb/db";
@@ -86,14 +85,13 @@ async function createThreadInEnvironment(
 ) {
   const thread = createThreadRecord(
     deps,
-    args.request,
-    args.environment.id,
+    {
+      request: args.request,
+      environmentId: args.environment.id,
+      status: args.threadStatus,
+    },
   );
   try {
-    if (args.threadStatus === "provisioning") {
-      transitionThreadStatus(deps.db, deps.hub, thread.id, args.threadStatus);
-    }
-
     const execution = await buildExecutionOptions(
       deps,
       args.request,
@@ -424,10 +422,12 @@ export async function createThreadFromRequest(
   });
   const thread = createThreadRecord(
     deps,
-    request,
-    environment.id,
+    {
+      request,
+      environmentId: environment.id,
+      status: "provisioning",
+    },
   );
-  transitionThreadStatus(deps.db, deps.hub, thread.id, "provisioning");
 
   const execution = await buildExecutionOptions(
     deps,

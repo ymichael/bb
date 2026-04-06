@@ -5,7 +5,6 @@ import {
   listEnvironmentOperations,
   listThreadOperations,
   markEnvironmentOperationCompleted,
-  markThreadOperationCompleted,
   sweepEphemeralHostsPendingCleanup,
   sweepDestroyingEnvironments,
   sweepExpiredCommands,
@@ -26,6 +25,7 @@ import {
 } from "./project-deletion.js";
 import {
   advanceThreadStart,
+  completeThreadStart,
   finalizeStoppedThread,
   requestThreadStop,
 } from "./thread-stop.js";
@@ -150,9 +150,8 @@ export async function runThreadLifecycleSweep(
         continue;
       }
       if (thread.status === "active") {
-        markThreadOperationCompleted(deps.db, {
+        completeThreadStart(deps, {
           threadId: thread.id,
-          kind: operation.kind,
         });
         continue;
       }

@@ -11,8 +11,6 @@ import {
   hostDaemonCommands,
   markEnvironmentOperationCompleted,
   markEnvironmentOperationFailed,
-  markThreadOperationCompleted,
-  markThreadOperationFailed,
   markEnvironmentDestroyed,
   threads,
   requestEnvironmentCleanup,
@@ -29,7 +27,13 @@ import {
   parseStoredTurnRequestEvent,
   appendSystemErrorEvent,
 } from "../services/thread-events.js";
-import { finalizeStoppedThread, requestThreadStart } from "../services/thread-stop.js";
+import {
+  completeThreadStart,
+  failThreadStart,
+  failThreadStop,
+  finalizeStoppedThread,
+  requestThreadStart,
+} from "../services/thread-stop.js";
 import {
   advanceEnvironmentCleanup,
 } from "../services/environment-cleanup.js";
@@ -321,13 +325,10 @@ function handleThreadStartResult(
 
   const operation = getThreadOperationByCommandId(deps.db, commandRow.id);
   if (!report.ok) {
-    if (operation) {
-      markThreadOperationFailed(deps.db, {
-        threadId: command.threadId,
-        kind: operation.kind,
-        failureReason: report.errorMessage,
-      });
-    }
+    failThreadStart(deps, {
+      threadId: command.threadId,
+      failureReason: report.errorMessage,
+    });
     return;
   }
 
@@ -340,12 +341,9 @@ function handleThreadStartResult(
     return;
   }
 
-  if (operation) {
-    markThreadOperationCompleted(deps.db, {
-      threadId: thread.id,
-      kind: operation.kind,
-    });
-  }
+  completeThreadStart(deps, {
+    threadId: thread.id,
+  });
 }
 
 function handleThreadStopResult(
@@ -360,13 +358,10 @@ function handleThreadStopResult(
   const operation = getThreadOperationByCommandId(deps.db, commandRow.id);
 
   if (!report.ok) {
-    if (operation) {
-      markThreadOperationFailed(deps.db, {
-        threadId: command.threadId,
-        kind: operation.kind,
-        failureReason: report.errorMessage,
-      });
-    }
+    failThreadStop(deps, {
+      threadId: command.threadId,
+      failureReason: report.errorMessage,
+    });
     return Promise.resolve();
   }
 

@@ -2,15 +2,17 @@ import { and, eq, inArray, isNotNull, isNull, notInArray, or } from "drizzle-orm
 import {
   deleteThread,
   environments,
-  getThreadOperation,
-  markThreadOperationCompleted,
   requestEnvironmentCleanup,
   threads,
 } from "@bb/db";
 import type { HostDaemonActiveThread } from "@bb/host-daemon-contract";
 import type { AppDeps } from "../types.js";
 import { advanceEnvironmentCleanup } from "../services/environment-cleanup.js";
-import { finalizeStoppedThread, requestThreadStop } from "../services/thread-stop.js";
+import {
+  completeThreadStart,
+  finalizeStoppedThread,
+  requestThreadStop,
+} from "../services/thread-stop.js";
 import { tryTransition } from "../services/thread-transitions.js";
 
 export async function reconcileSessionThreads(
@@ -134,16 +136,9 @@ export async function reconcileSessionThreads(
 
     for (const thread of inactiveButActive) {
       tryTransition(deps.db, deps.hub, thread.id, "active");
-      const startOperation = getThreadOperation(deps.db, {
+      completeThreadStart(deps, {
         threadId: thread.id,
-        kind: "start",
       });
-      if (startOperation) {
-        markThreadOperationCompleted(deps.db, {
-          threadId: thread.id,
-          kind: startOperation.kind,
-        });
-      }
     }
   }
 }
