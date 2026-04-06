@@ -11,6 +11,7 @@ import {
   getActiveSession,
   hostDaemonCommands,
   markEnvironmentOperationCompleted,
+  markEnvironmentOperationFailed,
   markEnvironmentOperationQueued,
   markEnvironmentDestroyed,
   queueCommand,
@@ -40,6 +41,15 @@ export interface AdvanceEnvironmentCleanupArgs {
 export interface RequestEnvironmentCleanupArgs {
   environmentId: string | null | undefined;
   mode: EnvironmentCleanupMode;
+}
+
+export interface EnvironmentCleanupMutationArgs {
+  environmentId: string;
+}
+
+export interface FailEnvironmentCleanupArgs
+  extends EnvironmentCleanupMutationArgs {
+  failureReason: string;
 }
 
 export interface ValidateEnvironmentCleanupRequestArgs {
@@ -210,6 +220,43 @@ function getDestroyOperationPayload(
   }
 
   return { mode: environment.cleanupMode };
+}
+
+export function completeEnvironmentDestroy(
+  deps: Pick<AppDeps, "db" | "hub">,
+  args: EnvironmentCleanupMutationArgs,
+): boolean {
+  const environment = getEnvironment(deps.db, args.environmentId);
+  if (!environment || environment.status !== "destroying") {
+    return false;
+  }
+
+  markEnvironmentDestroyed(deps.db, deps.hub, args.environmentId);
+  markEnvironmentOperationCompleted(deps.db, {
+    environmentId: args.environmentId,
+    kind: "destroy",
+  });
+  return true;
+}
+
+export function failEnvironmentDestroy(
+  deps: Pick<AppDeps, "db" | "hub">,
+  args: FailEnvironmentCleanupArgs,
+): boolean {
+  const environment = getEnvironment(deps.db, args.environmentId);
+  if (!environment || environment.status !== "destroying") {
+    return false;
+  }
+
+  markEnvironmentOperationFailed(deps.db, {
+    environmentId: args.environmentId,
+    kind: "destroy",
+    failureReason: args.failureReason,
+  });
+  updateEnvironmentStatus(deps.db, deps.hub, args.environmentId, {
+    status: environment.path ? "ready" : "error",
+  });
+  return true;
 }
 
 export async function validateEnvironmentCleanupRequest(

@@ -2,10 +2,12 @@ import { eq } from "drizzle-orm";
 import { z } from "zod";
 import {
   getProject,
+  getThread,
   hostDaemonCommands,
   hostDaemonSessions,
 } from "@bb/db";
 import { hostDaemonCommandSchema } from "@bb/host-daemon-contract";
+import { threadSchema } from "@bb/domain";
 import { describe, expect, it } from "vitest";
 import {
   reportQueuedCommandError,
@@ -116,6 +118,86 @@ describe("public project and host routes", () => {
 
       const finalListResponse = await harness.app.request("/api/v1/projects");
       await expect(readJson(finalListResponse)).resolves.toEqual([]);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("keeps created threads pending deletion until queued thread.start work is stopped", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-project-delete-created-start",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/project-delete-created-start",
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/project-delete-created-start",
+      });
+
+      const createThreadResponse = await harness.app.request("/api/v1/threads", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          projectId: project.id,
+          providerId: "codex",
+          model: "gpt-5",
+          input: [{ type: "text", text: "Create before project delete" }],
+          environment: {
+            type: "reuse",
+            environmentId: environment.id,
+          },
+        }),
+      });
+
+      expect(createThreadResponse.status).toBe(201);
+      const createdThread = threadSchema.parse(await readJson(createThreadResponse));
+      expect(createdThread.status).toBe("created");
+
+      const queuedStart = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "thread.start"
+          && command.threadId === createdThread.id,
+      );
+
+      const deleteProjectResponse = await harness.app.request(
+        `/api/v1/projects/${project.id}`,
+        {
+          method: "DELETE",
+        },
+      );
+
+      expect(deleteProjectResponse.status).toBe(200);
+      await expect(readJson(deleteProjectResponse)).resolves.toEqual({ ok: true });
+      expect(getProject(harness.db, project.id)).not.toBeNull();
+      expect(getThread(harness.db, createdThread.id)).toMatchObject({
+        deletedAt: expect.any(Number),
+        stopRequestedAt: expect.any(Number),
+        status: "created",
+      });
+
+      const queuedStop = await waitForQueuedCommandAfter(
+        harness,
+        queuedStart.row.cursor,
+        ({ command }) =>
+          command.type === "thread.stop"
+          && command.threadId === createdThread.id,
+      );
+      expect(queuedStop.command).toMatchObject({
+        environmentId: environment.id,
+        threadId: createdThread.id,
+      });
+
+      const projectsResponse = await harness.app.request("/api/v1/projects");
+      expect(projectsResponse.status).toBe(200);
+      await expect(readJson(projectsResponse)).resolves.toEqual([]);
     } finally {
       await harness.cleanup();
     }

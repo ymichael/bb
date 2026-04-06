@@ -4,6 +4,8 @@ import {
   getCommand,
   getEnvironment,
   getEnvironmentOperation,
+  markEnvironmentOperationCompleted,
+  markEnvironmentOperationFailed,
   markEnvironmentOperationQueued,
   queueCommand,
   upsertEnvironmentOperation,
@@ -55,6 +57,15 @@ export interface AdvanceEnvironmentProvisioningArgs {
   environmentId: string | null | undefined;
 }
 
+export interface EnvironmentProvisioningMutationArgs {
+  environmentId: string;
+}
+
+export interface FailEnvironmentProvisioningArgs
+  extends EnvironmentProvisioningMutationArgs {
+  failureReason: string;
+}
+
 function isActiveProvisionOperationState(
   state: EnvironmentOperationRow["state"],
 ): boolean {
@@ -102,6 +113,49 @@ function hasQueuedProvisionCommand(
   const command = getCommand(deps.db, commandId);
   return command !== null
     && (command.state === "pending" || command.state === "fetched");
+}
+
+export function completeEnvironmentProvisioning(
+  deps: Pick<AppDeps, "db">,
+  args: EnvironmentProvisioningMutationArgs,
+): boolean {
+  const operation = getActiveProvisionOperation(deps, args.environmentId);
+  if (!operation) {
+    return false;
+  }
+
+  markEnvironmentOperationCompleted(deps.db, {
+    environmentId: args.environmentId,
+    kind: operation.kind,
+  });
+  return true;
+}
+
+export function failEnvironmentProvisioning(
+  deps: Pick<AppDeps, "db" | "hub">,
+  args: FailEnvironmentProvisioningArgs,
+): boolean {
+  const operation = getActiveProvisionOperation(deps, args.environmentId);
+  if (operation) {
+    markEnvironmentOperationFailed(deps.db, {
+      environmentId: args.environmentId,
+      kind: operation.kind,
+      failureReason: args.failureReason,
+    });
+  }
+
+  const environment = getEnvironment(deps.db, args.environmentId);
+  if (
+    environment
+    && environment.status !== "destroyed"
+    && environment.status !== "error"
+  ) {
+    updateEnvironmentStatus(deps.db, deps.hub, args.environmentId, {
+      status: "error",
+    });
+  }
+
+  return operation !== null || environment !== null;
 }
 
 export function requestEnvironmentProvision(

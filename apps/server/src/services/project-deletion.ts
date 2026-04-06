@@ -17,7 +17,10 @@ import {
   advanceEnvironmentCleanup,
   requestEnvironmentCleanup,
 } from "./environment-cleanup.js";
-import { requestThreadStop } from "./thread-stop.js";
+import {
+  hasActiveThreadStartOperation,
+  requestThreadStop,
+} from "./thread-stop.js";
 
 export interface ProjectDeletionArgs {
   projectId: string;
@@ -39,9 +42,14 @@ function isProjectDeletionActive(
 }
 
 function shouldForceDeleteThread(
+  deps: Pick<AppDeps, "db">,
   thread: ProjectDeletionThreadRow,
   environment: Environment | null,
 ): boolean {
+  if (hasActiveThreadStartOperation(deps, thread.id)) {
+    return false;
+  }
+
   if (thread.status !== "active") {
     return true;
   }
@@ -73,9 +81,10 @@ function advanceProjectThreadsForDeletion(
     const environment = thread.environmentId
       ? args.environmentsById.get(thread.environmentId) ?? null
       : null;
+    const startRequested = hasActiveThreadStartOperation(deps, thread.id);
 
     if (thread.deletedAt !== null) {
-      if (thread.status === "active" && environment !== null) {
+      if ((thread.status === "active" || startRequested) && environment !== null) {
         requestThreadStop(deps, {
           environmentId: environment.id,
           hostId: environment.hostId,
@@ -86,7 +95,7 @@ function advanceProjectThreadsForDeletion(
       continue;
     }
 
-    if (shouldForceDeleteThread(thread, environment)) {
+    if (shouldForceDeleteThread(deps, thread, environment)) {
       deleteThread(deps.db, deps.hub, thread.id);
       continue;
     }
@@ -98,12 +107,14 @@ function advanceProjectThreadsForDeletion(
     markThreadDeleted(deps.db, deps.hub, {
       threadId: thread.id,
     });
-    requestThreadStop(deps, {
-      environmentId: environment.id,
-      hostId: environment.hostId,
-      stopRequestedAt: thread.stopRequestedAt,
-      threadId: thread.id,
-    });
+    if (thread.status === "active" || startRequested) {
+      requestThreadStop(deps, {
+        environmentId: environment.id,
+        hostId: environment.hostId,
+        stopRequestedAt: thread.stopRequestedAt,
+        threadId: thread.id,
+      });
+    }
   }
 }
 

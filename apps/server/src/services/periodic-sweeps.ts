@@ -4,7 +4,6 @@ import {
   listStopRequestedThreads,
   listEnvironmentOperations,
   listThreadOperations,
-  markEnvironmentOperationCompleted,
   sweepEphemeralHostsPendingCleanup,
   sweepDestroyingEnvironments,
   sweepExpiredCommands,
@@ -15,7 +14,10 @@ import { activeLifecycleOperationStates } from "@bb/domain";
 import type { AppDeps } from "../types.js";
 import { sweepDueAutomations } from "./automation-sweep.js";
 import { advanceEnvironmentCleanup } from "./environment-cleanup.js";
-import { advanceEnvironmentProvisioning } from "./environment-provisioning.js";
+import {
+  advanceEnvironmentProvisioning,
+  completeEnvironmentProvisioning,
+} from "./environment-provisioning.js";
 import { handleExpiredCommands } from "./expired-commands.js";
 import { destroyHost } from "./host-lifecycle.js";
 import { sweepDueNudges } from "./nudge-sweep.js";
@@ -115,9 +117,8 @@ export async function runEnvironmentProvisioningSweep(
         continue;
       }
       if (environment.status === "ready") {
-        markEnvironmentOperationCompleted(deps.db, {
+        completeEnvironmentProvisioning(deps, {
           environmentId: environment.id,
-          kind: operation.kind,
         });
         continue;
       }

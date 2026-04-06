@@ -2,12 +2,14 @@ import { and, eq, inArray, isNotNull, isNull, notInArray, or } from "drizzle-orm
 import {
   deleteThread,
   environments,
-  requestEnvironmentCleanup,
   threads,
 } from "@bb/db";
 import type { HostDaemonActiveThread } from "@bb/host-daemon-contract";
 import type { AppDeps } from "../types.js";
-import { advanceEnvironmentCleanup } from "../services/environment-cleanup.js";
+import {
+  advanceEnvironmentCleanup,
+  requestEnvironmentCleanup,
+} from "../services/environment-cleanup.js";
 import {
   completeThreadStart,
   finalizeStoppedThread,
@@ -56,23 +58,22 @@ export async function reconcileSessionThreads(
     }
 
     if (thread.stopRequestedAt !== null && !isActive) {
-      const finalized = await finalizeStoppedThread(deps, {
+      await finalizeStoppedThread(deps, {
         threadId: thread.id,
       });
-      if (finalized) {
-        continue;
-      }
+      continue;
     }
 
     if (thread.deletedAt !== null && !isActive) {
       const environmentId = thread.environmentId;
       deleteThread(deps.db, deps.hub, thread.id);
       if (environmentId !== null) {
-        requestEnvironmentCleanup(deps.db, deps.hub, environmentId, {
-          cleanupMode: "force",
+        requestEnvironmentCleanup(deps, {
+          environmentId,
+          mode: "force",
         });
       }
-      void advanceEnvironmentCleanup(deps, { environmentId });
+      await advanceEnvironmentCleanup(deps, { environmentId });
     }
   }
 

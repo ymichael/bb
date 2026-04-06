@@ -16,6 +16,7 @@ import {
   HOST_DAEMON_PROTOCOL_VERSION,
   hostDaemonCommandSchema,
 } from "@bb/host-daemon-contract";
+import { threadSchema } from "@bb/domain";
 import { describe, expect, it, vi } from "vitest";
 import { appendClientTurnEvent } from "../src/services/thread-events.js";
 import {
@@ -1151,6 +1152,103 @@ describe("internal session routes", () => {
         environmentId: environment.id,
         threadId: thread.id,
       });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("does not hard-delete deleted tombstones while thread.start is still active on reconnect", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-reconcile-created-start-pending",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/reconcile-created-start-pending",
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/reconcile-created-start-pending",
+      });
+
+      const createResponse = await harness.app.request("/api/v1/threads", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          projectId: project.id,
+          providerId: "codex",
+          model: "gpt-5",
+          input: [{ type: "text", text: "Create then reconnect-delete me" }],
+          environment: {
+            type: "reuse",
+            environmentId: environment.id,
+          },
+        }),
+      });
+
+      expect(createResponse.status).toBe(201);
+      const createdThread = threadSchema.parse(await readJson(createResponse));
+      expect(createdThread.status).toBe("created");
+
+      const queuedStart = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "thread.start"
+          && command.threadId === createdThread.id,
+      );
+
+      const deleteResponse = await harness.app.request(
+        `/api/v1/threads/${createdThread.id}`,
+        {
+          method: "DELETE",
+        },
+      );
+
+      expect(deleteResponse.status).toBe(200);
+
+      const queuedStop = await waitForQueuedCommandAfter(
+        harness,
+        queuedStart.row.cursor,
+        ({ command }) =>
+          command.type === "thread.stop"
+          && command.threadId === createdThread.id,
+      );
+      expect(queuedStop.command).toMatchObject({
+        environmentId: environment.id,
+        threadId: createdThread.id,
+      });
+
+      const reconnectResponse = await harness.app.request("/internal/session/open", {
+        method: "POST",
+        headers: internalAuthHeaders(harness),
+        body: JSON.stringify({
+          hostId: host.id,
+          instanceId: "instance-reconcile-created-start-pending",
+          hostName: "Reconcile Created Start Pending Host",
+          hostType: "persistent",
+          dataDir: "/tmp/reconcile-created-start-pending",
+          protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
+          activeThreads: [],
+        }),
+      });
+
+      expect(reconnectResponse.status).toBe(201);
+      expect(getThread(harness.db, createdThread.id)).toMatchObject({
+        deletedAt: expect.any(Number),
+        stopRequestedAt: expect.any(Number),
+        status: "created",
+      });
+      expect(
+        harness.db
+          .select({ id: hostDaemonCommands.id })
+          .from(hostDaemonCommands)
+          .where(eq(hostDaemonCommands.type, "environment.destroy"))
+          .all(),
+      ).toHaveLength(0);
     } finally {
       await harness.cleanup();
     }

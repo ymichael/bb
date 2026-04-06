@@ -9,12 +9,7 @@ import {
   getThread,
   getThreadOperationByCommandId,
   hostDaemonCommands,
-  markEnvironmentOperationCompleted,
-  markEnvironmentOperationFailed,
-  markEnvironmentDestroyed,
   threads,
-  requestEnvironmentCleanup,
-  updateEnvironmentStatus,
 } from "@bb/db";
 import {
   hostDaemonCommandSchema,
@@ -36,7 +31,14 @@ import {
 } from "../services/thread-stop.js";
 import {
   advanceEnvironmentCleanup,
+  completeEnvironmentDestroy,
+  failEnvironmentDestroy,
+  requestEnvironmentCleanup,
 } from "../services/environment-cleanup.js";
+import {
+  completeEnvironmentProvisioning,
+  failEnvironmentProvisioning,
+} from "../services/environment-provisioning.js";
 import { destroyEphemeralHostIfReady } from "../services/host-lifecycle.js";
 import { tryTransition } from "../services/thread-transitions.js";
 
@@ -116,8 +118,9 @@ async function handleProvisionCommandResult(
         const environmentId = thread.environmentId;
         deleteThread(deps.db, deps.hub, thread.id);
         if (environmentId !== null) {
-          requestEnvironmentCleanup(deps.db, deps.hub, environmentId, {
-            cleanupMode: "force",
+          requestEnvironmentCleanup(deps, {
+            environmentId,
+            mode: "force",
           });
         }
         continue;
@@ -193,12 +196,9 @@ async function handleProvisionCommandResult(
       });
     }
 
-    if (operation) {
-      markEnvironmentOperationCompleted(deps.db, {
-        environmentId: command.environmentId,
-        kind: operation.kind,
-      });
-    }
+    completeEnvironmentProvisioning(deps, {
+      environmentId: command.environmentId,
+    });
 
     await advanceEnvironmentCleanup(deps, {
       environmentId: command.environmentId,
@@ -211,16 +211,10 @@ async function handleProvisionCommandResult(
     return;
   }
 
-  updateEnvironmentStatus(deps.db, deps.hub, command.environmentId, {
-    status: "error",
+  failEnvironmentProvisioning(deps, {
+    environmentId: command.environmentId,
+    failureReason: report.errorMessage,
   });
-  if (operation) {
-    markEnvironmentOperationFailed(deps.db, {
-      environmentId: command.environmentId,
-      kind: operation.kind,
-      failureReason: report.errorMessage,
-    });
-  }
 
   for (const thread of boundThreads) {
     appendProvisioningEvent(deps, {
@@ -264,18 +258,10 @@ async function handleEnvironmentDestroyResult(
   const environment = getEnvironment(deps.db, command.environmentId);
 
   if (!report.ok) {
-    if (operation) {
-      markEnvironmentOperationFailed(deps.db, {
-        environmentId: command.environmentId,
-        kind: operation.kind,
-        failureReason: report.errorMessage,
-      });
-    }
-    if (environment?.status === "destroying") {
-      updateEnvironmentStatus(deps.db, deps.hub, command.environmentId, {
-        status: environment.path ? "ready" : "error",
-      });
-    }
+    failEnvironmentDestroy(deps, {
+      environmentId: command.environmentId,
+      failureReason: report.errorMessage,
+    });
     return;
   }
 
@@ -283,15 +269,13 @@ async function handleEnvironmentDestroyResult(
     return;
   }
 
-  if (environment?.status !== "destroying") {
+  if (!environment || environment.status !== "destroying") {
     return;
   }
-  markEnvironmentDestroyed(deps.db, deps.hub, command.environmentId);
-  if (operation) {
-    markEnvironmentOperationCompleted(deps.db, {
-      environmentId: command.environmentId,
-      kind: operation.kind,
-    });
+  if (!completeEnvironmentDestroy(deps, {
+    environmentId: command.environmentId,
+  })) {
+    return;
   }
 
   const host = getHost(deps.db, environment.hostId);
