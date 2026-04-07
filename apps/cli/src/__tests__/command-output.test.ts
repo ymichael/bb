@@ -534,6 +534,58 @@ describe("CLI command output contracts", () => {
     expect(collectLogLines(vi.mocked(console.log))).toContain("Manager hired: thread-manager-1");
   });
 
+  it("bb manager hire omits reasoning level when not provided", async () => {
+    const post = vi.fn(async () => ({
+      id: "thread-manager-2",
+      projectId: "project-123",
+      title: "Manager",
+      type: "manager",
+      status: "active",
+      createdAt: 1,
+      updatedAt: 2,
+    }));
+    createClientMock.mockReturnValue(asServerClient({
+      api: {
+        v1: {
+          projects: {
+            ":id": {
+              managers: {
+                $post: post,
+              },
+            },
+          },
+        },
+      },
+    }));
+
+    await runCommand(
+      [
+        "manager",
+        "hire",
+        "project-123",
+        "--name",
+        "Manager",
+        "--provider",
+        "claude-code",
+        "--model",
+        "claude-opus-4-6",
+      ],
+      (program) =>
+        registerManagerCommands(program, () => "http://server"),
+    );
+
+    expect(post).toHaveBeenCalledWith({
+      param: { id: "project-123" },
+      json: {
+        environment: { type: "host", hostId: "host-test-001" },
+        model: "claude-opus-4-6",
+        name: "Manager",
+        providerId: "claude-code",
+      },
+    });
+    expect(collectLogLines(vi.mocked(console.log))).toContain("Manager hired: thread-manager-2");
+  });
+
   it("bb manager list reports when no managers are hired", async () => {
     const list = vi.fn(async () => []);
     createClientMock.mockReturnValue(asServerClient({

@@ -24,9 +24,9 @@ Mutating commands (e.g., `commit`, `stop`, `archive`, `update`) require an expli
 Spawning:
 
 ```
-bb thread spawn --project <project-id> --provider <provider-id> --model <model-id> --reasoning-level <level> --title "Implement API" --prompt "Implement feature X"
-bb thread spawn --project <project-id> --parent-thread <manager-id> --provider <provider-id> --model <model-id> --reasoning-level <level> --title "Backend fix" --prompt "Fix bug Y"
-bb thread spawn --project <project-id> --environment <environment-id> --parent-thread <manager-id> --provider <provider-id> --model <model-id> --reasoning-level <level> --title "Review backend fix" --prompt "Review the changes"
+bb thread spawn --project <project-id> --provider <provider-id> --model <model-id> --title "Implement API" --prompt "Implement feature X"
+bb thread spawn --project <project-id> --parent-thread <manager-id> --provider <provider-id> --model <model-id> --title "Backend fix" --prompt "Fix bug Y"
+bb thread spawn --project <project-id> --environment <environment-id> --parent-thread <manager-id> --provider <provider-id> --model <model-id> --title "Review backend fix" --prompt "Review the changes"
 ```
 
 The `--parent-thread` flag makes the new thread a managed child of the specified manager.
@@ -91,7 +91,7 @@ bb environment promote-status --project <project-id>  # Show the active primary-
 ## Managers
 
 ```
-bb manager hire <project-id> --provider <provider-id> --model <model-id> --reasoning-level <level>
+bb manager hire <project-id> --provider <provider-id> --model <model-id>
 bb manager list [projectId]            # List managers for a project
 bb manager status <manager-id>         # Show manager status and managed threads
 bb manager delete <manager-id>         # Delete a manager permanently

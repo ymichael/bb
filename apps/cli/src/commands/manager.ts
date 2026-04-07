@@ -19,7 +19,7 @@ interface ManagerHireCommandOptions {
   host?: string;
   provider: string;
   model: string;
-  reasoningLevel: string;
+  reasoningLevel?: string;
 }
 
 interface ManagerListCommandOptions {
@@ -46,7 +46,7 @@ export function registerManagerCommands(program: Command, getUrl: () => string):
     .option("--name <name>", "Manager name")
     .requiredOption("--provider <id>", "Provider ID for the manager (e.g. claude-code, codex)")
     .requiredOption("--model <model>", "Model ID for the manager")
-    .requiredOption("--reasoning-level <level>", "Reasoning level (low, medium, high, xhigh)")
+    .option("--reasoning-level <level>", "Reasoning level (low, medium, high, xhigh)")
     .option("--host <id>", "Host ID (defaults to local host)")
     .option("--json", "Print machine-readable JSON output")
     .action(action(async (
@@ -58,9 +58,6 @@ export function registerManagerCommands(program: Command, getUrl: () => string):
       const projectId = resolvedProject.id;
       printContextLabel(resolvedProject, "Project", "BB_PROJECT_ID", opts);
       const reasoningLevel = parseReasoningLevel(opts.reasoningLevel);
-      if (!reasoningLevel) {
-        throw new Error("Manager reasoning level is required");
-      }
       let hostId: string | undefined = opts.host;
       if (!hostId) {
         hostId = (await fetchLocalHostId()) ?? undefined;
@@ -77,7 +74,9 @@ export function registerManagerCommands(program: Command, getUrl: () => string):
             ...(opts.name ? { name: opts.name } : {}),
             providerId: opts.provider,
             model: opts.model,
-            reasoningLevel,
+            environment: { type: "host", hostId },
+            ...(reasoningLevel ? { reasoningLevel } : {}),
+            ...(reasoningLevel ? { reasoningLevel } : {}),
             environment: { type: "host", hostId },
           },
         }),
