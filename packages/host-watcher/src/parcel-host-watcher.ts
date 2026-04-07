@@ -54,8 +54,10 @@ function toThreadStorageTargetEvents(args: {
 
 function watchWorkspace(args: WatchWorkspaceArgs): () => void {
   return watchWorkspaceStatus(args.workspacePath, {
-    onChange: () => {
+    onChange: (event) => {
       args.onChange({
+        changedPaths: event.changedPaths,
+        changeKinds: event.changeKinds,
         kind: "workspace-status-changed",
         environmentId: args.environmentId,
       });

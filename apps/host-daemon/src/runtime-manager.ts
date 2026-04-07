@@ -6,12 +6,14 @@ import {
 import type { ThreadEvent, WorkspaceProvisionType } from "@bb/domain";
 import type {
   HostDaemonActiveThread,
+  HostDaemonEnvironmentChange,
   HostDaemonTrackedThreadTarget,
 } from "@bb/host-daemon-contract";
 import type {
   HostWatcher,
   ThreadStorageWatchError,
   WorkspaceWatchError,
+  WorkspaceStatusWatchChangeKind,
 } from "@bb/host-watcher";
 import {
   provisionWorkspace,
@@ -20,6 +22,10 @@ import {
 } from "@bb/host-workspace";
 
 const STOP_WATCHING = () => undefined;
+const LOCAL_WORKSPACE_WATCH_CHANGE_KINDS: readonly WorkspaceStatusWatchChangeKind[] = [
+  "workspace-content-changed",
+  "workspace-git-changed",
+];
 
 interface RuntimeThreadState {
   providerThreadId: string;
@@ -29,6 +35,13 @@ interface RuntimeThreadState {
 interface ThreadStorageTarget {
   environmentId: string;
   threadId: string;
+}
+
+interface WorkspaceWatchState {
+  lastLocalFingerprint: string | null;
+  lastSharedRefsFingerprint: string | null;
+  pendingKinds: Set<WorkspaceStatusWatchChangeKind>;
+  processing: Promise<void> | null;
 }
 
 function lazyProvisionOpts(
@@ -43,6 +56,27 @@ function lazyProvisionOpts(
     case "managed-clone":
       return { workspaceProvisionType: "reconnect-managed-clone", path: workspacePath };
   }
+}
+
+function toErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message.trim().length > 0) {
+    return error.message;
+  }
+  return "Unknown workspace watch error";
+}
+
+function workspaceWatchKindsIncludeLocalState(
+  changeKinds: readonly WorkspaceStatusWatchChangeKind[],
+): boolean {
+  return changeKinds.some((changeKind) =>
+    LOCAL_WORKSPACE_WATCH_CHANGE_KINDS.includes(changeKind)
+  );
+}
+
+function workspaceWatchKindsIncludeSharedRefs(
+  changeKinds: readonly WorkspaceStatusWatchChangeKind[],
+): boolean {
+  return changeKinds.includes("shared-git-refs-changed");
 }
 
 export interface RuntimeEntry {
@@ -79,7 +113,10 @@ export interface RuntimeManagerOptions {
   onThreadStorageWatchError?: (args: {
     error: ThreadStorageWatchError;
   }) => void;
-  onWorkspaceStatusChanged?: (args: { environmentId: string }) => void;
+  onWorkspaceStatusChanged?: (args: {
+    changeKinds: HostDaemonEnvironmentChange[];
+    environmentId: string;
+  }) => void;
   onWorkspaceStatusWatchError?: (args: {
     error: WorkspaceWatchError;
   }) => void;
@@ -101,6 +138,112 @@ export class RuntimeManager {
     this.createRuntime = options.createRuntime ?? createAgentRuntime;
     this.hostWatcher = options.hostWatcher;
     this.provisionWorkspace = options.provisionWorkspace ?? provisionWorkspace;
+  }
+
+  private async createWorkspaceWatchState(
+    workspace: HostWorkspace,
+  ): Promise<WorkspaceWatchState> {
+    if (!workspace.isGitRepo) {
+      return {
+        lastLocalFingerprint: null,
+        lastSharedRefsFingerprint: null,
+        pendingKinds: new Set(),
+        processing: null,
+      };
+    }
+
+    const [lastLocalFingerprint, lastSharedRefsFingerprint] = await Promise.all([
+      workspace.getLocalStateFingerprint(),
+      workspace.getSharedGitRefsFingerprint(),
+    ]);
+    return {
+      lastLocalFingerprint,
+      lastSharedRefsFingerprint,
+      pendingKinds: new Set(),
+      processing: null,
+    };
+  }
+
+  private queueWorkspaceWatchChange(args: {
+    changeKinds: readonly WorkspaceStatusWatchChangeKind[];
+    environmentId: string;
+    workspace: HostWorkspace;
+    workspacePath: string;
+    workspaceWatchState: WorkspaceWatchState;
+  }): void {
+    for (const changeKind of args.changeKinds) {
+      args.workspaceWatchState.pendingKinds.add(changeKind);
+    }
+    if (args.workspaceWatchState.processing) {
+      return;
+    }
+    this.flushWorkspaceWatchChanges(args);
+  }
+
+  private flushWorkspaceWatchChanges(args: {
+    environmentId: string;
+    workspace: HostWorkspace;
+    workspacePath: string;
+    workspaceWatchState: WorkspaceWatchState;
+  }): void {
+    const processing = this.processWorkspaceWatchChanges(args).finally(() => {
+      if (args.workspaceWatchState.processing === processing) {
+        args.workspaceWatchState.processing = null;
+      }
+      if (args.workspaceWatchState.pendingKinds.size > 0) {
+        this.flushWorkspaceWatchChanges(args);
+      }
+    });
+    args.workspaceWatchState.processing = processing;
+  }
+
+  private async processWorkspaceWatchChanges(args: {
+    environmentId: string;
+    workspace: HostWorkspace;
+    workspacePath: string;
+    workspaceWatchState: WorkspaceWatchState;
+  }): Promise<void> {
+    const pendingKinds = Array.from(args.workspaceWatchState.pendingKinds);
+    args.workspaceWatchState.pendingKinds.clear();
+
+    try {
+      const changeKinds: HostDaemonEnvironmentChange[] = [];
+      if (workspaceWatchKindsIncludeLocalState(pendingKinds)) {
+        const nextLocalFingerprint = await args.workspace.getLocalStateFingerprint();
+        if (args.workspaceWatchState.lastLocalFingerprint !== nextLocalFingerprint) {
+          args.workspaceWatchState.lastLocalFingerprint = nextLocalFingerprint;
+          changeKinds.push("work-status-changed");
+        }
+      }
+      if (workspaceWatchKindsIncludeSharedRefs(pendingKinds)) {
+        const nextSharedRefsFingerprint =
+          await args.workspace.getSharedGitRefsFingerprint();
+        if (
+          args.workspaceWatchState.lastSharedRefsFingerprint !==
+          nextSharedRefsFingerprint
+        ) {
+          args.workspaceWatchState.lastSharedRefsFingerprint =
+            nextSharedRefsFingerprint;
+          changeKinds.push("git-refs-changed");
+        }
+      }
+      if (changeKinds.length === 0) {
+        return;
+      }
+      this.options.onWorkspaceStatusChanged?.({
+        changeKinds,
+        environmentId: args.environmentId,
+      });
+    } catch (error) {
+      this.options.onWorkspaceStatusWatchError?.({
+        error: {
+          environmentId: args.environmentId,
+          kind: "workspace-watch-error",
+          message: toErrorMessage(error),
+          rootPath: args.workspacePath,
+        },
+      });
+    }
   }
 
   get(environmentId: string): RuntimeEntry | undefined {
@@ -271,13 +414,18 @@ export class RuntimeManager {
     }
 
     const workspace = await this.provisionWorkspace(provision);
+    const workspaceWatchState = await this.createWorkspaceWatchState(workspace);
     const stopWatchingStatus = this.hostWatcher
       ? this.hostWatcher.watchWorkspace({
           environmentId: args.environmentId,
           workspacePath: workspace.path,
-          onChange: () => {
-            this.options.onWorkspaceStatusChanged?.({
+          onChange: (event) => {
+            this.queueWorkspaceWatchChange({
+              changeKinds: event.changeKinds,
               environmentId: args.environmentId,
+              workspace,
+              workspacePath: workspace.path,
+              workspaceWatchState,
             });
           },
           onWatchError: (error) => {

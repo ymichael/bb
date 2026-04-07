@@ -33,6 +33,7 @@ export const ENVIRONMENT_CHANGE_KINDS = [
   "metadata-changed",
   "status-changed",
   "work-status-changed",
+  "git-refs-changed",
   "thread-storage-changed",
 ] as const;
 export type EnvironmentChangeKind = (typeof ENVIRONMENT_CHANGE_KINDS)[number];

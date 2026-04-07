@@ -1,13 +1,16 @@
+import fs from "node:fs/promises";
 import path from "node:path";
 import parcelWatcher from "@parcel/watcher";
 import { calculateExponentialBackoffDelay } from "@bb/domain";
 import { createDebouncedCallbackScheduler } from "./watch-callback-scheduler.js";
 import { pathExists } from "./path-exists.js";
 import {
+  collectWorkspaceStatusChanges,
   resolveMetadataWatchSpecs,
   type WatchSubscriptionSpec,
 } from "./watch-specs.js";
 import type {
+  WorkspaceStatusChangeEvent,
   WorkspaceStatusWatchArgs,
   WorkspaceStatusWatchError,
 } from "./watch-status-types.js";
@@ -52,6 +55,7 @@ function createWorkspaceStatusCallbackError(
 
 function createWorkspaceRootWatchSpec(cwd: string): WatchSubscriptionSpec {
   return {
+    kind: "workspace-root",
     options: {
       ignore: [".git"],
     },
@@ -59,7 +63,17 @@ function createWorkspaceRootWatchSpec(cwd: string): WatchSubscriptionSpec {
   };
 }
 
+async function resolveWatchRootPath(rootPath: string): Promise<string> {
+  try {
+    return await fs.realpath(rootPath);
+  } catch {
+    return rootPath;
+  }
+}
+
 export class WorkspaceStatusWatcher {
+  private readonly changedPaths = new Set<string>();
+  private readonly changeKinds = new Set<WorkspaceStatusChangeEvent["changeKinds"][number]>();
   private disposed = false;
   private metadataRetryAttempt = 0;
   private metadataStartRetryTimer: ReturnType<typeof setTimeout> | null = null;
@@ -78,7 +92,17 @@ export class WorkspaceStatusWatcher {
           return;
         }
         try {
-          this.args.onChange();
+          const changedPaths = Array.from(this.changedPaths).sort();
+          const changeKinds = Array.from(this.changeKinds);
+          this.changedPaths.clear();
+          this.changeKinds.clear();
+          if (changedPaths.length === 0 || changeKinds.length === 0) {
+            return;
+          }
+          this.args.onChange({
+            changedPaths,
+            changeKinds,
+          });
         } catch (error) {
           this.args.onWatchError(
             createWorkspaceStatusCallbackError(this.args.cwd, error),
@@ -95,6 +119,8 @@ export class WorkspaceStatusWatcher {
   dispose(): void {
     this.disposed = true;
     this.changeScheduler.dispose();
+    this.changedPaths.clear();
+    this.changeKinds.clear();
     if (this.metadataStartRetryTimer !== null) {
       clearTimeout(this.metadataStartRetryTimer);
       this.metadataStartRetryTimer = null;
@@ -115,7 +141,9 @@ export class WorkspaceStatusWatcher {
     if (this.disposed) {
       return;
     }
-    this.startWatchSubscription(createWorkspaceRootWatchSpec(this.args.cwd));
+    this.startWatchSubscription(
+      createWorkspaceRootWatchSpec(await resolveWatchRootPath(this.args.cwd)),
+    );
     this.startMetadataWatchSubscriptions();
   }
 
@@ -223,6 +251,19 @@ export class WorkspaceStatusWatcher {
           }
           if (events.length === 0) {
             return;
+          }
+          const changeEvent = collectWorkspaceStatusChanges({
+            events,
+            spec,
+          });
+          if (!changeEvent) {
+            return;
+          }
+          for (const changedPath of changeEvent.changedPaths) {
+            this.changedPaths.add(changedPath);
+          }
+          for (const changeKind of changeEvent.changeKinds) {
+            this.changeKinds.add(changeKind);
           }
           this.changeScheduler.schedule();
         },

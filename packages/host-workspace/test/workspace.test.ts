@@ -64,6 +64,36 @@ describe("Workspace", () => {
     expect(mixedStatus.workingTree.changedFiles).toBe(2);
   });
 
+  it("changes the local state fingerprint when local checkout state changes", async () => {
+    const repoPath = await initRepo();
+    const workspace = new Workspace(repoPath);
+
+    const initialFingerprint = await workspace.getLocalStateFingerprint();
+
+    await fs.writeFile(path.join(repoPath, "README.md"), "dirty\n", "utf8");
+    const dirtyFingerprint = await workspace.getLocalStateFingerprint();
+    expect(dirtyFingerprint).not.toBe(initialFingerprint);
+
+    await runGit(["checkout", "-b", "feature"], { cwd: repoPath });
+    const branchFingerprint = await workspace.getLocalStateFingerprint();
+    expect(branchFingerprint).not.toBe(dirtyFingerprint);
+  });
+
+  it("changes the shared git refs fingerprint only when refs change", async () => {
+    const repoPath = await initRepo();
+    const workspace = new Workspace(repoPath);
+
+    const initialFingerprint = await workspace.getSharedGitRefsFingerprint();
+
+    await fs.writeFile(path.join(repoPath, "README.md"), "dirty\n", "utf8");
+    const dirtyFingerprint = await workspace.getSharedGitRefsFingerprint();
+    expect(dirtyFingerprint).toBe(initialFingerprint);
+
+    await runGit(["branch", "feature"], { cwd: repoPath });
+    const branchFingerprint = await workspace.getSharedGitRefsFingerprint();
+    expect(branchFingerprint).not.toBe(initialFingerprint);
+  });
+
   it("returns grouped status details only when merge-base data is requested", async () => {
     const repoPath = await initRepo();
     await runGit(["checkout", "-b", "feature"], { cwd: repoPath });

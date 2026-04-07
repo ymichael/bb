@@ -98,6 +98,8 @@ export interface HostWorkspace {
   // Git queries
   getCurrentBranch(): Promise<string | null>;
   getHeadSha(): Promise<string | null>;
+  getLocalStateFingerprint(): Promise<string>;
+  getSharedGitRefsFingerprint(): Promise<string>;
   getStatus(options?: StatusOptions): Promise<WorkspaceStatus>;
   getDiff(options?: DiffOptions): Promise<DiffResult>;
   listBranches(): Promise<string[]>;
@@ -172,6 +174,14 @@ class ProvisionedHostWorkspace implements HostWorkspace {
 
   getHeadSha(): Promise<string | null> {
     return this.ws.getHeadSha();
+  }
+
+  getLocalStateFingerprint(): Promise<string> {
+    return this.ws.getLocalStateFingerprint();
+  }
+
+  getSharedGitRefsFingerprint(): Promise<string> {
+    return this.ws.getSharedGitRefsFingerprint();
   }
 
   getStatus(options?: StatusOptions): Promise<WorkspaceStatus> {

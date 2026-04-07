@@ -300,6 +300,38 @@ export class Workspace {
     };
   }
 
+  async getLocalStateFingerprint(): Promise<string> {
+    const [headSha, status] = await Promise.all([
+      this.getHeadSha(),
+      this.getStatus(),
+    ]);
+    return JSON.stringify({
+      currentBranch: status.branch.currentBranch,
+      headSha,
+      workingTree: status.workingTree,
+    });
+  }
+
+  async getSharedGitRefsFingerprint(): Promise<string> {
+    await ensureGitRepo(this.path);
+
+    const [refs, remoteHead] = await Promise.all([
+      runGit(
+        ["for-each-ref", "--format=%(refname)%00%(objectname)", "refs/heads", "refs/remotes"],
+        { cwd: this.path },
+      ),
+      runGit(
+        ["symbolic-ref", "--quiet", "refs/remotes/origin/HEAD"],
+        { cwd: this.path, allowFailure: true },
+      ),
+    ]);
+
+    return JSON.stringify({
+      refs: parseNonEmptyLines(refs.stdout),
+      remoteHead: remoteHead.exitCode === 0 ? remoteHead.stdout.trim() : "",
+    });
+  }
+
   async getDiff(options: DiffOptions = {}): Promise<DiffResult> {
     await ensureGitRepo(this.path);
 

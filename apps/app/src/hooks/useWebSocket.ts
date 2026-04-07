@@ -46,12 +46,14 @@ const WORKSPACE_STATE_CHANGE_KINDS: readonly EnvironmentChangeKind[] = [
   "metadata-changed",
   "status-changed",
   "work-status-changed",
+  "git-refs-changed",
 ];
 const BRANCH_LIST_CHANGE_KINDS: readonly EnvironmentChangeKind[] = [
   "environment-created",
   "environment-deleted",
   "metadata-changed",
   "status-changed",
+  "git-refs-changed",
 ];
 
 interface ThreadChangeFlags {

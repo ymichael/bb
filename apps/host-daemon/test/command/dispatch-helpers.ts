@@ -40,6 +40,26 @@ export function createFakeWorkspace(pathname: string) {
     async getHeadSha() {
       return "commit-1";
     },
+    async getLocalStateFingerprint() {
+      return JSON.stringify({
+        currentBranch: "main",
+        headSha: "commit-1",
+        workingTree: {
+          hasUncommittedChanges: false,
+          state: "clean",
+          changedFiles: 0,
+          insertions: 0,
+          deletions: 0,
+          files: [],
+        },
+      });
+    },
+    async getSharedGitRefsFingerprint() {
+      return JSON.stringify({
+        refs: ["refs/heads/main\u0000commit-1"],
+        remoteHead: "refs/remotes/origin/main",
+      });
+    },
     async getStatus(options?: { mergeBaseBranch?: string }) {
       state.statusReads += 1;
       return {

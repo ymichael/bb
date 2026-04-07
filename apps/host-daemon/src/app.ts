@@ -175,11 +175,13 @@ export async function createHostDaemonApp(
         "Thread storage watch unavailable; retrying in background",
       );
     },
-    onWorkspaceStatusChanged: ({ environmentId }) => {
-      environmentChangeReporter.queue({
-        environmentId,
-        change: "work-status-changed",
-      });
+    onWorkspaceStatusChanged: ({ environmentId, changeKinds }) => {
+      for (const change of changeKinds) {
+        environmentChangeReporter.queue({
+          environmentId,
+          change,
+        });
+      }
     },
     onWorkspaceStatusWatchError: ({ error }) => {
       options.logger.warn(

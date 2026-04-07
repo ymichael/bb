@@ -10,6 +10,10 @@ export type {
   WatchWorkspaceArgs,
   WorkspaceWatchError,
 } from "./host-watcher-types.js";
+export type {
+  WorkspaceStatusChangeEvent,
+  WorkspaceStatusWatchChangeKind,
+} from "./watch-status-types.js";
 
 export async function createHostWatcher(
   args: CreateHostWatcherArgs,

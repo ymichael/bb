@@ -578,6 +578,18 @@ describe("host-daemon session schemas", () => {
       hostDaemonEnvironmentChangeRequestSchema.parse({
         sessionId: "session_123",
         environmentId: "env_123",
+        change: "git-refs-changed",
+      }),
+    ).toEqual({
+      sessionId: "session_123",
+      environmentId: "env_123",
+      change: "git-refs-changed",
+    });
+
+    expect(
+      hostDaemonEnvironmentChangeRequestSchema.parse({
+        sessionId: "session_123",
+        environmentId: "env_123",
         change: "thread-storage-changed",
       }),
     ).toEqual({

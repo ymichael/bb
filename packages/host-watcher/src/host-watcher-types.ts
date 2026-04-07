@@ -1,8 +1,11 @@
 import type { HostType } from "@bb/domain";
+import type { WorkspaceStatusWatchChangeKind } from "./watch-status-types.js";
 
 export type HostObservedChange =
   | {
       kind: "workspace-status-changed";
+      changedPaths: string[];
+      changeKinds: WorkspaceStatusWatchChangeKind[];
       environmentId: string;
     }
   | {
@@ -10,6 +13,16 @@ export type HostObservedChange =
       environmentId: string;
       threadId: string;
     };
+
+export type WorkspaceObservedChange = Extract<
+  HostObservedChange,
+  { kind: "workspace-status-changed" }
+>;
+
+export type ThreadStorageObservedChange = Extract<
+  HostObservedChange,
+  { kind: "thread-storage-changed" }
+>;
 
 export interface WorkspaceWatchError {
   kind: "workspace-watch-error";
@@ -36,14 +49,14 @@ export interface ThreadStorageWatchTarget {
 export interface WatchWorkspaceArgs {
   environmentId: string;
   workspacePath: string;
-  onChange: (event: HostObservedChange) => void;
+  onChange: (event: WorkspaceObservedChange) => void;
   onWatchError: (error: WorkspaceWatchError) => void;
 }
 
 export interface WatchThreadStorageRootArgs {
   threadStorageRootPath: string;
   resolveThreadTarget: (threadId: string) => ThreadStorageWatchTarget | null;
-  onChange: (event: HostObservedChange) => void;
+  onChange: (event: ThreadStorageObservedChange) => void;
   onWatchError: (error: ThreadStorageWatchError) => void;
 }
 

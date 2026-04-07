@@ -28,6 +28,12 @@ function createFakeWorkspace(path: string): FakeWorkspace {
     isWorktree: false,
     getCurrentBranch: vi.fn(async () => "main"),
     getHeadSha: vi.fn(async () => "commit-1"),
+    getLocalStateFingerprint: vi.fn(
+      async () => JSON.stringify({ currentBranch: "main", headSha: "commit-1" }),
+    ),
+    getSharedGitRefsFingerprint: vi.fn(async () =>
+      JSON.stringify({ refs: [["refs/heads/main", "commit-1"]], remoteHead: null }),
+    ),
     getStatus: vi.fn(async () => ({
       workingTree: {
         hasUncommittedChanges: false,

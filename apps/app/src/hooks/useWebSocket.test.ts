@@ -252,6 +252,37 @@ describe("useWebSocket", () => {
     });
   });
 
+  it("invalidates workspace-derived and branch queries for shared git ref changes without touching the persisted environment record", () => {
+    vi.useFakeTimers();
+    const { queryClient, wrapper } = createQueryClientTestHarness();
+    const invalidateQueries = vi.spyOn(queryClient, "invalidateQueries");
+
+    renderHook(() => useWebSocket(), { wrapper });
+
+    act(() => {
+      changedCallbacks[0]?.({
+        changes: ["git-refs-changed"],
+        entity: "environment",
+        id: "env-1",
+        type: "changed",
+      });
+      vi.advanceTimersByTime(500);
+    });
+
+    expect(invalidateQueries).toHaveBeenCalledWith({
+      queryKey: environmentWorkStatusQueryKeyPrefix("env-1"),
+    });
+    expect(invalidateQueries).toHaveBeenCalledWith({
+      queryKey: environmentGitDiffQueryKeyPrefix("env-1"),
+    });
+    expect(invalidateQueries).toHaveBeenCalledWith({
+      queryKey: environmentMergeBaseBranchesQueryKeyPrefix("env-1"),
+    });
+    expect(invalidateQueries).not.toHaveBeenCalledWith({
+      queryKey: environmentQueryKey("env-1"),
+    });
+  });
+
   it("invalidates persisted environment, workspace, and branch queries for metadata changes", () => {
     vi.useFakeTimers();
     const { queryClient, wrapper } = createQueryClientTestHarness();

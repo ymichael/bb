@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import fsSync from "node:fs";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -40,6 +41,7 @@ interface WatchWorkspaceStatusImport {
 
 const execFileAsync = promisify(execFile);
 const tempDirs: string[] = [];
+const WATCH_READY_SETTLE_MS = 100;
 const WATCH_TEST_TIMEOUT_MS = 2_000;
 
 function ignoreWatchError(): void {
@@ -123,13 +125,32 @@ function isWorkspaceRootSubscription(
 ): boolean {
   const [rootPath, _callback, options] = watchArgs;
   return (
-    rootPath === workspaceRootPath &&
+    normalizeWatchPath(rootPath) === normalizeWatchPath(workspaceRootPath) &&
     options?.ignore?.includes(".git") === true
   );
 }
 
+function normalizeWatchPath(inputPath: string): string {
+  try {
+    return fsSync.realpathSync.native(inputPath);
+  } catch {
+    return path.resolve(inputPath);
+  }
+}
+
 function trimOutput(value: string): string {
   return value.trim().replace(/\n+$/u, "");
+}
+
+function normalizeEventBatch(
+  events: ParcelWatcherEventBatch,
+): ParcelWatcherEventBatch {
+  return events.map((event) => ({
+    ...event,
+    path: path.isAbsolute(event.path)
+      ? normalizeWatchPath(event.path)
+      : event.path,
+  }));
 }
 
 async function resolveExpectedWatchRootPaths(cwd: string): Promise<string[]> {
@@ -151,9 +172,9 @@ async function resolveExpectedWatchRootPaths(cwd: string): Promise<string[]> {
   );
   return Array.from(
     new Set([
-      cwd,
-      path.resolve(cwd, gitDir),
-      path.resolve(cwd, commonDir),
+      normalizeWatchPath(cwd),
+      normalizeWatchPath(path.resolve(cwd, gitDir)),
+      normalizeWatchPath(path.resolve(cwd, commonDir)),
     ]),
   );
 }
@@ -162,19 +183,23 @@ async function importWatchWorkspaceStatusWithReadySignal(
   args: WatchSetupSignalImportArgs,
 ): Promise<WatchWorkspaceStatusImport> {
   const ready = createDeferredPromise<void>();
+  const expectedRootPaths = args.expectedRootPaths.map(normalizeWatchPath);
   const seenRootPaths = new Set<string>();
+  let readyScheduled = false;
   vi.resetModules();
   vi.doMock("@parcel/watcher", async () => {
     const actualWatcher =
       await vi.importActual<ParcelWatcherModule>("@parcel/watcher");
     const markReady = (rootPath: string) => {
-      seenRootPaths.add(rootPath);
-      if (
-        args.expectedRootPaths.every((expectedRootPath) =>
-          seenRootPaths.has(expectedRootPath)
-        )
-      ) {
-        ready.resolve(undefined);
+      seenRootPaths.add(normalizeWatchPath(rootPath));
+      if (expectedRootPaths.every((expectedRootPath) => seenRootPaths.has(expectedRootPath))) {
+        if (readyScheduled) {
+          return;
+        }
+        readyScheduled = true;
+        setTimeout(() => {
+          ready.resolve(undefined);
+        }, WATCH_READY_SETTLE_MS);
       }
     };
     return {
@@ -210,6 +235,7 @@ async function importWatchWorkspaceStatusWithTransientWorkspaceSubscriptionFailu
 ): Promise<WatchWorkspaceStatusImport> {
   let failedWorkspaceSubscription = false;
   const ready = createDeferredPromise<void>();
+  let readyScheduled = false;
   vi.resetModules();
   vi.doMock("@parcel/watcher", async () => {
     const actualWatcher =
@@ -230,7 +256,12 @@ async function importWatchWorkspaceStatusWithTransientWorkspaceSubscriptionFailu
           }
           const subscription = await actualWatcher.default.subscribe(...watchArgs);
           if (isWorkspaceRootSubscription(watchArgs, workspaceRootPath)) {
-            ready.resolve(undefined);
+            if (!readyScheduled) {
+              readyScheduled = true;
+              setTimeout(() => {
+                ready.resolve(undefined);
+              }, WATCH_READY_SETTLE_MS);
+            }
           }
           return subscription;
         },
@@ -247,7 +278,12 @@ async function importWatchWorkspaceStatusWithTransientWorkspaceSubscriptionFailu
         }
         const subscription = await actualWatcher.subscribe(...watchArgs);
         if (isWorkspaceRootSubscription(watchArgs, workspaceRootPath)) {
-          ready.resolve(undefined);
+          if (!readyScheduled) {
+            readyScheduled = true;
+            setTimeout(() => {
+              ready.resolve(undefined);
+            }, WATCH_READY_SETTLE_MS);
+          }
         }
         return subscription;
       },
@@ -344,7 +380,53 @@ async function importWatchWorkspaceStatusWithManualWorkspaceEvents(
       if (!workspaceRootCallback) {
         throw new Error("Workspace root watcher has not been installed");
       }
-      workspaceRootCallback(null, events);
+      workspaceRootCallback(null, normalizeEventBatch(events));
+    },
+    ready: ready.promise,
+    watchWorkspaceStatus: watchStatusModule.watchWorkspaceStatus,
+  };
+}
+
+async function importWatchWorkspaceStatusWithManualRootEvents(
+  args: WatchSetupSignalImportArgs,
+): Promise<{
+  emitEvents: (rootPath: string, events: ParcelWatcherEventBatch) => void;
+  ready: Promise<void>;
+  watchWorkspaceStatus: WatchWorkspaceStatus;
+}> {
+  const callbacksByRootPath = new Map<string, ParcelWatcherCallback>();
+  const ready = createDeferredPromise<void>();
+  const expectedRootPaths = args.expectedRootPaths.map(normalizeWatchPath);
+  const seenRootPaths = new Set<string>();
+  vi.resetModules();
+  vi.doMock("@parcel/watcher", async () => {
+    const mockSubscribe = async (
+      ...watchArgs: ParcelWatcherSubscribeArgs
+    ): Promise<ParcelWatcherSubscribeResult> => {
+      const [rootPath, callback] = watchArgs;
+      const normalizedRootPath = normalizeWatchPath(rootPath);
+      callbacksByRootPath.set(normalizedRootPath, callback);
+      seenRootPaths.add(normalizedRootPath);
+      if (expectedRootPaths.every((expectedRootPath) => seenRootPaths.has(expectedRootPath))) {
+        ready.resolve(undefined);
+      }
+      return createMockWatcherSubscription();
+    };
+    return {
+      default: {
+        subscribe: mockSubscribe,
+      },
+      subscribe: mockSubscribe,
+    };
+  });
+  const watchStatusModule = await import("../src/watch-status.js");
+  return {
+    emitEvents: (rootPath, events) => {
+      const callback = callbacksByRootPath.get(normalizeWatchPath(rootPath));
+      if (!callback) {
+        throw new Error(`Watcher has not been installed for ${rootPath}`);
+      }
+      callback(null, normalizeEventBatch(events));
     },
     ready: ready.promise,
     watchWorkspaceStatus: watchStatusModule.watchWorkspaceStatus,
@@ -680,6 +762,51 @@ describe("watchWorkspaceStatus", () => {
       expect(watchErrors[0]).toContain(repoPath);
       expect(watchErrors[0]).toContain("workspace subscription unavailable");
       expect(getWorkspaceSubscriptionAttemptCount()).toBeGreaterThan(1);
+    } finally {
+      stopWatching();
+    }
+  });
+
+  it("ignores shared common-dir index updates for detached worktree environments", async () => {
+    const repoPath = await initRepo();
+    const worktreePath = await addDetachedWorktree(repoPath);
+    const expectedRootPaths = await resolveExpectedWatchRootPaths(worktreePath);
+    const commonDirPath = path.resolve(
+      worktreePath,
+      trimOutput(
+        (
+          await runGit({
+            args: ["rev-parse", "--git-common-dir"],
+            cwd: worktreePath,
+          })
+        ).stdout,
+      ),
+    );
+    const {
+      emitEvents,
+      ready,
+      watchWorkspaceStatus,
+    } = await importWatchWorkspaceStatusWithManualRootEvents({
+      expectedRootPaths,
+      workspaceRootPath: worktreePath,
+    });
+    const calls: number[] = [];
+    const stopWatching = watchWorkspaceStatus(worktreePath, {
+      onChange: () => {
+        calls.push(Date.now());
+      },
+      onWatchError: ignoreWatchError,
+    });
+
+    try {
+      await ready;
+      emitEvents(commonDirPath, [
+        {
+          path: path.join(commonDirPath, "index"),
+          type: "update",
+        },
+      ]);
+      await ensureCallCountStays(() => calls.length, 0);
     } finally {
       stopWatching();
     }

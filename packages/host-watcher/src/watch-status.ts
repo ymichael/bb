@@ -3,7 +3,9 @@ import type { WorkspaceStatusWatchArgs } from "./watch-status-types.js";
 
 export type {
   WorkspaceStatusChangeCallback,
+  WorkspaceStatusChangeEvent,
   WorkspaceStatusWatchArgs,
+  WorkspaceStatusWatchChangeKind,
   WorkspaceStatusWatchError,
   WorkspaceStatusWatchErrorCallback,
 } from "./watch-status-types.js";
