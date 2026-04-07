@@ -44,6 +44,33 @@ function formatThreadLabelForManager(thread: {
   return thread.title ? `${thread.id}: ${thread.title}` : thread.id;
 }
 
+async function queueManagerSystemMessageBestEffort(
+  deps: Pick<AppDeps, "db" | "hub" | "logger">,
+  args: {
+    managedThreadId: string;
+    managerThreadId: string;
+    messageText: string;
+    reason: "assigned" | "removed";
+  },
+): Promise<void> {
+  try {
+    await queueManagerSystemMessage(deps, {
+      managerThreadId: args.managerThreadId,
+      messageText: args.messageText,
+    });
+  } catch (error) {
+    deps.logger.error(
+      {
+        err: error,
+        managedThreadId: args.managedThreadId,
+        managerThreadId: args.managerThreadId,
+        reason: args.reason,
+      },
+      "Failed to queue manager ownership system message",
+    );
+  }
+}
+
 export function registerThreadBaseRoutes(app: Hono, deps: AppDeps): void {
   const { get, post, patch, del } = typedRoutes<PublicApiSchema>(app, {
     onValidationError: (msg) => new ApiError(400, "invalid_request", msg),
@@ -111,19 +138,23 @@ export function registerThreadBaseRoutes(app: Hono, deps: AppDeps): void {
 
       const threadLabel = formatThreadLabelForManager(updated);
       if (updated.parentThreadId) {
-        await queueManagerSystemMessage(deps, {
+        await queueManagerSystemMessageBestEffort(deps, {
+          managedThreadId: updated.id,
           managerThreadId: updated.parentThreadId,
           messageText: renderTemplate("systemMessageThreadOwnershipAssigned", {
             threadLabel,
           }),
+          reason: "assigned",
         });
       }
       if (thread.parentThreadId) {
-        await queueManagerSystemMessage(deps, {
+        await queueManagerSystemMessageBestEffort(deps, {
+          managedThreadId: updated.id,
           managerThreadId: thread.parentThreadId,
           messageText: renderTemplate("systemMessageThreadOwnershipRemoved", {
             threadLabel,
           }),
+          reason: "removed",
         });
       }
     }

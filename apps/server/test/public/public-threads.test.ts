@@ -2723,6 +2723,74 @@ describe("public thread routes", () => {
     }
   });
 
+  it("keeps ownership updates successful when manager notification queuing fails", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const loggerError = vi.fn();
+      harness.deps.logger.error = loggerError;
+
+      const host = seedHost(harness.deps, {
+        id: "host-manager-notify-offline",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/thread-ownership-offline-project",
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/thread-ownership-offline-project/worktree",
+      });
+      const managerThread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        type: "manager",
+        title: "Offline manager",
+      });
+      seedThreadRuntimeState(harness.deps, {
+        threadId: managerThread.id,
+        environmentId: environment.id,
+        providerThreadId: "provider-manager-offline",
+        inputText: "Initial manager task",
+        model: "gpt-5.4",
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        parentThreadId: null,
+      });
+
+      const response = await harness.app.request(`/api/v1/threads/${thread.id}`, {
+        method: "PATCH",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          parentThreadId: managerThread.id,
+        }),
+      });
+
+      expect(response.status).toBe(200);
+      expect(getThread(harness.db, thread.id)?.parentThreadId).toBe(managerThread.id);
+      expect(
+        harness.db
+          .select({ id: hostDaemonCommands.id })
+          .from(hostDaemonCommands)
+          .all(),
+      ).toEqual([]);
+      expect(loggerError).toHaveBeenCalledWith(
+        expect.objectContaining({
+          managedThreadId: thread.id,
+          managerThreadId: managerThread.id,
+          reason: "assigned",
+        }),
+        "Failed to queue manager ownership system message",
+      );
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("archives non-git threads without requiring workspace status", async () => {
     const harness = await createTestAppHarness();
     try {
