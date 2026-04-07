@@ -295,11 +295,22 @@ export const updateHostRequestSchema = z
   );
 export type UpdateHostRequest = z.infer<typeof updateHostRequestSchema>;
 
+export const managerHostEnvironmentSchema = z.object({
+  type: z.literal("host"),
+  hostId: z.string().min(1),
+});
+
+export const managerEnvironmentArgsSchema = z.discriminatedUnion("type", [
+  managerHostEnvironmentSchema,
+]);
+export type ManagerEnvironmentArgs = z.infer<typeof managerEnvironmentArgsSchema>;
+
 export const createManagerThreadRequestSchema = z.object({
   name: z.string().min(1).optional(),
   providerId: z.string().min(1),
   model: z.string().min(1),
   reasoningLevel: reasoningLevelSchema.optional(),
+  environment: managerEnvironmentArgsSchema,
 });
 export type CreateManagerThreadRequest = z.infer<
   typeof createManagerThreadRequestSchema

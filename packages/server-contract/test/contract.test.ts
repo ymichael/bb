@@ -249,9 +249,11 @@ describe("server-contract canonical schemas", () => {
         providerId: "codex",
         reasoningLevel: "high",
         name: "Manager",
+        environment: { type: "host", hostId: "host_123" },
       }),
     ).toMatchObject({
       providerId: "codex",
+      environment: { type: "host", hostId: "host_123" },
     });
 
     expect(
@@ -340,6 +342,7 @@ describe("server-contract canonical schemas", () => {
         providerId: "claude-code",
         reasoningLevel: "high",
         name: "Missing model",
+        environment: { type: "host", hostId: "host_123" },
       }),
     ).toThrow();
   });

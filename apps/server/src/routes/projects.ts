@@ -4,6 +4,7 @@ import {
   createProjectSource,
   deleteProjectSource,
   getDefaultProjectSource,
+  getProjectSourceByHost,
   getProjectSourceForProject,
   listProjects,
   listProjectSourcesByProjectIds,
@@ -247,12 +248,15 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
   post("/projects/:id/managers", createManagerThreadRequestSchema, async (context, payload) => {
     const projectId = context.req.param("id");
     requirePublicProject(deps.db, projectId);
-    const source = getDefaultProjectSource(deps.db, projectId);
+
+    const { hostId } = payload.environment;
+    requireHostWithStatus(deps.db, hostId);
+    const source = getProjectSourceByHost(deps.db, projectId, hostId);
     if (!source) {
-      throw new ApiError(409, "invalid_request", "Project has no default source");
+      throw new ApiError(409, "invalid_request", "No project source found for the selected host");
     }
     if (source.type !== "local_path") {
-      throw new ApiError(409, "invalid_request", "Default source has no local path");
+      throw new ApiError(409, "invalid_request", "Project source for host has no local path");
     }
 
     let title: string;
@@ -276,7 +280,7 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
       reasoningLevel: payload.reasoningLevel,
       environment: {
         type: "host",
-        hostId: source.hostId,
+        hostId,
         workspace: { type: "unmanaged", path: source.path },
       },
     });

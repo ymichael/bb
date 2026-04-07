@@ -2,6 +2,7 @@ import { Command } from "commander";
 import { type Thread } from "@bb/domain";
 import { action } from "../action.js";
 import { createClient, unwrap } from "../client.js";
+import { fetchLocalHostId } from "../daemon.js";
 import { renderBorderlessTable } from "../table.js";
 import {
   confirmDestructiveAction,
@@ -15,6 +16,7 @@ interface ManagerHireCommandOptions {
   json?: boolean;
   project?: string;
   name?: string;
+  host?: string;
   provider: string;
   model: string;
   reasoningLevel: string;
@@ -45,6 +47,7 @@ export function registerManagerCommands(program: Command, getUrl: () => string):
     .requiredOption("--provider <id>", "Provider ID for the manager (e.g. claude-code, codex)")
     .requiredOption("--model <model>", "Model ID for the manager")
     .requiredOption("--reasoning-level <level>", "Reasoning level (low, medium, high, xhigh)")
+    .option("--host <id>", "Host ID (defaults to local host)")
     .option("--json", "Print machine-readable JSON output")
     .action(action(async (
       projectIdArg: string | undefined,
@@ -58,6 +61,15 @@ export function registerManagerCommands(program: Command, getUrl: () => string):
       if (!reasoningLevel) {
         throw new Error("Manager reasoning level is required");
       }
+      let hostId: string | undefined = opts.host;
+      if (!hostId) {
+        hostId = (await fetchLocalHostId()) ?? undefined;
+        if (!hostId) {
+          throw new Error(
+            "Cannot auto-detect host ID (daemon unreachable). Pass --host <id> explicitly.",
+          );
+        }
+      }
       const thread = await unwrap<Thread>(
         client.api.v1.projects[":id"].managers.$post({
           param: { id: projectId },
@@ -66,6 +78,7 @@ export function registerManagerCommands(program: Command, getUrl: () => string):
             providerId: opts.provider,
             model: opts.model,
             reasoningLevel,
+            environment: { type: "host", hostId },
           },
         }),
       );

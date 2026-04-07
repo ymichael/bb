@@ -102,6 +102,7 @@ export type {
   CreateHostJoinRequest,
   CreateHostJoinResponse,
   CreateDraftRequest,
+  ManagerEnvironmentArgs,
   CreateManagerThreadRequest,
   CreateProjectRequest,
   CreateProjectSourceRequest,

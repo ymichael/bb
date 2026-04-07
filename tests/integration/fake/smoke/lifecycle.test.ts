@@ -125,6 +125,7 @@ describe.sequential("fake provider smoke lifecycle integration", () => {
           providerId: "fake",
           reasoningLevel: "high",
           name: "Project manager",
+          environment: { type: "host", hostId: harness.hostId },
         });
         expect(managerThread.type).toBe("manager");
         expect(managerThread.environmentId).toBe(sourceEnvironment.id);

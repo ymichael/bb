@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { ReasoningLevel, Thread } from "@bb/domain";
 import type {
   CreateProjectRequest,
+  ManagerEnvironmentArgs,
   UpdateProjectRequest,
   UploadedPromptAttachment,
 } from "@bb/server-contract";
@@ -23,6 +24,7 @@ interface HireProjectManagerRequest {
   providerId: string;
   model: string;
   reasoningLevel: ReasoningLevel;
+  environment: ManagerEnvironmentArgs;
 }
 
 interface UpdateProjectMutationRequest extends UpdateProjectRequest {
@@ -55,12 +57,14 @@ export function useHireProjectManager() {
       providerId,
       model,
       reasoningLevel,
+      environment,
     }: HireProjectManagerRequest) =>
       api.hireProjectManager(projectId, {
         name,
         providerId,
         model,
         reasoningLevel,
+        environment,
       }),
     onSuccess: (thread) => {
       queryClient.setQueryData<Thread>(threadQueryKey(thread.id), thread);
