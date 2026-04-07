@@ -3,18 +3,19 @@ import {
   toRecord,
 } from "@bb/core-ui";
 import type {
+  AvailableModel,
   Environment,
   Host,
   Project,
   ProjectSource,
   ResolvedThreadExecutionOptions,
+  SandboxBackendInfo,
   Thread,
   ThreadType,
   ThreadGitDiffResponse,
   ThreadQueuedMessage,
   WorkspaceDiffTarget,
   WorkspaceStatus,
-  AvailableModel,
 } from "@bb/domain";
 import type {
   CreateManagerThreadRequest,
@@ -612,4 +613,19 @@ export async function listSystemProviders(): Promise<SystemProviderInfo[]> {
 
 export async function listHosts(): Promise<Host[]> {
   return request<Host[]>(apiClient.hosts.$get());
+}
+
+export async function updateHost(
+  id: string,
+  req: { name: string },
+): Promise<Host> {
+  return request<Host>(apiClient.hosts[":id"].$patch({ param: { id }, json: req }));
+}
+
+export async function deleteHost(id: string): Promise<void> {
+  await requestVoid(apiClient.hosts[":id"].$delete({ param: { id } }));
+}
+
+export async function listSandboxBackends(): Promise<SandboxBackendInfo[]> {
+  return request<SandboxBackendInfo[]>(apiClient.system["sandbox-backends"].$get());
 }

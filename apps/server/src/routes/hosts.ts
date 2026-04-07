@@ -1,6 +1,7 @@
-import { createHostId, getHost, upsertHost } from "@bb/db";
+import { createHostId, deleteHost, getHost, updateHost, upsertHost } from "@bb/db";
 import {
   createHostJoinRequestSchema,
+  updateHostRequestSchema,
   typedRoutes,
   type PublicApiSchema,
 } from "@bb/server-contract";
@@ -22,7 +23,7 @@ function resolvePendingHostName(hostId: string): string {
 }
 
 export function registerHostRoutes(app: Hono, deps: AppDeps): void {
-  const { get, post } = typedRoutes<PublicApiSchema>(app, {
+  const { get, post, patch, del } = typedRoutes<PublicApiSchema>(app, {
     onValidationError: (message) => new ApiError(400, "invalid_request", message),
   });
 
@@ -68,4 +69,24 @@ export function registerHostRoutes(app: Hono, deps: AppDeps): void {
   get("/hosts/:id", (context) =>
     context.json(requireHostWithStatus(deps.db, context.req.param("id"))),
   );
+
+  patch("/hosts/:id", updateHostRequestSchema, (context, payload) => {
+    const id = context.req.param("id");
+    requireHostWithStatus(deps.db, id);
+    const updated = updateHost(deps.db, deps.hub, id, payload);
+    if (!updated) {
+      throw new ApiError(404, "host_not_found", "Host not found");
+    }
+    return context.json(requireHostWithStatus(deps.db, id));
+  });
+
+  del("/hosts/:id", (context) => {
+    const id = context.req.param("id");
+    requireHostWithStatus(deps.db, id);
+    const deleted = deleteHost(deps.db, deps.hub, id);
+    if (!deleted) {
+      throw new ApiError(404, "host_not_found", "Host not found");
+    }
+    return context.json({ ok: true });
+  });
 }

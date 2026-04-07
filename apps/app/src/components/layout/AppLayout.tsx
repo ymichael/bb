@@ -8,6 +8,7 @@ import {
   ChevronRight,
   MoreHorizontal,
   PencilLine,
+  Settings,
   UserRoundPlus,
   X,
 } from "lucide-react"
@@ -170,6 +171,14 @@ function AppHeader({
               <UserRoundPlus className="size-4" />
             </button>
             <Link
+              to={`/projects/${projectId}/settings`}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              aria-label="Project settings"
+              title="Project settings"
+            >
+              <Settings className="size-4" />
+            </Link>
+            <Link
               to={`/projects/${projectId}/archived`}
               className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
               aria-label="Archived threads"
@@ -229,11 +238,12 @@ export function AppLayout({ children }: { children: ReactNode }) {
   const projectMatch = useMatch("/projects/:projectId/*")
   const projectThreadMatch = useMatch("/projects/:projectId/threads/:threadId/*")
   const projectArchivedMatch = useMatch("/projects/:projectId/archived")
+  const projectSettingsMatch = useMatch("/projects/:projectId/settings")
   const threadMatch = projectThreadMatch
   const showHeader = location.pathname !== "/" && !threadMatch
   const showFloatingSidebarTrigger = location.pathname === "/"
   const isProjectMainView = Boolean(
-    projectMatch && !threadMatch && !projectArchivedMatch
+    projectMatch && !threadMatch && !projectArchivedMatch && !projectSettingsMatch
   )
   const threadId = projectThreadMatch?.params.threadId ?? ""
 
@@ -271,6 +281,19 @@ export function AppLayout({ children }: { children: ReactNode }) {
             { label: "Archived" },
           ],
         }
+    : projectSettingsMatch && projectId
+      ? {
+          title: "",
+          subtitle: undefined,
+          breadcrumbs: [
+            { label: "Projects" },
+            {
+              label: projectLabel ?? projectId,
+              to: `/projects/${projectId}`,
+            },
+            { label: "Settings" },
+          ],
+        }
     : projectMatch && projectId
       ? {
           title: projectLabel ?? projectId,
@@ -284,6 +307,9 @@ export function AppLayout({ children }: { children: ReactNode }) {
     }
     if (projectArchivedMatch && projectId) {
       return `${projectLabel ?? projectId} · Archived`
+    }
+    if (projectSettingsMatch && projectId) {
+      return `${projectLabel ?? projectId} · Settings`
     }
     if (projectMatch && projectId) {
       return projectLabel ?? projectId

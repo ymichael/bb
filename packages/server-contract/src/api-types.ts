@@ -284,6 +284,17 @@ export const createHostJoinResponseSchema = z.object({
 });
 export type CreateHostJoinResponse = z.infer<typeof createHostJoinResponseSchema>;
 
+export const updateHostRequestSchema = z
+  .object({
+    name: z.string().min(1),
+  })
+  .partial()
+  .refine(
+    (value) => value.name !== undefined,
+    "At least one field must be provided",
+  );
+export type UpdateHostRequest = z.infer<typeof updateHostRequestSchema>;
+
 export const createManagerThreadRequestSchema = z.object({
   name: z.string().min(1).optional(),
   providerId: z.string().min(1),
@@ -584,9 +595,9 @@ export const projectResponseSchema = projectSchema.extend({
 export type ProjectResponse = z.infer<typeof projectResponseSchema>;
 
 export const systemConfigResponseSchema = z.object({
-  e2bConfigured: z.boolean(),
   githubConnected: z.boolean(),
   hostDaemonPort: z.number().nullable(),
+  sandboxHostSupported: z.boolean(),
   voiceTranscriptionEnabled: z.boolean(),
 });
 export type SystemConfigResponse = z.infer<typeof systemConfigResponseSchema>;

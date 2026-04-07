@@ -26,6 +26,7 @@ export {
   type DetailRowProps,
   type DetailMessageRowProps,
 } from "./detail-card.js";
+export { Pill, type PillProps, type PillVariant } from "./pill.js";
 export {
   StatusPill,
   type StatusPillProps,

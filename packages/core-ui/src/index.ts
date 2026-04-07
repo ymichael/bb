@@ -8,7 +8,7 @@ export type {
   FormatTimelineOptions,
   TimelineFormat,
 } from "./format-timeline-text.js";
-export { durationToCompactString } from "./format-helpers.js";
+export { durationToCompactString, timeAgo } from "./format-helpers.js";
 export {
   buildToolGroupSummaryParts,
   formatToolGroupCountLabel,

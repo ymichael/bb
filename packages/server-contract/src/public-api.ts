@@ -62,6 +62,7 @@ import type {
   TimelineToolDetailsResponse,
   UpdateAutomationRequest,
   UpdateEnvironmentRequest,
+  UpdateHostRequest,
   UpdateProjectRequest,
   UpdateProjectSourceRequest,
   UpdateThreadRequest,
@@ -153,6 +154,8 @@ export type PublicApiSchema = {
   };
   "/hosts/:id": {
     $get: Endpoint<PathId, Host>;
+    $patch: Endpoint<PathId & { json: UpdateHostRequest }, Host>;
+    $delete: Endpoint<PathId, { ok: true }>;
   };
 
   // ─── Environments ────────────────────────────────────────────────────

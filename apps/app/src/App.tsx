@@ -4,6 +4,7 @@ import { MainView } from "./views/MainView";
 import { ProjectMainView } from "./views/ProjectMainView";
 import { ProjectArchivedThreadsView } from "./views/ProjectArchivedThreadsView";
 import { AppSettingsView } from "./views/AppSettingsView";
+import { ProjectSettingsView } from "./views/ProjectSettingsView";
 import { ThreadDetailView } from "./views/ThreadDetailView";
 import { useWebSocket } from "./hooks/useWebSocket";
 
@@ -17,6 +18,10 @@ export function App() {
         <Route path="/" element={<MainView />} />
         <Route path="/settings" element={<AppSettingsView />} />
         <Route path="/projects/:projectId" element={<ProjectMainView />} />
+        <Route
+          path="/projects/:projectId/settings"
+          element={<ProjectSettingsView />}
+        />
         <Route
           path="/projects/:projectId/archived"
           element={<ProjectArchivedThreadsView />}
