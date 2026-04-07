@@ -2,7 +2,7 @@ import { and, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import type { HostChangeKind, HostType } from "@bb/domain";
 import type { DbConnection } from "../connection.js";
 import type { DbNotifier } from "../notifier.js";
-import { environments, hostDaemonCommands, hosts } from "../schema.js";
+import { environments, hosts } from "../schema.js";
 import { createHostId } from "../ids.js";
 
 export interface UpsertHostInput {
@@ -202,7 +202,6 @@ export function deleteHost(
     return false;
   }
 
-  db.delete(hostDaemonCommands).where(eq(hostDaemonCommands.hostId, hostId)).run();
   db.delete(hosts).where(eq(hosts.id, hostId)).run();
   notifier.notifyHost(existing.id, ["host-disconnected"]);
   return true;
