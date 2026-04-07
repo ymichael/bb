@@ -696,6 +696,32 @@ describe("public project and host routes", () => {
     }
   });
 
+  it("returns 404 when renaming a destroyed host via PATCH", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const host = seedHost(harness.deps, { id: "host-rename-destroyed" });
+      updateHost(harness.db, harness.hub, host.id, {
+        destroyedAt: Date.now(),
+      });
+
+      const patchResponse = await harness.app.request(
+        `/api/v1/hosts/${host.id}`,
+        {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ name: "Renamed Host" }),
+        },
+      );
+
+      expect(patchResponse.status).toBe(404);
+      await expect(readJson(patchResponse)).resolves.toMatchObject({
+        code: "host_not_found",
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("deletes a host via DELETE", async () => {
     const harness = await createTestAppHarness();
     try {
@@ -710,6 +736,28 @@ describe("public project and host routes", () => {
 
       const getResponse = await harness.app.request(`/api/v1/hosts/${host.id}`);
       expect(getResponse.status).toBe(404);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("returns 404 when deleting a destroyed host via DELETE", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const host = seedHost(harness.deps, { id: "host-delete-destroyed" });
+      updateHost(harness.db, harness.hub, host.id, {
+        destroyedAt: Date.now(),
+      });
+
+      const deleteResponse = await harness.app.request(
+        `/api/v1/hosts/${host.id}`,
+        { method: "DELETE" },
+      );
+
+      expect(deleteResponse.status).toBe(404);
+      await expect(readJson(deleteResponse)).resolves.toMatchObject({
+        code: "host_not_found",
+      });
     } finally {
       await harness.cleanup();
     }
