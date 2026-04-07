@@ -21,7 +21,7 @@ import {
 } from "@/components/settings/HostRenameDialog";
 import { setPreferredTheme, usePreferredTheme } from "@/hooks/useTheme";
 import { useHosts } from "@/hooks/queries/system-queries";
-import { hostsQueryKey } from "@/hooks/queries/query-keys";
+import { hostsQueryKey, projectsQueryKey } from "@/hooks/queries/query-keys";
 import * as api from "@/lib/api";
 
 function SettingsWithControl({
@@ -71,6 +71,7 @@ export function AppSettingsView() {
     mutationFn: ({ id }: { id: string }) => api.deleteHost(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: hostsQueryKey() });
+      queryClient.invalidateQueries({ queryKey: projectsQueryKey() });
       setDeleteTarget(null);
     },
   });
