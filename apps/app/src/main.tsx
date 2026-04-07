@@ -1,11 +1,12 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider } from "@tanstack/react-query";
 import { WorkerPoolContextProvider } from "@pierre/diffs/react";
 import { BrowserRouter } from "react-router-dom";
 import { App } from "./App";
 import { Toaster } from "./components/ui/sonner";
 import { initializePreferredTheme } from "./hooks/useTheme";
+import { createAppQueryClient } from "./lib/query-client";
 import "./app.css";
 
 const DIFF_WORKER_POOL_MAX_SIZE = 8;
@@ -30,14 +31,7 @@ function createDiffWorker(): Worker {
   );
 }
 
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      staleTime: 2000,
-      refetchOnWindowFocus: true,
-    },
-  },
-});
+const queryClient = createAppQueryClient();
 
 initializePreferredTheme();
 

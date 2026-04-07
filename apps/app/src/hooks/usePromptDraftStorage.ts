@@ -178,6 +178,10 @@ export function usePromptDraftStorage(scope: PromptDraftScope) {
     [storageKey],
   );
 
+  const getCurrent = useCallback((): PromptDraftState => {
+    return readPromptDraft(storageKey);
+  }, [storageKey]);
+
   const setText = useCallback((nextText: string) => {
     writePromptDraft(storageKey, {
       ...readPromptDraft(storageKey),
@@ -246,6 +250,7 @@ export function usePromptDraftStorage(scope: PromptDraftScope) {
 
   return {
     storageKey,
+    getCurrent,
     value: draft.text,
     text: draft.text,
     attachments: draft.attachments,

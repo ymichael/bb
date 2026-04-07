@@ -102,6 +102,9 @@ export function useUpdateThread() {
   const queryClient = useQueryClient();
 
   return useMutation({
+    meta: {
+      errorMessage: "Failed to update thread.",
+    },
     mutationFn: ({ id, ...request }: ThreadMutationRequest & UpdateThreadRequest) =>
       api.updateThread(id, request),
     onSuccess: (thread) => {
@@ -116,6 +119,10 @@ export function useArchiveThread() {
   const queryClient = useQueryClient();
 
   return useMutation({
+    meta: {
+      errorMessage: "Failed to archive thread.",
+      showErrorToast: false,
+    },
     mutationFn: ({ id, force }: ArchiveThreadMutationRequest) =>
       api.archiveThread(id, { force }),
     onSuccess: (_data, variables) => {
@@ -146,6 +153,9 @@ export function useUnarchiveThread() {
   const queryClient = useQueryClient();
 
   return useMutation({
+    meta: {
+      errorMessage: "Failed to unarchive thread.",
+    },
     mutationFn: ({ id }: ThreadMutationRequest) => api.unarchiveThread(id),
     onMutate: async ({ id }) => {
       await queryClient.cancelQueries({ queryKey: threadQueryKey(id) });
@@ -207,6 +217,9 @@ export function useDeleteThread() {
   const queryClient = useQueryClient();
 
   return useMutation({
+    meta: {
+      errorMessage: "Failed to delete thread.",
+    },
     mutationFn: ({ id }: ThreadMutationRequest) => api.deleteThread(id),
     onMutate: async ({ id }) => {
       await queryClient.cancelQueries({ queryKey: threadQueryKey(id) });
@@ -264,6 +277,10 @@ export function useMarkThreadRead() {
   const queryClient = useQueryClient();
 
   return useMutation({
+    meta: {
+      errorMessage: "Failed to mark thread read.",
+      showErrorToast: false,
+    },
     mutationFn: (threadId: string) => api.markThreadRead(threadId),
     onSuccess: (thread) => {
       queryClient.setQueryData<Thread>(threadQueryKey(thread.id), thread);
@@ -276,6 +293,10 @@ export function useMarkThreadUnread() {
   const queryClient = useQueryClient();
 
   return useMutation({
+    meta: {
+      errorMessage: "Failed to mark thread unread.",
+      showErrorToast: false,
+    },
     mutationFn: (threadId: string) => api.markThreadUnread(threadId),
     onSuccess: (thread) => {
       queryClient.setQueryData<Thread>(threadQueryKey(thread.id), thread);

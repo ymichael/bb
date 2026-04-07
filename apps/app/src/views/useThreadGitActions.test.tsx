@@ -268,7 +268,7 @@ describe("useThreadGitActions", () => {
       throw new Error("Expected a ThreadGitActionDialogError");
     }
 
-    expect(thrownError.message).toBe("HTTP 409: Squash merge failed");
+    expect(thrownError.message).toBe("Squash merge failed");
     expect(thrownError.askAgentInput).toEqual([
       {
         text: buildSquashMergeConflictFollowUpInstruction(

@@ -39,6 +39,9 @@ export function useCreateThread() {
   const queryClient = useQueryClient();
 
   return useMutation({
+    meta: {
+      errorMessage: "Failed to create thread.",
+    },
     mutationFn: (request: CreateThreadRequest) => api.createThread(request),
     onMutate: async () => {
       await queryClient.cancelQueries({ queryKey: threadsQueryKey() });
@@ -60,6 +63,10 @@ export function useSendThreadMessage() {
   const queryClient = useQueryClient();
 
   return useMutation({
+    meta: {
+      errorMessage: "Failed to send message.",
+      showErrorToast: false,
+    },
     mutationFn: ({
       id,
       input,
@@ -120,6 +127,10 @@ export function useCreateThreadDraft() {
   const queryClient = useQueryClient();
 
   return useMutation({
+    meta: {
+      errorMessage: "Failed to queue follow-up.",
+      showErrorToast: false,
+    },
     mutationFn: ({
       id,
       input,
@@ -146,6 +157,10 @@ export function useSendThreadDraft() {
   const queryClient = useQueryClient();
 
   return useMutation({
+    meta: {
+      errorMessage: "Failed to send queued follow-up.",
+      showErrorToast: false,
+    },
     mutationFn: ({
       id,
       queuedMessageId,
@@ -165,6 +180,10 @@ export function useDeleteThreadDraft() {
   const queryClient = useQueryClient();
 
   return useMutation({
+    meta: {
+      errorMessage: "Failed to delete queued follow-up.",
+      showErrorToast: false,
+    },
     mutationFn: ({
       id,
       queuedMessageId,
@@ -180,6 +199,9 @@ export function useStopThread() {
   const queryClient = useQueryClient();
 
   return useMutation({
+    meta: {
+      errorMessage: "Failed to stop thread.",
+    },
     mutationFn: (threadId: string) => api.stopThread(threadId),
     onSuccess: (_data, threadId) => {
       queryClient.invalidateQueries({ queryKey: threadQueryKey(threadId) });

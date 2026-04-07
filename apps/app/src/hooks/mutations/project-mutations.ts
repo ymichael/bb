@@ -40,6 +40,9 @@ export function useCreateProject() {
   const queryClient = useQueryClient();
 
   return useMutation({
+    meta: {
+      errorMessage: "Failed to create project.",
+    },
     mutationFn: (request: CreateProjectRequest) => api.createProject(request),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: projectsQueryKey() });
@@ -51,6 +54,10 @@ export function useHireProjectManager() {
   const queryClient = useQueryClient();
 
   return useMutation({
+    meta: {
+      errorMessage: "Failed to hire manager.",
+      showErrorToast: false,
+    },
     mutationFn: ({
       projectId,
       name,
@@ -81,6 +88,9 @@ export function useUpdateProject() {
   const queryClient = useQueryClient();
 
   return useMutation({
+    meta: {
+      errorMessage: "Failed to update project.",
+    },
     mutationFn: ({ id, ...request }: UpdateProjectMutationRequest) =>
       api.updateProject(id, request),
     onSuccess: (_data, variables) => {
@@ -97,6 +107,9 @@ export function useDeleteProject() {
   const queryClient = useQueryClient();
 
   return useMutation({
+    meta: {
+      errorMessage: "Failed to remove project.",
+    },
     mutationFn: (projectId: string) => api.deleteProject(projectId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: projectsQueryKey() });
@@ -108,6 +121,10 @@ export function useDeleteProject() {
 
 export function useUploadPromptAttachment() {
   return useMutation({
+    meta: {
+      errorMessage: "Failed to upload attachment.",
+      showErrorToast: false,
+    },
     mutationFn: ({
       projectId,
       file,

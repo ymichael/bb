@@ -56,6 +56,9 @@ export function ProjectSettingsView() {
   const [repoSearch, setRepoSearch] = useState("");
 
   const deleteSource = useMutation({
+    meta: {
+      errorMessage: "Failed to remove source.",
+    },
     mutationFn: ({ sourceId }: { sourceId: string }) => {
       if (!projectId) return Promise.resolve();
       return api.removeProjectSource(projectId, sourceId);

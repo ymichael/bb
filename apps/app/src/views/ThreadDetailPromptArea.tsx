@@ -15,6 +15,7 @@ import { useThreadCreationOptions } from "@/hooks/useThreadCreationOptions";
 import { useUploadPromptAttachment } from "@/hooks/mutations/project-mutations";
 import { useCreateThreadDraft, useDeleteThreadDraft, useSendThreadDraft, useStopThread } from "@/hooks/mutations/thread-runtime-mutations";
 import { useThreadDefaultExecutionOptions, useThreadDrafts } from "@/hooks/queries/thread-queries";
+import { getMutationErrorMessage } from "@/lib/mutation-errors";
 import { promptDraftToInput } from "@/lib/prompt-draft";
 import { toast } from "sonner";
 import { ThreadFollowUpComposer } from "./ThreadFollowUpComposer";
@@ -261,9 +262,10 @@ export function ThreadDetailPromptArea({
         promptDraft.clear();
         setAttachmentError(null);
       } catch (nextError) {
-        toast.error(
-          nextError instanceof Error ? nextError.message : "Failed to queue follow-up",
-        );
+        toast.error(getMutationErrorMessage({
+          error: nextError,
+          fallbackMessage: "Failed to queue follow-up.",
+        }));
       }
       return;
     }
@@ -281,9 +283,10 @@ export function ThreadDetailPromptArea({
       });
     } catch (nextError) {
       clearPendingFollowUp();
-      toast.error(
-        nextError instanceof Error ? nextError.message : "Failed to send follow-up",
-      );
+      toast.error(getMutationErrorMessage({
+        error: nextError,
+        fallbackMessage: "Failed to send follow-up.",
+      }));
     }
   }, [
     activeModel?.model,
@@ -318,9 +321,10 @@ export function ThreadDetailPromptArea({
         setAttachmentError(null);
       })
       .catch((nextError) => {
-        toast.error(
-          nextError instanceof Error ? nextError.message : "Failed to send queued follow-up",
-        );
+        toast.error(getMutationErrorMessage({
+          error: nextError,
+          fallbackMessage: "Failed to send queued follow-up.",
+        }));
       })
       .finally(() => {
         setProcessingQueuedMessageId((currentMessageId) =>
@@ -348,9 +352,10 @@ export function ThreadDetailPromptArea({
         setAttachmentError(null);
       })
       .catch((nextError) => {
-        toast.error(
-          nextError instanceof Error ? nextError.message : "Failed to edit queued follow-up",
-        );
+        toast.error(getMutationErrorMessage({
+          error: nextError,
+          fallbackMessage: "Failed to edit queued follow-up.",
+        }));
       })
       .finally(() => {
         setProcessingQueuedMessageId((currentMessageId) =>
@@ -367,9 +372,10 @@ export function ThreadDetailPromptArea({
         queuedMessageId: messageId,
       })
       .catch((nextError) => {
-        toast.error(
-          nextError instanceof Error ? nextError.message : "Failed to delete queued follow-up",
-        );
+        toast.error(getMutationErrorMessage({
+          error: nextError,
+          fallbackMessage: "Failed to delete queued follow-up.",
+        }));
       })
       .finally(() => {
         setProcessingQueuedMessageId((currentMessageId) =>

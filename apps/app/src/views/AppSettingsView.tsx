@@ -63,6 +63,9 @@ export function AppSettingsView() {
   const [deleteTarget, setDeleteTarget] = useState<HostDeleteDialogTarget | null>(null);
 
   const renameHost = useMutation({
+    meta: {
+      errorMessage: "Failed to rename host.",
+    },
     mutationFn: ({ id, name }: { id: string; name: string }) =>
       api.updateHost(id, { name }),
     onSuccess: () => {
@@ -73,6 +76,9 @@ export function AppSettingsView() {
   });
 
   const deleteHost = useMutation({
+    meta: {
+      errorMessage: "Failed to remove host.",
+    },
     mutationFn: ({ id }: { id: string }) => api.deleteHost(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: hostsQueryKey() });

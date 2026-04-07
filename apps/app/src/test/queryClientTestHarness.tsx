@@ -1,6 +1,7 @@
 import { Provider as JotaiProvider } from "jotai";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { JSX, ReactNode } from "react";
+import { createAppQueryClient } from "@/lib/query-client";
 
 interface QueryClientTestWrapperProps {
   children: ReactNode;
@@ -14,7 +15,7 @@ export interface QueryClientTestHarness {
 }
 
 export function createQueryClientTestHarness(): QueryClientTestHarness {
-  const queryClient = new QueryClient({
+  const queryClient = createAppQueryClient({
     defaultOptions: {
       mutations: {
         retry: false,

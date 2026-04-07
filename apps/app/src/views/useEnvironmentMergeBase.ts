@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef } from "react";
 import type { Environment, Thread, WorkspaceStatus } from "@bb/domain";
 import { toast } from "sonner";
 import { getMergeBaseBranchCandidates } from "@/components/thread/MergeBaseBranchPicker";
+import { getMutationErrorMessage } from "@/lib/mutation-errors";
 import { useUpdateEnvironment } from "../hooks/mutations/environment-mutations";
 
 interface UseEnvironmentMergeBaseParams {
@@ -136,11 +137,10 @@ export function useEnvironmentMergeBase({
         {
           onError: (error) => {
             setSelectedMergeBaseBranch(environment.mergeBaseBranch ?? undefined);
-            toast.error(
-              error instanceof Error
-                ? error.message
-                : "Failed to update merge base branch.",
-            );
+            toast.error(getMutationErrorMessage({
+              error,
+              fallbackMessage: "Failed to update merge base branch.",
+            }));
           },
         },
       );

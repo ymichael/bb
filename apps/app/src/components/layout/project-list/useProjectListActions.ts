@@ -8,6 +8,7 @@ import { projectsQueryKey } from "@/hooks/queries/query-keys"
 import { useDialogState } from "@/hooks/useDialogState"
 import * as api from "@/lib/api"
 import { findLocalPathProjectSourceForHost } from "@bb/domain"
+import { getMutationErrorMessage } from "@/lib/mutation-errors"
 import { isArchiveForceRequiredError } from "@/lib/thread-archive"
 import { getThreadDisplayTitle, threadTypeLabel } from "@/lib/thread-title"
 import { toast } from "sonner"
@@ -78,9 +79,6 @@ export function useProjectListActions({
         onSuccess: () => {
           projectRenameDialog.onClose()
         },
-        onError: (error) => {
-          toast.error(error instanceof Error ? error.message : "Failed to rename project.")
-        },
       },
     )
   }, [projectRenameDialog.onClose, updateProject.mutate])
@@ -112,7 +110,10 @@ export function useProjectListActions({
       }
       queryClient.invalidateQueries({ queryKey: projectsQueryKey() })
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to update project source.")
+      toast.error(getMutationErrorMessage({
+        error,
+        fallbackMessage: "Failed to update project source.",
+      }))
     } finally {
       setPathUpdateProjectId((currentProjectId) =>
         currentProjectId === projectId ? null : currentProjectId,
@@ -135,9 +136,6 @@ export function useProjectListActions({
         projectDeleteDialog.onClose()
         onProjectRemoved(projectId)
       },
-      onError: (error) => {
-        toast.error(error instanceof Error ? error.message : "Failed to remove project.")
-      },
     })
   }, [deleteProject.mutate, onProjectRemoved, projectDeleteDialog.onClose])
 
@@ -153,9 +151,10 @@ export function useProjectListActions({
             return
           }
 
-          toast.error(
-            error instanceof Error ? error.message : `Failed to archive ${threadTypeLabel(thread.type)}.`,
-          )
+          toast.error(getMutationErrorMessage({
+            error,
+            fallbackMessage: `Failed to archive ${threadTypeLabel(thread.type)}.`,
+          }))
         },
       },
     )
@@ -170,9 +169,10 @@ export function useProjectListActions({
       { id: thread.id, force: true },
       {
         onError: (error) => {
-          toast.error(
-            error instanceof Error ? error.message : `Failed to archive ${label}.`,
-          )
+          toast.error(getMutationErrorMessage({
+            error,
+            fallbackMessage: `Failed to archive ${label}.`,
+          }))
         },
       },
     )
@@ -198,9 +198,6 @@ export function useProjectListActions({
         onSuccess: () => {
           threadRenameDialog.onClose()
         },
-        onError: (error) => {
-          toast.error(error instanceof Error ? error.message : "Failed to rename thread.")
-        },
       },
     )
   }, [threadRenameDialog.onClose, updateThread.mutate])
@@ -218,11 +215,6 @@ export function useProjectListActions({
           threadDeleteDialog.onClose()
           onThreadDeleted(thread)
         },
-        onError: (error) => {
-          toast.error(
-            error instanceof Error ? error.message : `Failed to delete ${threadTypeLabel(thread.type)}.`,
-          )
-        },
       },
     )
   }, [deleteThread.mutate, onThreadDeleted, threadDeleteDialog.onClose])
@@ -238,11 +230,25 @@ export function useProjectListActions({
 
   const toggleThreadRead = useCallback((thread: Thread) => {
     if (getThreadReadToggleAction(thread) === "mark_unread") {
-      markThreadUnread.mutate(thread.id)
+      markThreadUnread.mutate(thread.id, {
+        onError: (error) => {
+          toast.error(getMutationErrorMessage({
+            error,
+            fallbackMessage: "Failed to mark thread unread.",
+          }))
+        },
+      })
       return
     }
 
-    markThreadRead.mutate(thread.id)
+    markThreadRead.mutate(thread.id, {
+      onError: (error) => {
+        toast.error(getMutationErrorMessage({
+          error,
+          fallbackMessage: "Failed to mark thread read.",
+        }))
+      },
+    })
   }, [markThreadRead, markThreadUnread])
 
   return {

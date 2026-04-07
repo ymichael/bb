@@ -18,6 +18,7 @@ import {
   buildSquashMergeConflictFollowUpInstruction,
 } from "@/lib/thread-operation-prompts";
 import { HttpError } from "@/lib/api";
+import { getMutationErrorMessage } from "@/lib/mutation-errors";
 import type {
   RequestEnvironmentActionMutationLike,
   SendMessageMutationLike,
@@ -131,8 +132,10 @@ function toThreadGitActionDialogError({
   error,
   mergeBaseBranch,
 }: ToThreadGitActionDialogErrorParams): ThreadGitActionDialogError {
-  const message =
-    error instanceof Error ? error.message : "Failed to start git action";
+  const message = getMutationErrorMessage({
+    error,
+    fallbackMessage: "Failed to start git action.",
+  });
 
   return new ThreadGitActionDialogError(message, {
     askAgentInput: buildAskAgentInputForGitOperation({

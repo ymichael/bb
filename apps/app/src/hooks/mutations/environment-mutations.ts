@@ -19,6 +19,10 @@ export function useRequestEnvironmentAction() {
   const queryClient = useQueryClient();
 
   return useMutation({
+    meta: {
+      errorMessage: "Failed to run environment action.",
+      showErrorToast: false,
+    },
     mutationFn: ({
       id,
       ...request
@@ -38,6 +42,10 @@ export function useUpdateEnvironment() {
   const queryClient = useQueryClient();
 
   return useMutation({
+    meta: {
+      errorMessage: "Failed to update environment.",
+      showErrorToast: false,
+    },
     mutationFn: ({ id, ...request }: UpdateEnvironmentMutationRequest) =>
       api.updateEnvironment(id, request),
     onSuccess: (environment: Environment) => {

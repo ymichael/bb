@@ -18,6 +18,7 @@ import { useAvailableModels, useHosts, useSystemProviders } from "@/hooks/querie
 import { useProjects } from "@/hooks/queries/project-queries";
 import { useHostDaemon } from "@/hooks/useHostDaemon";
 import { formatModelLabel } from "@/hooks/useThreadCreationOptions";
+import { getMutationErrorMessage } from "@/lib/mutation-errors";
 import { getProviderIconInfo } from "@/lib/provider-icon";
 import { PromptProviderModelPicker } from "@/components/promptbox/PromptProviderModelPicker";
 import { PromptOptionPicker, type PromptOption } from "@/components/promptbox/PromptOptionPicker";
@@ -192,7 +193,10 @@ export function HireManagerModal({
       onHired(thread);
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to hire manager");
+      setError(getMutationErrorMessage({
+        error: err,
+        fallbackMessage: "Failed to hire manager.",
+      }));
     } finally {
       setIsPending(false);
     }

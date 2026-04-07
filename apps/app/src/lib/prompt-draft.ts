@@ -57,6 +57,13 @@ export function serializePromptDraftStorage(draft: PromptDraftState): string | n
   });
 }
 
+export function arePromptDraftStatesEqual(
+  left: PromptDraftState,
+  right: PromptDraftState,
+): boolean {
+  return serializePromptDraftStorage(left) === serializePromptDraftStorage(right);
+}
+
 export function promptDraftToInput(draft: PromptDraftState): PromptInput[] {
   const input: PromptInput[] = [];
   const text = draft.text.trim();

@@ -176,6 +176,10 @@ export function useThreadTimeline(
 
 export function useThreadTimelineToolDetails() {
   return useMutation({
+    meta: {
+      errorMessage: "Failed to load tool details.",
+      showErrorToast: false,
+    },
     mutationFn: ({
       id,
       sourceSeqStart,

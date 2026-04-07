@@ -47,6 +47,7 @@ import { getThreadDisplayTitle, threadTypeLabel } from "@/lib/thread-title";
 import {
   isArchiveForceRequiredError,
 } from "@/lib/thread-archive";
+import { getMutationErrorMessage } from "@/lib/mutation-errors";
 import { useGitDiffPanel } from "./useGitDiffPanel";
 import { useThreadTimelineController } from "./useThreadTimelineController";
 import { ThreadDetailHeader } from "./ThreadDetailHeader";
@@ -278,9 +279,10 @@ export function ThreadDetailView() {
           navigate(`/projects/${threadToArchive.projectId}`);
         },
         onError: (nextError) => {
-          toast.error(
-            nextError instanceof Error ? nextError.message : `Failed to archive ${label}.`,
-          );
+          toast.error(getMutationErrorMessage({
+            error: nextError,
+            fallbackMessage: `Failed to archive ${label}.`,
+          }));
         },
       },
     );
@@ -304,9 +306,10 @@ export function ThreadDetailView() {
             threadArchiveConfirmationDialog.onOpen(thread);
             return;
           }
-          toast.error(
-            nextError instanceof Error ? nextError.message : `Failed to archive ${label}.`,
-          );
+          toast.error(getMutationErrorMessage({
+            error: nextError,
+            fallbackMessage: `Failed to archive ${label}.`,
+          }));
         },
       },
     );
@@ -505,10 +508,24 @@ export function ThreadDetailView() {
       isRead={(thread.lastReadAt ?? 0) >= thread.updatedAt}
       onToggleRead={() => {
         if ((thread.lastReadAt ?? 0) >= thread.updatedAt) {
-          markThreadUnread.mutate(thread.id);
+          markThreadUnread.mutate(thread.id, {
+            onError: (nextError) => {
+              toast.error(getMutationErrorMessage({
+                error: nextError,
+                fallbackMessage: "Failed to mark thread unread.",
+              }));
+            },
+          });
           return;
         }
-        markThreadRead.mutate(thread.id);
+        markThreadRead.mutate(thread.id, {
+          onError: (nextError) => {
+            toast.error(getMutationErrorMessage({
+              error: nextError,
+              fallbackMessage: "Failed to mark thread read.",
+            }));
+          },
+        });
       }}
       onRename={renameThread}
       onToggleArchive={() => {
@@ -731,11 +748,6 @@ export function ThreadDetailView() {
               onSuccess: () => {
                 threadDeleteDialog.onClose();
                 navigate(`/projects/${target.projectId}`, { replace: true });
-              },
-              onError: (nextError) => {
-                toast.error(
-                  nextError instanceof Error ? nextError.message : `Failed to delete ${threadTypeLabel(target.type)}.`,
-                );
               },
             },
           );

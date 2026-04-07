@@ -12,8 +12,12 @@ import { useHostDaemon } from "@/hooks/useHostDaemon";
 import { usePromptDraftStorage } from "@/hooks/usePromptDraftStorage";
 import { usePromptMentions } from "@/hooks/usePromptMentions";
 import { useThreadCreationOptions } from "@/hooks/useThreadCreationOptions";
+import { getMutationErrorMessage } from "@/lib/mutation-errors";
 import { getProjectScopedStorageKey } from "@/lib/project-scoped-storage";
-import { promptDraftToInput } from "@/lib/prompt-draft";
+import {
+  arePromptDraftStatesEqual,
+  promptDraftToInput,
+} from "@/lib/prompt-draft";
 import type { CreateThreadRequest } from "@bb/server-contract";
 
 const PROJECT_MAIN_ZEN_MODE_STORAGE_KEY = "bb.promptbox.zen-mode.project-main";
@@ -164,7 +168,10 @@ export function ProjectMainView() {
         });
         promptDraft.addAttachment(uploaded);
       } catch (err) {
-        setAttachmentError(err instanceof Error ? err.message : "Attachment upload failed");
+        setAttachmentError(getMutationErrorMessage({
+          error: err,
+          fallbackMessage: "Attachment upload failed.",
+        }));
         break;
       }
     }
@@ -196,9 +203,6 @@ export function ProjectMainView() {
       return;
     }
 
-    // Match thread follow-up behavior: clear immediately, then restore only if the
-    // request fails and the user has not started a new draft in the meantime.
-    promptDraft.clear();
     setAttachmentError(null);
 
     try {
@@ -212,9 +216,11 @@ export function ProjectMainView() {
         sandboxMode,
         environment: selectedEnvironment,
       });
+      if (arePromptDraftStatesEqual(promptDraft.getCurrent(), submittedDraft)) {
+        promptDraft.clear();
+      }
     } catch {
-      promptDraft.restoreIfEmpty(submittedDraft);
-      // Error state is surfaced in mutation status and can be shown by callers if needed.
+      // Global mutation error handling already surfaced the failure.
     }
   };
 
