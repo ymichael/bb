@@ -94,6 +94,7 @@ async function sendClaimedDraft(
       deps,
       environment,
       execution,
+      initiator: "user",
       input: queuedMessage.content,
       onQueued: () => {
         deleteDraft(deps.db, deps.hub, draft.id);

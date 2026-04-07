@@ -284,6 +284,33 @@ describe("events", () => {
     });
   });
 
+  it("skips empty assistant output when a manager user message is the latest visible output", () => {
+    const { db, thread } = setup();
+
+    insertEvents(db, noopNotifier, [
+      {
+        threadId: thread.id,
+        sequence: 1,
+        type: "system/manager/user_message",
+        ...emptyItemFields,
+        data: JSON.stringify({ text: "manager output" }),
+      },
+      {
+        threadId: thread.id,
+        sequence: 2,
+        type: "item/completed",
+        itemId: "msg_1",
+        itemKind: "agentMessage",
+        data: JSON.stringify({ item: { id: "msg_1", type: "agentMessage", text: "" } }),
+      },
+    ]);
+
+    expect(getLatestThreadOutputEventRow(db, { threadId: thread.id })).toMatchObject({
+      sequence: 1,
+      type: "system/manager/user_message",
+    });
+  });
+
   it("lists stored event rows by range and exclusion filters", () => {
     const { db, thread } = setup();
 

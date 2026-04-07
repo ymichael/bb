@@ -201,6 +201,60 @@ export function seedEvent<TType extends ThreadEventType>(
   ]);
 }
 
+export function seedThreadRuntimeState(
+  deps: Pick<AppDeps, "db" | "hub">,
+  args: {
+    environmentId: string;
+    inputText?: string;
+    model?: string;
+    providerThreadId: string;
+    reasoningLevel?: string;
+    sandboxMode?: string;
+    sequenceStart?: number;
+    serviceTier?: string;
+    threadId: string;
+  },
+): void {
+  const sequenceStart = args.sequenceStart ?? 1;
+  seedEvent(deps, {
+    threadId: args.threadId,
+    environmentId: args.environmentId,
+    providerThreadId: args.providerThreadId,
+    sequence: sequenceStart,
+    type: "thread/identity",
+    data: {},
+  });
+  seedEvent(deps, {
+    threadId: args.threadId,
+    environmentId: args.environmentId,
+    providerThreadId: args.providerThreadId,
+    sequence: sequenceStart + 1,
+    type: "client/turn/requested",
+    data: {
+      direction: "outbound",
+      input: [
+        {
+          type: "text",
+          text: args.inputText ?? "Prior task",
+        },
+      ],
+      execution: {
+        model: args.model ?? "gpt-5",
+        serviceTier: args.serviceTier ?? "default",
+        reasoningLevel: args.reasoningLevel ?? "medium",
+        sandboxMode: args.sandboxMode ?? "danger-full-access",
+        source: "client/turn/requested",
+      },
+      initiator: "user",
+      request: {
+        method: "turn/start",
+        params: {},
+      },
+      source: "tell",
+    },
+  });
+}
+
 export function seedStoredEvent(
   deps: Pick<AppDeps, "db" | "hub">,
   args: SeedStoredEventArgs,

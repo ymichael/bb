@@ -210,6 +210,62 @@ describe("public thread data routes", () => {
     }
   });
 
+  it("returns the manager user-visible output when a later assistant item is empty", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps);
+      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        type: "manager",
+      });
+
+      seedEvent(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        providerThreadId: "provider-output",
+        turnId: "turn-1",
+        sequence: 1,
+        type: "system/manager/user_message",
+        data: {
+          text: "Visible manager update",
+          toolCallId: "call-1",
+          turnId: "turn-1",
+        },
+      });
+      seedEvent(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        providerThreadId: "provider-output",
+        turnId: "turn-1",
+        sequence: 2,
+        type: "item/completed",
+        data: {
+          item: {
+            type: "agentMessage",
+            id: "msg-1",
+            text: "",
+          },
+        },
+      });
+
+      const outputResponse = await harness.app.request(
+        `/api/v1/threads/${thread.id}/output`,
+      );
+      expect(outputResponse.status).toBe(200);
+      await expect(readJson(outputResponse)).resolves.toEqual({
+        output: "Visible manager update",
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("skips malformed item/completed events and returns the last valid output", async () => {
     const harness = await createTestAppHarness();
     try {

@@ -148,6 +148,7 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
         deps,
         environment,
         execution,
+        initiator: "user",
         input: payload.input,
         thread,
       })

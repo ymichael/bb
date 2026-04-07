@@ -427,8 +427,15 @@ export function getLatestThreadOutputEventRow(
     .from(events)
     .where(
       sql`${events.threadId} = ${args.threadId} AND (
-        ${events.type} = 'system/manager/user_message'
-        OR (${events.type} = 'item/completed' AND ${events.itemKind} = 'agentMessage')
+        (
+          ${events.type} = 'system/manager/user_message'
+          AND COALESCE(json_extract(${events.data}, '$.text'), '') <> ''
+        )
+        OR (
+          ${events.type} = 'item/completed'
+          AND ${events.itemKind} = 'agentMessage'
+          AND COALESCE(json_extract(${events.data}, '$.item.text'), '') <> ''
+        )
       )`,
     )
     .orderBy(desc(events.sequence))

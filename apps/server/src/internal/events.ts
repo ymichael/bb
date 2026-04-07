@@ -15,6 +15,7 @@ import {
   type HostDaemonEventEnvelope,
   type HostDaemonInternalSchema,
 } from "@bb/host-daemon-contract";
+import { renderTemplate } from "@bb/templates";
 import type { Hono } from "hono";
 import { ApiError } from "../errors.js";
 import type { AppDeps } from "../types.js";
@@ -27,6 +28,7 @@ import {
   wouldCleanupEnvironment,
 } from "../services/environments/environment-cleanup.js";
 import { syncManagerThreadSchedules } from "../services/scheduling/manager-schedule-sync.js";
+import { queueManagerSystemMessage } from "../services/threads/manager-system-messages.js";
 import { sendNextQueuedDraftIfPresent } from "../services/threads/queued-drafts.js";
 import { tryTransition } from "../services/threads/thread-transitions.js";
 import { getAuthenticatedDaemon } from "./auth.js";
@@ -83,6 +85,67 @@ type CompletedTurnStatus = Extract<
 interface ArchiveCompletedAutomationThreadIfNeededArgs {
   latestThread: NonNullable<ReturnType<typeof getThread>>;
   turnStatus: CompletedTurnStatus;
+}
+
+interface QueueManagedThreadTurnNotificationArgs {
+  managedThreadId: string;
+  managerThreadId: string;
+  turnStatus: CompletedTurnStatus;
+  title: string | null;
+}
+
+interface RenderManagedThreadTurnStatusMessageArgs {
+  managedThreadId: string;
+  title: string | null;
+  turnStatus: CompletedTurnStatus;
+}
+
+function formatManagedThreadTitleSuffix(title: string | null): string {
+  return title ? ` (${title})` : "";
+}
+
+function renderManagedThreadTurnStatusMessage(
+  args: RenderManagedThreadTurnStatusMessageArgs,
+): string {
+  const variables = {
+    threadId: args.managedThreadId,
+    titleSuffix: formatManagedThreadTitleSuffix(args.title),
+  };
+
+  switch (args.turnStatus) {
+    case "completed":
+      return renderTemplate("systemMessageManagedThreadComplete", variables);
+    case "failed":
+      return renderTemplate("systemMessageManagedThreadFailed", variables);
+    case "interrupted":
+      return renderTemplate("systemMessageManagedThreadInterrupted", variables);
+    default: {
+      const exhaustiveCheck: never = args.turnStatus;
+      return exhaustiveCheck;
+    }
+  }
+}
+
+async function queueManagedThreadTurnNotificationBestEffort(
+  deps: Pick<AppDeps, "db" | "hub" | "logger">,
+  args: QueueManagedThreadTurnNotificationArgs,
+): Promise<void> {
+  try {
+    await queueManagerSystemMessage(deps, {
+      managerThreadId: args.managerThreadId,
+      messageText: renderManagedThreadTurnStatusMessage(args),
+    });
+  } catch (error) {
+    deps.logger.error(
+      {
+        err: error,
+        managedThreadId: args.managedThreadId,
+        managerThreadId: args.managerThreadId,
+        turnStatus: args.turnStatus,
+      },
+      "Failed to queue manager turn notification",
+    );
+  }
 }
 
 function resolveProviderIdentifiers(
@@ -205,6 +268,14 @@ async function applyEventEffects(
           ...event,
           threadId: entry.threadId,
         });
+        if (turnCompleted.thread?.parentThreadId) {
+          await queueManagedThreadTurnNotificationBestEffort(deps, {
+            managedThreadId: turnCompleted.thread.id,
+            managerThreadId: turnCompleted.thread.parentThreadId,
+            turnStatus: event.status,
+            title: turnCompleted.thread.title,
+          });
+        }
         if (event.status === "completed") {
           await sendNextQueuedDraftIfPresent(deps, {
             threadId: entry.threadId,

@@ -108,6 +108,34 @@ export const templateDefinitions = [
     }
   },
   {
+    "id": "systemMessageManagedThreadFailed",
+    "body": "[bb system] Managed thread failed: {{threadId}}{{titleSuffix}}\nReview that thread's error and decide whether to retry, clarify the task, or update the user.\nInspect the managed thread directly before taking action; do not reapply its edits into the manager checkout unless the user explicitly asked for that.",
+    "fileName": "system-message-managed-thread-failed.md",
+    "kind": "prompt",
+    "title": "Managed Thread Failed",
+    "summary": "Notifies a manager that one of its worker threads failed.",
+    "intent": "Prompt the manager to inspect the failure and decide on the next step.",
+    "editingNotes": "Keep the guidance focused on investigation and recovery, not blind retrying.",
+    "variables": {
+      "threadId": "The failed worker thread's ID.",
+      "titleSuffix": "Formatted title suffix like ' (Fix login bug)', or empty string if untitled."
+    }
+  },
+  {
+    "id": "systemMessageManagedThreadInterrupted",
+    "body": "[bb system] Managed thread interrupted: {{threadId}}{{titleSuffix}}\nReview that thread's latest state and decide whether to resume it, redirect it, or update the user.\nInspect the managed thread directly before taking action; do not reapply its edits into the manager checkout unless the user explicitly asked for that.",
+    "fileName": "system-message-managed-thread-interrupted.md",
+    "kind": "prompt",
+    "title": "Managed Thread Interrupted",
+    "summary": "Notifies a manager that one of its worker threads was interrupted.",
+    "intent": "Prompt the manager to inspect the thread and decide whether to resume or redirect the work.",
+    "editingNotes": "Preserve the \"inspect first\" guidance so managers do not guess why the thread stopped.",
+    "variables": {
+      "threadId": "The interrupted worker thread's ID.",
+      "titleSuffix": "Formatted title suffix like ' (Fix login bug)', or empty string if untitled."
+    }
+  },
+  {
     "id": "systemMessageManagerWelcome",
     "body": "[bb system] Welcome!",
     "fileName": "system-message-manager-welcome.md",
@@ -211,6 +239,14 @@ export interface TemplateVariables {
   };
   standardAgentInstructions: Record<string, never>;
   systemMessageManagedThreadComplete: {
+    threadId: string;
+    titleSuffix?: string;
+  };
+  systemMessageManagedThreadFailed: {
+    threadId: string;
+    titleSuffix?: string;
+  };
+  systemMessageManagedThreadInterrupted: {
     threadId: string;
     titleSuffix?: string;
   };

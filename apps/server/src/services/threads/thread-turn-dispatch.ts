@@ -3,6 +3,7 @@ import type {
   PromptInput,
   ResolvedThreadExecutionOptions,
   Thread,
+  ThreadTurnInitiator,
 } from "@bb/domain";
 import type { AppDeps } from "../../types.js";
 import { ApiError } from "../../errors.js";
@@ -19,6 +20,7 @@ export interface QueueTurnDuringReprovisionArgs {
   deps: Pick<AppDeps, "db" | "hub">;
   environment: Environment;
   execution: ResolvedThreadExecutionOptions;
+  initiator: ThreadTurnInitiator;
   input: PromptInput[];
   onQueued?: () => void;
   thread: Thread;
@@ -66,7 +68,7 @@ export function queueTurnDuringReprovision(
     type: "client/turn/requested",
     input: args.input,
     execution: args.execution,
-    initiator: "user",
+    initiator: args.initiator,
     requestMethod: "turn/start",
     source: "tell",
   });

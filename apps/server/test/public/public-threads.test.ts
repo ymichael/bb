@@ -23,8 +23,10 @@ import {
 } from "@bb/db";
 import { HOST_DAEMON_PROTOCOL_VERSION } from "@bb/host-daemon-contract";
 import { systemOperationEventDataSchema, threadSchema } from "@bb/domain";
+import { renderTemplate } from "@bb/templates";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  reportQueuedCommandError,
   reportQueuedCommandSuccess,
   waitForQueuedCommand,
   waitForQueuedCommandAfter,
@@ -39,6 +41,7 @@ import {
   seedHost,
   seedHostSession,
   seedProjectWithSource,
+  seedThreadRuntimeState,
   seedThread,
 } from "../helpers/seed.js";
 import { createTestAppHarness } from "../helpers/test-app.js";
@@ -2495,7 +2498,7 @@ describe("public thread routes", () => {
     }
   });
 
-  it("appends an ownership change event when the parent thread changes", async () => {
+  it("appends an ownership change event and queues a manager assignment message", async () => {
     const harness = await createTestAppHarness();
     try {
       const { host } = seedHostSession(harness.deps);
@@ -2514,13 +2517,20 @@ describe("public thread routes", () => {
         type: "manager",
         title: "Manager thread",
       });
+      seedThreadRuntimeState(harness.deps, {
+        threadId: managerThread.id,
+        environmentId: environment.id,
+        providerThreadId: "provider-manager-assigned",
+        inputText: "Initial manager task",
+        model: "gpt-5.4",
+      });
       const thread = seedThread(harness.deps, {
         projectId: project.id,
         environmentId: environment.id,
         parentThreadId: null,
       });
 
-      const response = await harness.app.request(`/api/v1/threads/${thread.id}`, {
+      const responsePromise = harness.app.request(`/api/v1/threads/${thread.id}`, {
         method: "PATCH",
         headers: {
           "content-type": "application/json",
@@ -2530,6 +2540,24 @@ describe("public thread routes", () => {
         }),
       });
 
+      const managerPreferencesPath = `/tmp/bb-host-data/${host.id}/thread-storage/${managerThread.id}/PREFERENCES.md`;
+      const preferencesReadCommand = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "host.read_file"
+          && command.path === managerPreferencesPath,
+      );
+      const readResponse = await reportQueuedCommandError(
+        harness,
+        preferencesReadCommand,
+        {
+          errorCode: "ENOENT",
+          errorMessage: "File not found",
+        },
+      );
+      expect(readResponse.status).toBe(200);
+
+      const response = await responsePromise;
       expect(response.status).toBe(200);
       expect(getThread(harness.db, thread.id)?.parentThreadId).toBe(managerThread.id);
 
@@ -2555,6 +2583,209 @@ describe("public thread routes", () => {
           nextParentThreadId: managerThread.id,
         },
       });
+
+      const queuedCommand = await waitForQueuedCommandAfter(
+        harness,
+        preferencesReadCommand.row.cursor,
+        ({ command }) =>
+          command.type === "turn.run" && command.threadId === managerThread.id,
+      );
+      expect(queuedCommand.command).toMatchObject({
+        environmentId: environment.id,
+        input: [
+          {
+            type: "text",
+            text: renderTemplate("systemMessageThreadOwnershipAssigned", {
+              threadLabel: `${thread.id}: Test Thread`,
+            }),
+          },
+        ],
+        options: {
+          model: "gpt-5.4",
+          serviceTier: "default",
+          reasoningLevel: "medium",
+          sandboxMode: "danger-full-access",
+          source: "client/turn/requested",
+        },
+        resumeContext: {
+          providerId: managerThread.providerId,
+          providerThreadId: "provider-manager-assigned",
+          projectId: project.id,
+          workspaceContext: {
+            workspacePath: environment.path,
+            workspaceProvisionType: "unmanaged",
+          },
+        },
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("queues a manager unassignment message when ownership is cleared", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps);
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/thread-unassignment-project",
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/thread-unassignment-project/worktree",
+      });
+      const managerThread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        type: "manager",
+        title: "Manager thread",
+      });
+      seedThreadRuntimeState(harness.deps, {
+        threadId: managerThread.id,
+        environmentId: environment.id,
+        providerThreadId: "provider-manager-unassigned",
+        inputText: "Initial manager task",
+        model: "gpt-5.4",
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        parentThreadId: managerThread.id,
+      });
+
+      const responsePromise = harness.app.request(`/api/v1/threads/${thread.id}`, {
+        method: "PATCH",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          parentThreadId: null,
+        }),
+      });
+
+      const managerPreferencesPath = `/tmp/bb-host-data/${host.id}/thread-storage/${managerThread.id}/PREFERENCES.md`;
+      const preferencesReadCommand = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "host.read_file"
+          && command.path === managerPreferencesPath,
+      );
+      const readResponse = await reportQueuedCommandError(
+        harness,
+        preferencesReadCommand,
+        {
+          errorCode: "ENOENT",
+          errorMessage: "File not found",
+        },
+      );
+      expect(readResponse.status).toBe(200);
+
+      const response = await responsePromise;
+      expect(response.status).toBe(200);
+      expect(getThread(harness.db, thread.id)?.parentThreadId).toBeNull();
+
+      const queuedCommand = await waitForQueuedCommandAfter(
+        harness,
+        preferencesReadCommand.row.cursor,
+        ({ command }) =>
+          command.type === "turn.run" && command.threadId === managerThread.id,
+      );
+      expect(queuedCommand.command).toMatchObject({
+        environmentId: environment.id,
+        input: [
+          {
+            type: "text",
+            text: renderTemplate("systemMessageThreadOwnershipRemoved", {
+              threadLabel: `${thread.id}: Test Thread`,
+            }),
+          },
+        ],
+        options: {
+          model: "gpt-5.4",
+          serviceTier: "default",
+          reasoningLevel: "medium",
+          sandboxMode: "danger-full-access",
+          source: "client/turn/requested",
+        },
+        resumeContext: {
+          providerId: managerThread.providerId,
+          providerThreadId: "provider-manager-unassigned",
+          projectId: project.id,
+          workspaceContext: {
+            workspacePath: environment.path,
+            workspaceProvisionType: "unmanaged",
+          },
+        },
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("keeps ownership updates successful when manager notification queuing fails", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const loggerError = vi.fn();
+      harness.deps.logger.error = loggerError;
+
+      const host = seedHost(harness.deps, {
+        id: "host-manager-notify-offline",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/thread-ownership-offline-project",
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/thread-ownership-offline-project/worktree",
+      });
+      const managerThread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        type: "manager",
+        title: "Offline manager",
+      });
+      seedThreadRuntimeState(harness.deps, {
+        threadId: managerThread.id,
+        environmentId: environment.id,
+        providerThreadId: "provider-manager-offline",
+        inputText: "Initial manager task",
+        model: "gpt-5.4",
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        parentThreadId: null,
+      });
+
+      const response = await harness.app.request(`/api/v1/threads/${thread.id}`, {
+        method: "PATCH",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          parentThreadId: managerThread.id,
+        }),
+      });
+
+      expect(response.status).toBe(200);
+      expect(getThread(harness.db, thread.id)?.parentThreadId).toBe(managerThread.id);
+      expect(
+        harness.db
+          .select({ id: hostDaemonCommands.id })
+          .from(hostDaemonCommands)
+          .all(),
+      ).toEqual([]);
+      expect(loggerError).toHaveBeenCalledWith(
+        expect.objectContaining({
+          managedThreadId: thread.id,
+          managerThreadId: managerThread.id,
+          reason: "assigned",
+        }),
+        "Failed to queue manager ownership system message",
+      );
     } finally {
       await harness.cleanup();
     }
