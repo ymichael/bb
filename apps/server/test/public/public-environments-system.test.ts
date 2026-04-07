@@ -827,9 +827,9 @@ describe("public environment and system routes", () => {
       const response = await harness.app.request("/api/v1/system/config");
       expect(response.status).toBe(200);
       await expect(readJson(response)).resolves.toEqual({
-        e2bConfigured: true,
         githubConnected: false,
         hostDaemonPort: 4010,
+        sandboxHostSupported: true,
         voiceTranscriptionEnabled: true,
       });
     } finally {
@@ -845,9 +845,9 @@ describe("public environment and system routes", () => {
       const response = await harness.app.request("/api/v1/system/config");
       expect(response.status).toBe(200);
       await expect(readJson(response)).resolves.toEqual({
-        e2bConfigured: false,
         githubConnected: false,
         hostDaemonPort: 3001,
+        sandboxHostSupported: false,
         voiceTranscriptionEnabled: true,
       });
     } finally {

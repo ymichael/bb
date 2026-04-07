@@ -39,9 +39,9 @@ export function registerSystemRoutes(app: Hono, deps: AppDeps): void {
 
   get("/system/config", (context) =>
     context.json({
-      e2bConfigured: isSandboxProvisioningConfigured(deps.config),
       githubConnected: deps.config.githubPat !== "",
       hostDaemonPort: deps.config.hostDaemonPort,
+      sandboxHostSupported: isSandboxProvisioningConfigured(deps.config),
       voiceTranscriptionEnabled: !!deps.config.openAiApiKey,
     }),
   );

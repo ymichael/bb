@@ -13,18 +13,18 @@ async function loadSystemConfig(): Promise<SystemConfigResponse> {
     const res = await apiClient.system.config.$get();
     if (!res.ok) {
       return {
-        e2bConfigured: false,
         githubConnected: false,
         hostDaemonPort: null,
+        sandboxHostSupported: false,
         voiceTranscriptionEnabled: false,
       };
     }
     return (await res.json()) as SystemConfigResponse;
   } catch {
     return {
-      e2bConfigured: false,
       githubConnected: false,
       hostDaemonPort: null,
+      sandboxHostSupported: false,
       voiceTranscriptionEnabled: false,
     };
   }
