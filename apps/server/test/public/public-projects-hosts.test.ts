@@ -601,6 +601,68 @@ describe("public project and host routes", () => {
     }
   });
 
+  it("renames a host via PATCH", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, { id: "host-rename" });
+
+      const patchResponse = await harness.app.request(
+        `/api/v1/hosts/${host.id}`,
+        {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ name: "Renamed Host" }),
+        },
+      );
+      expect(patchResponse.status).toBe(200);
+      await expect(readJson(patchResponse)).resolves.toMatchObject({
+        id: host.id,
+        name: "Renamed Host",
+      });
+
+      const getResponse = await harness.app.request(`/api/v1/hosts/${host.id}`);
+      expect(getResponse.status).toBe(200);
+      await expect(readJson(getResponse)).resolves.toMatchObject({
+        id: host.id,
+        name: "Renamed Host",
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("deletes a host via DELETE", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const host = seedHost(harness.deps, { id: "host-delete" });
+
+      const deleteResponse = await harness.app.request(
+        `/api/v1/hosts/${host.id}`,
+        { method: "DELETE" },
+      );
+      expect(deleteResponse.status).toBe(200);
+      await expect(readJson(deleteResponse)).resolves.toEqual({ ok: true });
+
+      const getResponse = await harness.app.request(`/api/v1/hosts/${host.id}`);
+      expect(getResponse.status).toBe(404);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("returns 404 when deleting a nonexistent host", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const deleteResponse = await harness.app.request(
+        `/api/v1/hosts/host-nonexistent`,
+        { method: "DELETE" },
+      );
+      expect(deleteResponse.status).toBe(404);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("retries managed project teardown after a partial destroy failure", async () => {
     const harness = await createTestAppHarness();
     try {
