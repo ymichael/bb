@@ -693,6 +693,77 @@ describe("CLI command output contracts", () => {
     expect(lines).toContain("Thread: thread-1");
   });
 
+  it("bb status fetches the environment host by id", async () => {
+    process.env.BB_PROJECT_ID = "proj-1";
+    process.env.BB_THREAD_ID = "thread-1";
+
+    const getProject = vi.fn(async () => ({
+      id: "proj-1",
+      name: "Alpha",
+    }));
+    const getThread = vi.fn(async () =>
+      makeThread({
+        id: "thread-1",
+        projectId: "proj-1",
+        providerId: "codex",
+        environmentId: "env-1",
+      })
+    );
+    const getEnvironment = vi.fn(async () =>
+      makeEnvironment({
+        id: "env-1",
+        projectId: "proj-1",
+        hostId: "host-ephemeral",
+      })
+    );
+    const getHost = vi.fn(async () => ({
+      id: "host-ephemeral",
+      name: "Sandbox Host",
+      type: "ephemeral",
+      status: "connected",
+      createdAt: 1,
+      updatedAt: 2,
+      lastSeenAt: 3,
+    }));
+    createClientMock.mockReturnValue(asServerClient({
+      api: {
+        v1: {
+          projects: {
+            ":id": {
+              $get: getProject,
+            },
+          },
+          threads: {
+            ":id": {
+              $get: getThread,
+            },
+          },
+          environments: {
+            ":id": {
+              $get: getEnvironment,
+            },
+          },
+          hosts: {
+            ":id": {
+              $get: getHost,
+            },
+          },
+        },
+      },
+    }));
+
+    await runCommand(["status"], (program) =>
+      registerStatusCommand(program, () => "http://server"),
+    );
+
+    expect(getHost).toHaveBeenCalledWith({
+      param: { id: "host-ephemeral" },
+    });
+    expect(collectLogLines(vi.mocked(console.log))).toContain(
+      "  Environment: Cloud (env-1)",
+    );
+  });
+
   it("bb thread spawn sends project and prompt", async () => {
     process.env.BB_PROJECT_ID = "proj-1";
     const thread: Thread = makeThread({

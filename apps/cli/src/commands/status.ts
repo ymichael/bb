@@ -73,21 +73,36 @@ function fetchThread(args: {
   );
 }
 
+function fetchHost(args: {
+  client: Client;
+  hostId: string;
+}): Promise<Host | null> {
+  return fetchSilent(() =>
+    unwrap<Host>(
+      args.client.api.v1.hosts[":id"].$get({
+        param: { id: args.hostId },
+      }),
+    ),
+  );
+}
+
 async function fetchEnvironmentInfo(args: {
   client: Client;
   environmentId: string;
 }): Promise<ThreadEnvironmentInfo | null> {
   return fetchSilent(async () => {
-    const [env, localHostId, hosts] = await Promise.all([
+    const [env, localHostId] = await Promise.all([
       unwrap<Environment>(
         args.client.api.v1.environments[":id"].$get({
           param: { id: args.environmentId },
         }),
       ),
       fetchLocalHostId(),
-      unwrap<Host[]>(args.client.api.v1.hosts.$get()),
     ]);
-    const host = hosts.find((h) => h.id === env.hostId);
+    const host = await fetchHost({
+      client: args.client,
+      hostId: env.hostId,
+    });
     const isLocal = env.hostId === localHostId;
     return {
       display: formatEnvironmentDisplay({
