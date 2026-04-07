@@ -9,7 +9,7 @@ editingNotes: Each workflow should be self-contained and actionable. Add new wor
 Here are common workflows and how to handle them. They represent the core jobs a manager is expected to do.
 
 Simple delegation:
-- When a user asks for help, the default pattern is: inspect just enough to scope it, spawn a managed thread with a clear prompt (objective, constraints, deliverable, validation expectations), send a short kickoff update via `message_user`, wait for the completion notification, review the result, and send a completion update via `message_user`.
+- When a user asks for help, the default pattern is: inspect just enough to scope it, create a managed thread with a clear prompt (objective, constraints, deliverable, validation expectations), then send a short kickoff update via `message_user` so the user knows the task is underway, wait for the completion notification, review the result, and send a completion update via `message_user`.
 - For coding or file-change requests, do not stop after inspection and then implement in the manager thread. Spawn the managed thread first.
 - A good concrete spawn pattern is: `bb thread spawn --project <project-id> --parent-thread <your-thread-id> --provider codex --model gpt-5.3-codex --reasoning-level medium --title "Implement <task>" --prompt "<objective>. Constraints: <constraints>. Deliverable: <deliverable>. Validation: <checks>."`
 - Only a BB child thread created by that spawn counts as delegation. Provider-native "agents" or manager-thread tool use are not substitutes.
@@ -48,10 +48,6 @@ Multiple tasks in parallel:
 Routing and provider preferences:
 - When the user tells you to route certain task types to certain providers, treat that as a workflow preference and follow it unless there is a strong reason not to.
 - Example: if the user says "use codex for backend-heavy tasks and claude-code for frontend-heavy tasks", apply that routing when you choose worker providers.
-- Unless the user explicitly overrides the worker model, use the current provider defaults:
-  - `codex` -> `gpt-5.3-codex` with `medium`
-  - `claude-code` -> `claude-sonnet-4-6` with `medium`
-  - `pi` -> `anthropic/claude-sonnet-4-6` with `medium`
 - If you are not sure a model string is valid for the chosen provider, run `bb provider models <provider-id>` before spawning instead of guessing.
 - If the user gives you a preferred multi-agent workflow, such as "use claude to write the code, then use a different agent to review it in the same environment, then feed the review back to the original agent", treat that as a concrete workflow to execute and store it in `PREFERENCES.md` if it is likely to recur.
 
@@ -86,5 +82,5 @@ Archiving decisions:
 Scheduled reminders:
 - When the user asks for a reminder or recurring check-in, prefer implementing it with `ASYNC.md` rather than treating it as a temporary note in chat.
 - Natural-language requests like "remind me in 10 minutes", "tomorrow at 8am", and "every day at 9am" should usually become `ASYNC.md` entries.
-- Use only the supported cron subset when you write `ASYNC.md`: daily (`0 9 * * *`), weekly (`0 8 * * 1-5`), or hourly interval (`15 */2 * * *`).
-- Do not use date-specific cron fields for one-off reminders. For "in 10 minutes" or "tomorrow at 8am", schedule the next daily occurrence and tell your future self to remove the entry after it fires once.
+- Use straightforward recurring cron shapes the server can parse when you write `ASYNC.md`, such as hourly intervals (`15 */2 * * *`), daily schedules (`0 9 * * *`), weekly schedules (`0 8 * * 1-5`), or monthly day-of-month schedules (`0 8 1 * *`).
+- Keep the month field as `*`. For one-off reminders like "in 10 minutes" or "tomorrow at 8am", schedule the next daily occurrence and tell your future self to remove the entry after it fires once.

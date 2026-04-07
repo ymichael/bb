@@ -57,7 +57,7 @@ describe("@bb/templates", () => {
     expect(rendered).toContain("bb thread spawn");
     expect(rendered).toContain("gpt-5.3-codex");
     expect(rendered).toContain("claude-sonnet-4-6");
-    expect(rendered).toContain("anthropic/claude-sonnet-4-6");
+    expect(rendered).toContain("anthropic/claude-opus-4-6");
     expect(rendered).toContain("America/Los_Angeles");
     // bbSystemOverview partial content
     expect(rendered).toContain("agent orchestration tool");
