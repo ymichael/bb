@@ -7,7 +7,6 @@ import type {
   SandboxMode,
   ServiceTier,
   ThreadEvent,
-  ToolCallRequest,
 } from "@bb/domain";
 
 // ---------------------------------------------------------------------------
@@ -28,6 +27,16 @@ export interface ProviderTranslationContext {
 
 export interface ProviderAdapterFactoryOptions {
   bridgeBundleDir?: string;
+}
+
+export interface DecodedToolCallRequest {
+  requestId: string | number;
+  providerThreadId: string;
+  turnId: string;
+  callId: string;
+  tool: string;
+  arguments?: unknown;
+  threadId?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -100,5 +109,5 @@ export interface ProviderAdapter {
     event: unknown,
     context?: ProviderTranslationContext,
   ): ThreadEvent[];
-  decodeToolCallRequest(request: JsonRpcMessage): ToolCallRequest | null;
+  decodeToolCallRequest(request: JsonRpcMessage): DecodedToolCallRequest | null;
 }

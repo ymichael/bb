@@ -1185,7 +1185,7 @@ describe("codex provider adapter", () => {
       }),
     ).toEqual({
       requestId: 7,
-      threadId: "t1",
+      providerThreadId: "t1",
       turnId: "turn-1",
       callId: "call-1",
       tool: "bb_test_ping",

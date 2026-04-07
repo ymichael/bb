@@ -15,7 +15,6 @@ import type {
   ThreadEventItem,
   ThreadEventTokenUsage,
   ThreadEventTokenUsageBreakdown,
-  ToolCallRequest,
 } from "@bb/domain";
 import { toPositiveNumber } from "@bb/domain";
 import {
@@ -51,6 +50,7 @@ import {
 } from "../shared/json-rpc-envelope.js";
 import type {
   AdapterCommand,
+  DecodedToolCallRequest,
   JsonRpcMessage,
   ProviderTranslationContext,
   ProviderAdapter,
@@ -743,7 +743,7 @@ export function createClaudeCodeProviderAdapter(
 
     // -- Tool call codec ---------------------------------------------------
 
-    decodeToolCallRequest(request: JsonRpcMessage): ToolCallRequest | null {
+    decodeToolCallRequest(request: JsonRpcMessage): DecodedToolCallRequest | null {
       if (typeof request.id !== "string" && typeof request.id !== "number") {
         return null;
       }

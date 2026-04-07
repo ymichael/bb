@@ -47,7 +47,8 @@ export interface AgentRuntimeOptions {
   /** Called when runtime audit capture is enabled by a harness or test. */
   onCapture?: (entry: AgentRuntimeCaptureEntry) => void;
 
-  /** Called when a provider needs to execute a tool. */
+  /** Called when a provider needs to execute a tool.
+   *  `threadId` is always the BB thread id and `providerThreadId` is always present. */
   onToolCall: (request: ToolCallRequest) => Promise<ToolCallResponse>;
 
   /** Called on provider stderr lines. */

@@ -1,10 +1,9 @@
 import { z } from "zod";
-import type {
-  ToolCallRequest,
-} from "@bb/domain";
+import type { DecodedToolCallRequest } from "../provider-adapter.js";
 
 const providerToolCallRequestSchema = z.object({
   threadId: z.string(),
+  providerThreadId: z.string().optional(),
   turnId: z.string(),
   callId: z.string().min(1),
   tool: z.string().min(1),
@@ -31,7 +30,7 @@ export function decodeProviderToolCallRequest(
   requestId: string | number,
   method: string,
   params: unknown,
-): ToolCallRequest | null {
+): DecodedToolCallRequest | null {
   if (method !== "item/tool/call") {
     return null;
   }
@@ -41,8 +40,14 @@ export function decodeProviderToolCallRequest(
     return null;
   }
 
+  const providerThreadId = parsed.data.providerThreadId ?? parsed.data.threadId;
   return {
     requestId,
-    ...parsed.data,
+    providerThreadId,
+    turnId: parsed.data.turnId,
+    callId: parsed.data.callId,
+    tool: parsed.data.tool,
+    ...(parsed.data.arguments !== undefined ? { arguments: parsed.data.arguments } : {}),
+    ...(parsed.data.providerThreadId ? { threadId: parsed.data.threadId } : {}),
   };
 }

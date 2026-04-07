@@ -199,6 +199,7 @@ describe("pi provider adapter", () => {
         method: "item/tool/call",
         params: {
           threadId: "t1",
+          providerThreadId: "t1",
           turnId: "turn-1",
           callId: "call-1",
           tool: "bb_test_ping",
@@ -208,6 +209,7 @@ describe("pi provider adapter", () => {
     ).toEqual({
       requestId: "req-1",
       threadId: "t1",
+      providerThreadId: "t1",
       turnId: "turn-1",
       callId: "call-1",
       tool: "bb_test_ping",

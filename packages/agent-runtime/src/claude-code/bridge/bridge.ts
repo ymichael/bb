@@ -225,6 +225,7 @@ function createForwardToolCall(threadIdRef: { current: string }): ToolCallForwar
         method: "item/tool/call",
         params: {
           threadId: threadIdRef.current,
+          providerThreadId: threadSession.providerThreadId ?? threadIdRef.current,
           turnId: "",
           callId: `call-${requestId}`,
           tool: toolName,

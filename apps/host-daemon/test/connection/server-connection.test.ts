@@ -280,6 +280,7 @@ describe("ServerConnection", () => {
     const response = await serverClient.callTool({
       requestId: 1,
       threadId: "thread-1",
+      providerThreadId: "provider-thread-1",
       turnId: "turn-1",
       callId: "call-1",
       tool: "message_user",

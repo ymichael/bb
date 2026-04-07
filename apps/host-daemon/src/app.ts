@@ -191,7 +191,26 @@ export async function createHostDaemonApp(
         "Workspace status watch unavailable; retrying in background",
       );
     },
-    onToolCall: options.onToolCall ?? ((request) => serverClient.callTool(request)),
+    onToolCall:
+      options.onToolCall ??
+      (async (request) => {
+        try {
+          return await serverClient.callTool(request);
+        } catch (error) {
+          options.logger.error(
+            {
+              err: error,
+              tool: request.tool,
+              threadId: request.threadId,
+              providerThreadId: request.providerThreadId,
+              turnId: request.turnId,
+              callId: request.callId,
+            },
+            "Failed to forward dynamic tool call to server",
+          );
+          throw error;
+        }
+      }),
     threadStorageRootPath,
   });
 

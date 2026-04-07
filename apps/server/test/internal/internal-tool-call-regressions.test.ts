@@ -36,6 +36,7 @@ describe("internal tool-call regressions", () => {
         body: JSON.stringify({
           sessionId: hostA.session.id,
           threadId: thread.id,
+          providerThreadId: "provider-cross-host",
           turnId: "turn-cross-host",
           callId: "call-cross-host",
           tool: "message_user",

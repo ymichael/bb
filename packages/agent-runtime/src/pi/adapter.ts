@@ -18,7 +18,6 @@ import type {
   ThreadEventItem,
   ThreadEventTokenUsage,
   ThreadEventTokenUsageBreakdown,
-  ToolCallRequest,
 } from "@bb/domain";
 import { toPositiveNumber } from "@bb/domain";
 import {
@@ -55,6 +54,7 @@ import {
 import type {
   AdapterCommand,
   AdapterOptions,
+  DecodedToolCallRequest,
   JsonRpcMessage,
   ProviderTranslationContext,
   ProviderAdapter,
@@ -852,7 +852,7 @@ export function createPiProviderAdapter(
 
     // -- Tool call codec ---------------------------------------------------
 
-    decodeToolCallRequest(request: JsonRpcMessage): ToolCallRequest | null {
+    decodeToolCallRequest(request: JsonRpcMessage): DecodedToolCallRequest | null {
       if (typeof request.id !== "string" && typeof request.id !== "number") {
         return null;
       }

@@ -51,6 +51,7 @@ export type ToolCallOutputItem = z.infer<typeof toolCallOutputItemSchema>;
 export const toolCallRequestSchema = z.object({
   requestId: z.union([z.string(), z.number()]),
   threadId: z.string(),
+  providerThreadId: z.string(),
   turnId: z.string(),
   callId: z.string(),
   tool: z.string(),

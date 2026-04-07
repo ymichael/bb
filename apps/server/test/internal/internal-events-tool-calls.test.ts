@@ -241,6 +241,7 @@ describe("internal event and tool-call routes", () => {
         body: JSON.stringify({
           sessionId: session.id,
           threadId: managerThread.id,
+          providerThreadId: "provider-manager-unsupported-tool",
           turnId: "turn-1",
           callId: "call-1",
           tool: "spawn_thread",
@@ -286,6 +287,7 @@ describe("internal event and tool-call routes", () => {
         body: JSON.stringify({
           sessionId: session.id,
           threadId: managerThread.id,
+          providerThreadId: "provider-manager-message-user",
           turnId: "turn-2",
           callId: "call-2",
           tool: "message_user",

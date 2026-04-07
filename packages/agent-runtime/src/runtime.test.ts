@@ -689,12 +689,16 @@ describe("createAgentRuntime", () => {
   // ---- Tool calls ----
 
   it("routes tool calls through onToolCall and sends response back", async () => {
-    const toolCalls: Array<{ tool: string }> = [];
+    const toolCalls: Array<{ threadId: string; providerThreadId: string; tool: string }> = [];
     const runtime = createAgentRuntime({
       workspacePath: tmpDir,
       onEvent: () => {},
       onToolCall: async (req) => {
-        toolCalls.push({ tool: req.tool });
+        toolCalls.push({
+          threadId: req.threadId,
+          providerThreadId: req.providerThreadId,
+          tool: req.tool,
+        });
         return {
           contentItems: [{ type: "inputText", text: "tool result" }],
           success: true,
@@ -716,7 +720,48 @@ describe("createAgentRuntime", () => {
     await wait(200);
 
     expect(toolCalls).toHaveLength(1);
-    expect(toolCalls[0].tool).toBe("my_test_tool");
+    expect(toolCalls[0]).toEqual({
+      threadId: "t1",
+      providerThreadId: "prov-1",
+      tool: "my_test_tool",
+    });
+    await runtime.shutdown();
+  });
+
+  it("maps provider-native tool calls back to BB thread ids while preserving provider ids", async () => {
+    const toolCalls: Array<{ threadId: string; providerThreadId: string; tool: string }> = [];
+    const runtime = createAgentRuntime({
+      workspacePath: tmpDir,
+      onEvent: () => {},
+      onToolCall: async (req) => {
+        toolCalls.push({
+          threadId: req.threadId,
+          providerThreadId: req.providerThreadId,
+          tool: req.tool,
+        });
+        return {
+          contentItems: [{ type: "inputText", text: "tool result" }],
+          success: true,
+        };
+      },
+      adapterFactory: () => createFakeAdapter(scriptPath),
+    });
+
+    await runtime.startThread({
+      environmentId: "env-1",
+      threadId: "t1",
+      projectId: "p1",
+      providerId: "fake",
+    });
+    await runtime.runTurn({
+      threadId: "t1",
+      input: [{ type: "text", text: "call_tool_provider_thread:my_test_tool" }],
+    });
+    await wait(200);
+
+    expect(toolCalls).toEqual([
+      { threadId: "t1", providerThreadId: "prov-1", tool: "my_test_tool" },
+    ]);
     await runtime.shutdown();
   });
 
@@ -798,7 +843,11 @@ describe("createAgentRuntime", () => {
     );
     expect(toolRequests).toHaveLength(1);
     expect(toolResults).toHaveLength(1);
-    expect(toolRequests[0]?.request.tool).toBe("my_test_tool");
+    expect(toolRequests[0]?.request).toMatchObject({
+      threadId: "t1",
+      providerThreadId: "prov-1",
+      tool: "my_test_tool",
+    });
     expect(toolResults[0]).toMatchObject({
       requestCaptureId: toolRequests[0]?.captureId,
       requestId: toolRequests[0]?.request.requestId,

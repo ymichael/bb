@@ -165,6 +165,7 @@ export type HostDaemonDaemonWsMessage = z.infer<
 export const hostDaemonToolCallRequestSchema = toolCallRequestSchema
   .pick({
     threadId: true,
+    providerThreadId: true,
     turnId: true,
     callId: true,
     tool: true,

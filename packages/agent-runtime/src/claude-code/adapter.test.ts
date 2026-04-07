@@ -296,6 +296,7 @@ describe("claude-code provider adapter", () => {
         method: "item/tool/call",
         params: {
           threadId: "t1",
+          providerThreadId: "claude-session-1",
           turnId: "turn-1",
           callId: "call-1",
           tool: "bb_test_ping",
@@ -305,6 +306,7 @@ describe("claude-code provider adapter", () => {
     ).toEqual({
       requestId: "req-1",
       threadId: "t1",
+      providerThreadId: "claude-session-1",
       turnId: "turn-1",
       callId: "call-1",
       tool: "bb_test_ping",

@@ -4,6 +4,7 @@ import type {
   DynamicTool,
   ThreadEvent,
   ThreadExecutionOptions,
+  ToolCallRequest,
 } from "@bb/domain";
 import type { AgentRuntimeCaptureEntry } from "./capture-types.js";
 import type {
@@ -176,6 +177,32 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
     return providerId;
   }
 
+  function resolveBbThreadIdForProcess(
+    proc: ProviderProcess,
+    candidateThreadId: string | undefined,
+  ): string | undefined {
+    if (candidateThreadId && proc.threadIds.has(candidateThreadId)) {
+      return candidateThreadId;
+    }
+
+    if (candidateThreadId) {
+      for (const [bbThreadId, providerThreadId] of threadToProviderThread) {
+        if (
+          providerThreadId === candidateThreadId
+          && proc.threadIds.has(bbThreadId)
+        ) {
+          return bbThreadId;
+        }
+      }
+    }
+
+    if (proc.threadIds.size === 1) {
+      return [...proc.threadIds][0];
+    }
+
+    return undefined;
+  }
+
   function sameExecutionSettings(
     left: ThreadExecutionOptions | undefined,
     right: ThreadExecutionOptions | undefined,
@@ -298,6 +325,32 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
         rawRequest,
       );
       if (toolCallReq) {
+        const resolvedThreadId = toolCallReq.threadId
+          ?? resolveBbThreadIdForProcess(
+            proc,
+            toolCallReq.providerThreadId,
+          );
+        if (!resolvedThreadId) {
+          const rpcError = {
+            jsonrpc: "2.0",
+            id: parsed.id,
+            error: {
+              code: -32000,
+              message: `Unable to resolve BB thread id for tool call on provider thread "${toolCallReq.providerThreadId}"`,
+            },
+          };
+          proc.child.stdin?.write(JSON.stringify(rpcError) + "\n");
+          return;
+        }
+        const scopedToolCallReq: ToolCallRequest = {
+          requestId: toolCallReq.requestId,
+          threadId: resolvedThreadId,
+          providerThreadId: toolCallReq.providerThreadId,
+          turnId: toolCallReq.turnId,
+          callId: toolCallReq.callId,
+          tool: toolCallReq.tool,
+          ...(toolCallReq.arguments !== undefined ? { arguments: toolCallReq.arguments } : {}),
+        };
         const captureId = createCaptureId();
         emitCapture({
           kind: "tool-call-request",
@@ -306,15 +359,15 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
           providerId,
           rawLine: line,
           rawRequest,
-          request: toolCallReq,
+          request: scopedToolCallReq,
         });
-        void options.onToolCall(toolCallReq).then((response) => {
+        void options.onToolCall(scopedToolCallReq).then((response) => {
           emitCapture({
             kind: "tool-call-result",
             capturedAt: Date.now(),
             providerId,
             requestCaptureId: captureId,
-            requestId: toolCallReq.requestId,
+            requestId: scopedToolCallReq.requestId,
             success: true,
             response,
           });
@@ -330,7 +383,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
             capturedAt: Date.now(),
             providerId,
             requestCaptureId: captureId,
-            requestId: toolCallReq.requestId,
+            requestId: scopedToolCallReq.requestId,
             success: false,
             errorMessage: err instanceof Error ? err.message : String(err),
           });
