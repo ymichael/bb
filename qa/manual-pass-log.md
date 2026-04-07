@@ -115,3 +115,91 @@ Notes:
 
 - `bb thread show --self --json` is not currently supported by the CLI; the codex smoke thread reported `unknown option '--self'`. This did not block verification because `bb thread update --self` worked and the follow-up checks used `bb thread show <thread-id> --json`.
 - The standalone restart helper was incorrect at the start of QA because it tried to launch a new daemon without stopping the existing one, which correctly failed on the daemon lock. `scripts/qa/shared.mjs` and `scripts/qa/start-standalone.mjs` were updated so the generated restart command now kills the old daemon PID before starting the replacement process.
+
+## Manager CLI
+
+Date: 2026-04-06
+Operator: Codex
+Status: passed after critical fixes
+Core-flow standalone state path: `/var/folders/lr/f3ynv4xj6p77kvx_rz7zgzg00000gn/T/bb-standalone-7ESgJX/standalone-state.json`
+Scheduling/routing standalone state path: `/var/folders/lr/f3ynv4xj6p77kvx_rz7zgzg00000gn/T/bb-standalone-SpMvKV/standalone-state.json`
+Codex manager (core flow): `thr_7a3e6av9a3`
+Codex manager (scheduling/routing): `thr_c9gaer9gz4`
+Pi manager: `thr_epdnikmy8z`
+Implementation child: `thr_srga7hm3jp`
+Review child: `thr_igdmm42wi8`
+Ownership-transfer thread: `thr_ndw9jbmr64`
+Routing backend child: `thr_rq9stzj3gi`
+Routing frontend child: `thr_4eangjpzgs`
+
+Validated:
+
+- Codex manager hire immediately hatched, reached `idle`, and exposed the meet-and-greet through `bb thread output`.
+- Manager updates now flow through `message_user` end to end; live logs show successful `message_user` tool calls and persisted `system/manager/user_message` events.
+- A substantive backend task was delegated to a child thread, followed by a same-environment review thread, then triaged back to the original worker before the final user update.
+- Manager completion handling now uses automated managed-thread completion signals. The manager log shows system-driven `client/turn/requested` entries for completion, ownership assigned, and ownership removed.
+- Ownership transfer via `bb thread update --parent-thread` and `--clear-parent-thread` triggered manager follow-up turns as expected.
+- Provider-routing preferences worked in a live parallel request:
+  - backend child used `providerId: codex`
+  - frontend child used `providerId: claude-code`
+- Pi manager smoke passed with `anthropic/claude-opus-4-6` / `medium`; the Pi manager reached `idle` and produced a visible hatch message.
+- Reminder scheduling passed after tightening the manager instructions:
+  - `ASYNC.md` contained `cron: "17 0 * * *"`
+  - `manager_thread_nudges` contained `thr_c9gaer9gz4|backend-port-cleanup-check|17 0 * * *|America/Los_Angeles|1775546220000`
+
+Critical issues fixed during the pass:
+
+- dynamic `message_user` forwarding used provider thread ids instead of BB thread ids
+- manager completion / ownership control messages were not wired on the server
+- `bb thread output` dropped manager-visible messages when a later assistant item was empty
+- manager reminder generation could produce unsupported date-specific cron in `ASYNC.md`
+
+Residual notes:
+
+- The manager no longer relied on polling loops to detect completion, but live logs still showed a small number of `bb thread show --json` inspections while reviewing completed child results. This did not behave like tight completion polling, but it remains worth watching.
+
+## Pi Manager Parity Rerun
+
+Date: 2026-04-07
+Operator: Codex
+Status: passed after Pi-specific critical fixes
+Pi full-flow standalone state path: `/var/folders/lr/f3ynv4xj6p77kvx_rz7zgzg00000gn/T/bb-standalone-ydj2ZY/standalone-state.json`
+Pi scheduling-timezone standalone state path: `/var/folders/lr/f3ynv4xj6p77kvx_rz7zgzg00000gn/T/bb-standalone-lZ8167/standalone-state.json`
+Pi archive standalone state path: `/var/folders/lr/f3ynv4xj6p77kvx_rz7zgzg00000gn/T/bb-standalone-leqi3T/standalone-state.json`
+Pi full-flow manager: `thr_iini5qeeii`
+Pi ownership/scheduling manager: `thr_et5zkcpnx7`
+Pi scheduling-timezone manager: `thr_xdd955ybte`
+Pi archive manager: `thr_xt5yisgw67`
+Backend implementation child: `thr_syvuknesb9`
+Initial same-environment review child: `thr_6csnzj8czc`
+Fallback same-environment review child: `thr_2bkyfxxjgy`
+Routing backend child: `thr_95bwwbe36k`
+Routing frontend child: `thr_8v9y6q9z9m`
+Routing frontend fallback child: `thr_xdh4m83529`
+Ownership-transfer thread: `thr_b7qfaizahx`
+Archived helper thread: `thr_ydwh24qkxp`
+
+Validated:
+
+- Pi managers now hatch immediately, send a visible meet-and-greet through `message_user`, and persist routing/update preferences in `PREFERENCES.md`.
+- After tightening the worker-model guidance, the Pi manager stopped spawning unsupported Codex models and delegated backend work directly to `gpt-5.3-codex` / `medium`.
+- A substantive backend task was delegated, reviewed in the same environment, triaged back to the original worker, and closed out with a final user update.
+- Pi multi-thread fan-out worked in a live parallel request:
+  - backend child used `providerId: codex`
+  - frontend child used `providerId: claude-code`
+- When `claude-code` failed because the local OAuth token was expired, the Pi manager recovered by retrying the affected work with codex rather than stalling.
+- Ownership transfer via `bb thread update --parent-thread` and `--clear-parent-thread` triggered the expected Pi-manager follow-up turns and user-visible updates.
+- Reminder scheduling passed after the local-timezone fix:
+  - `ASYNC.md` contained `timezone: America/Los_Angeles`
+  - `manager_thread_nudges` rows for `thr_xdd955ybte` used `America/Los_Angeles`
+- Archive judgment passed in a focused helper-thread flow: Pi manager `thr_xt5yisgw67` summarized a one-off codex research thread and archived `thr_ydwh24qkxp` afterward.
+
+Critical issues fixed during the Pi rerun:
+
+- Pi managers could guess unsupported worker model ids like `o4-mini` instead of using current CLI-valid defaults
+- Pi managers could default reminder-style `ASYNC.md` schedules to `UTC` instead of the local reminder timezone
+
+Residual notes:
+
+- `claude-code` remains blocked by a local expired OAuth token in this environment. Pi managers still routed work to `claude-code` correctly, but the live pass had to rely on codex fallbacks to complete those tasks.
+- No tight completion-polling loop was observed in the Pi reruns. Managers still used occasional inspection commands while reviewing child output, but completion itself came from manager system messages rather than repeated polling.
