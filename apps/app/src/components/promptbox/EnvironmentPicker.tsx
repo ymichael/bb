@@ -15,6 +15,7 @@ import {
 import { useHostDaemon } from "@/hooks/useHostDaemon";
 import { useHosts, useSandboxBackends } from "@/hooks/queries/system-queries";
 import { sandboxHostSupportedAtom } from "@/lib/atoms";
+import { HostStatusBadge, HostStatusDot } from "@/components/HostStatusIndicator";
 import { cn } from "@/lib/utils";
 import {
   PROMPT_OPTION_BASE_CLASS_NAME,
@@ -106,6 +107,13 @@ function buildHostSections(
 // Component
 // ---------------------------------------------------------------------------
 
+interface SelectedEnvironment {
+  modeLabel: string;
+  hostLabel?: string;
+  icon: typeof Monitor;
+  hostConnected?: boolean;
+}
+
 interface EnvironmentPickerProps {
   value: string;
   onChange: (value: string) => void;
@@ -127,20 +135,20 @@ export function EnvironmentPicker({
     [hosts, sources, isLocalHost],
   );
 
-  const selected = useMemo(() => {
+  const selected = useMemo((): SelectedEnvironment => {
     const parsed = parseEnvironmentValue(value);
-    if (!parsed) return { label: "Environment", icon: Monitor };
+    if (!parsed) return { modeLabel: "Environment", icon: Monitor };
     if (parsed.type === "host") {
       const modeLabel = parsed.mode === "worktree" ? "Worktree" : "Direct";
-      if (isLocalHost(parsed.hostId)) {
-        return { label: modeLabel, icon: Monitor };
-      }
       const host = hosts.find((h) => h.id === parsed.hostId);
-      const hostName = host?.name ?? "Unknown";
-      return { label: `${hostName} · ${modeLabel}`, icon: Monitor };
+      const hostConnected = host?.status === "connected";
+      if (isLocalHost(parsed.hostId)) {
+        return { modeLabel, icon: Monitor, hostConnected };
+      }
+      return { modeLabel, hostLabel: host?.name ?? "Unknown", icon: Monitor, hostConnected };
     }
     const backend = sandboxBackends.find((b) => b.id === parsed.backendId);
-    return { label: backend?.displayName ?? "Cloud", icon: Cloud };
+    return { modeLabel: backend?.displayName ?? "Cloud", icon: Cloud };
   }, [value, hosts, sandboxBackends]);
 
   return (
@@ -151,7 +159,7 @@ export function EnvironmentPicker({
           variant="ghost"
           size="sm"
           aria-label="Environment"
-          title={`Environment: ${selected.label}`}
+          title={`Environment: ${selected.modeLabel}${selected.hostLabel ? ` · ${selected.hostLabel}` : ""}`}
           className={cn(
             PROMPT_OPTION_BASE_CLASS_NAME,
             PROMPT_OPTION_INTERACTIVE_CLASS_NAME,
@@ -159,7 +167,15 @@ export function EnvironmentPicker({
         >
           <span className={PROMPT_OPTION_CONTENT_CLASS_NAME}>
             <selected.icon className="size-3.5 shrink-0" />
-            <span className="truncate">{selected.label}</span>
+            <span className="truncate">
+              {selected.modeLabel}
+              {selected.hostLabel ? (
+                <span className="text-muted-foreground/60"> · {selected.hostLabel}</span>
+              ) : null}
+            </span>
+            {selected.hostConnected !== undefined ? (
+              <HostStatusBadge connected={selected.hostConnected} />
+            ) : null}
           </span>
           <ChevronDown className="size-3.5 text-muted-foreground" />
         </Button>
@@ -219,6 +235,7 @@ function HostSectionGroup({
               localhost
             </span>
           ) : null}
+          {section.isConnected ? <HostStatusDot /> : null}
         </DropdownMenuLabel>
         {enabled ? (
           <>
@@ -238,7 +255,7 @@ function HostSectionGroup({
         ) : (
           <DropdownMenuItem disabled className="text-xs text-muted-foreground">
             {!section.isConnected
-              ? "Host is disconnected"
+              ? "Host is offline"
               : "Host not configured for project"}
           </DropdownMenuItem>
         )}

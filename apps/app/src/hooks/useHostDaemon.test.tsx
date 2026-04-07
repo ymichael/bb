@@ -53,7 +53,7 @@ interface HostDaemonWrapperOptions {
 interface HostDaemonSnapshot {
   localHostId: string | null;
   localHost: Host | null;
-  isLocalHostConnected: boolean;
+  hasConnectedPersistentHost: boolean;
   hasDaemon: boolean;
   isLocalHost: (hostId: string | null | undefined) => boolean;
   openPath: ((path: string) => Promise<void>) | null;
@@ -121,7 +121,7 @@ function createHostDaemonProbe(useHostDaemon: () => HostDaemonSnapshot) {
         <div data-testid="local-host-id">{value.localHostId ?? "null"}</div>
         <div data-testid="host-name">{value.localHost?.name ?? "none"}</div>
         <div data-testid="has-daemon">{String(value.hasDaemon)}</div>
-        <div data-testid="is-connected">{String(value.isLocalHostConnected)}</div>
+        <div data-testid="is-connected">{String(value.hasConnectedPersistentHost)}</div>
         <div data-testid="is-local-host-1">{String(value.isLocalHost("host-1"))}</div>
         <div data-testid="is-local-host-2">{String(value.isLocalHost("host-2"))}</div>
         <button disabled={value.openPath == null} onClick={() => void value.openPath?.("/tmp/file.txt")}>

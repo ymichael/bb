@@ -39,6 +39,7 @@ interface ThreadDetailPromptAreaProps {
   canExpandPromptChangeList: boolean;
   canUseGitUi: boolean;
   contextWindowUsage?: ThreadTimelineResponse["contextWindowUsage"];
+  environmentHostConnected?: boolean;
   environmentIcon?: ComponentType<{ className?: string }>;
   environmentLabel?: ReactNode;
   isDiffPanelActive: boolean;
@@ -67,6 +68,7 @@ export function ThreadDetailPromptArea({
   canExpandPromptChangeList,
   canUseGitUi,
   contextWindowUsage,
+  environmentHostConnected,
   environmentIcon,
   environmentLabel,
   isDiffPanelActive,
@@ -429,6 +431,7 @@ export function ThreadDetailPromptArea({
       }}
       environment={{
         contextWindowUsage,
+        environmentHostConnected,
         environmentIcon,
         environmentLabel,
       }}

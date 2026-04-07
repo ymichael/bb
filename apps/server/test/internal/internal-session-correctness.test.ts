@@ -402,39 +402,14 @@ describe("internal session correctness", () => {
     }
   });
 
-  it("keeps the daemon session active during the disconnect grace period", async () => {
+  it("closes the daemon session immediately when the websocket disconnects", async () => {
     const harness = await createTestAppHarness();
     try {
-      vi.useFakeTimers();
       const { session } = seedHostSession(harness.deps, {
         id: "host-daemon-disconnect",
       });
 
       onDaemonSocketClose(harness.deps, session.id);
-      await vi.advanceTimersByTimeAsync(DAEMON_DISCONNECT_GRACE_MS - 1);
-
-      const activeSession = harness.db
-        .select()
-        .from(hostDaemonSessions)
-        .where(eq(hostDaemonSessions.id, session.id))
-        .get();
-      expect(activeSession?.status).toBe("active");
-    } finally {
-      vi.useRealTimers();
-      await harness.cleanup();
-    }
-  });
-
-  it("closes the daemon session after the disconnect grace period expires", async () => {
-    const harness = await createTestAppHarness();
-    try {
-      vi.useFakeTimers();
-      const { session } = seedHostSession(harness.deps, {
-        id: "host-daemon-disconnect-expired",
-      });
-
-      onDaemonSocketClose(harness.deps, session.id);
-      await vi.advanceTimersByTimeAsync(DAEMON_DISCONNECT_GRACE_MS);
 
       const closedSession = harness.db
         .select()
@@ -444,7 +419,6 @@ describe("internal session correctness", () => {
       expect(closedSession?.status).toBe("closed");
       expect(closedSession?.closeReason).toBe("daemon-disconnect");
     } finally {
-      vi.useRealTimers();
       await harness.cleanup();
     }
   });
@@ -520,7 +494,7 @@ describe("internal session correctness", () => {
 
       const response = await harness.app.request("/internal/session/open", {
         method: "POST",
-        headers: internalAuthHeaders(harness),
+        headers: internalAuthHeaders(harness, { hostId: host.id, hostType: host.type }),
         body: JSON.stringify({
           hostId: host.id,
           instanceId: "instance-2",
@@ -539,7 +513,7 @@ describe("internal session correctness", () => {
         .from(hostDaemonSessions)
         .where(eq(hostDaemonSessions.id, session.id))
         .get();
-      expect(originalSession?.closeReason).toBe("replaced");
+      expect(originalSession?.closeReason).toBe("daemon-disconnect");
       expect(getThread(harness.db, thread.id)?.status).toBe("active");
       expect(
         listEvents(harness.db, { threadId: thread.id }).some(

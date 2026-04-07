@@ -10,7 +10,7 @@ import { useHosts } from "./queries/system-queries";
  * Provides:
  * - `localHostId` — this machine's host ID, null if no daemon
  * - `localHost` — the full Host object for this machine, or null
- * - `isLocalHostConnected` — whether the local host's status is "connected"
+ * - `hasConnectedPersistentHost` — whether the local host's status is "connected"
  * - `hasDaemon` — whether a daemon is reachable
  * - `isLocalHost(hostId)` — whether the given host matches this machine
  * - `openPath(path)` — open a path in the user's editor (null if no daemon)
@@ -28,7 +28,17 @@ export function useHostDaemon() {
     return hosts.find((h) => h.id === localHostId) ?? null;
   }, [localHostId, hosts]);
 
-  const isLocalHostConnected = localHost?.status === "connected";
+  // For the connection indicator we only need the hosts query — not the daemon
+  // probe atom.  The atom can temporarily return null (e.g. after a server
+  // restart while the daemon is still reconnecting), which would make the
+  // indicator stuck on "Disconnected" even though the server already has an
+  // active session.  Checking for any connected persistent host avoids that.
+  const connectedPersistentHost = useMemo(() => {
+    if (!hosts) return null;
+    return hosts.find((h) => h.type === "persistent" && h.status === "connected") ?? null;
+  }, [hosts]);
+
+  const hasConnectedPersistentHost = connectedPersistentHost !== null;
 
   const isLocalHost = useCallback(
     (hostId: string | null | undefined) => {
@@ -53,7 +63,8 @@ export function useHostDaemon() {
   return {
     localHostId,
     localHost,
-    isLocalHostConnected,
+    connectedPersistentHost,
+    hasConnectedPersistentHost,
     hasDaemon,
     isLocalHost,
     openPath,

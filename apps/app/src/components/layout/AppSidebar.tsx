@@ -12,7 +12,6 @@ import {
 } from "@/components/ui/sidebar"
 import { ProjectList } from "./ProjectList"
 import { useQuickCreateProject } from "@/hooks/useQuickCreateProject"
-import { useHostDaemon } from "@/hooks/useHostDaemon"
 import { setPreferredTheme, usePreferredTheme } from "@/hooks/useTheme"
 
 interface AppSidebarProps {
@@ -24,7 +23,6 @@ export function AppSidebar({ onResizeMouseDown, isResizing }: AppSidebarProps) {
   const location = useLocation()
   const { isMobile, setOpenMobile } = useSidebar()
   const { createFromPicker, isCreating, isAvailable: canCreateProject } = useQuickCreateProject()
-  const { isLocalHostConnected, localHost } = useHostDaemon()
   const theme = usePreferredTheme()
 
   const closeOnMobile = () => {
@@ -38,11 +36,6 @@ export function AppSidebar({ onResizeMouseDown, isResizing }: AppSidebarProps) {
     setPreferredTheme(isDarkTheme ? "light" : "dark")
   }
   const selectedProjectId = location.pathname.match(/^\/projects\/([^/]+)/)?.[1]
-
-  const hostIndicatorClassName = isLocalHostConnected
-    ? "bg-emerald-500 ring-emerald-500/25 shadow-[0_0_0_4px_rgba(16,185,129,0.16)]"
-    : "bg-amber-400 ring-amber-400/30 shadow-[0_0_0_4px_rgba(251,191,36,0.18)] animate-pulse"
-  const hostStatusLabel = isLocalHostConnected ? (localHost?.name ?? "Connected") : "Disconnected"
 
   return (
     <>
@@ -77,24 +70,6 @@ export function AppSidebar({ onResizeMouseDown, isResizing }: AppSidebarProps) {
                 <Link to="/settings">
                   <Settings />
                 </Link>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-            <SidebarMenuItem>
-              <SidebarMenuButton
-                className="min-w-0 gap-2 rounded-full border border-sidebar-border/70 bg-sidebar/70 px-2 py-1 text-sidebar-foreground/80 shadow-none cursor-default hover:bg-sidebar/70 hover:text-sidebar-foreground/80 active:bg-sidebar/70"
-                aria-label={`Host daemon: ${hostStatusLabel}`}
-                title={`Host daemon: ${hostStatusLabel}`}
-              >
-                <span
-                  className={cn(
-                    "size-2.5 shrink-0 rounded-full ring-1 ring-inset transition-all",
-                    hostIndicatorClassName,
-                  )}
-                  aria-hidden
-                />
-                <span className="truncate text-xs font-medium leading-none">
-                  {hostStatusLabel}
-                </span>
               </SidebarMenuButton>
             </SidebarMenuItem>
           </SidebarMenu>

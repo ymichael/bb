@@ -193,6 +193,10 @@ export function useWebSocket(): void {
     const unsubscribeConnected = wsManager.onConnected(({ reconnected }) => {
       if (reconnected) {
         queryClient.invalidateQueries();
+      } else {
+        // On initial connect, refetch host-related queries that may have
+        // resolved before the daemon connected to the server.
+        queryClient.invalidateQueries({ queryKey: hostsQueryKey() });
       }
     });
 
@@ -418,7 +422,6 @@ export function useWebSocket(): void {
       wsManager.unsubscribe("environment");
       wsManager.unsubscribe("host");
       wsManager.unsubscribe("system");
-      wsManager.disconnect();
     };
   }, [queryClient]);
 }

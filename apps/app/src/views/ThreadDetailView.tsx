@@ -564,6 +564,7 @@ export function ThreadDetailView() {
       canExpandPromptChangeList={canExpandPromptChangeList}
       canUseGitUi={canUseGitUi}
       contextWindowUsage={contextWindowUsage}
+      environmentHostConnected={environmentHost ? environmentHost.status === "connected" : undefined}
       environmentIcon={threadEnvironmentDisplay ? threadEnvironmentIcon : undefined}
       environmentLabel={threadEnvironmentValue}
       isDiffPanelActive={isDiffPanelActive}
@@ -643,6 +644,7 @@ export function ThreadDetailView() {
           threadEnvironmentModeLabel,
           threadEnvironmentType,
           threadEnvironmentValue,
+          threadHostConnected: environmentHost ? environmentHost.status === "connected" : undefined,
           threadHostIsLocal: environment ? isLocalHost(environment.hostId) : undefined,
           threadHostName: environmentHost?.name,
           threadGitStatusDisplay,

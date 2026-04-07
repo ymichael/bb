@@ -1,4 +1,5 @@
 import { type ComponentProps, type ReactNode } from "react";
+import { HostStatusBadge } from "@/components/HostStatusIndicator";
 import { Check, ChevronDown, ChevronRight, Copy, X } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Panel, PanelGroup } from "react-resizable-panels";
@@ -65,6 +66,7 @@ interface ThreadDetailMetadataProps {
   threadEnvironmentModeLabel?: string;
   threadEnvironmentType?: string;
   threadEnvironmentValue?: ReactNode;
+  threadHostConnected?: boolean;
   threadHostIsLocal?: boolean;
   threadHostName?: string;
   threadGitStatusDisplay: ThreadGitStatusDisplay;
@@ -220,6 +222,7 @@ function ThreadMetadataContent({
   threadEnvironmentModeLabel,
   threadEnvironmentType,
   threadEnvironmentValue,
+  threadHostConnected,
   threadHostIsLocal,
   threadHostName,
   threadGitStatusDisplay,
@@ -264,6 +267,9 @@ function ThreadMetadataContent({
               <span className="shrink-0 rounded-full bg-primary/10 px-1.5 py-px text-[10px] font-medium text-primary">
                 localhost
               </span>
+            ) : null}
+            {threadHostConnected !== undefined ? (
+              <HostStatusBadge connected={threadHostConnected} />
             ) : null}
           </span>
         </DetailRow>

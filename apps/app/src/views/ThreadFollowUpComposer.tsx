@@ -1,4 +1,5 @@
 import { type ComponentProps, type ComponentType, type ReactNode, type RefObject } from "react";
+import { HostStatusBadge } from "@/components/HostStatusIndicator";
 import { CornerDownRight, Pencil, Trash2, ChevronDown } from "lucide-react";
 import {
   type ReasoningLevel,
@@ -183,6 +184,7 @@ export interface ComposerCoreProps {
 
 export interface ComposerEnvironmentProps {
   contextWindowUsage?: ComponentProps<typeof ThreadContextWindowIndicator>["usage"];
+  environmentHostConnected?: boolean;
   environmentIcon?: ComponentType<{ className?: string }>;
   environmentLabel?: ReactNode;
 }
@@ -434,7 +436,7 @@ export function ThreadFollowUpComposer({
         />
         {environment.environmentLabel || environment.contextWindowUsage ? (
           <div className="mt-1 flex items-center justify-between gap-2 pl-[15px] pr-3.5">
-            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-0.5">
               {environment.environmentLabel ? (
                 <PromptOptionDisplay
                   label="Environment"
@@ -442,6 +444,9 @@ export function ThreadFollowUpComposer({
                   icon={environment.environmentIcon}
                   className="h-6"
                 />
+              ) : null}
+              {environment.environmentHostConnected !== undefined ? (
+                <HostStatusBadge connected={environment.environmentHostConnected} />
               ) : null}
             </div>
             {environment.contextWindowUsage ? (

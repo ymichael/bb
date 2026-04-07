@@ -16,16 +16,20 @@ export default defineConfig({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  define: {
+    // In dev mode, connect the WebSocket directly to the server instead of
+    // going through Vite's proxy. Vite's WS proxy (node-http-proxy) does not
+    // handle reconnection when the upstream server restarts — it's a known
+    // limitation (vitejs/vite#8117, chimurai/http-proxy-middleware#44).
+    // In production the server serves the app directly so this isn't needed.
+    "__BB_DEV_WS_URL__": JSON.stringify(`${serverWsOrigin}/ws`),
+  },
   server: {
     port: appPort,
     proxy: {
       "/api": {
         target: serverHttpOrigin,
         changeOrigin: true,
-      },
-      "/ws": {
-        target: serverWsOrigin,
-        ws: true,
       },
     },
   },

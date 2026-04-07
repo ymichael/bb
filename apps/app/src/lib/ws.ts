@@ -28,8 +28,12 @@ export class WebSocketManager {
   connect(): void {
     if (this.socket) return;
 
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const url = `${protocol}//${window.location.host}/ws`;
+    // In dev mode, connect directly to the server to bypass Vite's WS proxy
+    // which does not handle reconnection after backend restarts.
+    // In production, use the same origin (server serves the app).
+    const url = typeof __BB_DEV_WS_URL__ === "string"
+      ? __BB_DEV_WS_URL__
+      : `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.host}/ws`;
 
     this.socket = new ReconnectingWebSocket(url, undefined, {
       minReconnectionDelay: 1000,
@@ -168,5 +172,17 @@ export function parseSubKey(
   return id ? { entity, id } : { entity };
 }
 
-// Singleton instance
-export const wsManager = new WebSocketManager();
+// Singleton instance — preserved across Vite HMR so the WebSocket connection
+// and its state survive module re-evaluation during dev rebuilds.
+function createOrReuse(): WebSocketManager {
+  if (import.meta.hot?.data) {
+    const existing = import.meta.hot.data.wsManager as WebSocketManager | undefined;
+    if (existing) return existing;
+    const instance = new WebSocketManager();
+    import.meta.hot.data.wsManager = instance;
+    return instance;
+  }
+  return new WebSocketManager();
+}
+
+export const wsManager = createOrReuse();

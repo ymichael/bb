@@ -4,6 +4,7 @@ import {
   closeSession,
   events,
   environments,
+  getActiveSession,
   heartbeatSession,
   hostDaemonSessions,
   threads,
@@ -121,17 +122,7 @@ export function onDaemonSocketClose(
 ): void {
   deps.logger.info({ sessionId }, "Daemon WebSocket closed");
   deps.hub.unregisterDaemon(sessionId);
-  deps.hub.scheduleDaemonDisconnect(
-    sessionId,
-    DAEMON_DISCONNECT_GRACE_MS,
-    () => finalizeDaemonDisconnect(deps, sessionId),
-  );
-}
 
-function finalizeDaemonDisconnect(
-  deps: Pick<AppDeps, "db" | "hub">,
-  sessionId: string,
-): void {
   const session = deps.db
     .select()
     .from(hostDaemonSessions)
@@ -140,11 +131,37 @@ function finalizeDaemonDisconnect(
   if (!session || session.status !== "active") {
     return;
   }
+
+  // Close the session immediately so the host status reflects the disconnect
+  // right away. Thread interruption is deferred behind a grace period so that
+  // brief reconnects don't produce spurious error events on active threads.
   closeSession(deps.db, deps.hub, sessionId, "daemon-disconnect");
+
+  const hostId = session.hostId;
+  deps.hub.scheduleDaemonDisconnect(
+    sessionId,
+    DAEMON_DISCONNECT_GRACE_MS,
+    () => deferredThreadInterrupt(deps, hostId),
+  );
+}
+
+/**
+ * After the grace period, interrupt active threads on a host that is still
+ * disconnected.  If the daemon reconnected in the meantime (a new active
+ * session exists for the host), this is a no-op.
+ */
+function deferredThreadInterrupt(
+  deps: Pick<AppDeps, "db" | "hub">,
+  hostId: string,
+): void {
+  // Host reconnected — nothing to interrupt.
+  if (getActiveSession(deps.db, hostId)) {
+    return;
+  }
 
   const interruptedThreadIds = interruptThreadsForDisconnectedHost(
     deps,
-    session.hostId,
+    hostId,
   );
   for (const threadId of interruptedThreadIds.eventThreadIds) {
     deps.hub.notifyThread(threadId, ["events-appended"]);
