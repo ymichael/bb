@@ -371,7 +371,7 @@ export const hostDaemonCommands = sqliteTable(
     id: text("id").primaryKey(),
     hostId: text("host_id")
       .notNull()
-      .references(() => hosts.id),
+      .references(() => hosts.id, { onDelete: "cascade" }),
     sessionId: text("session_id").references(() => hostDaemonSessions.id, {
       onDelete: "set null",
     }),

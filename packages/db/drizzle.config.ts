@@ -1,7 +1,7 @@
 import { defineConfig } from "drizzle-kit";
 import { homedir } from "node:os";
 import { resolve } from "node:path";
-import { DEFAULTS } from "../config/src/defaults.js";
+import { DEFAULTS } from "../config/src/defaults.ts";
 
 function expandHomeDirectory(path: string): string {
   if (path === "~") return homedir();
