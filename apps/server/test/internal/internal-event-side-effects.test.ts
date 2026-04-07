@@ -9,6 +9,7 @@ import {
   hostDaemonCommands,
   listDrafts,
   listManagerThreadNudgesByThread,
+  markThreadDeleted,
   threads,
 } from "@bb/db";
 import { turnRequestEventDataSchema } from "@bb/domain";
@@ -433,6 +434,80 @@ describe("internal event side effects", () => {
         },
       });
       expect(getThread(harness.db, managerThread.id)?.status).toBe("active");
+      expect(getThread(harness.db, childThread.id)?.status).toBe("idle");
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("skips manager follow-up turns for deleted manager threads", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host, session } = seedHostSession(harness.deps, {
+        id: "host-event-deleted-manager-follow-up",
+      });
+      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/deleted-manager-follow-up-environment",
+      });
+      const managerThread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "idle",
+        type: "manager",
+        title: "Deleted manager",
+      });
+      seedThreadRuntimeState(harness.deps, {
+        threadId: managerThread.id,
+        environmentId: environment.id,
+        providerThreadId: "provider-deleted-manager-follow-up",
+        inputText: "Initial manager task",
+        model: "gpt-5.4",
+      });
+      markThreadDeleted(harness.db, harness.hub, {
+        threadId: managerThread.id,
+      });
+      const childThread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "active",
+        parentThreadId: managerThread.id,
+        title: "Backend port validation cleanup",
+      });
+
+      const response = await harness.app.request("/internal/session/events", {
+        method: "POST",
+        headers: internalAuthHeaders(harness),
+        body: JSON.stringify({
+          sessionId: session.id,
+          events: [
+            {
+              environmentId: environment.id,
+              threadId: childThread.id,
+              sequence: 1,
+              createdAt: Date.now(),
+              event: {
+                type: "turn/completed",
+                threadId: childThread.id,
+                providerThreadId: "provider-child-deleted-manager-follow-up",
+                turnId: "turn-child-deleted-manager-follow-up",
+                status: "completed",
+              },
+            },
+          ],
+        }),
+      });
+
+      expect(response.status).toBe(200);
+      expect(
+        harness.db
+          .select()
+          .from(hostDaemonCommands)
+          .all(),
+      ).toEqual([]);
+      expect(getThread(harness.db, managerThread.id)?.deletedAt).toBeTypeOf("number");
       expect(getThread(harness.db, childThread.id)?.status).toBe("idle");
     } finally {
       await harness.cleanup();

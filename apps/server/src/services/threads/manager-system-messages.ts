@@ -101,6 +101,7 @@ export async function queueManagerSystemMessage(
     !managerThread
     || managerThread.type !== "manager"
     || managerThread.archivedAt !== null
+    || managerThread.deletedAt !== null
   ) {
     return false;
   }
