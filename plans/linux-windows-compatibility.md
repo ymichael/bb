@@ -214,7 +214,13 @@ Windows runtime support is not claimed until Milestone 2 exits.
 **Validation**
 
 - `pnpm exec turbo run test --filter=@bb/host-daemon --filter=@bb/agent-runtime --filter=@bb/host-workspace --filter=@bb/app --filter=@bb/server`
-- Manual:
+- `pnpm exec turbo run test:smoke --filter=@bb/integration-tests`
+- CI:
+  - Linux smoke is green on `ubuntu-latest`
+  - Windows preflight remains green during Milestone 1
+- When a dedicated Linux desktop host or VM is not available, treat the
+  GitHub-hosted Ubuntu smoke job as the Milestone 1 Linux sign-off path.
+- Recommended manual verification when a Linux desktop host or VM is available:
   - start host daemon on Linux
   - confirm provider startup succeeds for at least one installed provider on
     Linux
@@ -247,6 +253,9 @@ Windows runtime support is not claimed until Milestone 2 exits.
       Linux flows
 - [ ] App-based local project creation/update works on Linux through native
       folder picking or the supported text-input fallback
+- [ ] Linux sign-off is automated in GitHub-hosted Ubuntu CI when a dedicated
+      Linux desktop host is not available, with manual desktop verification kept
+      as a recommended follow-up rather than a Milestone 1 blocker
 
 ### Milestone 2: Windows Support + Final Hardening
 

@@ -53,6 +53,9 @@
     "test": {
       "dependsOn": ["build", "^build"]
     },
+    "test:smoke": {
+      "dependsOn": ["build", "^build"]
+    },
     "bench": {
       "dependsOn": ["build", "^build"]
     },
