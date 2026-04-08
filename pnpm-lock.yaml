@@ -603,6 +603,9 @@ importers:
       '@bb/domain':
         specifier: workspace:*
         version: link:../domain
+      '@bb/process-utils':
+        specifier: workspace:*
+        version: link:../process-utils
     devDependencies:
       '@bb/test-helpers':
         specifier: workspace:*

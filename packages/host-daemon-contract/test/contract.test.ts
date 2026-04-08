@@ -74,7 +74,7 @@ describe("host-daemon command schemas", () => {
         sourcePath: "/tmp/project",
         targetPath: "/tmp/project/.bb/env",
         branchName: "bb/env-123",
-        setupScript: ".bb-env-setup.sh",
+        setupScript: ".bb-env-setup.ts",
         setupTimeoutMs: 900000,
       }),
     ).toMatchObject({
@@ -443,7 +443,7 @@ describe("host-daemon command schemas", () => {
         isWorktree: true,
         branchName: "bb/env-123",
         defaultBranch: "main",
-        transcript: [{ type: "step", key: "setup", text: "/bin/bash .bb-env-setup.sh", status: "completed" }],
+        transcript: [{ type: "step", key: "setup", text: "node --experimental-transform-types .bb-env-setup.ts", status: "completed" }],
       }),
     ).toMatchObject({
       isGitRepo: true,

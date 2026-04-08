@@ -425,7 +425,7 @@ describe("internal session routes", () => {
           targetPath: "/tmp/transcript-test",
           sourcePath: "/tmp/transcript-source",
           branchName: "bb/transcript",
-          setupScript: ".bb-env-setup.sh",
+          setupScript: ".bb-env-setup.ts",
           setupTimeoutMs: 900000,
         },
       });
@@ -528,7 +528,7 @@ describe("internal session routes", () => {
           targetPath: "/tmp/reprovision-start",
           sourcePath: "/tmp/reprovision-source",
           branchName: "bb/reprovision-start",
-          setupScript: ".bb-env-setup.sh",
+          setupScript: ".bb-env-setup.ts",
           setupTimeoutMs: 900000,
         },
       });
@@ -652,7 +652,7 @@ describe("internal session routes", () => {
           targetPath: "/tmp/reprovision-malformed",
           sourcePath: "/tmp/reprovision-malformed-source",
           branchName: "bb/reprovision-malformed",
-          setupScript: ".bb-env-setup.sh",
+          setupScript: ".bb-env-setup.ts",
           setupTimeoutMs: 900000,
         },
       });
@@ -767,7 +767,7 @@ describe("internal session routes", () => {
           targetPath: "/tmp/reprovision-filter",
           sourcePath: "/tmp/reprovision-filter-source",
           branchName: "bb/reprovision-filter",
-          setupScript: ".bb-env-setup.sh",
+          setupScript: ".bb-env-setup.ts",
           setupTimeoutMs: 900000,
         },
       });

@@ -1,7 +1,11 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { spawn } from "node:child_process";
-import type { ProvisioningTranscriptEntry } from "@bb/domain";
+import {
+  DEFAULT_ENV_SETUP_SCRIPT_NAME,
+  LEGACY_POSIX_ENV_SETUP_SCRIPT_NAME,
+  type ProvisioningTranscriptEntry,
+} from "@bb/domain";
+import { spawnPortableProcess } from "@bb/process-utils";
 import { Workspace } from "./workspace.js";
 import { pathExists, runGit, WorkspaceError, type GitCommandResult } from "./git.js";
 
@@ -33,6 +37,26 @@ export interface RemoveWorktreeArgs {
 
 const GITHUB_HOSTNAME = "github.com";
 const GITHUB_TOKEN_ENV_KEY = "GITHUB_TOKEN";
+const SETUP_SCRIPT_NODE_TRANSFORM_FLAG = "--experimental-transform-types";
+const SETUP_SCRIPT_NODE_EXTENSIONS = new Set([
+  ".cjs",
+  ".cts",
+  ".js",
+  ".mjs",
+  ".mts",
+  ".ts",
+]);
+
+interface ResolvedSetupScript {
+  scriptName: string;
+  scriptPath: string;
+}
+
+interface SetupScriptCommand {
+  command: string;
+  args: string[];
+  text: string;
+}
 
 function buildGitHubCloneEnv(sourcePath: string): NodeJS.ProcessEnv | undefined {
   const githubToken = process.env[GITHUB_TOKEN_ENV_KEY]?.trim();
@@ -148,6 +172,63 @@ async function ensureWorkspaceParentDirectory(targetPath: string): Promise<void>
   await fs.mkdir(path.dirname(targetPath), { recursive: true });
 }
 
+async function resolveSetupScript(
+  args: RunSetupScriptArgs,
+): Promise<ResolvedSetupScript | null> {
+  const requestedScriptPath = path.join(args.workspacePath, args.scriptName);
+  if (await pathExists(requestedScriptPath)) {
+    return {
+      scriptName: args.scriptName,
+      scriptPath: requestedScriptPath,
+    };
+  }
+
+  if (
+    args.scriptName === DEFAULT_ENV_SETUP_SCRIPT_NAME
+    && process.platform !== "win32"
+  ) {
+    const legacyScriptPath = path.join(
+      args.workspacePath,
+      LEGACY_POSIX_ENV_SETUP_SCRIPT_NAME,
+    );
+    if (await pathExists(legacyScriptPath)) {
+      return {
+        scriptName: LEGACY_POSIX_ENV_SETUP_SCRIPT_NAME,
+        scriptPath: legacyScriptPath,
+      };
+    }
+  }
+
+  return null;
+}
+
+function buildSetupScriptCommand(
+  script: ResolvedSetupScript,
+): SetupScriptCommand {
+  const extension = path.extname(script.scriptName).toLowerCase();
+
+  if (SETUP_SCRIPT_NODE_EXTENSIONS.has(extension)) {
+    return {
+      command: process.execPath,
+      args: [SETUP_SCRIPT_NODE_TRANSFORM_FLAG, script.scriptPath],
+      text: `node ${SETUP_SCRIPT_NODE_TRANSFORM_FLAG} ${script.scriptName}`,
+    };
+  }
+
+  if (extension === ".sh") {
+    return {
+      command: "/bin/bash",
+      args: [script.scriptPath],
+      text: `/bin/bash ${script.scriptName}`,
+    };
+  }
+
+  throw new WorkspaceError(
+    "setup_script_failed",
+    `Unsupported setup script type: ${script.scriptName}`,
+  );
+}
+
 export async function createWorktree(args: CreateWorkspaceArgs): Promise<{ path: string }> {
   if (await ensureExistingWorkspaceMatches(args.targetPath, args.branchName)) {
     return { path: args.targetPath };
@@ -240,20 +321,29 @@ export async function createClone(args: CreateWorkspaceArgs): Promise<{ path: st
 export async function runSetupScript(
   args: RunSetupScriptArgs,
 ): Promise<{ ran: boolean; exitCode?: number; output?: string }> {
-  const scriptPath = path.join(args.workspacePath, args.scriptName);
-  if (!(await pathExists(scriptPath))) {
+  const resolvedScript = await resolveSetupScript(args);
+  if (!resolvedScript) {
     return { ran: false };
   }
 
-  const commandText = `/bin/bash ${args.scriptName}`;
+  const command = buildSetupScriptCommand(resolvedScript);
+  const commandText = command.text;
   emitStep({ onProgress: args.onProgress, key: "setup", text: commandText, status: "started" });
   const startedAt = Date.now();
 
   const { timeoutMs } = args;
-  const child = spawn("/bin/bash", [scriptPath], {
+  const child = spawnPortableProcess({
+    command: command.command,
+    args: command.args,
     cwd: args.workspacePath,
     stdio: ["ignore", "pipe", "pipe"],
   });
+  if (!child.stdout || !child.stderr) {
+    throw new WorkspaceError(
+      "setup_script_failed",
+      `Setup script failed to attach stdio: ${resolvedScript.scriptPath}`,
+    );
+  }
 
   const outputChunks: string[] = [];
   let outputIndex = 0;
@@ -291,7 +381,7 @@ export async function runSetupScript(
       emitStep({ onProgress: args.onProgress, key: "setup", text: commandText, status: "failed", metadata: { durationMs } });
       throw new WorkspaceError(
         "setup_script_failed",
-        `Setup script timed out after ${timeoutMs}ms: ${scriptPath}`,
+        `Setup script timed out after ${timeoutMs}ms: ${resolvedScript.scriptPath}`,
       );
     }
 
@@ -299,7 +389,7 @@ export async function runSetupScript(
       emitStep({ onProgress: args.onProgress, key: "setup", text: commandText, status: "failed", metadata: { durationMs } });
       throw new WorkspaceError(
         "setup_script_failed",
-        `Setup script exited via signal ${result.signal}: ${scriptPath}`,
+        `Setup script exited via signal ${result.signal}: ${resolvedScript.scriptPath}`,
       );
     }
 
@@ -307,7 +397,7 @@ export async function runSetupScript(
       emitStep({ onProgress: args.onProgress, key: "setup", text: commandText, status: "failed", metadata: { durationMs } });
       throw new WorkspaceError(
         "setup_script_failed",
-        `Setup script failed with exit code ${result.exitCode}: ${scriptPath}`,
+        `Setup script failed with exit code ${result.exitCode}: ${resolvedScript.scriptPath}`,
       );
     }
 

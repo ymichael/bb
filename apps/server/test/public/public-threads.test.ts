@@ -626,7 +626,7 @@ describe("public thread routes", () => {
       expect(queued.command).toMatchObject({
         sourcePath: source.path,
         workspaceProvisionType: "managed-worktree",
-        setupScript: ".bb-env-setup.sh",
+        setupScript: ".bb-env-setup.ts",
         setupTimeoutMs: 900000,
       });
       expect(queued.command).toHaveProperty("targetPath");

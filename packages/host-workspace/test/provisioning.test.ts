@@ -2,6 +2,10 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import {
+  DEFAULT_ENV_SETUP_SCRIPT_NAME,
+  LEGACY_POSIX_ENV_SETUP_SCRIPT_NAME,
+} from "@bb/domain";
 import { Workspace } from "../src/workspace.js";
 import {
   createClone,
@@ -22,6 +26,7 @@ async function makeTempDir(prefix: string): Promise<string> {
 
 async function initRepoWithOptionalSetup(
   setupScript?: string,
+  scriptName: string = DEFAULT_ENV_SETUP_SCRIPT_NAME,
 ): Promise<string> {
   const repoPath = await makeTempDir("bb-provisioning-repo-");
   await runGit(["init", "-b", "main"], { cwd: repoPath });
@@ -30,7 +35,7 @@ async function initRepoWithOptionalSetup(
   await fs.writeFile(path.join(repoPath, "README.md"), "hello\n", "utf8");
   if (setupScript) {
     await fs.writeFile(
-      path.join(repoPath, ".bb-env-setup.sh"),
+      path.join(repoPath, scriptName),
       setupScript,
       "utf8",
     );
@@ -56,14 +61,14 @@ describe("workspace provisioning", () => {
       sourcePath: sourceRepo,
       targetPath,
       branchName: "feature",
-      scriptName: ".bb-env-setup.sh",
+      scriptName: DEFAULT_ENV_SETUP_SCRIPT_NAME,
       timeoutMs: 900000,
     });
     const second = await createWorktree({
       sourcePath: sourceRepo,
       targetPath,
       branchName: "feature",
-      scriptName: ".bb-env-setup.sh",
+      scriptName: DEFAULT_ENV_SETUP_SCRIPT_NAME,
       timeoutMs: 900000,
     });
 
@@ -74,7 +79,7 @@ describe("workspace provisioning", () => {
 
   it("rolls back failed worktree setup scripts", async () => {
     const sourceRepo = await initRepoWithOptionalSetup(
-      "echo failing\nexit 1\n",
+      'throw new Error("failing");\n',
     );
     const parentDir = await makeTempDir("bb-worktree-fail-parent-");
     const targetPath = path.join(parentDir, "broken");
@@ -84,7 +89,7 @@ describe("workspace provisioning", () => {
         sourcePath: sourceRepo,
         targetPath,
         branchName: "broken",
-        scriptName: ".bb-env-setup.sh",
+        scriptName: DEFAULT_ENV_SETUP_SCRIPT_NAME,
         timeoutMs: 900000,
       }),
     ).rejects.toThrow(/Setup script failed/u);
@@ -101,7 +106,7 @@ describe("workspace provisioning", () => {
       sourcePath: sourceRepo,
       targetPath,
       branchName: "clone-branch",
-      scriptName: ".bb-env-setup.sh",
+      scriptName: DEFAULT_ENV_SETUP_SCRIPT_NAME,
       timeoutMs: 900000,
     });
 
@@ -110,7 +115,7 @@ describe("workspace provisioning", () => {
 
   it("rolls back failed clone setup scripts", async () => {
     const sourceRepo = await initRepoWithOptionalSetup(
-      "echo failing\nexit 1\n",
+      'throw new Error("failing");\n',
     );
     const parentDir = await makeTempDir("bb-clone-fail-parent-");
     const targetPath = path.join(parentDir, "broken-clone");
@@ -120,7 +125,7 @@ describe("workspace provisioning", () => {
         sourcePath: sourceRepo,
         targetPath,
         branchName: "broken-clone",
-        scriptName: ".bb-env-setup.sh",
+        scriptName: DEFAULT_ENV_SETUP_SCRIPT_NAME,
         timeoutMs: 900000,
       }),
     ).rejects.toThrow(/Setup script failed/u);
@@ -137,7 +142,7 @@ describe("workspace provisioning", () => {
       sourcePath: sourceRepo,
       targetPath,
       branchName: "clone-branch",
-      scriptName: ".bb-env-setup.sh",
+      scriptName: DEFAULT_ENV_SETUP_SCRIPT_NAME,
       timeoutMs: 900000,
     });
 
@@ -153,7 +158,7 @@ describe("workspace provisioning", () => {
       sourcePath: sourceRepo,
       targetPath,
       branchName: "feature",
-      scriptName: ".bb-env-setup.sh",
+      scriptName: DEFAULT_ENV_SETUP_SCRIPT_NAME,
       timeoutMs: 900000,
     });
 
@@ -177,15 +182,15 @@ describe("workspace provisioning", () => {
   it("streams setup script output and respects timeouts", async () => {
     const workspacePath = await makeTempDir("bb-setup-script-");
     await fs.writeFile(
-      path.join(workspacePath, ".bb-env-setup.sh"),
-      "echo first\necho second\n",
+      path.join(workspacePath, DEFAULT_ENV_SETUP_SCRIPT_NAME),
+      'console.log("first");\nconsole.log("second");\n',
       "utf8",
     );
 
     const entries: string[] = [];
     const result = await runSetupScript({
       workspacePath,
-      scriptName: ".bb-env-setup.sh",
+      scriptName: DEFAULT_ENV_SETUP_SCRIPT_NAME,
       timeoutMs: 900000,
       onProgress: (entry) => entries.push(`${entry.type}:${entry.text}`),
     });
@@ -194,23 +199,45 @@ describe("workspace provisioning", () => {
     expect(entries.some((entry) => entry.includes("first"))).toBe(true);
 
     await fs.writeFile(
-      path.join(workspacePath, ".bb-env-setup.sh"),
-      "sleep 2\n",
+      path.join(workspacePath, DEFAULT_ENV_SETUP_SCRIPT_NAME),
+      'await new Promise((resolve) => setTimeout(resolve, 2_000));\n',
       "utf8",
     );
     await expect(
       runSetupScript({
         workspacePath,
-        scriptName: ".bb-env-setup.sh",
+        scriptName: DEFAULT_ENV_SETUP_SCRIPT_NAME,
         timeoutMs: 50,
       }),
     ).rejects.toThrow(/timed out/u);
   });
 
+  it("falls back to the legacy POSIX setup script when the new default is missing", async () => {
+    if (process.platform === "win32") {
+      return;
+    }
+
+    const workspacePath = await makeTempDir("bb-setup-script-legacy-");
+    await fs.writeFile(
+      path.join(workspacePath, LEGACY_POSIX_ENV_SETUP_SCRIPT_NAME),
+      "echo legacy-setup\n",
+      "utf8",
+    );
+
+    const result = await runSetupScript({
+      workspacePath,
+      scriptName: DEFAULT_ENV_SETUP_SCRIPT_NAME,
+      timeoutMs: 900000,
+    });
+
+    expect(result.ran).toBe(true);
+    expect(result.output).toContain("legacy-setup");
+  });
+
   it("returns a no-op when the setup script is missing", async () => {
     const workspacePath = await makeTempDir("bb-setup-noop-");
 
-    await expect(runSetupScript({ workspacePath, scriptName: ".bb-env-setup.sh", timeoutMs: 900000 })).resolves.toEqual({ ran: false });
+    await expect(runSetupScript({ workspacePath, scriptName: DEFAULT_ENV_SETUP_SCRIPT_NAME, timeoutMs: 900000 })).resolves.toEqual({ ran: false });
   });
 
   it("removes worktrees and plain directories", async () => {
@@ -222,7 +249,7 @@ describe("workspace provisioning", () => {
       sourcePath: sourceRepo,
       targetPath,
       branchName: "feature",
-      scriptName: ".bb-env-setup.sh",
+      scriptName: DEFAULT_ENV_SETUP_SCRIPT_NAME,
       timeoutMs: 900000,
     });
     await fs.writeFile(path.join(targetPath, "local.txt"), "dirty\n", "utf8");
