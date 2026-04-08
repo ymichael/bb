@@ -94,20 +94,33 @@ reduces maintenance versus homegrown OS-specific wrappers.
 
 ## Plan
 
-### Phase 1: Define the platform contract
+This rollout is split into two milestones. Milestone 1 is intentionally not
+"Linux only"; it includes the shared compatibility foundation we need in order
+to avoid redoing script, checkout, setup-hook, and path work in the Windows
+milestone. Milestone 2 finishes Windows runtime support and final hardening.
 
-1. Decide the official support matrix:
-   - Linux persistent host: supported
-   - Windows persistent host: supported
+### Milestone 1: Shared Foundation + Linux Support
+
+Deliver a supported Linux product path for persistent-host flows while landing
+the shared compatibility work that Windows will later depend on. Windows is
+still in scope during this milestone for install/build/typecheck preflight, but
+Windows runtime support is not claimed until Milestone 2 exits.
+
+#### Phase 1: Define the platform contract
+
+1. Decide the official support matrix for the milestone boundary:
+   - Linux persistent host: supported at Milestone 1 exit
+   - Windows persistent host: supported at Milestone 2 exit
+   - Windows install/build/typecheck: kept green as preflight during Milestone 1
    - macOS persistent host: keep supported
    - E2B sandbox runtime: Linux-only unless explicitly expanded
-2. Document which features are expected to work on each OS.
+2. Document which features are expected to work on each OS at each milestone.
 3. Split supported product flows from Unix-only maintainer tooling so we do not
-   block the main rollout on QA helper scripts.
+   block the rollout on QA helper scripts.
 4. Decide the dependency policy for cross-platform maintenance:
    - prefer a small shared package set over many repo-local one-off scripts
-   - keep packages at true boundaries: env injection, filesystem shell helpers,
-     process launch, and OS open/folder-picker integration
+   - keep packages at true boundaries: env injection, process launch, and OS
+     open/folder-picker integration
    - wrap package usage behind repo-local helpers when the package would
      otherwise leak through many call sites
 5. Make an explicit package decision record for the rollout:
@@ -135,7 +148,7 @@ reduces maintenance versus homegrown OS-specific wrappers.
 **Validation**
 
 - A decision record exists under `plans/` or `docs/` and lists:
-  - the supported OS matrix
+  - the milestone-based OS support matrix
   - maintainer-only or best-effort exclusions
   - the chosen package set and rationale
   - the setup-hook end state and any temporary migration bridge
@@ -143,7 +156,7 @@ reduces maintenance versus homegrown OS-specific wrappers.
 - Product documentation clearly distinguishes supported flows from maintainer
   tooling and best-effort surfaces
 
-### Phase 2: Make packaging, checkout, and critical security paths cross-platform
+#### Phase 2: Make packaging, checkout, and critical security paths portable
 
 1. Replace inline env assignments with a cross-platform mechanism:
    - `cross-env` for package scripts
@@ -154,7 +167,7 @@ reduces maintenance versus homegrown OS-specific wrappers.
    - repo-local Node scripts for copy/create-directory logic
 3. Standardize the script layer so the same package choices are reused across
    the repo instead of mixing multiple approaches package by package.
-4. Fix the attachment containment bug before expanding Windows runtime coverage:
+4. Fix the attachment containment bug before expanding runtime coverage:
    - replace string-prefix checks with `path.relative`-based containment
    - add targeted traversal tests for both POSIX and Windows-style paths
 5. Define and implement repository line-ending policy:
@@ -164,8 +177,8 @@ reduces maintenance versus homegrown OS-specific wrappers.
 6. Remove assumptions that `pnpm`, `node`, or provider CLIs are launched through
    POSIX shell parsing.
 7. Add an automated preflight CI job on `ubuntu-latest` and `windows-latest`
-   that runs install/build/typecheck before Phase 8 expands to full smoke
-   coverage.
+   that runs install/build/typecheck before the final compatibility matrix is
+   expanded in Milestone 2.
 8. Keep Turbo as the only supported task runner path.
 
 **Validation**
@@ -179,102 +192,130 @@ reduces maintenance versus homegrown OS-specific wrappers.
 - Attachment reads reject traversal correctly on both POSIX and Windows-style
   paths
 
-### Phase 3: Fix host-daemon, CLI launcher, and Windows spawn portability
+#### Phase 3: Deliver Linux product-path support on the new foundation
 
-1. Replace the POSIX-only `bb` launcher contract with a cross-platform one:
+1. Introduce a shared child-process launch helper backed by `cross-spawn` for
+   portability-sensitive launch paths.
+2. Make Linux host-daemon and CLI launcher support use the new launch contract:
+   - `bb` is available inside a thread runtime shell
+   - runtime shell env uses `path.delimiter`
+   - no shared logic relies on Unix executable-bit checks that Windows will
+     later need to bypass
+3. Implement the setup-hook end state for supported Linux flows:
+   - provisioning prefers `.bb-env-setup.ts`
+   - any `.bb-env-setup.sh` bridge stays POSIX-only and explicitly temporary
+4. Complete Linux local project UX:
+   - add Linux folder picking if practical
+   - otherwise expose an app-side validated absolute-path text input
+   - keep `open-path` working with graceful error handling
+5. Fix any remaining path/UI issues required for Linux local project flows.
+6. Add Linux smoke coverage and keep the Windows preflight job green.
+
+**Validation**
+
+- `pnpm exec turbo run test --filter=@bb/host-daemon --filter=@bb/agent-runtime --filter=@bb/host-workspace --filter=@bb/app --filter=@bb/server`
+- Manual:
+  - start host daemon on Linux
+  - confirm provider startup succeeds for at least one installed provider on
+    Linux
+  - confirm `bb` is available inside a thread runtime shell on Linux
+  - provision managed clone/worktree on Linux
+  - create a local-path project from the app on Linux
+  - update an existing local-path source from the app on Linux
+  - confirm Linux smoke coverage is green and Windows preflight remains green
+
+**Milestone 1 Exit Criteria**
+
+- [ ] A Phase 1 decision record documents the milestone-based OS support matrix,
+      minimal dependency set, setup-hook policy, and Windows line-ending
+      expectations
+- [ ] `pnpm install`, `pnpm exec turbo run build`, `pnpm exec turbo run typecheck`,
+      and `pnpm exec turbo run test` succeed in Linux CI for the supported
+      product path
+- [ ] Windows preflight CI is green for install, build, and typecheck, but
+      Windows runtime flows are not yet claimed as supported
+- [ ] Cross-platform maintenance uses a documented, minimal dependency set
+      instead of package-by-package custom shell fixes
+- [ ] Attachment containment is fixed and tested for both POSIX and Windows-style
+      paths
+- [ ] The repo enforces a line-ending policy that keeps supported flows working
+      on default Windows Git checkouts
+- [ ] Host daemon starts successfully on Linux for persistent-host flows
+- [ ] Provider runtime startup works on Linux for at least one installed
+      provider, and the launch path already uses the shared launch helper
+- [ ] Managed environment setup no longer depends on `/bin/bash` for supported
+      Linux flows
+- [ ] App-based local project creation/update works on Linux through native
+      folder picking or the supported text-input fallback
+
+### Milestone 2: Windows Support + Final Hardening
+
+Finish the Windows product path on top of the shared work from Milestone 1, then
+lock the result in with full CI, portable test/process infrastructure, and final
+support documentation.
+
+#### Phase 4: Deliver Windows runtime and launcher support
+
+1. Finalize the Windows `bb` launcher contract:
    - either a generated Windows launcher alongside the Unix script
    - or a Node-based entrypoint that the host daemon can reference directly
-2. Change runtime shell env construction to use `path.delimiter` instead of `:`.
-3. Stop using Unix executable-bit checks as the gate for CLI availability on
-   Windows.
-4. Standardize the child-process launch contract:
-   - route portability-sensitive launches through a shared helper backed by
-     `cross-spawn`
-   - make that helper responsible for `.cmd`, `.bat`, `.exe`, and POSIX binary
-     resolution
+2. Apply the shared launch helper to Windows-sensitive runtime paths:
+   - `.cmd`, `.bat`, `.exe`, and POSIX binary resolution go through the helper
    - do not rely on raw `spawn(..., { shell: false })` for Windows command shims
-     or on `shell: true` as a blanket workaround
-5. Make provider process launch robust on Windows:
+   - do not use `shell: true` as a blanket workaround
+3. Remove the remaining Unix-only launcher assumptions from supported flows:
+   - no `:`-joined `PATH`
+   - no executable-bit gating for Windows availability checks
+4. Make provider process launch robust on Windows:
    - verify Codex startup via `codex` / shim resolution
    - verify Node bridge startup for Claude Code and Pi
    - verify at least one shim-installed provider on Windows
-6. Keep the shared launch helper isolated so process-launch semantics stay
-   consistent and easy to test.
 
 **Validation**
 
 - `pnpm exec turbo run test --filter=@bb/host-daemon --filter=@bb/agent-runtime`
 - Manual:
-  - start host daemon on Linux and Windows
-  - confirm provider startup succeeds for at least one installed provider
-  - confirm `bb` is available inside a thread runtime shell
+  - start host daemon on Windows
+  - confirm provider startup succeeds for at least one installed provider on
+    Windows
+  - confirm `bb` is available inside a thread runtime shell on Windows
 
-### Phase 4: Replace the setup-hook contract with a cross-platform mechanism
+#### Phase 5: Deliver Windows workspace and app flows
 
-1. Define the supported environment-setup contract:
-   - documented end state: Node-based `.bb-env-setup.ts`
-   - if we need a migration bridge, `.bb-env-setup.sh` runs only on POSIX and is
-     explicitly temporary
-2. Update workspace provisioning to use that contract instead of `/bin/bash`.
-3. Update transcript output to reflect the actual command or hook used.
-4. Update tests and fixtures that currently hardcode `/bin/bash .bb-env-setup.sh`.
-5. Define and validate Windows behavior for repositories that contain symlinks in
+1. Finish the setup-hook migration for supported Windows flows:
+   - provisioning uses `.bb-env-setup.ts`
+   - `.bb-env-setup.sh` is not part of the supported Windows path
+   - transcript output reflects the actual hook used
+2. Define and validate Windows behavior for repositories that contain symlinks in
    managed clone/worktree flows:
    - if host Git symlink support is required, detect that case and surface a
      clear unsupported-host error
    - otherwise document the supported behavior and test it
-
-**Validation**
-
-- `pnpm exec turbo run test --filter=@bb/host-workspace --filter=@bb/host-daemon`
-- Manual:
-  - provision managed clone/worktree on Linux
-  - provision managed clone/worktree on Windows from a default Git checkout
-  - confirm timeout and failure reporting still works
-  - verify the documented behavior for a repository that contains symlinks on
-    Windows
-
-### Phase 5: Fix local host UX on Linux and Windows
-
-1. Add a Linux/Windows implementation for folder picking, or when native
-   selection is unavailable expose an app-side validated absolute-path text
-   input; do not require a CLI-only workaround.
-2. Keep `open-path` working on Linux and Windows with graceful error handling if
-   the OS helper is missing.
-3. Ensure project creation and source updates from the app work on all supported
-   persistent-host OSes.
-
-**Validation**
-
-- `pnpm exec turbo run test --filter=@bb/app --filter=@bb/host-daemon`
-- Manual:
-  - create a local-path project from the app on Linux
-  - create a local-path project from the app on Windows
-  - update an existing local-path source from the app on both OSes
-
-### Phase 6: Sweep remaining path handling and OS-sensitive correctness bugs
-
-1. Introduce shared path helpers only where at least two callers justify reuse;
-   otherwise fix locally:
-   - basename extraction from either slash style
-   - normalized display formatting when UI wants forward slashes
-   - path containment helpers only if they are needed beyond the earlier
-     attachment fix
-2. Fix the remaining audited path issues:
+3. Complete Windows local project UX:
+   - native folder picking if practical
+   - otherwise the same app-side validated absolute-path text input used on
+     Linux
+   - keep `open-path` working with graceful error handling
+4. Fix remaining Windows path/UI issues:
    - project-name derivation
    - any path joins built with string interpolation
    - any Windows-path display or round-trip bugs found during earlier phases
-3. Add targeted tests with Windows-style input paths even when running on
-   non-Windows CI.
+5. Introduce shared path helpers only where at least two callers justify reuse;
+   otherwise fix locally.
 
 **Validation**
 
-- `pnpm exec turbo run test --filter=@bb/app --filter=@bb/server --filter=@bb/ui-core --filter=@bb/core-ui`
+- `pnpm exec turbo run test --filter=@bb/host-workspace --filter=@bb/host-daemon --filter=@bb/app --filter=@bb/server --filter=@bb/ui-core --filter=@bb/core-ui`
 - Manual:
+  - provision managed clone/worktree on Windows from a default Git checkout
+  - verify the documented behavior for a repository that contains symlinks on
+    Windows
+  - create a local-path project from the app on Windows
+  - update an existing local-path source from the app on Windows
   - verify Windows-style local paths round-trip through the app and server
   - verify path-derived UI labels remain correct for both POSIX and Windows paths
 
-### Phase 7: Make process management and test infrastructure portable
+#### Phase 6: Final hardening, CI, and docs
 
 1. Replace or isolate Unix-only test cleanup code (`lsof`, signal assumptions).
 2. Replace dev-supervisor restart signaling with a cross-platform control path:
@@ -282,64 +323,45 @@ reduces maintenance versus homegrown OS-specific wrappers.
    - file-based restart requests
 3. Move Unix-specific QA helpers behind explicit Linux/macOS-only tooling if they
    are not part of the supported product path.
-
-**Validation**
-
-- `pnpm exec turbo run test --filter=@bb/integration-tests`
-- Manual:
-  - restart dev server and host-daemon through the supported flow on Linux
-  - restart dev server and host-daemon through the supported flow on Windows
-
-### Phase 8: Add compatibility CI and smoke coverage
-
-1. Expand the earlier install/build/typecheck preflight into a full OS matrix:
+4. Expand the earlier install/build/typecheck preflight into a full OS matrix:
    - `ubuntu-latest`
    - `windows-latest`
    - `macos-latest` for host-local API coverage if cost is acceptable
-2. Split jobs so failures are attributable:
+5. Split jobs so failures are attributable:
    - install/build/typecheck
    - unit tests
    - smoke tests for server + host-daemon startup
-3. Add a small smoke suite that verifies:
+6. Add a small smoke suite that verifies:
    - server starts
    - host daemon starts
    - local API health responds
    - unmanaged environment path works
    - local-path project creation path works
+7. Update README with supported OSes and any intentional Linux-only surfaces.
+8. Document required host prerequisites per OS:
+   - Git
+   - Node / pnpm
+   - provider CLI installation expectations
+9. Document known limitations that remain after rollout.
 
 **Validation**
 
+- `pnpm exec turbo run test --filter=@bb/integration-tests`
 - CI matrix is green on all supported OSes for:
   - install
   - build
   - typecheck
   - tests
   - smoke
-
-### Phase 9: Document support and operating procedures
-
-1. Update README with supported OSes and any intentional Linux-only surfaces.
-2. Document required host prerequisites per OS:
-   - Git
-   - Node / pnpm
-   - provider CLI installation expectations
-3. Document known limitations that remain after rollout.
-
-**Validation**
-
 - Docs include:
   - supported OS matrix
   - startup instructions for Linux and Windows
   - any explicitly unsupported flows
 
-## Exit Criteria
+**Milestone 2 Exit Criteria**
 
-- [ ] A Phase 1 decision record documents the supported OS matrix, minimal
-      dependency set, setup-hook policy, and Windows line-ending expectations
 - [ ] `pnpm install`, `pnpm exec turbo run build`, `pnpm exec turbo run typecheck`,
       and `pnpm exec turbo run test` succeed on Linux and Windows in CI
-- [ ] Cross-platform maintenance uses a documented, minimal dependency set
-      instead of package-by-package custom shell fixes
 - [ ] Host daemon starts successfully on Linux and Windows for persistent-host
       flows
 - [ ] Portability-sensitive process launches use the shared launch helper and no
@@ -350,9 +372,7 @@ reduces maintenance versus homegrown OS-specific wrappers.
       related Windows limitations are either supported or surfaced as explicit
       host errors
 - [ ] App-based local project creation/update works on Linux and Windows, either
-      through native folder picking or a supported fallback
-- [ ] The repo enforces a line-ending policy that keeps supported flows working
-      on default Windows Git checkouts
+      through native folder picking or the supported text-input fallback
 - [ ] Attachment containment and path-derived UI behavior are correct for Windows
       and POSIX paths
 - [ ] CI includes Linux and Windows coverage for build, typecheck, tests, and
@@ -410,16 +430,13 @@ We will still keep usage constrained:
 
 ## Execution Order
 
-1. Phase 1
-2. Phase 2
-3. Phase 3
-4. Phase 4
-5. Phase 5
-6. Phase 6
-7. Phase 7
-8. Phase 8
-9. Phase 9
+1. Milestone 1 / Phase 1
+2. Milestone 1 / Phase 2
+3. Milestone 1 / Phase 3
+4. Milestone 2 / Phase 4
+5. Milestone 2 / Phase 5
+6. Milestone 2 / Phase 6
 
-This order fixes the security-sensitive path handling and build/check-out
-foundations first, then makes runtime setup and app UX portable, then locks the
-result in with CI and documentation.
+This order lands the shared compatibility and security foundations first,
+delivers a real Linux support milestone second, and only then finishes the more
+invasive Windows runtime work and final hardening.
